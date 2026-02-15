@@ -1,0 +1,172 @@
+/**
+ * Global Theme CSS — Android Material-inspired
+ * Clean surfaces, proper elevation, minimal animations
+ */
+
+:root {
+    /* Surface colors - Matching Tailwind 'surface' & 'stone' */
+    --surface: #FFFFFF;
+    --surface-dim: #FAFAF9; /* stone-50 */
+    --surface-container: #F5F5F4; /* stone-100 */
+    --surface-container-high: #E7E5E4; /* stone-200 */
+    --surface-variant: #E7E5E4;
+    --on-surface: #1C1917; /* stone-900 */
+    --on-surface-variant: #44403C; /* stone-700 */
+    --outline: #D6D3D1; /* stone-300 */
+    --outline-variant: #E7E5E4; /* stone-200 */
+
+    /* Primary - Matching Tailwind 'emerald-600' */
+    --primary: #059669;
+    --primary-container: #D1FAE5; /* emerald-100 */
+    --on-primary: #FFFFFF;
+    --on-primary-container: #064E3B; /* emerald-900 */
+
+    /* Status colors */
+    --status-draft: #78716C; /* stone-500 */
+    --status-confirmed: #0284C7; /* sky-600 */
+    --status-verified: #059669; /* emerald-600 */
+    --status-disputed: #EA580C; /* orange-600 */
+
+    /* Elevation shadows (Soft Modern) */
+    --elevation-0: none;
+    --elevation-1: 0 2px 10px rgba(0, 0, 0, 0.03);
+    --elevation-2: 0 4px 20px rgba(0, 0, 0, 0.06);
+    --elevation-3: 0 8px 30px rgba(0, 0, 0, 0.08);
+    --elevation-4: 0 12px 40px rgba(0, 0, 0, 0.12);
+
+    /* Border radius (Modern - Soft) */
+    --radius-xs: 6px;
+    --radius-sm: 10px;
+    --radius-md: 16px;
+    --radius-lg: 20px;
+    --radius-xl: 32px;
+    --radius-full: 9999px;
+
+    /* Typography */
+    --font-display: 'Inter', system-ui, -apple-system, sans-serif;
+
+    /* --- DFES NEW TOKENS --- */
+
+    /* Verification Status Palette */
+    /* --status-draft... */
+    /* --status-confirmed... */
+    /* --status-verified... */
+    /* --status-disputed... */
+
+    /* Semantic Surfaces */
+    --surface-success: #ECFDF5; /* emerald-50 */
+    /* Light green wash for save confirmation */
+    --surface-warning: #FFF7ED; /* orange-50 */
+    /* Light amber for corrections needed */
+    --surface-error: #FEF2F2; /* red-50 */
+    /* Light red — only for data loss risk */
+    --surface-info: #F0F9FF; /* sky-50 */
+    /* Light blue for informational */
+
+    /* Offline/Sync Indicators */
+    --sync-saved: #059669; /* emerald-600 */
+    /* Saved locally — green dot */
+    --sync-pending: #0284C7; /* sky-600 */
+    /* Waiting to sync — blue */
+    --sync-synced: #78716C; /* stone-500 */
+    /* Fully synced — fades to grey */
+    --sync-conflict: #EA580C; /* orange-600 */
+    /* Needs human review — amber */
+
+    /* Agricultural Accent (seasonal warmth) */
+    --accent-soil: #78350F; /* amber-900ish */
+    /* Brown — earth/soil references */
+    --accent-water: #0EA5E9; /* sky-500 */
+    /* Blue — irrigation references */
+    --accent-sun: #F59E0B; /* amber-500 */
+    /* Amber — harvest/season references */
+    --accent-leaf: #10B981; /* emerald-500 */
+    /* Primary green — growth references */
+}
+
+/* Base resets */
+html {
+    font-family: var(--font-display);
+    -webkit-font-smoothing: antialiased;
+    -webkit-tap-highlight-color: transparent;
+}
+
+/* Remove the universal transition that causes jank */
+button,
+a {
+    cursor: pointer;
+    user-select: none;
+    -webkit-user-select: none;
+}
+
+/* Focus ring */
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+    outline: 2px solid var(--primary);
+    outline-offset: 2px;
+}
+
+/* Scrollbar — thin, subtle */
+::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+}
+
+::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+    background: #E7E5E4; /* stone-200 */
+    border-radius: 99px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: #D6D3D1; /* stone-300 */
+}
+
+/* Minimal animations */
+@keyframes fade-in {
+    from {
+        opacity: 0;
+    }
+
+    to {
+        opacity: 1;
+    }
+}
+
+@keyframes slide-up {
+    from {
+        transform: translateY(12px);
+        opacity: 0;
+    }
+
+    to {
+        transform: translateY(0);
+        opacity: 1;
+    }
+}
+
+@keyframes scale-in {
+    from {
+        transform: scale(0.96);
+        opacity: 0;
+    }
+
+    to {
+        transform: scale(1);
+        opacity: 1;
+    }
+}
+
+.animate-fade-in {
+    animation: fade-in 300ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.animate-slide-up {
+    animation: slide-up 400ms cubic-bezier(0.16, 1, 0.3, 1);
+}

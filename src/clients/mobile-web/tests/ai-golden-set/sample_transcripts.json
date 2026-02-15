@@ -1,0 +1,41 @@
+[
+    {
+        "id": "1",
+        "transcript": "Aaj 2 taas kapusala pani dile ani 1 bag urea takla",
+        "expected": {
+            "cropActivities": [],
+            "irrigation": [
+                {
+                    "durationHours": 2,
+                    "source": "Any"
+                }
+            ],
+            "inputs": [
+                {
+                    "product": "Urea",
+                    "quantity": 1,
+                    "unit": "Bag"
+                }
+            ],
+            "labour": [],
+            "machinery": []
+        }
+    },
+    {
+        "id": "2",
+        "transcript": "3 purush ani 2 mahila ani 500 rupaye karch ala",
+        "expected": {
+            "cropActivities": [],
+            "irrigation": [],
+            "inputs": [],
+            "labour": [
+                {
+                    "maleCount": 3,
+                    "femaleCount": 2,
+                    "type": "HIRED"
+                }
+            ],
+            "machinery": []
+        }
+    }
+]

@@ -1,0 +1,60 @@
+@import './styles/global-theme.css';
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer utilities {
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+  }
+
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+
+  /* Glassmorphism Utilities */
+  .glass {
+    @apply bg-white/70 backdrop-blur-md border border-white/40 shadow-soft;
+  }
+
+  .glass-dark {
+    @apply bg-stone-900/80 backdrop-blur-md border border-stone-700/50 shadow-soft text-white;
+  }
+
+  .glass-panel {
+    @apply glass rounded-2xl;
+  }
+
+  .glass-panel-dark {
+    @apply glass-dark rounded-2xl;
+  }
+}
+
+/* Subtle pulse for recording indicator */
+@keyframes pulse-subtle {
+
+  0%,
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+
+  50% {
+    opacity: 0.8;
+    transform: scale(0.98);
+  }
+}
+
+.animate-pulse-slow {
+  animation: pulse-subtle 2s ease-in-out infinite;
+}
+
+/* Global Body Style Upgrade */
+body {
+  @apply bg-[length:200%_200%] animate-fade-in text-stone-900 antialiased;
+  background-color: #FAFAF9;
+  /* Fallback */
+  background-image: var(--bg-mesh, none);
+}

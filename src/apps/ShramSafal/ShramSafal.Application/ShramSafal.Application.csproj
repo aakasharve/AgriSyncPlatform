@@ -1,0 +1,15 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <ProjectReference Include="..\ShramSafal.Domain\ShramSafal.Domain.csproj" />
+    <ProjectReference Include="..\..\..\AgriSync.SharedKernel\AgriSync.SharedKernel.csproj" />
+    <ProjectReference Include="..\..\..\AgriSync.BuildingBlocks\AgriSync.BuildingBlocks.csproj" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+</Project>

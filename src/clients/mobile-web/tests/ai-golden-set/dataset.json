@@ -1,0 +1,73 @@
+[
+    {
+        "id": "gold_001",
+        "transcript": "Watered Plot A for 3 hours using Drip.",
+        "expected": {
+            "irrigation": [
+                {
+                    "method": "Drip",
+                    "durationHours": 3,
+                    "targetPlotName": "Plot A"
+                }
+            ]
+        }
+    },
+    {
+        "id": "gold_002",
+        "transcript": "Paid 1500 rupees to 5 women for weeding.",
+        "expected": {
+            "labour": [
+                {
+                    "count": 5,
+                    "femaleCount": 5,
+                    "totalCost": 1500,
+                    "activity": "weeding"
+                }
+            ]
+        }
+    },
+    {
+        "id": "gold_003",
+        "transcript": "Sprayed 200 liters of Neem Oil on the Chili crop.",
+        "expected": {
+            "inputs": [
+                {
+                    "method": "Spray",
+                    "productName": "Neem Oil",
+                    "quantity": 200,
+                    "unit": "liters",
+                    "detectedCrop": "Chili"
+                }
+            ]
+        }
+    },
+    {
+        "id": "gold_004",
+        "transcript": "Harvested 500kg of Tomatoes today.",
+        "expected": {
+            "cropActivities": [
+                {
+                    "title": "Harvest",
+                    "harvestQuantity": 500,
+                    "harvestUnit": "kg",
+                    "detectedCrop": "Tomatoes"
+                }
+            ]
+        }
+    },
+    {
+        "id": "gold_005",
+        "transcript": "Observed some white spots on the grape leaves.",
+        "expected": {
+            "observations": [
+                {
+                    "noteType": "observation",
+                    "tags": [
+                        "white spots",
+                        "grape leaves"
+                    ]
+                }
+            ]
+        }
+    }
+]
