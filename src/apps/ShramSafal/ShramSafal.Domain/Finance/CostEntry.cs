@@ -1,0 +1,115 @@
+using AgriSync.BuildingBlocks.Domain;
+using AgriSync.SharedKernel.Contracts.Ids;
+using ShramSafal.Domain.Events;
+
+namespace ShramSafal.Domain.Finance;
+
+public sealed class CostEntry : Entity<Guid>
+{
+    private CostEntry() : base(Guid.Empty) { } // EF Core
+
+    private CostEntry(
+        Guid id,
+        FarmId farmId,
+        Guid? plotId,
+        Guid? cropCycleId,
+        string category,
+        string description,
+        decimal amount,
+        string currencyCode,
+        DateOnly entryDate,
+        UserId createdByUserId,
+        DateTime createdAtUtc)
+        : base(id)
+    {
+        FarmId = farmId;
+        PlotId = plotId;
+        CropCycleId = cropCycleId;
+        Category = category;
+        Description = description;
+        Amount = amount;
+        CurrencyCode = currencyCode;
+        EntryDate = entryDate;
+        CreatedByUserId = createdByUserId;
+        CreatedAtUtc = createdAtUtc;
+    }
+
+    public FarmId FarmId { get; private set; }
+    public Guid? PlotId { get; private set; }
+    public Guid? CropCycleId { get; private set; }
+    public string Category { get; private set; } = string.Empty;
+    public string Description { get; private set; } = string.Empty;
+    public decimal Amount { get; private set; }
+    public string CurrencyCode { get; private set; } = "INR";
+    public DateOnly EntryDate { get; private set; }
+    public UserId CreatedByUserId { get; private set; }
+    public DateTime CreatedAtUtc { get; private set; }
+    public bool IsCorrected { get; private set; }
+
+    public static CostEntry Create(
+        Guid id,
+        FarmId farmId,
+        Guid? plotId,
+        Guid? cropCycleId,
+        string category,
+        string description,
+        decimal amount,
+        string currencyCode,
+        DateOnly entryDate,
+        UserId createdByUserId,
+        DateTime createdAtUtc)
+    {
+        if (string.IsNullOrWhiteSpace(category))
+        {
+            throw new ArgumentException("Category is required.", nameof(category));
+        }
+
+        if (amount <= 0)
+        {
+            throw new ArgumentException("Amount must be greater than zero.", nameof(amount));
+        }
+
+        if (string.IsNullOrWhiteSpace(currencyCode))
+        {
+            throw new ArgumentException("Currency code is required.", nameof(currencyCode));
+        }
+
+        var entry = new CostEntry(
+            id,
+            farmId,
+            plotId,
+            cropCycleId,
+            category.Trim(),
+            description.Trim(),
+            decimal.Round(amount, 2, MidpointRounding.AwayFromZero),
+            currencyCode.Trim().ToUpperInvariant(),
+            entryDate,
+            createdByUserId,
+            createdAtUtc);
+
+        entry.Raise(new CostEntryCreatedEvent(
+            Guid.NewGuid(),
+            createdAtUtc,
+            id,
+            entry.Amount,
+            entry.CurrencyCode));
+
+        return entry;
+    }
+
+    public void MarkCorrected(
+        Guid correctionId,
+        decimal correctedAmount,
+        string currencyCode,
+        DateTime correctedAtUtc)
+    {
+        IsCorrected = true;
+        Raise(new CostEntryCorrectedEvent(
+            Guid.NewGuid(),
+            correctedAtUtc,
+            Id,
+            correctionId,
+            correctedAmount,
+            currencyCode));
+    }
+}

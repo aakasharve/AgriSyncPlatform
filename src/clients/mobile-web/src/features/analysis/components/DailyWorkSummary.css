@@ -1,0 +1,423 @@
+/**
+ * Daily Work Summary View Styles
+ * 
+ * Design principle: Trust through transparency
+ * Visual hierarchy: Cost → Evidence → Context
+ */
+
+/* ========== CONTAINER ========== */
+
+.daily-work-summary {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+  padding: 1rem;
+  max-width: 800px;
+  margin: 0 auto;
+}
+
+/* ========== 1. COST SUMMARY CARD (Top, Prominent) ========== */
+
+.cost-summary-card {
+  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+  color: white;
+  padding: 2rem;
+  border-radius: 16px;
+  box-shadow: 0 8px 24px rgba(16, 185, 129, 0.25);
+}
+
+.cost-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1rem;
+}
+
+.cost-label {
+  font-size: 0.875rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  opacity: 0.9;
+}
+
+.cost-date {
+  font-size: 0.8125rem;
+  opacity: 0.85;
+}
+
+.cost-amount {
+  font-size: 3rem;
+  font-weight: 700;
+  line-height: 1;
+  margin-bottom: 0.75rem;
+}
+
+.cost-context {
+  opacity: 0.9;
+}
+
+.cost-hint {
+  font-size: 0.875rem;
+  margin: 0;
+}
+
+/* ========== 2. WORK EVENTS SECTION ========== */
+
+.work-events-section {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.section-title {
+  font-size: 1.125rem;
+  font-weight: 700;
+  color: #1f2937;
+  margin-bottom: 0.5rem;
+}
+
+/* Event Card Base */
+.event-card {
+  background: white;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  overflow: hidden;
+  transition: box-shadow 0.2s ease;
+}
+
+.event-card:hover {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+}
+
+.event-card-empty {
+  background: #f9fafb;
+  border-style: dashed;
+  opacity: 0.7;
+}
+
+.event-card-notes {
+  background: #fffbeb;
+  border-color: #fef3c7;
+}
+
+/* Event Header */
+.event-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1rem;
+  gap: 1rem;
+}
+
+.event-header-clickable {
+  width: 100%;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  text-align: left;
+  transition: background-color 0.2s ease;
+}
+
+.event-header-clickable:hover {
+  background-color: #f9fafb;
+}
+
+.event-header-left {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex: 1;
+  min-width: 0;
+}
+
+.event-header-right {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-shrink: 0;
+}
+
+.event-icon {
+  color: #6b7280;
+  flex-shrink: 0;
+}
+
+.event-title {
+  font-weight: 600;
+  color: #1f2937;
+  flex-shrink: 0;
+}
+
+.event-summary {
+  font-size: 0.875rem;
+  color: #6b7280;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.event-cost {
+  font-weight: 700;
+  color: #10b981;
+  font-size: 1.125rem;
+}
+
+/* Empty State */
+.empty-state-text {
+  padding: 0 1rem 1rem 3rem;
+  color: #9ca3af;
+  font-size: 0.875rem;
+  margin: 0;
+}
+
+/* Event Details (Expanded) */
+.event-details {
+  padding: 0 1rem 1rem 1rem;
+  border-top: 1px solid #f3f4f6;
+  background-color: #fafbfc;
+}
+
+.detail-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.75rem 0;
+  border-bottom: 1px solid #f3f4f6;
+}
+
+.detail-row:last-child {
+  border-bottom: none;
+}
+
+.detail-row-total {
+  background-color: #f0fdf4;
+  padding: 1rem;
+  margin: 0.5rem -1rem -1rem -1rem;
+  border-top: 2px solid #d1fae5;
+}
+
+.detail-label {
+  font-size: 0.875rem;
+  color: #6b7280;
+}
+
+.detail-value {
+  font-weight: 500;
+  color: #1f2937;
+  text-align: right;
+}
+
+.detail-label-bold {
+  font-weight: 700;
+  color: #1f2937;
+}
+
+.detail-value-bold {
+  font-weight: 700;
+  color: #10b981;
+  font-size: 1.125rem;
+}
+
+.detail-note {
+  margin-top: 0.75rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid #e5e7eb;
+  text-align: center;
+  color: #9ca3af;
+  font-size: 0.75rem;
+}
+
+/* Inputs Table */
+.inputs-table {
+  padding: 1rem 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.input-item-row {
+  padding: 0.75rem;
+  background: white;
+  border-radius: 8px;
+  border: 1px solid #e5e7eb;
+}
+
+.input-item-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.5rem;
+}
+
+.input-item-name {
+  font-weight: 600;
+  color: #1f2937;
+}
+
+.input-item-cost {
+  font-weight: 700;
+  color: #10b981;
+}
+
+.input-item-details {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.input-detail-badge {
+  font-size: 0.75rem;
+  padding: 0.25rem 0.625rem;
+  background: #f3f4f6;
+  color: #6b7280;
+  border-radius: 6px;
+  font-weight: 500;
+}
+
+/* Notes Content */
+.notes-content {
+  padding: 1rem;
+  color: #92400e;
+  line-height: 1.6;
+}
+
+.notes-content p {
+  margin: 0;
+}
+
+/* ========== 3. WEATHER SECTION (Demoted) ========== */
+
+.weather-section {
+  margin-top: 1rem;
+}
+
+.weather-context {
+  background: #f9fafb;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  overflow: hidden;
+  opacity: 0.8;
+}
+
+.weather-header {
+  width: 100%;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  text-align: left;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.875rem 1rem;
+  gap: 0.75rem;
+}
+
+.weather-header:hover {
+  background-color: #f3f4f6;
+}
+
+.weather-header-left {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.weather-icon {
+  color: #9ca3af;
+  flex-shrink: 0;
+}
+
+.weather-title {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: #6b7280;
+}
+
+.weather-summary {
+  font-size: 0.8125rem;
+  color: #9ca3af;
+}
+
+.weather-details {
+  padding: 0 1rem 1rem 1rem;
+  border-top: 1px solid #e5e7eb;
+}
+
+.weather-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 0.5rem 0;
+  font-size: 0.875rem;
+}
+
+.weather-label {
+  color: #9ca3af;
+}
+
+.weather-value {
+  color: #6b7280;
+  font-weight: 500;
+}
+
+.weather-note {
+  margin-top: 0.5rem;
+  padding-top: 0.5rem;
+  border-top: 1px solid #e5e7eb;
+  text-align: center;
+  color: #9ca3af;
+  font-size: 0.75rem;
+}
+
+/* ========== EMPTY DAY MESSAGE ========== */
+
+.empty-day-message {
+  background: white;
+  border: 2px dashed #e5e7eb;
+  border-radius: 12px;
+  padding: 2rem;
+  text-align: center;
+}
+
+.empty-day-title {
+  font-size: 1.125rem;
+  font-weight: 600;
+  color: #6b7280;
+  margin-bottom: 0.5rem;
+}
+
+.empty-day-subtitle {
+  font-size: 0.875rem;
+  color: #9ca3af;
+  margin: 0;
+}
+
+/* ========== RESPONSIVE ========== */
+
+@media (max-width: 640px) {
+  .daily-work-summary {
+    padding: 0.75rem;
+  }
+  
+  .cost-summary-card {
+    padding: 1.5rem;
+  }
+  
+  .cost-amount {
+    font-size: 2.5rem;
+  }
+  
+  .event-summary {
+    display: none; /* Hide on mobile for cleaner look */
+  }
+  
+  .detail-row {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.25rem;
+  }
+  
+  .detail-value {
+    text-align: left;
+  }
+}

@@ -1,0 +1,29 @@
+# Visual Studio / .NET
+.vs/
+*.user
+*.suo
+
+# Build folders
+**/bin/
+**/obj/
+
+# Rider / IDE
+.idea/
+.vscode/
+
+# NuGet
+*.nupkg
+**/packages/
+
+# Logs
+*.log
+
+# OS
+Thumbs.db
+.DS_Store
+
+# Node
+node_modules/
+
+# Generated files
+*.generated.*

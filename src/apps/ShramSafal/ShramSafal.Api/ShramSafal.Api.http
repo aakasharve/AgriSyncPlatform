@@ -1,0 +1,6 @@
+@ShramSafal.Api_HostAddress = http://localhost:5072
+
+GET {{ShramSafal.Api_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###
