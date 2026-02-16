@@ -130,29 +130,35 @@ try
         var result = new Dictionary<string, object>();
         try
         {
-            // 1. Test raw connection
-            var conn = db.Database.GetDbConnection();
+            // 1. Test connectivity via EF
+            var canConnect = await db.Database.CanConnectAsync();
+            result["canConnect"] = canConnect;
+
+            if (!canConnect)
+            {
+                result["status"] = "disconnected";
+                return Results.Json(result, statusCode: 503);
+            }
+
+            // 2. Get PostgreSQL version via EF raw SQL
+            var version = await db.Database.SqlQueryRaw<string>("SELECT version() AS \"Value\"").FirstOrDefaultAsync();
+            result["postgresVersion"] = version ?? "unknown";
+
+            // 3. User count
+            var userCount = await db.Users.CountAsync();
+            result["userCount"] = userCount;
+
+            // 4. List tables via separate connection
+            var connString = db.Database.GetConnectionString()!;
+            using var conn = new Npgsql.NpgsqlConnection(connString);
             await conn.OpenAsync();
-            result["connectionState"] = conn.State.ToString();
-
-            // 2. DB version
-            using var versionCmd = conn.CreateCommand();
-            versionCmd.CommandText = "SELECT version();";
-            var version = await versionCmd.ExecuteScalarAsync();
-            result["postgresVersion"] = version?.ToString() ?? "unknown";
-
-            // 3. List tables in usr schema
-            using var tablesCmd = conn.CreateCommand();
-            tablesCmd.CommandText = "SELECT table_name FROM information_schema.tables WHERE table_schema = 'usr' ORDER BY table_name;";
+            using var cmd = conn.CreateCommand();
+            cmd.CommandText = "SELECT table_name FROM information_schema.tables WHERE table_schema = 'usr' ORDER BY table_name;";
             var tables = new List<string>();
-            using var reader = await tablesCmd.ExecuteReaderAsync();
+            using var reader = await cmd.ExecuteReaderAsync();
             while (await reader.ReadAsync())
                 tables.Add(reader.GetString(0));
             result["tables"] = tables;
-
-            // 4. User count
-            var userCount = await db.Users.CountAsync();
-            result["userCount"] = userCount;
 
             result["status"] = "connected";
             return Results.Ok(result);
@@ -166,6 +172,33 @@ try
         }
     })
     .WithName("TestDatabaseConnectivity")
+    .WithTags("System")
+    .AllowAnonymous();
+
+    // ── Test Endpoint: Bootstrap Database Schema ────────────────────────
+    app.MapPost("/test/db/init", async (UserDbContext db) =>
+    {
+        try
+        {
+            var created = await db.Database.EnsureCreatedAsync();
+            return Results.Ok(new
+            {
+                status = "ok",
+                schemaCreated = created,
+                message = created ? "Database schema created successfully" : "Schema already exists"
+            });
+        }
+        catch (Exception ex)
+        {
+            return Results.Json(new
+            {
+                status = "error",
+                error = ex.Message,
+                innerError = ex.InnerException?.Message ?? ""
+            }, statusCode: 500);
+        }
+    })
+    .WithName("InitDatabaseSchema")
     .WithTags("System")
     .AllowAnonymous();
 
