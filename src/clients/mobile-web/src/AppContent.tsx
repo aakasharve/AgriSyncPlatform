@@ -13,7 +13,6 @@ import BottomNavigation from './features/context/components/BottomNavigation';
 import AppHeader from './features/context/components/AppHeader';
 import AppRouter from './core/navigation/AppRouter';
 import ActionToast from './shared/components/ui/ActionToast';
-import { DEMO_SEED_VERSION } from './features/demo/DemoDataService';
 import WeatherReactionPrompt from './features/weather/components/WeatherReactionPrompt';
 import VoiceListeningOverlay from './features/voice/components/VoiceListeningOverlay';
 
@@ -27,15 +26,7 @@ import { AppFeatureProviders } from './app/context/AppFeatureContexts';
 import { useAuth } from './app/providers/AuthProvider';
 import LoginPage from './pages/LoginPage';
 
-// Demo Mode pill
-const DemoModeIndicator = () => (
-    <div className="flex justify-center py-1 relative z-50">
-        <div className="glass px-3 py-1 rounded-full flex items-center gap-2 shadow-sm border-emerald-200/50">
-            <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse shadow-[0_0_10px_rgba(16,185,129,0.5)]" />
-            <span className="text-[10px] font-bold uppercase tracking-wide text-emerald-800">Demo Data {DEMO_SEED_VERSION}</span>
-        </div>
-    </div>
-);
+// Demo Mode pill removed
 
 
 
@@ -195,8 +186,8 @@ const AppContent: React.FC<AppContentProps> = ({ crops: initialCrops }) => {
         getContextDisplay
     };
 
-    if (!data.isDemoMode && !isAuthenticated) {
-        return <LoginPage onUseDemoMode={() => data.setIsDemoMode(true)} />;
+    if (!isAuthenticated) {
+        return <LoginPage />;
     }
 
     return (
@@ -216,7 +207,7 @@ const AppContent: React.FC<AppContentProps> = ({ crops: initialCrops }) => {
             />
 
             {/* Demo indicators */}
-            {data.isDemoMode && <DemoModeIndicator />}
+
 
             {/* Main Content */}
             <main className="max-w-md mx-auto min-h-screen relative">

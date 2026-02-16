@@ -1,10 +1,7 @@
 name: dotnet-ci
 
 on:
-  push:
-    branches:
-      - "**"
-  pull_request:
+  workflow_dispatch:   # manual-only until CI infra is ready
 
 jobs:
   build-test:

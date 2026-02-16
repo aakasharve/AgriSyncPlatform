@@ -4,14 +4,8 @@ import {
     ResourceItem, Person, VerificationStatus, OperatorCapability
 } from '../../types';
 import { useDataSource } from '../providers/DataSourceProvider';
-import {
-    generateDemoPlannedTasks,
-    generateDemoHarvestSessions,
-    generateDemoProcurementExpenses
-} from '../../features/demo/DemoDataService';
 import { HarvestSession } from '../../features/logs/harvest.types';
 import { ProcurementExpense } from '../../features/procurement/procurement.types';
-import { RAMUS_FARM } from '../../data/farmData';
 import { backgroundSyncWorker } from '../../infrastructure/sync/BackgroundSyncWorker';
 import { useAuth } from '../providers/AuthProvider';
 
@@ -162,53 +156,30 @@ export const useAppData = (_props?: UseAppDataProps): UseAppDataResult => {
 
         const loadData = async () => {
             try {
-                if (isDemoMode) {
-                    // DEMO MODE: Use RAMUS_FARM demo data
-                    if (mounted) {
-                        setCrops(RAMUS_FARM);
-                        setPlannedTasks(generateDemoPlannedTasks());
-                        setHarvestSessions(generateDemoHarvestSessions());
-                        setProcurementExpenses(generateDemoProcurementExpenses());
-                    }
-
-                    // Load demo logs
-                    const loadedLogs = await dataSource.logs.getAll();
-                    if (mounted) setHistory(loadedLogs);
-
-                    // Load demo profile or use default
-                    const loadedProfile = await dataSource.profile.get();
-                    if (mounted && loadedProfile && loadedProfile.name) {
-                        setFarmerProfile(loadedProfile);
-                    }
-                } else {
-                    if (isAuthenticated) {
-                        await backgroundSyncWorker.triggerNow();
-                    }
+                if (mounted && isAuthenticated) {
+                    await backgroundSyncWorker.triggerNow();
 
                     // REAL MODE: Load user's actual data (may be empty)
                     const loadedCrops = await dataSource.crops.getAll();
-                    if (mounted) {
-                        // Only use loaded crops if they exist, otherwise empty
-                        setCrops(loadedCrops.length > 0 ? loadedCrops : []);
-                        setRealCrops(loadedCrops);
-                    }
+
+                    // Only use loaded crops if they exist, otherwise empty
+                    setCrops(loadedCrops.length > 0 ? loadedCrops : []);
+                    setRealCrops(loadedCrops);
 
                     // Load real profile
                     const loadedProfile = await dataSource.profile.get();
-                    if (mounted && loadedProfile && loadedProfile.name) {
+                    if (loadedProfile && loadedProfile.name) {
                         setFarmerProfile(loadedProfile);
                     }
 
                     // Load real logs
                     const loadedLogs = await dataSource.logs.getAll();
-                    if (mounted) setHistory(loadedLogs);
+                    setHistory(loadedLogs);
 
-                    // Clear demo aux data in real mode
-                    if (mounted) {
-                        setPlannedTasks([]);
-                        setHarvestSessions([]);
-                        setProcurementExpenses([]);
-                    }
+                    // Clear demo aux data
+                    setPlannedTasks([]);
+                    setHarvestSessions([]);
+                    setProcurementExpenses([]);
                 }
             } catch (err) {
                 console.error("Failed to load app data", err);

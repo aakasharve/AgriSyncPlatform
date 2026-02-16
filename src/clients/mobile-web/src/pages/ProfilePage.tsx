@@ -8,7 +8,7 @@ import {
     User, Zap, MapPin, Plus, Trash2, X, Sprout, Crosshair, Clock,
     Settings2, ArrowRight, Droplets, Tractor, BarChart3, CalendarDays,
     ChevronRight, CheckCircle2, Wrench, Cylinder, ArrowLeft, Save, BrainCircuit,
-    Medal, ShieldCheck, Check, Users, Settings, Phone, AlertTriangle, FileText, Upload, Eye
+    Medal, ShieldCheck, Check, Users, Settings, Phone, AlertTriangle, FileText, Upload, Eye, LogOut
 } from 'lucide-react';
 import {
     FarmerProfile, WaterResource, FarmMotor,
@@ -28,6 +28,7 @@ import { getDateKey } from '../domain/system/DateKeyService';
 import { createInitialScheduleInstance } from '../domain/planning/PlanEngine';
 import { getScheduleById, getSchedulesForCrop } from '../data/scheduleLibrary';
 import { useLanguage } from '../i18n/LanguageContext';
+import { useAuth } from '../app/providers/AuthProvider';
 import { idGenerator } from '../core/domain/services/IdGenerator';
 import { systemClock } from '../core/domain/services/Clock';
 import ElectricityTimingConfigurator from '../features/profile/components/ElectricityTimingConfigurator';
@@ -1329,6 +1330,7 @@ const UtilitiesManager = ({ profile, onUpdate }: { profile: FarmerProfile, onUpd
 
 const ProfilePage: React.FC<ProfilePageProps> = ({ profile, crops, onUpdateProfile, onUpdateCrops, onAddPerson, onDeletePerson, onOpenScheduleLibrary, onOpenFinanceManager }) => {
     const { t } = useLanguage();
+    const { logout } = useAuth();
     const [activeTab, setActiveTab] = useState<'identity' | 'structure' | 'utils' | 'plan' | 'machines' | 'intelligence' | 'people'>('structure');
 
     // Crop & Plot State (Reused from previous, simplified)
@@ -1696,6 +1698,16 @@ const ProfilePage: React.FC<ProfilePageProps> = ({ profile, crops, onUpdateProfi
                                                 </button>
                                             );
                                         })()}
+                                    </div>
+
+                                    {/* LOGOUT ACTION */}
+                                    <div className="mt-4 pt-4 border-t border-slate-100 flex justify-center">
+                                        <button
+                                            onClick={logout}
+                                            className="text-red-500 font-bold text-sm flex items-center gap-2 px-6 py-3 rounded-xl hover:bg-red-50 transition-colors"
+                                        >
+                                            <LogOut size={16} /> Log Out
+                                        </button>
                                     </div>
                                 </div>
                             </div>
