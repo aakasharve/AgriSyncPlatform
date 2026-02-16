@@ -15,7 +15,7 @@ public static class DependencyInjection
         services.AddDbContext<UserDbContext>(options =>
             options.UseNpgsql(
                 configuration.GetConnectionString("UserDb"),
-                npgsql => npgsql.MigrationsHistoryTable("__ef_migrations", "usr")));
+                npgsql => npgsql.MigrationsHistoryTable("__ef_migrations", "public")));
 
         services.AddScoped<IUserRepository, UserRepository>();
         services.AddScoped<IRefreshTokenRepository, RefreshTokenRepository>();
