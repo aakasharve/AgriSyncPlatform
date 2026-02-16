@@ -12,6 +12,7 @@ import { seedHarvestSessions } from '../../services/harvestService'; // To be re
 import { procurementRepository } from '../../services/procurementRepository'; // To be refactored later
 import { RAMUS_FARM } from '../../data/farmData'; // Default crops for seeding
 import { legacyAuditPort } from '../../infrastructure/audit/LegacyAuditPort';
+import { useAuth } from './AuthProvider';
 
 // --- CONTEXT ---
 
@@ -28,14 +29,26 @@ const DataSourceContext = createContext<DataSourceContextValue | null>(null);
 // --- PROVIDER ---
 
 export const DataSourceProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-    // Default to Demo Mode for safety/exploration
-    const [isDemoMode, setIsDemoMode] = useState<boolean>(true);
+    const { isAuthenticated } = useAuth();
+    // Start in Demo Mode unless user is already authenticated
+    const [isDemoMode, setIsDemoMode] = useState<boolean>(!isAuthenticated);
     const [isLoading, setIsLoading] = useState<boolean>(false);
 
     // Select Source based on Mode
     const dataSource = useMemo(() => {
         return isDemoMode ? DemoDataSource.getInstance() : DexieDataSource.getInstance();
     }, [isDemoMode]);
+
+    // Auto-switch mode based on authentication state
+    useEffect(() => {
+        if (isAuthenticated && isDemoMode) {
+            console.log("[DataSource] User authenticated, switching to REAL mode");
+            setIsDemoMode(false);
+        } else if (!isAuthenticated && !isDemoMode) {
+            console.log("[DataSource] User logged out, switching to DEMO mode");
+            setIsDemoMode(true);
+        }
+    }, [isAuthenticated]);
 
     // Helper: Seeding Logic (moved from useAppData to keep Data logic contained)
     const seedDemoDataIfNeeded = async () => {
