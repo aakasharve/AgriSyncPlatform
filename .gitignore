@@ -27,3 +27,6 @@ node_modules/
 
 # Generated files
 *.generated.*
+
+# Local cofounder workspace (never sync)
+/_COFOUNDER/
