@@ -1,4 +1,4 @@
-﻿
+
 Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 17
 VisualStudioVersion = 17.0.31903.59
@@ -13,21 +13,21 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Apps", "Apps", "{1787FE1D-0
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "User", "User", "{33D88E24-BC23-CC92-8C4D-43D130CFA673}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "User.Domain", "Apps\User\User.Domain\User.Domain.csproj", "{6D225963-8343-4165-9E69-CFB7D3143F04}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "User.Domain", "apps\User\User.Domain\User.Domain.csproj", "{6D225963-8343-4165-9E69-CFB7D3143F04}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "User.Application", "Apps\User\User.Application\User.Application.csproj", "{E304E45C-561C-4FA3-A082-BE3C04118899}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "User.Application", "apps\User\User.Application\User.Application.csproj", "{E304E45C-561C-4FA3-A082-BE3C04118899}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "User.Infrastructure", "Apps\User\User.Infrastructure\User.Infrastructure.csproj", "{AFE33CCD-5AF7-4210-B8A7-B473CC2A251C}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "User.Infrastructure", "apps\User\User.Infrastructure\User.Infrastructure.csproj", "{AFE33CCD-5AF7-4210-B8A7-B473CC2A251C}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "User.Api", "Apps\User\User.Api\User.Api.csproj", "{B607E08F-5A2C-4F76-B86B-5D5BD3DE197B}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "User.Api", "apps\User\User.Api\User.Api.csproj", "{B607E08F-5A2C-4F76-B86B-5D5BD3DE197B}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ShramSafal.Domain", "Apps\ShramSafal\ShramSafal.Domain\ShramSafal.Domain.csproj", "{E3E2379F-2AFF-4B69-BC9A-CA0808A7BA0B}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ShramSafal.Domain", "apps\ShramSafal\ShramSafal.Domain\ShramSafal.Domain.csproj", "{E3E2379F-2AFF-4B69-BC9A-CA0808A7BA0B}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ShramSafal.Application", "Apps\ShramSafal\ShramSafal.Application\ShramSafal.Application.csproj", "{4A68DBA6-DB4D-4DE9-A328-4B0AAA71565F}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ShramSafal.Application", "apps\ShramSafal\ShramSafal.Application\ShramSafal.Application.csproj", "{4A68DBA6-DB4D-4DE9-A328-4B0AAA71565F}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ShramSafal.Infrastructure", "Apps\ShramSafal\ShramSafal.Infrastructure\ShramSafal.Infrastructure.csproj", "{B8B33C23-1291-47FB-980E-C4035D76EF63}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ShramSafal.Infrastructure", "apps\ShramSafal\ShramSafal.Infrastructure\ShramSafal.Infrastructure.csproj", "{B8B33C23-1291-47FB-980E-C4035D76EF63}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ShramSafal.Api", "Apps\ShramSafal\ShramSafal.Api\ShramSafal.Api.csproj", "{4FBDB98F-BB9F-499F-843C-3DF8FAF628A0}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ShramSafal.Api", "apps\ShramSafal\ShramSafal.Api\ShramSafal.Api.csproj", "{4FBDB98F-BB9F-499F-843C-3DF8FAF628A0}"
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "tests", "tests", "{0AB3BF05-4346-4AA6-1389-037BE0695223}"
 EndProject
