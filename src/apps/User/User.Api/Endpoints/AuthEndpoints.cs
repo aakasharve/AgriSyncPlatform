@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using AgriSync.BuildingBlocks.Results;
 using User.Application.UseCases.Auth.Login;
 using User.Application.UseCases.Auth.RefreshToken;
 using User.Application.UseCases.Auth.RegisterUser;
@@ -17,14 +18,27 @@ public static class AuthEndpoints
             RegisterUserHandler handler,
             CancellationToken ct) =>
         {
+            if (!TryValidateRegisterRequest(request, out var validationErrors))
+            {
+                return Results.ValidationProblem(validationErrors);
+            }
+
             var command = new RegisterUserCommand(
-                request.Phone,
-                request.Password,
-                request.DisplayName,
+                request.Phone!,
+                request.Password!,
+                request.DisplayName!,
                 request.AppId,
                 request.Role);
 
-            var result = await handler.HandleAsync(command, ct);
+            Result<User.Application.Contracts.Dtos.AuthResponse> result;
+            try
+            {
+                result = await handler.HandleAsync(command, ct);
+            }
+            catch (ArgumentException ex)
+            {
+                return Results.BadRequest(new { error = "validation_error", message = ex.Message });
+            }
 
             return result.IsSuccess
                 ? Results.Ok(result.Value)
@@ -63,6 +77,16 @@ public static class AuthEndpoints
         .WithName("RefreshToken")
         .AllowAnonymous();
 
+        group.MapPost("/logout", () =>
+        {
+            // For stateless JWT, client handles token removal.
+            // Ideally we revoke refresh token here, but for now we return OK.
+            // Client should discard tokens.
+            return Results.Ok(new { message = "Logged out successfully" });
+        })
+        .WithName("LogoutUser")
+        .RequireAuthorization();
+
         group.MapGet("/me", async (
             ClaimsPrincipal user,
             GetCurrentUserHandler handler,
@@ -85,12 +109,40 @@ public static class AuthEndpoints
 
         return endpoints;
     }
+
+    private static bool TryValidateRegisterRequest(RegisterRequest? request, out Dictionary<string, string[]> errors)
+    {
+        errors = [];
+
+        if (request is null)
+        {
+            errors["body"] = ["Request body is required."];
+            return false;
+        }
+
+        if (string.IsNullOrWhiteSpace(request.Phone))
+        {
+            errors["phone"] = ["Phone is required."];
+        }
+
+        if (string.IsNullOrWhiteSpace(request.Password))
+        {
+            errors["password"] = ["Password is required."];
+        }
+
+        if (string.IsNullOrWhiteSpace(request.DisplayName))
+        {
+            errors["displayName"] = ["Display name is required."];
+        }
+
+        return errors.Count == 0;
+    }
 }
 
 public sealed record RegisterRequest(
-    string Phone,
-    string Password,
-    string DisplayName,
+    string? Phone,
+    string? Password,
+    string? DisplayName,
     string? AppId = "shramsafal",
     string? Role = "PrimaryOwner");
 

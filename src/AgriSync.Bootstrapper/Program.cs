@@ -2,6 +2,8 @@ using System.Text;
 using AgriSync.Bootstrapper.Middleware;
 using AgriSync.BuildingBlocks;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Storage;
 using Serilog;
 using ShramSafal.Api;
 using User.Api;
@@ -35,15 +37,21 @@ try
     {
         options.AddPolicy("AllowFrontendDev", policy =>
         {
-            policy.WithOrigins("http://localhost:3000", "http://localhost:5173")
-                  .AllowAnyHeader()
-                  .AllowAnyMethod()
-                  .AllowCredentials();
+            policy.WithOrigins(
+                "http://localhost:3000", 
+                "http://localhost:3001",
+                "http://localhost:3002", 
+                "http://localhost:5173"
+            )
+            .AllowAnyHeader()
+            .AllowAnyMethod()
+            .AllowCredentials();
         });
     });
 
     builder.Services.AddUserApi(builder.Configuration);
     builder.Services.AddShramSafalApi(builder.Configuration);
+    builder.Services.AddTransient<AgriSync.Bootstrapper.Infrastructure.DatabaseSeeder>();
 
     var app = builder.Build();
 
@@ -143,6 +151,8 @@ try
             // 2. Get PostgreSQL version via EF raw SQL
             var version = await db.Database.SqlQueryRaw<string>("SELECT version() AS \"Value\"").FirstOrDefaultAsync();
             result["postgresVersion"] = version ?? "unknown";
+            var currentDatabase = await db.Database.SqlQueryRaw<string>("SELECT current_database() AS \"Value\"").FirstOrDefaultAsync();
+            result["database"] = currentDatabase ?? "unknown";
 
             // 3. User count
             var userCount = await db.Users.CountAsync();
@@ -153,12 +163,26 @@ try
             using var conn = new Npgsql.NpgsqlConnection(connString);
             await conn.OpenAsync();
             using var cmd = conn.CreateCommand();
-            cmd.CommandText = "SELECT table_name FROM information_schema.tables WHERE table_schema = 'usr' ORDER BY table_name;";
+            cmd.CommandText = "SELECT table_name FROM information_schema.tables WHERE table_schema = 'public' ORDER BY table_name;";
             var tables = new List<string>();
-            using var reader = await cmd.ExecuteReaderAsync();
-            while (await reader.ReadAsync())
-                tables.Add(reader.GetString(0));
+            await using (var reader = await cmd.ExecuteReaderAsync())
+            {
+                while (await reader.ReadAsync())
+                    tables.Add(reader.GetString(0));
+            }
             result["tables"] = tables;
+
+            // 5. Diagnostic: check any legacy tables under usr schema
+            var usrTables = new List<string>();
+            await using (var usrCmd = conn.CreateCommand())
+            {
+                usrCmd.CommandText = "SELECT table_name FROM information_schema.tables WHERE table_schema = 'usr' ORDER BY table_name;";
+                await using var usrReader = await usrCmd.ExecuteReaderAsync();
+                while (await usrReader.ReadAsync())
+                    usrTables.Add(usrReader.GetString(0));
+            }
+            result["usrTables"] = usrTables;
+            result["schemaChecked"] = "public";
 
             result["status"] = "connected";
             return Results.Ok(result);
@@ -176,16 +200,39 @@ try
     .AllowAnonymous();
 
     // ── Test Endpoint: Bootstrap Database Schema ────────────────────────
-    app.MapPost("/test/db/init", async (UserDbContext db) =>
+    // ── Test Endpoint: Bootstrap Database Schema ────────────────────────
+    app.MapPost("/test/db/init", async (User.Infrastructure.Persistence.UserDbContext userDb, ShramSafal.Infrastructure.Persistence.ShramSafalDbContext ssfDb, bool reset = false) =>
     {
         try
         {
-            var created = await db.Database.EnsureCreatedAsync();
+            bool userDeleted = false;
+            bool ssfDeleted = false;
+
+            if (reset)
+            {
+                userDeleted = await userDb.Database.EnsureDeletedAsync();
+                var sameConnection = string.Equals(
+                    userDb.Database.GetConnectionString(),
+                    ssfDb.Database.GetConnectionString(),
+                    StringComparison.OrdinalIgnoreCase);
+
+                if (!sameConnection)
+                {
+                    ssfDeleted = await ssfDb.Database.EnsureDeletedAsync();
+                }
+            }
+
+            var userCreated = await EnsureContextTablesCreatedAsync(userDb, "public", "users");
+            var ssfCreated = await EnsureContextTablesCreatedAsync(ssfDb, "ssf", "farms");
             return Results.Ok(new
             {
                 status = "ok",
-                schemaCreated = created,
-                message = created ? "Database schema created successfully" : "Schema already exists"
+                resetPerformed = reset,
+                userDatabaseDeleted = userDeleted,
+                ssfDatabaseDeleted = ssfDeleted,
+                userSchemaCreated = userCreated,
+                ssfSchemaCreated = ssfCreated,
+                message = "Database schemas initialized successfully"
             });
         }
         catch (Exception ex)
@@ -202,8 +249,57 @@ try
     .WithTags("System")
     .AllowAnonymous();
 
+    // ── Test Endpoint: Seed Demo Data ──────────────────────────────────
+    app.MapPost("/test/seed", async (AgriSync.Bootstrapper.Infrastructure.DatabaseSeeder seeder) =>
+    {
+        try
+        {
+            var result = await seeder.SeedDemoDataAsync();
+            return Results.Ok(new { status = "ok", message = result });
+        }
+        catch (Exception ex)
+        {
+             return Results.Json(new
+            {
+                status = "error",
+                error = ex.Message,
+                innerError = ex.InnerException?.Message ?? ""
+            }, statusCode: 500);
+        }
+    })
+    .WithName("SeedDemoData")
+    .WithTags("System")
+    .AllowAnonymous();
+
     app.MapUserApi();
     app.MapShramSafalApi();
+
+    // Auto-seed demo data on startup
+    using (var scope = app.Services.CreateScope())
+    {
+        var services = scope.ServiceProvider;
+        try 
+        {
+            // Ensure Database Created
+            var userContext = services.GetRequiredService<User.Infrastructure.Persistence.UserDbContext>();
+            var ssfContext = services.GetRequiredService<ShramSafal.Infrastructure.Persistence.ShramSafalDbContext>();
+
+            var userSchemaCreated = await EnsureContextTablesCreatedAsync(userContext, "public", "users");
+            var ssfSchemaCreated = await EnsureContextTablesCreatedAsync(ssfContext, "ssf", "farms");
+
+            // Seed Data
+            var seeder = services.GetRequiredService<AgriSync.Bootstrapper.Infrastructure.DatabaseSeeder>();
+            await seeder.SeedDemoDataAsync();
+            Log.Information(
+                "Database initialization and seeding completed successfully. User schema created: {UserSchemaCreated}, SSF schema created: {SsfSchemaCreated}",
+                userSchemaCreated,
+                ssfSchemaCreated);
+        }
+        catch (Exception ex)
+        {
+            Log.Error(ex, "An error occurred while initializing or seeding the database.");
+        }
+    }
 
     app.Run();
 }
@@ -214,4 +310,29 @@ catch (Exception ex)
 finally
 {
     Log.CloseAndFlush();
+}
+
+static async Task<bool> EnsureContextTablesCreatedAsync(DbContext context, string schema, string tableName)
+{
+    var databaseCreator = context.GetService<IRelationalDatabaseCreator>();
+
+    if (!await databaseCreator.ExistsAsync())
+    {
+        await databaseCreator.CreateAsync();
+    }
+
+    var tableExists = await context.Database
+        .SqlQueryRaw<bool>(
+            "SELECT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = {0} AND table_name = {1}) AS \"Value\"",
+            schema,
+            tableName)
+        .FirstAsync();
+
+    if (tableExists)
+    {
+        return false;
+    }
+
+    await databaseCreator.CreateTablesAsync();
+    return true;
 }
