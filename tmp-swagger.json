@@ -1,0 +1,877 @@
+{
+  "openapi": "3.0.4",
+  "info": {
+    "title": "AgriSync.Bootstrapper",
+    "version": "1.0"
+  },
+  "paths": {
+    "/user/auth/register": {
+      "post": {
+        "tags": [
+          "Auth"
+        ],
+        "operationId": "RegisterUser",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RegisterRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/user/auth/login": {
+      "post": {
+        "tags": [
+          "Auth"
+        ],
+        "operationId": "LoginUser",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LoginRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/user/auth/refresh": {
+      "post": {
+        "tags": [
+          "Auth"
+        ],
+        "operationId": "RefreshToken",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RefreshRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/user/auth/me": {
+      "get": {
+        "tags": [
+          "Auth"
+        ],
+        "operationId": "GetCurrentUser",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/shramsafal/health": {
+      "get": {
+        "tags": [
+          "ShramSafal"
+        ],
+        "operationId": "GetShramSafalModuleHealth",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/shramsafal/farms": {
+      "post": {
+        "tags": [
+          "ShramSafal"
+        ],
+        "operationId": "CreateFarm",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateFarmRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/shramsafal/plots": {
+      "post": {
+        "tags": [
+          "ShramSafal"
+        ],
+        "operationId": "CreatePlot",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreatePlotRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/shramsafal/cropcycles": {
+      "post": {
+        "tags": [
+          "ShramSafal"
+        ],
+        "operationId": "CreateCropCycle",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateCropCycleRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/shramsafal/logs": {
+      "post": {
+        "tags": [
+          "ShramSafal"
+        ],
+        "operationId": "CreateDailyLog",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateDailyLogRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/shramsafal/logs/{id}/tasks": {
+      "post": {
+        "tags": [
+          "ShramSafal"
+        ],
+        "operationId": "AddLogTask",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AddLogTaskRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/shramsafal/logs/{id}/verify": {
+      "post": {
+        "tags": [
+          "ShramSafal"
+        ],
+        "operationId": "VerifyLog",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VerifyLogRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/shramsafal/finance/price-config": {
+      "post": {
+        "tags": [
+          "ShramSafal"
+        ],
+        "operationId": "SetPriceConfigVersion",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetPriceConfigRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/shramsafal/finance/cost-entry": {
+      "post": {
+        "tags": [
+          "ShramSafal"
+        ],
+        "operationId": "AddCostEntry",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AddCostEntryRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/shramsafal/finance/cost-entry/{id}/correct": {
+      "post": {
+        "tags": [
+          "ShramSafal"
+        ],
+        "operationId": "CorrectCostEntry",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CorrectCostEntryRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/shramsafal/finance/summary": {
+      "get": {
+        "tags": [
+          "ShramSafal"
+        ],
+        "operationId": "GetFinanceSummary",
+        "parameters": [
+          {
+            "name": "groupBy",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "fromDate",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "date"
+            }
+          },
+          {
+            "name": "toDate",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "date"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/shramsafal/plan/generate": {
+      "post": {
+        "tags": [
+          "ShramSafal"
+        ],
+        "operationId": "GeneratePlanFromTemplate",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GeneratePlanRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/shramsafal/compare": {
+      "get": {
+        "tags": [
+          "ShramSafal"
+        ],
+        "operationId": "ComputePlannedVsExecutedDelta",
+        "parameters": [
+          {
+            "name": "cropCycleId",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/sync/push": {
+      "post": {
+        "tags": [
+          "Sync"
+        ],
+        "operationId": "PushSyncBatch",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SyncPushRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/sync/pull": {
+      "get": {
+        "tags": [
+          "Sync"
+        ],
+        "operationId": "PullSyncChanges",
+        "parameters": [
+          {
+            "name": "since",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/health": {
+      "get": {
+        "tags": [
+          "System"
+        ],
+        "operationId": "GetBootstrapperHealth",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/user/health": {
+      "get": {
+        "tags": [
+          "User"
+        ],
+        "operationId": "GetUserModuleHealth",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "AddCostEntryRequest": {
+        "type": "object",
+        "properties": {
+          "farmId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "plotId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          },
+          "cropCycleId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          },
+          "category": {
+            "type": "string",
+            "nullable": true
+          },
+          "description": {
+            "type": "string",
+            "nullable": true
+          },
+          "amount": {
+            "type": "number",
+            "format": "double"
+          },
+          "currencyCode": {
+            "type": "string",
+            "nullable": true
+          },
+          "entryDate": {
+            "type": "string",
+            "format": "date"
+          },
+          "createdByUserId": {
+            "type": "string",
+            "format": "uuid"
+          }
+        },
+        "additionalProperties": false
+      },
+      "AddLogTaskRequest": {
+        "type": "object",
+        "properties": {
+          "activityType": {
+            "type": "string",
+            "nullable": true
+          },
+          "notes": {
+            "type": "string",
+            "nullable": true
+          },
+          "occurredAtUtc": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "CorrectCostEntryRequest": {
+        "type": "object",
+        "properties": {
+          "correctedAmount": {
+            "type": "number",
+            "format": "double"
+          },
+          "currencyCode": {
+            "type": "string",
+            "nullable": true
+          },
+          "reason": {
+            "type": "string",
+            "nullable": true
+          },
+          "correctedByUserId": {
+            "type": "string",
+            "format": "uuid"
+          }
+        },
+        "additionalProperties": false
+      },
+      "CreateCropCycleRequest": {
+        "type": "object",
+        "properties": {
+          "farmId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "plotId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "cropName": {
+            "type": "string",
+            "nullable": true
+          },
+          "stage": {
+            "type": "string",
+            "nullable": true
+          },
+          "startDate": {
+            "type": "string",
+            "format": "date"
+          },
+          "endDate": {
+            "type": "string",
+            "format": "date",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "CreateDailyLogRequest": {
+        "type": "object",
+        "properties": {
+          "farmId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "plotId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "cropCycleId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "operatorUserId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "logDate": {
+            "type": "string",
+            "format": "date"
+          },
+          "deviceId": {
+            "type": "string",
+            "nullable": true
+          },
+          "clientRequestId": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "CreateFarmRequest": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "nullable": true
+          },
+          "ownerUserId": {
+            "type": "string",
+            "format": "uuid"
+          }
+        },
+        "additionalProperties": false
+      },
+      "CreatePlotRequest": {
+        "type": "object",
+        "properties": {
+          "farmId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string",
+            "nullable": true
+          },
+          "areaInAcres": {
+            "type": "number",
+            "format": "double"
+          }
+        },
+        "additionalProperties": false
+      },
+      "GeneratePlanActivityRequest": {
+        "type": "object",
+        "properties": {
+          "activityName": {
+            "type": "string",
+            "nullable": true
+          },
+          "offsetDays": {
+            "type": "integer",
+            "format": "int32"
+          }
+        },
+        "additionalProperties": false
+      },
+      "GeneratePlanRequest": {
+        "type": "object",
+        "properties": {
+          "cropCycleId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "templateName": {
+            "type": "string",
+            "nullable": true
+          },
+          "stage": {
+            "type": "string",
+            "nullable": true
+          },
+          "planStartDate": {
+            "type": "string",
+            "format": "date"
+          },
+          "activities": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/GeneratePlanActivityRequest"
+            },
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "LoginRequest": {
+        "type": "object",
+        "properties": {
+          "phone": {
+            "type": "string",
+            "nullable": true
+          },
+          "password": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "RefreshRequest": {
+        "type": "object",
+        "properties": {
+          "refreshToken": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "RegisterRequest": {
+        "type": "object",
+        "properties": {
+          "phone": {
+            "type": "string",
+            "nullable": true
+          },
+          "password": {
+            "type": "string",
+            "nullable": true
+          },
+          "displayName": {
+            "type": "string",
+            "nullable": true
+          },
+          "appId": {
+            "type": "string",
+            "nullable": true
+          },
+          "role": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "SetPriceConfigRequest": {
+        "type": "object",
+        "properties": {
+          "itemName": {
+            "type": "string",
+            "nullable": true
+          },
+          "unitPrice": {
+            "type": "number",
+            "format": "double"
+          },
+          "currencyCode": {
+            "type": "string",
+            "nullable": true
+          },
+          "effectiveFrom": {
+            "type": "string",
+            "format": "date"
+          },
+          "version": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "createdByUserId": {
+            "type": "string",
+            "format": "uuid"
+          }
+        },
+        "additionalProperties": false
+      },
+      "SyncPushMutationRequest": {
+        "type": "object",
+        "properties": {
+          "clientRequestId": {
+            "type": "string",
+            "nullable": true
+          },
+          "mutationType": {
+            "type": "string",
+            "nullable": true
+          },
+          "payload": { }
+        },
+        "additionalProperties": false
+      },
+      "SyncPushRequest": {
+        "type": "object",
+        "properties": {
+          "deviceId": {
+            "type": "string",
+            "nullable": true
+          },
+          "mutations": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SyncPushMutationRequest"
+            },
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "VerifyLogRequest": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string",
+            "nullable": true
+          },
+          "reason": {
+            "type": "string",
+            "nullable": true
+          },
+          "verifiedByUserId": {
+            "type": "string",
+            "format": "uuid"
+          }
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "tags": [
+    {
+      "name": "Auth"
+    },
+    {
+      "name": "ShramSafal"
+    },
+    {
+      "name": "Sync"
+    },
+    {
+      "name": "System"
+    },
+    {
+      "name": "User"
+    }
+  ]
+}
