@@ -27,6 +27,19 @@ try
     builder.Services.AddProblemDetails();
     builder.Services.AddEndpointsApiExplorer();
     builder.Services.AddSwaggerGen();
+
+    // CORS: allow the React frontend dev server to call API
+    builder.Services.AddCors(options =>
+    {
+        options.AddPolicy("AllowFrontendDev", policy =>
+        {
+            policy.WithOrigins("http://localhost:3000", "http://localhost:5173")
+                  .AllowAnyHeader()
+                  .AllowAnyMethod()
+                  .AllowCredentials();
+        });
+    });
+
     builder.Services.AddUserApi(builder.Configuration);
     builder.Services.AddShramSafalApi(builder.Configuration);
 
@@ -34,6 +47,7 @@ try
 
     app.UseSerilogRequestLogging();
     app.UseExceptionHandler();
+    app.UseCors("AllowFrontendDev");
 
     app.Use(async (context, next) =>
     {
