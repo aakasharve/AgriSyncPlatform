@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { BrowserRouter } from 'react-router-dom';
-import { RAMUS_FARM as INITIAL_CROPS } from './data/farmData';
+
 import { CropProfile } from './types';
 import { LogProvider } from './app/context/LogContext';
 import { AppErrorBoundary } from './app/components/common/AppErrorBoundary';
@@ -18,7 +18,7 @@ import { AuthProvider } from './app/providers/AuthProvider';
 // Let's wrap everything in DataSourceProvider.
 const App: React.FC = () => {
     // Top-Level State: Crops (Required for LogProvider derivation)
-    const [crops, setCrops] = useState<CropProfile[]>(INITIAL_CROPS);
+    const [crops, setCrops] = useState<CropProfile[]>([]);
     const [showSplash, setShowSplash] = useState(true);
 
     return (

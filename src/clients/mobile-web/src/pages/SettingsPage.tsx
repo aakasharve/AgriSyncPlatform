@@ -3,7 +3,6 @@ import { useAppNavigationState } from '../app/context/AppFeatureContexts';
 import { Settings, Droplets, Users, Tractor, BookOpen, FlaskConical, Plus, Trash2, Coins, Leaf, Check, Pencil, ChevronDown, ChevronUp, Globe } from 'lucide-react';
 import { LedgerDefaults, LabourShift, DailyLog, CropProfile, HarvestConfig } from '../types';
 import { getHarvestConfig } from '../services/harvestService';
-import DemoLedger from '../features/analysis/components/DemoLedger';
 import NotificationTestComponent from '../shared/components/NotificationTestComponent';
 import HarvestConfigSheet from '../features/logs/components/harvest/HarvestConfigSheet';
 import { CropSymbol } from '../features/context/components/CropSelector';
@@ -12,20 +11,14 @@ import { Language } from '../i18n/translations';
 import { idGenerator } from '../core/domain/services/IdGenerator';
 
 interface SettingsPageProps {
-    isDemoMode: boolean;
-    onToggleDemo: (value: boolean) => void;
     defaults: LedgerDefaults;
     onUpdateDefaults: (defaults: LedgerDefaults) => void;
-    mockHistory: DailyLog[];
     crops: CropProfile[];
 }
 
 const SettingsPage: React.FC<SettingsPageProps> = ({
-    isDemoMode,
-    onToggleDemo,
     defaults,
     onUpdateDefaults,
-    mockHistory,
     crops
 }) => {
     const { setCurrentRoute } = useAppNavigationState();
@@ -120,29 +113,7 @@ const SettingsPage: React.FC<SettingsPageProps> = ({
                 </div>
             </div>
 
-            {/* 1. Demo Data Toggle */}
-            <div className="glass-panel p-5">
-                <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-4">
-                        <div className={`p-3 rounded-2xl transition-colors shadow-sm ${isDemoMode ? 'bg-emerald-100 text-emerald-600' : 'bg-stone-100 text-stone-400'}`}>
-                            <FlaskConical size={24} strokeWidth={2.5} />
-                        </div>
-                        <div>
-                            <h3 className="font-bold text-stone-800 text-lg">{t('settings.demoMode')}</h3>
-                            <p className="text-xs text-stone-500 font-medium mt-0.5">{t('settings.demoDescription')}</p>
-                        </div>
-                    </div>
-                    <button
-                        onClick={() => onToggleDemo(!isDemoMode)}
-                        className={`relative w-14 h-8 rounded-full transition-all duration-300 ease-in-out focus:outline-none focus:ring-4 focus:ring-emerald-500/20 ${isDemoMode ? 'bg-emerald-500 shadow-glow-emerald' : 'bg-stone-200 shadow-inner'}`}
-                    >
-                        <div className={`absolute top-1 left-1 bg-white w-6 h-6 rounded-full shadow-md transition-all duration-300 ease-in-out ${isDemoMode ? 'translate-x-6' : 'translate-x-0'}`} />
-                    </button>
-                </div>
 
-                {/* Ledger Visualization */}
-                {isDemoMode && <div className="mt-4"><DemoLedger mockHistory={mockHistory} /></div>}
-            </div>
 
             <div className="pt-4">
                 <h3 className="text-xl font-display font-black text-stone-800 px-1">{t('settings.ledgerConfig')}</h3>

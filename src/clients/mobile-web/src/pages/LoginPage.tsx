@@ -1,12 +1,10 @@
 import React, { useState } from 'react';
 import { useAuth } from '../app/providers/AuthProvider';
 
-interface LoginPageProps {
-    onUseDemoMode: () => void;
-}
+interface LoginPageProps { }
 
-const LoginPage: React.FC<LoginPageProps> = ({ onUseDemoMode }) => {
-    const { login, isLoading, loginError, bypassLogin } = useAuth();
+const LoginPage: React.FC<LoginPageProps> = () => {
+    const { login, isLoading, loginError } = useAuth();
     const [phone, setPhone] = useState('');
     const [password, setPassword] = useState('');
 
@@ -80,21 +78,11 @@ const LoginPage: React.FC<LoginPageProps> = ({ onUseDemoMode }) => {
                     </button>
                 </form>
 
-                <button
-                    type="button"
-                    onClick={onUseDemoMode}
-                    className="w-full rounded-xl bg-stone-100 hover:bg-stone-200 text-stone-700 font-semibold text-sm py-2.5 transition-colors"
-                >
-                    Switch to Demo Mode
-                </button>
-
-                <button
-                    type="button"
-                    onClick={() => bypassLogin()}
-                    className="w-full rounded-xl bg-orange-100 hover:bg-orange-200 text-orange-800 font-semibold text-sm py-2.5 transition-colors mt-2"
-                >
-                    Debug: Bypass Login (Test Real Mode)
-                </button>
+                <div className="mt-8 text-center">
+                    <p className="text-xs text-stone-400">
+                        AgriSync Platform v1.0
+                    </p>
+                </div>
             </div>
         </div>
     );
