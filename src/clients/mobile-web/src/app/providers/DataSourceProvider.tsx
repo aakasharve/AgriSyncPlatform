@@ -32,10 +32,13 @@ export const DataSourceProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     const { isAuthenticated } = useAuth();
     // Start in Demo Mode unless user is already authenticated
     const [isDemoMode, setIsDemoMode] = useState<boolean>(!isAuthenticated);
-    const [isLoading, setIsLoading] = useState<boolean>(false);
+    const [isLoading, setIsLoading] = useState<boolean>(true); // Start loading until first init completes
 
-    // Select Source based on Mode
+    // Select Source based on Mode — SYNCHRONOUSLY set namespace here
+    // to prevent race conditions (children effects run before parent effects)
     const dataSource = useMemo(() => {
+        storageNamespace.setNamespace(isDemoMode ? 'demo' : 'user');
+        console.log(`[DataSource] Namespace set to '${isDemoMode ? 'demo' : 'user'}' (sync)`);
         return isDemoMode ? DemoDataSource.getInstance() : DexieDataSource.getInstance();
     }, [isDemoMode]);
 
@@ -123,7 +126,7 @@ export const DataSourceProvider: React.FC<{ children: React.ReactNode }> = ({ ch
                 if (isDemoMode) {
                     console.log("[DataSource] Switching to DEMO mode");
                     backgroundSyncWorker.stop();
-                    storageNamespace.setNamespace('demo');
+                    // Namespace already set synchronously in useMemo
                     await dataSource.initialize();
 
                     // Helper: Auto-Seed Demo Data if empty
@@ -131,7 +134,7 @@ export const DataSourceProvider: React.FC<{ children: React.ReactNode }> = ({ ch
 
                 } else {
                     console.log("[DataSource] Switching to REAL mode");
-                    storageNamespace.setNamespace('user');
+                    // Namespace already set synchronously in useMemo
                     await dataSource.initialize();
 
                     // Run Migrations if needed
@@ -159,6 +162,18 @@ export const DataSourceProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         setDemoMode: handleSetDemoMode,
         isLoading
     };
+
+    // Gate children: Don't render until initialization is complete
+    // This prevents useAppData from loading data with stale/uninitialized state
+    if (isLoading) {
+        return (
+            <DataSourceContext.Provider value={value}>
+                <div className="min-h-screen flex items-center justify-center bg-surface-100">
+                    <div className="animate-pulse text-stone-400 text-sm font-medium">Loading...</div>
+                </div>
+            </DataSourceContext.Provider>
+        );
+    }
 
     return (
         <DataSourceContext.Provider value={value}>
