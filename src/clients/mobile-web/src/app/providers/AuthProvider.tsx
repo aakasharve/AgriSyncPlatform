@@ -113,6 +113,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setLoginError(null);
     }, []);
 
+    const bypassLogin = useCallback(async () => {
+        // DEBUG ONLY: Bypass login for testing "Real Mode" without backend
+        const dummySession: AuthSession = {
+            userId: 'debug-user-id',
+            accessToken: 'debug-access-token',
+            refreshToken: 'debug-refresh-token',
+            expiresAtUtc: new Date(Date.now() + 3600 * 1000).toISOString()
+        };
+        setAuthSession(dummySession);
+        setSession(dummySession);
+    }, []);
+
     const value = useMemo<AuthContextValue>(() => ({
         session,
         isAuthenticated: !!session?.accessToken,
@@ -121,18 +133,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         login,
         logout,
         refresh,
-        bypassLogin: useCallback(async () => {
-            // DEBUG ONLY: Bypass login for testing "Real Mode" without backend
-            const dummySession: AuthSession = {
-                userId: 'debug-user-id',
-                accessToken: 'debug-access-token',
-                refreshToken: 'debug-refresh-token',
-                expiresAtUtc: new Date(Date.now() + 3600 * 1000).toISOString()
-            };
-            setAuthSession(dummySession);
-            setSession(dummySession);
-        }, []),
-    }), [session, isLoading, loginError, login, logout, refresh]);
+        bypassLogin,
+    }), [session, isLoading, loginError, login, logout, refresh, bypassLogin]);
 
     return (
         <AuthContext.Provider value={value}>
