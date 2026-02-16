@@ -1,9 +1,11 @@
 using System.Text;
 using AgriSync.Bootstrapper.Middleware;
 using AgriSync.BuildingBlocks;
+using Microsoft.EntityFrameworkCore;
 using Serilog;
 using ShramSafal.Api;
 using User.Api;
+using User.Infrastructure.Persistence;
 
 Log.Logger = new LoggerConfiguration()
     .WriteTo.Console()
@@ -121,6 +123,51 @@ try
     app.MapGet("/health", () => Results.Ok(new { status = "ok", service = "AgriSync.Bootstrapper" }))
         .WithName("GetBootstrapperHealth")
         .WithTags("System");
+
+    // ── Test Endpoint: PostgreSQL Connectivity ──────────────────────────
+    app.MapGet("/test/db", async (UserDbContext db) =>
+    {
+        var result = new Dictionary<string, object>();
+        try
+        {
+            // 1. Test raw connection
+            var conn = db.Database.GetDbConnection();
+            await conn.OpenAsync();
+            result["connectionState"] = conn.State.ToString();
+
+            // 2. DB version
+            using var versionCmd = conn.CreateCommand();
+            versionCmd.CommandText = "SELECT version();";
+            var version = await versionCmd.ExecuteScalarAsync();
+            result["postgresVersion"] = version?.ToString() ?? "unknown";
+
+            // 3. List tables in usr schema
+            using var tablesCmd = conn.CreateCommand();
+            tablesCmd.CommandText = "SELECT table_name FROM information_schema.tables WHERE table_schema = 'usr' ORDER BY table_name;";
+            var tables = new List<string>();
+            using var reader = await tablesCmd.ExecuteReaderAsync();
+            while (await reader.ReadAsync())
+                tables.Add(reader.GetString(0));
+            result["tables"] = tables;
+
+            // 4. User count
+            var userCount = await db.Users.CountAsync();
+            result["userCount"] = userCount;
+
+            result["status"] = "connected";
+            return Results.Ok(result);
+        }
+        catch (Exception ex)
+        {
+            result["status"] = "error";
+            result["error"] = ex.Message;
+            result["innerError"] = ex.InnerException?.Message ?? "";
+            return Results.Json(result, statusCode: 500);
+        }
+    })
+    .WithName("TestDatabaseConnectivity")
+    .WithTags("System")
+    .AllowAnonymous();
 
     app.MapUserApi();
     app.MapShramSafalApi();
