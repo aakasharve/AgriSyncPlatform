@@ -1,3 +1,4 @@
+using System.Text;
 using AgriSync.Bootstrapper.Middleware;
 using AgriSync.BuildingBlocks;
 using Serilog;
@@ -34,9 +35,69 @@ try
     app.UseSerilogRequestLogging();
     app.UseExceptionHandler();
 
+    app.Use(async (context, next) =>
+    {
+        if (context.Request.Path.Equals("/swagger", StringComparison.OrdinalIgnoreCase))
+        {
+            context.Response.Redirect("/swagger/index.html", permanent: false);
+            return;
+        }
+
+        if (context.Request.Path.Equals("/swagger/index.html", StringComparison.OrdinalIgnoreCase)
+            && (context.Request.Query.ContainsKey("url") || context.Request.Query.ContainsKey("configUrl")))
+        {
+            context.Response.Redirect("/swagger/index.html", permanent: false);
+            return;
+        }
+
+        // Backward compatibility: some stale Swagger UI states request swagger-config as a spec URL.
+        // Rewrite to the real OpenAPI document to avoid "Unable to render this definition" failures.
+        if (context.Request.Path.Equals("/swagger/swagger-config", StringComparison.OrdinalIgnoreCase))
+        {
+            context.Request.Path = "/swagger/v1/swagger.json";
+        }
+
+        if (context.Request.Path.StartsWithSegments("/swagger", StringComparison.OrdinalIgnoreCase))
+        {
+            context.Response.Headers.CacheControl = "no-store, no-cache, must-revalidate";
+            context.Response.Headers.Pragma = "no-cache";
+            context.Response.Headers.Expires = "0";
+        }
+
+        await next();
+    });
+
+    // Swashbuckle 10.x emits OpenAPI 3.0.4 via Microsoft.OpenApi v2,
+    // but the bundled Swagger UI does not recognise that patch version yet.
+    // Downgrade the spec version string so the UI can render it.
+    app.Use(async (ctx, next) =>
+    {
+        var path = ctx.Request.Path.Value;
+        if (path is null || !path.EndsWith("swagger.json", StringComparison.OrdinalIgnoreCase))
+        {
+            await next();
+            return;
+        }
+
+        var original = ctx.Response.Body;
+        using var buffer = new MemoryStream();
+        ctx.Response.Body = buffer;
+
+        await next();
+
+        buffer.Position = 0;
+        var json = await new StreamReader(buffer).ReadToEndAsync();
+        json = json.Replace("\"3.0.4\"", "\"3.0.3\"");
+
+        ctx.Response.Body = original;
+        ctx.Response.ContentLength = Encoding.UTF8.GetByteCount(json);
+        await ctx.Response.WriteAsync(json);
+    });
+
     app.UseSwagger();
     app.UseSwaggerUI(options =>
     {
+        // Use an absolute route to avoid UI URL-resolution edge cases.
         options.SwaggerEndpoint("/swagger/v1/swagger.json", "AgriSync API v1");
     });
 
