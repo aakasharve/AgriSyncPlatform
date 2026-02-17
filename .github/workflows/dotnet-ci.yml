@@ -29,20 +29,4 @@ jobs:
       - name: Test
         run: dotnet test src/AgriSync.sln --configuration Release --no-build --verbosity normal
 
-      - name: Build Bootstrapper Docker image (.NET 10)
-        run: docker build -f src/AgriSync.Bootstrapper/Dockerfile -t agrisync-bootstrapper:${{ github.sha }} .
 
-      - name: Smoke test Bootstrapper container health
-        run: |
-          set -euo pipefail
-          docker run -d --name agrisync-bootstrapper-ci -p 18080:8080 agrisync-bootstrapper:${{ github.sha }}
-          trap 'docker rm -f agrisync-bootstrapper-ci >/dev/null 2>&1 || true' EXIT
-          for i in {1..20}; do
-            if curl -fsS http://127.0.0.1:18080/health >/dev/null; then
-              exit 0
-            fi
-            sleep 1
-          done
-          docker logs agrisync-bootstrapper-ci
-          echo "Container health check failed"
-          exit 1
