@@ -30,6 +30,12 @@ internal sealed class FarmConfiguration : IEntityTypeConfiguration<Farm>
             .HasColumnName("created_at_utc")
             .IsRequired();
 
+        builder.Property(x => x.ModifiedAtUtc)
+            .HasColumnName("modified_at_utc")
+            .IsRequired();
+
+        builder.HasIndex(x => x.ModifiedAtUtc);
+
         builder.Ignore(x => x.DomainEvents);
     }
 }

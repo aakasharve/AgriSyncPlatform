@@ -7,4 +7,6 @@ public sealed record SetPriceConfigVersionCommand(
     DateOnly EffectiveFrom,
     int Version,
     Guid CreatedByUserId,
-    Guid? PriceConfigId = null);
+    Guid? PriceConfigId = null,
+    string? ActorRole = null,
+    string? ClientCommandId = null);

@@ -4,6 +4,7 @@ using AgriSync.BuildingBlocks.Results;
 using AgriSync.SharedKernel.Contracts.Ids;
 using ShramSafal.Application.Contracts.Dtos;
 using ShramSafal.Application.Ports;
+using ShramSafal.Domain.Audit;
 using ShramSafal.Domain.Common;
 
 namespace ShramSafal.Application.UseCases.Finance.AddCostEntry;
@@ -41,7 +42,11 @@ public sealed class AddCostEntryHandler(
             return Result.Failure<AddCostEntryResultDto>(ShramSafalErrors.FarmNotFound);
         }
 
-        await authorizationEnforcer.EnsureIsFarmMember(new UserId(command.CreatedByUserId), farmId);
+        var canWriteFarm = await repository.IsUserMemberOfFarmAsync(command.FarmId, command.CreatedByUserId, ct);
+        if (!canWriteFarm)
+        {
+            return Result.Failure<CostEntryDto>(ShramSafalErrors.Forbidden);
+        }
 
         if (command.PlotId is not null)
         {
@@ -73,6 +78,7 @@ public sealed class AddCostEntryHandler(
             command.CurrencyCode,
             command.EntryDate,
             command.CreatedByUserId,
+            command.Location,
             clock.UtcNow);
 
         var duplicateCandidates = await repository.GetCostEntriesForDuplicateCheck(
@@ -93,6 +99,29 @@ public sealed class AddCostEntryHandler(
         }
 
         await repository.AddCostEntryAsync(entry, ct);
+        await repository.AddAuditEventAsync(
+            AuditEvent.Create(
+                command.FarmId,
+                "CostEntry",
+                entry.Id,
+                "Created",
+                command.CreatedByUserId,
+                command.ActorRole ?? "unknown",
+                new
+                {
+                    entry.Id,
+                    command.FarmId,
+                    command.PlotId,
+                    command.CropCycleId,
+                    command.Category,
+                    command.Amount,
+                    command.CurrencyCode,
+                    command.EntryDate,
+                    command.Location
+                },
+                command.ClientCommandId,
+                clock.UtcNow),
+            ct);
         await repository.SaveChangesAsync(ct);
 
         return Result.Success(new AddCostEntryResultDto(entry.ToDto(), isPotentialDuplicate));

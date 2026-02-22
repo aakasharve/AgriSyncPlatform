@@ -23,10 +23,10 @@ import {
 } from '../scheduler.types';
 
 import {
-    getTemplateForCrop as fetchTemplate,
-    getScheduleById
-} from '../library/scheduleLibrary';
-import { idGenerator } from '../../../core/domain/services/IdGenerator';
+    getPrimaryTemplateForCrop as fetchTemplate,
+    getTemplateById,
+} from '../../infrastructure/reference/TemplateCatalog';
+import { idGenerator } from '../../core/domain/services/IdGenerator';
 
 // ============================================
 // 1. OPERATION REGISTRY
@@ -93,7 +93,7 @@ export const getTemplateForCrop = (cropName: string): CropScheduleTemplate => {
     return fetchTemplate(cropName);
 };
 
-export { getScheduleById };
+export { getTemplateById as getScheduleById };
 
 // ============================================
 // 3. PLAN DERIVATION (CORE ENGINE)

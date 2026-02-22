@@ -3,7 +3,7 @@
  *
  * IndexedDB-backed database using Dexie.js.
  * 9 tables: logs, outbox, mutationQueue, auditEvents, syncCursors, appMeta,
- * referenceData, dayLedgers, plannedTasks.
+ * referenceData, attachments, uploadQueue.
  *
  * Replaces localStorage for:
  * - Larger storage capacity (no 5MB limit)
@@ -57,6 +57,7 @@ export interface MutationQueueItem {
     id?: number;
     deviceId: string;
     clientRequestId: string;
+    clientCommandId: string;
     mutationType: string;
     payload: unknown;
     status: MutationQueueStatus;
@@ -64,6 +65,51 @@ export interface MutationQueueItem {
     updatedAt: string;
     retryCount: number;
     lastError?: string;
+}
+
+// =============================================================================
+// ATTACHMENTS (Metadata + local linkage)
+// =============================================================================
+
+export type LocalAttachmentStatus = 'pending' | 'uploading' | 'uploaded' | 'failed';
+
+export interface AttachmentRecord {
+    /** Local attachment id (and server id when provided via attachmentId) */
+    id: string;
+    farmId: string;
+    linkedEntityId?: string;
+    linkedEntityType?: string;
+    /** Device-local file reference used by upload worker */
+    localPath: string;
+    originalFileName: string;
+    mimeType: string;
+    sizeBytes: number;
+    status: LocalAttachmentStatus;
+    remoteAttachmentId?: string;
+    uploadedAtUtc?: string;
+    finalizedAtUtc?: string;
+    createdAt: string;
+    updatedAt: string;
+    retryCount: number;
+    lastError?: string;
+}
+
+// =============================================================================
+// ATTACHMENT UPLOAD QUEUE
+// =============================================================================
+
+export type UploadQueueStatus = 'pending' | 'uploading' | 'retry_wait' | 'failed' | 'completed';
+
+export interface UploadQueueItem {
+    autoId?: number;
+    attachmentId: string;
+    status: UploadQueueStatus;
+    retryCount: number;
+    lastAttemptAt?: string;
+    nextAttemptAt?: string;
+    lastError?: string;
+    createdAt: string;
+    updatedAt: string;
 }
 
 // =============================================================================
@@ -153,6 +199,8 @@ export class AgriLogDatabase extends Dexie {
     logs!: Table<DexieLogRecord, string>;
     outbox!: Table<OutboxEvent, number>;
     mutationQueue!: Table<MutationQueueItem, number>;
+    attachments!: Table<AttachmentRecord, string>;
+    uploadQueue!: Table<UploadQueueItem, number>;
     auditEvents!: Table<AuditEvent, string>;
     syncCursors!: Table<SyncCursor, string>;
     appMeta!: Table<AppMetaEntry, string>;
@@ -199,6 +247,18 @@ export class AgriLogDatabase extends Dexie {
             referenceData: 'key, versionHash, updatedAt',
             dayLedgers: 'id, farmId, dateKey, [farmId+dateKey]',
             plannedTasks: 'id, cropCycleId, plannedDate, [cropCycleId+plannedDate]',
+        });
+
+        this.version(4).stores({
+            logs: 'id, date, verificationStatus, createdByOperatorId, isDeleted, [date+isDeleted], [createdByOperatorId+isDeleted]',
+            outbox: '++id, idempotencyKey, status, action, [status+createdAt]',
+            mutationQueue: '++id, &[deviceId+clientRequestId], status, mutationType, createdAt, [status+createdAt]',
+            attachments: 'id, farmId, linkedEntityId, linkedEntityType, localPath, status, [linkedEntityId+linkedEntityType], [farmId+status]',
+            uploadQueue: '++autoId, attachmentId, status, retryCount, lastAttemptAt, nextAttemptAt, [status+nextAttemptAt]',
+            auditEvents: 'id, resourceId, action, timestamp, [resourceId+timestamp]',
+            syncCursors: 'tableName',
+            appMeta: 'key',
+            referenceData: 'key, versionHash, updatedAt',
         });
     }
 }

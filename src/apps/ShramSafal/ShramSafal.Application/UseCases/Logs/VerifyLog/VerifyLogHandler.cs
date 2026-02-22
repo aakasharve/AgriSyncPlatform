@@ -4,6 +4,7 @@ using AgriSync.BuildingBlocks.Results;
 using AgriSync.SharedKernel.Contracts.Ids;
 using ShramSafal.Application.Contracts.Dtos;
 using ShramSafal.Application.Ports;
+using ShramSafal.Domain.Audit;
 using ShramSafal.Domain.Common;
 using ShramSafal.Domain.Logs;
 
@@ -38,21 +39,41 @@ public sealed class VerifyLogHandler(
             return Result.Failure<DailyLogDto>(ShramSafalErrors.DailyLogNotFound);
         }
 
-        var currentStatus = log.CurrentVerificationStatus;
-        if (!VerificationStateMachine.CanTransitionWithRole(currentStatus, command.TargetStatus, command.CallerRole))
+        var canWriteFarm = await repository.IsUserMemberOfFarmAsync(log.FarmId, command.VerifiedByUserId, ct);
+        if (!canWriteFarm)
         {
-            return Result.Failure<DailyLogDto>(ShramSafalErrors.VerificationTransitionNotAllowedForRole);
+            return Result.Failure<DailyLogDto>(ShramSafalErrors.Forbidden);
         }
 
         try
         {
-            log.Verify(
+            var verification = log.Verify(
                 command.VerificationEventId ?? idGenerator.New(),
                 command.TargetStatus,
                 command.Reason,
                 command.CallerRole,
                 command.VerifiedByUserId,
                 clock.UtcNow);
+
+            await repository.AddAuditEventAsync(
+                AuditEvent.Create(
+                    log.FarmId,
+                    "DailyLog",
+                    log.Id,
+                    "VerificationChanged",
+                    command.VerifiedByUserId,
+                    command.ActorRole ?? "unknown",
+                    new
+                    {
+                        logId = log.Id,
+                        verificationId = verification.Id,
+                        status = verification.Status.ToString(),
+                        verification.Reason,
+                        verification.OccurredAtUtc
+                    },
+                    command.ClientCommandId,
+                    clock.UtcNow),
+                ct);
         }
         catch (ArgumentException)
         {

@@ -20,6 +20,7 @@ public sealed class PlannedActivity : Entity<Guid>
         Stage = stage;
         PlannedDate = plannedDate;
         CreatedAtUtc = createdAtUtc;
+        ModifiedAtUtc = createdAtUtc;
     }
 
     public Guid CropCycleId { get; private set; }
@@ -27,6 +28,7 @@ public sealed class PlannedActivity : Entity<Guid>
     public string Stage { get; private set; } = string.Empty;
     public DateOnly PlannedDate { get; private set; }
     public DateTime CreatedAtUtc { get; private set; }
+    public DateTime ModifiedAtUtc { get; private set; }
 
     public static PlannedActivity Create(
         Guid id,
@@ -55,4 +57,3 @@ public sealed class PlannedActivity : Entity<Guid>
             createdAtUtc);
     }
 }
-

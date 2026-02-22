@@ -74,6 +74,7 @@ export interface ProcurementExpense {
     // Evidence
     receiptImageUrl?: string;        // Stored image path
     receiptImageBase64?: string;     // For processing (not stored long-term)
+    attachmentIds?: string[];        // Background-uploaded attachment ids
 
     // AI Processing
     aiExtracted: boolean;            // Was this AI-processed?

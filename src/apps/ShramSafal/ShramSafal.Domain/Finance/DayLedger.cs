@@ -5,61 +5,82 @@ namespace ShramSafal.Domain.Finance;
 
 public sealed class DayLedger : Entity<Guid>
 {
+    private readonly List<DayLedgerAllocation> _allocations = [];
+
     private DayLedger() : base(Guid.Empty) { } // EF Core
 
     private DayLedger(
         Guid id,
         FarmId farmId,
-        DateOnly dateKey,
-        AllocationStrategy allocationStrategy,
-        DateTime createdAtUtc)
+        Guid sourceCostEntryId,
+        DateOnly ledgerDate,
+        string allocationBasis,
+        UserId createdByUserId,
+        DateTime createdAtUtc,
+        IEnumerable<DayLedgerAllocation> allocations)
         : base(id)
     {
         FarmId = farmId;
-        DateKey = dateKey;
-        AllocationStrategy = allocationStrategy;
+        SourceCostEntryId = sourceCostEntryId;
+        LedgerDate = ledgerDate;
+        AllocationBasis = allocationBasis;
+        CreatedByUserId = createdByUserId;
         CreatedAtUtc = createdAtUtc;
+        ModifiedAtUtc = createdAtUtc;
+        _allocations.AddRange(allocations);
     }
 
     public FarmId FarmId { get; private set; }
-    public DateOnly DateKey { get; private set; }
-    public List<Guid> GlobalExpenseIds { get; private set; } = [];
-    public AllocationStrategy AllocationStrategy { get; private set; }
-    public decimal TotalGlobalCost { get; private set; }
+    public Guid SourceCostEntryId { get; private set; }
+    public DateOnly LedgerDate { get; private set; }
+    public string AllocationBasis { get; private set; } = string.Empty;
+    public UserId CreatedByUserId { get; private set; }
     public DateTime CreatedAtUtc { get; private set; }
-    public List<PlotAllocation> PlotAllocations { get; private set; } = [];
+    public DateTime ModifiedAtUtc { get; private set; }
+    public IReadOnlyCollection<DayLedgerAllocation> Allocations => _allocations.AsReadOnly();
 
     public static DayLedger Create(
         Guid id,
         FarmId farmId,
-        DateOnly dateKey,
-        AllocationStrategy strategy,
+        Guid sourceCostEntryId,
+        DateOnly ledgerDate,
+        string allocationBasis,
+        UserId createdByUserId,
+        IReadOnlyCollection<DayLedgerAllocation> allocations,
         DateTime createdAtUtc)
     {
-        if (id == Guid.Empty)
+        if (sourceCostEntryId == Guid.Empty)
         {
-            throw new ArgumentException("Ledger id is required.", nameof(id));
+            throw new ArgumentException("Source cost entry id is required.", nameof(sourceCostEntryId));
         }
 
-        return new DayLedger(id, farmId, dateKey, strategy, createdAtUtc);
-    }
-
-    public void ReplaceAllocations(
-        IReadOnlyCollection<Guid> globalExpenseIds,
-        IReadOnlyCollection<PlotAllocation> allocations,
-        decimal totalGlobalCost)
-    {
-        ArgumentNullException.ThrowIfNull(globalExpenseIds);
-        ArgumentNullException.ThrowIfNull(allocations);
-
-        if (totalGlobalCost < 0)
+        if (string.IsNullOrWhiteSpace(allocationBasis))
         {
-            throw new ArgumentException("Total global cost cannot be negative.", nameof(totalGlobalCost));
+            throw new ArgumentException("Allocation basis is required.", nameof(allocationBasis));
         }
 
-        GlobalExpenseIds = globalExpenseIds.Distinct().ToList();
-        PlotAllocations = allocations.ToList();
+        if (allocations.Count == 0)
+        {
+            throw new ArgumentException("At least one allocation is required.", nameof(allocations));
+        }
 
-        TotalGlobalCost = decimal.Round(totalGlobalCost, 2, MidpointRounding.AwayFromZero);
+        var normalizedAllocations = allocations
+            .Where(x => x.AllocatedAmount > 0)
+            .ToList();
+
+        if (normalizedAllocations.Count != allocations.Count)
+        {
+            throw new ArgumentException("Allocation amount must be greater than zero.", nameof(allocations));
+        }
+
+        return new DayLedger(
+            id,
+            farmId,
+            sourceCostEntryId,
+            ledgerDate,
+            allocationBasis.Trim(),
+            createdByUserId,
+            createdAtUtc,
+            normalizedAllocations);
     }
 }

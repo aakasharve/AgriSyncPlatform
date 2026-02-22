@@ -3,7 +3,7 @@
  * Clean Android-style layout: header, content, bottom panel
  */
 
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Mic } from 'lucide-react';
 
 import AudioRecorder from './features/voice/components/AudioRecorder'; // Keep for type check/ref if needed
@@ -24,6 +24,7 @@ import { CropProfile } from './types';
 import { useAgriLogApp } from './app/compositionRoot';
 import { AppFeatureProviders } from './app/context/AppFeatureContexts';
 import { useAuth } from './app/providers/AuthProvider';
+import { useTemplateCatalogSync } from './app/hooks/useTemplateCatalogSync';
 import LoginPage from './pages/LoginPage';
 
 // Demo Mode pill removed
@@ -35,10 +36,11 @@ interface AppContentProps {
     setCrops: React.Dispatch<React.SetStateAction<CropProfile[]>>;
 }
 
-const AppContent: React.FC<AppContentProps> = ({ crops: initialCrops }) => {
+const AppContent: React.FC<AppContentProps> = ({ crops: initialCrops, setCrops }) => {
 
     const app = useAgriLogApp({ initialCrops });
     const { isAuthenticated } = useAuth();
+    useTemplateCatalogSync();
 
     // Phase 4: Global Voice State (UI concern, so kept here or could be moved to hook)
     const [isGlobalListening, setIsGlobalListening] = useState(false);
@@ -47,6 +49,10 @@ const AppContent: React.FC<AppContentProps> = ({ crops: initialCrops }) => {
         navigation, context, data, voice, weather, commands, trust,
         toast, setToast, handleReset, lastSavedLogSummary, lastSavedLogIds
     } = app;
+
+    useEffect(() => {
+        setCrops(data.crops);
+    }, [data.crops, setCrops]);
 
     // --- VIEW HELPERS ---
     const getContextColorIndicator = () => {

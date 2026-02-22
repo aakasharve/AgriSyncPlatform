@@ -1,8 +1,8 @@
 import React, { useMemo, useState } from 'react';
 import { BookOpen, CheckCircle2, Clock, Eye, Layers, Users, X } from 'lucide-react';
 import { CropProfile, CropScheduleTemplate } from '../../../types';
-import { ScheduleLibrarySort, getSchedulesForCrop, getStageNote } from '../library/scheduleLibrary';
-import { getOperationName } from '../../../features/scheduler/planning/ClientPlanEngine';
+import { TemplateCatalogSort, getTemplatesForCrop, getStageNote } from '../../../infrastructure/reference/TemplateCatalog';
+import { getOperationName } from '../../../domain/planning/PlanEngine';
 
 interface ScheduleLibraryViewProps {
     crop?: CropProfile;
@@ -34,13 +34,13 @@ const getStageActivities = (template: CropScheduleTemplate, stageId: string): Ar
 };
 
 const ScheduleLibraryView: React.FC<ScheduleLibraryViewProps> = ({ crop, adoptedScheduleId, onAdopt }) => {
-    const [sortBy, setSortBy] = useState<ScheduleLibrarySort>('HIGHEST_ADOPTION');
+    const [sortBy, setSortBy] = useState<TemplateCatalogSort>('HIGHEST_ADOPTION');
     const [search, setSearch] = useState('');
     const [detailTemplate, setDetailTemplate] = useState<CropScheduleTemplate | null>(null);
 
     const schedules = useMemo(() => {
         if (!crop) return [];
-        return getSchedulesForCrop(crop.name, sortBy);
+        return getTemplatesForCrop(crop.name, sortBy);
     }, [crop, sortBy]);
 
     const filteredSchedules = useMemo(() => {
@@ -72,7 +72,7 @@ const ScheduleLibraryView: React.FC<ScheduleLibraryViewProps> = ({ crop, adopted
                     />
                     <select
                         value={sortBy}
-                        onChange={(e) => setSortBy(e.target.value as ScheduleLibrarySort)}
+                        onChange={(e) => setSortBy(e.target.value as TemplateCatalogSort)}
                         className="px-3 py-2 rounded-xl border border-stone-200 text-sm font-bold bg-white outline-none focus:border-emerald-500"
                     >
                         <option value="HIGHEST_ADOPTION">Highest Adoption Score</option>

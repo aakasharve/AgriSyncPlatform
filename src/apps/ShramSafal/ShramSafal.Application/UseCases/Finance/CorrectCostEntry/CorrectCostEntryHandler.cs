@@ -4,6 +4,7 @@ using AgriSync.BuildingBlocks.Results;
 using AgriSync.SharedKernel.Contracts.Ids;
 using ShramSafal.Application.Contracts.Dtos;
 using ShramSafal.Application.Ports;
+using ShramSafal.Domain.Audit;
 using ShramSafal.Domain.Common;
 
 namespace ShramSafal.Application.UseCases.Finance.CorrectCostEntry;
@@ -35,7 +36,11 @@ public sealed class CorrectCostEntryHandler(
             return Result.Failure<FinanceCorrectionDto>(ShramSafalErrors.CostEntryNotFound);
         }
 
-        await authorizationEnforcer.EnsureIsFarmMember(new UserId(command.CorrectedByUserId), entry.FarmId);
+        var canWriteFarm = await repository.IsUserMemberOfFarmAsync(entry.FarmId, command.CorrectedByUserId, ct);
+        if (!canWriteFarm)
+        {
+            return Result.Failure<FinanceCorrectionDto>(ShramSafalErrors.Forbidden);
+        }
 
         var correction = Domain.Finance.FinanceCorrection.Create(
             command.FinanceCorrectionId ?? idGenerator.New(),
@@ -50,6 +55,26 @@ public sealed class CorrectCostEntryHandler(
         entry.MarkCorrected(correction.Id, correction.CorrectedAmount, correction.CurrencyCode, correction.CorrectedAtUtc);
 
         await repository.AddFinanceCorrectionAsync(correction, ct);
+        await repository.AddAuditEventAsync(
+            AuditEvent.Create(
+                entry.FarmId,
+                "CostEntry",
+                entry.Id,
+                "Corrected",
+                command.CorrectedByUserId,
+                command.ActorRole ?? "unknown",
+                new
+                {
+                    costEntryId = entry.Id,
+                    financeCorrectionId = correction.Id,
+                    correction.OriginalAmount,
+                    correction.CorrectedAmount,
+                    correction.CurrencyCode,
+                    correction.Reason
+                },
+                command.ClientCommandId,
+                clock.UtcNow),
+            ct);
         await repository.SaveChangesAsync(ct);
 
         return Result.Success(correction.ToDto());

@@ -45,7 +45,18 @@ export { DexieLogsRepository } from './DexieLogsRepository';
 
 // Dexie database
 export { getDatabase, resetDatabase, AgriLogDatabase } from './DexieDatabase';
-export type { OutboxEvent, MutationQueueItem, MutationQueueStatus, SyncCursor, AppMetaEntry, DexieLogRecord } from './DexieDatabase';
+export type {
+    OutboxEvent,
+    MutationQueueItem,
+    MutationQueueStatus,
+    AttachmentRecord,
+    LocalAttachmentStatus,
+    UploadQueueItem,
+    UploadQueueStatus,
+    SyncCursor,
+    AppMetaEntry,
+    DexieLogRecord,
+} from './DexieDatabase';
 
 // Migration
 export { MigrationService } from './MigrationService';

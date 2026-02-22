@@ -4,6 +4,7 @@ using AgriSync.BuildingBlocks.Results;
 using AgriSync.SharedKernel.Contracts.Ids;
 using ShramSafal.Application.Contracts.Dtos;
 using ShramSafal.Application.Ports;
+using ShramSafal.Domain.Audit;
 using ShramSafal.Domain.Common;
 
 namespace ShramSafal.Application.UseCases.Logs.CreateDailyLog;
@@ -38,7 +39,11 @@ public sealed class CreateDailyLogHandler(
             return Result.Failure<DailyLogDto>(ShramSafalErrors.FarmNotFound);
         }
 
-        await authorizationEnforcer.EnsureIsFarmMember(new UserId(command.RequestedByUserId), farmId);
+        var canWriteFarm = await repository.IsUserMemberOfFarmAsync(command.FarmId, command.OperatorUserId, ct);
+        if (!canWriteFarm)
+        {
+            return Result.Failure<DailyLogDto>(ShramSafalErrors.Forbidden);
+        }
 
         var plot = await repository.GetPlotByIdAsync(command.PlotId, ct);
         if (plot is null || plot.FarmId != farmId)
@@ -69,9 +74,30 @@ public sealed class CreateDailyLogHandler(
             command.OperatorUserId,
             command.LogDate,
             command.IdempotencyKey,
+            command.Location,
             clock.UtcNow);
 
         await repository.AddDailyLogAsync(log, ct);
+        await repository.AddAuditEventAsync(
+            AuditEvent.Create(
+                command.FarmId,
+                "DailyLog",
+                log.Id,
+                "Created",
+                command.OperatorUserId,
+                command.ActorRole ?? "unknown",
+                new
+                {
+                    log.Id,
+                    command.FarmId,
+                    command.PlotId,
+                    command.CropCycleId,
+                    command.LogDate,
+                    command.Location
+                },
+                command.ClientRequestId,
+                clock.UtcNow),
+            ct);
         await repository.SaveChangesAsync(ct);
 
         return Result.Success(log.ToDto());

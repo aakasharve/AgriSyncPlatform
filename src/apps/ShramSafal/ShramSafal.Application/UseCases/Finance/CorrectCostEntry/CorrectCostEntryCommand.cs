@@ -6,4 +6,6 @@ public sealed record CorrectCostEntryCommand(
     string CurrencyCode,
     string Reason,
     Guid CorrectedByUserId,
-    Guid? FinanceCorrectionId = null);
+    Guid? FinanceCorrectionId = null,
+    string? ActorRole = null,
+    string? ClientCommandId = null);

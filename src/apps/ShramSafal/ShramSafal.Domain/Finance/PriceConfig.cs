@@ -25,6 +25,7 @@ public sealed class PriceConfig : Entity<Guid>
         Version = version;
         CreatedByUserId = createdByUserId;
         CreatedAtUtc = createdAtUtc;
+        ModifiedAtUtc = createdAtUtc;
     }
 
     public string ItemName { get; private set; } = string.Empty;
@@ -34,6 +35,7 @@ public sealed class PriceConfig : Entity<Guid>
     public int Version { get; private set; }
     public UserId CreatedByUserId { get; private set; }
     public DateTime CreatedAtUtc { get; private set; }
+    public DateTime ModifiedAtUtc { get; private set; }
 
     public static PriceConfig Create(
         Guid id,

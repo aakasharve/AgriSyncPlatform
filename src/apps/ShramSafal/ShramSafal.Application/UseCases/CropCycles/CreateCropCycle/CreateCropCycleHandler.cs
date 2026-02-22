@@ -3,6 +3,7 @@ using AgriSync.BuildingBlocks.Results;
 using AgriSync.SharedKernel.Contracts.Ids;
 using ShramSafal.Application.Contracts.Dtos;
 using ShramSafal.Application.Ports;
+using ShramSafal.Domain.Audit;
 using ShramSafal.Domain.Common;
 
 namespace ShramSafal.Application.UseCases.CropCycles.CreateCropCycle;
@@ -18,6 +19,7 @@ public sealed class CreateCropCycleHandler(
 
         if (command.FarmId == Guid.Empty ||
             command.PlotId == Guid.Empty ||
+            command.ActorUserId == Guid.Empty ||
             string.IsNullOrWhiteSpace(command.CropName) ||
             string.IsNullOrWhiteSpace(command.Stage))
         {
@@ -41,6 +43,13 @@ public sealed class CreateCropCycleHandler(
             return Result.Failure<CropCycleDto>(ShramSafalErrors.PlotNotFound);
         }
 
+        var canWriteFarm = await repository.IsUserMemberOfFarmAsync(command.FarmId, command.ActorUserId, ct);
+        if (!canWriteFarm)
+        {
+            return Result.Failure<CropCycleDto>(ShramSafalErrors.Forbidden);
+        }
+
+        var nowUtc = clock.UtcNow;
         var cycle = Domain.Crops.CropCycle.Create(
             command.CropCycleId ?? idGenerator.New(),
             command.FarmId,
@@ -49,9 +58,30 @@ public sealed class CreateCropCycleHandler(
             command.Stage,
             command.StartDate,
             command.EndDate,
-            clock.UtcNow);
+            nowUtc);
 
         await repository.AddCropCycleAsync(cycle, ct);
+        await repository.AddAuditEventAsync(
+            AuditEvent.Create(
+                command.FarmId,
+                "CropCycle",
+                cycle.Id,
+                "Created",
+                command.ActorUserId,
+                command.ActorRole ?? "unknown",
+                new
+                {
+                    cycle.Id,
+                    command.FarmId,
+                    command.PlotId,
+                    cycle.CropName,
+                    cycle.Stage,
+                    cycle.StartDate,
+                    cycle.EndDate
+                },
+                command.ClientCommandId,
+                nowUtc),
+            ct);
         await repository.SaveChangesAsync(ct);
 
         return Result.Success(cycle.ToDto());

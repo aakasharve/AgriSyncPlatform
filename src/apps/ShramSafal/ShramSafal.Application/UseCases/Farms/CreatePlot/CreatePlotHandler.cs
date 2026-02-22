@@ -2,6 +2,7 @@ using AgriSync.BuildingBlocks.Abstractions;
 using AgriSync.BuildingBlocks.Results;
 using ShramSafal.Application.Contracts.Dtos;
 using ShramSafal.Application.Ports;
+using ShramSafal.Domain.Audit;
 using ShramSafal.Domain.Common;
 
 namespace ShramSafal.Application.UseCases.Farms.CreatePlot;
@@ -13,7 +14,10 @@ public sealed class CreatePlotHandler(
 {
     public async Task<Result<PlotDto>> HandleAsync(CreatePlotCommand command, CancellationToken ct = default)
     {
-        if (command.FarmId == Guid.Empty || string.IsNullOrWhiteSpace(command.Name) || command.AreaInAcres <= 0)
+        if (command.FarmId == Guid.Empty ||
+            command.ActorUserId == Guid.Empty ||
+            string.IsNullOrWhiteSpace(command.Name) ||
+            command.AreaInAcres <= 0)
         {
             return Result.Failure<PlotDto>(ShramSafalErrors.InvalidCommand);
         }
@@ -29,14 +33,39 @@ public sealed class CreatePlotHandler(
             return Result.Failure<PlotDto>(ShramSafalErrors.FarmNotFound);
         }
 
+        var canWriteFarm = await repository.IsUserMemberOfFarmAsync(command.FarmId, command.ActorUserId, ct);
+        if (!canWriteFarm)
+        {
+            return Result.Failure<PlotDto>(ShramSafalErrors.Forbidden);
+        }
+
+        var nowUtc = clock.UtcNow;
         var plot = Domain.Farms.Plot.Create(
             command.PlotId ?? idGenerator.New(),
             command.FarmId,
             command.Name,
             command.AreaInAcres,
-            clock.UtcNow);
+            nowUtc);
 
         await repository.AddPlotAsync(plot, ct);
+        await repository.AddAuditEventAsync(
+            AuditEvent.Create(
+                command.FarmId,
+                "Plot",
+                plot.Id,
+                "Created",
+                command.ActorUserId,
+                command.ActorRole ?? "unknown",
+                new
+                {
+                    plot.Id,
+                    command.FarmId,
+                    plot.Name,
+                    plot.AreaInAcres
+                },
+                command.ClientCommandId,
+                nowUtc),
+            ct);
         await repository.SaveChangesAsync(ct);
 
         return Result.Success(plot.ToDto());

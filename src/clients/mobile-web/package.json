@@ -10,7 +10,8 @@
     "build:prod": "vite build --mode production",
     "clean": "rimraf dist",
     "preview": "vite preview",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "verify:mutation-queue": "node scripts/verify-mutation-queue.mjs"
   },
   "dependencies": {
     "@google/genai": "^1.30.0",

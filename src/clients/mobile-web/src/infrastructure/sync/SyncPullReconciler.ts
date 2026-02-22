@@ -7,6 +7,7 @@ import {
     type Plot,
 } from '../../types';
 import {
+    type AttachmentDto,
     type CropCycleDto,
     type DailyLogDto,
     type DayLedgerDto,
@@ -14,7 +15,7 @@ import {
     type PlotDto,
     type SyncPullResponse,
 } from '../api/AgriSyncClient';
-import { getDatabase } from '../storage/DexieDatabase';
+import { getDatabase, type AttachmentRecord } from '../storage/DexieDatabase';
 import { storageNamespace } from '../storage/StorageNamespace';
 
 type SyncPullReferenceDataPayload = SyncPullResponse & {
@@ -23,6 +24,11 @@ type SyncPullReferenceDataPayload = SyncPullResponse & {
     activityCategories?: string[];
     costCategories?: string[];
     referenceDataVersionHash?: string;
+};
+
+type CropTypeReference = {
+    name: string;
+    defaultTemplateId?: string | null;
 };
 
 const REFERENCE_DATA_VERSION_META_KEY = 'shramsafal_reference_data_version_hash_v1';
@@ -58,11 +64,43 @@ function pickIconName(cropName: string): string {
     return match?.iconName ?? 'Sprout';
 }
 
-function defaultPlotSchedule(plotId: string, referenceDate: string) {
+function normalizeCropTypeKey(value: string): string {
+    return value.trim().toLowerCase().replace(/\s+/g, ' ');
+}
+
+function readCropTypeReferences(rawCropTypes: unknown[]): Map<string, string> {
+    const defaults = new Map<string, string>();
+
+    rawCropTypes.forEach(item => {
+        if (!item || typeof item !== 'object') {
+            return;
+        }
+
+        const value = item as CropTypeReference;
+        if (typeof value.name !== 'string') {
+            return;
+        }
+
+        if (typeof value.defaultTemplateId !== 'string') {
+            return;
+        }
+
+        const templateId = value.defaultTemplateId.trim();
+        if (!templateId) {
+            return;
+        }
+
+        defaults.set(normalizeCropTypeKey(value.name), templateId);
+    });
+
+    return defaults;
+}
+
+function defaultPlotSchedule(plotId: string, referenceDate: string, templateId: string | null) {
     return {
         id: `sch_${plotId}`,
         plotId,
-        templateId: 'sync_template',
+        templateId: templateId ?? 'fallback_template',
         referenceType: 'PLANTING' as const,
         referenceDate,
         stageOverrides: [],
@@ -94,11 +132,14 @@ function ensureCrop(cropsById: Map<string, CropProfile>, cropName: string): Crop
     return created;
 }
 
-function upsertPlot(crop: CropProfile, plotDto: PlotDto, cycle: CropCycleDto): void {
+function upsertPlot(crop: CropProfile, plotDto: PlotDto, cycle: CropCycleDto, templateId: string | null): void {
     const existingPlot = crop.plots.find(p => p.id === plotDto.id);
     if (existingPlot) {
         existingPlot.name = plotDto.name;
         existingPlot.startDate = cycle.startDate;
+        if (existingPlot.schedule) {
+            existingPlot.schedule.templateId = templateId ?? existingPlot.schedule.templateId;
+        }
         existingPlot.baseline = {
             ...existingPlot.baseline,
             totalArea: plotDto.areaInAcres,
@@ -117,7 +158,7 @@ function upsertPlot(crop: CropProfile, plotDto: PlotDto, cycle: CropCycleDto): v
             totalArea: plotDto.areaInAcres,
             unit: 'Acre',
         },
-        schedule: defaultPlotSchedule(plotDto.id, cycle.startDate),
+        schedule: defaultPlotSchedule(plotDto.id, cycle.startDate, templateId),
     };
 
     crop.plots.push(plot);
@@ -154,12 +195,22 @@ function mapVerificationStatus(status?: string): LogVerificationStatus {
     }
 }
 
-function dayLedgerMetaKey(dayLedgerId: string): string {
-    return `shramsafal_day_ledger_${dayLedgerId}`;
-}
+function mapAttachmentStatus(status?: string): AttachmentRecord['status'] {
+    if (!status) {
+        return 'pending';
+    }
 
-function normalizeDateValue(value: string): string {
-    return value.includes('T') ? value.split('T')[0] : value;
+    switch (status.trim().toLowerCase()) {
+        case 'finalized':
+        case 'uploaded':
+            return 'uploaded';
+        case 'uploading':
+            return 'uploading';
+        case 'failed':
+            return 'failed';
+        default:
+            return 'pending';
+    }
 }
 
 function toDailyLog(
@@ -242,18 +293,33 @@ function writeCrops(crops: CropProfile[]): void {
 }
 
 export async function reconcileSyncPull(payload: SyncPullResponse): Promise<void> {
+    const referencePayload = payload as SyncPullReferenceDataPayload;
+    const scheduleTemplates = referencePayload.scheduleTemplates ?? [];
+    const cropTypes = referencePayload.cropTypes ?? [];
+    const activityCategories = referencePayload.activityCategories ?? [];
+    const costCategories = referencePayload.costCategories ?? [];
+    const referenceDataVersionHash = referencePayload.referenceDataVersionHash?.trim() ?? '';
+    const cropTypeDefaults = readCropTypeReferences(cropTypes);
+
     const existingCrops = readExistingCrops();
     const cropsById = new Map(existingCrops.map(crop => [crop.id, crop]));
 
     const plotsById = new Map(payload.plots.map(plot => [plot.id, plot]));
     for (const cycle of payload.cropCycles) {
         const crop = ensureCrop(cropsById, cycle.cropName);
+        const resolvedTemplateId = cropTypeDefaults.get(normalizeCropTypeKey(cycle.cropName))
+            ?? crop.activeScheduleId
+            ?? null;
+        if (resolvedTemplateId) {
+            crop.activeScheduleId = resolvedTemplateId;
+        }
+
         const plotDto = plotsById.get(cycle.plotId);
         if (!plotDto) {
             continue;
         }
 
-        upsertPlot(crop, plotDto, cycle);
+        upsertPlot(crop, plotDto, cycle, resolvedTemplateId);
     }
 
     const mergedCrops = [...cropsById.values()];
@@ -271,18 +337,11 @@ export async function reconcileSyncPull(payload: SyncPullResponse): Promise<void
     }
 
     const logs = payload.dailyLogs.map(log => toDailyLog(log, plotLookup));
-    const dayLedgers: DayLedgerDto[] = payload.dayLedgers ?? [];
-    const plannedTasks: PlannedTaskDto[] = payload.plannedActivities ?? [];
-    const referencePayload = payload as SyncPullReferenceDataPayload;
-    const scheduleTemplates = referencePayload.scheduleTemplates ?? [];
-    const cropTypes = referencePayload.cropTypes ?? [];
-    const activityCategories = referencePayload.activityCategories ?? [];
-    const costCategories = referencePayload.costCategories ?? [];
-    const referenceDataVersionHash = referencePayload.referenceDataVersionHash?.trim() ?? '';
+    const attachments: AttachmentDto[] = payload.attachments ?? [];
     const receivedAtUtc = systemClock.nowISO();
 
     const db = getDatabase();
-    await db.transaction('rw', [db.logs, db.appMeta, db.referenceData, db.dayLedgers, db.plannedTasks], async () => {
+    await db.transaction('rw', [db.logs, db.attachments, db.uploadQueue, db.appMeta, db.referenceData], async () => {
         for (const log of logs) {
             await db.logs.put({
                 id: log.id,
@@ -293,6 +352,52 @@ export async function reconcileSyncPull(payload: SyncPullResponse): Promise<void
                 createdByOperatorId: log.meta?.createdByOperatorId,
                 isDeleted: log.deletion ? 1 : 0,
             });
+        }
+
+        for (const attachment of attachments) {
+            const existing = await db.attachments.get(attachment.id);
+            const mappedStatus = mapAttachmentStatus(attachment.status);
+
+            await db.attachments.put({
+                id: attachment.id,
+                farmId: attachment.farmId,
+                linkedEntityId: attachment.linkedEntityId,
+                linkedEntityType: attachment.linkedEntityType,
+                localPath: existing?.localPath ?? attachment.localPath ?? '',
+                originalFileName: attachment.fileName,
+                mimeType: attachment.mimeType,
+                sizeBytes: attachment.sizeBytes ?? existing?.sizeBytes ?? 0,
+                status: mappedStatus,
+                remoteAttachmentId: attachment.id,
+                uploadedAtUtc: attachment.uploadedAtUtc ?? existing?.uploadedAtUtc,
+                finalizedAtUtc: attachment.finalizedAtUtc ?? existing?.finalizedAtUtc,
+                createdAt: attachment.createdAtUtc,
+                updatedAt: attachment.modifiedAtUtc,
+                retryCount: existing?.retryCount ?? 0,
+                lastError: mappedStatus === 'failed'
+                    ? existing?.lastError ?? 'Attachment upload failed on server.'
+                    : undefined,
+            });
+
+            if (mappedStatus === 'uploaded') {
+                const queuedItems = await db.uploadQueue
+                    .where('attachmentId')
+                    .equals(attachment.id)
+                    .toArray();
+
+                for (const queuedItem of queuedItems) {
+                    if (queuedItem.autoId === undefined) {
+                        continue;
+                    }
+
+                    await db.uploadQueue.update(queuedItem.autoId, {
+                        status: 'completed',
+                        updatedAt: receivedAtUtc,
+                        nextAttemptAt: undefined,
+                        lastError: undefined,
+                    });
+                }
+            }
         }
 
         let referenceDataUpdated = false;
@@ -409,6 +514,7 @@ export async function reconcileSyncPull(payload: SyncPullResponse): Promise<void
                 nextCursorUtc: payload.nextCursorUtc,
                 receivedAtUtc,
                 importedLogs: logs.length,
+                importedAttachments: attachments.length,
                 importedScheduleTemplates: scheduleTemplates.length,
                 importedDayLedgers: dayLedgers.length,
                 importedPlannedTasks: plannedTasks.length,

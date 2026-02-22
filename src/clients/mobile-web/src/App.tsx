@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
 import { BrowserRouter } from 'react-router-dom';
-
 import { CropProfile } from './types';
 import { LogProvider } from './app/context/LogContext';
 import { AppErrorBoundary } from './app/components/common/AppErrorBoundary';

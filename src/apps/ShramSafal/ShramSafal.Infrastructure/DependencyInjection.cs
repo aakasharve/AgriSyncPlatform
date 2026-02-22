@@ -5,10 +5,9 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using ShramSafal.Application.Ports;
 using ShramSafal.Application.Ports.External;
-using ShramSafal.Infrastructure.Auth;
-using ShramSafal.Infrastructure.Integrations.Gemini;
 using ShramSafal.Infrastructure.Persistence;
 using ShramSafal.Infrastructure.Persistence.Repositories;
+using ShramSafal.Infrastructure.Storage;
 
 namespace ShramSafal.Infrastructure;
 
@@ -62,8 +61,8 @@ public static class DependencyInjection
 
         services.AddScoped<IShramSafalRepository, ShramSafalRepository>();
         services.AddScoped<ISyncMutationStore, SyncMutationStore>();
-        services.AddScoped<IAiParsingService, GeminiParsingService>();
-        services.AddScoped<IAuthorizationEnforcer, ShramSafalAuthorizationEnforcer>();
+        services.Configure<StorageOptions>(configuration.GetSection("ShramSafal:Storage"));
+        services.AddSingleton<IAttachmentStorageService, LocalFileStorageService>();
         return services;
     }
 }

@@ -1,12 +1,14 @@
-using ShramSafal.Domain.Finance;
-
 namespace ShramSafal.Application.UseCases.Finance.AllocateGlobalExpense;
 
 public sealed record AllocateGlobalExpenseCommand(
-    Guid FarmId,
-    Guid RequestedByUserId,
-    DateOnly DateKey,
-    IReadOnlyList<Guid> CostEntryIds,
-    AllocationStrategy Strategy,
-    IReadOnlyDictionary<Guid, decimal>? CustomAllocations = null,
-    Guid? DayLedgerId = null);
+    Guid CostEntryId,
+    string AllocationBasis,
+    IReadOnlyList<AllocateGlobalExpenseAllocationCommand> Allocations,
+    Guid CreatedByUserId,
+    Guid? DayLedgerId = null,
+    string? ActorRole = null,
+    string? ClientCommandId = null);
+
+public sealed record AllocateGlobalExpenseAllocationCommand(
+    Guid PlotId,
+    decimal Amount);

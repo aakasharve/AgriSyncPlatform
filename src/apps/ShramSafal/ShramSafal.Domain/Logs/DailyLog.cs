@@ -2,6 +2,7 @@ using AgriSync.BuildingBlocks.Domain;
 using AgriSync.SharedKernel.Contracts.Ids;
 using AgriSync.SharedKernel.Contracts.Roles;
 using ShramSafal.Domain.Events;
+using ShramSafal.Domain.Location;
 
 namespace ShramSafal.Domain.Logs;
 
@@ -20,6 +21,7 @@ public sealed class DailyLog : Entity<Guid>
         UserId operatorUserId,
         DateOnly logDate,
         string? idempotencyKey,
+        LocationSnapshot? location,
         DateTime createdAtUtc)
         : base(id)
     {
@@ -30,15 +32,20 @@ public sealed class DailyLog : Entity<Guid>
         LogDate = logDate;
         IdempotencyKey = idempotencyKey;
         CreatedAtUtc = createdAtUtc;
+        ModifiedAtUtc = createdAtUtc;
+        Location = location;
     }
 
     public FarmId FarmId { get; private set; }
     public Guid PlotId { get; private set; }
     public Guid CropCycleId { get; private set; }
     public UserId OperatorUserId { get; private set; }
+    public UserId CreatedByUserId => OperatorUserId;
     public DateOnly LogDate { get; private set; }
     public string? IdempotencyKey { get; private set; }
     public DateTime CreatedAtUtc { get; private set; }
+    public DateTime ModifiedAtUtc { get; private set; }
+    public LocationSnapshot? Location { get; private set; }
     public IReadOnlyCollection<LogTask> Tasks => _tasks.AsReadOnly();
     public IReadOnlyCollection<VerificationEvent> VerificationEvents => _verificationEvents.AsReadOnly();
 
@@ -59,6 +66,7 @@ public sealed class DailyLog : Entity<Guid>
         UserId operatorUserId,
         DateOnly logDate,
         string? idempotencyKey,
+        LocationSnapshot? location,
         DateTime createdAtUtc)
     {
         var log = new DailyLog(
@@ -69,6 +77,7 @@ public sealed class DailyLog : Entity<Guid>
             operatorUserId,
             logDate,
             idempotencyKey,
+            location,
             createdAtUtc);
 
         log.Raise(new DailyLogCreatedEvent(
@@ -92,7 +101,38 @@ public sealed class DailyLog : Entity<Guid>
 
         var task = new LogTask(taskId, Id, activityType.Trim(), notes?.Trim(), occurredAtUtc);
         _tasks.Add(task);
+        ModifiedAtUtc = occurredAtUtc;
         return task;
+    }
+
+    public void AttachLocation(LocationSnapshot location)
+    {
+        if (Location is not null)
+        {
+            throw new InvalidOperationException("Location is immutable once attached.");
+        }
+
+        Location = location;
+        ModifiedAtUtc = location.CapturedAtUtc;
+    }
+
+    public VerificationEvent Edit(
+        Guid verificationEventId,
+        UserId editedByUserId,
+        DateTime occurredAtUtc,
+        string? reason = "Edited")
+    {
+        var editMarker = new VerificationEvent(
+            verificationEventId,
+            Id,
+            VerificationStatus.Draft,
+            string.IsNullOrWhiteSpace(reason) ? "Edited" : reason.Trim(),
+            editedByUserId,
+            occurredAtUtc);
+
+        _verificationEvents.Add(editMarker);
+        ModifiedAtUtc = occurredAtUtc;
+        return editMarker;
     }
 
     public VerificationEvent Verify(
@@ -123,6 +163,7 @@ public sealed class DailyLog : Entity<Guid>
             occurredAtUtc);
 
         _verificationEvents.Add(verification);
+        ModifiedAtUtc = occurredAtUtc;
 
         Raise(new LogVerifiedEvent(
             Guid.NewGuid(),

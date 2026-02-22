@@ -1,3 +1,5 @@
+using ShramSafal.Domain.Location;
+
 namespace ShramSafal.Application.UseCases.Logs.CreateDailyLog;
 
 public sealed record CreateDailyLogCommand(
@@ -7,9 +9,11 @@ public sealed record CreateDailyLogCommand(
     Guid RequestedByUserId,
     Guid OperatorUserId,
     DateOnly LogDate,
+    LocationSnapshot? Location,
     string? DeviceId,
     string? ClientRequestId,
-    Guid? DailyLogId = null)
+    Guid? DailyLogId = null,
+    string? ActorRole = null)
 {
     public string? IdempotencyKey
     {

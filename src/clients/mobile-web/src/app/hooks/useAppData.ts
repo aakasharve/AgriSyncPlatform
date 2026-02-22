@@ -156,8 +156,29 @@ export const useAppData = (_props?: UseAppDataProps): UseAppDataResult => {
 
         const loadData = async () => {
             try {
-                if (mounted && isAuthenticated) {
-                    await backgroundSyncWorker.triggerNow();
+                if (isDemoMode) {
+                    const loadedCrops = await dataSource.crops.getAll();
+
+                    if (mounted) {
+                        setCrops(loadedCrops);
+                        setPlannedTasks(generateDemoPlannedTasks());
+                        setHarvestSessions(generateDemoHarvestSessions());
+                        setProcurementExpenses(generateDemoProcurementExpenses());
+                    }
+
+                    // Load demo logs
+                    const loadedLogs = await dataSource.logs.getAll();
+                    if (mounted) setHistory(loadedLogs);
+
+                    // Load demo profile or use default
+                    const loadedProfile = await dataSource.profile.get();
+                    if (mounted && loadedProfile && loadedProfile.name) {
+                        setFarmerProfile(loadedProfile);
+                    }
+                } else {
+                    if (isAuthenticated) {
+                        await backgroundSyncWorker.triggerNow();
+                    }
 
                     // REAL MODE: Load user's actual data (may be empty)
                     const loadedCrops = await dataSource.crops.getAll();
