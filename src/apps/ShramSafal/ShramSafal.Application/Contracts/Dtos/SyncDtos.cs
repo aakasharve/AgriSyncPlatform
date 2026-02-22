@@ -29,4 +29,9 @@ public sealed record SyncPullResponseDto(
     IReadOnlyList<FinanceCorrectionDto> FinanceCorrections,
     IReadOnlyList<PriceConfigDto> PriceConfigs,
     IReadOnlyList<DayLedgerDto> DayLedgers,
-    IReadOnlyList<PlannedActivityDto> PlannedActivities);
+    IReadOnlyList<PlannedActivityDto> PlannedActivities,
+    IReadOnlyList<ScheduleTemplateDto> ScheduleTemplates,
+    IReadOnlyList<CropTypeDto> CropTypes,
+    IReadOnlyList<string> ActivityCategories,
+    IReadOnlyList<string> CostCategories,
+    string ReferenceDataVersionHash);

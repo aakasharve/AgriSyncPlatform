@@ -17,6 +17,16 @@ import {
 import { getDatabase } from '../storage/DexieDatabase';
 import { storageNamespace } from '../storage/StorageNamespace';
 
+type SyncPullReferenceDataPayload = SyncPullResponse & {
+    scheduleTemplates?: unknown[];
+    cropTypes?: unknown[];
+    activityCategories?: string[];
+    costCategories?: string[];
+    referenceDataVersionHash?: string;
+};
+
+const REFERENCE_DATA_VERSION_META_KEY = 'shramsafal_reference_data_version_hash_v1';
+
 const CROP_COLORS = [
     'bg-emerald-500',
     'bg-rose-500',
@@ -263,10 +273,16 @@ export async function reconcileSyncPull(payload: SyncPullResponse): Promise<void
     const logs = payload.dailyLogs.map(log => toDailyLog(log, plotLookup));
     const dayLedgers: DayLedgerDto[] = payload.dayLedgers ?? [];
     const plannedTasks: PlannedTaskDto[] = payload.plannedActivities ?? [];
+    const referencePayload = payload as SyncPullReferenceDataPayload;
+    const scheduleTemplates = referencePayload.scheduleTemplates ?? [];
+    const cropTypes = referencePayload.cropTypes ?? [];
+    const activityCategories = referencePayload.activityCategories ?? [];
+    const costCategories = referencePayload.costCategories ?? [];
+    const referenceDataVersionHash = referencePayload.referenceDataVersionHash?.trim() ?? '';
     const receivedAtUtc = systemClock.nowISO();
 
     const db = getDatabase();
-    await db.transaction('rw', [db.logs, db.appMeta, db.dayLedgers, db.plannedTasks], async () => {
+    await db.transaction('rw', [db.logs, db.appMeta, db.referenceData, db.dayLedgers, db.plannedTasks], async () => {
         for (const log of logs) {
             await db.logs.put({
                 id: log.id,
@@ -276,6 +292,49 @@ export async function reconcileSyncPull(payload: SyncPullResponse): Promise<void
                 verificationStatus: log.verification?.status,
                 createdByOperatorId: log.meta?.createdByOperatorId,
                 isDeleted: log.deletion ? 1 : 0,
+            });
+        }
+
+        let referenceDataUpdated = false;
+        if (referenceDataVersionHash.length > 0) {
+            const previousVersionMeta = await db.appMeta.get(REFERENCE_DATA_VERSION_META_KEY);
+            const previousVersionHash = typeof previousVersionMeta?.value === 'string'
+                ? previousVersionMeta.value
+                : '';
+
+            if (previousVersionHash !== referenceDataVersionHash) {
+                await db.referenceData.put({
+                    key: 'scheduleTemplates',
+                    data: scheduleTemplates,
+                    versionHash: referenceDataVersionHash,
+                    updatedAt: receivedAtUtc,
+                });
+                await db.referenceData.put({
+                    key: 'cropTypes',
+                    data: cropTypes,
+                    versionHash: referenceDataVersionHash,
+                    updatedAt: receivedAtUtc,
+                });
+                await db.referenceData.put({
+                    key: 'activityCategories',
+                    data: activityCategories,
+                    versionHash: referenceDataVersionHash,
+                    updatedAt: receivedAtUtc,
+                });
+                await db.referenceData.put({
+                    key: 'costCategories',
+                    data: costCategories,
+                    versionHash: referenceDataVersionHash,
+                    updatedAt: receivedAtUtc,
+                });
+
+                referenceDataUpdated = true;
+            }
+
+            await db.appMeta.put({
+                key: REFERENCE_DATA_VERSION_META_KEY,
+                value: referenceDataVersionHash,
+                updatedAt: receivedAtUtc,
             });
         }
 
@@ -350,8 +409,11 @@ export async function reconcileSyncPull(payload: SyncPullResponse): Promise<void
                 nextCursorUtc: payload.nextCursorUtc,
                 receivedAtUtc,
                 importedLogs: logs.length,
+                importedScheduleTemplates: scheduleTemplates.length,
                 importedDayLedgers: dayLedgers.length,
                 importedPlannedTasks: plannedTasks.length,
+                referenceDataVersionHash: referenceDataVersionHash || null,
+                referenceDataUpdated,
             },
             updatedAt: receivedAtUtc,
         });

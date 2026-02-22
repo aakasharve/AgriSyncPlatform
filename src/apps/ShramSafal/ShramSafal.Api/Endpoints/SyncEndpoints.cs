@@ -32,11 +32,11 @@ public static class SyncEndpoints
         .WithName("PushSyncBatch");
 
         group.MapGet("/pull", async (
-            DateTime? since,
+            string? since,
             PullSyncChangesHandler handler,
             CancellationToken ct) =>
         {
-            var cursor = since ?? DateTime.UnixEpoch;
+            var cursor = ParseSinceCursor(since);
             var result = await handler.HandleAsync(new PullSyncChangesQuery(cursor), ct);
             return result.IsSuccess ? Results.Ok(result.Value) : ToErrorResult(result.Error);
         })
@@ -50,6 +50,18 @@ public static class SyncEndpoints
         return error.Code.EndsWith("NotFound", StringComparison.Ordinal)
             ? Results.NotFound(new { error = error.Code, message = error.Description })
             : Results.BadRequest(new { error = error.Code, message = error.Description });
+    }
+
+    private static DateTime ParseSinceCursor(string? rawSince)
+    {
+        if (string.IsNullOrWhiteSpace(rawSince) || rawSince.Trim() == "0")
+        {
+            return DateTime.UnixEpoch;
+        }
+
+        return DateTime.TryParse(rawSince, out var parsed)
+            ? parsed
+            : DateTime.UnixEpoch;
     }
 }
 

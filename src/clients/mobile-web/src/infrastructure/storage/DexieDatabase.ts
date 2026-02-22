@@ -2,8 +2,8 @@
  * DexieDatabase — DFES V2 Storage Layer
  *
  * IndexedDB-backed database using Dexie.js.
- * 8 tables: logs, outbox, mutationQueue, auditEvents, syncCursors, appMeta,
- * dayLedgers, plannedTasks.
+ * 9 tables: logs, outbox, mutationQueue, auditEvents, syncCursors, appMeta,
+ * referenceData, dayLedgers, plannedTasks.
  *
  * Replaces localStorage for:
  * - Larger storage capacity (no 5MB limit)
@@ -88,6 +88,23 @@ export interface AppMetaEntry {
 }
 
 // =============================================================================
+// REFERENCE DATA CACHE
+// =============================================================================
+
+export type ReferenceDataKey =
+    | 'scheduleTemplates'
+    | 'cropTypes'
+    | 'activityCategories'
+    | 'costCategories';
+
+export interface ReferenceDataRecord {
+    key: ReferenceDataKey;
+    data: unknown;
+    versionHash: string;
+    updatedAt: string;
+}
+
+// =============================================================================
 // SYNC CACHE TABLES
 // =============================================================================
 
@@ -139,6 +156,7 @@ export class AgriLogDatabase extends Dexie {
     auditEvents!: Table<AuditEvent, string>;
     syncCursors!: Table<SyncCursor, string>;
     appMeta!: Table<AppMetaEntry, string>;
+    referenceData!: Table<ReferenceDataRecord, ReferenceDataKey>;
     dayLedgers!: Table<DayLedgerCacheRecord, string>;
     plannedTasks!: Table<PlannedTaskCacheRecord, string>;
 
@@ -178,6 +196,7 @@ export class AgriLogDatabase extends Dexie {
             auditEvents: 'id, resourceId, action, timestamp, [resourceId+timestamp]',
             syncCursors: 'tableName',
             appMeta: 'key',
+            referenceData: 'key, versionHash, updatedAt',
             dayLedgers: 'id, farmId, dateKey, [farmId+dateKey]',
             plannedTasks: 'id, cropCycleId, plannedDate, [cropCycleId+plannedDate]',
         });
