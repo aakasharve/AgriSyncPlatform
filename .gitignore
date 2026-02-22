@@ -37,3 +37,6 @@ src/clients/mobile-web/ios/
 
 # Local cofounder workspace (never sync)
 /_COFOUNDER/
+
+# Local paid API credentials (never commit)
+src/AgriSync.Bootstrapper/secrets/local/credentials.json
