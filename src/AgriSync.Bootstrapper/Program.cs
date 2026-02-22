@@ -16,6 +16,9 @@ Log.Logger = new LoggerConfiguration()
 try
 {
     var builder = WebApplication.CreateBuilder(args);
+    builder.Configuration
+        .AddJsonFile("secrets/local/credentials.json", optional: true, reloadOnChange: true)
+        .AddEnvironmentVariables();
 
     builder.Host.UseSerilog((context, services, loggerConfiguration) =>
     {
