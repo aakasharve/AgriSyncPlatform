@@ -8,5 +8,6 @@ public sealed record VerifyLogCommand(
     VerificationStatus TargetStatus,
     string? Reason,
     Guid VerifiedByUserId,
-    AppRole CallerRole,
-    Guid? VerificationEventId = null);
+    Guid? VerificationEventId = null,
+    string? ActorRole = null,
+    string? ClientCommandId = null);

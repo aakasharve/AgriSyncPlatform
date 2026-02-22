@@ -6,28 +6,19 @@ import type { SyncMutationType } from '../api/AgriSyncClient';
 const DEVICE_ID_KEY = 'agrisync_device_id_v1';
 const SYNC_SCOPE = 'shramsafal';
 const LAST_PULL_META_KEY = 'shramsafal_last_pull_payload';
-const SUPPORTED_MUTATION_TYPES: ReadonlySet<SyncMutationType> = new Set([
+const SUPPORTED_MUTATION_TYPES = new Set([
     'create_farm',
     'create_plot',
     'create_crop_cycle',
     'create_daily_log',
     'add_log_task',
     'verify_log',
-    'verify_log_v2',
     'add_cost_entry',
-    'correct_cost_entry',
     'allocate_global_expense',
+    'correct_cost_entry',
     'set_price_config',
+    'create_attachment',
 ]);
-
-function normalizeMutationType(mutationType: string): SyncMutationType {
-    const normalized = mutationType.trim().toLowerCase();
-    if (!SUPPORTED_MUTATION_TYPES.has(normalized as SyncMutationType)) {
-        throw new Error(`Unsupported mutationType '${mutationType}'.`);
-    }
-
-    return normalized as SyncMutationType;
-}
 
 function getOrCreateDeviceId(): string {
     const existing = localStorage.getItem(DEVICE_ID_KEY);
@@ -59,21 +50,28 @@ export class MutationQueue {
     async enqueue(
         mutationType: SyncMutationType,
         payload: unknown,
-        options?: { clientRequestId?: string; deviceId?: string }
+        options?: { clientRequestId?: string; clientCommandId?: string; deviceId?: string }
     ): Promise<string> {
         if (!mutationType || mutationType.trim().length === 0) {
             throw new Error('mutationType is required');
         }
 
+        const normalizedMutationType = mutationType.trim();
+        if (!SUPPORTED_MUTATION_TYPES.has(normalizedMutationType)) {
+            throw new Error(`Unsupported mutationType '${normalizedMutationType}'.`);
+        }
+
         const db = getDatabase();
         const deviceId = options?.deviceId ?? getOrCreateDeviceId();
         const clientRequestId = options?.clientRequestId ?? idGenerator.generate();
+        const clientCommandId = options?.clientCommandId ?? clientRequestId;
         const now = systemClock.nowISO();
         const normalizedMutationType = normalizeMutationType(mutationType);
 
         const record: MutationQueueItem = {
             deviceId,
             clientRequestId,
+            clientCommandId,
             mutationType: normalizedMutationType,
             payload,
             status: 'PENDING',

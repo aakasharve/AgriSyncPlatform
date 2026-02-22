@@ -144,6 +144,7 @@ export class BackgroundSyncWorker {
                 deviceId: mutationQueue.getDeviceId(),
                 mutations: supportedMutations.map(item => ({
                     clientRequestId: item.clientRequestId,
+                    clientCommandId: item.clientCommandId ?? item.clientRequestId,
                     mutationType: item.mutationType,
                     payload: item.payload,
                 })),

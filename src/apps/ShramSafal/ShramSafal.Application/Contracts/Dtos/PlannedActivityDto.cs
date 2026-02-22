@@ -6,5 +6,5 @@ public sealed record PlannedActivityDto(
     string ActivityName,
     string Stage,
     DateOnly PlannedDate,
-    DateTime CreatedAtUtc);
-
+    DateTime CreatedAtUtc,
+    DateTime ModifiedAtUtc);

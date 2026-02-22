@@ -37,8 +37,12 @@ internal sealed class PlannedActivityConfiguration : IEntityTypeConfiguration<Pl
             .HasColumnName("created_at_utc")
             .IsRequired();
 
+        builder.Property(x => x.ModifiedAtUtc)
+            .HasColumnName("modified_at_utc")
+            .IsRequired();
+
         builder.HasIndex(x => new { x.CropCycleId, x.PlannedDate });
+        builder.HasIndex(x => x.ModifiedAtUtc);
         builder.Ignore(x => x.DomainEvents);
     }
 }
-

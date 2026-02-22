@@ -1,10 +1,10 @@
 using System.Security.Claims;
 using AgriSync.BuildingBlocks.Results;
-using AgriSync.SharedKernel.Contracts.Roles;
-using ShramSafal.Application.Ports;
+using System.Security.Claims;
 using ShramSafal.Application.UseCases.Logs.AddLogTask;
 using ShramSafal.Application.UseCases.Logs.CreateDailyLog;
 using ShramSafal.Application.UseCases.Logs.VerifyLog;
+using ShramSafal.Domain.Location;
 using ShramSafal.Domain.Logs;
 
 namespace ShramSafal.Api.Endpoints;
@@ -19,7 +19,7 @@ public static class LogsEndpoints
             CreateDailyLogHandler handler,
             CancellationToken ct) =>
         {
-            if (!TryGetCallerContext(user, out var callerUserId, out _))
+            if (!EndpointActorContext.TryGetUserId(user, out var actorUserId))
             {
                 return Results.Unauthorized();
             }
@@ -28,11 +28,13 @@ public static class LogsEndpoints
                 request.FarmId,
                 request.PlotId,
                 request.CropCycleId,
-                callerUserId,
-                request.OperatorUserId,
+                actorUserId,
                 request.LogDate,
+                request.Location?.ToDomain(),
                 request.DeviceId,
-                request.ClientRequestId);
+                request.ClientRequestId,
+                DailyLogId: null,
+                ActorRole: EndpointActorContext.GetActorRole(user));
 
             var result = await handler.HandleAsync(command, ct);
             return result.IsSuccess ? Results.Ok(result.Value) : ToErrorResult(result.Error);
@@ -43,10 +45,23 @@ public static class LogsEndpoints
         group.MapPost("/logs/{id:guid}/tasks", async (
             Guid id,
             AddLogTaskRequest request,
+            ClaimsPrincipal user,
             AddLogTaskHandler handler,
             CancellationToken ct) =>
         {
-            var command = new AddLogTaskCommand(id, request.ActivityType, request.Notes, request.OccurredAtUtc);
+            if (!EndpointActorContext.TryGetUserId(user, out var actorUserId))
+            {
+                return Results.Unauthorized();
+            }
+
+            var command = new AddLogTaskCommand(
+                id,
+                request.ActivityType,
+                request.Notes,
+                request.OccurredAtUtc,
+                LogTaskId: null,
+                ActorUserId: actorUserId,
+                ActorRole: EndpointActorContext.GetActorRole(user));
             var result = await handler.HandleAsync(command, ct);
             return result.IsSuccess ? Results.Ok(result.Value) : ToErrorResult(result.Error);
         })
@@ -60,21 +75,23 @@ public static class LogsEndpoints
             VerifyLogHandler handler,
             CancellationToken ct) =>
         {
-            if (!TryGetCallerContext(user, out var callerUserId, out var callerRole))
+            if (!EndpointActorContext.TryGetUserId(user, out var actorUserId))
             {
                 return Results.Unauthorized();
             }
 
-            if (!Enum.TryParse<VerificationStatus>(request.TargetStatus, true, out var targetStatus))
+            if (!Enum.TryParse<VerificationStatus>(request.Status, true, out var status))
             {
-                return Results.BadRequest(new
-                {
-                    error = "ShramSafal.InvalidVerificationStatus",
-                    message = "targetStatus must be one of: Draft, Confirmed, Verified, Disputed, CorrectionPending."
-                });
+                return Results.Unauthorized();
             }
 
-            var command = new VerifyLogCommand(id, targetStatus, request.Reason, callerUserId, callerRole);
+            var command = new VerifyLogCommand(
+                id,
+                status,
+                request.Reason,
+                actorUserId,
+                VerificationEventId: null,
+                ActorRole: EndpointActorContext.GetActorRole(user));
             var result = await handler.HandleAsync(command, ct);
             return result.IsSuccess ? Results.Ok(result.Value) : ToErrorResult(result.Error);
         })
@@ -122,6 +139,11 @@ public static class LogsEndpoints
 
     private static IResult ToErrorResult(Error error)
     {
+        if (error.Code.EndsWith("Forbidden", StringComparison.Ordinal))
+        {
+            return Results.Forbid();
+        }
+
         return error.Code.EndsWith("NotFound", StringComparison.Ordinal)
             ? Results.NotFound(new { error = error.Code, message = error.Description })
             : Results.BadRequest(new { error = error.Code, message = error.Description });
@@ -172,8 +194,8 @@ public sealed record CreateDailyLogRequest(
     Guid FarmId,
     Guid PlotId,
     Guid CropCycleId,
-    Guid OperatorUserId,
     DateOnly LogDate,
+    LocationRequest? Location,
     string? DeviceId,
     string? ClientRequestId);
 
@@ -183,5 +205,28 @@ public sealed record AddLogTaskRequest(
     DateTime? OccurredAtUtc = null);
 
 public sealed record VerifyLogRequest(
-    string TargetStatus,
+    string Status,
     string? Reason);
+
+public sealed record LocationRequest(
+    decimal Latitude,
+    decimal Longitude,
+    decimal AccuracyMeters,
+    decimal? Altitude,
+    DateTime CapturedAtUtc,
+    string Provider,
+    string PermissionState)
+{
+    public LocationSnapshot ToDomain() =>
+        new()
+        {
+            Latitude = Latitude,
+            Longitude = Longitude,
+            AccuracyMeters = AccuracyMeters,
+            Altitude = Altitude,
+            CapturedAtUtc = CapturedAtUtc,
+            Provider = Provider,
+            PermissionState = PermissionState
+        };
+}
+

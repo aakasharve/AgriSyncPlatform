@@ -2,6 +2,7 @@ using AgriSync.BuildingBlocks.Abstractions;
 using AgriSync.BuildingBlocks.Results;
 using ShramSafal.Application.Contracts.Dtos;
 using ShramSafal.Application.Ports;
+using ShramSafal.Domain.Audit;
 using ShramSafal.Domain.Common;
 
 namespace ShramSafal.Application.UseCases.Finance.SetPriceConfigVersion;
@@ -36,6 +37,25 @@ public sealed class SetPriceConfigVersionHandler(
             clock.UtcNow);
 
         await repository.AddPriceConfigAsync(config, ct);
+        await repository.AddAuditEventAsync(
+            AuditEvent.Create(
+                "PriceConfig",
+                config.Id,
+                "VersionSet",
+                command.CreatedByUserId,
+                command.ActorRole ?? "unknown",
+                new
+                {
+                    config.Id,
+                    config.ItemName,
+                    config.UnitPrice,
+                    config.CurrencyCode,
+                    config.EffectiveFrom,
+                    config.Version
+                },
+                command.ClientCommandId,
+                clock.UtcNow),
+            ct);
         await repository.SaveChangesAsync(ct);
 
         return Result.Success(config.ToDto());

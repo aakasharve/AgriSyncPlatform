@@ -7,4 +7,7 @@ public sealed record CreateCropCycleCommand(
     string Stage,
     DateOnly StartDate,
     DateOnly? EndDate,
-    Guid? CropCycleId = null);
+    Guid ActorUserId,
+    Guid? CropCycleId = null,
+    string? ActorRole = null,
+    string? ClientCommandId = null);

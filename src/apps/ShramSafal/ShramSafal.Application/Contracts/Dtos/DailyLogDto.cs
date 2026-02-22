@@ -9,6 +9,8 @@ public sealed record DailyLogDto(
     DateOnly LogDate,
     string? IdempotencyKey,
     DateTime CreatedAtUtc,
-    string VerificationStatus,
+    DateTime ModifiedAtUtc,
+    LocationDto? Location,
+    string? LastVerificationStatus,
     IReadOnlyList<LogTaskDto> Tasks,
     IReadOnlyList<VerificationEventDto> VerificationEvents);

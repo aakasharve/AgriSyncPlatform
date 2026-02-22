@@ -5,4 +5,7 @@ public sealed record AddLogTaskCommand(
     string ActivityType,
     string? Notes,
     DateTime? OccurredAtUtc = null,
-    Guid? LogTaskId = null);
+    Guid? LogTaskId = null,
+    Guid ActorUserId = default,
+    string? ActorRole = null,
+    string? ClientCommandId = null);

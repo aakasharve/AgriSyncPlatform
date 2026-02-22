@@ -9,6 +9,8 @@ import { v4 as uuidv4 } from 'uuid';
 import { getDateKey } from '../../../core/domain/services/DateKeyService';
 import { financeCommandService } from '../../finance/financeCommandService';
 import { MoneyCategory } from '../../finance/finance.types';
+import { captureAttachment } from '../../../application/use-cases/CaptureAttachment';
+import { resolveFarmIdFromSyncState } from '../../../infrastructure/sync/SyncContext';
 
 const mapExpenseCategoryToMoneyCategory = (category: string): MoneyCategory => {
     if (category === 'LABOUR') return 'Labour';
@@ -42,6 +44,8 @@ export const ReceiptCaptureSheet: React.FC<Props> = ({ onClose, onSave, crops, a
     // 3. User Edits (for correction)
     const [editedTotal, setEditedTotal] = useState<number>(0);
     const [editedVendor, setEditedVendor] = useState<string>('');
+    const [attachmentIds, setAttachmentIds] = useState<string[]>([]);
+    const [attachmentCaptureError, setAttachmentCaptureError] = useState<string | null>(null);
 
     const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -51,6 +55,10 @@ export const ReceiptCaptureSheet: React.FC<Props> = ({ onClose, onSave, crops, a
         const file = e.target.files?.[0];
         if (!file) return;
 
+        setAttachmentCaptureError(null);
+        setAttachmentIds([]);
+        void queueAttachmentCapture(file);
+
         const reader = new FileReader();
         reader.onloadend = () => {
             const base64ForDisplay = reader.result as string;
@@ -58,6 +66,31 @@ export const ReceiptCaptureSheet: React.FC<Props> = ({ onClose, onSave, crops, a
             processImage(base64ForDisplay);
         }
         reader.readAsDataURL(file);
+    };
+
+    const queueAttachmentCapture = async (file: File): Promise<void> => {
+        try {
+            const farmId = await resolveFarmIdFromSyncState(activePlotId);
+            if (!farmId) {
+                setAttachmentCaptureError('Attachment queue unavailable until sync metadata is loaded.');
+                return;
+            }
+
+            const queued = await captureAttachment({
+                source: 'file',
+                farmId,
+                linkedEntityId: farmId,
+                linkedEntityType: 'Farm',
+                file,
+                fileName: file.name,
+                mimeType: file.type
+            });
+
+            setAttachmentIds([queued.id]);
+        } catch (error) {
+            console.error('Attachment queue capture failed', error);
+            setAttachmentCaptureError('Attachment saved for preview only; upload queue capture failed.');
+        }
     };
 
     const processImage = async (base64: string) => {
@@ -105,6 +138,7 @@ export const ReceiptCaptureSheet: React.FC<Props> = ({ onClose, onSave, crops, a
             grandTotal: editedTotal,
             paymentStatus: 'PAID', // Default assumption, editable later
             receiptImageUrl: image || undefined, // In real app, upload to storage first!
+            attachmentIds: attachmentIds.length > 0 ? attachmentIds : undefined,
             aiExtracted: true,
             userVerified: true,
             aiRawResponse: JSON.stringify(extraction)
@@ -128,7 +162,8 @@ export const ReceiptCaptureSheet: React.FC<Props> = ({ onClose, onSave, crops, a
                 paymentMode: newExpense.paymentStatus === 'CREDIT' ? 'Credit' : 'Cash',
                 vendorName: newExpense.vendorName,
                 createdByUserId: newExpense.operatorId || 'owner',
-                attachments: newExpense.receiptImageUrl ? [newExpense.receiptImageUrl] : []
+                attachments: newExpense.attachmentIds
+                    ?? (newExpense.receiptImageUrl ? [newExpense.receiptImageUrl] : [])
             });
         });
 
@@ -179,6 +214,17 @@ export const ReceiptCaptureSheet: React.FC<Props> = ({ onClose, onSave, crops, a
                     {/* 2. PREVIEW & PROCESSING */}
                     {image && (
                         <div className="flex flex-col gap-6">
+                            {attachmentCaptureError && (
+                                <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-700">
+                                    {attachmentCaptureError}
+                                </div>
+                            )}
+                            {!attachmentCaptureError && attachmentIds.length > 0 && (
+                                <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-700">
+                                    Attachment queued for background upload.
+                                </div>
+                            )}
+
                             {/* Image Thumbnail */}
                             <div className="relative w-full h-48 bg-black rounded-xl overflow-hidden shadow-sm shrink-0">
                                 <img src={image} className="w-full h-full object-contain opacity-80" />

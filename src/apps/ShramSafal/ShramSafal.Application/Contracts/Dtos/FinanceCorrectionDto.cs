@@ -8,5 +8,5 @@ public sealed record FinanceCorrectionDto(
     string CurrencyCode,
     string Reason,
     Guid CorrectedByUserId,
-    DateTime CorrectedAtUtc);
-
+    DateTime CorrectedAtUtc,
+    DateTime ModifiedAtUtc);

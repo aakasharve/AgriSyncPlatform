@@ -1,8 +1,7 @@
 using System.Security.Claims;
 using AgriSync.BuildingBlocks.Abstractions;
 using AgriSync.BuildingBlocks.Results;
-using AgriSync.SharedKernel.Contracts.Ids;
-using ShramSafal.Application.Ports;
+using System.Security.Claims;
 using ShramSafal.Application.UseCases.Finance.AddCostEntry;
 using ShramSafal.Application.UseCases.Finance.AllocateGlobalExpense;
 using ShramSafal.Application.UseCases.Finance.CorrectCostEntry;
@@ -19,16 +18,24 @@ public static class FinanceEndpoints
     {
         group.MapPost("/finance/price-config", async (
             SetPriceConfigRequest request,
+            ClaimsPrincipal user,
             SetPriceConfigVersionHandler handler,
             CancellationToken ct) =>
         {
+            if (!EndpointActorContext.TryGetUserId(user, out var actorUserId))
+            {
+                return Results.Unauthorized();
+            }
+
             var command = new SetPriceConfigVersionCommand(
                 request.ItemName,
                 request.UnitPrice,
                 request.CurrencyCode,
                 request.EffectiveFrom,
                 request.Version,
-                request.CreatedByUserId);
+                actorUserId,
+                PriceConfigId: null,
+                ActorRole: EndpointActorContext.GetActorRole(user));
 
             var result = await handler.HandleAsync(command, ct);
             return result.IsSuccess ? Results.Ok(result.Value) : ToErrorResult(result.Error);
@@ -41,14 +48,9 @@ public static class FinanceEndpoints
             AddCostEntryHandler handler,
             CancellationToken ct) =>
         {
-            if (!TryGetCallerUserId(user, out var callerUserId))
+            if (!EndpointActorContext.TryGetUserId(user, out var actorUserId))
             {
                 return Results.Unauthorized();
-            }
-
-            if (request.CreatedByUserId != Guid.Empty && request.CreatedByUserId != callerUserId)
-            {
-                return Results.Forbid();
             }
 
             var command = new AddCostEntryCommand(
@@ -60,13 +62,42 @@ public static class FinanceEndpoints
                 request.Amount,
                 request.CurrencyCode,
                 request.EntryDate,
-                callerUserId);
+                actorUserId,
+                request.Location?.ToDomain(),
+                CostEntryId: null,
+                ActorRole: EndpointActorContext.GetActorRole(user));
 
             var result = await handler.HandleAsync(command, ct);
             return result.IsSuccess ? Results.Ok(result.Value) : ToErrorResult(result.Error);
         })
         .WithName("AddCostEntry")
         .RequireAuthorization();
+
+        group.MapPost("/finance/allocate", async (
+            AllocateGlobalExpenseRequest request,
+            ClaimsPrincipal user,
+            AllocateGlobalExpenseHandler handler,
+            CancellationToken ct) =>
+        {
+            if (!EndpointActorContext.TryGetUserId(user, out var actorUserId))
+            {
+                return Results.Unauthorized();
+            }
+
+            var command = new AllocateGlobalExpenseCommand(
+                request.CostEntryId,
+                request.AllocationBasis,
+                request.Allocations
+                    .Select(a => new AllocateGlobalExpenseAllocationCommand(a.PlotId, a.Amount))
+                    .ToList(),
+                actorUserId,
+                request.DayLedgerId,
+                EndpointActorContext.GetActorRole(user));
+
+            var result = await handler.HandleAsync(command, ct);
+            return result.IsSuccess ? Results.Ok(result.Value) : ToErrorResult(result.Error);
+        })
+        .WithName("AllocateGlobalExpense");
 
         group.MapPost("/finance/cost-entry/{id:guid}/correct", async (
             Guid id,
@@ -75,14 +106,9 @@ public static class FinanceEndpoints
             CorrectCostEntryHandler handler,
             CancellationToken ct) =>
         {
-            if (!TryGetCallerUserId(user, out var callerUserId))
+            if (!EndpointActorContext.TryGetUserId(user, out var actorUserId))
             {
                 return Results.Unauthorized();
-            }
-
-            if (request.CorrectedByUserId != Guid.Empty && request.CorrectedByUserId != callerUserId)
-            {
-                return Results.Forbid();
             }
 
             var command = new CorrectCostEntryCommand(
@@ -90,7 +116,9 @@ public static class FinanceEndpoints
                 request.CorrectedAmount,
                 request.CurrencyCode,
                 request.Reason,
-                callerUserId);
+                actorUserId,
+                FinanceCorrectionId: null,
+                ActorRole: EndpointActorContext.GetActorRole(user));
 
             var result = await handler.HandleAsync(command, ct);
             return result.IsSuccess ? Results.Ok(result.Value) : ToErrorResult(result.Error);
@@ -214,6 +242,11 @@ public static class FinanceEndpoints
 
     private static IResult ToErrorResult(Error error)
     {
+        if (error.Code.EndsWith("Forbidden", StringComparison.Ordinal))
+        {
+            return Results.Forbid();
+        }
+
         return error.Code.EndsWith("NotFound", StringComparison.Ordinal)
             ? Results.NotFound(new { error = error.Code, message = error.Description })
             : Results.BadRequest(new { error = error.Code, message = error.Description });
@@ -232,8 +265,7 @@ public sealed record SetPriceConfigRequest(
     decimal UnitPrice,
     string CurrencyCode,
     DateOnly EffectiveFrom,
-    int Version,
-    Guid CreatedByUserId);
+    int Version);
 
 public sealed record AddCostEntryRequest(
     Guid FarmId,
@@ -244,7 +276,7 @@ public sealed record AddCostEntryRequest(
     decimal Amount,
     string CurrencyCode,
     DateOnly EntryDate,
-    Guid CreatedByUserId);
+    LocationRequest? Location);
 
 public sealed record AllocateGlobalExpenseRequest(
     Guid FarmId,
@@ -270,5 +302,15 @@ public sealed record DuplicateCheckResponse(bool IsDuplicate, Guid? MatchedEntry
 public sealed record CorrectCostEntryRequest(
     decimal CorrectedAmount,
     string CurrencyCode,
-    string Reason,
-    Guid CorrectedByUserId);
+    string Reason);
+
+public sealed record AllocateGlobalExpenseRequest(
+    Guid CostEntryId,
+    string AllocationBasis,
+    IReadOnlyList<AllocateGlobalExpenseAllocationRequest> Allocations,
+    Guid? DayLedgerId = null);
+
+public sealed record AllocateGlobalExpenseAllocationRequest(
+    Guid PlotId,
+    decimal Amount);
+

@@ -20,61 +20,69 @@ internal sealed class DayLedgerConfiguration : IEntityTypeConfiguration<DayLedge
             .HasConversion(TypedIdConverters.FarmId)
             .IsRequired();
 
-        builder.Property(x => x.DateKey)
-            .HasColumnName("date_key")
+        builder.Property(x => x.SourceCostEntryId)
+            .HasColumnName("source_cost_entry_id")
             .IsRequired();
 
-        builder.Property(x => x.GlobalExpenseIds)
-            .HasColumnName("global_expense_ids")
-            .HasColumnType("uuid[]")
+        builder.Property(x => x.LedgerDate)
+            .HasColumnName("ledger_date")
             .IsRequired();
 
-        builder.Property(x => x.AllocationStrategy)
-            .HasColumnName("allocation_strategy")
-            .HasConversion<string>()
-            .HasMaxLength(32)
+        builder.Property(x => x.AllocationBasis)
+            .HasColumnName("allocation_basis")
+            .HasMaxLength(40)
             .IsRequired();
 
-        builder.Property(x => x.TotalGlobalCost)
-            .HasColumnName("total_global_cost")
-            .HasPrecision(18, 2)
+        builder.Property(x => x.CreatedByUserId)
+            .HasColumnName("created_by_user_id")
+            .HasConversion(TypedIdConverters.UserId)
             .IsRequired();
 
         builder.Property(x => x.CreatedAtUtc)
             .HasColumnName("created_at_utc")
             .IsRequired();
 
-        builder.OwnsMany(x => x.PlotAllocations, owned =>
+        builder.Property(x => x.ModifiedAtUtc)
+            .HasColumnName("modified_at_utc")
+            .IsRequired();
+
+        builder.OwnsMany(x => x.Allocations, allocation =>
         {
-            owned.ToTable("day_ledger_plot_allocations");
+            allocation.ToTable("day_ledger_allocations");
+            allocation.WithOwner().HasForeignKey("day_ledger_id");
 
-            owned.WithOwner()
-                .HasForeignKey("day_ledger_id");
+            allocation.HasKey(x => x.Id);
 
-            owned.Property<int>("id");
-            owned.HasKey("id");
+            allocation.Property(x => x.Id)
+                .HasColumnName("id")
+                .ValueGeneratedNever();
 
-            owned.Property(x => x.PlotId)
+            allocation.Property(x => x.PlotId)
                 .HasColumnName("plot_id")
                 .IsRequired();
 
-            owned.Property(x => x.CropCycleId)
-                .HasColumnName("crop_cycle_id")
-                .IsRequired();
-
-            owned.Property(x => x.AllocationPercent)
-                .HasColumnName("allocation_percent")
-                .HasPrecision(8, 2)
-                .IsRequired();
-
-            owned.Property(x => x.AllocatedAmount)
+            allocation.Property(x => x.AllocatedAmount)
                 .HasColumnName("allocated_amount")
                 .HasPrecision(18, 2)
                 .IsRequired();
-        });
 
-        builder.HasIndex(x => new { x.FarmId, x.DateKey })
-            .IsUnique();
+            allocation.Property(x => x.CurrencyCode)
+                .HasColumnName("currency_code")
+                .HasMaxLength(8)
+                .IsRequired();
+
+            allocation.Property(x => x.AllocatedAtUtc)
+                .HasColumnName("allocated_at_utc")
+                .IsRequired();
+
+            allocation.HasIndex(x => x.PlotId);
+            allocation.HasIndex(x => x.AllocatedAtUtc);
+        });
+        builder.Navigation(x => x.Allocations).UsePropertyAccessMode(PropertyAccessMode.Field);
+
+        builder.HasIndex(x => new { x.FarmId, x.LedgerDate });
+        builder.HasIndex(x => x.SourceCostEntryId).IsUnique();
+        builder.HasIndex(x => x.ModifiedAtUtc);
 
         builder.Ignore(x => x.DomainEvents);
     }

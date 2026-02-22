@@ -1,5 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using AgriSync.SharedKernel.Contracts.Ids;
+using ShramSafal.Domain.Audit;
+using ShramSafal.Domain.Attachments;
 using ShramSafal.Application.Ports;
 using ShramSafal.Domain.Crops;
 using ShramSafal.Domain.Farms;
@@ -121,25 +123,48 @@ internal sealed class ShramSafalRepository(ShramSafalDbContext db) : IShramSafal
         await db.DayLedgers.AddAsync(dayLedger, ct);
     }
 
-    public async Task<DayLedger?> GetDayLedger(FarmId farmId, DateOnly dateKey, CancellationToken ct = default)
+    public async Task<DayLedger?> GetDayLedgerByIdAsync(Guid dayLedgerId, CancellationToken ct = default)
     {
         return await db.DayLedgers
-            .Include(ledger => ledger.PlotAllocations)
-            .FirstOrDefaultAsync(ledger => ledger.FarmId == farmId && ledger.DateKey == dateKey, ct);
+            .Include(x => x.Allocations)
+            .FirstOrDefaultAsync(x => x.Id == dayLedgerId, ct);
     }
 
-    public async Task<List<DayLedger>> GetDayLedgersForFarm(FarmId farmId, DateOnly from, DateOnly to, CancellationToken ct = default)
+    public async Task<DayLedger?> GetDayLedgerBySourceCostEntryIdAsync(Guid costEntryId, CancellationToken ct = default)
     {
         return await db.DayLedgers
-            .Include(ledger => ledger.PlotAllocations)
-            .Where(ledger => ledger.FarmId == farmId && ledger.DateKey >= from && ledger.DateKey <= to)
-            .OrderBy(ledger => ledger.DateKey)
+            .Include(x => x.Allocations)
+            .FirstOrDefaultAsync(x => x.SourceCostEntryId == costEntryId, ct);
+    }
+
+    public async Task AddAttachmentAsync(Attachment attachment, CancellationToken ct = default)
+    {
+        await db.Attachments.AddAsync(attachment, ct);
+    }
+
+    public async Task<Attachment?> GetAttachmentByIdAsync(Guid attachmentId, CancellationToken ct = default)
+    {
+        return await db.Attachments.FirstOrDefaultAsync(a => a.Id == attachmentId, ct);
+    }
+
+    public async Task<List<Attachment>> GetAttachmentsForEntityAsync(Guid entityId, string entityType, CancellationToken ct = default)
+    {
+        var normalizedType = entityType.Trim();
+        return await db.Attachments
+            .AsNoTracking()
+            .Where(a => a.LinkedEntityId == entityId && a.LinkedEntityType == normalizedType)
+            .OrderBy(a => a.CreatedAtUtc)
             .ToListAsync(ct);
     }
 
     public async Task AddPriceConfigAsync(PriceConfig config, CancellationToken ct = default)
     {
         await db.PriceConfigs.AddAsync(config, ct);
+    }
+
+    public async Task AddAuditEventAsync(AuditEvent auditEvent, CancellationToken ct = default)
+    {
+        await db.AuditEvents.AddAsync(auditEvent, ct);
     }
 
     public async Task AddScheduleTemplateAsync(ScheduleTemplate template, CancellationToken ct = default)
@@ -168,6 +193,16 @@ internal sealed class ShramSafalRepository(ShramSafalDbContext db) : IShramSafal
             join log in db.DailyLogs on task.DailyLogId equals log.Id
             where log.CropCycleId == cropCycleId
             select task)
+            .ToListAsync(ct);
+    }
+
+    public async Task<List<Plot>> GetPlotsByFarmIdAsync(Guid farmId, CancellationToken ct = default)
+    {
+        var typedFarmId = new FarmId(farmId);
+        return await db.Plots
+            .AsNoTracking()
+            .Where(p => p.FarmId == typedFarmId)
+            .OrderBy(p => p.Name)
             .ToListAsync(ct);
     }
 
@@ -209,8 +244,8 @@ internal sealed class ShramSafalRepository(ShramSafalDbContext db) : IShramSafal
     {
         return await db.Farms
             .AsNoTracking()
-            .Where(f => f.CreatedAtUtc > sinceUtc)
-            .OrderBy(f => f.CreatedAtUtc)
+            .Where(f => f.ModifiedAtUtc > sinceUtc)
+            .OrderBy(f => f.ModifiedAtUtc)
             .ToListAsync(ct);
     }
 
@@ -218,8 +253,8 @@ internal sealed class ShramSafalRepository(ShramSafalDbContext db) : IShramSafal
     {
         return await db.Plots
             .AsNoTracking()
-            .Where(p => p.CreatedAtUtc > sinceUtc)
-            .OrderBy(p => p.CreatedAtUtc)
+            .Where(p => p.ModifiedAtUtc > sinceUtc)
+            .OrderBy(p => p.ModifiedAtUtc)
             .ToListAsync(ct);
     }
 
@@ -227,8 +262,8 @@ internal sealed class ShramSafalRepository(ShramSafalDbContext db) : IShramSafal
     {
         return await db.CropCycles
             .AsNoTracking()
-            .Where(c => c.CreatedAtUtc > sinceUtc)
-            .OrderBy(c => c.CreatedAtUtc)
+            .Where(c => c.ModifiedAtUtc > sinceUtc)
+            .OrderBy(c => c.ModifiedAtUtc)
             .ToListAsync(ct);
     }
 
@@ -238,11 +273,8 @@ internal sealed class ShramSafalRepository(ShramSafalDbContext db) : IShramSafal
             .AsNoTracking()
             .Include(l => l.Tasks)
             .Include(l => l.VerificationEvents)
-            .Where(l =>
-                l.CreatedAtUtc > sinceUtc ||
-                l.Tasks.Any(t => t.OccurredAtUtc > sinceUtc) ||
-                l.VerificationEvents.Any(v => v.OccurredAtUtc > sinceUtc))
-            .OrderBy(l => l.CreatedAtUtc)
+            .Where(l => l.ModifiedAtUtc > sinceUtc)
+            .OrderBy(l => l.ModifiedAtUtc)
             .ToListAsync(ct);
     }
 
@@ -250,10 +282,8 @@ internal sealed class ShramSafalRepository(ShramSafalDbContext db) : IShramSafal
     {
         return await db.CostEntries
             .AsNoTracking()
-            .Where(c =>
-                c.CreatedAtUtc > sinceUtc ||
-                db.FinanceCorrections.Any(fc => fc.CostEntryId == c.Id && fc.CorrectedAtUtc > sinceUtc))
-            .OrderBy(c => c.CreatedAtUtc)
+            .Where(c => c.ModifiedAtUtc > sinceUtc)
+            .OrderBy(c => c.ModifiedAtUtc)
             .ToListAsync(ct);
     }
 
@@ -261,8 +291,18 @@ internal sealed class ShramSafalRepository(ShramSafalDbContext db) : IShramSafal
     {
         return await db.FinanceCorrections
             .AsNoTracking()
-            .Where(c => c.CorrectedAtUtc > sinceUtc)
-            .OrderBy(c => c.CorrectedAtUtc)
+            .Where(c => c.ModifiedAtUtc > sinceUtc)
+            .OrderBy(c => c.ModifiedAtUtc)
+            .ToListAsync(ct);
+    }
+
+    public async Task<List<DayLedger>> GetDayLedgersChangedSinceAsync(DateTime sinceUtc, CancellationToken ct = default)
+    {
+        return await db.DayLedgers
+            .AsNoTracking()
+            .Include(x => x.Allocations)
+            .Where(x => x.ModifiedAtUtc > sinceUtc)
+            .OrderBy(x => x.ModifiedAtUtc)
             .ToListAsync(ct);
     }
 
@@ -270,8 +310,8 @@ internal sealed class ShramSafalRepository(ShramSafalDbContext db) : IShramSafal
     {
         return await db.PriceConfigs
             .AsNoTracking()
-            .Where(c => c.CreatedAtUtc > sinceUtc)
-            .OrderBy(c => c.CreatedAtUtc)
+            .Where(c => c.ModifiedAtUtc > sinceUtc)
+            .OrderBy(c => c.ModifiedAtUtc)
             .ToListAsync(ct);
     }
 
@@ -289,9 +329,81 @@ internal sealed class ShramSafalRepository(ShramSafalDbContext db) : IShramSafal
     {
         return await db.PlannedActivities
             .AsNoTracking()
-            .Where(a => a.CreatedAtUtc > sinceUtc)
-            .OrderBy(a => a.CreatedAtUtc)
+            .Where(a => a.ModifiedAtUtc > sinceUtc)
+            .OrderBy(a => a.ModifiedAtUtc)
             .ToListAsync(ct);
+    }
+
+    public async Task<List<Attachment>> GetAttachmentsChangedSinceAsync(DateTime sinceUtc, CancellationToken ct = default)
+    {
+        return await db.Attachments
+            .AsNoTracking()
+            .Where(a =>
+                a.CreatedAtUtc > sinceUtc ||
+                a.ModifiedAtUtc > sinceUtc ||
+                (a.UploadedAtUtc.HasValue && a.UploadedAtUtc.Value > sinceUtc) ||
+                (a.FinalizedAtUtc.HasValue && a.FinalizedAtUtc.Value > sinceUtc))
+            .OrderBy(a => a.ModifiedAtUtc)
+            .ToListAsync(ct);
+    }
+
+    public async Task<List<AuditEvent>> GetAuditEventsChangedSinceAsync(DateTime sinceUtc, CancellationToken ct = default)
+    {
+        return await db.AuditEvents
+            .AsNoTracking()
+            .Where(a => a.OccurredAtUtc > sinceUtc)
+            .OrderBy(a => a.OccurredAtUtc)
+            .ToListAsync(ct);
+    }
+
+    public async Task<List<AuditEvent>> GetAuditEventsForEntityAsync(Guid entityId, string entityType, CancellationToken ct = default)
+    {
+        var normalizedEntityType = entityType.Trim();
+        return await db.AuditEvents
+            .AsNoTracking()
+            .Where(a => a.EntityId == entityId && a.EntityType == normalizedEntityType)
+            .OrderBy(a => a.OccurredAtUtc)
+            .ToListAsync(ct);
+    }
+
+    public async Task<List<AuditEvent>> GetAuditEventsForFarmAsync(
+        Guid farmId,
+        DateOnly from,
+        DateOnly to,
+        int limit,
+        int offset,
+        CancellationToken ct = default)
+    {
+        var fromUtc = from.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc);
+        var toExclusiveUtc = to.AddDays(1).ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc);
+
+        return await db.AuditEvents
+            .AsNoTracking()
+            .Where(a =>
+                a.FarmId == farmId &&
+                a.OccurredAtUtc >= fromUtc &&
+                a.OccurredAtUtc < toExclusiveUtc)
+            .OrderByDescending(a => a.OccurredAtUtc)
+            .Skip(Math.Max(0, offset))
+            .Take(Math.Clamp(limit, 1, 1000))
+            .ToListAsync(ct);
+    }
+
+    public async Task<List<Guid>> GetFarmIdsForUserAsync(Guid userId, CancellationToken ct = default)
+    {
+        return await db.Farms
+            .AsNoTracking()
+            .Where(f => (Guid)f.OwnerUserId == userId)
+            .Select(f => (Guid)f.Id)
+            .ToListAsync(ct);
+    }
+
+    public async Task<bool> IsUserMemberOfFarmAsync(Guid farmId, Guid userId, CancellationToken ct = default)
+    {
+        var typedFarmId = new FarmId(farmId);
+        return await db.Farms
+            .AsNoTracking()
+            .AnyAsync(f => f.Id == typedFarmId && (Guid)f.OwnerUserId == userId, ct);
     }
 
     public async Task SaveChangesAsync(CancellationToken ct = default)

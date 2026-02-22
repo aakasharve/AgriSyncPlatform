@@ -35,7 +35,8 @@ export interface AuthResponseDto {
 
 export interface SyncPushMutation {
     clientRequestId: string;
-    mutationType: SyncMutationType;
+    clientCommandId?: string;
+    mutationType: string;
     payload: unknown;
 }
 
@@ -63,6 +64,7 @@ export interface FarmDto {
     name: string;
     ownerUserId: string;
     createdAtUtc: string;
+    modifiedAtUtc: string;
 }
 
 export interface PlotDto {
@@ -71,6 +73,7 @@ export interface PlotDto {
     name: string;
     areaInAcres: number;
     createdAtUtc: string;
+    modifiedAtUtc: string;
 }
 
 export interface CropCycleDto {
@@ -82,6 +85,17 @@ export interface CropCycleDto {
     startDate: string;
     endDate?: string;
     createdAtUtc: string;
+    modifiedAtUtc: string;
+}
+
+export interface LocationDto {
+    latitude: number;
+    longitude: number;
+    accuracyMeters: number;
+    altitude?: number;
+    capturedAtUtc: string;
+    provider: string;
+    permissionState: string;
 }
 
 export interface LogTaskDto {
@@ -108,108 +122,91 @@ export interface DailyLogDto {
     logDate: string;
     idempotencyKey?: string;
     createdAtUtc: string;
-    verificationStatus: string;
+    modifiedAtUtc: string;
+    location?: LocationDto;
     lastVerificationStatus?: string;
     tasks: LogTaskDto[];
     verificationEvents: VerificationEventDto[];
 }
 
-export interface PlotAllocation {
+export interface CostEntryDto {
+    id: string;
+    farmId: string;
+    plotId?: string;
+    cropCycleId?: string;
+    category: string;
+    description: string;
+    amount: number;
+    currencyCode: string;
+    entryDate: string;
+    createdByUserId: string;
+    createdAtUtc: string;
+    modifiedAtUtc: string;
+    location?: LocationDto;
+    isCorrected: boolean;
+}
+
+export interface FinanceCorrectionDto {
+    id: string;
+    costEntryId: string;
+    originalAmount: number;
+    correctedAmount: number;
+    currencyCode: string;
+    reason: string;
+    correctedByUserId: string;
+    correctedAtUtc: string;
+    modifiedAtUtc: string;
+}
+
+export interface DayLedgerAllocationDto {
+    id: string;
     plotId: string;
-    cropCycleId: string;
-    allocationPercent: number;
     allocatedAmount: number;
+    currencyCode: string;
+    allocatedAtUtc: string;
 }
 
 export interface DayLedgerDto {
     id: string;
     farmId: string;
-    dateKey: string;
-    globalExpenseIds: string[];
-    allocationStrategy: string;
-    totalGlobalCost: number;
-    createdAtUtc: string;
-    plotAllocations: PlotAllocation[];
-}
-
-export interface PlannedTask {
-    id: string;
-    cropCycleId: string;
-    activityName: string;
-    stage: string;
-    plannedDate: string;
-    createdAtUtc: string;
-}
-
-export interface StageComparisonBucket {
-    category: string;
-    planned: string[];
-    executed: string[];
-    matched: string[];
-    missing: string[];
-    extra: string[];
-    health: number | string;
-}
-
-export interface StageComparisonResult {
-    stageName: string;
-    startDay: number;
-    endDay: number;
-    buckets: StageComparisonBucket[];
-    overallHealth: number | string;
-}
-
-export interface PlotFinanceSummaryDto {
-    plotId: string;
-    fromDate?: string;
-    toDate?: string;
-    directCosts: number;
-    allocatedCosts: number;
-    totalCosts: number;
-}
-
-export interface VoiceParseResult {
-    parsedLog: unknown;
-    confidence: number;
-    fieldConfidences: Record<string, { score: number; level: string; reason?: string }>;
-    suggestedAction: string;
-    modelUsed: string;
-    latencyMs: number;
-    validationOutcome: string;
-}
-
-export interface ParseVoiceContext {
-    farmId: string;
-    plotId?: string;
-    cropCycleId?: string;
-    audioBase64?: string;
-    audioMimeType?: string;
-}
-
-export interface AllocateGlobalExpenseRequest {
-    farmId: string;
-    dateKey: string;
-    costEntryIds: string[];
-    strategy: 'Equal' | 'ByAcreage' | 'Custom';
-    customAllocations?: Record<string, number>;
-}
-
-export interface DateRangeFilter {
-    fromDate?: string;
-    toDate?: string;
-}
-
-export interface DuplicateCheckRequest {
-    farmId: string;
-    plotId?: string;
-    cropCycleId?: string;
-    category: string;
-    description?: string;
-    amount: number;
-    currencyCode: string;
-    entryDate: string;
+    sourceCostEntryId: string;
+    ledgerDate: string;
+    allocationBasis: string;
     createdByUserId: string;
-    windowMinutes?: number;
+    createdAtUtc: string;
+    modifiedAtUtc: string;
+    allocations: DayLedgerAllocationDto[];
+}
+
+export interface AttachmentDto {
+    id: string;
+    farmId: string;
+    linkedEntityId: string;
+    linkedEntityType: string;
+    fileName: string;
+    mimeType: string;
+    status: string;
+    localPath?: string | null;
+    sizeBytes?: number | null;
+    createdByUserId: string;
+    createdAtUtc: string;
+    modifiedAtUtc: string;
+    uploadedAtUtc?: string | null;
+    finalizedAtUtc?: string | null;
+}
+
+export interface CreateAttachmentRequest {
+    farmId: string;
+    linkedEntityId: string;
+    linkedEntityType: string;
+    fileName: string;
+    mimeType: string;
+    attachmentId?: string;
+}
+
+export interface CreateAttachmentResponse {
+    attachment: AttachmentDto;
+    uploadUrl: string;
 }
 
 export interface SyncPullResponse {
@@ -219,11 +216,13 @@ export interface SyncPullResponse {
     plots: PlotDto[];
     cropCycles: CropCycleDto[];
     dailyLogs: DailyLogDto[];
-    costEntries: unknown[];
-    financeCorrections: unknown[];
-    priceConfigs: unknown[];
+    attachments: AttachmentDto[];
+    costEntries: CostEntryDto[];
+    financeCorrections: FinanceCorrectionDto[];
     dayLedgers: DayLedgerDto[];
-    plannedActivities: PlannedTask[];
+    priceConfigs: unknown[];
+    plannedActivities: unknown[];
+    auditEvents: unknown[];
 }
 
 interface RetriableRequestConfig extends InternalAxiosRequestConfig {
@@ -334,80 +333,47 @@ export class AgriSyncClient {
         return response.data;
     }
 
-    async parseVoice(text: string, context: ParseVoiceContext): Promise<VoiceParseResult> {
-        const response = await this.http.post<VoiceParseResult>('/ai/parse-voice', {
-            farmId: context.farmId,
-            plotId: context.plotId,
-            cropCycleId: context.cropCycleId,
-            textTranscript: text,
-            audioBase64: context.audioBase64,
-            audioMimeType: context.audioMimeType,
-        });
-
+    async createAttachment(request: CreateAttachmentRequest): Promise<CreateAttachmentResponse> {
+        const response = await this.http.post<CreateAttachmentResponse>('/shramsafal/attachments', request);
         return response.data;
     }
 
-    async getTodaysPlan(cropCycleId: string): Promise<PlannedTask[]> {
-        const response = await this.http.get<{ activities: PlannedTask[] }>('/plan/today', {
-            params: { cropCycleId },
-        });
+    async uploadAttachmentFile(
+        attachmentId: string,
+        file: Blob,
+        fileName = 'attachment.bin',
+        mimeType?: string,
+    ): Promise<void> {
+        const payload = mimeType && file.type !== mimeType
+            ? new Blob([file], { type: mimeType })
+            : file;
 
-        return response.data.activities ?? [];
+        const formData = new FormData();
+        formData.append('file', payload, fileName);
+        await this.http.post(`/shramsafal/attachments/${encodeURIComponent(attachmentId)}/upload`, formData);
     }
 
-    async getStagePlan(cropCycleId: string, stage?: string): Promise<PlannedTask[]> {
-        const response = await this.http.get<{ stage: string; activities: PlannedTask[] }>('/plan/stage', {
-            params: {
-                cropCycleId,
-                stage,
-            },
-        });
-
-        return response.data.activities ?? [];
-    }
-
-    async getStageComparison(cropCycleId: string, stage?: string): Promise<StageComparisonResult> {
-        const response = await this.http.get<StageComparisonResult>('/compare/stage', {
-            params: {
-                cropCycleId,
-                stage,
-            },
-        });
-
+    async getAttachmentMetadata(attachmentId: string): Promise<AttachmentDto> {
+        const response = await this.http.get<AttachmentDto>(`/shramsafal/attachments/${encodeURIComponent(attachmentId)}`);
         return response.data;
     }
 
-    async allocateGlobalExpense(request: AllocateGlobalExpenseRequest): Promise<PlotAllocation[]> {
-        const response = await this.http.post<DayLedgerDto>('/finance/allocate', request);
-        return response.data.plotAllocations ?? [];
+    getAttachmentDownloadUrl(attachmentId: string): string {
+        const path = `/shramsafal/attachments/${encodeURIComponent(attachmentId)}/download`;
+        const baseUrl = this.http.defaults.baseURL?.trim();
+
+        if (!baseUrl) {
+            return path;
+        }
+
+        return `${baseUrl.replace(/\/+$/, '')}${path}`;
     }
 
-    async getPlotFinanceSummary(plotId: string, dateRange?: DateRangeFilter): Promise<PlotFinanceSummaryDto> {
-        const response = await this.http.get<PlotFinanceSummaryDto>('/finance/plot-summary', {
-            params: {
-                plotId,
-                fromDate: dateRange?.fromDate,
-                toDate: dateRange?.toDate,
-            },
+    async listAttachments(entityId: string, entityType: string): Promise<AttachmentDto[]> {
+        const response = await this.http.get<AttachmentDto[]>('/shramsafal/attachments', {
+            params: { entityId, entityType },
         });
-
         return response.data;
-    }
-
-    async checkDuplicate(request: DuplicateCheckRequest): Promise<{ isDuplicate: boolean; matchedEntryId?: string }> {
-        const response = await this.http.post<{ isDuplicate: boolean; matchedEntryId?: string }>(
-            '/finance/duplicate-check',
-            request);
-
-        return {
-            isDuplicate: response.data.isDuplicate,
-            matchedEntryId: response.data.matchedEntryId,
-        };
-    }
-
-    async getAvailableTransitions(logId: string): Promise<VerificationStatus[]> {
-        const response = await this.http.get<{ availableTransitions?: string[] }>(`/logs/${logId}/transitions`);
-        return (response.data.availableTransitions ?? []).map(normalizeVerificationStatus);
     }
 
     private attachAccessToken(config: InternalAxiosRequestConfig): InternalAxiosRequestConfig {

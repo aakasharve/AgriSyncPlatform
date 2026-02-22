@@ -13,11 +13,13 @@ public sealed class Farm : Entity<FarmId>
         Name = name;
         OwnerUserId = ownerUserId;
         CreatedAtUtc = createdAtUtc;
+        ModifiedAtUtc = createdAtUtc;
     }
 
     public string Name { get; private set; } = string.Empty;
     public UserId OwnerUserId { get; private set; }
     public DateTime CreatedAtUtc { get; private set; }
+    public DateTime ModifiedAtUtc { get; private set; }
 
     public static Farm Create(FarmId id, string name, UserId ownerUserId, DateTime createdAtUtc)
     {

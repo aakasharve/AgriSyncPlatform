@@ -1,3 +1,8 @@
+using ShramSafal.Application.UseCases.Attachments.CreateAttachment;
+using ShramSafal.Application.UseCases.Attachments.GetAttachmentFile;
+using ShramSafal.Application.UseCases.Attachments.GetAttachmentMetadata;
+using ShramSafal.Application.UseCases.Attachments.ListAttachmentsForEntity;
+using ShramSafal.Application.UseCases.Attachments.UploadAttachment;
 using ShramSafal.Application.UseCases.CropCycles.CreateCropCycle;
 using ShramSafal.Application.UseCases.AI.ParseVoiceInput;
 using ShramSafal.Application.UseCases.Farms.CreateFarm;
@@ -28,6 +33,7 @@ public static class DependencyInjection
     public static IServiceCollection AddShramSafalApi(this IServiceCollection services, IConfiguration configuration)
     {
         services.AddShramSafalInfrastructure(configuration);
+        services.AddAuthorization();
 
         services.AddScoped<CreateFarmHandler>();
         services.AddScoped<CreatePlotHandler>();
@@ -39,10 +45,14 @@ public static class DependencyInjection
 
         services.AddScoped<SetPriceConfigVersionHandler>();
         services.AddScoped<AddCostEntryHandler>();
+        services.AddScoped<AllocateGlobalExpenseHandler>();
         services.AddScoped<CorrectCostEntryHandler>();
         services.AddScoped<GetFinanceSummaryHandler>();
-        services.AddScoped<AllocateGlobalExpenseHandler>();
-        services.AddScoped<GetPlotFinanceSummaryHandler>();
+        services.AddScoped<CreateAttachmentHandler>();
+        services.AddScoped<UploadAttachmentHandler>();
+        services.AddScoped<GetAttachmentMetadataHandler>();
+        services.AddScoped<GetAttachmentFileHandler>();
+        services.AddScoped<ListAttachmentsForEntityHandler>();
 
         services.AddScoped<GeneratePlanFromTemplateHandler>();
         services.AddScoped<ComputePlannedVsExecutedDeltaHandler>();
