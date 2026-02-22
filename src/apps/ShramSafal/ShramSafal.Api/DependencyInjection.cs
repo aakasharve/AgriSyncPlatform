@@ -1,7 +1,14 @@
 using ShramSafal.Application.UseCases.CropCycles.CreateCropCycle;
 using ShramSafal.Application.UseCases.AI.ParseVoiceInput;
+using ShramSafal.Application.UseCases.Attachments.CreateAttachment;
+using ShramSafal.Application.UseCases.Attachments.GetAttachment;
+using ShramSafal.Application.UseCases.Attachments.GetAttachmentFile;
+using ShramSafal.Application.UseCases.Attachments.UploadAttachment;
 using ShramSafal.Application.UseCases.Farms.CreateFarm;
 using ShramSafal.Application.UseCases.Farms.CreatePlot;
+using ShramSafal.Application.UseCases.Export.ExportDailySummary;
+using ShramSafal.Application.UseCases.Export.ExportMonthlyCost;
+using ShramSafal.Application.UseCases.Export.ExportVerificationReport;
 using ShramSafal.Application.UseCases.Finance.AddCostEntry;
 using ShramSafal.Application.UseCases.Finance.AllocateGlobalExpense;
 using ShramSafal.Application.UseCases.Finance.CorrectCostEntry;
@@ -15,6 +22,7 @@ using ShramSafal.Application.UseCases.Planning.ComputePlannedVsExecutedDelta;
 using ShramSafal.Application.UseCases.Planning.GeneratePlanFromTemplate;
 using ShramSafal.Application.UseCases.Planning.GetStagePlan;
 using ShramSafal.Application.UseCases.Planning.GetTodaysPlan;
+using ShramSafal.Application.UseCases.OCR.ExtractFromReceipt;
 using ShramSafal.Application.UseCases.Sync.PullSyncChanges;
 using ShramSafal.Application.UseCases.Sync.PushSyncBatch;
 using ShramSafal.Infrastructure;
@@ -46,8 +54,16 @@ public static class DependencyInjection
         services.AddScoped<ComputePlannedVsExecutedDeltaHandler>();
         services.AddScoped<GetTodaysPlanHandler>();
         services.AddScoped<GetStagePlanHandler>();
+        services.AddScoped<ExportDailySummaryHandler>();
+        services.AddScoped<ExportMonthlyCostHandler>();
+        services.AddScoped<ExportVerificationReportHandler>();
 
         services.AddScoped<ParseVoiceInputHandler>();
+        services.AddScoped<CreateAttachmentHandler>();
+        services.AddScoped<UploadAttachmentHandler>();
+        services.AddScoped<GetAttachmentHandler>();
+        services.AddScoped<GetAttachmentFileHandler>();
+        services.AddScoped<ExtractFromReceiptHandler>();
 
         services.AddScoped<PushSyncBatchHandler>();
         services.AddScoped<PullSyncChangesHandler>();

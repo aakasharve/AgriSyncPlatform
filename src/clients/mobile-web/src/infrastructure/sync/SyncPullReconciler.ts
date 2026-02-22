@@ -7,6 +7,7 @@ import {
     type Plot,
 } from '../../types';
 import {
+    type AttachmentDto,
     type CropCycleDto,
     type DailyLogDto,
     type DayLedgerDto,
@@ -263,10 +264,11 @@ export async function reconcileSyncPull(payload: SyncPullResponse): Promise<void
     const logs = payload.dailyLogs.map(log => toDailyLog(log, plotLookup));
     const dayLedgers: DayLedgerDto[] = payload.dayLedgers ?? [];
     const plannedTasks: PlannedTaskDto[] = payload.plannedActivities ?? [];
+    const attachments: AttachmentDto[] = payload.attachments ?? [];
     const receivedAtUtc = systemClock.nowISO();
 
     const db = getDatabase();
-    await db.transaction('rw', [db.logs, db.appMeta, db.dayLedgers, db.plannedTasks], async () => {
+    await db.transaction('rw', [db.logs, db.appMeta, db.dayLedgers, db.plannedTasks, db.attachments], async () => {
         for (const log of logs) {
             await db.logs.put({
                 id: log.id,
@@ -305,6 +307,51 @@ export async function reconcileSyncPull(payload: SyncPullResponse): Promise<void
             });
         }
 
+        for (const attachment of attachments) {
+            const byServerId = await db.attachments
+                .where('serverAttachmentId')
+                .equals(attachment.id)
+                .first();
+
+            if (byServerId) {
+                await db.attachments.update(byServerId.id, {
+                    farmId: attachment.farmId,
+                    linkedEntityId: attachment.linkedEntityId,
+                    linkedEntityType: attachment.linkedEntityType,
+                    status: attachment.status.toLowerCase() === 'finalized' ? 'finalized' : byServerId.status,
+                    fileName: attachment.originalFileName,
+                    mimeType: attachment.mimeType,
+                    sizeBytes: attachment.sizeBytes,
+                    serverAttachmentId: attachment.id,
+                    storagePath: attachment.storagePath,
+                    uploadedByUserId: attachment.uploadedByUserId,
+                    createdAtUtc: attachment.createdAtUtc,
+                    finalizedAtUtc: attachment.finalizedAtUtc,
+                    updatedAt: receivedAtUtc,
+                    lastError: undefined,
+                });
+                continue;
+            }
+
+            await db.attachments.put({
+                id: attachment.id,
+                farmId: attachment.farmId,
+                linkedEntityId: attachment.linkedEntityId,
+                linkedEntityType: attachment.linkedEntityType,
+                localPath: '',
+                status: attachment.status.toLowerCase() === 'finalized' ? 'finalized' : 'pending',
+                fileName: attachment.originalFileName,
+                mimeType: attachment.mimeType,
+                sizeBytes: attachment.sizeBytes,
+                serverAttachmentId: attachment.id,
+                storagePath: attachment.storagePath,
+                uploadedByUserId: attachment.uploadedByUserId,
+                createdAtUtc: attachment.createdAtUtc,
+                finalizedAtUtc: attachment.finalizedAtUtc,
+                updatedAt: receivedAtUtc,
+            });
+        }
+
         await db.appMeta.put({
             key: 'shramsafal_day_ledgers_index_v1',
             value: {
@@ -321,6 +368,16 @@ export async function reconcileSyncPull(payload: SyncPullResponse): Promise<void
                 ids: plannedTasks.map(task => task.id),
                 importedAtUtc: receivedAtUtc,
                 importedCount: plannedTasks.length,
+            },
+            updatedAt: receivedAtUtc,
+        });
+
+        await db.appMeta.put({
+            key: 'shramsafal_attachments_index_v1',
+            value: {
+                ids: attachments.map(item => item.id),
+                importedAtUtc: receivedAtUtc,
+                importedCount: attachments.length,
             },
             updatedAt: receivedAtUtc,
         });
@@ -352,6 +409,7 @@ export async function reconcileSyncPull(payload: SyncPullResponse): Promise<void
                 importedLogs: logs.length,
                 importedDayLedgers: dayLedgers.length,
                 importedPlannedTasks: plannedTasks.length,
+                importedAttachments: attachments.length,
             },
             updatedAt: receivedAtUtc,
         });

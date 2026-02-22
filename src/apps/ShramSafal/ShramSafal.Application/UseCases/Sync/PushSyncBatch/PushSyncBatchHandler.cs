@@ -17,6 +17,7 @@ using ShramSafal.Application.UseCases.Logs.VerifyLog;
 using ShramSafal.Domain.Common;
 using ShramSafal.Domain.Finance;
 using ShramSafal.Domain.Logs;
+using ShramSafal.Domain.Location;
 
 namespace ShramSafal.Application.UseCases.Sync.PushSyncBatch;
 
@@ -221,7 +222,8 @@ public sealed class PushSyncBatchHandler(
                         request.LogDate,
                         deviceId,
                         clientRequestId,
-                        request.DailyLogId),
+                        request.DailyLogId,
+                        MapLocation(request.Location)),
                     ct);
 
                 return ToOutcome(result);
@@ -298,7 +300,8 @@ public sealed class PushSyncBatchHandler(
                         request.CurrencyCode,
                         request.EntryDate,
                         request.CreatedByUserId,
-                        request.CostEntryId),
+                        request.CostEntryId,
+                        MapLocation(request.Location)),
                     ct);
 
                 return ToOutcome(result);
@@ -410,6 +413,25 @@ public sealed class PushSyncBatchHandler(
         return document.RootElement.Clone();
     }
 
+    private static LocationSnapshot? MapLocation(LocationMutationPayload? payload)
+    {
+        if (payload is null)
+        {
+            return null;
+        }
+
+        return new LocationSnapshot
+        {
+            Latitude = payload.Latitude,
+            Longitude = payload.Longitude,
+            AccuracyMeters = payload.AccuracyMeters,
+            Altitude = payload.Altitude,
+            CapturedAtUtc = payload.CapturedAtUtc,
+            Provider = string.IsNullOrWhiteSpace(payload.Provider) ? "unknown" : payload.Provider.Trim().ToLowerInvariant(),
+            PermissionState = string.IsNullOrWhiteSpace(payload.PermissionState) ? "prompt" : payload.PermissionState.Trim().ToLowerInvariant()
+        };
+    }
+
     private static MutationExecutionOutcome ToOutcome<T>(Result<T> result)
     {
         if (result.IsSuccess)
@@ -451,7 +473,8 @@ public sealed class PushSyncBatchHandler(
         Guid PlotId,
         Guid CropCycleId,
         Guid OperatorUserId,
-        DateOnly LogDate);
+        DateOnly LogDate,
+        LocationMutationPayload? Location);
 
     private sealed record AddLogTaskMutationPayload(
         Guid? LogTaskId,
@@ -479,7 +502,17 @@ public sealed class PushSyncBatchHandler(
         decimal Amount,
         string CurrencyCode,
         DateOnly EntryDate,
-        Guid CreatedByUserId);
+        Guid CreatedByUserId,
+        LocationMutationPayload? Location);
+
+    private sealed record LocationMutationPayload(
+        decimal Latitude,
+        decimal Longitude,
+        decimal AccuracyMeters,
+        decimal? Altitude,
+        DateTime CapturedAtUtc,
+        string Provider,
+        string PermissionState);
 
     private sealed record CorrectCostEntryMutationPayload(
         Guid? FinanceCorrectionId,

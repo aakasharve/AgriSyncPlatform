@@ -1,3 +1,5 @@
+using ShramSafal.Domain.Location;
+
 namespace ShramSafal.Application.UseCases.Finance.AddCostEntry;
 
 public sealed record AddCostEntryCommand(
@@ -10,4 +12,5 @@ public sealed record AddCostEntryCommand(
     string CurrencyCode,
     DateOnly EntryDate,
     Guid CreatedByUserId,
-    Guid? CostEntryId = null);
+    Guid? CostEntryId = null,
+    LocationSnapshot? Location = null);

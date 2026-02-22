@@ -4,7 +4,9 @@
       "Bash(git add:*)",
       "Bash(git commit:*)",
       "Bash(npx tsc:*)",
-      "Bash(npx vite build)"
+      "Bash(npx vite build)",
+      "Bash(git -C \"E:/APPS/Running App Versions/AgriSyncPlatform\" ls-files:*)",
+      "Bash(git -C \"E:/APPS/Running App Versions/AgriSyncPlatform\" ls-files -- \"src/clients/mobile-web/dist/\")"
     ]
   }
 }

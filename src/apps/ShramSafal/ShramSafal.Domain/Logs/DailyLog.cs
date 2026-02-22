@@ -2,6 +2,7 @@ using AgriSync.BuildingBlocks.Domain;
 using AgriSync.SharedKernel.Contracts.Ids;
 using AgriSync.SharedKernel.Contracts.Roles;
 using ShramSafal.Domain.Events;
+using ShramSafal.Domain.Location;
 
 namespace ShramSafal.Domain.Logs;
 
@@ -39,6 +40,7 @@ public sealed class DailyLog : Entity<Guid>
     public DateOnly LogDate { get; private set; }
     public string? IdempotencyKey { get; private set; }
     public DateTime CreatedAtUtc { get; private set; }
+    public LocationSnapshot? Location { get; private set; }
     public IReadOnlyCollection<LogTask> Tasks => _tasks.AsReadOnly();
     public IReadOnlyCollection<VerificationEvent> VerificationEvents => _verificationEvents.AsReadOnly();
 
@@ -164,5 +166,17 @@ public sealed class DailyLog : Entity<Guid>
             editedByUserId));
 
         return verification;
+    }
+
+    public void AttachLocation(LocationSnapshot location)
+    {
+        ArgumentNullException.ThrowIfNull(location);
+
+        if (Location is not null)
+        {
+            throw new InvalidOperationException("Location is immutable once attached.");
+        }
+
+        Location = location;
     }
 }

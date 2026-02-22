@@ -10,6 +10,7 @@ using ShramSafal.Application.UseCases.Finance.GetFinanceSummary;
 using ShramSafal.Application.UseCases.Finance.GetPlotFinanceSummary;
 using ShramSafal.Application.UseCases.Finance.SetPriceConfigVersion;
 using ShramSafal.Domain.Finance;
+using ShramSafal.Domain.Location;
 
 namespace ShramSafal.Api.Endpoints;
 
@@ -60,7 +61,9 @@ public static class FinanceEndpoints
                 request.Amount,
                 request.CurrencyCode,
                 request.EntryDate,
-                callerUserId);
+                callerUserId,
+                null,
+                request.Location);
 
             var result = await handler.HandleAsync(command, ct);
             return result.IsSuccess ? Results.Ok(result.Value) : ToErrorResult(result.Error);
@@ -244,7 +247,8 @@ public sealed record AddCostEntryRequest(
     decimal Amount,
     string CurrencyCode,
     DateOnly EntryDate,
-    Guid CreatedByUserId);
+    Guid CreatedByUserId,
+    LocationSnapshot? Location = null);
 
 public sealed record AllocateGlobalExpenseRequest(
     Guid FarmId,

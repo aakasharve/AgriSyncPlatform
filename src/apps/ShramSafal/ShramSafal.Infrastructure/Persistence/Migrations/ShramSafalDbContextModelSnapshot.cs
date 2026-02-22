@@ -24,6 +24,75 @@ namespace ShramSafal.Infrastructure.Persistence.Migrations
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
+            modelBuilder.Entity("ShramSafal.Domain.Attachments.Attachment", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at_utc");
+
+                    b.Property<Guid>("FarmId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("farm_id");
+
+                    b.Property<DateTime?>("FinalizedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("finalized_at_utc");
+
+                    b.Property<Guid?>("LinkedEntityId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("linked_entity_id");
+
+                    b.Property<string>("LinkedEntityType")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("linked_entity_type");
+
+                    b.Property<string>("MimeType")
+                        .IsRequired()
+                        .HasMaxLength(120)
+                        .HasColumnType("character varying(120)")
+                        .HasColumnName("mime_type");
+
+                    b.Property<string>("OriginalFileName")
+                        .IsRequired()
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)")
+                        .HasColumnName("original_file_name");
+
+                    b.Property<long>("SizeBytes")
+                        .HasColumnType("bigint")
+                        .HasColumnName("size_bytes");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("status");
+
+                    b.Property<string>("StoragePath")
+                        .IsRequired()
+                        .HasMaxLength(600)
+                        .HasColumnType("character varying(600)")
+                        .HasColumnName("storage_path");
+
+                    b.Property<Guid>("UploadedByUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("uploaded_by_user_id");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("FarmId");
+
+                    b.HasIndex("UploadedByUserId");
+
+                    b.HasIndex("LinkedEntityId", "LinkedEntityType");
+
+                    b.ToTable("attachments", "ssf");
+                });
+
             modelBuilder.Entity("ShramSafal.Domain.Crops.CropCycle", b =>
                 {
                     b.Property<Guid>("Id")
@@ -441,6 +510,51 @@ namespace ShramSafal.Infrastructure.Persistence.Migrations
                     b.ToTable("verification_events", "ssf");
                 });
 
+            modelBuilder.Entity("ShramSafal.Domain.OCR.OcrResult", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("AttachmentId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("attachment_id");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at_utc");
+
+                    b.Property<string>("ExtractedFieldsJson")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("extracted_fields_json");
+
+                    b.Property<int>("LatencyMs")
+                        .HasColumnType("integer")
+                        .HasColumnName("latency_ms");
+
+                    b.Property<string>("ModelUsed")
+                        .IsRequired()
+                        .HasMaxLength(120)
+                        .HasColumnType("character varying(120)")
+                        .HasColumnName("model_used");
+
+                    b.Property<decimal>("OverallConfidence")
+                        .HasPrecision(6, 4)
+                        .HasColumnType("numeric(6,4)")
+                        .HasColumnName("overall_confidence");
+
+                    b.Property<string>("RawText")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("raw_text");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AttachmentId");
+
+                    b.ToTable("ocr_results", "ssf");
+                });
+
             modelBuilder.Entity("ShramSafal.Domain.Planning.PlannedActivity", b =>
                 {
                     b.Property<Guid>("Id")
@@ -569,6 +683,60 @@ namespace ShramSafal.Infrastructure.Persistence.Migrations
                     b.ToTable("sync_mutations", "ssf");
                 });
 
+            modelBuilder.Entity("ShramSafal.Domain.Finance.CostEntry", b =>
+                {
+                    b.OwnsOne("ShramSafal.Domain.Location.LocationSnapshot", "Location", b1 =>
+                        {
+                            b1.Property<Guid>("CostEntryId")
+                                .HasColumnType("uuid");
+
+                            b1.Property<decimal>("AccuracyMeters")
+                                .HasPrecision(10, 2)
+                                .HasColumnType("numeric(10,2)")
+                                .HasColumnName("location_accuracy_meters");
+
+                            b1.Property<decimal?>("Altitude")
+                                .HasPrecision(10, 2)
+                                .HasColumnType("numeric(10,2)")
+                                .HasColumnName("location_altitude");
+
+                            b1.Property<DateTime>("CapturedAtUtc")
+                                .HasColumnType("timestamp with time zone")
+                                .HasColumnName("location_captured_at_utc");
+
+                            b1.Property<decimal>("Latitude")
+                                .HasPrecision(10, 7)
+                                .HasColumnType("numeric(10,7)")
+                                .HasColumnName("location_latitude");
+
+                            b1.Property<decimal>("Longitude")
+                                .HasPrecision(10, 7)
+                                .HasColumnType("numeric(10,7)")
+                                .HasColumnName("location_longitude");
+
+                            b1.Property<string>("PermissionState")
+                                .IsRequired()
+                                .HasMaxLength(20)
+                                .HasColumnType("character varying(20)")
+                                .HasColumnName("location_permission_state");
+
+                            b1.Property<string>("Provider")
+                                .IsRequired()
+                                .HasMaxLength(20)
+                                .HasColumnType("character varying(20)")
+                                .HasColumnName("location_provider");
+
+                            b1.HasKey("CostEntryId");
+
+                            b1.ToTable("cost_entries", "ssf");
+
+                            b1.WithOwner()
+                                .HasForeignKey("CostEntryId");
+                        });
+
+                    b.Navigation("Location");
+                });
+
             modelBuilder.Entity("ShramSafal.Domain.Finance.DayLedger", b =>
                 {
                     b.OwnsMany("ShramSafal.Domain.Finance.PlotAllocation", "PlotAllocations", b1 =>
@@ -611,6 +779,60 @@ namespace ShramSafal.Infrastructure.Persistence.Migrations
                         });
 
                     b.Navigation("PlotAllocations");
+                });
+
+            modelBuilder.Entity("ShramSafal.Domain.Logs.DailyLog", b =>
+                {
+                    b.OwnsOne("ShramSafal.Domain.Location.LocationSnapshot", "Location", b1 =>
+                        {
+                            b1.Property<Guid>("DailyLogId")
+                                .HasColumnType("uuid");
+
+                            b1.Property<decimal>("AccuracyMeters")
+                                .HasPrecision(10, 2)
+                                .HasColumnType("numeric(10,2)")
+                                .HasColumnName("location_accuracy_meters");
+
+                            b1.Property<decimal?>("Altitude")
+                                .HasPrecision(10, 2)
+                                .HasColumnType("numeric(10,2)")
+                                .HasColumnName("location_altitude");
+
+                            b1.Property<DateTime>("CapturedAtUtc")
+                                .HasColumnType("timestamp with time zone")
+                                .HasColumnName("location_captured_at_utc");
+
+                            b1.Property<decimal>("Latitude")
+                                .HasPrecision(10, 7)
+                                .HasColumnType("numeric(10,7)")
+                                .HasColumnName("location_latitude");
+
+                            b1.Property<decimal>("Longitude")
+                                .HasPrecision(10, 7)
+                                .HasColumnType("numeric(10,7)")
+                                .HasColumnName("location_longitude");
+
+                            b1.Property<string>("PermissionState")
+                                .IsRequired()
+                                .HasMaxLength(20)
+                                .HasColumnType("character varying(20)")
+                                .HasColumnName("location_permission_state");
+
+                            b1.Property<string>("Provider")
+                                .IsRequired()
+                                .HasMaxLength(20)
+                                .HasColumnType("character varying(20)")
+                                .HasColumnName("location_provider");
+
+                            b1.HasKey("DailyLogId");
+
+                            b1.ToTable("daily_logs", "ssf");
+
+                            b1.WithOwner()
+                                .HasForeignKey("DailyLogId");
+                        });
+
+                    b.Navigation("Location");
                 });
 
             modelBuilder.Entity("ShramSafal.Domain.Logs.LogTask", b =>

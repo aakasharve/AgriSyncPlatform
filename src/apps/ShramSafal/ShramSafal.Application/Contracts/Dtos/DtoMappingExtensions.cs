@@ -1,7 +1,9 @@
+using ShramSafal.Domain.Attachments;
 using ShramSafal.Domain.Crops;
 using ShramSafal.Domain.Farms;
 using ShramSafal.Domain.Finance;
 using ShramSafal.Domain.Logs;
+using ShramSafal.Domain.Location;
 using ShramSafal.Domain.Planning;
 
 namespace ShramSafal.Application.Contracts.Dtos;
@@ -54,7 +56,8 @@ internal static class DtoMappingExtensions
             log.VerificationEvents
                 .OrderBy(v => v.OccurredAtUtc)
                 .Select(ToDto)
-                .ToList());
+                .ToList(),
+            ToLocationDto(log.Location));
 
     public static CostEntryDto ToDto(this CostEntry entry) =>
         new(
@@ -71,7 +74,8 @@ internal static class DtoMappingExtensions
             entry.CreatedAtUtc,
             entry.IsCorrected,
             entry.IsFlagged,
-            entry.FlagReason);
+            entry.FlagReason,
+            ToLocationDto(entry.Location));
 
     public static PlotAllocationDto ToDto(this PlotAllocation allocation) =>
         new(
@@ -113,6 +117,21 @@ internal static class DtoMappingExtensions
             config.CreatedByUserId,
             config.CreatedAtUtc);
 
+    public static AttachmentDto ToDto(this Attachment attachment) =>
+        new(
+            attachment.Id,
+            attachment.FarmId,
+            attachment.LinkedEntityId,
+            attachment.LinkedEntityType,
+            attachment.UploadedByUserId,
+            attachment.OriginalFileName,
+            attachment.MimeType,
+            attachment.SizeBytes,
+            attachment.StoragePath,
+            attachment.Status.ToString(),
+            attachment.CreatedAtUtc,
+            attachment.FinalizedAtUtc);
+
     public static PlannedActivityDto ToDto(this PlannedActivity activity) =>
         new(
             activity.Id,
@@ -132,4 +151,21 @@ internal static class DtoMappingExtensions
             VerificationStatus.CorrectionPending => "correction_pending",
             _ => "draft"
         };
+
+    private static LocationDto? ToLocationDto(LocationSnapshot? location)
+    {
+        if (location is null)
+        {
+            return null;
+        }
+
+        return new LocationDto(
+            location.Latitude,
+            location.Longitude,
+            location.AccuracyMeters,
+            location.Altitude,
+            location.CapturedAtUtc,
+            location.Provider,
+            location.PermissionState);
+    }
 }

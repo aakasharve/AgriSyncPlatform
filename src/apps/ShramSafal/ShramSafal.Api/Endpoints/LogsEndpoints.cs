@@ -6,6 +6,7 @@ using ShramSafal.Application.UseCases.Logs.AddLogTask;
 using ShramSafal.Application.UseCases.Logs.CreateDailyLog;
 using ShramSafal.Application.UseCases.Logs.VerifyLog;
 using ShramSafal.Domain.Logs;
+using ShramSafal.Domain.Location;
 
 namespace ShramSafal.Api.Endpoints;
 
@@ -32,7 +33,9 @@ public static class LogsEndpoints
                 request.OperatorUserId,
                 request.LogDate,
                 request.DeviceId,
-                request.ClientRequestId);
+                request.ClientRequestId,
+                null,
+                request.Location);
 
             var result = await handler.HandleAsync(command, ct);
             return result.IsSuccess ? Results.Ok(result.Value) : ToErrorResult(result.Error);
@@ -175,7 +178,8 @@ public sealed record CreateDailyLogRequest(
     Guid OperatorUserId,
     DateOnly LogDate,
     string? DeviceId,
-    string? ClientRequestId);
+    string? ClientRequestId,
+    LocationSnapshot? Location = null);
 
 public sealed record AddLogTaskRequest(
     string ActivityType,

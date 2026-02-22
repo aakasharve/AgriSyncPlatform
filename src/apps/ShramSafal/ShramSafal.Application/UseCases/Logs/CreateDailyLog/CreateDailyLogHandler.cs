@@ -71,6 +71,11 @@ public sealed class CreateDailyLogHandler(
             command.IdempotencyKey,
             clock.UtcNow);
 
+        if (command.Location is not null)
+        {
+            log.AttachLocation(command.Location);
+        }
+
         await repository.AddDailyLogAsync(log, ct);
         await repository.SaveChangesAsync(ct);
 

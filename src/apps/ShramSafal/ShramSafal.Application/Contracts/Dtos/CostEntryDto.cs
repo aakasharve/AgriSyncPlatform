@@ -14,4 +14,5 @@ public sealed record CostEntryDto(
     DateTime CreatedAtUtc,
     bool IsCorrected,
     bool IsFlagged,
-    string? FlagReason);
+    string? FlagReason,
+    LocationDto? Location);

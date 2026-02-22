@@ -9,6 +9,8 @@ using ShramSafal.Infrastructure.Auth;
 using ShramSafal.Infrastructure.Integrations.Gemini;
 using ShramSafal.Infrastructure.Persistence;
 using ShramSafal.Infrastructure.Persistence.Repositories;
+using ShramSafal.Infrastructure.Reports;
+using ShramSafal.Infrastructure.Storage;
 
 namespace ShramSafal.Infrastructure;
 
@@ -60,9 +62,14 @@ public static class DependencyInjection
             }
         });
 
+        services.Configure<StorageOptions>(configuration.GetSection(StorageOptions.SectionName));
+
         services.AddScoped<IShramSafalRepository, ShramSafalRepository>();
         services.AddScoped<ISyncMutationStore, SyncMutationStore>();
         services.AddScoped<IAiParsingService, GeminiParsingService>();
+        services.AddScoped<IOcrExtractionService, GeminiOcrService>();
+        services.AddScoped<IAttachmentStorageService, LocalFileStorageService>();
+        services.AddScoped<IReportExportService, PdfReportExportService>();
         services.AddScoped<IAuthorizationEnforcer, ShramSafalAuthorizationEnforcer>();
         return services;
     }

@@ -4,6 +4,7 @@ using AgriSync.BuildingBlocks;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Storage;
+using QuestPDF.Infrastructure;
 using Serilog;
 using ShramSafal.Api;
 using User.Api;
@@ -16,6 +17,7 @@ Log.Logger = new LoggerConfiguration()
 try
 {
     var builder = WebApplication.CreateBuilder(args);
+    QuestPDF.Settings.License = LicenseType.Community;
 
     builder.Host.UseSerilog((context, services, loggerConfiguration) =>
     {

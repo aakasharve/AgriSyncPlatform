@@ -75,6 +75,11 @@ public sealed class AddCostEntryHandler(
             command.CreatedByUserId,
             clock.UtcNow);
 
+        if (command.Location is not null)
+        {
+            entry.AttachLocation(command.Location);
+        }
+
         var duplicateCandidates = await repository.GetCostEntriesForDuplicateCheck(
             farmId,
             command.PlotId,

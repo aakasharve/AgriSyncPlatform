@@ -12,7 +12,8 @@ export type SyncMutationType =
     | 'add_cost_entry'
     | 'correct_cost_entry'
     | 'allocate_global_expense'
-    | 'set_price_config';
+    | 'set_price_config'
+    | 'create_attachment';
 
 export type VerificationStatus =
     | 'draft'
@@ -99,6 +100,16 @@ export interface VerificationEventDto {
     occurredAtUtc: string;
 }
 
+export interface LocationDto {
+    latitude: number;
+    longitude: number;
+    accuracyMeters: number;
+    altitude?: number;
+    capturedAtUtc: string;
+    provider: string;
+    permissionState: string;
+}
+
 export interface DailyLogDto {
     id: string;
     farmId: string;
@@ -112,6 +123,25 @@ export interface DailyLogDto {
     lastVerificationStatus?: string;
     tasks: LogTaskDto[];
     verificationEvents: VerificationEventDto[];
+    location?: LocationDto | null;
+}
+
+export interface CostEntryDto {
+    id: string;
+    farmId: string;
+    plotId?: string;
+    cropCycleId?: string;
+    category: string;
+    description: string;
+    amount: number;
+    currencyCode: string;
+    entryDate: string;
+    createdByUserId: string;
+    createdAtUtc: string;
+    isCorrected: boolean;
+    isFlagged: boolean;
+    flagReason?: string;
+    location?: LocationDto | null;
 }
 
 export interface PlotAllocation {
@@ -139,6 +169,51 @@ export interface PlannedTask {
     stage: string;
     plannedDate: string;
     createdAtUtc: string;
+}
+
+export interface AttachmentDto {
+    id: string;
+    farmId: string;
+    linkedEntityId?: string;
+    linkedEntityType?: string;
+    uploadedByUserId: string;
+    originalFileName: string;
+    mimeType: string;
+    sizeBytes: number;
+    storagePath: string;
+    status: string;
+    createdAtUtc: string;
+    finalizedAtUtc?: string;
+}
+
+export interface CreateAttachmentRequest {
+    farmId: string;
+    originalFileName: string;
+    mimeType: string;
+    sizeBytes: number;
+    linkedEntityId?: string;
+    linkedEntityType?: string;
+}
+
+export interface CreateAttachmentResponse {
+    attachment: AttachmentDto;
+    uploadUrl: string;
+}
+
+export interface OcrExtractedFieldDto {
+    fieldName: string;
+    value: string;
+    confidence: number;
+}
+
+export interface OcrExtractionResultDto {
+    attachmentId: string;
+    rawText: string;
+    fields: OcrExtractedFieldDto[];
+    overallConfidence: number;
+    modelUsed: string;
+    latencyMs: number;
+    extractedAtUtc: string;
 }
 
 export interface StageComparisonBucket {
@@ -219,9 +294,10 @@ export interface SyncPullResponse {
     plots: PlotDto[];
     cropCycles: CropCycleDto[];
     dailyLogs: DailyLogDto[];
-    costEntries: unknown[];
+    costEntries: CostEntryDto[];
     financeCorrections: unknown[];
     priceConfigs: unknown[];
+    attachments: AttachmentDto[];
     dayLedgers: DayLedgerDto[];
     plannedActivities: PlannedTask[];
 }
@@ -334,6 +410,52 @@ export class AgriSyncClient {
         return response.data;
     }
 
+    async createAttachment(request: CreateAttachmentRequest): Promise<CreateAttachmentResponse> {
+        const response = await this.http.post<CreateAttachmentResponse>('/attachments', request);
+        return response.data;
+    }
+
+    async uploadAttachmentFile(attachmentId: string, file: Blob, fileName?: string): Promise<void> {
+        const formData = new FormData();
+        formData.append('file', file, fileName ?? `attachment_${attachmentId}`);
+
+        await this.http.post(`/attachments/${attachmentId}/upload`, formData, {
+            headers: {
+                'Content-Type': 'multipart/form-data',
+            },
+        });
+    }
+
+    async getAttachmentMetadata(attachmentId: string): Promise<AttachmentDto> {
+        const response = await this.http.get<AttachmentDto>(`/attachments/${attachmentId}`);
+        return response.data;
+    }
+
+    getAttachmentDownloadUrl(attachmentId: string): string {
+        return this.http.getUri({ url: `/attachments/${attachmentId}/download` });
+    }
+
+    async listAttachments(entityId: string, entityType: string): Promise<AttachmentDto[]> {
+        const response = await this.http.get<AttachmentDto[]>('/attachments', {
+            params: {
+                entityId,
+                entityType,
+            },
+        });
+
+        return response.data ?? [];
+    }
+
+    async extractAttachmentReceipt(attachmentId: string): Promise<OcrExtractionResultDto> {
+        const response = await this.http.post<OcrExtractionResultDto>(`/attachments/${attachmentId}/ocr`);
+        return response.data;
+    }
+
+    async getAttachmentOcrResult(attachmentId: string): Promise<OcrExtractionResultDto> {
+        const response = await this.http.get<OcrExtractionResultDto>(`/attachments/${attachmentId}/ocr`);
+        return response.data;
+    }
+
     async parseVoice(text: string, context: ParseVoiceContext): Promise<VoiceParseResult> {
         const response = await this.http.post<VoiceParseResult>('/ai/parse-voice', {
             farmId: context.farmId,
@@ -403,6 +525,33 @@ export class AgriSyncClient {
             isDuplicate: response.data.isDuplicate,
             matchedEntryId: response.data.matchedEntryId,
         };
+    }
+
+    async exportDailySummary(farmId: string, date: string): Promise<Blob> {
+        const response = await this.http.get('/export/daily-summary', {
+            params: { farmId, date },
+            responseType: 'blob',
+        });
+
+        return response.data as Blob;
+    }
+
+    async exportMonthlyCost(farmId: string, year: number, month: number): Promise<Blob> {
+        const response = await this.http.get('/export/monthly-cost', {
+            params: { farmId, year, month },
+            responseType: 'blob',
+        });
+
+        return response.data as Blob;
+    }
+
+    async exportVerificationReport(farmId: string, fromDate: string, toDate: string): Promise<Blob> {
+        const response = await this.http.get('/export/verification', {
+            params: { farmId, fromDate, toDate },
+            responseType: 'blob',
+        });
+
+        return response.data as Blob;
     }
 
     async getAvailableTransitions(logId: string): Promise<VerificationStatus[]> {

@@ -5,6 +5,7 @@ import { DexieDataSource } from '../../infrastructure/storage/DexieDataSource';
 import { storageNamespace } from '../../infrastructure/storage/StorageNamespace';
 import { MigrationService } from '../../infrastructure/storage/MigrationService';
 import { backgroundSyncWorker } from '../../infrastructure/sync/BackgroundSyncWorker';
+import { attachmentUploadWorker } from '../../infrastructure/sync/AttachmentUploadWorker';
 import { legacyAuditPort } from '../../infrastructure/audit/LegacyAuditPort';
 import { useAuth } from './AuthProvider';
 
@@ -39,8 +40,10 @@ export const DataSourceProvider: React.FC<{ children: React.ReactNode }> = ({ ch
                     await dataSource.initialize();
                     await MigrationService.migrate();
                     backgroundSyncWorker.start();
+                    attachmentUploadWorker.start();
                 } else {
                     backgroundSyncWorker.stop();
+                    attachmentUploadWorker.stop();
                 }
             } catch (error) {
                 console.error("[DataSource] Init failed", error);
@@ -53,6 +56,7 @@ export const DataSourceProvider: React.FC<{ children: React.ReactNode }> = ({ ch
 
         return () => {
             backgroundSyncWorker.stop();
+            attachmentUploadWorker.stop();
         };
     }, [isAuthenticated, dataSource]);
 

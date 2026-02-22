@@ -18,6 +18,7 @@ function toSyncMutationType(mutationType: string): SyncMutationType | null {
         case 'correct_cost_entry':
         case 'allocate_global_expense':
         case 'set_price_config':
+        case 'create_attachment':
             return normalized;
         default:
             return null;
