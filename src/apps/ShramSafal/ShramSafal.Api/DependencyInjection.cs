@@ -15,6 +15,8 @@ using ShramSafal.Application.UseCases.Planning.ComputePlannedVsExecutedDelta;
 using ShramSafal.Application.UseCases.Planning.GeneratePlanFromTemplate;
 using ShramSafal.Application.UseCases.Planning.GetStagePlan;
 using ShramSafal.Application.UseCases.Planning.GetTodaysPlan;
+using ShramSafal.Application.UseCases.ReferenceData.GetCropTypes;
+using ShramSafal.Application.UseCases.ReferenceData.GetScheduleTemplates;
 using ShramSafal.Application.UseCases.Sync.PullSyncChanges;
 using ShramSafal.Application.UseCases.Sync.PushSyncBatch;
 using ShramSafal.Infrastructure;
@@ -46,6 +48,8 @@ public static class DependencyInjection
         services.AddScoped<ComputePlannedVsExecutedDeltaHandler>();
         services.AddScoped<GetTodaysPlanHandler>();
         services.AddScoped<GetStagePlanHandler>();
+        services.AddScoped<GetScheduleTemplatesHandler>();
+        services.AddScoped<GetCropTypesHandler>();
 
         services.AddScoped<ParseVoiceInputHandler>();
 

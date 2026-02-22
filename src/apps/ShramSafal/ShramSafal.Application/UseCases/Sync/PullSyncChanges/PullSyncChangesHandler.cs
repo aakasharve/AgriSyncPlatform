@@ -2,6 +2,7 @@ using AgriSync.BuildingBlocks.Abstractions;
 using AgriSync.BuildingBlocks.Results;
 using ShramSafal.Application.Contracts.Dtos;
 using ShramSafal.Application.Ports;
+using ShramSafal.Application.UseCases.ReferenceData.GetScheduleTemplates;
 
 namespace ShramSafal.Application.UseCases.Sync.PullSyncChanges;
 
@@ -47,7 +48,12 @@ public sealed class PullSyncChangesHandler(
             financeCorrections.Select(c => c.ToDto()).ToList(),
             priceConfigs.Select(c => c.ToDto()).ToList(),
             dayLedgers.Select(c => c.ToDto()).ToList(),
-            plannedActivities.Select(a => a.ToDto()).ToList());
+            plannedActivities.Select(a => a.ToDto()).ToList(),
+            ReferenceDataCatalog.ScheduleTemplates,
+            ReferenceDataCatalog.CropTypes,
+            ReferenceDataCatalog.ActivityCategories,
+            ReferenceDataCatalog.CostCategories,
+            ReferenceDataCatalog.VersionHash);
 
         return Result.Success(response);
     }
