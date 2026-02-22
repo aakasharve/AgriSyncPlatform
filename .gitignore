@@ -25,6 +25,13 @@ Thumbs.db
 # Node
 node_modules/
 
+# Frontend build output
+**/dist/
+
+# Capacitor native projects (built, not committed)
+src/clients/mobile-web/android/
+src/clients/mobile-web/ios/
+
 # Generated files
 *.generated.*
 

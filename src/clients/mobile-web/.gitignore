@@ -1,0 +1,17 @@
+# Build output
+dist/
+
+# Dependencies (already in root .gitignore but explicit here)
+node_modules/
+
+# Environment files with secrets
+.env.local
+.env.production.local
+
+# Capacitor build artifacts (Phase 1)
+android/
+ios/
+
+# IDE
+.idea/
+.vscode/
