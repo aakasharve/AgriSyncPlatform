@@ -22,7 +22,7 @@ internal sealed class VerificationEventConfiguration : IEntityTypeConfiguration<
         builder.Property(x => x.Status)
             .HasColumnName("status")
             .HasConversion<string>()
-            .HasMaxLength(20)
+            .HasMaxLength(40)
             .IsRequired();
 
         builder.Property(x => x.Reason)

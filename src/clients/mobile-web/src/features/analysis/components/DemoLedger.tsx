@@ -1,6 +1,6 @@
 import React, { useMemo } from 'react';
 import { DailyLog } from '../../../types';
-import { DEMO_SEED_VERSION } from '../../demo/DemoDataService';
+const DEMO_SEED_VERSION = 'v2.0';
 import { ScrollText, Calendar, CloudLightning, Layers, TrendingUp, AlertCircle } from 'lucide-react';
 
 interface DemoLedgerProps {

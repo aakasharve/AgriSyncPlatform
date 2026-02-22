@@ -1,15 +1,20 @@
 using ShramSafal.Application.UseCases.CropCycles.CreateCropCycle;
+using ShramSafal.Application.UseCases.AI.ParseVoiceInput;
 using ShramSafal.Application.UseCases.Farms.CreateFarm;
 using ShramSafal.Application.UseCases.Farms.CreatePlot;
 using ShramSafal.Application.UseCases.Finance.AddCostEntry;
+using ShramSafal.Application.UseCases.Finance.AllocateGlobalExpense;
 using ShramSafal.Application.UseCases.Finance.CorrectCostEntry;
 using ShramSafal.Application.UseCases.Finance.GetFinanceSummary;
+using ShramSafal.Application.UseCases.Finance.GetPlotFinanceSummary;
 using ShramSafal.Application.UseCases.Finance.SetPriceConfigVersion;
 using ShramSafal.Application.UseCases.Logs.AddLogTask;
 using ShramSafal.Application.UseCases.Logs.CreateDailyLog;
 using ShramSafal.Application.UseCases.Logs.VerifyLog;
 using ShramSafal.Application.UseCases.Planning.ComputePlannedVsExecutedDelta;
 using ShramSafal.Application.UseCases.Planning.GeneratePlanFromTemplate;
+using ShramSafal.Application.UseCases.Planning.GetStagePlan;
+using ShramSafal.Application.UseCases.Planning.GetTodaysPlan;
 using ShramSafal.Application.UseCases.Sync.PullSyncChanges;
 using ShramSafal.Application.UseCases.Sync.PushSyncBatch;
 using ShramSafal.Infrastructure;
@@ -34,9 +39,15 @@ public static class DependencyInjection
         services.AddScoped<AddCostEntryHandler>();
         services.AddScoped<CorrectCostEntryHandler>();
         services.AddScoped<GetFinanceSummaryHandler>();
+        services.AddScoped<AllocateGlobalExpenseHandler>();
+        services.AddScoped<GetPlotFinanceSummaryHandler>();
 
         services.AddScoped<GeneratePlanFromTemplateHandler>();
         services.AddScoped<ComputePlannedVsExecutedDeltaHandler>();
+        services.AddScoped<GetTodaysPlanHandler>();
+        services.AddScoped<GetStagePlanHandler>();
+
+        services.AddScoped<ParseVoiceInputHandler>();
 
         services.AddScoped<PushSyncBatchHandler>();
         services.AddScoped<PullSyncChangesHandler>();

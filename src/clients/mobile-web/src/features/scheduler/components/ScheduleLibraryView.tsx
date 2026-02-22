@@ -1,8 +1,8 @@
 import React, { useMemo, useState } from 'react';
 import { BookOpen, CheckCircle2, Clock, Eye, Layers, Users, X } from 'lucide-react';
 import { CropProfile, CropScheduleTemplate } from '../../../types';
-import { ScheduleLibrarySort, getSchedulesForCrop, getStageNote } from '../../../data/scheduleLibrary';
-import { getOperationName } from '../../../domain/planning/PlanEngine';
+import { ScheduleLibrarySort, getSchedulesForCrop, getStageNote } from '../library/scheduleLibrary';
+import { getOperationName } from '../../../features/scheduler/planning/ClientPlanEngine';
 
 interface ScheduleLibraryViewProps {
     crop?: CropProfile;

@@ -11,7 +11,11 @@ public static class ShramSafalErrors
     public static readonly Error DuplicateLogRequest = new("ShramSafal.DuplicateLogRequest", "A log already exists for this idempotency key.");
     public static readonly Error CostEntryNotFound = new("ShramSafal.CostEntryNotFound", "Cost entry was not found.");
     public static readonly Error InvalidAmount = new("ShramSafal.InvalidAmount", "Amount must be greater than zero.");
-    public static readonly Error InvalidVerificationReason = new("ShramSafal.InvalidVerificationReason", "Reason is required for rejected verification.");
+    public static readonly Error InvalidVerificationReason = new("ShramSafal.InvalidVerificationReason", "Reason is required for disputed verification.");
+    public static readonly Error VerificationTransitionNotAllowedForRole =
+        new("ShramSafal.VerificationTransitionNotAllowedForRole", "Transition not allowed for role.");
+    public static readonly Error MissingVoiceTranscript = new("ShramSafal.MissingVoiceTranscript", "Text transcript is required for AI parsing.");
+    public static readonly Error InvalidAiResponse = new("ShramSafal.InvalidAiResponse", "AI parser returned an invalid response payload.");
+    public static readonly Error AiParsingFailed = new("ShramSafal.AiParsingFailed", "Voice parsing failed.");
     public static readonly Error InvalidCommand = new("ShramSafal.InvalidCommand", "Request is invalid.");
 }
-

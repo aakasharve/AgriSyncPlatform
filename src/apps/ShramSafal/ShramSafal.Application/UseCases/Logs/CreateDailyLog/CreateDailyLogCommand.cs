@@ -4,6 +4,7 @@ public sealed record CreateDailyLogCommand(
     Guid FarmId,
     Guid PlotId,
     Guid CropCycleId,
+    Guid RequestedByUserId,
     Guid OperatorUserId,
     DateOnly LogDate,
     string? DeviceId,

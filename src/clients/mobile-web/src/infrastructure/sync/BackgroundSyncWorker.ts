@@ -1,8 +1,28 @@
 import { mutationQueue } from './MutationQueue';
 import { systemClock } from '../../core/domain/services/Clock';
-import { agriSyncClient } from '../api/AgriSyncClient';
+import { agriSyncClient, type SyncMutationType } from '../api/AgriSyncClient';
 import { getAuthSession } from '../api/AuthTokenStore';
 import { reconcileSyncPull } from './SyncPullReconciler';
+
+function toSyncMutationType(mutationType: string): SyncMutationType | null {
+    const normalized = mutationType.trim().toLowerCase();
+    switch (normalized) {
+        case 'create_farm':
+        case 'create_plot':
+        case 'create_crop_cycle':
+        case 'create_daily_log':
+        case 'add_log_task':
+        case 'verify_log':
+        case 'verify_log_v2':
+        case 'add_cost_entry':
+        case 'correct_cost_entry':
+        case 'allocate_global_expense':
+        case 'set_price_config':
+            return normalized;
+        default:
+            return null;
+    }
+}
 
 export class BackgroundSyncWorker {
     private static instance: BackgroundSyncWorker;
@@ -95,14 +115,34 @@ export class BackgroundSyncWorker {
             return;
         }
 
+        const supportedMutations: Array<{ id: number; clientRequestId: string; mutationType: SyncMutationType; payload: unknown }> = [];
         for (const mutation of pendingWithId) {
+            const mutationType = toSyncMutationType(mutation.mutationType);
+            if (!mutationType) {
+                await mutationQueue.markFailed(mutation.id as number, `Unsupported mutationType '${mutation.mutationType}'.`);
+                continue;
+            }
+
+            supportedMutations.push({
+                id: mutation.id as number,
+                clientRequestId: mutation.clientRequestId,
+                mutationType,
+                payload: mutation.payload,
+            });
+        }
+
+        if (supportedMutations.length === 0) {
+            return;
+        }
+
+        for (const mutation of supportedMutations) {
             await mutationQueue.markSending(mutation.id as number);
         }
 
         try {
             const body = await agriSyncClient.pushSyncBatch({
                 deviceId: mutationQueue.getDeviceId(),
-                mutations: pendingWithId.map(item => ({
+                mutations: supportedMutations.map(item => ({
                     clientRequestId: item.clientRequestId,
                     mutationType: item.mutationType,
                     payload: item.payload,
@@ -111,7 +151,7 @@ export class BackgroundSyncWorker {
             const byClientRequestId = new Map(
                 body.results.map(result => [result.clientRequestId, result]));
 
-            for (const mutation of pendingWithId) {
+            for (const mutation of supportedMutations) {
                 const mutationId = mutation.id as number;
                 const result = byClientRequestId.get(mutation.clientRequestId);
 
@@ -130,7 +170,7 @@ export class BackgroundSyncWorker {
             }
         } catch (error) {
             const message = error instanceof Error ? error.message : 'Unknown push error';
-            for (const mutation of pendingWithId) {
+            for (const mutation of supportedMutations) {
                 await mutationQueue.markFailed(mutation.id as number, message);
             }
         }

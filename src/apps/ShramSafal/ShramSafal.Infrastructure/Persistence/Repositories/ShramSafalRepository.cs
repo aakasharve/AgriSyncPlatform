@@ -32,6 +32,15 @@ internal sealed class ShramSafalRepository(ShramSafalDbContext db) : IShramSafal
         return await db.Plots.FirstOrDefaultAsync(p => p.Id == plotId, ct);
     }
 
+    public async Task<List<Plot>> GetPlotsByFarmIdAsync(Guid farmId, CancellationToken ct = default)
+    {
+        var typedFarmId = new FarmId(farmId);
+        return await db.Plots
+            .Where(p => p.FarmId == typedFarmId)
+            .OrderBy(p => p.Name)
+            .ToListAsync(ct);
+    }
+
     public async Task AddCropCycleAsync(CropCycle cropCycle, CancellationToken ct = default)
     {
         await db.CropCycles.AddAsync(cropCycle, ct);
@@ -73,9 +82,59 @@ internal sealed class ShramSafalRepository(ShramSafalDbContext db) : IShramSafal
         return await db.CostEntries.FirstOrDefaultAsync(c => c.Id == costEntryId, ct);
     }
 
+    public async Task<List<CostEntry>> GetCostEntriesByIdsAsync(IEnumerable<Guid> costEntryIds, CancellationToken ct = default)
+    {
+        var ids = costEntryIds.Distinct().ToList();
+        if (ids.Count == 0)
+        {
+            return [];
+        }
+
+        return await db.CostEntries
+            .Where(entry => ids.Contains(entry.Id))
+            .ToListAsync(ct);
+    }
+
+    public async Task<List<CostEntry>> GetCostEntriesForDuplicateCheck(
+        FarmId farmId,
+        Guid? plotId,
+        string category,
+        DateTime since,
+        CancellationToken ct = default)
+    {
+        return await db.CostEntries
+            .Where(entry =>
+                entry.FarmId == farmId &&
+                entry.PlotId == plotId &&
+                entry.CreatedAtUtc >= since)
+            .OrderByDescending(entry => entry.CreatedAtUtc)
+            .ToListAsync(ct);
+    }
+
     public async Task AddFinanceCorrectionAsync(FinanceCorrection correction, CancellationToken ct = default)
     {
         await db.FinanceCorrections.AddAsync(correction, ct);
+    }
+
+    public async Task AddDayLedgerAsync(DayLedger dayLedger, CancellationToken ct = default)
+    {
+        await db.DayLedgers.AddAsync(dayLedger, ct);
+    }
+
+    public async Task<DayLedger?> GetDayLedger(FarmId farmId, DateOnly dateKey, CancellationToken ct = default)
+    {
+        return await db.DayLedgers
+            .Include(ledger => ledger.PlotAllocations)
+            .FirstOrDefaultAsync(ledger => ledger.FarmId == farmId && ledger.DateKey == dateKey, ct);
+    }
+
+    public async Task<List<DayLedger>> GetDayLedgersForFarm(FarmId farmId, DateOnly from, DateOnly to, CancellationToken ct = default)
+    {
+        return await db.DayLedgers
+            .Include(ledger => ledger.PlotAllocations)
+            .Where(ledger => ledger.FarmId == farmId && ledger.DateKey >= from && ledger.DateKey <= to)
+            .OrderBy(ledger => ledger.DateKey)
+            .ToListAsync(ct);
     }
 
     public async Task AddPriceConfigAsync(PriceConfig config, CancellationToken ct = default)
@@ -213,6 +272,16 @@ internal sealed class ShramSafalRepository(ShramSafalDbContext db) : IShramSafal
             .AsNoTracking()
             .Where(c => c.CreatedAtUtc > sinceUtc)
             .OrderBy(c => c.CreatedAtUtc)
+            .ToListAsync(ct);
+    }
+
+    public async Task<List<DayLedger>> GetDayLedgersChangedSinceAsync(DateTime sinceUtc, CancellationToken ct = default)
+    {
+        return await db.DayLedgers
+            .AsNoTracking()
+            .Include(ledger => ledger.PlotAllocations)
+            .Where(ledger => ledger.CreatedAtUtc > sinceUtc)
+            .OrderBy(ledger => ledger.CreatedAtUtc)
             .ToListAsync(ct);
     }
 

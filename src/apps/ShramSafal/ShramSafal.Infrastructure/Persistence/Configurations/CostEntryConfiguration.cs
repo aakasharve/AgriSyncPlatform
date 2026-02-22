@@ -63,6 +63,15 @@ internal sealed class CostEntryConfiguration : IEntityTypeConfiguration<CostEntr
             .HasColumnName("is_corrected")
             .HasDefaultValue(false);
 
+        builder.Property(x => x.IsFlagged)
+            .HasColumnName("is_flagged")
+            .HasDefaultValue(false)
+            .IsRequired();
+
+        builder.Property(x => x.FlagReason)
+            .HasColumnName("flag_reason")
+            .HasMaxLength(300);
+
         builder.HasIndex(x => new { x.EntryDate, x.FarmId });
         builder.Ignore(x => x.DomainEvents);
     }

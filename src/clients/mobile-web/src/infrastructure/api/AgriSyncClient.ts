@@ -1,6 +1,26 @@
 import axios, { AxiosError, AxiosInstance, InternalAxiosRequestConfig } from 'axios';
 import { clearAuthSession, getAuthSession, setAuthSession, type AuthSession } from './AuthTokenStore';
 
+export type SyncMutationType =
+    | 'create_farm'
+    | 'create_plot'
+    | 'create_crop_cycle'
+    | 'create_daily_log'
+    | 'add_log_task'
+    | 'verify_log'
+    | 'verify_log_v2'
+    | 'add_cost_entry'
+    | 'correct_cost_entry'
+    | 'allocate_global_expense'
+    | 'set_price_config';
+
+export type VerificationStatus =
+    | 'draft'
+    | 'confirmed'
+    | 'verified'
+    | 'disputed'
+    | 'correction_pending';
+
 export interface LoginRequest {
     phone: string;
     password: string;
@@ -15,7 +35,7 @@ export interface AuthResponseDto {
 
 export interface SyncPushMutation {
     clientRequestId: string;
-    mutationType: string;
+    mutationType: SyncMutationType;
     payload: unknown;
 }
 
@@ -88,9 +108,108 @@ export interface DailyLogDto {
     logDate: string;
     idempotencyKey?: string;
     createdAtUtc: string;
+    verificationStatus: string;
     lastVerificationStatus?: string;
     tasks: LogTaskDto[];
     verificationEvents: VerificationEventDto[];
+}
+
+export interface PlotAllocation {
+    plotId: string;
+    cropCycleId: string;
+    allocationPercent: number;
+    allocatedAmount: number;
+}
+
+export interface DayLedgerDto {
+    id: string;
+    farmId: string;
+    dateKey: string;
+    globalExpenseIds: string[];
+    allocationStrategy: string;
+    totalGlobalCost: number;
+    createdAtUtc: string;
+    plotAllocations: PlotAllocation[];
+}
+
+export interface PlannedTask {
+    id: string;
+    cropCycleId: string;
+    activityName: string;
+    stage: string;
+    plannedDate: string;
+    createdAtUtc: string;
+}
+
+export interface StageComparisonBucket {
+    category: string;
+    planned: string[];
+    executed: string[];
+    matched: string[];
+    missing: string[];
+    extra: string[];
+    health: number | string;
+}
+
+export interface StageComparisonResult {
+    stageName: string;
+    startDay: number;
+    endDay: number;
+    buckets: StageComparisonBucket[];
+    overallHealth: number | string;
+}
+
+export interface PlotFinanceSummaryDto {
+    plotId: string;
+    fromDate?: string;
+    toDate?: string;
+    directCosts: number;
+    allocatedCosts: number;
+    totalCosts: number;
+}
+
+export interface VoiceParseResult {
+    parsedLog: unknown;
+    confidence: number;
+    fieldConfidences: Record<string, { score: number; level: string; reason?: string }>;
+    suggestedAction: string;
+    modelUsed: string;
+    latencyMs: number;
+    validationOutcome: string;
+}
+
+export interface ParseVoiceContext {
+    farmId: string;
+    plotId?: string;
+    cropCycleId?: string;
+    audioBase64?: string;
+    audioMimeType?: string;
+}
+
+export interface AllocateGlobalExpenseRequest {
+    farmId: string;
+    dateKey: string;
+    costEntryIds: string[];
+    strategy: 'Equal' | 'ByAcreage' | 'Custom';
+    customAllocations?: Record<string, number>;
+}
+
+export interface DateRangeFilter {
+    fromDate?: string;
+    toDate?: string;
+}
+
+export interface DuplicateCheckRequest {
+    farmId: string;
+    plotId?: string;
+    cropCycleId?: string;
+    category: string;
+    description?: string;
+    amount: number;
+    currencyCode: string;
+    entryDate: string;
+    createdByUserId: string;
+    windowMinutes?: number;
 }
 
 export interface SyncPullResponse {
@@ -103,7 +222,8 @@ export interface SyncPullResponse {
     costEntries: unknown[];
     financeCorrections: unknown[];
     priceConfigs: unknown[];
-    plannedActivities: unknown[];
+    dayLedgers: DayLedgerDto[];
+    plannedActivities: PlannedTask[];
 }
 
 interface RetriableRequestConfig extends InternalAxiosRequestConfig {
@@ -132,6 +252,33 @@ function shouldSkipAuthRetry(url?: string): boolean {
     return url.includes('/user/auth/login')
         || url.includes('/user/auth/register')
         || url.includes('/user/auth/refresh');
+}
+
+function normalizeVerificationStatus(status: string): VerificationStatus {
+    const normalized = status
+        .trim()
+        .replace(/([a-z])([A-Z])/g, '$1_$2')
+        .replace(/[\s-]+/g, '_')
+        .toLowerCase();
+
+    switch (normalized) {
+        case 'draft':
+        case 'pending':
+            return 'draft';
+        case 'confirmed':
+        case 'auto_approved':
+            return 'confirmed';
+        case 'verified':
+        case 'approved':
+            return 'verified';
+        case 'disputed':
+        case 'rejected':
+            return 'disputed';
+        case 'correction_pending':
+            return 'correction_pending';
+        default:
+            return 'draft';
+    }
 }
 
 export class AgriSyncClient {
@@ -185,6 +332,82 @@ export class AgriSyncClient {
         const params = sinceCursorIso ? { since: sinceCursorIso } : undefined;
         const response = await this.http.get<SyncPullResponse>('/sync/pull', { params });
         return response.data;
+    }
+
+    async parseVoice(text: string, context: ParseVoiceContext): Promise<VoiceParseResult> {
+        const response = await this.http.post<VoiceParseResult>('/ai/parse-voice', {
+            farmId: context.farmId,
+            plotId: context.plotId,
+            cropCycleId: context.cropCycleId,
+            textTranscript: text,
+            audioBase64: context.audioBase64,
+            audioMimeType: context.audioMimeType,
+        });
+
+        return response.data;
+    }
+
+    async getTodaysPlan(cropCycleId: string): Promise<PlannedTask[]> {
+        const response = await this.http.get<{ activities: PlannedTask[] }>('/plan/today', {
+            params: { cropCycleId },
+        });
+
+        return response.data.activities ?? [];
+    }
+
+    async getStagePlan(cropCycleId: string, stage?: string): Promise<PlannedTask[]> {
+        const response = await this.http.get<{ stage: string; activities: PlannedTask[] }>('/plan/stage', {
+            params: {
+                cropCycleId,
+                stage,
+            },
+        });
+
+        return response.data.activities ?? [];
+    }
+
+    async getStageComparison(cropCycleId: string, stage?: string): Promise<StageComparisonResult> {
+        const response = await this.http.get<StageComparisonResult>('/compare/stage', {
+            params: {
+                cropCycleId,
+                stage,
+            },
+        });
+
+        return response.data;
+    }
+
+    async allocateGlobalExpense(request: AllocateGlobalExpenseRequest): Promise<PlotAllocation[]> {
+        const response = await this.http.post<DayLedgerDto>('/finance/allocate', request);
+        return response.data.plotAllocations ?? [];
+    }
+
+    async getPlotFinanceSummary(plotId: string, dateRange?: DateRangeFilter): Promise<PlotFinanceSummaryDto> {
+        const response = await this.http.get<PlotFinanceSummaryDto>('/finance/plot-summary', {
+            params: {
+                plotId,
+                fromDate: dateRange?.fromDate,
+                toDate: dateRange?.toDate,
+            },
+        });
+
+        return response.data;
+    }
+
+    async checkDuplicate(request: DuplicateCheckRequest): Promise<{ isDuplicate: boolean; matchedEntryId?: string }> {
+        const response = await this.http.post<{ isDuplicate: boolean; matchedEntryId?: string }>(
+            '/finance/duplicate-check',
+            request);
+
+        return {
+            isDuplicate: response.data.isDuplicate,
+            matchedEntryId: response.data.matchedEntryId,
+        };
+    }
+
+    async getAvailableTransitions(logId: string): Promise<VerificationStatus[]> {
+        const response = await this.http.get<{ availableTransitions?: string[] }>(`/logs/${logId}/transitions`);
+        return (response.data.availableTransitions ?? []).map(normalizeVerificationStatus);
     }
 
     private attachAccessToken(config: InternalAxiosRequestConfig): InternalAxiosRequestConfig {

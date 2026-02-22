@@ -28,7 +28,8 @@ internal sealed class TemplateActivityConfiguration : IEntityTypeConfiguration<T
             .HasColumnName("offset_days")
             .IsRequired();
 
+        builder.Ignore(x => x.FrequencyMode);
+        builder.Ignore(x => x.IntervalDays);
         builder.Ignore(x => x.DomainEvents);
     }
 }
-

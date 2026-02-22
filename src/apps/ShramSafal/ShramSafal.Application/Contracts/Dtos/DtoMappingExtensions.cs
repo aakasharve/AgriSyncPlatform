@@ -31,7 +31,7 @@ internal static class DtoMappingExtensions
     public static VerificationEventDto ToDto(this VerificationEvent verificationEvent) =>
         new(
             verificationEvent.Id,
-            verificationEvent.Status.ToString(),
+            verificationEvent.Status.ToSyncVerificationStatus(),
             verificationEvent.Reason,
             verificationEvent.VerifiedByUserId,
             verificationEvent.OccurredAtUtc);
@@ -46,7 +46,7 @@ internal static class DtoMappingExtensions
             log.LogDate,
             log.IdempotencyKey,
             log.CreatedAtUtc,
-            log.LastVerificationStatus?.ToString(),
+            log.CurrentVerificationStatus.ToSyncVerificationStatus(),
             log.Tasks
                 .OrderBy(t => t.OccurredAtUtc)
                 .Select(ToDto)
@@ -69,7 +69,27 @@ internal static class DtoMappingExtensions
             entry.EntryDate,
             entry.CreatedByUserId,
             entry.CreatedAtUtc,
-            entry.IsCorrected);
+            entry.IsCorrected,
+            entry.IsFlagged,
+            entry.FlagReason);
+
+    public static PlotAllocationDto ToDto(this PlotAllocation allocation) =>
+        new(
+            allocation.PlotId,
+            allocation.CropCycleId,
+            allocation.AllocationPercent,
+            allocation.AllocatedAmount);
+
+    public static DayLedgerDto ToDto(this DayLedger ledger) =>
+        new(
+            ledger.Id,
+            ledger.FarmId,
+            ledger.DateKey,
+            ledger.GlobalExpenseIds.ToList(),
+            ledger.AllocationStrategy.ToString(),
+            ledger.TotalGlobalCost,
+            ledger.CreatedAtUtc,
+            ledger.PlotAllocations.Select(ToDto).ToList());
 
     public static FinanceCorrectionDto ToDto(this FinanceCorrection correction) =>
         new(
@@ -101,5 +121,15 @@ internal static class DtoMappingExtensions
             activity.Stage,
             activity.PlannedDate,
             activity.CreatedAtUtc);
-}
 
+    private static string ToSyncVerificationStatus(this VerificationStatus status) =>
+        status switch
+        {
+            VerificationStatus.Draft => "draft",
+            VerificationStatus.Confirmed => "confirmed",
+            VerificationStatus.Verified => "verified",
+            VerificationStatus.Disputed => "disputed",
+            VerificationStatus.CorrectionPending => "correction_pending",
+            _ => "draft"
+        };
+}

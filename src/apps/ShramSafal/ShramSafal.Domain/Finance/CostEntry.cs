@@ -19,7 +19,9 @@ public sealed class CostEntry : Entity<Guid>
         string currencyCode,
         DateOnly entryDate,
         UserId createdByUserId,
-        DateTime createdAtUtc)
+        DateTime createdAtUtc,
+        bool isFlagged = false,
+        string? flagReason = null)
         : base(id)
     {
         FarmId = farmId;
@@ -32,6 +34,8 @@ public sealed class CostEntry : Entity<Guid>
         EntryDate = entryDate;
         CreatedByUserId = createdByUserId;
         CreatedAtUtc = createdAtUtc;
+        IsFlagged = isFlagged;
+        FlagReason = flagReason;
     }
 
     public FarmId FarmId { get; private set; }
@@ -45,6 +49,8 @@ public sealed class CostEntry : Entity<Guid>
     public UserId CreatedByUserId { get; private set; }
     public DateTime CreatedAtUtc { get; private set; }
     public bool IsCorrected { get; private set; }
+    public bool IsFlagged { get; private set; }
+    public string? FlagReason { get; private set; }
 
     public static CostEntry Create(
         Guid id,
@@ -95,6 +101,17 @@ public sealed class CostEntry : Entity<Guid>
             entry.CurrencyCode));
 
         return entry;
+    }
+
+    public void Flag(string reason)
+    {
+        if (string.IsNullOrWhiteSpace(reason))
+        {
+            throw new ArgumentException("Flag reason is required.", nameof(reason));
+        }
+
+        IsFlagged = true;
+        FlagReason = reason.Trim();
     }
 
     public void MarkCorrected(

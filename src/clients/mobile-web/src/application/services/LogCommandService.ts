@@ -6,9 +6,8 @@ import { LogsRepository } from '../ports';
 import { WeatherPort } from '../ports/WeatherPort';
 import { idGenerator } from '../../core/domain/services/IdGenerator';
 import { systemClock } from '../../core/domain/services/Clock';
-import { runAiContractGate, isContractGateFailure } from './AiContractGate';
 import { getWeatherForLocation } from '../usecases/AttachWeatherSnapshot';
-import { financeService } from '../../features/finance/financeService';
+import { financeCommandService } from '../../features/finance/financeCommandService';
 import { MoneyCategory } from '../../features/finance/finance.types';
 
 // Define the Service Interface
@@ -67,19 +66,14 @@ export class LogCommandServiceImpl implements LogCommandService {
         profile: FarmerProfile,
         provenance?: LogProvenance
     ): Promise<DailyLog[]> {
-        const gateResult = runAiContractGate(response, provenance);
-        if (isContractGateFailure(gateResult)) {
-            throw new Error(gateResult.error);
-        }
-
         // 1. Factory Creation
         const logs = LogFactory.createFromVoiceResult(
-            gateResult.data,
+            response,
             scope,
             crops,
             profile,
             undefined, // weatherStamps (enriched later)
-            gateResult.provenance,
+            provenance,
             systemClock,
             idGenerator
         );
@@ -202,7 +196,7 @@ export class LogCommandServiceImpl implements LogCommandService {
         log.labour.forEach((entry) => {
             const amount = entry.totalCost ?? ((entry.count || 0) * (entry.wagePerPerson || 0));
             if (!amount) return;
-            financeService.createMoneyEventFromSource({
+            financeCommandService.createMoneyEventFromSource({
                 type: 'VoiceLog',
                 sourceId: `${log.id}:labour:${entry.id}`,
                 dateTime: baseDateTime,
@@ -222,7 +216,7 @@ export class LogCommandServiceImpl implements LogCommandService {
         log.inputs.forEach((entry) => {
             const amount = entry.cost;
             if (!amount) return;
-            financeService.createMoneyEventFromSource({
+            financeCommandService.createMoneyEventFromSource({
                 type: 'VoiceLog',
                 sourceId: `${log.id}:input:${entry.id}`,
                 dateTime: baseDateTime,
@@ -241,7 +235,7 @@ export class LogCommandServiceImpl implements LogCommandService {
         log.machinery.forEach((entry) => {
             const amount = (entry.rentalCost || 0) + (entry.fuelCost || 0);
             if (!amount) return;
-            financeService.createMoneyEventFromSource({
+            financeCommandService.createMoneyEventFromSource({
                 type: 'VoiceLog',
                 sourceId: `${log.id}:machinery:${entry.id}`,
                 dateTime: baseDateTime,
@@ -261,7 +255,7 @@ export class LogCommandServiceImpl implements LogCommandService {
             const category = this.mapActivityExpenseCategory(entry.category);
             const amount = entry.totalAmount || 0;
             if (!amount) return;
-            financeService.createMoneyEventFromSource({
+            financeCommandService.createMoneyEventFromSource({
                 type: 'Manual',
                 sourceId: `${log.id}:activity-expense:${entry.id}`,
                 dateTime: baseDateTime,

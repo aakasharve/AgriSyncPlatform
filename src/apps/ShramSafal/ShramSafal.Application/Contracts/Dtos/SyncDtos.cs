@@ -12,6 +12,12 @@ public sealed record SyncPushResponseDto(
     DateTime ServerTimeUtc,
     IReadOnlyList<SyncMutationResultDto> Results);
 
+public static class SyncMutationTypes
+{
+    public const string AllocateGlobalExpense = "allocate_global_expense";
+    public const string VerifyLogV2 = "verify_log_v2";
+}
+
 public sealed record SyncPullResponseDto(
     DateTime ServerTimeUtc,
     DateTime NextCursorUtc,
@@ -22,4 +28,5 @@ public sealed record SyncPullResponseDto(
     IReadOnlyList<CostEntryDto> CostEntries,
     IReadOnlyList<FinanceCorrectionDto> FinanceCorrections,
     IReadOnlyList<PriceConfigDto> PriceConfigs,
+    IReadOnlyList<DayLedgerDto> DayLedgers,
     IReadOnlyList<PlannedActivityDto> PlannedActivities);

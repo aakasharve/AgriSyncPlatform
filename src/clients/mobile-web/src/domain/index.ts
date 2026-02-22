@@ -4,17 +4,15 @@
  *
  * Domain Layer Index
  *
- * This module exports all domain-level abstractions:
- * - types/ - Pure domain types (no UI/infrastructure deps)
- * - system/ - System services (Clock, IdGenerator, DateKeyService)
- * - context/ - Context selectors
+ * Pure type definitions only. No business logic.
+ * - types/ - Domain type definitions
+ * - ai/contracts/ - AI type definitions
+ * - ledger/ - Ledger type definitions
+ *
+ * Note: System services (Clock, IdGenerator, DateKeyService) are in core/domain/services/
+ * Note: Selection selectors are in application/selectors/ContextSelectors.ts
+ * Note: SoftDeletePolicy is in application/policies/SoftDeletePolicy.ts
  */
 
 // Domain Types
 export * from './types';
-
-// System Services
-export * from './system';
-
-// Context Selectors
-export * from './context';

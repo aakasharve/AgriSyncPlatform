@@ -2,6 +2,7 @@ import { useCallback } from 'react';
 import { DailyLog, LogVerificationStatus, FarmerProfile } from '../../types';
 import { verifyLog } from '../../application/usecases/VerifyLog';
 import { useDataSource } from '../providers/DataSourceProvider';
+import { backgroundSyncWorker } from '../../infrastructure/sync/BackgroundSyncWorker';
 
 export interface UseTrustLayerResult {
     handleVerifyLog: (logId: string, status: LogVerificationStatus, notes?: string) => void;
@@ -30,27 +31,21 @@ export const useTrustLayer = ({
 
     // --- TRUST LAYER HANDLERS ---
     const handleVerifyLog = useCallback(async (logId: string, status: LogVerificationStatus, notes?: string) => {
-        // 1. Optimistic UI Update (keep UI responsive)
-        const updater = (prev: DailyLog[]) => prev.map(log => {
+        // Mark as pending while backend mutation is queued and synced.
+        setHistory((prev: DailyLog[]) => prev.map(log => {
             if (log.id !== logId) return log;
             return {
                 ...log,
                 verification: {
                     ...log.verification,
-                    status: status,
+                    status: log.verification?.status ?? LogVerificationStatus.DRAFT,
                     verifiedByOperatorId: farmerProfile.activeOperatorId,
-                    verifiedAtISO: new Date().toISOString(),
-                    notes: notes,
+                    notes: notes ? `${notes} (pending sync)` : 'Pending sync',
                     required: true
                 }
             };
-        });
+        }));
 
-        // Update React State immediately
-        setHistory(updater);
-
-        // 2. Persistent Write via Use-Case (with Audit & Policy)
-        // Works for both Demo (LocalStorage) and Real (Dexie) via DataSource abstraction
         try {
             const result = await verifyLog({
                 logId,
@@ -60,14 +55,25 @@ export const useTrustLayer = ({
             }, dataSource.logs, auditPort, farmerProfile);
 
             if (!result.success) {
-                console.error("Verification failed:", result.error);
-                // Rollback (revert optimistic update)
-                // This would require fetching usage-case or undo logic
-                // For now, we alert.
-                alert(`Verification failed: ${result.error}`);
+                setHistory((prev: DailyLog[]) => prev.map(log => {
+                    if (log.id !== logId) return log;
+                    return {
+                        ...log,
+                        verification: {
+                            ...log.verification,
+                            notes: result.error || 'Verification failed',
+                            required: true
+                        }
+                    };
+                }));
+                return;
             }
+
+            await backgroundSyncWorker.triggerNow();
+            const refreshed = await dataSource.logs.getAll();
+            setHistory(refreshed);
         } catch (e) {
-            console.error("Verification System Error", e);
+            console.error('Verification queue error', e);
         }
     }, [farmerProfile, setHistory, dataSource.logs, auditPort]);
 

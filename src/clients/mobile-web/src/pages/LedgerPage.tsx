@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { AppRoute } from '../types';
-import { financeService } from '../features/finance/financeService';
+import { financeSelectors } from '../features/finance/financeSelectors';
 import { FinanceManagerNav } from '../features/finance/components/FinanceManagerNav';
 import { MoneyChip } from '../features/finance/components/MoneyChip';
 import { MoneyLensDrawer } from '../features/finance/components/MoneyLensDrawer';
@@ -14,7 +14,7 @@ interface LedgerPageProps {
 
 const LedgerPage: React.FC<LedgerPageProps> = ({ currentRoute, onNavigate }) => {
     const [drawerFilter, setDrawerFilter] = useState<FinanceFilters | null>(null);
-    const events = useMemo(() => financeService.getEffectiveMoneyEvents(), [currentRoute, drawerFilter]); // Refresh on close drawer to see updates
+    const events = useMemo(() => financeSelectors.getEffectiveMoneyEvents(), [currentRoute, drawerFilter]); // Refresh on close drawer to see updates
 
     const totalIncome = events.filter(e => e.type === 'Income').reduce((sum, e) => sum + e.effectiveAmount, 0);
     const totalExpense = events.filter(e => e.type === 'Expense').reduce((sum, e) => sum + e.effectiveAmount, 0);

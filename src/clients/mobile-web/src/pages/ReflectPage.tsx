@@ -19,8 +19,8 @@ import SlidingCropSelector from '../features/context/components/SlidingCropSelec
 import '../features/analysis/components/DailyWorkSummary.css';
 import CropSelector, { CropSymbol, PlotMarker } from '../features/context/components/CropSelector';
 import { getPhaseAndDay } from '../shared/utils/timelineUtils';
-import { generateDayWorkSummary } from '../services/workSummaryService';
-import { getDateKey } from '../domain/system/DateKeyService';
+import { generateDayWorkSummary } from '../features/analysis/dayWorkSummary';
+import { getDateKey } from '../core/domain/services/DateKeyService';
 import ReviewInbox from '../features/analysis/components/ReviewInbox';
 import TrustBadge from '../shared/components/ui/TrustBadge';
 import { getHarvestSessions, getOtherIncomeEntries } from '../services/harvestService';

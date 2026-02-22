@@ -16,9 +16,14 @@ public sealed class VerificationEvent : Entity<Guid>
         DateTime occurredAtUtc)
         : base(id)
     {
+        if (status == VerificationStatus.Disputed && string.IsNullOrWhiteSpace(reason))
+        {
+            throw new ArgumentException("Reason is required when disputing a log.", nameof(reason));
+        }
+
         DailyLogId = dailyLogId;
         Status = status;
-        Reason = reason;
+        Reason = string.IsNullOrWhiteSpace(reason) ? null : reason.Trim();
         VerifiedByUserId = verifiedByUserId;
         OccurredAtUtc = occurredAtUtc;
     }

@@ -6,7 +6,7 @@
 import React, { useState } from 'react';
 import { Users, ChevronDown, ChevronUp } from 'lucide-react';
 import { LabourEvent } from '../../../types';
-import { formatCurrency } from '../../../shared/utils/costCalculations';
+import { formatCurrency } from '../../../shared/utils/currency';
 
 export interface LabourSummary {
     isEmpty: boolean;

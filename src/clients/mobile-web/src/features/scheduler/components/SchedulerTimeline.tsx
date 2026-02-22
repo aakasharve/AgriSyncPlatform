@@ -4,7 +4,7 @@ import DayCard, { BlockStatus } from './DayCard';
 import { calculateEffectiveDay } from '../../../shared/utils/timelineUtils';
 import { FileEdit, ArrowLeft } from 'lucide-react';
 import ScheduleDetailModal from './ScheduleDetailModal';
-import { getDateKey } from '../../../domain/system/DateKeyService';
+import { getDateKey } from '../../../core/domain/services/DateKeyService';
 
 import {
     getTemplateForCrop,
@@ -12,7 +12,7 @@ import {
     PlannedTaskDerived,
     getOperationCategory,
     getEffectiveStartDate
-} from '../../../domain/planning/PlanEngine';
+} from '../../../features/scheduler/planning/ClientPlanEngine';
 
 interface SchedulerTimelineProps {
     plot: Plot;

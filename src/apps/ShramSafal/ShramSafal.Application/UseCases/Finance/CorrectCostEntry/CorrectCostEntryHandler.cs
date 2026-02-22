@@ -1,5 +1,7 @@
 using AgriSync.BuildingBlocks.Abstractions;
+using AgriSync.BuildingBlocks.Auth;
 using AgriSync.BuildingBlocks.Results;
+using AgriSync.SharedKernel.Contracts.Ids;
 using ShramSafal.Application.Contracts.Dtos;
 using ShramSafal.Application.Ports;
 using ShramSafal.Domain.Common;
@@ -8,6 +10,7 @@ namespace ShramSafal.Application.UseCases.Finance.CorrectCostEntry;
 
 public sealed class CorrectCostEntryHandler(
     IShramSafalRepository repository,
+    IAuthorizationEnforcer authorizationEnforcer,
     IIdGenerator idGenerator,
     IClock clock)
 {
@@ -31,6 +34,8 @@ public sealed class CorrectCostEntryHandler(
         {
             return Result.Failure<FinanceCorrectionDto>(ShramSafalErrors.CostEntryNotFound);
         }
+
+        await authorizationEnforcer.EnsureIsFarmMember(new UserId(command.CorrectedByUserId), entry.FarmId);
 
         var correction = Domain.Finance.FinanceCorrection.Create(
             command.FinanceCorrectionId ?? idGenerator.New(),

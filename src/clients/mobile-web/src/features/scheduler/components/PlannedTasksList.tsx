@@ -6,8 +6,7 @@
 import React, { useMemo } from 'react';
 import { ClipboardList, Calendar, Inbox } from 'lucide-react';
 import PlannedTaskCard from './PlannedTaskCard';
-import { PlannedTask, CropProfile } from '../../../types';
-import { getCropById } from '../../../data/farmData';
+import { PlannedTask } from '../../../types';
 
 interface PlannedTasksListProps {
     tasks: PlannedTask[];
@@ -92,18 +91,7 @@ const PlannedTasksList: React.FC<PlannedTasksListProps> = ({
 
     // Get crop/plot info for a task
     const getTaskContext = (task: PlannedTask) => {
-        if (!task.cropId) return {};
-
-        const crop = getCropById(task.cropId);
-        if (!crop) return {};
-
-        const plot = crop.plots.find(p => p.id === task.plotId);
-
-        return {
-            cropName: crop.name,
-            plotName: plot?.name,
-            plotColor: crop.color
-        };
+        return {};
     };
 
     // Render a group section

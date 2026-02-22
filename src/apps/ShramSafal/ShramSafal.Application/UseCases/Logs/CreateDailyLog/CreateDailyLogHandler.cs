@@ -1,4 +1,5 @@
 using AgriSync.BuildingBlocks.Abstractions;
+using AgriSync.BuildingBlocks.Auth;
 using AgriSync.BuildingBlocks.Results;
 using AgriSync.SharedKernel.Contracts.Ids;
 using ShramSafal.Application.Contracts.Dtos;
@@ -9,6 +10,7 @@ namespace ShramSafal.Application.UseCases.Logs.CreateDailyLog;
 
 public sealed class CreateDailyLogHandler(
     IShramSafalRepository repository,
+    IAuthorizationEnforcer authorizationEnforcer,
     IIdGenerator idGenerator,
     IClock clock)
 {
@@ -19,6 +21,7 @@ public sealed class CreateDailyLogHandler(
         if (command.FarmId == Guid.Empty ||
             command.PlotId == Guid.Empty ||
             command.CropCycleId == Guid.Empty ||
+            command.RequestedByUserId == Guid.Empty ||
             command.OperatorUserId == Guid.Empty)
         {
             return Result.Failure<DailyLogDto>(ShramSafalErrors.InvalidCommand);
@@ -34,6 +37,8 @@ public sealed class CreateDailyLogHandler(
         {
             return Result.Failure<DailyLogDto>(ShramSafalErrors.FarmNotFound);
         }
+
+        await authorizationEnforcer.EnsureIsFarmMember(new UserId(command.RequestedByUserId), farmId);
 
         var plot = await repository.GetPlotByIdAsync(command.PlotId, ct);
         if (plot is null || plot.FarmId != farmId)

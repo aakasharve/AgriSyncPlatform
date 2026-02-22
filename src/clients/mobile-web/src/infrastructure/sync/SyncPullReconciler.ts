@@ -9,6 +9,8 @@ import {
 import {
     type CropCycleDto,
     type DailyLogDto,
+    type DayLedgerDto,
+    type PlannedTask as PlannedTaskDto,
     type PlotDto,
     type SyncPullResponse,
 } from '../api/AgriSyncClient';
@@ -116,22 +118,38 @@ function mapVerificationStatus(status?: string): LogVerificationStatus {
         return LogVerificationStatus.DRAFT;
     }
 
-    switch (status.trim().toLowerCase()) {
+    const normalized = status
+        .trim()
+        .replace(/([a-z])([A-Z])/g, '$1_$2')
+        .replace(/[\s-]+/g, '_')
+        .toLowerCase();
+
+    switch (normalized) {
+        case 'draft':
+        case 'pending':
+            return LogVerificationStatus.DRAFT;
+        case 'confirmed':
+        case 'auto_approved':
+            return LogVerificationStatus.CONFIRMED;
         case 'approved':
         case 'verified':
             return LogVerificationStatus.VERIFIED;
         case 'rejected':
         case 'disputed':
             return LogVerificationStatus.DISPUTED;
-        case 'confirmed':
-            return LogVerificationStatus.CONFIRMED;
         case 'correction_pending':
             return LogVerificationStatus.CORRECTION_PENDING;
-        case 'pending':
-            return LogVerificationStatus.DRAFT;
         default:
             return LogVerificationStatus.DRAFT;
     }
+}
+
+function dayLedgerMetaKey(dayLedgerId: string): string {
+    return `shramsafal_day_ledger_${dayLedgerId}`;
+}
+
+function normalizeDateValue(value: string): string {
+    return value.includes('T') ? value.split('T')[0] : value;
 }
 
 function toDailyLog(
@@ -142,7 +160,8 @@ function toDailyLog(
     const latestVerification = [...source.verificationEvents]
         .sort((left, right) => Date.parse(right.occurredAtUtc) - Date.parse(left.occurredAtUtc))[0];
 
-    const verificationStatus = mapVerificationStatus(source.lastVerificationStatus ?? latestVerification?.status);
+    const verificationStatus = mapVerificationStatus(
+        source.verificationStatus ?? source.lastVerificationStatus ?? latestVerification?.status);
 
     return {
         id: source.id,
@@ -242,9 +261,12 @@ export async function reconcileSyncPull(payload: SyncPullResponse): Promise<void
     }
 
     const logs = payload.dailyLogs.map(log => toDailyLog(log, plotLookup));
+    const dayLedgers: DayLedgerDto[] = payload.dayLedgers ?? [];
+    const plannedTasks: PlannedTaskDto[] = payload.plannedActivities ?? [];
+    const receivedAtUtc = systemClock.nowISO();
 
     const db = getDatabase();
-    await db.transaction('rw', [db.logs, db.appMeta], async () => {
+    await db.transaction('rw', [db.logs, db.appMeta, db.dayLedgers, db.plannedTasks], async () => {
         for (const log of logs) {
             await db.logs.put({
                 id: log.id,
@@ -257,15 +279,81 @@ export async function reconcileSyncPull(payload: SyncPullResponse): Promise<void
             });
         }
 
+        for (const dayLedger of dayLedgers) {
+            await db.dayLedgers.put({
+                id: dayLedger.id,
+                farmId: dayLedger.farmId,
+                dateKey: normalizeDateValue(dayLedger.dateKey),
+                payload: dayLedger,
+                updatedAt: receivedAtUtc,
+            });
+
+            await db.appMeta.put({
+                key: dayLedgerMetaKey(dayLedger.id),
+                value: dayLedger,
+                updatedAt: receivedAtUtc,
+            });
+        }
+
+        for (const plannedTask of plannedTasks) {
+            await db.plannedTasks.put({
+                id: plannedTask.id,
+                cropCycleId: plannedTask.cropCycleId,
+                plannedDate: normalizeDateValue(plannedTask.plannedDate),
+                payload: plannedTask,
+                updatedAt: receivedAtUtc,
+            });
+        }
+
+        await db.appMeta.put({
+            key: 'shramsafal_day_ledgers_index_v1',
+            value: {
+                ids: dayLedgers.map(dayLedger => dayLedger.id),
+                importedAtUtc: receivedAtUtc,
+                importedCount: dayLedgers.length,
+            },
+            updatedAt: receivedAtUtc,
+        });
+
+        await db.appMeta.put({
+            key: 'shramsafal_planned_tasks_index_v1',
+            value: {
+                ids: plannedTasks.map(task => task.id),
+                importedAtUtc: receivedAtUtc,
+                importedCount: plannedTasks.length,
+            },
+            updatedAt: receivedAtUtc,
+        });
+
+        await db.appMeta.put({
+            key: 'shramsafal_finance_cost_entries_v1',
+            value: payload.costEntries ?? [],
+            updatedAt: receivedAtUtc,
+        });
+
+        await db.appMeta.put({
+            key: 'shramsafal_finance_corrections_v1',
+            value: payload.financeCorrections ?? [],
+            updatedAt: receivedAtUtc,
+        });
+
+        await db.appMeta.put({
+            key: 'shramsafal_finance_price_configs_v1',
+            value: payload.priceConfigs ?? [],
+            updatedAt: receivedAtUtc,
+        });
+
         await db.appMeta.put({
             key: 'shramsafal_last_reconciled_pull_v1',
             value: {
                 serverTimeUtc: payload.serverTimeUtc,
                 nextCursorUtc: payload.nextCursorUtc,
-                receivedAtUtc: systemClock.nowISO(),
+                receivedAtUtc,
                 importedLogs: logs.length,
+                importedDayLedgers: dayLedgers.length,
+                importedPlannedTasks: plannedTasks.length,
             },
-            updatedAt: systemClock.nowISO(),
+            updatedAt: receivedAtUtc,
         });
     });
 }

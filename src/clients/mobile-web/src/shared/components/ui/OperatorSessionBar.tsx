@@ -1,6 +1,5 @@
 import React from 'react';
 import { FarmOperator } from '../../../domain/types/farm.types';
-import { AuthorizationPolicy } from '../../../application/policy/AuthorizationPolicy';
 
 import { SyncIndicator } from './SyncIndicator';
 import { useSyncStatus } from '../../../app/hooks/useSyncStatus';
@@ -24,6 +23,13 @@ export const OperatorSessionBar: React.FC<OperatorSessionBarProps> = ({
     currentOperator,
     ownerName
 }) => {
+    const roleLabel = {
+        PRIMARY_OWNER: 'Primary Owner',
+        SECONDARY_OWNER: 'Secondary Owner',
+        MUKADAM: 'Mukadam',
+        WORKER: 'Worker',
+    }[currentOperator.role] ?? 'Worker';
+
     // Color config based on role (Visual hierarchy)
     const roleConfig = {
         PRIMARY_OWNER: { bg: 'bg-emerald-100', text: 'text-emerald-900', border: 'border-emerald-200' },
@@ -51,7 +57,7 @@ export const OperatorSessionBar: React.FC<OperatorSessionBarProps> = ({
                         <SyncIndicator status={status} lastSyncedAt={lastSyncedAt} />
                     </div>
                     <p className="text-[10px] opacity-70 uppercase tracking-wide mt-0.5">
-                        {AuthorizationPolicy.getRoleLabel(currentOperator.role)}
+                        {roleLabel}
                     </p>
                 </div>
             </div>

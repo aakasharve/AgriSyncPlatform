@@ -1,29 +1,9 @@
-/**
- * VerifyLog Use-Case
- *
- * Orchestrates the verification of DailyLog entries.
- * Verification is part of the DFES Trust Layer.
- *
- * Verification flow:
- * - PENDING: Log created, awaiting verification
- * - APPROVED: Verified by owner/mukadam
- * - DISPUTED: Flagged for review
- *
- * Responsibilities:
- * - Validate verifier has permission
- * - Update verification status
- * - Record verification metadata
- * - Emit events for UI updates
- */
-
 import { DailyLog, LogVerificationStatus, FarmerProfile } from '../../types';
 import { LogsRepository } from '../ports';
-import { AuthorizationPolicy } from '../policy/AuthorizationPolicy';
 import { AuditPort } from '../ports/AuditPort';
+import { mutationQueue } from '../../infrastructure/sync/MutationQueue';
+import { backgroundSyncWorker } from '../../infrastructure/sync/BackgroundSyncWorker';
 
-/**
- * Input for verifying a single log.
- */
 export interface VerifyLogInput {
     logId: string;
     verifierId: string;
@@ -31,117 +11,108 @@ export interface VerifyLogInput {
     note?: string;
 }
 
-/**
- * Input for batch verification.
- */
 export interface BatchVerifyInput {
     logIds: string[];
     verifierId: string;
     action: 'approve';
 }
 
-/**
- * Result of verification operation.
- */
 export interface VerifyResult {
     success: boolean;
     error?: string;
 }
 
-/**
- * Check if an operator can verify logs.
- * @deprecated Use AuthorizationPolicy.can('VERIFY_LOG', ...)
- */
-function canVerify(profile: FarmerProfile): boolean {
-    return AuthorizationPolicy.can('VERIFY_LOG', profile);
+function mapTargetStatus(action: VerifyLogInput['action']): 'Verified' | 'Disputed' {
+    return action === 'approve' ? 'Verified' : 'Disputed';
 }
 
-/**
- * Use-case for verifying a single log.
- */
+function mapCallerRole(profile: FarmerProfile): 'PrimaryOwner' | 'SecondaryOwner' | 'Mukadam' | 'Worker' {
+    const operator = profile.operators.find(item => item.id === profile.activeOperatorId);
+    switch (operator?.role) {
+        case 'PRIMARY_OWNER':
+            return 'PrimaryOwner';
+        case 'SECONDARY_OWNER':
+            return 'SecondaryOwner';
+        case 'MUKADAM':
+            return 'Mukadam';
+        default:
+            return 'Worker';
+    }
+}
+
+async function triggerSyncBestEffort(): Promise<void> {
+    try {
+        await backgroundSyncWorker.triggerNow();
+    } catch {
+        // Queue persistence is the durable path; sync retries are periodic.
+    }
+}
+
 export async function verifyLog(
     input: VerifyLogInput,
-    repository: LogsRepository,
+    _repository: LogsRepository,
     auditPort: AuditPort,
     profile: FarmerProfile
 ): Promise<VerifyResult> {
     try {
-        // 1. Check permission
-        if (!canVerify(profile)) {
-            return {
-                success: false,
-                error: 'Current operator does not have verification permission'
-            };
-        }
+        await mutationQueue.enqueue('verify_log_v2', {
+            dailyLogId: input.logId,
+            targetStatus: mapTargetStatus(input.action),
+            reason: input.note,
+            verifiedByUserId: input.verifierId,
+            callerRole: mapCallerRole(profile),
+        });
 
-        // 2. Determine new status
-        const newStatus = input.action === 'approve'
-            ? LogVerificationStatus.APPROVED
-            : LogVerificationStatus.DISPUTED;
-
-        // 3. Update in repository
-        await repository.updateVerification(input.logId, newStatus, input.verifierId);
-
-        // 4. Audit
         await auditPort.append({
             actorId: input.verifierId,
             action: 'VERIFY_LOG',
             resourceId: input.logId,
-            details: `Status changed to ${newStatus}. Note: ${input.note || ''}`
+            details: `Queued verify_log_v2 mutation as ${mapTargetStatus(input.action)}.`,
         });
 
+        await triggerSyncBestEffort();
         return { success: true };
     } catch (error) {
         return {
             success: false,
-            error: error instanceof Error ? error.message : 'Unknown error verifying log'
+            error: error instanceof Error ? error.message : 'Failed to queue verify mutation.',
         };
     }
 }
 
-/**
- * Use-case for batch verification (approve multiple logs at once).
- */
 export async function batchVerifyLogs(
     input: BatchVerifyInput,
-    repository: LogsRepository,
+    _repository: LogsRepository,
     auditPort: AuditPort,
     profile: FarmerProfile
 ): Promise<VerifyResult> {
     try {
-        // 1. Check permission
-        if (!canVerify(profile)) {
-            return {
-                success: false,
-                error: 'Current operator does not have verification permission'
-            };
+        for (const logId of input.logIds) {
+            await mutationQueue.enqueue('verify_log_v2', {
+                dailyLogId: logId,
+                targetStatus: 'Verified',
+                verifiedByUserId: input.verifierId,
+                callerRole: mapCallerRole(profile),
+            });
+
+            await auditPort.append({
+                actorId: input.verifierId,
+                action: 'VERIFY_LOG',
+                resourceId: logId,
+                details: 'Queued batch verify_log_v2 mutation.',
+            });
         }
 
-        // 2. Update all logs (with Audit)
-        await Promise.all(
-            input.logIds.map(async id => {
-                await repository.updateVerification(id, LogVerificationStatus.APPROVED, input.verifierId);
-                await auditPort.append({
-                    actorId: input.verifierId,
-                    action: 'VERIFY_LOG',
-                    resourceId: id,
-                    details: 'Batch approved'
-                });
-            })
-        );
-
+        await triggerSyncBestEffort();
         return { success: true };
     } catch (error) {
         return {
             success: false,
-            error: error instanceof Error ? error.message : 'Unknown error in batch verification'
+            error: error instanceof Error ? error.message : 'Failed to queue batch verify mutations.',
         };
     }
 }
 
-/**
- * Get logs that need verification (pending, created by others).
- */
 export async function getLogsNeedingVerification(
     repository: LogsRepository,
     currentOperatorId: string
@@ -149,12 +120,17 @@ export async function getLogsNeedingVerification(
     const allLogs = await repository.getAll();
 
     return allLogs.filter(log => {
-        // Created by someone else
         const createdByOther = log.meta?.createdByOperatorId !== currentOperatorId;
-        // Still pending
-        const isPending = !log.verification ||
-            log.verification.status === LogVerificationStatus.PENDING;
+        const status = log.verification?.status;
 
-        return createdByOther && isPending;
+        const needsReview =
+            !status
+            || status === LogVerificationStatus.DRAFT
+            || status === LogVerificationStatus.CONFIRMED
+            || status === LogVerificationStatus.CORRECTION_PENDING
+            || status === LogVerificationStatus.PENDING
+            || status === LogVerificationStatus.AUTO_APPROVED;
+
+        return createdByOther && needsReview;
     });
 }

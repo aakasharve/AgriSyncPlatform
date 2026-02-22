@@ -7,7 +7,6 @@ import { LogProvenance } from '../../domain/ai/LogProvenance';
 import { logger } from '../../infrastructure/observability/Logger';
 import { CorrelationId } from '../../infrastructure/observability/CorrelationContext';
 import { WeatherPort } from '../../application/ports/WeatherPort';
-import { countSuccessfulIrrigationEvents } from '../../domain/ai/IrrigationStatusHeuristics';
 import { computeDayState } from '../../shared/utils/dayState';
 
 // ARCHITECTURE FIX: Import Service Class and Hook
@@ -52,6 +51,14 @@ interface UseLogCommandsProps {
     weatherProvider?: WeatherPort;
 }
 
+const countSuccessfulIrrigationEvents = (events: Array<{ durationHours?: number; waterVolumeLitres?: number; method?: string; source?: string }>): number => {
+    return events.filter(event => {
+        if ((event.durationHours || 0) > 0) return true;
+        if ((event.waterVolumeLitres || 0) > 0) return true;
+        return Boolean(event.method || event.source);
+    }).length;
+};
+
 export const useLogCommands = ({
     hasActiveLogContext,
     logScope,
@@ -94,7 +101,7 @@ export const useLogCommands = ({
                 (log.labour?.length || 0) +
                 (log.inputs?.length || 0) +
                 (log.machinery?.length || 0) +
-                countSuccessfulIrrigationEvents(log.irrigation || [], log.fullTranscript);
+                countSuccessfulIrrigationEvents(log.irrigation || []);
 
             return { cropName, count };
         });

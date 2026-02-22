@@ -1,55 +1,94 @@
 using AgriSync.BuildingBlocks.Results;
-using ShramSafal.Application.Contracts.Dtos;
 using ShramSafal.Application.Ports;
 using ShramSafal.Domain.Common;
+using ShramSafal.Domain.Compare;
 
 namespace ShramSafal.Application.UseCases.Planning.ComputePlannedVsExecutedDelta;
 
 public sealed class ComputePlannedVsExecutedDeltaHandler(IShramSafalRepository repository)
 {
-    public async Task<Result<PlannedVsExecutedDeltaDto>> HandleAsync(
+    public async Task<Result<StageComparisonResult>> HandleAsync(
         ComputePlannedVsExecutedDeltaQuery query,
         CancellationToken ct = default)
     {
         if (query.CropCycleId == Guid.Empty)
         {
-            return Result.Failure<PlannedVsExecutedDeltaDto>(ShramSafalErrors.InvalidCommand);
+            return Result.Failure<StageComparisonResult>(ShramSafalErrors.InvalidCommand);
         }
 
         var cropCycle = await repository.GetCropCycleByIdAsync(query.CropCycleId, ct);
         if (cropCycle is null)
         {
-            return Result.Failure<PlannedVsExecutedDeltaDto>(ShramSafalErrors.CropCycleNotFound);
+            return Result.Failure<StageComparisonResult>(ShramSafalErrors.CropCycleNotFound);
         }
 
         var planned = await repository.GetPlannedActivitiesByCropCycleIdAsync(query.CropCycleId, ct);
         var executedTasks = await repository.GetExecutedTasksByCropCycleIdAsync(query.CropCycleId, ct);
 
-        var plannedNames = planned
-            .Select(p => p.ActivityName.Trim())
-            .Where(p => !string.IsNullOrWhiteSpace(p))
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .OrderBy(x => x)
+        var stageName = ResolveStageName(query.Stage, cropCycle.Stage, planned);
+        var stagePlanned = planned
+            .Where(p => string.Equals(p.Stage, stageName, StringComparison.OrdinalIgnoreCase))
             .ToList();
 
-        var executedNames = executedTasks
-            .Select(t => t.ActivityType.Trim())
-            .Where(t => !string.IsNullOrWhiteSpace(t))
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .OrderBy(x => x)
-            .ToList();
+        DateOnly? stageStartDate = null;
+        DateOnly? stageEndDate = null;
+        if (stagePlanned.Count > 0)
+        {
+            stageStartDate = stagePlanned.Min(p => p.PlannedDate);
+            stageEndDate = stagePlanned.Max(p => p.PlannedDate);
+        }
 
-        var executedSet = new HashSet<string>(executedNames, StringComparer.OrdinalIgnoreCase);
-        var missing = plannedNames
-            .Where(p => !executedSet.Contains(p))
-            .OrderBy(x => x)
-            .ToList();
+        var stageExecuted = executedTasks;
+        if (stageStartDate is not null && stageEndDate is not null)
+        {
+            stageExecuted = executedTasks
+                .Where(t =>
+                {
+                    var taskDate = DateOnly.FromDateTime(t.OccurredAtUtc);
+                    return taskDate >= stageStartDate.Value && taskDate <= stageEndDate.Value;
+                })
+                .ToList();
+        }
 
-        return Result.Success(new PlannedVsExecutedDeltaDto(
-            query.CropCycleId,
-            plannedNames,
-            executedNames,
-            missing));
+        var stageComparison = CompareEngine.ComputeStageComparison(stagePlanned, stageExecuted, stageName);
+
+        var startDay = stageStartDate is null
+            ? 0
+            : stageStartDate.Value.DayNumber - cropCycle.StartDate.DayNumber;
+
+        var endDay = stageEndDate is null
+            ? 0
+            : stageEndDate.Value.DayNumber - cropCycle.StartDate.DayNumber;
+
+        return Result.Success(stageComparison with
+        {
+            StartDay = startDay,
+            EndDay = endDay
+        });
+    }
+
+    private static string ResolveStageName(
+        string? requestedStage,
+        string cropCycleStage,
+        IReadOnlyCollection<Domain.Planning.PlannedActivity> planned)
+    {
+        if (!string.IsNullOrWhiteSpace(requestedStage))
+        {
+            return requestedStage.Trim();
+        }
+
+        var cropStageMatch = planned
+            .FirstOrDefault(p => string.Equals(p.Stage, cropCycleStage, StringComparison.OrdinalIgnoreCase));
+        if (cropStageMatch is not null)
+        {
+            return cropStageMatch.Stage;
+        }
+
+        return planned
+            .OrderBy(p => p.PlannedDate)
+            .Select(p => p.Stage)
+            .FirstOrDefault(s => !string.IsNullOrWhiteSpace(s))
+            ?? cropCycleStage;
     }
 }
 

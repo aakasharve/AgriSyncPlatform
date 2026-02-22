@@ -1,6 +1,6 @@
 import React, { useMemo } from 'react';
 import { AppRoute } from '../types';
-import { financeService } from '../features/finance/financeService';
+import { financeSelectors } from '../features/finance/financeSelectors';
 import { FinanceManagerNav } from '../features/finance/components/FinanceManagerNav';
 import { ChevronRight, TrendingUp, AlertCircle, CheckCircle, RefreshCcw } from 'lucide-react';
 
@@ -10,7 +10,7 @@ interface FinanceManagerHomeProps {
 }
 
 const FinanceManagerHome: React.FC<FinanceManagerHomeProps> = ({ currentRoute, onNavigate }) => {
-    const buckets = useMemo(() => financeService.getPipelineBuckets(), [currentRoute]);
+    const buckets = useMemo(() => financeSelectors.getPipelineBuckets(), [currentRoute]);
 
     const getIcon = (key: string) => {
         switch (key) {

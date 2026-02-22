@@ -21,6 +21,7 @@ public sealed class PullSyncChangesHandler(
         var costEntries = await repository.GetCostEntriesChangedSinceAsync(sinceUtc, ct);
         var financeCorrections = await repository.GetFinanceCorrectionsChangedSinceAsync(sinceUtc, ct);
         var priceConfigs = await repository.GetPriceConfigsChangedSinceAsync(sinceUtc, ct);
+        var dayLedgers = await repository.GetDayLedgersChangedSinceAsync(sinceUtc, ct);
         var plannedActivities = await repository.GetPlannedActivitiesChangedSinceAsync(sinceUtc, ct);
 
         var nextCursorUtc = ComputeNextCursor(
@@ -32,6 +33,7 @@ public sealed class PullSyncChangesHandler(
             costEntries,
             financeCorrections,
             priceConfigs,
+            dayLedgers,
             plannedActivities);
 
         var response = new SyncPullResponseDto(
@@ -44,6 +46,7 @@ public sealed class PullSyncChangesHandler(
             costEntries.Select(c => c.ToDto()).ToList(),
             financeCorrections.Select(c => c.ToDto()).ToList(),
             priceConfigs.Select(c => c.ToDto()).ToList(),
+            dayLedgers.Select(c => c.ToDto()).ToList(),
             plannedActivities.Select(a => a.ToDto()).ToList());
 
         return Result.Success(response);
@@ -80,6 +83,7 @@ public sealed class PullSyncChangesHandler(
         IReadOnlyList<Domain.Finance.CostEntry> costEntries,
         IReadOnlyList<Domain.Finance.FinanceCorrection> financeCorrections,
         IReadOnlyList<Domain.Finance.PriceConfig> priceConfigs,
+        IReadOnlyList<Domain.Finance.DayLedger> dayLedgers,
         IReadOnlyList<Domain.Planning.PlannedActivity> plannedActivities)
     {
         var maxTimestamp = sinceUtc;
@@ -126,6 +130,11 @@ public sealed class PullSyncChangesHandler(
         if (priceConfigs.Count > 0)
         {
             maxTimestamp = Max(maxTimestamp, priceConfigs.Max(c => c.CreatedAtUtc));
+        }
+
+        if (dayLedgers.Count > 0)
+        {
+            maxTimestamp = Max(maxTimestamp, dayLedgers.Max(c => c.CreatedAtUtc));
         }
 
         if (plannedActivities.Count > 0)

@@ -4,7 +4,14 @@ import { LogProvenance } from '../../domain/ai/LogProvenance';
 import { VoiceParserPort, VoiceInput } from '../../application/ports';
 import { parseVoiceToDraft } from '../../application/usecases/ParseVoiceToDraft';
 import { LogScope } from '../../domain/types/log.types';
-import { hasSuccessfulIrrigation } from '../../domain/ai/IrrigationStatusHeuristics';
+
+const hasSuccessfulIrrigation = (events: Array<{ durationHours?: number; waterVolumeLitres?: number; method?: string; source?: string }>): boolean => {
+    return events.some(event => {
+        if ((event.durationHours || 0) > 0) return true;
+        if ((event.waterVolumeLitres || 0) > 0) return true;
+        return Boolean(event.method || event.source);
+    });
+};
 
 interface UseVoiceRecorderProps {
     currentLogContext: FarmContext | null;
@@ -181,7 +188,7 @@ export const useVoiceRecorder = ({
                     }
 
                     const hasWork = mergedDraft.cropActivities.length > 0
-                        || hasSuccessfulIrrigation(mergedDraft.irrigation || [], mergedDraft.fullTranscript)
+                        || hasSuccessfulIrrigation(mergedDraft.irrigation || [])
                         || mergedDraft.labour.length > 0
                         || mergedDraft.inputs.length > 0
                         || mergedDraft.machinery.length > 0;
@@ -191,7 +198,7 @@ export const useVoiceRecorder = ({
                 }
 
                 const hasWorkFinal = mergedDraft.cropActivities.length > 0
-                    || hasSuccessfulIrrigation(mergedDraft.irrigation || [], mergedDraft.fullTranscript)
+                    || hasSuccessfulIrrigation(mergedDraft.irrigation || [])
                     || mergedDraft.labour.length > 0
                     || mergedDraft.inputs.length > 0
                     || mergedDraft.machinery.length > 0;

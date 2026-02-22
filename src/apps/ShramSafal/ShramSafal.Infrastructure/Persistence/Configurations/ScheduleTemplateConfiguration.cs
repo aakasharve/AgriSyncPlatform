@@ -35,7 +35,7 @@ internal sealed class ScheduleTemplateConfiguration : IEntityTypeConfiguration<S
             .OnDelete(DeleteBehavior.Cascade);
 
         builder.Navigation(x => x.Activities).UsePropertyAccessMode(PropertyAccessMode.Field);
+        builder.Ignore(x => x.Stages);
         builder.Ignore(x => x.DomainEvents);
     }
 }
-

@@ -15,7 +15,7 @@ import {
 import { storageNamespace } from '../infrastructure/storage/StorageNamespace';
 import { idGenerator } from '../core/domain/services/IdGenerator';
 import { systemClock } from '../core/domain/services/Clock';
-import { financeService } from '../features/finance/financeService';
+import { financeCommandService } from '../features/finance/financeCommandService';
 
 // --- CONSTANTS ---
 
@@ -288,7 +288,7 @@ export const addOtherIncomeEntry = (entry: Omit<OtherIncomeEntry, 'id'>): OtherI
     const key = storageNamespace.getKey('harvest_other_income');
     localStorage.setItem(key, JSON.stringify(updatedEntries));
 
-    financeService.createMoneyEventFromSource({
+    financeCommandService.createMoneyEventFromSource({
         type: 'Income',
         sourceId: newEntry.id,
         dateTime: new Date(newEntry.date).toISOString(),
@@ -320,7 +320,7 @@ export const updateHarvestSession = (session: HarvestSession): void => {
     // Finance Integration: Sync Sales
     session.saleEntries.forEach(sale => {
         const saleUnit = sale.gradeWiseSales[0]?.unit || 'unit';
-        financeService.createMoneyEventFromSource({
+        financeCommandService.createMoneyEventFromSource({
             type: 'Income',
             sourceId: `${session.id}:sale:${sale.id}`,
             dateTime: sale.date + 'T12:00:00',

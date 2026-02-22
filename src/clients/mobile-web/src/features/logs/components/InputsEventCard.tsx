@@ -6,7 +6,7 @@
 import React, { useState } from 'react';
 import { SprayCan, Leaf, ChevronDown, ChevronUp } from 'lucide-react';
 import { InputsSummary, InputItem } from '../../../domain/types/summary.types';
-import { formatCurrency } from '../../../shared/utils/costCalculations';
+import { formatCurrency } from '../../../shared/utils/currency';
 
 interface InputsEventCardProps {
     inputs: InputsSummary;
