@@ -17,8 +17,8 @@ import WeatherReactionPrompt from './features/weather/components/WeatherReaction
 import VoiceListeningOverlay from './features/voice/components/VoiceListeningOverlay';
 
 import { getPhaseAndDay } from './shared/utils/timelineUtils';
-import { getPrimarySelection } from './domain/context/selectors';
-import { getDateKey } from './domain/system/DateKeyService';
+import { getPrimarySelection } from './application/selectors/ContextSelectors';
+import { getDateKey } from './core/domain/services/DateKeyService';
 
 import { CropProfile } from './types';
 import { useAgriLogApp } from './app/compositionRoot';

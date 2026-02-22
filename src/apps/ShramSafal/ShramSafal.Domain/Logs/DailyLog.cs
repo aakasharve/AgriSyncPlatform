@@ -1,5 +1,6 @@
 using AgriSync.BuildingBlocks.Domain;
 using AgriSync.SharedKernel.Contracts.Ids;
+using AgriSync.SharedKernel.Contracts.Roles;
 using ShramSafal.Domain.Events;
 
 namespace ShramSafal.Domain.Logs;
@@ -41,11 +42,14 @@ public sealed class DailyLog : Entity<Guid>
     public IReadOnlyCollection<LogTask> Tasks => _tasks.AsReadOnly();
     public IReadOnlyCollection<VerificationEvent> VerificationEvents => _verificationEvents.AsReadOnly();
 
-    public VerificationStatus? LastVerificationStatus =>
+    public VerificationStatus CurrentVerificationStatus =>
         _verificationEvents
             .OrderBy(v => v.OccurredAtUtc)
-            .Select(v => (VerificationStatus?)v.Status)
-            .LastOrDefault();
+            .Select(v => v.Status)
+            .DefaultIfEmpty(VerificationStatus.Draft)
+            .Last();
+
+    public VerificationStatus? LastVerificationStatus => CurrentVerificationStatus;
 
     public static DailyLog Create(
         Guid id,
@@ -95,19 +99,26 @@ public sealed class DailyLog : Entity<Guid>
         Guid verificationEventId,
         VerificationStatus status,
         string? reason,
+        AppRole callerRole,
         UserId verifiedByUserId,
         DateTime occurredAtUtc)
     {
-        if (status == VerificationStatus.Rejected && string.IsNullOrWhiteSpace(reason))
+        var currentStatus = CurrentVerificationStatus;
+        if (!VerificationStateMachine.CanTransitionWithRole(currentStatus, status, callerRole))
         {
-            throw new ArgumentException("Reason is required when rejecting a log.", nameof(reason));
+            throw new InvalidOperationException("Transition not allowed for role.");
+        }
+
+        if (status == VerificationStatus.Disputed && string.IsNullOrWhiteSpace(reason))
+        {
+            throw new ArgumentException("Reason is required when disputing a log.", nameof(reason));
         }
 
         var verification = new VerificationEvent(
             verificationEventId,
             Id,
             status,
-            string.IsNullOrWhiteSpace(reason) ? null : reason.Trim(),
+            reason,
             verifiedByUserId,
             occurredAtUtc);
 
@@ -119,6 +130,38 @@ public sealed class DailyLog : Entity<Guid>
             Id,
             status,
             verifiedByUserId));
+
+        return verification;
+    }
+
+    public VerificationEvent? Edit(
+        Guid verificationEventId,
+        UserId editedByUserId,
+        DateTime occurredAtUtc)
+    {
+        var currentStatus = CurrentVerificationStatus;
+        var nextStatus = VerificationStateMachine.GetNextStatusForEdit(currentStatus);
+        if (nextStatus == currentStatus)
+        {
+            return null;
+        }
+
+        var verification = new VerificationEvent(
+            verificationEventId,
+            Id,
+            nextStatus,
+            null,
+            editedByUserId,
+            occurredAtUtc);
+
+        _verificationEvents.Add(verification);
+
+        Raise(new LogVerifiedEvent(
+            Guid.NewGuid(),
+            occurredAtUtc,
+            Id,
+            nextStatus,
+            editedByUserId));
 
         return verification;
     }

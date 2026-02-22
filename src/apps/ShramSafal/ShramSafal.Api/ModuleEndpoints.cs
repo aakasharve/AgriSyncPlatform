@@ -19,6 +19,7 @@ public static class ModuleEndpoints
         group.MapLogsEndpoints();
         group.MapFinanceEndpoints();
         group.MapPlanningEndpoints();
+        group.MapAiEndpoints();
         endpoints.MapSyncEndpoints();
 
         return endpoints;

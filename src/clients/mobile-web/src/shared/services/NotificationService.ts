@@ -1,6 +1,6 @@
 
 import { systemClock } from '../../core/domain/services/Clock';
-import { getDateKey } from '../../domain/system/DateKeyService';
+import { getDateKey } from '../../core/domain/services/DateKeyService';
 
 // Extend NotificationOptions for newer properties
 interface ExtendedNotificationOptions extends NotificationOptions {

@@ -1,8 +1,8 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Plot, CropProfile, DailyLog, PlannedItem, ExecutedItem } from '../types';
-import { generatePlotComparison } from '../services/compareService';
-import { getScheduleById } from '../data/scheduleLibrary';
-import { parseDateKey } from '../domain/system/DateKeyService';
+import { generatePlotComparison } from '../features/compare/plotComparisonService';
+import { getScheduleById } from '../features/scheduler/library/scheduleLibrary';
+import { parseDateKey } from '../core/domain/services/DateKeyService';
 import SlidingCropSelector from '../features/context/components/SlidingCropSelector';
 import DayCard, { BlockStatus } from '../features/scheduler/components/DayCard';
 import {

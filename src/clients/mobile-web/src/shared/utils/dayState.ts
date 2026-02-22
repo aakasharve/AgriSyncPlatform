@@ -12,8 +12,8 @@ import {
     getScheduleById,
     getStageStartDay,
     getTemplateForCrop
-} from '../../domain/planning/PlanEngine';
-import { getDateKey } from '../../domain/system/DateKeyService';
+} from '../../features/scheduler/planning/ClientPlanEngine';
+import { getDateKey } from '../../core/domain/services/DateKeyService';
 
 type OperationCategory = 'IRRIGATION' | 'FERTIGATION' | 'FOLIAR_SPRAY' | 'ACTIVITY';
 

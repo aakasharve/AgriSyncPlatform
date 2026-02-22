@@ -17,6 +17,7 @@ public sealed class ShramSafalDbContext(DbContextOptions<ShramSafalDbContext> op
     public DbSet<VerificationEvent> VerificationEvents => Set<VerificationEvent>();
     public DbSet<CostEntry> CostEntries => Set<CostEntry>();
     public DbSet<FinanceCorrection> FinanceCorrections => Set<FinanceCorrection>();
+    public DbSet<DayLedger> DayLedgers => Set<DayLedger>();
     public DbSet<PriceConfig> PriceConfigs => Set<PriceConfig>();
     public DbSet<ScheduleTemplate> ScheduleTemplates => Set<ScheduleTemplate>();
     public DbSet<TemplateActivity> TemplateActivities => Set<TemplateActivity>();

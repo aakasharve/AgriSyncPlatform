@@ -1,6 +1,5 @@
 import React, { createContext, useContext, useState, useMemo } from 'react';
 import { LogScope, FarmContext, CropProfile } from '../../types';
-import { getPrimaryCropId, getPrimaryPlotId } from '../../domain/context/selectors';
 
 // Define the shape of the Context
 interface LogContextType {
@@ -108,8 +107,8 @@ export const LogProvider: React.FC<LogProviderProps> = ({ crops, children }) => 
     const hasActiveLogContext = !!currentLogContext && currentLogContext.selection.length > 0;
     const isContextReady = hasActiveLogContext;
 
-    const activeCropId = getPrimaryCropId(currentLogContext) ?? undefined;
-    const activePlotId = getPrimaryPlotId(currentLogContext) ?? undefined;
+    const activeCropId = logScope.selectedCropIds[0] ?? undefined;
+    const activePlotId = logScope.selectedPlotIds[0] ?? undefined;
 
     // Actions adapted to SelectionContext
     const handleSetLogScope = (newScope: LogScope) => {

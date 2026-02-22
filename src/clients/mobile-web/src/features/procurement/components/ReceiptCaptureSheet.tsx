@@ -1,13 +1,13 @@
 
 import React, { useState, useRef } from 'react';
 import { Camera, Upload, X, Check, Loader2, AlertTriangle, RefreshCw } from 'lucide-react';
-import { extractReceiptData } from '../../../services/receiptExtractionService';
+import { extractReceiptData } from '../receipt/receiptExtractionClient';
 import { ReceiptExtractionResponse, ProcurementExpense, ExpenseScope, CropProfile, Plot } from '../../../types';
 import { ScopeSelectorRadio } from './ScopeSelectorRadio';
 import { procurementRepository } from '../../../services/procurementRepository';
 import { v4 as uuidv4 } from 'uuid';
-import { getDateKey } from '../../../domain/system/DateKeyService';
-import { financeService } from '../../finance/financeService';
+import { getDateKey } from '../../../core/domain/services/DateKeyService';
+import { financeCommandService } from '../../finance/financeCommandService';
 import { MoneyCategory } from '../../finance/finance.types';
 
 const mapExpenseCategoryToMoneyCategory = (category: string): MoneyCategory => {
@@ -113,7 +113,7 @@ export const ReceiptCaptureSheet: React.FC<Props> = ({ onClose, onSave, crops, a
         procurementRepository.saveExpense(newExpense);
 
         newExpense.lineItems.forEach((item) => {
-            financeService.createMoneyEventFromSource({
+            financeCommandService.createMoneyEventFromSource({
                 type: 'Procurement',
                 sourceId: `${newExpense.id}:${item.id}`,
                 dateTime: new Date(newExpense.date).toISOString(),

@@ -10,16 +10,21 @@ public sealed class TemplateActivity : Entity<Guid>
         Guid id,
         Guid scheduleTemplateId,
         string activityName,
-        int offsetDays)
+        int offsetDays,
+        FrequencyMode frequencyMode,
+        int intervalDays)
         : base(id)
     {
         ScheduleTemplateId = scheduleTemplateId;
         ActivityName = activityName;
         OffsetDays = offsetDays;
+        FrequencyMode = frequencyMode;
+        IntervalDays = intervalDays;
     }
 
     public Guid ScheduleTemplateId { get; private set; }
     public string ActivityName { get; private set; } = string.Empty;
     public int OffsetDays { get; private set; }
+    public FrequencyMode FrequencyMode { get; private set; } = FrequencyMode.OneTime;
+    public int IntervalDays { get; private set; } = 1;
 }
-

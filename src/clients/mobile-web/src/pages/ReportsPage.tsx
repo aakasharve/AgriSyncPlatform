@@ -1,7 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { AppRoute } from '../types';
 import { financeSelectors } from '../features/finance/financeSelectors';
-import { financeService } from '../features/finance/financeService';
 import { FinanceManagerNav } from '../features/finance/components/FinanceManagerNav';
 import { FinanceFilters } from '../features/finance/finance.types';
 import { TrendingUp, TrendingDown, Calendar, Filter, PieChart, Info } from 'lucide-react';
@@ -33,7 +32,7 @@ const ReportsPage: React.FC<ReportsPageProps> = ({ currentRoute, onNavigate }) =
     }, [timeRange]);
 
     const events = useMemo(() => {
-        return financeService.getEffectiveMoneyEvents(filters);
+        return financeSelectors.getEffectiveMoneyEvents(filters);
     }, [filters]);
 
     // Financials

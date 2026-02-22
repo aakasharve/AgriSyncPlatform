@@ -29,7 +29,7 @@ import DailyLogCard from '../../features/logs/components/DailyLogCard';
 import TaskCreationSheet from '../../features/scheduler/components/TaskCreationSheet';
 import { Leaf } from 'lucide-react';
 import { getSegmentVisual } from '../../shared/utils/uiUtils'; // We might need to extract this helper too
-import { getDateKey } from '../../domain/system/DateKeyService';
+import { getDateKey } from '../domain/services/DateKeyService';
 import { buildTimelineEntries } from '../../services/transcriptTimelineService';
 import LogWizardContainer from '../../features/logs/components/wizard/LogWizardContainer';
 import ReviewInboxSheet from '../../features/logs/components/ReviewInboxSheet';
@@ -410,7 +410,7 @@ const AppRouter: React.FC = () => {
 
             {currentRoute === 'settings' && (
                 <div className="animate-in fade-in slide-in-from-right-4 duration-300">
-                    <SettingsPage isDemoMode={isDemoMode} onToggleDemo={setIsDemoMode} defaults={ledgerDefaults} onUpdateDefaults={setLedgerDefaults} mockHistory={mockHistory} crops={crops} />
+                    <SettingsPage defaults={ledgerDefaults} onUpdateDefaults={setLedgerDefaults} crops={crops} />
                 </div>
             )}
 

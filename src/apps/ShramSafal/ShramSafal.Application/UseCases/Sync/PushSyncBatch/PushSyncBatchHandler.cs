@@ -1,18 +1,21 @@
 using System.Text.Json;
 using AgriSync.BuildingBlocks.Abstractions;
 using AgriSync.BuildingBlocks.Results;
+using AgriSync.SharedKernel.Contracts.Roles;
 using ShramSafal.Application.Contracts.Dtos;
 using ShramSafal.Application.Ports;
 using ShramSafal.Application.UseCases.CropCycles.CreateCropCycle;
 using ShramSafal.Application.UseCases.Farms.CreateFarm;
 using ShramSafal.Application.UseCases.Farms.CreatePlot;
 using ShramSafal.Application.UseCases.Finance.AddCostEntry;
+using ShramSafal.Application.UseCases.Finance.AllocateGlobalExpense;
 using ShramSafal.Application.UseCases.Finance.CorrectCostEntry;
 using ShramSafal.Application.UseCases.Finance.SetPriceConfigVersion;
 using ShramSafal.Application.UseCases.Logs.AddLogTask;
 using ShramSafal.Application.UseCases.Logs.CreateDailyLog;
 using ShramSafal.Application.UseCases.Logs.VerifyLog;
 using ShramSafal.Domain.Common;
+using ShramSafal.Domain.Finance;
 using ShramSafal.Domain.Logs;
 
 namespace ShramSafal.Application.UseCases.Sync.PushSyncBatch;
@@ -28,6 +31,7 @@ public sealed class PushSyncBatchHandler(
     VerifyLogHandler verifyLogHandler,
     AddCostEntryHandler addCostEntryHandler,
     CorrectCostEntryHandler correctCostEntryHandler,
+    AllocateGlobalExpenseHandler allocateGlobalExpenseHandler,
     SetPriceConfigVersionHandler setPriceConfigVersionHandler)
 {
     private static readonly JsonSerializerOptions SerializerOptions = new()
@@ -213,6 +217,7 @@ public sealed class PushSyncBatchHandler(
                         request.PlotId,
                         request.CropCycleId,
                         request.OperatorUserId,
+                        request.OperatorUserId,
                         request.LogDate,
                         deviceId,
                         clientRequestId,
@@ -241,24 +246,34 @@ public sealed class PushSyncBatchHandler(
                 return ToOutcome(result);
             }
             case "verify_log":
+            case SyncMutationTypes.VerifyLogV2:
             {
                 var request = DeserializePayload<VerifyLogMutationPayload>(payload);
                 if (request is null)
                 {
-                    return MutationExecutionOutcome.Failure("ShramSafal.SyncInvalidPayload", "Invalid payload for verify_log.");
+                    return MutationExecutionOutcome.Failure("ShramSafal.SyncInvalidPayload", "Invalid payload for verify_log/verify_log_v2.");
                 }
 
-                if (!Enum.TryParse<VerificationStatus>(request.Status, true, out var status))
+                var requestedTargetStatus = request.TargetStatus ?? request.Status;
+                if (string.IsNullOrWhiteSpace(requestedTargetStatus) ||
+                    !Enum.TryParse<VerificationStatus>(requestedTargetStatus, true, out var targetStatus))
                 {
-                    return MutationExecutionOutcome.Failure("ShramSafal.InvalidVerificationStatus", "Status must be Approved or Rejected.");
+                    return MutationExecutionOutcome.Failure(
+                        "ShramSafal.InvalidVerificationStatus",
+                        "targetStatus must be one of: Draft, Confirmed, Verified, Disputed, CorrectionPending.");
                 }
+
+                var parsedCallerRole = Enum.TryParse<AppRole>(request.CallerRole, true, out var callerRole)
+                    ? callerRole
+                    : AppRole.Worker;
 
                 var result = await verifyLogHandler.HandleAsync(
                     new VerifyLogCommand(
                         request.DailyLogId,
-                        status,
+                        targetStatus,
                         request.Reason,
                         request.VerifiedByUserId,
+                        parsedCallerRole,
                         request.VerificationEventId),
                     ct);
 
@@ -304,6 +319,43 @@ public sealed class PushSyncBatchHandler(
                         request.Reason,
                         request.CorrectedByUserId,
                         request.FinanceCorrectionId),
+                    ct);
+
+                return ToOutcome(result);
+            }
+            case SyncMutationTypes.AllocateGlobalExpense:
+            {
+                var request = DeserializePayload<AllocateGlobalExpenseMutationPayload>(payload);
+                if (request is null)
+                {
+                    return MutationExecutionOutcome.Failure(
+                        "ShramSafal.SyncInvalidPayload",
+                        "Invalid payload for allocate_global_expense.");
+                }
+
+                if (!Enum.TryParse<AllocationStrategy>(request.Strategy, true, out var strategy))
+                {
+                    return MutationExecutionOutcome.Failure(
+                        "ShramSafal.InvalidAllocationStrategy",
+                        "strategy must be one of: Equal, ByAcreage, Custom.");
+                }
+
+                if (request.CostEntryIds is null || request.CostEntryIds.Count == 0)
+                {
+                    return MutationExecutionOutcome.Failure(
+                        "ShramSafal.SyncInvalidPayload",
+                        "allocate_global_expense requires one or more costEntryIds.");
+                }
+
+                var result = await allocateGlobalExpenseHandler.HandleAsync(
+                    new AllocateGlobalExpenseCommand(
+                        request.FarmId,
+                        request.RequestedByUserId,
+                        request.DateKey,
+                        request.CostEntryIds,
+                        strategy,
+                        request.CustomAllocations,
+                        request.DayLedgerId),
                     ct);
 
                 return ToOutcome(result);
@@ -411,9 +463,11 @@ public sealed class PushSyncBatchHandler(
     private sealed record VerifyLogMutationPayload(
         Guid? VerificationEventId,
         Guid DailyLogId,
-        string Status,
+        string? Status,
+        string? TargetStatus,
         string? Reason,
-        Guid VerifiedByUserId);
+        Guid VerifiedByUserId,
+        string? CallerRole);
 
     private sealed record AddCostEntryMutationPayload(
         Guid? CostEntryId,
@@ -434,6 +488,15 @@ public sealed class PushSyncBatchHandler(
         string CurrencyCode,
         string Reason,
         Guid CorrectedByUserId);
+
+    private sealed record AllocateGlobalExpenseMutationPayload(
+        Guid? DayLedgerId,
+        Guid FarmId,
+        Guid RequestedByUserId,
+        DateOnly DateKey,
+        IReadOnlyList<Guid> CostEntryIds,
+        string Strategy,
+        IReadOnlyDictionary<Guid, decimal>? CustomAllocations);
 
     private sealed record SetPriceConfigMutationPayload(
         Guid? PriceConfigId,

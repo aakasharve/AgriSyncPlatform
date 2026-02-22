@@ -1,4 +1,5 @@
 using AgriSync.BuildingBlocks.Abstractions;
+using AgriSync.BuildingBlocks.Auth;
 using AgriSync.BuildingBlocks.Results;
 using AgriSync.SharedKernel.Contracts.Ids;
 using ShramSafal.Application.Contracts.Dtos;
@@ -9,10 +10,15 @@ namespace ShramSafal.Application.UseCases.Finance.AddCostEntry;
 
 public sealed class AddCostEntryHandler(
     IShramSafalRepository repository,
+    IAuthorizationEnforcer authorizationEnforcer,
     IIdGenerator idGenerator,
     IClock clock)
 {
-    public async Task<Result<CostEntryDto>> HandleAsync(AddCostEntryCommand command, CancellationToken ct = default)
+    private const int DuplicateWindowMinutes = 120;
+    private const decimal HighAmountThreshold = 25000m;
+    private const string HighAmountFlagReason = "High amount: >= 25000 INR";
+
+    public async Task<Result<AddCostEntryResultDto>> HandleAsync(AddCostEntryCommand command, CancellationToken ct = default)
     {
         var farmId = new FarmId(command.FarmId);
 
@@ -21,26 +27,28 @@ public sealed class AddCostEntryHandler(
             string.IsNullOrWhiteSpace(command.Category) ||
             command.Amount <= 0)
         {
-            return Result.Failure<CostEntryDto>(ShramSafalErrors.InvalidCommand);
+            return Result.Failure<AddCostEntryResultDto>(ShramSafalErrors.InvalidCommand);
         }
 
         if (command.CostEntryId.HasValue && command.CostEntryId.Value == Guid.Empty)
         {
-            return Result.Failure<CostEntryDto>(ShramSafalErrors.InvalidCommand);
+            return Result.Failure<AddCostEntryResultDto>(ShramSafalErrors.InvalidCommand);
         }
 
         var farm = await repository.GetFarmByIdAsync(command.FarmId, ct);
         if (farm is null)
         {
-            return Result.Failure<CostEntryDto>(ShramSafalErrors.FarmNotFound);
+            return Result.Failure<AddCostEntryResultDto>(ShramSafalErrors.FarmNotFound);
         }
+
+        await authorizationEnforcer.EnsureIsFarmMember(new UserId(command.CreatedByUserId), farmId);
 
         if (command.PlotId is not null)
         {
             var plot = await repository.GetPlotByIdAsync(command.PlotId.Value, ct);
             if (plot is null || plot.FarmId != farmId)
             {
-                return Result.Failure<CostEntryDto>(ShramSafalErrors.PlotNotFound);
+                return Result.Failure<AddCostEntryResultDto>(ShramSafalErrors.PlotNotFound);
             }
         }
 
@@ -49,12 +57,13 @@ public sealed class AddCostEntryHandler(
             var cropCycle = await repository.GetCropCycleByIdAsync(command.CropCycleId.Value, ct);
             if (cropCycle is null || cropCycle.FarmId != farmId)
             {
-                return Result.Failure<CostEntryDto>(ShramSafalErrors.CropCycleNotFound);
+                return Result.Failure<AddCostEntryResultDto>(ShramSafalErrors.CropCycleNotFound);
             }
         }
 
+        var candidateId = command.CostEntryId ?? idGenerator.New();
         var entry = Domain.Finance.CostEntry.Create(
-            command.CostEntryId ?? idGenerator.New(),
+            candidateId,
             command.FarmId,
             command.PlotId,
             command.CropCycleId,
@@ -66,9 +75,26 @@ public sealed class AddCostEntryHandler(
             command.CreatedByUserId,
             clock.UtcNow);
 
+        var duplicateCandidates = await repository.GetCostEntriesForDuplicateCheck(
+            farmId,
+            command.PlotId,
+            command.Category,
+            clock.UtcNow.AddMinutes(-DuplicateWindowMinutes),
+            ct);
+
+        var isPotentialDuplicate = Domain.Finance.DuplicateDetector.IsPotentialDuplicate(
+            duplicateCandidates,
+            entry,
+            DuplicateWindowMinutes);
+
+        if (entry.Amount >= HighAmountThreshold)
+        {
+            entry.Flag(HighAmountFlagReason);
+        }
+
         await repository.AddCostEntryAsync(entry, ct);
         await repository.SaveChangesAsync(ct);
 
-        return Result.Success(entry.ToDto());
+        return Result.Success(new AddCostEntryResultDto(entry.ToDto(), isPotentialDuplicate));
     }
 }

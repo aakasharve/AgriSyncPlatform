@@ -62,6 +62,7 @@ internal sealed class DailyLogConfiguration : IEntityTypeConfiguration<DailyLog>
         builder.Navigation(x => x.Tasks).UsePropertyAccessMode(PropertyAccessMode.Field);
         builder.Navigation(x => x.VerificationEvents).UsePropertyAccessMode(PropertyAccessMode.Field);
 
+        builder.Ignore(x => x.CurrentVerificationStatus);
         builder.Ignore(x => x.LastVerificationStatus);
         builder.Ignore(x => x.DomainEvents);
     }

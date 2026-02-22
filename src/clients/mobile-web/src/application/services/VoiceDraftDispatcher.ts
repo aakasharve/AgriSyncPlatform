@@ -1,4 +1,4 @@
-import { AgriLogResponse } from '../../domain/ai/contracts/AgriLogResponseSchema';
+import { AgriLogResponse } from '../../types';
 import { LogProvenance } from '../../domain/ai/LogProvenance';
 
 export interface VoiceDraftEvent {
@@ -46,4 +46,3 @@ export class VoiceDraftDispatcher {
         };
     }
 }
-

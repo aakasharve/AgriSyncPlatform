@@ -1,7 +1,5 @@
 /**
  * Domain Context Layer
  *
- * Contains canonical selectors for accessing farm/log context.
+ * Selectors moved to application/selectors/ContextSelectors.ts
  */
-
-export * from './selectors';

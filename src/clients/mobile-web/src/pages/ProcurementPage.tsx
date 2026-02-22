@@ -9,7 +9,7 @@ import { ExpenseCard } from '../features/procurement/components/ExpenseCard';
 import { ReceiptCaptureSheet } from '../features/procurement/components/ReceiptCaptureSheet';
 import { MoneyLensDrawer } from '../features/finance/components/MoneyLensDrawer';
 import { FinanceFilters, MoneyCategory } from '../features/finance/finance.types';
-import { financeService } from '../features/finance/financeService';
+import { financeCommandService } from '../features/finance/financeCommandService';
 
 const mapExpenseCategoryToMoneyCategory = (category: string): MoneyCategory => {
     if (category === 'LABOUR') return 'Labour';
@@ -58,7 +58,7 @@ const ProcurementPage: React.FC<Props> = ({ crops = [] }) => {
         const all = procurementRepository.getExpenses();
         all.forEach(expense => {
             expense.lineItems.forEach(item => {
-                financeService.createMoneyEventFromSource({
+                financeCommandService.createMoneyEventFromSource({
                     type: 'Procurement',
                     sourceId: `${expense.id}:${item.id}`,
                     dateTime: new Date(expense.date).toISOString(),

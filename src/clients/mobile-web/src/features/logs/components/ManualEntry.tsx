@@ -23,11 +23,10 @@ import {
     LogTimelineEntry, PlannedTask, DailyLog, UnclearReason
 } from '../../../types';
 import { BucketIssue } from '../../../domain/types/log.types';
-import { getCropById, getPhaseAndDay } from '../../../data/farmData';
 import UnclearSegmentCard from '../../../shared/components/ui/UnclearSegmentCard';
 import { UnclearSegment } from '../../logs/logs.types';
-import { loadVocabDB, addApprovedMapping } from '../../../services/vocabLearner';
-import { getDateKey } from '../../../domain/system/DateKeyService';
+import { loadVocabDB, addApprovedMapping } from '../../voice/vocab/vocabStore';
+import { getDateKey } from '../../../core/domain/services/DateKeyService';
 
 
 

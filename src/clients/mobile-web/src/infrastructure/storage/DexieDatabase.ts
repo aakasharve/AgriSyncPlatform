@@ -2,7 +2,8 @@
  * DexieDatabase — DFES V2 Storage Layer
  *
  * IndexedDB-backed database using Dexie.js.
- * 6 tables: logs, outbox, mutationQueue, auditEvents, syncCursors, appMeta.
+ * 8 tables: logs, outbox, mutationQueue, auditEvents, syncCursors, appMeta,
+ * dayLedgers, plannedTasks.
  *
  * Replaces localStorage for:
  * - Larger storage capacity (no 5MB limit)
@@ -87,6 +88,26 @@ export interface AppMetaEntry {
 }
 
 // =============================================================================
+// SYNC CACHE TABLES
+// =============================================================================
+
+export interface DayLedgerCacheRecord {
+    id: string;
+    farmId: string;
+    dateKey: string;
+    payload: unknown;
+    updatedAt: string;
+}
+
+export interface PlannedTaskCacheRecord {
+    id: string;
+    cropCycleId: string;
+    plannedDate: string;
+    payload: unknown;
+    updatedAt: string;
+}
+
+// =============================================================================
 // VERSIONED LOG RECORD
 // =============================================================================
 
@@ -118,6 +139,8 @@ export class AgriLogDatabase extends Dexie {
     auditEvents!: Table<AuditEvent, string>;
     syncCursors!: Table<SyncCursor, string>;
     appMeta!: Table<AppMetaEntry, string>;
+    dayLedgers!: Table<DayLedgerCacheRecord, string>;
+    plannedTasks!: Table<PlannedTaskCacheRecord, string>;
 
     constructor() {
         super('AgriLogDB');
@@ -146,6 +169,17 @@ export class AgriLogDatabase extends Dexie {
             auditEvents: 'id, resourceId, action, timestamp, [resourceId+timestamp]',
             syncCursors: 'tableName',
             appMeta: 'key',
+        });
+
+        this.version(3).stores({
+            logs: 'id, date, verificationStatus, createdByOperatorId, isDeleted, [date+isDeleted], [createdByOperatorId+isDeleted]',
+            outbox: '++id, idempotencyKey, status, action, [status+createdAt]',
+            mutationQueue: '++id, &[deviceId+clientRequestId], status, mutationType, createdAt, [status+createdAt]',
+            auditEvents: 'id, resourceId, action, timestamp, [resourceId+timestamp]',
+            syncCursors: 'tableName',
+            appMeta: 'key',
+            dayLedgers: 'id, farmId, dateKey, [farmId+dateKey]',
+            plannedTasks: 'id, cropCycleId, plannedDate, [cropCycleId+plannedDate]',
         });
     }
 }

@@ -6,8 +6,8 @@ import Step3_GrowthStages from './steps/Step3_GrowthStages';
 import SlidingCropSelector from '../../../context/components/SlidingCropSelector';
 import ScheduleSelector from '../ScheduleSelector';
 import { Save, CheckCircle2, Sprout, Plus, MapPin, ArrowRight, BookOpen } from 'lucide-react';
-import { getDaysSinceStart } from '../../../../domain/planning/PlanEngine';
-import { getDateKey } from '../../../../domain/system/DateKeyService';
+import { getDaysSinceStart } from '../../../../features/scheduler/planning/ClientPlanEngine';
+import { getDateKey } from '../../../../core/domain/services/DateKeyService';
 
 interface ScheduleMakerProps {
     crops: CropProfile[];
