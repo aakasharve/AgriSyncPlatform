@@ -14,6 +14,7 @@ import { useLogContext } from './context/LogContext';
 import { GeminiClient } from '../infrastructure/ai/GeminiClient';
 import { weatherService } from '../infrastructure/weather/TomorrowIoWeatherService';
 import { VoiceDraftDispatcher } from '../application/services/VoiceDraftDispatcher';
+import { createDeviceServices } from '../infrastructure/device';
 
 export interface AgriLogAppConfig {
     initialCrops: CropProfile[];
@@ -54,6 +55,7 @@ export const useAgriLogApp = ({ initialCrops }: AgriLogAppConfig) => {
     // --- INFRASTRUCTURE ---
     const parser = useMemo(() => new GeminiClient(), []);
     const voiceDraftDispatcher = useMemo(() => new VoiceDraftDispatcher(), []);
+    const deviceServices = useMemo(() => createDeviceServices(), []);
 
     // --- 4. VOICE RECORDER (Producer) ---
     const voice = useVoiceRecorder({
@@ -145,6 +147,7 @@ export const useAgriLogApp = ({ initialCrops }: AgriLogAppConfig) => {
         weather,
         commands,
         trust,
+        device: deviceServices,
 
         // UI Globals
         toast,

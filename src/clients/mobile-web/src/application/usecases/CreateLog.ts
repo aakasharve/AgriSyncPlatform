@@ -2,6 +2,7 @@ import { CropProfile, DailyLog, FarmerProfile, LogScope } from '../../types';
 import { LogsRepository, VoiceParseResult, WeatherPort } from '../ports';
 import { mutationQueue } from '../../infrastructure/sync/MutationQueue';
 import { backgroundSyncWorker } from '../../infrastructure/sync/BackgroundSyncWorker';
+import { captureLocation } from '../use-cases/CaptureLocation';
 
 export interface CreateLogsFromManualInput {
     formData: any;
@@ -51,6 +52,7 @@ export async function createLogsFromManualEntry(
 ): Promise<CreateLogsResult> {
     try {
         const farmId = tryExtractFarmId(input.crops);
+        const location = await captureLocation();
 
         await mutationQueue.enqueue('create_daily_log', {
             farmId,
@@ -61,6 +63,7 @@ export async function createLogsFromManualEntry(
             capturedAtUtc: new Date().toISOString(),
             source: 'manual',
             draft: input.formData,
+            location,
         });
 
         await triggerSyncBestEffort();
@@ -85,6 +88,7 @@ export async function createLogsFromVoiceResult(
 ): Promise<CreateLogsResult> {
     try {
         const farmId = tryExtractFarmId(input.crops);
+        const location = await captureLocation();
 
         await mutationQueue.enqueue('create_daily_log', {
             farmId,
@@ -97,6 +101,7 @@ export async function createLogsFromVoiceResult(
             draft: input.voiceResult.data,
             provenance: input.voiceResult.provenance,
             rawTranscript: input.voiceResult.rawTranscript,
+            location,
         });
 
         await triggerSyncBestEffort();

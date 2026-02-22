@@ -1,6 +1,7 @@
 using AgriSync.BuildingBlocks.Domain;
 using AgriSync.SharedKernel.Contracts.Ids;
 using ShramSafal.Domain.Events;
+using ShramSafal.Domain.Location;
 
 namespace ShramSafal.Domain.Finance;
 
@@ -51,6 +52,7 @@ public sealed class CostEntry : Entity<Guid>
     public bool IsCorrected { get; private set; }
     public bool IsFlagged { get; private set; }
     public string? FlagReason { get; private set; }
+    public LocationSnapshot? Location { get; private set; }
 
     public static CostEntry Create(
         Guid id,
@@ -128,5 +130,17 @@ public sealed class CostEntry : Entity<Guid>
             correctionId,
             correctedAmount,
             currencyCode));
+    }
+
+    public void AttachLocation(LocationSnapshot location)
+    {
+        ArgumentNullException.ThrowIfNull(location);
+
+        if (Location is not null)
+        {
+            throw new InvalidOperationException("Location is immutable once attached.");
+        }
+
+        Location = location;
     }
 }

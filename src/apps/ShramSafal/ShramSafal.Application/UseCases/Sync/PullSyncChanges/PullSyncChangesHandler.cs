@@ -21,6 +21,7 @@ public sealed class PullSyncChangesHandler(
         var costEntries = await repository.GetCostEntriesChangedSinceAsync(sinceUtc, ct);
         var financeCorrections = await repository.GetFinanceCorrectionsChangedSinceAsync(sinceUtc, ct);
         var priceConfigs = await repository.GetPriceConfigsChangedSinceAsync(sinceUtc, ct);
+        var attachments = await repository.GetAttachmentsChangedSinceAsync(sinceUtc, ct);
         var dayLedgers = await repository.GetDayLedgersChangedSinceAsync(sinceUtc, ct);
         var plannedActivities = await repository.GetPlannedActivitiesChangedSinceAsync(sinceUtc, ct);
 
@@ -33,6 +34,7 @@ public sealed class PullSyncChangesHandler(
             costEntries,
             financeCorrections,
             priceConfigs,
+            attachments,
             dayLedgers,
             plannedActivities);
 
@@ -46,6 +48,10 @@ public sealed class PullSyncChangesHandler(
             costEntries.Select(c => c.ToDto()).ToList(),
             financeCorrections.Select(c => c.ToDto()).ToList(),
             priceConfigs.Select(c => c.ToDto()).ToList(),
+            attachments
+                .Where(attachment => attachment.Status == Domain.Attachments.AttachmentStatus.Finalized)
+                .Select(attachment => attachment.ToDto())
+                .ToList(),
             dayLedgers.Select(c => c.ToDto()).ToList(),
             plannedActivities.Select(a => a.ToDto()).ToList());
 
@@ -83,6 +89,7 @@ public sealed class PullSyncChangesHandler(
         IReadOnlyList<Domain.Finance.CostEntry> costEntries,
         IReadOnlyList<Domain.Finance.FinanceCorrection> financeCorrections,
         IReadOnlyList<Domain.Finance.PriceConfig> priceConfigs,
+        IReadOnlyList<Domain.Attachments.Attachment> attachments,
         IReadOnlyList<Domain.Finance.DayLedger> dayLedgers,
         IReadOnlyList<Domain.Planning.PlannedActivity> plannedActivities)
     {
@@ -130,6 +137,15 @@ public sealed class PullSyncChangesHandler(
         if (priceConfigs.Count > 0)
         {
             maxTimestamp = Max(maxTimestamp, priceConfigs.Max(c => c.CreatedAtUtc));
+        }
+
+        foreach (var attachment in attachments)
+        {
+            maxTimestamp = Max(maxTimestamp, attachment.CreatedAtUtc);
+            if (attachment.FinalizedAtUtc.HasValue)
+            {
+                maxTimestamp = Max(maxTimestamp, attachment.FinalizedAtUtc.Value);
+            }
         }
 
         if (dayLedgers.Count > 0)

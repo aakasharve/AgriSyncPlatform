@@ -136,6 +136,103 @@ public sealed class SyncEndpointsTests
         Assert.Empty(thirdFarms);
     }
 
+    [Fact]
+    public async Task PushCreateDailyLog_WithLocation_PullIncludesLocation()
+    {
+        await using var harness = await TestHarness.CreateAsync();
+
+        var ownerId = Guid.NewGuid();
+        var farmId = Guid.NewGuid();
+        var plotId = Guid.NewGuid();
+        var cropCycleId = Guid.NewGuid();
+        var dailyLogId = Guid.NewGuid();
+
+        var push = await harness.Client.PostAsJsonAsync("/sync/push", new
+        {
+            deviceId = "device-location-a",
+            mutations = new object[]
+            {
+                new
+                {
+                    clientRequestId = "req-location-farm",
+                    mutationType = "create_farm",
+                    payload = new
+                    {
+                        farmId,
+                        name = "Location Farm",
+                        ownerUserId = ownerId
+                    }
+                },
+                new
+                {
+                    clientRequestId = "req-location-plot",
+                    mutationType = "create_plot",
+                    payload = new
+                    {
+                        plotId,
+                        farmId,
+                        name = "Plot A",
+                        areaInAcres = 2.5m
+                    }
+                },
+                new
+                {
+                    clientRequestId = "req-location-cycle",
+                    mutationType = "create_crop_cycle",
+                    payload = new
+                    {
+                        cropCycleId,
+                        farmId,
+                        plotId,
+                        cropName = "Tomato",
+                        stage = "Sowing",
+                        startDate = "2026-02-01",
+                        endDate = (string?)null
+                    }
+                },
+                new
+                {
+                    clientRequestId = "req-location-log",
+                    mutationType = "create_daily_log",
+                    payload = new
+                    {
+                        dailyLogId,
+                        farmId,
+                        plotId,
+                        cropCycleId,
+                        operatorUserId = ownerId,
+                        logDate = "2026-02-22",
+                        location = new
+                        {
+                            latitude = 18.5204m,
+                            longitude = 73.8567m,
+                            accuracyMeters = 10.0m,
+                            altitude = 560.5m,
+                            capturedAtUtc = "2026-02-22T10:00:00Z",
+                            provider = "gps",
+                            permissionState = "granted"
+                        }
+                    }
+                }
+            }
+        });
+
+        push.EnsureSuccessStatusCode();
+
+        var pull = await harness.Client.GetAsync($"/sync/pull?since={Uri.EscapeDataString(DateTime.UnixEpoch.ToString("O"))}");
+        pull.EnsureSuccessStatusCode();
+
+        using var pullDoc = JsonDocument.Parse(await pull.Content.ReadAsStringAsync());
+        var targetLog = pullDoc.RootElement.GetProperty("dailyLogs")
+            .EnumerateArray()
+            .FirstOrDefault(item => item.TryGetProperty("id", out var id) && id.GetGuid() == dailyLogId);
+
+        Assert.Equal(JsonValueKind.Object, targetLog.ValueKind);
+        Assert.True(targetLog.TryGetProperty("location", out var location));
+        Assert.Equal(18.5204m, location.GetProperty("latitude").GetDecimal());
+        Assert.Equal("gps", location.GetProperty("provider").GetString());
+    }
+
     private static async Task PushCreateFarmAsync(
         HttpClient client,
         string deviceId,

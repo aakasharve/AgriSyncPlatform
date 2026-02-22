@@ -1,10 +1,12 @@
 using Microsoft.EntityFrameworkCore;
 using AgriSync.SharedKernel.Contracts.Ids;
 using ShramSafal.Application.Ports;
+using ShramSafal.Domain.Attachments;
 using ShramSafal.Domain.Crops;
 using ShramSafal.Domain.Farms;
 using ShramSafal.Domain.Finance;
 using ShramSafal.Domain.Logs;
+using ShramSafal.Domain.OCR;
 using ShramSafal.Domain.Planning;
 
 namespace ShramSafal.Infrastructure.Persistence.Repositories;
@@ -72,6 +74,24 @@ internal sealed class ShramSafalRepository(ShramSafalDbContext db) : IShramSafal
             .FirstOrDefaultAsync(l => l.IdempotencyKey == idempotencyKey, ct);
     }
 
+    public async Task<List<DailyLog>> GetDailyLogsForFarmByDateRangeAsync(
+        Guid farmId,
+        DateOnly fromDate,
+        DateOnly toDate,
+        CancellationToken ct = default)
+    {
+        var typedFarmId = new FarmId(farmId);
+
+        return await db.DailyLogs
+            .AsNoTracking()
+            .Include(l => l.Tasks)
+            .Include(l => l.VerificationEvents)
+            .Where(l => l.FarmId == typedFarmId && l.LogDate >= fromDate && l.LogDate <= toDate)
+            .OrderBy(l => l.LogDate)
+            .ThenBy(l => l.CreatedAtUtc)
+            .ToListAsync(ct);
+    }
+
     public async Task AddCostEntryAsync(CostEntry costEntry, CancellationToken ct = default)
     {
         await db.CostEntries.AddAsync(costEntry, ct);
@@ -111,6 +131,22 @@ internal sealed class ShramSafalRepository(ShramSafalDbContext db) : IShramSafal
             .ToListAsync(ct);
     }
 
+    public async Task<List<CostEntry>> GetCostEntriesForFarmByDateRangeAsync(
+        Guid farmId,
+        DateOnly fromDate,
+        DateOnly toDate,
+        CancellationToken ct = default)
+    {
+        var typedFarmId = new FarmId(farmId);
+
+        return await db.CostEntries
+            .AsNoTracking()
+            .Where(entry => entry.FarmId == typedFarmId && entry.EntryDate >= fromDate && entry.EntryDate <= toDate)
+            .OrderBy(entry => entry.EntryDate)
+            .ThenBy(entry => entry.CreatedAtUtc)
+            .ToListAsync(ct);
+    }
+
     public async Task AddFinanceCorrectionAsync(FinanceCorrection correction, CancellationToken ct = default)
     {
         await db.FinanceCorrections.AddAsync(correction, ct);
@@ -140,6 +176,66 @@ internal sealed class ShramSafalRepository(ShramSafalDbContext db) : IShramSafal
     public async Task AddPriceConfigAsync(PriceConfig config, CancellationToken ct = default)
     {
         await db.PriceConfigs.AddAsync(config, ct);
+    }
+
+    public async Task AddAttachmentAsync(Attachment attachment, CancellationToken ct = default)
+    {
+        await db.Attachments.AddAsync(attachment, ct);
+    }
+
+    public async Task<Attachment?> GetAttachmentByIdAsync(Guid id, CancellationToken ct = default)
+    {
+        return await db.Attachments.FirstOrDefaultAsync(a => a.Id == id, ct);
+    }
+
+    public async Task<List<Attachment>> GetAttachmentsByEntityAsync(Guid entityId, string entityType, CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(entityType))
+        {
+            return [];
+        }
+
+        var normalizedType = entityType.Trim();
+        return await db.Attachments
+            .Where(a => a.LinkedEntityId == entityId && a.LinkedEntityType == normalizedType)
+            .OrderByDescending(a => a.CreatedAtUtc)
+            .ToListAsync(ct);
+    }
+
+    public async Task<List<Attachment>> GetAttachmentsByFarmAsync(Guid farmId, int limit, int offset, CancellationToken ct = default)
+    {
+        var normalizedLimit = Math.Clamp(limit <= 0 ? 50 : limit, 1, 200);
+        var normalizedOffset = Math.Max(0, offset);
+        var typedFarmId = new FarmId(farmId);
+
+        return await db.Attachments
+            .Where(a => a.FarmId == typedFarmId)
+            .OrderByDescending(a => a.CreatedAtUtc)
+            .Skip(normalizedOffset)
+            .Take(normalizedLimit)
+            .ToListAsync(ct);
+    }
+
+    public async Task<List<Attachment>> GetPendingAttachmentsAsync(Guid farmId, CancellationToken ct = default)
+    {
+        var typedFarmId = new FarmId(farmId);
+        return await db.Attachments
+            .Where(a => a.FarmId == typedFarmId && a.Status != AttachmentStatus.Finalized)
+            .OrderBy(a => a.CreatedAtUtc)
+            .ToListAsync(ct);
+    }
+
+    public async Task AddOcrResultAsync(OcrResult result, CancellationToken ct = default)
+    {
+        await db.OcrResults.AddAsync(result, ct);
+    }
+
+    public async Task<OcrResult?> GetOcrResultByAttachmentIdAsync(Guid attachmentId, CancellationToken ct = default)
+    {
+        return await db.OcrResults
+            .Where(result => result.AttachmentId == attachmentId)
+            .OrderByDescending(result => result.CreatedAtUtc)
+            .FirstOrDefaultAsync(ct);
     }
 
     public async Task AddScheduleTemplateAsync(ScheduleTemplate template, CancellationToken ct = default)
@@ -291,6 +387,17 @@ internal sealed class ShramSafalRepository(ShramSafalDbContext db) : IShramSafal
             .AsNoTracking()
             .Where(a => a.CreatedAtUtc > sinceUtc)
             .OrderBy(a => a.CreatedAtUtc)
+            .ToListAsync(ct);
+    }
+
+    public async Task<List<Attachment>> GetAttachmentsChangedSinceAsync(DateTime sinceUtc, CancellationToken ct = default)
+    {
+        return await db.Attachments
+            .AsNoTracking()
+            .Where(attachment =>
+                attachment.CreatedAtUtc > sinceUtc ||
+                (attachment.FinalizedAtUtc.HasValue && attachment.FinalizedAtUtc.Value > sinceUtc))
+            .OrderBy(attachment => attachment.CreatedAtUtc)
             .ToListAsync(ct);
     }
 

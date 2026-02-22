@@ -2,8 +2,8 @@
  * DexieDatabase — DFES V2 Storage Layer
  *
  * IndexedDB-backed database using Dexie.js.
- * 8 tables: logs, outbox, mutationQueue, auditEvents, syncCursors, appMeta,
- * dayLedgers, plannedTasks.
+ * 10 tables: logs, outbox, mutationQueue, auditEvents, syncCursors, appMeta,
+ * dayLedgers, plannedTasks, attachments, uploadQueue.
  *
  * Replaces localStorage for:
  * - Larger storage capacity (no 5MB limit)
@@ -87,6 +87,15 @@ export interface AppMetaEntry {
     updatedAt: string;
 }
 
+export type GpsConsentDecision = 'granted' | 'denied' | 'later';
+
+export interface GpsConsentMetaValue {
+    askedAt: string;
+    decision: GpsConsentDecision;
+}
+
+export const GPS_CONSENT_META_KEY = 'gps_consent';
+
 // =============================================================================
 // SYNC CACHE TABLES
 // =============================================================================
@@ -104,6 +113,43 @@ export interface PlannedTaskCacheRecord {
     cropCycleId: string;
     plannedDate: string;
     payload: unknown;
+    updatedAt: string;
+}
+
+// =============================================================================
+// ATTACHMENTS CACHE + UPLOAD QUEUE
+// =============================================================================
+
+export type AttachmentStatus = 'pending' | 'uploading' | 'finalized' | 'failed';
+
+export interface AttachmentRecord {
+    id: string;
+    farmId: string;
+    linkedEntityId?: string;
+    linkedEntityType?: string;
+    localPath: string;
+    status: AttachmentStatus;
+    fileName: string;
+    mimeType: string;
+    sizeBytes: number;
+    serverAttachmentId?: string;
+    storagePath?: string;
+    uploadedByUserId?: string;
+    createdAtUtc: string;
+    finalizedAtUtc?: string;
+    updatedAt: string;
+    lastError?: string;
+}
+
+export type UploadQueueStatus = 'pending' | 'uploading' | 'completed' | 'failed';
+
+export interface UploadQueueItem {
+    autoId?: number;
+    attachmentId: string;
+    status: UploadQueueStatus;
+    retryCount: number;
+    lastAttemptAt?: string;
+    createdAt: string;
     updatedAt: string;
 }
 
@@ -141,6 +187,8 @@ export class AgriLogDatabase extends Dexie {
     appMeta!: Table<AppMetaEntry, string>;
     dayLedgers!: Table<DayLedgerCacheRecord, string>;
     plannedTasks!: Table<PlannedTaskCacheRecord, string>;
+    attachments!: Table<AttachmentRecord, string>;
+    uploadQueue!: Table<UploadQueueItem, number>;
 
     constructor() {
         super('AgriLogDB');
@@ -180,6 +228,19 @@ export class AgriLogDatabase extends Dexie {
             appMeta: 'key',
             dayLedgers: 'id, farmId, dateKey, [farmId+dateKey]',
             plannedTasks: 'id, cropCycleId, plannedDate, [cropCycleId+plannedDate]',
+        });
+
+        this.version(4).stores({
+            logs: 'id, date, verificationStatus, createdByOperatorId, isDeleted, [date+isDeleted], [createdByOperatorId+isDeleted]',
+            outbox: '++id, idempotencyKey, status, action, [status+createdAt]',
+            mutationQueue: '++id, &[deviceId+clientRequestId], status, mutationType, createdAt, [status+createdAt]',
+            auditEvents: 'id, resourceId, action, timestamp, [resourceId+timestamp]',
+            syncCursors: 'tableName',
+            appMeta: 'key',
+            dayLedgers: 'id, farmId, dateKey, [farmId+dateKey]',
+            plannedTasks: 'id, cropCycleId, plannedDate, [cropCycleId+plannedDate]',
+            attachments: 'id, farmId, linkedEntityId, linkedEntityType, localPath, status, serverAttachmentId, [linkedEntityId+linkedEntityType], [status+updatedAt]',
+            uploadQueue: '++autoId, attachmentId, status, retryCount, lastAttemptAt',
         });
     }
 }

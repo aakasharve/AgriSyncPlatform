@@ -13,6 +13,17 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@capacitor/android": "^8.1.0",
+    "@capacitor/app": "^8.0.1",
+    "@capacitor/camera": "^8.0.1",
+    "@capacitor/cli": "^8.1.0",
+    "@capacitor/core": "^8.1.0",
+    "@capacitor/filesystem": "^8.1.2",
+    "@capacitor/geolocation": "^8.1.0",
+    "@capacitor/haptics": "^8.0.0",
+    "@capacitor/network": "^8.0.1",
+    "@capacitor/share": "^8.0.1",
+    "@capacitor/status-bar": "^8.0.1",
     "@google/genai": "^1.30.0",
     "@react-google-maps/api": "^2.20.8",
     "@types/react-router-dom": "^5.3.3",

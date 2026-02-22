@@ -1,8 +1,10 @@
 using Microsoft.EntityFrameworkCore;
+using ShramSafal.Domain.Attachments;
 using ShramSafal.Domain.Crops;
 using ShramSafal.Domain.Farms;
 using ShramSafal.Domain.Finance;
 using ShramSafal.Domain.Logs;
+using ShramSafal.Domain.OCR;
 using ShramSafal.Domain.Planning;
 
 namespace ShramSafal.Infrastructure.Persistence;
@@ -19,6 +21,8 @@ public sealed class ShramSafalDbContext(DbContextOptions<ShramSafalDbContext> op
     public DbSet<FinanceCorrection> FinanceCorrections => Set<FinanceCorrection>();
     public DbSet<DayLedger> DayLedgers => Set<DayLedger>();
     public DbSet<PriceConfig> PriceConfigs => Set<PriceConfig>();
+    public DbSet<Attachment> Attachments => Set<Attachment>();
+    public DbSet<OcrResult> OcrResults => Set<OcrResult>();
     public DbSet<ScheduleTemplate> ScheduleTemplates => Set<ScheduleTemplate>();
     public DbSet<TemplateActivity> TemplateActivities => Set<TemplateActivity>();
     public DbSet<PlannedActivity> PlannedActivities => Set<PlannedActivity>();

@@ -6,6 +6,17 @@ import type { SyncMutationType } from '../api/AgriSyncClient';
 const DEVICE_ID_KEY = 'agrisync_device_id_v1';
 const SYNC_SCOPE = 'shramsafal';
 const LAST_PULL_META_KEY = 'shramsafal_last_pull_payload';
+
+export interface SyncLocationPayload {
+    latitude: number;
+    longitude: number;
+    accuracyMeters: number;
+    altitude?: number;
+    capturedAtUtc: string;
+    provider: 'gps' | 'network' | 'fused' | 'unknown';
+    permissionState: 'granted' | 'denied' | 'prompt';
+}
+
 const SUPPORTED_MUTATION_TYPES: ReadonlySet<SyncMutationType> = new Set([
     'create_farm',
     'create_plot',
@@ -18,6 +29,7 @@ const SUPPORTED_MUTATION_TYPES: ReadonlySet<SyncMutationType> = new Set([
     'correct_cost_entry',
     'allocate_global_expense',
     'set_price_config',
+    'create_attachment',
 ]);
 
 function normalizeMutationType(mutationType: string): SyncMutationType {
@@ -27,6 +39,32 @@ function normalizeMutationType(mutationType: string): SyncMutationType {
     }
 
     return normalized as SyncMutationType;
+}
+
+function ensureLocationField(payload: unknown): unknown {
+    if (payload === null || typeof payload !== 'object' || Array.isArray(payload)) {
+        return payload;
+    }
+
+    const candidate = payload as Record<string, unknown>;
+    if (Object.prototype.hasOwnProperty.call(candidate, 'location')) {
+        return payload;
+    }
+
+    return {
+        ...candidate,
+        location: null,
+    };
+}
+
+function normalizePayloadForMutation(mutationType: SyncMutationType, payload: unknown): unknown {
+    switch (mutationType) {
+        case 'create_daily_log':
+        case 'add_cost_entry':
+            return ensureLocationField(payload);
+        default:
+            return payload;
+    }
 }
 
 function getOrCreateDeviceId(): string {
@@ -70,12 +108,13 @@ export class MutationQueue {
         const clientRequestId = options?.clientRequestId ?? idGenerator.generate();
         const now = systemClock.nowISO();
         const normalizedMutationType = normalizeMutationType(mutationType);
+        const normalizedPayload = normalizePayloadForMutation(normalizedMutationType, payload);
 
         const record: MutationQueueItem = {
             deviceId,
             clientRequestId,
             mutationType: normalizedMutationType,
-            payload,
+            payload: normalizedPayload,
             status: 'PENDING',
             createdAt: now,
             updatedAt: now,

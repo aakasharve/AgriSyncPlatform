@@ -11,4 +11,5 @@ public sealed record DailyLogDto(
     DateTime CreatedAtUtc,
     string VerificationStatus,
     IReadOnlyList<LogTaskDto> Tasks,
-    IReadOnlyList<VerificationEventDto> VerificationEvents);
+    IReadOnlyList<VerificationEventDto> VerificationEvents,
+    LocationDto? Location);

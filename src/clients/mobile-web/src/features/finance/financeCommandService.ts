@@ -76,6 +76,7 @@ export const financeCommandService = {
             currencyCode: 'INR',
             entryDate: toDateKey(event.dateTime),
             createdByUserId: event.createdByUserId,
+            location: null,
         });
         triggerSyncBestEffort();
 
