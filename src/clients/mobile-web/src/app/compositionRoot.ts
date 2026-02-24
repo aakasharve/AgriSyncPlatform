@@ -11,9 +11,10 @@ import { useLogCommands } from './hooks/useLogCommands';
 import { useVoiceRecorder } from '../features/voice/useVoiceRecorder';
 import { useWeatherMonitor } from '../features/weather/useWeatherMonitor';
 import { useLogContext } from './context/LogContext';
-import { GeminiClient } from '../infrastructure/ai/GeminiClient';
+import { BackendAiClient } from '../infrastructure/ai/BackendAiClient';
 import { weatherService } from '../infrastructure/weather/TomorrowIoWeatherService';
 import { VoiceDraftDispatcher } from '../application/services/VoiceDraftDispatcher';
+import { VoicePreprocessor } from '../infrastructure/voice/VoicePreprocessor';
 
 export interface AgriLogAppConfig {
     initialCrops: CropProfile[];
@@ -52,8 +53,9 @@ export const useAgriLogApp = ({ initialCrops }: AgriLogAppConfig) => {
     });
 
     // --- INFRASTRUCTURE ---
-    const parser = useMemo(() => new GeminiClient(), []);
+    const parser = useMemo(() => new BackendAiClient(), []);
     const voiceDraftDispatcher = useMemo(() => new VoiceDraftDispatcher(), []);
+    const voicePreprocessor = useMemo(() => new VoicePreprocessor(), []);
 
     // --- 4. VOICE RECORDER (Producer) ---
     const voice = useVoiceRecorder({
@@ -67,7 +69,8 @@ export const useAgriLogApp = ({ initialCrops }: AgriLogAppConfig) => {
         },
         onAutoSave: (log, prov) => voiceDraftDispatcher.emit(log, prov),
         parser,
-        logScope
+        logScope,
+        voicePreprocessor,
     });
 
     // --- 5. COMMANDS (Consumer) ---

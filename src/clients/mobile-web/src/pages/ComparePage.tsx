@@ -1,8 +1,17 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Plot, CropProfile, DailyLog, PlannedItem, ExecutedItem } from '../types';
-import { generatePlotComparison } from '../services/compareService';
+
+// TODO: Phase 7 implementation required for generatePlotComparison
+const generatePlotComparison = (plot: Plot, crop: CropProfile, logs: DailyLog[]): any => {
+    return {
+        currentStage: { buckets: [] },
+        stages: [],
+        currentDay: 0,
+        referenceDate: plot.startDate || new Date().toISOString()
+    };
+};
 import { getTemplateById as getScheduleById } from '../infrastructure/reference/TemplateCatalog';
-import { parseDateKey } from '../domain/system/DateKeyService';
+import { parseDateKey } from '../core/domain/services/DateKeyService';
 import SlidingCropSelector from '../features/context/components/SlidingCropSelector';
 import DayCard, { BlockStatus } from '../features/scheduler/components/DayCard';
 import {
@@ -342,7 +351,7 @@ export const ComparePage: React.FC<Props> = ({ plots = [], crops = [], logs = []
             categoryCounts[category].extraCount += bucket.extraCount;
 
             bucket.planned.forEach(planned => {
-                const executed = planned.matchedExecutionId ? executedById.get(planned.matchedExecutionId) : undefined;
+                const executed = (planned.matchedExecutionId ? executedById.get(planned.matchedExecutionId) : undefined) as ExecutedItem | undefined;
                 const plannedText = typeof planned.expectedDay === 'number'
                     ? `Plan: Day ${planned.expectedDay}`
                     : 'Plan: Current phase';
@@ -448,7 +457,8 @@ export const ComparePage: React.FC<Props> = ({ plots = [], crops = [], logs = []
                         ? executedByCategoryId[category].get(planned.matchedExecutionId)
                         : undefined;
 
-                    if (matchedExecution && matchedExecution.executedDay === day) {
+                    const executedMatch = executedByCategoryId[category].get(planned.matchedExecutionId) as ExecutedItem | undefined;
+                    if (matchedExecution && executedMatch && executedMatch.executedDay === day) {
                         doneNames.push(planned.name);
                         return;
                     }
@@ -463,8 +473,9 @@ export const ComparePage: React.FC<Props> = ({ plots = [], crops = [], logs = []
                         return;
                     }
 
-                    if (matchedExecution.executedDay > day) {
-                        missedNames.push(`${planned.name} (done Day ${matchedExecution.executedDay})`);
+                    const executedMatchAfter = executedByCategoryId[category].get(planned.matchedExecutionId) as ExecutedItem | undefined;
+                    if (matchedExecution && executedMatchAfter && executedMatchAfter.executedDay > day) {
+                        missedNames.push(`${planned.name} (done Day ${executedMatchAfter.executedDay})`);
                         return;
                     }
 

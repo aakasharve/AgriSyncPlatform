@@ -1,3 +1,4 @@
+using System;
 using ShramSafal.Domain.Finance;
 using Xunit;
 
@@ -57,6 +58,7 @@ public sealed class DuplicateDetectorTests
             "INR",
             DateOnly.FromDateTime(createdAtUtc),
             Guid.NewGuid(),
+            null,
             createdAtUtc);
     }
 }

@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using ShramSafal.Domain.AI;
 using ShramSafal.Domain.Audit;
 using ShramSafal.Domain.Attachments;
 using ShramSafal.Domain.Crops;
@@ -23,6 +24,9 @@ public sealed class ShramSafalDbContext(DbContextOptions<ShramSafalDbContext> op
     public DbSet<Attachment> Attachments => Set<Attachment>();
     public DbSet<PriceConfig> PriceConfigs => Set<PriceConfig>();
     public DbSet<AuditEvent> AuditEvents => Set<AuditEvent>();
+    public DbSet<AiJob> AiJobs => Set<AiJob>();
+    public DbSet<AiJobAttempt> AiJobAttempts => Set<AiJobAttempt>();
+    public DbSet<AiProviderConfig> AiProviderConfigs => Set<AiProviderConfig>();
     public DbSet<ScheduleTemplate> ScheduleTemplates => Set<ScheduleTemplate>();
     public DbSet<TemplateActivity> TemplateActivities => Set<TemplateActivity>();
     public DbSet<PlannedActivity> PlannedActivities => Set<PlannedActivity>();

@@ -3,6 +3,7 @@ import { AppRoute } from '../types';
 import { financeSelectors } from '../features/finance/financeSelectors';
 import { FinanceManagerNav } from '../features/finance/components/FinanceManagerNav';
 import { ChevronRight, TrendingUp, AlertCircle, CheckCircle, RefreshCcw } from 'lucide-react';
+import { ExportButton } from '../features/export';
 
 interface FinanceManagerHomeProps {
     currentRoute: AppRoute;
@@ -11,6 +12,7 @@ interface FinanceManagerHomeProps {
 
 const FinanceManagerHome: React.FC<FinanceManagerHomeProps> = ({ currentRoute, onNavigate }) => {
     const buckets = useMemo(() => financeSelectors.getPipelineBuckets(), [currentRoute]);
+    const currentFarmId = useMemo(() => financeSelectors.getEffectiveMoneyEvents()[0]?.farmId || 'default', []);
 
     const getIcon = (key: string) => {
         switch (key) {
@@ -77,7 +79,16 @@ const FinanceManagerHome: React.FC<FinanceManagerHomeProps> = ({ currentRoute, o
                 <div className="absolute -right-10 -top-10 text-white/5 rotate-12 group-hover:rotate-0 transition-transform duration-700">
                     <TrendingUp size={150} />
                 </div>
-                <h3 className="text-lg font-black relative z-10">Quick Stats</h3>
+                <div className="flex items-center justify-between relative z-10">
+                    <h3 className="text-lg font-black">Quick Stats</h3>
+                    <ExportButton
+                        reportType="monthly-cost"
+                        options={{ farmId: currentFarmId, year: new Date().getFullYear(), month: new Date().getMonth() + 1, fileName: `monthly-cost-${new Date().getFullYear()}-${new Date().getMonth() + 1}.pdf` }}
+                        variant="secondary"
+                        label="Report"
+                        className="bg-white/10 text-white hover:bg-white hover:text-slate-900 border-0"
+                    />
+                </div>
                 <div className="grid grid-cols-2 gap-4 mt-4 relative z-10">
                     <div>
                         <p className="text-slate-400 text-xs font-bold uppercase">Total Input</p>

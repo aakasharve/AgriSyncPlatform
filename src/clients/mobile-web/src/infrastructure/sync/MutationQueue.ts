@@ -66,7 +66,6 @@ export class MutationQueue {
         const clientRequestId = options?.clientRequestId ?? idGenerator.generate();
         const clientCommandId = options?.clientCommandId ?? clientRequestId;
         const now = systemClock.nowISO();
-        const normalizedMutationType = normalizeMutationType(mutationType);
 
         const record: MutationQueueItem = {
             deviceId,

@@ -9,6 +9,7 @@ import SplashScreen from './shared/components/ui/SplashScreen';
 import { DataSourceProvider } from './app/providers/DataSourceProvider';
 import { SelectionProvider } from './app/context/SelectionContext';
 import { AuthProvider } from './app/providers/AuthProvider';
+import { OfflineBanner } from './features/sync';
 
 // Top-Level State: Crops (Required for LogProvider derivation)
 // Note: Crops will eventually move to DataSource, but for now App maintains initial state
@@ -28,6 +29,7 @@ const App: React.FC = () => {
                         <LanguageProvider>
                             <SelectionProvider crops={crops}>
                                 <LogProvider crops={crops}>
+                                    <OfflineBanner />
                                     {showSplash && <SplashScreen onComplete={() => setShowSplash(false)} />}
                                     <AppContent crops={crops} setCrops={setCrops} />
                                 </LogProvider>

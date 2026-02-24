@@ -1,6 +1,7 @@
 using System.Security.Claims;
 using AgriSync.BuildingBlocks.Results;
-using System.Security.Claims;
+using AgriSync.SharedKernel.Contracts.Roles;
+using ShramSafal.Application.Ports;
 using ShramSafal.Application.UseCases.Logs.AddLogTask;
 using ShramSafal.Application.UseCases.Logs.CreateDailyLog;
 using ShramSafal.Application.UseCases.Logs.VerifyLog;
@@ -28,6 +29,7 @@ public static class LogsEndpoints
                 request.FarmId,
                 request.PlotId,
                 request.CropCycleId,
+                actorUserId,
                 actorUserId,
                 request.LogDate,
                 request.Location?.ToDomain(),

@@ -1,11 +1,12 @@
 /**
  * Layer 4: Segment Compressor
  *
- * Encodes PCM audio chunks to compressed Opus/WebM format.
- * Uses MediaRecorder API for hardware-accelerated encoding.
+ * Encodes PCM audio chunks into compressed Opus/WebM when supported.
  */
 
 import { CompressionConfig } from './types';
+
+type AudioContextCtor = { new(options?: AudioContextOptions): AudioContext };
 
 export class SegmentCompressor {
     private readonly config: CompressionConfig;
@@ -14,126 +15,162 @@ export class SegmentCompressor {
         this.config = config;
     }
 
-    /**
-     * Compress PCM Float32Array to Opus/WebM Blob.
-     * Uses OfflineAudioContext + MediaRecorder for encoding.
-     */
-    async compress(pcmData: Float32Array, inputSampleRate: number): Promise<{
+    async compress(
+        pcmData: Float32Array,
+        inputSampleRate: number,
+    ): Promise<{
         blob: Blob;
         mimeType: string;
         compressionRatio: number;
     }> {
-        const rawSizeBytes = pcmData.length * 4; // Float32 = 4 bytes per sample
+        const rawSizeBytes = Math.max(1, pcmData.length * 4);
+        if (pcmData.length === 0) {
+            throw new Error('Cannot compress empty PCM data.');
+        }
 
-        // Resample if needed
         const resampled = inputSampleRate !== this.config.targetSampleRate
             ? await this.resample(pcmData, inputSampleRate, this.config.targetSampleRate)
             : pcmData;
-
-        // Encode using MediaRecorder via AudioContext trick
         const blob = await this.encodeToWebm(resampled, this.config.targetSampleRate);
-        const compressionRatio = blob.size / rawSizeBytes;
 
         return {
             blob,
-            mimeType: this.config.mimeType,
-            compressionRatio,
+            mimeType: blob.type || this.config.mimeType,
+            compressionRatio: blob.size / rawSizeBytes,
         };
     }
 
-    /**
-     * Check if the browser supports the target codec.
-     */
-    static isSupported(): boolean {
-        if (typeof MediaRecorder === 'undefined') return false;
-        return MediaRecorder.isTypeSupported('audio/webm;codecs=opus');
+    static getSupportedMimeType(): string | null {
+        if (typeof MediaRecorder === 'undefined') {
+            return null;
+        }
+
+        if (MediaRecorder.isTypeSupported('audio/webm;codecs=opus')) {
+            return 'audio/webm;codecs=opus';
+        }
+
+        if (MediaRecorder.isTypeSupported('audio/webm')) {
+            return 'audio/webm';
+        }
+
+        return null;
     }
 
-    /**
-     * Resample PCM data to target sample rate using OfflineAudioContext.
-     */
+    static isSupported(): boolean {
+        return SegmentCompressor.getSupportedMimeType() !== null;
+    }
+
     private async resample(
         pcmData: Float32Array,
         fromRate: number,
-        toRate: number
+        toRate: number,
     ): Promise<Float32Array> {
         const duration = pcmData.length / fromRate;
-        const offlineCtx = new OfflineAudioContext(1, Math.ceil(duration * toRate), toRate);
-        const buffer = offlineCtx.createBuffer(1, pcmData.length, fromRate);
+        const offlineContext = new OfflineAudioContext(1, Math.ceil(duration * toRate), toRate);
+        const buffer = offlineContext.createBuffer(1, pcmData.length, fromRate);
         buffer.getChannelData(0).set(pcmData);
 
-        const source = offlineCtx.createBufferSource();
+        const source = offlineContext.createBufferSource();
         source.buffer = buffer;
-        source.connect(offlineCtx.destination);
+        source.connect(offlineContext.destination);
         source.start(0);
 
-        const rendered = await offlineCtx.startRendering();
-        return rendered.getChannelData(0);
+        const rendered = await offlineContext.startRendering();
+        return new Float32Array(rendered.getChannelData(0));
     }
 
-    /**
-     * Encode Float32Array PCM to WebM/Opus blob using MediaRecorder.
-     */
     private async encodeToWebm(pcmData: Float32Array, sampleRate: number): Promise<Blob> {
+        const mimeType = SegmentCompressor.getSupportedMimeType();
+        if (!mimeType) {
+            throw new Error('MediaRecorder Opus/WebM support is unavailable.');
+        }
+
+        const AudioContextConstructor = SegmentCompressor.resolveAudioContextCtor();
+        if (!AudioContextConstructor) {
+            throw new Error('AudioContext is unavailable for encoding.');
+        }
+
         return new Promise<Blob>((resolve, reject) => {
+            const audioContext = new AudioContextConstructor({ sampleRate });
+            const timeoutMs = Math.max(1500, Math.ceil((pcmData.length / sampleRate) * 1000) + 1500);
+            let settled = false;
+            let timeoutHandle: number | null = null;
+
+            const complete = (callback: () => void) => {
+                if (settled) {
+                    return;
+                }
+                settled = true;
+                if (timeoutHandle !== null) {
+                    clearTimeout(timeoutHandle);
+                }
+                callback();
+            };
+
             try {
-                const audioCtx = new AudioContext({ sampleRate });
-                const buffer = audioCtx.createBuffer(1, pcmData.length, sampleRate);
+                const buffer = audioContext.createBuffer(1, pcmData.length, sampleRate);
                 buffer.getChannelData(0).set(pcmData);
 
-                const source = audioCtx.createBufferSource();
+                const source = audioContext.createBufferSource();
                 source.buffer = buffer;
 
-                const dest = audioCtx.createMediaStreamDestination();
-                source.connect(dest);
+                const destination = audioContext.createMediaStreamDestination();
+                source.connect(destination);
 
-                const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
-                    ? 'audio/webm;codecs=opus'
-                    : 'audio/webm';
-
-                const recorder = new MediaRecorder(dest.stream, {
+                const recorder = new MediaRecorder(destination.stream, {
                     mimeType,
                     audioBitsPerSecond: this.config.targetBitrate,
                 });
-
                 const chunks: Blob[] = [];
 
-                recorder.ondataavailable = (e) => {
-                    if (e.data.size > 0) {
-                        chunks.push(e.data);
+                recorder.ondataavailable = (event) => {
+                    if (event.data.size > 0) {
+                        chunks.push(event.data);
                     }
                 };
 
-                recorder.onstop = () => {
-                    audioCtx.close();
-                    resolve(new Blob(chunks, { type: mimeType }));
+                recorder.onerror = () => {
+                    complete(() => {
+                        void audioContext.close().catch(() => {});
+                        reject(new Error('MediaRecorder failed while encoding segment.'));
+                    });
                 };
 
-                recorder.onerror = (e) => {
-                    audioCtx.close();
-                    reject(new Error(`MediaRecorder error: ${e}`));
+                recorder.onstop = () => {
+                    const blob = new Blob(chunks, { type: mimeType });
+                    complete(() => {
+                        void audioContext.close().catch(() => {});
+                        if (blob.size <= 0) {
+                            reject(new Error('MediaRecorder produced an empty encoded blob.'));
+                            return;
+                        }
+                        resolve(blob);
+                    });
+                };
+
+                source.onended = () => {
+                    if (recorder.state === 'recording') {
+                        recorder.stop();
+                    }
                 };
 
                 recorder.start();
                 source.start(0);
 
-                // Stop recording after audio finishes
-                const durationMs = (pcmData.length / sampleRate) * 1000;
-                setTimeout(() => {
+                timeoutHandle = window.setTimeout(() => {
                     if (recorder.state === 'recording') {
                         recorder.stop();
                     }
-                    source.stop();
-                }, durationMs + 100); // small buffer
-            } catch (err) {
-                reject(err);
+                }, timeoutMs);
+            } catch (error) {
+                complete(() => {
+                    void audioContext.close().catch(() => {});
+                    reject(error instanceof Error ? error : new Error('Failed to initialize segment encoding.'));
+                });
             }
         });
     }
 
-    /**
-     * Fallback: return raw PCM as WAV blob if MediaRecorder is unavailable.
-     */
     static createWavBlob(pcmData: Float32Array, sampleRate: number): Blob {
         const numChannels = 1;
         const bitsPerSample = 16;
@@ -144,10 +181,9 @@ export class SegmentCompressor {
         const buffer = new ArrayBuffer(headerSize + dataSize);
         const view = new DataView(buffer);
 
-        // WAV header
-        const writeString = (offset: number, str: string) => {
-            for (let i = 0; i < str.length; i++) {
-                view.setUint8(offset + i, str.charCodeAt(i));
+        const writeString = (offset: number, text: string): void => {
+            for (let i = 0; i < text.length; i++) {
+                view.setUint8(offset + i, text.charCodeAt(i));
             }
         };
 
@@ -156,7 +192,7 @@ export class SegmentCompressor {
         writeString(8, 'WAVE');
         writeString(12, 'fmt ');
         view.setUint32(16, 16, true);
-        view.setUint16(20, 1, true); // PCM
+        view.setUint16(20, 1, true);
         view.setUint16(22, numChannels, true);
         view.setUint32(24, sampleRate, true);
         view.setUint32(28, byteRate, true);
@@ -165,14 +201,24 @@ export class SegmentCompressor {
         writeString(36, 'data');
         view.setUint32(40, dataSize, true);
 
-        // Convert Float32 to Int16
         let offset = headerSize;
         for (let i = 0; i < pcmData.length; i++) {
             const sample = Math.max(-1, Math.min(1, pcmData[i]));
-            view.setInt16(offset, sample < 0 ? sample * 0x8000 : sample * 0x7FFF, true);
+            view.setInt16(offset, sample < 0 ? sample * 0x8000 : sample * 0x7fff, true);
             offset += 2;
         }
 
         return new Blob([buffer], { type: 'audio/wav' });
+    }
+
+    private static resolveAudioContextCtor(): AudioContextCtor | null {
+        if (typeof AudioContext !== 'undefined') {
+            return AudioContext;
+        }
+
+        const maybeWindow = typeof window !== 'undefined'
+            ? (window as unknown as { webkitAudioContext?: AudioContextCtor })
+            : undefined;
+        return maybeWindow?.webkitAudioContext ?? null;
     }
 }

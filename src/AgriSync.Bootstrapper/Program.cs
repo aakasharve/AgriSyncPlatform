@@ -60,6 +60,8 @@ try
     builder.Services.AddShramSafalApi(builder.Configuration);
     builder.Services.AddTransient<AgriSync.Bootstrapper.Infrastructure.DatabaseSeeder>();
 
+    QuestPDF.Settings.License = QuestPDF.Infrastructure.LicenseType.Community;
+
     var app = builder.Build();
 
     app.UseSerilogRequestLogging();

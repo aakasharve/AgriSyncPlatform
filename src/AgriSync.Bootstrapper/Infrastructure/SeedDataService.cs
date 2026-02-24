@@ -92,6 +92,7 @@ public class SeedDataService
         var log = DailyLog.Create(Guid.NewGuid(), farmId, plotId, cropCycleId, userId, 
             DateOnly.FromDateTime(DateTime.UtcNow), 
             Guid.NewGuid().ToString(), 
+            null,
             DateTime.UtcNow);
         
         log.AddTask(Guid.NewGuid(), "Irrigation", "Drip irrigation for 2 hours", DateTime.UtcNow);

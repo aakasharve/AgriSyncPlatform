@@ -47,6 +47,7 @@ public sealed class CompareEngineTests
             new UserId(Guid.NewGuid()),
             new DateOnly(2026, 2, 10),
             null,
+            null,
             DateTime.UtcNow);
 
         log.AddTask(Guid.NewGuid(), "Foliar Spray with Sticker", null, DateTime.UtcNow);

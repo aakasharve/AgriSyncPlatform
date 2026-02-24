@@ -2,7 +2,11 @@ import React, { useMemo, useState } from 'react';
 import { BookOpen, CheckCircle2, Clock, Eye, Layers, Users, X } from 'lucide-react';
 import { CropProfile, CropScheduleTemplate } from '../../../types';
 import { TemplateCatalogSort, getTemplatesForCrop, getStageNote } from '../../../infrastructure/reference/TemplateCatalog';
-import { getOperationName } from '../../../domain/planning/PlanEngine';
+// Stubbed operation name getter since PlanEngine was migrated
+const getOperationName = (operationTypeId: string): string => {
+    const parts = operationTypeId.split('_');
+    return parts.map(p => p.charAt(0).toUpperCase() + p.slice(1).toLowerCase()).join(' ');
+};
 
 interface ScheduleLibraryViewProps {
     crop?: CropProfile;

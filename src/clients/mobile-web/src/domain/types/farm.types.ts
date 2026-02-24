@@ -375,6 +375,7 @@ export type AppRoute =
     | 'main'
     | 'profile'
     | 'settings'
+    | 'ai-admin'
     | 'schedule'
     | 'procurement'
     | 'income'

@@ -7,6 +7,7 @@ using ShramSafal.Domain.Farms;
 using ShramSafal.Domain.Finance;
 using ShramSafal.Domain.Logs;
 using ShramSafal.Domain.Planning;
+using ShramSafal.Domain.AI;
 using ShramSafal.Infrastructure.Persistence;
 using User.Application.Ports;
 using User.Domain.Identity;
@@ -101,6 +102,7 @@ public class DatabaseSeeder
         var logStats = await EnsureDailyLogsAsync(farm.Id, cycleContexts, ramu.Id, ganesh.Id, nowUtc);
         var costStats = await EnsureCostEntriesAndCorrectionsAsync(farm.Id, cycleContexts, ramu.Id, ganesh.Id, nowUtc);
         var priceAdded = await EnsurePriceConfigsAsync(ramu.Id, nowUtc);
+        var aiConfigAdded = await EnsureAiProviderConfigAsync(ramu.Id, nowUtc);
         await _SSFContext.SaveChangesAsync();
 
         var totals = await BuildSeedTotalsAsync(farm.Id);
@@ -115,7 +117,8 @@ public class DatabaseSeeder
                          + logStats.VerificationsAdded
                          + costStats.CostEntriesAdded
                          + costStats.CorrectionsAdded
-                         + priceAdded;
+                         + priceAdded
+                         + aiConfigAdded;
 
         var status = totalAdded == 0
             ? "Demo data already seeded."
@@ -391,6 +394,7 @@ public class DatabaseSeeder
                         operatorUserId,
                         logDate,
                         idempotencyKey,
+                        null,
                         occurredAtUtc);
 
                     _SSFContext.DailyLogs.Add(log);
@@ -516,6 +520,7 @@ public class DatabaseSeeder
                 "INR",
                 entryDate,
                 createdBy,
+                null,
                 createdAt);
 
             _SSFContext.CostEntries.Add(entry);
@@ -611,6 +616,30 @@ public class DatabaseSeeder
         }
 
         return added;
+    }
+
+    private async Task<int> EnsureAiProviderConfigAsync(UserId modifiedByUserId, DateTime nowUtc)
+    {
+        var existing = await _SSFContext.AiProviderConfigs.AsNoTracking().FirstOrDefaultAsync();
+        if (existing is not null)
+        {
+            return 0;
+        }
+
+        var config = AiProviderConfig.CreateDefault();
+        config.UpdateSettings(
+            modifiedByUserId,
+            defaultProvider: AiProviderType.Sarvam,
+            fallbackEnabled: true,
+            isAiProcessingDisabled: false,
+            maxRetries: 1,
+            circuitBreakerThreshold: 5,
+            circuitBreakerResetSeconds: 60,
+            voiceConfidenceThreshold: 0.60m,
+            receiptConfidenceThreshold: 0.50m);
+
+        await _SSFContext.AiProviderConfigs.AddAsync(config);
+        return 1;
     }
 
     private async Task<SeedTotals> BuildSeedTotalsAsync(FarmId farmId)

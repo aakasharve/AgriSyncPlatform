@@ -175,7 +175,6 @@ internal static class DtoMappingExtensions
             attachment.ModifiedAtUtc,
             attachment.UploadedAtUtc,
             attachment.FinalizedAtUtc);
-}
 
     private static string ToSyncVerificationStatus(this VerificationStatus status) =>
         status switch

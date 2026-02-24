@@ -30,7 +30,6 @@ public sealed record SyncPullResponseDto(
     IReadOnlyList<FinanceCorrectionDto> FinanceCorrections,
     IReadOnlyList<DayLedgerDto> DayLedgers,
     IReadOnlyList<PriceConfigDto> PriceConfigs,
-    IReadOnlyList<DayLedgerDto> DayLedgers,
     IReadOnlyList<PlannedActivityDto> PlannedActivities,
     IReadOnlyList<AuditEventDto> AuditEvents,
     IReadOnlyList<ScheduleTemplateDto> ScheduleTemplates,

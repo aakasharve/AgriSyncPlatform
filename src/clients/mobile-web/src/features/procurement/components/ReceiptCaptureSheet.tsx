@@ -11,6 +11,7 @@ import { financeCommandService } from '../../finance/financeCommandService';
 import { MoneyCategory } from '../../finance/finance.types';
 import { captureAttachment } from '../../../application/use-cases/CaptureAttachment';
 import { resolveFarmIdFromSyncState } from '../../../infrastructure/sync/SyncContext';
+import AllocationSelector from '../../finance/components/AllocationSelector';
 
 const mapExpenseCategoryToMoneyCategory = (category: string): MoneyCategory => {
     if (category === 'LABOUR') return 'Labour';
@@ -46,6 +47,8 @@ export const ReceiptCaptureSheet: React.FC<Props> = ({ onClose, onSave, crops, a
     const [editedVendor, setEditedVendor] = useState<string>('');
     const [attachmentIds, setAttachmentIds] = useState<string[]>([]);
     const [attachmentCaptureError, setAttachmentCaptureError] = useState<string | null>(null);
+    const [showAllocation, setShowAllocation] = useState(false);
+    const [savedCostEntryId, setSavedCostEntryId] = useState<string>('');
 
     const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -166,6 +169,14 @@ export const ReceiptCaptureSheet: React.FC<Props> = ({ onClose, onSave, crops, a
                     ?? (newExpense.receiptImageUrl ? [newExpense.receiptImageUrl] : [])
             });
         });
+
+        // If farm-scoped, show allocation step
+        if (scope === 'FARM' && crops.flatMap(c => c.plots).length > 1) {
+            setSavedCostEntryId(newExpense.id);
+            setShowAllocation(true);
+            onSave(); // Notify parent that expense is saved
+            return;
+        }
 
         onSave();
         onClose();
@@ -343,8 +354,21 @@ export const ReceiptCaptureSheet: React.FC<Props> = ({ onClose, onSave, crops, a
                     )}
                 </div>
 
+                {/* ALLOCATION FOLLOW-UP */}
+                {showAllocation && (
+                    <div className="flex-1 overflow-y-auto p-4 bg-gray-50">
+                        <AllocationSelector
+                            costEntryId={savedCostEntryId}
+                            totalAmount={editedTotal}
+                            plots={crops.flatMap(c => c.plots)}
+                            onAllocate={() => onClose()}
+                            onCancel={() => onClose()}
+                        />
+                    </div>
+                )}
+
                 {/* FOOTER */}
-                {image && !isExtracting && extraction && (
+                {!showAllocation && image && !isExtracting && extraction && (
                     <div className="flex-none p-4 bg-white border-t border-gray-100 flex gap-3">
                         <button onClick={onClose} className="flex-1 py-4 text-gray-500 font-bold hover:bg-gray-50 rounded-xl">Cancel</button>
                         <button

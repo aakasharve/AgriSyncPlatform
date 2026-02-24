@@ -3,6 +3,7 @@ import { systemClock } from '../../core/domain/services/Clock';
 import { agriSyncClient, type SyncMutationType } from '../api/AgriSyncClient';
 import { getAuthSession } from '../api/AuthTokenStore';
 import { reconcileSyncPull } from './SyncPullReconciler';
+import { getDatabase } from '../storage/DexieDatabase';
 
 function toSyncMutationType(mutationType: string): SyncMutationType | null {
     const normalized = mutationType.trim().toLowerCase();
@@ -74,6 +75,27 @@ export class BackgroundSyncWorker {
         await this.safeRunCycle();
     }
 
+    async retryFailed(clientRequestId: string): Promise<void> {
+        const db = getDatabase();
+        const failedItem = await db.mutationQueue
+            .where('[deviceId+clientRequestId]')
+            .equals([mutationQueue.getDeviceId(), clientRequestId])
+            .first();
+
+        if (failedItem?.id && failedItem.status === 'FAILED') {
+            await db.mutationQueue.update(failedItem.id, {
+                status: 'PENDING',
+                updatedAt: systemClock.nowISO(),
+            });
+            await this.triggerNow();
+        }
+    }
+
+    async retryAllFailed(): Promise<void> {
+        await mutationQueue.markFailedAsPending();
+        await this.triggerNow();
+    }
+
     private handleOnline = () => {
         this.safeRunCycle();
     };
@@ -115,7 +137,7 @@ export class BackgroundSyncWorker {
             return;
         }
 
-        const supportedMutations: Array<{ id: number; clientRequestId: string; mutationType: SyncMutationType; payload: unknown }> = [];
+        const supportedMutations: Array<{ id: number; clientRequestId: string; clientCommandId?: string; mutationType: SyncMutationType; payload: unknown }> = [];
         for (const mutation of pendingWithId) {
             const mutationType = toSyncMutationType(mutation.mutationType);
             if (!mutationType) {
@@ -126,6 +148,7 @@ export class BackgroundSyncWorker {
             supportedMutations.push({
                 id: mutation.id as number,
                 clientRequestId: mutation.clientRequestId,
+                clientCommandId: mutation.clientCommandId,
                 mutationType,
                 payload: mutation.payload,
             });

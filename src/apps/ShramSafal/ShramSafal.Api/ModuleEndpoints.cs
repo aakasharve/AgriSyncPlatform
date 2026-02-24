@@ -22,10 +22,12 @@ public static class ModuleEndpoints
         group.MapFarmEndpoints();
         group.MapLogsEndpoints();
         group.MapFinanceEndpoints();
+        group.MapAiEndpoints();
         group.MapAttachmentEndpoints();
         group.MapPlanningEndpoints();
         group.MapReferenceDataEndpoints();
         group.MapAuditEndpoints();
+        group.MapExportEndpoints();
         endpoints.MapSyncEndpoints();
 
         return endpoints;

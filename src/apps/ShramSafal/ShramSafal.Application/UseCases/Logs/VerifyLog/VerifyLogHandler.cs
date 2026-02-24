@@ -2,6 +2,7 @@ using AgriSync.BuildingBlocks.Abstractions;
 using AgriSync.BuildingBlocks.Auth;
 using AgriSync.BuildingBlocks.Results;
 using AgriSync.SharedKernel.Contracts.Ids;
+using AgriSync.SharedKernel.Contracts.Roles;
 using ShramSafal.Application.Contracts.Dtos;
 using ShramSafal.Application.Ports;
 using ShramSafal.Domain.Audit;
@@ -18,6 +19,10 @@ public sealed class VerifyLogHandler(
 {
     public async Task<Result<DailyLogDto>> HandleAsync(VerifyLogCommand command, CancellationToken ct = default)
     {
+        var callerRole = Enum.TryParse<AppRole>(command.ActorRole, ignoreCase: true, out var parsedRole)
+            ? parsedRole
+            : AppRole.Worker;
+
         if (command.DailyLogId == Guid.Empty || command.VerifiedByUserId == Guid.Empty)
         {
             return Result.Failure<DailyLogDto>(ShramSafalErrors.InvalidCommand);
@@ -31,7 +36,7 @@ public sealed class VerifyLogHandler(
         await authorizationEnforcer.EnsureCanVerify(
             new UserId(command.VerifiedByUserId),
             command.DailyLogId,
-            command.CallerRole);
+            callerRole);
 
         var log = await repository.GetDailyLogByIdAsync(command.DailyLogId, ct);
         if (log is null)
@@ -51,7 +56,7 @@ public sealed class VerifyLogHandler(
                 command.VerificationEventId ?? idGenerator.New(),
                 command.TargetStatus,
                 command.Reason,
-                command.CallerRole,
+                callerRole,
                 command.VerifiedByUserId,
                 clock.UtcNow);
 

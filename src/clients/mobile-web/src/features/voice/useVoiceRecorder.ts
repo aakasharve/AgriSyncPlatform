@@ -1,9 +1,12 @@
-import { useState } from 'react';
-import { LogVerificationStatus, AppStatus, LogSegment, AudioData, FarmContext, CropProfile, FarmerProfile, InputMode, AgriLogResponse, QuestionForUser } from '../../types';
+import { useRef, useState } from 'react';
+import { AppStatus, LogSegment, AudioData, FarmContext, CropProfile, FarmerProfile, InputMode, AgriLogResponse, QuestionForUser } from '../../types';
 import { LogProvenance } from '../../domain/ai/LogProvenance';
-import { VoiceParserPort, VoiceInput } from '../../application/ports';
+import { VoiceParserPort } from '../../application/ports';
 import { parseVoiceToDraft } from '../../application/usecases/ParseVoiceToDraft';
 import { LogScope } from '../../domain/types/log.types';
+import { VoicePreprocessor } from '../../infrastructure/voice/VoicePreprocessor';
+import { VoiceIdempotency } from '../../infrastructure/voice/VoiceIdempotency';
+import { VoiceSessionMetadata } from '../../infrastructure/voice/types';
 
 const hasSuccessfulIrrigation = (events: Array<{ durationHours?: number; waterVolumeLitres?: number; method?: string; source?: string }>): boolean => {
     return events.some(event => {
@@ -22,6 +25,7 @@ interface UseVoiceRecorderProps {
     setMode: (mode: InputMode) => void;
     onAutoSave?: (log: AgriLogResponse, provenance?: LogProvenance) => void;
     parser: VoiceParserPort;
+    voicePreprocessor: VoicePreprocessor;
 }
 
 export const useVoiceRecorder = ({
@@ -32,7 +36,8 @@ export const useVoiceRecorder = ({
     farmerProfile,
     setMode,
     onAutoSave,
-    parser
+    parser,
+    voicePreprocessor,
 }: UseVoiceRecorderProps) => {
 
     const [status, setStatus] = useState<AppStatus>('idle');
@@ -43,9 +48,81 @@ export const useVoiceRecorder = ({
     const [recordingSegment, setRecordingSegment] = useState<LogSegment | null>(null);
     const [clarificationNeeded, setClarificationNeeded] = useState<QuestionForUser | null>(null);
     const [pendingTranscript, setPendingTranscript] = useState<string | null>(null);
+    const lastVoiceSessionMetadataRef = useRef<VoiceSessionMetadata | null>(null);
+    const lastVoiceIdempotencySeedRef = useRef<string | null>(null);
+
+    const resolveFarmId = (): string => {
+        const farmId = currentLogContext?.selection
+            .find(selection => typeof selection.farmId === 'string' && selection.farmId.trim().length > 0)
+            ?.farmId;
+        return farmId ?? 'unknown-farm';
+    };
+
+    const resolveUserId = (): string => {
+        const userId = farmerProfile.activeOperatorId?.trim();
+        return userId && userId.length > 0 ? userId : 'unknown-user';
+    };
+
+    const blobToBase64 = async (blob: Blob): Promise<string> => {
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onloadend = () => {
+                const result = typeof reader.result === 'string' ? reader.result : '';
+                if (!result.includes(',')) {
+                    reject(new Error('Unable to encode audio for upload.'));
+                    return;
+                }
+                resolve(result.split(',')[1]);
+            };
+            reader.onerror = () => reject(new Error('FileReader failed while encoding audio.'));
+            reader.readAsDataURL(blob);
+        });
+    };
+
+    const preprocessAudio = async (audioData: AudioData): Promise<AudioData> => {
+        const farmId = resolveFarmId();
+        const userId = resolveUserId();
+        const sessionId = VoiceIdempotency.createSessionId();
+
+        try {
+            const pipelineOutput = await voicePreprocessor.processBlobAsSingleBlob(
+                audioData.blob,
+                sessionId,
+                farmId,
+            );
+            const deterministicMaterial = await VoiceIdempotency.buildSegmentMaterial({
+                userId,
+                farmId,
+                sessionId,
+                segmentIndex: 0,
+                contentHash: pipelineOutput.contentHash,
+            });
+
+            lastVoiceSessionMetadataRef.current = pipelineOutput.metadata;
+            lastVoiceIdempotencySeedRef.current = deterministicMaterial.deterministicSeed;
+
+            return {
+                blob: pipelineOutput.audioBlob,
+                base64: await blobToBase64(pipelineOutput.audioBlob),
+                mimeType: pipelineOutput.mimeType,
+            };
+        } catch (pipelineError) {
+            console.warn('[VoicePreprocessor] Falling back to raw audio upload.', pipelineError);
+            lastVoiceSessionMetadataRef.current = null;
+            lastVoiceIdempotencySeedRef.current = null;
+            return audioData;
+        }
+    };
 
     const handleAudioReady = async (audioData: AudioData) => {
-        await processInput({ type: 'audio', data: audioData.base64, mimeType: audioData.mimeType });
+        setStatus('processing');
+        setError(null);
+        const preprocessedAudio = await preprocessAudio(audioData);
+        await processInput({
+            type: 'audio',
+            data: preprocessedAudio.base64,
+            mimeType: preprocessedAudio.mimeType,
+        });
     };
 
     const handleTextReady = async (text: string) => {
@@ -240,6 +317,8 @@ export const useVoiceRecorder = ({
         setRecordingSegment(null);
         setClarificationNeeded(null);
         setPendingTranscript(null);
+        lastVoiceSessionMetadataRef.current = null;
+        lastVoiceIdempotencySeedRef.current = null;
         setStatus('idle');
         setError(null);
         setErrorTranscript(undefined);

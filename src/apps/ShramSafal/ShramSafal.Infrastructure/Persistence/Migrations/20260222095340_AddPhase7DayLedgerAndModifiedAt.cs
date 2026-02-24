@@ -11,315 +11,165 @@ namespace ShramSafal.Infrastructure.Persistence.Migrations
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.AddColumn<DateTime>(
-                name: "modified_at_utc",
-                schema: "ssf",
-                table: "price_configs",
-                type: "timestamp with time zone",
-                nullable: false,
-                defaultValue: new DateTime(1, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified));
+            migrationBuilder.Sql(
+"""
+CREATE SCHEMA IF NOT EXISTS ssf;
 
-            migrationBuilder.AddColumn<DateTime>(
-                name: "modified_at_utc",
-                schema: "ssf",
-                table: "plots",
-                type: "timestamp with time zone",
-                nullable: false,
-                defaultValue: new DateTime(1, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified));
+ALTER TABLE ssf.price_configs
+    ADD COLUMN IF NOT EXISTS modified_at_utc timestamp with time zone NOT NULL DEFAULT TIMESTAMPTZ '0001-01-01 00:00:00+00';
+ALTER TABLE ssf.plots
+    ADD COLUMN IF NOT EXISTS modified_at_utc timestamp with time zone NOT NULL DEFAULT TIMESTAMPTZ '0001-01-01 00:00:00+00';
+ALTER TABLE ssf.planned_activities
+    ADD COLUMN IF NOT EXISTS modified_at_utc timestamp with time zone NOT NULL DEFAULT TIMESTAMPTZ '0001-01-01 00:00:00+00';
+ALTER TABLE ssf.finance_corrections
+    ADD COLUMN IF NOT EXISTS modified_at_utc timestamp with time zone NOT NULL DEFAULT TIMESTAMPTZ '0001-01-01 00:00:00+00';
+ALTER TABLE ssf.farms
+    ADD COLUMN IF NOT EXISTS modified_at_utc timestamp with time zone NOT NULL DEFAULT TIMESTAMPTZ '0001-01-01 00:00:00+00';
 
-            migrationBuilder.AddColumn<DateTime>(
-                name: "modified_at_utc",
-                schema: "ssf",
-                table: "planned_activities",
-                type: "timestamp with time zone",
-                nullable: false,
-                defaultValue: new DateTime(1, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified));
+ALTER TABLE ssf.daily_logs
+    ADD COLUMN IF NOT EXISTS location_accuracy_meters numeric(10,2) NULL;
+ALTER TABLE ssf.daily_logs
+    ADD COLUMN IF NOT EXISTS location_altitude numeric(10,2) NULL;
+ALTER TABLE ssf.daily_logs
+    ADD COLUMN IF NOT EXISTS location_captured_at_utc timestamp with time zone NULL;
+ALTER TABLE ssf.daily_logs
+    ADD COLUMN IF NOT EXISTS location_latitude numeric(10,7) NULL;
+ALTER TABLE ssf.daily_logs
+    ADD COLUMN IF NOT EXISTS location_longitude numeric(10,7) NULL;
+ALTER TABLE ssf.daily_logs
+    ADD COLUMN IF NOT EXISTS location_permission_state character varying(30) NULL;
+ALTER TABLE ssf.daily_logs
+    ADD COLUMN IF NOT EXISTS location_provider character varying(50) NULL;
+ALTER TABLE ssf.daily_logs
+    ADD COLUMN IF NOT EXISTS modified_at_utc timestamp with time zone NOT NULL DEFAULT TIMESTAMPTZ '0001-01-01 00:00:00+00';
 
-            migrationBuilder.AddColumn<DateTime>(
-                name: "modified_at_utc",
-                schema: "ssf",
-                table: "finance_corrections",
-                type: "timestamp with time zone",
-                nullable: false,
-                defaultValue: new DateTime(1, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified));
+ALTER TABLE ssf.crop_cycles
+    ADD COLUMN IF NOT EXISTS modified_at_utc timestamp with time zone NOT NULL DEFAULT TIMESTAMPTZ '0001-01-01 00:00:00+00';
 
-            migrationBuilder.AddColumn<DateTime>(
-                name: "modified_at_utc",
-                schema: "ssf",
-                table: "farms",
-                type: "timestamp with time zone",
-                nullable: false,
-                defaultValue: new DateTime(1, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified));
+ALTER TABLE ssf.cost_entries
+    ADD COLUMN IF NOT EXISTS location_accuracy_meters numeric(10,2) NULL;
+ALTER TABLE ssf.cost_entries
+    ADD COLUMN IF NOT EXISTS location_altitude numeric(10,2) NULL;
+ALTER TABLE ssf.cost_entries
+    ADD COLUMN IF NOT EXISTS location_captured_at_utc timestamp with time zone NULL;
+ALTER TABLE ssf.cost_entries
+    ADD COLUMN IF NOT EXISTS location_latitude numeric(10,7) NULL;
+ALTER TABLE ssf.cost_entries
+    ADD COLUMN IF NOT EXISTS location_longitude numeric(10,7) NULL;
+ALTER TABLE ssf.cost_entries
+    ADD COLUMN IF NOT EXISTS location_permission_state character varying(30) NULL;
+ALTER TABLE ssf.cost_entries
+    ADD COLUMN IF NOT EXISTS location_provider character varying(50) NULL;
+ALTER TABLE ssf.cost_entries
+    ADD COLUMN IF NOT EXISTS modified_at_utc timestamp with time zone NOT NULL DEFAULT TIMESTAMPTZ '0001-01-01 00:00:00+00';
 
-            migrationBuilder.AddColumn<decimal>(
-                name: "location_accuracy_meters",
-                schema: "ssf",
-                table: "daily_logs",
-                type: "numeric(10,2)",
-                precision: 10,
-                scale: 2,
-                nullable: true);
+DO $$
+BEGIN
+    IF EXISTS (
+        SELECT 1
+        FROM information_schema.tables
+        WHERE table_schema = 'ssf'
+          AND table_name = 'day_ledgers'
+    ) AND EXISTS (
+        SELECT 1
+        FROM information_schema.columns
+        WHERE table_schema = 'ssf'
+          AND table_name = 'day_ledgers'
+          AND column_name = 'date_key'
+    ) THEN
+        IF NOT EXISTS (
+            SELECT 1
+            FROM information_schema.tables
+            WHERE table_schema = 'ssf'
+              AND table_name = 'day_ledgers_legacy_financev2'
+        ) THEN
+            ALTER TABLE ssf.day_ledgers RENAME TO day_ledgers_legacy_financev2;
+        END IF;
+    END IF;
 
-            migrationBuilder.AddColumn<decimal>(
-                name: "location_altitude",
-                schema: "ssf",
-                table: "daily_logs",
-                type: "numeric(10,2)",
-                precision: 10,
-                scale: 2,
-                nullable: true);
+    IF EXISTS (
+        SELECT 1
+        FROM information_schema.tables
+        WHERE table_schema = 'ssf'
+          AND table_name = 'day_ledger_plot_allocations'
+    ) THEN
+        IF NOT EXISTS (
+            SELECT 1
+            FROM information_schema.tables
+            WHERE table_schema = 'ssf'
+              AND table_name = 'day_ledger_plot_allocations_legacy_financev2'
+        ) THEN
+            ALTER TABLE ssf.day_ledger_plot_allocations RENAME TO day_ledger_plot_allocations_legacy_financev2;
+        END IF;
+    END IF;
+END $$;
 
-            migrationBuilder.AddColumn<DateTime>(
-                name: "location_captured_at_utc",
-                schema: "ssf",
-                table: "daily_logs",
-                type: "timestamp with time zone",
-                nullable: true);
+CREATE TABLE IF NOT EXISTS ssf.day_ledgers (
+    "Id" uuid PRIMARY KEY,
+    farm_id uuid NOT NULL,
+    source_cost_entry_id uuid NOT NULL,
+    ledger_date date NOT NULL,
+    allocation_basis character varying(40) NOT NULL,
+    created_by_user_id uuid NOT NULL,
+    created_at_utc timestamp with time zone NOT NULL,
+    modified_at_utc timestamp with time zone NOT NULL
+);
 
-            migrationBuilder.AddColumn<decimal>(
-                name: "location_latitude",
-                schema: "ssf",
-                table: "daily_logs",
-                type: "numeric(10,7)",
-                precision: 10,
-                scale: 7,
-                nullable: true);
+CREATE TABLE IF NOT EXISTS ssf.day_ledger_allocations (
+    id uuid PRIMARY KEY,
+    plot_id uuid NOT NULL,
+    allocated_amount numeric(18,2) NOT NULL,
+    currency_code character varying(8) NOT NULL,
+    allocated_at_utc timestamp with time zone NOT NULL,
+    day_ledger_id uuid NOT NULL
+);
 
-            migrationBuilder.AddColumn<decimal>(
-                name: "location_longitude",
-                schema: "ssf",
-                table: "daily_logs",
-                type: "numeric(10,7)",
-                precision: 10,
-                scale: 7,
-                nullable: true);
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1
+        FROM pg_constraint
+        WHERE conname = 'fk_day_ledger_allocations_day_ledgers_day_ledger_id'
+          AND connamespace = 'ssf'::regnamespace
+    ) THEN
+        ALTER TABLE ssf.day_ledger_allocations
+            ADD CONSTRAINT fk_day_ledger_allocations_day_ledgers_day_ledger_id
+            FOREIGN KEY (day_ledger_id)
+            REFERENCES ssf.day_ledgers("Id")
+            ON DELETE CASCADE;
+    END IF;
+END $$;
 
-            migrationBuilder.AddColumn<string>(
-                name: "location_permission_state",
-                schema: "ssf",
-                table: "daily_logs",
-                type: "character varying(30)",
-                maxLength: 30,
-                nullable: true);
+CREATE INDEX IF NOT EXISTS ix_price_configs_modified_at_utc
+    ON ssf.price_configs (modified_at_utc);
+CREATE INDEX IF NOT EXISTS ix_plots_modified_at_utc
+    ON ssf.plots (modified_at_utc);
+CREATE INDEX IF NOT EXISTS ix_planned_activities_modified_at_utc
+    ON ssf.planned_activities (modified_at_utc);
+CREATE INDEX IF NOT EXISTS ix_finance_corrections_modified_at_utc
+    ON ssf.finance_corrections (modified_at_utc);
+CREATE INDEX IF NOT EXISTS ix_farms_modified_at_utc
+    ON ssf.farms (modified_at_utc);
+CREATE INDEX IF NOT EXISTS ix_daily_logs_modified_at_utc
+    ON ssf.daily_logs (modified_at_utc);
+CREATE INDEX IF NOT EXISTS ix_crop_cycles_modified_at_utc
+    ON ssf.crop_cycles (modified_at_utc);
+CREATE INDEX IF NOT EXISTS ix_cost_entries_modified_at_utc
+    ON ssf.cost_entries (modified_at_utc);
 
-            migrationBuilder.AddColumn<string>(
-                name: "location_provider",
-                schema: "ssf",
-                table: "daily_logs",
-                type: "character varying(50)",
-                maxLength: 50,
-                nullable: true);
-
-            migrationBuilder.AddColumn<DateTime>(
-                name: "modified_at_utc",
-                schema: "ssf",
-                table: "daily_logs",
-                type: "timestamp with time zone",
-                nullable: false,
-                defaultValue: new DateTime(1, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified));
-
-            migrationBuilder.AddColumn<DateTime>(
-                name: "modified_at_utc",
-                schema: "ssf",
-                table: "crop_cycles",
-                type: "timestamp with time zone",
-                nullable: false,
-                defaultValue: new DateTime(1, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified));
-
-            migrationBuilder.AddColumn<decimal>(
-                name: "location_accuracy_meters",
-                schema: "ssf",
-                table: "cost_entries",
-                type: "numeric(10,2)",
-                precision: 10,
-                scale: 2,
-                nullable: true);
-
-            migrationBuilder.AddColumn<decimal>(
-                name: "location_altitude",
-                schema: "ssf",
-                table: "cost_entries",
-                type: "numeric(10,2)",
-                precision: 10,
-                scale: 2,
-                nullable: true);
-
-            migrationBuilder.AddColumn<DateTime>(
-                name: "location_captured_at_utc",
-                schema: "ssf",
-                table: "cost_entries",
-                type: "timestamp with time zone",
-                nullable: true);
-
-            migrationBuilder.AddColumn<decimal>(
-                name: "location_latitude",
-                schema: "ssf",
-                table: "cost_entries",
-                type: "numeric(10,7)",
-                precision: 10,
-                scale: 7,
-                nullable: true);
-
-            migrationBuilder.AddColumn<decimal>(
-                name: "location_longitude",
-                schema: "ssf",
-                table: "cost_entries",
-                type: "numeric(10,7)",
-                precision: 10,
-                scale: 7,
-                nullable: true);
-
-            migrationBuilder.AddColumn<string>(
-                name: "location_permission_state",
-                schema: "ssf",
-                table: "cost_entries",
-                type: "character varying(30)",
-                maxLength: 30,
-                nullable: true);
-
-            migrationBuilder.AddColumn<string>(
-                name: "location_provider",
-                schema: "ssf",
-                table: "cost_entries",
-                type: "character varying(50)",
-                maxLength: 50,
-                nullable: true);
-
-            migrationBuilder.AddColumn<DateTime>(
-                name: "modified_at_utc",
-                schema: "ssf",
-                table: "cost_entries",
-                type: "timestamp with time zone",
-                nullable: false,
-                defaultValue: new DateTime(1, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified));
-
-            migrationBuilder.CreateTable(
-                name: "day_ledgers",
-                schema: "ssf",
-                columns: table => new
-                {
-                    Id = table.Column<Guid>(type: "uuid", nullable: false),
-                    farm_id = table.Column<Guid>(type: "uuid", nullable: false),
-                    source_cost_entry_id = table.Column<Guid>(type: "uuid", nullable: false),
-                    ledger_date = table.Column<DateOnly>(type: "date", nullable: false),
-                    allocation_basis = table.Column<string>(type: "character varying(40)", maxLength: 40, nullable: false),
-                    created_by_user_id = table.Column<Guid>(type: "uuid", nullable: false),
-                    created_at_utc = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
-                    modified_at_utc = table.Column<DateTime>(type: "timestamp with time zone", nullable: false)
-                },
-                constraints: table =>
-                {
-                    table.PrimaryKey("PK_day_ledgers", x => x.Id);
-                });
-
-            migrationBuilder.CreateTable(
-                name: "day_ledger_allocations",
-                schema: "ssf",
-                columns: table => new
-                {
-                    id = table.Column<Guid>(type: "uuid", nullable: false),
-                    plot_id = table.Column<Guid>(type: "uuid", nullable: false),
-                    allocated_amount = table.Column<decimal>(type: "numeric(18,2)", precision: 18, scale: 2, nullable: false),
-                    currency_code = table.Column<string>(type: "character varying(8)", maxLength: 8, nullable: false),
-                    allocated_at_utc = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
-                    day_ledger_id = table.Column<Guid>(type: "uuid", nullable: false)
-                },
-                constraints: table =>
-                {
-                    table.PrimaryKey("PK_day_ledger_allocations", x => x.id);
-                    table.ForeignKey(
-                        name: "FK_day_ledger_allocations_day_ledgers_day_ledger_id",
-                        column: x => x.day_ledger_id,
-                        principalSchema: "ssf",
-                        principalTable: "day_ledgers",
-                        principalColumn: "Id",
-                        onDelete: ReferentialAction.Cascade);
-                });
-
-            migrationBuilder.CreateIndex(
-                name: "IX_price_configs_modified_at_utc",
-                schema: "ssf",
-                table: "price_configs",
-                column: "modified_at_utc");
-
-            migrationBuilder.CreateIndex(
-                name: "IX_plots_modified_at_utc",
-                schema: "ssf",
-                table: "plots",
-                column: "modified_at_utc");
-
-            migrationBuilder.CreateIndex(
-                name: "IX_planned_activities_modified_at_utc",
-                schema: "ssf",
-                table: "planned_activities",
-                column: "modified_at_utc");
-
-            migrationBuilder.CreateIndex(
-                name: "IX_finance_corrections_modified_at_utc",
-                schema: "ssf",
-                table: "finance_corrections",
-                column: "modified_at_utc");
-
-            migrationBuilder.CreateIndex(
-                name: "IX_farms_modified_at_utc",
-                schema: "ssf",
-                table: "farms",
-                column: "modified_at_utc");
-
-            migrationBuilder.CreateIndex(
-                name: "IX_daily_logs_modified_at_utc",
-                schema: "ssf",
-                table: "daily_logs",
-                column: "modified_at_utc");
-
-            migrationBuilder.CreateIndex(
-                name: "IX_crop_cycles_modified_at_utc",
-                schema: "ssf",
-                table: "crop_cycles",
-                column: "modified_at_utc");
-
-            migrationBuilder.CreateIndex(
-                name: "IX_cost_entries_modified_at_utc",
-                schema: "ssf",
-                table: "cost_entries",
-                column: "modified_at_utc");
-
-            migrationBuilder.CreateIndex(
-                name: "IX_day_ledger_allocations_allocated_at_utc",
-                schema: "ssf",
-                table: "day_ledger_allocations",
-                column: "allocated_at_utc");
-
-            migrationBuilder.CreateIndex(
-                name: "IX_day_ledger_allocations_day_ledger_id",
-                schema: "ssf",
-                table: "day_ledger_allocations",
-                column: "day_ledger_id");
-
-            migrationBuilder.CreateIndex(
-                name: "IX_day_ledger_allocations_plot_id",
-                schema: "ssf",
-                table: "day_ledger_allocations",
-                column: "plot_id");
-
-            migrationBuilder.CreateIndex(
-                name: "IX_day_ledgers_farm_id_ledger_date",
-                schema: "ssf",
-                table: "day_ledgers",
-                columns: new[] { "farm_id", "ledger_date" });
-
-            migrationBuilder.CreateIndex(
-                name: "IX_day_ledgers_modified_at_utc",
-                schema: "ssf",
-                table: "day_ledgers",
-                column: "modified_at_utc");
-
-            migrationBuilder.CreateIndex(
-                name: "IX_day_ledgers_source_cost_entry_id",
-                schema: "ssf",
-                table: "day_ledgers",
-                column: "source_cost_entry_id",
-                unique: true);
+CREATE INDEX IF NOT EXISTS ix_day_ledger_allocations_allocated_at_utc
+    ON ssf.day_ledger_allocations (allocated_at_utc);
+CREATE INDEX IF NOT EXISTS ix_day_ledger_allocations_day_ledger_id
+    ON ssf.day_ledger_allocations (day_ledger_id);
+CREATE INDEX IF NOT EXISTS ix_day_ledger_allocations_plot_id
+    ON ssf.day_ledger_allocations (plot_id);
+CREATE INDEX IF NOT EXISTS ix_day_ledgers_farm_id_ledger_date
+    ON ssf.day_ledgers (farm_id, ledger_date);
+CREATE INDEX IF NOT EXISTS ix_day_ledgers_modified_at_utc
+    ON ssf.day_ledgers (modified_at_utc);
+CREATE UNIQUE INDEX IF NOT EXISTS ix_day_ledgers_source_cost_entry_id
+    ON ssf.day_ledgers (source_cost_entry_id);
+""");
         }
 
         /// <inheritdoc />

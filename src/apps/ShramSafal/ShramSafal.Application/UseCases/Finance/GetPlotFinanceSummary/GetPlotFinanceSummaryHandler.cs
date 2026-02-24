@@ -40,7 +40,7 @@ public sealed class GetPlotFinanceSummaryHandler(IShramSafalRepository repositor
 
         var allocatedCosts = decimal.Round(
             ledgers.Sum(ledger =>
-                ledger.PlotAllocations
+                ledger.Allocations
                     .Where(allocation => allocation.PlotId == query.PlotId)
                     .Sum(allocation => allocation.AllocatedAmount)),
             2,

@@ -3,11 +3,17 @@ using AgriSync.BuildingBlocks.Auth;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Options;
 using ShramSafal.Application.Ports;
 using ShramSafal.Application.Ports.External;
+using ShramSafal.Infrastructure.AI;
+using ShramSafal.Infrastructure.Auth;
+using ShramSafal.Infrastructure.Integrations.Gemini;
+using ShramSafal.Infrastructure.Integrations.Sarvam;
 using ShramSafal.Infrastructure.Persistence;
 using ShramSafal.Infrastructure.Persistence.Repositories;
 using ShramSafal.Infrastructure.Storage;
+using ShramSafal.Infrastructure.Reports;
 
 namespace ShramSafal.Infrastructure;
 
@@ -34,9 +40,18 @@ public static class DependencyInjection
                 options.ApiKey = section["ApiKey"]!.Trim();
             }
 
-            if (!string.IsNullOrWhiteSpace(section["Model"]))
+            if (!string.IsNullOrWhiteSpace(section["ModelId"]))
             {
-                options.Model = section["Model"]!.Trim();
+                options.ModelId = section["ModelId"]!.Trim();
+            }
+            else if (!string.IsNullOrWhiteSpace(section["Model"]))
+            {
+                options.ModelId = section["Model"]!.Trim();
+            }
+
+            if (!string.IsNullOrWhiteSpace(section["BaseUrl"]))
+            {
+                options.BaseUrl = section["BaseUrl"]!.Trim();
             }
 
             if (decimal.TryParse(section["Temperature"], NumberStyles.Float, CultureInfo.InvariantCulture, out var temperature))
@@ -47,6 +62,11 @@ public static class DependencyInjection
             if (int.TryParse(section["MaxTokens"], NumberStyles.Integer, CultureInfo.InvariantCulture, out var maxTokens))
             {
                 options.MaxTokens = maxTokens;
+            }
+
+            if (int.TryParse(section["TimeoutSeconds"], NumberStyles.Integer, CultureInfo.InvariantCulture, out var timeoutSeconds))
+            {
+                options.TimeoutSeconds = timeoutSeconds;
             }
         });
 
@@ -59,8 +79,107 @@ public static class DependencyInjection
             }
         });
 
+        services.Configure<SarvamOptions>(options =>
+        {
+            var section = configuration.GetSection(SarvamOptions.SectionName);
+            if (!string.IsNullOrWhiteSpace(section["ApiSubscriptionKey"]))
+            {
+                options.ApiSubscriptionKey = section["ApiSubscriptionKey"]!.Trim();
+            }
+
+            if (!string.IsNullOrWhiteSpace(section["SttEndpoint"]))
+            {
+                options.SttEndpoint = section["SttEndpoint"]!.Trim();
+            }
+
+            if (!string.IsNullOrWhiteSpace(section["SttModel"]))
+            {
+                options.SttModel = section["SttModel"]!.Trim();
+            }
+
+            if (!string.IsNullOrWhiteSpace(section["SttMode"]))
+            {
+                options.SttMode = section["SttMode"]!.Trim();
+            }
+
+            if (!string.IsNullOrWhiteSpace(section["SttLanguage"]))
+            {
+                options.SttLanguage = section["SttLanguage"]!.Trim();
+            }
+
+            if (!string.IsNullOrWhiteSpace(section["ChatEndpoint"]))
+            {
+                options.ChatEndpoint = section["ChatEndpoint"]!.Trim();
+            }
+
+            if (!string.IsNullOrWhiteSpace(section["ChatModel"]))
+            {
+                options.ChatModel = section["ChatModel"]!.Trim();
+            }
+
+            if (!string.IsNullOrWhiteSpace(section["VisionModel"]))
+            {
+                options.VisionModel = section["VisionModel"]!.Trim();
+            }
+
+            if (decimal.TryParse(section["ChatTemperature"], NumberStyles.Float, CultureInfo.InvariantCulture, out var temperature))
+            {
+                options.ChatTemperature = temperature;
+            }
+
+            if (int.TryParse(section["TimeoutSeconds"], NumberStyles.Integer, CultureInfo.InvariantCulture, out var timeoutSeconds))
+            {
+                options.TimeoutSeconds = timeoutSeconds;
+            }
+
+            if (int.TryParse(section["DocIntelTimeoutSeconds"], NumberStyles.Integer, CultureInfo.InvariantCulture, out var docIntelTimeoutSeconds))
+            {
+                options.DocIntelTimeoutSeconds = docIntelTimeoutSeconds;
+            }
+        });
+
+        services.PostConfigure<SarvamOptions>(options =>
+        {
+            var key = Environment.GetEnvironmentVariable("SARVAM_API_SUBSCRIPTION_KEY");
+            if (!string.IsNullOrWhiteSpace(key))
+            {
+                options.ApiSubscriptionKey = key.Trim();
+            }
+        });
+
         services.AddScoped<IShramSafalRepository, ShramSafalRepository>();
+        services.AddScoped<IReportExportService, PdfReportExportService>();
+        services.AddScoped<IAuthorizationEnforcer, ShramSafalAuthorizationEnforcer>();
+        services.AddScoped<IAiJobRepository, AiJobRepository>();
         services.AddScoped<ISyncMutationStore, SyncMutationStore>();
+        services.AddSingleton<AiResponseNormalizer>();
+        services.AddSingleton<AiCircuitBreakerRegistry>();
+        services.AddSingleton<AiFailureClassifier>();
+        services.AddSingleton<AiAttemptCostEstimator>();
+        services.AddScoped<IAiPromptBuilder, AiPromptBuilder>();
+        services.AddScoped<SarvamSttClient>();
+        services.AddScoped<SarvamChatClient>();
+        services.AddScoped<SarvamVisionClient>();
+        services.AddScoped<IAiProvider, SarvamAiProvider>();
+        services.AddScoped<IAiProvider, GeminiAiProvider>();
+        services.AddScoped<IAiOrchestrator, AiOrchestrator>();
+
+        services.AddHttpClient("GeminiAiProvider")
+            .ConfigureHttpClient((sp, client) =>
+            {
+                var geminiOptions = sp.GetRequiredService<IOptions<GeminiOptions>>().Value;
+                var timeout = geminiOptions.TimeoutSeconds <= 0 ? 30 : geminiOptions.TimeoutSeconds;
+                client.Timeout = TimeSpan.FromSeconds(timeout);
+            });
+
+        services.AddHttpClient("SarvamAiProvider")
+            .ConfigureHttpClient((sp, client) =>
+            {
+                var sarvamOptions = sp.GetRequiredService<IOptions<SarvamOptions>>().Value;
+                var timeout = sarvamOptions.TimeoutSeconds <= 0 ? 45 : sarvamOptions.TimeoutSeconds;
+                client.Timeout = TimeSpan.FromSeconds(timeout);
+            });
+
         services.Configure<StorageOptions>(configuration.GetSection("ShramSafal:Storage"));
         services.AddSingleton<IAttachmentStorageService, LocalFileStorageService>();
         return services;

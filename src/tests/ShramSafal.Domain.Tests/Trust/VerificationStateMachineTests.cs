@@ -115,6 +115,7 @@ public sealed class VerificationStateMachineTests
             new UserId(Guid.NewGuid()),
             DateOnly.FromDateTime(DateTime.UtcNow.Date),
             null,
+            null,
             DateTime.UtcNow);
     }
 }

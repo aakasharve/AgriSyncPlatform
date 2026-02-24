@@ -100,8 +100,25 @@ export interface VoiceParseResult {
 }
 
 export type VoiceInput =
-    | { type: 'audio'; data: string; mimeType: string } // Base64 data
-    | { type: 'text'; content: string };
+    | {
+        type: 'audio';
+        data: string;
+        mimeType: string;
+        idempotencyKey?: string;
+        sessionId?: string;
+        segmentIndex?: number;
+        contentHash?: string;
+        inputSpeechDurationMs?: number;
+        inputRawDurationMs?: number;
+        segmentMetadataJson?: string;
+        requestPayloadHash?: string;
+    }
+    | {
+        type: 'text';
+        content: string;
+        idempotencyKey?: string;
+        requestPayloadHash?: string;
+    };
 
 /**
  * Port for AI voice parsing operations.

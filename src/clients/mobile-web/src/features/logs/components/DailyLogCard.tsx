@@ -6,6 +6,9 @@
 import React from 'react';
 import { ArrowRight, CheckSquare, Droplets, Users, Package } from 'lucide-react';
 import { TodayCounts } from '../../../types';
+import type { LocationDto } from '../../../infrastructure/api/AgriSyncClient';
+import LocationBadge from '../../location/components/LocationBadge';
+import VerificationStatusBadge from './verification/VerificationStatusBadge';
 
 interface DailyLogCardProps {
     workDone: string;
@@ -18,6 +21,9 @@ interface DailyLogCardProps {
     statusTone: 'pending' | 'rejected' | 'approved';
     counts?: Partial<TodayCounts>;
     summaryLines?: string[];
+    location?: LocationDto | null;
+    verificationStatus?: string;
+    attachmentCount?: number;
     onClick: () => void;
 }
 
@@ -32,6 +38,9 @@ const DailyLogCard: React.FC<DailyLogCardProps> = ({
     statusTone,
     counts,
     summaryLines = [],
+    location,
+    verificationStatus,
+    attachmentCount,
     onClick,
 }) => {
     const compactCounts = {
@@ -59,12 +68,16 @@ const DailyLogCard: React.FC<DailyLogCardProps> = ({
                 <div className="pl-2.5 w-full">
                     <div className="flex justify-between items-start gap-2 mb-2">
                         <div>
-                            <p className="text-[10px] uppercase tracking-wide font-bold text-slate-400">Work Done</p>
+                            <p className="text-[10px] uppercase tracking-wide font-bold text-slate-400">Work</p>
                             <h3 className="font-bold text-sm text-slate-900 leading-tight">{workDone}</h3>
                         </div>
-                        <span className={`text-[10px] font-bold uppercase tracking-wide px-2 py-0.5 rounded-full border ${statusToneClass}`}>
-                            {statusLabel}
-                        </span>
+                        {verificationStatus ? (
+                            <VerificationStatusBadge status={verificationStatus} size="sm" />
+                        ) : (
+                            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${statusTone === 'pending' ? 'bg-amber-50 text-amber-600 border-amber-200' : statusTone === 'rejected' ? 'bg-red-50 text-red-600 border-red-200' : 'bg-emerald-50 text-emerald-600 border-emerald-200'}`}>
+                                {statusTone === 'pending' ? '⏳ Wait' : statusTone === 'rejected' ? '❌ Fix' : '✅ Done'}
+                            </span>
+                        )}
                     </div>
 
                     <p className="text-xs text-slate-600">
@@ -78,6 +91,16 @@ const DailyLogCard: React.FC<DailyLogCardProps> = ({
                     </p>
 
                     <p className="text-[11px] text-slate-500 mt-0.5">{timeLabel}</p>
+
+                    {/* Location + Attachment badges */}
+                    <div className="flex items-center gap-1.5 mt-1">
+                        <LocationBadge location={location} />
+                        {attachmentCount !== undefined && attachmentCount > 0 && (
+                            <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-md text-[10px] font-semibold bg-blue-50 border border-blue-100 text-blue-700">
+                                📎 {attachmentCount}
+                            </span>
+                        )}
+                    </div>
 
                     {summaryLines.length > 0 && (
                         <div className="mt-2 rounded-lg bg-slate-50 border border-slate-100 px-2 py-1.5">

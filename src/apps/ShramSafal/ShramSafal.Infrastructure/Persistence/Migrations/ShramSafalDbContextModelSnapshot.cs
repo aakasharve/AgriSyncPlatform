@@ -18,10 +18,256 @@ namespace ShramSafal.Infrastructure.Persistence.Migrations
 #pragma warning disable 612, 618
             modelBuilder
                 .HasDefaultSchema("ssf")
-                .HasAnnotation("ProductVersion", "9.0.13")
+                .HasAnnotation("ProductVersion", "10.0.3")
                 .HasAnnotation("Relational:MaxIdentifierLength", 63);
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
+
+            modelBuilder.Entity("ShramSafal.Domain.AI.AiJob", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTime?>("CompletedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("completed_at_utc");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at_utc");
+
+                    b.Property<Guid>("FarmId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("farm_id");
+
+                    b.Property<string>("IdempotencyKey")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)")
+                        .HasColumnName("idempotency_key");
+
+                    b.Property<string>("InputContentHash")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("input_content_hash");
+
+                    b.Property<int?>("InputRawDurationMs")
+                        .HasColumnType("integer")
+                        .HasColumnName("input_raw_duration_ms");
+
+                    b.Property<string>("InputSessionMetadataJson")
+                        .HasColumnType("jsonb")
+                        .HasColumnName("input_session_metadata_json");
+
+                    b.Property<int?>("InputSpeechDurationMs")
+                        .HasColumnType("integer")
+                        .HasColumnName("input_speech_duration_ms");
+
+                    b.Property<string>("InputStoragePath")
+                        .HasMaxLength(1024)
+                        .HasColumnType("character varying(1024)")
+                        .HasColumnName("input_storage_path");
+
+                    b.Property<DateTime>("ModifiedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("modified_at_utc");
+
+                    b.Property<string>("NormalizedResultJson")
+                        .HasColumnType("jsonb")
+                        .HasColumnName("normalized_result_json");
+
+                    b.Property<string>("OperationType")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("operation_type");
+
+                    b.Property<string>("SchemaVersion")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("schema_version");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("status");
+
+                    b.Property<int>("TotalAttempts")
+                        .HasColumnType("integer")
+                        .HasColumnName("total_attempts");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("user_id");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CreatedAtUtc");
+
+                    b.HasIndex("FarmId");
+
+                    b.HasIndex("IdempotencyKey")
+                        .IsUnique();
+
+                    b.HasIndex("Status");
+
+                    b.HasIndex("UserId");
+
+                    b.ToTable("ai_jobs", "ssf");
+                });
+
+            modelBuilder.Entity("ShramSafal.Domain.AI.AiJobAttempt", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<Guid>("AiJobId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("ai_job_id");
+
+                    b.Property<int>("AttemptNumber")
+                        .HasColumnType("integer")
+                        .HasColumnName("attempt_number");
+
+                    b.Property<DateTime>("AttemptedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("attempted_at_utc");
+
+                    b.Property<decimal?>("ConfidenceScore")
+                        .HasPrecision(5, 4)
+                        .HasColumnType("numeric(5,4)")
+                        .HasColumnName("confidence_score");
+
+                    b.Property<string>("ErrorMessage")
+                        .HasMaxLength(2048)
+                        .HasColumnType("character varying(2048)")
+                        .HasColumnName("error_message");
+
+                    b.Property<decimal?>("EstimatedCostUnits")
+                        .HasPrecision(10, 4)
+                        .HasColumnType("numeric(10,4)")
+                        .HasColumnName("estimated_cost_units");
+
+                    b.Property<string>("FailureClass")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("failure_class");
+
+                    b.Property<bool>("IsSuccess")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_success");
+
+                    b.Property<int>("LatencyMs")
+                        .HasColumnType("integer")
+                        .HasColumnName("latency_ms");
+
+                    b.Property<string>("Provider")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("provider");
+
+                    b.Property<string>("RawProviderResponse")
+                        .HasColumnType("text")
+                        .HasColumnName("raw_provider_response");
+
+                    b.Property<string>("RequestPayloadHash")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("request_payload_hash");
+
+                    b.Property<int?>("TokensUsed")
+                        .HasColumnType("integer")
+                        .HasColumnName("tokens_used");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AiJobId");
+
+                    b.HasIndex("AttemptedAtUtc");
+
+                    b.HasIndex("Provider");
+
+                    b.HasIndex("AiJobId", "AttemptNumber")
+                        .IsUnique();
+
+                    b.ToTable("ai_job_attempts", "ssf");
+                });
+
+            modelBuilder.Entity("ShramSafal.Domain.AI.AiProviderConfig", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<int>("CircuitBreakerResetSeconds")
+                        .HasColumnType("integer")
+                        .HasColumnName("circuit_breaker_reset_seconds");
+
+                    b.Property<int>("CircuitBreakerThreshold")
+                        .HasColumnType("integer")
+                        .HasColumnName("circuit_breaker_threshold");
+
+                    b.Property<string>("DefaultProvider")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("default_provider");
+
+                    b.Property<bool>("FallbackEnabled")
+                        .HasColumnType("boolean")
+                        .HasColumnName("fallback_enabled");
+
+                    b.Property<bool>("IsAiProcessingDisabled")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_ai_processing_disabled");
+
+                    b.Property<int>("MaxRetries")
+                        .HasColumnType("integer")
+                        .HasColumnName("max_retries");
+
+                    b.Property<DateTime>("ModifiedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("modified_at_utc");
+
+                    b.Property<Guid>("ModifiedByUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("modified_by_user_id");
+
+                    b.Property<string>("PattiProvider")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("patti_provider");
+
+                    b.Property<decimal>("ReceiptConfidenceThreshold")
+                        .HasPrecision(5, 4)
+                        .HasColumnType("numeric(5,4)")
+                        .HasColumnName("receipt_confidence_threshold");
+
+                    b.Property<string>("ReceiptProvider")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("receipt_provider");
+
+                    b.Property<decimal>("VoiceConfidenceThreshold")
+                        .HasPrecision(5, 4)
+                        .HasColumnType("numeric(5,4)")
+                        .HasColumnName("voice_confidence_threshold");
+
+                    b.Property<string>("VoiceProvider")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("voice_provider");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("ai_provider_configs", "ssf");
+                });
 
             modelBuilder.Entity("ShramSafal.Domain.Attachments.Attachment", b =>
                 {
@@ -327,11 +573,22 @@ namespace ShramSafal.Infrastructure.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("farm_id");
 
+                    b.Property<string>("FlagReason")
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)")
+                        .HasColumnName("flag_reason");
+
                     b.Property<bool>("IsCorrected")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("boolean")
                         .HasDefaultValue(false)
                         .HasColumnName("is_corrected");
+
+                    b.Property<bool>("IsFlagged")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("is_flagged");
 
                     b.Property<DateTime>("ModifiedAtUtc")
                         .HasColumnType("timestamp with time zone")
@@ -601,8 +858,8 @@ namespace ShramSafal.Infrastructure.Persistence.Migrations
 
                     b.Property<string>("Status")
                         .IsRequired()
-                        .HasMaxLength(20)
-                        .HasColumnType("character varying(20)")
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)")
                         .HasColumnName("status");
 
                     b.Property<Guid>("VerifiedByUserId")
@@ -748,6 +1005,15 @@ namespace ShramSafal.Infrastructure.Persistence.Migrations
                         .IsUnique();
 
                     b.ToTable("sync_mutations", "ssf");
+                });
+
+            modelBuilder.Entity("ShramSafal.Domain.AI.AiJobAttempt", b =>
+                {
+                    b.HasOne("ShramSafal.Domain.AI.AiJob", null)
+                        .WithMany("Attempts")
+                        .HasForeignKey("AiJobId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("ShramSafal.Domain.Finance.CostEntry", b =>
@@ -930,6 +1196,11 @@ namespace ShramSafal.Infrastructure.Persistence.Migrations
                         .HasForeignKey("ScheduleTemplateId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
+                });
+
+            modelBuilder.Entity("ShramSafal.Domain.AI.AiJob", b =>
+                {
+                    b.Navigation("Attempts");
                 });
 
             modelBuilder.Entity("ShramSafal.Domain.Logs.DailyLog", b =>

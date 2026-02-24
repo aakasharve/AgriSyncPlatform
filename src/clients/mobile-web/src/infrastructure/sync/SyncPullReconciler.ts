@@ -11,12 +11,17 @@ import {
     type CropCycleDto,
     type DailyLogDto,
     type DayLedgerDto,
-    type PlannedTask as PlannedTaskDto,
     type PlotDto,
     type SyncPullResponse,
+    type PlannedTask as PlannedTaskDto
 } from '../api/AgriSyncClient';
 import { getDatabase, type AttachmentRecord } from '../storage/DexieDatabase';
 import { storageNamespace } from '../storage/StorageNamespace';
+import { getDateKey } from '../../core/domain/services/DateKeyService';
+
+export function dayLedgerMetaKey(id: string): string {
+    return `shramsafal_day_ledger_${id}`;
+}
 
 type SyncPullReferenceDataPayload = SyncPullResponse & {
     scheduleTemplates?: unknown[];
@@ -222,7 +227,7 @@ function toDailyLog(
         .sort((left, right) => Date.parse(right.occurredAtUtc) - Date.parse(left.occurredAtUtc))[0];
 
     const verificationStatus = mapVerificationStatus(
-        source.verificationStatus ?? source.lastVerificationStatus ?? latestVerification?.status);
+        source.lastVerificationStatus ?? latestVerification?.status);
 
     return {
         id: source.id,
@@ -300,6 +305,8 @@ export async function reconcileSyncPull(payload: SyncPullResponse): Promise<void
     const costCategories = referencePayload.costCategories ?? [];
     const referenceDataVersionHash = referencePayload.referenceDataVersionHash?.trim() ?? '';
     const cropTypeDefaults = readCropTypeReferences(cropTypes);
+    const dayLedgers = payload.dayLedgers ?? [];
+    const plannedTasks = payload.plannedActivities as PlannedTaskDto[] ?? [];
 
     const existingCrops = readExistingCrops();
     const cropsById = new Map(existingCrops.map(crop => [crop.id, crop]));
@@ -341,7 +348,11 @@ export async function reconcileSyncPull(payload: SyncPullResponse): Promise<void
     const receivedAtUtc = systemClock.nowISO();
 
     const db = getDatabase();
-    await db.transaction('rw', [db.logs, db.attachments, db.uploadQueue, db.appMeta, db.referenceData], async () => {
+    await db.transaction('rw', [
+        db.logs, db.attachments, db.uploadQueue, db.appMeta, db.referenceData,
+        db.farms, db.plots, db.cropCycles, db.costEntries, db.financeCorrections,
+        db.dayLedgers, db.plannedTasks
+    ], async () => {
         for (const log of logs) {
             await db.logs.put({
                 id: log.id,
@@ -447,7 +458,7 @@ export async function reconcileSyncPull(payload: SyncPullResponse): Promise<void
             await db.dayLedgers.put({
                 id: dayLedger.id,
                 farmId: dayLedger.farmId,
-                dateKey: normalizeDateValue(dayLedger.dateKey),
+                dateKey: getDateKey(dayLedger.ledgerDate),
                 payload: dayLedger,
                 updatedAt: receivedAtUtc,
             });
@@ -463,7 +474,7 @@ export async function reconcileSyncPull(payload: SyncPullResponse): Promise<void
             await db.plannedTasks.put({
                 id: plannedTask.id,
                 cropCycleId: plannedTask.cropCycleId,
-                plannedDate: normalizeDateValue(plannedTask.plannedDate),
+                plannedDate: getDateKey(plannedTask.plannedDate),
                 payload: plannedTask,
                 updatedAt: receivedAtUtc,
             });
@@ -489,17 +500,55 @@ export async function reconcileSyncPull(payload: SyncPullResponse): Promise<void
             updatedAt: receivedAtUtc,
         });
 
-        await db.appMeta.put({
-            key: 'shramsafal_finance_cost_entries_v1',
-            value: payload.costEntries ?? [],
-            updatedAt: receivedAtUtc,
-        });
+        const parsedCostEntries = payload.costEntries ?? [];
+        for (const ce of parsedCostEntries) {
+            await db.costEntries.put({
+                id: ce.id,
+                farmId: ce.farmId,
+                payload: ce,
+                updatedAt: receivedAtUtc
+            });
+        }
 
-        await db.appMeta.put({
-            key: 'shramsafal_finance_corrections_v1',
-            value: payload.financeCorrections ?? [],
-            updatedAt: receivedAtUtc,
-        });
+        const parsedCorrections = payload.financeCorrections ?? [];
+        for (const fc of parsedCorrections) {
+            await db.financeCorrections.put({
+                id: fc.id,
+                costEntryId: fc.costEntryId,
+                payload: fc,
+                updatedAt: receivedAtUtc
+            });
+        }
+
+        const parsedFarms = payload.farms ?? [];
+        for (const f of parsedFarms) {
+            await db.farms.put({
+                id: f.id,
+                payload: f,
+                updatedAt: receivedAtUtc
+            });
+        }
+
+        const parsedLocalPlots = payload.plots ?? [];
+        for (const p of parsedLocalPlots) {
+            await db.plots.put({
+                id: p.id,
+                farmId: p.farmId,
+                payload: p,
+                updatedAt: receivedAtUtc
+            });
+        }
+
+        const parsedCycles = payload.cropCycles ?? [];
+        for (const cy of parsedCycles) {
+            await db.cropCycles.put({
+                id: cy.id,
+                farmId: cy.farmId,
+                plotId: cy.plotId,
+                payload: cy,
+                updatedAt: receivedAtUtc
+            });
+        }
 
         await db.appMeta.put({
             key: 'shramsafal_finance_price_configs_v1',
