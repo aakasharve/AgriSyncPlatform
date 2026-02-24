@@ -46,7 +46,7 @@ import {
 } from '../../types';
 import { HarvestSession, HarvestDayEntry, SaleEntry } from '../logs/harvest.types';
 import { ProcurementExpense } from '../procurement/procurement.types';
-import { getDateKey, getTodayKey } from '../../domain/system/DateKeyService';
+import { getDateKey, getTodayKey } from '../../core/domain/services/DateKeyService';
 import { idGenerator } from '../../core/domain/services/IdGenerator';
 
 // --- VERSION ---
@@ -513,7 +513,7 @@ export const generateRollingDemoData = (crops: CropProfile[]): DailyLog[] => {
 
 // --- FINANCIAL GENERATORS ---
 
-import { financeService } from '../finance/financeService';
+import { financeCommandService } from '../finance/financeCommandService';
 import { MoneyCategory } from '../finance/finance.types';
 
 export const captureMoneyEventsFromLog = (log: DailyLog): void => {
@@ -526,12 +526,13 @@ export const captureMoneyEventsFromLog = (log: DailyLog): void => {
     log.labour?.forEach((entry) => {
         const amount = entry.totalCost ?? ((entry.count || 0) * (entry.wagePerPerson || 0));
         if (!amount) return;
-        financeService.createMoneyEventFromSource({
+        financeCommandService.createMoneyEventFromSource({
             type: 'VoiceLog',
             sourceId: `${log.id}:labour:${entry.id}`,
             dateTime: baseDateTime,
             eventType: 'Expense',
             category: 'Labour',
+            farmId: selection?.farmId || 'farm_unknown', // Added required property
             cropId,
             plotId,
             amount,
@@ -546,12 +547,13 @@ export const captureMoneyEventsFromLog = (log: DailyLog): void => {
     log.inputs?.forEach((entry) => {
         const amount = entry.cost;
         if (!amount) return;
-        financeService.createMoneyEventFromSource({
+        financeCommandService.createMoneyEventFromSource({
             type: 'VoiceLog',
             sourceId: `${log.id}:input:${entry.id}`,
             dateTime: baseDateTime,
             eventType: 'Expense',
             category: 'Input',
+            farmId: selection?.farmId || 'farm_unknown', // Added required property
             cropId,
             plotId,
             amount,
@@ -565,12 +567,13 @@ export const captureMoneyEventsFromLog = (log: DailyLog): void => {
     log.machinery?.forEach((entry) => {
         const amount = (entry.rentalCost || 0) + (entry.fuelCost || 0);
         if (!amount) return;
-        financeService.createMoneyEventFromSource({
+        financeCommandService.createMoneyEventFromSource({
             type: 'VoiceLog',
             sourceId: `${log.id}:machinery:${entry.id}`,
             dateTime: baseDateTime,
             eventType: 'Expense',
             category: 'Machinery',
+            farmId: selection?.farmId || 'farm_unknown', // Added required property
             cropId,
             plotId,
             amount,
@@ -585,12 +588,13 @@ export const captureMoneyEventsFromLog = (log: DailyLog): void => {
         const category = mapActivityExpenseCategory(entry.category);
         const amount = entry.totalAmount || 0;
         if (!amount) return;
-        financeService.createMoneyEventFromSource({
+        financeCommandService.createMoneyEventFromSource({
             type: 'Manual',
             sourceId: `${log.id}:activity-expense:${entry.id}`,
             dateTime: baseDateTime,
             eventType: 'Expense',
             category,
+            farmId: selection?.farmId || 'farm_unknown', // Added required property
             cropId,
             plotId,
             amount,

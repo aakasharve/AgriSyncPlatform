@@ -52,12 +52,19 @@ public static class AuthEndpoints
             LoginHandler handler,
             CancellationToken ct) =>
         {
-            var command = new LoginCommand(request.Phone, request.Password);
-            var result = await handler.HandleAsync(command, ct);
+            try
+            {
+                var command = new LoginCommand(request.Phone, request.Password);
+                var result = await handler.HandleAsync(command, ct);
 
-            return result.IsSuccess
-                ? Results.Ok(result.Value)
-                : Results.Unauthorized();
+                return result.IsSuccess
+                    ? Results.Ok(result.Value)
+                    : Results.Unauthorized();
+            }
+            catch (ArgumentException ex)
+            {
+                return Results.BadRequest(new { error = "validation_error", message = ex.Message });
+            }
         })
         .WithName("LoginUser")
         .AllowAnonymous();

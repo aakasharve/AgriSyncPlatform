@@ -728,6 +728,7 @@ export interface AgriLogResponse {
 // =============================================================================
 
 export interface SelectedCropContext {
+    farmId?: string; // Phase 7 - needed for finance tracking
     cropId: string;
     cropName: string;
     selectedPlotIds: string[];

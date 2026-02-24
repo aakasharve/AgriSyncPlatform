@@ -343,6 +343,7 @@ public sealed class PushSyncBatchHandler(
                 FarmId: request.FarmId,
                 PlotId: request.PlotId,
                 CropCycleId: request.CropCycleId,
+                RequestedByUserId: actorUserId,
                 OperatorUserId: actorUserId,
                 LogDate: request.LogDate,
                 Location: ToLocationSnapshot(request.Location),
@@ -422,9 +423,11 @@ public sealed class PushSyncBatchHandler(
             return MutationExecutionOutcome.Failure("ShramSafal.SyncInvalidPayload", "Invalid payload for verify_log.");
         }
 
-        if (!Enum.TryParse<VerificationStatus>(request.Status, true, out var status))
+        if (!TryMapVerificationStatus(request.Status, out var status))
         {
-            return MutationExecutionOutcome.Failure("ShramSafal.InvalidVerificationStatus", "Status must be Approved or Rejected.");
+            return MutationExecutionOutcome.Failure(
+                "ShramSafal.InvalidVerificationStatus",
+                "Status must be one of Approved, Rejected, Draft, Confirmed, Verified, Disputed, CorrectionPending.");
         }
 
         var dailyLog = await repository.GetDailyLogByIdAsync(request.DailyLogId, ct);
@@ -717,6 +720,31 @@ public sealed class PushSyncBatchHandler(
         return payload.Deserialize<TPayload>(SerializerOptions);
     }
 
+    private static bool TryMapVerificationStatus(string? rawStatus, out VerificationStatus status)
+    {
+        if (Enum.TryParse<VerificationStatus>(rawStatus, ignoreCase: true, out status))
+        {
+            return true;
+        }
+
+        var normalized = rawStatus?.Trim().ToLowerInvariant();
+        switch (normalized)
+        {
+            case "approved":
+                status = VerificationStatus.Confirmed;
+                return true;
+            case "rejected":
+                status = VerificationStatus.Disputed;
+                return true;
+            case "pending":
+                status = VerificationStatus.CorrectionPending;
+                return true;
+            default:
+                status = VerificationStatus.Draft;
+                return false;
+        }
+    }
+
     private static object? DeserializeStoredPayload(string payloadJson)
     {
         if (string.IsNullOrWhiteSpace(payloadJson))
@@ -818,15 +846,6 @@ public sealed class PushSyncBatchHandler(
     private sealed record AllocateGlobalExpenseMutationAllocationPayload(
         Guid PlotId,
         decimal Amount);
-
-    private sealed record AllocateGlobalExpenseMutationPayload(
-        Guid? DayLedgerId,
-        Guid FarmId,
-        Guid RequestedByUserId,
-        DateOnly DateKey,
-        IReadOnlyList<Guid> CostEntryIds,
-        string Strategy,
-        IReadOnlyDictionary<Guid, decimal>? CustomAllocations);
 
     private sealed record SetPriceConfigMutationPayload(
         Guid? PriceConfigId,

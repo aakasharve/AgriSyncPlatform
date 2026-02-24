@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useAppNavigationState } from '../app/context/AppFeatureContexts';
-import { Settings, Droplets, Users, Tractor, BookOpen, FlaskConical, Plus, Trash2, Coins, Leaf, Check, Pencil, ChevronDown, ChevronUp, Globe } from 'lucide-react';
+import { Settings, Droplets, Users, Tractor, BookOpen, FlaskConical, Bot, Plus, Trash2, Coins, Leaf, Check, Pencil, ChevronDown, ChevronUp, Globe } from 'lucide-react';
 import { LedgerDefaults, LabourShift, DailyLog, CropProfile, HarvestConfig } from '../types';
 import { getHarvestConfig } from '../services/harvestService';
 import NotificationTestComponent from '../shared/components/NotificationTestComponent';
@@ -232,13 +232,22 @@ const SettingsPage: React.FC<SettingsPageProps> = ({
             {/* Developer Tools */}
             <div className="glass-panel p-5 mt-6">
                 <h3 className="font-bold text-stone-800 text-lg mb-4">Developer Tools</h3>
-                <button
-                    onClick={() => setCurrentRoute('test-e2e')}
-                    className="w-full py-3 px-4 bg-stone-100 text-stone-700 font-bold rounded-xl hover:bg-stone-200 transition-colors flex items-center justify-center gap-2 active:scale-[0.98]"
-                >
-                    <FlaskConical size={20} />
-                    Open End-to-End Test Page
-                </button>
+                <div className="space-y-2">
+                    <button
+                        onClick={() => setCurrentRoute('test-e2e')}
+                        className="w-full py-3 px-4 bg-stone-100 text-stone-700 font-bold rounded-xl hover:bg-stone-200 transition-colors flex items-center justify-center gap-2 active:scale-[0.98]"
+                    >
+                        <FlaskConical size={20} />
+                        Open End-to-End Test Page
+                    </button>
+                    <button
+                        onClick={() => setCurrentRoute('ai-admin')}
+                        className="w-full py-3 px-4 bg-emerald-100 text-emerald-800 font-bold rounded-xl hover:bg-emerald-200 transition-colors flex items-center justify-center gap-2 active:scale-[0.98]"
+                    >
+                        <Bot size={20} />
+                        Open AI Operations (Admin)
+                    </button>
+                </div>
             </div>
 
         </div>

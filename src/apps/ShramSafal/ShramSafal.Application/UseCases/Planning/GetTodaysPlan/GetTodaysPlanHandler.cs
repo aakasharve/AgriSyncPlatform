@@ -38,7 +38,8 @@ public sealed class GetTodaysPlanHandler(
                 x.ActivityName,
                 x.Stage,
                 x.PlannedDate,
-                x.CreatedAtUtc))
+                x.CreatedAtUtc,
+                x.ModifiedAtUtc))
             .ToList();
 
         return Result.Success<IReadOnlyList<PlannedActivityDto>>(result);

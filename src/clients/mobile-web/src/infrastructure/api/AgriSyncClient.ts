@@ -178,6 +178,17 @@ export interface DayLedgerDto {
     allocations: DayLedgerAllocationDto[];
 }
 
+export interface PlannedTask {
+    id: string;
+    cropCycleId: string;
+    plannedDate: string;
+    taskType: string;
+    description: string;
+    status: string;
+    createdAtUtc: string;
+    modifiedAtUtc: string;
+}
+
 export interface AttachmentDto {
     id: string;
     farmId: string;
@@ -223,6 +234,116 @@ export interface SyncPullResponse {
     priceConfigs: unknown[];
     plannedActivities: unknown[];
     auditEvents: unknown[];
+}
+
+export interface AiParseResponse {
+    success?: boolean;
+    parsedLog: Record<string, unknown>;
+    confidence: number;
+    fieldConfidences?: Record<string, { score: number; level: string; reason?: string }>;
+    suggestedAction?: string;
+    modelUsed?: string;
+    latencyMs?: number;
+    validationOutcome?: string;
+    jobId?: string;
+}
+
+export interface AiJobStatusResponse {
+    id: string;
+    status: string;
+    operationType: string;
+    createdAtUtc: string;
+    completedAtUtc?: string;
+    inputSpeechDurationMs?: number;
+    inputRawDurationMs?: number;
+    inputSessionMetadata?: unknown;
+    attempts: Array<{
+        attemptNumber: number;
+        provider: string;
+        isSuccess: boolean;
+        failureClass: string;
+        errorMessage?: string;
+        latencyMs: number;
+        confidenceScore?: number;
+        estimatedCostUnits?: number;
+        requestPayloadHash?: string;
+        rawProviderResponse?: string;
+        attemptedAtUtc: string;
+    }>;
+    result?: unknown;
+}
+
+export interface AiHealthResponse {
+    module: string;
+    statuses: Array<{
+        provider: string;
+        isHealthy: boolean;
+    }>;
+}
+
+export interface AiProviderConfigResponse {
+    id: string;
+    defaultProvider: string;
+    fallbackEnabled: boolean;
+    isAiProcessingDisabled: boolean;
+    maxRetries: number;
+    circuitBreakerThreshold: number;
+    circuitBreakerResetSeconds: number;
+    voiceConfidenceThreshold: number;
+    receiptConfidenceThreshold: number;
+    voiceProvider?: string;
+    receiptProvider?: string;
+    pattiProvider?: string;
+    modifiedAtUtc: string;
+    modifiedByUserId: string;
+}
+
+export interface AiDashboardResponse {
+    config: AiProviderConfigResponse;
+    sinceUtc: string;
+    providerStats?: Record<string, { successCount: number; failureCount: number }>;
+    successes: Record<string, number>;
+    failures: Record<string, number>;
+    recentJobs: Array<{
+        id: string;
+        operationType: string;
+        status: string;
+        createdAtUtc: string;
+        completedAtUtc?: string;
+        providers: string[];
+    }>;
+}
+
+export interface UpdateAiProviderConfigRequest {
+    defaultProvider?: 'Sarvam' | 'Gemini';
+    fallbackEnabled?: boolean;
+    isAiProcessingDisabled?: boolean;
+    maxRetries?: number;
+    circuitBreakerThreshold?: number;
+    circuitBreakerResetSeconds?: number;
+    voiceConfidenceThreshold?: number;
+    receiptConfidenceThreshold?: number;
+    voiceProvider?: 'Sarvam' | 'Gemini' | null;
+    receiptProvider?: 'Sarvam' | 'Gemini' | null;
+    pattiProvider?: 'Sarvam' | 'Gemini' | null;
+}
+
+export interface AllowedTransitionsDto {
+    currentStatus: string;
+    allowedTransitions: Array<{
+        targetStatus: string;
+        requiredRole: string;
+        description: string;
+    }>;
+}
+
+export interface VerificationEventDto {
+    id: string;
+    logId: string;
+    status: string;
+    verifiedByUserId: string;
+    reason?: string;
+    occurredAtUtc: string;
 }
 
 interface RetriableRequestConfig extends InternalAxiosRequestConfig {
@@ -372,6 +493,195 @@ export class AgriSyncClient {
     async listAttachments(entityId: string, entityType: string): Promise<AttachmentDto[]> {
         const response = await this.http.get<AttachmentDto[]>('/shramsafal/attachments', {
             params: { entityId, entityType },
+        });
+        return response.data;
+    }
+
+    async parseVoice(
+        textTranscript: string,
+        options: {
+            farmId: string;
+            plotId?: string;
+            cropCycleId?: string;
+            audioBase64?: string;
+            audioMimeType?: string;
+            idempotencyKey?: string;
+            contextJson?: string;
+            inputSpeechDurationMs?: number;
+            inputRawDurationMs?: number;
+            segmentMetadataJson?: string;
+            requestPayloadHash?: string;
+        },
+    ): Promise<AiParseResponse> {
+        const payload = {
+            farmId: options.farmId,
+            plotId: options.plotId,
+            cropCycleId: options.cropCycleId,
+            textTranscript,
+            audioBase64: options.audioBase64,
+            audioMimeType: options.audioMimeType,
+            idempotencyKey: options.idempotencyKey,
+            contextJson: options.contextJson,
+            inputSpeechDurationMs: options.inputSpeechDurationMs,
+            inputRawDurationMs: options.inputRawDurationMs,
+            segmentMetadataJson: options.segmentMetadataJson,
+            requestPayloadHash: options.requestPayloadHash,
+        };
+
+        const response = await this.http.post<AiParseResponse>('/shramsafal/ai/voice-parse', payload);
+        return response.data;
+    }
+
+    async parseVoiceLog(
+        audio: Blob,
+        mimeType: string,
+        context: object,
+        farmId: string,
+        options?: {
+            plotId?: string;
+            cropCycleId?: string;
+            idempotencyKey?: string;
+            inputSpeechDurationMs?: number;
+            inputRawDurationMs?: number;
+            segmentMetadataJson?: string;
+            requestPayloadHash?: string;
+        },
+    ): Promise<AiParseResponse> {
+        const payload = mimeType && audio.type !== mimeType
+            ? new Blob([audio], { type: mimeType })
+            : audio;
+
+        const formData = new FormData();
+        formData.append('audio', payload, 'voice-input.webm');
+        formData.append('farmId', farmId);
+        formData.append('context', JSON.stringify(context));
+
+        if (options?.plotId) formData.append('plotId', options.plotId);
+        if (options?.cropCycleId) formData.append('cropCycleId', options.cropCycleId);
+        if (options?.idempotencyKey) formData.append('idempotencyKey', options.idempotencyKey);
+        if (options?.inputSpeechDurationMs !== undefined) formData.append('inputSpeechDurationMs', `${options.inputSpeechDurationMs}`);
+        if (options?.inputRawDurationMs !== undefined) formData.append('inputRawDurationMs', `${options.inputRawDurationMs}`);
+        if (options?.segmentMetadataJson) formData.append('segmentMetadata', options.segmentMetadataJson);
+        if (options?.requestPayloadHash) formData.append('requestPayloadHash', options.requestPayloadHash);
+
+        const response = await this.http.post<AiParseResponse>('/shramsafal/ai/voice-parse', formData);
+        return response.data;
+    }
+
+    async parseTextLog(
+        text: string,
+        context: object,
+        farmId: string,
+        options?: {
+            plotId?: string;
+            cropCycleId?: string;
+            idempotencyKey?: string;
+            inputSpeechDurationMs?: number;
+            inputRawDurationMs?: number;
+            segmentMetadataJson?: string;
+            requestPayloadHash?: string;
+        },
+    ): Promise<AiParseResponse> {
+        const response = await this.http.post<AiParseResponse>('/shramsafal/ai/voice-parse', {
+            farmId,
+            plotId: options?.plotId,
+            cropCycleId: options?.cropCycleId,
+            textTranscript: text,
+            idempotencyKey: options?.idempotencyKey,
+            contextJson: JSON.stringify(context),
+            inputSpeechDurationMs: options?.inputSpeechDurationMs,
+            inputRawDurationMs: options?.inputRawDurationMs,
+            segmentMetadataJson: options?.segmentMetadataJson,
+            requestPayloadHash: options?.requestPayloadHash,
+        });
+        return response.data;
+    }
+
+    async extractReceipt(
+        image: Blob,
+        mimeType: string,
+        farmId: string,
+        idempotencyKey?: string,
+    ): Promise<Record<string, unknown>> {
+        const payload = mimeType && image.type !== mimeType
+            ? new Blob([image], { type: mimeType })
+            : image;
+
+        const formData = new FormData();
+        formData.append('image', payload, 'receipt-image.jpg');
+        formData.append('farmId', farmId);
+        if (idempotencyKey) formData.append('idempotencyKey', idempotencyKey);
+
+        const response = await this.http.post<Record<string, unknown>>('/shramsafal/ai/receipt-extract', formData);
+        return response.data;
+    }
+
+    async extractPatti(
+        image: Blob,
+        mimeType: string,
+        cropName: string,
+        farmId: string,
+        idempotencyKey?: string,
+    ): Promise<Record<string, unknown>> {
+        const payload = mimeType && image.type !== mimeType
+            ? new Blob([image], { type: mimeType })
+            : image;
+
+        const formData = new FormData();
+        formData.append('image', payload, 'patti-image.jpg');
+        formData.append('farmId', farmId);
+        formData.append('cropName', cropName);
+        if (idempotencyKey) formData.append('idempotencyKey', idempotencyKey);
+
+        const response = await this.http.post<Record<string, unknown>>('/shramsafal/ai/patti-extract', formData);
+        return response.data;
+    }
+
+    async getAiJobStatus(jobId: string): Promise<AiJobStatusResponse> {
+        const response = await this.http.get<AiJobStatusResponse>(`/shramsafal/ai/jobs/${encodeURIComponent(jobId)}`);
+        return response.data;
+    }
+
+    async getAiHealth(): Promise<AiHealthResponse> {
+        const response = await this.http.get<AiHealthResponse>('/shramsafal/ai/health');
+        return response.data;
+    }
+
+    async getAiProviderConfig(): Promise<AiProviderConfigResponse> {
+        const response = await this.http.get<AiProviderConfigResponse>('/shramsafal/ai/config');
+        return response.data;
+    }
+
+    async updateAiProviderConfig(request: UpdateAiProviderConfigRequest): Promise<AiProviderConfigResponse> {
+        const response = await this.http.put<AiProviderConfigResponse>('/shramsafal/ai/config', request);
+        return response.data;
+    }
+
+    async getAiDashboard(): Promise<AiDashboardResponse> {
+        const response = await this.http.get<AiDashboardResponse>('/shramsafal/ai/dashboard');
+        return response.data;
+    }
+
+    async exportDailySummary(farmId: string, date: string): Promise<Blob> {
+        const response = await this.http.get<Blob>('/shramsafal/export/daily-summary', {
+            params: { farmId, date },
+            responseType: 'blob'
+        });
+        return response.data;
+    }
+
+    async exportMonthlyCost(farmId: string, year: number, month: number): Promise<Blob> {
+        const response = await this.http.get<Blob>('/shramsafal/export/monthly-cost', {
+            params: { farmId, year, month },
+            responseType: 'blob'
+        });
+        return response.data;
+    }
+
+    async exportVerificationReport(farmId: string, fromDate: string, toDate: string): Promise<Blob> {
+        const response = await this.http.get<Blob>('/shramsafal/export/verification', {
+            params: { farmId, fromDate, toDate },
+            responseType: 'blob'
         });
         return response.data;
     }

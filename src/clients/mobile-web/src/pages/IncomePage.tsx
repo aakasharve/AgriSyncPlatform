@@ -3,6 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { TrendingUp, DollarSign, Plus } from 'lucide-react';
 import SlidingCropSelector from '../features/context/components/SlidingCropSelector';
 import { CropProfile } from '../types';
+import OfflineEmptyState from '../shared/components/ui/OfflineEmptyState';
 
 interface Props {
     crops: CropProfile[];
@@ -10,7 +11,15 @@ interface Props {
 
 const IncomePage: React.FC<Props> = ({ crops = [] }) => {
     if (!crops || crops.length === 0) {
-        return <div className="p-8 text-center text-gray-500">No crop data available.</div>;
+        return (
+            <div className="max-w-4xl mx-auto px-4 py-6 pb-24">
+                <OfflineEmptyState
+                    icon={<TrendingUp size={40} className="text-slate-300" />}
+                    title="No Income Recorded"
+                    message="Add crops and record harvest sales to track your farm income."
+                />
+            </div>
+        );
     }
 
     const [selectedCropId, setSelectedCropId] = useState<string>(crops[0]?.id || '');

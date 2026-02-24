@@ -24,14 +24,16 @@ import PeopleDirectory from '../features/people/components/PeopleDirectory';
 import { Person, PlotGeoData } from '../types';
 import { AddMemberWizard } from '../features/people/components/AddMemberWizard';
 import { PlotMap } from '../features/context/components/PlotMap';
-import { getDateKey } from '../domain/system/DateKeyService';
-import { createInitialScheduleInstance } from '../domain/planning/PlanEngine';
+import { getDateKey } from '../core/domain/services/DateKeyService';
+import { createInitialScheduleInstance } from '../features/scheduler/planning/ClientPlanEngine';
 import { getTemplateById as getScheduleById, getTemplatesForCrop as getSchedulesForCrop } from '../infrastructure/reference/TemplateCatalog';
 import { useLanguage } from '../i18n/LanguageContext';
 import { useAuth } from '../app/providers/AuthProvider';
 import { idGenerator } from '../core/domain/services/IdGenerator';
 import { systemClock } from '../core/domain/services/Clock';
 import ElectricityTimingConfigurator from '../features/profile/components/ElectricityTimingConfigurator';
+import { useLocationConsent } from '../features/location/hooks/useLocationConsent';
+import LocationConsentPrompt from '../features/location/components/LocationConsentPrompt';
 
 // Identity verification status for farmer ID
 type IdentityStatus = 'NOT_STARTED' | 'PENDING' | 'VERIFIED' | 'REJECTED';
@@ -1326,6 +1328,66 @@ const UtilitiesManager = ({ profile, onUpdate }: { profile: FarmerProfile, onUpd
     );
 };
 
+// --- GPS CONSENT SETTINGS COMPONENT ---
+const GpsConsentSettings = () => {
+    const { consentState, showPrompt, requestConsent, grantConsent, denyConsent, neverAskAgain, resetConsent } = useLocationConsent();
+
+    const statusConfig = {
+        granted: { label: 'Allowed', color: 'text-emerald-700 bg-emerald-50 border-emerald-200', icon: '✅' },
+        denied: { label: 'Denied', color: 'text-red-700 bg-red-50 border-red-200', icon: '❌' },
+        prompt: { label: 'Not Asked', color: 'text-amber-700 bg-amber-50 border-amber-200', icon: '❓' },
+        never: { label: 'Never Ask', color: 'text-slate-700 bg-slate-50 border-slate-200', icon: '🚫' },
+    }[consentState];
+
+    return (
+        <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100">
+            <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2 mb-4">
+                <MapPin size={20} className="text-emerald-600" />
+                Location Tracking
+            </h3>
+
+            <div className="flex items-center justify-between mb-4">
+                <div>
+                    <p className="text-sm text-slate-600">Current Status</p>
+                    <span className={`inline-flex items-center gap-1 text-xs font-bold px-2 py-1 rounded-lg border ${statusConfig.color}`}>
+                        {statusConfig.icon} {statusConfig.label}
+                    </span>
+                </div>
+
+                {consentState !== 'prompt' && (
+                    <button
+                        onClick={resetConsent}
+                        className="text-xs font-bold text-slate-500 px-3 py-2 rounded-xl border border-slate-200 hover:bg-slate-50 transition-colors"
+                    >
+                        Reset
+                    </button>
+                )}
+            </div>
+
+            <p className="text-xs text-slate-400 leading-relaxed">
+                When allowed, GPS coordinates are saved with your logs and expenses to prove where work happened.
+                This builds trust in your records. You can always log without location.
+            </p>
+
+            {consentState === 'prompt' && (
+                <button
+                    onClick={requestConsent}
+                    className="mt-4 w-full py-3 bg-emerald-600 text-white font-bold rounded-xl text-sm active:bg-emerald-700 transition-colors"
+                >
+                    Enable Location
+                </button>
+            )}
+
+            <LocationConsentPrompt
+                isOpen={showPrompt}
+                onAllow={grantConsent}
+                onNotNow={denyConsent}
+                onNeverAsk={neverAskAgain}
+            />
+        </div>
+    );
+};
+
 // --- MAIN PAGE LAYOUT ---
 
 const ProfilePage: React.FC<ProfilePageProps> = ({ profile, crops, onUpdateProfile, onUpdateCrops, onAddPerson, onDeletePerson, onOpenScheduleLibrary, onOpenFinanceManager }) => {
@@ -1810,6 +1872,9 @@ const ProfilePage: React.FC<ProfilePageProps> = ({ profile, crops, onUpdateProfi
                                     )}
                                 </div>
                             </div>
+
+                            {/* GPS LOCATION TRACKING SETTINGS */}
+                            <GpsConsentSettings />
                         </div>
                     )}
 

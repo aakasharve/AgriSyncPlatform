@@ -29,6 +29,7 @@ import CostAnalysisSection from '../features/analysis/components/CostAnalysisSec
 import { MoneyChip } from '../features/finance/components/MoneyChip';
 import { MoneyLensDrawer } from '../features/finance/components/MoneyLensDrawer';
 import { FinanceFilters } from '../features/finance/finance.types';
+import OfflineEmptyState from '../shared/components/ui/OfflineEmptyState';
 
 interface ReflectPageProps {
     history: DailyLog[];
@@ -837,8 +838,12 @@ const ReflectPage: React.FC<ReflectPageProps> = ({
                         );
                     }
                 }) : (
-                    <div className="col-span-2 text-center py-12 text-slate-400">
-                        <p className="text-sm">Select crops and plots above to see daily activity</p>
+                    <div className="col-span-2">
+                        <OfflineEmptyState
+                            icon={<Calendar size={40} className="text-slate-300" />}
+                            title="No Activity Today"
+                            message="Select crops and plots above, or add your first daily entry."
+                        />
                     </div>
                 )}
             </div>

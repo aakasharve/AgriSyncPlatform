@@ -45,7 +45,7 @@ public sealed class AddCostEntryHandler(
         var canWriteFarm = await repository.IsUserMemberOfFarmAsync(command.FarmId, command.CreatedByUserId, ct);
         if (!canWriteFarm)
         {
-            return Result.Failure<CostEntryDto>(ShramSafalErrors.Forbidden);
+            return Result.Failure<AddCostEntryResultDto>(ShramSafalErrors.Forbidden);
         }
 
         if (command.PlotId is not null)

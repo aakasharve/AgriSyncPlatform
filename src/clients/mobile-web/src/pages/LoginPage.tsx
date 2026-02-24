@@ -3,6 +3,19 @@ import { useAuth } from '../app/providers/AuthProvider';
 
 interface LoginPageProps { }
 
+function normalizeDemoPhone(input: string): string {
+    const normalized = input.trim();
+    if (normalized === '999') {
+        return '9999999999';
+    }
+
+    if (normalized === '888') {
+        return '8888888888';
+    }
+
+    return normalized;
+}
+
 const LoginPage: React.FC<LoginPageProps> = () => {
     const { login, isLoading, loginError } = useAuth();
     const [phone, setPhone] = useState('');
@@ -10,12 +23,13 @@ const LoginPage: React.FC<LoginPageProps> = () => {
 
     const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
         event.preventDefault();
-        if (!phone.trim() || !password.trim()) {
+        const normalizedPhone = normalizeDemoPhone(phone);
+        if (!normalizedPhone || !password.trim()) {
             return;
         }
 
         try {
-            await login(phone.trim(), password);
+            await login(normalizedPhone, password);
         } catch {
             // Error is surfaced by AuthProvider state.
         }
@@ -28,6 +42,9 @@ const LoginPage: React.FC<LoginPageProps> = () => {
                     <h1 className="text-2xl font-black font-display text-stone-800">ShramSafal Login</h1>
                     <p className="text-xs text-stone-500 font-medium">
                         Real mode uses AgriSync backend authentication.
+                    </p>
+                    <p className="text-[11px] text-stone-500">
+                        Demo shortcuts: Ramu `999`, Ganesh `888`
                     </p>
                 </div>
 

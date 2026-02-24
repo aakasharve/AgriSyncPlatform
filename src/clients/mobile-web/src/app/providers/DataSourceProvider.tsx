@@ -6,7 +6,7 @@ import { storageNamespace } from '../../infrastructure/storage/StorageNamespace'
 import { MigrationService } from '../../infrastructure/storage/MigrationService';
 import { backgroundSyncWorker } from '../../infrastructure/sync/BackgroundSyncWorker';
 import { attachmentUploadWorker } from '../../infrastructure/sync/AttachmentUploadWorker';
-import { generateRollingDemoData, generateDemoHarvestSessions, generateDemoProcurementExpenses, captureMoneyEventsFromLog, DEMO_SEED_VERSION } from '../../features/demo/DemoDataService';
+import { generateRollingDemoData, generateDemoHarvestSessions, generateDemoProcurementExpenses, DEMO_SEED_VERSION } from '../../features/demo/DemoDataService';
 import { LocalStorageLogsRepository } from '../../infrastructure/storage/LocalStorageLogsRepository';
 import { seedHarvestSessions } from '../../services/harvestService'; // To be refactored later
 import { procurementRepository } from '../../services/procurementRepository'; // To be refactored later
@@ -30,6 +30,7 @@ const DataSourceContext = createContext<DataSourceContextValue | null>(null);
 export const DataSourceProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     const { isAuthenticated } = useAuth();
     const [isLoading, setIsLoading] = useState<boolean>(true);
+    const [isDemoMode, setIsDemoMode] = useState<boolean>(false);
 
     const dataSource = useMemo(() => {
         storageNamespace.setNamespace('user');
@@ -82,8 +83,7 @@ export const DataSourceProvider: React.FC<{ children: React.ReactNode }> = ({ ch
             const logs = generateRollingDemoData(effectiveCrops);
             await demoRepo.batchSave(logs);
 
-            // 1b. Generate Finance Events
-            logs.forEach(log => captureMoneyEventsFromLog(log));
+            // 1b. Generate Finance Events (Handled internally by DemoDataService now)
 
             // 2. Harvest (Legacy Service call for now)
             const harvestSessions = generateDemoHarvestSessions();

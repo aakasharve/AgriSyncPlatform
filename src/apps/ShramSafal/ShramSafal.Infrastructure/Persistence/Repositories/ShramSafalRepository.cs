@@ -137,6 +137,26 @@ internal sealed class ShramSafalRepository(ShramSafalDbContext db) : IShramSafal
             .FirstOrDefaultAsync(x => x.SourceCostEntryId == costEntryId, ct);
     }
 
+    public async Task<List<DayLedger>> GetDayLedgersForFarm(
+        Guid farmId,
+        DateOnly from,
+        DateOnly to,
+        CancellationToken ct = default)
+    {
+        var typedFarmId = new FarmId(farmId);
+
+        return await db.DayLedgers
+            .AsNoTracking()
+            .Include(x => x.Allocations)
+            .Where(x =>
+                x.FarmId == typedFarmId &&
+                x.LedgerDate >= from &&
+                x.LedgerDate <= to)
+            .OrderBy(x => x.LedgerDate)
+            .ThenBy(x => x.CreatedAtUtc)
+            .ToListAsync(ct);
+    }
+
     public async Task AddAttachmentAsync(Attachment attachment, CancellationToken ct = default)
     {
         await db.Attachments.AddAsync(attachment, ct);
@@ -193,16 +213,6 @@ internal sealed class ShramSafalRepository(ShramSafalDbContext db) : IShramSafal
             join log in db.DailyLogs on task.DailyLogId equals log.Id
             where log.CropCycleId == cropCycleId
             select task)
-            .ToListAsync(ct);
-    }
-
-    public async Task<List<Plot>> GetPlotsByFarmIdAsync(Guid farmId, CancellationToken ct = default)
-    {
-        var typedFarmId = new FarmId(farmId);
-        return await db.Plots
-            .AsNoTracking()
-            .Where(p => p.FarmId == typedFarmId)
-            .OrderBy(p => p.Name)
             .ToListAsync(ct);
     }
 
@@ -312,16 +322,6 @@ internal sealed class ShramSafalRepository(ShramSafalDbContext db) : IShramSafal
             .AsNoTracking()
             .Where(c => c.ModifiedAtUtc > sinceUtc)
             .OrderBy(c => c.ModifiedAtUtc)
-            .ToListAsync(ct);
-    }
-
-    public async Task<List<DayLedger>> GetDayLedgersChangedSinceAsync(DateTime sinceUtc, CancellationToken ct = default)
-    {
-        return await db.DayLedgers
-            .AsNoTracking()
-            .Include(ledger => ledger.PlotAllocations)
-            .Where(ledger => ledger.CreatedAtUtc > sinceUtc)
-            .OrderBy(ledger => ledger.CreatedAtUtc)
             .ToListAsync(ct);
     }
 

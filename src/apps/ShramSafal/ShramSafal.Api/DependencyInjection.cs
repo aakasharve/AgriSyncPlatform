@@ -4,7 +4,15 @@ using ShramSafal.Application.UseCases.Attachments.GetAttachmentMetadata;
 using ShramSafal.Application.UseCases.Attachments.ListAttachmentsForEntity;
 using ShramSafal.Application.UseCases.Attachments.UploadAttachment;
 using ShramSafal.Application.UseCases.CropCycles.CreateCropCycle;
+using ShramSafal.Application.UseCases.AI.ExtractPattiImage;
+using ShramSafal.Application.UseCases.AI.ExtractReceipt;
+using ShramSafal.Application.UseCases.AI.GetAiDashboard;
+using ShramSafal.Application.UseCases.AI.GetAiJobStatus;
 using ShramSafal.Application.UseCases.AI.ParseVoiceInput;
+using ShramSafal.Application.UseCases.AI.UpdateProviderConfig;
+using ShramSafal.Application.UseCases.Export.ExportDailySummary;
+using ShramSafal.Application.UseCases.Export.ExportMonthlyCost;
+using ShramSafal.Application.UseCases.Export.ExportVerificationReport;
 using ShramSafal.Application.UseCases.Farms.CreateFarm;
 using ShramSafal.Application.UseCases.Farms.CreatePlot;
 using ShramSafal.Application.UseCases.Finance.AddCostEntry;
@@ -34,6 +42,9 @@ public static class DependencyInjection
     {
         services.AddShramSafalInfrastructure(configuration);
         services.AddAuthorization();
+        services.AddScoped<ExportDailySummaryHandler>();
+        services.AddScoped<ExportMonthlyCostHandler>();
+        services.AddScoped<ExportVerificationReportHandler>();
 
         services.AddScoped<CreateFarmHandler>();
         services.AddScoped<CreatePlotHandler>();
@@ -62,6 +73,11 @@ public static class DependencyInjection
         services.AddScoped<GetCropTypesHandler>();
 
         services.AddScoped<ParseVoiceInputHandler>();
+        services.AddScoped<ExtractReceiptHandler>();
+        services.AddScoped<ExtractPattiImageHandler>();
+        services.AddScoped<GetAiJobStatusHandler>();
+        services.AddScoped<UpdateProviderConfigHandler>();
+        services.AddScoped<GetAiDashboardHandler>();
 
         services.AddScoped<PushSyncBatchHandler>();
         services.AddScoped<PullSyncChangesHandler>();

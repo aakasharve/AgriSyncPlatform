@@ -8,6 +8,7 @@ import { HarvestSession } from '../../features/logs/harvest.types';
 import { ProcurementExpense } from '../../features/procurement/procurement.types';
 import { backgroundSyncWorker } from '../../infrastructure/sync/BackgroundSyncWorker';
 import { useAuth } from '../providers/AuthProvider';
+import { generateDemoHarvestSessions, generateDemoPlannedTasks, generateDemoProcurementExpenses } from '../../features/demo/DemoDataService';
 
 export interface UseAppDataResult {
     // State
@@ -244,7 +245,9 @@ export const useAppData = (_props?: UseAppDataProps): UseAppDataResult => {
 
     return {
         isDemoMode,
-        setIsDemoMode: (val) => setDemoMode(val), // Adapts provider to hook interface
+        setIsDemoMode: (val: boolean) => {
+            void setDemoMode(val); // Fire and forget promise handling
+        }, // Adapts provider to hook interface
         crops, setCrops,
         farmerProfile, setFarmerProfile,
 

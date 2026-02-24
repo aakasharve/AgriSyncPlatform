@@ -25,8 +25,8 @@ import {
 import {
     getPrimaryTemplateForCrop as fetchTemplate,
     getTemplateById,
-} from '../../infrastructure/reference/TemplateCatalog';
-import { idGenerator } from '../../core/domain/services/IdGenerator';
+} from '../../../infrastructure/reference/TemplateCatalog';
+import { idGenerator } from '../../../core/domain/services/IdGenerator';
 
 // ============================================
 // 1. OPERATION REGISTRY

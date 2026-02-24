@@ -21,6 +21,7 @@ import PriceBookPage from '../../pages/PriceBookPage';
 import ReviewInboxPage from '../../pages/ReviewInboxPage';
 import ReportsPage from '../../pages/ReportsPage';
 import FinanceSettingsPage from '../../pages/FinanceSettingsPage';
+import { AdminAiOpsPage } from '../../features/admin/ai/AdminAiOpsPage';
 import CropSelector from '../../features/context/components/CropSelector';
 import InputMethodToggle from '../../shared/components/ui/InputMethodToggle';
 import AudioRecorder from '../../features/voice/components/AudioRecorder';
@@ -411,6 +412,12 @@ const AppRouter: React.FC = () => {
             {currentRoute === 'settings' && (
                 <div className="animate-in fade-in slide-in-from-right-4 duration-300">
                     <SettingsPage defaults={ledgerDefaults} onUpdateDefaults={setLedgerDefaults} crops={crops} />
+                </div>
+            )}
+
+            {currentRoute === 'ai-admin' && (
+                <div className="animate-in fade-in slide-in-from-right-4 duration-300">
+                    <AdminAiOpsPage onBack={() => setCurrentRoute('settings')} />
                 </div>
             )}
 

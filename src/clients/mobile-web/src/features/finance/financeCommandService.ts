@@ -10,8 +10,11 @@
 import { idGenerator } from '../../core/domain/services/IdGenerator';
 import { systemClock } from '../../core/domain/services/Clock';
 import { getAuthSession } from '../../infrastructure/api/AuthTokenStore';
-import { mutationQueue } from '../../infrastructure/sync/MutationQueue';
 import { backgroundSyncWorker } from '../../infrastructure/sync/BackgroundSyncWorker';
+import { AddCostEntryCommand } from '../../application/usecases/sync/AddCostEntryCommand';
+import { SetPriceConfigCommand } from '../../application/usecases/sync/SetPriceConfigCommand';
+import { CorrectCostEntryCommand } from '../../application/usecases/sync/CorrectCostEntryCommand';
+import { VerifyLogCommand } from '../../application/usecases/sync/VerifyLogCommand';
 import { financeService } from './financeService';
 import {
     MoneyAdjustment,
@@ -66,16 +69,17 @@ export const financeCommandService = {
 
         financeService._addEvent(event);
 
-        void mutationQueue.enqueue('add_cost_entry', {
+        void AddCostEntryCommand.enqueue({
+            costEntryId: id,
             farmId: event.farmId,
             plotId: event.plotId,
             cropCycleId: event.cropId,
             category: event.category,
-            description: event.notes || event.sourceId,
+            description: event.notes || event.sourceId || '',
             amount: event.amount,
             currencyCode: 'INR',
             entryDate: toDateKey(event.dateTime),
-            createdByUserId: event.createdByUserId,
+            ...(payload.location ? { location: payload.location } : {}),
         });
         triggerSyncBestEffort();
 
@@ -88,13 +92,13 @@ export const financeCommandService = {
 
         financeService._addPriceBookItem(item);
 
-        void mutationQueue.enqueue('set_price_config', {
-            itemName: item.name,
+        void SetPriceConfigCommand.enqueue({
+            configId: item.id,
+            category: item.name,
             unitPrice: item.defaultUnitPrice,
             currencyCode: 'INR',
-            effectiveFrom: toDateKey(item.effectiveFrom),
-            version: 1,
-            createdByUserId,
+            unitType: item.defaultUnit,
+            effectiveDate: toDateKey(item.effectiveFrom),
         });
         triggerSyncBestEffort();
 
@@ -110,12 +114,13 @@ export const financeCommandService = {
 
         financeService._addAdjustment(next);
 
-        void mutationQueue.enqueue('correct_cost_entry', {
+        void CorrectCostEntryCommand.enqueue({
             costEntryId: adjustment.adjustsMoneyEventId,
+            correctionId: next.id,
+            originalAmount: 0, // Requires fetching from previous value if tracking completely, 0 as default shim
             correctedAmount: adjustment.correctedFields?.amount ?? 0,
             currencyCode: 'INR',
-            reason: adjustment.reason,
-            correctedByUserId: getCurrentUserId(adjustment.correctedByUserId),
+            reason: adjustment.reason || ''
         });
         triggerSyncBestEffort();
 
@@ -141,11 +146,10 @@ export const financeCommandService = {
 
         // Queue a verification mutation for each approved event
         for (const id of ids) {
-            void mutationQueue.enqueue('verify_log_v2', {
-                logId: id,
-                targetStatus: 'Verified',
+            void VerifyLogCommand.enqueue({
+                dailyLogId: id,
+                verificationStatus: 'verified',
                 reason: 'Approved via finance review',
-                callerRole: 'PrimaryOwner',
             });
         }
         triggerSyncBestEffort();

@@ -1,6 +1,12 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import { agriSyncClient, type AuthResponseDto } from '../../infrastructure/api/AgriSyncClient';
-import { clearAuthSession, getAuthSession, setAuthSession, type AuthSession } from '../../infrastructure/api/AuthTokenStore';
+import {
+    AUTH_SESSION_CHANGED_EVENT,
+    clearAuthSession,
+    getAuthSession,
+    setAuthSession,
+    type AuthSession
+} from '../../infrastructure/api/AuthTokenStore';
 
 interface AuthContextValue {
     session: AuthSession | null;
@@ -85,8 +91,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             }
         };
 
+        const onAuthSessionChanged = () => {
+            syncFromStorage();
+        };
+
         window.addEventListener('storage', onStorage);
-        return () => window.removeEventListener('storage', onStorage);
+        window.addEventListener(AUTH_SESSION_CHANGED_EVENT, onAuthSessionChanged);
+
+        return () => {
+            window.removeEventListener('storage', onStorage);
+            window.removeEventListener(AUTH_SESSION_CHANGED_EVENT, onAuthSessionChanged);
+        };
     }, [syncFromStorage]);
 
     const login = useCallback(async (phone: string, password: string) => {

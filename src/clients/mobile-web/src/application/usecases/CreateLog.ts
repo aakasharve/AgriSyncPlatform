@@ -2,12 +2,14 @@ import { CropProfile, DailyLog, FarmerProfile, LogScope } from '../../types';
 import { LogsRepository, VoiceParseResult, WeatherPort } from '../ports';
 import { mutationQueue } from '../../infrastructure/sync/MutationQueue';
 import { backgroundSyncWorker } from '../../infrastructure/sync/BackgroundSyncWorker';
+import type { LocationDto } from '../../infrastructure/api/AgriSyncClient';
 
 export interface CreateLogsFromManualInput {
     formData: any;
     logScope: LogScope;
     crops: CropProfile[];
     profile: FarmerProfile;
+    location?: LocationDto | null;
 }
 
 export interface CreateLogsFromVoiceInput {
@@ -16,6 +18,7 @@ export interface CreateLogsFromVoiceInput {
     crops: CropProfile[];
     profile: FarmerProfile;
     enrichWithWeather?: boolean;
+    location?: LocationDto | null;
 }
 
 export interface CreateLogsResult {
@@ -61,6 +64,7 @@ export async function createLogsFromManualEntry(
             capturedAtUtc: new Date().toISOString(),
             source: 'manual',
             draft: input.formData,
+            ...(input.location ? { location: input.location } : {}),
         });
 
         await triggerSyncBestEffort();
@@ -97,6 +101,7 @@ export async function createLogsFromVoiceResult(
             draft: input.voiceResult.data,
             provenance: input.voiceResult.provenance,
             rawTranscript: input.voiceResult.rawTranscript,
+            ...(input.location ? { location: input.location } : {}),
         });
 
         await triggerSyncBestEffort();

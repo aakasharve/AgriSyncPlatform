@@ -1,0 +1,66 @@
+- generic [ref=e20]:
+  - banner [ref=e21]:
+    - generic [ref=e22]:
+      - button "Owner" [active] [ref=e23] [cursor=pointer]:
+        - img [ref=e25]
+        - generic [ref=e28]: Owner
+      - generic [ref=e32]:
+        - button "LOG" [ref=e33] [cursor=pointer]:
+          - img [ref=e35]
+          - text: LOG
+        - button "REFLECT" [ref=e40] [cursor=pointer]:
+          - img [ref=e42]
+          - text: REFLECT
+        - button "COMPARE" [ref=e44] [cursor=pointer]:
+          - img [ref=e46]
+          - text: COMPARE
+      - generic [ref=e49]:
+        - button "nav.voice" [ref=e50] [cursor=pointer]:
+          - img [ref=e51]
+        - button [ref=e54] [cursor=pointer]:
+          - img [ref=e55]
+  - main [ref=e58]:
+    - generic [ref=e170]:
+      - generic [ref=e172]:
+        - generic [ref=e173]: Setup Hub
+        - button "Farmer Identity" [ref=e174] [cursor=pointer]:
+          - img [ref=e176]
+          - generic [ref=e179]: Farmer Identity
+        - button "Crops & Plots" [ref=e180] [cursor=pointer]:
+          - img [ref=e182]
+          - generic [ref=e185]: Crops & Plots
+          - img [ref=e186]
+        - button "Water & Power" [ref=e188] [cursor=pointer]:
+          - img [ref=e190]
+          - generic [ref=e192]: Water & Power
+        - button "Machinery" [ref=e193] [cursor=pointer]:
+          - img [ref=e195]
+          - generic [ref=e201]: Machinery
+        - button "Intelligence" [ref=e202] [cursor=pointer]:
+          - img [ref=e204]
+          - generic [ref=e216]: Intelligence
+        - generic [ref=e217]: Finance
+        - button "Finance Manager" [ref=e218] [cursor=pointer]:
+          - img [ref=e220]
+          - generic [ref=e222]: Finance Manager
+          - img [ref=e223]
+      - generic [ref=e226]:
+        - button "Add New Crop" [ref=e228] [cursor=pointer]:
+          - img [ref=e229]
+          - text: Add New Crop
+        - generic [ref=e230]:
+          - img [ref=e232]
+          - heading "No crops yet" [level=3] [ref=e235]
+          - paragraph [ref=e236]: Add your first crop to start tracking your farm activities.
+  - navigation [ref=e153]:
+    - generic [ref=e154]:
+      - button "Procure Procure" [ref=e155] [cursor=pointer]:
+        - img "Procure" [ref=e157]
+        - generic [ref=e158]: Procure
+      - generic [ref=e159]:
+        - button "Schedule" [ref=e160] [cursor=pointer]:
+          - img "Schedule" [ref=e162]
+        - generic [ref=e163]: Schedule
+      - button "Income Income" [ref=e164] [cursor=pointer]:
+        - img "Income" [ref=e166]
+        - generic [ref=e167]: Income

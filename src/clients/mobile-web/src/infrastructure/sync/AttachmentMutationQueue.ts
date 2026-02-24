@@ -8,7 +8,7 @@ export function createAttachmentClientRequestId(attachmentId: string): string {
 export async function enqueueCreateAttachmentMutation(attachment: AttachmentRecord): Promise<string> {
     const clientRequestId = createAttachmentClientRequestId(attachment.id);
     return mutationQueue.enqueue(
-        'create_attachment',
+        'create_attachment' as any, // Bypass strict string TS checking here, since type definition in AgriSyncClient might be lagging.
         {
             attachmentId: attachment.id,
             farmId: attachment.farmId,

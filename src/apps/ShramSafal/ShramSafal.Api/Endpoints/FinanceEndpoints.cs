@@ -1,7 +1,9 @@
 using System.Security.Claims;
 using AgriSync.BuildingBlocks.Abstractions;
 using AgriSync.BuildingBlocks.Results;
-using System.Security.Claims;
+using AgriSync.SharedKernel.Contracts.Ids;
+using Microsoft.AspNetCore.Mvc;
+using ShramSafal.Application.Ports;
 using ShramSafal.Application.UseCases.Finance.AddCostEntry;
 using ShramSafal.Application.UseCases.Finance.AllocateGlobalExpense;
 using ShramSafal.Application.UseCases.Finance.CorrectCostEntry;
@@ -97,7 +99,8 @@ public static class FinanceEndpoints
             var result = await handler.HandleAsync(command, ct);
             return result.IsSuccess ? Results.Ok(result.Value) : ToErrorResult(result.Error);
         })
-        .WithName("AllocateGlobalExpense");
+        .WithName("AllocateGlobalExpense")
+        .RequireAuthorization();
 
         group.MapPost("/finance/cost-entry/{id:guid}/correct", async (
             Guid id,
@@ -130,7 +133,7 @@ public static class FinanceEndpoints
             string? groupBy,
             DateOnly? fromDate,
             DateOnly? toDate,
-            GetFinanceSummaryHandler handler,
+            [FromServices] GetFinanceSummaryHandler handler,
             CancellationToken ct) =>
         {
             var query = new GetFinanceSummaryQuery(groupBy ?? "day", fromDate, toDate);
@@ -139,45 +142,11 @@ public static class FinanceEndpoints
         })
         .WithName("GetFinanceSummary");
 
-        group.MapPost("/finance/allocate", async (
-            AllocateGlobalExpenseRequest request,
-            ClaimsPrincipal user,
-            AllocateGlobalExpenseHandler handler,
-            CancellationToken ct) =>
-        {
-            if (!TryGetCallerUserId(user, out var callerUserId))
-            {
-                return Results.Unauthorized();
-            }
-
-            if (!Enum.TryParse<AllocationStrategy>(request.Strategy, true, out var strategy))
-            {
-                return Results.BadRequest(new
-                {
-                    error = "ShramSafal.InvalidAllocationStrategy",
-                    message = "Allocation strategy must be Equal, ByAcreage, or Custom."
-                });
-            }
-
-            var command = new AllocateGlobalExpenseCommand(
-                request.FarmId,
-                callerUserId,
-                request.DateKey,
-                request.CostEntryIds,
-                strategy,
-                request.CustomAllocations);
-
-            var result = await handler.HandleAsync(command, ct);
-            return result.IsSuccess ? Results.Ok(result.Value) : ToErrorResult(result.Error);
-        })
-        .WithName("AllocateGlobalExpense")
-        .RequireAuthorization();
-
         group.MapGet("/finance/plot-summary", async (
             Guid plotId,
             DateOnly? fromDate,
             DateOnly? toDate,
-            GetPlotFinanceSummaryHandler handler,
+            [FromServices] GetPlotFinanceSummaryHandler handler,
             CancellationToken ct) =>
         {
             var result = await handler.HandleAsync(
@@ -217,6 +186,7 @@ public static class FinanceEndpoints
                 request.CurrencyCode,
                 request.EntryDate,
                 request.CreatedByUserId == Guid.Empty ? Guid.NewGuid() : request.CreatedByUserId,
+                null,
                 clock.UtcNow);
 
             var existing = await repository.GetCostEntriesForDuplicateCheck(
@@ -252,12 +222,6 @@ public static class FinanceEndpoints
             : Results.BadRequest(new { error = error.Code, message = error.Description });
     }
 
-    private static bool TryGetCallerUserId(ClaimsPrincipal user, out Guid callerUserId)
-    {
-        callerUserId = Guid.Empty;
-        var sub = user.FindFirstValue("sub") ?? user.FindFirstValue(ClaimTypes.NameIdentifier);
-        return sub is not null && Guid.TryParse(sub, out callerUserId);
-    }
 }
 
 public sealed record SetPriceConfigRequest(
@@ -279,11 +243,10 @@ public sealed record AddCostEntryRequest(
     LocationRequest? Location);
 
 public sealed record AllocateGlobalExpenseRequest(
-    Guid FarmId,
-    DateOnly DateKey,
-    IReadOnlyList<Guid> CostEntryIds,
-    string Strategy,
-    IReadOnlyDictionary<Guid, decimal>? CustomAllocations);
+    Guid CostEntryId,
+    string AllocationBasis,
+    IReadOnlyList<AllocateGlobalExpenseAllocationRequest> Allocations,
+    Guid? DayLedgerId = null);
 
 public sealed record DuplicateCheckRequest(
     Guid FarmId,
@@ -303,12 +266,6 @@ public sealed record CorrectCostEntryRequest(
     decimal CorrectedAmount,
     string CurrencyCode,
     string Reason);
-
-public sealed record AllocateGlobalExpenseRequest(
-    Guid CostEntryId,
-    string AllocationBasis,
-    IReadOnlyList<AllocateGlobalExpenseAllocationRequest> Allocations,
-    Guid? DayLedgerId = null);
 
 public sealed record AllocateGlobalExpenseAllocationRequest(
     Guid PlotId,

@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Settings, Calendar, Droplets, SprayCan, Sprout, ChevronDown, ChevronRight, Save, Info, ArrowLeft, Layers, MapPin, Clock, User, Building2, Shield, Sparkles, CheckCircle2, AlertCircle } from 'lucide-react';
+import { Settings, Calendar, CalendarRange, Droplets, SprayCan, Sprout, ChevronDown, ChevronRight, Save, Info, ArrowLeft, Layers, MapPin, Clock, User, Building2, Shield, Sparkles, CheckCircle2, AlertCircle } from 'lucide-react';
 import { CropProfile, Plot, PlotScheduleInstance, CropScheduleTemplate, StageTemplate, PeriodicExpectation, StageOverride, ExpectationOverride, DailyLog, ResourceItem, PlannedTask } from '../types';
-import { getTemplateForCrop, calculateDayNumber, getCurrentStage, createInitialScheduleInstance, derivePlannedItemsForDay, getScheduleById } from '../domain/planning/PlanEngine';
+import { getTemplateForCrop, calculateDayNumber, getCurrentStage, createInitialScheduleInstance, derivePlannedItemsForDay, getScheduleById } from '../features/scheduler/planning/ClientPlanEngine';
 import { getTemplatesForCrop as getSchedulesForCrop } from '../infrastructure/reference/TemplateCatalog';
 import { getEffectivePhaseAndDay, PhaseResult } from '../shared/utils/timelineUtils';
 import SchedulerTimeline from '../features/scheduler/components/SchedulerTimeline';
@@ -14,6 +14,7 @@ import { financeSelectors } from '../features/finance/financeSelectors';
 import { MoneyChip } from '../features/finance/components/MoneyChip';
 import { MoneyLensDrawer } from '../features/finance/components/MoneyLensDrawer';
 import { FinanceFilters } from '../features/finance/finance.types';
+import OfflineEmptyState from '../shared/components/ui/OfflineEmptyState';
 
 interface SchedulerPageProps {
     crops: CropProfile[];
@@ -293,7 +294,15 @@ const SchedulerPage: React.FC<SchedulerPageProps> = ({
         return { mode: ov?.customFrequencyMode ?? tExp.frequencyMode, value: ov?.customFrequencyValue ?? tExp.frequencyValue, notes: tExp.notes };
     };
 
-    if (crops.length === 0) return <div className="p-8 text-center text-stone-400">No crops available.</div>;
+    if (crops.length === 0) return (
+        <div className="max-w-4xl mx-auto px-4 py-6 pb-24">
+            <OfflineEmptyState
+                icon={<CalendarRange size={40} className="text-slate-300" />}
+                title="No Schedules Yet"
+                message="Add crops and plots in Profile to create farming schedules."
+            />
+        </div>
+    );
 
     // Construct Preview Plot for Editing
     const previewEditingPlot = editingPlot && draftInstance ? { ...editingPlot, schedule: draftInstance } : editingPlot;
@@ -576,10 +585,10 @@ const SchedulerPage: React.FC<SchedulerPageProps> = ({
                                             {todayPlan.plannedItems.map(item => (
                                                 <div key={item.id} className="flex items-center gap-3 p-3 rounded-xl bg-stone-50 border border-stone-100 hover:bg-stone-100/50 transition-colors">
                                                     <div className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 ${item.category === 'IRRIGATION' ? 'bg-blue-100 text-blue-600' :
-                                                            item.category === 'FERTIGATION' ? 'bg-amber-100 text-amber-600' :
-                                                                item.category === 'FOLIAR_SPRAY' ? 'bg-purple-100 text-purple-600' :
-                                                                    item.category === 'WEED_CONTROL' ? 'bg-green-100 text-green-600' :
-                                                                        'bg-stone-100 text-stone-600'
+                                                        item.category === 'FERTIGATION' ? 'bg-amber-100 text-amber-600' :
+                                                            item.category === 'FOLIAR_SPRAY' ? 'bg-purple-100 text-purple-600' :
+                                                                item.category === 'WEED_CONTROL' ? 'bg-green-100 text-green-600' :
+                                                                    'bg-stone-100 text-stone-600'
                                                         }`}>
                                                         {item.category === 'IRRIGATION' ? <Droplets size={16} /> :
                                                             item.category === 'FOLIAR_SPRAY' ? <SprayCan size={16} /> :
@@ -592,8 +601,8 @@ const SchedulerPage: React.FC<SchedulerPageProps> = ({
                                                         )}
                                                     </div>
                                                     <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-1 rounded-full ${item.type === 'ONE_TIME'
-                                                            ? 'bg-rose-50 text-rose-600 border border-rose-100'
-                                                            : 'bg-stone-100 text-stone-500'
+                                                        ? 'bg-rose-50 text-rose-600 border border-rose-100'
+                                                        : 'bg-stone-100 text-stone-500'
                                                         }`}>
                                                         {item.type === 'ONE_TIME' ? 'Milestone' : 'Routine'}
                                                     </span>
@@ -644,11 +653,11 @@ const SchedulerPage: React.FC<SchedulerPageProps> = ({
 
                                                 return (
                                                     <div key={stage.id} className={`flex items-center gap-3 px-3 py-2 rounded-xl transition-all ${isCurrent ? 'bg-emerald-50 border border-emerald-200' :
-                                                            isPast ? 'opacity-50' : ''
+                                                        isPast ? 'opacity-50' : ''
                                                         }`}>
                                                         <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-black flex-shrink-0 ${isCurrent ? 'bg-emerald-500 text-white shadow-md shadow-emerald-500/30' :
-                                                                isPast ? 'bg-stone-300 text-white' :
-                                                                    'bg-stone-100 text-stone-400'
+                                                            isPast ? 'bg-stone-300 text-white' :
+                                                                'bg-stone-100 text-stone-400'
                                                             }`}>
                                                             {isPast ? '✓' : idx + 1}
                                                         </div>

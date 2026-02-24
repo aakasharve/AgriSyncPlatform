@@ -1,8 +1,8 @@
-
 import { DailyLog, LogVerificationStatus } from '../../domain/types/log.types';
 import { FarmerProfile } from '../../domain/types/farm.types';
 import { PatchEvent } from '../../domain/ledger/PatchEvent';
 import { LogsRepository } from '../ports';
+import { mutationQueue } from '../../infrastructure/sync/MutationQueue';
 // import { AuditLogRepository } from '../../infrastructure/storage/AuditLogRepository'; // Deprecated Fix-07
 
 interface UpdateLogRequest {
@@ -79,11 +79,13 @@ export const updateLog = async (
             finalLog.patches = [...(existingLog.patches || []), patch];
         }
 
-        // 4. Persist with Unified Audit (Fix-07)
-        await repo.save(finalLog, {
-            actorId: request.actorId,
+        // 4. Queue Mutation for backend execution
+        await mutationQueue.enqueue('add_log_task', {
+            dailyLogId: finalLog.id,
+            action: 'UPDATE_LOG',
+            updatedData: request.updatedData,
             reason: request.reason,
-            action: 'UPDATE_LOG'
+            actorId: request.actorId
         });
 
         return { success: true, log: finalLog };

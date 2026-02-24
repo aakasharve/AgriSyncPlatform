@@ -113,6 +113,42 @@ export interface UploadQueueItem {
 }
 
 // =============================================================================
+// PENDING AI JOBS (Offline queue for voice/receipt/patti AI requests)
+// =============================================================================
+
+export type PendingAiOperationType = 'voice_parse' | 'receipt_extract' | 'patti_extract';
+export type PendingAiJobStatus = 'pending' | 'processing' | 'failed' | 'completed';
+
+export interface PendingAiJobContext {
+    farmId?: string;
+    userId?: string;
+    operation?: 'voice' | 'receipt' | 'patti' | 'text';
+    plotId?: string;
+    cropCycleId?: string;
+    cropName?: string;
+    parseContext?: object;
+    textTranscript?: string;
+    idempotencyKey?: string;
+    requestPayloadHash?: string;
+    inputSpeechDurationMs?: number;
+    inputRawDurationMs?: number;
+    segmentMetadataJson?: string;
+}
+
+export interface PendingAiJobRecord {
+    id?: number;
+    operationType: PendingAiOperationType;
+    inputBlob?: Blob;
+    inputMimeType?: string;
+    context: PendingAiJobContext;
+    status: PendingAiJobStatus;
+    createdAt: string;
+    updatedAt: string;
+    retryCount: number;
+    lastError?: string;
+}
+
+// =============================================================================
 // SYNC CURSORS
 // =============================================================================
 
@@ -170,6 +206,41 @@ export interface PlannedTaskCacheRecord {
     updatedAt: string;
 }
 
+export interface FarmCacheRecord {
+    id: string;
+    payload: unknown;
+    updatedAt: string;
+}
+
+export interface PlotCacheRecord {
+    id: string;
+    farmId: string;
+    payload: unknown;
+    updatedAt: string;
+}
+
+export interface CropCycleCacheRecord {
+    id: string;
+    farmId: string;
+    plotId: string;
+    payload: unknown;
+    updatedAt: string;
+}
+
+export interface CostEntryCacheRecord {
+    id: string;
+    farmId: string;
+    payload: unknown;
+    updatedAt: string;
+}
+
+export interface FinanceCorrectionCacheRecord {
+    id: string;
+    costEntryId: string;
+    payload: unknown;
+    updatedAt: string;
+}
+
 // =============================================================================
 // VERSIONED LOG RECORD
 // =============================================================================
@@ -201,12 +272,19 @@ export class AgriLogDatabase extends Dexie {
     mutationQueue!: Table<MutationQueueItem, number>;
     attachments!: Table<AttachmentRecord, string>;
     uploadQueue!: Table<UploadQueueItem, number>;
+    pendingAiJobs!: Table<PendingAiJobRecord, number>;
     auditEvents!: Table<AuditEvent, string>;
     syncCursors!: Table<SyncCursor, string>;
     appMeta!: Table<AppMetaEntry, string>;
     referenceData!: Table<ReferenceDataRecord, ReferenceDataKey>;
     dayLedgers!: Table<DayLedgerCacheRecord, string>;
     plannedTasks!: Table<PlannedTaskCacheRecord, string>;
+
+    farms!: Table<FarmCacheRecord, string>;
+    plots!: Table<PlotCacheRecord, string>;
+    cropCycles!: Table<CropCycleCacheRecord, string>;
+    costEntries!: Table<CostEntryCacheRecord, string>;
+    financeCorrections!: Table<FinanceCorrectionCacheRecord, string>;
 
     constructor() {
         super('AgriLogDB');
@@ -259,6 +337,45 @@ export class AgriLogDatabase extends Dexie {
             syncCursors: 'tableName',
             appMeta: 'key',
             referenceData: 'key, versionHash, updatedAt',
+        });
+
+        this.version(5).stores({
+            logs: 'id, date, verificationStatus, createdByOperatorId, isDeleted, [date+isDeleted], [createdByOperatorId+isDeleted]',
+            outbox: '++id, idempotencyKey, status, action, [status+createdAt]',
+            mutationQueue: '++id, &[deviceId+clientRequestId], status, mutationType, createdAt, [status+createdAt]',
+            attachments: 'id, farmId, linkedEntityId, linkedEntityType, localPath, status, [linkedEntityId+linkedEntityType], [farmId+status]',
+            uploadQueue: '++autoId, attachmentId, status, retryCount, lastAttemptAt, nextAttemptAt, [status+nextAttemptAt]',
+            auditEvents: 'id, resourceId, action, timestamp, [resourceId+timestamp]',
+            syncCursors: 'tableName',
+            appMeta: 'key',
+            referenceData: 'key, versionHash, updatedAt',
+            dayLedgers: 'id, farmId, dateKey, [farmId+dateKey]',
+            plannedTasks: 'id, cropCycleId, plannedDate, [cropCycleId+plannedDate]',
+            farms: 'id, modifiedAtUtc',
+            plots: 'id, farmId, modifiedAtUtc',
+            cropCycles: 'id, farmId, plotId, modifiedAtUtc',
+            costEntries: 'id, farmId, modifiedAtUtc',
+            financeCorrections: 'id, costEntryId, modifiedAtUtc'
+        });
+
+        this.version(6).stores({
+            logs: 'id, date, verificationStatus, createdByOperatorId, isDeleted, [date+isDeleted], [createdByOperatorId+isDeleted]',
+            outbox: '++id, idempotencyKey, status, action, [status+createdAt]',
+            mutationQueue: '++id, &[deviceId+clientRequestId], status, mutationType, createdAt, [status+createdAt]',
+            attachments: 'id, farmId, linkedEntityId, linkedEntityType, localPath, status, [linkedEntityId+linkedEntityType], [farmId+status]',
+            uploadQueue: '++autoId, attachmentId, status, retryCount, lastAttemptAt, nextAttemptAt, [status+nextAttemptAt]',
+            pendingAiJobs: '++id, operationType, status, createdAt, [status+createdAt]',
+            auditEvents: 'id, resourceId, action, timestamp, [resourceId+timestamp]',
+            syncCursors: 'tableName',
+            appMeta: 'key',
+            referenceData: 'key, versionHash, updatedAt',
+            dayLedgers: 'id, farmId, dateKey, [farmId+dateKey]',
+            plannedTasks: 'id, cropCycleId, plannedDate, [cropCycleId+plannedDate]',
+            farms: 'id, modifiedAtUtc',
+            plots: 'id, farmId, modifiedAtUtc',
+            cropCycles: 'id, farmId, plotId, modifiedAtUtc',
+            costEntries: 'id, farmId, modifiedAtUtc',
+            financeCorrections: 'id, costEntryId, modifiedAtUtc'
         });
     }
 }

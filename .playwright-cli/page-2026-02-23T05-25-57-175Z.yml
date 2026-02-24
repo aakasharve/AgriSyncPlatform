@@ -1,0 +1,118 @@
+- generic [ref=e20]:
+  - banner [ref=e21]:
+    - generic [ref=e22]:
+      - button "Owner" [ref=e23] [cursor=pointer]:
+        - img [ref=e25]
+        - generic [ref=e28]: Owner
+      - generic [ref=e32]:
+        - button "LOG" [ref=e33] [cursor=pointer]:
+          - img [ref=e35]
+          - text: LOG
+        - button "REFLECT" [ref=e40] [cursor=pointer]:
+          - img [ref=e42]
+          - text: REFLECT
+        - button "COMPARE" [ref=e44] [cursor=pointer]:
+          - img [ref=e46]
+          - text: COMPARE
+      - generic [ref=e49]:
+        - button "nav.voice" [ref=e50] [cursor=pointer]:
+          - img [ref=e51]
+        - button [ref=e54] [cursor=pointer]:
+          - img [ref=e55]
+  - main [ref=e58]:
+    - generic [ref=e59]:
+      - generic [ref=e60]:
+        - button "23 February 2026 | 10:55 28.947106633295906°C / 31.5°C Farm Center Sunny" [ref=e61] [cursor=pointer]:
+          - generic [ref=e63]:
+            - generic [ref=e64]:
+              - paragraph [ref=e65]: 23 February 2026 | 10:55
+              - generic [ref=e66]:
+                - generic [ref=e67]: 28.947106633295906°C
+                - generic [ref=e68]: / 31.5°C
+              - generic [ref=e69]:
+                - img [ref=e70]
+                - text: Farm Center
+            - generic [ref=e73]:
+              - img [ref=e74]
+              - paragraph [ref=e80]: Sunny
+        - generic [ref=e81]:
+          - paragraph [ref=e82]: Daily Log
+          - generic [ref=e83]: "Owner: Shetkari Raja"
+        - generic [ref=e84]:
+          - generic [ref=e85]:
+            - generic [ref=e86]:
+              - generic [ref=e88]: 100%
+              - generic [ref=e89]:
+                - paragraph [ref=e90]: Daily Closure
+                - paragraph [ref=e91]: Day Closed
+            - button "Close Day" [ref=e92] [cursor=pointer]
+          - paragraph [ref=e93]: "Tasks: Done 0 / Planned 0"
+        - generic [ref=e94]:
+          - paragraph [ref=e95]: Running Cost
+          - generic [ref=e96]:
+            - generic [ref=e97]:
+              - paragraph [ref=e98]: Today
+              - paragraph [ref=e99]: Rs 0
+            - generic [ref=e100]:
+              - paragraph [ref=e101]: Yesterday
+              - paragraph [ref=e102]: Rs 0
+            - generic [ref=e103]:
+              - paragraph [ref=e104]: Running
+              - paragraph [ref=e105]: Rs 0
+      - generic [ref=e107]:
+        - generic [ref=e110]:
+          - generic [ref=e111]:
+            - img [ref=e112]
+            - text: Select the plots you worked on today
+          - generic [ref=e115]: You can select multiple crops or multiple plots where same work was executed
+        - button "Warehouse Entire Farm Overview" [ref=e117] [cursor=pointer]:
+          - img "Warehouse" [ref=e120]: 🏡
+          - generic [ref=e121]:
+            - generic [ref=e122]: Entire Farm
+            - generic [ref=e123]: Overview
+      - generic [ref=e126]:
+        - button "Voice" [ref=e127] [cursor=pointer]:
+          - img [ref=e128]
+          - text: Voice
+        - button "Manual" [ref=e131] [cursor=pointer]:
+          - img [ref=e132]
+          - text: Manual
+      - generic [ref=e134]:
+        - generic [ref=e136]:
+          - generic [ref=e137] [cursor=pointer]:
+            - img [ref=e139]
+            - generic [ref=e141]:
+              - paragraph [ref=e142]: First Choose the crop or plot where you worked today
+              - paragraph [ref=e143]: Tap to Select
+          - generic:
+            - generic:
+              - button "Select a Plot First":
+                - generic:
+                  - img
+            - generic:
+              - generic:
+                - heading "Start Logging" [level=3]
+                - paragraph: Tap microphone to speak
+            - generic:
+              - generic:
+                - textbox "Select a plot using the pills above" [disabled]
+                - button [disabled]:
+                  - img
+        - generic [ref=e144]:
+          - generic [ref=e147]: Today's Timeline
+          - generic [ref=e149]:
+            - heading "Activity Feed" [level=3] [ref=e150]
+            - generic [ref=e151]: Monday, Feb 23
+          - generic [ref=e152]: No work logged yet today
+  - navigation [ref=e153]:
+    - generic [ref=e154]:
+      - button "Procure Procure" [ref=e155] [cursor=pointer]:
+        - img "Procure" [ref=e157]
+        - generic [ref=e158]: Procure
+      - generic [ref=e159]:
+        - button "Schedule" [ref=e160] [cursor=pointer]:
+          - img "Schedule" [ref=e162]
+        - generic [ref=e163]: Schedule
+      - button "Income Income" [ref=e164] [cursor=pointer]:
+        - img "Income" [ref=e166]
+        - generic [ref=e167]: Income
