@@ -1,0 +1,9 @@
+ .claude/settings.local.json                        |  3 +-
+ .../ShramSafal.Api/Endpoints/ExportEndpoints.cs    | 79 +++++++++++++++-----
+ .../mobile-web/src/core/navigation/AppRouter.tsx   |  1 +
+ .../features/export/components/ExportButton.tsx    | 42 ++++++++---
+ .../src/features/export/hooks/useExportReport.ts   | 44 +++++------
+ .../src/features/logs/components/DailyLogCard.tsx  | 81 +++++++++++++++++---
+ src/clients/mobile-web/src/pages/ComparePage.tsx   | 25 +++++++
+ src/clients/mobile-web/src/pages/LedgerPage.tsx    | 86 +++++++++++++++++++++-
+ 8 files changed, 292 insertions(+), 69 deletions(-)

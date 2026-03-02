@@ -873,6 +873,7 @@ const AppRouter: React.FC = () => {
                                                     return (
                                                         <DailyLogCard
                                                             key={log.id}
+                                                            logId={log.id}
                                                             workDone={getPrimaryWorkDone(log)}
                                                             plotName={contextDetails.plotName}
                                                             cropName={contextDetails.cropName}
