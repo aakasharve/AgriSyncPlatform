@@ -3,14 +3,18 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { ArrowRight, CheckSquare, Droplets, Users, Package } from 'lucide-react';
 import { TodayCounts } from '../../../types';
 import type { LocationDto } from '../../../infrastructure/api/AgriSyncClient';
+import { getDatabase } from '../../../infrastructure/storage/DexieDatabase';
+import { AttachmentList } from '../../attachments';
+import { useAttachmentRetry } from '../../attachments/hooks/useAttachmentRetry';
 import LocationBadge from '../../location/components/LocationBadge';
 import VerificationStatusBadge from './verification/VerificationStatusBadge';
 
 interface DailyLogCardProps {
+    logId?: string;
     workDone: string;
     plotName: string;
     cropName: string;
@@ -28,6 +32,7 @@ interface DailyLogCardProps {
 }
 
 const DailyLogCard: React.FC<DailyLogCardProps> = ({
+    logId,
     workDone,
     plotName,
     cropName,
@@ -43,6 +48,42 @@ const DailyLogCard: React.FC<DailyLogCardProps> = ({
     attachmentCount,
     onClick,
 }) => {
+    const [isAttachmentsOpen, setIsAttachmentsOpen] = useState(false);
+    const [resolvedAttachmentCount, setResolvedAttachmentCount] = useState<number>(attachmentCount ?? 0);
+    const { retryUpload } = useAttachmentRetry();
+
+    useEffect(() => {
+        let cancelled = false;
+
+        const loadCount = async () => {
+            if (!logId) {
+                setResolvedAttachmentCount(attachmentCount ?? 0);
+                return;
+            }
+
+            try {
+                const db = getDatabase();
+                const count = await db.attachments
+                    .where('linkedEntityId')
+                    .equals(logId)
+                    .count();
+
+                if (!cancelled) {
+                    setResolvedAttachmentCount(count);
+                }
+            } catch {
+                if (!cancelled) {
+                    setResolvedAttachmentCount(attachmentCount ?? 0);
+                }
+            }
+        };
+
+        void loadCount();
+        return () => {
+            cancelled = true;
+        };
+    }, [logId, attachmentCount]);
+
     const compactCounts = {
         cropActivities: counts?.cropActivities || 0,
         irrigation: counts?.irrigation || 0,
@@ -50,11 +91,7 @@ const DailyLogCard: React.FC<DailyLogCardProps> = ({
         inputs: counts?.inputs || 0
     };
 
-    const statusToneClass = statusTone === 'rejected'
-        ? 'bg-red-50 text-red-700 border-red-200'
-        : statusTone === 'pending'
-            ? 'bg-amber-50 text-amber-700 border-amber-200'
-            : 'bg-emerald-50 text-emerald-700 border-emerald-200';
+    const hasAttachments = resolvedAttachmentCount > 0;
 
     return (
         <div className="w-full bg-white rounded-2xl shadow-sm border border-slate-100 hover:border-emerald-200 hover:shadow-md transition-all mb-3 relative overflow-hidden">
@@ -95,9 +132,25 @@ const DailyLogCard: React.FC<DailyLogCardProps> = ({
                     {/* Location + Attachment badges */}
                     <div className="flex items-center gap-1.5 mt-1">
                         <LocationBadge location={location} />
-                        {attachmentCount !== undefined && attachmentCount > 0 && (
-                            <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-md text-[10px] font-semibold bg-blue-50 border border-blue-100 text-blue-700">
-                                📎 {attachmentCount}
+                        {hasAttachments && (
+                            <span
+                                role="button"
+                                tabIndex={0}
+                                className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-md text-[10px] font-semibold bg-blue-50 border border-blue-100 text-blue-700 cursor-pointer hover:bg-blue-100"
+                                onClick={(event) => {
+                                    event.preventDefault();
+                                    event.stopPropagation();
+                                    setIsAttachmentsOpen(previous => !previous);
+                                }}
+                                onKeyDown={(event) => {
+                                    if (event.key === 'Enter' || event.key === ' ') {
+                                        event.preventDefault();
+                                        event.stopPropagation();
+                                        setIsAttachmentsOpen(previous => !previous);
+                                    }
+                                }}
+                            >
+                                Attachments {resolvedAttachmentCount}
                             </span>
                         )}
                     </div>
@@ -124,6 +177,16 @@ const DailyLogCard: React.FC<DailyLogCardProps> = ({
                     </div>
                 </div>
             </button>
+
+            {isAttachmentsOpen && hasAttachments && logId && (
+                <div className="px-5 pb-3">
+                    <AttachmentList
+                        linkedEntityId={logId}
+                        compact
+                        onRetry={retryUpload}
+                    />
+                </div>
+            )}
         </div>
     );
 };

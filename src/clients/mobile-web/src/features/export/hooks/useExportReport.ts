@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { agriSyncClient } from '../../../infrastructure/api/AgriSyncClient';
+import { deviceShareAndSaveService } from '../../../infrastructure/device/DeviceShareAndSaveService';
 
 export type ReportType = 'daily-summary' | 'monthly-cost' | 'verification';
 
@@ -11,13 +12,15 @@ export interface ExportOptions {
      fromDate?: string; // Format: YYYY-MM-DD
      toDate?: string; // Format: YYYY-MM-DD
      fileName: string;
+     tryShare?: boolean;
 }
 
 export function useExportReport() {
      const [isExporting, setIsExporting] = useState(false);
      const [error, setError] = useState<Error | null>(null);
+     const [lastExportedAt, setLastExportedAt] = useState<string | null>(null);
 
-     const exportReport = async (type: ReportType, options: ExportOptions) => {
+     const exportReport = async (type: ReportType, options: ExportOptions): Promise<boolean> => {
           setIsExporting(true);
           setError(null);
 
@@ -41,34 +44,20 @@ export function useExportReport() {
                          throw new Error(`Unsupported report type: ${type}`);
                }
 
-               // Create a File from Blob to share or download
-               const file = new File([blob], options.fileName, { type: 'application/pdf' });
+               const shouldTryShare = options.tryShare ?? true;
+               const wasShared = shouldTryShare
+                    ? await deviceShareAndSaveService.shareFile(blob, options.fileName, {
+                         title: 'Farm Report',
+                         text: `Here is the ${type} report.`,
+                         mimeType: 'application/pdf',
+                    })
+                    : false;
 
-               // Try the Web Share API first
-               if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
-                    try {
-                         await navigator.share({
-                              files: [file],
-                              title: 'Farm Report',
-                              text: `Here is the ${type} report.`
-                         });
-                         // Successfully shared, no need to download
-                         return true;
-                    } catch (shareError) {
-                         console.error("User cancelled share or share failed", shareError);
-                         // Fall back to download
-                    }
+               if (!wasShared) {
+                    await deviceShareAndSaveService.saveToDownloads(blob, options.fileName, 'application/pdf');
                }
 
-               // Fallback: Trigger download
-               const url = window.URL.createObjectURL(blob);
-               const link = document.createElement('a');
-               link.href = url;
-               link.download = options.fileName;
-               document.body.appendChild(link);
-               link.click();
-               document.body.removeChild(link);
-               window.URL.revokeObjectURL(url);
+               setLastExportedAt(new Date().toISOString());
 
                return true;
           } catch (err) {
@@ -83,6 +72,7 @@ export function useExportReport() {
      return {
           exportReport,
           isExporting,
-          error
+          lastExportedAt,
+          error,
      };
 }

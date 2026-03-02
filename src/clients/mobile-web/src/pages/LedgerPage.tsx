@@ -1,11 +1,14 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { AppRoute } from '../types';
 import { financeSelectors } from '../features/finance/financeSelectors';
 import { FinanceManagerNav } from '../features/finance/components/FinanceManagerNav';
 import { MoneyChip } from '../features/finance/components/MoneyChip';
 import { MoneyLensDrawer } from '../features/finance/components/MoneyLensDrawer';
 import { FinanceFilters } from '../features/finance/finance.types';
-import { FileText, Filter, Search, Layers, Edit3, CornerDownRight } from 'lucide-react';
+import { FileText, Filter, Search, Layers, Edit3, CornerDownRight, Paperclip, ChevronDown, ChevronUp } from 'lucide-react';
+import { getDatabase } from '../infrastructure/storage/DexieDatabase';
+import { AttachmentList } from '../features/attachments';
+import { useAttachmentRetry } from '../features/attachments/hooks/useAttachmentRetry';
 import CostCorrectionSheet from '../features/finance/components/CostCorrectionSheet';
 import { ExportButton } from '../features/export';
 
@@ -18,11 +21,58 @@ const LedgerPage: React.FC<LedgerPageProps> = ({ currentRoute, onNavigate }) => 
     const [drawerFilter, setDrawerFilter] = useState<FinanceFilters | null>(null);
     const [refreshKey, setRefreshKey] = useState(0);
     const [correctionTarget, setCorrectionTarget] = useState<{ id: string; amount: number; category: string } | null>(null);
+    const [expandedAttachments, setExpandedAttachments] = useState<Record<string, boolean>>({});
+    const [attachmentCounts, setAttachmentCounts] = useState<Record<string, number>>({});
+    const { retryUpload } = useAttachmentRetry();
 
     const events = useMemo(() => financeSelectors.getEffectiveMoneyEvents(), [currentRoute, drawerFilter, refreshKey]);
 
     const totalIncome = events.filter(e => e.type === 'Income').reduce((sum, e) => sum + e.effectiveAmount, 0);
     const totalExpense = events.filter(e => e.type === 'Expense').reduce((sum, e) => sum + e.effectiveAmount, 0);
+
+    useEffect(() => {
+        let cancelled = false;
+
+        const loadAttachmentCounts = async () => {
+            const entityIds = events.map(event => event.id).filter(Boolean);
+            if (entityIds.length === 0) {
+                setAttachmentCounts({});
+                return;
+            }
+
+            try {
+                const db = getDatabase();
+                const records = await db.attachments
+                    .where('linkedEntityId')
+                    .anyOf(entityIds)
+                    .toArray();
+
+                if (cancelled) {
+                    return;
+                }
+
+                const counts = records.reduce<Record<string, number>>((accumulator, record) => {
+                    if (!record.linkedEntityId) {
+                        return accumulator;
+                    }
+
+                    accumulator[record.linkedEntityId] = (accumulator[record.linkedEntityId] ?? 0) + 1;
+                    return accumulator;
+                }, {});
+
+                setAttachmentCounts(counts);
+            } catch {
+                if (!cancelled) {
+                    setAttachmentCounts({});
+                }
+            }
+        };
+
+        void loadAttachmentCounts();
+        return () => {
+            cancelled = true;
+        };
+    }, [events]);
 
     return (
         <div className="max-w-4xl mx-auto px-4 py-6 pb-24 min-h-screen bg-slate-50">
@@ -71,13 +121,16 @@ const LedgerPage: React.FC<LedgerPageProps> = ({ currentRoute, onNavigate }) => 
                 {events.map((item, index) => {
                     const isAdjusted = item.trustStatus === 'Adjusted';
                     const hasCorrection = isAdjusted;
+                    const attachmentCount = attachmentCounts[item.id] ?? 0;
+                    const isAttachmentOpen = !!expandedAttachments[item.id];
 
                     return (
                         <div
                             key={item.id}
-                            className="glass-panel p-4 rounded-xl flex items-center justify-between group hover:border-slate-300 transition-all duration-300 animate-in fade-in slide-in-from-bottom-2 bg-white"
+                            className="glass-panel p-4 rounded-xl group hover:border-slate-300 transition-all duration-300 animate-in fade-in slide-in-from-bottom-2 bg-white"
                             style={{ animationDelay: `${index * 20}ms` }}
                         >
+                            <div className="flex items-center justify-between">
                             <div className="flex items-center gap-3 flex-1 min-w-0">
                                 <div className={`w-8 h-8 rounded-lg flex items-center justify-center font-bold text-sm border shadow-sm ${item.type === 'Income' ? 'bg-emerald-50 text-emerald-600 border-emerald-100' : 'bg-rose-50 text-rose-600 border-rose-100'
                                     }`}>
@@ -101,6 +154,22 @@ const LedgerPage: React.FC<LedgerPageProps> = ({ currentRoute, onNavigate }) => 
                                             <span className="inline-flex items-center gap-1 text-[9px] font-bold px-1.5 py-0.5 rounded border bg-amber-50 text-amber-600 border-amber-100">
                                                 <CornerDownRight size={8} /> Corrected
                                             </span>
+                                        )}
+                                        {attachmentCount > 0 && (
+                                            <button
+                                                type="button"
+                                                onClick={() => {
+                                                    setExpandedAttachments(previous => ({
+                                                        ...previous,
+                                                        [item.id]: !previous[item.id],
+                                                    }));
+                                                }}
+                                                className="inline-flex items-center gap-1 text-[9px] font-bold px-1.5 py-0.5 rounded border bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100"
+                                            >
+                                                <Paperclip size={8} />
+                                                {attachmentCount}
+                                                {isAttachmentOpen ? <ChevronUp size={8} /> : <ChevronDown size={8} />}
+                                            </button>
                                         )}
                                     </div>
                                 </div>
@@ -133,6 +202,17 @@ const LedgerPage: React.FC<LedgerPageProps> = ({ currentRoute, onNavigate }) => 
                                     </span>
                                 )}
                             </div>
+                            </div>
+
+                            {isAttachmentOpen && attachmentCount > 0 && (
+                                <div className="mt-3 border-t border-slate-100 pt-2">
+                                    <AttachmentList
+                                        linkedEntityId={item.id}
+                                        compact
+                                        onRetry={retryUpload}
+                                    />
+                                </div>
+                            )}
                         </div>
                     );
                 })}

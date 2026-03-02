@@ -22,6 +22,7 @@ import {
     XCircle,
     PlusCircle,
     Droplets,
+    GitCompare,
     ChevronDown,
     ChevronUp,
     Sprout,
@@ -229,6 +230,30 @@ export const ComparePage: React.FC<Props> = ({ plots = [], crops = [], logs = []
                     <ArrowLeft className="w-6 h-6 text-gray-700" />
                 </button>
                 <p className="text-gray-500 font-medium">No crop data available.</p>
+            </div>
+        );
+    }
+
+    if (!logs || logs.length === 0) {
+        return (
+            <div className="min-h-screen bg-[#F8F6F1] p-4 sm:p-6">
+                <button
+                    onClick={onBack}
+                    className="mb-5 inline-flex items-center gap-2 rounded-full border border-stone-200 bg-white px-3 py-2 text-sm font-semibold text-stone-700 shadow-sm"
+                >
+                    <ArrowLeft className="h-4 w-4" />
+                    Back
+                </button>
+
+                <div className="mx-auto max-w-xl rounded-3xl border-2 border-dashed border-stone-300 bg-white p-8 text-center shadow-sm">
+                    <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-stone-100 text-stone-500">
+                        <GitCompare className="h-8 w-8" />
+                    </div>
+                    <h2 className="text-xl font-black text-stone-900">Nothing to Compare</h2>
+                    <p className="mt-2 text-sm font-medium text-stone-600">
+                        Log some activities first. Compare shows planned vs actual work.
+                    </p>
+                </div>
             </div>
         );
     }
