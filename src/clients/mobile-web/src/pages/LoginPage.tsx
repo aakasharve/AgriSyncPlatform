@@ -37,11 +37,25 @@ const LoginPage: React.FC<LoginPageProps> = () => {
                 <div className="space-y-1 text-center">
                     <h1 className="text-2xl font-black font-display text-stone-800">ShramSafal Login</h1>
                     <p className="text-xs text-stone-500 font-medium">
-                        Real mode uses AgriSync backend authentication.
+                        AgriSync backend authentication.
                     </p>
-                    <p className="text-[11px] text-stone-500">
-                        Demo shortcut: type `purvesh` as phone
-                    </p>
+                </div>
+
+                <div className="rounded-xl border border-stone-100 bg-stone-50 divide-y divide-stone-100 text-[11px]">
+                    <div className="flex items-center justify-between px-3 py-2">
+                        <span className="font-bold text-emerald-700 uppercase tracking-wider">Demo</span>
+                        <span className="text-stone-600">
+                            phone: <span className="font-mono font-bold text-stone-800">purvesh</span>
+                            &nbsp;&nbsp;pass: <span className="font-mono font-bold text-stone-800">purvesh123</span>
+                        </span>
+                    </div>
+                    <div className="flex items-center justify-between px-3 py-2">
+                        <span className="font-bold text-blue-700 uppercase tracking-wider">New user</span>
+                        <span className="text-stone-600">
+                            phone: <span className="font-mono font-bold text-stone-800">0000000000</span>
+                            &nbsp;&nbsp;pass: <span className="font-mono font-bold text-stone-800">real@1234</span>
+                        </span>
+                    </div>
                 </div>
 
                 <form className="space-y-4" onSubmit={handleSubmit}>
