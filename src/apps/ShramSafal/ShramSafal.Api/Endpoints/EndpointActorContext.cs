@@ -5,12 +5,14 @@ namespace ShramSafal.Api.Endpoints;
 internal static class EndpointActorContext
 {
     private const string SubjectClaimType = "sub";
+    private const string NameIdentifierClaimType = ClaimTypes.NameIdentifier;
     private const string MembershipClaimType = "membership";
     private const string AppId = "shramsafal";
 
     public static bool TryGetUserId(ClaimsPrincipal user, out Guid userId)
     {
-        var subject = user.FindFirstValue(SubjectClaimType);
+        var subject = user.FindFirstValue(SubjectClaimType)
+            ?? user.FindFirstValue(NameIdentifierClaimType);
         if (subject is not null && Guid.TryParse(subject, out userId))
         {
             return true;

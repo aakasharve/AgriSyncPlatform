@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { Settings, Calendar, CalendarRange, Droplets, SprayCan, Sprout, ChevronDown, ChevronRight, Save, Info, ArrowLeft, Layers, MapPin, Clock, User, Building2, Shield, Sparkles, CheckCircle2, AlertCircle } from 'lucide-react';
 import { CropProfile, Plot, PlotScheduleInstance, CropScheduleTemplate, StageTemplate, PeriodicExpectation, StageOverride, ExpectationOverride, DailyLog, ResourceItem, PlannedTask } from '../types';
 import { getTemplateForCrop, calculateDayNumber, getCurrentStage, createInitialScheduleInstance, derivePlannedItemsForDay, getScheduleById } from '../features/scheduler/planning/ClientPlanEngine';
-import { getTemplatesForCrop as getSchedulesForCrop } from '../infrastructure/reference/TemplateCatalog';
+import { getAllTemplates } from '../infrastructure/reference/TemplateCatalog';
 import { getEffectivePhaseAndDay, PhaseResult } from '../shared/utils/timelineUtils';
 import SchedulerTimeline from '../features/scheduler/components/SchedulerTimeline';
 import { getDateKey } from '../core/domain/services/DateKeyService';
@@ -27,6 +27,11 @@ interface SchedulerPageProps {
     onCloseDay?: () => void;
 }
 
+const canonicalCropCode = (value: string): string => {
+    const normalized = value.trim().toLowerCase().replace(/[^a-z0-9]+/g, '');
+    return normalized.endsWith('s') ? normalized.slice(0, -1) : normalized;
+};
+
 const SchedulerPage: React.FC<SchedulerPageProps> = ({
     crops,
     logs,
@@ -49,6 +54,27 @@ const SchedulerPage: React.FC<SchedulerPageProps> = ({
     const [isDirty, setIsDirty] = useState(false);
     const [moneyLensOpen, setMoneyLensOpen] = useState(false);
     const [moneyLensFilters, setMoneyLensFilters] = useState<FinanceFilters>({});
+    const libraryTemplateCount = useMemo(() => {
+        const allowedCropCodes = new Set(crops.map(crop => canonicalCropCode(crop.name)));
+        const byCrop = new Map<string, number[]>();
+        getAllTemplates().forEach(template => {
+            const cropCode = canonicalCropCode(template.cropCode);
+            if (!allowedCropCodes.has(cropCode)) {
+                return;
+            }
+
+            const size = template.periodicExpectations.length + template.oneTimeExpectations.length;
+            const bucket = byCrop.get(cropCode) ?? [];
+            bucket.push(size);
+            byCrop.set(cropCode, bucket);
+        });
+
+        let total = 0;
+        byCrop.forEach(bucket => {
+            total += Math.min(3, bucket.length);
+        });
+        return total;
+    }, [crops]);
 
     // Derived Selection
     const activeCrop = crops.find(c => c.id === selectedCropId);
@@ -377,7 +403,7 @@ const SchedulerPage: React.FC<SchedulerPageProps> = ({
                         <div className="text-left leading-tight">
                             <span className="block text-sm font-black tracking-tight">LIBRARY</span>
                             <span className="text-[9px] font-bold uppercase tracking-widest opacity-60">
-                                {activeCrop ? `${getSchedulesForCrop(activeCrop.name).length} Options` : 'Templates'}
+                                {`${libraryTemplateCount} Options`}
                             </span>
                         </div>
                     </button>
@@ -479,6 +505,7 @@ const SchedulerPage: React.FC<SchedulerPageProps> = ({
                 <div className="max-w-3xl mx-auto">
                     <ScheduleLibraryView
                         crop={activeCrop}
+                        allCrops={crops}
                         adoptedScheduleId={activeCrop?.activeScheduleId || null}
                         onAdopt={handleAdoptSchedule}
                     />
@@ -565,7 +592,7 @@ const SchedulerPage: React.FC<SchedulerPageProps> = ({
                                         className="mt-4 w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl border border-white/20 bg-white/10 text-xs font-black uppercase tracking-wider hover:bg-white/20 transition-colors"
                                     >
                                         <Layers size={14} />
-                                        Library ({activeCrop ? getSchedulesForCrop(activeCrop.name).length : 0} schedules available)
+                                        Library ({libraryTemplateCount} schedules available)
                                     </button>
                                 </div>
 

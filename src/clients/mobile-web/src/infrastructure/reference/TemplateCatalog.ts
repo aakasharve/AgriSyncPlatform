@@ -157,7 +157,21 @@ function mapActivityToOperationId(category: string, name: string): string {
     if (normalized.includes('irrigation') || normalized.includes('water')) {
         return 'op_irrig_drip';
     }
-    if (normalized.includes('fertigation') || normalized.includes('nutrition') || normalized.includes('fertil')) {
+    if (
+        normalized.includes('fertigation')
+        || normalized.includes('nutrition')
+        || normalized.includes('fertil')
+        || normalized.includes('urea')
+        || normalized.includes('dap')
+        || normalized.includes('npk')
+        || normalized.includes('basal')
+        || normalized.includes('top_dress')
+        || normalized.includes('top-dress')
+        || normalized.includes('potash')
+        || normalized.includes('manure')
+        || normalized.includes('fym')
+        || normalized.includes('micronutrient')
+    ) {
         return 'op_fert_gen';
     }
     if (normalized.includes('spray')) {
@@ -282,10 +296,11 @@ function buildExpectations(
 }
 
 function mapTemplate(referenceTemplate: ReferenceScheduleTemplate): CropScheduleTemplate {
-    const templateId = toSafeId(referenceTemplate.id) || `tpl_${toSafeId(referenceTemplate.name)}`;
+    const templateId = referenceTemplate.id.trim();
+    const templateKey = toSafeId(templateId) || `tpl_${toSafeId(referenceTemplate.name)}`;
     const cropCode = canonicalCropCode(referenceTemplate.cropType);
     const stageList: StageTemplate[] = referenceTemplate.stages.map((stage, index) => {
-        const stageId = `stg_${templateId}_${index + 1}`;
+        const stageId = `stg_${templateKey}_${index + 1}`;
         const stageCode = inferStageCode(stage.name);
         const startDay = Math.max(0, stage.startDay);
         const endDay = Math.max(startDay, stage.endDay);

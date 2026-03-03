@@ -72,7 +72,7 @@ export class BackgroundSyncWorker {
     }
 
     async triggerNow(): Promise<void> {
-        await this.safeRunCycle();
+        await this.safeRunCycle(true);
     }
 
     async retryFailed(clientRequestId: string): Promise<void> {
@@ -100,8 +100,8 @@ export class BackgroundSyncWorker {
         this.safeRunCycle();
     };
 
-    private async safeRunCycle(): Promise<void> {
-        if (!this.isRunning || this.cycleInProgress) {
+    private async safeRunCycle(forceRun: boolean = false): Promise<void> {
+        if ((!this.isRunning && !forceRun) || this.cycleInProgress) {
             return;
         }
 

@@ -59,6 +59,7 @@ try
     builder.Services.AddUserApi(builder.Configuration);
     builder.Services.AddShramSafalApi(builder.Configuration);
     builder.Services.AddTransient<AgriSync.Bootstrapper.Infrastructure.DatabaseSeeder>();
+    builder.Services.AddTransient<AgriSync.Bootstrapper.Infrastructure.PurveshDemoSeeder>();
 
     QuestPDF.Settings.License = QuestPDF.Infrastructure.LicenseType.Community;
 
@@ -296,13 +297,52 @@ try
             var userSchemaCreated = await EnsureContextTablesCreatedAsync(userContext, "public", "users");
             var ssfSchemaCreated = await EnsureContextTablesCreatedAsync(ssfContext, "ssf", "farms");
 
-            // Seed Data
-            var seeder = services.GetRequiredService<AgriSync.Bootstrapper.Infrastructure.DatabaseSeeder>();
-            await seeder.SeedDemoDataAsync();
+            // Seed Data — each seeder is gated behind an env var so no demo data
+            // runs automatically on a fresh deployment.
+            var seedRamuDemo = string.Equals(
+                Environment.GetEnvironmentVariable("SEED_RAMU_DEMO"),
+                "true",
+                StringComparison.OrdinalIgnoreCase);
+            if (seedRamuDemo)
+            {
+                var seeder = services.GetRequiredService<AgriSync.Bootstrapper.Infrastructure.DatabaseSeeder>();
+                await seeder.SeedDemoDataAsync();
+                Log.Information("Ramu demo seeding completed.");
+            }
+
+            var clearPurveshDemo = string.Equals(
+                Environment.GetEnvironmentVariable("CLEAR_PURVESH_DEMO"),
+                "true",
+                StringComparison.OrdinalIgnoreCase);
+            var seedPurveshDemo = string.Equals(
+                Environment.GetEnvironmentVariable("SEED_PURVESH_DEMO"),
+                "true",
+                StringComparison.OrdinalIgnoreCase);
+
+            if (clearPurveshDemo || seedPurveshDemo)
+            {
+                var purveshSeeder = services.GetRequiredService<AgriSync.Bootstrapper.Infrastructure.PurveshDemoSeeder>();
+
+                if (clearPurveshDemo)
+                {
+                    var clearResult = await purveshSeeder.ClearPurveshDemoAsync();
+                    Log.Information("Purvesh demo clear result: {Result}", clearResult);
+                }
+
+                if (seedPurveshDemo)
+                {
+                    var seedResult = await purveshSeeder.SeedPurveshDemoAsync();
+                    Log.Information("Purvesh demo seed result: {Result}", seedResult);
+                }
+            }
+
             Log.Information(
-                "Database initialization and seeding completed successfully. User schema created: {UserSchemaCreated}, SSF schema created: {SsfSchemaCreated}",
+                "Database initialization completed. UserSchema: {UserSchemaCreated}, SsfSchema: {SsfSchemaCreated}, seedRamu: {SeedRamuDemo}, clearPurvesh: {ClearPurveshDemo}, seedPurvesh: {SeedPurveshDemo}",
                 userSchemaCreated,
-                ssfSchemaCreated);
+                ssfSchemaCreated,
+                seedRamuDemo,
+                clearPurveshDemo,
+                seedPurveshDemo);
         }
         catch (Exception ex)
         {

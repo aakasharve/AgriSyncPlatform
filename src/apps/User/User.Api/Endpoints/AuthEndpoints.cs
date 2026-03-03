@@ -99,7 +99,7 @@ public static class AuthEndpoints
             GetCurrentUserHandler handler,
             CancellationToken ct) =>
         {
-            var sub = user.FindFirstValue("sub");
+            var sub = user.FindFirstValue("sub") ?? user.FindFirstValue(ClaimTypes.NameIdentifier);
             if (sub is null || !Guid.TryParse(sub, out var userId))
             {
                 return Results.Unauthorized();

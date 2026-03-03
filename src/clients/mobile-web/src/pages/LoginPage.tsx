@@ -5,12 +5,8 @@ interface LoginPageProps { }
 
 function normalizeDemoPhone(input: string): string {
     const normalized = input.trim();
-    if (normalized === '999') {
-        return '9999999999';
-    }
-
-    if (normalized === '888') {
-        return '8888888888';
+    if (normalized === 'purvesh') {
+        return '9800000001';
     }
 
     return normalized;
@@ -44,7 +40,7 @@ const LoginPage: React.FC<LoginPageProps> = () => {
                         Real mode uses AgriSync backend authentication.
                     </p>
                     <p className="text-[11px] text-stone-500">
-                        Demo shortcuts: Ramu `999`, Ganesh `888`
+                        Demo shortcut: type `purvesh` as phone
                     </p>
                 </div>
 

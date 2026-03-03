@@ -189,6 +189,12 @@ export interface PlannedTask {
     modifiedAtUtc: string;
 }
 
+export interface SyncOperatorDto {
+    userId: string;
+    displayName: string;
+    role: string;
+}
+
 export interface AttachmentDto {
     id: string;
     farmId: string;
@@ -234,6 +240,12 @@ export interface SyncPullResponse {
     priceConfigs: unknown[];
     plannedActivities: unknown[];
     auditEvents: unknown[];
+    operators?: SyncOperatorDto[];
+    scheduleTemplates?: unknown[];
+    cropTypes?: unknown[];
+    activityCategories?: string[];
+    costCategories?: string[];
+    referenceDataVersionHash?: string;
 }
 
 export interface AiParseResponse {

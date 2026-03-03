@@ -901,8 +901,11 @@ public static class AiEndpoints
             return false;
         }
 
-        var normalized = mimeType.Trim();
-        return allowedMimeTypes.Contains(normalized);
+        // Strip codec parameters (e.g. "audio/webm;codecs=opus" → "audio/webm")
+        // before checking against the allowlist, because browsers report full MIME
+        // types with codec suffixes that we don't need to enumerate explicitly.
+        var normalized = NormalizeMimeType(mimeType);
+        return normalized is not null && allowedMimeTypes.Contains(normalized);
     }
 
     private static bool IsAdmin(ClaimsPrincipal user)

@@ -4,11 +4,20 @@ using ShramSafal.Application.UseCases.ReferenceData.GetScheduleTemplates;
 
 namespace ShramSafal.Application.UseCases.ReferenceData.GetCropTypes;
 
-public sealed class GetCropTypesHandler
+public sealed class GetCropTypesHandler(GetScheduleTemplatesHandler getScheduleTemplatesHandler)
 {
-    public Task<Result<IReadOnlyList<CropTypeDto>>> HandleAsync(CancellationToken ct = default)
+    public async Task<Result<IReadOnlyList<CropTypeDto>>> HandleAsync(CancellationToken ct = default)
     {
         ct.ThrowIfCancellationRequested();
-        return Task.FromResult(Result.Success<IReadOnlyList<CropTypeDto>>(ReferenceDataCatalog.CropTypes));
+
+        var templatesResult = await getScheduleTemplatesHandler.HandleAsync(ct);
+        if (!templatesResult.IsSuccess)
+        {
+            return Result.Failure<IReadOnlyList<CropTypeDto>>(templatesResult.Error);
+        }
+
+        var templates = templatesResult.Value ?? [];
+        var cropTypes = GetScheduleTemplatesHandler.BuildCropTypes(templates);
+        return Result.Success<IReadOnlyList<CropTypeDto>>(cropTypes);
     }
 }

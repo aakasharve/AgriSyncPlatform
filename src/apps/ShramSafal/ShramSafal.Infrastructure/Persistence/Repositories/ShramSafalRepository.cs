@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using AgriSync.SharedKernel.Contracts.Ids;
+using ShramSafal.Application.Contracts.Dtos;
 using ShramSafal.Domain.Audit;
 using ShramSafal.Domain.Attachments;
 using ShramSafal.Application.Ports;
@@ -190,6 +191,16 @@ internal sealed class ShramSafalRepository(ShramSafalDbContext db) : IShramSafal
     public async Task AddScheduleTemplateAsync(ScheduleTemplate template, CancellationToken ct = default)
     {
         await db.ScheduleTemplates.AddAsync(template, ct);
+    }
+
+    public async Task<List<ScheduleTemplate>> GetScheduleTemplatesAsync(CancellationToken ct = default)
+    {
+        return await db.ScheduleTemplates
+            .AsNoTracking()
+            .Include(t => t.Activities)
+            .OrderBy(t => t.Name)
+            .ThenBy(t => t.Stage)
+            .ToListAsync(ct);
     }
 
     public async Task AddPlannedActivitiesAsync(IEnumerable<PlannedActivity> plannedActivities, CancellationToken ct = default)
@@ -398,6 +409,59 @@ internal sealed class ShramSafalRepository(ShramSafalDbContext db) : IShramSafal
             .ToListAsync(ct);
     }
 
+    public async Task<IReadOnlyList<SyncOperatorDto>> GetOperatorsByIdsAsync(
+        IEnumerable<Guid> userIds,
+        CancellationToken ct = default)
+    {
+        var ids = userIds
+            .Where(id => id != Guid.Empty)
+            .Distinct()
+            .ToList();
+
+        if (ids.Count == 0)
+        {
+            return [];
+        }
+
+        var operators = new List<SyncOperatorDto>(ids.Count);
+        foreach (var id in ids)
+        {
+            var row = await db.Database
+                .SqlQueryRaw<OperatorDirectoryRow>(
+                    """
+                    select
+                        u."Id" as "UserId",
+                        u.display_name as "DisplayName",
+                        case lower(coalesce(m.role, 'worker'))
+                            when 'primaryowner' then 'PRIMARY_OWNER'
+                            when 'secondaryowner' then 'SECONDARY_OWNER'
+                            when 'mukadam' then 'MUKADAM'
+                            else 'WORKER'
+                        end as "Role"
+                    from public.users u
+                    left join public.memberships m
+                        on m.user_id = u."Id"
+                        and m.app_id = 'shramsafal'
+                        and m.is_revoked = false
+                    where u."Id" = {0}
+                    limit 1
+                    """,
+                    id)
+                .FirstOrDefaultAsync(ct);
+
+            if (row is null)
+            {
+                continue;
+            }
+
+            operators.Add(new SyncOperatorDto(row.UserId, row.DisplayName, row.Role));
+        }
+
+        return operators
+            .OrderBy(op => op.DisplayName, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+    }
+
     public async Task<bool> IsUserMemberOfFarmAsync(Guid farmId, Guid userId, CancellationToken ct = default)
     {
         var typedFarmId = new FarmId(farmId);
@@ -409,5 +473,12 @@ internal sealed class ShramSafalRepository(ShramSafalDbContext db) : IShramSafal
     public async Task SaveChangesAsync(CancellationToken ct = default)
     {
         await db.SaveChangesAsync(ct);
+    }
+
+    private sealed class OperatorDirectoryRow
+    {
+        public Guid UserId { get; set; }
+        public string DisplayName { get; set; } = string.Empty;
+        public string Role { get; set; } = "WORKER";
     }
 }

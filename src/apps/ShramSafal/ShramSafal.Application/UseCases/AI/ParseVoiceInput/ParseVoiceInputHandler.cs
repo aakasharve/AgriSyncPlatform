@@ -178,8 +178,11 @@ public sealed class ParseVoiceInputHandler(
         {
             try
             {
-                var parsed = JsonSerializer.Deserialize<VoiceParseContext>(contextJson);
-                if (parsed is not null)
+                var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
+                var parsed = JsonSerializer.Deserialize<VoiceParseContext>(contextJson, options);
+                if (parsed is not null
+                    && parsed.AvailableCrops is not null
+                    && parsed.Profile is not null)
                 {
                     return parsed;
                 }

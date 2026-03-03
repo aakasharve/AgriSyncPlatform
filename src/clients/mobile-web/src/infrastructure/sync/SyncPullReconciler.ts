@@ -13,11 +13,20 @@ import {
     type DayLedgerDto,
     type PlotDto,
     type SyncPullResponse,
+    type SyncOperatorDto,
     type PlannedTask as PlannedTaskDto
 } from '../api/AgriSyncClient';
 import { getDatabase, type AttachmentRecord } from '../storage/DexieDatabase';
 import { storageNamespace } from '../storage/StorageNamespace';
 import { getDateKey } from '../../core/domain/services/DateKeyService';
+import { setScheduleTemplatesFromReferenceData } from '../reference/TemplateCatalog';
+import { normalizeMojibakeDeep, normalizeMojibakeText } from '../../shared/utils/textEncoding';
+import {
+    type FarmerProfile,
+    type FarmOperator,
+    OperatorCapability,
+    VerificationStatus,
+} from '../../types';
 
 export function dayLedgerMetaKey(id: string): string {
     return `shramsafal_day_ledger_${id}`;
@@ -29,6 +38,7 @@ type SyncPullReferenceDataPayload = SyncPullResponse & {
     activityCategories?: string[];
     costCategories?: string[];
     referenceDataVersionHash?: string;
+    operators?: SyncOperatorDto[];
 };
 
 type CropTypeReference = {
@@ -114,17 +124,19 @@ function defaultPlotSchedule(plotId: string, referenceDate: string, templateId: 
 }
 
 function ensureCrop(cropsById: Map<string, CropProfile>, cropName: string): CropProfile {
-    const cropId = toCropId(cropName);
+    const normalizedCropName = normalizeMojibakeText(cropName);
+    const cropId = toCropId(normalizedCropName);
     const existing = cropsById.get(cropId);
     if (existing) {
+        existing.name = normalizeMojibakeText(existing.name);
         return existing;
     }
 
     const color = CROP_COLORS[cropsById.size % CROP_COLORS.length];
     const created: CropProfile = {
         id: cropId,
-        name: cropName,
-        iconName: pickIconName(cropName),
+        name: normalizedCropName,
+        iconName: pickIconName(normalizedCropName),
         color,
         plots: [],
         activeScheduleId: null,
@@ -138,10 +150,14 @@ function ensureCrop(cropsById: Map<string, CropProfile>, cropName: string): Crop
 }
 
 function upsertPlot(crop: CropProfile, plotDto: PlotDto, cycle: CropCycleDto, templateId: string | null): void {
+    const normalizedPlotName = normalizeMojibakeText(plotDto.name);
+    const normalizedCropName = normalizeMojibakeText(cycle.cropName);
+
     const existingPlot = crop.plots.find(p => p.id === plotDto.id);
     if (existingPlot) {
-        existingPlot.name = plotDto.name;
+        existingPlot.name = normalizedPlotName;
         existingPlot.startDate = cycle.startDate;
+        existingPlot.variety = normalizedCropName;
         if (existingPlot.schedule) {
             existingPlot.schedule.templateId = templateId ?? existingPlot.schedule.templateId;
         }
@@ -155,8 +171,8 @@ function upsertPlot(crop: CropProfile, plotDto: PlotDto, cycle: CropCycleDto, te
 
     const plot: Plot = {
         id: plotDto.id,
-        name: plotDto.name,
-        variety: cycle.cropName,
+        name: normalizedPlotName,
+        variety: normalizedCropName,
         startDate: cycle.startDate,
         createdAt: plotDto.createdAtUtc,
         baseline: {
@@ -218,16 +234,272 @@ function mapAttachmentStatus(status?: string): AttachmentRecord['status'] {
     }
 }
 
+function normalizeTaskActivityType(value: string): string {
+    return value.trim().toLowerCase();
+}
+
+function isIrrigationActivity(value: string): boolean {
+    return value.includes('irrigation')
+        || value.includes('drip')
+        || value.includes('flood')
+        || value.includes('sprinkler')
+        || value.includes('pani');
+}
+
+function isSprayActivity(value: string): boolean {
+    return value.includes('spray')
+        || value.includes('spraying')
+        || value.includes('phavar')
+        || value.includes('herbicide')
+        || value.includes('fungicide')
+        || value.includes('pesticide');
+}
+
+function isNutritionActivity(value: string): boolean {
+    return value.includes('fertigation')
+        || value.includes('fertilizer')
+        || value.includes('fertiliser')
+        || value.includes('urea')
+        || value.includes('dap')
+        || value.includes('basal')
+        || value.includes('khat');
+}
+
+function isObservationActivity(value: string): boolean {
+    return value.includes('observation')
+        || value.includes('inspection')
+        || value.includes('check');
+}
+
+function mapOperatorRole(rawRole?: string): FarmOperator['role'] {
+    const normalized = (rawRole ?? '').trim().toUpperCase();
+    switch (normalized) {
+        case 'PRIMARYOWNER':
+        case 'PRIMARY_OWNER':
+            return 'PRIMARY_OWNER';
+        case 'SECONDARYOWNER':
+        case 'SECONDARY_OWNER':
+            return 'SECONDARY_OWNER';
+        case 'MUKADAM':
+            return 'MUKADAM';
+        default:
+            return 'WORKER';
+    }
+}
+
+function capabilitiesForRole(role: FarmOperator['role']): OperatorCapability[] {
+    switch (role) {
+        case 'PRIMARY_OWNER':
+            return Object.values(OperatorCapability) as OperatorCapability[];
+        case 'SECONDARY_OWNER':
+            return [
+                OperatorCapability.VIEW_ALL,
+                OperatorCapability.LOG_DATA,
+                OperatorCapability.APPROVE_LOGS,
+                OperatorCapability.MANAGE_PEOPLE,
+            ];
+        case 'MUKADAM':
+            return [
+                OperatorCapability.VIEW_ALL,
+                OperatorCapability.LOG_DATA,
+            ];
+        case 'WORKER':
+        default:
+            return [
+                OperatorCapability.VIEW_ALL,
+                OperatorCapability.LOG_DATA,
+            ];
+    }
+}
+
+function readExistingProfile(): FarmerProfile | null {
+    const key = storageNamespace.getKey('farmer_profile');
+    const raw = localStorage.getItem(key);
+    if (!raw) {
+        return null;
+    }
+
+    try {
+        return JSON.parse(raw) as FarmerProfile;
+    } catch {
+        return null;
+    }
+}
+
+function writeProfile(profile: FarmerProfile): void {
+    const key = storageNamespace.getKey('farmer_profile');
+    localStorage.setItem(key, JSON.stringify(profile));
+}
+
+function buildProfileFromSync(
+    operators: SyncOperatorDto[],
+    ownerUserId: string | undefined,
+    existingProfile: FarmerProfile | null,
+    receivedAtUtc: string
+): FarmerProfile | null {
+    if (operators.length === 0 && !existingProfile) {
+        return null;
+    }
+
+    const mappedOperators: FarmOperator[] = operators.map(operator => {
+        const normalizedRole = mapOperatorRole(operator.role);
+        const role = ownerUserId && operator.userId === ownerUserId
+            ? 'PRIMARY_OWNER'
+            : normalizedRole;
+        const displayName = normalizeMojibakeText(operator.displayName?.trim() || operator.userId);
+
+        return {
+            id: operator.userId,
+            name: displayName,
+            role,
+            capabilities: capabilitiesForRole(role),
+            isVerifier: role === 'PRIMARY_OWNER' || role === 'SECONDARY_OWNER',
+            isActive: true,
+        };
+    });
+
+    const operatorsById = new Map<string, FarmOperator>();
+    mappedOperators.forEach(operator => {
+        operatorsById.set(operator.id, operator);
+    });
+
+    const finalOperators = [...operatorsById.values()].sort((left, right) => {
+        const leftRank = left.role === 'PRIMARY_OWNER' ? 0 : left.role === 'SECONDARY_OWNER' ? 1 : left.role === 'MUKADAM' ? 2 : 3;
+        const rightRank = right.role === 'PRIMARY_OWNER' ? 0 : right.role === 'SECONDARY_OWNER' ? 1 : right.role === 'MUKADAM' ? 2 : 3;
+        if (leftRank !== rightRank) {
+            return leftRank - rightRank;
+        }
+
+        return left.name.localeCompare(right.name);
+    });
+
+    if (finalOperators.length === 0) {
+        return existingProfile;
+    }
+
+    const ownerOperator = finalOperators.find(operator => operator.role === 'PRIMARY_OWNER') ?? finalOperators[0];
+    const existingActiveOperatorId = existingProfile?.activeOperatorId;
+    const activeOperatorId = existingActiveOperatorId && finalOperators.some(operator => operator.id === existingActiveOperatorId)
+        ? existingActiveOperatorId
+        : ownerOperator.id;
+
+    return {
+        name: ownerOperator.name,
+        village: existingProfile?.village || '',
+        phone: existingProfile?.phone || '',
+        language: existingProfile?.language || 'mr',
+        verificationStatus: existingProfile?.verificationStatus || VerificationStatus.Unverified,
+        landHoldings: existingProfile?.landHoldings,
+        operators: finalOperators,
+        activeOperatorId,
+        people: existingProfile?.people,
+        trust: existingProfile?.trust,
+        location: existingProfile?.location || {
+            lat: 0,
+            lon: 0,
+            source: 'unknown',
+            updatedAt: receivedAtUtc,
+        },
+        waterResources: existingProfile?.waterResources || [],
+        motors: existingProfile?.motors || [],
+        electricityTiming: existingProfile?.electricityTiming,
+        machineries: existingProfile?.machineries,
+        infrastructure: existingProfile?.infrastructure || {
+            waterManagement: 'Decentralized',
+            filtrationType: 'Screen',
+        },
+    };
+}
+
 function toDailyLog(
     source: DailyLogDto,
     plotLookup: Map<string, { cropId: string; cropName: string; plotName: string }>
 ): DailyLog {
     const plotContext = plotLookup.get(source.plotId);
+    const selectedCropName = normalizeMojibakeText(plotContext?.cropName ?? 'Farm');
+    const selectedPlotName = normalizeMojibakeText(plotContext?.plotName ?? 'Unknown Plot');
     const latestVerification = [...source.verificationEvents]
         .sort((left, right) => Date.parse(right.occurredAtUtc) - Date.parse(left.occurredAtUtc))[0];
 
     const verificationStatus = mapVerificationStatus(
         source.lastVerificationStatus ?? latestVerification?.status);
+    const cropActivities: DailyLog['cropActivities'] = [];
+    const irrigation: DailyLog['irrigation'] = [];
+    const inputs: DailyLog['inputs'] = [];
+    const observations: DailyLog['observations'] = [];
+
+    source.tasks.forEach(task => {
+        const activityType = normalizeMojibakeText(task.activityType);
+        const taskNotes = task.notes ? normalizeMojibakeText(task.notes) : undefined;
+        const normalizedActivity = normalizeTaskActivityType(activityType);
+        if (isIrrigationActivity(normalizedActivity)) {
+            irrigation.push({
+                id: task.id,
+                method: 'Drip',
+                source: 'Field',
+                notes: taskNotes,
+            });
+            return;
+        }
+
+        if (isSprayActivity(normalizedActivity)) {
+            inputs.push({
+                id: task.id,
+                method: 'Spray',
+                mix: [{
+                    id: `mix_${task.id}`,
+                    productName: activityType,
+                    unit: 'unit',
+                }],
+                reason: 'Preventive',
+                type: 'pesticide',
+                productName: activityType,
+                notes: taskNotes,
+            });
+            return;
+        }
+
+        if (isNutritionActivity(normalizedActivity)) {
+            inputs.push({
+                id: task.id,
+                method: normalizedActivity.includes('fertigation') ? 'Drip' : 'Soil',
+                mix: [{
+                    id: `mix_${task.id}`,
+                    productName: activityType,
+                    unit: 'unit',
+                }],
+                reason: 'Growth',
+                type: 'fertilizer',
+                productName: activityType,
+                notes: taskNotes,
+            });
+            return;
+        }
+
+        if (isObservationActivity(normalizedActivity)) {
+            observations.push({
+                id: task.id,
+                plotId: source.plotId,
+                cropId: plotContext?.cropId,
+                dateKey: source.logDate,
+                timestamp: task.occurredAtUtc,
+                textRaw: taskNotes || activityType,
+                textCleaned: taskNotes,
+                noteType: 'observation',
+                severity: 'normal',
+                source: 'manual',
+            });
+            return;
+        }
+
+        cropActivities.push({
+            id: task.id,
+            title: activityType,
+            workTypes: [activityType],
+            notes: taskNotes,
+            status: 'completed',
+        });
+    });
 
     return {
         id: source.id,
@@ -235,25 +507,19 @@ function toDailyLog(
         context: {
             selection: [{
                 cropId: plotContext?.cropId ?? 'FARM_GLOBAL',
-                cropName: plotContext?.cropName ?? 'Farm',
+                cropName: selectedCropName,
                 selectedPlotIds: [source.plotId],
-                selectedPlotNames: [plotContext?.plotName ?? 'Unknown Plot'],
+                selectedPlotNames: [selectedPlotName],
             }],
         },
         dayOutcome: 'WORK_RECORDED',
-        cropActivities: source.tasks.map(task => ({
-            id: task.id,
-            title: task.activityType,
-            workTypes: [task.activityType],
-            notes: task.notes,
-            status: 'completed',
-        })),
-        irrigation: [],
+        cropActivities,
+        irrigation,
         labour: [],
-        inputs: [],
+        inputs,
         machinery: [],
         activityExpenses: [],
-        observations: [],
+        observations,
         plannedTasks: [],
         meta: {
             createdAtISO: source.createdAtUtc,
@@ -286,7 +552,8 @@ function readExistingCrops(): CropProfile[] {
 
     try {
         const parsed = JSON.parse(raw) as CropProfile[];
-        return Array.isArray(parsed) ? parsed : [];
+        const normalized = normalizeMojibakeDeep(Array.isArray(parsed) ? parsed : []);
+        return normalized.value as CropProfile[];
     } catch {
         return [];
     }
@@ -294,7 +561,8 @@ function readExistingCrops(): CropProfile[] {
 
 function writeCrops(crops: CropProfile[]): void {
     const key = storageNamespace.getKey('crops');
-    localStorage.setItem(key, JSON.stringify(crops));
+    const normalized = normalizeMojibakeDeep(crops).value;
+    localStorage.setItem(key, JSON.stringify(normalized));
 }
 
 export async function reconcileSyncPull(payload: SyncPullResponse): Promise<void> {
@@ -304,6 +572,7 @@ export async function reconcileSyncPull(payload: SyncPullResponse): Promise<void
     const activityCategories = referencePayload.activityCategories ?? [];
     const costCategories = referencePayload.costCategories ?? [];
     const referenceDataVersionHash = referencePayload.referenceDataVersionHash?.trim() ?? '';
+    const operators = referencePayload.operators ?? [];
     const cropTypeDefaults = readCropTypeReferences(cropTypes);
     const dayLedgers = payload.dayLedgers ?? [];
     const plannedTasks = payload.plannedActivities as PlannedTaskDto[] ?? [];
@@ -331,6 +600,16 @@ export async function reconcileSyncPull(payload: SyncPullResponse): Promise<void
 
     const mergedCrops = [...cropsById.values()];
     writeCrops(mergedCrops);
+    const receivedAtUtc = systemClock.nowISO();
+    const existingProfile = readExistingProfile();
+    const reconciledProfile = buildProfileFromSync(
+        operators,
+        payload.farms[0]?.ownerUserId,
+        existingProfile,
+        receivedAtUtc);
+    if (reconciledProfile) {
+        writeProfile(reconciledProfile);
+    }
 
     const plotLookup = new Map<string, { cropId: string; cropName: string; plotName: string }>();
     for (const crop of mergedCrops) {
@@ -345,7 +624,6 @@ export async function reconcileSyncPull(payload: SyncPullResponse): Promise<void
 
     const logs = payload.dailyLogs.map(log => toDailyLog(log, plotLookup));
     const attachments: AttachmentDto[] = payload.attachments ?? [];
-    const receivedAtUtc = systemClock.nowISO();
 
     const db = getDatabase();
     await db.transaction('rw', [
@@ -501,7 +779,8 @@ export async function reconcileSyncPull(payload: SyncPullResponse): Promise<void
         });
 
         const parsedCostEntries = payload.costEntries ?? [];
-        for (const ce of parsedCostEntries) {
+        const normalizedCostEntries = parsedCostEntries.map(entry => normalizeMojibakeDeep(entry).value);
+        for (const ce of normalizedCostEntries) {
             await db.costEntries.put({
                 id: ce.id,
                 farmId: ce.farmId,
@@ -511,7 +790,8 @@ export async function reconcileSyncPull(payload: SyncPullResponse): Promise<void
         }
 
         const parsedCorrections = payload.financeCorrections ?? [];
-        for (const fc of parsedCorrections) {
+        const normalizedCorrections = parsedCorrections.map(correction => normalizeMojibakeDeep(correction).value);
+        for (const fc of normalizedCorrections) {
             await db.financeCorrections.put({
                 id: fc.id,
                 costEntryId: fc.costEntryId,
@@ -520,8 +800,21 @@ export async function reconcileSyncPull(payload: SyncPullResponse): Promise<void
             });
         }
 
+        await db.appMeta.put({
+            key: 'shramsafal_finance_cost_entries_v1',
+            value: normalizedCostEntries,
+            updatedAt: receivedAtUtc,
+        });
+
+        await db.appMeta.put({
+            key: 'shramsafal_finance_corrections_v1',
+            value: normalizedCorrections,
+            updatedAt: receivedAtUtc,
+        });
+
         const parsedFarms = payload.farms ?? [];
-        for (const f of parsedFarms) {
+        const normalizedFarms = parsedFarms.map(farm => normalizeMojibakeDeep(farm).value);
+        for (const f of normalizedFarms) {
             await db.farms.put({
                 id: f.id,
                 payload: f,
@@ -530,7 +823,8 @@ export async function reconcileSyncPull(payload: SyncPullResponse): Promise<void
         }
 
         const parsedLocalPlots = payload.plots ?? [];
-        for (const p of parsedLocalPlots) {
+        const normalizedLocalPlots = parsedLocalPlots.map(plot => normalizeMojibakeDeep(plot).value);
+        for (const p of normalizedLocalPlots) {
             await db.plots.put({
                 id: p.id,
                 farmId: p.farmId,
@@ -540,7 +834,8 @@ export async function reconcileSyncPull(payload: SyncPullResponse): Promise<void
         }
 
         const parsedCycles = payload.cropCycles ?? [];
-        for (const cy of parsedCycles) {
+        const normalizedCycles = parsedCycles.map(cycle => normalizeMojibakeDeep(cycle).value);
+        for (const cy of normalizedCycles) {
             await db.cropCycles.put({
                 id: cy.id,
                 farmId: cy.farmId,
@@ -573,4 +868,18 @@ export async function reconcileSyncPull(payload: SyncPullResponse): Promise<void
             updatedAt: receivedAtUtc,
         });
     });
+
+    // Keep runtime catalog aligned with the latest server reference data.
+    setScheduleTemplatesFromReferenceData(scheduleTemplates);
+
+    if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('agrisync:finance-sync-payload', {
+            detail: {
+                costEntries: payload.costEntries ?? [],
+                corrections: payload.financeCorrections ?? [],
+                priceConfigs: payload.priceConfigs ?? [],
+            },
+        }));
+        window.dispatchEvent(new CustomEvent('agrisync:sync-reconciled'));
+    }
 }

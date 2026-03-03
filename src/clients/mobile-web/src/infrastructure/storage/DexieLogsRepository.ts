@@ -20,6 +20,7 @@ import { type AuditEvent, type AuditAction } from './AuditLogRepository';
 import { VersionRegistry } from '../../core/contracts/VersionRegistry';
 import { idGenerator } from '../../core/domain/services/IdGenerator';
 import { systemClock } from '../../core/domain/services/Clock';
+import { normalizeMojibakeDeep } from '../../shared/utils/textEncoding';
 
 const SCHEMA_VERSION = VersionRegistry.DB_SCHEMA_VERSION;
 
@@ -27,15 +28,20 @@ const SCHEMA_VERSION = VersionRegistry.DB_SCHEMA_VERSION;
  * Create a DexieLogRecord from a DailyLog for indexed storage.
  */
 function toRecord(log: DailyLog): DexieLogRecord {
+    const normalizedLog = normalizeMojibakeDeep(log).value as DailyLog;
     return {
-        id: log.id,
+        id: normalizedLog.id,
         schemaVersion: SCHEMA_VERSION,
-        log,
-        date: log.date,
-        verificationStatus: log.verification?.status,
-        createdByOperatorId: log.meta?.createdByOperatorId,
-        isDeleted: log.deletion ? 1 : 0,
+        log: normalizedLog,
+        date: normalizedLog.date,
+        verificationStatus: normalizedLog.verification?.status,
+        createdByOperatorId: normalizedLog.meta?.createdByOperatorId,
+        isDeleted: normalizedLog.deletion ? 1 : 0,
     };
+}
+
+function normalizeForRead(log: DailyLog): DailyLog {
+    return normalizeMojibakeDeep(log).value as DailyLog;
 }
 
 /**
@@ -66,10 +72,10 @@ export class DexieLogsRepository implements LogsRepository {
         const db = getDatabase();
         if (filters?.includeDeleted) {
             const records = await db.logs.toArray();
-            return records.map(r => r.log);
+            return records.map(r => normalizeForRead(r.log));
         }
         const records = await db.logs.where('isDeleted').equals(0).toArray();
-        return records.map(r => r.log);
+        return records.map(r => normalizeForRead(r.log));
     }
 
     async getByDate(date: string): Promise<DailyLog[]> {
@@ -78,7 +84,7 @@ export class DexieLogsRepository implements LogsRepository {
             .where('[date+isDeleted]')
             .equals([date, 0])
             .toArray();
-        return records.map(r => r.log);
+        return records.map(r => normalizeForRead(r.log));
     }
 
     async getByPlot(plotId: string): Promise<DailyLog[]> {
@@ -90,13 +96,13 @@ export class DexieLogsRepository implements LogsRepository {
                     sel.selectedPlotIds.includes(plotId)
                 )
             )
-            .map(r => r.log);
+            .map(r => normalizeForRead(r.log));
     }
 
     async getById(id: string): Promise<DailyLog | null> {
         const db = getDatabase();
         const record = await db.logs.get(id);
-        return record ? record.log : null;
+        return record ? normalizeForRead(record.log) : null;
     }
 
     // ============================================
@@ -281,7 +287,7 @@ export class DexieLogsRepository implements LogsRepository {
             .where('verificationStatus')
             .equals(status)
             .toArray();
-        return records.filter(r => !r.isDeleted).map(r => r.log);
+        return records.filter(r => !r.isDeleted).map(r => normalizeForRead(r.log));
     }
 
     async getUnverifiedLogs(): Promise<DailyLog[]> {
@@ -293,7 +299,7 @@ export class DexieLogsRepository implements LogsRepository {
                 r.verificationStatus === 'PENDING' ||
                 r.verificationStatus === 'DRAFT'
             )
-            .map(r => r.log);
+            .map(r => normalizeForRead(r.log));
     }
 
     async getByOperator(operatorId: string): Promise<DailyLog[]> {
@@ -302,7 +308,7 @@ export class DexieLogsRepository implements LogsRepository {
             .where('[createdByOperatorId+isDeleted]')
             .equals([operatorId, 0])
             .toArray();
-        return records.map(r => r.log);
+        return records.map(r => normalizeForRead(r.log));
     }
 
     async getByDateRange(startDate: string, endDate: string): Promise<DailyLog[]> {
@@ -311,7 +317,7 @@ export class DexieLogsRepository implements LogsRepository {
             .where('date')
             .between(startDate, endDate, true, true)
             .toArray();
-        return records.filter(r => !r.isDeleted).map(r => r.log);
+        return records.filter(r => !r.isDeleted).map(r => normalizeForRead(r.log));
     }
 
     async count(): Promise<number> {
