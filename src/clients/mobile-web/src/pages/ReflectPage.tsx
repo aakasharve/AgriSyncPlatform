@@ -30,6 +30,8 @@ import { MoneyChip } from '../features/finance/components/MoneyChip';
 import { MoneyLensDrawer } from '../features/finance/components/MoneyLensDrawer';
 import { FinanceFilters } from '../features/finance/finance.types';
 import OfflineEmptyState from '../shared/components/ui/OfflineEmptyState';
+import { getDatabase } from '../infrastructure/storage/DexieDatabase';
+import { AttachmentList, useAttachmentRetry } from '../features/attachments';
 
 interface ReflectPageProps {
     history: DailyLog[];
@@ -144,6 +146,25 @@ const getPrimaryActivityName = (log: DailyLog) => {
     if (log.labour.length > 0) return "Labour";
     if (log.machinery.length > 0) return log.machinery[0].type;
     return "Activity";
+};
+
+const getPrimaryLogNote = (log?: DailyLog): string | undefined => {
+    if (!log) {
+        return undefined;
+    }
+
+    const observation = log.observations?.[0];
+    const observationText = (observation?.textCleaned || observation?.textRaw)?.trim();
+    if (observationText) {
+        return observationText;
+    }
+
+    const cropActivityNote = log.cropActivities.find(activity => activity.notes)?.notes?.trim();
+    if (cropActivityNote) {
+        return cropActivityNote;
+    }
+
+    return log.irrigation.find(event => event.notes)?.notes?.trim();
 };
 
 // --- SUB-COMPONENTS ---
@@ -279,6 +300,7 @@ interface CompactCropCardProps {
 const CompactCropCard: React.FC<CompactCropCardProps> = ({ crop, plot, plotIndex, log, date, onClick, onCostClick }) => {
     const status = getDayStatus(log);
     const isBlocked = log?.disturbance?.scope === 'FULL_DAY';
+    const [attachmentCount, setAttachmentCount] = useState<number>(0);
 
     // Data Presence Checks
     const counts = {
@@ -299,9 +321,46 @@ const CompactCropCard: React.FC<CompactCropCardProps> = ({ crop, plot, plotIndex
     const targetPlot = plot || crop.plots[0];
     const timeline = getPhaseAndDay(targetPlot, date);
     const plotDisplayName = plot ? plot.name : (crop.plots.length > 1 ? 'All Plots' : crop.plots[0]?.name || 'Main Field');
+    const primaryNote = getPrimaryLogNote(log);
 
     // NEW: Water Adherence Status
     const waterStatus = getIrrigationStatus(date, plot, log);
+    const hasAttachments = attachmentCount > 0;
+
+    useEffect(() => {
+        let cancelled = false;
+
+        const loadAttachmentCount = async () => {
+            const logId = log?.id;
+            if (!logId) {
+                if (!cancelled) {
+                    setAttachmentCount(0);
+                }
+                return;
+            }
+
+            try {
+                const db = getDatabase();
+                const count = await db.attachments
+                    .where('linkedEntityId')
+                    .equals(logId)
+                    .count();
+
+                if (!cancelled) {
+                    setAttachmentCount(count);
+                }
+            } catch {
+                if (!cancelled) {
+                    setAttachmentCount(0);
+                }
+            }
+        };
+
+        void loadAttachmentCount();
+        return () => {
+            cancelled = true;
+        };
+    }, [log?.id]);
 
     // Helper for bucket icons
     const BucketIcon = ({ icon, count, activeColor, label }: { icon: React.ReactNode, count: number, activeColor: string, label: string }) => {
@@ -337,6 +396,11 @@ const CompactCropCard: React.FC<CompactCropCardProps> = ({ crop, plot, plotIndex
                     {/* Cost Pill + Trust Badge */}
                     <div className="flex items-center gap-1.5">
                         {log?.verification?.status && <TrustBadge status={log.verification.status} size="sm" />}
+                        {hasAttachments && (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-blue-50 text-blue-700 border border-blue-100">
+                                Attachments {attachmentCount}
+                            </span>
+                        )}
                         {log?.financialSummary.grandTotal ? (
                             <MoneyChip
                                 amount={log.financialSummary.grandTotal}
@@ -353,6 +417,11 @@ const CompactCropCard: React.FC<CompactCropCardProps> = ({ crop, plot, plotIndex
                 <div className="text-xs font-medium text-slate-500 mb-2 ml-0.5 truncate max-w-full">
                     {plotDisplayName}
                 </div>
+                {primaryNote && (
+                    <div className="text-[10px] font-semibold text-amber-800 bg-amber-50 border border-amber-100 rounded-md px-2 py-1 mb-2 truncate w-full">
+                        {primaryNote}
+                    </div>
+                )}
 
                 {/* 2.5 Weather Display - Per Plot */}
                 {log?.weatherSnapshot && (
@@ -457,6 +526,9 @@ const ReflectPage: React.FC<ReflectPageProps> = ({
     const [seasonalIncome, setSeasonalIncome] = useState<number>(0);
     const [moneyLensOpen, setMoneyLensOpen] = useState(false);
     const [moneyLensFilters, setMoneyLensFilters] = useState<FinanceFilters>({});
+    const [selectedLogAttachmentCount, setSelectedLogAttachmentCount] = useState(0);
+    const [showSelectedLogAttachments, setShowSelectedLogAttachments] = useState(false);
+    const { retryUpload } = useAttachmentRetry();
 
     // Update income summary when context changes
     useEffect(() => {
@@ -485,6 +557,42 @@ const ReflectPage: React.FC<ReflectPageProps> = ({
 
     // Block Ordering State
     const [blockOrder, setBlockOrder] = useState<string[]>(['farm-status', 'notes', 'daily-logs']);
+
+    useEffect(() => {
+        let cancelled = false;
+        const selectedLogId = selectedLog?.id;
+        setShowSelectedLogAttachments(false);
+
+        const loadSelectedLogAttachmentCount = async () => {
+            if (!selectedLogId) {
+                if (!cancelled) {
+                    setSelectedLogAttachmentCount(0);
+                }
+                return;
+            }
+
+            try {
+                const db = getDatabase();
+                const count = await db.attachments
+                    .where('linkedEntityId')
+                    .equals(selectedLogId)
+                    .count();
+
+                if (!cancelled) {
+                    setSelectedLogAttachmentCount(count);
+                }
+            } catch {
+                if (!cancelled) {
+                    setSelectedLogAttachmentCount(0);
+                }
+            }
+        };
+
+        void loadSelectedLogAttachmentCount();
+        return () => {
+            cancelled = true;
+        };
+    }, [selectedLog?.id]);
 
     const openLogMoneyLens = (log: DailyLog) => {
         const selection = log.context.selection?.[0];
@@ -1162,6 +1270,26 @@ const ReflectPage: React.FC<ReflectPageProps> = ({
                         >
                             {selectedLog ? (
                                 <>
+                                    {selectedLogAttachmentCount > 0 && (
+                                        <div className="mb-4 rounded-xl border border-blue-100 bg-blue-50/50 p-3">
+                                            <button
+                                                type="button"
+                                                onClick={() => setShowSelectedLogAttachments(previous => !previous)}
+                                                className="inline-flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-xs font-bold bg-white border border-blue-200 text-blue-700"
+                                            >
+                                                Attachments {selectedLogAttachmentCount}
+                                            </button>
+                                            {showSelectedLogAttachments && (
+                                                <div className="mt-2">
+                                                    <AttachmentList
+                                                        linkedEntityId={selectedLog.id}
+                                                        compact
+                                                        onRetry={retryUpload}
+                                                    />
+                                                </div>
+                                            )}
+                                        </div>
+                                    )}
                                     <DailyWorkSummaryView
                                         key={selectedLog.id}
                                         summary={generateDayWorkSummary(selectedLog, defaults)}

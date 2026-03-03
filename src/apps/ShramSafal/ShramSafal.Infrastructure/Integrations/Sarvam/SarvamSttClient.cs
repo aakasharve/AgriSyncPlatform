@@ -36,8 +36,10 @@ internal sealed class SarvamSttClient(
 
             using var multipart = new MultipartFormDataContent();
             var fileContent = new ByteArrayContent(payload);
-            fileContent.Headers.ContentType = new MediaTypeHeaderValue(
-                string.IsNullOrWhiteSpace(mimeType) ? "audio/webm" : mimeType.Trim());
+            var normalizedMimeType = string.IsNullOrWhiteSpace(mimeType) ? "audio/webm" : mimeType.Trim();
+            var semicolonIndex = normalizedMimeType.IndexOf(';');
+            if (semicolonIndex > 0) normalizedMimeType = normalizedMimeType[..semicolonIndex];
+            fileContent.Headers.ContentType = new MediaTypeHeaderValue(normalizedMimeType);
 
             multipart.Add(fileContent, "file", "audio.webm");
             multipart.Add(new StringContent(_options.SttModel), "model");

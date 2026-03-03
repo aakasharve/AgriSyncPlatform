@@ -65,6 +65,12 @@ interface FinanceCacheState {
     priceBook: PriceBookItem[];
 }
 
+type FinanceSyncPayload = {
+    costEntries?: ServerCostEntry[];
+    corrections?: ServerFinanceCorrection[];
+    priceConfigs?: ServerPriceConfig[];
+};
+
 const cache: FinanceCacheState = {
     hydrated: false,
     hydrating: null,
@@ -145,6 +151,27 @@ function mapPriceConfig(entry: ServerPriceConfig): PriceBookItem {
     };
 }
 
+function emitFinanceCacheUpdated(): void {
+    if (typeof window === 'undefined') {
+        return;
+    }
+
+    window.dispatchEvent(new CustomEvent('agrisync:finance-cache-updated'));
+}
+
+function applyFinanceSnapshot(payload: FinanceSyncPayload): void {
+    const costEntries = asArray<ServerCostEntry>(payload.costEntries);
+    const corrections = asArray<ServerFinanceCorrection>(payload.corrections);
+    const priceConfigs = asArray<ServerPriceConfig>(payload.priceConfigs);
+
+    cache.events = costEntries.map(mapCostEntryToMoneyEvent);
+    cache.adjustments = corrections.map(mapCorrection);
+    cache.priceBook = priceConfigs.map(mapPriceConfig);
+    cache.hydrated = true;
+
+    emitFinanceCacheUpdated();
+}
+
 async function hydrateFromDexie(force = false): Promise<void> {
     if (cache.hydrating) {
         return cache.hydrating;
@@ -156,20 +183,24 @@ async function hydrateFromDexie(force = false): Promise<void> {
 
     cache.hydrating = (async () => {
         const db = getDatabase();
-        const [costEntriesMeta, correctionsMeta, priceConfigsMeta] = await Promise.all([
-            db.appMeta.get('shramsafal_finance_cost_entries_v1'),
-            db.appMeta.get('shramsafal_finance_corrections_v1'),
+        const [costEntryRows, correctionRows, priceConfigsMeta] = await Promise.all([
+            db.costEntries.toArray(),
+            db.financeCorrections.toArray(),
             db.appMeta.get('shramsafal_finance_price_configs_v1'),
         ]);
 
-        const costEntries = asArray<ServerCostEntry>(costEntriesMeta?.value);
-        const corrections = asArray<ServerFinanceCorrection>(correctionsMeta?.value);
+        const costEntries = costEntryRows
+            .map(row => row.payload as ServerCostEntry)
+            .filter(Boolean);
+        const corrections = correctionRows
+            .map(row => row.payload as ServerFinanceCorrection)
+            .filter(Boolean);
         const priceConfigs = asArray<ServerPriceConfig>(priceConfigsMeta?.value);
-
-        cache.events = costEntries.map(mapCostEntryToMoneyEvent);
-        cache.adjustments = corrections.map(mapCorrection);
-        cache.priceBook = priceConfigs.map(mapPriceConfig);
-        cache.hydrated = true;
+        applyFinanceSnapshot({
+            costEntries,
+            corrections,
+            priceConfigs,
+        });
     })().finally(() => {
         cache.hydrating = null;
     });
@@ -178,12 +209,23 @@ async function hydrateFromDexie(force = false): Promise<void> {
 }
 
 function refreshInBackground(): void {
-    void hydrateFromDexie();
+    void hydrateFromDexie(true);
 }
 
 // ── Auto-hydrate on load ───────────────────────────────────────────────
 
 void hydrateFromDexie();
+
+if (typeof window !== 'undefined') {
+    window.addEventListener('agrisync:finance-sync-payload', event => {
+        const detail = (event as CustomEvent<FinanceSyncPayload>).detail;
+        if (!detail) {
+            return;
+        }
+
+        applyFinanceSnapshot(detail);
+    });
+}
 
 // ── Public API: Dexie reads + settings ─────────────────────────────────
 

@@ -31,6 +31,21 @@ const LedgerPage: React.FC<LedgerPageProps> = ({ currentRoute, onNavigate }) => 
     const totalExpense = events.filter(e => e.type === 'Expense').reduce((sum, e) => sum + e.effectiveAmount, 0);
 
     useEffect(() => {
+        if (typeof window === 'undefined') {
+            return;
+        }
+
+        const handleFinanceCacheUpdated = () => {
+            setRefreshKey(previous => previous + 1);
+        };
+
+        window.addEventListener('agrisync:finance-cache-updated', handleFinanceCacheUpdated);
+        return () => {
+            window.removeEventListener('agrisync:finance-cache-updated', handleFinanceCacheUpdated);
+        };
+    }, []);
+
+    useEffect(() => {
         let cancelled = false;
 
         const loadAttachmentCounts = async () => {

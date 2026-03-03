@@ -3,6 +3,7 @@ import { LogsRepository } from '../../application/ports/index';
 import { DexieLogsRepository } from './DexieLogsRepository';
 import { storageNamespace } from './StorageNamespace';
 import { CropProfile, FarmerProfile } from '../../types';
+import { normalizeMojibakeDeep } from '../../shared/utils/textEncoding';
 
 // Simple LocalStorage implementation for Crops/Profile for now, 
 // as they are not yet in Dexie. 
@@ -12,12 +13,27 @@ class LocalCropRepository implements CropRepository {
     async getAll(): Promise<CropProfile[]> {
         const key = storageNamespace.getKey('crops');
         const stored = localStorage.getItem(key);
-        return stored ? JSON.parse(stored) : [];
+        if (!stored) {
+            return [];
+        }
+
+        try {
+            const parsed = JSON.parse(stored) as CropProfile[];
+            const normalized = normalizeMojibakeDeep(Array.isArray(parsed) ? parsed : []);
+            if (normalized.changed) {
+                localStorage.setItem(key, JSON.stringify(normalized.value));
+            }
+
+            return normalized.value as CropProfile[];
+        } catch {
+            return [];
+        }
     }
 
     async save(crops: CropProfile[]): Promise<void> {
         const key = storageNamespace.getKey('crops');
-        localStorage.setItem(key, JSON.stringify(crops));
+        const normalized = normalizeMojibakeDeep(crops).value;
+        localStorage.setItem(key, JSON.stringify(normalized));
     }
 }
 
@@ -25,12 +41,27 @@ class LocalProfileRepository implements ProfileRepository {
     async get(): Promise<FarmerProfile> {
         const key = storageNamespace.getKey('farmer_profile');
         const stored = localStorage.getItem(key);
-        return stored ? JSON.parse(stored) : {} as FarmerProfile; // Handle default/empty upstream
+        if (!stored) {
+            return {} as FarmerProfile;
+        }
+
+        try {
+            const parsed = JSON.parse(stored) as FarmerProfile;
+            const normalized = normalizeMojibakeDeep(parsed);
+            if (normalized.changed) {
+                localStorage.setItem(key, JSON.stringify(normalized.value));
+            }
+
+            return normalized.value as FarmerProfile;
+        } catch {
+            return {} as FarmerProfile;
+        }
     }
 
     async save(profile: FarmerProfile): Promise<void> {
         const key = storageNamespace.getKey('farmer_profile');
-        localStorage.setItem(key, JSON.stringify(profile));
+        const normalized = normalizeMojibakeDeep(profile).value;
+        localStorage.setItem(key, JSON.stringify(normalized));
     }
 }
 

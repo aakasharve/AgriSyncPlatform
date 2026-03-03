@@ -106,16 +106,14 @@ export const DataSourceProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         const init = async () => {
             setIsLoading(true);
             try {
-                if (isDemoMode) {
-                    console.log("[DataSource] Switching to DEMO mode");
-                    backgroundSyncWorker.stop();
-                    attachmentUploadWorker.stop();
-                    storageNamespace.setNamespace('demo');
-                    await dataSource.initialize();
-                    await MigrationService.migrate();
-                    backgroundSyncWorker.start();
-                    attachmentUploadWorker.start();
-                }
+                console.log(`[DataSource] Initializing ${isDemoMode ? 'DEMO' : 'REAL'} mode`);
+                backgroundSyncWorker.stop();
+                attachmentUploadWorker.stop();
+                storageNamespace.setNamespace(isDemoMode ? 'demo' : 'user');
+                await dataSource.initialize();
+                await MigrationService.migrate();
+                backgroundSyncWorker.start();
+                attachmentUploadWorker.start();
             } catch (error) {
                 console.error("[DataSource] Init failed", error);
             } finally {
@@ -129,7 +127,7 @@ export const DataSourceProvider: React.FC<{ children: React.ReactNode }> = ({ ch
             backgroundSyncWorker.stop();
             attachmentUploadWorker.stop();
         };
-    }, [isAuthenticated, dataSource]);
+    }, [isAuthenticated, isDemoMode, dataSource]);
 
     const value: DataSourceContextValue = {
         dataSource,

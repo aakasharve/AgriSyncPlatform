@@ -12,6 +12,11 @@ public sealed record SyncPushResponseDto(
     DateTime ServerTimeUtc,
     IReadOnlyList<SyncMutationResultDto> Results);
 
+public sealed record SyncOperatorDto(
+    Guid UserId,
+    string DisplayName,
+    string Role);
+
 public static class SyncMutationTypes
 {
     public const string AllocateGlobalExpense = "allocate_global_expense";
@@ -32,6 +37,7 @@ public sealed record SyncPullResponseDto(
     IReadOnlyList<PriceConfigDto> PriceConfigs,
     IReadOnlyList<PlannedActivityDto> PlannedActivities,
     IReadOnlyList<AuditEventDto> AuditEvents,
+    IReadOnlyList<SyncOperatorDto> Operators,
     IReadOnlyList<ScheduleTemplateDto> ScheduleTemplates,
     IReadOnlyList<CropTypeDto> CropTypes,
     IReadOnlyList<string> ActivityCategories,

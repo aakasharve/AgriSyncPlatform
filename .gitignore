@@ -40,3 +40,11 @@ src/clients/mobile-web/ios/
 
 # Local paid API credentials (never commit)
 src/AgriSync.Bootstrapper/secrets/local/credentials.json
+
+# Playwright CLI session snapshots (auto-generated, test-only artifacts)
+.playwright-cli/
+
+# Demo photo assets (large binaries, drop locally)
+src/clients/mobile-web/public/demo-photos/*.jpg
+src/clients/mobile-web/public/demo-photos/*.jpeg
+src/clients/mobile-web/public/demo-photos/*.png

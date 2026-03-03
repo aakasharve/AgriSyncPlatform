@@ -155,6 +155,28 @@ export const useAppData = (_props?: UseAppDataProps): UseAppDataResult => {
     useEffect(() => {
         let mounted = true;
 
+        const hydrateRealData = async () => {
+            const loadedCrops = await dataSource.crops.getAll();
+            if (!mounted) return;
+
+            setCrops(loadedCrops.length > 0 ? loadedCrops : []);
+            setRealCrops(loadedCrops);
+
+            const loadedProfile = await dataSource.profile.get();
+            if (!mounted) return;
+            if (loadedProfile && loadedProfile.name) {
+                setFarmerProfile(loadedProfile);
+            }
+
+            const loadedLogs = await dataSource.logs.getAll();
+            if (!mounted) return;
+            setHistory(loadedLogs);
+
+            setPlannedTasks([]);
+            setHarvestSessions([]);
+            setProcurementExpenses([]);
+        };
+
         const loadData = async () => {
             try {
                 if (isDemoMode) {
@@ -181,36 +203,31 @@ export const useAppData = (_props?: UseAppDataProps): UseAppDataResult => {
                         await backgroundSyncWorker.triggerNow();
                     }
 
-                    // REAL MODE: Load user's actual data (may be empty)
-                    const loadedCrops = await dataSource.crops.getAll();
-
-                    // Only use loaded crops if they exist, otherwise empty
-                    setCrops(loadedCrops.length > 0 ? loadedCrops : []);
-                    setRealCrops(loadedCrops);
-
-                    // Load real profile
-                    const loadedProfile = await dataSource.profile.get();
-                    if (loadedProfile && loadedProfile.name) {
-                        setFarmerProfile(loadedProfile);
-                    }
-
-                    // Load real logs
-                    const loadedLogs = await dataSource.logs.getAll();
-                    setHistory(loadedLogs);
-
-                    // Clear demo aux data
-                    setPlannedTasks([]);
-                    setHarvestSessions([]);
-                    setProcurementExpenses([]);
+                    await hydrateRealData();
                 }
             } catch (err) {
                 console.error("Failed to load app data", err);
             }
         };
 
+        const handleSyncReconciled = () => {
+            if (!isDemoMode) {
+                void hydrateRealData();
+            }
+        };
+
+        if (typeof window !== 'undefined') {
+            window.addEventListener('agrisync:sync-reconciled', handleSyncReconciled);
+        }
+
         loadData();
 
-        return () => { mounted = false; };
+        return () => {
+            mounted = false;
+            if (typeof window !== 'undefined') {
+                window.removeEventListener('agrisync:sync-reconciled', handleSyncReconciled);
+            }
+        };
     }, [dataSource, isDemoMode, isAuthenticated]);
 
     // --- HANDLERS ---

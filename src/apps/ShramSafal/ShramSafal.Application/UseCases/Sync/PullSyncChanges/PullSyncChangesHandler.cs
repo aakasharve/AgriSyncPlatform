@@ -8,7 +8,8 @@ namespace ShramSafal.Application.UseCases.Sync.PullSyncChanges;
 
 public sealed class PullSyncChangesHandler(
     IShramSafalRepository repository,
-    IClock clock)
+    IClock clock,
+    GetScheduleTemplatesHandler getScheduleTemplatesHandler)
 {
     public async Task<Result<SyncPullResponseDto>> HandleAsync(PullSyncChangesQuery query, CancellationToken ct = default)
     {
@@ -52,6 +53,27 @@ public sealed class PullSyncChangesHandler(
         var auditEvents = (await repository.GetAuditEventsChangedSinceAsync(sinceUtc, ct))
             .Where(a => !a.FarmId.HasValue || farmIdSet.Contains(a.FarmId.Value))
             .ToList();
+        var templatesResult = await getScheduleTemplatesHandler.HandleAsync(ct);
+        if (!templatesResult.IsSuccess)
+        {
+            return Result.Failure<SyncPullResponseDto>(templatesResult.Error);
+        }
+
+        var scheduleTemplates = templatesResult.Value ?? [];
+        var cropTypes = GetScheduleTemplatesHandler.BuildCropTypes(scheduleTemplates);
+        var referenceDataVersionHash = scheduleTemplates.Count > 0
+            ? scheduleTemplates[0].VersionHash
+            : ReferenceDataCatalog.VersionHash;
+        var operatorIds = CollectOperatorIds(
+            query.UserId,
+            farms,
+            dailyLogs,
+            attachments,
+            costEntries,
+            financeCorrections,
+            dayLedgers,
+            auditEvents);
+        var operators = await repository.GetOperatorsByIdsAsync(operatorIds, ct);
 
         var nextCursorUtc = ComputeNextCursor(
             sinceUtc,
@@ -81,11 +103,12 @@ public sealed class PullSyncChangesHandler(
             priceConfigs.Select(c => c.ToDto()).ToList(),
             plannedActivities.Select(a => a.ToDto()).ToList(),
             auditEvents.Select(a => a.ToDto()).ToList(),
-            ReferenceDataCatalog.ScheduleTemplates,
-            ReferenceDataCatalog.CropTypes,
+            operators.ToList(),
+            scheduleTemplates,
+            cropTypes,
             ReferenceDataCatalog.ActivityCategories,
             ReferenceDataCatalog.CostCategories,
-            ReferenceDataCatalog.VersionHash);
+            referenceDataVersionHash);
 
         return Result.Success(response);
     }
@@ -192,4 +215,67 @@ public sealed class PullSyncChangesHandler(
     }
 
     private static DateTime Max(DateTime left, DateTime right) => left >= right ? left : right;
+
+    private static HashSet<Guid> CollectOperatorIds(
+        Guid requestingUserId,
+        IReadOnlyList<Domain.Farms.Farm> farms,
+        IReadOnlyList<Domain.Logs.DailyLog> dailyLogs,
+        IReadOnlyList<Domain.Attachments.Attachment> attachments,
+        IReadOnlyList<Domain.Finance.CostEntry> costEntries,
+        IReadOnlyList<Domain.Finance.FinanceCorrection> financeCorrections,
+        IReadOnlyList<Domain.Finance.DayLedger> dayLedgers,
+        IReadOnlyList<Domain.Audit.AuditEvent> auditEvents)
+    {
+        var ids = new HashSet<Guid>();
+        AddIfValid(requestingUserId, ids);
+
+        foreach (var farm in farms)
+        {
+            AddIfValid((Guid)farm.OwnerUserId, ids);
+        }
+
+        foreach (var log in dailyLogs)
+        {
+            AddIfValid((Guid)log.OperatorUserId, ids);
+            foreach (var verification in log.VerificationEvents)
+            {
+                AddIfValid((Guid)verification.VerifiedByUserId, ids);
+            }
+        }
+
+        foreach (var attachment in attachments)
+        {
+            AddIfValid((Guid)attachment.CreatedByUserId, ids);
+        }
+
+        foreach (var entry in costEntries)
+        {
+            AddIfValid((Guid)entry.CreatedByUserId, ids);
+        }
+
+        foreach (var correction in financeCorrections)
+        {
+            AddIfValid((Guid)correction.CorrectedByUserId, ids);
+        }
+
+        foreach (var ledger in dayLedgers)
+        {
+            AddIfValid((Guid)ledger.CreatedByUserId, ids);
+        }
+
+        foreach (var auditEvent in auditEvents)
+        {
+            AddIfValid((Guid)auditEvent.ActorUserId, ids);
+        }
+
+        return ids;
+    }
+
+    private static void AddIfValid(Guid value, HashSet<Guid> ids)
+    {
+        if (value != Guid.Empty)
+        {
+            ids.Add(value);
+        }
+    }
 }

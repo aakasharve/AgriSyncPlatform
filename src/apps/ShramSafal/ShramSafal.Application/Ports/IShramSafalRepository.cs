@@ -5,6 +5,7 @@ using ShramSafal.Domain.Farms;
 using ShramSafal.Domain.Finance;
 using ShramSafal.Domain.Logs;
 using ShramSafal.Domain.Planning;
+using ShramSafal.Application.Contracts.Dtos;
 using AgriSync.SharedKernel.Contracts.Ids;
 
 namespace ShramSafal.Application.Ports;
@@ -42,6 +43,7 @@ public interface IShramSafalRepository
     Task AddAuditEventAsync(AuditEvent auditEvent, CancellationToken ct = default);
 
     Task AddScheduleTemplateAsync(ScheduleTemplate template, CancellationToken ct = default);
+    Task<List<ScheduleTemplate>> GetScheduleTemplatesAsync(CancellationToken ct = default);
     Task AddPlannedActivitiesAsync(IEnumerable<PlannedActivity> plannedActivities, CancellationToken ct = default);
     Task<List<PlannedActivity>> GetPlannedActivitiesByCropCycleIdAsync(Guid cropCycleId, CancellationToken ct = default);
     Task<List<LogTask>> GetExecutedTasksByCropCycleIdAsync(Guid cropCycleId, CancellationToken ct = default);
@@ -63,6 +65,7 @@ public interface IShramSafalRepository
     Task<List<AuditEvent>> GetAuditEventsForEntityAsync(Guid entityId, string entityType, CancellationToken ct = default);
     Task<List<AuditEvent>> GetAuditEventsForFarmAsync(Guid farmId, DateOnly from, DateOnly to, int limit, int offset, CancellationToken ct = default);
     Task<List<Guid>> GetFarmIdsForUserAsync(Guid userId, CancellationToken ct = default);
+    Task<IReadOnlyList<SyncOperatorDto>> GetOperatorsByIdsAsync(IEnumerable<Guid> userIds, CancellationToken ct = default);
     Task<bool> IsUserMemberOfFarmAsync(Guid farmId, Guid userId, CancellationToken ct = default);
 
     Task SaveChangesAsync(CancellationToken ct = default);

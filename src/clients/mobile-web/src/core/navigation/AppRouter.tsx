@@ -137,8 +137,11 @@ const getSummaryLines = (log: DailyLog): string[] => {
     }
 
     const firstObservation = log.observations?.[0]?.textCleaned || log.observations?.[0]?.textRaw;
-    if (firstObservation && lines.length < 2) {
-        lines.push(`Note: ${truncateLine(firstObservation, 60)}`);
+    const firstActivityNote = log.cropActivities.find(activity => activity.notes)?.notes;
+    const firstIrrigationNote = log.irrigation.find(event => event.notes)?.notes;
+    const firstNote = firstObservation || firstActivityNote || firstIrrigationNote;
+    if (firstNote && lines.length < 2) {
+        lines.push(`Note: ${truncateLine(firstNote, 60)}`);
     }
 
     lines.push(

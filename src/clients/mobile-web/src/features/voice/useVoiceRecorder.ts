@@ -79,7 +79,17 @@ export const useVoiceRecorder = ({
         });
     };
 
-    const preprocessAudio = async (audioData: AudioData): Promise<AudioData> => {
+    type PreprocessedAudioResult = {
+        base64: string;
+        mimeType: string;
+        inputSpeechDurationMs?: number;
+        inputRawDurationMs?: number;
+        segmentMetadataJson?: string;
+        idempotencyKey?: string;
+        requestPayloadHash?: string;
+    };
+
+    const preprocessAudio = async (audioData: AudioData): Promise<PreprocessedAudioResult> => {
         const farmId = resolveFarmId();
         const userId = resolveUserId();
         const sessionId = VoiceIdempotency.createSessionId();
@@ -101,27 +111,50 @@ export const useVoiceRecorder = ({
             lastVoiceSessionMetadataRef.current = pipelineOutput.metadata;
             lastVoiceIdempotencySeedRef.current = deterministicMaterial.deterministicSeed;
 
+            const speechMs = Math.round(pipelineOutput.metadata.totalSpeechDurationMs);
+            const rawMs = Math.round(pipelineOutput.metadata.totalRawDurationMs);
+            const segmentMetadata = {
+                sessionId: pipelineOutput.metadata.sessionId,
+                farmId: pipelineOutput.metadata.farmId,
+                totalSegments: pipelineOutput.metadata.totalSegments,
+                totalSpeechDurationMs: speechMs,
+                totalRawDurationMs: rawMs,
+                totalSilenceRemovedMs: Math.round(pipelineOutput.metadata.totalSilenceRemovedMs),
+            };
+
             return {
-                blob: pipelineOutput.audioBlob,
                 base64: await blobToBase64(pipelineOutput.audioBlob),
                 mimeType: pipelineOutput.mimeType,
+                inputSpeechDurationMs: speechMs,
+                inputRawDurationMs: rawMs,
+                segmentMetadataJson: JSON.stringify(segmentMetadata),
+                idempotencyKey: deterministicMaterial.deterministicKey,
+                requestPayloadHash: pipelineOutput.contentHash,
             };
         } catch (pipelineError) {
             console.warn('[VoicePreprocessor] Falling back to raw audio upload.', pipelineError);
             lastVoiceSessionMetadataRef.current = null;
             lastVoiceIdempotencySeedRef.current = null;
-            return audioData;
+            return {
+                base64: audioData.base64,
+                mimeType: audioData.mimeType,
+            };
         }
     };
 
     const handleAudioReady = async (audioData: AudioData) => {
         setStatus('processing');
         setError(null);
-        const preprocessedAudio = await preprocessAudio(audioData);
+        const preprocessed = await preprocessAudio(audioData);
         await processInput({
             type: 'audio',
-            data: preprocessedAudio.base64,
-            mimeType: preprocessedAudio.mimeType,
+            data: preprocessed.base64,
+            mimeType: preprocessed.mimeType,
+            inputSpeechDurationMs: preprocessed.inputSpeechDurationMs,
+            inputRawDurationMs: preprocessed.inputRawDurationMs,
+            segmentMetadataJson: preprocessed.segmentMetadataJson,
+            idempotencyKey: preprocessed.idempotencyKey,
+            requestPayloadHash: preprocessed.requestPayloadHash,
         });
     };
 
@@ -129,7 +162,16 @@ export const useVoiceRecorder = ({
         await processInput({ type: 'text', data: text }); // mimeType not needed for text
     };
 
-    const processInput = async (input: { type: 'audio' | 'text', data: string, mimeType?: string }) => {
+    const processInput = async (input: {
+        type: 'audio' | 'text';
+        data: string;
+        mimeType?: string;
+        inputSpeechDurationMs?: number;
+        inputRawDurationMs?: number;
+        segmentMetadataJson?: string;
+        idempotencyKey?: string;
+        requestPayloadHash?: string;
+    }) => {
         if (!hasActiveLogContext) {
             // PHASE 25: Allow Global Log (Removed Blocker)
             // We pass a "NULL" flag or leave it as is, Parser handles it.
@@ -158,9 +200,19 @@ export const useVoiceRecorder = ({
         const focusCategory = isSegmentUpdate ? recordingSegment : undefined;
 
         try {
-            // Construct correct payload type
+            // Construct correct payload type — forward preprocessor metadata for audio
+            // so BackendAiClient uses authoritative durations and idempotency key.
             const payload = payloadInput.type === 'audio'
-                ? { type: 'audio' as const, data: payloadInput.data, mimeType: payloadInput.mimeType! }
+                ? {
+                    type: 'audio' as const,
+                    data: payloadInput.data,
+                    mimeType: payloadInput.mimeType!,
+                    inputSpeechDurationMs: payloadInput.inputSpeechDurationMs,
+                    inputRawDurationMs: payloadInput.inputRawDurationMs,
+                    segmentMetadataJson: payloadInput.segmentMetadataJson,
+                    idempotencyKey: payloadInput.idempotencyKey,
+                    requestPayloadHash: payloadInput.requestPayloadHash,
+                }
                 : { type: 'text' as const, content: payloadInput.data };
 
             const result = await parseVoiceToDraft(
