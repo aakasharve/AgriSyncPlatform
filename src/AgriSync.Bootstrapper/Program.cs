@@ -60,6 +60,7 @@ try
     builder.Services.AddShramSafalApi(builder.Configuration);
     builder.Services.AddTransient<AgriSync.Bootstrapper.Infrastructure.DatabaseSeeder>();
     builder.Services.AddTransient<AgriSync.Bootstrapper.Infrastructure.PurveshDemoSeeder>();
+    builder.Services.AddTransient<AgriSync.Bootstrapper.Infrastructure.BlankTestUserSeeder>();
 
     QuestPDF.Settings.License = QuestPDF.Infrastructure.LicenseType.Community;
 
@@ -296,6 +297,10 @@ try
 
             var userSchemaCreated = await EnsureContextTablesCreatedAsync(userContext, "public", "users");
             var ssfSchemaCreated = await EnsureContextTablesCreatedAsync(ssfContext, "ssf", "farms");
+
+            // Always ensure the blank-experience test account exists (no farm data).
+            var blankSeeder = services.GetRequiredService<AgriSync.Bootstrapper.Infrastructure.BlankTestUserSeeder>();
+            await blankSeeder.SeedAsync();
 
             // Seed Data — each seeder is gated behind an env var so no demo data
             // runs automatically on a fresh deployment.
