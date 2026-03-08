@@ -1,50 +1,134 @@
-# Visual Studio / .NET
+# ============================================
+# AgriSync Platform .gitignore
+# ============================================
+
+# ------------------------------------------
+# Operations Vault (Obsidian / _COFOUNDER)
+# NEVER commit planning artifacts to git.
+# ------------------------------------------
+/_COFOUNDER/
+.obsidian/
+
+# Prevent stray operations folders at repo root
+/00_Home/
+/00_Strategy/
+/01_Operations/
+/02_Quality/
+/02_Skills/
+/03_Documentation/
+/04_Product/
+/05_Engineering/
+/99_System_State/
+
+# ------------------------------------------
+# .NET / Visual Studio
+# ------------------------------------------
 .vs/
 *.user
 *.suo
-
-# Build folders
 **/bin/
 **/obj/
-
-# Rider / IDE
-.idea/
-.vscode/
-
-# NuGet
 *.nupkg
 **/packages/
 
-# Logs
-*.log
+# ------------------------------------------
+# IDE
+# ------------------------------------------
+.idea/
+.vscode/
 
-# OS
-Thumbs.db
-.DS_Store
-
-# Node
+# ------------------------------------------
+# Node / Frontend
+# ------------------------------------------
 node_modules/
-
-# Frontend build output
 **/dist/
 
-# Capacitor native projects (built, not committed)
+# Environment files (NEVER commit secrets)
+.env
+.env.local
+.env.*.local
+
+# Capacitor native projects (built locally)
 src/clients/mobile-web/android/
 src/clients/mobile-web/ios/
 
-# Generated files
+# ------------------------------------------
+# Logs & Temp Files
+# ------------------------------------------
+*.log
+*.err.log
+*.out.log
+build.log
+.codex_build/
+build_out.txt
+diff.txt
+diff_content.txt
+diff_stat.txt
+status.txt
+status*.txt
+snapshot_commits.txt
+uncommitted_files.txt
+tmp-swagger.json
+debug_seed.ps1
+.preview_backend_pid
+.preview_frontend_pid
+.codex_tmp_handoff_result.json
+
+# ------------------------------------------
+# OS
+# ------------------------------------------
+Thumbs.db
+.DS_Store
+
+# ------------------------------------------
+# Generated / Misc
+# ------------------------------------------
 *.generated.*
 
-# Local cofounder workspace (never sync)
-/_COFOUNDER/
-
-# Local paid API credentials (never commit)
+# ------------------------------------------
+# Secrets & Credentials
+# ------------------------------------------
 src/AgriSync.Bootstrapper/secrets/local/credentials.json
+src/AgriSync.Bootstrapper/App_Data/
 
-# Playwright CLI session snapshots (auto-generated, test-only artifacts)
+# ------------------------------------------
+# Testing & CI Artifacts
+# ------------------------------------------
 .playwright-cli/
+src/clients/mobile-web/vite_log.txt
 
-# Demo photo assets (large binaries, drop locally)
+# ------------------------------------------
+# Python virtual environments
+# ------------------------------------------
+venv_sarvam/
+venv*/
+
+# ------------------------------------------
+# Test/debug artifacts
+# ------------------------------------------
+_test_output*.txt
+_sarvam_*.txt
+_sarvam_*.json
+_domain_tests.txt
+_err.txt
+_git_vision.txt
+_integr_tests.txt
+*.canvas
+
+# ------------------------------------------
+# Temp debug files
+# ------------------------------------------
+out.txt
+out[0-9]*.txt
+err.txt
+err.json
+error_out.txt
+out_upload.txt
+tmp-swagger.json
+
+# ------------------------------------------
+# Demo Assets (large binaries, local only)
+# ------------------------------------------
 src/clients/mobile-web/public/demo-photos/*.jpg
 src/clients/mobile-web/public/demo-photos/*.jpeg
 src/clients/mobile-web/public/demo-photos/*.png
