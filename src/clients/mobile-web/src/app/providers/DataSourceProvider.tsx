@@ -112,8 +112,12 @@ export const DataSourceProvider: React.FC<{ children: React.ReactNode }> = ({ ch
                 storageNamespace.setNamespace(isDemoMode ? 'demo' : 'user');
                 await dataSource.initialize();
                 await MigrationService.migrate();
-                backgroundSyncWorker.start();
-                attachmentUploadWorker.start();
+                if (isDemoMode) {
+                    await seedDemoDataIfNeeded();
+                } else {
+                    backgroundSyncWorker.start();
+                    attachmentUploadWorker.start();
+                }
             } catch (error) {
                 console.error("[DataSource] Init failed", error);
             } finally {
@@ -132,8 +136,8 @@ export const DataSourceProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     const value: DataSourceContextValue = {
         dataSource,
         auditPort: legacyAuditPort,
-        isDemoMode: false,
-        setDemoMode: async () => { }, // No-op
+        isDemoMode,
+        setDemoMode: handleSetDemoMode,
         isLoading
     };
 
