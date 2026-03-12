@@ -40,7 +40,7 @@ public static class VerificationStateMachine
             ],
             [VerificationStatus.CorrectionPending] =
             [
-                new TransitionRule(VerificationStatus.Confirmed, AllRoles)
+                new TransitionRule(VerificationStatus.Draft, AllRoles)
             ]
         };
 
