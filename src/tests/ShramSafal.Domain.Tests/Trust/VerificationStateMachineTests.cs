@@ -63,11 +63,11 @@ public sealed class VerificationStateMachineTests
     }
 
     [Fact]
-    public void CorrectionPendingToConfirmed_WithWorker_IsAllowed()
+    public void CorrectionPendingToDraft_WithWorker_IsAllowed()
     {
         var allowed = VerificationStateMachine.CanTransitionWithRole(
             VerificationStatus.CorrectionPending,
-            VerificationStatus.Confirmed,
+            VerificationStatus.Draft,
             AppRole.Worker);
 
         Assert.True(allowed);

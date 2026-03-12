@@ -423,6 +423,14 @@ internal sealed class ShramSafalRepository(ShramSafalDbContext db) : IShramSafal
             return [];
         }
 
+        if (!db.Database.IsRelational())
+        {
+            return ids
+                .Select(id => new SyncOperatorDto(id, $"Operator {id:N}"[..17], "WORKER"))
+                .OrderBy(op => op.DisplayName, StringComparer.OrdinalIgnoreCase)
+                .ToList();
+        }
+
         var operators = new List<SyncOperatorDto>(ids.Count);
         foreach (var id in ids)
         {
