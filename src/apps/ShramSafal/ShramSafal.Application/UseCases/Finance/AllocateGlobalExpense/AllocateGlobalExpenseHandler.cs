@@ -13,6 +13,8 @@ public sealed class AllocateGlobalExpenseHandler(
     IIdGenerator idGenerator,
     IClock clock)
 {
+    private const decimal MaxSupportedAmount = 999_999_999m;
+
     public async Task<Result<DayLedgerDto>> HandleAsync(AllocateGlobalExpenseCommand command, CancellationToken ct = default)
     {
         if (command.CostEntryId == Guid.Empty ||
@@ -31,6 +33,11 @@ public sealed class AllocateGlobalExpenseHandler(
         if (costEntry is null)
         {
             return Result.Failure<DayLedgerDto>(ShramSafalErrors.CostEntryNotFound);
+        }
+
+        if (IsAmountOutOfRange(costEntry.Amount))
+        {
+            return Result.Failure<DayLedgerDto>(CreateInvalidAmountError());
         }
 
         var canWriteFarm = await repository.IsUserMemberOfFarmAsync(costEntry.FarmId, command.CreatedByUserId, ct);
@@ -81,6 +88,8 @@ public sealed class AllocateGlobalExpenseHandler(
             allocations,
             nowUtc);
 
+        // Repository add methods only stage entities; the single SaveChangesAsync call below is
+        // the atomic EF Core commit point for both the ledger and its audit event.
         await repository.AddDayLedgerAsync(dayLedger, ct);
         await repository.AddAuditEventAsync(
             AuditEvent.Create(
@@ -251,8 +260,19 @@ public sealed class AllocateGlobalExpenseHandler(
             .ToList();
     }
 
-    private static long ToCents(decimal amount) =>
-        (long)decimal.Round(amount * 100m, 0, MidpointRounding.AwayFromZero);
+    private static bool IsAmountOutOfRange(decimal amount) =>
+        amount <= 0 || amount > MaxSupportedAmount;
+
+    private static Error CreateInvalidAmountError() =>
+        new("ShramSafal.InvalidAmount", "Amount must be greater than zero and no more than 999999999.");
+
+    private static long ToCents(decimal amount)
+    {
+        checked
+        {
+            return (long)decimal.Round(amount * 100m, 0, MidpointRounding.AwayFromZero);
+        }
+    }
 
     private static decimal FromCents(long cents) =>
         decimal.Round(cents / 100m, 2, MidpointRounding.AwayFromZero);

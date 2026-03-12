@@ -32,6 +32,7 @@ public static class DependencyInjection
             options.UseNpgsql(
                 connectionString,
                 npgsql => npgsql.MigrationsHistoryTable("__ef_migrations", "ssf")));
+        services.AddScoped<DbContext>(provider => provider.GetRequiredService<ShramSafalDbContext>());
 
         services.Configure<GeminiOptions>(options =>
         {

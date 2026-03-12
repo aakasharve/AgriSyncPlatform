@@ -13,14 +13,20 @@ public sealed class CorrectCostEntryHandler(
     IIdGenerator idGenerator,
     IClock clock)
 {
+    private const decimal MaxSupportedAmount = 999_999_999m;
+
     public async Task<Result<FinanceCorrectionDto>> HandleAsync(CorrectCostEntryCommand command, CancellationToken ct = default)
     {
         if (command.CostEntryId == Guid.Empty ||
             command.CorrectedByUserId == Guid.Empty ||
-            command.CorrectedAmount <= 0 ||
             string.IsNullOrWhiteSpace(command.Reason))
         {
             return Result.Failure<FinanceCorrectionDto>(ShramSafalErrors.InvalidCommand);
+        }
+
+        if (IsAmountOutOfRange(command.CorrectedAmount))
+        {
+            return Result.Failure<FinanceCorrectionDto>(CreateInvalidAmountError());
         }
 
         if (command.FinanceCorrectionId.HasValue && command.FinanceCorrectionId.Value == Guid.Empty)
@@ -52,6 +58,8 @@ public sealed class CorrectCostEntryHandler(
 
         entry.MarkCorrected(correction.Id, correction.CorrectedAmount, correction.CurrencyCode, correction.CorrectedAtUtc);
 
+        // Repository add methods only stage entities; the single SaveChangesAsync call below is
+        // the atomic EF Core commit point for both the correction and its audit event.
         await repository.AddFinanceCorrectionAsync(correction, ct);
         await repository.AddAuditEventAsync(
             AuditEvent.Create(
@@ -77,4 +85,10 @@ public sealed class CorrectCostEntryHandler(
 
         return Result.Success(correction.ToDto());
     }
+
+    private static bool IsAmountOutOfRange(decimal amount) =>
+        amount <= 0 || amount > MaxSupportedAmount;
+
+    private static Error CreateInvalidAmountError() =>
+        new("ShramSafal.InvalidAmount", "Amount must be greater than zero and no more than 999999999.");
 }
