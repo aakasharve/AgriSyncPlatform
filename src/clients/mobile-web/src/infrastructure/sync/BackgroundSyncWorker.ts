@@ -31,7 +31,7 @@ export class BackgroundSyncWorker {
     private readonly intervalMs = 15000;
     private timerId: number | null = null;
     private isRunning = false;
-    private cycleInProgress = false;
+    private currentCycle: Promise<void> = Promise.resolve();
 
     private constructor() { }
 
@@ -102,30 +102,35 @@ export class BackgroundSyncWorker {
     };
 
     private async safeRunCycle(forceRun: boolean = false): Promise<void> {
-        if ((!this.isRunning && !forceRun) || this.cycleInProgress) {
-            return;
+        if (!this.isRunning && !forceRun) {
+            return this.currentCycle;
         }
 
-        if (!getAuthSession()) {
-            return;
-        }
+        this.currentCycle = this.currentCycle
+            .then(async () => {
+                if (!this.isRunning && !forceRun) {
+                    return;
+                }
 
-        if (!navigator.onLine) {
-            return;
-        }
+                if (!getAuthSession() || !navigator.onLine) {
+                    return;
+                }
 
-        this.cycleInProgress = true;
-        try {
-            await mutationQueue.resetInFlightMutations();
-            await mutationQueue.markFailedAsPending();
-            await this.pushPendingMutations();
-            await this.pullLatestDeltas();
-            await AiJobWorker.run();
-        } catch (error) {
-            console.error('[BackgroundSyncWorker] Sync cycle failed', error);
-        } finally {
-            this.cycleInProgress = false;
-        }
+                await this.executeCycle();
+            })
+            .catch((error) => {
+                console.error('[BackgroundSyncWorker] Sync cycle failed', error);
+            });
+
+        return this.currentCycle;
+    }
+
+    private async executeCycle(): Promise<void> {
+        await mutationQueue.resetInFlightMutations();
+        await mutationQueue.markFailedAsPending();
+        await this.pushPendingMutations();
+        await this.pullLatestDeltas();
+        await AiJobWorker.run();
     }
 
     private async pushPendingMutations(): Promise<void> {

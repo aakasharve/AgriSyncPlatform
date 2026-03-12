@@ -1,5 +1,5 @@
 import { VoiceInput, VoiceParseResult, VoiceParserPort } from '../../application/ports';
-import { CropProfile, FarmerProfile } from '../../types';
+import { AgriLogResponse, CropProfile, FarmerProfile } from '../../types';
 import { LogScope } from '../../domain/types/log.types';
 import { agriSyncClient } from '../api/AgriSyncClient';
 import { getAuthSession } from '../api/AuthTokenStore';
@@ -35,6 +35,23 @@ async function resolveFarmIdFromCache(): Promise<string | undefined> {
 
     const firstDayLedger = await db.dayLedgers.toCollection().first();
     return firstDayLedger?.farmId;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+    return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+}
+
+function isAgriLogResponse(value: unknown): value is AgriLogResponse {
+    return isRecord(value)
+        && typeof value.summary === 'string'
+        && typeof value.dayOutcome === 'string'
+        && Array.isArray(value.cropActivities)
+        && Array.isArray(value.irrigation)
+        && Array.isArray(value.labour)
+        && Array.isArray(value.inputs)
+        && Array.isArray(value.machinery)
+        && Array.isArray(value.activityExpenses)
+        && Array.isArray(value.missingSegments);
 }
 
 function base64ToBlob(base64: string, mimeType: string): Blob {
@@ -125,6 +142,13 @@ export class BackendAiClient implements VoiceParserPort {
         options?: { focusCategory?: string }
     ): Promise<VoiceParseResult> {
         try {
+            if (input.type === 'audio' && (!input.data || input.data.length === 0)) {
+                return {
+                    success: false,
+                    error: 'No audio data captured',
+                };
+            }
+
             const farmId = await resolveFarmIdFromCache();
             if (!farmId) {
                 return {
@@ -154,15 +178,21 @@ export class BackendAiClient implements VoiceParserPort {
                 .filter(([, confidence]) => (confidence?.level || '').toLowerCase() === 'low')
                 .map(([field]) => field);
             const suggestedAction = normalizeSuggestedAction(apiResult.suggestedAction);
+            if (!isAgriLogResponse(apiResult.parsedLog)) {
+                return {
+                    success: false,
+                    error: 'Server returned unexpected data format',
+                };
+            }
 
-            const parsedLog = apiResult.parsedLog as Record<string, unknown>;
+            const parsedLog = apiResult.parsedLog;
             const inferredTranscript = typeof parsedLog?.fullTranscript === 'string'
                 ? parsedLog.fullTranscript
                 : (input.type === 'text' ? input.content : undefined);
 
             return {
                 success: true,
-                data: parsedLog as any,
+                data: parsedLog,
                 confidenceAssessment: {
                     fieldConfidences,
                     suggestedAction,

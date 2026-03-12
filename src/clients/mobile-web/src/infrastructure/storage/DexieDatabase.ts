@@ -146,6 +146,7 @@ export interface PendingAiJobRecord {
     updatedAt: string;
     retryCount: number;
     lastError?: string;
+    nextRetryAfterMs?: number;
 }
 
 // =============================================================================
