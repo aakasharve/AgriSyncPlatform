@@ -108,8 +108,8 @@ try
                 };
 
             policy.WithOrigins(origins)
-                .AllowAnyHeader()
-                .AllowAnyMethod()
+                .WithHeaders("Content-Type", "Authorization", "X-Request-Id", "X-Device-Id")
+                .WithMethods("GET", "POST", "PUT", "DELETE", "OPTIONS")
                 .AllowCredentials();
         });
     });
@@ -430,6 +430,7 @@ static async Task InitializeApplicationDataAsync(WebApplication app)
 {
     using var scope = app.Services.CreateScope();
     var services = scope.ServiceProvider;
+    var logger = services.GetRequiredService<ILoggerFactory>().CreateLogger("AgriSync.Bootstrapper.Startup");
     try
     {
         var userContext = services.GetRequiredService<User.Infrastructure.Persistence.UserDbContext>();
@@ -493,7 +494,13 @@ static async Task InitializeApplicationDataAsync(WebApplication app)
     }
     catch (Exception ex)
     {
-        Log.Error(ex, "An error occurred while initializing or seeding the database.");
+        logger.LogCritical(ex, "Application initialization failed. Shutting down.");
+        if (!app.Environment.IsDevelopment())
+        {
+            throw;
+        }
+
+        logger.LogWarning("Continuing despite init failure because environment is Development.");
     }
 }
 
