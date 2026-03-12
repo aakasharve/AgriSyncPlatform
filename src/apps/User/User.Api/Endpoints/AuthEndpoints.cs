@@ -1,6 +1,9 @@
 using System.Security.Claims;
+using AgriSync.BuildingBlocks.Abstractions;
 using AgriSync.BuildingBlocks.Results;
 using Microsoft.AspNetCore.RateLimiting;
+using Microsoft.Extensions.Logging;
+using User.Application.Ports;
 using User.Application.UseCases.Auth.Login;
 using User.Application.UseCases.Auth.RefreshToken;
 using User.Application.UseCases.Auth.RegisterUser;
@@ -17,6 +20,8 @@ public static class AuthEndpoints
 
         publicGroup.MapPost("/register", async (
             RegisterRequest request,
+            HttpContext context,
+            ILoggerFactory loggerFactory,
             RegisterUserHandler handler,
             CancellationToken ct) =>
         {
@@ -39,7 +44,7 @@ public static class AuthEndpoints
             }
             catch (ArgumentException ex)
             {
-                return Results.BadRequest(new { error = "validation_error", message = ex.Message });
+                return CreateValidationErrorResponse(context, loggerFactory, ex);
             }
 
             return result.IsSuccess
@@ -51,6 +56,8 @@ public static class AuthEndpoints
 
         publicGroup.MapPost("/login", async (
             LoginRequest request,
+            HttpContext context,
+            ILoggerFactory loggerFactory,
             LoginHandler handler,
             CancellationToken ct) =>
         {
@@ -65,7 +72,7 @@ public static class AuthEndpoints
             }
             catch (ArgumentException ex)
             {
-                return Results.BadRequest(new { error = "validation_error", message = ex.Message });
+                return CreateValidationErrorResponse(context, loggerFactory, ex);
             }
         })
         .WithName("LoginUser")
@@ -86,11 +93,20 @@ public static class AuthEndpoints
         .WithName("RefreshToken")
         .AllowAnonymous();
 
-        group.MapPost("/logout", () =>
+        group.MapPost("/logout", async (
+            HttpContext context,
+            IRefreshTokenRepository refreshTokenRepository,
+            IClock clock,
+            CancellationToken ct) =>
         {
-            // For stateless JWT, client handles token removal.
-            // Ideally we revoke refresh token here, but for now we return OK.
-            // Client should discard tokens.
+            if (!TryGetUserId(context.User, out var userId))
+            {
+                return Results.Unauthorized();
+            }
+
+            await refreshTokenRepository.RevokeAllForUserAsync(userId, clock.UtcNow, ct);
+            await refreshTokenRepository.SaveChangesAsync(ct);
+
             return Results.Ok(new { message = "Logged out successfully" });
         })
         .WithName("LogoutUser")
@@ -101,8 +117,7 @@ public static class AuthEndpoints
             GetCurrentUserHandler handler,
             CancellationToken ct) =>
         {
-            var sub = user.FindFirstValue("sub") ?? user.FindFirstValue(ClaimTypes.NameIdentifier);
-            if (sub is null || !Guid.TryParse(sub, out var userId))
+            if (!TryGetUserId(user, out var userId))
             {
                 return Results.Unauthorized();
             }
@@ -117,6 +132,21 @@ public static class AuthEndpoints
         .RequireAuthorization();
 
         return endpoints;
+    }
+
+    private static IResult CreateValidationErrorResponse(HttpContext context, ILoggerFactory loggerFactory, ArgumentException ex)
+    {
+        loggerFactory
+            .CreateLogger("User.Api.Endpoints.AuthEndpoints")
+            .LogWarning(ex, "Auth validation error for endpoint {Endpoint}", context.Request.Path);
+
+        return Results.BadRequest(new { error = "validation_error", message = "Invalid request" });
+    }
+
+    private static bool TryGetUserId(ClaimsPrincipal user, out Guid userId)
+    {
+        var subject = user.FindFirstValue("sub") ?? user.FindFirstValue(ClaimTypes.NameIdentifier);
+        return Guid.TryParse(subject, out userId);
     }
 
     private static bool TryValidateRegisterRequest(RegisterRequest? request, out Dictionary<string, string[]> errors)

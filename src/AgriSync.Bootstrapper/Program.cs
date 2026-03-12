@@ -170,7 +170,10 @@ try
     app.UseRateLimiter();
     app.UseAuthorization();
 
-    app.MapGet("/health", async (UserDbContext db, CancellationToken ct) =>
+    app.MapGet("/health", async (
+        UserDbContext db,
+        ILoggerFactory loggerFactory,
+        CancellationToken ct) =>
     {
         try
         {
@@ -181,8 +184,12 @@ try
         }
         catch (Exception ex)
         {
+            loggerFactory
+                .CreateLogger("AgriSync.Bootstrapper.Health")
+                .LogError(ex, "Health check failed while probing database connectivity.");
+
             return Results.Json(
-                new { status = "unhealthy", service = "AgriSync", db = "error", message = ex.Message },
+                new { status = "unhealthy", service = "AgriSync", db = "error" },
                 statusCode: StatusCodes.Status503ServiceUnavailable);
         }
     })
@@ -339,9 +346,9 @@ static void MapDevelopmentOnlyTestEndpoints(WebApplication app)
         }
         catch (Exception ex)
         {
+            Log.Error(ex, "Development database connectivity test failed.");
             result["status"] = "error";
-            result["error"] = ex.Message;
-            result["innerError"] = ex.InnerException?.Message ?? string.Empty;
+            result["message"] = "Database connectivity check failed";
             return Results.Json(result, statusCode: StatusCodes.Status500InternalServerError);
         }
     })
@@ -385,11 +392,11 @@ static void MapDevelopmentOnlyTestEndpoints(WebApplication app)
         }
         catch (Exception ex)
         {
+            Log.Error(ex, "Development database initialization endpoint failed.");
             return Results.Json(new
             {
                 status = "error",
-                error = ex.Message,
-                innerError = ex.InnerException?.Message ?? string.Empty
+                message = "Database schema initialization failed"
             }, statusCode: StatusCodes.Status500InternalServerError);
         }
     })
@@ -406,11 +413,11 @@ static void MapDevelopmentOnlyTestEndpoints(WebApplication app)
         }
         catch (Exception ex)
         {
+            Log.Error(ex, "Development seed endpoint failed.");
             return Results.Json(new
             {
                 status = "error",
-                error = ex.Message,
-                innerError = ex.InnerException?.Message ?? string.Empty
+                message = "Demo data seeding failed"
             }, statusCode: StatusCodes.Status500InternalServerError);
         }
     })

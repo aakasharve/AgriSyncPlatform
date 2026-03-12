@@ -10,9 +10,11 @@ public static class TokenValidationExtensions
 {
     public static IServiceCollection AddJwtTokenValidation(this IServiceCollection services, IConfiguration configuration)
     {
-        var jwtOptions = configuration.GetSection(JwtOptions.SectionName).Get<JwtOptions>() ?? new JwtOptions();
+        var jwtSection = configuration.GetSection(JwtOptions.SectionName);
+        var jwtOptions = jwtSection.Get<JwtOptions>() ?? new JwtOptions();
+        ValidateJwtOptions(jwtOptions);
 
-        services.Configure<JwtOptions>(configuration.GetSection(JwtOptions.SectionName));
+        services.Configure<JwtOptions>(jwtSection);
 
         services
             .AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
@@ -32,5 +34,13 @@ public static class TokenValidationExtensions
             });
 
         return services;
+    }
+
+    private static void ValidateJwtOptions(JwtOptions jwtOptions)
+    {
+        if (string.IsNullOrWhiteSpace(jwtOptions.SigningKey) || jwtOptions.SigningKey.Length < 32)
+        {
+            throw new InvalidOperationException("JWT SigningKey must be configured and at least 32 characters. Set Jwt__SigningKey environment variable.");
+        }
     }
 }
