@@ -112,7 +112,7 @@ const ReviewInbox: React.FC<ReviewInboxProps> = ({ pendingLogs, operators, onVer
                                         )}
                                         {log.labour.length > 0 && (
                                             <span className="bg-blue-50 text-blue-700 px-2 py-0.5 rounded-md border border-blue-100">
-                                                {log.labour.reduce((s, l) => s + l.count, 0)} Workers
+                                                {log.labour.reduce((s, l) => s + (l.count ?? 0), 0)} Workers
                                             </span>
                                         )}
                                         {log.financialSummary.grandTotal > 0 && (

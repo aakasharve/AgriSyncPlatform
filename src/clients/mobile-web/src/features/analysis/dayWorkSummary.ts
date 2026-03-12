@@ -327,7 +327,7 @@ const generateInputsSummary = (log: DailyLog): InputsSummary => {
             inputEvent.mix.forEach(mixItem => {
                 items.push({
                     name: mixItem.productName,
-                    quantity: mixItem.dose,
+                    quantity: mixItem.dose ?? 0,
                     unit: mixItem.unit,
                     applicationMethod: inputEvent.method || 'Unknown',
                     individualCost: inputEvent.cost ? (inputEvent.cost / inputEvent.mix.length) : 0,

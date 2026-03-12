@@ -97,6 +97,17 @@ export class AiJobWorker {
                 nextRetryAfterMs,
             });
 
+            console.error(JSON.stringify({
+                level: 'error',
+                component: 'AiJobWorker',
+                jobId: job.id,
+                message: 'AI job failed',
+                error: error instanceof Error
+                    ? { message: error.message, stack: error.stack }
+                    : String(error),
+                timestamp: new Date().toISOString(),
+            }));
+
             if (isPermanentFailure) {
                 emitPermanentFailureToast();
             }

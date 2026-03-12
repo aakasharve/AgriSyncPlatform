@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { CropProfile, InputMode } from '../types';
 
 // Feature Controllers
@@ -101,15 +101,17 @@ export const useAgriLogApp = ({ initialCrops }: AgriLogAppConfig) => {
         setStatus: voice.setStatus,
         weatherProvider: weatherService
     });
+    const commandsRef = useRef(commands);
+    commandsRef.current = commands;
 
     // Bridge event stream: voice -> dispatcher -> commands
     useEffect(() => {
         const unsubscribe = voiceDraftDispatcher.subscribe((event) => {
-            void commands.handleAutoSave(event.draft, event.provenance);
+            void commandsRef.current.handleAutoSave(event.draft, event.provenance);
         });
 
-        return unsubscribe;
-    }, [voiceDraftDispatcher, commands.handleAutoSave]);
+        return () => { unsubscribe(); };
+    }, [voiceDraftDispatcher]);
 
     useEffect(() => {
         const handleGlobalToast = (event: Event) => {
@@ -139,8 +141,8 @@ export const useAgriLogApp = ({ initialCrops }: AgriLogAppConfig) => {
         setCrops: appData.setCrops,
         logScope,
         hasActiveLogContext,
-        activeCropId,
-        activePlotId,
+        activeCropId: activeCropId ?? null,
+        activePlotId: activePlotId ?? null,
         setError: voice.setError,
         provider: weatherService // Inject infrastructure
     });

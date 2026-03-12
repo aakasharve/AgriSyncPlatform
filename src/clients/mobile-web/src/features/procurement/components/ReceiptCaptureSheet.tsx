@@ -155,7 +155,9 @@ export const ReceiptCaptureSheet: React.FC<Props> = ({ onClose, onSave, crops, a
             setExtraction(result);
             setEditedTotal(result.grandTotal || 0);
             setEditedVendor(result.vendorName || '');
-            if (result.suggestedScope !== 'UNKNOWN') setScope(result.suggestedScope);
+            if (result.suggestedScope && result.suggestedScope !== 'UNKNOWN') {
+                setScope(result.suggestedScope);
+            }
 
             if (result.suggestedCropName) {
                 const match = crops.find(c => c.name.toLowerCase().includes(result.suggestedCropName!.toLowerCase()));

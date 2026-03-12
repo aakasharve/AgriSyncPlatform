@@ -308,13 +308,13 @@ const ElectricityTimingConfigurator: React.FC<ElectricityTimingConfiguratorProps
                                 <label className="flex items-center gap-2 text-xs text-slate-600">
                                     <input
                                         type="checkbox"
-                                        checked={phaseData.weekBOffWindows.length === 0}
+                                        checked={(phaseData.weekBOffWindows?.length ?? 0) === 0}
                                         onChange={e => setNoPowerCut(phase, 'B', e.target.checked)}
                                         className="rounded border-slate-300"
                                     />
                                     No daily power cut (24h available)
                                 </label>
-                                {phaseData.weekBOffWindows.length > 0 && (
+                                {(phaseData.weekBOffWindows?.length ?? 0) > 0 && (
                                     <div className="grid grid-cols-2 gap-2">
                                         <input
                                             type="time"

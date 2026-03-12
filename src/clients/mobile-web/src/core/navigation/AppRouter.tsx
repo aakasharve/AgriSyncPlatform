@@ -1035,7 +1035,7 @@ const AppRouter: React.FC = () => {
                 onClose={() => setShowReviewInbox(false)}
                 logs={history}
                 operators={farmerProfile.operators}
-                currentOperatorId={farmerProfile.activeOperatorId}
+                currentOperatorId={farmerProfile.activeOperatorId || 'owner'}
                 onApproveLog={(logId) => handleVerifyLog(logId, LogVerificationStatus.APPROVED)}
                 onApproveAll={(logIds) => logIds.forEach(id => handleVerifyLog(id, LogVerificationStatus.APPROVED))}
                 onDisputeLog={(logId, note) => handleVerifyLog(logId, LogVerificationStatus.REJECTED, note)}

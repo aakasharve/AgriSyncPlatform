@@ -452,7 +452,7 @@ const CompactCropCard: React.FC<CompactCropCardProps> = ({ crop, plot, plotIndex
                     {isBlocked ? (
                         <div className="flex items-center gap-1.5 text-xs text-amber-700 bg-amber-100/50 p-2 rounded-lg border border-amber-100 justify-center font-bold">
                             <Ban size={14} className="shrink-0" />
-                            Work Stopped: {log.disturbance.reason}
+                            Work Stopped: {log.disturbance?.reason ?? 'Unknown reason'}
                         </div>
                     ) : (
                         <div className="flex flex-wrap gap-1 px-0.5">

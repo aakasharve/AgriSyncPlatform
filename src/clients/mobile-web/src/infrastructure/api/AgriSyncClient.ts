@@ -12,7 +12,8 @@ export type SyncMutationType =
     | 'add_cost_entry'
     | 'correct_cost_entry'
     | 'allocate_global_expense'
-    | 'set_price_config';
+    | 'set_price_config'
+    | 'create_attachment';
 
 export type VerificationStatus =
     | 'draft'
@@ -398,9 +399,24 @@ interface RetriableRequestConfig extends InternalAxiosRequestConfig {
     _agriSyncRetry?: boolean;
 }
 
+type ViteImportMeta = ImportMeta & {
+    env?: {
+        VITE_AGRISYNC_API_URL?: unknown;
+    };
+};
+
 function resolveApiBaseUrl(): string {
-    const configured = (import.meta as any).env?.VITE_AGRISYNC_API_URL as string | undefined;
-    return configured?.trim()?.replace(/\/+$/, '') ?? '';
+    const apiUrl = (import.meta as ViteImportMeta).env?.VITE_AGRISYNC_API_URL;
+    if (typeof apiUrl === 'string' && apiUrl.trim().length > 0) {
+        try {
+            const validated = new URL(apiUrl);
+            return validated.toString().replace(/\/+$/, '');
+        } catch {
+            throw new Error(`VITE_AGRISYNC_API_URL is not a valid URL: "${apiUrl}"`);
+        }
+    }
+
+    return '';
 }
 
 function toAuthSession(dto: AuthResponseDto): AuthSession {

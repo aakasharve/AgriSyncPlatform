@@ -718,8 +718,8 @@ export class LogFactory {
         isShared: boolean,
         plotIndex: number,
         plotCount: number
-    ): number | null | undefined {
-        if (value === null || value === undefined) return value;
+    ): number | undefined {
+        if (value === null || value === undefined) return undefined;
         if (!isShared || plotCount <= 1) return value;
         return this.allocateAmountAcrossPlots(value, plotIndex, plotCount);
     }
