@@ -5,12 +5,15 @@ using System.Text;
 using System.Text.Json;
 using AgriSync.BuildingBlocks.Results;
 using Microsoft.AspNetCore.Http.HttpResults;
+using Microsoft.AspNetCore.RateLimiting;
 using ShramSafal.Application.Ports;
 using ShramSafal.Application.Ports.External;
+using ShramSafal.Application.UseCases.AI.CreateDocumentSession;
 using ShramSafal.Application.UseCases.AI.ExtractPattiImage;
 using ShramSafal.Application.UseCases.AI.ExtractReceipt;
 using ShramSafal.Application.UseCases.AI.GetAiDashboard;
 using ShramSafal.Application.UseCases.AI.GetAiJobStatus;
+using ShramSafal.Application.UseCases.AI.GetDocumentSession;
 using ShramSafal.Application.UseCases.AI.ParseVoiceInput;
 using ShramSafal.Application.UseCases.AI.UpdateProviderConfig;
 using ShramSafal.Domain.AI;
@@ -55,20 +58,52 @@ public static class AiEndpoints
     {
         group.MapPost("/ai/voice-parse", HandleVoiceParseAsync)
             .WithName("ParseVoiceInput")
+            .RequireRateLimiting("ai")
             .RequireAuthorization();
 
         // Backward-compatible route alias
         group.MapPost("/ai/parse-voice", HandleVoiceParseAsync)
             .WithName("ParseVoiceInputLegacy")
+            .RequireRateLimiting("ai")
             .RequireAuthorization();
 
         group.MapPost("/ai/receipt-extract", HandleReceiptExtractAsync)
             .WithName("ExtractReceipt")
+            .RequireRateLimiting("ai")
             .RequireAuthorization();
 
         group.MapPost("/ai/patti-extract", HandlePattiExtractAsync)
             .WithName("ExtractPatti")
+            .RequireRateLimiting("ai")
             .RequireAuthorization();
+
+        group.MapPost("/ai/document-sessions/receipt", HandleCreateReceiptSessionAsync)
+            .WithName("CreateReceiptSession")
+            .RequireRateLimiting("ai")
+            .RequireAuthorization();
+
+        group.MapPost("/ai/document-sessions/patti", HandleCreatePattiSessionAsync)
+            .WithName("CreatePattiSession")
+            .RequireRateLimiting("ai")
+            .RequireAuthorization();
+
+        group.MapGet("/ai/document-sessions/{sessionId:guid}", async Task<IResult> (
+            Guid sessionId,
+            ClaimsPrincipal user,
+            GetDocumentSessionHandler handler,
+            CancellationToken ct) =>
+        {
+            if (!EndpointActorContext.TryGetUserId(user, out var actorUserId))
+            {
+                return Results.Unauthorized();
+            }
+
+            var result = await handler.HandleAsync(new GetDocumentSessionQuery(sessionId, actorUserId), ct);
+            return result.IsSuccess ? Results.Ok(result.Value) : ToErrorResult(result.Error);
+        })
+        .WithName("GetDocumentSession")
+        .RequireRateLimiting("ai")
+        .RequireAuthorization();
 
         group.MapGet("/ai/jobs/{jobId:guid}", async Task<IResult> (
             Guid jobId,
@@ -88,6 +123,7 @@ public static class AiEndpoints
             return result.IsSuccess ? Results.Ok(result.Value) : ToErrorResult(result.Error);
         })
         .WithName("GetAiJobStatus")
+        .RequireRateLimiting("ai")
         .RequireAuthorization();
 
         group.MapGet("/ai/health", async Task<IResult> (
@@ -118,6 +154,7 @@ public static class AiEndpoints
             });
         })
         .WithName("GetAiHealth")
+        .RequireRateLimiting("ai")
         .RequireAuthorization();
 
         group.MapGet("/ai/config", async Task<IResult> (
@@ -134,6 +171,7 @@ public static class AiEndpoints
             return Results.Ok(ToConfigResponse(config));
         })
         .WithName("GetAiProviderConfig")
+        .RequireRateLimiting("ai")
         .RequireAuthorization();
 
         group.MapPut("/ai/config", async Task<IResult> (
@@ -172,6 +210,7 @@ public static class AiEndpoints
             return result.IsSuccess ? Results.Ok(result.Value) : ToErrorResult(result.Error);
         })
         .WithName("UpdateAiProviderConfig")
+        .RequireRateLimiting("ai")
         .RequireAuthorization();
 
         group.MapGet("/ai/dashboard", async Task<IResult> (
@@ -188,9 +227,174 @@ public static class AiEndpoints
             return result.IsSuccess ? Results.Ok(result.Value) : ToErrorResult(result.Error);
         })
         .WithName("GetAiDashboard")
+        .RequireRateLimiting("ai")
         .RequireAuthorization();
 
         return group;
+    }
+
+    private static async Task<IResult> HandleCreateReceiptSessionAsync(
+        HttpRequest request,
+        ClaimsPrincipal user,
+        CreateDocumentSessionHandler handler,
+        CancellationToken ct)
+    {
+        if (!EndpointActorContext.TryGetUserId(user, out var userId))
+        {
+            return Results.Unauthorized();
+        }
+
+        if (!request.HasFormContentType)
+        {
+            return Results.BadRequest(new { error = "ShramSafal.InvalidCommand", message = "multipart/form-data is required." });
+        }
+
+        var form = await request.ReadFormAsync(ct);
+        if (!TryParseGuid(form["farmId"], out var farmId))
+        {
+            return Results.BadRequest(new { error = "ShramSafal.InvalidCommand", message = "farmId is required." });
+        }
+
+        var image = form.Files["image"] ?? form.Files.FirstOrDefault();
+        if (image is null || image.Length == 0)
+        {
+            return Results.BadRequest(new { error = "ShramSafal.InvalidCommand", message = "image is required." });
+        }
+
+        if (!TryValidateImageFile(image, out var imageValidationError))
+        {
+            return Results.BadRequest(new { error = "ShramSafal.InvalidCommand", message = imageValidationError });
+        }
+
+        var idempotencyKey = string.IsNullOrWhiteSpace(form["idempotencyKey"])
+            ? Guid.NewGuid().ToString("N")
+            : form["idempotencyKey"].ToString().Trim();
+
+        await using var stream = image.OpenReadStream();
+        var result = await handler.HandleAsync(
+            new CreateDocumentSessionCommand(
+                userId,
+                farmId,
+                DocumentType.Receipt,
+                stream,
+                image.ContentType ?? MediaTypeNames.Image.Jpeg,
+                null,
+                idempotencyKey),
+            ct);
+
+        if (!result.IsSuccess)
+        {
+            return string.Equals(result.Error.Code, ShramSafalErrors.AiParsingFailed.Code, StringComparison.Ordinal)
+                ? Results.StatusCode(StatusCodes.Status503ServiceUnavailable)
+                : ToErrorResult(result.Error);
+        }
+
+        var session = result.Value;
+        if (session is null)
+        {
+            return UnexpectedNullResult("CreateReceiptSession");
+        }
+
+        return Results.Ok(new
+        {
+            success = true,
+            sessionId = session.SessionId,
+            status = session.Status,
+            draft = new
+            {
+                normalizedJson = session.NormalizedJson,
+                overallConfidence = session.OverallConfidence,
+                jobId = session.JobId,
+                providerUsed = session.ProviderUsed,
+                fallbackUsed = session.FallbackUsed,
+                warnings = session.Warnings
+            }
+        });
+    }
+
+    private static async Task<IResult> HandleCreatePattiSessionAsync(
+        HttpRequest request,
+        ClaimsPrincipal user,
+        CreateDocumentSessionHandler handler,
+        CancellationToken ct)
+    {
+        if (!EndpointActorContext.TryGetUserId(user, out var userId))
+        {
+            return Results.Unauthorized();
+        }
+
+        if (!request.HasFormContentType)
+        {
+            return Results.BadRequest(new { error = "ShramSafal.InvalidCommand", message = "multipart/form-data is required." });
+        }
+
+        var form = await request.ReadFormAsync(ct);
+        if (!TryParseGuid(form["farmId"], out var farmId))
+        {
+            return Results.BadRequest(new { error = "ShramSafal.InvalidCommand", message = "farmId is required." });
+        }
+
+        var cropName = form["cropName"].ToString();
+        if (string.IsNullOrWhiteSpace(cropName))
+        {
+            return Results.BadRequest(new { error = "ShramSafal.InvalidCommand", message = "cropName is required." });
+        }
+
+        var image = form.Files["image"] ?? form.Files.FirstOrDefault();
+        if (image is null || image.Length == 0)
+        {
+            return Results.BadRequest(new { error = "ShramSafal.InvalidCommand", message = "image is required." });
+        }
+
+        if (!TryValidateImageFile(image, out var imageValidationError))
+        {
+            return Results.BadRequest(new { error = "ShramSafal.InvalidCommand", message = imageValidationError });
+        }
+
+        var idempotencyKey = string.IsNullOrWhiteSpace(form["idempotencyKey"])
+            ? Guid.NewGuid().ToString("N")
+            : form["idempotencyKey"].ToString().Trim();
+
+        await using var stream = image.OpenReadStream();
+        var result = await handler.HandleAsync(
+            new CreateDocumentSessionCommand(
+                userId,
+                farmId,
+                DocumentType.Patti,
+                stream,
+                image.ContentType ?? MediaTypeNames.Image.Jpeg,
+                cropName,
+                idempotencyKey),
+            ct);
+
+        if (!result.IsSuccess)
+        {
+            return string.Equals(result.Error.Code, ShramSafalErrors.AiParsingFailed.Code, StringComparison.Ordinal)
+                ? Results.StatusCode(StatusCodes.Status503ServiceUnavailable)
+                : ToErrorResult(result.Error);
+        }
+
+        var session = result.Value;
+        if (session is null)
+        {
+            return UnexpectedNullResult("CreatePattiSession");
+        }
+
+        return Results.Ok(new
+        {
+            success = true,
+            sessionId = session.SessionId,
+            status = session.Status,
+            draft = new
+            {
+                normalizedJson = session.NormalizedJson,
+                overallConfidence = session.OverallConfidence,
+                jobId = session.JobId,
+                providerUsed = session.ProviderUsed,
+                fallbackUsed = session.FallbackUsed,
+                warnings = session.Warnings
+            }
+        });
     }
 
     private static async Task<IResult> HandleVoiceParseAsync(
@@ -215,24 +419,30 @@ public static class AiEndpoints
             });
         }
 
-        var effectiveIdempotencyKey = string.IsNullOrWhiteSpace(parsedRequest.Value.IdempotencyKey)
-            ? BuildDeterministicFallbackIdempotencyKey(userId, parsedRequest.Value)
-            : parsedRequest.Value.IdempotencyKey;
+        var parsed = parsedRequest.Value;
+        if (parsed is null)
+        {
+            return UnexpectedNullResult("ParseVoiceRequest");
+        }
+
+        var effectiveIdempotencyKey = string.IsNullOrWhiteSpace(parsed.IdempotencyKey)
+            ? BuildDeterministicFallbackIdempotencyKey(userId, parsed)
+            : parsed.IdempotencyKey;
 
         var command = new ParseVoiceInputCommand(
             userId,
-            parsedRequest.Value.FarmId,
-            parsedRequest.Value.PlotId,
-            parsedRequest.Value.CropCycleId,
-            parsedRequest.Value.TextTranscript,
-            parsedRequest.Value.AudioBase64,
-            parsedRequest.Value.AudioMimeType,
+            parsed.FarmId,
+            parsed.PlotId,
+            parsed.CropCycleId,
+            parsed.TextTranscript,
+            parsed.AudioBase64,
+            parsed.AudioMimeType,
             effectiveIdempotencyKey,
-            parsedRequest.Value.ContextJson,
-            parsedRequest.Value.InputSpeechDurationMs,
-            parsedRequest.Value.InputRawDurationMs,
-            parsedRequest.Value.SegmentMetadataJson,
-            parsedRequest.Value.RequestPayloadHash);
+            parsed.ContextJson,
+            parsed.InputSpeechDurationMs,
+            parsed.InputRawDurationMs,
+            parsed.SegmentMetadataJson,
+            parsed.RequestPayloadHash);
 
         var result = await handler.HandleAsync(command, ct);
         if (!result.IsSuccess)
@@ -240,17 +450,23 @@ public static class AiEndpoints
             return ToErrorResult(result.Error);
         }
 
+        var parseResult = result.Value;
+        if (parseResult is null)
+        {
+            return UnexpectedNullResult("ParseVoiceInput");
+        }
+
         var job = await aiJobRepository.GetByIdempotencyKeyAsync(effectiveIdempotencyKey, ct);
         return Results.Ok(new
         {
             success = true,
-            parsedLog = result.Value.ParsedLog,
-            confidence = result.Value.Confidence,
-            fieldConfidences = result.Value.FieldConfidences,
-            suggestedAction = result.Value.SuggestedAction,
-            modelUsed = result.Value.ModelUsed,
-            latencyMs = result.Value.LatencyMs,
-            validationOutcome = result.Value.ValidationOutcome,
+            parsedLog = parseResult.ParsedLog,
+            confidence = parseResult.Confidence,
+            fieldConfidences = parseResult.FieldConfidences,
+            suggestedAction = parseResult.SuggestedAction,
+            modelUsed = parseResult.ModelUsed,
+            latencyMs = parseResult.LatencyMs,
+            validationOutcome = parseResult.ValidationOutcome,
             jobId = job?.Id
         });
     }
@@ -313,15 +529,21 @@ public static class AiEndpoints
                 : ToErrorResult(result.Error);
         }
 
+        var extraction = result.Value;
+        if (extraction is null)
+        {
+            return UnexpectedNullResult("ExtractReceipt");
+        }
+
         return Results.Ok(new
         {
             success = true,
-            normalizedJson = result.Value.NormalizedJson,
-            overallConfidence = result.Value.OverallConfidence,
-            jobId = result.Value.JobId,
-            providerUsed = result.Value.ProviderUsed,
-            fallbackUsed = result.Value.FallbackUsed,
-            warnings = result.Value.Warnings
+            normalizedJson = extraction.NormalizedJson,
+            overallConfidence = extraction.OverallConfidence,
+            jobId = extraction.JobId,
+            providerUsed = extraction.ProviderUsed,
+            fallbackUsed = extraction.FallbackUsed,
+            warnings = extraction.Warnings
         });
     }
 
@@ -390,15 +612,21 @@ public static class AiEndpoints
                 : ToErrorResult(result.Error);
         }
 
+        var extraction = result.Value;
+        if (extraction is null)
+        {
+            return UnexpectedNullResult("ExtractPatti");
+        }
+
         return Results.Ok(new
         {
             success = true,
-            normalizedJson = result.Value.NormalizedJson,
-            overallConfidence = result.Value.OverallConfidence,
-            jobId = result.Value.JobId,
-            providerUsed = result.Value.ProviderUsed,
-            fallbackUsed = result.Value.FallbackUsed,
-            warnings = result.Value.Warnings
+            normalizedJson = extraction.NormalizedJson,
+            overallConfidence = extraction.OverallConfidence,
+            jobId = extraction.JobId,
+            providerUsed = extraction.ProviderUsed,
+            fallbackUsed = extraction.FallbackUsed,
+            warnings = extraction.Warnings
         });
     }
 
@@ -531,9 +759,16 @@ public static class AiEndpoints
             jsonRequest.RequestPayloadHash));
     }
 
-    private static bool TryParseGuid(string value, out Guid guid)
+    private static bool TryParseGuid(Microsoft.Extensions.Primitives.StringValues value, out Guid guid)
     {
-        return Guid.TryParse(value, out guid);
+        var candidate = value.ToString();
+        if (string.IsNullOrWhiteSpace(candidate))
+        {
+            guid = Guid.Empty;
+            return false;
+        }
+
+        return Guid.TryParse(candidate, out guid);
     }
 
     private static Guid? TryParseNullableGuid(Microsoft.Extensions.Primitives.StringValues value)
@@ -948,6 +1183,11 @@ public static class AiEndpoints
         return error.Code.EndsWith("NotFound", StringComparison.Ordinal)
             ? Results.NotFound(new { error = error.Code, message = error.Description })
             : Results.BadRequest(new { error = error.Code, message = error.Description });
+    }
+
+    private static IResult UnexpectedNullResult(string operation)
+    {
+        return Results.StatusCode(StatusCodes.Status500InternalServerError);
     }
 }
 

@@ -25,7 +25,7 @@ internal sealed class SarvamVisionClient(
         try
         {
             var base64Image = await ReadAsBase64Async(imageStream, ct);
-            using var timeout = CreateTimeoutToken(ct, _options.DocIntelTimeoutSeconds);
+            using var timeout = CreateTimeoutToken(ct, _options.TimeoutSeconds);
             var client = httpClientFactory.CreateClient("SarvamAiProvider");
 
             var requestBody = new
@@ -189,7 +189,7 @@ internal sealed class SarvamVisionClient(
 
     private static CancellationTokenSource CreateTimeoutToken(CancellationToken ct, int timeoutSeconds)
     {
-        var timeout = timeoutSeconds <= 0 ? 120 : timeoutSeconds;
+        var timeout = timeoutSeconds <= 0 ? 45 : timeoutSeconds;
         var linked = CancellationTokenSource.CreateLinkedTokenSource(ct);
         linked.CancelAfter(TimeSpan.FromSeconds(timeout));
         return linked;

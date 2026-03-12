@@ -54,6 +54,7 @@ export const processPattiImage = async (
         farmId,
         operation: 'patti',
         contentHash: requestPayloadHash,
+        versionTag: 'ocr-patti-v2',
     });
     const idempotencyKey = keyMaterial.idempotencyKey;
 

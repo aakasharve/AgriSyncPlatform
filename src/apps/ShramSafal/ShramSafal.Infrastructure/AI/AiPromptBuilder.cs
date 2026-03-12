@@ -121,26 +121,24 @@ internal sealed class AiPromptBuilder : IAiPromptBuilder
     public string BuildReceiptExtractionPrompt()
     {
         return """
-               You are an agricultural expense extraction assistant for Indian farmers.
+               You are extracting a farm purchase receipt for an Indian farmer.
 
-               CONTEXT:
-               - This is a receipt/bill from a farm input dealer or shop
-               - May be handwritten or printed
-               - Language could be Hindi, Marathi, English, or mixed
-               - Common items: fertilizers (DAP, Urea, Potash), pesticides, seeds, labour payments, machinery repairs
+               RULES:
+               - Return STRICT JSON only. No markdown. No prose.
+               - Do not omit keys from the requested shape.
+               - Use null for unknown scalar values and [] for arrays.
+               - Confidence values must be between 0.0 and 1.0.
+               - Preserve handwritten Marathi, Hindi, and English text in rawTextExtracted.
+               - Extract all readable line items, totals, and vendor/date fields from the image.
+               - suggestedCategory must be one of:
+                 FERTILIZER, PESTICIDE, FUNGICIDE, SEEDS_PLANTS, IRRIGATION, LABOUR,
+                 MACHINERY_RENTAL, FUEL, TRANSPORT, PACKAGING, ELECTRICITY, EQUIPMENT_REPAIR, MISC
+               - suggestedScope must be one of: PLOT, CROP, FARM, UNKNOWN
 
-               YOUR TASK:
-               1. Extract ALL text from the image.
-               2. Identify line items with names, quantities, units, and prices.
-               3. Categorize each item into: FERTILIZER, PESTICIDE, FUNGICIDE, SEEDS_PLANTS, IRRIGATION, LABOUR,
-                  MACHINERY_RENTAL, FUEL, TRANSPORT, PACKAGING, ELECTRICITY, EQUIPMENT_REPAIR, MISC.
-               4. Calculate totals if missing or unclear.
-               5. Suggest if this is PLOT-specific, CROP-level, or FARM-general expense.
-
-               OUTPUT FORMAT (JSON ONLY):
+               OUTPUT SHAPE:
                {
                  "success": true,
-                 "confidence": 0,
+                 "confidence": 0.0,
                  "vendorName": null,
                  "vendorPhone": null,
                  "date": "YYYY-MM-DD",
@@ -152,7 +150,7 @@ internal sealed class AiPromptBuilder : IAiPromptBuilder
                      "unitPrice": 500,
                      "totalAmount": 5000,
                      "suggestedCategory": "FERTILIZER",
-                     "confidence": 90
+                     "confidence": 0.9
                    }
                  ],
                  "subtotal": 5000,

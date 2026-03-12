@@ -1163,6 +1163,17 @@ const ReflectPage: React.FC<ReflectPageProps> = ({
                     selectedDate={calendarViewDate}
                     calendarMode={calendarMode}
                 />
+                
+                {navigate && (
+                    <div className="mt-4 pt-4 border-t border-slate-200">
+                        <button
+                            onClick={() => navigate('finance-ledger')}
+                            className="w-full py-3 bg-white border border-slate-200 hover:border-blue-300 hover:bg-blue-50 active:scale-95 transition-all rounded-xl text-blue-700 font-bold text-sm flex items-center justify-center gap-2 shadow-sm"
+                        >
+                            Open Finance Ledger <ArrowRight size={16} />
+                        </button>
+                    </div>
+                )}
             </AccordionBlock>
 
             {/* Detail Drawer - REDESIGNED FOR SIMPLE SCROLLING */}

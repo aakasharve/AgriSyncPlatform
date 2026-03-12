@@ -237,13 +237,26 @@ export const useAppData = (_props?: UseAppDataProps): UseAppDataResult => {
         await dataSource.crops.save(newCrops);
     };
 
-    const handleAddPerson = (person: Person) => {
-        // TODO: Persist to generic 'PeopleRepository'
-        console.log("Adding person", person);
+    const handleAddPerson = (person: any) => {
+        setFarmerProfile(prev => ({
+            ...prev,
+            operators: [...(prev.operators || []), {
+                id: person.id || `op_${Date.now()}`,
+                name: person.name,
+                role: person.role === 'SECONDARY_OWNER' ? 'SECONDARY_OWNER' : 'WORKER',
+                phone: person.phone,
+                capabilities: [OperatorCapability.LOG_DATA],
+                isVerifier: false,
+                isActive: true
+            }]
+        }));
     };
 
     const handleDeletePerson = (id: string) => {
-        console.log("Deleting person", id);
+        setFarmerProfile(prev => ({
+            ...prev,
+            operators: (prev.operators || []).filter(op => op.id !== id)
+        }));
     };
 
     const handleSaveTask = (task: PlannedTask) => {

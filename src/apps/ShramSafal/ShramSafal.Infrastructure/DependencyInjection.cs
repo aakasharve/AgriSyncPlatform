@@ -1,4 +1,6 @@
 using System.Globalization;
+using Amazon;
+using Amazon.S3;
 using AgriSync.BuildingBlocks.Auth;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
@@ -132,10 +134,16 @@ public static class DependencyInjection
                 options.TimeoutSeconds = timeoutSeconds;
             }
 
-            if (int.TryParse(section["DocIntelTimeoutSeconds"], NumberStyles.Integer, CultureInfo.InvariantCulture, out var docIntelTimeoutSeconds))
+            if (!string.IsNullOrWhiteSpace(section["DocIntelEndpoint"]))
             {
-                options.DocIntelTimeoutSeconds = docIntelTimeoutSeconds;
+                options.DocIntelEndpoint = section["DocIntelEndpoint"]!.Trim();
             }
+
+            if (int.TryParse(section["DocIntelTimeoutSeconds"], NumberStyles.Integer, CultureInfo.InvariantCulture, out var docIntelTimeout))
+            {
+                options.DocIntelTimeoutSeconds = docIntelTimeout;
+            }
+
         });
 
         services.PostConfigure<SarvamOptions>(options =>
@@ -148,6 +156,7 @@ public static class DependencyInjection
         });
 
         services.AddScoped<IShramSafalRepository, ShramSafalRepository>();
+        services.AddScoped<IDocumentExtractionSessionRepository, DocumentExtractionSessionRepository>();
         services.AddScoped<IReportExportService, PdfReportExportService>();
         services.AddScoped<IAuthorizationEnforcer, ShramSafalAuthorizationEnforcer>();
         services.AddScoped<IAiJobRepository, AiJobRepository>();
@@ -160,9 +169,11 @@ public static class DependencyInjection
         services.AddScoped<SarvamSttClient>();
         services.AddScoped<SarvamChatClient>();
         services.AddScoped<SarvamVisionClient>();
+        services.AddScoped<SarvamDocIntelClient>();
         services.AddScoped<IAiProvider, SarvamAiProvider>();
         services.AddScoped<IAiProvider, GeminiAiProvider>();
         services.AddScoped<IAiOrchestrator, AiOrchestrator>();
+        services.AddHostedService<ExtractionVerificationWorker>();
 
         services.AddHttpClient("GeminiAiProvider")
             .ConfigureHttpClient((sp, client) =>
@@ -180,8 +191,34 @@ public static class DependencyInjection
                 client.Timeout = TimeSpan.FromSeconds(timeout);
             });
 
+        services.AddHttpClient("SarvamDocIntel")
+            .ConfigureHttpClient((sp, client) =>
+            {
+                var sarvamOptions = sp.GetRequiredService<IOptions<SarvamOptions>>().Value;
+                var timeout = sarvamOptions.DocIntelTimeoutSeconds <= 0 ? 120 : sarvamOptions.DocIntelTimeoutSeconds;
+                // Add a buffer beyond the job timeout so the HttpClient doesn't cut the connection
+                client.Timeout = TimeSpan.FromSeconds(timeout + 30);
+            });
+
         services.Configure<StorageOptions>(configuration.GetSection("ShramSafal:Storage"));
-        services.AddSingleton<IAttachmentStorageService, LocalFileStorageService>();
+        var storageProvider = configuration.GetSection("ShramSafal:Storage:Provider").Value ?? "Local";
+        if (storageProvider.Equals("S3", StringComparison.OrdinalIgnoreCase))
+        {
+            services.AddSingleton<IAmazonS3>(sp =>
+            {
+                var storageOptions = sp.GetRequiredService<IOptions<StorageOptions>>().Value;
+                var regionName = string.IsNullOrWhiteSpace(storageOptions.Region) ? "ap-south-1" : storageOptions.Region.Trim();
+                return new AmazonS3Client(new AmazonS3Config
+                {
+                    RegionEndpoint = RegionEndpoint.GetBySystemName(regionName)
+                });
+            });
+            services.AddSingleton<IAttachmentStorageService, S3AttachmentStorageService>();
+        }
+        else
+        {
+            services.AddSingleton<IAttachmentStorageService, LocalFileStorageService>();
+        }
         return services;
     }
 }

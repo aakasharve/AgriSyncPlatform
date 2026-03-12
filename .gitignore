@@ -90,6 +90,8 @@ Thumbs.db
 # ------------------------------------------
 src/AgriSync.Bootstrapper/secrets/local/credentials.json
 src/AgriSync.Bootstrapper/App_Data/
+*.keystore
+*.jks
 
 # ------------------------------------------
 # Testing & CI Artifacts
@@ -125,6 +127,7 @@ err.json
 error_out.txt
 out_upload.txt
 tmp-swagger.json
+patch_*.js
 
 # ------------------------------------------
 # Demo Assets (large binaries, local only)

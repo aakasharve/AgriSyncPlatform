@@ -117,7 +117,7 @@ export interface UploadQueueItem {
 // =============================================================================
 
 export type PendingAiOperationType = 'voice_parse' | 'receipt_extract' | 'patti_extract';
-export type PendingAiJobStatus = 'pending' | 'processing' | 'failed' | 'completed';
+export type PendingAiJobStatus = 'pending' | 'processing' | 'failed' | 'failed_permanent' | 'completed';
 
 export interface PendingAiJobContext {
     farmId?: string;

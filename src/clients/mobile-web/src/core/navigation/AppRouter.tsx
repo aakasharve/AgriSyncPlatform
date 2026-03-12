@@ -36,6 +36,7 @@ import LogWizardContainer from '../../features/logs/components/wizard/LogWizardC
 import ReviewInboxSheet from '../../features/logs/components/ReviewInboxSheet';
 import { QuickLogSheet } from '../../features/logs/components/QuickLogSheet';
 import WeatherWidget from '../../features/weather/components/WeatherWidget';
+import OnboardingPermissionsPage from '../../pages/OnboardingPermissionsPage';
 import {
     computeDayState,
     formatCurrencyINR
@@ -160,6 +161,14 @@ const AppRouter: React.FC = () => {
     const weather = useAppWeatherState();
     const trust = useAppTrustState();
     const { handleReset, lastSavedLogSummary, lastSavedLogIds } = useAppUiRuntime();
+    
+    // permissions state
+    const [permissionsGranted, setPermissionsGranted] = React.useState<boolean>(() => {
+        if (typeof window !== 'undefined') {
+            return localStorage.getItem('shramsafal_permissions_granted') === 'true';
+        }
+        return true;
+    });
     const {
         getTodayCounts,
         getContextColorIndicator
@@ -388,6 +397,10 @@ const AppRouter: React.FC = () => {
         const nextUrl = `${window.location.pathname}${nextQuery ? `?${nextQuery}` : ''}`;
         window.history.replaceState({}, '', nextUrl);
     }, [setCurrentRoute, setMainView, todayDayState.unverifiedCount]);
+
+    if (!permissionsGranted) {
+        return <OnboardingPermissionsPage onComplete={() => setPermissionsGranted(true)} />;
+    }
 
     return (
         <div className="relative w-full">
@@ -1013,7 +1026,7 @@ const AppRouter: React.FC = () => {
                 onSave={handleSaveTask}
                 crops={crops}
                 selectedCropId={crops[0]?.id}
-                people={farmerProfile.people}
+                people={farmerProfile.operators.map(op => ({ ...op, isActive: op.isActive ?? true }))}
             />
 
             {/* DFES Phase 0: Review Inbox Sheet */}

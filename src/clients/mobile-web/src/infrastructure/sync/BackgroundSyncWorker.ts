@@ -4,6 +4,7 @@ import { agriSyncClient, type SyncMutationType } from '../api/AgriSyncClient';
 import { getAuthSession } from '../api/AuthTokenStore';
 import { reconcileSyncPull } from './SyncPullReconciler';
 import { getDatabase } from '../storage/DexieDatabase';
+import { AiJobWorker } from './AiJobWorker';
 
 function toSyncMutationType(mutationType: string): SyncMutationType | null {
     const normalized = mutationType.trim().toLowerCase();
@@ -119,6 +120,7 @@ export class BackgroundSyncWorker {
             await mutationQueue.markFailedAsPending();
             await this.pushPendingMutations();
             await this.pullLatestDeltas();
+            await AiJobWorker.run();
         } catch (error) {
             console.error('[BackgroundSyncWorker] Sync cycle failed', error);
         } finally {

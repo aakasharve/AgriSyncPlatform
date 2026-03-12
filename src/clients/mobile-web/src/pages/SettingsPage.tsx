@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useAppNavigationState } from '../app/context/AppFeatureContexts';
-import { Settings, Droplets, Users, Tractor, BookOpen, FlaskConical, Bot, Plus, Trash2, Coins, Leaf, Check, Pencil, ChevronDown, ChevronUp, Globe } from 'lucide-react';
+import { Settings, Droplets, Users, Tractor, BookOpen, FlaskConical, Bot, Plus, Trash2, Coins, Leaf, Check, Pencil, ChevronDown, ChevronUp, Globe, Shield, MapPin, Mic, Camera } from 'lucide-react';
 import { LedgerDefaults, LabourShift, DailyLog, CropProfile, HarvestConfig } from '../types';
 import { getHarvestConfig } from '../services/harvestService';
 import NotificationTestComponent from '../shared/components/NotificationTestComponent';
@@ -115,7 +115,49 @@ const SettingsPage: React.FC<SettingsPageProps> = ({
 
 
 
+            
+            {/* App Permissions */}
             <div className="pt-4">
+                <h3 className="text-xl font-display font-black text-stone-800 px-1">App Configuration</h3>
+            </div>
+            
+            <div className="glass-panel p-5 mb-6">
+                <div className="flex items-center justify-between mb-4">
+                    <div className="flex items-center gap-4 text-stone-700">
+                        <div className="bg-emerald-100 p-3 rounded-2xl text-emerald-700 shadow-sm"><Shield size={22} strokeWidth={2.5} /></div>
+                        <div>
+                            <h4 className="font-bold text-lg">App Permissions</h4>
+                            <p className="text-xs text-stone-500 mt-1 leading-relaxed">
+                                Manage Camera, Mic, and Location access.
+                            </p>
+                        </div>
+                    </div>
+                </div>
+                <div className="bg-stone-50 rounded-xl p-4 border border-stone-100 flex items-center justify-between">
+                    <div className="flex gap-4">
+                        <div className="flex flex-col items-center gap-1">
+                            <MapPin size={16} className="text-emerald-600" />
+                            <span className="text-[10px] font-bold text-stone-400">GPS</span>
+                        </div>
+                        <div className="flex flex-col items-center gap-1">
+                            <Mic size={16} className="text-emerald-600" />
+                            <span className="text-[10px] font-bold text-stone-400">MIC</span>
+                        </div>
+                        <div className="flex flex-col items-center gap-1">
+                            <Camera size={16} className="text-emerald-600" />
+                            <span className="text-[10px] font-bold text-stone-400">CAM</span>
+                        </div>
+                    </div>
+                    <button 
+                        onClick={() => alert('Please manage site permissions in your browser settings (usually near the URL bar).')}
+                        className="text-xs font-bold text-emerald-700 bg-emerald-100 px-4 py-2 rounded-lg hover:bg-emerald-200 transition-colors"
+                    >
+                        Browser Settings
+                    </button>
+                </div>
+            </div>
+
+<div className="pt-4">
                 <h3 className="text-xl font-display font-black text-stone-800 px-1">{t('settings.ledgerConfig')}</h3>
             </div>
 
@@ -228,6 +270,27 @@ const SettingsPage: React.FC<SettingsPageProps> = ({
 
             {/* Notification Tester */}
             <NotificationTestComponent />
+
+            
+            {/* Manage Crops Data */}
+            <div className="pt-4">
+                <h3 className="text-xl font-display font-black text-stone-800 px-1">Manage Farm Data</h3>
+            </div>
+            <div className="glass-panel p-5 mb-6">
+                <h4 className="font-bold text-lg text-stone-800 mb-2">Delete Crop Data</h4>
+                <p className="text-xs text-stone-500 mb-4">Warning: This action is irreversible. All plots and logs related to the crop will be lost.</p>
+                <div className="space-y-2">
+                    {crops.map(crop => (
+                        <div key={crop.id} className="flex items-center justify-between border border-stone-100 rounded-xl p-3 bg-stone-50">
+                            <span className="font-bold text-sm text-stone-700">{crop.name}</span>
+                            <button className="text-xs font-bold text-red-600 bg-red-50 hover:bg-red-100 px-3 py-1.5 rounded-lg flex items-center gap-1 transition-colors">
+                                <Trash2 size={14} /> Delete
+                            </button>
+                        </div>
+                    ))}
+                    {crops.length === 0 && <p className="text-xs text-stone-400 italic">No crops available</p>}
+                </div>
+            </div>
 
             {/* Developer Tools */}
             <div className="glass-panel p-5 mt-6">

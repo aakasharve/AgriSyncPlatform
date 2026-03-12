@@ -23,10 +23,25 @@ const defaultCenter = {
     lng: 73.8567
 };
 
-export const PlotMap: React.FC<PlotMapProps> = ({ existingGeoData, onPlotComplete, isReadOnly = false }) => {
+const MapUnavailableState: React.FC<{ existingGeoData?: PlotGeoData }> = ({ existingGeoData }) => (
+    <div className="h-96 w-full bg-amber-50 rounded-2xl flex flex-col items-center justify-center p-6 text-center border-2 border-amber-100">
+        <span className="text-amber-700 font-bold text-lg mb-2">Map unavailable in this build</span>
+        <p className="text-sm text-amber-700 max-w-md">
+            Google Maps is disabled until a production maps key is explicitly approved for launch.
+            Plot creation still works without boundary mapping.
+        </p>
+        {existingGeoData?.boundary?.length ? (
+            <p className="text-xs text-amber-800 mt-4 bg-white p-2 rounded border border-amber-200 font-medium">
+                Existing mapped boundary preserved. Re-enable maps later to edit it.
+            </p>
+        ) : null}
+    </div>
+);
+
+const PlotMapWithGoogleMaps: React.FC<PlotMapProps & { mapsApiKey: string }> = ({ existingGeoData, onPlotComplete, isReadOnly = false, mapsApiKey }) => {
     const { isLoaded, loadError } = useJsApiLoader({
         id: 'google-map-script',
-        googleMapsApiKey: import.meta.env.VITE_GOOGLE_MAPS_API_KEY || "",
+        googleMapsApiKey: mapsApiKey,
         libraries
     });
 
@@ -464,4 +479,13 @@ export const PlotMap: React.FC<PlotMapProps> = ({ existingGeoData, onPlotComplet
             </div>
         </div>
     );
+};
+
+export const PlotMap: React.FC<PlotMapProps> = (props) => {
+    const mapsApiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY?.trim() ?? '';
+    if (!mapsApiKey) {
+        return <MapUnavailableState existingGeoData={props.existingGeoData} />;
+    }
+
+    return <PlotMapWithGoogleMaps {...props} mapsApiKey={mapsApiKey} />;
 };

@@ -19,8 +19,9 @@ internal sealed class LocalFileStorageService : IAttachmentStorageService
         Directory.CreateDirectory(rootDirectory);
     }
 
-    public async Task<long> SaveAsync(string relativePath, Stream content, CancellationToken ct = default)
+    public async Task<long> SaveAsync(string relativePath, Stream content, string? contentType = null, CancellationToken ct = default)
     {
+        _ = contentType;
         var fullPath = ResolveSafePath(relativePath);
         var parentDirectory = Path.GetDirectoryName(fullPath);
         if (!string.IsNullOrWhiteSpace(parentDirectory))

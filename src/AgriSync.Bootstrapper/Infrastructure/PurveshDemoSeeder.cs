@@ -242,18 +242,6 @@ public sealed class PurveshDemoSeeder
             ]
         };
 
-    private static readonly IReadOnlyDictionary<string, int[]> LogDayOffsetsByPlotKey =
-        new Dictionary<string, int[]>(StringComparer.Ordinal)
-        {
-            ["grape_g1"] = [-85, -82, -79, -76, -72, -68, -65, -62, -59, -55, -51, -48, -45, -42, -38, -35, -32, -28, -25, -22, -18, -14, -11, -7, -4, -1, 0],
-            ["grape_g2"] = [-75, -70, -63, -55, -46, -38, -30, -24, -20, -14, -8, -4, -2, 0],
-            ["sugarcane_s1"] = [-90, -85, -80, -75, -70, -65, -60, -55, -50, -45, -40, -35, -30, -25, -20, -14, -7, 0],
-            ["sugarcane_s2"] = [-60, -53, -46, -38, -30, -22, -15, -10, -5, 0],
-            ["pomegranate_p1"] = [-80, -74, -68, -62, -56, -50, -44, -38, -35, -27, -22, -17, -12, -8, -4, 0],
-            ["turmeric_t1"] = [-70, -63, -56, -49, -42, -35, -28, -21, -16, -11, -6, 0],
-            ["bajra_b1"] = [-45, -38, -31, -24, -17, -12, -7, 0]
-        };
-
     private static readonly IReadOnlyDictionary<string, OperatorRoutingSeed> OperatorRoutingByPlotKey =
         new Dictionary<string, OperatorRoutingSeed>(StringComparer.Ordinal)
         {
@@ -354,6 +342,12 @@ public sealed class PurveshDemoSeeder
                 "तण काढले. एक दिवसाचे काम पूर्ण.",
                 "रजू आला नाही आज. काम अर्धे राहिले."
             ],
+            ["Machinery"] =
+            [
+                "पॉवर स्प्रेयर आणि लाईन तपासणी केली. उद्याच्या कामासाठी यंत्र तयार ठेवले.",
+                "ट्रॅक्टर/इम्प्लिमेंट तपासले. बेल्ट आणि ग्रीसिंग पूर्ण.",
+                "मोटर, फिल्टर आणि व्हॉल्व्ह तपासून पुन्हा लाईन सुरू केली."
+            ],
             ["Bahar Treatment"] =
             [
                 "पाणी बंद केले. बहार उपचार सुरूवात.",
@@ -419,6 +413,7 @@ public sealed class PurveshDemoSeeder
 
     public async Task<string> SeedPurveshDemoAsync(CancellationToken cancellationToken = default)
     {
+        var refreshResult = await ClearPurveshDemoAsync(cancellationToken);
         var nowUtc = DateTime.UtcNow;
         var usersByKey = new Dictionary<string, User.Domain.Identity.User>(StringComparer.Ordinal);
 
@@ -470,7 +465,8 @@ public sealed class PurveshDemoSeeder
             PriceConfigsAdded: phase4FinanceStats.PriceConfigsAdded,
             AttachmentsAdded: phase5AttachmentStats.AttachmentsAdded);
 
-        return $"Phase 2+3+4+5 seeded for {SeedVersion}. " +
+        return $"Refreshed {SeedVersion}. {refreshResult} | " +
+               $"Phase 2+3+4+5 seeded. " +
                $"users={totals.UserCount}, farms={totals.FarmCount}, plots={totals.PlotCount}, " +
                $"cropCycles={totals.CropCycleCount}, templates={totals.ScheduleTemplateCount}, " +
                $"templateActivitiesAdded={totals.TemplateActivitiesAdded}, plannedActivitiesAdded={totals.PlannedActivitiesAdded}, " +
@@ -920,20 +916,16 @@ public sealed class PurveshDemoSeeder
         var tasksAdded = 0;
         var verificationsAdded = 0;
 
-        foreach (var kvp in LogDayOffsetsByPlotKey)
+        foreach (var context in contextByPlotKey.Values.OrderBy(value => value.Seed.Key, StringComparer.Ordinal))
         {
-            var plotKey = kvp.Key;
-            if (!contextByPlotKey.TryGetValue(plotKey, out var context))
-            {
-                continue;
-            }
+            var plotKey = context.Seed.Key;
 
             if (!OperatorRoutingByPlotKey.TryGetValue(plotKey, out var routing))
             {
                 continue;
             }
 
-            var offsets = kvp.Value;
+            var offsets = BuildRollingLogDayOffsets(context.Seed);
 
             for (var index = 0; index < offsets.Length; index++)
             {
@@ -963,7 +955,7 @@ public sealed class PurveshDemoSeeder
                     logsAdded++;
                 }
 
-                var taskPattern = ResolveTaskPattern(plotKey, context.Seed.CropName, index);
+                var taskPattern = ResolveTaskPattern(plotKey, context.Seed.CropName, dayOffset, index);
                 for (var taskIndex = 0; taskIndex < taskPattern.Length; taskIndex++)
                 {
                     var activityType = taskPattern[taskIndex];
@@ -1476,19 +1468,154 @@ public sealed class PurveshDemoSeeder
         return routing.PrimaryUserKey;
     }
 
-    private static string[] ResolveTaskPattern(string plotKey, string cropName, int index)
+    private static int[] BuildRollingLogDayOffsets(PlotSeed seed)
     {
-        if (TaskPatternsByPlotKey.TryGetValue(plotKey, out var plotPatterns) && plotPatterns.Length > 0)
+        return Enumerable.Range(seed.StartOffsetDays, Math.Abs(seed.StartOffsetDays) + 1).ToArray();
+    }
+
+    private static string[] ResolveTaskPattern(string plotKey, string cropName, int dayOffset, int index)
+    {
+        if (IsRestDay(plotKey, dayOffset))
         {
-            return plotPatterns[index % plotPatterns.Length];
+            return ["Observation"];
         }
 
+        return plotKey switch
+        {
+            "grape_g1" or "grape_g2" => BuildGrapePattern(dayOffset, index),
+            "sugarcane_s1" or "sugarcane_s2" => BuildSugarcanePattern(dayOffset, index),
+            "pomegranate_p1" => BuildPomegranatePattern(dayOffset, index),
+            "turmeric_t1" => BuildTurmericPattern(dayOffset, index),
+            "bajra_b1" => BuildBajraPattern(dayOffset, index),
+            _ => BuildFallbackPattern(cropName, index)
+        };
+    }
+
+    private static string[] BuildGrapePattern(int dayOffset, int index)
+    {
+        if (dayOffset <= -65 && Math.Abs(dayOffset) % 5 == 0)
+        {
+            return ["Pruning", "Machinery", "Observation"];
+        }
+
+        if (Math.Abs(dayOffset) % 9 == 0)
+        {
+            return ["Spraying", "Observation"];
+        }
+
+        if (Math.Abs(dayOffset) % 4 == 0)
+        {
+            return ["Fertigation", "Irrigation", "Observation"];
+        }
+
+        return index % 3 == 0
+            ? ["Irrigation", "Machinery", "Observation"]
+            : ["Irrigation", "Observation"];
+    }
+
+    private static string[] BuildSugarcanePattern(int dayOffset, int index)
+    {
+        if (Math.Abs(dayOffset) % 15 == 0)
+        {
+            return ["Fertilizer application", "Irrigation", "Observation"];
+        }
+
+        if (Math.Abs(dayOffset) % 8 == 0)
+        {
+            return ["Weeding", "Observation"];
+        }
+
+        if (Math.Abs(dayOffset) % 11 == 0)
+        {
+            return ["Machinery", "Irrigation", "Observation"];
+        }
+
+        return index % 2 == 0
+            ? ["Irrigation", "Observation"]
+            : ["Observation", "Irrigation"];
+    }
+
+    private static string[] BuildPomegranatePattern(int dayOffset, int index)
+    {
+        if (dayOffset <= -50 && Math.Abs(dayOffset) % 7 == 0)
+        {
+            return ["Bahar Treatment", "Observation"];
+        }
+
+        if (Math.Abs(dayOffset) % 10 == 0)
+        {
+            return ["Spraying", "Irrigation", "Observation"];
+        }
+
+        if (Math.Abs(dayOffset) % 6 == 0)
+        {
+            return ["Machinery", "Irrigation", "Observation"];
+        }
+
+        return index % 2 == 0
+            ? ["Irrigation", "Observation"]
+            : ["Observation", "Irrigation"];
+    }
+
+    private static string[] BuildTurmericPattern(int dayOffset, int index)
+    {
+        if (Math.Abs(dayOffset) % 16 == 0)
+        {
+            return ["Fertilizer application", "Observation"];
+        }
+
+        if (Math.Abs(dayOffset) % 12 == 0)
+        {
+            return ["Machinery", "Irrigation", "Observation"];
+        }
+
+        return index % 3 == 0
+            ? ["Irrigation", "Observation"]
+            : ["Irrigation", "Fertilizer application", "Observation"];
+    }
+
+    private static string[] BuildBajraPattern(int dayOffset, int index)
+    {
+        if (dayOffset <= -35 && Math.Abs(dayOffset) % 9 == 0)
+        {
+            return ["Sowing", "Irrigation", "Observation"];
+        }
+
+        if (Math.Abs(dayOffset) % 7 == 0)
+        {
+            return ["Weeding", "Observation"];
+        }
+
+        return index % 2 == 0
+            ? ["Irrigation", "Observation"]
+            : ["Observation", "Irrigation"];
+    }
+
+    private static string[] BuildFallbackPattern(string cropName, int index)
+    {
         if (TaskPatternsByCropName.TryGetValue(cropName, out var patterns) && patterns.Length > 0)
         {
             return patterns[index % patterns.Length];
         }
 
         return ["Observation"];
+    }
+
+    private static bool IsRestDay(string plotKey, int dayOffset)
+    {
+        var restingModulo = plotKey switch
+        {
+            "grape_g1" => 13,
+            "grape_g2" => 11,
+            "sugarcane_s1" => 10,
+            "sugarcane_s2" => 8,
+            "pomegranate_p1" => 9,
+            "turmeric_t1" => 10,
+            "bajra_b1" => 7,
+            _ => 12
+        };
+
+        return Math.Abs(dayOffset) > 0 && Math.Abs(dayOffset) % restingModulo == 0;
     }
 
     private static string ResolveTaskNote(
@@ -1518,6 +1645,25 @@ public sealed class PurveshDemoSeeder
             activityType.Equals("Fertilizer application", StringComparison.OrdinalIgnoreCase))
         {
             return "युरिया पहिला हप्ता. उशीर झाला 14 दिवस.";
+        }
+
+        if (activityType.Equals("Observation", StringComparison.OrdinalIgnoreCase) && IsRestDay(plotKey, dayOffset))
+        {
+            return "प्लॉट रेस्टिंग आहे. आज कोणते काम केले नाही.";
+        }
+
+        if (activityType.Equals("Irrigation", StringComparison.OrdinalIgnoreCase))
+        {
+            var waterSource = ResolveWaterSourceName(plotKey);
+            var motor = ResolveMotorName(plotKey);
+            return (Math.Abs(dayOffset) + logIndex + taskIndex) % 2 == 0
+                ? $"शेड्यूल नुसार पाणी दिले. {waterSource} वरून {motor} चालू करून लाईन पूर्ण केली."
+                : $"{waterSource} वरून {motor} ने सिंचन केले. दाब आणि ओल दोन्ही समाधानकारक होते.";
+        }
+
+        if (activityType.Equals("Machinery", StringComparison.OrdinalIgnoreCase))
+        {
+            return $"{ResolveMachineryName(plotKey)} वापरून सहाय्यक काम केले. फिल्टर, बेल्ट आणि नोजल तपासले.";
         }
 
         if (NotesByActivityType.TryGetValue(activityType, out var notes) && notes.Length > 0)
@@ -1614,7 +1760,7 @@ public sealed class PurveshDemoSeeder
 
     private static List<CostEntrySeed> BuildCostEntrySeeds()
     {
-        var seeds = new List<CostEntrySeed>(70);
+        var seeds = new List<CostEntrySeed>(82);
 
         void Add(string key, string? plotKey, string category, decimal amount, int dayOffset, string description, string createdByUserKey)
         {
@@ -1700,13 +1846,68 @@ public sealed class PurveshDemoSeeder
         Add("farmwide_08", null, "Equipment", 2050m, -9, "Sprayer service and parts", "purvesh");
         Add("farmwide_09", null, "Fuel", 460m, -4, "Diesel refill", "purvesh");
         Add("farmwide_10", null, "Equipment", 1800m, 0, "Pump and line repair", "purvesh");
+        Add("farmwide_11", null, "Fuel", 520m, -18, "Generator diesel for late-night irrigation", "purvesh");
+        Add("farmwide_12", null, "Equipment", 1450m, -11, "Disc filter cartridge replacement", "purvesh");
+        Add("farmwide_13", null, "Equipment", 2600m, -6, "Kirloskar motor rewinding advance", "purvesh");
+        Add("farmwide_14", null, "Fuel", 410m, -2, "Sprayer petrol refill", "purvesh");
 
-        if (seeds.Count != 70)
+        Add("g1_equipment_01", "grape_g1", "Equipment", 1650m, -16, "Blower and pruning kit service - G1", "shankar");
+        Add("g2_equipment_01", "grape_g2", "Equipment", 980m, -5, "Drip venturi replacement - G2", "raju");
+        Add("p1_equipment_01", "pomegranate_p1", "Equipment", 1220m, -8, "Bahar plot spray gun repair - P1", "purvesh");
+        Add("t1_equipment_01", "turmeric_t1", "Equipment", 1480m, -4, "Mini tiller hire - T1", "santosh");
+        Add("s1_fuel_01", "sugarcane_s1", "Fuel", 390m, -12, "Field bund levelling diesel - S1", "shankar");
+        Add("s2_equipment_01", "sugarcane_s2", "Equipment", 760m, -3, "Water gate and pipe coupling - S2", "raju");
+        Add("b1_equipment_01", "bajra_b1", "Equipment", 910m, -14, "Seed drill and line marker hire - B1", "raju");
+        Add("p1_fuel_01", "pomegranate_p1", "Fuel", 350m, -1, "Farm pond pump diesel - P1", "purvesh");
+
+        if (seeds.Count != 82)
         {
-            throw new InvalidOperationException($"Phase 4 cost seed count drifted. Expected 70, found {seeds.Count}.");
+            throw new InvalidOperationException($"Phase 4 cost seed count drifted. Expected 82, found {seeds.Count}.");
         }
 
         return seeds;
+    }
+
+    private static string ResolveWaterSourceName(string plotKey)
+    {
+        return plotKey switch
+        {
+            "grape_g1" or "grape_g2" => "मेन विहीर",
+            "sugarcane_s1" => "कालवा फीड लाईन",
+            "sugarcane_s2" => "पूर्व बोअरवेल",
+            "pomegranate_p1" => "शेततळे लाईन",
+            "turmeric_t1" => "पूर्व बोअरवेल",
+            "bajra_b1" => "तळ्याची पूरक लाईन",
+            _ => "शेतीतील स्रोत"
+        };
+    }
+
+    private static string ResolveMotorName(string plotKey)
+    {
+        return plotKey switch
+        {
+            "grape_g1" => "किर्लोस्कर 7.5 HP मोटर",
+            "grape_g2" => "CRI 5 HP मोटर",
+            "sugarcane_s1" => "कालवा पंप सेट",
+            "sugarcane_s2" => "शक्ती 5 HP मोटर",
+            "pomegranate_p1" => "सोलर 10 HP पंप",
+            "turmeric_t1" => "बोअरवेल 5 HP मोटर",
+            "bajra_b1" => "मोबाइल डिझेल पंप",
+            _ => "मोटर"
+        };
+    }
+
+    private static string ResolveMachineryName(string plotKey)
+    {
+        return plotKey switch
+        {
+            "grape_g1" or "grape_g2" => "पॉवर स्प्रेयर",
+            "sugarcane_s1" or "sugarcane_s2" => "ट्रॅक्टर आणि इम्प्लिमेंट",
+            "pomegranate_p1" => "ब्लोअर स्प्रेयर",
+            "turmeric_t1" => "मिनी टिलर",
+            "bajra_b1" => "सीड ड्रिल",
+            _ => "यंत्रसामग्री"
+        };
     }
 
     private static string BuildPlannedKey(Guid cropCycleId, string activityName, DateOnly plannedDate)

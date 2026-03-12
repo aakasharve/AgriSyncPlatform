@@ -231,6 +231,7 @@ export interface FarmMotor {
     powerSourceName?: string;
     linkedWaterSourceId: string;
     schedule?: PowerSchedule;
+    dripDetails?: DripDetails;
 }
 
 export interface FarmMachinery {

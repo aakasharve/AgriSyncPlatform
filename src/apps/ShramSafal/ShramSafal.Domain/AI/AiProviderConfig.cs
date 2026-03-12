@@ -48,7 +48,7 @@ public sealed class AiProviderConfig
 
     public static AiProviderConfig CreateDefault()
     {
-        return new AiProviderConfig(
+        var config = new AiProviderConfig(
             id: Guid.NewGuid(),
             defaultProvider: AiProviderType.Sarvam,
             fallbackEnabled: true,
@@ -60,6 +60,11 @@ public sealed class AiProviderConfig
             receiptConfidenceThreshold: 0.50m,
             modifiedByUserId: Guid.Empty,
             modifiedAtUtc: DateTime.UtcNow);
+
+        config.VoiceProvider = AiProviderType.Sarvam;
+        config.ReceiptProvider = AiProviderType.Gemini;
+        config.PattiProvider = AiProviderType.Gemini;
+        return config;
     }
 
     public AiProviderType GetProviderForOperation(AiOperationType operation)

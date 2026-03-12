@@ -1,5 +1,4 @@
 using AgriSync.BuildingBlocks.Abstractions;
-using AgriSync.BuildingBlocks.Auth;
 using AgriSync.BuildingBlocks.Results;
 using AgriSync.SharedKernel.Contracts.Ids;
 using ShramSafal.Application.Contracts.Dtos;
@@ -11,7 +10,6 @@ namespace ShramSafal.Application.UseCases.Logs.CreateDailyLog;
 
 public sealed class CreateDailyLogHandler(
     IShramSafalRepository repository,
-    IAuthorizationEnforcer authorizationEnforcer,
     IIdGenerator idGenerator,
     IClock clock)
 {

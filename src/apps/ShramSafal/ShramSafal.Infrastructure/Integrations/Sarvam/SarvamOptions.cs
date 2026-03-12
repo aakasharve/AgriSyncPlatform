@@ -14,5 +14,6 @@ public sealed class SarvamOptions
     public string VisionModel { get; set; } = "sarvam-vision";
     public decimal ChatTemperature { get; set; } = 0.2m;
     public int TimeoutSeconds { get; set; } = 45;
+    public string DocIntelEndpoint { get; set; } = "https://api.sarvam.ai/doc-digitization/job/v1";
     public int DocIntelTimeoutSeconds { get; set; } = 120;
 }

@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Net.Http.Json;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using ShramSafal.Application.Ports.External;
@@ -155,7 +156,13 @@ internal sealed class GeminiAiProvider(
         string systemPrompt,
         CancellationToken ct = default)
     {
-        return await ExtractImageAsync(imageStream, mimeType, systemPrompt, ct);
+        return await ExtractImageAsync(
+            imageStream,
+            mimeType,
+            systemPrompt,
+            BuildReceiptResponseSchema(),
+            LooksMeaningfulReceiptResult,
+            ct);
     }
 
     public async Task<ReceiptExtractCanonicalResult> ExtractPattiAsync(
@@ -164,13 +171,21 @@ internal sealed class GeminiAiProvider(
         string systemPrompt,
         CancellationToken ct = default)
     {
-        return await ExtractImageAsync(imageStream, mimeType, systemPrompt, ct);
+        return await ExtractImageAsync(
+            imageStream,
+            mimeType,
+            systemPrompt,
+            BuildPattiResponseSchema(),
+            LooksMeaningfulPattiResult,
+            ct);
     }
 
     private async Task<ReceiptExtractCanonicalResult> ExtractImageAsync(
         Stream imageStream,
         string mimeType,
         string systemPrompt,
+        JsonElement responseJsonSchema,
+        Func<string, bool> hasMeaningfulResult,
         CancellationToken ct)
     {
         if (string.IsNullOrWhiteSpace(_options.ApiKey))
@@ -197,7 +212,12 @@ internal sealed class GeminiAiProvider(
                 }
             };
 
-            var generated = await GenerateContentAsync(systemPrompt, userParts, ct);
+            var generated = await GenerateContentAsync(
+                systemPrompt,
+                userParts,
+                ct,
+                responseJsonSchema,
+                thinkingBudget: 0);
             if (!generated.Success)
             {
                 return new ReceiptExtractCanonicalResult
@@ -209,6 +229,14 @@ internal sealed class GeminiAiProvider(
 
             var cleaned = GeminiJsonCleaner.Clean(generated.Content!);
             var normalized = responseNormalizer.NormalizeGenericJson(cleaned);
+            if (!hasMeaningfulResult(normalized))
+            {
+                return new ReceiptExtractCanonicalResult
+                {
+                    Success = false,
+                    Error = "Gemini returned an empty structured extraction."
+                };
+            }
 
             return new ReceiptExtractCanonicalResult
             {
@@ -231,31 +259,48 @@ internal sealed class GeminiAiProvider(
     private async Task<(bool Success, string? Content, string? Error)> GenerateContentAsync(
         string systemPrompt,
         List<object> userParts,
-        CancellationToken ct)
+        CancellationToken ct,
+        JsonElement? responseJsonSchema = null,
+        int? thinkingBudget = null)
     {
         using var timeout = CreateTimeoutToken(ct);
         var client = httpClientFactory.CreateClient("GeminiAiProvider");
 
-        var requestBody = new
+        var generationConfig = new JsonObject
         {
-            systemInstruction = new
+            ["responseMimeType"] = "application/json",
+            ["temperature"] = JsonValue.Create(_options.Temperature),
+            ["maxOutputTokens"] = _options.MaxTokens
+        };
+
+        if (responseJsonSchema.HasValue)
+        {
+            generationConfig["responseJsonSchema"] = JsonNode.Parse(responseJsonSchema.Value.GetRawText());
+        }
+
+        if (thinkingBudget.HasValue)
+        {
+            generationConfig["thinkingConfig"] = new JsonObject
+            {
+                ["thinkingBudget"] = thinkingBudget.Value
+            };
+        }
+
+        var requestBody = new JsonObject
+        {
+            ["systemInstruction"] = JsonSerializer.SerializeToNode(new
             {
                 parts = new[] { new { text = systemPrompt } }
-            },
-            contents = new[]
+            }),
+            ["contents"] = JsonSerializer.SerializeToNode(new[]
             {
                 new
                 {
                     role = "user",
                     parts = userParts
                 }
-            },
-            generationConfig = new
-            {
-                responseMimeType = "application/json",
-                temperature = _options.Temperature,
-                maxOutputTokens = _options.MaxTokens
-            }
+            }),
+            ["generationConfig"] = generationConfig
         };
 
         using var request = new HttpRequestMessage(HttpMethod.Post, BuildGenerateContentUrl())
@@ -273,7 +318,13 @@ internal sealed class GeminiAiProvider(
             return (false, null, message);
         }
 
-        var generatedText = ExtractGeneratedText(body);
+        var generation = ExtractGenerationResult(body);
+        if (string.Equals(generation.FinishReason, "MAX_TOKENS", StringComparison.OrdinalIgnoreCase))
+        {
+            return (false, null, "Gemini output was truncated at the max token limit.");
+        }
+
+        var generatedText = generation.Text;
         if (string.IsNullOrWhiteSpace(generatedText))
         {
             return (false, null, "Gemini did not return parseable content.");
@@ -312,7 +363,7 @@ internal sealed class GeminiAiProvider(
         return Convert.ToBase64String(memory.ToArray());
     }
 
-    private static string? ExtractGeneratedText(string responseBody)
+    private static (string? Text, string? FinishReason) ExtractGenerationResult(string responseBody)
     {
         try
         {
@@ -321,11 +372,16 @@ internal sealed class GeminiAiProvider(
             if (!document.RootElement.TryGetProperty("candidates", out var candidates) ||
                 candidates.ValueKind != JsonValueKind.Array)
             {
-                return null;
+                return (null, null);
             }
 
             foreach (var candidate in candidates.EnumerateArray())
             {
+                var finishReason = candidate.TryGetProperty("finishReason", out var finishReasonNode) &&
+                                   finishReasonNode.ValueKind == JsonValueKind.String
+                    ? finishReasonNode.GetString()
+                    : null;
+
                 if (!candidate.TryGetProperty("content", out var content) ||
                     content.ValueKind != JsonValueKind.Object ||
                     !content.TryGetProperty("parts", out var parts) ||
@@ -340,17 +396,17 @@ internal sealed class GeminiAiProvider(
                         part.TryGetProperty("text", out var textNode) &&
                         textNode.ValueKind == JsonValueKind.String)
                     {
-                        return textNode.GetString();
+                        return (textNode.GetString(), finishReason);
                     }
                 }
             }
         }
         catch (JsonException)
         {
-            return null;
+            return (null, null);
         }
 
-        return null;
+        return (null, null);
     }
 
     private static string? TryExtractProviderError(string responseBody)
@@ -390,12 +446,22 @@ internal sealed class GeminiAiProvider(
 
             if (confidence.ValueKind == JsonValueKind.Number && confidence.TryGetDecimal(out var number))
             {
+                if (number > 1m)
+                {
+                    number /= 100m;
+                }
+
                 return Math.Clamp(number, 0m, 1m);
             }
 
             if (confidence.ValueKind == JsonValueKind.String &&
                 decimal.TryParse(confidence.GetString(), NumberStyles.Float, CultureInfo.InvariantCulture, out var parsed))
             {
+                if (parsed > 1m)
+                {
+                    parsed /= 100m;
+                }
+
                 return Math.Clamp(parsed, 0m, 1m);
             }
         }
@@ -424,5 +490,194 @@ internal sealed class GeminiAiProvider(
         }
 
         return null;
+    }
+
+    private static JsonElement BuildReceiptResponseSchema()
+    {
+        const string schema = """
+        {
+          "type": "object",
+          "properties": {
+            "success": { "type": "boolean" },
+            "confidence": { "type": "number" },
+            "vendorName": { "type": ["string", "null"] },
+            "vendorPhone": { "type": ["string", "null"] },
+            "date": { "type": ["string", "null"] },
+            "lineItems": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "name": { "type": "string" },
+                  "quantity": { "type": ["number", "null"] },
+                  "unit": { "type": ["string", "null"] },
+                  "unitPrice": { "type": ["number", "null"] },
+                  "totalAmount": { "type": ["number", "null"] },
+                  "suggestedCategory": {
+                    "type": "string",
+                    "enum": [
+                      "FERTILIZER",
+                      "PESTICIDE",
+                      "FUNGICIDE",
+                      "SEEDS_PLANTS",
+                      "IRRIGATION",
+                      "LABOUR",
+                      "MACHINERY_RENTAL",
+                      "FUEL",
+                      "TRANSPORT",
+                      "PACKAGING",
+                      "ELECTRICITY",
+                      "EQUIPMENT_REPAIR",
+                      "MISC"
+                    ]
+                  },
+                  "confidence": { "type": "number" }
+                },
+                "required": [ "name", "suggestedCategory", "confidence" ]
+              }
+            },
+            "subtotal": { "type": "number" },
+            "discount": { "type": "number" },
+            "tax": { "type": "number" },
+            "grandTotal": { "type": "number" },
+            "suggestedScope": {
+              "type": "string",
+              "enum": [ "PLOT", "CROP", "FARM", "UNKNOWN" ]
+            },
+            "suggestedCropName": { "type": ["string", "null"] },
+            "rawTextExtracted": { "type": ["string", "null"] },
+            "warnings": {
+              "type": "array",
+              "items": { "type": "string" }
+            }
+          },
+          "required": [
+            "success",
+            "confidence",
+            "lineItems",
+            "subtotal",
+            "discount",
+            "tax",
+            "grandTotal",
+            "suggestedScope",
+            "warnings"
+          ]
+        }
+        """;
+
+        return JsonSerializer.Deserialize<JsonElement>(schema);
+    }
+
+    private static JsonElement BuildPattiResponseSchema()
+    {
+        const string schema = """
+        {
+          "type": "object",
+          "properties": {
+            "date": { "type": ["string", "null"] },
+            "pattiNumber": { "type": ["string", "null"] },
+            "buyerName": { "type": ["string", "null"] },
+            "items": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "gradeRaw": { "type": "string" },
+                  "quantity": { "type": ["number", "null"] },
+                  "unit": { "type": ["string", "null"] },
+                  "rate": { "type": ["number", "null"] },
+                  "amount": { "type": ["number", "null"] }
+                },
+                "required": [ "gradeRaw" ]
+              }
+            },
+            "deductions": {
+              "type": "object",
+              "properties": {
+                "commission": { "type": "number" },
+                "transport": { "type": "number" },
+                "other": { "type": "number" }
+              }
+            },
+            "grossTotal": { "type": "number" },
+            "netAmount": { "type": "number" },
+            "confidence": { "type": "number" }
+          },
+          "required": [ "items", "deductions", "grossTotal", "netAmount" ]
+        }
+        """;
+
+        return JsonSerializer.Deserialize<JsonElement>(schema);
+    }
+
+    private static bool LooksMeaningfulReceiptResult(string normalizedJson)
+    {
+        try
+        {
+            using var document = JsonDocument.Parse(normalizedJson);
+            var root = document.RootElement;
+
+            if (root.TryGetProperty("lineItems", out var items) &&
+                items.ValueKind == JsonValueKind.Array &&
+                items.GetArrayLength() > 0)
+            {
+                return true;
+            }
+
+            if (root.TryGetProperty("grandTotal", out var grandTotal) &&
+                grandTotal.ValueKind == JsonValueKind.Number &&
+                grandTotal.TryGetDecimal(out var total) &&
+                total > 0m)
+            {
+                return true;
+            }
+
+            if (root.TryGetProperty("vendorName", out var vendorName) &&
+                vendorName.ValueKind == JsonValueKind.String &&
+                !string.IsNullOrWhiteSpace(vendorName.GetString()))
+            {
+                return true;
+            }
+
+            return root.TryGetProperty("rawTextExtracted", out var rawText) &&
+                   rawText.ValueKind == JsonValueKind.String &&
+                   !string.IsNullOrWhiteSpace(rawText.GetString());
+        }
+        catch (JsonException)
+        {
+            return false;
+        }
+    }
+
+    private static bool LooksMeaningfulPattiResult(string normalizedJson)
+    {
+        try
+        {
+            using var document = JsonDocument.Parse(normalizedJson);
+            var root = document.RootElement;
+
+            if (root.TryGetProperty("items", out var items) &&
+                items.ValueKind == JsonValueKind.Array &&
+                items.GetArrayLength() > 0)
+            {
+                return true;
+            }
+
+            if (root.TryGetProperty("netAmount", out var netAmount) &&
+                netAmount.ValueKind == JsonValueKind.Number &&
+                netAmount.TryGetDecimal(out var amount) &&
+                amount > 0m)
+            {
+                return true;
+            }
+
+            return root.TryGetProperty("buyerName", out var buyerName) &&
+                   buyerName.ValueKind == JsonValueKind.String &&
+                   !string.IsNullOrWhiteSpace(buyerName.GetString());
+        }
+        catch (JsonException)
+        {
+            return false;
+        }
     }
 }

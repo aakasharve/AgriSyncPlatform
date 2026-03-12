@@ -1,5 +1,6 @@
 using System.Security.Claims;
 using AgriSync.BuildingBlocks.Results;
+using Microsoft.AspNetCore.RateLimiting;
 using User.Application.UseCases.Auth.Login;
 using User.Application.UseCases.Auth.RefreshToken;
 using User.Application.UseCases.Auth.RegisterUser;
@@ -12,8 +13,9 @@ public static class AuthEndpoints
     public static IEndpointRouteBuilder MapAuthEndpoints(this IEndpointRouteBuilder endpoints)
     {
         var group = endpoints.MapGroup("/user/auth").WithTags("Auth");
+        var publicGroup = group.MapGroup(string.Empty).RequireRateLimiting("auth");
 
-        group.MapPost("/register", async (
+        publicGroup.MapPost("/register", async (
             RegisterRequest request,
             RegisterUserHandler handler,
             CancellationToken ct) =>
@@ -47,7 +49,7 @@ public static class AuthEndpoints
         .WithName("RegisterUser")
         .AllowAnonymous();
 
-        group.MapPost("/login", async (
+        publicGroup.MapPost("/login", async (
             LoginRequest request,
             LoginHandler handler,
             CancellationToken ct) =>
@@ -69,7 +71,7 @@ public static class AuthEndpoints
         .WithName("LoginUser")
         .AllowAnonymous();
 
-        group.MapPost("/refresh", async (
+        publicGroup.MapPost("/refresh", async (
             RefreshRequest request,
             RefreshTokenHandler handler,
             CancellationToken ct) =>

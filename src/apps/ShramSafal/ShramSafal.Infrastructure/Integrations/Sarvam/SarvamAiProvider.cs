@@ -19,9 +19,9 @@ internal sealed class SarvamAiProvider(
 
     public bool CanHandle(AiOperationType operation)
     {
-        return operation is AiOperationType.VoiceToStructuredLog
-            or AiOperationType.ReceiptToExpenseItems
-            or AiOperationType.PattiImageToSaleData;
+        return operation is AiOperationType.VoiceToStructuredLog or
+               AiOperationType.ReceiptToExpenseItems or
+               AiOperationType.PattiImageToSaleData;
     }
 
     public async Task<bool> HealthCheckAsync(CancellationToken ct = default)
