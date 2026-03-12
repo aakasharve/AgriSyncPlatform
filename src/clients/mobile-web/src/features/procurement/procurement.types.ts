@@ -121,6 +121,9 @@ export interface ExpenseSummaryByScope {
 export interface ReceiptExtractionResponse {
     success: boolean;
     confidence: number;              // Overall confidence 0-100
+    queued?: boolean;
+    message?: string;
+    data?: null;
 
     // Extracted data
     vendorName?: string;

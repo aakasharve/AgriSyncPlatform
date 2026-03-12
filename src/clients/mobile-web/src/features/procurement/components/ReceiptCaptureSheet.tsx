@@ -47,6 +47,7 @@ export const ReceiptCaptureSheet: React.FC<Props> = ({ onClose, onSave, crops, a
     const [editedVendor, setEditedVendor] = useState<string>('');
     const [attachmentIds, setAttachmentIds] = useState<string[]>([]);
     const [attachmentCaptureError, setAttachmentCaptureError] = useState<string | null>(null);
+    const [queuedExtractionMessage, setQueuedExtractionMessage] = useState<string | null>(null);
     const [showAllocation, setShowAllocation] = useState(false);
     const [savedCostEntryId, setSavedCostEntryId] = useState<string>('');
 
@@ -110,6 +111,7 @@ export const ReceiptCaptureSheet: React.FC<Props> = ({ onClose, onSave, crops, a
     const processImage = async (base64: string) => {
         setIsExtracting(true);
         setVerificationStatus(null);
+        setQueuedExtractionMessage(null);
         setSuggestedTotal(null);
         setSuggestedVendor(null);
         setUserEditedTotal(false);
@@ -143,6 +145,12 @@ export const ReceiptCaptureSheet: React.FC<Props> = ({ onClose, onSave, crops, a
                     }
                 },
             );
+
+            if (result.queued) {
+                setExtraction(null);
+                setQueuedExtractionMessage(result.message || 'Saved locally. Will process when online.');
+                return;
+            }
 
             setExtraction(result);
             setEditedTotal(result.grandTotal || 0);
@@ -273,6 +281,11 @@ export const ReceiptCaptureSheet: React.FC<Props> = ({ onClose, onSave, crops, a
                             {!attachmentCaptureError && attachmentIds.length > 0 && (
                                 <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-700">
                                     Attachment queued for background upload.
+                                </div>
+                            )}
+                            {queuedExtractionMessage && (
+                                <div className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-xs font-semibold text-blue-700">
+                                    {queuedExtractionMessage}
                                 </div>
                             )}
 

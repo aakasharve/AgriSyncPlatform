@@ -24,7 +24,12 @@ async function resolveFarmIdFromCache(): Promise<string | undefined> {
 
 function base64ToBlob(base64: string, mimeType: string): Blob {
     const normalized = base64.includes(',') ? base64.split(',')[1] : base64;
-    const binaryString = atob(normalized);
+    let binaryString: string;
+    try {
+        binaryString = atob(normalized);
+    } catch {
+        throw new Error('Invalid base64 image data');
+    }
     const bytes = new Uint8Array(binaryString.length);
     for (let i = 0; i < binaryString.length; i++) {
         bytes[i] = binaryString.charCodeAt(i);

@@ -91,7 +91,12 @@ function extractMimeType(base64: string): string {
 
 function base64ToBlob(base64: string, mimeType: string): Blob {
     const normalized = base64.includes(',') ? base64.split(',')[1] : base64;
-    const binaryString = atob(normalized);
+    let binaryString: string;
+    try {
+        binaryString = atob(normalized);
+    } catch {
+        throw new Error('Invalid base64 image data');
+    }
     const bytes = new Uint8Array(binaryString.length);
 
     for (let i = 0; i < binaryString.length; i++) {
@@ -99,6 +104,34 @@ function base64ToBlob(base64: string, mimeType: string): Blob {
     }
 
     return new Blob([bytes], { type: mimeType });
+}
+
+async function queueOfflineReceiptJob(
+    blob: Blob,
+    mimeType: string,
+    farmId: string,
+    userId: string,
+    idempotencyKey: string,
+    requestPayloadHash: string,
+): Promise<void> {
+    const nowIso = new Date().toISOString();
+    const db = getDatabase();
+    await db.pendingAiJobs.add({
+        operationType: 'receipt_extract',
+        inputBlob: blob,
+        inputMimeType: mimeType,
+        context: {
+            farmId,
+            userId,
+            operation: 'receipt',
+            idempotencyKey,
+            requestPayloadHash,
+        },
+        status: 'pending',
+        createdAt: nowIso,
+        updatedAt: nowIso,
+        retryCount: 0,
+    });
 }
 
 function ensureRecord(value: unknown): UnknownRecord {
@@ -335,6 +368,9 @@ export const extractReceiptWithSession = async (
     } catch {
         // Session API failed — fall back to legacy direct extraction
         const fallback = await extractReceiptData(imageBase64);
+        if (fallback.queued) {
+            return fallback;
+        }
         if (!hasMeaningfulReceiptExtraction(fallback)) {
             throw new Error('Receipt OCR returned no usable data.');
         }
@@ -377,27 +413,13 @@ export const extractReceiptData = async (imageBase64: string): Promise<ReceiptEx
     const idempotencyKey = keyMaterial.idempotencyKey;
 
     if (!navigator.onLine) {
-        const nowIso = new Date().toISOString();
-        const db = getDatabase();
-        await db.pendingAiJobs.add({
-            operationType: 'receipt_extract',
-            inputBlob: blob,
-            inputMimeType: mimeType,
-            context: {
-                farmId,
-                userId,
-                operation: 'receipt',
-                idempotencyKey,
-                requestPayloadHash,
-            },
-            status: 'pending',
-            createdAt: nowIso,
-            updatedAt: nowIso,
-            retryCount: 0,
-        });
+        await queueOfflineReceiptJob(blob, mimeType, farmId, userId, idempotencyKey, requestPayloadHash);
 
         return {
             success: false,
+            queued: true,
+            message: 'Saved locally. Will process when online.',
+            data: null,
             confidence: 0,
             date: getDateKey(),
             lineItems: [],

@@ -44,7 +44,8 @@ export class AiJobWorker {
         const db = getDatabase();
         const pendingJobs = await db.pendingAiJobs
             .where('status')
-            .equals('pending')
+            .anyOf('pending', 'failed')
+            .filter(job => !job.nextRetryAfterMs || job.nextRetryAfterMs <= Date.now())
             .toArray();
 
         const jobsToProcess = pendingJobs
@@ -70,6 +71,7 @@ export class AiJobWorker {
             status: 'processing',
             updatedAt: processingAt,
             lastError: undefined,
+            nextRetryAfterMs: undefined,
         });
 
         try {
@@ -79,16 +81,20 @@ export class AiJobWorker {
                 status: 'completed',
                 updatedAt: systemClock.nowISO(),
                 lastError: undefined,
+                nextRetryAfterMs: undefined,
             });
         } catch (error) {
             const nextRetryCount = job.retryCount + 1;
             const isPermanentFailure = nextRetryCount >= MAX_RETRIES;
+            const backoffMs = Math.min(1000 * Math.pow(2, nextRetryCount), 60000);
+            const nextRetryAfterMs = Date.now() + backoffMs;
 
             await db.pendingAiJobs.update(job.id, {
                 status: isPermanentFailure ? 'failed_permanent' : 'failed',
                 retryCount: nextRetryCount,
                 updatedAt: systemClock.nowISO(),
                 lastError: getErrorMessage(error),
+                nextRetryAfterMs,
             });
 
             if (isPermanentFailure) {
