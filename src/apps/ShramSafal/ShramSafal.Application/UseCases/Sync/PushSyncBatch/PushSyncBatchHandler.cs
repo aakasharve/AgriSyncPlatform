@@ -1,7 +1,10 @@
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using AgriSync.BuildingBlocks.Abstractions;
 using AgriSync.BuildingBlocks.Results;
 using AgriSync.SharedKernel.Contracts.Roles;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Storage;
 using ShramSafal.Application.Contracts.Dtos;
 using ShramSafal.Application.Ports;
 using ShramSafal.Application.UseCases.Attachments.CreateAttachment;
@@ -24,6 +27,7 @@ public sealed class PushSyncBatchHandler(
     IClock clock,
     ISyncMutationStore syncMutationStore,
     IShramSafalRepository repository,
+    DbContext dbContext,
     CreateFarmHandler createFarmHandler,
     CreatePlotHandler createPlotHandler,
     CreateCropCycleHandler createCropCycleHandler,
@@ -40,6 +44,10 @@ public sealed class PushSyncBatchHandler(
     {
         PropertyNameCaseInsensitive = true
     };
+    private static readonly Regex DeviceIdPattern = new(
+        "^[a-zA-Z0-9\\-_]+$",
+        RegexOptions.Compiled | RegexOptions.CultureInvariant,
+        TimeSpan.FromMilliseconds(100));
 
     public async Task<Result<SyncPushResponseDto>> HandleAsync(PushSyncBatchCommand command, CancellationToken ct = default)
     {
@@ -53,103 +61,135 @@ public sealed class PushSyncBatchHandler(
             : command.ActorRole.Trim();
         var mutations = command.Mutations ?? [];
         var normalizedDeviceId = command.DeviceId.Trim();
+        if (normalizedDeviceId.Length > 128 || !DeviceIdPattern.IsMatch(normalizedDeviceId))
+        {
+            return Result.Failure<SyncPushResponseDto>(Domain.Common.ShramSafalErrors.InvalidCommand);
+        }
+
         var results = new List<SyncMutationResultDto>(mutations.Count);
 
         foreach (var mutation in mutations)
         {
-            var clientRequestId = mutation.ClientRequestId?.Trim();
-            var mutationType = mutation.MutationType?.Trim();
+            results.Add(await ProcessMutationAsync(
+                normalizedDeviceId,
+                mutation,
+                command.AuthenticatedUserId,
+                actorRole,
+                ct));
+        }
 
-            if (string.IsNullOrWhiteSpace(clientRequestId) || string.IsNullOrWhiteSpace(mutationType))
-            {
-                results.Add(new SyncMutationResultDto(
-                    mutation.ClientRequestId ?? string.Empty,
-                    mutation.MutationType ?? string.Empty,
-                    "failed",
-                    null,
-                    Domain.Common.ShramSafalErrors.InvalidCommand.Code,
-                    "Each mutation must contain clientRequestId and mutationType."));
-                continue;
-            }
+        return Result.Success(new SyncPushResponseDto(clock.UtcNow, results));
+    }
 
-            var existing = await syncMutationStore.GetAsync(normalizedDeviceId, clientRequestId, ct);
-            if (existing is not null)
+    private async Task<SyncMutationResultDto> ProcessMutationAsync(
+        string deviceId,
+        PushSyncMutationCommand mutation,
+        Guid actorUserId,
+        string actorRole,
+        CancellationToken ct)
+    {
+        var clientRequestId = mutation.ClientRequestId?.Trim();
+        var mutationType = mutation.MutationType?.Trim();
+
+        if (string.IsNullOrWhiteSpace(clientRequestId) || string.IsNullOrWhiteSpace(mutationType))
+        {
+            return CreateFailedResult(
+                mutation.ClientRequestId ?? string.Empty,
+                mutation.MutationType ?? string.Empty,
+                Domain.Common.ShramSafalErrors.InvalidCommand.Code,
+                "Each mutation must contain clientRequestId and mutationType.");
+        }
+
+        var existing = await syncMutationStore.GetAsync(deviceId, clientRequestId, ct);
+        if (existing is not null)
+        {
+            return CreateDuplicateResult(clientRequestId, mutationType, existing);
+        }
+
+        await using var transaction = await BeginTransactionIfSupportedAsync(ct);
+
+        try
+        {
+            var persistedBeforeExecution = await syncMutationStore.GetAsync(deviceId, clientRequestId, ct);
+            if (persistedBeforeExecution is not null)
             {
-                results.Add(new SyncMutationResultDto(
-                    clientRequestId,
-                    mutationType,
-                    "duplicate",
-                    DeserializeStoredPayload(existing.ResponsePayloadJson),
-                    null,
-                    null));
-                continue;
+                await RollbackAsync(transaction, ct);
+                return CreateDuplicateResult(clientRequestId, mutationType, persistedBeforeExecution);
             }
 
             var execution = await ExecuteMutationAsync(
-                normalizedDeviceId,
+                deviceId,
                 clientRequestId,
                 mutationType,
                 mutation.Payload,
-                command.AuthenticatedUserId,
+                actorUserId,
                 actorRole,
                 ct);
 
             if (!execution.IsSuccess)
             {
-                results.Add(new SyncMutationResultDto(
-                    clientRequestId,
-                    mutationType,
-                    "failed",
-                    null,
-                    execution.ErrorCode,
-                    execution.ErrorMessage));
-                continue;
+                await RollbackAsync(transaction, ct);
+                return CreateFailedResult(clientRequestId, mutationType, execution.ErrorCode, execution.ErrorMessage);
             }
 
             var responsePayloadJson = JsonSerializer.Serialize(execution.Data, SerializerOptions);
             var stored = await syncMutationStore.TryStoreSuccessAsync(
-                normalizedDeviceId,
+                deviceId,
                 clientRequestId,
                 mutationType,
                 responsePayloadJson,
                 clock.UtcNow,
                 ct);
 
-            if (stored)
+            if (!stored)
             {
-                results.Add(new SyncMutationResultDto(
-                    clientRequestId,
-                    mutationType,
-                    "applied",
-                    execution.Data,
-                    null,
-                    null));
-                continue;
+                await RollbackAsync(transaction, ct);
+                dbContext.ChangeTracker.Clear();
+                return await ResolveDuplicateOrStoreFailureAsync(deviceId, clientRequestId, mutationType, ct);
             }
 
-            var deduplicated = await syncMutationStore.GetAsync(normalizedDeviceId, clientRequestId, ct);
+            if (transaction is not null)
+            {
+                await transaction.CommitAsync(ct);
+            }
+
+            return CreateAppliedResult(clientRequestId, mutationType, execution.Data);
+        }
+        catch (DbUpdateException)
+        {
+            await RollbackAsync(transaction, ct);
+            dbContext.ChangeTracker.Clear();
+
+            var deduplicated = await syncMutationStore.GetAsync(deviceId, clientRequestId, ct);
             if (deduplicated is not null)
             {
-                results.Add(new SyncMutationResultDto(
-                    clientRequestId,
-                    mutationType,
-                    "duplicate",
-                    DeserializeStoredPayload(deduplicated.ResponsePayloadJson),
-                    null,
-                    null));
-                continue;
+                return CreateDuplicateResult(clientRequestId, mutationType, deduplicated);
             }
 
-            results.Add(new SyncMutationResultDto(
-                clientRequestId,
-                mutationType,
-                "failed",
-                null,
-                "ShramSafal.SyncMutationStoreError",
-                "Mutation was applied but could not be persisted in sync mutation store."));
+            throw;
+        }
+        finally
+        {
+            dbContext.ChangeTracker.Clear();
+        }
+    }
+
+    private async Task<IDbContextTransaction?> BeginTransactionIfSupportedAsync(CancellationToken ct)
+    {
+        if (!dbContext.Database.IsRelational())
+        {
+            return null;
         }
 
-        return Result.Success(new SyncPushResponseDto(clock.UtcNow, results));
+        return await dbContext.Database.BeginTransactionAsync(ct);
+    }
+
+    private static async Task RollbackAsync(IDbContextTransaction? transaction, CancellationToken ct)
+    {
+        if (transaction is not null)
+        {
+            await transaction.RollbackAsync(ct);
+        }
     }
 
     private async Task<MutationExecutionOutcome> ExecuteMutationAsync(
@@ -754,6 +794,59 @@ public sealed class PushSyncBatchHandler(
 
         using var document = JsonDocument.Parse(payloadJson);
         return document.RootElement.Clone();
+    }
+
+    private static SyncMutationResultDto CreateAppliedResult(string clientRequestId, string mutationType, object? data)
+    {
+        return new SyncMutationResultDto(clientRequestId, mutationType, "applied", data, null, null);
+    }
+
+    private static SyncMutationResultDto CreateDuplicateResult(
+        string clientRequestId,
+        string mutationType,
+        StoredSyncMutation storedMutation)
+    {
+        return new SyncMutationResultDto(
+            clientRequestId,
+            mutationType,
+            "duplicate",
+            DeserializeStoredPayload(storedMutation.ResponsePayloadJson),
+            null,
+            null);
+    }
+
+    private static SyncMutationResultDto CreateFailedResult(
+        string clientRequestId,
+        string mutationType,
+        string? errorCode,
+        string? errorMessage)
+    {
+        return new SyncMutationResultDto(
+            clientRequestId,
+            mutationType,
+            "failed",
+            null,
+            errorCode,
+            errorMessage);
+    }
+
+    private async Task<SyncMutationResultDto> ResolveDuplicateOrStoreFailureAsync(
+        string deviceId,
+        string clientRequestId,
+        string mutationType,
+        CancellationToken ct)
+    {
+        var deduplicated = await syncMutationStore.GetAsync(deviceId, clientRequestId, ct);
+        if (deduplicated is not null)
+        {
+            return CreateDuplicateResult(clientRequestId, mutationType, deduplicated);
+        }
+
+        return CreateFailedResult(
+            clientRequestId,
+            mutationType,
+            "ShramSafal.SyncMutationStoreError",
+            "Mutation was rolled back because the sync mutation store could not persist the deduplication record.");
     }
 
     private static MutationExecutionOutcome ToOutcome<T>(Result<T> result)
