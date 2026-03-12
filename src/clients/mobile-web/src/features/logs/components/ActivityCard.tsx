@@ -1319,7 +1319,7 @@ const ActivityCard: React.FC<ActivityCardProps> = ({
     profile,
     currentPlot,
     cropContractUnit,
-    expenses = [],
+    expenses: rawExpenses = [],
     onAddExpense,
     onUpdateExpenses,
     onDeleteExpense,
@@ -1332,6 +1332,10 @@ const ActivityCard: React.FC<ActivityCardProps> = ({
     todayLogs = [] // NEW: Destructure todayLogs with default
 }: ActivityCardProps & { onUpdateIssue?: (issue: BucketIssue | undefined) => void }) => {
     const [refiningItem, setRefiningItem] = useState<{ name: string; mode: 'manual' | 'voice' } | null>(null);
+    const expenses = rawExpenses.map((expense) => ({
+        ...expense,
+        totalAmount: expense.totalAmount ?? 0,
+    }));
     const [refineValue, setRefineValue] = useState('');
     // ActivityCard Props Update: onRename removed, onUpdateWorkTypes added.
 
@@ -1390,7 +1394,7 @@ const ActivityCard: React.FC<ActivityCardProps> = ({
     };
 
     const getDailyExpenseTotal = () => {
-        return plotTodayLogs.reduce((acc, l) => acc + (l.activityExpenses?.reduce((sum, e) => sum + e.totalAmount, 0) || 0), 0);
+        return plotTodayLogs.reduce((acc, l) => acc + (l.activityExpenses?.reduce((sum, e) => sum + (e.totalAmount ?? 0), 0) || 0), 0);
     };
 
     const getDailyWorkList = () => {

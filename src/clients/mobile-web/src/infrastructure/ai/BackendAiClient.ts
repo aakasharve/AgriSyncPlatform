@@ -76,7 +76,7 @@ function resolveUserIdFromSession(): string {
     return 'unknown-user';
 }
 
-function getAudioContextCtor(): (new(...args: unknown[]) => AudioContext) | null {
+function getAudioContextCtor(): typeof AudioContext | null {
     if (typeof AudioContext !== 'undefined') {
         return AudioContext;
     }

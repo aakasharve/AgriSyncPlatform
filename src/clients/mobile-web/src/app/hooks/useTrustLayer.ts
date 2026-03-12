@@ -37,8 +37,7 @@ export const useTrustLayer = ({
             return {
                 ...log,
                 verification: {
-                    ...log.verification,
-                    status: log.verification?.status ?? LogVerificationStatus.DRAFT,
+                    status,
                     verifiedByOperatorId: farmerProfile.activeOperatorId,
                     notes: notes ? `${notes} (pending sync)` : 'Pending sync',
                     required: true
@@ -60,7 +59,9 @@ export const useTrustLayer = ({
                     return {
                         ...log,
                         verification: {
-                            ...log.verification,
+                            status: log.verification?.status ?? LogVerificationStatus.DRAFT,
+                            verifiedByOperatorId: log.verification?.verifiedByOperatorId,
+                            verifiedAtISO: log.verification?.verifiedAtISO,
                             notes: result.error || 'Verification failed',
                             required: true
                         }

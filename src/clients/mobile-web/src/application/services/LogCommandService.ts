@@ -167,7 +167,8 @@ export class LogCommandServiceImpl implements LogCommandService {
     // --- PRIVATE HELPERS ---
 
     private async enrichWithWeather(logs: DailyLog[], crops: CropProfile[], profile: FarmerProfile) {
-        if (!this.weatherProvider) return;
+        const weatherProvider = this.weatherProvider;
+        if (!weatherProvider) return;
 
         await Promise.all(logs.map(async (log) => {
             if (log.context.selection[0].selectedPlotIds.length > 0) {
@@ -177,7 +178,7 @@ export class LogCommandServiceImpl implements LogCommandService {
                 if (plot) {
                     try {
                         const geo = plot.geo || { lat: profile.location?.lat || 0, lon: profile.location?.lon || 0, source: 'approx' };
-                        const stamp = await getWeatherForLocation(geo, this.weatherProvider);
+                        const stamp = await getWeatherForLocation(geo, weatherProvider);
                         stamp.plotId = plotId;
                         log.weatherStamp = stamp;
                     } catch (e) { console.error("Weather enrichment failed", e); }

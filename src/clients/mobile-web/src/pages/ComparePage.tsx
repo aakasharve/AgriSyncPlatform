@@ -518,12 +518,12 @@ export const ComparePage: React.FC<Props> = ({ plots = [], crops = [], logs = []
                 const plannedNames: string[] = [];
 
                 plannedForDay.forEach(planned => {
-                    const matchedExecution = planned.matchedExecutionId
-                        ? executedByCategoryId[category].get(planned.matchedExecutionId)
+                    const matchedExecutionId = planned.matchedExecutionId;
+                    const matchedExecution = matchedExecutionId
+                        ? executedByCategoryId[category].get(matchedExecutionId)
                         : undefined;
 
-                    const executedMatch = executedByCategoryId[category].get(planned.matchedExecutionId) as ExecutedItem | undefined;
-                    if (matchedExecution && executedMatch && executedMatch.executedDay === day) {
+                    if (matchedExecution && matchedExecution.executedDay === day) {
                         doneNames.push(planned.name);
                         return;
                     }
@@ -538,9 +538,8 @@ export const ComparePage: React.FC<Props> = ({ plots = [], crops = [], logs = []
                         return;
                     }
 
-                    const executedMatchAfter = executedByCategoryId[category].get(planned.matchedExecutionId) as ExecutedItem | undefined;
-                    if (matchedExecution && executedMatchAfter && executedMatchAfter.executedDay > day) {
-                        missedNames.push(`${planned.name} (done Day ${executedMatchAfter.executedDay})`);
+                    if (matchedExecution && matchedExecution.executedDay > day) {
+                        missedNames.push(`${planned.name} (done Day ${matchedExecution.executedDay})`);
                         return;
                     }
 

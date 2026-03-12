@@ -40,6 +40,7 @@
   "devDependencies": {
     "@types/google.maps": "^3.58.1",
     "@types/node": "^22.14.0",
+    "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^5.0.0",
     "dotenv": "^17.2.3",
     "rimraf": "^6.0.1",

@@ -106,6 +106,7 @@ export class BackgroundSyncWorker {
             return this.currentCycle;
         }
 
+        const syncCycleId = crypto.randomUUID();
         this.currentCycle = this.currentCycle
             .then(async () => {
                 if (!this.isRunning && !forceRun) {
@@ -119,7 +120,16 @@ export class BackgroundSyncWorker {
                 await this.executeCycle();
             })
             .catch((error) => {
-                console.error('[BackgroundSyncWorker] Sync cycle failed', error);
+                console.error(JSON.stringify({
+                    level: 'error',
+                    component: 'BackgroundSyncWorker',
+                    syncCycleId,
+                    message: 'Sync cycle failed',
+                    error: error instanceof Error
+                        ? { message: error.message, stack: error.stack }
+                        : String(error),
+                    timestamp: new Date().toISOString(),
+                }));
             });
 
         return this.currentCycle;

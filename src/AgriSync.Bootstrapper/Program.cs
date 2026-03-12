@@ -163,6 +163,7 @@ try
     if (app.Environment.IsDevelopment())
     {
         ConfigureDevelopmentSwagger(app);
+        // HARDENING: verified — these endpoints are unreachable in Production
         MapDevelopmentOnlyTestEndpoints(app);
     }
 

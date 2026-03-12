@@ -84,7 +84,7 @@ registerProcessor('${WORKLET_PROCESSOR_NAME}', AgriSyncSilenceDetectorProcessor)
 `;
 }
 
-function resolveAudioContextCtor(): (new (...args: unknown[]) => AudioContext) | null {
+function resolveAudioContextCtor(): typeof AudioContext | null {
     if (typeof AudioContext !== 'undefined') {
         return AudioContext;
     }
