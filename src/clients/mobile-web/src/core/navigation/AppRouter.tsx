@@ -5,38 +5,16 @@ import {
     DetailedWeather, WeatherEvent, WeatherReaction, ResourceItem,
     FarmContext, LogScope, AgriLogResponse, LogVerificationStatus
 } from '../../types';
-
-// Page Imports
-import ProfilePage from '../../pages/ProfilePage';
-import SettingsPage from '../../pages/SettingsPage';
-import SchedulerPage from '../../pages/SchedulerPage';
-import ProcurementPage from '../../pages/ProcurementPage';
-import HarvestIncomePage from '../../pages/HarvestIncomePage';
-import ReflectPage from '../../pages/ReflectPage';
-import TestE2EPage from '../../pages/TestE2EPage';
-import { ComparePage } from '../../pages/ComparePage';
-import FinanceManagerHome from '../../pages/FinanceManagerHome';
-import LedgerPage from '../../pages/LedgerPage';
-import PriceBookPage from '../../pages/PriceBookPage';
-import ReviewInboxPage from '../../pages/ReviewInboxPage';
-import ReportsPage from '../../pages/ReportsPage';
-import FinanceSettingsPage from '../../pages/FinanceSettingsPage';
-import { AdminAiOpsPage } from '../../features/admin/ai/AdminAiOpsPage';
 import CropSelector from '../../features/context/components/CropSelector';
 import InputMethodToggle from '../../shared/components/ui/InputMethodToggle';
 import AudioRecorder from '../../features/voice/components/AudioRecorder';
 import ManualEntry from '../../features/logs/components/ManualEntry';
 import DailyLogCard from '../../features/logs/components/DailyLogCard';
-import TaskCreationSheet from '../../features/scheduler/components/TaskCreationSheet';
 import { Leaf } from 'lucide-react';
 import { getSegmentVisual } from '../../shared/utils/uiUtils'; // We might need to extract this helper too
 import { getDateKey } from '../domain/services/DateKeyService';
 import { buildTimelineEntries } from '../../services/transcriptTimelineService';
-import LogWizardContainer from '../../features/logs/components/wizard/LogWizardContainer';
-import ReviewInboxSheet from '../../features/logs/components/ReviewInboxSheet';
-import { QuickLogSheet } from '../../features/logs/components/QuickLogSheet';
 import WeatherWidget from '../../features/weather/components/WeatherWidget';
-import OnboardingPermissionsPage from '../../pages/OnboardingPermissionsPage';
 import {
     computeDayState,
     formatCurrencyINR
@@ -53,6 +31,27 @@ import {
     useAppVoiceState,
     useAppWeatherState
 } from '../../app/context/AppFeatureContexts';
+
+const ProfilePage = React.lazy(() => import('../../pages/ProfilePage'));
+const SettingsPage = React.lazy(() => import('../../pages/SettingsPage'));
+const SchedulerPage = React.lazy(() => import('../../pages/SchedulerPage'));
+const ProcurementPage = React.lazy(() => import('../../pages/ProcurementPage'));
+const HarvestIncomePage = React.lazy(() => import('../../pages/HarvestIncomePage'));
+const ReflectPage = React.lazy(() => import('../../pages/ReflectPage'));
+const TestE2EPage = React.lazy(() => import('../../pages/TestE2EPage'));
+const ComparePage = React.lazy(() => import('../../pages/ComparePage').then(module => ({ default: module.ComparePage })));
+const FinanceManagerHome = React.lazy(() => import('../../pages/FinanceManagerHome'));
+const LedgerPage = React.lazy(() => import('../../pages/LedgerPage'));
+const PriceBookPage = React.lazy(() => import('../../pages/PriceBookPage'));
+const ReviewInboxPage = React.lazy(() => import('../../pages/ReviewInboxPage'));
+const ReportsPage = React.lazy(() => import('../../pages/ReportsPage'));
+const FinanceSettingsPage = React.lazy(() => import('../../pages/FinanceSettingsPage'));
+const AdminAiOpsPage = React.lazy(() => import('../../features/admin/ai/AdminAiOpsPage').then(module => ({ default: module.AdminAiOpsPage })));
+const TaskCreationSheet = React.lazy(() => import('../../features/scheduler/components/TaskCreationSheet'));
+const LogWizardContainer = React.lazy(() => import('../../features/logs/components/wizard/LogWizardContainer'));
+const ReviewInboxSheet = React.lazy(() => import('../../features/logs/components/ReviewInboxSheet'));
+const QuickLogSheet = React.lazy(() => import('../../features/logs/components/QuickLogSheet').then(module => ({ default: module.QuickLogSheet })));
+const OnboardingPermissionsPage = React.lazy(() => import('../../pages/OnboardingPermissionsPage'));
 
 type FeedStatusTone = 'pending' | 'rejected' | 'approved';
 
@@ -151,6 +150,12 @@ const getSummaryLines = (log: DailyLog): string[] => {
 
     return lines.slice(0, 3).map(line => truncateLine(line));
 };
+
+const RouteLoader: React.FC = () => (
+    <div className="flex min-h-[40vh] items-center justify-center text-sm font-semibold text-stone-400">
+        Loading...
+    </div>
+);
 
 const AppRouter: React.FC = () => {
     const navigation = useAppNavigationState();
@@ -399,10 +404,15 @@ const AppRouter: React.FC = () => {
     }, [setCurrentRoute, setMainView, todayDayState.unverifiedCount]);
 
     if (!permissionsGranted) {
-        return <OnboardingPermissionsPage onComplete={() => setPermissionsGranted(true)} />;
+        return (
+            <React.Suspense fallback={<RouteLoader />}>
+                <OnboardingPermissionsPage onComplete={() => setPermissionsGranted(true)} />
+            </React.Suspense>
+        );
     }
 
     return (
+        <React.Suspense fallback={<RouteLoader />}>
         <div className="relative w-full">
             {currentRoute === 'profile' && (
                 <div className="animate-in fade-in slide-in-from-left-4 duration-300">
@@ -1077,6 +1087,7 @@ const AppRouter: React.FC = () => {
                 )
             }
         </div >
+        </React.Suspense>
     );
 };
 
