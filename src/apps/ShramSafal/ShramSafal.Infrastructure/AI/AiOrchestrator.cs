@@ -193,13 +193,20 @@ internal sealed class AiOrchestrator(
         var existing = await aiJobRepository.GetByIdempotencyKeyAsync(key, ct);
         if (existing is not null &&
             existing.Status is AiJobStatus.Succeeded or AiJobStatus.FallbackSucceeded &&
-            !string.IsNullOrWhiteSpace(existing.NormalizedResultJson))
+            !string.IsNullOrWhiteSpace(existing.NormalizedResultJson) &&
+            !IsEmptyJsonObject(existing.NormalizedResultJson))
         {
+            var cachedConfidence =
+                TryReadJsonDecimal(existing.NormalizedResultJson, "confidence") ??
+                existing.Attempts.LastOrDefault(x => x.IsSuccess)?.ConfidenceScore ??
+                0.70m;
+
             return (
                 new ReceiptExtractCanonicalResult
                 {
                     Success = true,
-                    NormalizedJson = existing.NormalizedResultJson
+                    NormalizedJson = existing.NormalizedResultJson,
+                    OverallConfidence = cachedConfidence
                 },
                 existing.Id,
                 existing.Attempts.LastOrDefault(x => x.IsSuccess)?.Provider ?? AiProviderType.Gemini,
@@ -454,6 +461,14 @@ internal sealed class AiOrchestrator(
                 var failureClass = failureClassifier.ClassifyProviderError(result.Error);
                 attempt.RecordFailure(failureClass, result.Error ?? "Provider call failed.", result.NormalizedJson, latencyMs);
                 attempt.SetEstimatedCostUnits(estimatedCost);
+                logger.LogWarning(
+                    "AI provider {ProviderType} returned failure for {Operation} job {JobId} after {LatencyMs}ms. FailureClass={FailureClass}. Error={Error}",
+                    provider.ProviderType,
+                    AiOperationType.VoiceToStructuredLog,
+                    job.Id,
+                    latencyMs,
+                    failureClass,
+                    result.Error ?? "Provider call failed.");
                 breaker.RecordFailure();
                 return VoiceAttemptExecution.Failed(provider.ProviderType, failureClass, result.Error, attempt);
             }
@@ -466,6 +481,14 @@ internal sealed class AiOrchestrator(
                     result.NormalizedJson,
                     latencyMs);
                 attempt.SetEstimatedCostUnits(estimatedCost);
+                logger.LogWarning(
+                    "AI provider {ProviderType} returned low confidence for {Operation} job {JobId} after {LatencyMs}ms. Confidence={Confidence} Threshold={Threshold}",
+                    provider.ProviderType,
+                    AiOperationType.VoiceToStructuredLog,
+                    job.Id,
+                    latencyMs,
+                    result.OverallConfidence,
+                    config.VoiceConfidenceThreshold);
                 breaker.RecordFailure();
                 return VoiceAttemptExecution.Failed(provider.ProviderType, AiFailureClass.LowConfidence, "Low confidence.", attempt, result);
             }
@@ -477,11 +500,18 @@ internal sealed class AiOrchestrator(
         }
         catch (Exception ex)
         {
-            logger.LogWarning(ex, "AI provider {ProviderType} failed for job {JobId}.", provider.ProviderType, job.Id);
             var failureClass = failureClassifier.ClassifyException(ex);
             var latencyMs = ToLatencyMs(stopwatch.Elapsed);
             attempt.RecordFailure(failureClass, ex.Message, null, latencyMs);
             attempt.SetEstimatedCostUnits(estimatedCost);
+            logger.LogWarning(
+                ex,
+                "AI provider {ProviderType} threw for {Operation} job {JobId} after {LatencyMs}ms. FailureClass={FailureClass}",
+                provider.ProviderType,
+                AiOperationType.VoiceToStructuredLog,
+                job.Id,
+                latencyMs,
+                failureClass);
             breaker.RecordFailure();
             return VoiceAttemptExecution.Failed(provider.ProviderType, failureClass, ex.Message, attempt);
         }
@@ -530,6 +560,14 @@ internal sealed class AiOrchestrator(
                 var failureClass = failureClassifier.ClassifyProviderError(result.Error);
                 attempt.RecordFailure(failureClass, result.Error ?? "Provider call failed.", result.NormalizedJson, latencyMs);
                 attempt.SetEstimatedCostUnits(estimatedCost);
+                logger.LogWarning(
+                    "AI provider {ProviderType} returned failure for {Operation} job {JobId} after {LatencyMs}ms. FailureClass={FailureClass}. Error={Error}",
+                    provider.ProviderType,
+                    operation,
+                    job.Id,
+                    latencyMs,
+                    failureClass,
+                    result.Error ?? "Provider call failed.");
                 breaker.RecordFailure();
                 return ReceiptAttemptExecution.Failed(provider.ProviderType, failureClass, result.Error, attempt);
             }
@@ -542,6 +580,14 @@ internal sealed class AiOrchestrator(
                     result.NormalizedJson,
                     latencyMs);
                 attempt.SetEstimatedCostUnits(estimatedCost);
+                logger.LogWarning(
+                    "AI provider {ProviderType} returned low confidence for {Operation} job {JobId} after {LatencyMs}ms. Confidence={Confidence} Threshold={Threshold}",
+                    provider.ProviderType,
+                    operation,
+                    job.Id,
+                    latencyMs,
+                    result.OverallConfidence,
+                    config.ReceiptConfidenceThreshold);
                 breaker.RecordFailure();
                 return ReceiptAttemptExecution.Failed(provider.ProviderType, AiFailureClass.LowConfidence, "Low confidence.", attempt);
             }
@@ -553,11 +599,18 @@ internal sealed class AiOrchestrator(
         }
         catch (Exception ex)
         {
-            logger.LogWarning(ex, "AI provider {ProviderType} failed for job {JobId}.", provider.ProviderType, job.Id);
             var failureClass = failureClassifier.ClassifyException(ex);
             var latencyMs = ToLatencyMs(stopwatch.Elapsed);
             attempt.RecordFailure(failureClass, ex.Message, null, latencyMs);
             attempt.SetEstimatedCostUnits(estimatedCost);
+            logger.LogWarning(
+                ex,
+                "AI provider {ProviderType} threw for {Operation} job {JobId} after {LatencyMs}ms. FailureClass={FailureClass}",
+                provider.ProviderType,
+                operation,
+                job.Id,
+                latencyMs,
+                failureClass);
             breaker.RecordFailure();
             return ReceiptAttemptExecution.Failed(provider.ProviderType, failureClass, ex.Message, attempt);
         }
@@ -684,13 +737,35 @@ internal sealed class AiOrchestrator(
                 return null;
             }
 
-            return node.ValueKind == JsonValueKind.Number && node.TryGetDecimal(out var value)
-                ? Math.Clamp(value, 0m, 1m)
-                : null;
+            if (node.ValueKind == JsonValueKind.Number && node.TryGetDecimal(out var value))
+            {
+                if (value > 1m)
+                {
+                    value /= 100m;
+                }
+
+                return Math.Clamp(value, 0m, 1m);
+            }
+
+            return null;
         }
         catch (JsonException)
         {
             return null;
+        }
+    }
+
+    private static bool IsEmptyJsonObject(string json)
+    {
+        try
+        {
+            using var document = JsonDocument.Parse(json);
+            return document.RootElement.ValueKind == JsonValueKind.Object &&
+                   !document.RootElement.EnumerateObject().Any();
+        }
+        catch (JsonException)
+        {
+            return false;
         }
     }
 

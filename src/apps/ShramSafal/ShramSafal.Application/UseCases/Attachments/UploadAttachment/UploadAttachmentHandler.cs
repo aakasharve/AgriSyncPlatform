@@ -41,7 +41,7 @@ public sealed class UploadAttachmentHandler(
 
         var nowUtc = clock.UtcNow;
         var relativePath = BuildRelativePath(attachment, nowUtc, command.ClientFileName);
-        var bytesWritten = await storageService.SaveAsync(relativePath, command.FileStream, ct);
+        var bytesWritten = await storageService.SaveAsync(relativePath, command.FileStream, attachment.MimeType, ct);
         attachment.MarkUploaded(relativePath, bytesWritten, nowUtc);
         attachment.FinalizeUpload(nowUtc);
 
@@ -74,11 +74,39 @@ public sealed class UploadAttachmentHandler(
 
     private static string BuildRelativePath(Domain.Attachments.Attachment attachment, DateTime nowUtc, string? clientFileName)
     {
-        var bucket = nowUtc.ToString("yyyy-MM", CultureInfo.InvariantCulture);
-        var extension = ResolveExtension(attachment.FileName, attachment.MimeType, clientFileName);
-        var safeName = $"{attachment.Id:N}{extension}";
+        var year = nowUtc.ToString("yyyy", CultureInfo.InvariantCulture);
+        var month = nowUtc.ToString("MM", CultureInfo.InvariantCulture);
         var farmSegment = ((Guid)attachment.FarmId).ToString("N", CultureInfo.InvariantCulture);
-        return $"attachments/{farmSegment}/{bucket}/{safeName}";
+        var attachmentSegment = attachment.Id.ToString("N", CultureInfo.InvariantCulture);
+        var safeName = ResolveSafeFileName(attachment.FileName, attachment.MimeType, clientFileName);
+        return $"attachments/{farmSegment}/{year}/{month}/{attachmentSegment}/{safeName}";
+    }
+
+    private static string ResolveSafeFileName(string fileName, string mimeType, string? clientFileName)
+    {
+        var candidate = string.IsNullOrWhiteSpace(clientFileName) ? fileName : clientFileName;
+        var nameOnly = Path.GetFileName(candidate);
+        if (string.IsNullOrWhiteSpace(nameOnly))
+        {
+            nameOnly = Path.GetFileName(fileName);
+        }
+
+        if (string.IsNullOrWhiteSpace(nameOnly))
+        {
+            nameOnly = $"attachment{ResolveExtension(fileName, mimeType, clientFileName)}";
+        }
+
+        var sanitized = new string(nameOnly
+            .Select(ch => Path.GetInvalidFileNameChars().Contains(ch) ? '_' : ch)
+            .ToArray())
+            .Trim();
+
+        if (string.IsNullOrWhiteSpace(sanitized))
+        {
+            sanitized = $"attachment{ResolveExtension(fileName, mimeType, clientFileName)}";
+        }
+
+        return sanitized;
     }
 
     private static string ResolveExtension(string fileName, string mimeType, string? clientFileName)
@@ -98,6 +126,7 @@ public sealed class UploadAttachmentHandler(
         {
             "image/jpeg" => ".jpg",
             "image/png" => ".png",
+            "image/webp" => ".webp",
             "application/pdf" => ".pdf",
             _ => string.Empty
         };

@@ -50,13 +50,15 @@ export class IdempotencyKeyFactory {
         farmId: string;
         operation: Exclude<AiOperationScope, 'voice'>;
         contentHash: string;
+        versionTag?: string;
     }): Promise<DeterministicKeyMaterial> {
         const userId = normalizePart(params.userId);
         const farmId = normalizePart(params.farmId);
         const operation = normalizePart(params.operation);
         const contentHash = normalizePart(params.contentHash);
+        const versionTag = normalizePart(params.versionTag, 'v1');
 
-        const deterministicSeed = `${userId}|${farmId}|${operation}|${contentHash}`;
+        const deterministicSeed = `${userId}|${farmId}|${operation}|${versionTag}|${contentHash}`;
         return {
             idempotencyKey: await IdempotencyKeyFactory.hashString(deterministicSeed),
             deterministicSeed,

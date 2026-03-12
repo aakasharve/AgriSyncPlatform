@@ -326,6 +326,42 @@ export interface AiDashboardResponse {
     }>;
 }
 
+// --- Document Extraction Session ---
+
+export interface ExtractionSessionDraftResponse {
+    normalizedJson: unknown;
+    overallConfidence: number;
+    jobId?: string;
+    providerUsed?: string;
+    fallbackUsed?: boolean;
+    warnings?: string[];
+}
+
+/** Response from POST /ai/document-sessions/receipt|patti */
+export interface CreateExtractionSessionResponse {
+    success: boolean;
+    sessionId: string;
+    status: string;
+    draft: ExtractionSessionDraftResponse;
+}
+
+/** Response from GET /ai/document-sessions/{sessionId} */
+export interface GetExtractionSessionResponse {
+    sessionId: string;
+    documentType: string;
+    status: string;
+    draftResult: unknown | null;
+    draftConfidence: number;
+    draftProvider: string | null;
+    draftJobId: string | null;
+    verifiedResult: unknown | null;
+    verifiedConfidence: number | null;
+    verificationProvider: string | null;
+    verificationJobId: string | null;
+    createdAtUtc: string;
+    modifiedAtUtc: string;
+}
+
 export interface UpdateAiProviderConfigRequest {
     defaultProvider?: 'Sarvam' | 'Gemini';
     fallbackEnabled?: boolean;
@@ -646,6 +682,57 @@ export class AgriSyncClient {
         if (idempotencyKey) formData.append('idempotencyKey', idempotencyKey);
 
         const response = await this.http.post<Record<string, unknown>>('/shramsafal/ai/patti-extract', formData);
+        return response.data;
+    }
+
+    async createReceiptSession(
+        farmId: string,
+        image: Blob,
+        mimeType: string,
+        idempotencyKey?: string,
+    ): Promise<CreateExtractionSessionResponse> {
+        const payload = mimeType && image.type !== mimeType
+            ? new Blob([image], { type: mimeType })
+            : image;
+        const formData = new FormData();
+        formData.append('image', payload, 'receipt-image.jpg');
+        formData.append('farmId', farmId);
+        if (idempotencyKey) formData.append('idempotencyKey', idempotencyKey);
+
+        const response = await this.http.post<CreateExtractionSessionResponse>(
+            '/shramsafal/ai/document-sessions/receipt',
+            formData,
+        );
+        return response.data;
+    }
+
+    async createPattiSession(
+        farmId: string,
+        cropName: string,
+        image: Blob,
+        mimeType: string,
+        idempotencyKey?: string,
+    ): Promise<CreateExtractionSessionResponse> {
+        const payload = mimeType && image.type !== mimeType
+            ? new Blob([image], { type: mimeType })
+            : image;
+        const formData = new FormData();
+        formData.append('image', payload, 'patti-image.jpg');
+        formData.append('farmId', farmId);
+        formData.append('cropName', cropName);
+        if (idempotencyKey) formData.append('idempotencyKey', idempotencyKey);
+
+        const response = await this.http.post<CreateExtractionSessionResponse>(
+            '/shramsafal/ai/document-sessions/patti',
+            formData,
+        );
+        return response.data;
+    }
+
+    async getExtractionSession(sessionId: string): Promise<GetExtractionSessionResponse> {
+        const response = await this.http.get<GetExtractionSessionResponse>(
+            `/shramsafal/ai/document-sessions/${encodeURIComponent(sessionId)}`,
+        );
         return response.data;
     }
 

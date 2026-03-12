@@ -139,6 +139,10 @@ internal sealed class AiResponseNormalizer
         var tax = ReadDecimal(root["tax"]) ?? 0m;
         var grandTotal = ReadDecimal(root["grandTotal"])
                          ?? decimal.Round(subtotal - discount + tax, 2, MidpointRounding.AwayFromZero);
+        var rawTextExtracted = ReadNullableString(root["rawTextExtracted"]);
+
+        EnsureArray(root, "warnings");
+        ApplyReceiptAmountCorrections(root, normalizedItems, rawTextExtracted, discount, tax, ref subtotal, ref grandTotal);
 
         var suggestedScope = ReadString(root["suggestedScope"], "UNKNOWN").ToUpperInvariant();
         if (!AllowedReceiptScopes.Contains(suggestedScope))
@@ -158,7 +162,7 @@ internal sealed class AiResponseNormalizer
         root["grandTotal"] = decimal.Round(grandTotal, 2, MidpointRounding.AwayFromZero);
         root["suggestedScope"] = suggestedScope;
         root["suggestedCropName"] = ReadNullableString(root["suggestedCropName"]);
-        EnsureArray(root, "warnings");
+        root["rawTextExtracted"] = rawTextExtracted;
     }
 
     private static void NormalizePatti(JsonObject root)
@@ -305,13 +309,133 @@ internal sealed class AiResponseNormalizer
 
     private static decimal NormalizeConfidencePercent(JsonNode? value)
     {
-        var numeric = ReadDecimal(value) ?? 70m;
+        var numeric = ReadDecimal(value) ?? 85m;
         if (numeric <= 1m)
         {
             numeric *= 100m;
         }
 
         return Math.Clamp(decimal.Round(numeric, 2, MidpointRounding.AwayFromZero), 0m, 100m);
+    }
+
+    private static void ApplyReceiptAmountCorrections(
+        JsonObject root,
+        JsonArray normalizedItems,
+        string? rawTextExtracted,
+        decimal discount,
+        decimal tax,
+        ref decimal subtotal,
+        ref decimal grandTotal)
+    {
+        var suspiciousSignals = 0;
+
+        foreach (var itemNode in normalizedItems.OfType<JsonObject>())
+        {
+            var itemTotal = ReadDecimal(itemNode["totalAmount"]);
+            if (!IsLikelyTrailingDigitSmear(itemTotal))
+            {
+                continue;
+            }
+
+            itemNode["totalAmount"] = CorrectTrailingDigitSmear(itemTotal!.Value);
+            suspiciousSignals++;
+
+            var unitPrice = ReadDecimal(itemNode["unitPrice"]);
+            if (IsLikelyTrailingDigitSmear(unitPrice))
+            {
+                itemNode["unitPrice"] = CorrectTrailingDigitSmear(unitPrice!.Value);
+            }
+        }
+
+        var correctedSubtotal = normalizedItems.OfType<JsonObject>()
+            .Select(item => ReadDecimal(item["totalAmount"]) ?? 0m)
+            .Sum();
+
+        var suspiciousGrandTotal = IsLikelyTrailingDigitSmear(grandTotal);
+        var correctedGrandTotal = suspiciousGrandTotal
+            ? CorrectTrailingDigitSmear(grandTotal)
+            : grandTotal;
+
+        if (suspiciousGrandTotal)
+        {
+            suspiciousSignals++;
+        }
+
+        if (suspiciousSignals == 0 || correctedSubtotal <= 0m)
+        {
+            return;
+        }
+
+        var previousBalanceHint = TryReadPreviousBalance(rawTextExtracted);
+        var deltaAfterCorrection = correctedGrandTotal - correctedSubtotal;
+
+        var shouldApply =
+            previousBalanceHint.HasValue && Math.Abs(deltaAfterCorrection - previousBalanceHint.Value) <= 2m ||
+            suspiciousGrandTotal && deltaAfterCorrection >= 0m && deltaAfterCorrection <= 5000m ||
+            suspiciousGrandTotal && correctedSubtotal < subtotal / 5m;
+
+        if (!shouldApply)
+        {
+            return;
+        }
+
+        subtotal = decimal.Round(correctedSubtotal, 2, MidpointRounding.AwayFromZero);
+        grandTotal = suspiciousGrandTotal
+            ? decimal.Round(correctedGrandTotal, 2, MidpointRounding.AwayFromZero)
+            : decimal.Round(subtotal - discount + tax, 2, MidpointRounding.AwayFromZero);
+
+        if (root["warnings"] is JsonArray warnings)
+        {
+            warnings.Add("Applied arithmetic correction to probable OCR digit-smear in handwritten amounts.");
+        }
+    }
+
+    private static bool IsLikelyTrailingDigitSmear(decimal? amount)
+    {
+        return amount.HasValue &&
+               amount.Value >= 100000m &&
+               decimal.Truncate(amount.Value) == amount.Value &&
+               amount.Value % 10m == 1m;
+    }
+
+    private static decimal CorrectTrailingDigitSmear(decimal amount)
+    {
+        return decimal.Floor(amount / 10m);
+    }
+
+    private static decimal? TryReadPreviousBalance(string? rawTextExtracted)
+    {
+        if (string.IsNullOrWhiteSpace(rawTextExtracted))
+        {
+            return null;
+        }
+
+        var patterns = new[]
+        {
+            @"(?:मागील|बाकी|उधार|previous\s*balance|balance)[^\d]{0,8}(?<amount>\d[\d,]*)",
+            @"(?<amount>\d[\d,]*)[^\S\r\n]*(?:मागील|बाकी|previous\s*balance|balance)"
+        };
+
+        foreach (var pattern in patterns)
+        {
+            var match = System.Text.RegularExpressions.Regex.Match(
+                rawTextExtracted,
+                pattern,
+                System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+
+            if (!match.Success)
+            {
+                continue;
+            }
+
+            var amountText = match.Groups["amount"].Value.Replace(",", string.Empty, StringComparison.Ordinal);
+            if (decimal.TryParse(amountText, NumberStyles.Integer, CultureInfo.InvariantCulture, out var amount))
+            {
+                return amount;
+            }
+        }
+
+        return null;
     }
 
     private static string NormalizeCategory(string category)

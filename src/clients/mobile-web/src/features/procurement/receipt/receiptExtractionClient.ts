@@ -157,6 +157,194 @@ function mapReceiptResponse(apiResponse: UnknownRecord, fallbackDate: string): R
     };
 }
 
+function hasMeaningfulReceiptExtraction(result: ReceiptExtractionResponse): boolean {
+    return result.lineItems.length > 0 ||
+        (result.grandTotal ?? 0) > 0 ||
+        (result.subtotal ?? 0) > 0 ||
+        Boolean(result.vendorName);
+}
+
+// ─── Session-based progressive extraction ────────────────────────────────────
+
+/** Status reported by the background verification poller. */
+export type VerificationStatus = 'pending' | 'verifying' | 'verified' | 'needs_review' | 'failed';
+
+/** Callback fired when verification completes or updates a field. */
+export interface VerificationUpdate {
+    status: VerificationStatus;
+    /** Updated extraction when verification produces a different/better result. */
+    updated?: Partial<ReceiptExtractionResponse>;
+}
+
+/** Starts background verification polling. Returns cleanup function. */
+function startVerificationPoller(
+    sessionId: string,
+    draftExtraction: ReceiptExtractionResponse,
+    onUpdate: (update: VerificationUpdate) => void,
+): () => void {
+    const POLL_INTERVAL_MS = 5_000;
+    const MAX_POLLS = 12; // 60 s max
+
+    let stopped = false;
+    let pollCount = 0;
+
+    const poll = async () => {
+        if (stopped) return;
+
+        try {
+            const session = await agriSyncClient.getExtractionSession(sessionId);
+            const status = (session.status ?? '').toLowerCase();
+
+            if (status === 'verifying' || status === 'draftready') {
+                // Still in progress — schedule next poll
+                onUpdate({ status: 'verifying' });
+                scheduleNext();
+                return;
+            }
+
+            if (status === 'verified' && session.verifiedResult != null) {
+                const verifiedExtraction = mapReceiptResponse(
+                    session.verifiedResult as Record<string, unknown>,
+                    draftExtraction.date || getDateKey(),
+                );
+                // Only emit update if meaningful fields changed
+                const updated = buildPartialUpdate(draftExtraction, verifiedExtraction);
+                onUpdate({ status: 'verified', updated });
+                return;
+            }
+
+            if (status === 'needsreview' || status === 'needs_review') {
+                onUpdate({ status: 'needs_review' });
+                return;
+            }
+
+            // Completed or unrecognised — stop polling
+            onUpdate({ status: 'failed' });
+        } catch {
+            onUpdate({ status: 'failed' });
+        }
+    };
+
+    const scheduleNext = () => {
+        if (stopped || pollCount >= MAX_POLLS) {
+            if (!stopped) onUpdate({ status: 'failed' });
+            return;
+        }
+        pollCount++;
+        setTimeout(() => void poll(), POLL_INTERVAL_MS);
+    };
+
+    // Initial delay before first poll — give the server a moment to start processing
+    setTimeout(() => void poll(), POLL_INTERVAL_MS);
+
+    return () => { stopped = true; };
+}
+
+/** Returns only the fields that genuinely differ between draft and verified. */
+function buildPartialUpdate(
+    draft: ReceiptExtractionResponse,
+    verified: ReceiptExtractionResponse,
+): Partial<ReceiptExtractionResponse> {
+    const update: Partial<ReceiptExtractionResponse> = {};
+
+    if (verified.grandTotal !== 0 && Math.abs((verified.grandTotal ?? 0) - (draft.grandTotal ?? 0)) > 0.01) {
+        update.grandTotal = verified.grandTotal;
+    }
+    if (verified.vendorName && verified.vendorName !== draft.vendorName) {
+        update.vendorName = verified.vendorName;
+    }
+    if (verified.confidence > draft.confidence) {
+        update.confidence = verified.confidence;
+    }
+    if (verified.lineItems.length > 0 && verified.lineItems.length !== draft.lineItems.length) {
+        update.lineItems = verified.lineItems;
+    }
+
+    return update;
+}
+
+/**
+ * Session-based receipt extraction — progressive two-lane.
+ *
+ * 1. Posts image to /document-sessions/receipt → server returns draft immediately
+ * 2. Returns the draft ReceiptExtractionResponse to the caller (fast path, ~3s)
+ * 3. Starts a background verification poller; fires `onVerification` when done
+ *
+ * Falls back to the legacy `extractReceiptData` if session creation fails.
+ */
+export const extractReceiptWithSession = async (
+    imageBase64: string,
+    onVerification: (update: VerificationUpdate) => void,
+): Promise<ReceiptExtractionResponse> => {
+    const farmId = await resolveFarmIdFromCache();
+    if (!farmId) {
+        return {
+            success: false,
+            confidence: 0,
+            date: getDateKey(),
+            lineItems: [],
+            subtotal: 0,
+            grandTotal: 0,
+            suggestedScope: 'UNKNOWN',
+        };
+    }
+
+    if (!navigator.onLine) {
+        // Offline — fall back to legacy path which queues to pendingAiJobs
+        return extractReceiptData(imageBase64);
+    }
+
+    const mimeType = extractMimeType(imageBase64);
+    const blob = base64ToBlob(imageBase64, mimeType);
+    const userId = getAuthSession()?.userId ?? 'unknown-user';
+    const requestPayloadHash = await IdempotencyKeyFactory.hashBlob(blob);
+    const keyMaterial = await IdempotencyKeyFactory.buildOperationKey({
+        userId,
+        farmId,
+        operation: 'receipt',
+        contentHash: requestPayloadHash,
+        versionTag: 'ocr-receipt-v3',
+    });
+
+    try {
+        const sessionResponse = await agriSyncClient.createReceiptSession(
+            farmId,
+            blob,
+            mimeType,
+            keyMaterial.idempotencyKey,
+        );
+
+        const draftExtraction = mapReceiptResponse(
+            ensureRecord(sessionResponse.draft.normalizedJson),
+            getDateKey(),
+        );
+
+        // Boost confidence from the API response (0-1 scale from backend)
+        if (typeof sessionResponse.draft.overallConfidence === 'number') {
+            draftExtraction.confidence = normalizeConfidence(sessionResponse.draft.overallConfidence);
+        }
+
+        if (!hasMeaningfulReceiptExtraction(draftExtraction)) {
+            throw new Error('Session OCR returned no usable receipt fields.');
+        }
+
+        // Background: start verification poller
+        startVerificationPoller(sessionResponse.sessionId, draftExtraction, onVerification);
+
+        return draftExtraction;
+    } catch {
+        // Session API failed — fall back to legacy direct extraction
+        const fallback = await extractReceiptData(imageBase64);
+        if (!hasMeaningfulReceiptExtraction(fallback)) {
+            throw new Error('Receipt OCR returned no usable data.');
+        }
+
+        return fallback;
+    }
+};
+
+// ─── Legacy direct extraction ─────────────────────────────────────────────────
+
 /**
  * Backend-driven receipt extraction client.
  * When offline, request is persisted in pendingAiJobs and processed by BackgroundSyncWorker.
@@ -184,6 +372,7 @@ export const extractReceiptData = async (imageBase64: string): Promise<ReceiptEx
         farmId,
         operation: 'receipt',
         contentHash: requestPayloadHash,
+        versionTag: 'ocr-receipt-v3',
     });
     const idempotencyKey = keyMaterial.idempotencyKey;
 

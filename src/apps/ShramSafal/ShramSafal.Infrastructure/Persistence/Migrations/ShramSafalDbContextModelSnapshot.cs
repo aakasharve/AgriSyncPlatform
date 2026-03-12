@@ -269,6 +269,93 @@ namespace ShramSafal.Infrastructure.Persistence.Migrations
                     b.ToTable("ai_provider_configs", "ssf");
                 });
 
+            modelBuilder.Entity("ShramSafal.Domain.AI.DocumentExtractionSession", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at_utc");
+
+                    b.Property<string>("DocumentType")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("document_type");
+
+                    b.Property<Guid?>("DraftAiJobId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("draft_ai_job_id");
+
+                    b.Property<decimal>("DraftConfidence")
+                        .HasColumnType("numeric(5,4)")
+                        .HasColumnName("draft_confidence");
+
+                    b.Property<string>("DraftProvider")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("draft_provider");
+
+                    b.Property<string>("DraftResultJson")
+                        .HasColumnType("text")
+                        .HasColumnName("draft_result_json");
+
+                    b.Property<Guid>("FarmId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("farm_id");
+
+                    b.Property<string>("InputImagePath")
+                        .HasMaxLength(1024)
+                        .HasColumnType("character varying(1024)")
+                        .HasColumnName("input_image_path");
+
+                    b.Property<string>("InputMimeType")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("input_mime_type");
+
+                    b.Property<DateTime>("ModifiedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("modified_at_utc");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("status");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("user_id");
+
+                    b.Property<Guid?>("VerificationAiJobId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("verification_ai_job_id");
+
+                    b.Property<string>("VerificationProvider")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("verification_provider");
+
+                    b.Property<decimal?>("VerifiedConfidence")
+                        .HasColumnType("numeric(5,4)")
+                        .HasColumnName("verified_confidence");
+
+                    b.Property<string>("VerifiedResultJson")
+                        .HasColumnType("text")
+                        .HasColumnName("verified_result_json");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("FarmId", "Status");
+
+                    b.HasIndex("UserId", "CreatedAtUtc");
+
+                    b.ToTable("document_extraction_sessions", "ssf");
+                });
+
             modelBuilder.Entity("ShramSafal.Domain.Attachments.Attachment", b =>
                 {
                     b.Property<Guid>("Id")

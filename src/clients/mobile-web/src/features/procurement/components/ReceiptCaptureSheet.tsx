@@ -1,7 +1,7 @@
 
 import React, { useState, useRef } from 'react';
 import { Camera, Upload, X, Check, Loader2, AlertTriangle, RefreshCw } from 'lucide-react';
-import { extractReceiptData } from '../receipt/receiptExtractionClient';
+import { extractReceiptWithSession, VerificationStatus } from '../receipt/receiptExtractionClient';
 import { ReceiptExtractionResponse, ProcurementExpense, ExpenseScope, CropProfile, Plot } from '../../../types';
 import { ScopeSelectorRadio } from './ScopeSelectorRadio';
 import { procurementRepository } from '../../../services/procurementRepository';
@@ -50,6 +50,15 @@ export const ReceiptCaptureSheet: React.FC<Props> = ({ onClose, onSave, crops, a
     const [showAllocation, setShowAllocation] = useState(false);
     const [savedCostEntryId, setSavedCostEntryId] = useState<string>('');
 
+    // 4. Verification state (two-lane progressive UX)
+    const [verificationStatus, setVerificationStatus] = useState<VerificationStatus | null>(null);
+    // Suggestions for fields the user has already edited — never auto-overwrite, just hint
+    const [suggestedTotal, setSuggestedTotal] = useState<number | null>(null);
+    const [suggestedVendor, setSuggestedVendor] = useState<string | null>(null);
+    // Whether the user has manually changed each field (guard against auto-overwrite)
+    const [userEditedTotal, setUserEditedTotal] = useState(false);
+    const [userEditedVendor, setUserEditedVendor] = useState(false);
+
     const fileInputRef = useRef<HTMLInputElement>(null);
 
     // --- HANDLERS ---
@@ -75,7 +84,9 @@ export const ReceiptCaptureSheet: React.FC<Props> = ({ onClose, onSave, crops, a
         try {
             const farmId = await resolveFarmIdFromSyncState(activePlotId);
             if (!farmId) {
-                setAttachmentCaptureError('Attachment queue unavailable until sync metadata is loaded.');
+                // Sync metadata not yet available — silently skip attachment queuing.
+                // Receipt AI extraction still runs. Attachment can be re-linked after first sync.
+                console.warn('[ReceiptCapture] Farm ID unavailable for attachment queue — skipping queue, extraction continues.');
                 return;
             }
 
@@ -92,30 +103,59 @@ export const ReceiptCaptureSheet: React.FC<Props> = ({ onClose, onSave, crops, a
             setAttachmentIds([queued.id]);
         } catch (error) {
             console.error('Attachment queue capture failed', error);
-            setAttachmentCaptureError('Attachment saved for preview only; upload queue capture failed.');
+            // Silent — attachment upload failure does not block receipt extraction or saving.
         }
     };
 
     const processImage = async (base64: string) => {
         setIsExtracting(true);
+        setVerificationStatus(null);
+        setSuggestedTotal(null);
+        setSuggestedVendor(null);
+        setUserEditedTotal(false);
+        setUserEditedVendor(false);
+
         try {
-            // Convert to pure base64 if needed by API (strip prefix)
-            const cleanBase64 = base64.split(',')[1];
-            const result = await extractReceiptData(cleanBase64);
+            const result = await extractReceiptWithSession(
+                base64,
+                (update) => {
+                    setVerificationStatus(update.status);
+
+                    if (update.status === 'verified' && update.updated) {
+                        const { grandTotal, vendorName } = update.updated;
+
+                        if (grandTotal !== undefined) {
+                            // Auto-apply if user hasn't touched the field; otherwise suggest
+                            setUserEditedTotal(prev => {
+                                if (!prev) setEditedTotal(grandTotal);
+                                else setSuggestedTotal(grandTotal);
+                                return prev;
+                            });
+                        }
+
+                        if (vendorName !== undefined) {
+                            setUserEditedVendor(prev => {
+                                if (!prev) setEditedVendor(vendorName);
+                                else setSuggestedVendor(vendorName);
+                                return prev;
+                            });
+                        }
+                    }
+                },
+            );
 
             setExtraction(result);
-
-            // Auto-fill state from specific result
             setEditedTotal(result.grandTotal || 0);
             setEditedVendor(result.vendorName || '');
             if (result.suggestedScope !== 'UNKNOWN') setScope(result.suggestedScope);
 
-            // Try to match crop if suggested
             if (result.suggestedCropName) {
                 const match = crops.find(c => c.name.toLowerCase().includes(result.suggestedCropName!.toLowerCase()));
                 if (match) setSelectedCropId(match.id);
             }
 
+            // Mark that verification is pending (poller has started)
+            setVerificationStatus('pending');
         } catch (e) {
             console.error(e);
             alert("Failed to process image. Please try manual entry.");
@@ -268,16 +308,39 @@ export const ReceiptCaptureSheet: React.FC<Props> = ({ onClose, onSave, crops, a
                                         </div>
                                     )}
 
+                                    {/* Verification Status Badge */}
+                                    {verificationStatus === 'pending' || verificationStatus === 'verifying' ? (
+                                        <div className="flex items-center gap-2 px-3 py-2 bg-blue-50 border border-blue-100 rounded-lg text-blue-700 text-xs font-semibold">
+                                            <Loader2 size={13} className="animate-spin shrink-0" />
+                                            Verifying bill with high-accuracy OCR...
+                                        </div>
+                                    ) : verificationStatus === 'verified' ? (
+                                        <div className="flex items-center gap-2 px-3 py-2 bg-emerald-50 border border-emerald-100 rounded-lg text-emerald-700 text-xs font-semibold">
+                                            <Check size={13} className="shrink-0" />
+                                            Verified ✓ — high-accuracy scan complete
+                                        </div>
+                                    ) : verificationStatus === 'needs_review' ? (
+                                        <div className="flex items-center gap-2 px-3 py-2 bg-amber-50 border border-amber-100 rounded-lg text-amber-700 text-xs font-semibold">
+                                            <AlertTriangle size={13} className="shrink-0" />
+                                            Verification flagged — please double-check amounts
+                                        </div>
+                                    ) : null}
+
                                     {/* Extracted Fields */}
                                     <div className="bg-white p-4 rounded-xl border border-gray-200 space-y-4 shadow-sm">
                                         <div>
                                             <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block mb-1">Vendor/Shop</label>
                                             <input
                                                 value={editedVendor}
-                                                onChange={(e) => setEditedVendor(e.target.value)}
+                                                onChange={(e) => { setEditedVendor(e.target.value); setUserEditedVendor(true); }}
                                                 className="w-full text-base font-bold text-gray-900 border-b border-gray-200 outline-none focus:border-emerald-500 py-1"
                                                 placeholder="Enter vendor name"
                                             />
+                                            {suggestedVendor && suggestedVendor !== editedVendor && (
+                                                <p className="text-[10px] text-amber-600 mt-1">
+                                                    AI suggests: <button className="font-bold underline" onClick={() => { setEditedVendor(suggestedVendor); setSuggestedVendor(null); }}>{suggestedVendor}</button>
+                                                </p>
+                                            )}
                                         </div>
 
                                         {/* Items List (Simplified for prototype) */}
@@ -298,10 +361,15 @@ export const ReceiptCaptureSheet: React.FC<Props> = ({ onClose, onSave, crops, a
                                                 <input
                                                     type="number"
                                                     value={editedTotal}
-                                                    onChange={(e) => setEditedTotal(Number(e.target.value))}
+                                                    onChange={(e) => { setEditedTotal(Number(e.target.value)); setUserEditedTotal(true); }}
                                                     className="w-full text-2xl font-black text-gray-900 border-b border-gray-200 outline-none focus:border-emerald-500 py-1"
                                                 />
                                             </div>
+                                            {suggestedTotal !== null && suggestedTotal !== editedTotal && (
+                                                <p className="text-[10px] text-amber-600 mt-1">
+                                                    AI suggests: <button className="font-bold underline" onClick={() => { setEditedTotal(suggestedTotal!); setSuggestedTotal(null); }}>₹{suggestedTotal}</button>
+                                                </p>
+                                            )}
                                         </div>
                                     </div>
 

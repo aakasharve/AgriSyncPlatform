@@ -20,6 +20,9 @@ export interface AgriLogAppConfig {
     initialCrops: CropProfile[];
 }
 
+const GLOBAL_TOAST_EVENT = 'agrisync:toast';
+type GlobalToastDetail = { message: string; type: 'success' | 'error' };
+
 export const useAgriLogApp = ({ initialCrops }: AgriLogAppConfig) => {
     // --- 0. UI GLOBAL STATE (Hoisted) ---
     const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
@@ -107,6 +110,27 @@ export const useAgriLogApp = ({ initialCrops }: AgriLogAppConfig) => {
 
         return unsubscribe;
     }, [voiceDraftDispatcher, commands.handleAutoSave]);
+
+    useEffect(() => {
+        const handleGlobalToast = (event: Event) => {
+            const detail = (event as CustomEvent<GlobalToastDetail>).detail;
+            if (!detail || typeof detail.message !== 'string' || detail.message.trim().length === 0) {
+                return;
+            }
+
+            if (detail.type !== 'success' && detail.type !== 'error') {
+                return;
+            }
+
+            setToast({
+                message: detail.message,
+                type: detail.type,
+            });
+        };
+
+        window.addEventListener(GLOBAL_TOAST_EVENT, handleGlobalToast as EventListener);
+        return () => window.removeEventListener(GLOBAL_TOAST_EVENT, handleGlobalToast as EventListener);
+    }, []);
 
     // --- 6. WEATHER ---
     const weather = useWeatherMonitor({

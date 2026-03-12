@@ -171,8 +171,7 @@ public sealed class SarvamAdapterTests
             ChatEndpoint = "https://unit.test/chat",
             ChatModel = "sarvam-m-test",
             VisionModel = "sarvam-vision-test",
-            TimeoutSeconds = 5,
-            DocIntelTimeoutSeconds = 5
+            TimeoutSeconds = 5
         };
     }
 }

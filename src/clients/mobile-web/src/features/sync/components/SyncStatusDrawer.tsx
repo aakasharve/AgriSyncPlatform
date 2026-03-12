@@ -18,6 +18,10 @@ interface Props {
 const SyncStatusDrawer: React.FC<Props> = ({ isOpen, onClose }) => {
      const status = useSyncQueueStatus();
      const [failedItems, setFailedItems] = useState<MutationQueueItem[]>([]);
+     const [aiJobStatusCounts, setAiJobStatusCounts] = useState<{ pending: number; processing: number }>({
+          pending: 0,
+          processing: 0,
+     });
      const [isSyncing, setIsSyncing] = useState(false);
      const [isRetrying, setIsRetrying] = useState(false);
 
@@ -27,6 +31,11 @@ const SyncStatusDrawer: React.FC<Props> = ({ isOpen, onClose }) => {
           loadFailedItems();
      }, [isOpen, status.failedCount]);
 
+     useEffect(() => {
+          if (!isOpen) return;
+          loadAiJobStatusCounts();
+     }, [isOpen, status.pendingAiJobs]);
+
      const loadFailedItems = async () => {
           try {
                const db = getDatabase();
@@ -34,6 +43,18 @@ const SyncStatusDrawer: React.FC<Props> = ({ isOpen, onClose }) => {
                setFailedItems(items);
           } catch (e) {
                console.warn('Failed to load failed items', e);
+          }
+     };
+
+     const loadAiJobStatusCounts = async () => {
+          try {
+               const db = getDatabase();
+               const pending = await db.pendingAiJobs.where('status').equals('pending').count();
+               const processing = await db.pendingAiJobs.where('status').equals('processing').count();
+               setAiJobStatusCounts({ pending, processing });
+          } catch (e) {
+               console.warn('Failed to load AI job queue status counts', e);
+               setAiJobStatusCounts({ pending: 0, processing: 0 });
           }
      };
 
@@ -81,6 +102,10 @@ const SyncStatusDrawer: React.FC<Props> = ({ isOpen, onClose }) => {
 
      const totalPending = status.pendingCount + status.pendingUploads + status.pendingAiJobs;
      const totalFailed = status.failedCount + status.failedUploads;
+     const aiStatusParts = [
+          aiJobStatusCounts.pending > 0 ? `${aiJobStatusCounts.pending} voice recording${aiJobStatusCounts.pending > 1 ? 's' : ''} pending` : null,
+          aiJobStatusCounts.processing > 0 ? `${aiJobStatusCounts.processing} voice recording${aiJobStatusCounts.processing > 1 ? 's' : ''} processing` : null,
+     ].filter((part): part is string => Boolean(part));
 
      return (
           <div className="fixed inset-0 z-[200] bg-black/40 backdrop-blur-sm flex items-end justify-center animate-in fade-in" onClick={onClose}>
@@ -180,11 +205,11 @@ const SyncStatusDrawer: React.FC<Props> = ({ isOpen, onClose }) => {
                          )}
 
                          {/* 5. AI Processing */}
-                         {status.pendingAiJobs > 0 && (
+                         {aiStatusParts.length > 0 && (
                               <div className="flex items-center gap-3 p-3 rounded-xl bg-purple-50 border border-purple-200">
                                    <Cpu size={14} className="text-purple-600" />
                                    <span className="text-sm font-medium text-purple-700">
-                                        {status.pendingAiJobs} voice recording{status.pendingAiJobs > 1 ? 's' : ''} processing
+                                        {aiStatusParts.join(' â€¢ ')}
                                    </span>
                               </div>
                          )}

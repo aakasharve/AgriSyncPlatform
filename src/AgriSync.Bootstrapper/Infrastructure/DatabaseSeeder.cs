@@ -620,9 +620,32 @@ public class DatabaseSeeder
 
     private async Task<int> EnsureAiProviderConfigAsync(UserId modifiedByUserId, DateTime nowUtc)
     {
-        var existing = await _SSFContext.AiProviderConfigs.AsNoTracking().FirstOrDefaultAsync();
+        var existing = await _SSFContext.AiProviderConfigs.FirstOrDefaultAsync();
+
         if (existing is not null)
         {
+            var requiresPatch =
+                existing.ReceiptProvider != AiProviderType.Gemini ||
+                existing.PattiProvider != AiProviderType.Gemini;
+
+            if (requiresPatch)
+            {
+                existing.UpdateSettings(
+                    modifiedByUserId,
+                    defaultProvider: existing.DefaultProvider,
+                    fallbackEnabled: existing.FallbackEnabled,
+                    isAiProcessingDisabled: existing.IsAiProcessingDisabled,
+                    maxRetries: existing.MaxRetries,
+                    circuitBreakerThreshold: existing.CircuitBreakerThreshold,
+                    circuitBreakerResetSeconds: existing.CircuitBreakerResetSeconds,
+                    voiceConfidenceThreshold: existing.VoiceConfidenceThreshold,
+                    receiptConfidenceThreshold: existing.ReceiptConfidenceThreshold,
+                    voiceProvider: existing.VoiceProvider ?? AiProviderType.Sarvam,
+                    receiptProvider: AiProviderType.Gemini,
+                    pattiProvider: AiProviderType.Gemini);
+                return 1;
+            }
+
             return 0;
         }
 
@@ -636,7 +659,10 @@ public class DatabaseSeeder
             circuitBreakerThreshold: 5,
             circuitBreakerResetSeconds: 60,
             voiceConfidenceThreshold: 0.60m,
-            receiptConfidenceThreshold: 0.50m);
+            receiptConfidenceThreshold: 0.50m,
+            voiceProvider: AiProviderType.Sarvam,
+            receiptProvider: AiProviderType.Gemini,
+            pattiProvider: AiProviderType.Gemini);
 
         await _SSFContext.AiProviderConfigs.AddAsync(config);
         return 1;

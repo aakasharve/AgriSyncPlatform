@@ -1,10 +1,16 @@
+using System.Diagnostics;
+using System.Security.Claims;
 using System.Text;
+using System.Threading.RateLimiting;
 using AgriSync.Bootstrapper.Middleware;
 using AgriSync.BuildingBlocks;
+using Microsoft.AspNetCore.HttpOverrides;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Storage;
 using Serilog;
+using Serilog.Context;
 using ShramSafal.Api;
 using User.Api;
 using User.Infrastructure.Persistence;
@@ -19,40 +25,92 @@ try
     builder.Configuration
         .AddJsonFile("secrets/local/credentials.json", optional: true, reloadOnChange: true)
         .AddEnvironmentVariables();
+    builder.WebHost.ConfigureKestrel(options =>
+    {
+        options.Limits.MaxRequestBodySize = 50L * 1024L * 1024L;
+    });
 
     builder.Host.UseSerilog((context, services, loggerConfiguration) =>
     {
         loggerConfiguration
             .ReadFrom.Configuration(context.Configuration)
             .ReadFrom.Services(services)
-            .Enrich.FromLogContext()
-            .WriteTo.Console();
+            .Enrich.FromLogContext();
     });
 
     builder.Services.AddBuildingBlocks();
     builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
     builder.Services.AddProblemDetails();
     builder.Services.AddEndpointsApiExplorer();
-    builder.Services.AddSwaggerGen();
+    builder.Services.AddRateLimiter(options =>
+    {
+        options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+        options.OnRejected = (rateLimitContext, _) =>
+        {
+            rateLimitContext.HttpContext.Response.Headers["Retry-After"] = "60";
+            return ValueTask.CompletedTask;
+        };
 
-    // CORS: allow the React frontend dev server to call API
+        options.AddPolicy("auth", httpContext =>
+            RateLimitPartition.GetFixedWindowLimiter(
+                partitionKey: ResolveRemoteIpRateLimitPartitionKey(httpContext),
+                factory: _ => new FixedWindowRateLimiterOptions
+                {
+                    PermitLimit = 10,
+                    Window = TimeSpan.FromMinutes(1),
+                    QueueLimit = 0,
+                    AutoReplenishment = true
+                }));
+
+        options.AddPolicy("ai", httpContext =>
+            RateLimitPartition.GetFixedWindowLimiter(
+                partitionKey: ResolveAiRateLimitPartitionKey(httpContext),
+                factory: _ => new FixedWindowRateLimiterOptions
+                {
+                    PermitLimit = 30,
+                    Window = TimeSpan.FromMinutes(1),
+                    QueueLimit = 0,
+                    AutoReplenishment = true
+                }));
+    });
+
+    if (builder.Environment.IsDevelopment())
+    {
+        builder.Services.AddSwaggerGen();
+    }
+
     builder.Services.AddCors(options =>
     {
-        options.AddPolicy("AllowFrontendDev", policy =>
+        options.AddPolicy("AllowFrontend", policy =>
         {
-            policy.WithOrigins(
-                "http://localhost:3000", 
-                "http://localhost:3001",
-                "http://localhost:3002", 
-                "http://localhost:5173",
-                "http://127.0.0.1:3000",
-                "http://127.0.0.1:3001",
-                "http://127.0.0.1:3002",
-                "http://127.0.0.1:5173"
-            )
-            .AllowAnyHeader()
-            .AllowAnyMethod()
-            .AllowCredentials();
+            var origins = builder.Environment.IsDevelopment()
+                ? new[]
+                {
+                    "http://localhost:3000",
+                    "http://localhost:3001",
+                    "http://localhost:3002",
+                    "http://localhost:5173",
+                    "http://127.0.0.1:3000",
+                    "http://127.0.0.1:3001",
+                    "http://127.0.0.1:3002",
+                    "http://127.0.0.1:5173",
+                    "capacitor://localhost",
+                    "https://localhost",
+                    "http://localhost"
+                }
+                : new[]
+                {
+                    "https://app.shramsafal.in",
+                    "https://shramsafal.in",
+                    "capacitor://localhost",
+                    "https://localhost",
+                    "http://localhost"
+                };
+
+            policy.WithOrigins(origins)
+                .AllowAnyHeader()
+                .AllowAnyMethod()
+                .AllowCredentials();
         });
     });
 
@@ -66,10 +124,102 @@ try
 
     var app = builder.Build();
 
-    app.UseSerilogRequestLogging();
-    app.UseExceptionHandler();
-    app.UseCors("AllowFrontendDev");
+    app.UseForwardedHeaders(new ForwardedHeadersOptions
+    {
+        ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto
+    });
+    app.Use(async (context, next) =>
+    {
+        var traceId = Activity.Current?.TraceId.ToString() ?? context.TraceIdentifier;
+        var spanId = Activity.Current?.SpanId.ToString() ?? string.Empty;
 
+        context.Response.Headers["X-Correlation-Id"] = context.TraceIdentifier;
+
+        using (LogContext.PushProperty("CorrelationId", context.TraceIdentifier))
+        using (LogContext.PushProperty("TraceId", traceId))
+        using (LogContext.PushProperty("SpanId", spanId))
+        {
+            await next();
+        }
+    });
+    app.UseSerilogRequestLogging(options =>
+    {
+        options.EnrichDiagnosticContext = (diagnosticContext, httpContext) =>
+        {
+            diagnosticContext.Set("CorrelationId", httpContext.TraceIdentifier);
+            diagnosticContext.Set("TraceId", Activity.Current?.TraceId.ToString() ?? httpContext.TraceIdentifier);
+            diagnosticContext.Set("SpanId", Activity.Current?.SpanId.ToString() ?? string.Empty);
+            diagnosticContext.Set("ClientIp", httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown");
+        };
+    });
+    app.UseExceptionHandler();
+    if (!app.Environment.IsDevelopment())
+    {
+        app.UseHttpsRedirection();
+    }
+
+    app.UseCors("AllowFrontend");
+
+    if (app.Environment.IsDevelopment())
+    {
+        ConfigureDevelopmentSwagger(app);
+        MapDevelopmentOnlyTestEndpoints(app);
+    }
+
+    app.UseAuthentication();
+    app.UseRateLimiter();
+    app.UseAuthorization();
+
+    app.MapGet("/health", async (UserDbContext db, CancellationToken ct) =>
+    {
+        try
+        {
+            var canConnect = await db.Database.CanConnectAsync(ct);
+            return canConnect
+                ? Results.Ok(new { status = "healthy", service = "AgriSync", db = "connected" })
+                : Results.Json(new { status = "unhealthy", service = "AgriSync", db = "disconnected" }, statusCode: StatusCodes.Status503ServiceUnavailable);
+        }
+        catch (Exception ex)
+        {
+            return Results.Json(
+                new { status = "unhealthy", service = "AgriSync", db = "error", message = ex.Message },
+                statusCode: StatusCodes.Status503ServiceUnavailable);
+        }
+    })
+    .WithName("GetBootstrapperHealth")
+    .WithTags("System")
+    .AllowAnonymous();
+
+    app.MapGet("/version", () => Results.Ok(new
+    {
+        service = "AgriSync",
+        version = typeof(Program).Assembly.GetName().Version?.ToString() ?? "0.0.0",
+        buildSha = Environment.GetEnvironmentVariable("BUILD_SHA") ?? "unknown",
+        deployedAt = Environment.GetEnvironmentVariable("DEPLOYED_AT") ?? "unknown",
+        environment = Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT") ?? "unknown"
+    }))
+    .WithName("GetVersion")
+    .WithTags("System")
+    .AllowAnonymous();
+
+    app.MapUserApi();
+    app.MapShramSafalApi();
+
+    await InitializeApplicationDataAsync(app);
+
+    app.Run();
+}
+catch (Exception ex)
+{
+    Log.Fatal(ex, "AgriSync.Bootstrapper failed to start.");
+}
+finally
+{
+    Log.CloseAndFlush();
+}
+
+static void ConfigureDevelopmentSwagger(WebApplication app)
+{
     app.Use(async (context, next) =>
     {
         if (context.Request.Path.Equals("/swagger", StringComparison.OrdinalIgnoreCase))
@@ -85,8 +235,6 @@ try
             return;
         }
 
-        // Backward compatibility: some stale Swagger UI states request swagger-config as a spec URL.
-        // Rewrite to the real OpenAPI document to avoid "Unable to render this definition" failures.
         if (context.Request.Path.Equals("/swagger/swagger-config", StringComparison.OrdinalIgnoreCase))
         {
             context.Request.Path = "/swagger/v1/swagger.json";
@@ -102,9 +250,6 @@ try
         await next();
     });
 
-    // Swashbuckle 10.x emits OpenAPI 3.0.4 via Microsoft.OpenApi v2,
-    // but the bundled Swagger UI does not recognise that patch version yet.
-    // Downgrade the spec version string so the UI can render it.
     app.Use(async (ctx, next) =>
     {
         var path = ctx.Request.Path.Value;
@@ -132,44 +277,34 @@ try
     app.UseSwagger();
     app.UseSwaggerUI(options =>
     {
-        // Use an absolute route to avoid UI URL-resolution edge cases.
         options.SwaggerEndpoint("/swagger/v1/swagger.json", "AgriSync API v1");
     });
+}
 
-    app.UseAuthentication();
-    app.UseAuthorization();
-
-    app.MapGet("/health", () => Results.Ok(new { status = "ok", service = "AgriSync.Bootstrapper" }))
-        .WithName("GetBootstrapperHealth")
-        .WithTags("System");
-
-    // ── Test Endpoint: PostgreSQL Connectivity ──────────────────────────
+static void MapDevelopmentOnlyTestEndpoints(WebApplication app)
+{
     app.MapGet("/test/db", async (UserDbContext db) =>
     {
         var result = new Dictionary<string, object>();
         try
         {
-            // 1. Test connectivity via EF
             var canConnect = await db.Database.CanConnectAsync();
             result["canConnect"] = canConnect;
 
             if (!canConnect)
             {
                 result["status"] = "disconnected";
-                return Results.Json(result, statusCode: 503);
+                return Results.Json(result, statusCode: StatusCodes.Status503ServiceUnavailable);
             }
 
-            // 2. Get PostgreSQL version via EF raw SQL
             var version = await db.Database.SqlQueryRaw<string>("SELECT version() AS \"Value\"").FirstOrDefaultAsync();
             result["postgresVersion"] = version ?? "unknown";
             var currentDatabase = await db.Database.SqlQueryRaw<string>("SELECT current_database() AS \"Value\"").FirstOrDefaultAsync();
             result["database"] = currentDatabase ?? "unknown";
 
-            // 3. User count
             var userCount = await db.Users.CountAsync();
             result["userCount"] = userCount;
 
-            // 4. List tables via separate connection
             var connString = db.Database.GetConnectionString()!;
             using var conn = new Npgsql.NpgsqlConnection(connString);
             await conn.OpenAsync();
@@ -179,22 +314,26 @@ try
             await using (var reader = await cmd.ExecuteReaderAsync())
             {
                 while (await reader.ReadAsync())
+                {
                     tables.Add(reader.GetString(0));
+                }
             }
+
             result["tables"] = tables;
 
-            // 5. Diagnostic: check any legacy tables under usr schema
             var usrTables = new List<string>();
             await using (var usrCmd = conn.CreateCommand())
             {
                 usrCmd.CommandText = "SELECT table_name FROM information_schema.tables WHERE table_schema = 'usr' ORDER BY table_name;";
                 await using var usrReader = await usrCmd.ExecuteReaderAsync();
                 while (await usrReader.ReadAsync())
+                {
                     usrTables.Add(usrReader.GetString(0));
+                }
             }
+
             result["usrTables"] = usrTables;
             result["schemaChecked"] = "public";
-
             result["status"] = "connected";
             return Results.Ok(result);
         }
@@ -202,16 +341,14 @@ try
         {
             result["status"] = "error";
             result["error"] = ex.Message;
-            result["innerError"] = ex.InnerException?.Message ?? "";
-            return Results.Json(result, statusCode: 500);
+            result["innerError"] = ex.InnerException?.Message ?? string.Empty;
+            return Results.Json(result, statusCode: StatusCodes.Status500InternalServerError);
         }
     })
     .WithName("TestDatabaseConnectivity")
     .WithTags("System")
     .AllowAnonymous();
 
-    // ── Test Endpoint: Bootstrap Database Schema ────────────────────────
-    // ── Test Endpoint: Bootstrap Database Schema ────────────────────────
     app.MapPost("/test/db/init", async (User.Infrastructure.Persistence.UserDbContext userDb, ShramSafal.Infrastructure.Persistence.ShramSafalDbContext ssfDb, bool reset = false) =>
     {
         try
@@ -252,15 +389,14 @@ try
             {
                 status = "error",
                 error = ex.Message,
-                innerError = ex.InnerException?.Message ?? ""
-            }, statusCode: 500);
+                innerError = ex.InnerException?.Message ?? string.Empty
+            }, statusCode: StatusCodes.Status500InternalServerError);
         }
     })
     .WithName("InitDatabaseSchema")
     .WithTags("System")
     .AllowAnonymous();
 
-    // ── Test Endpoint: Seed Demo Data ──────────────────────────────────
     app.MapPost("/test/seed", async (AgriSync.Bootstrapper.Infrastructure.DatabaseSeeder seeder) =>
     {
         try
@@ -270,100 +406,121 @@ try
         }
         catch (Exception ex)
         {
-             return Results.Json(new
+            return Results.Json(new
             {
                 status = "error",
                 error = ex.Message,
-                innerError = ex.InnerException?.Message ?? ""
-            }, statusCode: 500);
+                innerError = ex.InnerException?.Message ?? string.Empty
+            }, statusCode: StatusCodes.Status500InternalServerError);
         }
     })
     .WithName("SeedDemoData")
     .WithTags("System")
     .AllowAnonymous();
+}
 
-    app.MapUserApi();
-    app.MapShramSafalApi();
-
-    // Auto-seed demo data on startup
-    using (var scope = app.Services.CreateScope())
+static async Task InitializeApplicationDataAsync(WebApplication app)
+{
+    using var scope = app.Services.CreateScope();
+    var services = scope.ServiceProvider;
+    try
     {
-        var services = scope.ServiceProvider;
-        try 
+        var userContext = services.GetRequiredService<User.Infrastructure.Persistence.UserDbContext>();
+        var ssfContext = services.GetRequiredService<ShramSafal.Infrastructure.Persistence.ShramSafalDbContext>();
+
+        var userSchemaCreated = app.Environment.IsDevelopment()
+            ? await EnsureContextTablesCreatedAsync(userContext, "public", "users")
+            : await MigrateContextAsync(userContext, "UserDbContext");
+        var ssfSchemaCreated = app.Environment.IsDevelopment()
+            ? await EnsureContextTablesCreatedAsync(ssfContext, "ssf", "farms")
+            : await MigrateContextAsync(ssfContext, "ShramSafalDbContext");
+
+        var blankSeeder = services.GetRequiredService<AgriSync.Bootstrapper.Infrastructure.BlankTestUserSeeder>();
+        await blankSeeder.SeedAsync();
+
+        var seedRamuDemo = string.Equals(
+            Environment.GetEnvironmentVariable("SEED_RAMU_DEMO"),
+            "true",
+            StringComparison.OrdinalIgnoreCase);
+        if (seedRamuDemo)
         {
-            // Ensure Database Created
-            var userContext = services.GetRequiredService<User.Infrastructure.Persistence.UserDbContext>();
-            var ssfContext = services.GetRequiredService<ShramSafal.Infrastructure.Persistence.ShramSafalDbContext>();
+            var seeder = services.GetRequiredService<AgriSync.Bootstrapper.Infrastructure.DatabaseSeeder>();
+            await seeder.SeedDemoDataAsync();
+            Log.Information("Ramu demo seeding completed.");
+        }
 
-            var userSchemaCreated = await EnsureContextTablesCreatedAsync(userContext, "public", "users");
-            var ssfSchemaCreated = await EnsureContextTablesCreatedAsync(ssfContext, "ssf", "farms");
+        var clearPurveshDemo = string.Equals(
+            Environment.GetEnvironmentVariable("CLEAR_PURVESH_DEMO"),
+            "true",
+            StringComparison.OrdinalIgnoreCase);
+        var seedPurveshDemo = string.Equals(
+            Environment.GetEnvironmentVariable("SEED_PURVESH_DEMO"),
+            "true",
+            StringComparison.OrdinalIgnoreCase);
 
-            // Always ensure the blank-experience test account exists (no farm data).
-            var blankSeeder = services.GetRequiredService<AgriSync.Bootstrapper.Infrastructure.BlankTestUserSeeder>();
-            await blankSeeder.SeedAsync();
+        if (clearPurveshDemo || seedPurveshDemo)
+        {
+            var purveshSeeder = services.GetRequiredService<AgriSync.Bootstrapper.Infrastructure.PurveshDemoSeeder>();
 
-            // Seed Data — each seeder is gated behind an env var so no demo data
-            // runs automatically on a fresh deployment.
-            var seedRamuDemo = string.Equals(
-                Environment.GetEnvironmentVariable("SEED_RAMU_DEMO"),
-                "true",
-                StringComparison.OrdinalIgnoreCase);
-            if (seedRamuDemo)
+            if (clearPurveshDemo)
             {
-                var seeder = services.GetRequiredService<AgriSync.Bootstrapper.Infrastructure.DatabaseSeeder>();
-                await seeder.SeedDemoDataAsync();
-                Log.Information("Ramu demo seeding completed.");
+                var clearResult = await purveshSeeder.ClearPurveshDemoAsync();
+                Log.Information("Purvesh demo clear result: {Result}", clearResult);
             }
 
-            var clearPurveshDemo = string.Equals(
-                Environment.GetEnvironmentVariable("CLEAR_PURVESH_DEMO"),
-                "true",
-                StringComparison.OrdinalIgnoreCase);
-            var seedPurveshDemo = string.Equals(
-                Environment.GetEnvironmentVariable("SEED_PURVESH_DEMO"),
-                "true",
-                StringComparison.OrdinalIgnoreCase);
-
-            if (clearPurveshDemo || seedPurveshDemo)
+            if (seedPurveshDemo)
             {
-                var purveshSeeder = services.GetRequiredService<AgriSync.Bootstrapper.Infrastructure.PurveshDemoSeeder>();
-
-                if (clearPurveshDemo)
-                {
-                    var clearResult = await purveshSeeder.ClearPurveshDemoAsync();
-                    Log.Information("Purvesh demo clear result: {Result}", clearResult);
-                }
-
-                if (seedPurveshDemo)
-                {
-                    var seedResult = await purveshSeeder.SeedPurveshDemoAsync();
-                    Log.Information("Purvesh demo seed result: {Result}", seedResult);
-                }
+                var seedResult = await purveshSeeder.SeedPurveshDemoAsync();
+                Log.Information("Purvesh demo seed result: {Result}", seedResult);
             }
+        }
 
-            Log.Information(
-                "Database initialization completed. UserSchema: {UserSchemaCreated}, SsfSchema: {SsfSchemaCreated}, seedRamu: {SeedRamuDemo}, clearPurvesh: {ClearPurveshDemo}, seedPurvesh: {SeedPurveshDemo}",
-                userSchemaCreated,
-                ssfSchemaCreated,
-                seedRamuDemo,
-                clearPurveshDemo,
-                seedPurveshDemo);
-        }
-        catch (Exception ex)
-        {
-            Log.Error(ex, "An error occurred while initializing or seeding the database.");
-        }
+        Log.Information(
+            "Database initialization completed. Environment: {Environment}, UserSchemaChanged: {UserSchemaChanged}, SsfSchemaChanged: {SsfSchemaChanged}, seedRamu: {SeedRamuDemo}, clearPurvesh: {ClearPurveshDemo}, seedPurvesh: {SeedPurveshDemo}",
+            app.Environment.EnvironmentName,
+            userSchemaCreated,
+            ssfSchemaCreated,
+            seedRamuDemo,
+            clearPurveshDemo,
+            seedPurveshDemo);
+    }
+    catch (Exception ex)
+    {
+        Log.Error(ex, "An error occurred while initializing or seeding the database.");
+    }
+}
+
+static string ResolveRemoteIpRateLimitPartitionKey(HttpContext context)
+{
+    return context.Connection.RemoteIpAddress?.ToString() ?? "unknown";
+}
+
+static string ResolveAiRateLimitPartitionKey(HttpContext context)
+{
+    var subject =
+        context.User.FindFirst("sub")?.Value ??
+        context.User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+
+    if (!string.IsNullOrWhiteSpace(subject))
+    {
+        return $"user:{subject}";
     }
 
-    app.Run();
+    return $"ip:{ResolveRemoteIpRateLimitPartitionKey(context)}";
 }
-catch (Exception ex)
+
+static async Task<bool> MigrateContextAsync(DbContext context, string contextName)
 {
-    Log.Fatal(ex, "AgriSync.Bootstrapper failed to start.");
-}
-finally
-{
-    Log.CloseAndFlush();
+    var pendingMigrations = (await context.Database.GetPendingMigrationsAsync()).ToArray();
+    if (pendingMigrations.Length == 0)
+    {
+        Log.Information("No pending migrations for {ContextName}.", contextName);
+        return false;
+    }
+
+    Log.Information("Applying {MigrationCount} pending migrations for {ContextName}: {Migrations}", pendingMigrations.Length, contextName, pendingMigrations);
+    await context.Database.MigrateAsync();
+    return true;
 }
 
 static async Task<bool> EnsureContextTablesCreatedAsync(DbContext context, string schema, string tableName)
