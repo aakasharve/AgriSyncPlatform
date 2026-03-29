@@ -1,0 +1,62 @@
+/* src/styles/tokens.css — Terra Viva dark palette */
+:root {
+  /* ── Backgrounds ── */
+  --bg-base:         #060f07;
+  --bg-surface:      #0a180b;
+  --bg-elevated:     #0e2010;
+  --bg-card-white:   #ffffff;
+
+  /* ── Brand ── */
+  --brand:           #10b981;
+  --brand-fresh:     #34d399;
+  --brand-hover:     #059669;
+
+  /* ── Golden accent ── */
+  --gold:            #f59e0b;
+  --gold-warm:       #fbbf24;
+
+  /* ── White scale ── */
+  --white:           #ffffff;
+  --white-70:        rgba(255,255,255,0.70);
+  --white-55:        rgba(255,255,255,0.55);
+  --white-40:        rgba(255,255,255,0.40);
+  --white-10:        rgba(255,255,255,0.10);
+  --white-06:        rgba(255,255,255,0.06);
+  --white-04:        rgba(255,255,255,0.04);
+
+  /* ── Text ── */
+  --text-primary:    #ffffff;
+  --text-secondary:  rgba(255,255,255,0.70);
+  --text-muted:      rgba(255,255,255,0.40);
+  --text-soil:       #1C1917;
+
+  /* ── Borders ── */
+  --border-dark:     rgba(255,255,255,0.08);
+  --border-gold:     rgba(245,158,11,0.28);
+
+  /* ── Legacy aliases (used by existing components — do not remove) ── */
+  --brand-primary:      var(--brand);
+  --brand-primary-hover:var(--brand-hover);
+  --farm-harvest:       var(--gold);
+  --farm-golden:        var(--gold-warm);
+  --farm-sky:           #0EA5E9;
+  --farm-leaf:          var(--brand-fresh);
+  --farm-soil:          #78350F;
+  --accent-soil:        #78350F;
+  --accent-water:       #0EA5E9;
+  --accent-harvest:     var(--gold);
+  --text-ink:           var(--text-primary);
+  --text-ink-secondary: var(--text-secondary);
+  --border-soft:        var(--border-dark);
+
+  /* ── Motion ── */
+  --ease-out-expo:   cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-in-expo:    cubic-bezier(0.7, 0, 0.84, 0);
+
+  /* ── Spacing ── */
+  --section-pad-y:       clamp(64px, 9vw, 112px);
+  --section-pad-y-tight: clamp(40px, 5vw, 72px);
+  --section-pad-x:       clamp(20px, 5vw, 80px);
+  --prose-width:         68ch;
+  --site-width:          1280px;
+}
