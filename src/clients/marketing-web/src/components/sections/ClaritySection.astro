@@ -18,19 +18,20 @@ const t = getTranslations(lang);
       </span>
       <h2
         class="scene-stagger font-serif text-h2 mb-6"
-        style="color:var(--white-70);"
+        style="color:rgb(29,51,38);"
         set:html={t.scene6.headline.replace(/\n/g, '<br />')}
       />
-      <p class="scene-stagger text-body-lg max-w-prose mx-auto" style="color:var(--white-40);">
+      <p class="scene-stagger text-body-lg max-w-prose mx-auto" style="color:rgba(29,51,38,0.72);">
         {t.scene6.body}
       </p>
     </div>
 
     <!-- Code-Based Dashboard Mockup (Premium UI) -->
     <div class="scene-stagger max-w-sm mx-auto mb-10 md:mb-12">
-      <div class="relative mx-auto w-full max-w-[320px] md:max-w-[350px] rounded-[2.5rem] border-[8px] p-1.5 shadow-[0_32px_80px_-12px_rgba(5,150,105,0.2)] transform hover:-translate-y-2 transition-transform duration-500" style="border-color:rgba(255,255,255,0.06);background:var(--bg-elevated);">
-        <!-- Phone screen -->
-        <div class="relative w-full rounded-[2rem] overflow-hidden shadow-inner h-[500px]" style="background:var(--bg-base);">
+      <!-- Phone shell: always dark forest green regardless of page theme -->
+      <div class="relative mx-auto w-full max-w-[320px] md:max-w-[350px] rounded-[2.5rem] border-[8px] p-1.5 shadow-[0_32px_80px_-12px_rgba(20,83,45,0.28)] transform hover:-translate-y-2 transition-transform duration-500" data-zoom-section data-zoom-scrub="true" data-zoom-start="top 82%" data-zoom-end="center center" style="border-color:rgba(22,163,74,0.28);background:#0F3D22;">
+        <!-- Phone screen: dark interior -->
+        <div class="relative w-full rounded-[2rem] overflow-hidden shadow-inner h-[500px]" style="background:#0a1f10;">
           <!-- Header -->
           <div class="bg-gradient-to-r from-brand to-brand-fresh px-6 pt-10 pb-6 rounded-b-[1.5rem] shadow-sm relative overflow-hidden">
             <div class="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjAiIGhlaWdodD0iMjAiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+PGNpcmNsZSBjeD0iMSIgY3k9IjEiIHI9IjEiIGZpbGw9InJnYmEoMjU1LDI1NSwyNTUsMC4xNSkiLz48L3N2Zz4=')] opacity-30"></div>
@@ -39,41 +40,53 @@ const t = getTranslations(lang);
               <p class="text-white/90 text-sm mt-1.5 font-medium">Farm Overview <span class="opacity-50 mx-1">•</span> Today</p>
             </div>
           </div>
-          
-          <!-- Body -->
+
+          <!-- Body: cards inside phone screen are dark (explicit, not via token) -->
           <div class="p-5 space-y-4">
             <!-- Today's Work -->
-            <div class="card-dark p-4 rounded-xl hover:border-brand/30 transition-colors">
-              <h4 class="text-[11px] font-bold uppercase tracking-widest mb-3 flex items-center gap-2" style="color:var(--white-40);">
+            <div class="p-4 rounded-xl transition-colors" style="background:#0e2614;border:1px solid rgba(255,255,255,0.08);">
+              <h4 class="text-[11px] font-bold uppercase tracking-widest mb-3 flex items-center gap-2" style="color:rgba(255,255,255,0.40);">
                 <span class="w-1.5 h-1.5 rounded-full bg-brand"></span> Today's Work
               </h4>
               <div class="space-y-3">
                 <div class="flex items-center gap-3">
-                  <div class="w-5 h-5 rounded-md bg-brand/10 flex items-center justify-center flex-shrink-0" style="color:var(--brand-fresh);">✓</div>
-                  <span class="text-sm font-bold" style="color:var(--white-70);">Spraying • Plot A</span>
+                  <div class="w-5 h-5 rounded-md flex items-center justify-center flex-shrink-0" style="background:rgba(22,163,74,0.15);color:#4ade80;">✓</div>
+                  <span class="text-sm font-bold" style="color:rgba(255,255,255,0.70);">Spraying • Plot A</span>
                 </div>
                 <div class="flex items-center gap-3">
-                  <div class="w-5 h-5 rounded-md bg-brand flex items-center justify-center flex-shrink-0 text-white">✓</div>
-                  <span class="text-sm font-bold" style="color:var(--white-70);">Irrigation • 2 hrs</span>
+                  <div class="w-5 h-5 rounded-md flex items-center justify-center flex-shrink-0 text-white" style="background:#16A34A;">✓</div>
+                  <span class="text-sm font-bold" style="color:rgba(255,255,255,0.70);">Irrigation • 2 hrs</span>
                 </div>
               </div>
             </div>
 
             <!-- Costs -->
-            <div class="card-dark p-4 rounded-xl hover:shadow-md transition-shadow relative overflow-hidden" style="background:linear-gradient(135deg,rgba(251,191,36,0.08),rgba(217,119,6,0.04));">
-               <div class="absolute -right-4 -top-4 w-16 h-16 bg-amber-400/10 rounded-full blur-xl"></div>
-              <h4 class="text-[11px] font-bold text-amber-400 uppercase tracking-widest mb-2 relative z-10">Costs Recorded</h4>
+            <div class="p-4 rounded-xl hover:shadow-md transition-shadow relative overflow-hidden" style="background:linear-gradient(135deg,rgba(217,119,6,0.14),rgba(146,64,14,0.08));border:1px solid rgba(217,119,6,0.18);">
+              <div class="absolute -right-4 -top-4 w-16 h-16 rounded-full blur-xl" style="background:rgba(217,119,6,0.12);"></div>
+              <h4 class="text-[11px] font-bold uppercase tracking-widest mb-2 relative z-10" style="color:#f59e0b;">Costs Recorded</h4>
               <div class="flex items-baseline gap-1 relative z-10">
-                <span class="text-amber-400 font-extrabold text-xl">₹</span>
-                <span class="text-3xl font-black text-amber-400 tabular-nums tracking-tight">2,400</span>
+                <span class="font-extrabold text-xl" style="color:#f59e0b;">₹</span>
+                <span class="text-3xl font-black tabular-nums tracking-tight" style="color:#f59e0b;">2,400</span>
               </div>
-              <p class="text-xs text-amber-400/60 mt-1 font-medium relative z-10">For 3 workers (Plot A)</p>
+              <p class="text-xs mt-1 font-medium relative z-10" style="color:rgba(245,158,11,0.60);">For 3 workers (Plot A)</p>
             </div>
 
             <!-- Tomorrow -->
-            <div class="card-dark p-4 rounded-xl border-l-[3px] border-l-blue-400">
-              <h4 class="text-[11px] font-bold uppercase tracking-widest mb-2 opacity-70" style="color:var(--white-40);">Tomorrow's Plan</h4>
-              <p class="text-sm font-bold" style="color:var(--white-70);">Fertilizer • Plot B</p>
+            <div class="p-4 rounded-xl border-l-[3px] border-l-blue-400" style="background:#0e2614;border-top:1px solid rgba(255,255,255,0.06);border-right:1px solid rgba(255,255,255,0.06);border-bottom:1px solid rgba(255,255,255,0.06);">
+              <h4 class="text-[11px] font-bold uppercase tracking-widest mb-2" style="color:rgba(255,255,255,0.40);">Tomorrow's Plan</h4>
+              <p class="text-sm font-bold" style="color:rgba(255,255,255,0.70);">Fertilizer • Plot B</p>
+            </div>
+
+            <div class="p-4 rounded-xl overflow-hidden" style="background:#0e2614;border:1px solid rgba(255,255,255,0.06);">
+              <div class="flex items-center justify-between mb-3">
+                <h4 class="text-[11px] font-bold uppercase tracking-widest" style="color:rgba(255,255,255,0.40);">Momentum</h4>
+                <span class="text-[11px] font-bold" style="color:#4ade80;">+18%</span>
+              </div>
+              <svg viewBox="0 0 180 84" class="w-full h-20" fill="none" aria-hidden="true">
+                <path d="M0 70 H180" stroke="rgba(255,255,255,0.08)" stroke-width="1"></path>
+                <path d="M8 60 C28 54 42 48 58 44 C78 38 92 42 106 32 C124 20 138 24 154 12 C162 7 168 6 172 8" stroke="rgba(22,163,74,0.82)" stroke-width="3" stroke-linecap="round" fill="none" data-draw-path data-draw-dur="1.4"></path>
+                <circle cx="172" cy="8" r="4" fill="#D97706"></circle>
+              </svg>
             </div>
           </div>
         </div>
@@ -81,16 +94,16 @@ const t = getTranslations(lang);
     </div>
 
     <div class="grid grid-cols-1 md:grid-cols-3 gap-6 max-w-5xl mx-auto">
-      <div class="clarity-card scene-stagger card-dark rounded-xl p-6 hover:shadow-xl hover:-translate-y-1 transition-all duration-300 border-l-4 border-l-brand relative overflow-hidden">
-        <div class="w-10 h-10 rounded-lg bg-brand/10 flex items-center justify-center mb-4">
+      <div class="clarity-card scene-stagger card-white rounded-xl p-6 hover:shadow-xl hover:-translate-y-1 transition-all duration-300 border-l-4 relative overflow-hidden" style="border-left-color:var(--brand);">
+        <div class="w-10 h-10 rounded-lg flex items-center justify-center mb-4" style="background:rgba(20,83,45,0.08);">
           <svg class="w-5 h-5" style="color:var(--brand-fresh);" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
             <path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5" />
           </svg>
         </div>
-        <h3 class="font-serif text-xl md:text-2xl mb-4 font-bold" style="color:var(--white-70);">{t.scene6.card1_title}</h3>
+        <h3 class="font-serif text-xl md:text-2xl mb-4 font-bold" style="color:var(--text-primary);">{t.scene6.card1_title}</h3>
         <ul class="space-y-3">
           {t.scene6.card1_items.map((item: string) => (
-            <li class="flex items-start gap-2 text-base" style="color:var(--white-40);">
+            <li class="flex items-start gap-2 text-base" style="color:var(--text-secondary);">
               <svg class="w-4 h-4 mt-0.5 flex-shrink-0" style="color:var(--brand-fresh);" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
                 <path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5" />
               </svg>
@@ -98,49 +111,49 @@ const t = getTranslations(lang);
             </li>
           ))}
         </ul>
-        <div class="absolute bottom-0 left-0 right-0 h-1 bg-gradient-to-r from-brand/20 to-transparent"></div>
+        <div class="absolute bottom-0 left-0 right-0 h-1" style="background:linear-gradient(to right, rgba(20,83,45,0.18), transparent);"></div>
       </div>
 
-      <div class="clarity-card scene-stagger card-dark rounded-xl p-6 hover:shadow-xl hover:-translate-y-1 transition-all duration-300 border-l-4 border-l-brand relative overflow-hidden">
-        <div class="w-10 h-10 rounded-lg bg-amber-50/10 flex items-center justify-center mb-4">
-          <svg class="w-5 h-5 text-amber-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+      <div class="clarity-card scene-stagger card-white rounded-xl p-6 hover:shadow-xl hover:-translate-y-1 transition-all duration-300 border-l-4 relative overflow-hidden" style="border-left-color:var(--gold-warm);">
+        <div class="w-10 h-10 rounded-lg flex items-center justify-center mb-4" style="background:rgba(217,119,6,0.10);">
+          <svg class="w-5 h-5" style="color:var(--gold-warm);" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
             <path stroke-linecap="round" stroke-linejoin="round" d="M12 6v12m-3-2.818l.879.659c1.171.879 3.07.879 4.242 0 1.172-.879 1.172-2.303 0-3.182C13.536 12.219 12.768 12 12 12c-.725 0-1.45-.22-2.003-.659-1.106-.879-1.106-2.303 0-3.182s2.9-.879 4.006 0l.415.33" />
           </svg>
         </div>
-        <h3 class="font-serif text-xl md:text-2xl mb-4 font-bold" style="color:var(--white-70);">{t.scene6.card2_title}</h3>
+        <h3 class="font-serif text-xl md:text-2xl mb-4 font-bold" style="color:var(--text-primary);">{t.scene6.card2_title}</h3>
         <ul class="space-y-3">
           {t.scene6.card2_items.map((item: string) => (
             <li class="flex items-center justify-between text-base">
-              <span style="color:var(--white-40);">{item.split('|')[0]}</span>
-              <span class="font-bold tabular-nums" style="color:var(--white-70);">{item.split('|')[1]}</span>
+              <span style="color:var(--text-secondary);">{item.split('|')[0]}</span>
+              <span class="font-bold tabular-nums" style="color:var(--text-primary);">{item.split('|')[1]}</span>
             </li>
           ))}
         </ul>
-        <div class="mt-3 pt-3 border-t-2 border-brand/20 flex items-center justify-between text-base">
-          <span class="font-bold" style="color:var(--white-70);">{t.scene6.card2_total_label}</span>
+        <div class="mt-3 pt-3 flex items-center justify-between text-base" style="border-top:2px solid rgba(217,119,6,0.16);">
+          <span class="font-bold" style="color:var(--text-primary);">{t.scene6.card2_total_label}</span>
           <span class="font-bold text-base tabular-nums" style="color:var(--brand-fresh);">{t.scene6.card2_total}</span>
         </div>
-        <div class="absolute bottom-0 left-0 right-0 h-1 bg-gradient-to-r from-amber-200/20 to-transparent"></div>
+        <div class="absolute bottom-0 left-0 right-0 h-1" style="background:linear-gradient(to right, rgba(217,119,6,0.18), transparent);"></div>
       </div>
 
-      <div class="clarity-card scene-stagger card-dark rounded-xl p-6 hover:shadow-xl hover:-translate-y-1 transition-all duration-300 border-l-4 border-l-accent-harvest relative overflow-hidden">
-        <div class="w-10 h-10 rounded-lg bg-amber-50/10 flex items-center justify-center mb-4">
-          <svg class="w-5 h-5 text-accent-harvest" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+      <div class="clarity-card scene-stagger card-white rounded-xl p-6 hover:shadow-xl hover:-translate-y-1 transition-all duration-300 border-l-4 relative overflow-hidden" style="border-left-color:var(--gold);">
+        <div class="w-10 h-10 rounded-lg flex items-center justify-center mb-4" style="background:rgba(146,64,14,0.08);">
+          <svg class="w-5 h-5" style="color:var(--gold);" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
             <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z" />
           </svg>
         </div>
-        <h3 class="font-serif text-xl md:text-2xl mb-4 font-bold" style="color:var(--white-70);">{t.scene6.card3_title}</h3>
+        <h3 class="font-serif text-xl md:text-2xl mb-4 font-bold" style="color:var(--text-primary);">{t.scene6.card3_title}</h3>
         <ul class="space-y-3">
           {t.scene6.card3_items.map((item: string) => (
-            <li class="flex items-start gap-2 text-base" style="color:var(--white-40);">
-              <svg class="w-4 h-4 text-accent-harvest mt-0.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <li class="flex items-start gap-2 text-base" style="color:var(--text-secondary);">
+              <svg class="w-4 h-4 mt-0.5 flex-shrink-0" style="color:var(--gold);" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
                 <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z" />
               </svg>
               <span>{item}</span>
             </li>
           ))}
         </ul>
-        <div class="absolute bottom-0 left-0 right-0 h-1 bg-gradient-to-r from-accent-harvest/20 to-transparent"></div>
+        <div class="absolute bottom-0 left-0 right-0 h-1" style="background:linear-gradient(to right, rgba(146,64,14,0.16), transparent);"></div>
       </div>
     </div>
   </div>
