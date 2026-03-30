@@ -7,9 +7,9 @@ const t = getTranslations(lang);
 ---
 
 <section data-scene="legacy" data-soil="alluvial" data-cursor="sun" class="relative py-section-tight overflow-hidden min-h-[70vh] flex items-center">
-  <!-- Deep dark background -->
-  <div class="absolute inset-0" style="background:var(--bg-base);"></div>
-  <div class="absolute inset-0 pointer-events-none" style="background:radial-gradient(ellipse 80% 60% at 50% 90%, rgba(245,158,11,0.12) 0%, transparent 60%);" aria-hidden="true"></div>
+  <!-- Kachi Mati warm background — deepest ochre in the section arc -->
+  <div class="absolute inset-0" style="background:linear-gradient(180deg, #F2E8D8 0%, #E8D9C4 100%);"></div>
+  <div class="absolute inset-0 pointer-events-none" style="background:radial-gradient(ellipse 80% 60% at 50% 90%, rgba(217,119,6,0.10) 0%, transparent 60%);" aria-hidden="true"></div>
 
   <!-- Golden glow ring from base -->
   <div class="legacy-glow-ring" aria-hidden="true"></div>
@@ -32,30 +32,24 @@ const t = getTranslations(lang);
       </span>
       <h2
         data-split-headline
-        class="scene-stagger font-serif text-h2 text-white mb-6 drop-shadow-xl"
+        class="scene-stagger font-serif text-h2 mb-6"
+        style="color:var(--text-primary);"
         set:html={t.legacy.headline.replace(/\n/g, '<br />')}
       />
-      <p class="scene-stagger text-body-lg text-white/80 max-w-prose mx-auto mb-10">
+      <p class="scene-stagger text-body-lg max-w-prose mx-auto mb-10" style="color:var(--text-secondary);">
         {t.legacy.body}
       </p>
       <div class="space-y-3 max-w-lg mx-auto">
         {t.legacy.lines.map((line: string) => (
-          <div class="legacy-line flex items-start gap-3 text-left bg-white/10 backdrop-blur-sm rounded-xl px-5 py-3 border border-white/15">
-            <svg class="w-5 h-5 text-farm-harvest flex-shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <div class="legacy-line card-white flex items-start gap-3 text-left px-5 py-3">
+            <svg class="w-5 h-5 flex-shrink-0 mt-0.5" style="color:var(--gold-warm);" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
               <path stroke-linecap="round" stroke-linejoin="round" d="M12 3v2.25m6.364.386l-1.591 1.591M21 12h-2.25m-.386 6.364l-1.591-1.591M12 18.75V21m-4.773-4.227l-1.591 1.591M5.25 12H3m4.227-4.773L5.636 5.636M15.75 12a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0z" />
             </svg>
-            <p class="text-base text-white/90 font-medium">{line}</p>
+            <p class="text-base font-medium" style="color:var(--text-primary);">{line}</p>
           </div>
         ))}
       </div>
     </div>
-  </div>
-
-  <!-- Top wave separator -->
-  <div class="absolute top-0 left-0 right-0">
-    <svg viewBox="0 0 1440 60" fill="none" class="w-full h-auto block" preserveAspectRatio="none">
-      <path d="M0 0C240 40 480 10 720 30C960 50 1200 15 1440 25V0H0Z" fill="#FEFCF8" opacity="0.15"/>
-    </svg>
   </div>
 
   <CropSilhouette count={16} variant="sugarcane" goldGlow={true} height={80} />
