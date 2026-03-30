@@ -1,178 +1,90 @@
 ---
 import { getLangFromUrl, getTranslations } from '../../i18n/translations';
+
 const lang = getLangFromUrl(Astro.url);
 const t = getTranslations(lang);
-const noteAnnotations = lang === 'mr'
-  ? ['हे तर माझ्याच बाबतीत!', 'रोज हेच.', '★ महत्त्वाचं', 'पैसा कुठे गेला?']
-  : ['This happens to me too.', 'Same every day.', 'Important.', 'Where did the money go?'];
 ---
 
-<section id="problem-hit" data-scene="problem-hit" data-soil="cracked-dry" data-cursor="wilt" class="relative py-section overflow-hidden">
-  <!-- Section background -->
-  <div class="absolute inset-0" style="background:var(--bg-surface);"></div>
-  <div class="absolute inset-0 pointer-events-none" style="background:radial-gradient(ellipse 80% 50% at 50% 100%, rgba(245,158,11,0.08) 0%, transparent 60%);" aria-hidden="true"></div>
-
-  <!-- Ambient particles -->
-  <div class="absolute inset-0 pointer-events-none overflow-hidden" aria-hidden="true">
-    <div class="ambient-particle amber-particle" style="left:8%;animation-delay:0s;animation-duration:10s;"></div>
-    <div class="ambient-particle amber-particle" style="left:25%;animation-delay:2.5s;animation-duration:13s;"></div>
-    <div class="ambient-particle amber-particle" style="left:68%;animation-delay:3.5s;animation-duration:14s;"></div>
-    <div class="ambient-particle amber-particle" style="left:90%;animation-delay:0.5s;animation-duration:12s;"></div>
-  </div>
+<section
+  id="problem-hit"
+  data-scene="problem-hit"
+  data-soil="cracked-dry"
+  data-cursor="wilt"
+  class="relative py-section overflow-hidden"
+  style="background:var(--bg-base);"
+>
+  <div class="absolute inset-0 pointer-events-none" style="background:radial-gradient(ellipse 62% 44% at 50% 14%, rgba(146,64,14,0.07) 0%, transparent 44%), radial-gradient(ellipse 44% 28% at 82% 84%, rgba(20,83,45,0.07) 0%, transparent 44%);" aria-hidden="true"></div>
 
   <div class="relative z-10 max-w-site mx-auto px-5 md:px-8">
-    <div class="text-center mb-10 md:mb-14">
+    <div class="text-center max-w-3xl mx-auto mb-10 md:mb-14">
       <span class="chapter-mark" data-chapter>
-        {lang === 'mr' ? 'Chapter 02 · समस्या' : 'Chapter 02 · The Problem'}
+        {lang === 'mr' ? 'Chapter 02 · अडचण कुठे आहे' : 'Chapter 02 · Where the Day Breaks'}
       </span>
-      <h2 class="scene-stagger font-serif text-h2 text-ink mb-5" set:html={t.problem_hit.headline.replace(/\n/g, '<br />')} />
-      <p class="scene-stagger text-body-lg text-ink-secondary max-w-prose mx-auto">{t.problem_hit.body}</p>
+      <h2 class="font-serif text-h2 mb-5" style="color:rgb(29,51,38);" set:html={t.problem_hit.headline.replace(/\n/g, '<br />')} />
+      <p class="text-body-lg max-w-prose mx-auto" style="color:rgba(29,51,38,0.74);">
+        {t.problem_hit.body}
+      </p>
     </div>
 
-    <div class="grid grid-cols-1 lg:grid-cols-2 gap-8 lg:gap-16 items-center max-w-5xl mx-auto">
-      <!-- Problem cards -->
-      <div class="space-y-4 problem-note-stack" data-reveal>
+    <div class="grid grid-cols-1 lg:grid-cols-[1.15fr_0.85fr] gap-8 lg:gap-12 items-center max-w-6xl mx-auto">
+      <div class="grid gap-4" data-reveal-3d-group>
         {t.problem_hit.pain_lines.map((line: string, i: number) => (
-          <div class="relative">
-            <div class="card-dark relative px-5 py-4" style="border-left:3px solid rgba(245,158,11,0.5);">
-              <p class="text-base md:text-lg font-semibold leading-relaxed" style="color:var(--white-70);">{line}</p>
-            </div>
-            <div class:list={['problem-annotation', `problem-annotation--${i + 1}`]} aria-hidden="true">
-              {noteAnnotations[i]}
+          <div
+            class="card-white rounded-2xl px-5 py-5 shadow-[0_12px_28px_rgba(146,64,14,0.07)]"
+            data-reveal-3d-item
+          >
+            <div class="flex items-start gap-4">
+              <div class="problem-pin" style={`background:${i % 2 === 0 ? '#D97706' : '#14532D'}`}></div>
+              <div class="min-w-0">
+                <div class="text-[0.68rem] font-extrabold uppercase tracking-[0.28em] mb-2" style="color:rgba(146,64,14,0.55);">
+                  {lang === 'mr' ? `दिवसातील भंग 0${i + 1}` : `Breakpoint 0${i + 1}`}
+                </div>
+                <p class="text-lg md:text-[1.35rem] leading-8 font-semibold" style="color:var(--text-primary);">{line}</p>
+              </div>
             </div>
           </div>
         ))}
       </div>
 
-      <!-- Chaos illustration -->
-      <div class="scene-stagger hidden lg:flex justify-center items-center" data-reveal>
-        <svg viewBox="0 0 300 280" xmlns="http://www.w3.org/2000/svg" class="w-full max-w-xs" aria-hidden="true">
-          <!-- Head silhouette -->
-          <ellipse cx="150" cy="100" rx="60" ry="70" fill="rgba(255,255,255,0.04)" stroke="rgba(255,255,255,0.08)" stroke-width="1.5"/>
-          <!-- Tangled thought lines -->
-          <path d="M110 80 C90 60 70 90 100 100 C80 110 60 130 90 140" stroke="rgba(245,158,11,0.4)" stroke-width="1.5" fill="none" stroke-linecap="round"/>
-          <path d="M190 75 C210 55 230 85 200 95 C220 105 240 125 210 135" stroke="rgba(239,68,68,0.35)" stroke-width="1.5" fill="none" stroke-linecap="round"/>
-          <path d="M150 60 C160 30 180 20 170 50 C190 40 200 60 180 70" stroke="rgba(16,185,129,0.3)" stroke-width="1.5" fill="none" stroke-linecap="round"/>
-          <!-- Floating question marks -->
-          <text x="80"  y="60"  font-size="18" fill="rgba(245,158,11,0.5)" font-family="serif">?</text>
-          <text x="210" y="55"  font-size="14" fill="rgba(245,158,11,0.35)" font-family="serif">?</text>
-          <text x="155" y="40"  font-size="12" fill="rgba(255,255,255,0.2)" font-family="serif">?</text>
-          <!-- Money symbol -->
-          <text x="88"  y="145" font-size="13" fill="rgba(245,158,11,0.45)" font-family="sans-serif">₹?</text>
-          <!-- Ground line -->
-          <line x1="60" y1="200" x2="240" y2="200" stroke="rgba(245,158,11,0.2)" stroke-width="1"/>
-          <!-- Farmer silhouette (simple) -->
-          <circle cx="150" cy="170" r="12" fill="rgba(255,255,255,0.06)" stroke="rgba(255,255,255,0.1)" stroke-width="1"/>
-          <line x1="150" y1="182" x2="150" y2="200" stroke="rgba(255,255,255,0.1)" stroke-width="1.5"/>
-        </svg>
-      </div>
-    </div>
+      <div class="rounded-[2rem] border border-[rgba(19,50,36,0.08)] bg-[rgba(17,49,34,0.92)] px-6 py-8 shadow-[0_24px_60px_rgba(0,0,0,0.16)]" data-zoom-section>
+        <div class="relative w-56 h-56 mx-auto mb-6 flex justify-center items-center rounded-2xl overflow-hidden shadow-inner bg-[rgba(255,255,255,0.03)] border border-white/10">
+          <img 
+            src="/images/characters/problem-burdened-farmer.png" 
+            alt={lang === 'mr' ? 'थकलेला शेतकरी' : 'Burdened farmer'} 
+            class="w-full h-full object-cover opacity-90 mix-blend-luminosity hover:mix-blend-normal transition-all duration-500"
+          />
+        </div>
 
-    <div class="problem-bridge" aria-hidden="true">
-      <svg viewBox="0 0 760 220" class="w-full h-full">
-        <path
-          class="problem-rope-shadow"
-          d="M54 82 C 210 170, 515 176, 708 106"
-          fill="none"
-          stroke="rgba(28, 25, 23, 0.16)"
-          stroke-width="10"
-          stroke-linecap="round"
-        />
-        <path
-          class="problem-rope-path"
-          d="M54 82 C 210 170, 515 176, 708 106"
-          fill="none"
-          stroke="#8B5A2B"
-          stroke-width="6"
-          stroke-linecap="round"
-          stroke-dasharray="10 8 22 10"
-        />
-      </svg>
+        <div class="mt-8 grid grid-cols-2 gap-3">
+          {[
+            lang === 'mr' ? 'खर्च?' : 'Cost?',
+            lang === 'mr' ? 'मजूर?' : 'Labour?',
+            lang === 'mr' ? 'बाकी?' : 'Pending?',
+            lang === 'mr' ? 'कुठला प्लॉट?' : 'Which plot?',
+          ].map((label) => (
+            <div class="rounded-2xl border border-white/10 bg-white/5 px-4 py-4 text-center">
+              <div class="text-sm font-bold tracking-wide" style="color:rgba(255,255,255,0.82);">{label}</div>
+            </div>
+          ))}
+        </div>
+
+        <p class="mt-6 text-center text-base leading-7" style="color:rgba(255,255,255,0.68);">
+          {lang === 'mr'
+            ? 'दिवसातलं काम अनेक तुकड्यांत विखुरतं. नोंद नसली की सगळं पुन्हा डोक्यात जोडावं लागतं.'
+            : 'The day breaks into fragments. Without a record, everything has to be rebuilt from memory at night.'}
+        </p>
+      </div>
     </div>
   </div>
 </section>
 
 <style>
-  .problem-note-stack {
-    position: relative;
+  .problem-pin {
+    width: 0.5rem;
+    min-width: 0.5rem;
+    align-self: stretch;
+    border-radius: 999px;
+    box-shadow: 0 0 0 6px rgba(255,255,255,0.8);
   }
 
-  .problem-annotation {
-    position: absolute;
-    color: rgba(255,255,255,0.45);
-    font-family: var(--font-sans);
-    font-size: 0.8rem;
-    font-style: italic;
-    letter-spacing: 0.02em;
-    opacity: 0;
-    transform: translateY(8px);
-    transition: opacity 0.6s ease-out, transform 0.6s ease-out;
-    pointer-events: none;
-    white-space: nowrap;
-  }
-
-  [data-scene="problem-hit"].scene-visible .problem-annotation {
-    opacity: 1;
-    transform: translateY(0);
-  }
-
-  .problem-annotation--1 {
-    top: -0.8rem;
-    left: 0.5rem;
-    transform: rotate(-3deg);
-  }
-
-  .problem-annotation--2 {
-    top: 0.25rem;
-    right: 0.9rem;
-    transform: rotate(3deg);
-  }
-
-  .problem-annotation--3 {
-    bottom: -0.9rem;
-    left: 1.5rem;
-    transform: rotate(-2deg);
-  }
-
-  .problem-annotation--4 {
-    bottom: -0.7rem;
-    right: 0.5rem;
-    transform: rotate(2deg);
-  }
-
-  .problem-bridge {
-    position: absolute;
-    inset: 0;
-    display: none;
-    pointer-events: none;
-  }
-
-  .problem-bridge svg {
-    position: absolute;
-    left: 50%;
-    top: 56%;
-    width: min(760px, 92%);
-    height: 220px;
-    transform: translate(-50%, -50%);
-    overflow: visible;
-  }
-
-  .problem-rope-path {
-    transition: stroke-dashoffset 0.6s ease-out;
-    filter: drop-shadow(0 6px 14px rgba(120, 53, 15, 0.18));
-  }
-
-  @media (min-width: 1024px) {
-    .problem-bridge {
-      display: block;
-    }
-  }
-
-  @media (prefers-reduced-motion: reduce) {
-    .problem-annotation {
-      opacity: 1;
-      transform: none;
-      transition: none;
-    }
-  }
 </style>
