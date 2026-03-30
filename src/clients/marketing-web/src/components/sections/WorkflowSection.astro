@@ -1,0 +1,440 @@
+---
+import { getLangFromUrl, getTranslations } from '../../i18n/translations';
+
+const lang = getLangFromUrl(Astro.url);
+const t = getTranslations(lang);
+
+// Visual demo tags — hardcoded for animation, keyed to transcript.buckets categories
+// chip styles: dark glass
+const chipStyles = {
+  emerald: 'background:rgba(16,185,129,0.1);color:#34d399;border:1px solid rgba(16,185,129,0.25);',
+  blue:    'background:rgba(59,130,246,0.1);color:#93c5fd;border:1px solid rgba(59,130,246,0.2);',
+  amber:   'background:rgba(245,158,11,0.1);color:#fbbf24;border:1px solid rgba(245,158,11,0.25);',
+  purple:  'background:rgba(168,85,247,0.1);color:#d8b4fe;border:1px solid rgba(168,85,247,0.2);',
+  rose:    'background:rgba(244,63,94,0.1);color:#fda4af;border:1px solid rgba(244,63,94,0.2);',
+  orange:  'background:rgba(249,115,22,0.1);color:#fdba74;border:1px solid rgba(249,115,22,0.2);',
+};
+
+const demoTags = lang === 'mr'
+  ? [
+      { label: 'फवारणी', bucket: 0, chipStyle: chipStyles.emerald },
+      { label: '३ मजूर', bucket: 2, chipStyle: chipStyles.blue },
+      { label: '₹२,४००', bucket: 3, chipStyle: chipStyles.amber },
+      { label: 'प्लॉट A', bucket: 1, chipStyle: chipStyles.purple },
+      { label: 'ठिबक सिंचन', bucket: 0, chipStyle: chipStyles.emerald },
+      { label: '२ तास', bucket: 4, chipStyle: chipStyles.rose },
+      { label: 'प्लॉट C', bucket: 1, chipStyle: chipStyles.purple },
+      { label: 'कीटकनाशक', bucket: 0, chipStyle: chipStyles.emerald },
+      { label: 'उद्या प्लॉट B', bucket: 5, chipStyle: chipStyles.orange },
+    ]
+  : [
+      { label: 'Spraying', bucket: 0, chipStyle: chipStyles.emerald },
+      { label: '3 workers', bucket: 2, chipStyle: chipStyles.blue },
+      { label: '₹2,400', bucket: 3, chipStyle: chipStyles.amber },
+      { label: 'Plot A', bucket: 1, chipStyle: chipStyles.purple },
+      { label: 'Drip irrigation', bucket: 0, chipStyle: chipStyles.emerald },
+      { label: '2 hours', bucket: 4, chipStyle: chipStyles.rose },
+      { label: 'Plot C', bucket: 1, chipStyle: chipStyles.purple },
+      { label: 'Pesticide', bucket: 0, chipStyle: chipStyles.emerald },
+      { label: 'Plot B pending', bucket: 5, chipStyle: chipStyles.orange },
+    ];
+
+// Bucket icons
+const bucketIcons = ['🌾', '📍', '👷', '💰', '⏱️', '📋', '👁️'];
+---
+
+<section
+  data-scene="workflow"
+  data-soil="wet-irrigated"
+  data-cursor="mic"
+  class="relative py-section overflow-hidden"
+>
+  <div class="absolute inset-0" style="background:var(--bg-surface);"></div>
+  <div class="absolute inset-0 pointer-events-none" style="background:radial-gradient(ellipse 70% 60% at 40% 50%, rgba(16,185,129,0.06) 0%, transparent 65%);" aria-hidden="true"></div>
+
+  <!-- Floating colored tag particles drifting upward -->
+  <div class="absolute inset-0 pointer-events-none overflow-hidden" aria-hidden="true">
+    <div class="ambient-particle green-particle" style="left: 8%; animation-delay: 0s; animation-duration: 12s;"></div>
+    <div class="ambient-particle amber-particle" style="left: 25%; animation-delay: 1.5s; animation-duration: 14s;"></div>
+    <div class="ambient-particle green-particle" style="left: 50%; animation-delay: 0.5s; animation-duration: 11s;"></div>
+    <div class="ambient-particle amber-particle" style="left: 72%; animation-delay: 3s; animation-duration: 13s;"></div>
+    <div class="ambient-particle green-particle" style="left: 90%; animation-delay: 2s; animation-duration: 15s;"></div>
+  </div>
+
+  <div class="relative z-10 max-w-site mx-auto px-5 md:px-8">
+    <!-- Headline -->
+    <div class="text-center mb-8 md:mb-10">
+      <span class="chapter-mark" data-chapter>
+        {lang === 'mr' ? 'Chapter 04 · आवाज' : 'Chapter 04 · Voice to Record'}
+      </span>
+      <h2
+        class="scene-stagger font-serif text-h2 text-ink mb-6"
+        set:html={t.transcript.headline.replace(/\n/g, '<br />')}
+      />
+      <p class="scene-stagger text-body-lg text-ink-secondary max-w-prose mx-auto">
+        {t.transcript.body}
+      </p>
+    </div>
+
+    <!-- VOICE-TO-PARSE AUTO-BUCKETING VISUALIZATION -->
+    <div class="scene-stagger workflow-storyboard max-w-5xl mx-auto grid grid-cols-1 lg:grid-cols-[auto_1fr] gap-8 lg:gap-12 items-start">
+
+      <!-- Phone mockup (desktop only) -->
+      <div class="hidden lg:block">
+        <div class="phone-frame phone-tilt relative mx-auto">
+          <div class="phone-notch"></div>
+
+          <!-- Status bar -->
+          <div class="absolute top-0 left-0 right-0 h-8 flex items-end justify-between px-6 pb-0.5 z-20 text-[9px] text-gray-500 font-medium">
+            <span>9:41</span>
+            <div class="flex items-center gap-1">
+              <svg class="w-3 h-3" viewBox="0 0 24 24" fill="currentColor"><path d="M1 9l2 2c4.97-4.97 13.03-4.97 18 0l2-2C16.93 2.93 7.08 2.93 1 9zm8 8l3 3 3-3a4.237 4.237 0 00-6 0zm-4-4l2 2a7.074 7.074 0 0110 0l2-2C15.14 9.14 8.87 9.14 5 13z"/></svg>
+              <svg class="w-3 h-3" viewBox="0 0 24 24" fill="currentColor"><path d="M15.67 4H14V2h-4v2H8.33C7.6 4 7 4.6 7 5.33v15.33C7 21.4 7.6 22 8.33 22h7.33c.74 0 1.34-.6 1.34-1.33V5.33C17 4.6 16.4 4 15.67 4z"/></svg>
+            </div>
+          </div>
+
+          <!-- Mini app screen -->
+          <div class="pt-9 h-full flex flex-col overflow-hidden bg-gradient-to-b from-white to-gray-50/50">
+
+            <!-- App header bar -->
+            <div class="flex items-center justify-between px-4 py-2.5 border-b border-gray-100">
+              <div class="flex items-center gap-2">
+                <div class="w-7 h-7 rounded-lg bg-gradient-to-br from-brand to-brand-fresh flex items-center justify-center">
+                  <svg class="w-3.5 h-3.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M12 6.042A8.967 8.967 0 006 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 016 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 016-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0018 18a8.967 8.967 0 00-6 2.292m0-14.25v14.25" /></svg>
+                </div>
+                <div>
+                  <span class="text-[10px] font-extrabold text-ink block leading-none">{lang === 'mr' ? 'आजचा लॉग' : "Today's Log"}</span>
+                  <span class="text-[8px] text-ink-muted">{lang === 'mr' ? '२८ मार्च' : 'Mar 28'}</span>
+                </div>
+              </div>
+              <div class="flex items-center gap-1.5">
+                <div class="w-1.5 h-1.5 rounded-full bg-brand animate-pulse"></div>
+                <span class="text-[8px] text-brand font-bold">{lang === 'mr' ? 'ऐकतोय...' : 'Listening...'}</span>
+              </div>
+            </div>
+
+            <!-- Active voice recording area -->
+            <div class="mx-3 mt-3 rounded-xl bg-gradient-to-br from-brand/5 via-brand/10 to-emerald-50 border border-brand/20 p-3">
+              <div class="flex items-center gap-2 mb-2">
+                <div class="w-5 h-5 rounded-full bg-brand flex items-center justify-center pulse-ring-container">
+                  <svg class="w-2.5 h-2.5 text-white" fill="currentColor" viewBox="0 0 24 24"><path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z"/></svg>
+                  <div class="absolute w-5 h-5 rounded-full border border-brand/40 pulse-ring-animated"></div>
+                </div>
+                <div class="text-[8px] text-ink-secondary font-medium">{lang === 'mr' ? '"आज प्लॉट A ला फवारणी..."' : '"Sprayed Plot A today..."'}</div>
+              </div>
+              <!-- Waveform inside recording area -->
+              <div class="flex items-end gap-[2px] h-5">
+                {Array.from({ length: 28 }).map((_, i) => (
+                  <div class="waveform-bar-mini w-[2px] bg-brand/50 rounded-full" style={`--delay: ${i};`}></div>
+                ))}
+              </div>
+            </div>
+
+            <!-- Parsed tags flowing in -->
+            <div class="px-3 mt-2.5">
+              <div class="text-[7px] text-ink-muted font-bold uppercase tracking-wider mb-1.5">{lang === 'mr' ? 'ओळखलं ✨' : 'Detected ✨'}</div>
+              <div class="flex flex-wrap gap-1">
+                {demoTags.slice(0, 6).map((tag, i) => (
+                  <span class="bucket-tag text-[7px] px-1.5 py-0.5 rounded-full font-bold" style={`${tag.chipStyle} animation-delay: ${0.5 + i * 0.18}s;`}>
+                    {tag.label}
+                  </span>
+                ))}
+              </div>
+            </div>
+
+            <!-- Log entries -->
+            <div class="mt-auto px-3 pb-3 space-y-2">
+              <div class="text-[7px] text-ink-muted font-bold uppercase tracking-wider mb-1">{lang === 'mr' ? 'आजच्या नोंदी' : "Today's entries"}</div>
+
+              <!-- Log card 1 -->
+              <div class="bg-white rounded-xl px-3 py-2 border border-gray-100 shadow-sm flex items-start gap-2">
+                <div class="w-6 h-6 rounded-lg bg-emerald-50 flex items-center justify-center flex-shrink-0 mt-0.5">
+                  <span class="text-[10px]">🌾</span>
+                </div>
+                <div class="min-w-0 flex-1">
+                  <div class="text-[9px] font-extrabold text-ink leading-tight">{lang === 'mr' ? 'फवारणी' : 'Spraying'}</div>
+                  <div class="text-[8px] text-ink-muted mt-0.5">{lang === 'mr' ? 'प्लॉट A · ३ मजूर · ₹२,४००' : 'Plot A · 3 workers · ₹2,400'}</div>
+                </div>
+                <svg class="w-3 h-3 text-brand flex-shrink-0 mt-1" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5" /></svg>
+              </div>
+
+              <!-- Log card 2 -->
+              <div class="bg-white rounded-xl px-3 py-2 border border-gray-100 shadow-sm flex items-start gap-2">
+                <div class="w-6 h-6 rounded-lg bg-blue-50 flex items-center justify-center flex-shrink-0 mt-0.5">
+                  <span class="text-[10px]">💧</span>
+                </div>
+                <div class="min-w-0 flex-1">
+                  <div class="text-[9px] font-extrabold text-ink leading-tight">{lang === 'mr' ? 'ठिबक सिंचन' : 'Drip irrigation'}</div>
+                  <div class="text-[8px] text-ink-muted mt-0.5">{lang === 'mr' ? 'प्लॉट C · २ तास' : 'Plot C · 2 hours'}</div>
+                </div>
+                <svg class="w-3 h-3 text-brand flex-shrink-0 mt-1" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5" /></svg>
+              </div>
+
+              <!-- Log card 3 — pending -->
+              <div class="bg-white rounded-xl px-3 py-2 border border-dashed border-orange-200 flex items-start gap-2 opacity-70">
+                <div class="w-6 h-6 rounded-lg bg-orange-50 flex items-center justify-center flex-shrink-0 mt-0.5">
+                  <span class="text-[10px]">📋</span>
+                </div>
+                <div class="min-w-0 flex-1">
+                  <div class="text-[9px] font-extrabold text-ink leading-tight">{lang === 'mr' ? 'उद्या प्लॉट B' : 'Plot B pending'}</div>
+                  <div class="text-[8px] text-orange-500 mt-0.5">{lang === 'mr' ? 'उद्याचे काम' : 'Scheduled tomorrow'}</div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Bottom floating mic button -->
+            <div class="absolute bottom-3 left-1/2 -translate-x-1/2 z-10">
+              <div class="mic-3d w-11 h-11 rounded-full flex items-center justify-center">
+                <svg class="w-5 h-5 text-white" fill="currentColor" viewBox="0 0 24 24"><path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm5.91-3c-.49 0-.9.36-.98.85C16.52 14.2 14.47 16 12 16s-4.52-1.8-4.93-4.15a.998.998 0 00-.98-.85c-.61 0-1.09.54-1 1.14.49 3 2.89 5.35 5.91 5.78V20c0 .55.45 1 1 1s1-.45 1-1v-2.08a6.993 6.993 0 005.91-5.78c.1-.6-.39-1.14-1-1.14z"/></svg>
+              </div>
+            </div>
+          </div>
+
+          <!-- Green glow behind phone -->
+          <div class="absolute -inset-8 -z-10 rounded-[60px] glow-green pointer-events-none" aria-hidden="true"></div>
+          <!-- Secondary warm glow -->
+          <div class="absolute -inset-12 -z-20 pointer-events-none" aria-hidden="true" style="background: radial-gradient(ellipse at 50% 70%, rgba(245, 158, 11, 0.06) 0%, transparent 60%);"></div>
+        </div>
+      </div>
+
+      <!-- Main workflow card -->
+      <div class="bg-white rounded-2xl border border-border-soft shadow-xl overflow-hidden">
+
+        <!-- STAGE 1: Voice Waveform -->
+        <div class="workflow-step bento-card bg-gradient-to-r from-brand to-brand-fresh px-5 md:px-8 py-5 !border-0 !rounded-none !backdrop-filter-none !shadow-none relative">
+          <div class="flex items-center gap-3 mb-3">
+            <div class="w-3.5 h-3.5 rounded-full bg-white/80 animate-pulse"></div>
+            <span class="text-white/90 text-sm font-bold">{t.transcript.listening_label}</span>
+          </div>
+          <!-- Animated waveform bars -->
+          <div class="flex items-end gap-[3px] h-10">
+            {Array.from({ length: 30 }).map((_, i) => (
+              <div
+                class="waveform-bar w-1 bg-white/50 rounded-full"
+                style={`--delay: ${i};`}
+              ></div>
+            ))}
+          </div>
+          <!-- Step connector arrow -->
+          <div class="workflow-connector absolute -bottom-1 left-1/2 -translate-x-1/2 z-10" aria-hidden="true">
+            <svg width="24" height="12" viewBox="0 0 24 12" fill="none">
+              <path d="M12 12L0 0h24L12 12z" fill="white" opacity="0.9"/>
+            </svg>
+          </div>
+        </div>
+
+        <!-- STAGE 2: Raw Transcript -->
+        <div class="workflow-step bento-card px-5 md:px-8 py-5 border-b border-border-soft/50 !rounded-none !shadow-none !backdrop-filter-none !border-x-0 !border-t-0 relative">
+          <p class="text-sm text-ink-muted mb-3 uppercase tracking-wider font-bold flex items-center gap-2">
+            {t.transcript.label}
+            <span class="inline-block w-0.5 h-4 bg-brand cursor-blink" aria-hidden="true"></span>
+          </p>
+          <p class="text-base md:text-lg text-ink leading-relaxed font-medium">
+            {t.transcript.text}
+          </p>
+          <!-- Step connector arrow -->
+          <div class="workflow-connector absolute -bottom-1 left-1/2 -translate-x-1/2 z-10" aria-hidden="true">
+            <svg width="24" height="12" viewBox="0 0 24 12" fill="none">
+              <path d="M12 12L0 0h24L12 12z" fill="#F9FAFB" opacity="0.9"/>
+            </svg>
+          </div>
+        </div>
+
+        <!-- STAGE 3: Auto-bucketed tags -->
+        <div class="workflow-step bento-card px-5 md:px-8 py-6 bg-gradient-to-b from-gray-50/80 to-white !rounded-none !rounded-b-2xl !shadow-none !backdrop-filter-none !border-0">
+          <p class="text-sm text-ink-muted mb-4 uppercase tracking-wider font-bold flex items-center gap-2">
+            <svg class="w-3.5 h-3.5 text-brand" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z" />
+            </svg>
+            {lang === 'mr' ? 'स्वयंचलित वर्गीकरण' : 'Auto-categorized'}
+          </p>
+
+          <!-- Extracted tags -->
+          <div class="flex flex-wrap gap-2 mb-6" data-reveal>
+            {demoTags.map((tag, i) => (
+              <span
+                class="bucket-tag inline-flex items-center gap-1 px-3 py-1.5 rounded-full text-sm md:text-base font-bold shadow-sm"
+                style={`${tag.chipStyle} animation-delay: ${0.3 + i * 0.15}s;`}
+              >
+                {tag.label}
+              </span>
+            ))}
+          </div>
+
+          <!-- 7 Category buckets from translations -->
+          <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3" data-reveal>
+            {t.transcript.buckets.map((bucketName: string, i: number) => {
+              const bucketTags = demoTags.filter((tag) => tag.bucket === i);
+              return (
+                <div class="card-dark rounded-xl p-3 hover:shadow-md transition-shadow">
+                  <div class="flex items-center gap-1.5 mb-2">
+                    <span class="text-base" aria-hidden="true">{bucketIcons[i] || '📦'}</span>
+                    <span class="text-xs font-bold text-ink-secondary uppercase tracking-wide">{bucketName}</span>
+                    <span class="ml-auto text-[10px] text-ink-muted bg-white/10 px-1.5 py-0.5 rounded-full">{bucketTags.length}</span>
+                  </div>
+                  <div class="flex flex-wrap gap-1">
+                    {bucketTags.map((tag, j) => (
+                      <span
+                        class="bucket-tag text-[10px] md:text-xs px-2 py-0.5 rounded-full font-medium"
+                        style={`${tag.chipStyle} animation-delay: ${1.2 + j * 0.2}s;`}
+                      >
+                        {tag.label}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+
+      <div class="workflow-annotation" aria-hidden="true">
+        {lang === 'mr' ? 'किती सोपं!' : 'So easy.'}
+      </div>
+
+      <div class="ant-trail" aria-hidden="true">
+        {Array.from({ length: 6 }, (_, index) => (
+          <span class="workflow-ant" style={`--ant-delay:${index * 0.75}s; --ant-left:${4 + index * 14}%;`}></span>
+        ))}
+      </div>
+    </div>  <!-- close grid -->
+  </div>
+</section>
+
+<style>
+  @keyframes waveform-mini {
+    0%, 100% { height: 3px; }
+    50% { height: 18px; }
+  }
+
+  .waveform-bar-mini {
+    animation: waveform-mini 1.2s ease-in-out infinite;
+    animation-delay: calc(var(--delay) * 0.07s);
+    height: 3px;
+  }
+
+  @keyframes waveform {
+    0%, 100% { height: 4px; }
+    50% { height: 36px; }
+  }
+
+  .waveform-bar {
+    animation: waveform 1.2s ease-in-out infinite;
+    animation-delay: calc(var(--delay) * 0.06s);
+    height: 4px;
+  }
+
+  /* Subtle 3D tilt on the phone */
+  .phone-tilt {
+    transform: perspective(900px) rotateY(-4deg) rotateX(2deg);
+    transition: transform 0.5s ease;
+  }
+  .phone-tilt:hover {
+    transform: perspective(900px) rotateY(0deg) rotateX(0deg);
+  }
+
+  /* Pulse ring around mic in phone */
+  .pulse-ring-container {
+    position: relative;
+  }
+
+  .workflow-storyboard {
+    position: relative;
+  }
+
+  .workflow-annotation {
+    position: absolute;
+    right: 1rem;
+    bottom: -1rem;
+    color: rgba(37, 99, 235, 0.72);
+    font-size: 0.92rem;
+    font-style: italic;
+    letter-spacing: 0.03em;
+    transform: rotate(4deg);
+  }
+
+  .ant-trail {
+    position: absolute;
+    left: 22%;
+    right: 2%;
+    bottom: -2.5rem;
+    height: 42px;
+    pointer-events: none;
+    display: none;
+  }
+
+  .ant-trail::before {
+    content: '';
+    position: absolute;
+    inset: 50% 0 auto;
+    border-top: 1px dashed rgba(120, 53, 15, 0.22);
+  }
+
+  .workflow-ant {
+    position: absolute;
+    left: var(--ant-left);
+    top: 50%;
+    width: 16px;
+    height: 8px;
+    transform: translateY(-50%);
+    animation: ant-march 7.5s linear infinite;
+    animation-delay: var(--ant-delay);
+  }
+
+  .workflow-ant::before,
+  .workflow-ant::after {
+    content: '';
+    position: absolute;
+    border-radius: 999px;
+    background: rgba(68, 33, 13, 0.92);
+  }
+
+  .workflow-ant::before {
+    inset: 2px 4px 2px 4px;
+    box-shadow: -5px 0 0 rgba(68, 33, 13, 0.86), 5px 0 0 rgba(68, 33, 13, 0.86);
+  }
+
+  .workflow-ant::after {
+    width: 2px;
+    height: 2px;
+    right: -1px;
+    top: 3px;
+    box-shadow: 1px -4px 0 rgba(68, 33, 13, 0.7), 1px 4px 0 rgba(68, 33, 13, 0.7);
+  }
+
+  @keyframes ant-march {
+    0% { transform: translate(-16px, -50%); }
+    100% { transform: translate(38px, -50%); }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .waveform-bar {
+      animation: none;
+      height: 14px;
+    }
+    .waveform-bar-mini {
+      animation: none;
+      height: 8px;
+    }
+    .bucket-tag {
+      animation: none !important;
+      opacity: 1 !important;
+    }
+    .phone-tilt {
+      transform: none;
+    }
+    .phone-tilt:hover {
+      transform: none;
+    }
+    .workflow-ant {
+      animation: none;
+    }
+  }
+
+  @media (min-width: 1024px) {
+    .ant-trail {
+      display: block;
+    }
+  }
+</style>
