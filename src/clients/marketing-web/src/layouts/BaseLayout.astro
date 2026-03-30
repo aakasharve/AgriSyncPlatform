@@ -2,12 +2,8 @@
 import { getLangFromUrl } from '../i18n/translations';
 import '../styles/tokens.css';
 import '../styles/global.css';
-import WindCanvas from '../components/islands/WindCanvas';
 import PloughNav from '../components/islands/PloughNav';
-import WellIndicator from '../components/islands/WellIndicator';
-import WaterChannel from '../components/islands/WaterChannel';
-import AudioSystem from '../components/islands/AudioSystem';
-import RangoliLoader from '../components/islands/RangoliLoader';
+import WindCanvas from '../components/islands/WindCanvas';
 
 interface Props {
   title: string;
@@ -29,7 +25,6 @@ const canonicalUrl = new URL(Astro.url.pathname, 'https://shramsafal.com');
     <meta name="description" content={description} />
     <link rel="canonical" href={canonicalUrl.href} />
 
-    <!-- Open Graph -->
     <meta property="og:title" content={title} />
     <meta property="og:description" content={description} />
     <meta property="og:type" content="website" />
@@ -37,86 +32,33 @@ const canonicalUrl = new URL(Astro.url.pathname, 'https://shramsafal.com');
     <meta property="og:locale" content={lang === 'mr' ? 'mr_IN' : 'en_IN'} />
     <meta property="og:site_name" content="ShramSafal" />
 
-    <!-- Twitter Card -->
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content={title} />
     <meta name="twitter:description" content={description} />
 
-    <!-- Favicon -->
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
 
-    <!-- Google Fonts: preconnect then load -->
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
-      href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400..900;1,9..40,400..700&family=DM+Serif+Display&family=Noto+Sans+Devanagari:wght@400..900&family=Noto+Serif+Devanagari:wght@400..700&display=swap"
+      href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700&family=DM+Serif+Display&family=Noto+Sans+Devanagari:wght@400;500;700&family=Noto+Serif+Devanagari:wght@400;700&display=swap"
       rel="stylesheet"
     />
 
-    <!-- Theme color for mobile browsers -->
-    <meta name="theme-color" content="#060f07" />
-    <meta name="color-scheme" content="dark" />
+    <meta name="theme-color" content="#FBF5EC" />
+    <meta name="color-scheme" content="light" />
   </head>
-  <body class="antialiased overflow-x-hidden relative grain" style="background:var(--bg-base);color:var(--text-primary);" data-cursor="leaf">
-    <RangoliLoader client:load />
-
-    <!-- ═══════════════════════════════════════════
-         Wind canvas — React island (client:load)
-         Particles: dust, pollen, leaves, seeds
-         Layer 6 (z-index:1), pointer-events:none
-         ═══════════════════════════════════════════ -->
+  <body
+    class="antialiased overflow-x-hidden relative grain"
+    style="background:var(--bg-base);color:var(--text-primary);"
+    data-cursor="leaf"
+  >
     <WindCanvas client:load />
-
-    <!-- ═══════════════════════════════════════════
-         Plough navigation — React island
-         Fixed left, desktop full SVG / mobile dots
-         ═══════════════════════════════════════════ -->
     <PloughNav client:load />
 
-    <!-- ═══════════════════════════════════════════
-         Well scroll indicator — React island
-         Fixed right (desktop only)
-         ═══════════════════════════════════════════ -->
-    <WellIndicator client:load />
-
-    <!-- ═══════════════════════════════════════════
-         Water channel — React island (client:load)
-         Right-margin channel, desktop ≥1280px only
-         ═══════════════════════════════════════════ -->
-    <WaterChannel client:load />
-
-    <!-- ═══════════════════════════════════════════
-         Audio system — React island (client:idle)
-         Conch shell opt-in, desktop only
-         ═══════════════════════════════════════════ -->
-    <AudioSystem client:idle />
-
-    <!-- Cursor glow — follows mouse with GSAP lerp -->
     <div id="cursor-glow" aria-hidden="true"></div>
-    <!-- Scroll progress bar -->
     <div id="scroll-progress" aria-hidden="true"></div>
 
-    <!-- Page content -->
     <slot />
-
-    <!-- ═══════════════════════════════════════════
-         Festive system — sets data-festival on body
-         CSS-only overlays per festival date
-         ═══════════════════════════════════════════ -->
-    <script>
-      (function () {
-        const festivals = [
-          { name: 'makar-sankranti', start: '01-14', end: '01-15' },
-          { name: 'holi',            start: '03-13', end: '03-14' },
-          { name: 'gudi-padwa',      start: '03-30', end: '04-01' },
-          { name: 'pola',            start: '08-09', end: '08-10' },
-          { name: 'diwali',          start: '10-20', end: '10-25' },
-        ];
-        const now = new Date();
-        const mmdd = String(now.getMonth() + 1).padStart(2, '0') + '-' + String(now.getDate()).padStart(2, '0');
-        const active = festivals.find(f => mmdd >= f.start && mmdd <= f.end);
-        if (active) document.body.dataset.festival = active.name;
-      })();
-    </script>
   </body>
 </html>
