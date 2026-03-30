@@ -1,0 +1,136 @@
+---
+import { getLangFromUrl, getTranslations } from '../../i18n/translations';
+import CropSilhouette from '../svg/CropSilhouette.astro';
+
+const lang = getLangFromUrl(Astro.url);
+const t = getTranslations(lang);
+---
+
+<section data-scene="legacy" data-soil="alluvial" data-cursor="sun" class="relative py-section-tight overflow-hidden min-h-[70vh] flex items-center">
+  <!-- Deep dark background -->
+  <div class="absolute inset-0" style="background:var(--bg-base);"></div>
+  <div class="absolute inset-0 pointer-events-none" style="background:radial-gradient(ellipse 80% 60% at 50% 90%, rgba(245,158,11,0.12) 0%, transparent 60%);" aria-hidden="true"></div>
+
+  <!-- Golden glow ring from base -->
+  <div class="legacy-glow-ring" aria-hidden="true"></div>
+  <!-- Keep the GSAP-driven golden glow from before -->
+  <div class="legacy-golden-glow absolute inset-0 pointer-events-none" aria-hidden="true"
+    style="background:radial-gradient(ellipse at 50% 85%, rgba(245,158,11,0.3) 0%, transparent 60%); opacity:0; will-change:opacity;"></div>
+  <div class="legacy-sparrows" aria-hidden="true">
+    <span class="legacy-sparrow legacy-sparrow--1">
+      <svg viewBox="0 0 34 20" xmlns="http://www.w3.org/2000/svg"><path d="M2 12C7 6 14 5 18 7C21 4 26 4 32 9C25 8 22 9 18 12C13 15 8 16 2 12Z" fill="#f8d7a7"/><path d="M18 12L20 19" stroke="#7c4a25" stroke-width="1.4" stroke-linecap="round"/><circle cx="22.5" cy="9" r="1" fill="#1c1207"/><path d="M30 8L34 10L30 11Z" fill="#f59e0b"/></svg>
+    </span>
+    <span class="legacy-sparrow legacy-sparrow--2">
+      <svg viewBox="0 0 34 20" xmlns="http://www.w3.org/2000/svg"><path d="M2 12C7 6 14 5 18 7C21 4 26 4 32 9C25 8 22 9 18 12C13 15 8 16 2 12Z" fill="#fde68a"/><path d="M18 12L20 19" stroke="#7c4a25" stroke-width="1.4" stroke-linecap="round"/><circle cx="22.5" cy="9" r="1" fill="#1c1207"/><path d="M30 8L34 10L30 11Z" fill="#f59e0b"/></svg>
+    </span>
+  </div>
+
+  <div class="relative z-10 max-w-site mx-auto px-5 md:px-8 w-full">
+    <div class="max-w-3xl mx-auto text-center">
+      <span class="chapter-mark" data-chapter>
+        {lang === 'mr' ? 'Chapter 07 · वारसा' : 'Chapter 07 · Legacy'}
+      </span>
+      <h2
+        data-split-headline
+        class="scene-stagger font-serif text-h2 text-white mb-6 drop-shadow-xl"
+        set:html={t.legacy.headline.replace(/\n/g, '<br />')}
+      />
+      <p class="scene-stagger text-body-lg text-white/80 max-w-prose mx-auto mb-10">
+        {t.legacy.body}
+      </p>
+      <div class="space-y-3 max-w-lg mx-auto">
+        {t.legacy.lines.map((line: string) => (
+          <div class="legacy-line flex items-start gap-3 text-left bg-white/10 backdrop-blur-sm rounded-xl px-5 py-3 border border-white/15">
+            <svg class="w-5 h-5 text-farm-harvest flex-shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M12 3v2.25m6.364.386l-1.591 1.591M21 12h-2.25m-.386 6.364l-1.591-1.591M12 18.75V21m-4.773-4.227l-1.591 1.591M5.25 12H3m4.227-4.773L5.636 5.636M15.75 12a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0z" />
+            </svg>
+            <p class="text-base text-white/90 font-medium">{line}</p>
+          </div>
+        ))}
+      </div>
+    </div>
+  </div>
+
+  <!-- Top wave separator -->
+  <div class="absolute top-0 left-0 right-0">
+    <svg viewBox="0 0 1440 60" fill="none" class="w-full h-auto block" preserveAspectRatio="none">
+      <path d="M0 0C240 40 480 10 720 30C960 50 1200 15 1440 25V0H0Z" fill="#FEFCF8" opacity="0.15"/>
+    </svg>
+  </div>
+
+  <CropSilhouette count={16} variant="sugarcane" goldGlow={true} height={80} />
+</section>
+
+<style>
+  .legacy-line {
+    opacity: 0;
+    transform: translateY(12px);
+    transition: opacity 0.5s ease-out, transform 0.5s ease-out;
+  }
+
+  [data-scene="legacy"].scene-visible .legacy-line {
+    opacity: 1;
+    transform: translateY(0);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .legacy-line {
+      opacity: 1;
+      transform: none;
+      transition: none;
+    }
+  }
+
+  .legacy-sparrows {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    z-index: 2;
+  }
+
+  .legacy-sparrow {
+    position: absolute;
+    width: 42px;
+    opacity: 0;
+  }
+
+  .legacy-sparrow svg {
+    width: 100%;
+    height: auto;
+    filter: drop-shadow(0 10px 24px rgba(28, 25, 23, 0.18));
+  }
+
+  .legacy-sparrow--1 {
+    left: 12%;
+    top: 28%;
+  }
+
+  .legacy-sparrow--2 {
+    right: 14%;
+    top: 34%;
+  }
+
+  [data-scene="legacy"].scene-visible .legacy-sparrow {
+    opacity: 0.9;
+  }
+
+  [data-scene="legacy"].scene-visible .legacy-sparrow--1 {
+    animation: sparrow-glide-1 10s ease-in-out infinite;
+  }
+
+  [data-scene="legacy"].scene-visible .legacy-sparrow--2 {
+    animation: sparrow-glide-2 11s ease-in-out infinite;
+  }
+
+  @keyframes sparrow-glide-1 {
+    0%, 100% { transform: translate(0, 0) rotate(6deg) scale(1); }
+    40% { transform: translate(54px, -26px) rotate(-10deg) scale(0.96); }
+    70% { transform: translate(84px, -12px) rotate(8deg) scale(1.03); }
+  }
+
+  @keyframes sparrow-glide-2 {
+    0%, 100% { transform: translate(0, 0) rotate(-8deg) scale(1); }
+    35% { transform: translate(-46px, -18px) rotate(12deg) scale(1.02); }
+    75% { transform: translate(-72px, -32px) rotate(-6deg) scale(0.97); }
+  }
+</style>
