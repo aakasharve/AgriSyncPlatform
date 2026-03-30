@@ -1,0 +1,143 @@
+---
+import { getLangFromUrl, getTranslations } from '../../i18n/translations';
+
+const lang = getLangFromUrl(Astro.url);
+const t = getTranslations(lang);
+---
+
+<section
+  data-scene="before-after"
+  data-soil="tilled"
+  data-cursor="seedling"
+  class="relative py-section-tight overflow-hidden"
+>
+  <div class="absolute inset-0" style="background:var(--bg-base);"></div>
+
+  <div class="relative z-10 max-w-site mx-auto px-5 md:px-8">
+    <div class="text-center mb-8 md:mb-10">
+      <span class="chapter-mark" data-chapter>
+        {lang === 'mr' ? 'Chapter 03 · बदल' : 'Chapter 03 · Before & After'}
+      </span>
+      <h2 class="scene-stagger font-serif text-h2 text-ink">
+        {t.before_after.headline}
+      </h2>
+    </div>
+
+    <div class="weighing-scale-wrap scene-stagger" aria-hidden="true" style="display:none;">
+      <div class="weighing-scale">
+        <div class="weighing-scale__beam"></div>
+        <div class="weighing-scale__pole"></div>
+        <div class="weighing-scale__base"></div>
+        <div class="weighing-scale__pan weighing-scale__pan--left">
+          <span>{lang === 'mr' ? 'गोंधळ' : 'Chaos'}</span>
+        </div>
+        <div class="weighing-scale__pan weighing-scale__pan--right">
+          <span>{lang === 'mr' ? 'स्पष्टता' : 'Clarity'}</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="scene-stagger mb-10 md:mb-12 max-w-5xl mx-auto">
+      <div class="relative grid grid-cols-1 md:grid-cols-2 gap-4">
+        <!-- Before panel -->
+        <div class="before-visual relative rounded-xl overflow-hidden aspect-[4/3] flex items-center justify-center" style="background:var(--bg-elevated);border:1px solid rgba(239,68,68,0.15);">
+          <svg viewBox="0 0 200 150" xmlns="http://www.w3.org/2000/svg" class="w-3/4 opacity-60" aria-hidden="true">
+            <path d="M20 80 C50 30 90 120 130 50 C160 10 190 90 170 130" stroke="rgba(239,68,68,0.5)" stroke-width="2" fill="none" stroke-linecap="round"/>
+            <path d="M40 100 C80 40 120 140 160 60" stroke="rgba(245,158,11,0.4)" stroke-width="1.5" fill="none" stroke-linecap="round"/>
+            <path d="M60 30 L80 80 L50 120 L100 90" stroke="rgba(255,255,255,0.15)" stroke-width="1" fill="none"/>
+            <text x="80" y="75" font-size="24" text-anchor="middle" fill="rgba(239,68,68,0.4)" font-family="serif">✗</text>
+          </svg>
+          <div class="absolute bottom-3 left-3 flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold" style="background:rgba(239,68,68,0.15);color:rgba(239,68,68,0.9);border:1px solid rgba(239,68,68,0.2);">
+            <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+            {t.before_after.before_title}
+          </div>
+        </div>
+
+        <div class="hidden md:flex absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-10 w-10 h-10 rounded-full shadow-lg items-center justify-center" style="background:var(--bg-elevated);border:1px solid rgba(255,255,255,0.1);">
+          <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5" style="color:var(--brand-fresh);"><path stroke-linecap="round" stroke-linejoin="round" d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3" /></svg>
+        </div>
+
+        <!-- After panel -->
+        <div class="after-visual relative rounded-xl overflow-hidden aspect-[4/3] flex items-center justify-center" style="background:var(--bg-elevated);border:1px solid rgba(16,185,129,0.2);box-shadow:0 0 40px rgba(16,185,129,0.06);">
+          <svg viewBox="0 0 200 150" xmlns="http://www.w3.org/2000/svg" class="w-3/4 opacity-70" aria-hidden="true">
+            <line x1="20" y1="120" x2="180" y2="120" stroke="rgba(255,255,255,0.08)" stroke-width="1"/>
+            <polyline points="20,100 50,80 80,90 110,60 140,70 170,40" stroke="rgba(16,185,129,0.6)" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+            <circle cx="170" cy="40" r="4" fill="rgba(16,185,129,0.8)"/>
+            <text x="100" y="75" font-size="22" text-anchor="middle" fill="rgba(16,185,129,0.5)" font-family="serif">✓</text>
+          </svg>
+          <div class="absolute bottom-3 left-3 flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold" style="background:rgba(16,185,129,0.12);color:var(--brand-fresh);border:1px solid rgba(16,185,129,0.2);">
+            <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5"/></svg>
+            {t.before_after.after_title}
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-6 md:gap-8 max-w-4xl mx-auto">
+      <div class="before-panel scene-stagger card-dark rounded-2xl p-6 md:p-8 hover:shadow-lg transition-shadow duration-300" style="border-left:3px solid rgba(239,68,68,0.4);">
+        <h3 class="font-serif text-xl md:text-2xl font-bold mb-6 flex items-center gap-2" style="color:rgba(248,113,113,0.9);">
+          <svg class="w-5 h-5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+          </svg>
+          {t.before_after.before_title}
+        </h3>
+        <ul class="space-y-4">
+          {t.before_after.before_items.map((item: string) => (
+            <li class="flex items-start gap-3 text-base md:text-lg" style="color:var(--white-55);">
+              <span class="mt-1.5 w-2 h-2 rounded-full flex-shrink-0" style="background:rgba(239,68,68,0.6);" aria-hidden="true"></span>
+              <span>{item}</span>
+            </li>
+          ))}
+        </ul>
+      </div>
+
+      <div class="after-panel scene-stagger card-dark rounded-2xl p-6 md:p-8 hover:shadow-lg transition-shadow duration-300" style="border-left:3px solid rgba(16,185,129,0.4);">
+        <h3 class="font-serif text-xl md:text-2xl font-bold mb-6 flex items-center gap-2" style="color:var(--brand-fresh);">
+          <svg class="w-5 h-5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+          </svg>
+          {t.before_after.after_title}
+        </h3>
+        <ul class="space-y-4">
+          {t.before_after.after_items.map((item: string) => (
+            <li class="flex items-start gap-3 text-base md:text-lg" style="color:var(--white-55);">
+              <svg class="w-4 h-4 mt-1 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5" style="color:var(--brand-fresh);">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+              </svg>
+              <span class="font-medium">{item}</span>
+            </li>
+          ))}
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<style>
+  .before-panel {
+    opacity: 0;
+    transform: translateX(-30px);
+    transition: opacity 0.7s ease-out, transform 0.7s ease-out, box-shadow 0.3s ease;
+  }
+
+  .after-panel {
+    opacity: 0;
+    transform: translateX(30px);
+    transition: opacity 0.7s ease-out 0.15s, transform 0.7s ease-out 0.15s, box-shadow 0.3s ease;
+  }
+
+  [data-scene="before-after"].scene-visible .before-panel,
+  [data-scene="before-after"].scene-visible .after-panel {
+    opacity: 1;
+    transform: translateX(0);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .before-panel,
+    .after-panel {
+      opacity: 1;
+      transform: none;
+      transition: none;
+    }
+  }
+</style>
