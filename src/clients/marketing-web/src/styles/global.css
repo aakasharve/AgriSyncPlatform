@@ -22,7 +22,7 @@ section {
   background-color: var(--bg-base);
 }
 
-/* ── Chapter mark ── */
+/* ── Chapter mark · terracotta ink ── */
 .chapter-mark {
   display: block;
   font-family: var(--font-sans);
@@ -30,30 +30,59 @@ section {
   font-weight: 800;
   letter-spacing: 0.22em;
   text-transform: uppercase;
-  color: var(--gold);
-  opacity: 0.75;
+  color: var(--gold);       /* #92400E terracotta */
+  opacity: 0.82;
   margin-bottom: 14px;
 }
 
-/* ── Card variants ── */
+/* ── Card variants · Kachi Mati ── */
+
+/* card-dark = deeper clay surface card on warm page bg */
 .card-dark {
-  background: var(--bg-elevated);
-  border: 1px solid var(--border-dark);
+  background: var(--bg-elevated);             /* #E8D9C4 */
+  border: 1px solid var(--border-light);      /* rgba(146,64,14,0.10) */
   border-radius: 16px;
 }
 
+/* card-phone = explicit dark interior for phone-screen contexts */
+.card-phone {
+  background: #0a1f10;
+  border: 1px solid rgba(255,255,255,0.06);
+  border-radius: 16px;
+}
+
+/* card-white = bright white lift on clay bg */
 .card-white {
   background: var(--bg-card-white);
   color: var(--text-soil);
+  border: 1px solid var(--border-light);
   border-radius: 16px;
+  box-shadow: 0 6px 24px rgba(146,64,14,0.07);
 }
 
-/* ── Text utilities for dark context ── */
+/* ── Soil stratum divider ── */
+/* Usage: <div class="soil-stratum" aria-hidden="true"></div> between sections */
+.soil-stratum {
+  width: 100%;
+  height: 6px;
+  display: grid;
+  grid-template-rows: 2px 2px 2px;
+  gap: 0;
+}
+
+.soil-stratum::before,
+.soil-stratum::after,
+.soil-stratum > span {
+  display: block;
+  height: 2px;
+}
+
+/* ── Text utilities (for explicit white-on-dark contexts like phone screen) ── */
 .text-white-70  { color: var(--white-70); }
 .text-white-55  { color: var(--white-55); }
 .text-white-40  { color: var(--white-40); }
 
-/* ── Grain overlay ── */
+/* ── Grain overlay — lighter for warm light bg ── */
 .grain::after {
   content: '';
   position: fixed;
@@ -61,7 +90,7 @@ section {
   pointer-events: none;
   z-index: 100;
   background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
-  opacity: 0.032;
+  opacity: 0.022;
 }
 
 @layer base {
@@ -407,6 +436,11 @@ section {
 .magnetic-btn {
   transition: transform 0.3s var(--ease-out-expo);
   will-change: transform;
+}
+
+.split-word {
+  display: inline-block;
+  will-change: transform, opacity;
 }
 
 /* ── Cursor glow ── */
@@ -878,9 +912,6 @@ section {
   display: block;
 }
 
-#wind-canvas {
-  /* Hide CSS leaves when canvas is active */
-}
 .wind-css-only #wind-canvas {
   display: none;
 }

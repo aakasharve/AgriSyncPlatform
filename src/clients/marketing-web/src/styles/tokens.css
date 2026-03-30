@@ -1,21 +1,28 @@
-/* src/styles/tokens.css — Terra Viva dark palette */
 :root {
-  /* ── Backgrounds ── */
-  --bg-base:         #060f07;
-  --bg-surface:      #0a180b;
-  --bg-elevated:     #0e2010;
-  --bg-card-white:   #ffffff;
+  /* ── Backgrounds · Kachi Mati (Raw Earth) ── */
+  --bg-base:         #FBF5EC;   /* dried clay white   — page default  */
+  --bg-surface:      #F2E8D8;   /* light ochre        — alternate sections */
+  --bg-elevated:     #E8D9C4;   /* deeper ochre clay  — card surface  */
+  --bg-card-white:   #FFFFFF;   /* pure white card    — contrast lift */
+  --bg-phone-shell:  #0F3D22;   /* deep forest green  — phone device  */
 
-  /* ── Brand ── */
-  --brand:           #10b981;
-  --brand-fresh:     #34d399;
-  --brand-hover:     #059669;
+  /* ── Brand greens ── */
+  --brand:           #14532D;   /* forest canopy  */
+  --brand-fresh:     #16A34A;   /* field green    */
+  --brand-hover:     #0F3D22;   /* deep canopy    */
 
-  /* ── Golden accent ── */
-  --gold:            #f59e0b;
-  --gold-warm:       #fbbf24;
+  /* ── Earth accent (terracotta + ochre) ── */
+  --gold:            #92400E;   /* dark terracotta — chapter marks, accents */
+  --gold-warm:       #D97706;   /* ochre yellow   — highlights */
 
-  /* ── White scale ── */
+  /* ── Text · warm soil-black ── */
+  --text-primary:    #1A0F00;
+  --text-secondary:  rgba(26,15,0,0.72);
+  --text-muted:      rgba(26,15,0,0.50);
+  --text-soil:       #1C1917;
+
+  /* ── White opacity scale
+       Kept for explicit dark-surface contexts (phone screen, dark card interior) ── */
   --white:           #ffffff;
   --white-70:        rgba(255,255,255,0.70);
   --white-55:        rgba(255,255,255,0.55);
@@ -24,39 +31,40 @@
   --white-06:        rgba(255,255,255,0.06);
   --white-04:        rgba(255,255,255,0.04);
 
-  /* ── Text ── */
-  --text-primary:    #ffffff;
-  --text-secondary:  rgba(255,255,255,0.70);
-  --text-muted:      rgba(255,255,255,0.40);
-  --text-soil:       #1C1917;
-
   /* ── Borders ── */
-  --border-dark:     rgba(255,255,255,0.08);
-  --border-gold:     rgba(245,158,11,0.28);
+  --border-light:    rgba(146,64,14,0.10);   /* terracotta-tinted default */
+  --border-mid:      rgba(146,64,14,0.20);
+  --border-dark:     rgba(146,64,14,0.10);   /* alias kept for card-dark compat */
+  --border-gold:     rgba(146,64,14,0.30);
 
-  /* ── Legacy aliases (used by existing components — do not remove) ── */
-  --brand-primary:      var(--brand);
-  --brand-primary-hover:var(--brand-hover);
-  --farm-harvest:       var(--gold);
-  --farm-golden:        var(--gold-warm);
-  --farm-sky:           #0EA5E9;
-  --farm-leaf:          var(--brand-fresh);
-  --farm-soil:          #78350F;
-  --accent-soil:        #78350F;
-  --accent-water:       #0EA5E9;
-  --accent-harvest:     var(--gold);
-  --text-ink:           var(--text-primary);
-  --text-ink-secondary: var(--text-secondary);
-  --border-soft:        var(--border-dark);
+  /* ── Soil stratum bands (decorative section dividers) ── */
+  --stratum-top:     #D97706;   /* ochre    */
+  --stratum-mid:     #92400E;   /* red clay */
+  --stratum-deep:    #1A0F00;   /* dark soil */
 
   /* ── Motion ── */
   --ease-out-expo:   cubic-bezier(0.16, 1, 0.3, 1);
   --ease-in-expo:    cubic-bezier(0.7, 0, 0.84, 0);
 
-  /* ── Spacing ── */
+  /* ── Layout ── */
   --section-pad-y:       clamp(64px, 9vw, 112px);
   --section-pad-y-tight: clamp(40px, 5vw, 72px);
   --section-pad-x:       clamp(20px, 5vw, 80px);
   --prose-width:         68ch;
   --site-width:          1280px;
+
+  /* ── Legacy aliases (kept to avoid breaking existing island components) ── */
+  --brand-primary:       var(--brand);
+  --brand-primary-hover: var(--brand-hover);
+  --farm-harvest:        var(--gold);
+  --farm-golden:         var(--gold-warm);
+  --farm-sky:            #0EA5E9;
+  --farm-leaf:           var(--brand-fresh);
+  --farm-soil:           #8B5E34;
+  --accent-soil:         #8B5E34;
+  --accent-water:        #0EA5E9;
+  --accent-harvest:      var(--gold);
+  --text-ink:            var(--text-primary);
+  --text-ink-secondary:  var(--text-secondary);
+  --border-soft:         var(--border-light);
 }
