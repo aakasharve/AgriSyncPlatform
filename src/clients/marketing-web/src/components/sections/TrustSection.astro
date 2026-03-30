@@ -1,0 +1,127 @@
+---
+import { getLangFromUrl, getTranslations } from '../../i18n/translations';
+
+const lang = getLangFromUrl(Astro.url);
+const t = getTranslations(lang);
+---
+
+<section
+  data-scene="trust"
+  data-soil="alluvial"
+  data-cursor="hand"
+  class="relative py-section overflow-hidden"
+>
+  <div class="absolute inset-0" style="background:var(--bg-base);"></div>
+  <div class="absolute inset-0 pointer-events-none" style="background:radial-gradient(ellipse 60% 50% at 50% 30%, rgba(16,185,129,0.05) 0%, transparent 60%);" aria-hidden="true"></div>
+
+  <div class="relative z-10 max-w-site mx-auto px-5 md:px-8 text-center">
+    <!-- Shield trust icon -->
+    <div class="scene-stagger mb-8">
+      <div class="w-16 h-16 md:w-20 md:h-20 rounded-full bg-brand/10 flex items-center justify-center mx-auto">
+        <svg class="w-8 h-8 md:w-10 md:h-10 text-brand" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75L11.25 15 15 9.75m-3-7.036A11.959 11.959 0 013.598 6 11.99 11.99 0 003 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285z" />
+        </svg>
+      </div>
+    </div>
+
+    <span class="chapter-mark" data-chapter>
+      {lang === 'mr' ? 'Chapter 09 · विश्वास' : 'Chapter 09 · Trust'}
+    </span>
+
+    <!-- Large typographic statement with emphasized words -->
+    <div class="max-w-3xl mx-auto mb-8 md:mb-10">
+      <h2 class="scene-stagger font-serif text-h2 leading-snug" style="color:var(--text-primary);">
+        {t.scene7.headline_before}
+        <span class="text-brand trust-emphasis">{t.scene7.emphasis1}</span>
+        {t.scene7.headline_mid1}
+        <span class="text-brand trust-emphasis">{t.scene7.emphasis2}</span>
+        {t.scene7.headline_mid2}
+        <span class="text-brand trust-emphasis">{t.scene7.emphasis3}</span>
+        {t.scene7.headline_after}
+      </h2>
+    </div>
+
+    <p class="scene-stagger text-body-lg max-w-prose mx-auto mb-10 md:mb-12" style="color:var(--text-secondary);">
+      {t.scene7.body}
+    </p>
+
+    <!-- Timeline: Day 1 → Day 30 → Day 90 with visual GROWTH -->
+    <div class="scene-stagger max-w-xl mx-auto" data-reveal-3d-group>
+      <div class="relative flex items-end justify-between px-4 md:px-8">
+        <!-- SVG trust growth curve — animated path draw -->
+        <svg class="trust-growth-svg absolute bottom-[28px] md:bottom-[36px] left-[15%] right-[15%] w-[70%] h-12 -translate-y-1/2 pointer-events-none z-0" viewBox="0 0 300 40" fill="none" preserveAspectRatio="none" aria-hidden="true">
+          <path d="M0,35 C50,35 60,30 100,25 C140,20 160,12 200,8 C240,4 280,2 300,1" stroke="url(#trust-gradient)" stroke-width="2.5" stroke-linecap="round" fill="none" />
+          <defs>
+            <linearGradient id="trust-gradient" x1="0%" y1="0%" x2="100%" y2="0%">
+              <stop offset="0%" stop-color="rgba(255,255,255,0.15)" />
+              <stop offset="50%" stop-color="rgba(5,150,105,0.5)" />
+              <stop offset="100%" stop-color="#059669" />
+            </linearGradient>
+          </defs>
+        </svg>
+
+        <!-- Growing connection line -->
+        <div class="absolute bottom-[28px] md:bottom-[36px] left-[15%] right-[15%] h-[2px]" style="background:rgba(255,255,255,0.08);">
+          <div class="trust-growth-line absolute top-0 left-0 h-full bg-gradient-to-r from-white/20 via-brand/50 to-brand rounded-full"></div>
+        </div>
+
+        <!-- Day 1 — small, muted -->
+        <div class="relative z-10 flex flex-col items-center card-dark rounded-2xl p-3" data-reveal-3d-item>
+          <div class="trust-circle w-10 h-10 md:w-14 md:h-14 rounded-full border-2 flex items-center justify-center mb-3 shadow-sm transition-all duration-500" style="background:rgba(255,255,255,0.06); border-color:rgba(255,255,255,0.15);">
+            <span class="trust-counter text-lg md:text-xl font-serif font-bold" style="color:var(--text-secondary);" data-target="1">0</span>
+          </div>
+          <span class="text-sm uppercase tracking-wider font-bold" style="color:var(--text-secondary);">{t.scene7.day_label}</span>
+        </div>
+
+        <!-- Day 30 — medium, stronger -->
+        <div class="relative z-10 flex flex-col items-center card-dark rounded-2xl p-3" data-reveal-3d-item>
+          <div class="trust-circle rounded-full bg-brand/10 border-2 border-brand/40 flex items-center justify-center mb-3 shadow-md transition-all duration-500" style="width: 3.5rem; height: 3.5rem;">
+            <span class="trust-counter text-xl md:text-2xl font-serif font-bold" style="color:var(--text-primary);" data-target="30">0</span>
+          </div>
+          <span class="text-sm uppercase tracking-wider font-bold" style="color:var(--text-secondary);">{t.scene7.days_label}</span>
+        </div>
+
+        <!-- Day 90 — large, bold brand green -->
+        <div class="relative z-10 flex flex-col items-center card-dark rounded-2xl p-3" data-reveal-3d-item>
+          <div class="trust-circle rounded-full bg-brand/15 border-brand flex items-center justify-center mb-3 shadow-lg shadow-brand/20 transition-all duration-500" style="width: 4.5rem; height: 4.5rem; border-width: 3px;">
+            <span class="trust-counter text-2xl md:text-3xl font-serif text-brand font-bold" data-target="90">0</span>
+          </div>
+          <span class="text-sm text-brand uppercase tracking-wider font-bold">{t.scene7.days_label}</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Accumulation message -->
+    <p class="scene-stagger text-base md:text-lg mt-8 md:mt-10 max-w-md mx-auto font-medium" style="color:var(--text-secondary);">
+      {t.scene7.accumulation}
+    </p>
+  </div>
+</section>
+
+<style>
+  /* GSAP drives width and opacity via scrub — no CSS transition conflicts */
+  .trust-growth-line {
+    width: 0;
+  }
+
+  .trust-emphasis {
+    opacity: 0.2;
+  }
+
+  .trust-circle {
+    will-change: transform, opacity;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .trust-growth-line {
+      width: 100%;
+    }
+    .trust-emphasis {
+      opacity: 1;
+    }
+    .trust-circle {
+      transform: none !important;
+      opacity: 1 !important;
+    }
+  }
+</style>
