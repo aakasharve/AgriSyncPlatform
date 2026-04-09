@@ -4,23 +4,29 @@ import Step2_WorkBuckets from './Step2_WorkBuckets';
 import Step3_Details from './Step3_Details';
 import Step4_Readback from './Step4_Readback';
 import SathiStepper from '../../../sathi/components/SathiStepper';
-import { FarmerProfile, CropProfile } from '../../../../types';
+import { AgriLogResponse, CropProfile, DailyLog, FarmerProfile } from '../../../../types';
 import { X } from 'lucide-react';
+import {
+    splitLogSubmission,
+    type WizardLogContext,
+} from '../../services/logSubmissionService';
+import { deriveBucketsFromParseResult } from '../../services/bucketDerivation';
 
 interface LogWizardContainerProps {
     isOpen: boolean;
     onClose: () => void;
     profile: FarmerProfile;
     crops: CropProfile[];
-    onSubmit: (data: any) => void;
+    voiceParseResult?: AgriLogResponse;
+    onSubmit: (logs: DailyLog[]) => Promise<void> | void;
 }
 
-const LogWizardContainer: React.FC<LogWizardContainerProps> = ({ isOpen, onClose, profile, crops, onSubmit }) => {
+const LogWizardContainer: React.FC<LogWizardContainerProps> = ({ isOpen, onClose, profile, crops, voiceParseResult, onSubmit }) => {
     // --- STATE ---
     const [phase, setPhase] = useState<number>(1); // 1: Context, 2: Buckets, 3: Details, 4: Review
 
     // Step 1 Data
-    const [contextData, setContextData] = useState<{ operatorId: string; plotId: string; cropId: string } | null>(null);
+    const [contextData, setContextData] = useState<WizardLogContext | null>(null);
 
     // Step 2 Data
     const [selectedBuckets, setSelectedBuckets] = useState<string[]>([]);
@@ -30,6 +36,8 @@ const LogWizardContainer: React.FC<LogWizardContainerProps> = ({ isOpen, onClose
     const [collectedData, setCollectedData] = useState<Record<string, any>>({}); // Map bucketId -> data
 
     if (!isOpen) return null;
+
+    const initialBuckets = voiceParseResult ? deriveBucketsFromParseResult(voiceParseResult) : [];
 
     // --- MANAGE FLOW ---
 
@@ -44,7 +52,7 @@ const LogWizardContainer: React.FC<LogWizardContainerProps> = ({ isOpen, onClose
         return totalSteps;
     };
 
-    const handleContextNext = (data: { operatorId: string; plotId: string; cropId: string }) => {
+    const handleContextNext = (data: WizardLogContext) => {
         setContextData(data);
         setPhase(2);
     };
@@ -78,13 +86,17 @@ const LogWizardContainer: React.FC<LogWizardContainerProps> = ({ isOpen, onClose
         }
     };
 
-    const handleSubmit = () => {
-        // Construct final payload
-        const payload = {
+    const handleSubmit = async () => {
+        if (!contextData) {
+            return;
+        }
+
+        const logs = splitLogSubmission({
             context: contextData,
-            activities: collectedData
-        };
-        onSubmit(payload);
+            activities: collectedData,
+        }, crops, profile);
+
+        await onSubmit(logs);
     };
 
 
@@ -119,13 +131,18 @@ const LogWizardContainer: React.FC<LogWizardContainerProps> = ({ isOpen, onClose
     // Find Plot Name for display
     const getPlotName = () => {
         if (!contextData) return '';
-        const crop = crops.find(c => c.id === contextData.cropId);
-        const plot = crop?.plots.find(p => p.id === contextData.plotId);
-        return plot?.name || 'Unknown Plot';
+        if (contextData.selections.length === 1) {
+            return contextData.selections[0].plotName;
+        }
+        return `${contextData.selections.length} plots`;
+    };
+
+    const getTargetLabels = () => {
+        return contextData?.selections.map(selection => `${selection.cropName} • ${selection.plotName}`) || [];
     };
 
     return (
-        <div className="fixed inset-0 z-50 bg-stone-50 flex flex-col animate-in fade-in duration-300">
+        <div className="fixed inset-0 z-50 bg-stone-50 flex flex-col pt-safe-area pb-safe-area animate-in fade-in duration-300">
             {/* Header */}
             <div className="px-4 py-4 flex items-center justify-between bg-white border-b border-stone-200">
                 <SathiStepper
@@ -152,6 +169,7 @@ const LogWizardContainer: React.FC<LogWizardContainerProps> = ({ isOpen, onClose
                     {phase === 2 && (
                         <Step2_WorkBuckets
                             plotName={getPlotName()}
+                            initialBuckets={initialBuckets}
                             onNext={handleBucketsNext}
                             onBack={() => setPhase(1)}
                         />
@@ -168,6 +186,7 @@ const LogWizardContainer: React.FC<LogWizardContainerProps> = ({ isOpen, onClose
                     {phase === 4 && (
                         <Step4_Readback
                             summaryData={getSummaryData()}
+                            targetLabels={getTargetLabels()}
                             onSubmit={handleSubmit}
                             onBack={() => {
                                 setCurrentBucketIndex(selectedBuckets.length - 1);
