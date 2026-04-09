@@ -4,10 +4,11 @@
 */
 
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { Mic, Square, AlertCircle, ArrowUp } from 'lucide-react';
+import { Mic, Square, AlertCircle, ArrowUp, X } from 'lucide-react';
 import Button from '../../../shared/components/ui/Button';
 import { AudioData } from '../../../types';
 import { useLanguage } from '../../../i18n/LanguageContext';
+import { hapticFeedback } from '../../../shared/utils/haptics';
 
 interface AudioRecorderProps {
   onAudioCaptured: (audioData: AudioData) => void;
@@ -50,19 +51,21 @@ const AudioRecorder: React.FC<AudioRecorderProps> = ({ onAudioCaptured, onTextCa
       };
 
       mediaRecorder.onstop = () => {
-        const blob = new Blob(chunksRef.current, { type: 'audio/webm' });
-        const reader = new FileReader();
-        reader.readAsDataURL(blob);
-        reader.onloadend = () => {
-          const base64String = reader.result as string;
-          const base64 = base64String.split(',')[1];
+        if (chunksRef.current.length > 0) {
+          const blob = new Blob(chunksRef.current, { type: 'audio/webm' });
+          const reader = new FileReader();
+          reader.readAsDataURL(blob);
+          reader.onloadend = () => {
+            const base64String = reader.result as string;
+            const base64 = base64String.split(',')[1];
 
-          onAudioCaptured({
-            blob,
-            base64,
-            mimeType: 'audio/webm'
-          });
-        };
+            onAudioCaptured({
+              blob,
+              base64,
+              mimeType: 'audio/webm'
+            });
+          };
+        }
 
         // Stop all tracks
         if (streamRef.current) {
@@ -108,6 +111,22 @@ const AudioRecorder: React.FC<AudioRecorderProps> = ({ onAudioCaptured, onTextCa
       }
       setDuration(0);
     }
+  }, [isRecording]);
+
+  const cancelRecording = useCallback(() => {
+    if (mediaRecorderRef.current && isRecording) {
+      chunksRef.current = [];
+      mediaRecorderRef.current.stop();
+      setIsRecording(false);
+      if (timerRef.current) {
+        clearInterval(timerRef.current);
+        timerRef.current = null;
+      }
+      setDuration(0);
+      return;
+    }
+
+    setDuration(0);
   }, [isRecording]);
 
   useEffect(() => {
@@ -273,6 +292,20 @@ const AudioRecorder: React.FC<AudioRecorderProps> = ({ onAudioCaptured, onTextCa
           <div className="animate-pulse text-amber-600 font-bold mb-4 text-center">
             {t('voice.autoStopping').replace('{seconds}', String(60 - duration))}
           </div>
+        )}
+
+        {isRecording && (
+          <button
+            type="button"
+            onClick={() => {
+              hapticFeedback.medium();
+              cancelRecording();
+            }}
+            className="mt-4 flex items-center gap-2 rounded-full border border-rose-200 bg-rose-50 px-6 py-2.5 text-sm font-bold text-rose-600 active:scale-95 transition-all duration-150"
+          >
+            <X size={14} strokeWidth={2.5} />
+            {t('voice.discardRecording')}
+          </button>
         )}
 
         {/* FOOTER BUTTON REMOVED - Using Mic Icon Interaction */}
