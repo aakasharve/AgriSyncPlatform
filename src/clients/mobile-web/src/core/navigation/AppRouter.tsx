@@ -5,12 +5,12 @@ import {
     DetailedWeather, WeatherEvent, WeatherReaction, ResourceItem,
     FarmContext, LogScope, AgriLogResponse, LogVerificationStatus
 } from '../../types';
-import CropSelector from '../../features/context/components/CropSelector';
+import CropSelector, { CropSymbol } from '../../features/context/components/CropSelector';
 import InputMethodToggle from '../../shared/components/ui/InputMethodToggle';
 import AudioRecorder from '../../features/voice/components/AudioRecorder';
 import ManualEntry from '../../features/logs/components/ManualEntry';
 import DailyLogCard from '../../features/logs/components/DailyLogCard';
-import { Leaf } from 'lucide-react';
+import { Leaf, LayoutGrid } from 'lucide-react';
 import { getSegmentVisual } from '../../shared/utils/uiUtils'; // We might need to extract this helper too
 import { getDateKey } from '../domain/services/DateKeyService';
 import { buildTimelineEntries } from '../../services/transcriptTimelineService';
@@ -19,7 +19,9 @@ import {
     computeDayState,
     formatCurrencyINR
 } from '../../shared/utils/dayState';
+import { hapticFeedback } from '../../shared/utils/haptics';
 import { financeSelectors } from '../../features/finance/financeSelectors';
+import { getCropTheme } from '../../shared/utils/colorTheme';
 import {
     useAppCommandsState,
     useAppDataState,
@@ -219,6 +221,7 @@ const AppRouter: React.FC = () => {
 
     const weatherData = weather.weatherData;
     const handleManualSubmit = commands.handleManualSubmit;
+    const handleWizardSubmit = commands.handleWizardSubmit;
     const handleUpdateNote = commands.handleUpdateNote;
     const handleVerifyLog = trust.handleVerifyLog;
     const history = isDemoMode ? mockHistory : realHistory;
@@ -786,22 +789,37 @@ const AppRouter: React.FC = () => {
 
                                 <div className={`transition-all duration-500 ${!isContextReady ? 'opacity-90' : ''}`}>
                                     {mode === 'voice' ? (
-                                        <AudioRecorder
-                                            onAudioCaptured={handleAudioReady}
-                                            onTextCaptured={handleTextReady}
-                                            disabled={!isContextReady}
-                                            externalError={error}
-                                            transcript={errorTranscript}
-                                            suggestInteraction={isContextReady}
-                                            onRequestContextSelection={() => {
-                                                const el = document.getElementById('crop-selector-container');
-                                                if (el) {
-                                                    el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                                                    el.classList.add('ring-4', 'ring-emerald-200', 'rounded-xl');
-                                                    setTimeout(() => el.classList.remove('ring-4', 'ring-emerald-200', 'rounded-xl'), 1500);
-                                                }
-                                            }}
-                                        />
+                                        <>
+                                            <AudioRecorder
+                                                onAudioCaptured={handleAudioReady}
+                                                onTextCaptured={handleTextReady}
+                                                disabled={!isContextReady}
+                                                externalError={error}
+                                                transcript={errorTranscript}
+                                                suggestInteraction={isContextReady}
+                                                onRequestContextSelection={() => {
+                                                    const el = document.getElementById('crop-selector-container');
+                                                    if (el) {
+                                                        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                                                        el.classList.add('ring-4', 'ring-emerald-200', 'rounded-xl');
+                                                        setTimeout(() => el.classList.remove('ring-4', 'ring-emerald-200', 'rounded-xl'), 1500);
+                                                    }
+                                                }}
+                                            />
+                                            {isContextReady && (
+                                                <button
+                                                    type="button"
+                                                    onClick={() => {
+                                                        hapticFeedback.medium();
+                                                        setShowLogWizard(true);
+                                                    }}
+                                                    className="mt-3 flex w-full items-center justify-center gap-2 rounded-2xl border border-emerald-200 bg-emerald-50 py-3 text-sm font-bold text-emerald-700 transition-all duration-150 active:scale-[0.98]"
+                                                >
+                                                    <LayoutGrid size={16} />
+                                                    Log for Multiple Plots
+                                                </button>
+                                            )}
+                                        </>
                                     ) : (
                                         hasActiveLogContext ? (
                                             <ManualEntry
@@ -961,22 +979,43 @@ const AppRouter: React.FC = () => {
                             <div className="absolute -top-10 -right-10 w-40 h-40 bg-emerald-100 rounded-full blur-3xl opacity-50"></div>
 
                             <div className="relative z-10">
-                                <div className="w-20 h-20 bg-white rounded-full flex items-center justify-center mx-auto mb-6 text-emerald-600 shadow-sm border border-emerald-50">
-                                    <Leaf size={40} className="drop-shadow-sm" />
-                                </div>
+                                    <div className="w-20 h-20 bg-white rounded-full flex items-center justify-center mx-auto mb-6 text-emerald-600 shadow-sm border border-emerald-50">
+                                        <Leaf size={40} className="drop-shadow-sm" />
+                                    </div>
                                 <h2 className="text-3xl font-bold text-stone-800 mb-6 tracking-tight">Saved to Ledger</h2>
 
                                 {/* Dynamic Feedback Summary */}
                                 {lastSavedLogSummary && lastSavedLogSummary.length > 0 ? (
                                     <div className="mb-8 space-y-3">
-                                        {lastSavedLogSummary.map((item, idx) => (
-                                            <div key={idx} className="bg-white rounded-2xl p-5 border border-emerald-100 shadow-sm relative overflow-hidden group">
-                                                <div className="absolute inset-0 bg-emerald-50/50 opacity-0 group-hover:opacity-100 transition-opacity"></div>
-                                                <p className="text-stone-700 font-medium text-lg relative z-10">
-                                                    I Understood your <span className="font-bold text-emerald-600 text-xl">{item.count}</span> activities for <span className="font-bold text-stone-900">{item.cropName}</span>
-                                                </p>
-                                            </div>
-                                        ))}
+                                        {lastSavedLogSummary.map((item, idx) => {
+                                            const crop = item.cropId ? crops.find(entry => entry.id === item.cropId) : undefined;
+                                            const theme = getCropTheme(crop?.color || 'bg-emerald-500');
+
+                                            return (
+                                                <div
+                                                    key={`${item.logId}-${idx}`}
+                                                    className={`rounded-[1.8rem] border p-1 shadow-lg ${theme.border} ${theme.shadow}`}
+                                                >
+                                                    <div className={`rounded-[1.5rem] p-4 ${theme.slideBgSelected}`}>
+                                                        <div className="flex items-center gap-3 text-left">
+                                                            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white shadow-sm ring-1 ring-white/70">
+                                                                {crop ? <CropSymbol name={crop.iconName} size="md" /> : <Leaf size={22} className="text-emerald-600" />}
+                                                            </div>
+                                                            <div className="min-w-0 flex-1">
+                                                                <p className="text-[10px] font-black uppercase tracking-[0.18em] text-stone-500">Stored In</p>
+                                                                <p className="truncate text-base font-black text-stone-900">
+                                                                    {item.cropName} • {item.plotName}
+                                                                </p>
+                                                            </div>
+                                                            <div className="rounded-2xl bg-white px-3 py-2 text-right shadow-sm">
+                                                                <p className="text-lg font-black text-emerald-700">{item.count}</p>
+                                                                <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-stone-500">Buckets</p>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            );
+                                        })}
                                     </div>
                                 ) : (
                                     <p className="text-stone-500 mb-8">Your activity has been logged successfully.</p>
@@ -987,6 +1026,12 @@ const AppRouter: React.FC = () => {
                                     {lastSavedLogIds && lastSavedLogIds.length > 0 && (
                                         <button
                                             onClick={() => {
+                                                if (lastSavedLogIds.length > 1) {
+                                                    setStatus('idle');
+                                                    setMode('manual');
+                                                    setMainView('log');
+                                                    return;
+                                                }
                                                 const logId = lastSavedLogIds[0];
                                                 const logToEdit = history.find(l => l.id === logId) || mockHistory.find(l => l.id === logId);
                                                 if (logToEdit) {
@@ -996,7 +1041,7 @@ const AppRouter: React.FC = () => {
                                             }}
                                             className="w-full bg-white text-emerald-700 border border-emerald-200 py-4 rounded-xl font-bold text-lg hover:bg-emerald-50 transition-colors mb-1"
                                         >
-                                            Review Details
+                                            {lastSavedLogIds.length > 1 ? 'Review Saved Targets' : 'Review Details'}
                                         </button>
                                     )}
 
@@ -1018,10 +1063,10 @@ const AppRouter: React.FC = () => {
                         onClose={() => setShowLogWizard(false)}
                         profile={farmerProfile}
                         crops={crops}
-                        onSubmit={(data) => {
-                            console.log("Wizard Submitted:", data);
+                        voiceParseResult={draftLog ?? undefined}
+                        onSubmit={async (logs) => {
+                            await handleWizardSubmit(logs);
                             setShowLogWizard(false);
-                            setStatus('success');
                         }}
                     />
 
@@ -1076,7 +1121,11 @@ const AppRouter: React.FC = () => {
                 currentRoute === 'main' && mainView === 'log' && status === 'idle' && !recordingSegment && hasActiveLogContext && (
                     <button
                         onClick={() => setShowQuickLog(true)}
-                        className="fixed bottom-24 left-4 z-40 w-14 h-14 bg-white text-emerald-600 rounded-full shadow-lg shadow-emerald-900/10 border border-emerald-100 flex items-center justify-center active:scale-95 transition-transform"
+                        className="fixed z-40 w-14 h-14 bg-white text-emerald-600 rounded-full shadow-lg shadow-emerald-900/10 border border-emerald-100 flex items-center justify-center active:scale-95 transition-transform"
+                        style={{
+                            bottom: 'calc(6rem + var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px)))',
+                            left: 'max(1rem, var(--safe-area-inset-left, env(safe-area-inset-left, 0px)))'
+                        }}
                         aria-label="Quick Log"
                     >
                         <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">

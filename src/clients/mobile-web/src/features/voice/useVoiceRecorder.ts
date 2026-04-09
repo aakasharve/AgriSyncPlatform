@@ -288,6 +288,7 @@ export const useVoiceRecorder = ({
                 return;
             }
 
+            // FUTURE: if selections.length > 1 and draftLog is ready, auto-open wizard
             if (isSegmentUpdate) {
                 const mergedDraft = { ...draftLog! };
 
