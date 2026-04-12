@@ -4,6 +4,11 @@
  */
 
 :root {
+    --safe-area-inset-top: env(safe-area-inset-top, 0px);
+    --safe-area-inset-bottom: env(safe-area-inset-bottom, 0px);
+    --safe-area-inset-left: env(safe-area-inset-left, 0px);
+    --safe-area-inset-right: env(safe-area-inset-right, 0px);
+
     /* Surface colors - Matching Tailwind 'surface' & 'stone' */
     --surface: #FFFFFF;
     --surface-dim: #FAFAF9; /* stone-50 */
@@ -43,7 +48,9 @@
     --radius-full: 9999px;
 
     /* Typography */
-    --font-display: 'Inter', system-ui, -apple-system, sans-serif;
+    --font-sans: 'DM Sans', 'Noto Sans Devanagari', sans-serif;
+    --font-serif: 'Noto Serif Devanagari', serif;
+    --font-display: 'DM Sans', 'Noto Sans Devanagari', sans-serif;
 
     /* --- DFES NEW TOKENS --- */
 
@@ -86,9 +93,68 @@
 
 /* Base resets */
 html {
-    font-family: var(--font-display);
+    font-family: var(--font-sans);
     -webkit-font-smoothing: antialiased;
     -webkit-tap-highlight-color: transparent;
+    color-scheme: light;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    overscroll-behavior: none;
+    touch-action: pan-y;
+    -webkit-text-size-adjust: 100%;
+}
+
+body {
+    position: fixed;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    overscroll-behavior: none;
+    touch-action: pan-y;
+    background: var(--surface-dim);
+    color: var(--on-surface);
+}
+
+#root {
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+}
+
+.page-content {
+    width: 100%;
+    max-width: 480px;
+    margin: 0 auto;
+    padding-left: 16px;
+    padding-right: 16px;
+}
+
+@media (min-width: 768px) {
+    .page-content {
+        max-width: 600px;
+    }
+}
+
+@media (min-width: 1280px) {
+    .page-content {
+        max-width: 640px;
+    }
+}
+
+* {
+    user-select: none;
+    -webkit-user-select: none;
+    -webkit-touch-callout: none;
+}
+
+input,
+textarea,
+[contenteditable="true"] {
+    user-select: text;
+    -webkit-user-select: text;
+    -webkit-touch-callout: default;
 }
 
 /* Remove the universal transition that causes jank */
@@ -97,6 +163,16 @@ a {
     cursor: pointer;
     user-select: none;
     -webkit-user-select: none;
+}
+
+button {
+    min-width: 44px;
+    min-height: 44px;
+    touch-action: manipulation;
+}
+
+a {
+    touch-action: manipulation;
 }
 
 /* Focus ring */

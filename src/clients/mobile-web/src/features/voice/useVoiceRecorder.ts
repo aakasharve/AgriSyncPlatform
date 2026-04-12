@@ -23,7 +23,6 @@ interface UseVoiceRecorderProps {
     crops: CropProfile[];
     farmerProfile: FarmerProfile;
     setMode: (mode: InputMode) => void;
-    onAutoSave?: (log: AgriLogResponse, provenance?: LogProvenance) => void;
     parser: VoiceParserPort;
     voicePreprocessor: VoicePreprocessor;
 }
@@ -35,7 +34,6 @@ export const useVoiceRecorder = ({
     crops,
     farmerProfile,
     setMode,
-    onAutoSave,
     parser,
     voicePreprocessor,
 }: UseVoiceRecorderProps) => {
@@ -266,27 +264,8 @@ export const useVoiceRecorder = ({
                 return;
             }
 
-            // AUTO-SAVE LOGIC (AV-6: DFES Voice Safety Gate)
-            const suggestedAction = result.confidenceAssessment?.suggestedAction;
-            const hasUnclearSegments = response.unclearSegments && response.unclearSegments.length > 0;
-
-            // Auto-save if confidence assessment says auto_confirm,
-            // or legacy fallback: no confidence data AND no unclear segments
-            const shouldAutoSave = suggestedAction === 'auto_confirm'
-                || (!suggestedAction && !hasUnclearSegments);
-
-            if (onAutoSave && !isSegmentUpdate && shouldAutoSave) {
-                // IMPORTANT: Pass provenance so backend can link audio if needed
-                onAutoSave(response, prov);
-
-                // Reset state immediately as we are done
-                setDraftLog(null);
-                setRecordingSegment(null);
-                setClarificationNeeded(null); // Clear any pending clarification
-                setStatus('idle');
-                // Note: The onAutoSave callback in compositionRoot.ts will set status to 'success'
-                return;
-            }
+            // Always show ManualEntry for review — never skip to auto-save.
+            // User must see what was parsed before it is written to the ledger.
 
             // FUTURE: if selections.length > 1 and draftLog is ready, auto-open wizard
             if (isSegmentUpdate) {

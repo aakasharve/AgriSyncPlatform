@@ -175,7 +175,10 @@ export class BackendAiClient implements VoiceParserPort {
             const confidenceScore = Number(apiResult.confidence || 0);
             const fieldConfidences = apiResult.fieldConfidences ?? {};
             const lowConfidenceFields = Object.entries(fieldConfidences)
-                .filter(([, confidence]) => (confidence?.level || '').toLowerCase() === 'low')
+                .filter(([, confidence]) => {
+                    const level = confidence?.level;
+                    return typeof level === 'string' && level.toLowerCase() === 'low';
+                })
                 .map(([field]) => field);
             const suggestedAction = normalizeSuggestedAction(apiResult.suggestedAction);
             if (!isAgriLogResponse(apiResult.parsedLog)) {
