@@ -13,8 +13,8 @@ import { useWeatherMonitor } from '../features/weather/useWeatherMonitor';
 import { useLogContext } from './context/LogContext';
 import { BackendAiClient } from '../infrastructure/ai/BackendAiClient';
 import { weatherService } from '../infrastructure/weather/TomorrowIoWeatherService';
-import { VoiceDraftDispatcher } from '../application/services/VoiceDraftDispatcher';
 import { VoicePreprocessor } from '../infrastructure/voice/VoicePreprocessor';
+import type { LastSavedLogSummaryItem } from './uiRuntimeTypes';
 
 export interface AgriLogAppConfig {
     initialCrops: CropProfile[];
@@ -26,7 +26,7 @@ type GlobalToastDetail = { message: string; type: 'success' | 'error' };
 export const useAgriLogApp = ({ initialCrops }: AgriLogAppConfig) => {
     // --- 0. UI GLOBAL STATE (Hoisted) ---
     const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
-    const [lastSavedLogSummary, setLastSavedLogSummary] = useState<Array<{ cropName: string, count: number }>>([]);
+    const [lastSavedLogSummary, setLastSavedLogSummary] = useState<LastSavedLogSummaryItem[]>([]);
     const [lastSavedLogIds, setLastSavedLogIds] = useState<string[]>([]);
     const [mode, setMode] = useState<InputMode>('voice');
 
@@ -57,7 +57,6 @@ export const useAgriLogApp = ({ initialCrops }: AgriLogAppConfig) => {
 
     // --- INFRASTRUCTURE ---
     const parser = useMemo(() => new BackendAiClient(), []);
-    const voiceDraftDispatcher = useMemo(() => new VoiceDraftDispatcher(), []);
     const voicePreprocessor = useMemo(() => new VoicePreprocessor(), []);
 
     // --- 4. VOICE RECORDER (Producer) ---
@@ -70,7 +69,6 @@ export const useAgriLogApp = ({ initialCrops }: AgriLogAppConfig) => {
             setMode(newMode);
             if (newMode === 'voice') navigation.setMainView('log');
         },
-        onAutoSave: (log, prov) => voiceDraftDispatcher.emit(log, prov),
         parser,
         logScope,
         voicePreprocessor,
@@ -103,15 +101,6 @@ export const useAgriLogApp = ({ initialCrops }: AgriLogAppConfig) => {
     });
     const commandsRef = useRef(commands);
     commandsRef.current = commands;
-
-    // Bridge event stream: voice -> dispatcher -> commands
-    useEffect(() => {
-        const unsubscribe = voiceDraftDispatcher.subscribe((event) => {
-            void commandsRef.current.handleAutoSave(event.draft, event.provenance);
-        });
-
-        return () => { unsubscribe(); };
-    }, [voiceDraftDispatcher]);
 
     useEffect(() => {
         const handleGlobalToast = (event: Event) => {

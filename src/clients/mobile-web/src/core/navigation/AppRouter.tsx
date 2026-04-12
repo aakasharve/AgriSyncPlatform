@@ -10,7 +10,7 @@ import InputMethodToggle from '../../shared/components/ui/InputMethodToggle';
 import AudioRecorder from '../../features/voice/components/AudioRecorder';
 import ManualEntry from '../../features/logs/components/ManualEntry';
 import DailyLogCard from '../../features/logs/components/DailyLogCard';
-import { Leaf, LayoutGrid } from 'lucide-react';
+import { Leaf, Droplets, Users, Package, Tractor, Sprout } from 'lucide-react';
 import { getSegmentVisual } from '../../shared/utils/uiUtils'; // We might need to extract this helper too
 import { getDateKey } from '../domain/services/DateKeyService';
 import { buildTimelineEntries } from '../../services/transcriptTimelineService';
@@ -50,7 +50,6 @@ const ReportsPage = React.lazy(() => import('../../pages/ReportsPage'));
 const FinanceSettingsPage = React.lazy(() => import('../../pages/FinanceSettingsPage'));
 const AdminAiOpsPage = React.lazy(() => import('../../features/admin/ai/AdminAiOpsPage').then(module => ({ default: module.AdminAiOpsPage })));
 const TaskCreationSheet = React.lazy(() => import('../../features/scheduler/components/TaskCreationSheet'));
-const LogWizardContainer = React.lazy(() => import('../../features/logs/components/wizard/LogWizardContainer'));
 const ReviewInboxSheet = React.lazy(() => import('../../features/logs/components/ReviewInboxSheet'));
 const QuickLogSheet = React.lazy(() => import('../../features/logs/components/QuickLogSheet').then(module => ({ default: module.QuickLogSheet })));
 const OnboardingPermissionsPage = React.lazy(() => import('../../pages/OnboardingPermissionsPage'));
@@ -221,13 +220,11 @@ const AppRouter: React.FC = () => {
 
     const weatherData = weather.weatherData;
     const handleManualSubmit = commands.handleManualSubmit;
-    const handleWizardSubmit = commands.handleWizardSubmit;
     const handleUpdateNote = commands.handleUpdateNote;
     const handleVerifyLog = trust.handleVerifyLog;
     const history = isDemoMode ? mockHistory : realHistory;
 
     // Sathi Wizard State
-    const [showLogWizard, setShowLogWizard] = React.useState(false);
     // DFES Phase 0: Review Inbox State
     const [showReviewInbox, setShowReviewInbox] = React.useState(false);
     // DFES: QuickLogSheet State (INT-3)
@@ -806,19 +803,6 @@ const AppRouter: React.FC = () => {
                                                     }
                                                 }}
                                             />
-                                            {isContextReady && (
-                                                <button
-                                                    type="button"
-                                                    onClick={() => {
-                                                        hapticFeedback.medium();
-                                                        setShowLogWizard(true);
-                                                    }}
-                                                    className="mt-3 flex w-full items-center justify-center gap-2 rounded-2xl border border-emerald-200 bg-emerald-50 py-3 text-sm font-bold text-emerald-700 transition-all duration-150 active:scale-[0.98]"
-                                                >
-                                                    <LayoutGrid size={16} />
-                                                    Log for Multiple Plots
-                                                </button>
-                                            )}
                                         </>
                                     ) : (
                                         hasActiveLogContext ? (
@@ -997,7 +981,7 @@ const AppRouter: React.FC = () => {
                                                     className={`rounded-[1.8rem] border p-1 shadow-lg ${theme.border} ${theme.shadow}`}
                                                 >
                                                     <div className={`rounded-[1.5rem] p-4 ${theme.slideBgSelected}`}>
-                                                        <div className="flex items-center gap-3 text-left">
+                                                        <div className="flex items-center gap-3 text-left mb-3">
                                                             <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white shadow-sm ring-1 ring-white/70">
                                                                 {crop ? <CropSymbol name={crop.iconName} size="md" /> : <Leaf size={22} className="text-emerald-600" />}
                                                             </div>
@@ -1007,11 +991,30 @@ const AppRouter: React.FC = () => {
                                                                     {item.cropName} • {item.plotName}
                                                                 </p>
                                                             </div>
-                                                            <div className="rounded-2xl bg-white px-3 py-2 text-right shadow-sm">
-                                                                <p className="text-lg font-black text-emerald-700">{item.count}</p>
-                                                                <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-stone-500">Buckets</p>
-                                                            </div>
                                                         </div>
+                                                        {/* Bucket Breakdown */}
+                                                        {(() => {
+                                                            const savedLog = history.find(l => l.id === item.logId);
+                                                            if (!savedLog) return null;
+                                                            const buckets = [
+                                                                { key: 'irrigation', count: (savedLog.irrigation || []).filter(e => (e.durationHours || 0) > 0 || (e.waterVolumeLitres || 0) > 0 || e.method || e.source).length, icon: <Droplets size={13} />, label: 'Irrigation', color: 'bg-blue-100 text-blue-700' },
+                                                                { key: 'labour', count: (savedLog.labour || []).length, icon: <Users size={13} />, label: 'Labour', color: 'bg-amber-100 text-amber-700' },
+                                                                { key: 'inputs', count: (savedLog.inputs || []).length, icon: <Package size={13} />, label: 'Inputs', color: 'bg-purple-100 text-purple-700' },
+                                                                { key: 'machinery', count: (savedLog.machinery || []).length, icon: <Tractor size={13} />, label: 'Machinery', color: 'bg-stone-100 text-stone-700' },
+                                                                { key: 'crop', count: (savedLog.cropActivities || []).length, icon: <Sprout size={13} />, label: 'Crop Work', color: 'bg-emerald-100 text-emerald-700' },
+                                                            ].filter(b => b.count > 0);
+                                                            if (buckets.length === 0) return null;
+                                                            return (
+                                                                <div className="flex flex-wrap gap-2">
+                                                                    {buckets.map(b => (
+                                                                        <span key={b.key} className={`flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-bold ${b.color}`}>
+                                                                            {b.icon}
+                                                                            {b.label} ×{b.count}
+                                                                        </span>
+                                                                    ))}
+                                                                </div>
+                                                            );
+                                                        })()}
                                                     </div>
                                                 </div>
                                             );
@@ -1057,18 +1060,6 @@ const AppRouter: React.FC = () => {
                     )}
 
 
-                    {/* SATHI LOG WIZARD */}
-                    <LogWizardContainer
-                        isOpen={showLogWizard}
-                        onClose={() => setShowLogWizard(false)}
-                        profile={farmerProfile}
-                        crops={crops}
-                        voiceParseResult={draftLog ?? undefined}
-                        onSubmit={async (logs) => {
-                            await handleWizardSubmit(logs);
-                            setShowLogWizard(false);
-                        }}
-                    />
 
 
                 </>
