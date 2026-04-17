@@ -1,16 +1,16 @@
 import { mutationQueue } from '../../../infrastructure/sync/MutationQueue';
-import { idGenerator } from '../../../core/domain/services/IdGenerator';
 
 export interface AddLogTaskPayload {
      dailyLogId: string;
-     taskId: string;
+     logTaskId: string;
      activityType: string;
      notes?: string;
+     occurredAtUtc?: string;
 }
 
 export class AddLogTaskCommand {
      static async enqueue(payload: AddLogTaskPayload): Promise<string> {
-          const clientRequestId = idGenerator.generate();
+          const clientRequestId = `add_log_task:${payload.dailyLogId}:${payload.logTaskId}`;
           return mutationQueue.enqueue('add_log_task', payload, {
                clientRequestId,
                clientCommandId: clientRequestId

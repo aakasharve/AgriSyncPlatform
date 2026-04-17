@@ -1,4 +1,6 @@
 using AgriSync.SharedKernel.Contracts.Ids;
+using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
 using Microsoft.EntityFrameworkCore;
 using User.Application.Ports;
 using User.Domain.Identity;
@@ -13,7 +15,11 @@ namespace AgriSync.Bootstrapper.Infrastructure;
 /// No farm, no plots, no data — shows the app as a brand-new user would see it.
 /// Runs unconditionally on every startup; idempotent.
 /// </summary>
-public sealed class BlankTestUserSeeder(UserDbContext userContext, IPasswordHasher passwordHasher)
+public sealed class BlankTestUserSeeder(
+    UserDbContext userContext,
+    IPasswordHasher passwordHasher,
+    IHostEnvironment hostEnvironment,
+    ILogger<BlankTestUserSeeder> logger)
 {
     private const string AppId = "shramsafal";
     private const string Phone = "0000000000";
@@ -25,6 +31,16 @@ public sealed class BlankTestUserSeeder(UserDbContext userContext, IPasswordHash
 
     public async Task SeedAsync(CancellationToken ct = default)
     {
+        var explicitlyEnabled = string.Equals(
+            Environment.GetEnvironmentVariable("SEED_BLANK_TEST_USER"),
+            "true",
+            StringComparison.OrdinalIgnoreCase);
+        if (!hostEnvironment.IsDevelopment() && !explicitlyEnabled)
+        {
+            logger.LogInformation("Skipping blank test user seeding because environment is {EnvironmentName} and SEED_BLANK_TEST_USER is not enabled.", hostEnvironment.EnvironmentName);
+            return;
+        }
+
         var nowUtc = DateTime.UtcNow;
         var existing = await userContext.Users
             .FirstOrDefaultAsync(u => u.Phone.Value == Phone, ct);

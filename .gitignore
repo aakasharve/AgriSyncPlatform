@@ -1,15 +1,31 @@
 # ============================================
 # AgriSync Platform .gitignore
+# Protocol: REPO_HYGIENE_PROTOCOL.md (in _COFOUNDER/01_Operations/Protocols/)
+# Last updated: 2026-03-15
 # ============================================
 
-# ------------------------------------------
-# Operations Vault (Obsidian / _COFOUNDER)
-# NEVER commit planning artifacts to git.
-# ------------------------------------------
+# ===========================================
+# §1  PERSONAL / AGENTIC WORKFLOW
+#     Never commit. These are local tools,
+#     not application code.
+# ===========================================
+
+# Operations vault (Obsidian knowledge base)
 /_COFOUNDER/
 .obsidian/
 
-# Prevent stray operations folders at repo root
+# AI agent configs (Claude, Gemini, Codex)
+.claude/
+.gemini/
+.mcp.json
+*.skill
+*.canvas
+.superpowers/
+.agents/
+.kiro/
+__pycache__/
+
+# Stray _COFOUNDER sub-folders at root (safety net)
 /00_Home/
 /00_Strategy/
 /01_Operations/
@@ -20,9 +36,29 @@
 /05_Engineering/
 /99_System_State/
 
-# ------------------------------------------
-# .NET / Visual Studio
-# ------------------------------------------
+# Protocol docs (for agents, not for the repo)
+/REPO_HYGIENE_PROTOCOL.md
+
+# ===========================================
+# §2  SECRETS & CREDENTIALS
+#     .env.example is committed (template).
+#     Real values NEVER committed.
+# ===========================================
+
+.env
+.env.local
+.env.*.local
+src/AgriSync.Bootstrapper/secrets/
+src/AgriSync.Bootstrapper/App_Data/
+*.keystore
+*.jks
+
+# ===========================================
+# §3  BUILD ARTIFACTS
+#     Reproducible from source. Never commit.
+# ===========================================
+
+# .NET
 .vs/
 *.user
 *.suo
@@ -31,83 +67,71 @@
 *.nupkg
 **/packages/
 
-# ------------------------------------------
-# IDE
-# ------------------------------------------
-.idea/
-.vscode/
-
-# ------------------------------------------
 # Node / Frontend
-# ------------------------------------------
 node_modules/
 **/dist/
 
-# Environment files (NEVER commit secrets)
-.env
-.env.local
-.env.*.local
-
-# Capacitor native projects (built locally)
+# Capacitor native (built locally per-device)
 src/clients/mobile-web/android/
 src/clients/mobile-web/ios/
 
-# ------------------------------------------
-# Logs & Temp Files
-# ------------------------------------------
+# Astro generated types (rebuilt on `astro dev`)
+**/.astro/
+
+# Python virtual environments
+venv*/
+
+# ===========================================
+# §4  IDE & OS
+# ===========================================
+
+.idea/
+.vscode/
+Thumbs.db
+.DS_Store
+
+# ===========================================
+# §5  LOGS, TEMP FILES & DEBUG SCRATCH
+#     Agents: use /tmp or outside the repo.
+#     NEVER dump debug output into src tree.
+# ===========================================
+
+# Log files
 *.log
 *.err.log
 *.out.log
-build.log
-.codex_build/
+
+# Agent debug dumps (catch-all patterns)
 build_out.txt
+build_error.txt
+**/build_error.txt
 diff.txt
 diff_content.txt
 diff_stat.txt
-status.txt
 status*.txt
 snapshot_commits.txt
 uncommitted_files.txt
 tmp-swagger.json
 debug_seed.ps1
-.preview_backend_pid
-.preview_frontend_pid
+out.txt
+out[0-9]*.txt
+err.txt
+err.json
+error_out.txt
+out_upload.txt
+**/check*.txt
+**/check_output.txt
+
+# Codex temp files
+.codex_build/
 .codex_tmp_handoff_result.json
 
-# ------------------------------------------
-# OS
-# ------------------------------------------
-Thumbs.db
-.DS_Store
+# Preview server PIDs
+.preview_backend_pid
+.preview_frontend_pid
 
-# ------------------------------------------
-# Generated / Misc
-# ------------------------------------------
-*.generated.*
-
-# ------------------------------------------
-# Secrets & Credentials
-# ------------------------------------------
-src/AgriSync.Bootstrapper/secrets/local/credentials.json
-src/AgriSync.Bootstrapper/App_Data/
-*.keystore
-*.jks
-
-# ------------------------------------------
-# Testing & CI Artifacts
-# ------------------------------------------
-.playwright-cli/
-src/clients/mobile-web/vite_log.txt
-
-# ------------------------------------------
-# Python virtual environments
-# ------------------------------------------
-venv_sarvam/
-venv*/
-
-# ------------------------------------------
-# Test/debug artifacts
-# ------------------------------------------
+# Test/debug scratch (underscore-prefixed at root)
+/_*.txt
 _test_output*.txt
 _sarvam_*.txt
 _sarvam_*.json
@@ -115,23 +139,44 @@ _domain_tests.txt
 _err.txt
 _git_vision.txt
 _integr_tests.txt
-*.canvas
 
-# ------------------------------------------
-# Temp debug files
-# ------------------------------------------
-out.txt
-out[0-9]*.txt
-err.txt
-err.json
-error_out.txt
-out_upload.txt
-tmp-swagger.json
-patch_*.js
+# ===========================================
+# §6  TESTING & CI ARTIFACTS
+# ===========================================
 
-# ------------------------------------------
-# Demo Assets (large binaries, local only)
-# ------------------------------------------
+.playwright-cli/
+**/output/*.png
+**/output/*.jpg
+src/clients/mobile-web/vite_log.txt
+
+# ===========================================
+# §7  MARKETING SITE — JUNK TO EXCLUDE
+#     App code at src/clients/marketing-web/
+#     is committed. Scaffolds and scratch are not.
+# ===========================================
+
+# Astro starter template (not our code)
+src/clients/marketing-web/galactic-graham/
+
+# Agent debug output inside marketing dir
+src/clients/marketing-web/output/
+
+# ===========================================
+# §8  LEGACY / MISC
+# ===========================================
+
+*.generated.*
+*.msi
+/publish/
+/marketing/
+/aws_*.log
+/patch_*.js
+
+# ===========================================
+# §9  DEMO ASSETS (large binaries, local only)
+# ===========================================
+
 src/clients/mobile-web/public/demo-photos/*.jpg
 src/clients/mobile-web/public/demo-photos/*.jpeg
 src/clients/mobile-web/public/demo-photos/*.png
+src/clients/marketing-web/public/videos/hero-bg.mp4

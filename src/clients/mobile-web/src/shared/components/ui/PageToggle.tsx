@@ -6,6 +6,7 @@ import React from 'react';
 import { PageView } from '../../../types';
 import { PenTool, BarChart3, ArrowRightLeft } from 'lucide-react';
 import { useLanguage } from '../../../i18n/LanguageContext';
+import { hapticFeedback } from '../../../shared/utils/haptics';
 
 interface PageToggleProps {
   view: PageView;
@@ -24,20 +25,23 @@ const PageToggle: React.FC<PageToggleProps> = ({ view, onChange, disabled }) => 
 
   return (
     <div className="flex justify-center w-full px-1">
-      <div className="bg-surface-200 p-1 rounded-xl flex w-full shadow-inner relative z-0">
+      <div className="bg-stone-100 p-1 rounded-xl flex w-full shadow-inner relative z-0">
         {items.map((item) => (
           <button
             key={item.key}
-            onClick={() => onChange(item.key)}
+            onClick={() => {
+              hapticFeedback.medium();
+              onChange(item.key);
+            }}
             disabled={disabled}
             className={`
               flex-1 flex items-center justify-center py-2 rounded-lg text-xs font-bold tracking-wide transition-all duration-200 relative z-10
               ${view === item.key
-                ? 'bg-white text-emerald-700 shadow-sm ring-1 ring-black/5 scale-[1.02]'
+                ? 'bg-emerald-600 text-white shadow-md'
                 : 'text-stone-500 hover:text-stone-700 hover:bg-stone-200/50 active:scale-95'}
             `}
           >
-            <span className={`mr-1.5 transition-transform ${view === item.key ? 'scale-110' : ''}`}>
+            <span className="mr-1.5">
               {item.icon}
             </span>
             {item.label}

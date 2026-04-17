@@ -3,6 +3,8 @@ import { useAuth } from '../app/providers/AuthProvider';
 
 interface LoginPageProps { }
 
+type AuthMode = 'login' | 'register';
+
 function normalizeDemoPhone(input: string): string {
     const normalized = input.trim();
     if (normalized === 'purvesh') {
@@ -13,32 +15,71 @@ function normalizeDemoPhone(input: string): string {
 }
 
 const LoginPage: React.FC<LoginPageProps> = () => {
-    const { login, isLoading, loginError } = useAuth();
+    const { login, register, isLoading, authError, clearAuthError } = useAuth();
+    const [mode, setMode] = useState<AuthMode>('login');
+    const [displayName, setDisplayName] = useState('');
     const [phone, setPhone] = useState('');
     const [password, setPassword] = useState('');
+    const isRegisterMode = mode === 'register';
+
+    const switchMode = (nextMode: AuthMode) => {
+        setMode(nextMode);
+        clearAuthError();
+    };
 
     const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
         event.preventDefault();
-        const normalizedPhone = normalizeDemoPhone(phone);
-        if (!normalizedPhone || !password.trim()) {
+        const normalizedPhone = isRegisterMode ? phone.trim() : normalizeDemoPhone(phone);
+        const normalizedPassword = password.trim();
+        const normalizedDisplayName = displayName.trim();
+
+        if (!normalizedPhone || !normalizedPassword) {
             return;
         }
 
         try {
-            await login(normalizedPhone, password);
+            if (isRegisterMode) {
+                if (!normalizedDisplayName) {
+                    return;
+                }
+
+                await register(normalizedPhone, normalizedPassword, normalizedDisplayName);
+                return;
+            }
+
+            await login(normalizedPhone, normalizedPassword);
         } catch {
             // Error is surfaced by AuthProvider state.
         }
     };
 
     return (
-        <div className="min-h-screen bg-surface-100 bg-subtle-mesh text-stone-900 flex items-center justify-center px-4">
-            <div className="w-full max-w-sm glass-panel p-6 space-y-5 shadow-xl border border-stone-200/70">
+        <div className="min-h-screen-safe bg-transparent text-stone-900 flex items-center justify-center px-4 py-6 pt-safe-area pb-safe-area pl-safe-area pr-safe-area">
+            <div className="w-full max-w-none glass-panel p-6 space-y-5 shadow-xl border border-stone-200/70 md:border-0 md:bg-transparent md:shadow-none md:backdrop-blur-none">
                 <div className="space-y-1 text-center">
-                    <h1 className="text-2xl font-black font-display text-stone-800">ShramSafal Login</h1>
+                    <h1 className="text-2xl font-black font-display text-stone-800">ShramSafal</h1>
                     <p className="text-xs text-stone-500 font-medium">
-                        AgriSync backend authentication.
+                        {isRegisterMode
+                            ? 'Create a real empty farmer account and enter the first-run workflow immediately.'
+                            : 'Sign in with an existing account or use the Purvesh demo account.'}
                     </p>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2 rounded-xl border border-stone-200 bg-stone-50 p-1">
+                    <button
+                        type="button"
+                        onClick={() => switchMode('login')}
+                        className={`rounded-lg px-3 py-2 text-xs font-bold transition-colors ${!isRegisterMode ? 'bg-white text-emerald-700 shadow-sm' : 'text-stone-500 hover:text-stone-700'}`}
+                    >
+                        Sign In
+                    </button>
+                    <button
+                        type="button"
+                        onClick={() => switchMode('register')}
+                        className={`rounded-lg px-3 py-2 text-xs font-bold transition-colors ${isRegisterMode ? 'bg-white text-blue-700 shadow-sm' : 'text-stone-500 hover:text-stone-700'}`}
+                    >
+                        New Farmer
+                    </button>
                 </div>
 
                 <div className="rounded-xl border border-stone-100 bg-stone-50 divide-y divide-stone-100 text-[11px]">
@@ -50,59 +91,94 @@ const LoginPage: React.FC<LoginPageProps> = () => {
                         </span>
                     </div>
                     <div className="flex items-center justify-between px-3 py-2">
-                        <span className="font-bold text-blue-700 uppercase tracking-wider">New user</span>
+                        <span className="font-bold text-blue-700 uppercase tracking-wider">Fresh account</span>
                         <span className="text-stone-600">
-                            phone: <span className="font-mono font-bold text-stone-800">0000000000</span>
-                            &nbsp;&nbsp;pass: <span className="font-mono font-bold text-stone-800">real@1234</span>
+                            Use the <span className="font-semibold text-stone-800">New Farmer</span> tab to create an empty account.
                         </span>
                     </div>
                 </div>
 
                 <form className="space-y-4" onSubmit={handleSubmit}>
+                    {isRegisterMode && (
+                        <div className="space-y-1">
+                            <label htmlFor="register-name" className="block text-xs font-semibold text-stone-600 uppercase tracking-wide">
+                                Display Name
+                            </label>
+                            <input
+                                id="register-name"
+                                type="text"
+                                autoComplete="name"
+                                value={displayName}
+                                onChange={(e) => setDisplayName(e.target.value)}
+                                placeholder="New Farmer"
+                                className="w-full rounded-xl border border-stone-200 bg-white px-3 py-2.5 text-sm font-medium outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-200/60"
+                                disabled={isLoading}
+                            />
+                        </div>
+                    )}
+
                     <div className="space-y-1">
-                        <label htmlFor="login-phone" className="block text-xs font-semibold text-stone-600 uppercase tracking-wide">
+                        <label htmlFor="auth-phone" className="block text-xs font-semibold text-stone-600 uppercase tracking-wide">
                             Phone
                         </label>
                         <input
-                            id="login-phone"
+                            id="auth-phone"
                             type="tel"
-                            autoComplete="username"
+                            autoComplete={isRegisterMode ? 'tel' : 'username'}
                             value={phone}
-                            onChange={(e) => setPhone(e.target.value)}
-                            placeholder="9876543210"
-                            className="w-full rounded-xl border border-stone-200 bg-white px-3 py-2.5 text-sm font-medium outline-none focus:border-emerald-400 focus:ring-2 focus:ring-emerald-200/60"
+                            onChange={(e) => {
+                                setPhone(e.target.value);
+                                if (authError) {
+                                    clearAuthError();
+                                }
+                            }}
+                            placeholder={isRegisterMode ? 'Use a new 10-digit phone number' : '9876543210'}
+                            className={`w-full rounded-xl border border-stone-200 bg-white px-3 py-2.5 text-sm font-medium outline-none focus:ring-2 ${isRegisterMode ? 'focus:border-blue-400 focus:ring-blue-200/60' : 'focus:border-emerald-400 focus:ring-emerald-200/60'}`}
                             disabled={isLoading}
                         />
                     </div>
 
                     <div className="space-y-1">
-                        <label htmlFor="login-password" className="block text-xs font-semibold text-stone-600 uppercase tracking-wide">
+                        <label htmlFor="auth-password" className="block text-xs font-semibold text-stone-600 uppercase tracking-wide">
                             Password
                         </label>
                         <input
-                            id="login-password"
+                            id="auth-password"
                             type="password"
-                            autoComplete="current-password"
+                            autoComplete={isRegisterMode ? 'new-password' : 'current-password'}
                             value={password}
-                            onChange={(e) => setPassword(e.target.value)}
-                            className="w-full rounded-xl border border-stone-200 bg-white px-3 py-2.5 text-sm font-medium outline-none focus:border-emerald-400 focus:ring-2 focus:ring-emerald-200/60"
+                            onChange={(e) => {
+                                setPassword(e.target.value);
+                                if (authError) {
+                                    clearAuthError();
+                                }
+                            }}
+                            className={`w-full rounded-xl border border-stone-200 bg-white px-3 py-2.5 text-sm font-medium outline-none focus:ring-2 ${isRegisterMode ? 'focus:border-blue-400 focus:ring-blue-200/60' : 'focus:border-emerald-400 focus:ring-emerald-200/60'}`}
                             disabled={isLoading}
                         />
                     </div>
 
-                    {loginError && (
+                    {authError && (
                         <div className="text-xs font-semibold text-rose-700 bg-rose-50 border border-rose-200 rounded-lg px-3 py-2">
-                            {loginError}
+                            {authError}
                         </div>
                     )}
 
                     <button
                         type="submit"
                         disabled={isLoading}
-                        className="w-full rounded-xl bg-emerald-600 hover:bg-emerald-700 disabled:opacity-60 disabled:cursor-not-allowed text-white font-bold text-sm py-2.5 transition-colors"
+                        className={`w-full rounded-xl disabled:opacity-60 disabled:cursor-not-allowed text-white font-bold text-sm py-2.5 transition-colors ${isRegisterMode ? 'bg-blue-600 hover:bg-blue-700' : 'bg-emerald-600 hover:bg-emerald-700'}`}
                     >
-                        {isLoading ? 'Signing in...' : 'Sign In'}
+                        {isLoading
+                            ? (isRegisterMode ? 'Creating account...' : 'Signing in...')
+                            : (isRegisterMode ? 'Create New Farmer Account' : 'Sign In')}
                     </button>
+
+                    {isRegisterMode && (
+                        <p className="text-[11px] leading-5 text-stone-500">
+                            This creates a real empty account with no farm, no plots, and no seeded workflow data so you can test the first-time UX safely. Purvesh remains available for full-feature smoke checks.
+                        </p>
+                    )}
                 </form>
 
                 <div className="mt-8 text-center">

@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useMemo } from 'react';
+import React, { createContext, useContext, useMemo, useState } from 'react';
 import { LogScope, FarmContext, CropProfile } from '../../types';
 
 // Define the shape of the Context
@@ -24,7 +24,6 @@ interface LogProviderProps {
     children: React.ReactNode;
 }
 
-// Helper interface for currentLogContext derivation
 interface SelectedCropContext {
     cropId: string;
     cropName: string;
@@ -32,30 +31,43 @@ interface SelectedCropContext {
     selectedPlotNames: string[];
 }
 
-import { useSelection } from './SelectionContext';
+const EMPTY_SCOPE: LogScope = {
+    selectedCropIds: [],
+    selectedPlotIds: [],
+    mode: 'single',
+    applyPolicy: 'broadcast',
+};
 
-export const LogProvider: React.FC<LogProviderProps> = ({ crops, children }) => {
-    // 1. Core State delegated to SelectionContext
-    const {
-        selectedCropId,
-        selectedPlotIds,
-        setSelection,
-        togglePlot: toggleSelectionPlot,
-        resetSelection
-    } = useSelection();
+function unique(values: string[]): string[] {
+    return Array.from(new Set(values.filter(Boolean)));
+}
 
-    // 2. Transaction-specific state (not in global selection)
-    const [applyPolicy, setApplyPolicy] = useState<LogScope['applyPolicy']>('broadcast');
+function normalizeScope(scope: LogScope): LogScope {
+    const selectedCropIds = unique(scope.selectedCropIds || []);
+    const selectedPlotIds = unique(scope.selectedPlotIds || []);
+    const applyPolicy = scope.applyPolicy || 'broadcast';
 
-    // 3. Construct LogScope from Selection
-    const logScope: LogScope = useMemo(() => ({
-        selectedCropIds: selectedCropId ? [selectedCropId] : [],
+    if (selectedCropIds.includes('FARM_GLOBAL')) {
+        return {
+            selectedCropIds: ['FARM_GLOBAL'],
+            selectedPlotIds: [],
+            mode: 'single',
+            applyPolicy,
+        };
+    }
+
+    return {
+        selectedCropIds,
         selectedPlotIds,
         mode: selectedPlotIds.length > 1 ? 'multi' : 'single',
-        applyPolicy
-    }), [selectedCropId, selectedPlotIds, applyPolicy]);
+        applyPolicy,
+    };
+}
 
-    // 4. Derive Context from Scope (Legacy/Current Logic)
+export const LogProvider: React.FC<LogProviderProps> = ({ crops, children }) => {
+    const [scopeState, setScopeState] = useState<LogScope>(EMPTY_SCOPE);
+    const logScope = useMemo(() => normalizeScope(scopeState), [scopeState]);
+
     const currentLogContext = useMemo(() => {
         const isFarmGlobalSelected =
             logScope.selectedCropIds.includes('FARM_GLOBAL') && logScope.selectedPlotIds.length === 0;
@@ -73,8 +85,12 @@ export const LogProvider: React.FC<LogProviderProps> = ({ crops, children }) => 
 
         if (logScope.selectedPlotIds.length === 0) return null;
 
-        const selectedCrops = Array.from(new Set(logScope.selectedCropIds));
-        const selection = selectedCrops.map(cId => {
+        const plotCropIds = logScope.selectedPlotIds
+            .map(plotId => crops.find(crop => crop.plots.some(plot => plot.id === plotId))?.id)
+            .filter((cropId): cropId is string => Boolean(cropId));
+        const orderedCropIds = unique([...logScope.selectedCropIds, ...plotCropIds]);
+
+        const selection = orderedCropIds.map(cId => {
             if (cId === 'FARM_GLOBAL') {
                 return {
                     cropId: 'FARM_GLOBAL',
@@ -89,7 +105,7 @@ export const LogProvider: React.FC<LogProviderProps> = ({ crops, children }) => 
 
             const plots = crop.plots.filter(p => logScope.selectedPlotIds.includes(p.id));
 
-            if (crop.plots.length > 0 && plots.length === 0) return null;
+            if (plots.length === 0) return null;
 
             return {
                 cropId: cId,
@@ -107,27 +123,58 @@ export const LogProvider: React.FC<LogProviderProps> = ({ crops, children }) => 
     const hasActiveLogContext = !!currentLogContext && currentLogContext.selection.length > 0;
     const isContextReady = hasActiveLogContext;
 
-    const activeCropId = logScope.selectedCropIds[0] ?? undefined;
-    const activePlotId = logScope.selectedPlotIds[0] ?? undefined;
+    const activeCropId = currentLogContext?.selection[0]?.cropId ?? logScope.selectedCropIds[0] ?? undefined;
+    const activePlotId = currentLogContext?.selection.flatMap(selection => selection.selectedPlotIds)[0]
+        ?? logScope.selectedPlotIds[0]
+        ?? undefined;
 
-    // Actions adapted to SelectionContext
     const handleSetLogScope = (newScope: LogScope) => {
-        if (newScope.applyPolicy) setApplyPolicy(newScope.applyPolicy);
-
-        const newCropId = newScope.selectedCropIds[0];
-        const newPlotIds = newScope.selectedPlotIds;
-
-        // Use atomic setSelection to avoid race conditions/batching issues
-        if (newCropId) {
-            setSelection(newCropId, newPlotIds);
-        } else {
-            resetSelection();
-        }
+        setScopeState(normalizeScope(newScope));
     };
 
     const togglePlot = (plotId: string, cropId: string, isGlobal: boolean) => {
-        // Use SelectionContext toggler
-        toggleSelectionPlot(plotId);
+        if (isGlobal) {
+            setScopeState({
+                selectedCropIds: ['FARM_GLOBAL'],
+                selectedPlotIds: [],
+                mode: 'single',
+                applyPolicy: logScope.applyPolicy,
+            });
+            return;
+        }
+
+        setScopeState(prevScope => {
+            const normalizedScope = normalizeScope(prevScope);
+            const nextCropIds = normalizedScope.selectedCropIds.filter(id => id !== 'FARM_GLOBAL');
+            const nextPlotIds = [...normalizedScope.selectedPlotIds];
+            const existingIndex = nextPlotIds.indexOf(plotId);
+
+            if (existingIndex >= 0) {
+                nextPlotIds.splice(existingIndex, 1);
+            } else {
+                nextPlotIds.push(plotId);
+            }
+
+            const cropIdsWithPlots = nextCropIds.filter(selectedCropId => {
+                if (selectedCropId === cropId) {
+                    return nextPlotIds.some(selectedPlotId =>
+                        crops.find(crop => crop.id === selectedCropId)?.plots.some(plot => plot.id === selectedPlotId)
+                    );
+                }
+
+                return true;
+            });
+
+            if (existingIndex < 0 && !cropIdsWithPlots.includes(cropId)) {
+                cropIdsWithPlots.push(cropId);
+            }
+
+            return normalizeScope({
+                ...normalizedScope,
+                selectedCropIds: cropIdsWithPlots,
+                selectedPlotIds: nextPlotIds,
+            });
+        });
     };
 
     const value = {
@@ -139,7 +186,7 @@ export const LogProvider: React.FC<LogProviderProps> = ({ crops, children }) => 
         activePlotId,
         setLogScope: handleSetLogScope,
         togglePlot,
-        resetScope: resetSelection
+        resetScope: () => setScopeState(EMPTY_SCOPE)
     };
 
     return (

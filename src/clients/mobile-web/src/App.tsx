@@ -1,5 +1,8 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { BrowserRouter } from 'react-router-dom';
+import { Capacitor, SystemBars, SystemBarsStyle } from '@capacitor/core';
+import { StatusBar, Style } from '@capacitor/status-bar';
+import { NavigationBar } from '@capgo/capacitor-navigation-bar';
 import { CropProfile } from './types';
 import { LogProvider } from './app/context/LogContext';
 import { AppErrorBoundary } from './app/components/common/AppErrorBoundary';
@@ -9,17 +12,45 @@ import SplashScreen from './shared/components/ui/SplashScreen';
 import { DataSourceProvider } from './app/providers/DataSourceProvider';
 import { SelectionProvider } from './app/context/SelectionContext';
 import { AuthProvider } from './app/providers/AuthProvider';
+import { useAuth } from './app/providers/AuthProvider';
 import { OfflineBanner } from './features/sync';
+import AppShell from './app/components/AppShell';
+import LoginPage from './pages/LoginPage';
 
-// Top-Level State: Crops (Required for LogProvider derivation)
-// Note: Crops will eventually move to DataSource, but for now App maintains initial state
-// or we fetch from DataSource inside. 
-// Ideally LogProvider needs crops. 
-// Let's wrap everything in DataSourceProvider.
+const AppFrame: React.FC<{
+    crops: CropProfile[];
+    setCrops: React.Dispatch<React.SetStateAction<CropProfile[]>>;
+}> = ({ crops, setCrops }) => {
+    const { isAuthenticated } = useAuth();
+
+    return (
+        <AppShell>
+            {isAuthenticated ? <AppContent crops={crops} setCrops={setCrops} /> : <LoginPage />}
+        </AppShell>
+    );
+};
+
 const App: React.FC = () => {
-    // Top-Level State: Crops (Required for LogProvider derivation)
     const [crops, setCrops] = useState<CropProfile[]>([]);
     const [showSplash, setShowSplash] = useState(true);
+
+    useEffect(() => {
+        if (!Capacitor.isNativePlatform()) {
+            return;
+        }
+
+        const configureNativeBars = async () => {
+            await StatusBar.setStyle({ style: Style.Light }).catch(() => undefined);
+            await StatusBar.setBackgroundColor({ color: '#FAFAF9' }).catch(() => undefined);
+            await StatusBar.setOverlaysWebView({ overlay: true }).catch(() => undefined);
+            await SystemBars.setStyle({ style: SystemBarsStyle.Light }).catch(() => undefined);
+            if (Capacitor.getPlatform() === 'android') {
+                await NavigationBar.setNavigationBarColor({ color: '#FFFFFF', darkButtons: true }).catch(() => undefined);
+            }
+        };
+
+        void configureNativeBars();
+    }, []);
 
     return (
         <BrowserRouter>
@@ -31,7 +62,7 @@ const App: React.FC = () => {
                                 <LogProvider crops={crops}>
                                     <OfflineBanner />
                                     {showSplash && <SplashScreen onComplete={() => setShowSplash(false)} />}
-                                    <AppContent crops={crops} setCrops={setCrops} />
+                                    <AppFrame crops={crops} setCrops={setCrops} />
                                 </LogProvider>
                             </SelectionProvider>
                         </LanguageProvider>

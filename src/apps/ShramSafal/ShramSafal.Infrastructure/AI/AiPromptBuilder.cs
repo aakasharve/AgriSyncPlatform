@@ -71,12 +71,40 @@ internal sealed class AiPromptBuilder : IAiPromptBuilder
                        Worker markers include: {{WORKER_MARKERS}}
                        If pattern [number + worker marker] appears, labour extraction is mandatory.
 
+                       --- COMPOUND LABOUR RULE ---
+                       If Marathi sentence uses "आणि" / comma to connect separate worker groups doing different work,
+                       create separate labour entries for each worker group.
+                       Example:
+                       "चार लोकांनी खत टाकले आणि तिघांनी पाणी सोडले"
+                       =>
+                       labour: [
+                         { count: 4, activity: "fertilizer_application", sourceText: "चार लोकांनी खत टाकले" },
+                         { count: 3, activity: "irrigation", sourceText: "तिघांनी पाणी सोडले" }
+                       ]
+                       Never collapse this into one labour entry.
+                       Never merge distinct worker counts into a single total when activities differ.
+                       If transcript says 4 and 3, output must preserve 4 and 3.
+                       Never rewrite counts, durations, or activities from few-shot examples.
+                       Few-shot examples are pattern only, never source data.
+
+                       --- OBSERVATIONS RULE ---
+                       Any sentence describing field condition, issue, warning, or future intent must appear in observations[].
+                       - field condition => noteType "observation"
+                       - problem / disease / deficiency => noteType "issue"
+                       - future intent / tomorrow work => noteType "reminder"
+                       If reminder observation includes extractedTasks, promote those tasks into plannedTasks[] also.
+
                        --- COMPLETE WORD-LEVEL ACCOUNTING ---
                        Every meaningful phrase must map to:
                        - a structured bucket
                        - observation
                        - planned task
                        - or unclearSegments with reason and clarification need.
+
+                       --- FEW-SHOT SAFETY RULE ---
+                       Use few-shot examples only to learn structure.
+                       Do not copy example numbers, crops, timings, or activities into the answer.
+                       The answer must be derived only from the current transcript and context.
 
                        --- OUTPUT SHAPE (JSON) ---
                        {

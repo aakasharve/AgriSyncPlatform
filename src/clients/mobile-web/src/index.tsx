@@ -5,6 +5,7 @@
 
 import React from 'react';
 import ReactDOM from 'react-dom/client';
+import './index.css';
 import App from './App';
 import { TenantProvider } from './core/tenant/TenantContext'; // Correct path
 import { NotificationService } from './shared/services/NotificationService';

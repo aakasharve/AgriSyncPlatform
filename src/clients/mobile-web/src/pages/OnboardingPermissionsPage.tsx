@@ -74,8 +74,8 @@ const OnboardingPermissionsPage: React.FC<OnboardingPermissionsPageProps> = ({ o
      };
 
      return (
-          <div className="fixed inset-0 z-50 bg-slate-50 flex flex-col items-center justify-center p-6 animate-in fade-in">
-               <div className="w-full max-w-sm flex flex-col h-full max-h-[85vh] bg-white rounded-3xl shadow-xl border border-slate-100 overflow-hidden relative">
+          <div className="fixed inset-0 z-50 bg-slate-50 flex flex-col items-center justify-center p-6 pt-safe-area pb-safe-area pl-safe-area pr-safe-area animate-in fade-in">
+               <div className="w-full max-w-[480px] flex flex-col h-full max-h-full bg-white rounded-3xl shadow-xl border border-slate-100 overflow-hidden relative">
 
                     {/* Header Decoration */}
                     <div className="absolute top-0 left-0 right-0 h-32 bg-emerald-500 rounded-b-[40px] opacity-10 pointer-events-none"></div>

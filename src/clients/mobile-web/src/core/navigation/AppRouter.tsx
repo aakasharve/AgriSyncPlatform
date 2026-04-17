@@ -224,7 +224,6 @@ const AppRouter: React.FC = () => {
     const handleVerifyLog = trust.handleVerifyLog;
     const history = isDemoMode ? mockHistory : realHistory;
 
-    // Sathi Wizard State
     // DFES Phase 0: Review Inbox State
     const [showReviewInbox, setShowReviewInbox] = React.useState(false);
     // DFES: QuickLogSheet State (INT-3)

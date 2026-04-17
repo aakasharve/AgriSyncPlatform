@@ -65,7 +65,7 @@ class TomorrowIoWeatherService implements WeatherPort {
             timestampLocal: systemClock.nowISO(),
             timestampProvider: systemClock.nowISO(),
             provider: 'mock',
-            tempC: 28 + Math.random() * 5,
+            tempC: Number((28 + Math.random() * 5).toFixed(1)),
             humidity: isRainy ? 85 : 45,
             windKph: 12,
             precipMm: isRainy ? 5.5 : 0,
@@ -149,7 +149,7 @@ class TomorrowIoWeatherService implements WeatherPort {
         // 4. HEAT SPIKE (Absolute)
         if (current.tempC >= THRESHOLDS.TEMP_HEAT_SPIKE) {
             return this.createEvent(current, 'HEAT_SPIKE', 'MEDIUM',
-                `Temperature is very high: ${current.tempC}°C`);
+                `Temperature is very high: ${current.tempC.toFixed(1)}°C`);
         }
 
         // 5. CONDITION CHANGE

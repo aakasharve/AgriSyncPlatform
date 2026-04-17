@@ -26,7 +26,7 @@ const OfflineBanner: React.FC = () => {
      if (!isOffline) return null;
 
      return (
-          <div className="fixed top-0 left-0 right-0 z-[100] bg-amber-500 text-white px-4 py-2 flex items-center justify-center gap-2 animate-in slide-in-from-top-2 shadow-md">
+          <div className="fixed top-0 left-0 right-0 z-[100] bg-amber-500 px-4 py-2 pt-safe-area pl-safe-area pr-safe-area text-white flex items-center justify-center gap-2 animate-in slide-in-from-top-2 shadow-md">
                <WifiOff size={14} />
                <span className="text-xs font-bold">You're offline. Changes saved locally.</span>
           </div>

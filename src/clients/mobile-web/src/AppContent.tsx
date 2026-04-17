@@ -4,6 +4,8 @@
  */
 
 import React, { useEffect, useState } from 'react';
+import { Capacitor } from '@capacitor/core';
+import { Keyboard } from '@capacitor/keyboard';
 import { Mic } from 'lucide-react';
 
 import AudioRecorder from './features/voice/components/AudioRecorder'; // Keep for type check/ref if needed
@@ -23,9 +25,7 @@ import { getDateKey } from './core/domain/services/DateKeyService';
 import { CropProfile } from './types';
 import { useAgriLogApp } from './app/compositionRoot';
 import { AppFeatureProviders } from './app/context/AppFeatureContexts';
-import { useAuth } from './app/providers/AuthProvider';
 import { useTemplateCatalogSync } from './app/hooks/useTemplateCatalogSync';
-import LoginPage from './pages/LoginPage';
 
 // Demo Mode pill removed
 
@@ -39,11 +39,11 @@ interface AppContentProps {
 const AppContent: React.FC<AppContentProps> = ({ crops: initialCrops, setCrops }) => {
 
     const app = useAgriLogApp({ initialCrops });
-    const { isAuthenticated } = useAuth();
     useTemplateCatalogSync();
 
     // Phase 4: Global Voice State (UI concern, so kept here or could be moved to hook)
     const [isGlobalListening, setIsGlobalListening] = useState(false);
+    const [isKeyboardOpen, setIsKeyboardOpen] = useState(false);
 
     const {
         navigation, context, data, voice, weather, commands, trust,
@@ -53,6 +53,28 @@ const AppContent: React.FC<AppContentProps> = ({ crops: initialCrops, setCrops }
     useEffect(() => {
         setCrops(data.crops);
     }, [data.crops, setCrops]);
+
+    useEffect(() => {
+        if (!Capacitor.isNativePlatform()) {
+            return;
+        }
+
+        let showListener: { remove: () => Promise<void> } | undefined;
+        let hideListener: { remove: () => Promise<void> } | undefined;
+
+        const registerKeyboardListeners = async () => {
+            showListener = await Keyboard.addListener('keyboardDidShow', () => setIsKeyboardOpen(true));
+            hideListener = await Keyboard.addListener('keyboardDidHide', () => setIsKeyboardOpen(false));
+        };
+
+        void registerKeyboardListeners();
+
+        return () => {
+            setIsKeyboardOpen(false);
+            void showListener?.remove();
+            void hideListener?.remove();
+        };
+    }, []);
 
     // --- VIEW HELPERS ---
     const getContextColorIndicator = () => {
@@ -192,12 +214,8 @@ const AppContent: React.FC<AppContentProps> = ({ crops: initialCrops, setCrops }
         getContextDisplay
     };
 
-    if (!isAuthenticated) {
-        return <LoginPage />;
-    }
-
     return (
-        <div className="min-h-screen bg-surface-100 bg-subtle-mesh text-stone-800 pb-24 font-sans selection:bg-emerald-200">
+        <div className="relative flex h-full flex-col bg-transparent text-stone-800 font-sans selection:bg-emerald-200">
             {/* Top App Bar */}
             <AppHeader
                 currentRoute={navigation.currentRoute}
@@ -216,7 +234,14 @@ const AppContent: React.FC<AppContentProps> = ({ crops: initialCrops, setCrops }
 
 
             {/* Main Content */}
-            <main className="max-w-md mx-auto min-h-screen relative">
+            <main
+                className="page-content relative flex-1 min-h-0 overflow-y-auto overflow-x-hidden overscroll-none"
+                style={{
+                    paddingBottom: isKeyboardOpen
+                        ? '1.5rem'
+                        : 'calc(6rem + var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px)))'
+                }}
+            >
                 <AppFeatureProviders app={app} helpers={featureHelpers}>
                     <AppRouter />
                 </AppFeatureProviders>
@@ -254,6 +279,7 @@ const AppContent: React.FC<AppContentProps> = ({ crops: initialCrops, setCrops }
                 currentView={navigation.mainView}
                 onNavigate={(route) => navigation.setCurrentRoute(route)}
                 onViewChange={(view) => navigation.setMainView(view)}
+                hidden={isKeyboardOpen}
             />
 
             {/* Toast */}

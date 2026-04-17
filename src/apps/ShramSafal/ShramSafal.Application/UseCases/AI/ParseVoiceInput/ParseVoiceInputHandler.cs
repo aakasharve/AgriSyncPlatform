@@ -2,6 +2,8 @@ using System.Globalization;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Nodes;
+using System.Text.RegularExpressions;
 using AgriSync.BuildingBlocks.Results;
 using ShramSafal.Application.Ports;
 using ShramSafal.Application.Ports.External;
@@ -15,6 +17,29 @@ public sealed class ParseVoiceInputHandler(
     IAiOrchestrator aiOrchestrator,
     IAiPromptBuilder promptBuilder)
 {
+    private static readonly Dictionary<string, int> MarathiNumberTokens = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ["एक"] = 1,
+        ["दोघांनी"] = 2,
+        ["दोन"] = 2,
+        ["तिघांनी"] = 3,
+        ["तिघे"] = 3,
+        ["तीन"] = 3,
+        ["चौघांनी"] = 4,
+        ["चौघे"] = 4,
+        ["चार"] = 4,
+        ["पाचजणांनी"] = 5,
+        ["पाचजण"] = 5,
+        ["पाच"] = 5,
+        ["सहाजणांनी"] = 6,
+        ["सहाजण"] = 6,
+        ["सहा"] = 6,
+        ["सात"] = 7,
+        ["आठ"] = 8,
+        ["नऊ"] = 9,
+        ["दहा"] = 10,
+    };
+
     public async Task<Result<VoiceParseResult>> HandleAsync(ParseVoiceInputCommand command, CancellationToken ct = default)
     {
         if (command.UserId == Guid.Empty ||
@@ -110,7 +135,10 @@ public sealed class ParseVoiceInputHandler(
                         canonicalResult.Error ?? ShramSafalErrors.AiParsingFailed.Description));
             }
 
-            using var document = JsonDocument.Parse(canonicalResult.NormalizedJson);
+            using var document = JsonDocument.Parse(
+                ApplyTranscriptIntegrityCorrections(
+                    canonicalResult.NormalizedJson,
+                    canonicalResult.RawTranscript ?? transcript ?? string.Empty));
             var parsedLog = document.RootElement.Clone();
             var fieldConfidences = ExtractFieldConfidences(parsedLog);
             var overallConfidence = canonicalResult.OverallConfidence > 0
@@ -215,6 +243,345 @@ public sealed class ParseVoiceInputHandler(
         var input = $"{command.UserId}|{command.FarmId}|{command.PlotId}|{command.CropCycleId}|{transcript}|{audioBase64}";
         var hash = SHA256.HashData(Encoding.UTF8.GetBytes(input));
         return Convert.ToHexString(hash).ToLowerInvariant();
+    }
+
+    private static string ApplyTranscriptIntegrityCorrections(string normalizedJson, string transcript)
+    {
+        if (string.IsNullOrWhiteSpace(normalizedJson))
+        {
+            return normalizedJson;
+        }
+
+        JsonObject root;
+        try
+        {
+            root = JsonNode.Parse(normalizedJson)?.AsObject() ?? new JsonObject();
+        }
+        catch (JsonException)
+        {
+            return normalizedJson;
+        }
+
+        var cleanTranscript = transcript.Trim();
+        if (cleanTranscript.Length == 0)
+        {
+            return normalizedJson;
+        }
+
+        root["fullTranscript"] = cleanTranscript;
+
+        var labourSegments = ExtractCompoundLabourSegments(cleanTranscript);
+        if (labourSegments.Count > 0)
+        {
+            var labour = new JsonArray();
+            foreach (var segment in labourSegments)
+            {
+                labour.Add(new JsonObject
+                {
+                    ["type"] = "HIRED",
+                    ["count"] = segment.Count,
+                    ["activity"] = segment.Activity,
+                    ["sourceText"] = segment.SourceText,
+                    ["systemInterpretation"] = $"{segment.Count} मजुरांनी {segment.ActivityDisplay} काम केले"
+                });
+            }
+
+            root["labour"] = labour;
+
+            if (labourSegments.Any(segment => segment.Activity == "fertilizer_application"))
+            {
+                var inputs = root["inputs"] as JsonArray ?? new JsonArray();
+                if (inputs.Count == 0)
+                {
+                    inputs.Add(new JsonObject
+                    {
+                        ["productName"] = "खत",
+                        ["method"] = "Soil",
+                        ["type"] = "fertilizer",
+                        ["sourceText"] = labourSegments.First(segment => segment.Activity == "fertilizer_application").SourceText,
+                        ["systemInterpretation"] = "खत टाकण्याचे काम नोंदवले"
+                    });
+                }
+                root["inputs"] = inputs;
+            }
+
+            if (labourSegments.Any(segment => segment.Activity == "irrigation"))
+            {
+                var irrigation = root["irrigation"] as JsonArray ?? new JsonArray();
+                if (irrigation.Count == 0)
+                {
+                    irrigation.Add(new JsonObject
+                    {
+                        ["method"] = "Flood",
+                        ["sourceText"] = labourSegments.First(segment => segment.Activity == "irrigation").SourceText,
+                        ["systemInterpretation"] = "पाणी सोडण्याचे काम नोंदवले"
+                    });
+                }
+                root["irrigation"] = irrigation;
+            }
+        }
+
+        if (TryExtractGenderSplit(cleanTranscript, out var maleCount, out var femaleCount))
+        {
+            root["labour"] = new JsonArray
+            {
+                new JsonObject
+                {
+                    ["type"] = "HIRED",
+                    ["maleCount"] = maleCount,
+                    ["femaleCount"] = femaleCount,
+                    ["count"] = maleCount + femaleCount,
+                    ["activity"] = "field_work",
+                    ["sourceText"] = cleanTranscript,
+                    ["systemInterpretation"] = $"{maleCount} पुरुष आणि {femaleCount} महिला मजूर कामावर होते"
+                }
+            };
+        }
+
+        // Safety net: ensure fertilizer application is captured when explicitly stated with a past-tense verb
+        if (ContainsFertilizerApplication(cleanTranscript))
+        {
+            var inputs = root["inputs"] as JsonArray ?? new JsonArray();
+            if (inputs.Count == 0)
+            {
+                inputs.Add(new JsonObject
+                {
+                    ["productName"] = "खत",
+                    ["method"] = "Soil",
+                    ["type"] = "fertilizer",
+                    ["sourceText"] = cleanTranscript,
+                    ["systemInterpretation"] = "खत देण्याचे काम नोंदवले"
+                });
+                root["inputs"] = inputs;
+            }
+        }
+
+        if (ContainsIssueSignal(cleanTranscript))
+        {
+            var observations = root["observations"] as JsonArray ?? new JsonArray();
+            if (!observations.Any(node => node?["noteType"]?.GetValue<string>() == "issue"))
+            {
+                observations.Add(new JsonObject
+                {
+                    ["noteType"] = "issue",
+                    ["textRaw"] = cleanTranscript,
+                    ["textCleaned"] = cleanTranscript,
+                    ["severity"] = "important",
+                    ["sourceText"] = cleanTranscript
+                });
+            }
+            root["observations"] = observations;
+        }
+
+        if (ContainsFutureIntent(cleanTranscript))
+        {
+            var observations = root["observations"] as JsonArray ?? new JsonArray();
+            var plannedTasks = root["plannedTasks"] as JsonArray ?? new JsonArray();
+            if (!plannedTasks.Any())
+            {
+                plannedTasks.Add(new JsonObject
+                {
+                    ["title"] = InferReminderTitle(cleanTranscript),
+                    ["dueHint"] = "उद्या",
+                    ["sourceText"] = cleanTranscript
+                });
+            }
+
+            if (!observations.Any(node => node?["noteType"]?.GetValue<string>() == "reminder"))
+            {
+                observations.Add(new JsonObject
+                {
+                    ["noteType"] = "reminder",
+                    ["textRaw"] = cleanTranscript,
+                    ["textCleaned"] = cleanTranscript,
+                    ["sourceText"] = cleanTranscript
+                });
+            }
+
+            root["observations"] = observations;
+            root["plannedTasks"] = plannedTasks;
+        }
+
+        return root.ToJsonString();
+    }
+
+    private static List<(int Count, string Activity, string ActivityDisplay, string SourceText)> ExtractCompoundLabourSegments(string transcript)
+    {
+        var results = new List<(int Count, string Activity, string ActivityDisplay, string SourceText)>();
+        var segments = Regex.Split(transcript, @"\s+आणि\s+|,\s*|。\s*|।\s*|\.\s*")
+            .Select(segment => segment.Trim())
+            .Where(segment => !string.IsNullOrWhiteSpace(segment))
+            .ToList();
+
+        foreach (var segment in segments)
+        {
+            var count = TryExtractCount(segment);
+            if (!count.HasValue)
+            {
+                continue;
+            }
+
+            var activity = InferLabourActivity(segment);
+            if (activity is null)
+            {
+                continue;
+            }
+
+            results.Add((count.Value, activity.Value.Activity, activity.Value.ActivityDisplay, segment));
+        }
+
+        return results;
+    }
+
+    private static int? TryExtractCount(string value)
+    {
+        foreach (var token in MarathiNumberTokens.OrderByDescending(item => item.Key.Length))
+        {
+            if (value.Contains(token.Key, StringComparison.OrdinalIgnoreCase))
+            {
+                return token.Value;
+            }
+        }
+
+        var digitMatch = Regex.Match(value, @"\b(\d+)\b");
+        if (digitMatch.Success && int.TryParse(digitMatch.Groups[1].Value, out var parsed))
+        {
+            return parsed;
+        }
+
+        return null;
+    }
+
+    private static (string Activity, string ActivityDisplay)? InferLabourActivity(string value)
+    {
+        if (value.Contains("नांगर", StringComparison.OrdinalIgnoreCase))
+        {
+            return ("tillage", "नांगरणीचे");
+        }
+
+        if (value.Contains("खत", StringComparison.OrdinalIgnoreCase))
+        {
+            return ("fertilizer_application", "खत टाकण्याचे");
+        }
+
+        if (value.Contains("पाणी", StringComparison.OrdinalIgnoreCase) && (value.Contains("सोड", StringComparison.OrdinalIgnoreCase) || value.Contains("दिले", StringComparison.OrdinalIgnoreCase)))
+        {
+            return ("irrigation", "पाणी देण्याचे");
+        }
+
+        if (value.Contains("फवार", StringComparison.OrdinalIgnoreCase))
+        {
+            return ("spraying", "फवारणीचे");
+        }
+
+        if (value.Contains("छाट", StringComparison.OrdinalIgnoreCase))
+        {
+            return ("pruning", "छाटणीचे");
+        }
+
+        if (value.Contains("निंदण", StringComparison.OrdinalIgnoreCase))
+        {
+            return ("weeding", "निंदणीचे");
+        }
+
+        if (value.Contains("पाने", StringComparison.OrdinalIgnoreCase) && value.Contains("काढ", StringComparison.OrdinalIgnoreCase))
+        {
+            return ("leaf_removal", "पाने काढण्याचे");
+        }
+
+        return null;
+    }
+
+    private static bool TryExtractGenderSplit(string transcript, out int maleCount, out int femaleCount)
+    {
+        maleCount = 0;
+        femaleCount = 0;
+
+        var maleMatch = Regex.Match(transcript, @"(एक|दोन|तीन|चार|पाच|सहा|सात|आठ|नऊ|दहा|\d+)\s+पुरुष");
+        var femaleMatch = Regex.Match(transcript, @"(एक|दोन|तीन|चार|पाच|सहा|सात|आठ|नऊ|दहा|\d+)\s+बायका");
+
+        if (!maleMatch.Success || !femaleMatch.Success)
+        {
+            return false;
+        }
+
+        maleCount = TryExtractCount(maleMatch.Value) ?? 0;
+        femaleCount = TryExtractCount(femaleMatch.Value) ?? 0;
+        return maleCount > 0 || femaleCount > 0;
+    }
+
+    private static bool ContainsFertilizerApplication(string transcript)
+    {
+        return transcript.Contains("खत", StringComparison.OrdinalIgnoreCase)
+               && (transcript.Contains("दिलं", StringComparison.OrdinalIgnoreCase)
+                   || transcript.Contains("दिले", StringComparison.OrdinalIgnoreCase)
+                   || transcript.Contains("घातले", StringComparison.OrdinalIgnoreCase)
+                   || transcript.Contains("टाकले", StringComparison.OrdinalIgnoreCase));
+    }
+
+    private static bool ContainsIssueSignal(string transcript)
+    {
+        return transcript.Contains("पिवळी", StringComparison.OrdinalIgnoreCase)
+               || transcript.Contains("किडे", StringComparison.OrdinalIgnoreCase)
+               || transcript.Contains("रोग", StringComparison.OrdinalIgnoreCase)
+               || transcript.Contains("समस्या", StringComparison.OrdinalIgnoreCase)
+               || transcript.Contains("खराब", StringComparison.OrdinalIgnoreCase)
+               || transcript.Contains("डाग", StringComparison.OrdinalIgnoreCase)
+               || transcript.Contains("बंद पडली", StringComparison.OrdinalIgnoreCase)
+               || transcript.Contains("नुकसान", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool ContainsFutureIntent(string transcript)
+    {
+        return transcript.Contains("उद्या", StringComparison.OrdinalIgnoreCase)
+               || transcript.Contains("करायचं", StringComparison.OrdinalIgnoreCase)
+               || transcript.Contains("करणार", StringComparison.OrdinalIgnoreCase)
+               || transcript.Contains("आणायचं", StringComparison.OrdinalIgnoreCase)
+               || transcript.Contains("द्यायचं", StringComparison.OrdinalIgnoreCase)
+               || transcript.Contains("घ्यायचं", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static string InferReminderTitle(string transcript)
+    {
+        // Extract the sentence that contains the future intent to pick the right action
+        var sentences = Regex.Split(transcript, @"[.।,]\s*")
+            .Select(s => s.Trim())
+            .Where(s => s.Length > 0)
+            .ToList();
+
+        var futureSentence = sentences.FirstOrDefault(s =>
+            s.Contains("उद्या", StringComparison.OrdinalIgnoreCase)
+            || s.Contains("करायचं", StringComparison.OrdinalIgnoreCase)
+            || s.Contains("आणायचं", StringComparison.OrdinalIgnoreCase)
+            || s.Contains("द्यायचं", StringComparison.OrdinalIgnoreCase)
+            || s.Contains("घ्यायचं", StringComparison.OrdinalIgnoreCase)) ?? transcript;
+
+        if (futureSentence.Contains("औषध", StringComparison.OrdinalIgnoreCase))
+        {
+            return "औषध आणणे";
+        }
+
+        if (futureSentence.Contains("फवार", StringComparison.OrdinalIgnoreCase))
+        {
+            return "फवारणी करणे";
+        }
+
+        if (futureSentence.Contains("खत", StringComparison.OrdinalIgnoreCase))
+        {
+            return "खत टाकणे";
+        }
+
+        if (futureSentence.Contains("पाणी", StringComparison.OrdinalIgnoreCase))
+        {
+            return "पाणी देणे";
+        }
+
+        if (futureSentence.Contains("मजूर", StringComparison.OrdinalIgnoreCase) || futureSentence.Contains("labour", StringComparison.OrdinalIgnoreCase))
+        {
+            return "मजूर बोलवणे";
+        }
+
+        return "काम करणे";
     }
 
     private static Dictionary<string, FieldConfidence> ExtractFieldConfidences(JsonElement parsedLog)
