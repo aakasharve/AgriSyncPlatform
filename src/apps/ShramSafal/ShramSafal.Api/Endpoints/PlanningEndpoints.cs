@@ -1,3 +1,4 @@
+using System.Security.Claims;
 using AgriSync.BuildingBlocks.Results;
 using ShramSafal.Application.UseCases.Planning.ComputePlannedVsExecutedDelta;
 using ShramSafal.Application.UseCases.Planning.GeneratePlanFromTemplate;
@@ -12,14 +13,21 @@ public static class PlanningEndpoints
     {
         group.MapPost("/plan/generate", async (
             GeneratePlanRequest request,
+            ClaimsPrincipal user,
             GeneratePlanFromTemplateHandler handler,
             CancellationToken ct) =>
         {
+            if (!EndpointActorContext.TryGetUserId(user, out var actorUserId))
+            {
+                return Results.Unauthorized();
+            }
+
             var activities = request.Activities
                 .Select(a => new TemplateActivityInput(a.ActivityName, a.OffsetDays))
                 .ToList();
 
             var command = new GeneratePlanFromTemplateCommand(
+                actorUserId,
                 request.CropCycleId,
                 request.TemplateName,
                 request.Stage,
@@ -33,10 +41,16 @@ public static class PlanningEndpoints
 
         group.MapGet("/plan/today", async (
             Guid cropCycleId,
+            ClaimsPrincipal user,
             GetTodaysPlanHandler handler,
             CancellationToken ct) =>
         {
-            var result = await handler.HandleAsync(new GetTodaysPlanQuery(cropCycleId), ct);
+            if (!EndpointActorContext.TryGetUserId(user, out var actorUserId))
+            {
+                return Results.Unauthorized();
+            }
+
+            var result = await handler.HandleAsync(new GetTodaysPlanQuery(actorUserId, cropCycleId), ct);
             return result.IsSuccess ? Results.Ok(new { activities = result.Value }) : ToErrorResult(result.Error);
         })
         .WithName("GetTodaysPlan");
@@ -44,10 +58,16 @@ public static class PlanningEndpoints
         group.MapGet("/plan/stage", async (
             Guid cropCycleId,
             string? stage,
+            ClaimsPrincipal user,
             GetStagePlanHandler handler,
             CancellationToken ct) =>
         {
-            var result = await handler.HandleAsync(new GetStagePlanQuery(cropCycleId, stage), ct);
+            if (!EndpointActorContext.TryGetUserId(user, out var actorUserId))
+            {
+                return Results.Unauthorized();
+            }
+
+            var result = await handler.HandleAsync(new GetStagePlanQuery(actorUserId, cropCycleId, stage), ct);
             return result.IsSuccess
                 ? Results.Ok(new { stage = stage ?? "current", activities = result.Value })
                 : ToErrorResult(result.Error);
@@ -56,10 +76,16 @@ public static class PlanningEndpoints
 
         group.MapGet("/compare", async (
             Guid cropCycleId,
+            ClaimsPrincipal user,
             ComputePlannedVsExecutedDeltaHandler handler,
             CancellationToken ct) =>
         {
-            var result = await handler.HandleAsync(new ComputePlannedVsExecutedDeltaQuery(cropCycleId), ct);
+            if (!EndpointActorContext.TryGetUserId(user, out var actorUserId))
+            {
+                return Results.Unauthorized();
+            }
+
+            var result = await handler.HandleAsync(new ComputePlannedVsExecutedDeltaQuery(actorUserId, cropCycleId), ct);
             return result.IsSuccess ? Results.Ok(result.Value) : ToErrorResult(result.Error);
         })
         .WithName("ComputePlannedVsExecutedDelta");
@@ -67,10 +93,16 @@ public static class PlanningEndpoints
         group.MapGet("/compare/stage", async (
             Guid cropCycleId,
             string? stage,
+            ClaimsPrincipal user,
             ComputePlannedVsExecutedDeltaHandler handler,
             CancellationToken ct) =>
         {
-            var result = await handler.HandleAsync(new ComputePlannedVsExecutedDeltaQuery(cropCycleId, stage), ct);
+            if (!EndpointActorContext.TryGetUserId(user, out var actorUserId))
+            {
+                return Results.Unauthorized();
+            }
+
+            var result = await handler.HandleAsync(new ComputePlannedVsExecutedDeltaQuery(actorUserId, cropCycleId, stage), ct);
             return result.IsSuccess ? Results.Ok(result.Value) : ToErrorResult(result.Error);
         })
         .WithName("ComputeStageComparison");
