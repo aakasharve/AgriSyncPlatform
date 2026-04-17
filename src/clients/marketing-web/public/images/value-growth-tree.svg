@@ -1,0 +1,107 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 300" fill="none">
+  <defs>
+    <linearGradient id="vgt-ground" x1="0" y1="250" x2="0" y2="300" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#059669" stop-opacity="0.12"/>
+      <stop offset="100%" stop-color="#047857" stop-opacity="0.04"/>
+    </linearGradient>
+    <linearGradient id="vgt-trunk1" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#A16207"/>
+      <stop offset="100%" stop-color="#78350F"/>
+    </linearGradient>
+    <linearGradient id="vgt-leaves1" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#34D399"/>
+      <stop offset="100%" stop-color="#059669"/>
+    </linearGradient>
+    <linearGradient id="vgt-leaves2" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#10B981"/>
+      <stop offset="100%" stop-color="#047857"/>
+    </linearGradient>
+    <filter id="vgt-shadow" x="-10%" y="-10%" width="120%" height="120%">
+      <feDropShadow dx="0" dy="3" stdDeviation="4" flood-color="#059669" flood-opacity="0.15"/>
+    </filter>
+  </defs>
+
+  <!-- Ground line -->
+  <path d="M0,270 Q300,260 600,265 Q900,260 1200,270" fill="url(#vgt-ground)"/>
+  <path d="M0,270 Q300,260 600,265 Q900,260 1200,270" stroke="#059669" stroke-width="1" opacity="0.15" fill="none"/>
+
+  <!-- STAGE 1: Seedling (7 days) -->
+  <g transform="translate(140, 160)" filter="url(#vgt-shadow)">
+    <!-- Soil mound -->
+    <ellipse cx="40" cy="105" rx="35" ry="8" fill="#78350F" opacity="0.3"/>
+    <!-- Thin stem -->
+    <path d="M40,105 C40,85 40,70 38,55" stroke="#059669" stroke-width="3" fill="none" stroke-linecap="round"/>
+    <!-- Two small leaves -->
+    <ellipse cx="30" cy="58" rx="12" ry="6" fill="url(#vgt-leaves1)" transform="rotate(-30, 30, 58)"/>
+    <ellipse cx="48" cy="62" rx="10" ry="5" fill="url(#vgt-leaves1)" transform="rotate(25, 48, 62)"/>
+    <!-- Tiny bud at top -->
+    <circle cx="38" cy="52" r="4" fill="#34D399"/>
+    <!-- Dewdrop -->
+    <ellipse cx="35" cy="56" rx="2" ry="3" fill="white" opacity="0.5"/>
+  </g>
+
+  <!-- Dotted connection line 1→2 -->
+  <line x1="260" y1="240" x2="440" y2="220" stroke="#059669" stroke-width="2" stroke-dasharray="8,6" opacity="0.25"/>
+
+  <!-- STAGE 2: Sapling (30 days) -->
+  <g transform="translate(440, 100)" filter="url(#vgt-shadow)">
+    <!-- Soil mound -->
+    <ellipse cx="60" cy="165" rx="50" ry="10" fill="#78350F" opacity="0.3"/>
+    <!-- Trunk -->
+    <path d="M60,165 C58,140 55,110 58,80" stroke="url(#vgt-trunk1)" stroke-width="6" fill="none" stroke-linecap="round"/>
+    <!-- Branches -->
+    <path d="M58,120 C45,110 35,100 30,90" stroke="url(#vgt-trunk1)" stroke-width="3" fill="none" stroke-linecap="round"/>
+    <path d="M58,105 C72,95 82,88 88,80" stroke="url(#vgt-trunk1)" stroke-width="3" fill="none" stroke-linecap="round"/>
+    <path d="M58,90 C48,82 42,75 38,68" stroke="url(#vgt-trunk1)" stroke-width="2" fill="none" stroke-linecap="round"/>
+    <!-- Leaf clusters -->
+    <ellipse cx="28" cy="85" rx="18" ry="14" fill="url(#vgt-leaves1)" opacity="0.9"/>
+    <ellipse cx="90" cy="75" rx="16" ry="12" fill="url(#vgt-leaves2)" opacity="0.9"/>
+    <ellipse cx="38" cy="63" rx="14" ry="11" fill="url(#vgt-leaves1)" opacity="0.85"/>
+    <ellipse cx="60" cy="70" rx="20" ry="15" fill="url(#vgt-leaves2)"/>
+    <!-- Small buds -->
+    <circle cx="22" cy="78" r="3" fill="#FCD34D"/>
+    <circle cx="95" cy="70" r="3" fill="#FCD34D"/>
+  </g>
+
+  <!-- Dotted connection line 2→3 -->
+  <line x1="580" y1="220" x2="760" y2="190" stroke="#059669" stroke-width="2" stroke-dasharray="8,6" opacity="0.25"/>
+
+  <!-- STAGE 3: Full Tree (1 season) -->
+  <g transform="translate(760, 20)" filter="url(#vgt-shadow)">
+    <!-- Soil mound -->
+    <ellipse cx="100" cy="245" rx="80" ry="12" fill="#78350F" opacity="0.3"/>
+    <!-- Trunk -->
+    <path d="M100,245 C98,210 95,170 100,120" stroke="url(#vgt-trunk1)" stroke-width="10" fill="none" stroke-linecap="round"/>
+    <!-- Major branches -->
+    <path d="M100,180 C75,160 55,140 40,125" stroke="url(#vgt-trunk1)" stroke-width="5" fill="none" stroke-linecap="round"/>
+    <path d="M100,160 C125,140 145,125 160,115" stroke="url(#vgt-trunk1)" stroke-width="5" fill="none" stroke-linecap="round"/>
+    <path d="M100,140 C85,125 70,110 60,95" stroke="url(#vgt-trunk1)" stroke-width="4" fill="none" stroke-linecap="round"/>
+    <path d="M100,130 C115,115 130,105 140,90" stroke="url(#vgt-trunk1)" stroke-width="4" fill="none" stroke-linecap="round"/>
+    <path d="M100,120 C95,100 90,85 88,70" stroke="url(#vgt-trunk1)" stroke-width="3" fill="none" stroke-linecap="round"/>
+
+    <!-- Large leaf canopy -->
+    <ellipse cx="100" cy="80" rx="70" ry="55" fill="url(#vgt-leaves2)" opacity="0.8"/>
+    <ellipse cx="60" cy="100" rx="40" ry="30" fill="url(#vgt-leaves1)" opacity="0.7"/>
+    <ellipse cx="140" cy="95" rx="35" ry="28" fill="url(#vgt-leaves1)" opacity="0.7"/>
+    <ellipse cx="100" cy="60" rx="45" ry="35" fill="url(#vgt-leaves2)" opacity="0.9"/>
+    <ellipse cx="75" cy="75" rx="30" ry="25" fill="url(#vgt-leaves1)" opacity="0.6"/>
+    <ellipse cx="130" cy="70" rx="28" ry="22" fill="url(#vgt-leaves1)" opacity="0.6"/>
+
+    <!-- Fruits -->
+    <circle cx="55" cy="110" r="6" fill="#F59E0B" stroke="#D97706" stroke-width="1"/>
+    <circle cx="150" cy="105" r="6" fill="#F59E0B" stroke="#D97706" stroke-width="1"/>
+    <circle cx="80" cy="55" r="5" fill="#F59E0B" stroke="#D97706" stroke-width="1"/>
+    <circle cx="120" cy="50" r="5" fill="#F59E0B" stroke="#D97706" stroke-width="1"/>
+    <circle cx="40" cy="95" r="5" fill="#DC2626" stroke="#B91C1C" stroke-width="1"/>
+    <circle cx="160" cy="85" r="5" fill="#DC2626" stroke="#B91C1C" stroke-width="1"/>
+    <circle cx="100" cy="42" r="5" fill="#F59E0B" stroke="#D97706" stroke-width="1"/>
+
+    <!-- Green glow -->
+    <circle cx="100" cy="100" r="90" fill="#059669" opacity="0.04"/>
+
+    <!-- Sparkles -->
+    <circle cx="50" cy="40" r="3" fill="#FCD34D" opacity="0.5"/>
+    <circle cx="160" cy="55" r="2.5" fill="#FCD34D" opacity="0.4"/>
+    <circle cx="100" cy="25" r="3" fill="#FCD34D" opacity="0.5"/>
+  </g>
+</svg>

@@ -1,502 +1,548 @@
 ---
+/**
+ * HeroSection — Chapter 01 · The Farm
+ * Product landing page layout: copy LEFT, floating phone RIGHT.
+ * Phone is a foreground showcase element (not a background fill).
+ * Ambient green glow + subtle 3D tilt + floating badges = premium feel.
+ */
 import { getLangFromUrl, getTranslations } from '../../i18n/translations';
-import CropSilhouette from '../svg/CropSilhouette.astro';
-import GoldenHorizon from '../svg/GoldenHorizon.astro';
 
 const lang = getLangFromUrl(Astro.url);
 const t = getTranslations(lang);
-const chapterLabel = lang === 'mr' ? 'Chapter 01 · शेत' : 'Chapter 01 · The Farm';
+const isMr = lang === 'mr';
 ---
 
 <section
   data-scene="hero"
-  data-soil="cotton-black"
-  data-cursor="kite"
-  data-hero-pin
-  class="relative overflow-hidden"
-  style="background:linear-gradient(180deg, #FBF5EC 0%, #F2E8D8 60%, #E8D9C4 100%);"
+  data-soil="kachi-mati"
+  class="hero"
 >
-  <div class="relative z-10">
-    <div class="w-full max-w-site mx-auto px-5 md:px-8 pt-28 md:pt-32 pb-28 lg:pb-36 grid grid-cols-1 lg:grid-cols-[0.96fr_1.04fr] gap-8 lg:gap-12 items-start">
-      <div class="max-w-[40rem] pt-2 md:pt-4" data-hero-content>
-        <div class="inline-flex items-center gap-3 px-4 py-2 rounded-full border border-[rgba(146,64,14,0.12)] bg-white/80 backdrop-blur-sm shadow-[0_10px_30px_rgba(0,0,0,0.05)] mb-5">
-          <span class="chapter-mark mb-0" data-chapter>{chapterLabel}</span>
-        </div>
+  <!-- Full-width seam: cinematic scroll dark close → warm Kachi Mati -->
+  <div class="hero__seam" aria-hidden="true"></div>
 
-        <h1
-          class="font-serif text-[clamp(2.6rem,5.2vw,4.7rem)] font-bold leading-[0.98] tracking-[-0.04em] mb-5"
-          style="color:var(--text-primary); text-wrap:balance;"
-          data-split-headline
-        >
-          {t.hero.headline}
-        </h1>
+  <!-- Decorative texture grain -->
+  <div class="hero__grain" aria-hidden="true"></div>
 
-        <p class="text-[clamp(1.02rem,1.45vw,1.18rem)] mb-8 max-w-[36rem]" style="color:var(--text-secondary); line-height:1.75;">
-          {t.hero.subheadline}
-        </p>
+  <div class="hero__inner max-w-site mx-auto px-5 md:px-8">
 
-        <div class="flex flex-col sm:flex-row gap-3 mb-5" data-reveal>
-          <a
-            href="#guided-questions"
-            class="magnetic-btn inline-flex items-center justify-center gap-2 font-extrabold text-white px-8 py-4 rounded-2xl transition-all hover:-translate-y-0.5"
-            style="background:linear-gradient(135deg, var(--brand), var(--brand-hover)); box-shadow:0 14px 34px rgba(20,83,45,0.22);"
-          >
-            {t.hero.cta_primary}
-            <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
-              <path stroke-linecap="round" stroke-linejoin="round" d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3"></path>
-            </svg>
-          </a>
+    <!-- ── LEFT: copy ──────────────────────────────────────────────── -->
+    <div class="hero__copy">
+      <span class="hero__chapter">
+        {isMr ? 'Chapter 01 · शेत' : 'Chapter 01 · The Farm'}
+      </span>
 
-          <a
-            href="#problem-hit"
-            class="magnetic-btn inline-flex items-center justify-center font-bold px-8 py-4 rounded-2xl transition-all"
-            style="border:1px solid rgba(146,64,14,0.18); color:var(--text-primary); background:rgba(255,255,255,0.72); box-shadow:0 10px 24px rgba(0,0,0,0.04);"
-          >
-            {t.hero.cta_secondary}
-          </a>
-        </div>
+      <h1
+        class="font-serif hero__headline"
+        set:html={t.hero.headline.replace(/\n/g, '<br />')}
+      />
 
-        <p class="text-base italic" style="color:rgba(26,15,0,0.50);">
-          {t.hero.microline}
-        </p>
+      <p class="hero__sub">{t.hero.subheadline}</p>
 
-        <div class="flex flex-wrap gap-3 mt-7" data-reveal>
-          <div class="hero-pill">
-            <svg class="w-4 h-4" style="color:var(--brand-fresh);" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-              <path stroke-linecap="round" stroke-linejoin="round" d="M12 18.75a6 6 0 006-6v-1.5m-6 7.5a6 6 0 01-6-6v-1.5m6 7.5v3.75m-3.75 0h7.5M12 15.75a3 3 0 01-3-3V4.5a3 3 0 116 0v8.25a3 3 0 01-3 3z"></path>
-            </svg>
-            {lang === 'mr' ? 'आवाजाने लॉग' : 'Voice logging'}
-          </div>
-          <div class="hero-pill">
-            <svg class="w-4 h-4" style="color:var(--gold);" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-              <path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75L11.25 15 15 9.75m-3-7.036A11.959 11.959 0 013.598 6 11.99 11.99 0 003 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285z"></path>
-            </svg>
-            {lang === 'mr' ? '९० दिवस विश्वास' : '90-day trust'}
-          </div>
-          <div class="hero-pill">
-            <svg class="w-4 h-4" style="color:var(--farm-sky);" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-              <path stroke-linecap="round" stroke-linejoin="round" d="M8.288 15.038a5.25 5.25 0 017.424 0M5.106 11.856c3.807-3.808 9.98-3.808 13.788 0M1.924 8.674c5.565-5.565 14.587-5.565 20.152 0M12.53 18.22l-.53.53-.53-.53a.75.75 0 011.06 0z"></path>
-            </svg>
-            {lang === 'mr' ? 'ऑफलाइन चालतो' : 'Works offline'}
-          </div>
-        </div>
+      <div class="hero__ctas">
+        <a href="#cta" class="hero__cta-primary magnetic-btn">
+          {t.hero.cta_primary}
+          <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5" aria-hidden="true">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3" />
+          </svg>
+        </a>
+        <a href="#problem-hit" class="hero__cta-ghost magnetic-btn">
+          {t.hero.cta_secondary}
+        </a>
       </div>
 
-      <div class="relative lg:pt-2">
-        <div class="hero-stage">
-          <div class="hero-stage__glow" aria-hidden="true"></div>
-          <div class="hero-stage__layout">
-            <div class="hero-stage__figure-card">
-              <div class="hero-stage__figure-frame">
-                <img
-                  src="/images/characters/hero-observing-farmer.png"
-                  alt={lang === 'mr' ? 'शेतकरी' : 'Farmer'}
-                  class="hero-farmer"
-                />
-              </div>
-            </div>
+      <p class="hero__microline" aria-hidden="true">{t.hero.microline}</p>
 
-            <div class="hero-stage__phone-column">
-              <div class="card-white hero-price-card" data-hero-white-card>
-                <div class="text-xs font-black uppercase tracking-[0.12em]" style="color:rgba(28,25,23,0.46);">
-                  {lang === 'mr' ? 'आजचा भाव' : "Today's Price"}
-                </div>
-                <div class="mt-2 font-extrabold text-[2rem] leading-none" style="color:var(--brand);">₹45/kg</div>
-                <div class="mt-2 text-base font-semibold" style="color:rgba(28,25,23,0.72);">
-                  {lang === 'mr' ? 'द्राक्षे ↑₹3' : 'Grapes ↑₹3'}
-                </div>
-                <div class="hero-price-card__live">LIVE</div>
-              </div>
+      <!-- Feature pills -->
+      <div class="hero__pills">
+        <span class="hero__pill">
+          <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" aria-hidden="true" style="color:var(--brand-fresh)">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M12 18.75a6 6 0 006-6v-1.5m-6 7.5a6 6 0 01-6-6v-1.5m6 7.5v3.75m-3.75 0h7.5M12 15.75a3 3 0 01-3-3V4.5a3 3 0 116 0v8.25a3 3 0 01-3 3z" />
+          </svg>
+          {isMr ? 'आवाजाने नोंद' : 'Voice logging'}
+        </span>
+        <span class="hero__pill">
+          <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" aria-hidden="true" style="color:var(--gold)">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75L11.25 15 15 9.75m-3-7.036A11.959 11.959 0 013.598 6 11.99 11.99 0 003 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285z" />
+          </svg>
+          {isMr ? '९० दिवस विश्वास' : '90-day trust'}
+        </span>
+        <span class="hero__pill">
+          <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" aria-hidden="true" style="color:#60A5FA">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M8.288 15.038a5.25 5.25 0 017.424 0M5.106 11.856c3.807-3.808 9.98-3.808 13.788 0M1.924 8.674c5.565-5.565 14.587-5.565 20.152 0M12.53 18.22l-.53.53-.53-.53a.75.75 0 011.06 0z" />
+          </svg>
+          {isMr ? 'ऑफलाइन चालतो' : 'Works offline'}
+        </span>
+      </div>
 
-              <div
-                class="hero-phone-shell"
-                data-hero-phone
-                style="transform:perspective(900px) rotateY(-10deg) rotateX(3deg); transform-origin:center center;"
-              >
-                <div class="hero-phone-shell__halo" aria-hidden="true"></div>
-                <div class="hero-phone">
-                  <div class="hero-phone__notch"></div>
-                  <div class="hero-phone__header">
-                    <div class="text-white font-black text-[1rem]">ShramSafal</div>
-                    <div class="text-[0.82rem]" style="color:rgba(255,255,255,0.74);">
-                      {lang === 'mr' ? 'आजचे काम' : "Today's work"}
-                    </div>
-                  </div>
-
-                  <div class="hero-phone__body">
-                    <div class="hero-phone__row hero-phone__row--green"></div>
-                    <div class="hero-phone__row hero-phone__row--soil"></div>
-                    <div class="hero-phone__row hero-phone__row--green wide"></div>
-                    <div class="hero-phone__row hero-phone__row--faint"></div>
-                    <div class="hero-phone__row hero-phone__row--soil wide"></div>
-                    <div class="hero-phone__row hero-phone__row--green"></div>
-                  </div>
-
-                  <div class="hero-phone__footer">
-                    {[0, 1, 2, 3].map(() => (
-                      <div class="hero-phone__icon"></div>
-                    ))}
-                  </div>
-                </div>
-              </div>
-
-              <div class="hero-stat-stack">
-                <div class="hero-stat">
-                  <span class="hero-stat__number" data-counter="10" data-counter-suffix="s">0s</span>
-                  <span>{lang === 'mr' ? 'प्रति नोंद' : 'per log'}</span>
-                </div>
-                <div class="hero-stat">
-                  <span class="hero-stat__number hero-stat__number--soil" data-counter="90" data-counter-suffix="d">0d</span>
-                  <span>{lang === 'mr' ? 'विश्वास' : 'trust'}</span>
-                </div>
-                <div class="hero-stat">
-                  <span>Offline ✓</span>
-                </div>
-              </div>
-            </div>
-          </div>
+      <!-- Stat row -->
+      <div class="hero__stats">
+        <div class="hero__stat">
+          <span class="hero__stat-num">10s</span>
+          <span class="hero__stat-label">{isMr ? 'प्रति नोंद' : 'per log'}</span>
+        </div>
+        <div class="hero__stat-sep" aria-hidden="true"></div>
+        <div class="hero__stat">
+          <span class="hero__stat-num">90d</span>
+          <span class="hero__stat-label">{isMr ? 'विश्वासार्ह नोंद' : 'verifiable record'}</span>
+        </div>
+        <div class="hero__stat-sep" aria-hidden="true"></div>
+        <div class="hero__stat">
+          <span class="hero__stat-num">∞</span>
+          <span class="hero__stat-label">Offline</span>
         </div>
       </div>
     </div>
-  </div>
 
-  <div
-    class="absolute bottom-28 left-1/2 -translate-x-1/2 flex flex-col items-center gap-2 z-10"
-    data-hero-scrollhint
-    aria-hidden="true"
-  >
-    <div class="w-5 h-8 rounded-full flex justify-center pt-1.5" style="border:1px solid rgba(26,15,0,0.18);">
-      <div class="w-1 h-2 rounded-full animate-bounce" style="background:rgba(26,15,0,0.36);"></div>
+    <!-- ── RIGHT: phone showcase ──────────────────────────────────── -->
+    <div class="hero__stage" aria-hidden="true">
+
+      <!-- Ambient glow pools behind phone -->
+      <div class="hero__glow hero__glow--green"></div>
+      <div class="hero__glow hero__glow--gold"></div>
+
+      <!-- Decorative rings -->
+      <div class="hero__ring hero__ring--outer"></div>
+      <div class="hero__ring hero__ring--inner"></div>
+
+      <!-- Phone — floating, 3D tilted, drop-shadowed -->
+      <div class="hero__phone-wrap">
+        <img
+          src="/images/app-screens/screen-daily-log.png"
+          alt={isMr ? 'श्रमसफल अ‍ॅप' : 'ShramSafal app'}
+          class="hero__phone"
+          loading="eager"
+          decoding="async"
+        />
+      </div>
+
+      <!-- Floating feature badges around phone -->
+      <div class="hero__badge hero__badge--voice">
+        <svg width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M12 18.75a6 6 0 006-6v-1.5m-6 7.5a6 6 0 01-6-6v-1.5m6 7.5v3.75m-3.75 0h7.5M12 15.75a3 3 0 01-3-3V4.5a3 3 0 116 0v8.25a3 3 0 01-3 3z" />
+        </svg>
+        {isMr ? 'आवाजाने नोंद झाली' : 'Logged by voice'}
+      </div>
+
+      <div class="hero__badge hero__badge--cost">
+        <svg width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M12 6v12m-3-2.818l.879.659c1.171.879 3.07.879 4.242 0 1.172-.879 1.172-2.303 0-3.182C13.536 12.219 12.768 12 12 12c-.725 0-1.45-.22-2.003-.659-1.106-.879-1.106-2.303 0-3.182s2.9-.879 4.006 0l.415.33" />
+        </svg>
+        {isMr ? 'खर्च दिसतो' : 'Running cost live'}
+      </div>
+
+      <div class="hero__badge hero__badge--offline">
+        <svg width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M8.288 15.038a5.25 5.25 0 017.424 0M5.106 11.856c3.807-3.808 9.98-3.808 13.788 0M1.924 8.674c5.565-5.565 14.587-5.565 20.152 0M12.53 18.22l-.53.53-.53-.53a.75.75 0 011.06 0z" />
+        </svg>
+        Offline ready
+      </div>
     </div>
-    <span class="text-[10px] font-bold tracking-widest uppercase" style="color:rgba(26,15,0,0.42);">
-      {lang === 'mr' ? 'खाली' : 'Scroll'}
-    </span>
-  </div>
 
-  <div id="mandi-ticker" aria-label={lang === 'mr' ? 'बाजारभाव' : 'Market rates'}>
-    <div class="mandi-ticker-inner" aria-hidden="true">
-      <span class="mandi-item">🍇 {lang === 'mr' ? 'द्राक्षे' : 'Grapes'} ₹45/kg <span class="up">↑₹3</span></span>
-      <span class="mandi-item">🧅 {lang === 'mr' ? 'कांदा' : 'Onion'} ₹22/kg <span class="down">↓₹5</span></span>
-      <span class="mandi-item">{lang === 'mr' ? 'सोयाबीन' : 'Soybean'} ₹4,850/qtl <span class="up">↑₹120</span></span>
-      <span class="mandi-item">{lang === 'mr' ? 'गहू' : 'Wheat'} ₹2,275/qtl</span>
-      <span class="mandi-item">{lang === 'mr' ? 'ऊस' : 'Sugarcane'} ₹3,100/ton <span class="up">↑₹50</span></span>
-      <span class="mandi-item">🍊 {lang === 'mr' ? 'संत्रा' : 'Orange'} ₹35/kg <span class="down">↓₹2</span></span>
-      <span class="mandi-item">{lang === 'mr' ? 'डाळिंब' : 'Pomegranate'} ₹80/kg <span class="up">↑₹8</span></span>
-      <span class="mandi-item">{lang === 'mr' ? 'कापूस' : 'Cotton'} ₹6,200/qtl <span class="up">↑₹100</span></span>
-      <span class="mandi-item">🍇 {lang === 'mr' ? 'द्राक्षे' : 'Grapes'} ₹45/kg <span class="up">↑₹3</span></span>
-      <span class="mandi-item">🧅 {lang === 'mr' ? 'कांदा' : 'Onion'} ₹22/kg <span class="down">↓₹5</span></span>
-      <span class="mandi-item">{lang === 'mr' ? 'सोयाबीन' : 'Soybean'} ₹4,850/qtl <span class="up">↑₹120</span></span>
-      <span class="mandi-item">{lang === 'mr' ? 'गहू' : 'Wheat'} ₹2,275/qtl</span>
-    </div>
   </div>
-
-  <CropSilhouette count={26} variant="mixed" goldGlow={true} height={96} />
-  <GoldenHorizon dots={true} />
 </section>
 
 <style>
-  .hero-pill {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.55rem;
-    padding: 0.7rem 1rem;
-    border-radius: 999px;
-    background: rgba(255,255,255,0.82);
-    border: 1px solid rgba(146,64,14,0.10);
-    color: var(--text-primary);
-    font-size: 0.92rem;
-    font-weight: 700;
-    box-shadow: 0 12px 24px rgba(0,0,0,0.04);
-  }
-
-  .hero-stage {
+  /* ── Section shell ──────────────────────────────────────────────────── */
+  .hero {
     position: relative;
-    min-height: 32rem;
-    border-radius: 2.2rem;
-    background: linear-gradient(180deg, rgba(255,255,255,0.72) 0%, rgba(232,217,196,0.48) 100%);
-    border: 1px solid rgba(146,64,14,0.10);
-    box-shadow: 0 24px 70px rgba(146,64,14,0.09);
-    overflow: hidden;
-    padding: 1.5rem;
+    overflow: clip;
+    background: var(--bg-base);
+    padding-top: clamp(5rem, 10vw, 8rem);
+    padding-bottom: clamp(4rem, 8vw, 7rem);
   }
 
-  .hero-stage__glow {
+  /* ── Seam: dark cinematic scroll close → warm clay ─────────────────── */
+  .hero__seam {
     position: absolute;
-    inset: auto auto 1.5rem 50%;
-    width: 28rem;
-    height: 12rem;
-    transform: translateX(-50%);
-    background: radial-gradient(ellipse at center, rgba(242,232,216,0.92), rgba(251,245,236,0.14) 48%, transparent 72%);
-    filter: blur(14px);
-  }
-
-  .hero-stage__layout {
-    position: relative;
-    z-index: 1;
-    display: grid;
-    grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
-    align-items: end;
-    gap: 1.5rem;
-    min-height: 100%;
-  }
-
-  .hero-stage__figure-card {
-    display: flex;
-    align-items: end;
-    justify-content: center;
-  }
-
-  .hero-stage__figure-frame {
-    width: 100%;
-    max-width: 20rem;
-    min-height: 28rem;
-    border-radius: 1.8rem;
-    background: linear-gradient(180deg, #FBF5EC 0%, #F2E8D8 100%);
-    border: 1px solid rgba(146,64,14,0.08);
-    box-shadow: inset 0 1px 0 rgba(255,255,255,0.7);
-    display: flex;
-    align-items: end;
-    justify-content: center;
-    overflow: hidden;
-  }
-
-  .hero-farmer {
-    width: min(18rem, 100%);
-    height: auto;
-    object-fit: contain;
-    mix-blend-mode: multiply;
-    filter: drop-shadow(0 18px 34px rgba(0,0,0,0.14));
-  }
-
-  .hero-stage__phone-column {
-    display: grid;
-    grid-template-rows: auto auto auto;
-    gap: 1rem;
-    justify-items: end;
-  }
-
-  .hero-phone-shell {
-    position: relative;
+    inset-x: 0;
+    top: 0;
+    height: 9rem;
     z-index: 2;
-    margin-right: 2rem;
+    pointer-events: none;
+    background: linear-gradient(
+      to bottom,
+      #0F1A10 0%,
+      #111E12 14%,
+      #1A2B17 34%,
+      rgba(26,43,23,0.55) 58%,
+      transparent 100%
+    );
   }
 
-  .hero-phone-shell__halo {
+  /* ── Grain overlay (subtle depth texture) ───────────────────────────── */
+  .hero__grain {
     position: absolute;
-    inset: -2rem;
-    background: radial-gradient(ellipse at center, rgba(22,140,87,0.16), transparent 66%);
-    filter: blur(20px);
+    inset: 0;
+    pointer-events: none;
+    z-index: 1;
+    opacity: 0.022;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.80' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
   }
 
-  .hero-phone {
+  /* ── Inner grid ─────────────────────────────────────────────────────── */
+  .hero__inner {
     position: relative;
-    width: 19rem;
-    border-radius: 2.2rem;
-    overflow: hidden;
-    background: var(--bg-phone-shell);
-    border: 2px solid rgba(22,163,74,0.30);
-    box-shadow: 0 30px 70px rgba(0,0,0,0.28);
-  }
-
-  .hero-phone__notch {
-    width: 5rem;
-    height: 0.5rem;
-    border-radius: 999px;
-    background: rgba(255,255,255,0.12);
-    margin: 1rem auto 0.5rem;
-  }
-
-  .hero-phone__header {
-    padding: 1rem 1.2rem 1.1rem;
-    background: linear-gradient(135deg, var(--brand), var(--brand-hover));
-  }
-
-  .hero-phone__body {
-    padding: 1rem 1.2rem 1.1rem;
+    z-index: 10;
     display: grid;
-    gap: 0.85rem;
+    grid-template-columns: 1fr;
+    gap: 3rem;
+    align-items: center;
   }
 
-  .hero-phone__row {
-    height: 0.7rem;
-    border-radius: 999px;
+  @media (min-width: 1024px) {
+    .hero__inner {
+      grid-template-columns: 1fr 1fr;
+      gap: clamp(2rem, 5vw, 6rem);
+      min-height: 86vh;
+    }
   }
 
-  .hero-phone__row.wide {
-    width: 86%;
-  }
-
-  .hero-phone__row--green {
-    width: 72%;
-    background: rgba(79,191,124,0.62);
-  }
-
-  .hero-phone__row--soil {
-    width: 58%;
-    background: rgba(188,136,81,0.58);
-  }
-
-  .hero-phone__row--faint {
-    width: 46%;
-    background: rgba(255,255,255,0.14);
-  }
-
-  .hero-phone__footer {
-    display: flex;
-    justify-content: space-around;
-    padding: 1rem 1.2rem 1.2rem;
-    border-top: 1px solid rgba(255,255,255,0.06);
-  }
-
-  .hero-phone__icon {
-    width: 1.9rem;
-    height: 1.9rem;
-    border-radius: 0.8rem;
-    background: rgba(255,255,255,0.08);
-  }
-
-  .hero-price-card {
-    position: relative;
-    min-width: 12rem;
-    padding: 1.2rem 1.3rem 1.1rem;
-    border-radius: 1.8rem;
-    box-shadow: 0 18px 40px rgba(0,0,0,0.10);
-    z-index: 3;
-  }
-
-  .hero-price-card__live {
-    position: absolute;
-    top: 1rem;
-    right: 1rem;
-    font-size: 0.7rem;
-    font-weight: 900;
-    letter-spacing: 0.08em;
-    color: rgba(22,140,87,0.82);
-  }
-
-  .hero-stat-stack {
+  /* ── Copy column ────────────────────────────────────────────────────── */
+  .hero__copy {
     display: flex;
     flex-direction: column;
-    gap: 0.75rem;
-    z-index: 3;
-    width: 100%;
-    max-width: 15rem;
+    padding-top: 3rem; /* clear the seam */
   }
 
-  .hero-stat {
+  @media (min-width: 1024px) {
+    .hero__copy { padding-top: 0; }
+  }
+
+  /* ── Chapter mark ───────────────────────────────────────────────────── */
+  .hero__chapter {
+    display: inline-block;
+    margin-bottom: 1.6rem;
+    font-size: 0.64rem;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.28em;
+    color: var(--gold);
+    border-left: 2px solid var(--gold);
+    padding-left: 0.65rem;
+  }
+
+  /* ── Headline ───────────────────────────────────────────────────────── */
+  .hero__headline {
+    font-family: var(--font-serif);
+    font-size: clamp(2.4rem, 5.2vw, 4.6rem);
+    font-weight: 700;
+    line-height: max(1.1, var(--heading-line-height, 1.15));
+    letter-spacing: var(--heading-letter-spacing, -0.02em);
+    color: var(--text-primary);
+    margin-bottom: 1.4rem;
+    text-wrap: balance;
+  }
+
+  /* ── Sub ────────────────────────────────────────────────────────────── */
+  .hero__sub {
+    font-family: var(--font-sans);
+    font-size: clamp(1rem, 1.5vw, 1.12rem);
+    line-height: 1.76;
+    color: var(--text-secondary);
+    max-width: 34rem;
+    margin-bottom: 2rem;
+  }
+
+  /* ── CTAs ───────────────────────────────────────────────────────────── */
+  .hero__ctas {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+    margin-bottom: 1rem;
+  }
+
+  .hero__cta-primary {
     display: inline-flex;
     align-items: center;
-    gap: 0.55rem;
-    padding: 0.85rem 1rem;
-    border-radius: 1rem;
-    background: rgba(255,255,255,0.68);
-    border: 1px solid rgba(146,64,14,0.10);
+    gap: 0.5rem;
+    padding: 0.95rem 2rem;
+    border-radius: 0.9rem;
+    font-family: var(--font-sans);
+    font-weight: 800;
+    font-size: 1rem;
+    color: #fff;
+    background: linear-gradient(135deg, var(--brand), var(--brand-fresh));
+    box-shadow: 0 12px 32px rgba(20,83,45,0.28);
+    text-decoration: none;
+    transition: transform 0.18s ease, box-shadow 0.18s ease;
+    cursor: pointer;
+  }
+  .hero__cta-primary:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 18px 44px rgba(20,83,45,0.38);
+  }
+
+  .hero__cta-ghost {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.95rem 2rem;
+    border-radius: 0.9rem;
+    font-family: var(--font-sans);
+    font-weight: 700;
+    font-size: 1rem;
     color: var(--text-primary);
-    backdrop-filter: blur(12px);
-    box-shadow: 0 10px 22px rgba(0,0,0,0.14);
-    font-size: 0.98rem;
-    font-weight: 700;
+    border: 1px solid var(--border-mid);
+    background: rgba(255,255,255,0.72);
+    text-decoration: none;
+    transition: transform 0.18s ease, background 0.18s ease;
+    cursor: pointer;
+  }
+  .hero__cta-ghost:hover {
+    transform: translateY(-2px);
+    background: rgba(255,255,255,0.92);
   }
 
-  .hero-stat__number {
-    color: var(--brand);
-    font-weight: 900;
+  /* ── Microline ──────────────────────────────────────────────────────── */
+  .hero__microline {
+    font-family: var(--font-sans);
+    font-size: 0.88rem;
+    font-style: italic;
+    color: var(--text-muted);
+    margin-bottom: 1.6rem;
   }
 
-  .hero-stat__number--soil {
-    color: var(--gold);
-  }
-
-  #mandi-ticker {
-    position: absolute;
-    left: 0;
-    right: 0;
-    bottom: 1.2rem;
-    z-index: 8;
-    overflow: hidden;
-    border-top: 1px solid rgba(255,255,255,0.10);
-    border-bottom: 1px solid rgba(255,255,255,0.10);
-    background: rgba(20,83,45,0.90);
-    backdrop-filter: blur(10px);
-  }
-
-  .mandi-ticker-inner {
+  /* ── Pills ──────────────────────────────────────────────────────────── */
+  .hero__pills {
     display: flex;
-    width: max-content;
-    gap: 2rem;
-    padding: 0.7rem 1.5rem;
-    animation: mandi-marquee 30s linear infinite;
-    color: rgba(255,255,255,0.74);
-    font-size: 0.78rem;
+    flex-wrap: wrap;
+    gap: 0.55rem;
+    margin-bottom: 2rem;
+  }
+
+  .hero__pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+    padding: 0.5rem 0.9rem;
+    border-radius: 999px;
+    border: 1px solid var(--border-light);
+    background: rgba(255,255,255,0.78);
+    color: var(--text-primary);
+    font-family: var(--font-sans);
+    font-size: 0.84rem;
     font-weight: 700;
+  }
+
+  /* ── Stats row ──────────────────────────────────────────────────────── */
+  .hero__stats {
+    display: flex;
+    align-items: center;
+    gap: 1.4rem;
+    padding: 1.2rem 0;
+    border-top: 1px solid var(--border-light);
+    max-width: 32rem;
+  }
+
+  .hero__stat {
+    display: flex;
+    flex-direction: column;
+    gap: 0.2rem;
+  }
+
+  .hero__stat-num {
+    font-family: var(--font-serif);
+    font-size: clamp(1.6rem, 3vw, 2.4rem);
+    font-weight: 400;
+    line-height: 1;
+    color: var(--brand);
+  }
+
+  .hero__stat-label {
+    font-family: var(--font-sans);
+    font-size: 0.72rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.14em;
+    color: var(--text-muted);
+  }
+
+  .hero__stat-sep {
+    width: 1px;
+    height: 2.4rem;
+    background: var(--border-light);
+    flex-shrink: 0;
+  }
+
+  /* ══════════════════════════════════════════════════════════════════════
+     PHONE SHOWCASE STAGE
+  ══════════════════════════════════════════════════════════════════════ */
+
+  .hero__stage {
+    position: relative;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    /* Enough height to show the floating badges without clipping */
+    padding: 3.5rem 3rem;
+  }
+
+  @media (min-width: 1024px) {
+    .hero__stage {
+      padding: 4rem 2rem;
+      justify-content: flex-end;
+    }
+  }
+
+  /* ── Ambient glow pools ─────────────────────────────────────────────── */
+  .hero__glow {
+    position: absolute;
+    border-radius: 50%;
+    pointer-events: none;
+    filter: blur(72px);
+  }
+
+  .hero__glow--green {
+    width: 38rem;
+    height: 38rem;
+    top: 50%;
+    left: 50%;
+    transform: translate(-46%, -52%);
+    background: radial-gradient(circle, rgba(20,83,45,0.14) 0%, transparent 68%);
+  }
+
+  .hero__glow--gold {
+    width: 24rem;
+    height: 24rem;
+    bottom: 5%;
+    right: 8%;
+    background: radial-gradient(circle, rgba(217,119,6,0.10) 0%, transparent 68%);
+  }
+
+  /* ── Decorative rings ───────────────────────────────────────────────── */
+  .hero__ring {
+    position: absolute;
+    border-radius: 50%;
+    border: 1px solid rgba(20,83,45,0.10);
+    pointer-events: none;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    animation: ring-pulse 6s ease-in-out infinite;
+  }
+
+  .hero__ring--outer {
+    width: 34rem;
+    height: 34rem;
+    animation-delay: 0s;
+  }
+
+  .hero__ring--inner {
+    width: 24rem;
+    height: 24rem;
+    border-color: rgba(20,83,45,0.07);
+    animation-delay: 1.2s;
+  }
+
+  @keyframes ring-pulse {
+    0%, 100% { opacity: 0.55; transform: translate(-50%, -50%) scale(1); }
+    50%       { opacity: 0.90; transform: translate(-50%, -50%) scale(1.03); }
+  }
+
+  /* ── Phone wrapper — float animation ───────────────────────────────── */
+  .hero__phone-wrap {
+    position: relative;
+    z-index: 4;
+    animation: hero-float 6s ease-in-out infinite;
+    /* 3D perspective tilt — gives product-showcase depth */
+    transform: perspective(1200px) rotateY(-6deg) rotateX(2deg);
+  }
+
+  @keyframes hero-float {
+    0%, 100% { translate: 0 0px; }
+    50%       { translate: 0 -14px; }
+  }
+
+  /* ── Phone image ────────────────────────────────────────────────────── */
+  .hero__phone {
+    display: block;
+    /* Tall enough to be impressive, never overflows */
+    height: clamp(420px, 56vh, 680px);
+    width: auto;
+    max-width: 100%;
+    object-fit: contain;
+    border-radius: 2rem;
+    /* Layered shadows for depth: deep base + close ambient + ring highlight */
+    filter:
+      drop-shadow(0 48px 96px rgba(10,20,12,0.36))
+      drop-shadow(0 16px 40px rgba(10,20,12,0.22))
+      drop-shadow(0 4px 12px rgba(10,20,12,0.14));
+    user-select: none;
+    -webkit-user-drag: none;
+  }
+
+  /* ── Floating feature badges ────────────────────────────────────────── */
+  .hero__badge {
+    position: absolute;
+    z-index: 8;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+    padding: 0.5rem 1rem;
+    border-radius: 999px;
+    font-family: var(--font-sans);
+    font-size: 0.74rem;
+    font-weight: 800;
+    background: rgba(255,255,255,0.94);
+    border: 1px solid rgba(146,64,14,0.12);
+    box-shadow: 0 8px 28px rgba(0,0,0,0.12), 0 2px 8px rgba(0,0,0,0.06);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    color: var(--text-primary);
     white-space: nowrap;
+    pointer-events: none;
   }
 
-  .mandi-item .up {
-    color: #BFEED0;
+  /* Voice badge — top left of phone */
+  .hero__badge--voice {
+    top: 18%;
+    left: -1rem;
+    color: var(--brand);
+    animation: badge-drift-a 5.5s ease-in-out infinite;
   }
 
-  .mandi-item .down {
-    color: #F5B5A5;
+  /* Cost badge — middle right */
+  .hero__badge--cost {
+    top: 52%;
+    right: -0.5rem;
+    color: var(--gold);
+    animation: badge-drift-b 6.2s ease-in-out infinite 0.8s;
   }
 
-  @keyframes mandi-marquee {
-    from { transform: translateX(0); }
-    to { transform: translateX(-50%); }
+  /* Offline badge — bottom left */
+  .hero__badge--offline {
+    bottom: 20%;
+    left: -0.5rem;
+    color: #3B82F6;
+    animation: badge-drift-a 7s ease-in-out infinite 1.6s;
   }
 
-  @media (max-width: 1023px) {
-    .hero-stage {
-      min-height: auto;
-      margin-top: 1rem;
-      padding: 1rem;
-    }
+  @keyframes badge-drift-a {
+    0%, 100% { transform: translate(0, 0); }
+    50%       { transform: translate(-5px, -8px); }
+  }
 
-    .hero-stage__layout {
-      grid-template-columns: 1fr;
-      gap: 1rem;
-    }
+  @keyframes badge-drift-b {
+    0%, 100% { transform: translate(0, 0); }
+    50%       { transform: translate(5px, -8px); }
+  }
 
-    .hero-stage__figure-frame {
-      max-width: 18rem;
-      min-height: 22rem;
-      margin-inline: auto;
+  /* ── Mobile: badges hidden to avoid overflow issues ─────────────────── */
+  @media (max-width: 639px) {
+    .hero__badge { display: none; }
+    .hero__ring  { display: none; }
+    .hero__phone {
+      height: clamp(320px, 65vw, 420px);
+      transform: none;
     }
-
-    .hero-stage__phone-column {
-      justify-items: center;
-    }
-
-    .hero-phone-shell {
-      margin-right: 0;
-      transform: scale(0.9);
-      transform-origin: center top;
-    }
-
-    .hero-stat-stack {
-      max-width: none;
-      width: 100%;
-      display: grid;
-      grid-template-columns: repeat(3, minmax(0, 1fr));
+    .hero__phone-wrap {
+      transform: none;
     }
   }
 
-  @media (max-width: 767px) {
-    .hero-stage {
-      padding: 0.9rem;
-    }
-
-    .hero-stage__figure-frame {
-      min-height: 18rem;
-    }
-
-    .hero-phone-shell {
-      transform: scale(0.76);
-    }
-
-    .hero-stat-stack {
-      grid-template-columns: 1fr;
-      max-width: 16rem;
-    }
+  /* ── Reduced motion ─────────────────────────────────────────────────── */
+  @media (prefers-reduced-motion: reduce) {
+    .hero__phone-wrap { animation: none; transform: none; }
+    .hero__badge      { animation: none; }
+    .hero__ring       { animation: none; }
   }
 </style>

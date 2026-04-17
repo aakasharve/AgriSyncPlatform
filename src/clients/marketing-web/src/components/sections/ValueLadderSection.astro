@@ -17,7 +17,7 @@ const t = getTranslations(lang);
   <div class="relative z-10 max-w-site mx-auto px-5 md:px-8">
     <div class="text-center mb-8 md:mb-10">
       <span class="chapter-mark" data-chapter>
-        {lang === 'mr' ? 'Chapter 05 · मूल्य' : 'Chapter 05 · Value'}
+        {lang === 'mr' ? 'Chapter 06 · ९० दिवसाचे फळ' : 'Chapter 06 · The 90-Day Return'}
       </span>
       <h2 class="scene-stagger font-serif text-h2 text-ink mb-6">
         {t.value_ladder.headline}
@@ -52,7 +52,7 @@ const t = getTranslations(lang);
                 'w-10 h-10 md:w-12 md:h-12 rounded-full flex items-center justify-center font-bold font-serif',
                 i === 2 ? 'bg-brand text-white text-xl md:text-2xl' : 'bg-brand/10 text-brand text-lg md:text-xl',
               ]}>
-                {i === 0 ? '7' : i === 1 ? '30' : '1'}
+                {i === 0 ? '7' : i === 1 ? '30' : (lang === 'mr' ? '१ वर्ष' : '1yr')}
               </div>
               <h3 class:list={[
                 'font-serif text-xl md:text-2xl font-bold',

@@ -95,7 +95,7 @@ section {
 
 @layer base {
   html[lang='en'] {
-    --font-serif: 'DM Serif Display', Georgia, serif;
+    --font-serif: 'Instrument Serif', 'DM Serif Display', Georgia, serif;
     --font-sans: 'DM Sans', sans-serif;
     --heading-line-height: 1.15;
     --body-line-height: 1.65;

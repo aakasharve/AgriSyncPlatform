@@ -1,0 +1,411 @@
+---
+/**
+ * FAQSection — Chapter 07 · Your Questions
+ *
+ * Consolidates what was previously:
+ *   - GuidedQuestionsSection (5 clickable cards)
+ *   - QASection ×5 (5 identical full-page sections)
+ *
+ * Now a single section with a <details>/<summary> accordion.
+ * Zero JS. Fully accessible. Narrative momentum preserved.
+ *
+ * Visual language: only --brand / --brand-fresh / --gold / --gold-warm.
+ * No off-palette Tailwind colors.
+ */
+import { getLangFromUrl, getTranslations } from '../../i18n/translations';
+
+const lang = getLangFromUrl(Astro.url);
+const t = getTranslations(lang);
+const isMr = lang === 'mr';
+
+// Each accordion item pulls from the same translation keys as the old QASection
+const faqItems = [
+  {
+    question: t.guided.questions[0],
+    headline: t.qa1.headline,
+    body: t.qa1.body,
+    items: (t.qa1 as any).points as string[],
+    closing: (t.qa1 as any).closing as string | undefined,
+    isSteps: false,
+    accentVar: '--brand-fresh',
+    iconPath: 'M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z',
+  },
+  {
+    question: t.guided.questions[1],
+    headline: t.qa2.headline,
+    body: t.qa2.body,
+    items: (t.qa2 as any).changes as string[],
+    closing: (t.qa2 as any).closing as string | undefined,
+    isSteps: false,
+    accentVar: '--gold-warm',
+    iconPath: 'M3.75 13.5l10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75z',
+  },
+  {
+    question: t.guided.questions[2],
+    headline: t.qa3.headline,
+    body: t.qa3.body,
+    items: (t.qa3 as any).types as string[],
+    closing: undefined,
+    isSteps: false,
+    accentVar: '--brand',
+    iconPath: 'M15 19.128a9.38 9.38 0 002.625.372 9.337 9.337 0 004.121-.952 4.125 4.125 0 00-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.106A12.318 12.318 0 018.624 21c-2.331 0-4.512-.645-6.374-1.766l-.001-.109a6.375 6.375 0 0111.964-3.07M12 6.375a3.375 3.375 0 11-6.75 0 3.375 3.375 0 016.75 0zm8.25 2.25a2.625 2.625 0 11-5.25 0 2.625 2.625 0 015.25 0z',
+  },
+  {
+    question: t.guided.questions[3],
+    headline: t.qa4.headline,
+    body: t.qa4.body,
+    items: (t.qa4 as any).use_cases as string[],
+    closing: (t.qa4 as any).closing as string | undefined,
+    isSteps: false,
+    accentVar: '--gold',
+    iconPath: 'M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z',
+  },
+  {
+    question: t.guided.questions[4],
+    headline: t.qa5.headline,
+    body: t.qa5.body,
+    items: (t.qa5 as any).steps as string[],
+    closing: undefined,
+    isSteps: true,
+    accentVar: '--brand-fresh',
+    iconPath: 'M21 7.5l-9-5.25L3 7.5m18 0l-9 5.25m9-5.25v9l-9 5.25M3 7.5l9 5.25M3 7.5v9l9 5.25m0-9v9',
+  },
+];
+---
+
+<section
+  id="faq"
+  data-scene="faq"
+  data-soil="tilled"
+  data-cursor="seedling"
+  class="relative py-section overflow-hidden"
+  style="background:var(--bg-surface);"
+>
+  <!-- Subtle soil-field texture -->
+  <div
+    class="absolute inset-0 pointer-events-none"
+    aria-hidden="true"
+    style="background:
+      radial-gradient(ellipse 72% 44% at 50% 8%, rgba(20,83,45,0.06) 0%, transparent 46%),
+      radial-gradient(ellipse 52% 32% at 80% 84%, rgba(217,119,6,0.06) 0%, transparent 50%);"
+  ></div>
+
+  <div class="relative z-10 max-w-site mx-auto px-5 md:px-8">
+
+    <!-- Section header -->
+    <div class="text-center max-w-2xl mx-auto mb-10 md:mb-14">
+      <span class="chapter-mark" data-chapter>
+        {isMr ? 'Chapter 07 · तुमचे प्रश्न' : 'Chapter 07 · Your Questions'}
+      </span>
+      <h2 class="font-serif text-h2 mb-5" style="color:var(--text-primary);">
+        {isMr
+          ? 'मनातले प्रश्न — उत्तरे इथे'
+          : 'Questions in your mind — answered here'}
+      </h2>
+      <p class="text-body-lg max-w-prose mx-auto" style="color:var(--text-secondary);">
+        {isMr
+          ? 'प्रत्येक शेतकऱ्याच्या मनात हे प्रश्न येतात. आम्ही ऐकले आहेत.'
+          : 'Every farmer asks these. We have listened.'}
+      </p>
+    </div>
+
+    <!-- Accordion -->
+    <div class="faq-stack max-w-4xl mx-auto space-y-3">
+      {faqItems.map((faq, i) => (
+        <details class="faq-item" data-reveal-3d-item>
+          <summary class="faq-summary">
+            <!-- Number badge -->
+            <span
+              class="faq-num"
+              style={`background:${i % 2 === 0 ? 'var(--brand)' : 'var(--gold)'};`}
+            >
+              {String(i + 1).padStart(2, '0')}
+            </span>
+
+            <!-- Icon -->
+            <span
+              class="faq-icon"
+              style={`color:var(${faq.accentVar});background:color-mix(in srgb, var(${faq.accentVar}) 10%, transparent);`}
+              aria-hidden="true"
+            >
+              <svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                <path stroke-linecap="round" stroke-linejoin="round" d={faq.iconPath} />
+              </svg>
+            </span>
+
+            <!-- Question text -->
+            <span class="faq-question">{faq.question}</span>
+
+            <!-- Chevron -->
+            <svg class="faq-chevron" width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5" aria-hidden="true">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
+            </svg>
+          </summary>
+
+          <!-- Answer panel -->
+          <div class="faq-body">
+            <!-- Accent top bar -->
+            <div
+              class="faq-body__bar"
+              style={`background:linear-gradient(90deg, var(${faq.accentVar}), transparent);`}
+              aria-hidden="true"
+            ></div>
+
+            <div class="faq-body__inner">
+              <h3 class="faq-body__headline" set:html={faq.headline.replace(/\n/g, '<br />')} />
+              <p class="faq-body__copy">{faq.body}</p>
+
+              <!-- Items list -->
+              <ul class="faq-body__list">
+                {faq.items.map((item: string, j: number) => (
+                  <li class="faq-body__item">
+                    {faq.isSteps ? (
+                      <span
+                        class="faq-body__step-num"
+                        style="background:var(--brand);"
+                      >
+                        {j + 1}
+                      </span>
+                    ) : (
+                      <svg
+                        class="faq-body__check"
+                        style={`color:var(${faq.accentVar});`}
+                        fill="none"
+                        viewBox="0 0 24 24"
+                        stroke="currentColor"
+                        stroke-width="2.5"
+                        aria-hidden="true"
+                      >
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+                      </svg>
+                    )}
+                    <span>{item}</span>
+                  </li>
+                ))}
+              </ul>
+
+              {faq.closing && (
+                <p class="faq-body__closing">{faq.closing}</p>
+              )}
+            </div>
+          </div>
+        </details>
+      ))}
+    </div>
+
+    <!-- Bottom anchor — old QA section IDs still work for any inbound links -->
+    <div id="qa-1" style="height:0;overflow:hidden;" aria-hidden="true"></div>
+    <div id="qa-2" style="height:0;overflow:hidden;" aria-hidden="true"></div>
+    <div id="qa-3" style="height:0;overflow:hidden;" aria-hidden="true"></div>
+    <div id="qa-4" style="height:0;overflow:hidden;" aria-hidden="true"></div>
+    <div id="qa-5" style="height:0;overflow:hidden;" aria-hidden="true"></div>
+
+    <!-- CTA nudge -->
+    <div class="mt-12 md:mt-16 text-center">
+      <p class="text-base md:text-lg font-medium mb-4" style="color:var(--text-secondary);">
+        {isMr ? 'अजून प्रश्न आहेत? थेट बोलू.' : 'Still have questions? Let\'s talk directly.'}
+      </p>
+      <a
+        href="#cta"
+        class="inline-flex items-center gap-2 font-extrabold text-sm px-5 py-3 rounded-xl transition-all duration-200 hover:-translate-y-0.5"
+        style="background:linear-gradient(135deg,var(--brand),var(--brand-fresh));color:#fff;box-shadow:0 8px 24px rgba(20,83,45,0.24);"
+      >
+        {isMr ? 'लवकर सहभागी व्हा' : 'Join early access'}
+        <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5" aria-hidden="true">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3" />
+        </svg>
+      </a>
+    </div>
+
+  </div>
+</section>
+
+<style>
+  /* ── Accordion item shell ───────────────────────────────────────────── */
+  .faq-item {
+    background: var(--bg-card-white);
+    border: 1px solid var(--border-light);
+    border-radius: 1.25rem;
+    overflow: hidden;
+    box-shadow: 0 6px 24px rgba(146,64,14,0.06);
+    transition: box-shadow 0.22s ease, transform 0.22s ease;
+  }
+
+  .faq-item:hover {
+    box-shadow: 0 14px 36px rgba(146,64,14,0.11);
+    transform: translateY(-1px);
+  }
+
+  .faq-item[open] {
+    border-color: var(--border-mid);
+    box-shadow: 0 18px 48px rgba(146,64,14,0.13);
+  }
+
+  /* ── Summary (clickable row) ─────────────────────────────────────────── */
+  .faq-summary {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    padding: 1.25rem 1.5rem;
+    cursor: pointer;
+    list-style: none;
+    user-select: none;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .faq-summary::-webkit-details-marker { display: none; }
+
+  .faq-num {
+    flex-shrink: 0;
+    width: 2rem;
+    height: 2rem;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: var(--font-sans);
+    font-size: 0.68rem;
+    font-weight: 900;
+    color: #fff;
+    letter-spacing: 0.02em;
+  }
+
+  .faq-icon {
+    flex-shrink: 0;
+    width: 2.25rem;
+    height: 2.25rem;
+    border-radius: 0.6rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: transform 0.22s ease;
+  }
+
+  .faq-item[open] .faq-icon {
+    transform: scale(1.08);
+  }
+
+  .faq-question {
+    flex: 1;
+    font-family: var(--font-sans);
+    font-size: clamp(0.95rem, 1.6vw, 1.1rem);
+    font-weight: 700;
+    line-height: 1.5;
+    color: var(--text-primary);
+  }
+
+  .faq-chevron {
+    flex-shrink: 0;
+    color: var(--text-muted);
+    transition: transform 0.28s var(--ease-out-expo, cubic-bezier(0.16,1,0.3,1));
+  }
+
+  .faq-item[open] .faq-chevron {
+    transform: rotate(180deg);
+  }
+
+  /* ── Answer body ─────────────────────────────────────────────────────── */
+  .faq-body {
+    border-top: 1px solid var(--border-light);
+  }
+
+  .faq-body__bar {
+    height: 2px;
+    opacity: 0.55;
+  }
+
+  .faq-body__inner {
+    padding: 1.5rem 1.5rem 1.75rem;
+  }
+
+  /* Offset for the num + icon columns */
+  @media (min-width: 640px) {
+    .faq-body__inner {
+      padding-left: calc(1.5rem + 2rem + 2.25rem + 1rem + 1rem);
+    }
+  }
+
+  .faq-body__headline {
+    font-family: var(--font-serif);
+    font-size: clamp(1.15rem, 2.2vw, 1.5rem);
+    font-weight: 400;
+    line-height: var(--heading-line-height, 1.25);
+    color: var(--text-primary);
+    margin-bottom: 0.75rem;
+  }
+
+  .faq-body__copy {
+    font-family: var(--font-sans);
+    font-size: clamp(0.9rem, 1.4vw, 1.05rem);
+    line-height: var(--body-line-height, 1.72);
+    color: var(--text-secondary);
+    margin-bottom: 1.25rem;
+  }
+
+  /* ── Items ───────────────────────────────────────────────────────────── */
+  .faq-body__list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.65rem;
+    list-style: none;
+    margin: 0;
+    padding: 0;
+  }
+
+  .faq-body__item {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.75rem;
+    background: rgba(255,255,255,0.72);
+    border: 1px solid var(--border-light);
+    border-radius: 0.75rem;
+    padding: 0.75rem 1rem;
+    font-family: var(--font-sans);
+    font-size: clamp(0.88rem, 1.3vw, 1rem);
+    font-weight: 500;
+    color: var(--text-primary);
+    line-height: 1.6;
+  }
+
+  .faq-body__check {
+    width: 1.1rem;
+    height: 1.1rem;
+    flex-shrink: 0;
+    margin-top: 0.18rem;
+  }
+
+  .faq-body__step-num {
+    flex-shrink: 0;
+    width: 1.5rem;
+    height: 1.5rem;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.72rem;
+    font-weight: 900;
+    color: #fff;
+  }
+
+  .faq-body__closing {
+    margin-top: 1rem;
+    padding-top: 1rem;
+    border-top: 1px solid var(--border-light);
+    font-family: var(--font-sans);
+    font-size: clamp(0.88rem, 1.3vw, 1rem);
+    font-style: italic;
+    color: var(--text-muted);
+    line-height: 1.7;
+  }
+
+  /* ── Reduced motion ──────────────────────────────────────────────────── */
+  @media (prefers-reduced-motion: reduce) {
+    .faq-item,
+    .faq-item:hover,
+    .faq-chevron,
+    .faq-icon {
+      transition: none;
+      transform: none;
+    }
+  }
+</style>

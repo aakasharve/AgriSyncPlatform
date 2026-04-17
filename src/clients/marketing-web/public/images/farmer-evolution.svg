@@ -1,0 +1,215 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 300" fill="none">
+  <defs>
+    <linearGradient id="fe-skin" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#C4956A"/>
+      <stop offset="100%" stop-color="#A67B5B"/>
+    </linearGradient>
+    <linearGradient id="fe-skin-dk" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#A67B5B"/>
+      <stop offset="100%" stop-color="#8B6545"/>
+    </linearGradient>
+    <linearGradient id="fe-shirt" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#EDE8DF"/>
+      <stop offset="100%" stop-color="#D6CFBF"/>
+    </linearGradient>
+    <linearGradient id="fe-trouser" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#8B7D6B"/>
+      <stop offset="100%" stop-color="#73685A"/>
+    </linearGradient>
+    <filter id="fe-shd" x="-10%" y="-8%" width="120%" height="116%">
+      <feDropShadow dx="0" dy="2" stdDeviation="3" flood-color="#3D2B1F" flood-opacity="0.1"/>
+    </filter>
+  </defs>
+
+  <!-- Ground line -->
+  <line x1="40" y1="272" x2="760" y2="272" stroke="#A67B5B" stroke-width="0.5" opacity="0.2"/>
+
+  <!-- ======= STAGE 1: OVERLOADED — hunched, burdened ======= -->
+  <g transform="translate(80, 15)" filter="url(#fe-shd)" opacity="0.6">
+    <!-- Feet -->
+    <path d="M38,255 C34,256 30,258 30,260 C30,262 34,264 40,263 C45,262 47,260 45,258Z" fill="#5C4A3A"/>
+    <path d="M62,257 C58,258 54,260 54,262 C54,264 58,266 64,265 C69,264 71,262 69,260Z" fill="#5C4A3A"/>
+
+    <!-- Legs -->
+    <path d="M40,205 C39,220 38,240 38,255" stroke="url(#fe-trouser)" stroke-width="13" fill="none" stroke-linecap="round"/>
+    <path d="M60,203 C61,220 62,242 62,257" stroke="url(#fe-trouser)" stroke-width="13" fill="none" stroke-linecap="round"/>
+
+    <!-- Torso — hunched forward -->
+    <path d="M22,80 C20,95 19,130 20,160 L22,200 C22,206 35,210 50,210 C65,210 78,206 78,200 L80,160 C81,130 80,95 78,80 C72,72 62,68 50,68 C38,68 28,72 22,80Z" fill="url(#fe-shirt)"/>
+
+    <!-- Shoulders drooping -->
+    <path d="M22,82 C18,95 14,115 16,140" stroke="url(#fe-skin)" stroke-width="9" fill="none" stroke-linecap="round"/>
+    <path d="M16,140 C15,150 16,160 18,168" stroke="url(#fe-skin-dk)" stroke-width="7" fill="none" stroke-linecap="round"/>
+    <path d="M18,168 C17,172 18,175 20,175 C22,174 22,170 20,168Z" fill="url(#fe-skin-dk)"/>
+
+    <path d="M78,82 C82,95 86,115 84,140" stroke="url(#fe-skin)" stroke-width="9" fill="none" stroke-linecap="round"/>
+    <path d="M84,140 C83,150 82,158 78,165" stroke="url(#fe-skin-dk)" stroke-width="7" fill="none" stroke-linecap="round"/>
+    <path d="M78,165 C76,168 77,172 80,172 C82,170 82,167 80,164Z" fill="url(#fe-skin-dk)"/>
+
+    <!-- Neck -->
+    <path d="M42,66 C42,62 45,58 50,58 C55,58 58,62 58,66" fill="url(#fe-skin)"/>
+
+    <!-- Head — bowed down -->
+    <path d="M34,30 C34,18 40,10 50,10 C60,10 66,18 66,30 L66,42 C66,48 62,54 58,56 C55,58 52,59 50,59 C48,59 45,58 42,56 C38,54 34,48 34,42Z"
+          fill="url(#fe-skin)"/>
+    <path d="M34,28 C34,14 40,6 50,6 C60,6 66,14 66,28 C66,24 60,20 50,20 C40,20 34,24 34,28Z" fill="#2C1810"/>
+
+    <!-- Face — tired, burdened -->
+    <path d="M41,34 C43,33 46,33 48,34" stroke="#2C1810" stroke-width="1.1" fill="none"/>
+    <path d="M52,34 C55,33 58,33 59,34" stroke="#2C1810" stroke-width="1.1" fill="none"/>
+    <circle cx="45" cy="38" r="1.3" fill="#2C1810"/>
+    <circle cx="55" cy="38" r="1.3" fill="#2C1810"/>
+    <!-- Tired under-eyes -->
+    <path d="M43,40 C45,41 47,40" stroke="#A67B5B" stroke-width="0.4" fill="none" opacity="0.5"/>
+    <path d="M53,40 C55,41 57,40" stroke="#A67B5B" stroke-width="0.4" fill="none" opacity="0.5"/>
+    <path d="M50,36 C51,40 51,44 50,46" stroke="#8B6545" stroke-width="0.6" fill="none"/>
+    <path d="M44,49 C46,48 50,48 56,49" stroke="#3D2B1F" stroke-width="1.2" fill="none" stroke-linecap="round"/>
+    <path d="M46,53 C48,54 52,54 54,53" stroke="#8B6545" stroke-width="0.6" fill="none"/>
+
+    <!-- Question mark — mental confusion -->
+    <text x="72" y="30" font-family="Georgia, serif" font-size="18" fill="#8B7D6B" opacity="0.35">?</text>
+  </g>
+
+  <!-- Arrow 1→2 -->
+  <g transform="translate(245, 140)" opacity="0.25">
+    <line x1="0" y1="0" x2="50" y2="0" stroke="#8B7D6B" stroke-width="1.5" stroke-dasharray="4 3"/>
+    <path d="M48,-5 L55,0 L48,5" stroke="#8B7D6B" stroke-width="1.5" fill="none"/>
+  </g>
+
+  <!-- ======= STAGE 2: AWARE — straightening, looking at phone ======= -->
+  <g transform="translate(320, 8)" filter="url(#fe-shd)" opacity="0.8">
+    <!-- Feet -->
+    <path d="M40,258 C36,259 32,261 32,263 C32,265 36,267 42,266 C47,265 49,263 47,261Z" fill="#5C4A3A"/>
+    <path d="M66,260 C62,261 58,263 58,265 C58,267 62,269 68,268 C73,267 75,265 73,263Z" fill="#5C4A3A"/>
+
+    <!-- Legs — more upright -->
+    <path d="M42,208 C41,224 40,244 40,258" stroke="url(#fe-trouser)" stroke-width="13" fill="none" stroke-linecap="round"/>
+    <path d="M64,206 C65,224 66,246 66,260" stroke="url(#fe-trouser)" stroke-width="13" fill="none" stroke-linecap="round"/>
+
+    <!-- Torso — straighter -->
+    <path d="M24,78 C22,94 21,128 22,158 L24,204 C24,210 37,214 52,214 C67,214 80,210 80,204 L82,158 C83,128 82,94 80,78 C74,70 64,66 52,66 C40,66 30,70 24,78Z" fill="url(#fe-shirt)"/>
+
+    <!-- Arms — one arm bringing phone up -->
+    <path d="M24,84 C16,100 12,120 14,145" stroke="url(#fe-skin)" stroke-width="9" fill="none" stroke-linecap="round"/>
+    <path d="M14,145 C13,155 14,165 16,172" stroke="url(#fe-skin-dk)" stroke-width="7" fill="none" stroke-linecap="round"/>
+    <path d="M16,172 C15,176 16,178 18,178 C20,176 20,174 18,172Z" fill="url(#fe-skin-dk)"/>
+
+    <!-- Right arm holding phone at mid level -->
+    <path d="M80,84 C88,96 92,110 90,125" stroke="url(#fe-skin)" stroke-width="9" fill="none" stroke-linecap="round"/>
+    <path d="M90,125 C88,132 84,140 82,146" stroke="url(#fe-skin-dk)" stroke-width="7" fill="none" stroke-linecap="round"/>
+
+    <!-- Small phone -->
+    <g transform="translate(74, 140) rotate(-5)">
+      <rect width="22" height="36" rx="3" fill="#1C1917"/>
+      <rect x="2" y="5" width="18" height="26" rx="1.5" fill="#D1FAE5"/>
+      <rect x="4" y="8" width="10" height="1" rx="0.5" fill="#059669" opacity="0.3"/>
+      <rect x="4" y="12" width="14" height="1" rx="0.5" fill="#6B7280" opacity="0.2"/>
+      <rect x="4" y="16" width="12" height="1" rx="0.5" fill="#6B7280" opacity="0.2"/>
+    </g>
+
+    <path d="M80,144 C79,148 80,152 82,152 C84,150 84,147 82,144Z" fill="url(#fe-skin-dk)"/>
+
+    <!-- Neck -->
+    <path d="M44,64 C44,60 47,56 52,56 C57,56 60,60 60,64" fill="url(#fe-skin)"/>
+
+    <!-- Head — looking slightly toward phone -->
+    <path d="M36,26 C36,14 42,6 52,6 C62,6 68,14 68,26 L68,40 C68,46 64,52 60,54 C57,56 54,57 52,57 C50,57 47,56 44,54 C40,52 36,46 36,40Z"
+          fill="url(#fe-skin)"/>
+    <path d="M36,24 C36,10 42,2 52,2 C62,2 68,10 68,24 C68,20 62,16 52,16 C42,16 36,20 36,24Z" fill="#2C1810"/>
+
+    <!-- Face — alert, observing -->
+    <path d="M43,32 C45,31 48,31 50,32" stroke="#2C1810" stroke-width="1.1" fill="none"/>
+    <path d="M54,32 C57,31 60,31 61,32" stroke="#2C1810" stroke-width="1.1" fill="none"/>
+    <ellipse cx="47" cy="36" rx="2.5" ry="2" fill="white"/>
+    <ellipse cx="57" cy="36" rx="2.5" ry="2" fill="white"/>
+    <circle cx="48" cy="36.5" r="1.3" fill="#2C1810"/>
+    <circle cx="58" cy="36.5" r="1.3" fill="#2C1810"/>
+    <path d="M52,34 C53,38 53,42 52,44" stroke="#8B6545" stroke-width="0.6" fill="none"/>
+    <path d="M46,47 C48,46 52,46 58,47" stroke="#3D2B1F" stroke-width="1.2" fill="none" stroke-linecap="round"/>
+    <path d="M48,51 C50,52 54,52 56,51" stroke="#8B6545" stroke-width="0.6" fill="none"/>
+
+    <!-- Awareness spark -->
+    <circle cx="78" cy="18" r="3" fill="#E8C170" opacity="0.3"/>
+    <circle cx="78" cy="18" r="1.5" fill="#E8C170" opacity="0.5"/>
+  </g>
+
+  <!-- Arrow 2→3 -->
+  <g transform="translate(490, 140)" opacity="0.25">
+    <line x1="0" y1="0" x2="50" y2="0" stroke="#8B7D6B" stroke-width="1.5" stroke-dasharray="4 3"/>
+    <path d="M48,-5 L55,0 L48,5" stroke="#8B7D6B" stroke-width="1.5" fill="none"/>
+  </g>
+
+  <!-- ======= STAGE 3: IN CONTROL — upright, confident, phone prominent ======= -->
+  <g transform="translate(565, 2)" filter="url(#fe-shd)">
+    <!-- Feet -->
+    <path d="M42,260 C38,261 34,263 34,265 C34,267 38,269 44,268 C49,267 51,265 49,263Z" fill="#5C4A3A"/>
+    <path d="M68,262 C64,263 60,265 60,267 C60,269 64,271 70,270 C75,269 77,267 75,265Z" fill="#5C4A3A"/>
+
+    <!-- Legs — firm stance -->
+    <path d="M44,212 C43,228 42,248 42,260" stroke="url(#fe-trouser)" stroke-width="14" fill="none" stroke-linecap="round"/>
+    <path d="M66,210 C67,228 68,250 68,262" stroke="url(#fe-trouser)" stroke-width="14" fill="none" stroke-linecap="round"/>
+
+    <!-- Torso — tall, shoulders back -->
+    <path d="M24,78 C22,94 21,130 22,162 L24,208 C24,214 38,218 55,218 C72,218 86,214 86,208 L88,162 C89,130 88,94 86,78 C80,68 68,64 55,64 C42,64 30,68 24,78Z" fill="url(#fe-shirt)"/>
+
+    <!-- Shirt wrinkles — relaxed -->
+    <path d="M38,125 C42,128 46,126" stroke="#B8AD9E" stroke-width="0.5" fill="none" opacity="0.4"/>
+
+    <!-- Left arm at side, confident -->
+    <path d="M24,84 C15,100 12,125 14,150" stroke="url(#fe-skin)" stroke-width="10" fill="none" stroke-linecap="round"/>
+    <path d="M14,150 C13,162 14,172 16,180" stroke="url(#fe-skin-dk)" stroke-width="8" fill="none" stroke-linecap="round"/>
+    <path d="M16,180 C15,184 16,186 18,186 C20,184 20,182 18,180Z" fill="url(#fe-skin-dk)"/>
+
+    <!-- Right arm — phone held confidently at chest -->
+    <path d="M86,84 C95,96 100,112 98,128" stroke="url(#fe-skin)" stroke-width="10" fill="none" stroke-linecap="round"/>
+    <path d="M98,128 C96,138 90,148 86,155" stroke="url(#fe-skin-dk)" stroke-width="8" fill="none" stroke-linecap="round"/>
+
+    <!-- Phone — slightly larger, showing data clearly -->
+    <g transform="translate(76, 146) rotate(-3)">
+      <rect width="26" height="42" rx="4" fill="#1C1917"/>
+      <rect x="2" y="5" width="22" height="32" rx="2" fill="#D1FAE5"/>
+      <!-- Organized content -->
+      <path d="M5,10 L7,12 L10,8" stroke="#059669" stroke-width="0.8" fill="none"/>
+      <rect x="13" y="9" width="8" height="1" rx="0.5" fill="#059669" opacity="0.3"/>
+      <path d="M5,16 L7,18 L10,14" stroke="#059669" stroke-width="0.8" fill="none"/>
+      <rect x="13" y="15" width="10" height="1" rx="0.5" fill="#059669" opacity="0.3"/>
+      <path d="M5,22 L7,24 L10,20" stroke="#059669" stroke-width="0.8" fill="none"/>
+      <rect x="13" y="21" width="7" height="1" rx="0.5" fill="#059669" opacity="0.3"/>
+      <!-- Total -->
+      <rect x="3" y="28" width="20" height="6" rx="1" fill="#059669" opacity="0.15"/>
+      <text x="5" y="33" font-family="system-ui" font-size="3.5" fill="#059669" font-weight="600">₹2,400 ✓</text>
+    </g>
+
+    <path d="M84,152 C82,156 83,160 86,160 C88,158 88,154 86,152Z" fill="url(#fe-skin-dk)"/>
+
+    <!-- Neck -->
+    <path d="M47,62 C47,58 50,54 55,54 C60,54 63,58 63,62" fill="url(#fe-skin)"/>
+
+    <!-- Head — upright, looking forward -->
+    <path d="M38,22 C38,10 44,2 55,2 C66,2 72,10 72,22 L72,36 C72,44 68,50 63,52 C60,54 57,55 55,55 C53,55 50,54 47,52 C42,50 38,44 38,36Z"
+          fill="url(#fe-skin)"/>
+    <path d="M38,20 C38,8 44,0 55,0 C66,0 72,8 72,20 C72,16 66,12 55,12 C44,12 38,16 38,20Z" fill="#2C1810"/>
+
+    <!-- Face — composed, quietly confident -->
+    <path d="M45,28 C47,27 50,27 53,28" stroke="#2C1810" stroke-width="1.2" fill="none"/>
+    <path d="M57,28 C60,27 63,27 65,28" stroke="#2C1810" stroke-width="1.2" fill="none"/>
+    <ellipse cx="49" cy="33" rx="2.8" ry="2.5" fill="white"/>
+    <ellipse cx="61" cy="33" rx="2.8" ry="2.5" fill="white"/>
+    <circle cx="49" cy="33" r="1.6" fill="#2C1810"/>
+    <circle cx="61" cy="33" r="1.6" fill="#2C1810"/>
+    <circle cx="49.5" cy="32.5" r="0.4" fill="white"/>
+    <circle cx="61.5" cy="32.5" r="0.4" fill="white"/>
+
+    <path d="M55,31 C56,35 56,39 55,42" stroke="#8B6545" stroke-width="0.7" fill="none"/>
+    <path d="M48,44 C50,43 55,43 62,44" stroke="#3D2B1F" stroke-width="1.3" fill="none" stroke-linecap="round"/>
+    <!-- Mouth — neutral but composed, not smiling -->
+    <path d="M50,49 C52,50 58,50 60,49" stroke="#8B6545" stroke-width="0.7" fill="none"/>
+
+    <path d="M38,34 C35,34 34,38 35,42 C36,43 37,43 38,42" stroke="#A67B5B" stroke-width="0.6" fill="url(#fe-skin)"/>
+  </g>
+
+  <!-- Stage labels — subtle -->
+  <text x="115" y="295" font-family="system-ui" font-size="10" fill="#8B7D6B" opacity="0.5" text-anchor="middle">बोझा</text>
+  <text x="370" y="295" font-family="system-ui" font-size="10" fill="#8B7D6B" opacity="0.5" text-anchor="middle">जाणीव</text>
+  <text x="620" y="295" font-family="system-ui" font-size="10" fill="#059669" opacity="0.5" text-anchor="middle">नियंत्रण</text>
+</svg>

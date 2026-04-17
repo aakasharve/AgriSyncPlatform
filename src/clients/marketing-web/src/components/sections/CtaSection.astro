@@ -9,6 +9,7 @@ const t = getTranslations(lang);
 ---
 
 <section
+  id="cta"
   data-scene="cta"
   data-soil="moonlit"
   data-cursor="pen"
@@ -36,18 +37,18 @@ const t = getTranslations(lang);
     <div class="grid grid-cols-1 xl:grid-cols-[1.1fr_0.9fr] gap-8 items-start">
       <div class="pt-4">
         <span class="chapter-mark" data-chapter>
-          {lang === 'mr' ? 'Chapter 11 · सुरुवात' : 'Chapter 11 · Begin'}
+          {lang === 'mr' ? 'Chapter 12 · सुरुवात' : 'Chapter 12 · Begin'}
         </span>
 
-        <h2 class="font-serif text-[clamp(2.3rem,5.4vw,4.6rem)] text-white font-bold tracking-tight leading-[1.04]" data-split-headline>
+        <h2 class="font-serif text-[clamp(2.3rem,5.4vw,4.6rem)] font-bold tracking-tight leading-[1.04]" style="color:var(--text-inverse);" data-split-headline>
           {t.scene8.cta_headline}
         </h2>
 
-        <p class="mt-5 max-w-prose text-[clamp(1rem,1.5vw,1.08rem)] leading-8" style="color:var(--white-55);">
+        <p class="mt-5 max-w-prose text-[clamp(1rem,1.5vw,1.08rem)] leading-8" style="color:var(--text-inverse-78);">
           {t.scene8.cta_body}
         </p>
 
-        <p class="mt-5 text-sm md:text-base italic" style="color:var(--white-40);">
+        <p class="mt-5 text-sm md:text-base italic" style="color:var(--text-inverse-58);">
           {t.scene8.trust_note}
         </p>
 
@@ -61,7 +62,7 @@ const t = getTranslations(lang);
               <div class="text-[0.68rem] font-extrabold uppercase tracking-[0.28em] mb-3" style="color:var(--gold);">
                 {lang === 'mr' ? `टप्पा 0${index + 1}` : `Stage 0${index + 1}`}
               </div>
-              <p class="text-base md:text-lg leading-7 font-medium text-white">{item}</p>
+              <p class="text-base md:text-lg leading-7 font-medium" style="color:var(--text-inverse);">{item}</p>
             </div>
           ))}
         </div>
@@ -75,10 +76,10 @@ const t = getTranslations(lang);
               <div class="text-[0.68rem] font-extrabold uppercase tracking-[0.28em]" style="color:var(--gold);">
                 {lang === 'mr' ? 'लवकर प्रवेश' : 'Early access'}
               </div>
-              <h3 class="mt-2 font-serif text-3xl text-white font-bold">{t.waitlist.title}</h3>
+              <h3 class="mt-2 font-serif text-3xl font-bold" style="color:var(--text-inverse);">{t.waitlist.title}</h3>
             </div>
             <div class="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-[0.7rem] font-bold uppercase tracking-[0.24em]" style="color:var(--brand-fresh);">
-              {lang === 'mr' ? 'लाईव्ह लवकरच' : 'Soon live'}
+              {lang === 'mr' ? 'लवकरच येतो' : 'Coming soon'}
             </div>
           </div>
 
@@ -90,7 +91,7 @@ const t = getTranslations(lang);
             />
           </div>
 
-          <div class="mt-5 flex flex-wrap items-center gap-3 text-sm" style="color:var(--white-40);">
+          <div class="mt-5 flex flex-wrap items-center gap-3 text-sm" style="color:var(--text-inverse-58);">
             <span class="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1.5">
               <span class="w-2 h-2 rounded-full bg-brand"></span>
               {lang === 'mr' ? 'टायपिंग नाही' : 'No typing'}
@@ -105,7 +106,7 @@ const t = getTranslations(lang);
             </span>
           </div>
 
-          <div class="mt-6 pt-5 border-t border-white/8 flex flex-wrap items-center gap-2 text-sm" style="color:var(--white-40);">
+          <div class="mt-6 pt-5 border-t border-white/8 flex flex-wrap items-center gap-2 text-sm" style="color:var(--text-inverse-58);">
             <span>{t.scene8.whatsapp_prefix}</span>
             <a
               href="https://wa.me/919999999999"

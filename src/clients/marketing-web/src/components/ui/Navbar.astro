@@ -1,40 +1,53 @@
 ---
 import { getLangFromUrl, getTranslations } from '../../i18n/translations';
-import BrandLogo from '../svg/BrandLogo.astro';
 
 const lang = getLangFromUrl(Astro.url);
 const t = getTranslations(lang);
 const oppositeLang = lang === 'en' ? '/mr/' : '/en/';
-// Always Latin script. Highlight current lang, dim the other.
 const isEn = lang === 'en';
+const logoSrc =
+  lang === 'mr'
+    ? '/brand-assets/logo-mr-transparent.svg'
+    : '/brand-assets/footer-logo-exact.svg';
+const logoAlt = lang === 'mr' ? 'श्रम सफल' : 'ShramSafal';
 ---
 
-<div id="nav-sentinel" aria-hidden="true" style="position: absolute; top: 0; left: 0; width: 1px; height: 1px;"></div>
+<div id="nav-sentinel" aria-hidden="true" style="position:absolute;top:0;left:0;width:1px;height:1px;"></div>
 
-<nav
-  id="main-nav"
-  class="fixed top-0 left-0 right-0 z-50"
-  aria-label="Main navigation"
->
-  <div class="max-w-site mx-auto flex items-center justify-between h-16 px-5 md:px-8">
-    <a href={`/${lang}/`} class="flex items-center transition-all duration-300">
-      <BrandLogo compact class="nav-logo" />
+<nav id="main-nav" class="fixed top-0 left-0 right-0 z-50" aria-label="Main navigation">
+  <div class="max-w-site mx-auto flex items-center justify-between min-h-[4.5rem] md:min-h-[5rem] px-5 py-2 md:px-8">
+    <a
+      href={`/${lang}/`}
+      class="flex shrink-0 items-center transition-all duration-300"
+      aria-label={logoAlt}
+    >
+      <div class="nav-logo-frame">
+        <img
+          src={logoSrc}
+          alt=""
+          aria-hidden="true"
+          class="nav-logo"
+          loading="eager"
+          decoding="async"
+        />
+      </div>
     </a>
 
-    <div class="flex items-center gap-3 md:gap-5">
+    <div class="flex shrink-0 items-center gap-3 md:gap-5">
       <a
-  href={oppositeLang}
-  class="nav-lang-toggle flex items-center gap-1 text-xs font-bold tracking-widest uppercase transition-colors duration-300 px-2 py-1"
-  aria-label={isEn ? 'Switch to Marathi' : 'Switch to English'}
->
-  <span style={isEn ? 'color:#fff;' : 'color:rgba(255,255,255,0.35);'}>EN</span>
-  <span style="color:rgba(255,255,255,0.25);">·</span>
-  <span style={!isEn ? 'color:#fff;' : 'color:rgba(255,255,255,0.35);'}>MR</span>
-</a>
+        href={oppositeLang}
+        class="nav-lang-toggle flex items-center gap-1 text-xs font-bold tracking-widest uppercase transition-colors duration-300 px-2 py-1"
+        aria-label={isEn ? 'Switch to Marathi' : 'Switch to English'}
+      >
+        <span style={isEn ? 'color:var(--text-primary);' : 'color:var(--text-muted);'}>EN</span>
+        <span style="color:rgba(26,15,0,0.25);">·</span>
+        <span style={!isEn ? 'color:var(--text-primary);' : 'color:var(--text-muted);'}>MR</span>
+      </a>
 
       <a
         href="https://app.shramsafal.com"
-        class="inline-flex items-center gap-2 bg-brand text-white text-sm font-bold px-4 py-2 rounded-lg hover:bg-brand-hover transition-colors shadow-sm"
+        class="inline-flex items-center gap-2 text-sm font-bold px-4 py-2 rounded-lg transition-colors shadow-sm"
+        style="background:linear-gradient(135deg,var(--brand),var(--brand-hover));color:var(--text-inverse);"
       >
         {t.nav.open_app}
       </a>
@@ -48,29 +61,76 @@ const isEn = lang === 'en';
   aria-hidden="true"
 >
   <a
-    href="#guided-questions"
-    class="flex items-center justify-center bg-brand text-white font-extrabold text-base py-3.5 rounded-full shadow-lg shadow-brand/30 w-full"
+    href="#cta"
+    class="flex items-center justify-center font-extrabold text-base py-3.5 rounded-full shadow-lg shadow-brand/30 w-full"
+    style="background:linear-gradient(135deg,var(--brand),var(--brand-hover));color:var(--text-inverse);"
   >
     {t.nav.cta_sticky}
   </a>
 </div>
 
 <style>
-  .nav-logo { transition: opacity 0.3s ease; }
-  .nav-logo:hover { opacity: 0.8; }
-
-  #main-nav {
-    background: transparent;
-    border-bottom: 1px solid transparent;
-    transition: background 0.3s ease, border-color 0.3s ease, box-shadow 0.3s ease;
+  .nav-logo-frame {
+    width: min(14rem, 46vw);
+    height: 3.45rem;
+    overflow: hidden;
   }
 
+  .nav-logo {
+    display: block;
+    width: 100%;
+    height: auto;
+    max-width: none;
+    transform: translateY(-31%);
+    transition: opacity 0.3s ease;
+  }
+
+  .nav-logo-frame:hover .nav-logo {
+    opacity: 0.82;
+  }
+
+  /* Lang toggle + Open App adapt to the dark initial nav state */
+  #main-nav:not(.navbar-solid) .nav-lang-toggle span {
+    color: rgba(242,233,219,0.72) !important;
+  }
+  #main-nav:not(.navbar-solid) .nav-lang-toggle span[style*="text-primary"] {
+    color: rgba(242,233,219,0.95) !important;
+  }
+  #main-nav:not(.navbar-solid) .nav-lang-toggle span[style*="text-muted"] {
+    color: rgba(242,233,219,0.38) !important;
+  }
+
+  @media (min-width: 768px) {
+    .nav-logo-frame {
+      width: min(20rem, 30vw);
+      height: 5rem;
+    }
+  }
+
+  /*
+   * Navbar starts DARK (matching the cinematic scroll canvas below it)
+   * and transitions to warm Kachi Mati cream once the user scrolls.
+   * This creates a clear visual "world" — dark cinematic canvas + dark nav header —
+   * rather than a floating cream bar over a dark background.
+   */
+  #main-nav {
+    background: linear-gradient(
+      to bottom,
+      rgba(9,16,11,0.82) 0%,
+      rgba(9,16,11,0.48) 70%,
+      rgba(9,16,11,0.08) 100%
+    );
+    border-bottom: 1px solid rgba(255,255,255,0.05);
+    transition: background 0.45s ease, border-color 0.45s ease, box-shadow 0.45s ease;
+  }
+
+  /* Once user scrolls past the cinematic hero, shift to the warm Kachi Mati palette */
   #main-nav.navbar-solid {
-    background: rgba(6,15,7,0.88);
-    backdrop-filter: blur(16px);
-    -webkit-backdrop-filter: blur(16px);
-    border-bottom: 1px solid rgba(255,255,255,0.06);
-    box-shadow: 0 1px 24px rgba(0,0,0,0.3);
+    background: rgba(251,245,236,0.96);
+    backdrop-filter: blur(18px);
+    -webkit-backdrop-filter: blur(18px);
+    border-bottom: 1px solid rgba(146,64,14,0.10);
+    box-shadow: 0 2px 28px rgba(0,0,0,0.10);
   }
 </style>
 
