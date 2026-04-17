@@ -18,7 +18,7 @@ const t = getTranslations(lang);
   <div class="relative z-10 max-w-site mx-auto px-5 md:px-8">
     <div class="text-center max-w-3xl mx-auto mb-10 md:mb-14">
       <span class="chapter-mark" data-chapter>
-        {lang === 'mr' ? 'Chapter 02 · अडचण कुठे आहे' : 'Chapter 02 · Where the Day Breaks'}
+        {lang === 'mr' ? 'Chapter 02 · वेदना' : 'Chapter 02 · Where the Day Breaks'}
       </span>
       <h2 class="font-serif text-h2 mb-5" style="color:rgb(29,51,38);" set:html={t.problem_hit.headline.replace(/\n/g, '<br />')} />
       <p class="text-body-lg max-w-prose mx-auto" style="color:rgba(29,51,38,0.74);">
@@ -46,33 +46,21 @@ const t = getTranslations(lang);
         ))}
       </div>
 
-      <div class="rounded-[2rem] border border-[rgba(19,50,36,0.08)] bg-[rgba(17,49,34,0.92)] px-6 py-8 shadow-[0_24px_60px_rgba(0,0,0,0.16)]" data-zoom-section>
-        <div class="relative w-56 h-56 mx-auto mb-6 flex justify-center items-center rounded-2xl overflow-hidden shadow-inner bg-[rgba(255,255,255,0.03)] border border-white/10">
-          <img 
-            src="/images/characters/problem-burdened-farmer.png" 
-            alt={lang === 'mr' ? 'थकलेला शेतकरी' : 'Burdened farmer'} 
-            class="w-full h-full object-cover opacity-90 mix-blend-luminosity hover:mix-blend-normal transition-all duration-500"
-          />
-        </div>
-
-        <div class="mt-8 grid grid-cols-2 gap-3">
-          {[
-            lang === 'mr' ? 'खर्च?' : 'Cost?',
-            lang === 'mr' ? 'मजूर?' : 'Labour?',
-            lang === 'mr' ? 'बाकी?' : 'Pending?',
-            lang === 'mr' ? 'कुठला प्लॉट?' : 'Which plot?',
-          ].map((label) => (
-            <div class="rounded-2xl border border-white/10 bg-white/5 px-4 py-4 text-center">
-              <div class="text-sm font-bold tracking-wide" style="color:rgba(255,255,255,0.82);">{label}</div>
-            </div>
-          ))}
-        </div>
-
-        <p class="mt-6 text-center text-base leading-7" style="color:rgba(255,255,255,0.68);">
+      <!-- Cinematic photo panel instead of UI template card -->
+      <div class="problem-photo-panel" data-zoom-section>
+        <img
+          src="/images/characters/problem-burdened-farmer.png"
+          alt={lang === 'mr' ? 'थकलेला शेतकरी — कागद चाळतोय' : 'Farmer reading scattered papers in the field'}
+          class="problem-photo-img"
+          loading="lazy"
+          decoding="async"
+        />
+        <div class="problem-photo-overlay" aria-hidden="true"></div>
+        <blockquote class="problem-photo-caption">
           {lang === 'mr'
-            ? 'दिवसातलं काम अनेक तुकड्यांत विखुरतं. नोंद नसली की सगळं पुन्हा डोक्यात जोडावं लागतं.'
-            : 'The day breaks into fragments. Without a record, everything has to be rebuilt from memory at night.'}
-        </p>
+            ? '"दिवसभर काम झालं, पण नोंद नाही."'
+            : '"The work happened. But there\'s no record."'}
+        </blockquote>
       </div>
     </div>
   </div>
@@ -87,4 +75,44 @@ const t = getTranslations(lang);
     box-shadow: 0 0 0 6px rgba(255,255,255,0.8);
   }
 
+  /* Cinematic photo panel */
+  .problem-photo-panel {
+    position: relative;
+    border-radius: 2rem;
+    overflow: hidden;
+    aspect-ratio: 3/4;
+    box-shadow: 0 32px 72px rgba(0,0,0,0.22);
+  }
+
+  .problem-photo-img {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    object-position: center 20%;
+  }
+
+  .problem-photo-overlay {
+    position: absolute;
+    inset: 0;
+    background:
+      linear-gradient(to top, rgba(10,18,12,0.85) 0%, rgba(10,18,12,0.20) 46%, transparent 68%),
+      radial-gradient(ellipse 80% 50% at 50% 0%, rgba(146,64,14,0.08) 0%, transparent 60%);
+  }
+
+  .problem-photo-caption {
+    position: absolute;
+    bottom: 2rem;
+    left: 1.6rem;
+    right: 1.6rem;
+    margin: 0;
+    font-family: var(--font-serif);
+    font-size: clamp(1.05rem, 1.8vw, 1.35rem);
+    font-weight: 400;
+    font-style: italic;
+    line-height: 1.55;
+    color: rgba(242,233,219,0.90);
+    text-shadow: 0 2px 16px rgba(0,0,0,0.50);
+  }
 </style>

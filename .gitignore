@@ -141,6 +141,8 @@ _domain_tests.txt
 _err.txt
 _git_vision.txt
 _integr_tests.txt
+/output/
+/_deploy/
 
 # ===========================================
 # §6  TESTING & CI ARTIFACTS
@@ -169,6 +171,20 @@ src/clients/marketing-web/galactic-graham/
 # Agent debug output inside marketing dir
 src/clients/marketing-web/output/
 
+# Agent prompt docs / tooling scratch
+src/clients/marketing-web/CINEMATIC_FARM_VISION.md
+src/clients/marketing-web/IMAGE_GENERATION_PROMPTS.md
+src/clients/marketing-web/skills-lock.json
+src/clients/marketing-web/convert_images.py
+
+# Raw asset sources and archives, not shipped runtime assets
+src/clients/marketing-web/public/images/Brand Icon Bundle/
+src/clients/marketing-web/public/images/*.zip
+src/clients/marketing-web/public/images/generated/
+
+# Root-level scratch scripts used for asset generation
+/scripts/
+
 # ===========================================
 # §8  LEGACY / MISC
 # ===========================================
@@ -187,4 +203,3 @@ src/clients/marketing-web/output/
 src/clients/mobile-web/public/demo-photos/*.jpg
 src/clients/mobile-web/public/demo-photos/*.jpeg
 src/clients/mobile-web/public/demo-photos/*.png
-src/clients/marketing-web/public/videos/hero-bg.mp4

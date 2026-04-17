@@ -17,7 +17,7 @@ const t = getTranslations(lang);
 
   <div class="relative z-10 max-w-site mx-auto px-5 md:px-8 text-center">
     <span class="chapter-mark" data-chapter>
-      {lang === 'mr' ? 'Chapter 08 · बदल' : 'Chapter 08 · Identity Shift'}
+      {lang === 'mr' ? 'Chapter 09 · कोण बनतो' : 'Chapter 09 · Who You Become'}
     </span>
 
     <h2
@@ -41,7 +41,11 @@ const t = getTranslations(lang);
           <div class="relative rounded-2xl overflow-hidden border group" style="background:var(--bg-surface);border-color:var(--border-light);">
             <img
               src={`/images/characters/${img}`}
-              alt={lang === 'mr' ? `स्थित्यंतर 0${i + 1}` : `State 0${i + 1}`}
+              alt={
+                lang === 'mr'
+                  ? ['शेत निरीक्षण करणारा शेतकरी','कागदपत्रांच्या ओझ्याखाली शेतकरी','नोंद करणारा शेतकरी','आत्मविश्वासू शेतकरी'][i]
+                  : ['Farmer observing his field at dawn','Farmer burdened by scattered paperwork','Farmer recording the day by voice','Confident farmer with clear records'][i]
+              }
               class="w-full h-auto object-cover transition-transform duration-700 group-hover:scale-[1.03]"
               style="mix-blend-mode:multiply;opacity:0.95;"
             />

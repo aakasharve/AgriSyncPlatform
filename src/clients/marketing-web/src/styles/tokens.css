@@ -20,6 +20,9 @@
   --text-secondary:  rgba(26,15,0,0.72);
   --text-muted:      rgba(26,15,0,0.50);
   --text-soil:       #1C1917;
+  --text-inverse:    #F2E9DB;
+  --text-inverse-78: rgba(242,233,219,0.78);
+  --text-inverse-58: rgba(242,233,219,0.58);
 
   /* ── White opacity scale
        Kept for explicit dark-surface contexts (phone screen, dark card interior) ── */
