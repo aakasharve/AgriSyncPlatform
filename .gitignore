@@ -50,6 +50,8 @@ __pycache__/
 .env.*.local
 src/AgriSync.Bootstrapper/secrets/
 src/AgriSync.Bootstrapper/App_Data/
+# Dev connection strings / local overrides — copy appsettings.Development.example.json and fill in locally
+src/AgriSync.Bootstrapper/appsettings.Development.json
 *.keystore
 *.jks
 
@@ -148,6 +150,12 @@ _integr_tests.txt
 **/output/*.png
 **/output/*.jpg
 src/clients/mobile-web/vite_log.txt
+
+# Build / tsc artifact dumps — never commit these
+**/build_log.txt
+**/errors.txt
+**/raw_tsc_errors.txt
+**/tsc_errors.txt
 
 # ===========================================
 # §7  MARKETING SITE — JUNK TO EXCLUDE
