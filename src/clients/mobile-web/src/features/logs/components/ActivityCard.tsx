@@ -1697,7 +1697,7 @@ const ActivityCard: React.FC<ActivityCardProps> = ({
                         return undefined;
                     })()}
                     filled={isMachineryFilled}
-                    theme="slate"
+                    theme="indigo"
                     onClick={() => setActiveSheet('machinery')}
                     sourceText={linkedData.machinery?.sourceText}
                     systemInterpretation={linkedData.machinery?.systemInterpretation}

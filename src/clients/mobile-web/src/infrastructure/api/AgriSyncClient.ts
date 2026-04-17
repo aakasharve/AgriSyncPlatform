@@ -419,6 +419,29 @@ function resolveApiBaseUrl(): string {
     return '';
 }
 
+function normalizeSyncCursorForApi(sinceCursorIso?: string): string | undefined {
+    if (!sinceCursorIso) {
+        return undefined;
+    }
+
+    const trimmed = sinceCursorIso.trim();
+    if (!trimmed) {
+        return undefined;
+    }
+
+    if (trimmed === '0') {
+        return '0';
+    }
+
+    const parsed = new Date(trimmed);
+    if (Number.isNaN(parsed.getTime())) {
+        return '0';
+    }
+
+    // Backend accepts `yyyy-MM-ddTHH:mm:ssZ` reliably for pull cursors.
+    return parsed.toISOString().replace(/\.\d{3}Z$/, 'Z');
+}
+
 function toAuthSession(dto: AuthResponseDto): AuthSession {
     return {
         userId: dto.userId,
@@ -513,7 +536,8 @@ export class AgriSyncClient {
     }
 
     async pullSyncChanges(sinceCursorIso?: string): Promise<SyncPullResponse> {
-        const params = sinceCursorIso ? { since: sinceCursorIso } : undefined;
+        const normalizedCursor = normalizeSyncCursorForApi(sinceCursorIso);
+        const params = normalizedCursor ? { since: normalizedCursor } : undefined;
         const response = await this.http.get<SyncPullResponse>('/sync/pull', { params });
         return response.data;
     }

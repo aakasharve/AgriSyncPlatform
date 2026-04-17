@@ -28,7 +28,10 @@ const ActionToast: React.FC<ActionToastProps> = ({
     }, [duration, onDismiss]);
 
     return (
-        <div className="fixed bottom-24 left-1/2 transform -translate-x-1/2 z-50 animate-slide-up w-[90%] max-w-sm">
+        <div
+            className="fixed left-1/2 transform -translate-x-1/2 z-50 animate-slide-up w-[90%] max-w-sm"
+            style={{ bottom: 'calc(6rem + var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px)))' }}
+        >
             <div className={`
                 flex items-center justify-between p-4 rounded-2xl shadow-hard border backdrop-blur-md
                 ${type === 'success'

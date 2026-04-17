@@ -4,7 +4,7 @@
  */
 
 import React, { useState, useEffect } from 'react';
-import { Plus, ListPlus, ChevronRight, CheckSquare, StickyNote, Droplets, Users, ArrowUp, Edit3, Bell, Trash2 } from 'lucide-react';
+import { Plus, ListPlus, ChevronRight, Check, CheckSquare, StickyNote, Droplets, Users, ArrowUp, Edit3, Bell, Trash2 } from 'lucide-react';
 import Button from '../../../shared/components/ui/Button';
 import ActivityCard from './ActivityCard';
 import { CropSymbol } from '../../context/components/CropSelector';
@@ -27,6 +27,7 @@ import UnclearSegmentCard from '../../../shared/components/ui/UnclearSegmentCard
 import { UnclearSegment } from '../../logs/logs.types';
 import { loadVocabDB, addApprovedMapping } from '../../voice/vocab/vocabStore';
 import { getDateKey } from '../../../core/domain/services/DateKeyService';
+import { getCropTheme } from '../../../shared/utils/colorTheme';
 
 
 
@@ -46,6 +47,75 @@ const SAFE_DEFAULTS: LedgerDefaults = {
         defaultRentalCost: 1000,
         defaultFuelCost: 200
     }
+};
+
+interface TargetSelectionGroup {
+    cropId: string;
+    cropName: string;
+    iconName?: string;
+    color: string;
+    plotNames: string[];
+}
+
+const MultiTargetDestinationCard: React.FC<{ groups: TargetSelectionGroup[] }> = ({ groups }) => {
+    return (
+        <div className="mx-4 mb-4 rounded-[2rem] border border-emerald-100 bg-white p-4 shadow-sm">
+            <div className="flex items-start justify-between gap-3">
+                <div>
+                    <p className="text-xs font-black uppercase tracking-[0.18em] text-emerald-700">Review Save Target</p>
+                    <p className="mt-1 text-sm font-semibold text-stone-700">
+                        This log will be stored in each crop below with its selected plots.
+                    </p>
+                </div>
+                <div className="rounded-2xl bg-emerald-50 px-3 py-2 text-xs font-black text-emerald-700">
+                    {groups.reduce((sum, group) => sum + group.plotNames.length, 0)} plots
+                </div>
+            </div>
+
+            <div className="mt-4 space-y-3">
+                {groups.map((group) => {
+                    const theme = getCropTheme(group.color);
+
+                    return (
+                        <div
+                            key={`${group.cropId}-${group.plotNames.join('|')}`}
+                            className={`rounded-[1.6rem] border p-1 shadow-lg ${theme.border} ${theme.shadow}`}
+                        >
+                            <div className={`rounded-[1.4rem] p-4 ${theme.slideBgSelected}`}>
+                                <div className="flex items-center justify-between gap-3">
+                                    <div className="flex items-center gap-3">
+                                        <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white shadow-sm ring-1 ring-white/70">
+                                            {group.iconName ? <CropSymbol name={group.iconName} size="md" /> : <div className={`h-3 w-3 rounded-full ${group.color}`} />}
+                                        </div>
+                                        <div>
+                                            <p className={`text-base font-black ${theme.text}`}>{group.cropName}</p>
+                                            <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-stone-500">
+                                                {group.plotNames.length === 1 ? '1 plot selected' : `${group.plotNames.length} plots selected`}
+                                            </p>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div className="mt-3 flex flex-wrap gap-2">
+                                    {group.plotNames.map((plotName) => (
+                                        <span
+                                            key={`${group.cropId}-${plotName}`}
+                                            className="inline-flex items-center gap-2 rounded-full border border-emerald-200 bg-white px-3 py-1.5 text-xs font-bold text-stone-800 shadow-sm"
+                                        >
+                                            <span className="flex h-5 w-5 items-center justify-center rounded-full bg-emerald-500 text-[10px] text-white">
+                                                <Check size={12} strokeWidth={3} />
+                                            </span>
+                                            {plotName}
+                                        </span>
+                                    ))}
+                                </div>
+                            </div>
+                        </div>
+                    );
+                })}
+            </div>
+        </div>
+    );
 };
 
 interface ManualEntryProps {
@@ -160,27 +230,45 @@ const ManualEntry: React.FC<ManualEntryProps> = ({ context, crops, defaults, pro
 
     // --- DERIVE CONTEXT ---
     useEffect(() => {
-        if (context && context.selection.length === 1 && context.selection[0].cropId !== 'FARM_GLOBAL') {
-            const sel = context.selection[0];
-            const crop = crops.find(c => c.id === sel.cropId);
-            if (crop) {
-                setCommonActivities(crop.workflow || []);
-                setActiveCrop(crop);
-                // Set Active Plot
-                const plotId = sel.selectedPlotIds[0];
-                const plot = plotId ? crop.plots.find(p => p.id === plotId) : crop.plots[0];
-                setActivePlot(plot);
-            }
-        } else {
+        if (!context || context.selection.length === 0) {
             setCommonActivities([]);
             setActiveCrop(undefined);
             setActivePlot(undefined);
+            return;
         }
-    }, [context]);
+
+        const primarySelection = context.selection[0];
+        const primaryCrop = crops.find(c => c.id === primarySelection.cropId);
+        const firstPlotId = context.selection.flatMap(selection => selection.selectedPlotIds)[0];
+        const firstPlot = firstPlotId
+            ? crops.flatMap(crop => crop.plots).find(plot => plot.id === firstPlotId)
+            : undefined;
+
+        if (context.selection.length === 1 && primaryCrop) {
+            setCommonActivities(primaryCrop.workflow || []);
+            setActiveCrop(primaryCrop);
+        } else {
+            setCommonActivities([]);
+            setActiveCrop(undefined);
+        }
+
+        setActivePlot(firstPlot);
+    }, [context, crops]);
+
+    // Guard ref: once voice data has been applied, prevent the effect from
+    // clearing the form when onDataConsumed() sets initialData → null and
+    // re-triggers this same effect.
+    const hasVoiceDataBeenApplied = React.useRef(false);
 
     // --- PRE-FILL & HYDRATION ---
     useEffect(() => {
         if (!activePlot) return;
+
+        // If voice data was already applied (initialData just became null due to
+        // onDataConsumed), do not re-run the hydration loop — that would wipe the
+        // pre-filled form. The guard resets when this component unmounts (new voice
+        // recording always causes a fresh ManualEntry mount).
+        if (!initialData && hasVoiceDataBeenApplied.current) return;
 
         // 1. Core State Hydration (Existing Data Merging)
         // Ensure Global Activity Card Exists
@@ -230,8 +318,9 @@ const ManualEntry: React.FC<ManualEntryProps> = ({ context, crops, defaults, pro
                 });
 
                 // Merge Labour
-                log.labour?.forEach(lab => {
-                    newLabourMap[globalActivity.id] = { ...lab, linkedActivityId: globalActivity.id };
+                log.labour?.forEach((lab, index) => {
+                    const labourEntryId = index === 0 ? globalActivity.id : (lab.id || `existing_labour_${log.id}_${index}`);
+                    newLabourMap[labourEntryId] = { ...lab, linkedActivityId: labourEntryId };
                 });
 
                 // Merge Irrigation
@@ -303,24 +392,34 @@ const ManualEntry: React.FC<ManualEntryProps> = ({ context, crops, defaults, pro
 
             // Handle Labour
             if (initialData.labour && initialData.labour.length > 0) {
-                const aiLabour = initialData.labour[0];
-                newLabourMap[globalActivity.id] = {
-                    id: `lab_${Date.now()}`,
-                    type: (aiLabour.type as any) || 'HIRED',
-                    count: aiLabour.count || 0,
-                    maleCount: aiLabour.maleCount,
-                    femaleCount: aiLabour.femaleCount,
-                    activity: 'Field Work',
-                    linkedActivityId: globalActivity.id,
-                    sourceText: aiLabour.sourceText,
-                    systemInterpretation: aiLabour.systemInterpretation
-                };
+                initialData.labour.forEach((aiLabour, index) => {
+                    const labourEntryId = index === 0 ? globalActivity.id : (aiLabour.id || `ai_labour_${index}`);
+                    newLabourMap[labourEntryId] = {
+                        id: aiLabour.id || `lab_${Date.now()}_${index}`,
+                        type: (aiLabour.type as any) || 'HIRED',
+                        count: aiLabour.count || 0,
+                        maleCount: aiLabour.maleCount,
+                        femaleCount: aiLabour.femaleCount,
+                        activity: aiLabour.activity || `Field Work ${index + 1}`,
+                        linkedActivityId: labourEntryId,
+                        sourceText: aiLabour.sourceText,
+                        systemInterpretation: aiLabour.systemInterpretation
+                    };
+                });
             }
 
             // Handle Crop Activities
+            const genericTitles = ['Farm Labour', 'Irrigation', 'Field Work', 'Crop Activity', 'Work Done'];
             if (initialData.cropActivities && initialData.cropActivities.length > 0) {
                 initialData.cropActivities.forEach(act => {
-                    if (act.title && !['Farm Labour', 'Irrigation', 'Field Work'].includes(act.title)) {
+                    // Add workTypes array first (most specific — e.g. "Tillage", "Pruning")
+                    act.workTypes?.forEach(wt => {
+                        if (!globalActivity.workTypes?.includes(wt)) {
+                            globalActivity.workTypes = [...(globalActivity.workTypes || []), wt];
+                        }
+                    });
+                    // Add title only if it's a specific name, not a generic placeholder
+                    if (act.title && !genericTitles.includes(act.title)) {
                         if (!globalActivity.workTypes?.includes(act.title)) {
                             globalActivity.workTypes = [...(globalActivity.workTypes || []), act.title];
                         }
@@ -337,11 +436,11 @@ const ManualEntry: React.FC<ManualEntryProps> = ({ context, crops, defaults, pro
                 }
                 newInputMap[globalActivity.id] = initialData.inputs.map((inp, idx) => ({
                     id: `inp_${Date.now()}_${idx}`,
-                    type: 'pesticide' as const,
+                    type: (inp.type as any) || 'pesticide',
                     quantity: inp.quantity || 0,
-                    unit: 'L',
+                    unit: inp.unit || 'L',
                     linkedActivityId: globalActivity.id,
-                    method: inp.method || 'Spray',
+                    method: inp.method || (inp.type === 'fertilizer' ? 'Soil' : 'Spray'),
                     mix: [{ id: `mix_${Date.now()}`, productName: inp.productName || 'Unknown', dose: 0, unit: 'ml/L' }],
                     sourceText: inp.sourceText,
                     systemInterpretation: inp.systemInterpretation
@@ -363,6 +462,41 @@ const ManualEntry: React.FC<ManualEntryProps> = ({ context, crops, defaults, pro
                 };
             } else if (hasSpray) {
                 newMachineryMap[globalActivity.id] = { id: `mach_${Date.now()}_auto`, type: 'tractor', ownership: 'owned', hoursUsed: 2, linkedActivityId: globalActivity.id };
+            }
+
+            // Handle Disturbance → create blocked bucket markers
+            if (initialData.disturbance) {
+                const dist = initialData.disturbance;
+                // Map disturbance group to BucketIssue type
+                const issueTypeMap: Record<string, 'MACHINERY' | 'ELECTRICITY' | 'WEATHER' | 'WATER_SOURCE' | 'OTHER'> = {
+                    equipment: 'MACHINERY',
+                    electricity: 'ELECTRICITY',
+                    power: 'ELECTRICITY',
+                    weather: 'WEATHER',
+                    rain: 'WEATHER',
+                    water: 'WATER_SOURCE',
+                };
+                const issueType = issueTypeMap[dist.group?.toLowerCase() || ''] || 'OTHER';
+                const issueSeverity: 'LOW' | 'MEDIUM' | 'HIGH' = (dist.severity as 'LOW' | 'MEDIUM' | 'HIGH') || 'HIGH';
+
+                // Irrigation blocked → create an irrigation event with issue (shows amber bucket)
+                if (dist.blockedSegments?.includes('irrigation') && !newIrrigationMap[globalActivity.id]) {
+                    newIrrigationMap[globalActivity.id] = {
+                        id: `irr_blocked_${Date.now()}`,
+                        method: 'Drip',
+                        source: 'Bore',
+                        durationHours: 0,
+                        linkedActivityId: globalActivity.id,
+                        issue: {
+                            issueType,
+                            reason: dist.reason || 'Equipment failure',
+                            note: dist.note || '',
+                            severity: issueSeverity,
+                            sourceText: dist.note
+                        },
+                        sourceText: dist.note
+                    };
+                }
             }
 
             // Handle Expenses/Observations/Tasks/Transcript
@@ -409,7 +543,12 @@ const ManualEntry: React.FC<ManualEntryProps> = ({ context, crops, defaults, pro
         setExpenses(currentExpenses);
         setObservations(currentObservations);
         setPlannedTasks(currentTasks);
-        if (initialData && onDataConsumed) onDataConsumed();
+        if (initialData) {
+            // Mark guard so subsequent re-runs (after onDataConsumed nullifies
+            // initialData) do not reset the form we just pre-filled.
+            hasVoiceDataBeenApplied.current = true;
+            if (onDataConsumed) onDataConsumed();
+        }
 
     }, [initialData, activePlot, defaults, profile, todayLogs]);
 
@@ -716,21 +855,85 @@ const ManualEntry: React.FC<ManualEntryProps> = ({ context, crops, defaults, pro
         );
     };
 
-    // If context has multiple plots and no single active plot is chosen, render selector
-    if (!activePlot && context && (context.selection.length > 1 || (context.selection.length === 1 && context.selection[0].selectedPlotIds.length > 1))) {
-        return <div className="w-full pb-24 relative">{renderPlotSelector()}</div>;
-    }
-
     // Default counts if map not provided or plot not found
-    const currentCounts = (activePlot && todayCountsMap) ? todayCountsMap[activePlot.id] : {
-        cropActivities: 0,
-        irrigation: 0,
-        labour: 0,
-        inputs: 0,
-        machinery: 0,
-        disturbance: 0,
-        observations: 0 // Default
-    };
+    const selectedPlotIds = context?.selection.flatMap(selection => selection.selectedPlotIds) || [];
+    const currentCounts = selectedPlotIds.length > 0 && todayCountsMap
+        ? selectedPlotIds.reduce((acc, plotId) => {
+            const next = todayCountsMap[plotId];
+            if (!next) return acc;
+
+            return {
+                cropActivities: acc.cropActivities + (next.cropActivities || 0),
+                irrigation: acc.irrigation + (next.irrigation || 0),
+                labour: acc.labour + (next.labour || 0),
+                inputs: acc.inputs + (next.inputs || 0),
+                machinery: acc.machinery + (next.machinery || 0),
+                disturbance: acc.disturbance + (next.disturbance || 0),
+                observations: acc.observations + (next.observations || 0),
+                activityExpenses: (acc as any).activityExpenses + ((next as any).activityExpenses || 0),
+                reminders: (acc as any).reminders + ((next as any).reminders || 0),
+                harvest: (acc as any).harvest + ((next as any).harvest || 0)
+            } as any;
+        }, {
+            cropActivities: 0,
+            irrigation: 0,
+            labour: 0,
+            inputs: 0,
+            machinery: 0,
+            disturbance: 0,
+            observations: 0,
+            activityExpenses: 0,
+            reminders: 0,
+            harvest: 0
+        } as any)
+        : {
+            cropActivities: 0,
+            irrigation: 0,
+            labour: 0,
+            inputs: 0,
+            machinery: 0,
+            disturbance: 0,
+            observations: 0,
+            activityExpenses: 0,
+            reminders: 0,
+            harvest: 0
+        };
+
+    const selectedPlotSummary = (() => {
+        if (!context || context.selection.length === 0) return 'No selection';
+        const selectedPairs = context.selection.flatMap(selection =>
+            selection.selectedPlotNames.map(plotName => ({
+                cropName: selection.cropName,
+                plotName
+            }))
+        );
+
+        if (selectedPairs.length === 1) {
+            return `${selectedPairs[0].cropName} • ${selectedPairs[0].plotName}`;
+        }
+
+        return `${selectedPairs.length} plots across ${context.selection.length} crops`;
+    })();
+
+    const selectedTargetGroups: TargetSelectionGroup[] = (context?.selection || []).map((selection) => {
+        const crop = crops.find(item => item.id === selection.cropId);
+        return {
+            cropId: selection.cropId,
+            cropName: selection.cropName,
+            iconName: crop?.iconName,
+            color: crop?.color || 'bg-slate-500',
+            plotNames: selection.selectedPlotNames,
+        };
+    }).filter(group => group.plotNames.length > 0);
+
+    const labourEntries = Object.values(labourMap);
+    const totalWorkerCount = labourEntries.reduce((sum, entry) => {
+        if (typeof entry.count === 'number' && entry.count > 0) {
+            return sum + entry.count;
+        }
+
+        return sum + (entry.maleCount || 0) + (entry.femaleCount || 0);
+    }, 0);
 
 
 
@@ -749,9 +952,13 @@ const ManualEntry: React.FC<ManualEntryProps> = ({ context, crops, defaults, pro
                 date={new Date().toISOString()}
                 context={context}
                 activeCrop={activeCrop}
-                activePlotName={context?.selection[0].selectedPlotNames.join(', ')}
-                todayCounts={activePlot ? (todayCountsMap?.[activePlot.id] || { cropActivities: 0, irrigation: 0, labour: 0, inputs: 0, machinery: 0, activityExpenses: 0, observations: 0, disturbance: 0, reminders: 0, harvest: 0 }) : { cropActivities: 0, irrigation: 0, labour: 0, inputs: 0, machinery: 0, activityExpenses: 0, observations: 0, disturbance: 0, reminders: 0, harvest: 0 }}
+                activePlotName={selectedPlotSummary}
+                todayCounts={currentCounts as any}
             />
+
+            {selectedPlotIds.length > 1 && (
+                <MultiTargetDestinationCard groups={selectedTargetGroups} />
+            )}
 
             {/* OPERATOR ATTRIBUTION */}
             <div className="px-4 py-2 flex justify-between items-center text-xs text-slate-500 bg-slate-50/50 border-b border-slate-100 mb-4 mx-4 rounded-b-xl -mt-2 pt-4">
@@ -881,6 +1088,40 @@ const ManualEntry: React.FC<ManualEntryProps> = ({ context, crops, defaults, pro
                 )}
             </div>
 
+            {labourEntries.length > 0 && (
+                <div className="mb-6 rounded-2xl border border-orange-200 bg-orange-50/60 p-4">
+                    <div className="flex items-center justify-between gap-3">
+                        <div>
+                            <p className="text-xs font-black uppercase tracking-[0.18em] text-orange-700">Labour Review</p>
+                            <p className="mt-1 text-sm font-semibold text-stone-700">
+                                Total workers: {totalWorkerCount} ({labourEntries.map(entry => entry.count || ((entry.maleCount || 0) + (entry.femaleCount || 0))).join(' + ')})
+                            </p>
+                        </div>
+                    </div>
+
+                    <div className="mt-3 space-y-2">
+                        {labourEntries.map((entry, index) => (
+                            <div key={`${entry.id}-${index}`} className="rounded-xl border border-orange-100 bg-white/90 px-3 py-3">
+                                <div className="flex flex-wrap items-center gap-2">
+                                    <span className="rounded-full bg-orange-100 px-2 py-1 text-[10px] font-bold uppercase tracking-wide text-orange-700">
+                                        {entry.activity || 'Labour'}
+                                    </span>
+                                    <span className="text-sm font-bold text-stone-800">
+                                        {entry.count || ((entry.maleCount || 0) + (entry.femaleCount || 0))} workers
+                                    </span>
+                                </div>
+                                {entry.sourceText && (
+                                    <p className="mt-2 text-xs italic text-stone-500">"{entry.sourceText}"</p>
+                                )}
+                                {entry.systemInterpretation && (
+                                    <p className="mt-1 text-[11px] font-medium text-stone-600">{entry.systemInterpretation}</p>
+                                )}
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            )}
+
             {/* ACTIVITY LEDGER FORM */}
             <div className={`space-y-4 min-h-[200px] border-l-2 pl-4 transition-colors ${selectedLogId ? 'border-amber-200' : 'border-emerald-100/50'}`}>
 
@@ -977,7 +1218,7 @@ const ManualEntry: React.FC<ManualEntryProps> = ({ context, crops, defaults, pro
                     setObservations(prev => [...prev, note]);
                 }}
                 existingNotes={observations}
-                crops={activeCrop ? [activeCrop] : []}
+                crops={crops}
                 selectedCropId={activeCrop?.id}
                 selectedPlotId={activePlot?.id}
                 selectedDate={new Date().toLocaleDateString('en-CA')} // YYYY-MM-DD

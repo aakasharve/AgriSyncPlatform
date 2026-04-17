@@ -1,5 +1,7 @@
 import React from 'react';
 import { Droplets, Sprout, SprayCan, CheckCircle2, AlertTriangle, XCircle, Minus, Hammer, AlertCircle, Thermometer, Cloud, Wind } from 'lucide-react';
+import { formatTemperature, formatHumidity } from '../../../shared/utils/weatherFormatter';
+
 
 export type BlockStatus = 'DONE' | 'MISSED' | 'PENDING' | 'PLANNED' | 'NOT_REQUIRED';
 
@@ -170,14 +172,14 @@ const DayCard: React.FC<DayCardProps & { isPast?: boolean, dayType?: 'CYCLE' | '
                             {/* Temp */}
                             <div className="flex items-center gap-1 min-w-[50px]">
                                 <Thermometer size={12} className="opacity-60" />
-                                <span className="font-bold">{Math.round(weatherContext.tempC)}°C</span>
+                                <span className="font-bold">{formatTemperature(weatherContext.tempC)}</span>
                             </div>
 
                             {/* Humidity */}
                             {weatherContext.humidity !== undefined && (
                                 <div className="flex items-center gap-1 min-w-[50px]">
                                     <Droplets size={12} className="opacity-60" />
-                                    <span>{weatherContext.humidity}%</span>
+                                    <span>{formatHumidity(weatherContext.humidity)}</span>
                                 </div>
                             )}
 

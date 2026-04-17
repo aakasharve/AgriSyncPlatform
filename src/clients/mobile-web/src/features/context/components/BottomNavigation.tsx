@@ -14,6 +14,7 @@ interface BottomNavigationProps {
     currentView: PageView;
     onNavigate: (route: AppRoute) => void;
     onViewChange: (view: PageView) => void;
+    hidden?: boolean;
 }
 
 interface NavItemProps {
@@ -43,31 +44,31 @@ const NavItem: React.FC<NavItemProps> = ({ icon, label, active, onClick }) => (
     </button>
 );
 
-const BottomNavigation: React.FC<BottomNavigationProps> = ({ currentRoute, currentView, onNavigate, onViewChange }) => {
+const BottomNavigation: React.FC<BottomNavigationProps> = ({ currentRoute, currentView, onNavigate, onViewChange, hidden = false }) => {
     const { t } = useLanguage();
 
     const handleNavClick = (route: AppRoute) => {
-        hapticFeedback.light();
+        hapticFeedback.medium();
         onNavigate(route);
     };
 
     const isActive = (route: AppRoute) => currentRoute === route;
 
     return (
-        <nav className="fixed bottom-0 left-0 right-0 z-50 bg-white/95 backdrop-blur-md border-t border-stone-100 pb-safe-area shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.02)]">
-            <div className="max-w-md mx-auto flex items-end justify-center h-[72px] px-2 pb-2">
+        <nav className={`fixed bottom-0 left-0 right-0 z-50 border-t border-stone-100 bg-white/95 pb-safe-area backdrop-blur-md shadow-[0_-8px_24px_-4px_rgba(0,0,0,0.10)] transition-all duration-200 ${hidden ? 'pointer-events-none translate-y-full opacity-0' : 'translate-y-0 opacity-100'}`}>
+            <div aria-hidden="true" className="pointer-events-none absolute -top-8 left-0 right-0 h-8 bg-gradient-to-b from-transparent to-[rgba(250,250,249,0.92)]" />
+            <div className="page-content pl-safe-area pr-safe-area flex h-[80px] items-end justify-center pb-2">
 
                 {/* PROCUREMENT SECTION */}
                 <button
                     onClick={() => handleNavClick('procurement')}
                     className={`
-                        flex flex-col items-center justify-end pb-2 w-20 transition-all duration-200 group
-                        ${isActive('procurement') ? 'scale-110' : 'hover:opacity-100'}
+                        flex w-20 flex-col items-center justify-end pb-1 transition-all duration-200 group
                     `}
                 >
                     <div className={`
-                        mb-1 transition-all duration-200
-                        ${isActive('procurement') ? 'drop-shadow-lg filter' : ''}
+                        mb-1 rounded-2xl px-3 py-1 transition-all duration-200
+                        ${isActive('procurement') ? 'bg-emerald-100' : ''}
                     `}>
                         <img
                             src="/assets/Procurement_rb.png"
@@ -75,9 +76,10 @@ const BottomNavigation: React.FC<BottomNavigationProps> = ({ currentRoute, curre
                             className={`w-9 h-9 object-contain`}
                         />
                     </div>
-                    <span className={`text-[10px] font-bold tracking-tight ${isActive('procurement') ? 'text-emerald-800' : 'text-stone-700'}`}>
+                    <span className={`text-[10px] tracking-tight ${isActive('procurement') ? 'font-extrabold text-emerald-700' : 'font-bold text-stone-700'}`}>
                         {t('nav.procure')}
                     </span>
+                    <span className={`mt-1 h-1 w-1 rounded-full bg-emerald-600 transition-opacity ${isActive('procurement') ? 'opacity-100' : 'opacity-0'}`} />
                 </button>
 
                 {/* SCHEDULE (CENTER - BIG BUTTON) */}
@@ -113,13 +115,12 @@ const BottomNavigation: React.FC<BottomNavigationProps> = ({ currentRoute, curre
                 <button
                     onClick={() => handleNavClick('income')}
                     className={`
-                        flex flex-col items-center justify-end pb-2 w-20 transition-all duration-200 group
-                        ${isActive('income') ? 'scale-110' : 'hover:opacity-100'}
+                        flex w-20 flex-col items-center justify-end pb-1 transition-all duration-200 group
                     `}
                 >
                     <div className={`
-                        mb-1 transition-all duration-200
-                        ${isActive('income') ? 'drop-shadow-lg filter' : ''}
+                        mb-1 rounded-2xl px-3 py-1 transition-all duration-200
+                        ${isActive('income') ? 'bg-emerald-100' : ''}
                     `}>
                         <img
                             src="/assets/Income_Rb.png"
@@ -127,9 +128,10 @@ const BottomNavigation: React.FC<BottomNavigationProps> = ({ currentRoute, curre
                             className={`w-10 h-10 object-contain`}
                         />
                     </div>
-                    <span className={`text-[10px] font-bold tracking-tight ${isActive('income') ? 'text-emerald-800' : 'text-stone-700'}`}>
+                    <span className={`text-[10px] tracking-tight ${isActive('income') ? 'font-extrabold text-emerald-700' : 'font-bold text-stone-700'}`}>
                         {t('nav.income')}
                     </span>
+                    <span className={`mt-1 h-1 w-1 rounded-full bg-emerald-600 transition-opacity ${isActive('income') ? 'opacity-100' : 'opacity-0'}`} />
                 </button>
 
             </div>

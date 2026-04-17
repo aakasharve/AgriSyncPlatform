@@ -444,8 +444,15 @@ static async Task InitializeApplicationDataAsync(WebApplication app)
             ? await EnsureContextTablesCreatedAsync(ssfContext, "ssf", "farms")
             : await MigrateContextAsync(ssfContext, "ShramSafalDbContext");
 
-        var blankSeeder = services.GetRequiredService<AgriSync.Bootstrapper.Infrastructure.BlankTestUserSeeder>();
-        await blankSeeder.SeedAsync();
+        var seedBlankTestUser = app.Environment.IsDevelopment() || string.Equals(
+            Environment.GetEnvironmentVariable("SEED_BLANK_TEST_USER"),
+            "true",
+            StringComparison.OrdinalIgnoreCase);
+        if (seedBlankTestUser)
+        {
+            var blankSeeder = services.GetRequiredService<AgriSync.Bootstrapper.Infrastructure.BlankTestUserSeeder>();
+            await blankSeeder.SeedAsync();
+        }
 
         var seedRamuDemo = string.Equals(
             Environment.GetEnvironmentVariable("SEED_RAMU_DEMO"),

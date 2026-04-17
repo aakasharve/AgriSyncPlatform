@@ -1,5 +1,4 @@
 import { mutationQueue } from '../../../infrastructure/sync/MutationQueue';
-import { idGenerator } from '../../../core/domain/services/IdGenerator';
 
 export interface LocationPayload {
      latitude: number;
@@ -22,7 +21,7 @@ export interface CreateDailyLogPayload {
 
 export class CreateDailyLogCommand {
      static async enqueue(payload: CreateDailyLogPayload): Promise<string> {
-          const clientRequestId = idGenerator.generate();
+          const clientRequestId = `create_daily_log:${payload.dailyLogId}`;
           return mutationQueue.enqueue('create_daily_log', payload, {
                clientRequestId,
                clientCommandId: clientRequestId

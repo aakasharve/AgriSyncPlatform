@@ -84,8 +84,8 @@ const VerifyActionBar: React.FC<VerifyActionBarProps> = ({
     };
 
     return (
-        <div className="fixed bottom-0 left-0 right-0 p-4 bg-white/80 backdrop-blur-md border-t border-stone-200 shadow-up-lg z-50 animate-in slide-in-from-bottom-4">
-            <div className="max-w-md mx-auto">
+        <div className="fixed bottom-0 left-0 right-0 z-50 border-t border-stone-200 bg-white/80 p-4 pb-safe-area backdrop-blur-md shadow-up-lg animate-in slide-in-from-bottom-4">
+            <div className="page-content">
                 {selectedTransition ? (
                     // Reason input mode
                     <div>

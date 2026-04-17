@@ -13,7 +13,7 @@ interface ViewHelpers {
 
 interface UiRuntime {
     handleReset: () => void;
-    lastSavedLogSummary: Array<{ cropName: string; count: number }>;
+    lastSavedLogSummary: AgriLogRuntime['lastSavedLogSummary'];
     lastSavedLogIds: string[];
 }
 

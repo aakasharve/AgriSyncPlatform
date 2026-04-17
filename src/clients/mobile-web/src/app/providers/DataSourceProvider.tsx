@@ -12,6 +12,7 @@ import { seedHarvestSessions } from '../../services/harvestService'; // To be re
 import { procurementRepository } from '../../services/procurementRepository'; // To be refactored later
 import { legacyAuditPort } from '../../infrastructure/audit/LegacyAuditPort';
 import { useAuth } from './AuthProvider';
+import { getDatabase } from '../../infrastructure/storage/DexieDatabase';
 
 // --- CONTEXT ---
 
@@ -25,10 +26,16 @@ interface DataSourceContextValue {
 
 const DataSourceContext = createContext<DataSourceContextValue | null>(null);
 
+const ACTIVE_USER_ID_KEY = 'agrisync_active_user_id_v1';
+const REAL_MODE_LOCAL_STORAGE_KEYS = [
+    'crops',
+    'farmer_profile',
+] as const;
+
 // --- PROVIDER ---
 
 export const DataSourceProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-    const { isAuthenticated } = useAuth();
+    const { isAuthenticated, session } = useAuth();
     const [isLoading, setIsLoading] = useState<boolean>(true);
     const [isDemoMode, setIsDemoMode] = useState<boolean>(false);
 
@@ -101,6 +108,62 @@ export const DataSourceProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         // Effect will trigger switch
     };
 
+    const resetAuthenticatedUserCacheIfNeeded = async (nextUserId: string) => {
+        const previousUserId = localStorage.getItem(ACTIVE_USER_ID_KEY);
+        if (previousUserId === nextUserId) {
+            return;
+        }
+
+        console.info(`[DataSource] Authenticated user changed (${previousUserId ?? 'none'} -> ${nextUserId}). Resetting cached user state.`);
+
+        const db = getDatabase();
+        await db.transaction('rw', [
+            db.logs,
+            db.outbox,
+            db.mutationQueue,
+            db.attachments,
+            db.uploadQueue,
+            db.pendingAiJobs,
+            db.auditEvents,
+            db.syncCursors,
+            db.appMeta,
+            db.referenceData,
+            db.dayLedgers,
+            db.plannedTasks,
+            db.farms,
+            db.plots,
+            db.cropCycles,
+            db.costEntries,
+            db.financeCorrections,
+        ], async () => {
+            await Promise.all([
+                db.logs.clear(),
+                db.outbox.clear(),
+                db.mutationQueue.clear(),
+                db.attachments.clear(),
+                db.uploadQueue.clear(),
+                db.pendingAiJobs.clear(),
+                db.auditEvents.clear(),
+                db.syncCursors.clear(),
+                db.appMeta.clear(),
+                db.referenceData.clear(),
+                db.dayLedgers.clear(),
+                db.plannedTasks.clear(),
+                db.farms.clear(),
+                db.plots.clear(),
+                db.cropCycles.clear(),
+                db.costEntries.clear(),
+                db.financeCorrections.clear(),
+            ]);
+        });
+
+        for (const baseKey of REAL_MODE_LOCAL_STORAGE_KEYS) {
+            localStorage.removeItem(storageNamespace.getKey(baseKey));
+        }
+
+        localStorage.setItem(ACTIVE_USER_ID_KEY, nextUserId);
+    };
+
     // Handle Mode Switching & Initialization
     useEffect(() => {
         const init = async () => {
@@ -115,6 +178,9 @@ export const DataSourceProvider: React.FC<{ children: React.ReactNode }> = ({ ch
                 if (isDemoMode) {
                     await seedDemoDataIfNeeded();
                 } else {
+                    if (session?.userId) {
+                        await resetAuthenticatedUserCacheIfNeeded(session.userId);
+                    }
                     backgroundSyncWorker.start();
                     attachmentUploadWorker.start();
                 }
@@ -131,7 +197,7 @@ export const DataSourceProvider: React.FC<{ children: React.ReactNode }> = ({ ch
             backgroundSyncWorker.stop();
             attachmentUploadWorker.stop();
         };
-    }, [isAuthenticated, isDemoMode, dataSource]);
+    }, [isAuthenticated, isDemoMode, dataSource, session?.userId]);
 
     const value: DataSourceContextValue = {
         dataSource,

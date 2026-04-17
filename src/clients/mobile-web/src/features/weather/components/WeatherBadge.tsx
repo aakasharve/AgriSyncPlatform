@@ -6,6 +6,8 @@
 import React from 'react';
 import { Cloud, CloudRain, Sun, Wind, Zap } from 'lucide-react';
 import { WeatherSnapshot } from '../../../types';
+import { formatTemperature, formatHumidity, formatPrecipitation } from '../../../shared/utils/weatherFormatter';
+
 
 interface WeatherBadgeProps {
     weather?: WeatherSnapshot;
@@ -38,9 +40,9 @@ const WeatherBadge: React.FC<WeatherBadgeProps> = ({ weather, variant = 'minimal
 
     if (variant === 'minimal') {
         return (
-            <div className={`flex items-center gap-1.5 px-2 py-0.5 rounded-md border text-[10px] font-bold ${colorClass}`}>
+             <div className={`flex items-center gap-1.5 px-2 py-0.5 rounded-md border text-[10px] font-bold ${colorClass}`}>
                 {getIcon()}
-                <span>{current.tempC}°C</span>
+                <span>{formatTemperature(current.tempC)}</span>
             </div>
         );
     }
@@ -48,10 +50,10 @@ const WeatherBadge: React.FC<WeatherBadgeProps> = ({ weather, variant = 'minimal
     return (
         <div className={`flex items-center gap-3 px-3 py-2 rounded-xl border ${colorClass}`}>
             <div className="p-1 bg-white/40 rounded-full">{getIcon()}</div>
-            <div className="flex flex-col leading-none">
-                <span className="font-bold text-sm">{current.tempC}°C • {current.conditionText}</span>
+             <div className="flex flex-col leading-none">
+                <span className="font-bold text-sm">{formatTemperature(current.tempC)} • {current.conditionText}</span>
                 <span className="text-[10px] opacity-80 mt-0.5">
-                    Hum: {current.humidity}% {current.precipMm > 0 ? `• Rain: ${current.precipMm}mm` : ''}
+                    Hum: {formatHumidity(current.humidity)} {current.precipMm > 0 ? `• Rain: ${formatPrecipitation(current.precipMm)}` : ''}
                 </span>
             </div>
         </div>

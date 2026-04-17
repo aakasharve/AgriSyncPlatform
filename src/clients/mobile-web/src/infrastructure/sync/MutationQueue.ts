@@ -98,11 +98,13 @@ export class MutationQueue {
 
     async getPending(limit = 50): Promise<MutationQueueItem[]> {
         const db = getDatabase();
-        return db.mutationQueue
+        const items = await db.mutationQueue
             .where('status')
             .equals('PENDING')
             .limit(limit)
             .toArray();
+
+        return items.sort((left, right) => (left.id ?? 0) - (right.id ?? 0));
     }
 
     async markSending(id: number): Promise<void> {

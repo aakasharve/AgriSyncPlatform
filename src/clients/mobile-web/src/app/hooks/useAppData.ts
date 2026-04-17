@@ -9,6 +9,9 @@ import { ProcurementExpense } from '../../features/procurement/procurement.types
 import { backgroundSyncWorker } from '../../infrastructure/sync/BackgroundSyncWorker';
 import { useAuth } from '../providers/AuthProvider';
 import { generateDemoHarvestSessions, generateDemoPlannedTasks, generateDemoProcurementExpenses } from '../../features/demo/DemoDataService';
+import { getDatabase } from '../../infrastructure/storage/DexieDatabase';
+
+const PLANNED_TASKS_META_KEY = 'agrisync_local_planned_tasks_v1';
 
 export interface UseAppDataResult {
     // State
@@ -156,6 +159,7 @@ export const useAppData = (_props?: UseAppDataProps): UseAppDataResult => {
         let mounted = true;
 
         const hydrateRealData = async () => {
+            const db = getDatabase();
             const loadedCrops = await dataSource.crops.getAll();
             if (!mounted) return;
 
@@ -172,7 +176,9 @@ export const useAppData = (_props?: UseAppDataProps): UseAppDataResult => {
             if (!mounted) return;
             setHistory(loadedLogs);
 
-            setPlannedTasks([]);
+            const plannedTasksMeta = await db.appMeta.get(PLANNED_TASKS_META_KEY);
+            if (!mounted) return;
+            setPlannedTasks(Array.isArray(plannedTasksMeta?.value) ? plannedTasksMeta.value as PlannedTask[] : []);
             setHarvestSessions([]);
             setProcurementExpenses([]);
         };
@@ -229,6 +235,27 @@ export const useAppData = (_props?: UseAppDataProps): UseAppDataResult => {
             }
         };
     }, [dataSource, isDemoMode, isAuthenticated]);
+
+    useEffect(() => {
+        if (isDemoMode) {
+            return;
+        }
+
+        const persistPlannedTasks = async () => {
+            try {
+                const db = getDatabase();
+                await db.appMeta.put({
+                    key: PLANNED_TASKS_META_KEY,
+                    value: plannedTasks,
+                    updatedAt: new Date().toISOString(),
+                });
+            } catch (error) {
+                console.error('Failed to persist planned tasks', error);
+            }
+        };
+
+        void persistPlannedTasks();
+    }, [plannedTasks, isDemoMode]);
 
     // --- HANDLERS ---
 

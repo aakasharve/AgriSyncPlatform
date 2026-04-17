@@ -218,7 +218,7 @@ export class BackgroundSyncWorker {
     }
 
     private async pullLatestDeltas(): Promise<void> {
-        const sinceCursor = await mutationQueue.getCursor() ?? new Date(0).toISOString();
+        const sinceCursor = await mutationQueue.getCursor() ?? '0';
         const payload = await agriSyncClient.pullSyncChanges(sinceCursor);
         await mutationQueue.saveLastPullPayload(payload);
         await reconcileSyncPull(payload);

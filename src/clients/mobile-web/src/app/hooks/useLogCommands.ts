@@ -8,15 +8,18 @@ import { logger } from '../../infrastructure/observability/Logger';
 import { CorrelationId } from '../../infrastructure/observability/CorrelationContext';
 import { WeatherPort } from '../../application/ports/WeatherPort';
 import { computeDayState } from '../../shared/utils/dayState';
+import type { LastSavedLogSummaryItem } from '../uiRuntimeTypes';
 
 // ARCHITECTURE FIX: Import Service Class and Hook
 import { LogCommandServiceImpl } from '../../application/services/LogCommandService';
 import { useDataSource } from '../providers/DataSourceProvider';
+import { enqueueLogsForSync } from '../../features/logs/services/logSyncMutationService';
 
 export interface UseLogCommandsResult {
     handleAutoSave: (logData: AgriLogResponse, provenance?: LogProvenance) => Promise<void>;
     handleFinalConfirm: (editedData: AgriLogResponse | null, draftLog: AgriLogResponse | null) => Promise<void>;
     handleManualSubmit: (data: any) => Promise<void>;
+    handleWizardSubmit: (logs: DailyLog[]) => Promise<void>;
     handleUpdateNote: (logId: string, noteId: string, updates: any) => void;
     // Exposed for testing/advanced usage
     service: LogCommandServiceImpl;
@@ -46,7 +49,7 @@ interface UseLogCommandsProps {
     setMode: (mode: InputMode) => void;
     setMainView: (view: PageView) => void;
     setStatus: (status: AppStatus) => void;
-    setLastSavedLogSummary: React.Dispatch<React.SetStateAction<Array<{ cropName: string, count: number }>>>;
+    setLastSavedLogSummary: React.Dispatch<React.SetStateAction<LastSavedLogSummaryItem[]>>;
     setLastSavedLogIds: React.Dispatch<React.SetStateAction<string[]>>;
     weatherProvider?: WeatherPort;
 }
@@ -91,11 +94,19 @@ export const useLogCommands = ({
 
     // --- HELPER: CALCULATE SUMMARY ---
     const calculateLogSummary = (logs: DailyLog[]) => {
-        const summary = logs.map(log => {
-            const contextCropId = log.context.selection[0]?.cropId;
+        const summary: LastSavedLogSummaryItem[] = logs.map(log => {
+            const selection = log.context.selection[0];
+            const contextCropId = selection?.cropId;
             const cropName = contextCropId === 'FARM_GLOBAL'
                 ? 'Farm'
                 : crops.find(c => c.id === contextCropId)?.name || 'Unknown Crop';
+            const plotId = selection?.selectedPlotIds?.[0];
+            const plotName = selection?.selectedPlotNames?.[0]
+                || crops
+                    .find(crop => crop.id === contextCropId)
+                    ?.plots.find(plot => plot.id === plotId)
+                    ?.name
+                || 'Farm';
 
             const count = (log.cropActivities?.length || 0) +
                 (log.labour?.length || 0) +
@@ -103,7 +114,14 @@ export const useLogCommands = ({
                 (log.machinery?.length || 0) +
                 countSuccessfulIrrigationEvents(log.irrigation || []);
 
-            return { cropName, count };
+            return {
+                logId: log.id,
+                cropId: contextCropId,
+                cropName,
+                plotId,
+                plotName,
+                count,
+            };
         });
         setLastSavedLogSummary(summary);
     };
@@ -169,11 +187,14 @@ export const useLogCommands = ({
                 newLogs,
                 setHistory // Update UI
             );
+            if (!isDemoMode) {
+                await enqueueLogsForSync(newLogs);
+            }
 
             // Sync: Extract and add any planned tasks from the new logs to global state
             const newTasks = newLogs.flatMap(l => l.plannedTasks || []);
             if (newTasks.length > 0) {
-                setPlannedTasks(prev => [...prev, ...newTasks]);
+                setPlannedTasks(prev => mergeUniqueTasks(prev, newTasks));
             }
 
             // Calculate Summary for Feedback
@@ -225,11 +246,14 @@ export const useLogCommands = ({
                 newLogs,
                 setHistory
             );
+            if (!isDemoMode) {
+                await enqueueLogsForSync(newLogs);
+            }
 
             // Sync: Extract and add any planned tasks from the new logs to global state
             const newCreatedTasks = newLogs.flatMap(l => l.plannedTasks || []);
             if (newCreatedTasks.length > 0) {
-                setPlannedTasks(prev => [...prev, ...newCreatedTasks]);
+                setPlannedTasks(prev => mergeUniqueTasks(prev, newCreatedTasks));
             }
 
             setDraftLog(null);
@@ -307,11 +331,14 @@ export const useLogCommands = ({
                     newLogs,
                     setHistory
                 );
+                if (!isDemoMode) {
+                    await enqueueLogsForSync(newLogs);
+                }
 
                 // Sync
                 const manualTasks = newLogs.flatMap(l => l.plannedTasks || []);
                 if (manualTasks.length > 0) {
-                    setPlannedTasks(prev => [...prev, ...manualTasks]);
+                    setPlannedTasks(prev => mergeUniqueTasks(prev, manualTasks));
                 }
 
                 calculateLogSummary(newLogs);
@@ -331,6 +358,40 @@ export const useLogCommands = ({
             setError("Failed to save logs. Please try again.");
         }
     }, [hasActiveLogContext, logScope, crops, farmerProfile, logCommandService, setHistory, setPlannedTasks, setStatus, setError, setLastSavedLogSummary, setLastSavedLogIds, computeClosureDelta, history, setToast]);
+
+    const handleWizardSubmit = useCallback(async (logs: DailyLog[]) => {
+        if (logs.length === 0) {
+            setError('No plots selected for this log.');
+            return;
+        }
+
+        try {
+            await logCommandService.confirmAndSave(logs, setHistory);
+            if (!isDemoMode) {
+                await enqueueLogsForSync(logs);
+            }
+
+            const wizardTasks = logs.flatMap(log => log.plannedTasks || []);
+            if (wizardTasks.length > 0) {
+                setPlannedTasks(prev => mergeUniqueTasks(prev, wizardTasks));
+            }
+
+            calculateLogSummary(logs);
+            setLastSavedLogIds(logs.map(log => log.id));
+
+            const nextHistory = [...logs, ...history];
+            const { beforePercent, afterPercent } = computeClosureDelta(history, nextHistory);
+            setToast({
+                message: `Logged once. Saved to ${logs.length} plots. Day closure: ${beforePercent}% -> ${afterPercent}%`,
+                type: 'success'
+            });
+
+            setStatus('success');
+        } catch (error) {
+            console.error('Critical error in handleWizardSubmit:', error);
+            setError('Failed to save wizard logs. Please try again.');
+        }
+    }, [computeClosureDelta, history, logCommandService, setError, setHistory, setLastSavedLogIds, setLastSavedLogSummary, setPlannedTasks, setStatus, setToast]);
 
     // Note Updating - Simplified
     // This should also use Service if possible, but keeping lightweight update logic
@@ -353,7 +414,16 @@ export const useLogCommands = ({
         handleAutoSave,
         handleFinalConfirm,
         handleManualSubmit,
+        handleWizardSubmit,
         handleUpdateNote,
         service: logCommandService
     };
+};
+
+const mergeUniqueTasks = (existing: PlannedTask[], incoming: PlannedTask[]): PlannedTask[] => {
+    if (incoming.length === 0) return existing;
+    const merged = new Map<string, PlannedTask>();
+    existing.forEach(task => merged.set(task.id, task));
+    incoming.forEach(task => merged.set(task.id, task));
+    return Array.from(merged.values());
 };
