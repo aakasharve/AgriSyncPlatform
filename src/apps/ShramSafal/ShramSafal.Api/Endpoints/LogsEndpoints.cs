@@ -106,7 +106,7 @@ public static class LogsEndpoints
             IShramSafalRepository repository,
             CancellationToken ct) =>
         {
-            if (!TryGetCallerContext(user, out _, out var callerRole))
+            if (!TryGetCallerContext(user, out var callerUserId, out var callerRole))
             {
                 return Results.Unauthorized();
             }
@@ -119,6 +119,12 @@ public static class LogsEndpoints
                     error = "ShramSafal.DailyLogNotFound",
                     message = "Daily log was not found."
                 });
+            }
+
+            var canReadFarm = await repository.IsUserMemberOfFarmAsync((Guid)log.FarmId, callerUserId, ct);
+            if (!canReadFarm)
+            {
+                return Results.Forbid();
             }
 
             var currentStatus = log.CurrentVerificationStatus;

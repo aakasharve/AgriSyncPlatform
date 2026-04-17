@@ -133,10 +133,16 @@ public static class FinanceEndpoints
             string? groupBy,
             DateOnly? fromDate,
             DateOnly? toDate,
+            ClaimsPrincipal user,
             [FromServices] GetFinanceSummaryHandler handler,
             CancellationToken ct) =>
         {
-            var query = new GetFinanceSummaryQuery(groupBy ?? "day", fromDate, toDate);
+            if (!EndpointActorContext.TryGetUserId(user, out var actorUserId))
+            {
+                return Results.Unauthorized();
+            }
+
+            var query = new GetFinanceSummaryQuery(actorUserId, groupBy ?? "day", fromDate, toDate);
             var result = await handler.HandleAsync(query, ct);
             return result.IsSuccess ? Results.Ok(result.Value) : ToErrorResult(result.Error);
         })
@@ -146,11 +152,17 @@ public static class FinanceEndpoints
             Guid plotId,
             DateOnly? fromDate,
             DateOnly? toDate,
+            ClaimsPrincipal user,
             [FromServices] GetPlotFinanceSummaryHandler handler,
             CancellationToken ct) =>
         {
+            if (!EndpointActorContext.TryGetUserId(user, out var actorUserId))
+            {
+                return Results.Unauthorized();
+            }
+
             var result = await handler.HandleAsync(
-                new GetPlotFinanceSummaryQuery(plotId, fromDate, toDate),
+                new GetPlotFinanceSummaryQuery(actorUserId, plotId, fromDate, toDate),
                 ct);
 
             return result.IsSuccess ? Results.Ok(result.Value) : ToErrorResult(result.Error);
@@ -159,10 +171,16 @@ public static class FinanceEndpoints
 
         group.MapPost("/finance/duplicate-check", async (
             DuplicateCheckRequest request,
+            ClaimsPrincipal user,
             IShramSafalRepository repository,
             IClock clock,
             CancellationToken ct) =>
         {
+            if (!EndpointActorContext.TryGetUserId(user, out var actorUserId))
+            {
+                return Results.Unauthorized();
+            }
+
             if (request.FarmId == Guid.Empty ||
                 string.IsNullOrWhiteSpace(request.Category) ||
                 request.Amount <= 0)
@@ -172,6 +190,12 @@ public static class FinanceEndpoints
                     error = "ShramSafal.InvalidCommand",
                     message = "Request is invalid."
                 });
+            }
+
+            var canReadFarm = await repository.IsUserMemberOfFarmAsync(request.FarmId, actorUserId, ct);
+            if (!canReadFarm)
+            {
+                return Results.Forbid();
             }
 
             var windowMinutes = request.WindowMinutes <= 0 ? 120 : request.WindowMinutes;
@@ -185,7 +209,7 @@ public static class FinanceEndpoints
                 request.Amount,
                 request.CurrencyCode,
                 request.EntryDate,
-                request.CreatedByUserId == Guid.Empty ? Guid.NewGuid() : request.CreatedByUserId,
+                actorUserId,
                 null,
                 clock.UtcNow);
 
@@ -257,7 +281,6 @@ public sealed record DuplicateCheckRequest(
     decimal Amount,
     string CurrencyCode,
     DateOnly EntryDate,
-    Guid CreatedByUserId,
     int WindowMinutes = 120);
 
 public sealed record DuplicateCheckResponse(bool IsDuplicate, Guid? MatchedEntryId);

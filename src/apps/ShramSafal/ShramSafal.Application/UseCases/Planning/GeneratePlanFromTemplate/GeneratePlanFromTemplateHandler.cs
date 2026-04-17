@@ -15,7 +15,8 @@ public sealed class GeneratePlanFromTemplateHandler(
         GeneratePlanFromTemplateCommand command,
         CancellationToken ct = default)
     {
-        if (command.CropCycleId == Guid.Empty ||
+        if (command.ActorUserId == Guid.Empty ||
+            command.CropCycleId == Guid.Empty ||
             string.IsNullOrWhiteSpace(command.TemplateName) ||
             string.IsNullOrWhiteSpace(command.Stage) ||
             command.Activities.Count == 0)
@@ -32,6 +33,12 @@ public sealed class GeneratePlanFromTemplateHandler(
         if (cropCycle is null)
         {
             return Result.Failure<PlanGenerationResultDto>(ShramSafalErrors.CropCycleNotFound);
+        }
+
+        var canWriteFarm = await repository.IsUserMemberOfFarmAsync((Guid)cropCycle.FarmId, command.ActorUserId, ct);
+        if (!canWriteFarm)
+        {
+            return Result.Failure<PlanGenerationResultDto>(ShramSafalErrors.Forbidden);
         }
 
         var utcNow = clock.UtcNow;
@@ -71,4 +78,3 @@ public sealed class GeneratePlanFromTemplateHandler(
             plannedActivities.Select(p => p.ToDto()).ToList()));
     }
 }
-

@@ -15,7 +15,7 @@ public sealed class GetStagePlanHandler(
         GetStagePlanQuery query,
         CancellationToken ct = default)
     {
-        if (query.CropCycleId == Guid.Empty)
+        if (query.ActorUserId == Guid.Empty || query.CropCycleId == Guid.Empty)
         {
             return Result.Failure<IReadOnlyList<PlannedActivityDto>>(ShramSafalErrors.InvalidCommand);
         }
@@ -24,6 +24,12 @@ public sealed class GetStagePlanHandler(
         if (cropCycle is null)
         {
             return Result.Failure<IReadOnlyList<PlannedActivityDto>>(ShramSafalErrors.CropCycleNotFound);
+        }
+
+        var canReadFarm = await repository.IsUserMemberOfFarmAsync((Guid)cropCycle.FarmId, query.ActorUserId, ct);
+        if (!canReadFarm)
+        {
+            return Result.Failure<IReadOnlyList<PlannedActivityDto>>(ShramSafalErrors.Forbidden);
         }
 
         var plannedActivities = await repository.GetPlannedActivitiesByCropCycleIdAsync(query.CropCycleId, ct);

@@ -29,7 +29,7 @@ public static class TokenValidationExtensions
                     ValidIssuer = jwtOptions.Issuer,
                     ValidAudience = jwtOptions.Audience,
                     IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtOptions.SigningKey)),
-                    ClockSkew = TimeSpan.FromMinutes(1)
+                    ClockSkew = TimeSpan.FromSeconds(30)
                 };
             });
 
@@ -41,6 +41,11 @@ public static class TokenValidationExtensions
         if (string.IsNullOrWhiteSpace(jwtOptions.SigningKey) || jwtOptions.SigningKey.Length < 32)
         {
             throw new InvalidOperationException("JWT SigningKey must be configured and at least 32 characters. Set Jwt__SigningKey environment variable.");
+        }
+
+        if (jwtOptions.AccessTokenMinutes <= 0 || jwtOptions.AccessTokenMinutes > 15)
+        {
+            throw new InvalidOperationException("JWT AccessTokenMinutes must be between 1 and 15 minutes.");
         }
     }
 }

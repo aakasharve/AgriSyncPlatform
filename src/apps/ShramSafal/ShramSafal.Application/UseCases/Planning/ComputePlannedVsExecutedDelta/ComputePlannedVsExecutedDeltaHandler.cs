@@ -11,7 +11,7 @@ public sealed class ComputePlannedVsExecutedDeltaHandler(IShramSafalRepository r
         ComputePlannedVsExecutedDeltaQuery query,
         CancellationToken ct = default)
     {
-        if (query.CropCycleId == Guid.Empty)
+        if (query.ActorUserId == Guid.Empty || query.CropCycleId == Guid.Empty)
         {
             return Result.Failure<StageComparisonResult>(ShramSafalErrors.InvalidCommand);
         }
@@ -20,6 +20,12 @@ public sealed class ComputePlannedVsExecutedDeltaHandler(IShramSafalRepository r
         if (cropCycle is null)
         {
             return Result.Failure<StageComparisonResult>(ShramSafalErrors.CropCycleNotFound);
+        }
+
+        var canReadFarm = await repository.IsUserMemberOfFarmAsync((Guid)cropCycle.FarmId, query.ActorUserId, ct);
+        if (!canReadFarm)
+        {
+            return Result.Failure<StageComparisonResult>(ShramSafalErrors.Forbidden);
         }
 
         var planned = await repository.GetPlannedActivitiesByCropCycleIdAsync(query.CropCycleId, ct);

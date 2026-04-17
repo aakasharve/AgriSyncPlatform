@@ -10,7 +10,7 @@ public sealed class GetPlotFinanceSummaryHandler(IShramSafalRepository repositor
 {
     public async Task<Result<PlotFinanceSummaryDto>> HandleAsync(GetPlotFinanceSummaryQuery query, CancellationToken ct = default)
     {
-        if (query.PlotId == Guid.Empty)
+        if (query.ActorUserId == Guid.Empty || query.PlotId == Guid.Empty)
         {
             return Result.Failure<PlotFinanceSummaryDto>(ShramSafalErrors.InvalidCommand);
         }
@@ -24,6 +24,12 @@ public sealed class GetPlotFinanceSummaryHandler(IShramSafalRepository repositor
         if (plot is null)
         {
             return Result.Failure<PlotFinanceSummaryDto>(ShramSafalErrors.PlotNotFound);
+        }
+
+        var canReadFarm = await repository.IsUserMemberOfFarmAsync((Guid)plot.FarmId, query.ActorUserId, ct);
+        if (!canReadFarm)
+        {
+            return Result.Failure<PlotFinanceSummaryDto>(ShramSafalErrors.Forbidden);
         }
 
         var costEntries = await repository.GetCostEntriesAsync(query.FromDate, query.ToDate, ct);

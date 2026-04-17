@@ -1,4 +1,4 @@
 namespace ShramSafal.Application.UseCases.Planning.GetTodaysPlan;
 
-public sealed record GetTodaysPlanQuery(Guid CropCycleId, DateOnly? TargetDate = null);
+public sealed record GetTodaysPlanQuery(Guid ActorUserId, Guid CropCycleId, DateOnly? TargetDate = null);
 

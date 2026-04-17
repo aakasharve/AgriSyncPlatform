@@ -79,35 +79,17 @@ try
         builder.Services.AddSwaggerGen();
     }
 
+    var allowedOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>() ?? [];
+    if (allowedOrigins.Length == 0)
+    {
+        throw new InvalidOperationException("Cors:AllowedOrigins must contain at least one configured origin.");
+    }
+
     builder.Services.AddCors(options =>
     {
         options.AddPolicy("AllowFrontend", policy =>
         {
-            var origins = builder.Environment.IsDevelopment()
-                ? new[]
-                {
-                    "http://localhost:3000",
-                    "http://localhost:3001",
-                    "http://localhost:3002",
-                    "http://localhost:5173",
-                    "http://127.0.0.1:3000",
-                    "http://127.0.0.1:3001",
-                    "http://127.0.0.1:3002",
-                    "http://127.0.0.1:5173",
-                    "capacitor://localhost",
-                    "https://localhost",
-                    "http://localhost"
-                }
-                : new[]
-                {
-                    "https://app.shramsafal.in",
-                    "https://shramsafal.in",
-                    "capacitor://localhost",
-                    "https://localhost",
-                    "http://localhost"
-                };
-
-            policy.WithOrigins(origins)
+            policy.WithOrigins(allowedOrigins)
                 .WithHeaders("Content-Type", "Authorization", "X-Request-Id", "X-Device-Id")
                 .WithMethods("GET", "POST", "PUT", "DELETE", "OPTIONS")
                 .AllowCredentials();
