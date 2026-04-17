@@ -37,6 +37,10 @@ try
             .ReadFrom.Services(services)
             .Enrich.FromLogContext();
     });
+    builder.Services.Configure<HostOptions>(options =>
+    {
+        options.ShutdownTimeout = TimeSpan.FromSeconds(30);
+    });
 
     builder.Services.AddBuildingBlocks();
     builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
@@ -153,30 +157,64 @@ try
     app.UseRateLimiter();
     app.UseAuthorization();
 
-    app.MapGet("/health", async (
-        UserDbContext db,
+    app.MapGet("/health", () =>
+    {
+        return Results.Ok(new
+        {
+            status = "healthy",
+            service = "AgriSync"
+        });
+    })
+    .WithName("GetBootstrapperHealth")
+    .WithTags("System")
+    .AllowAnonymous();
+
+    app.MapGet("/health/ready", async (
+        UserDbContext userDb,
+        ShramSafal.Infrastructure.Persistence.ShramSafalDbContext ssfDb,
         ILoggerFactory loggerFactory,
         CancellationToken ct) =>
     {
         try
         {
-            var canConnect = await db.Database.CanConnectAsync(ct);
-            return canConnect
-                ? Results.Ok(new { status = "healthy", service = "AgriSync", db = "connected" })
-                : Results.Json(new { status = "unhealthy", service = "AgriSync", db = "disconnected" }, statusCode: StatusCodes.Status503ServiceUnavailable);
+            var userDbReady = await userDb.Database.CanConnectAsync(ct);
+            var shramSafalDbReady = await ssfDb.Database.CanConnectAsync(ct);
+            var ready = userDbReady && shramSafalDbReady;
+
+            return ready
+                ? Results.Ok(new
+                {
+                    status = "ready",
+                    service = "AgriSync",
+                    checks = new
+                    {
+                        userDb = "connected",
+                        shramSafalDb = "connected"
+                    }
+                })
+                : Results.Json(new
+                {
+                    status = "not_ready",
+                    service = "AgriSync",
+                    checks = new
+                    {
+                        userDb = userDbReady ? "connected" : "disconnected",
+                        shramSafalDb = shramSafalDbReady ? "connected" : "disconnected"
+                    }
+                }, statusCode: StatusCodes.Status503ServiceUnavailable);
         }
         catch (Exception ex)
         {
             loggerFactory
-                .CreateLogger("AgriSync.Bootstrapper.Health")
-                .LogError(ex, "Health check failed while probing database connectivity.");
+                .CreateLogger("AgriSync.Bootstrapper.Readiness")
+                .LogError(ex, "Readiness check failed while probing database connectivity.");
 
             return Results.Json(
-                new { status = "unhealthy", service = "AgriSync", db = "error" },
+                new { status = "not_ready", service = "AgriSync", checks = new { userDb = "error", shramSafalDb = "error" } },
                 statusCode: StatusCodes.Status503ServiceUnavailable);
         }
     })
-    .WithName("GetBootstrapperHealth")
+    .WithName("GetBootstrapperReadiness")
     .WithTags("System")
     .AllowAnonymous();
 
@@ -421,10 +459,10 @@ static async Task InitializeApplicationDataAsync(WebApplication app)
 
         var userSchemaCreated = app.Environment.IsDevelopment()
             ? await EnsureContextTablesCreatedAsync(userContext, "public", "users")
-            : await MigrateContextAsync(userContext, "UserDbContext");
+            : await ApplyStartupMigrationsIfAllowedAsync(app, userContext, "UserDbContext");
         var ssfSchemaCreated = app.Environment.IsDevelopment()
             ? await EnsureContextTablesCreatedAsync(ssfContext, "ssf", "farms")
-            : await MigrateContextAsync(ssfContext, "ShramSafalDbContext");
+            : await ApplyStartupMigrationsIfAllowedAsync(app, ssfContext, "ShramSafalDbContext");
 
         var seedBlankTestUser = app.Environment.IsDevelopment() || string.Equals(
             Environment.GetEnvironmentVariable("SEED_BLANK_TEST_USER"),
@@ -513,13 +551,26 @@ static string ResolveAiRateLimitPartitionKey(HttpContext context)
     return $"ip:{ResolveRemoteIpRateLimitPartitionKey(context)}";
 }
 
-static async Task<bool> MigrateContextAsync(DbContext context, string contextName)
+static async Task<bool> ApplyStartupMigrationsIfAllowedAsync(WebApplication app, DbContext context, string contextName)
 {
     var pendingMigrations = (await context.Database.GetPendingMigrationsAsync()).ToArray();
     if (pendingMigrations.Length == 0)
     {
         Log.Information("No pending migrations for {ContextName}.", contextName);
         return false;
+    }
+
+    var allowProductionStartupMigrations =
+        !app.Environment.IsProduction() ||
+        string.Equals(
+            Environment.GetEnvironmentVariable("ALLOW_PRODUCTION_STARTUP_MIGRATIONS"),
+            "true",
+            StringComparison.OrdinalIgnoreCase);
+
+    if (!allowProductionStartupMigrations)
+    {
+        throw new InvalidOperationException(
+            $"Pending migrations detected for {contextName}. Apply them in a deployment step before starting Production.");
     }
 
     Log.Information("Applying {MigrationCount} pending migrations for {ContextName}: {Migrations}", pendingMigrations.Length, contextName, pendingMigrations);
