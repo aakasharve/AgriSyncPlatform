@@ -13,14 +13,14 @@ ConnectionStrings__ShramSafalDb="Host=<rds-endpoint>;Port=5432;Database=agrisync
 
 ```bash
 Jwt__SigningKey="<min-64-char-random-string>"
-Jwt__AccessTokenMinutes="1440"
+Jwt__AccessTokenMinutes="15"
 ```
 
 ## AI Providers
 
 ```bash
-GEMINI_API_KEY="<key>"
-SARVAM_API_SUBSCRIPTION_KEY="<key>"
+Gemini__ApiKey="<key>"
+Sarvam__ApiSubscriptionKey="<key>"
 ```
 
 ## Storage
@@ -31,6 +31,16 @@ ShramSafal__Storage__BucketName="shramsafal-uploads-prod"
 AWS_REGION="ap-south-1"
 ```
 
+## CORS
+
+```bash
+Cors__AllowedOrigins__0="https://app.shramsafal.in"
+Cors__AllowedOrigins__1="https://shramsafal.in"
+Cors__AllowedOrigins__2="capacitor://localhost"
+Cors__AllowedOrigins__3="https://localhost"
+Cors__AllowedOrigins__4="http://localhost"
+```
+
 ## Runtime
 
 ```bash
@@ -38,6 +48,7 @@ ASPNETCORE_ENVIRONMENT="Production"
 ASPNETCORE_URLS="http://localhost:5000"
 BUILD_SHA="<git-sha>"
 DEPLOYED_AT="<iso-timestamp>"
+ALLOW_PRODUCTION_STARTUP_MIGRATIONS="false"
 ```
 
 ## Seeding
@@ -52,3 +63,5 @@ CLEAR_PURVESH_DEMO="false"
 
 - `secrets/local/credentials.json` is a local-development convenience file only. It must not exist on EC2.
 - Override `Serilog__WriteTo__1__Args__path` only if the production log file path needs to move off `/var/log/agrisync/api-.log`.
+- Production startup no longer auto-applies pending EF migrations unless `ALLOW_PRODUCTION_STARTUP_MIGRATIONS=true` is set intentionally for a controlled maintenance window.
+- Preferred production flow: run database migrations as a separate deployment step, then start the API and validate `/health` plus `/health/ready`.
