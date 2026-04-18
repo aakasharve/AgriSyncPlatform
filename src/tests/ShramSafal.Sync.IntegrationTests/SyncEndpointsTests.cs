@@ -22,7 +22,10 @@ using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using ShramSafal.Api;
+using ShramSafal.Domain.Farms;
 using ShramSafal.Infrastructure.Persistence;
+using AgriSync.SharedKernel.Contracts.Ids;
+using AgriSync.SharedKernel.Contracts.Roles;
 using Xunit;
 
 namespace ShramSafal.Sync.IntegrationTests;
@@ -30,6 +33,8 @@ namespace ShramSafal.Sync.IntegrationTests;
 public sealed class SyncEndpointsTests
 {
     private static readonly Guid TestUserId = Guid.Parse("11111111-1111-1111-1111-111111111111");
+    private static readonly Guid WorkerUserId = Guid.Parse("22222222-2222-2222-2222-222222222222");
+    private static readonly Guid SecondaryOwnerUserId = Guid.Parse("33333333-3333-3333-3333-333333333333");
 
     [Fact]
     public async Task Push_WithDuplicateClientRequestId_PerDevice_IsIdempotent()
@@ -781,6 +786,243 @@ public sealed class SyncEndpointsTests
         Assert.Equal("applied", status);
     }
 
+    [Fact]
+    public async Task FarmMembership_IsFarmScoped_ForNonOwnerUser()
+    {
+        await using var harness = await TestHarness.CreateAsync();
+        var farmAId = Guid.NewGuid();
+        var farmBId = Guid.NewGuid();
+        var plotAId = Guid.NewGuid();
+        var plotBId = Guid.NewGuid();
+        var cycleAId = Guid.NewGuid();
+        var cycleBId = Guid.NewGuid();
+        var logAId = Guid.NewGuid();
+        var logBId = Guid.NewGuid();
+
+        await PushCreateFarmAsync(harness.Client, "device-scope", "req-farm-scope-a", farmAId, "Scoped Farm A");
+        await PushCreateFarmAsync(harness.Client, "device-scope", "req-farm-scope-b", farmBId, "Scoped Farm B");
+
+        var ownerSetupResponse = await harness.Client.PostAsJsonAsync("/sync/push", new
+        {
+            deviceId = "device-scope-owner",
+            mutations = new object[]
+            {
+                new
+                {
+                    clientRequestId = "req-plot-scope-a",
+                    mutationType = "create_plot",
+                    payload = new
+                    {
+                        plotId = plotAId,
+                        farmId = farmAId,
+                        name = "Scoped Plot A",
+                        areaInAcres = 1.2m
+                    }
+                },
+                new
+                {
+                    clientRequestId = "req-cycle-scope-a",
+                    mutationType = "create_crop_cycle",
+                    payload = new
+                    {
+                        cropCycleId = cycleAId,
+                        farmId = farmAId,
+                        plotId = plotAId,
+                        cropName = "Grapes",
+                        stage = "Growth",
+                        startDate = "2026-03-01"
+                    }
+                },
+                new
+                {
+                    clientRequestId = "req-plot-scope-b",
+                    mutationType = "create_plot",
+                    payload = new
+                    {
+                        plotId = plotBId,
+                        farmId = farmBId,
+                        name = "Scoped Plot B",
+                        areaInAcres = 2.4m
+                    }
+                },
+                new
+                {
+                    clientRequestId = "req-cycle-scope-b",
+                    mutationType = "create_crop_cycle",
+                    payload = new
+                    {
+                        cropCycleId = cycleBId,
+                        farmId = farmBId,
+                        plotId = plotBId,
+                        cropName = "Onion",
+                        stage = "Planting",
+                        startDate = "2026-03-01"
+                    }
+                }
+            }
+        });
+        ownerSetupResponse.EnsureSuccessStatusCode();
+
+        await harness.SeedFarmMembershipAsync(farmAId, WorkerUserId, AppRole.Worker);
+
+        using (var createLogForAssignedFarm = CreateJsonRequest(
+                   HttpMethod.Post,
+                   "/sync/push",
+                   new
+                   {
+                       deviceId = "device-scope-worker",
+                       mutations = new[]
+                       {
+                           new
+                           {
+                               clientRequestId = "req-log-scope-a",
+                               mutationType = "create_daily_log",
+                               payload = new
+                               {
+                                   dailyLogId = logAId,
+                                   farmId = farmAId,
+                                   plotId = plotAId,
+                                   cropCycleId = cycleAId,
+                                   logDate = "2026-03-05"
+                               }
+                           }
+                       }
+                   },
+                   WorkerUserId,
+                   "shramsafal:Worker"))
+        {
+            var assignedFarmResponse = await harness.Client.SendAsync(createLogForAssignedFarm);
+            assignedFarmResponse.EnsureSuccessStatusCode();
+            Assert.Equal("applied", await ReadFirstPushStatusAsync(assignedFarmResponse));
+        }
+
+        using (var createLogForOtherFarm = CreateJsonRequest(
+                   HttpMethod.Post,
+                   "/sync/push",
+                   new
+                   {
+                       deviceId = "device-scope-worker",
+                       mutations = new[]
+                       {
+                           new
+                           {
+                               clientRequestId = "req-log-scope-b",
+                               mutationType = "create_daily_log",
+                               payload = new
+                               {
+                                   dailyLogId = logBId,
+                                   farmId = farmBId,
+                                   plotId = plotBId,
+                                   cropCycleId = cycleBId,
+                                   logDate = "2026-03-05"
+                               }
+                           }
+                       }
+                   },
+                   WorkerUserId,
+                   "shramsafal:Worker"))
+        {
+            var otherFarmResponse = await harness.Client.SendAsync(createLogForOtherFarm);
+            otherFarmResponse.EnsureSuccessStatusCode();
+
+            using var doc = JsonDocument.Parse(await otherFarmResponse.Content.ReadAsStringAsync());
+            var result = doc.RootElement.GetProperty("results")[0];
+            Assert.Equal("failed", result.GetProperty("status").GetString());
+            Assert.Equal("ShramSafal.Forbidden", result.GetProperty("errorCode").GetString());
+        }
+
+        using var pullForWorker = CreateRequest(HttpMethod.Get, $"/sync/pull?since={Uri.EscapeDataString(DateTime.UnixEpoch.ToString("O"))}", WorkerUserId, "shramsafal:Worker");
+        var pullResponse = await harness.Client.SendAsync(pullForWorker);
+        pullResponse.EnsureSuccessStatusCode();
+
+        using var pullDoc = JsonDocument.Parse(await pullResponse.Content.ReadAsStringAsync());
+        var visibleFarmIds = pullDoc.RootElement
+            .GetProperty("farms")
+            .EnumerateArray()
+            .Select(x => x.GetProperty("id").GetGuid())
+            .ToList();
+
+        Assert.Contains(farmAId, visibleFarmIds);
+        Assert.DoesNotContain(farmBId, visibleFarmIds);
+    }
+
+    [Fact]
+    public async Task FarmMembership_RoleControlsOwnerOnlyActions()
+    {
+        await using var harness = await TestHarness.CreateAsync();
+        var farmId = Guid.NewGuid();
+        var workerPlotId = Guid.NewGuid();
+        var ownerPlotId = Guid.NewGuid();
+
+        await PushCreateFarmAsync(harness.Client, "device-role", "req-farm-role", farmId, "Role Farm");
+        await harness.SeedFarmMembershipAsync(farmId, WorkerUserId, AppRole.Worker);
+        await harness.SeedFarmMembershipAsync(farmId, SecondaryOwnerUserId, AppRole.SecondaryOwner);
+
+        using (var workerCreatePlot = CreateJsonRequest(
+                   HttpMethod.Post,
+                   "/sync/push",
+                   new
+                   {
+                       deviceId = "device-role-worker",
+                       mutations = new[]
+                       {
+                           new
+                           {
+                               clientRequestId = "req-plot-role-worker",
+                               mutationType = "create_plot",
+                               payload = new
+                               {
+                                   plotId = workerPlotId,
+                                   farmId,
+                                   name = "Worker Plot Attempt",
+                                   areaInAcres = 1m
+                               }
+                           }
+                       }
+                   },
+                   WorkerUserId,
+                   "shramsafal:Worker"))
+        {
+            var workerResponse = await harness.Client.SendAsync(workerCreatePlot);
+            workerResponse.EnsureSuccessStatusCode();
+
+            using var doc = JsonDocument.Parse(await workerResponse.Content.ReadAsStringAsync());
+            var result = doc.RootElement.GetProperty("results")[0];
+            Assert.Equal("failed", result.GetProperty("status").GetString());
+            Assert.Equal("ShramSafal.Forbidden", result.GetProperty("errorCode").GetString());
+        }
+
+        using (var secondaryOwnerCreatePlot = CreateJsonRequest(
+                   HttpMethod.Post,
+                   "/sync/push",
+                   new
+                   {
+                       deviceId = "device-role-owner",
+                       mutations = new[]
+                       {
+                           new
+                           {
+                               clientRequestId = "req-plot-role-owner",
+                               mutationType = "create_plot",
+                               payload = new
+                               {
+                                   plotId = ownerPlotId,
+                                   farmId,
+                                   name = "Secondary Owner Plot",
+                                   areaInAcres = 1.5m
+                               }
+                           }
+                       }
+                   },
+                   SecondaryOwnerUserId,
+                   "shramsafal:Worker"))
+        {
+            var ownerResponse = await harness.Client.SendAsync(secondaryOwnerCreatePlot);
+            ownerResponse.EnsureSuccessStatusCode();
+            Assert.Equal("applied", await ReadFirstPushStatusAsync(ownerResponse));
+        }
+    }
+
     private static async Task PushCreateFarmAsync(
         HttpClient client,
         string deviceId,
@@ -813,6 +1055,30 @@ public sealed class SyncEndpointsTests
     {
         using var doc = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
         return doc.RootElement.GetProperty("results")[0].GetProperty("status").GetString();
+    }
+
+    private static HttpRequestMessage CreateJsonRequest<T>(
+        HttpMethod method,
+        string uri,
+        T body,
+        Guid userId,
+        string membershipClaim)
+    {
+        var request = CreateRequest(method, uri, userId, membershipClaim);
+        request.Content = JsonContent.Create(body);
+        return request;
+    }
+
+    private static HttpRequestMessage CreateRequest(
+        HttpMethod method,
+        string uri,
+        Guid userId,
+        string membershipClaim)
+    {
+        var request = new HttpRequestMessage(method, uri);
+        request.Headers.Add("X-Test-UserId", userId.ToString());
+        request.Headers.Add("X-Test-Membership", membershipClaim);
+        return request;
     }
 
     private sealed class TestHarness(WebApplication app, HttpClient client, string storageDirectory) : IAsyncDisposable
@@ -857,6 +1123,19 @@ public sealed class SyncEndpointsTests
             return new TestHarness(app, client, storageDirectory);
         }
 
+        public async Task SeedFarmMembershipAsync(Guid farmId, Guid userId, AppRole role)
+        {
+            await using var scope = app.Services.CreateAsyncScope();
+            var db = scope.ServiceProvider.GetRequiredService<ShramSafalDbContext>();
+            db.FarmMemberships.Add(FarmMembership.Create(
+                Guid.NewGuid(),
+                new FarmId(farmId),
+                new UserId(userId),
+                role,
+                DateTime.UtcNow));
+            await db.SaveChangesAsync();
+        }
+
         public async ValueTask DisposeAsync()
         {
             Client.Dispose();
@@ -877,11 +1156,22 @@ public sealed class SyncEndpointsTests
     {
         protected override Task<AuthenticateResult> HandleAuthenticateAsync()
         {
-            var claims = new[]
+            var userId = Request.Headers.TryGetValue("X-Test-UserId", out var userIdHeader) &&
+                         Guid.TryParse(userIdHeader, out var parsedUserId)
+                ? parsedUserId
+                : TestUserId;
+            var membership = Request.Headers.TryGetValue("X-Test-Membership", out var membershipHeader)
+                ? membershipHeader.ToString()
+                : "shramsafal:PrimaryOwner";
+
+            var claims = new List<Claim>
             {
-                new Claim("sub", TestUserId.ToString()),
-                new Claim("membership", "shramsafal:PrimaryOwner")
+                new("sub", userId.ToString())
             };
+            if (!string.IsNullOrWhiteSpace(membership))
+            {
+                claims.Add(new Claim("membership", membership));
+            }
 
             var identity = new ClaimsIdentity(claims, Scheme.Name);
             var principal = new ClaimsPrincipal(identity);

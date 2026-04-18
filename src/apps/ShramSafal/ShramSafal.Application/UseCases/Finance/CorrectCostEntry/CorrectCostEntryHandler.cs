@@ -1,6 +1,7 @@
 using AgriSync.BuildingBlocks.Abstractions;
 using AgriSync.BuildingBlocks.Results;
 using AgriSync.SharedKernel.Contracts.Ids;
+using AgriSync.SharedKernel.Contracts.Roles;
 using ShramSafal.Application.Contracts.Dtos;
 using ShramSafal.Application.Ports;
 using ShramSafal.Domain.Audit;
@@ -40,11 +41,12 @@ public sealed class CorrectCostEntryHandler(
             return Result.Failure<FinanceCorrectionDto>(ShramSafalErrors.CostEntryNotFound);
         }
 
-        var canWriteFarm = await repository.IsUserMemberOfFarmAsync(entry.FarmId, command.CorrectedByUserId, ct);
-        if (!canWriteFarm)
+        var actorRole = await repository.GetUserRoleForFarmAsync((Guid)entry.FarmId, command.CorrectedByUserId, ct);
+        if (actorRole is not AppRole.PrimaryOwner and not AppRole.SecondaryOwner)
         {
             return Result.Failure<FinanceCorrectionDto>(ShramSafalErrors.Forbidden);
         }
+        var resolvedActorRole = actorRole.Value;
 
         var correction = Domain.Finance.FinanceCorrection.Create(
             command.FinanceCorrectionId ?? idGenerator.New(),
@@ -68,7 +70,7 @@ public sealed class CorrectCostEntryHandler(
                 entry.Id,
                 "Corrected",
                 command.CorrectedByUserId,
-                command.ActorRole ?? "unknown",
+                resolvedActorRole.ToString(),
                 new
                 {
                     costEntryId = entry.Id,

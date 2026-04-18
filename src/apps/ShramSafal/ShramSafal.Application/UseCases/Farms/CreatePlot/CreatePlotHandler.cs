@@ -1,5 +1,6 @@
 using AgriSync.BuildingBlocks.Abstractions;
 using AgriSync.BuildingBlocks.Results;
+using AgriSync.SharedKernel.Contracts.Roles;
 using ShramSafal.Application.Contracts.Dtos;
 using ShramSafal.Application.Ports;
 using ShramSafal.Domain.Audit;
@@ -33,11 +34,12 @@ public sealed class CreatePlotHandler(
             return Result.Failure<PlotDto>(ShramSafalErrors.FarmNotFound);
         }
 
-        var canWriteFarm = await repository.IsUserMemberOfFarmAsync(command.FarmId, command.ActorUserId, ct);
-        if (!canWriteFarm)
+        var actorRole = await repository.GetUserRoleForFarmAsync(command.FarmId, command.ActorUserId, ct);
+        if (actorRole is not AppRole.PrimaryOwner and not AppRole.SecondaryOwner)
         {
             return Result.Failure<PlotDto>(ShramSafalErrors.Forbidden);
         }
+        var resolvedActorRole = actorRole.Value;
 
         var nowUtc = clock.UtcNow;
         var plot = Domain.Farms.Plot.Create(
@@ -55,7 +57,7 @@ public sealed class CreatePlotHandler(
                 plot.Id,
                 "Created",
                 command.ActorUserId,
-                command.ActorRole ?? "unknown",
+                resolvedActorRole.ToString(),
                 new
                 {
                     plot.Id,

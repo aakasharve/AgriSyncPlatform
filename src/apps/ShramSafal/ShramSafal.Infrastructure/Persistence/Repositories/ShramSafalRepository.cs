@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using AgriSync.SharedKernel.Contracts.Ids;
+using AgriSync.SharedKernel.Contracts.Roles;
 using ShramSafal.Application.Contracts.Dtos;
 using ShramSafal.Domain.Audit;
 using ShramSafal.Domain.Attachments;
@@ -23,6 +24,53 @@ internal sealed class ShramSafalRepository(ShramSafalDbContext db) : IShramSafal
     {
         var typedFarmId = new FarmId(farmId);
         return await db.Farms.FirstOrDefaultAsync(f => f.Id == typedFarmId, ct);
+    }
+
+    public async Task AddFarmMembershipAsync(FarmMembership membership, CancellationToken ct = default)
+    {
+        await db.FarmMemberships.AddAsync(membership, ct);
+    }
+
+    public async Task<FarmMembership?> GetFarmMembershipAsync(Guid farmId, Guid userId, CancellationToken ct = default)
+    {
+        var typedFarmId = new FarmId(farmId);
+        var typedUserId = new UserId(userId);
+
+        return await db.FarmMemberships
+            .AsNoTracking()
+            .FirstOrDefaultAsync(
+                membership => membership.FarmId == typedFarmId &&
+                              membership.UserId == typedUserId &&
+                              !membership.IsRevoked,
+                ct);
+    }
+
+    public async Task<AppRole?> GetUserRoleForFarmAsync(Guid farmId, Guid userId, CancellationToken ct = default)
+    {
+        var typedFarmId = new FarmId(farmId);
+        var typedUserId = new UserId(userId);
+
+        var isDeclaredOwner = await db.Farms
+            .AsNoTracking()
+            .AnyAsync(f => f.Id == typedFarmId && f.OwnerUserId == typedUserId, ct);
+        if (isDeclaredOwner)
+        {
+            return AppRole.PrimaryOwner;
+        }
+
+        var membership = await db.FarmMemberships
+            .AsNoTracking()
+            .Where(x => x.FarmId == typedFarmId && x.UserId == typedUserId && !x.IsRevoked)
+            .Select(x => (AppRole?)x.Role)
+            .FirstOrDefaultAsync(ct);
+
+        return membership;
+    }
+
+    public async Task<bool> IsUserOwnerOfFarmAsync(Guid farmId, Guid userId, CancellationToken ct = default)
+    {
+        var role = await GetUserRoleForFarmAsync(farmId, userId, ct);
+        return role is AppRole.PrimaryOwner or AppRole.SecondaryOwner;
     }
 
     public async Task AddPlotAsync(Plot plot, CancellationToken ct = default)
@@ -402,11 +450,22 @@ internal sealed class ShramSafalRepository(ShramSafalDbContext db) : IShramSafal
 
     public async Task<List<Guid>> GetFarmIdsForUserAsync(Guid userId, CancellationToken ct = default)
     {
-        return await db.Farms
+        var ownedFarmIds = await db.Farms
             .AsNoTracking()
             .Where(f => (Guid)f.OwnerUserId == userId)
             .Select(f => (Guid)f.Id)
             .ToListAsync(ct);
+
+        var membershipFarmIds = await db.FarmMemberships
+            .AsNoTracking()
+            .Where(m => (Guid)m.UserId == userId && !m.IsRevoked)
+            .Select(m => (Guid)m.FarmId)
+            .ToListAsync(ct);
+
+        return ownedFarmIds
+            .Concat(membershipFarmIds)
+            .Distinct()
+            .ToList();
     }
 
     public async Task<IReadOnlyList<SyncOperatorDto>> GetOperatorsByIdsAsync(
@@ -473,9 +532,23 @@ internal sealed class ShramSafalRepository(ShramSafalDbContext db) : IShramSafal
     public async Task<bool> IsUserMemberOfFarmAsync(Guid farmId, Guid userId, CancellationToken ct = default)
     {
         var typedFarmId = new FarmId(farmId);
-        return await db.Farms
+        var typedUserId = new UserId(userId);
+
+        var isOwner = await db.Farms
             .AsNoTracking()
-            .AnyAsync(f => f.Id == typedFarmId && (Guid)f.OwnerUserId == userId, ct);
+            .AnyAsync(f => f.Id == typedFarmId && f.OwnerUserId == typedUserId, ct);
+        if (isOwner)
+        {
+            return true;
+        }
+
+        return await db.FarmMemberships
+            .AsNoTracking()
+            .AnyAsync(
+                membership => membership.FarmId == typedFarmId &&
+                              membership.UserId == typedUserId &&
+                              !membership.IsRevoked,
+                ct);
     }
 
     public async Task SaveChangesAsync(CancellationToken ct = default)
