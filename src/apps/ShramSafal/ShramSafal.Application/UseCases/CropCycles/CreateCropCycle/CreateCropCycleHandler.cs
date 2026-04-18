@@ -49,6 +49,20 @@ public sealed class CreateCropCycleHandler(
             return Result.Failure<CropCycleDto>(ShramSafalErrors.Forbidden);
         }
 
+        var requestedEndDate = command.EndDate ?? DateOnly.MaxValue;
+        var overlappingCycleExists = (await repository.GetCropCyclesByPlotIdAsync(command.PlotId, ct))
+            .Where(existing => !command.CropCycleId.HasValue || existing.Id != command.CropCycleId.Value)
+            .Any(existing =>
+            {
+                var existingEndDate = existing.EndDate ?? DateOnly.MaxValue;
+                return command.StartDate <= existingEndDate && existing.StartDate <= requestedEndDate;
+            });
+
+        if (overlappingCycleExists)
+        {
+            return Result.Failure<CropCycleDto>(ShramSafalErrors.CropCycleOverlap);
+        }
+
         var nowUtc = clock.UtcNow;
         var cycle = Domain.Crops.CropCycle.Create(
             command.CropCycleId ?? idGenerator.New(),

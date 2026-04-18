@@ -14,7 +14,7 @@ namespace ShramSafal.Domain.Tests.Attachments;
 public sealed class AttachmentStorageTests
 {
     [Fact]
-    public void BuildRelativePath_UsesFarmYearMonthAttachmentIdAndOriginalFileName()
+    public void BuildRelativePath_UsesFarmYearMonthAttachmentIdAndGeneratedFileName()
     {
         var attachmentId = Guid.Parse("aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee");
         var farmId = new FarmId(Guid.Parse("11111111-2222-3333-4444-555555555555"));
@@ -38,7 +38,7 @@ public sealed class AttachmentStorageTests
         var result = (string?)method!.Invoke(null, [attachment, new DateTime(2026, 3, 8, 12, 0, 0, DateTimeKind.Utc), "receipt final.jpg"]);
 
         Assert.Equal(
-            "attachments/11111111222233334444555555555555/2026/03/aaaaaaaabbbbccccddddeeeeeeeeeeee/receipt final.jpg",
+            "attachments/11111111222233334444555555555555/2026/03/aaaaaaaabbbbccccddddeeeeeeeeeeee/aaaaaaaabbbbccccddddeeeeeeeeeeee.jpg",
             result);
     }
 

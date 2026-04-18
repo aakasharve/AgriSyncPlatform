@@ -107,7 +107,11 @@ internal sealed class CostEntryConfiguration : IEntityTypeConfiguration<CostEntr
             .HasColumnName("flag_reason")
             .HasMaxLength(300);
 
-        builder.HasIndex(x => new { x.EntryDate, x.FarmId });
+        builder.HasIndex(x => x.FarmId);
+        builder.HasIndex(x => x.PlotId);
+        builder.HasIndex(x => x.CropCycleId);
+        builder.HasIndex(x => x.CreatedByUserId);
+        builder.HasIndex(x => new { x.FarmId, x.EntryDate });
         builder.HasIndex(x => x.ModifiedAtUtc);
         builder.Ignore(x => x.DomainEvents);
     }

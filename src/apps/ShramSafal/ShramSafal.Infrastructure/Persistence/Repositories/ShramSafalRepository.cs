@@ -102,6 +102,14 @@ internal sealed class ShramSafalRepository(ShramSafalDbContext db) : IShramSafal
         return await db.CropCycles.FirstOrDefaultAsync(c => c.Id == cropCycleId, ct);
     }
 
+    public async Task<List<CropCycle>> GetCropCyclesByPlotIdAsync(Guid plotId, CancellationToken ct = default)
+    {
+        return await db.CropCycles
+            .Where(c => c.PlotId == plotId)
+            .OrderBy(c => c.StartDate)
+            .ToListAsync(ct);
+    }
+
     public async Task AddDailyLogAsync(DailyLog log, CancellationToken ct = default)
     {
         await db.DailyLogs.AddAsync(log, ct);

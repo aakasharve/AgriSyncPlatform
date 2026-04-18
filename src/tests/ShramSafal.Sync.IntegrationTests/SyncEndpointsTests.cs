@@ -6,6 +6,7 @@ using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Security.Claims;
+using System.Text;
 using System.Text.Json;
 using System.Text.Encodings.Web;
 using System.Threading.Tasks;
@@ -226,7 +227,7 @@ public sealed class SyncEndpointsTests
             .GetGuid();
 
         using var multipart = new MultipartFormDataContent();
-        var imageContent = new ByteArrayContent(new byte[] { 1, 2, 3, 4, 5, 6 });
+        var imageContent = new ByteArrayContent(new byte[] { 0xFF, 0xD8, 0xFF, 0xD9 });
         imageContent.Headers.ContentType = new MediaTypeHeaderValue("image/jpeg");
         multipart.Add(imageContent, "file", "proof.jpg");
 
@@ -242,6 +243,77 @@ public sealed class SyncEndpointsTests
             .Single(x => x.GetProperty("action").GetString() == "UploadedAndFinalized");
 
         Assert.Equal(TestUserId, uploadedEvent.GetProperty("actorUserId").GetGuid());
+    }
+
+    [Fact]
+    public async Task UploadAttachment_RejectsMismatchedFileSignature()
+    {
+        await using var harness = await TestHarness.CreateAsync();
+        var farmId = Guid.NewGuid();
+        await PushCreateFarmAsync(harness.Client, "device-upload-signature", "req-farm-upload-signature", farmId, "Upload Signature Farm");
+
+        var createResponse = await harness.Client.PostAsJsonAsync("/shramsafal/attachments", new
+        {
+            farmId,
+            linkedEntityId = farmId,
+            linkedEntityType = "Farm",
+            fileName = "proof.jpg",
+            mimeType = "image/jpeg"
+        });
+
+        createResponse.EnsureSuccessStatusCode();
+        using var createDoc = JsonDocument.Parse(await createResponse.Content.ReadAsStringAsync());
+        var attachmentId = createDoc.RootElement
+            .GetProperty("attachment")
+            .GetProperty("id")
+            .GetGuid();
+
+        using var multipart = new MultipartFormDataContent();
+        var fakeJpeg = new ByteArrayContent(Encoding.UTF8.GetBytes("not-a-real-jpeg"));
+        fakeJpeg.Headers.ContentType = new MediaTypeHeaderValue("image/jpeg");
+        multipart.Add(fakeJpeg, "file", "proof.jpg");
+
+        var uploadResponse = await harness.Client.PostAsync($"/shramsafal/attachments/{attachmentId}/upload", multipart);
+        Assert.Equal(System.Net.HttpStatusCode.BadRequest, uploadResponse.StatusCode);
+    }
+
+    [Fact]
+    public async Task UploadAttachment_RejectsOversizedPayload()
+    {
+        await using var harness = await TestHarness.CreateAsync();
+        var farmId = Guid.NewGuid();
+        await PushCreateFarmAsync(harness.Client, "device-upload-size", "req-farm-upload-size", farmId, "Upload Size Farm");
+
+        var createResponse = await harness.Client.PostAsJsonAsync("/shramsafal/attachments", new
+        {
+            farmId,
+            linkedEntityId = farmId,
+            linkedEntityType = "Farm",
+            fileName = "large.pdf",
+            mimeType = "application/pdf"
+        });
+
+        createResponse.EnsureSuccessStatusCode();
+        using var createDoc = JsonDocument.Parse(await createResponse.Content.ReadAsStringAsync());
+        var attachmentId = createDoc.RootElement
+            .GetProperty("attachment")
+            .GetProperty("id")
+            .GetGuid();
+
+        using var multipart = new MultipartFormDataContent();
+        var oversized = new byte[(10 * 1024 * 1024) + 1];
+        oversized[0] = 0x25;
+        oversized[1] = 0x50;
+        oversized[2] = 0x44;
+        oversized[3] = 0x46;
+        oversized[4] = 0x2D;
+
+        var largePdf = new ByteArrayContent(oversized);
+        largePdf.Headers.ContentType = new MediaTypeHeaderValue("application/pdf");
+        multipart.Add(largePdf, "file", "large.pdf");
+
+        var uploadResponse = await harness.Client.PostAsync($"/shramsafal/attachments/{attachmentId}/upload", multipart);
+        Assert.Equal(System.Net.HttpStatusCode.BadRequest, uploadResponse.StatusCode);
     }
 
     [Fact]
@@ -722,6 +794,83 @@ public sealed class SyncEndpointsTests
             .EnumerateArray()
             .Single(x => x.GetProperty("action").GetString() == "Created");
         Assert.Equal(TestUserId, cycleCreated.GetProperty("actorUserId").GetGuid());
+    }
+
+    [Fact]
+    public async Task Push_CreateCropCycle_RejectsOverlapOnSamePlot()
+    {
+        await using var harness = await TestHarness.CreateAsync();
+        var farmId = Guid.NewGuid();
+        var plotId = Guid.NewGuid();
+        var firstCycleId = Guid.NewGuid();
+        var overlappingCycleId = Guid.NewGuid();
+
+        await PushCreateFarmAsync(harness.Client, "device-overlap", "req-farm-overlap", farmId, "Overlap Farm");
+
+        var setupResponse = await harness.Client.PostAsJsonAsync("/sync/push", new
+        {
+            deviceId = "device-overlap",
+            mutations = new object[]
+            {
+                new
+                {
+                    clientRequestId = "req-plot-overlap",
+                    mutationType = "create_plot",
+                    payload = new
+                    {
+                        plotId,
+                        farmId,
+                        name = "Overlap Plot",
+                        areaInAcres = 2m
+                    }
+                },
+                new
+                {
+                    clientRequestId = "req-cycle-overlap-1",
+                    mutationType = "create_crop_cycle",
+                    payload = new
+                    {
+                        cropCycleId = firstCycleId,
+                        farmId,
+                        plotId,
+                        cropName = "Grapes",
+                        stage = "Growth",
+                        startDate = "2026-01-01",
+                        endDate = "2026-06-30"
+                    }
+                }
+            }
+        });
+        setupResponse.EnsureSuccessStatusCode();
+
+        var overlappingResponse = await harness.Client.PostAsJsonAsync("/sync/push", new
+        {
+            deviceId = "device-overlap",
+            mutations = new[]
+            {
+                new
+                {
+                    clientRequestId = "req-cycle-overlap-2",
+                    mutationType = "create_crop_cycle",
+                    payload = new
+                    {
+                        cropCycleId = overlappingCycleId,
+                        farmId,
+                        plotId,
+                        cropName = "Onion",
+                        stage = "Planting",
+                        startDate = "2026-03-01",
+                        endDate = "2026-07-01"
+                    }
+                }
+            }
+        });
+        overlappingResponse.EnsureSuccessStatusCode();
+
+        using var doc = JsonDocument.Parse(await overlappingResponse.Content.ReadAsStringAsync());
+        var result = doc.RootElement.GetProperty("results")[0];
+        Assert.Equal("failed", result.GetProperty("status").GetString());
+        Assert.Equal("ShramSafal.CropCycleOverlap", result.GetProperty("errorCode").GetString());
     }
 
     [Fact]

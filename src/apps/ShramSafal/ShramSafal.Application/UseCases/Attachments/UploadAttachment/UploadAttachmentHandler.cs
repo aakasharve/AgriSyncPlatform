@@ -39,6 +39,15 @@ public sealed class UploadAttachmentHandler(
             return Result.Failure<AttachmentDto>(ShramSafalErrors.AttachmentAlreadyFinalized);
         }
 
+        if (!string.IsNullOrWhiteSpace(command.UploadedMimeType) &&
+            !string.Equals(
+                NormalizeMimeType(command.UploadedMimeType),
+                NormalizeMimeType(attachment.MimeType),
+                StringComparison.OrdinalIgnoreCase))
+        {
+            return Result.Failure<AttachmentDto>(ShramSafalErrors.InvalidCommand);
+        }
+
         var nowUtc = clock.UtcNow;
         var relativePath = BuildRelativePath(attachment, nowUtc, command.ClientFileName);
         var bytesWritten = await storageService.SaveAsync(relativePath, command.FileStream, attachment.MimeType, ct);
@@ -78,35 +87,14 @@ public sealed class UploadAttachmentHandler(
         var month = nowUtc.ToString("MM", CultureInfo.InvariantCulture);
         var farmSegment = ((Guid)attachment.FarmId).ToString("N", CultureInfo.InvariantCulture);
         var attachmentSegment = attachment.Id.ToString("N", CultureInfo.InvariantCulture);
-        var safeName = ResolveSafeFileName(attachment.FileName, attachment.MimeType, clientFileName);
+        var safeName = ResolveSafeFileName(attachment.Id, attachment.FileName, attachment.MimeType, clientFileName);
         return $"attachments/{farmSegment}/{year}/{month}/{attachmentSegment}/{safeName}";
     }
 
-    private static string ResolveSafeFileName(string fileName, string mimeType, string? clientFileName)
+    private static string ResolveSafeFileName(Guid attachmentId, string fileName, string mimeType, string? clientFileName)
     {
-        var candidate = string.IsNullOrWhiteSpace(clientFileName) ? fileName : clientFileName;
-        var nameOnly = Path.GetFileName(candidate);
-        if (string.IsNullOrWhiteSpace(nameOnly))
-        {
-            nameOnly = Path.GetFileName(fileName);
-        }
-
-        if (string.IsNullOrWhiteSpace(nameOnly))
-        {
-            nameOnly = $"attachment{ResolveExtension(fileName, mimeType, clientFileName)}";
-        }
-
-        var sanitized = new string(nameOnly
-            .Select(ch => Path.GetInvalidFileNameChars().Contains(ch) ? '_' : ch)
-            .ToArray())
-            .Trim();
-
-        if (string.IsNullOrWhiteSpace(sanitized))
-        {
-            sanitized = $"attachment{ResolveExtension(fileName, mimeType, clientFileName)}";
-        }
-
-        return sanitized;
+        var extension = ResolveExtension(fileName, mimeType, clientFileName);
+        return $"{attachmentId:N}{extension}";
     }
 
     private static string ResolveExtension(string fileName, string mimeType, string? clientFileName)
@@ -130,5 +118,17 @@ public sealed class UploadAttachmentHandler(
             "application/pdf" => ".pdf",
             _ => string.Empty
         };
+    }
+
+    private static string NormalizeMimeType(string? mimeType)
+    {
+        if (string.IsNullOrWhiteSpace(mimeType))
+        {
+            return string.Empty;
+        }
+
+        var normalized = mimeType.Trim().ToLowerInvariant();
+        var separator = normalized.IndexOf(';');
+        return separator > 0 ? normalized[..separator] : normalized;
     }
 }

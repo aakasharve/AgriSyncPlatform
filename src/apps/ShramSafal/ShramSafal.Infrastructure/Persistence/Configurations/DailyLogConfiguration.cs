@@ -83,6 +83,10 @@ internal sealed class DailyLogConfiguration : IEntityTypeConfiguration<DailyLog>
         builder.HasIndex(x => x.IdempotencyKey)
             .IsUnique()
             .HasFilter("idempotency_key IS NOT NULL");
+        builder.HasIndex(x => x.FarmId);
+        builder.HasIndex(x => new { x.FarmId, x.LogDate });
+        builder.HasIndex(x => x.CropCycleId);
+        builder.HasIndex(x => x.OperatorUserId);
         builder.HasIndex(x => x.ModifiedAtUtc);
 
         builder.HasMany(x => x.Tasks)
