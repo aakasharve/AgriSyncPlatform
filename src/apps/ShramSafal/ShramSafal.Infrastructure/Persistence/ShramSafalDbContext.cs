@@ -13,6 +13,7 @@ namespace ShramSafal.Infrastructure.Persistence;
 public sealed class ShramSafalDbContext(DbContextOptions<ShramSafalDbContext> options) : DbContext(options)
 {
     public DbSet<Farm> Farms => Set<Farm>();
+    public DbSet<FarmMembership> FarmMemberships => Set<FarmMembership>();
     public DbSet<Plot> Plots => Set<Plot>();
     public DbSet<CropCycle> CropCycles => Set<CropCycle>();
     public DbSet<DailyLog> DailyLogs => Set<DailyLog>();

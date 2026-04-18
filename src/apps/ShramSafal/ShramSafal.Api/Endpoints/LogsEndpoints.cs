@@ -106,7 +106,7 @@ public static class LogsEndpoints
             IShramSafalRepository repository,
             CancellationToken ct) =>
         {
-            if (!TryGetCallerContext(user, out var callerUserId, out var callerRole))
+            if (!EndpointActorContext.TryGetUserId(user, out var callerUserId))
             {
                 return Results.Unauthorized();
             }
@@ -127,9 +127,16 @@ public static class LogsEndpoints
                 return Results.Forbid();
             }
 
+            var callerRole = await repository.GetUserRoleForFarmAsync((Guid)log.FarmId, callerUserId, ct);
+            if (callerRole is null)
+            {
+                return Results.Forbid();
+            }
+            var resolvedCallerRole = callerRole.Value;
+
             var currentStatus = log.CurrentVerificationStatus;
             var availableTransitions = VerificationStateMachine
-                .GetAvailableTransitions(currentStatus, callerRole)
+                .GetAvailableTransitions(currentStatus, resolvedCallerRole)
                 .Select(status => status.ToString())
                 .ToArray();
 
@@ -157,45 +164,6 @@ public static class LogsEndpoints
             : Results.BadRequest(new { error = error.Code, message = error.Description });
     }
 
-    private static bool TryGetCallerContext(ClaimsPrincipal user, out Guid callerUserId, out AppRole callerRole)
-    {
-        callerUserId = Guid.Empty;
-        callerRole = AppRole.Worker;
-
-        var sub = user.FindFirstValue("sub") ?? user.FindFirstValue(ClaimTypes.NameIdentifier);
-        if (sub is null || !Guid.TryParse(sub, out callerUserId))
-        {
-            return false;
-        }
-
-        var memberships = user.FindAll("membership");
-        foreach (var membershipClaim in memberships)
-        {
-            var value = membershipClaim.Value;
-            if (string.IsNullOrWhiteSpace(value))
-            {
-                continue;
-            }
-
-            var tokens = value.Split(':', 2, StringSplitOptions.TrimEntries);
-            if (tokens.Length != 2)
-            {
-                continue;
-            }
-
-            if (!tokens[0].Equals("shramsafal", StringComparison.OrdinalIgnoreCase))
-            {
-                continue;
-            }
-
-            if (Enum.TryParse<AppRole>(tokens[1], true, out callerRole))
-            {
-                return true;
-            }
-        }
-
-        return false;
-    }
 }
 
 public sealed record CreateDailyLogRequest(

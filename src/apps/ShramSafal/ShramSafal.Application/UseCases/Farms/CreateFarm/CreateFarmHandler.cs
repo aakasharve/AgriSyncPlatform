@@ -1,5 +1,6 @@
 using AgriSync.BuildingBlocks.Abstractions;
 using AgriSync.BuildingBlocks.Results;
+using AgriSync.SharedKernel.Contracts.Roles;
 using ShramSafal.Application.Contracts.Dtos;
 using ShramSafal.Application.Ports;
 using ShramSafal.Domain.Common;
@@ -24,13 +25,26 @@ public sealed class CreateFarmHandler(
             return Result.Failure<FarmDto>(ShramSafalErrors.InvalidCommand);
         }
 
+        var nowUtc = clock.UtcNow;
         var farm = Domain.Farms.Farm.Create(
             command.FarmId ?? idGenerator.New(),
             command.Name,
             command.OwnerUserId,
-            clock.UtcNow);
+            nowUtc);
+
+        var ownerMembership = Domain.Farms.FarmMembership.Create(
+            idGenerator.New(),
+            farm.Id,
+            farm.OwnerUserId,
+            AppRole.PrimaryOwner,
+            nowUtc);
+
+        var actorRole = string.IsNullOrWhiteSpace(command.ActorRole)
+            ? AppRole.PrimaryOwner.ToString()
+            : command.ActorRole.Trim();
 
         await repository.AddFarmAsync(farm, ct);
+        await repository.AddFarmMembershipAsync(ownerMembership, ct);
         await repository.AddAuditEventAsync(
             AuditEvent.Create(
                 farm.Id,
@@ -38,14 +52,14 @@ public sealed class CreateFarmHandler(
                 farm.Id,
                 "Created",
                 command.OwnerUserId,
-                command.ActorRole ?? "unknown",
+                actorRole,
                 new
                 {
                     farmId = farm.Id,
                     farm.Name
                 },
                 command.ClientCommandId,
-                clock.UtcNow),
+                nowUtc),
             ct);
         await repository.SaveChangesAsync(ct);
 

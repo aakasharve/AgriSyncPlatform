@@ -294,11 +294,6 @@ public sealed class PushSyncBatchHandler(
             return MutationExecutionOutcome.Failure("ShramSafal.Forbidden", "User is not a member of the target farm.");
         }
 
-        if (!IsOwnerRole(actorRole))
-        {
-            return MutationExecutionOutcome.Failure("ShramSafal.Forbidden", "Only farm owners can create plots.");
-        }
-
         var result = await createPlotHandler.HandleAsync(
             new CreatePlotCommand(
                 request.FarmId,
@@ -636,11 +631,6 @@ public sealed class PushSyncBatchHandler(
             return MutationExecutionOutcome.Failure("ShramSafal.Forbidden", "User is not a member of the target farm.");
         }
 
-        if (!IsOwnerRole(actorRole))
-        {
-            return MutationExecutionOutcome.Failure("ShramSafal.Forbidden", "Only farm owners can correct cost entries.");
-        }
-
         var result = await correctCostEntryHandler.HandleAsync(
             new CorrectCostEntryCommand(
                 request.CostEntryId,
@@ -809,13 +799,6 @@ public sealed class PushSyncBatchHandler(
     private static SyncMutationResultDto CreateAppliedResult(string clientRequestId, string mutationType, object? data)
     {
         return new SyncMutationResultDto(clientRequestId, mutationType, "applied", data, null, null);
-    }
-
-    private static bool IsOwnerRole(string actorRole)
-    {
-        var normalized = actorRole.Replace("_", string.Empty, StringComparison.Ordinal).Trim();
-        return normalized.Equals(nameof(AppRole.PrimaryOwner), StringComparison.OrdinalIgnoreCase)
-            || normalized.Equals(nameof(AppRole.SecondaryOwner), StringComparison.OrdinalIgnoreCase);
     }
 
     private static SyncMutationResultDto CreateDuplicateResult(

@@ -19,10 +19,6 @@ public sealed class VerifyLogHandler(
 {
     public async Task<Result<DailyLogDto>> HandleAsync(VerifyLogCommand command, CancellationToken ct = default)
     {
-        var callerRole = Enum.TryParse<AppRole>(command.ActorRole, ignoreCase: true, out var parsedRole)
-            ? parsedRole
-            : AppRole.Worker;
-
         if (command.DailyLogId == Guid.Empty || command.VerifiedByUserId == Guid.Empty)
         {
             return Result.Failure<DailyLogDto>(ShramSafalErrors.InvalidCommand);
@@ -35,8 +31,7 @@ public sealed class VerifyLogHandler(
 
         await authorizationEnforcer.EnsureCanVerify(
             new UserId(command.VerifiedByUserId),
-            command.DailyLogId,
-            callerRole);
+            command.DailyLogId);
 
         var log = await repository.GetDailyLogByIdAsync(command.DailyLogId, ct);
         if (log is null)
@@ -44,11 +39,12 @@ public sealed class VerifyLogHandler(
             return Result.Failure<DailyLogDto>(ShramSafalErrors.DailyLogNotFound);
         }
 
-        var canWriteFarm = await repository.IsUserMemberOfFarmAsync(log.FarmId, command.VerifiedByUserId, ct);
-        if (!canWriteFarm)
+        var callerRole = await repository.GetUserRoleForFarmAsync((Guid)log.FarmId, command.VerifiedByUserId, ct);
+        if (callerRole is null)
         {
             return Result.Failure<DailyLogDto>(ShramSafalErrors.Forbidden);
         }
+        var resolvedCallerRole = callerRole.Value;
 
         try
         {
@@ -56,7 +52,7 @@ public sealed class VerifyLogHandler(
                 command.VerificationEventId ?? idGenerator.New(),
                 command.TargetStatus,
                 command.Reason,
-                callerRole,
+                resolvedCallerRole,
                 command.VerifiedByUserId,
                 clock.UtcNow);
 
@@ -67,7 +63,7 @@ public sealed class VerifyLogHandler(
                     log.Id,
                     "VerificationChanged",
                     command.VerifiedByUserId,
-                    command.ActorRole ?? "unknown",
+                    resolvedCallerRole.ToString(),
                     new
                     {
                         logId = log.Id,

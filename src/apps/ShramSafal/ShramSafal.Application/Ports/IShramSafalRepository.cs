@@ -7,6 +7,7 @@ using ShramSafal.Domain.Logs;
 using ShramSafal.Domain.Planning;
 using ShramSafal.Application.Contracts.Dtos;
 using AgriSync.SharedKernel.Contracts.Ids;
+using AgriSync.SharedKernel.Contracts.Roles;
 
 namespace ShramSafal.Application.Ports;
 
@@ -14,6 +15,10 @@ public interface IShramSafalRepository
 {
     Task AddFarmAsync(Farm farm, CancellationToken ct = default);
     Task<Farm?> GetFarmByIdAsync(Guid farmId, CancellationToken ct = default);
+    Task AddFarmMembershipAsync(FarmMembership membership, CancellationToken ct = default);
+    Task<FarmMembership?> GetFarmMembershipAsync(Guid farmId, Guid userId, CancellationToken ct = default);
+    Task<AppRole?> GetUserRoleForFarmAsync(Guid farmId, Guid userId, CancellationToken ct = default);
+    Task<bool> IsUserOwnerOfFarmAsync(Guid farmId, Guid userId, CancellationToken ct = default);
 
     Task AddPlotAsync(Plot plot, CancellationToken ct = default);
     Task<Plot?> GetPlotByIdAsync(Guid plotId, CancellationToken ct = default);
