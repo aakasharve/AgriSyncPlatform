@@ -261,6 +261,8 @@ export interface DexieLogRecord {
     createdByOperatorId?: string;
     /** Soft-deleted flag for index */
     isDeleted: 0 | 1;
+    /** Server-reported modification timestamp; used to skip stale-pull overwrites */
+    serverModifiedAtUtc?: string;
 }
 
 // =============================================================================
