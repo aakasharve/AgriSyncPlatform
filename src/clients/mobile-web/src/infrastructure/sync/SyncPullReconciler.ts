@@ -805,13 +805,65 @@ export async function reconcileSyncPull(payload: SyncPullResponse): Promise<void
     const logs = payload.dailyLogs.map(log => toDailyLog(log, plotLookup));
     const attachments: AttachmentDto[] = payload.attachments ?? [];
 
+    // Build server-version lookup so we can detect stale-pull overwrites.
+    const serverModifiedByLogId = new Map<string, string>();
+    for (const dto of payload.dailyLogs) {
+        if (dto.modifiedAtUtc) {
+            serverModifiedByLogId.set(dto.id, dto.modifiedAtUtc);
+        }
+    }
+
     const db = getDatabase();
+
+    // ARCH-S004: collect logIds that still have unsynced local mutations so we do
+    // NOT overwrite them with server state that is older than the pending edits.
+    const pendingLogIds = new Set<string>();
+    try {
+        const pending = await db.mutationQueue
+            .where('status')
+            .anyOf(['PENDING', 'SENDING', 'FAILED'])
+            .toArray();
+        for (const mutation of pending) {
+            const payloadObj = mutation.payload as
+                | { dailyLogId?: string; logId?: string; id?: string }
+                | null
+                | undefined;
+            if (!payloadObj || typeof payloadObj !== 'object') continue;
+            if (payloadObj.dailyLogId) pendingLogIds.add(payloadObj.dailyLogId);
+            if (payloadObj.logId) pendingLogIds.add(payloadObj.logId);
+        }
+    } catch (error) {
+        console.warn('SyncPullReconciler: failed to read mutationQueue for conflict detection', error);
+    }
+
     await db.transaction('rw', [
         db.logs, db.attachments, db.uploadQueue, db.appMeta, db.referenceData,
         db.farms, db.plots, db.cropCycles, db.costEntries, db.financeCorrections,
         db.dayLedgers, db.plannedTasks
     ], async () => {
         for (const log of logs) {
+            // Source-version conflict isolation.
+            if (pendingLogIds.has(log.id)) {
+                console.info(
+                    JSON.stringify({
+                        component: 'SyncPullReconciler',
+                        action: 'skip_overwrite_pending_mutation',
+                        logId: log.id,
+                    }));
+                continue;
+            }
+
+            const existing = await db.logs.get(log.id);
+            const serverModified = serverModifiedByLogId.get(log.id);
+            if (
+                existing?.serverModifiedAtUtc &&
+                serverModified &&
+                Date.parse(serverModified) <= Date.parse(existing.serverModifiedAtUtc)
+            ) {
+                // Server has not advanced past the version we already reconciled.
+                continue;
+            }
+
             await db.logs.put({
                 id: log.id,
                 schemaVersion: VersionRegistry.DB_SCHEMA_VERSION,
@@ -820,6 +872,7 @@ export async function reconcileSyncPull(payload: SyncPullResponse): Promise<void
                 verificationStatus: log.verification?.status,
                 createdByOperatorId: log.meta?.createdByOperatorId,
                 isDeleted: log.deletion ? 1 : 0,
+                serverModifiedAtUtc: serverModified,
             });
         }
 
