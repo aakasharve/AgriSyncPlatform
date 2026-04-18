@@ -166,7 +166,11 @@ public sealed class PushSyncBatchHandler(
                 return CreateDuplicateResult(clientRequestId, mutationType, deduplicated);
             }
 
-            throw;
+            return CreateFailedResult(
+                clientRequestId,
+                mutationType,
+                "ShramSafal.SyncMutationStoreError",
+                "Mutation failed during persistence and could not be safely deduplicated.");
         }
         finally
         {
