@@ -44,6 +44,15 @@ public sealed class PlanDerivationEngineTests
         Assert.All(irrigationItems, item => Assert.Equal("Vegetative", item.Stage));
     }
 
+    [Fact]
+    public void AddActivity_WithZeroInterval_Throws()
+    {
+        var template = BuildTemplate();
+
+        Assert.Throws<ArgumentException>(() =>
+            template.AddActivity(Guid.NewGuid(), "Spray", 2, FrequencyMode.EveryNDays, 0));
+    }
+
     private static ScheduleTemplate BuildTemplate()
     {
         var template = ScheduleTemplate.Create(

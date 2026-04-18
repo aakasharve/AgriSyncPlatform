@@ -26,6 +26,7 @@ public interface IShramSafalRepository
 
     Task AddCropCycleAsync(CropCycle cropCycle, CancellationToken ct = default);
     Task<CropCycle?> GetCropCycleByIdAsync(Guid cropCycleId, CancellationToken ct = default);
+    Task<List<CropCycle>> GetCropCyclesByPlotIdAsync(Guid plotId, CancellationToken ct = default);
 
     Task AddDailyLogAsync(DailyLog log, CancellationToken ct = default);
     Task<DailyLog?> GetDailyLogByIdAsync(Guid dailyLogId, CancellationToken ct = default);
