@@ -1,4 +1,5 @@
 using AgriSync.BuildingBlocks.Abstractions;
+using AgriSync.BuildingBlocks.Analytics;
 using AgriSync.BuildingBlocks.Auth;
 using AgriSync.BuildingBlocks.Results;
 using AgriSync.SharedKernel.Contracts.Ids;
@@ -15,7 +16,9 @@ public sealed class VerifyLogHandler(
     IShramSafalRepository repository,
     IAuthorizationEnforcer authorizationEnforcer,
     IIdGenerator idGenerator,
-    IClock clock)
+    IClock clock,
+    IEntitlementPolicy entitlementPolicy,
+    IAnalyticsWriter analytics)
 {
     public async Task<Result<DailyLogDto>> HandleAsync(VerifyLogCommand command, CancellationToken ct = default)
     {
@@ -46,9 +49,17 @@ public sealed class VerifyLogHandler(
         }
         var resolvedCallerRole = callerRole.Value;
 
+        // Phase 5 entitlement gate (PaidFeature.RunVerification).
+        var gate = await EntitlementGate.CheckAsync<DailyLogDto>(
+            entitlementPolicy, new UserId(command.VerifiedByUserId), log.FarmId,
+            PaidFeature.RunVerification, ct);
+        if (gate is not null) return gate;
+
+        var priorState = log.CurrentVerificationStatus;
+        VerificationEvent verification;
         try
         {
-            var verification = log.Verify(
+            verification = log.Verify(
                 command.VerificationEventId ?? idGenerator.New(),
                 command.TargetStatus,
                 command.Reason,
@@ -86,6 +97,28 @@ public sealed class VerifyLogHandler(
         }
 
         await repository.SaveChangesAsync(ct);
+
+        await analytics.EmitAsync(new AnalyticsEvent(
+            EventId: Guid.NewGuid(),
+            EventType: AnalyticsEventType.LogVerified,
+            OccurredAtUtc: clock.UtcNow,
+            ActorUserId: new UserId(command.VerifiedByUserId),
+            FarmId: log.FarmId,
+            OwnerAccountId: null, // Phase 2: null. Phase 4 will backfill via a BG job.
+            ActorRole: command.ActorRole ?? resolvedCallerRole.ToString().ToLowerInvariant(),
+            Trigger: "manual",
+            DeviceOccurredAtUtc: null,
+            SchemaVersion: "v1",
+            PropsJson: System.Text.Json.JsonSerializer.Serialize(new
+            {
+                logId = log.Id,
+                verifierUserId = command.VerifiedByUserId,
+                verifiedAtUtc = verification.OccurredAtUtc,
+                priorState = priorState.ToString(),
+                newState = verification.Status.ToString()
+            })
+        ), ct);
+
         return Result.Success(log.ToDto());
     }
 }

@@ -13,6 +13,7 @@ using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using AgriSync.BuildingBlocks;
+using AgriSync.BuildingBlocks.Analytics;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.TestHost;
@@ -25,6 +26,7 @@ using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using ShramSafal.Api;
+using ShramSafal.Application.Ports;
 using ShramSafal.Application.Ports.External;
 using ShramSafal.Domain.AI;
 using ShramSafal.Infrastructure.Persistence;
@@ -708,9 +710,20 @@ public sealed class AiEndpointsTests
                 .AddScheme<AuthenticationSchemeOptions, TestAuthHandler>("Test", _ => { });
             builder.Services.AddAuthorization();
             builder.Services.AddBuildingBlocks();
+            // Analytics writer — AI + other handlers now depend on IAnalyticsWriter.
+            // Use an in-memory analytics store so emits flow through the real
+            // failure-isolated writer instead of silently resolving to null.
+            builder.Services.AddAnalytics(options =>
+                options.UseInMemoryDatabase($"ai-tests-analytics-{Guid.NewGuid()}"));
             builder.Services.AddShramSafalApi(builder.Configuration);
             builder.Services.RemoveAll<DbContextOptions<ShramSafalDbContext>>();
             builder.Services.RemoveAll<IDbContextOptionsConfiguration<ShramSafalDbContext>>();
+            // Entitlement policy override — Slice 2 gates paid AI features on
+            // an active Accounts subscription, but this harness runs without
+            // the Accounts module. Tests assert AI pipeline behaviour, not
+            // subscription plumbing, so swap to an always-allow policy.
+            builder.Services.RemoveAll<IEntitlementPolicy>();
+            builder.Services.AddScoped<IEntitlementPolicy, AllowEntitlementPolicy>();
 
             builder.Services.RemoveAll<IAiProvider>();
             foreach (var aiProvider in aiProviders)
@@ -929,5 +942,23 @@ public sealed class AiEndpointsTests
                                  """
             });
         }
+    }
+
+    /// <summary>
+    /// Integration-test stub that bypasses the Slice 2 subscription gate.
+    /// The Accounts module is not registered in this harness, so there's no
+    /// real subscription to evaluate — tests assert AI pipeline behaviour.
+    /// </summary>
+    private sealed class AllowEntitlementPolicy : IEntitlementPolicy
+    {
+        public Task<EntitlementDecision> EvaluateAsync(
+            AgriSync.SharedKernel.Contracts.Ids.UserId userId,
+            AgriSync.SharedKernel.Contracts.Ids.FarmId farmId,
+            PaidFeature feature,
+            CancellationToken ct = default)
+            => Task.FromResult(new EntitlementDecision(
+                Allowed: true,
+                EntitlementReason.Allowed,
+                SubscriptionStatus: null));
     }
 }

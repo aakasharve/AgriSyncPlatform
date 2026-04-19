@@ -7,6 +7,7 @@ using ShramSafal.Domain.Farms;
 using ShramSafal.Domain.Finance;
 using ShramSafal.Domain.Logs;
 using ShramSafal.Domain.Planning;
+using ShramSafal.Domain.Subscriptions;
 
 namespace ShramSafal.Infrastructure.Persistence;
 
@@ -14,6 +15,9 @@ public sealed class ShramSafalDbContext(DbContextOptions<ShramSafalDbContext> op
 {
     public DbSet<Farm> Farms => Set<Farm>();
     public DbSet<FarmMembership> FarmMemberships => Set<FarmMembership>();
+    public DbSet<FarmInvitation> FarmInvitations => Set<FarmInvitation>();
+    public DbSet<FarmJoinToken> FarmJoinTokens => Set<FarmJoinToken>();
+    public DbSet<SubscriptionProjection> SubscriptionProjections => Set<SubscriptionProjection>();
     public DbSet<Plot> Plots => Set<Plot>();
     public DbSet<CropCycle> CropCycles => Set<CropCycle>();
     public DbSet<DailyLog> DailyLogs => Set<DailyLog>();

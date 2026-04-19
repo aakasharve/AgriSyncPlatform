@@ -53,6 +53,7 @@ const TaskCreationSheet = React.lazy(() => import('../../features/scheduler/comp
 const ReviewInboxSheet = React.lazy(() => import('../../features/logs/components/ReviewInboxSheet'));
 const QuickLogSheet = React.lazy(() => import('../../features/logs/components/QuickLogSheet').then(module => ({ default: module.QuickLogSheet })));
 const OnboardingPermissionsPage = React.lazy(() => import('../../pages/OnboardingPermissionsPage'));
+const QrDemoPage = React.lazy(() => import('../../pages/QrDemoPage'));
 
 type FeedStatusTone = 'pending' | 'rejected' | 'approved';
 
@@ -429,6 +430,7 @@ const AppRouter: React.FC = () => {
                             setCurrentRoute('schedule');
                         }}
                         onOpenFinanceManager={() => setCurrentRoute('finance-manager')}
+                        onOpenQrDemo={() => setCurrentRoute('qr-demo')}
                     />
                 </div>
             )}
@@ -523,6 +525,12 @@ const AppRouter: React.FC = () => {
                     currentRoute={currentRoute}
                     onNavigate={setCurrentRoute}
                 />
+            )}
+
+            {currentRoute === 'qr-demo' && (
+                <div className="animate-in fade-in slide-in-from-right-4 duration-300">
+                    <QrDemoPage onBack={() => setCurrentRoute('profile')} />
+                </div>
             )}
 
             {currentRoute === 'main' && mainView === 'reflect' && (

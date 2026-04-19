@@ -554,6 +554,11 @@ namespace ShramSafal.Infrastructure.Persistence.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at_utc");
 
+                    b.Property<string>("FarmCode")
+                        .HasMaxLength(12)
+                        .HasColumnType("character varying(12)")
+                        .HasColumnName("farm_code");
+
                     b.Property<DateTime>("ModifiedAtUtc")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("modified_at_utc");
@@ -564,21 +569,129 @@ namespace ShramSafal.Infrastructure.Persistence.Migrations
                         .HasColumnType("character varying(120)")
                         .HasColumnName("name");
 
+                    b.Property<Guid>("OwnerAccountId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("owner_account_id");
+
                     b.Property<Guid>("OwnerUserId")
                         .HasColumnType("uuid")
                         .HasColumnName("owner_user_id");
 
                     b.HasKey("Id");
 
+                    b.HasIndex("FarmCode")
+                        .IsUnique()
+                        .HasDatabaseName("ux_farms_farm_code")
+                        .HasFilter("farm_code IS NOT NULL");
+
                     b.HasIndex("ModifiedAtUtc");
 
+                    b.HasIndex("OwnerAccountId")
+                        .HasDatabaseName("ix_farms_owner_account_id");
+
                     b.ToTable("farms", "ssf");
+                });
+
+            modelBuilder.Entity("ShramSafal.Domain.Farms.FarmInvitation", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("farm_invitation_id");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at_utc");
+
+                    b.Property<Guid>("CreatedByUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by_user_id");
+
+                    b.Property<Guid>("FarmId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("farm_id");
+
+                    b.Property<DateTime?>("RevokedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("revoked_at_utc");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("integer")
+                        .HasColumnName("status");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("FarmId")
+                        .IsUnique()
+                        .HasDatabaseName("ux_farm_invitations_active_per_farm")
+                        .HasFilter("status = 1");
+
+                    b.ToTable("farm_invitations", "ssf");
+                });
+
+            modelBuilder.Entity("ShramSafal.Domain.Farms.FarmJoinToken", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("farm_join_token_id");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at_utc");
+
+                    b.Property<Guid>("FarmId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("farm_id");
+
+                    b.Property<Guid>("InvitationId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("farm_invitation_id");
+
+                    b.Property<bool>("IsRevoked")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("is_revoked");
+
+                    b.Property<string>("RawToken")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("raw_token");
+
+                    b.Property<DateTime?>("RevokedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("revoked_at_utc");
+
+                    b.Property<string>("TokenHash")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("token_hash");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("FarmId")
+                        .HasDatabaseName("ix_farm_join_tokens_farm_id");
+
+                    b.HasIndex("TokenHash")
+                        .IsUnique()
+                        .HasDatabaseName("ux_farm_join_tokens_token_hash");
+
+                    b.ToTable("farm_join_tokens", "ssf");
                 });
 
             modelBuilder.Entity("ShramSafal.Domain.Farms.FarmMembership", b =>
                 {
                     b.Property<Guid>("Id")
                         .HasColumnType("uuid");
+
+                    b.Property<Guid?>("ApprovedByUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("approved_by_user_id");
+
+                    b.Property<DateTime?>("ExitedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("exited_at_utc");
 
                     b.Property<Guid>("FarmId")
                         .HasColumnType("uuid")
@@ -588,11 +701,19 @@ namespace ShramSafal.Infrastructure.Persistence.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("granted_at_utc");
 
-                    b.Property<bool>("IsRevoked")
+                    b.Property<Guid?>("InvitationId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("invitation_id");
+
+                    b.Property<int>("JoinedVia")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("boolean")
-                        .HasDefaultValue(false)
-                        .HasColumnName("is_revoked");
+                        .HasColumnType("integer")
+                        .HasDefaultValue(1)
+                        .HasColumnName("joined_via");
+
+                    b.Property<DateTime?>("LastSeenAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("last_seen_at_utc");
 
                     b.Property<DateTime>("ModifiedAtUtc")
                         .HasColumnType("timestamp with time zone")
@@ -608,6 +729,12 @@ namespace ShramSafal.Infrastructure.Persistence.Migrations
                         .HasColumnType("character varying(30)")
                         .HasColumnName("role");
 
+                    b.Property<int>("Status")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(3)
+                        .HasColumnName("status");
+
                     b.Property<Guid>("UserId")
                         .HasColumnType("uuid")
                         .HasColumnName("user_id");
@@ -620,7 +747,8 @@ namespace ShramSafal.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("FarmId", "UserId")
                         .IsUnique()
-                        .HasFilter("is_revoked = false");
+                        .HasDatabaseName("ix_farm_memberships_farm_user_nonterminal")
+                        .HasFilter("status NOT IN (5, 6)");
 
                     b.ToTable("farm_memberships", "ssf");
                 });

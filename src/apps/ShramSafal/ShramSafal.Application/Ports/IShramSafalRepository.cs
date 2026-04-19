@@ -74,5 +74,12 @@ public interface IShramSafalRepository
     Task<IReadOnlyList<SyncOperatorDto>> GetOperatorsByIdsAsync(IEnumerable<Guid> userIds, CancellationToken ct = default);
     Task<bool> IsUserMemberOfFarmAsync(Guid farmId, Guid userId, CancellationToken ct = default);
 
+    /// <summary>
+    /// Count of <c>Active</c> <c>PrimaryOwner</c> memberships on a farm.
+    /// Used by the exit-membership handler to defend invariant I3 (the
+    /// last PrimaryOwner cannot leave).
+    /// </summary>
+    Task<int> CountActivePrimaryOwnersAsync(Guid farmId, CancellationToken ct = default);
+
     Task SaveChangesAsync(CancellationToken ct = default);
 }

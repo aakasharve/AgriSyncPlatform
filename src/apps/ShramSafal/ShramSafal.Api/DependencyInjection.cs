@@ -26,6 +26,11 @@ using ShramSafal.Application.UseCases.Finance.SetPriceConfigVersion;
 using ShramSafal.Application.UseCases.Logs.AddLogTask;
 using ShramSafal.Application.UseCases.Logs.CreateDailyLog;
 using ShramSafal.Application.UseCases.Logs.VerifyLog;
+using ShramSafal.Application.UseCases.Memberships.ClaimJoin;
+using ShramSafal.Application.UseCases.Memberships.ExitMembership;
+using ShramSafal.Application.UseCases.Memberships.GetMyFarms;
+using ShramSafal.Application.UseCases.Memberships.IssueFarmInvite;
+using ShramSafal.Application.UseCases.Memberships.RotateFarmInvite;
 using ShramSafal.Application.UseCases.Planning.ComputePlannedVsExecutedDelta;
 using ShramSafal.Application.UseCases.Planning.GeneratePlanFromTemplate;
 using ShramSafal.Application.UseCases.Planning.GetStagePlan;
@@ -85,6 +90,15 @@ public static class DependencyInjection
 
         services.AddScoped<PushSyncBatchHandler>();
         services.AddScoped<PullSyncChangesHandler>();
+
+        // Phase 4 — QR invitation + join
+        services.AddScoped<IssueFarmInviteHandler>();
+        services.AddScoped<RotateFarmInviteHandler>();
+        services.AddScoped<ClaimJoinHandler>();
+        services.AddScoped<GetMyFarmsHandler>();
+
+        // Phase 6 — self-exit
+        services.AddScoped<ExitMembershipHandler>();
 
         return services;
     }

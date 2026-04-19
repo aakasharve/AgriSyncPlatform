@@ -9,8 +9,10 @@ using System.Security.Claims;
 using System.Text;
 using System.Text.Json;
 using System.Text.Encodings.Web;
+using System.Threading;
 using System.Threading.Tasks;
 using AgriSync.BuildingBlocks;
+using AgriSync.BuildingBlocks.Analytics;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.TestHost;
@@ -23,6 +25,7 @@ using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using ShramSafal.Api;
+using ShramSafal.Application.Ports;
 using ShramSafal.Domain.Farms;
 using ShramSafal.Infrastructure.Persistence;
 using AgriSync.SharedKernel.Contracts.Ids;
@@ -1254,9 +1257,21 @@ public sealed class SyncEndpointsTests
                 .AddScheme<AuthenticationSchemeOptions, TestAuthHandler>("Test", _ => { });
             builder.Services.AddAuthorization();
             builder.Services.AddBuildingBlocks();
+            // Analytics writer — handlers now depend on IAnalyticsWriter. Give
+            // the test harness an in-memory analytics store so emits flow
+            // through the real failure-isolated writer rather than a noop.
+            builder.Services.AddAnalytics(options =>
+                options.UseInMemoryDatabase($"sync-tests-analytics-{Guid.NewGuid()}"));
             builder.Services.AddShramSafalApi(builder.Configuration);
             builder.Services.RemoveAll<DbContextOptions<ShramSafalDbContext>>();
             builder.Services.RemoveAll<IDbContextOptionsConfiguration<ShramSafalDbContext>>();
+            // Entitlement policy override — Slice 2 added a subscription gate to
+            // every paid handler, but this integration harness doesn't stand up
+            // the Accounts module (no seeded subscriptions). Swap in an
+            // "always allowed" policy so sync-push tests keep asserting the
+            // sync contract, not subscription plumbing.
+            builder.Services.RemoveAll<IEntitlementPolicy>();
+            builder.Services.AddScoped<IEntitlementPolicy, AllowEntitlementPolicy>();
             var dbRoot = new InMemoryDatabaseRoot();
             var dbName = $"sync-tests-{Guid.NewGuid()}";
             builder.Services.AddDbContext<ShramSafalDbContext>(options =>
@@ -1327,5 +1342,24 @@ public sealed class SyncEndpointsTests
             var ticket = new AuthenticationTicket(principal, Scheme.Name);
             return Task.FromResult(AuthenticateResult.Success(ticket));
         }
+    }
+
+    /// <summary>
+    /// Integration-test stub that bypasses the Slice 2 subscription gate.
+    /// The Accounts module is intentionally not spun up for sync-push tests,
+    /// so there's no real subscription to evaluate. Tests that specifically
+    /// need to assert gate behaviour should swap this out for the real policy.
+    /// </summary>
+    private sealed class AllowEntitlementPolicy : IEntitlementPolicy
+    {
+        public Task<EntitlementDecision> EvaluateAsync(
+            UserId userId,
+            FarmId farmId,
+            PaidFeature feature,
+            CancellationToken ct = default)
+            => Task.FromResult(new EntitlementDecision(
+                Allowed: true,
+                EntitlementReason.Allowed,
+                SubscriptionStatus: null));
     }
 }

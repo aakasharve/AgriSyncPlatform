@@ -10,6 +10,8 @@ import PageToggle from '../../../shared/components/ui/PageToggle';
 import { useLanguage } from '../../../i18n/LanguageContext';
 
 import { FarmOperator } from '../../../domain/types/farm.types';
+import FarmContextSwitcher from './FarmContextSwitcher';
+import type { MyFarmDto } from '../../onboarding/qr/inviteApi';
 
 interface AppHeaderProps {
   currentRoute: AppRoute;
@@ -19,6 +21,14 @@ interface AppHeaderProps {
   disabled?: boolean;
   activeOperator?: FarmOperator;
   onVoiceTrigger?: () => void;
+  /** Phase 6 — farm context strip below the main bar. Omit to hide. */
+  farmContext?: {
+    farms: MyFarmDto[];
+    currentFarmId: string | null;
+    onSwitchFarm: (farmId: string) => void;
+    onCreateFarm: () => void;
+    onJoinViaQr: () => void;
+  };
 }
 
 const getUserColor = (name: string) => {
@@ -44,7 +54,8 @@ const AppHeader: React.FC<AppHeaderProps> = ({
   onViewChange,
   disabled,
   activeOperator,
-  onVoiceTrigger
+  onVoiceTrigger,
+  farmContext,
 }) => {
   const { t } = useLanguage();
 
@@ -146,6 +157,20 @@ const AppHeader: React.FC<AppHeaderProps> = ({
         </div>
 
       </div>
+
+      {/* Phase 6 — slim farm-context strip. Always visible when farm data is available. */}
+      {farmContext && (
+        <div className="page-content pl-safe-area pr-safe-area flex items-center justify-start gap-2 border-t border-stone-100 bg-stone-50/60 py-1.5">
+          <FarmContextSwitcher
+            farms={farmContext.farms}
+            currentFarmId={farmContext.currentFarmId}
+            onSwitch={farmContext.onSwitchFarm}
+            onCreateFarm={farmContext.onCreateFarm}
+            onJoinViaQr={farmContext.onJoinViaQr}
+            compact
+          />
+        </div>
+      )}
     </header>
   );
 };

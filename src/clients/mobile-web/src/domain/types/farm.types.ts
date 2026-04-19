@@ -386,7 +386,8 @@ export type AppRoute =
     | 'finance-price-book'
     | 'finance-review-inbox'
     | 'finance-reports'
-    | 'finance-settings';
+    | 'finance-settings'
+    | 'qr-demo';
 
 export interface AudioData {
     blob: Blob;

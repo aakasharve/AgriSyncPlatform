@@ -1,5 +1,7 @@
 using AgriSync.BuildingBlocks.Abstractions;
+using AgriSync.BuildingBlocks.Analytics;
 using AgriSync.BuildingBlocks.Results;
+using AgriSync.SharedKernel.Contracts.Ids;
 using AgriSync.SharedKernel.Contracts.Roles;
 using ShramSafal.Application.Contracts.Dtos;
 using ShramSafal.Application.Ports;
@@ -11,7 +13,9 @@ namespace ShramSafal.Application.UseCases.Farms.CreatePlot;
 public sealed class CreatePlotHandler(
     IShramSafalRepository repository,
     IIdGenerator idGenerator,
-    IClock clock)
+    IClock clock,
+    IEntitlementPolicy entitlementPolicy,
+    IAnalyticsWriter analytics)
 {
     public async Task<Result<PlotDto>> HandleAsync(CreatePlotCommand command, CancellationToken ct = default)
     {
@@ -41,6 +45,12 @@ public sealed class CreatePlotHandler(
         }
         var resolvedActorRole = actorRole.Value;
 
+        // Phase 5 entitlement gate (PaidFeature.CreatePlot).
+        var gate = await EntitlementGate.CheckAsync<PlotDto>(
+            entitlementPolicy, new UserId(command.ActorUserId), new FarmId(command.FarmId),
+            PaidFeature.CreatePlot, ct);
+        if (gate is not null) return gate;
+
         var nowUtc = clock.UtcNow;
         var plot = Domain.Farms.Plot.Create(
             command.PlotId ?? idGenerator.New(),
@@ -69,6 +79,26 @@ public sealed class CreatePlotHandler(
                 nowUtc),
             ct);
         await repository.SaveChangesAsync(ct);
+
+        await analytics.EmitAsync(new AnalyticsEvent(
+            EventId: Guid.NewGuid(),
+            EventType: AnalyticsEventType.PlotCreated,
+            OccurredAtUtc: nowUtc,
+            ActorUserId: new UserId(command.ActorUserId),
+            FarmId: new FarmId(command.FarmId),
+            OwnerAccountId: null,
+            ActorRole: resolvedActorRole.ToString().ToLowerInvariant(),
+            Trigger: "manual",
+            DeviceOccurredAtUtc: null,
+            SchemaVersion: "v1",
+            PropsJson: System.Text.Json.JsonSerializer.Serialize(new
+            {
+                plotId = plot.Id,
+                farmId = command.FarmId,
+                plotName = plot.Name,
+                areaInAcres = plot.AreaInAcres
+            })
+        ), ct);
 
         return Result.Success(plot.ToDto());
     }

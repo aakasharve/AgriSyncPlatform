@@ -89,6 +89,67 @@ namespace User.Infrastructure.Persistence.Migrations
                     b.ToTable("memberships", "public");
                 });
 
+            modelBuilder.Entity("User.Domain.Security.OtpChallenge", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("AttemptCount")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0)
+                        .HasColumnName("attempt_count");
+
+                    b.Property<DateTime?>("ConsumedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("consumed_at_utc");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at_utc");
+
+                    b.Property<DateTime>("ExpiresAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("expires_at_utc");
+
+                    b.Property<int>("MaxAttempts")
+                        .HasColumnType("integer")
+                        .HasColumnName("max_attempts");
+
+                    b.Property<string>("OtpHash")
+                        .IsRequired()
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)")
+                        .HasColumnName("otp_hash");
+
+                    b.Property<string>("PhoneNumberNormalized")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("phone_number_normalized");
+
+                    b.Property<string>("ProviderRequestId")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("provider_request_id");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("integer")
+                        .HasColumnName("status");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("PhoneNumberNormalized")
+                        .IsUnique()
+                        .HasDatabaseName("ux_otp_challenges_pending_per_phone")
+                        .HasFilter("status = 1");
+
+                    b.HasIndex("PhoneNumberNormalized", "CreatedAtUtc")
+                        .HasDatabaseName("ix_otp_challenges_phone_created");
+
+                    b.ToTable("otp_challenges", "public");
+                });
+
             modelBuilder.Entity("User.Domain.Security.RefreshToken", b =>
                 {
                     b.Property<Guid>("Id")

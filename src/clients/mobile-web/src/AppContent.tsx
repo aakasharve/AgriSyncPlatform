@@ -26,6 +26,8 @@ import { CropProfile } from './types';
 import { useAgriLogApp } from './app/compositionRoot';
 import { AppFeatureProviders } from './app/context/AppFeatureContexts';
 import { useTemplateCatalogSync } from './app/hooks/useTemplateCatalogSync';
+import FirstFarmWizard from './features/onboarding/components/FirstFarmWizard';
+import { getMyFarms, type MyFarmDto, type BootstrapFirstFarmResponse } from './features/onboarding/qr/inviteApi';
 
 // Demo Mode pill removed
 
@@ -44,6 +46,74 @@ const AppContent: React.FC<AppContentProps> = ({ crops: initialCrops, setCrops }
     // Phase 4: Global Voice State (UI concern, so kept here or could be moved to hook)
     const [isGlobalListening, setIsGlobalListening] = useState(false);
     const [isKeyboardOpen, setIsKeyboardOpen] = useState(false);
+
+    // Phase 6: Farm context — list + current selection, first-farm wizard.
+    const [myFarms, setMyFarms] = useState<MyFarmDto[] | null>(null);
+    const [currentFarmId, setCurrentFarmId] = useState<string | null>(() => {
+        try { return window.localStorage.getItem('shramsafal_current_farm_id') || null; }
+        catch { return null; }
+    });
+    const [showFirstFarmWizard, setShowFirstFarmWizard] = useState(false);
+    const [farmContextRefreshCounter, setFarmContextRefreshCounter] = useState(0);
+
+    useEffect(() => {
+        let cancelled = false;
+        (async () => {
+            try {
+                const farms = await getMyFarms();
+                if (cancelled) return;
+                setMyFarms(farms);
+
+                // If the user has zero farms, auto-open the wizard.
+                if (farms.length === 0) {
+                    setShowFirstFarmWizard(true);
+                    return;
+                }
+
+                // Ensure currentFarmId points to something real.
+                if (!currentFarmId || !farms.some(f => f.farmId === currentFarmId)) {
+                    const next = farms[0].farmId;
+                    setCurrentFarmId(next);
+                    try { window.localStorage.setItem('shramsafal_current_farm_id', next); } catch { /* ignore */ }
+                }
+            } catch {
+                // Not authenticated / server unreachable — keep null; UI handles.
+                if (!cancelled) setMyFarms([]);
+            }
+        })();
+        return () => { cancelled = true; };
+    }, [farmContextRefreshCounter]); // eslint-disable-line react-hooks/exhaustive-deps
+
+    const handleSwitchFarm = (farmId: string) => {
+        setCurrentFarmId(farmId);
+        try { window.localStorage.setItem('shramsafal_current_farm_id', farmId); } catch { /* ignore */ }
+    };
+
+    const handleWizardComplete = (result: BootstrapFirstFarmResponse) => {
+        setShowFirstFarmWizard(false);
+        setCurrentFarmId(result.farmId);
+        try { window.localStorage.setItem('shramsafal_current_farm_id', result.farmId); } catch { /* ignore */ }
+        setFarmContextRefreshCounter(x => x + 1);
+    };
+
+    const handleJoinViaQr = () => {
+        // Deep-link: JoinFarmLandingPage expects `?join=<token>&farm=<code>`.
+        // We don't have a token handy here — route the user to a "paste link"
+        // prompt. Future: a real scanner. For now, redirect to LoginPage's
+        // "Join via farm QR" flow (which prompts for a pasted link).
+        const link = window.prompt('तुमच्या मालकाने शेअर केलेली QR लिंक पेस्ट करा\nPaste the QR link shared by the farmer:');
+        if (!link) return;
+        try {
+            const url = new URL(link.trim());
+            const token = url.searchParams.get('t') ?? url.searchParams.get('join');
+            const farm = url.searchParams.get('f') ?? url.searchParams.get('farm');
+            if (token && farm) {
+                window.location.assign(`/?join=${encodeURIComponent(token)}&farm=${encodeURIComponent(farm)}`);
+                return;
+            }
+        } catch { /* fall through */ }
+        window.alert('Link not recognised. Ask the farmer to share it again.');
+    };
 
     const {
         navigation, context, data, voice, weather, commands, trust,
@@ -228,6 +298,13 @@ const AppContent: React.FC<AppContentProps> = ({ crops: initialCrops, setCrops }
                     if (typeof navigator !== 'undefined' && navigator.vibrate) navigator.vibrate(40);
                     setIsGlobalListening(true);
                 }}
+                farmContext={myFarms ? {
+                    farms: myFarms,
+                    currentFarmId,
+                    onSwitchFarm: handleSwitchFarm,
+                    onCreateFarm: () => setShowFirstFarmWizard(true),
+                    onJoinViaQr: handleJoinViaQr,
+                } : undefined}
             />
 
             {/* Demo indicators */}
@@ -248,6 +325,14 @@ const AppContent: React.FC<AppContentProps> = ({ crops: initialCrops, setCrops }
             </main>
 
             {/* --- GLOBAL OVERLAYS --- */}
+
+            {/* Phase 6: First-farm wizard (auto-opens for brand-new users with 0 farms) */}
+            <FirstFarmWizard
+                isOpen={showFirstFarmWizard}
+                onComplete={handleWizardComplete}
+                onDismiss={myFarms && myFarms.length > 0 ? () => setShowFirstFarmWizard(false) : undefined}
+                suggestedOwnerName={data.farmerProfile?.name?.split(' ')[0]}
+            />
 
             {/* Weather Reaction Prompt Overlay */}
             {weather.pendingWeatherEvent && (

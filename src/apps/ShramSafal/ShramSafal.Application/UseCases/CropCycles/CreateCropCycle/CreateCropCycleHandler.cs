@@ -11,7 +11,8 @@ namespace ShramSafal.Application.UseCases.CropCycles.CreateCropCycle;
 public sealed class CreateCropCycleHandler(
     IShramSafalRepository repository,
     IIdGenerator idGenerator,
-    IClock clock)
+    IClock clock,
+    IEntitlementPolicy entitlementPolicy)
 {
     public async Task<Result<CropCycleDto>> HandleAsync(CreateCropCycleCommand command, CancellationToken ct = default)
     {
@@ -48,6 +49,13 @@ public sealed class CreateCropCycleHandler(
         {
             return Result.Failure<CropCycleDto>(ShramSafalErrors.Forbidden);
         }
+
+        // Phase 5 entitlement gate (PaidFeature.CreatePlot tier — crop
+        // cycles live in the same setup-level entitlement as plots).
+        var gate = await EntitlementGate.CheckAsync<CropCycleDto>(
+            entitlementPolicy, new UserId(command.ActorUserId), farmId,
+            PaidFeature.CreatePlot, ct);
+        if (gate is not null) return gate;
 
         var requestedEndDate = command.EndDate ?? DateOnly.MaxValue;
         var overlappingCycleExists = (await repository.GetCropCyclesByPlotIdAsync(command.PlotId, ct))

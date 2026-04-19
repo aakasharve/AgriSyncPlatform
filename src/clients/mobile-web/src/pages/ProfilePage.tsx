@@ -10,7 +10,8 @@ import {
     User, Zap, MapPin, Plus, Trash2, X, Sprout, Crosshair, Clock,
     Settings2, ArrowRight, Droplets, Tractor, BarChart3, CalendarDays,
     ChevronRight, CheckCircle2, Wrench, Cylinder, ArrowLeft, Save, BrainCircuit,
-    Medal, ShieldCheck, Check, Users, Settings, Phone, AlertTriangle, FileText, Upload, Eye, LogOut
+    Medal, ShieldCheck, Check, Users, Settings, Phone, AlertTriangle, FileText, Upload, Eye, LogOut,
+    PanelLeftClose, PanelLeftOpen
 } from 'lucide-react';
 import {
     FarmerProfile, WaterResource, FarmMotor,
@@ -25,6 +26,11 @@ import VocabManager from '../features/voice/components/VocabManager';
 import PeopleDirectory from '../features/people/components/PeopleDirectory';
 import { Person, PlotGeoData } from '../types';
 import { AddMemberWizard } from '../features/people/components/AddMemberWizard';
+import FarmInviteQrSheet from '../features/onboarding/qr/FarmInviteQrSheet';
+import { QrCode } from 'lucide-react';
+import EntitlementBanner, { type SubscriptionSnapshotView } from '../features/admin/billing/EntitlementBanner';
+import MembershipsList from '../features/people/components/MembershipsList';
+import type { MyFarmDto } from '../features/onboarding/qr/inviteApi';
 import { PlotMap } from '../features/context/components/PlotMap';
 import { getDateKey } from '../core/domain/services/DateKeyService';
 import { createInitialScheduleInstance } from '../features/scheduler/planning/ClientPlanEngine';
@@ -62,6 +68,7 @@ interface ProfilePageProps {
     onDeletePerson?: (id: string) => void;
     onOpenScheduleLibrary?: (cropId?: string) => void;
     onOpenFinanceManager?: () => void;
+    onOpenQrDemo?: () => void;
 }
 
 // --- CONSTANTS ---
@@ -1313,7 +1320,7 @@ const UtilitiesManager = ({ profile, onUpdate }: { profile: FarmerProfile, onUpd
 
 // --- MAIN PAGE LAYOUT ---
 
-const ProfilePage: React.FC<ProfilePageProps> = ({ profile, crops, onUpdateProfile, onUpdateCrops, onAddPerson, onDeletePerson, onOpenScheduleLibrary, onOpenFinanceManager }) => {
+const ProfilePage: React.FC<ProfilePageProps> = ({ profile, crops, onUpdateProfile, onUpdateCrops, onAddPerson, onDeletePerson, onOpenScheduleLibrary, onOpenFinanceManager, onOpenQrDemo }) => {
     const { t } = useLanguage();
     const { logout } = useAuth();
     const [activeTab, setActiveTab] = useState<'identity' | 'structure' | 'utils' | 'plan' | 'machines' | 'health' | 'intelligence' | 'people'>('structure');
@@ -1415,18 +1422,41 @@ const ProfilePage: React.FC<ProfilePageProps> = ({ profile, crops, onUpdateProfi
     const deleteCrop = (id: string) => onUpdateCrops(crops.filter(c => c.id !== id));
     const deletePlot = (cId: string, pId: string) => onUpdateCrops(crops.map(c => c.id === cId ? { ...c, plots: c.plots.filter(p => p.id !== pId) } : c));
 
-    const TabItem = ({ id, label, icon }: { id: typeof activeTab, label: string, icon: React.ReactNode }) => (
-        <button
-            onClick={() => setActiveTab(id)}
-            className={`flex items-center gap-3 w-full p-3 rounded-xl text-left transition-all ${activeTab === id ? 'bg-emerald-50 text-emerald-800 border border-emerald-100 shadow-sm' : 'text-slate-500 hover:bg-white'}`}
-        >
-            <div className={`${activeTab === id ? 'text-emerald-600' : 'text-slate-400'}`}>{icon}</div>
-            <span className="text-sm font-bold">{label}</span>
-            {activeTab === id && <ChevronRight size={16} className="ml-auto text-emerald-400" />}
-        </button>
-    );
+    // Sidebar collapse (web only). Persists across reloads so returning users
+    // keep their preferred layout. On mobile (<lg) the sidebar stacks above
+    // content and this flag is ignored so the Android/small-screen flow is
+    // unchanged.
+    const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(() => {
+        if (typeof window === 'undefined') return false;
+        return window.localStorage.getItem('shramsafal_setup_sidebar_collapsed') === '1';
+    });
+    React.useEffect(() => {
+        window.localStorage.setItem('shramsafal_setup_sidebar_collapsed', sidebarCollapsed ? '1' : '0');
+    }, [sidebarCollapsed]);
+
+    const TabItem = ({ id, label, icon }: { id: typeof activeTab, label: string, icon: React.ReactNode }) => {
+        const isActive = activeTab === id;
+        return (
+            <button
+                onClick={() => setActiveTab(id)}
+                title={sidebarCollapsed ? label : undefined}
+                className={`flex items-center w-full rounded-xl text-left transition-all
+                    ${sidebarCollapsed ? 'lg:justify-center lg:p-2 gap-3 p-3' : 'gap-3 p-3'}
+                    ${isActive ? 'bg-emerald-50 text-emerald-800 border border-emerald-100 shadow-sm' : 'text-slate-500 hover:bg-white'}`}
+            >
+                <div className={`${isActive ? 'text-emerald-600' : 'text-slate-400'}`}>{icon}</div>
+                <span className={`text-sm font-bold ${sidebarCollapsed ? 'lg:hidden' : ''}`}>{label}</span>
+                {isActive && !sidebarCollapsed && <ChevronRight size={16} className="ml-auto text-emerald-400 hidden lg:block" />}
+                {isActive && !sidebarCollapsed && <ChevronRight size={16} className="ml-auto text-emerald-400 lg:hidden" />}
+            </button>
+        );
+    };
 
     const [showMemberWizard, setShowMemberWizard] = useState(false);
+    const [showInviteQr, setShowInviteQr] = useState(false);
+    const [myFarm, setMyFarm] = useState<{ farmId: string; name: string; role: string; subscription: SubscriptionSnapshotView | null } | null>(null);
+    const [myMemberships, setMyMemberships] = useState<MyFarmDto[]>([]);
+    const [farmLookupError, setFarmLookupError] = useState<string | null>(null);
 
     // --- HANDLERS ---
     const handleAddMember = (member: any) => {
@@ -1434,8 +1464,90 @@ const ProfilePage: React.FC<ProfilePageProps> = ({ profile, crops, onUpdateProfi
         setShowMemberWizard(false);
     };
 
+    // When the owner taps "Share farm QR" we need the real server farmId,
+    // not the localStorage phone string. /shramsafal/farms/mine returns
+    // that. Lazy-load on first open.
+    const handleOpenInviteQr = React.useCallback(async () => {
+        setFarmLookupError(null);
+        if (myFarm) {
+            setShowInviteQr(true);
+            return;
+        }
+        try {
+            const { getMyFarms } = await import('../features/onboarding/qr/inviteApi');
+            const farms = await getMyFarms();
+            if (farms.length === 0) {
+                setFarmLookupError('You do not own a farm yet. Ask for help to set one up.');
+                return;
+            }
+            const ownerFarm = farms.find(f => f.role === 'PrimaryOwner' || f.role === 'SecondaryOwner') ?? farms[0];
+            setMyFarm({
+                farmId: ownerFarm.farmId,
+                name: ownerFarm.name,
+                role: ownerFarm.role,
+                subscription: ownerFarm.subscription ?? null,
+            });
+            setShowInviteQr(true);
+        } catch (err) {
+            setFarmLookupError(err instanceof Error ? err.message : 'Could not load your farm.');
+        }
+    }, [myFarm]);
+
+    // Load the farm snapshot on mount so the entitlement banner shows
+    // without waiting for the owner to tap "Share farm QR" first.
+    React.useEffect(() => {
+        let cancelled = false;
+        (async () => {
+            try {
+                const { getMyFarms } = await import('../features/onboarding/qr/inviteApi');
+                const farms = await getMyFarms();
+                if (cancelled) return;
+                setMyMemberships(farms);
+                if (farms.length === 0) return;
+                const ownerFarm = farms.find(f => f.role === 'PrimaryOwner' || f.role === 'SecondaryOwner') ?? farms[0];
+                setMyFarm(prev => prev ?? {
+                    farmId: ownerFarm.farmId,
+                    name: ownerFarm.name,
+                    role: ownerFarm.role,
+                    subscription: ownerFarm.subscription ?? null,
+                });
+            } catch {
+                /* silent — user may not be authenticated yet */
+            }
+        })();
+        return () => { cancelled = true; };
+    }, []);
+
+    const handleExitMembership = React.useCallback(async (farmId: string, _farmName: string) => {
+        const { exitMembership, getMyFarms, isInviteApiError } = await import('../features/onboarding/qr/inviteApi');
+        try {
+            await exitMembership(farmId);
+            const refreshed = await getMyFarms();
+            setMyMemberships(refreshed);
+            if (myFarm?.farmId === farmId) {
+                setMyFarm(null);
+            }
+        } catch (err) {
+            const message = isInviteApiError(err) ? err.message : 'Exit failed.';
+            throw new Error(message);
+        }
+    }, [myFarm?.farmId]);
+
+    // Compute which memberships the caller can't exit — any PrimaryOwner
+    // farm where they're the sole PrimaryOwner. Client-side heuristic; the
+    // server is still the source of truth and will return 409 if we guess wrong.
+    const nonExitableFarmIds = React.useMemo(() => {
+        const ids = new Set<string>();
+        for (const m of myMemberships) {
+            if (m.role === 'PrimaryOwner') {
+                ids.add(m.farmId); // conservative: assume they are the last
+            }
+        }
+        return ids;
+    }, [myMemberships]);
+
     return (
-        <div className="pb-20">
+        <div className="max-w-4xl mx-auto px-4 sm:px-6 pt-4 pb-32">
 
             {/* MEMBER WIZARD */}
             {showMemberWizard && (
@@ -1443,6 +1555,21 @@ const ProfilePage: React.FC<ProfilePageProps> = ({ profile, crops, onUpdateProfi
                     onSave={handleAddMember}
                     onCancel={() => setShowMemberWizard(false)}
                 />
+            )}
+
+            {/* FARM INVITE QR SHEET */}
+            {myFarm && (
+                <FarmInviteQrSheet
+                    isOpen={showInviteQr}
+                    onClose={() => setShowInviteQr(false)}
+                    farmId={myFarm.farmId}
+                    farmName={myFarm.name}
+                />
+            )}
+            {farmLookupError && showInviteQr === false && (
+                <div className="fixed bottom-24 left-1/2 -translate-x-1/2 rounded-xl border border-rose-200 bg-rose-50 px-4 py-2 text-xs font-semibold text-rose-700 shadow-lg z-50">
+                    {farmLookupError}
+                </div>
             )}
 
             {/* Wizard Overlay */}
@@ -1489,12 +1616,30 @@ const ProfilePage: React.FC<ProfilePageProps> = ({ profile, crops, onUpdateProfi
                 </div>
             )}
 
-            <div className="flex flex-col md:flex-row gap-6">
+            <div className="flex flex-col lg:flex-row gap-6">
 
-                {/* SIDEBAR NAVIGATION */}
-                <div className="w-full md:w-64 flex-shrink-0">
+                {/* SIDEBAR NAVIGATION — full width on mobile/tablet (Android-like
+                    flow), side-rail on lg+ desktops. A collapse toggle appears
+                    only on lg+ so narrow viewports never lose content room. */}
+                <div className={`w-full flex-shrink-0 transition-[width] duration-200 ${sidebarCollapsed ? 'lg:w-16' : 'lg:w-64'}`}>
                     <div className="bg-slate-50/50 p-2 rounded-2xl border border-slate-200 space-y-1">
-                        <div className="px-3 py-2 text-xs font-bold text-slate-400 uppercase tracking-wider">{t('profile.setupHub')}</div>
+
+                        {/* Header row: section title + collapse toggle (desktop only) */}
+                        <div className="flex items-center justify-between">
+                            <div className={`px-3 py-2 text-xs font-bold text-slate-400 uppercase tracking-wider ${sidebarCollapsed ? 'lg:hidden' : ''}`}>
+                                {t('profile.setupHub')}
+                            </div>
+                            <button
+                                type="button"
+                                onClick={() => setSidebarCollapsed(v => !v)}
+                                title={sidebarCollapsed ? 'Expand menu' : 'Collapse menu'}
+                                aria-label={sidebarCollapsed ? 'Expand menu' : 'Collapse menu'}
+                                className="hidden lg:inline-flex items-center justify-center ml-auto mr-1 h-8 w-8 rounded-lg text-slate-400 hover:bg-white hover:text-emerald-600 transition-colors"
+                            >
+                                {sidebarCollapsed ? <PanelLeftOpen size={16} /> : <PanelLeftClose size={16} />}
+                            </button>
+                        </div>
+
                         <TabItem id="identity" label={t('profile.farmerIdentity')} icon={<User size={20} />} />
                         <TabItem id="structure" label={t('profile.cropsAndPlots')} icon={<Sprout size={20} />} />
                         <TabItem id="utils" label={t('profile.waterAndPower')} icon={<Zap size={20} />} />
@@ -1503,20 +1648,23 @@ const ProfilePage: React.FC<ProfilePageProps> = ({ profile, crops, onUpdateProfi
                         <TabItem id="health" label="Soil & Crop Health" icon={<FlaskConical size={20} />} />
                         <TabItem id="intelligence" label={t('profile.intelligence')} icon={<BrainCircuit size={20} />} />
 
-                        <div className="px-3 py-2 text-xs font-bold text-slate-400 uppercase tracking-wider mt-4">Finance</div>
+                        <div className={`px-3 py-2 text-xs font-bold text-slate-400 uppercase tracking-wider mt-4 ${sidebarCollapsed ? 'lg:hidden' : ''}`}>Finance</div>
                         <button
                             onClick={onOpenFinanceManager}
-                            className="flex items-center gap-3 w-full p-3 rounded-xl text-left text-slate-500 hover:bg-white hover:text-emerald-700 transition-all group"
+                            title={sidebarCollapsed ? 'Finance Manager' : undefined}
+                            className={`flex items-center w-full rounded-xl text-left text-slate-500 hover:bg-white hover:text-emerald-700 transition-all group
+                                ${sidebarCollapsed ? 'lg:justify-center lg:p-2 gap-3 p-3' : 'gap-3 p-3'}`}
                         >
                             <div className="text-slate-400 group-hover:text-emerald-600"><BarChart3 size={20} /></div>
-                            <span className="text-sm font-bold">Finance Manager</span>
-                            <ArrowRight size={16} className="ml-auto text-slate-300 group-hover:text-emerald-400" />
+                            <span className={`text-sm font-bold ${sidebarCollapsed ? 'lg:hidden' : ''}`}>Finance Manager</span>
+                            <ArrowRight size={16} className={`ml-auto text-slate-300 group-hover:text-emerald-400 ${sidebarCollapsed ? 'lg:hidden' : ''}`} />
                         </button>
+
                     </div>
                 </div>
 
                 {/* CONTENT AREA */}
-                <div className="flex-1">
+                <div className="flex-1 min-w-0">
 
                     {/* 1. IDENTITY */}
                     {activeTab === 'identity' && (
@@ -1594,10 +1742,10 @@ const ProfilePage: React.FC<ProfilePageProps> = ({ profile, crops, onUpdateProfi
                                             )}
                                         </div>
 
-                                        <div className="flex-1">
-                                            <div className="flex items-center gap-2 mb-1">
-                                                <h2 className="text-2xl font-black text-slate-800">{profile.name || '—'}</h2>
-                                                <span className="bg-emerald-100 text-emerald-800 text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wide border border-emerald-200">
+                                        <div className="flex-1 min-w-0">
+                                            <div className="flex flex-wrap items-center gap-x-2 gap-y-1 mb-1">
+                                                <h2 className="text-2xl font-black text-slate-800 break-words">{profile.name || '—'}</h2>
+                                                <span className="bg-emerald-100 text-emerald-800 text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wide border border-emerald-200 whitespace-nowrap">
                                                     {t('profile.primaryOwner')}
                                                 </span>
                                             </div>
@@ -1623,7 +1771,7 @@ const ProfilePage: React.FC<ProfilePageProps> = ({ profile, crops, onUpdateProfi
                                     {/* DETAILED FIELDS - Always visible */}
                                     <div className="mt-6 pt-6 border-t border-slate-100">
                                         <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wide mb-4">Identity Details</h4>
-                                        <div className="grid grid-cols-2 gap-4">
+                                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                             <div className="bg-slate-50 rounded-xl p-3">
                                                 <p className="text-[10px] font-bold text-slate-400 uppercase">Full Name</p>
                                                 <p className="text-sm font-bold text-slate-700">{profile.name || '—'}</p>
@@ -1697,6 +1845,26 @@ const ProfilePage: React.FC<ProfilePageProps> = ({ profile, crops, onUpdateProfi
 
                             
 
+                            {/* Phase 5 entitlement banner — only renders for owners with
+                                subscription trouble or a trial. Workers never see this. */}
+                            {myFarm && (
+                                <EntitlementBanner
+                                    subscription={myFarm.subscription}
+                                    role={myFarm.role}
+                                />
+                            )}
+
+                            {/* Phase 6: Your memberships list with exit flow.
+                                Only renders if the user has farms — zero-farm users
+                                already have the FirstFarmWizard open from AppContent. */}
+                            {myMemberships.length > 0 && (
+                                <MembershipsList
+                                    farms={myMemberships}
+                                    nonExitableFarmIds={nonExitableFarmIds}
+                                    onExit={handleExitMembership}
+                                />
+                            )}
+
                             {/* 2. FARM TEAM HIERARCHY (LAYERS 2 & 3) */}
                             <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100">
                                 <div className="flex items-center justify-between mb-6">
@@ -1707,13 +1875,39 @@ const ProfilePage: React.FC<ProfilePageProps> = ({ profile, crops, onUpdateProfi
                                         </h3>
                                         <p className="text-xs text-slate-400 mt-1">{t('profile.manageAccess')}</p>
                                     </div>
-                                    <button
-                                        onClick={() => setShowMemberWizard(true)}
-                                        className="bg-slate-900 text-white px-4 py-2 rounded-xl text-sm font-bold shadow-lg shadow-slate-200 active:scale-95 transition-all flex items-center gap-2"
-                                    >
-                                        <Plus size={16} /> {t('profile.addMember')}
-                                    </button>
+                                    <div className="flex items-center gap-2">
+                                        <button
+                                            onClick={handleOpenInviteQr}
+                                            className="bg-emerald-600 text-white px-4 py-2 rounded-xl text-sm font-bold shadow-lg shadow-emerald-200 active:scale-95 transition-all flex items-center gap-2"
+                                        >
+                                            <QrCode size={16} /> Share farm QR
+                                        </button>
+                                        <button
+                                            onClick={() => setShowMemberWizard(true)}
+                                            className="bg-white text-slate-900 border border-slate-200 px-4 py-2 rounded-xl text-sm font-bold shadow-sm active:scale-95 transition-all flex items-center gap-2"
+                                        >
+                                            <Plus size={16} /> {t('profile.addMember')}
+                                        </button>
+                                    </div>
                                 </div>
+
+                                {/* Prominent invite banner — visible when the team is empty so a first-time farmer knows the QR exists. */}
+                                {(!profile.operators || profile.operators.length === 0) && (
+                                    <button
+                                        onClick={handleOpenInviteQr}
+                                        className="mb-4 w-full text-left rounded-2xl border border-emerald-200 bg-gradient-to-r from-emerald-50 to-white px-4 py-4 shadow-sm hover:border-emerald-300 transition-colors"
+                                    >
+                                        <div className="flex items-center gap-3">
+                                            <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-emerald-600 text-white">
+                                                <QrCode size={20} />
+                                            </div>
+                                            <div className="flex-1 min-w-0">
+                                                <div className="font-bold text-emerald-800">कामगारांना जोडा · Add your workers</div>
+                                                <div className="text-xs text-emerald-700/80">Show them the farm QR. They scan, enter phone, done.</div>
+                                            </div>
+                                        </div>
+                                    </button>
+                                )}
 
                                 <div className="space-y-3">
                                     {/* Existing People or Dummies if none */}
