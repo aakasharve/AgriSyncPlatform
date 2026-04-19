@@ -160,14 +160,10 @@ src/clients/mobile-web/vite_log.txt
 **/tsc_errors.txt
 
 # ===========================================
-# §7  MARKETING SITE — FULL EXCLUSION
-#     Owner keeps marketing-web locally but does
-#     not commit it to this repo (large binary
-#     assets + frame JPGs + WIP scaffolds).
+# §7  MARKETING SITE
+#     Not ignored — owner commits when ready.
+#     Appears as untracked in git status until then.
 # ===========================================
-
-# Entire marketing-web tree is local-only.
-src/clients/marketing-web/
 
 # Root-level scratch scripts used for asset generation
 /scripts/
