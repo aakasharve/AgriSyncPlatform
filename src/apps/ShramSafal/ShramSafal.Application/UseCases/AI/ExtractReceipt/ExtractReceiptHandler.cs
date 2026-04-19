@@ -14,6 +14,7 @@ public sealed class ExtractReceiptHandler(
     IShramSafalRepository repository,
     IAiOrchestrator aiOrchestrator,
     IAiPromptBuilder promptBuilder,
+    IEntitlementPolicy entitlementPolicy,
     IAnalyticsWriter analytics,
     IClock clock)
 {
@@ -33,6 +34,17 @@ public sealed class ExtractReceiptHandler(
         if (!canAccessFarm)
         {
             return Result.Failure<ExtractReceiptResult>(ShramSafalErrors.Forbidden);
+        }
+
+        var gate = await EntitlementGate.CheckAsync<ExtractReceiptResult>(
+            entitlementPolicy,
+            new UserId(command.UserId),
+            new FarmId(command.FarmId),
+            PaidFeature.AiParse,
+            ct);
+        if (gate is not null)
+        {
+            return gate;
         }
 
         var idempotencyKey = string.IsNullOrWhiteSpace(command.IdempotencyKey)

@@ -1248,6 +1248,256 @@ namespace ShramSafal.Infrastructure.Persistence.Migrations
                     b.ToTable("template_activities", "ssf");
                 });
 
+            modelBuilder.Entity("ShramSafal.Domain.Schedules.CropScheduleTemplate", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at_utc");
+
+                    b.Property<string>("CropKey")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)")
+                        .HasColumnName("crop_key");
+
+                    b.Property<bool>("IsPublished")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("is_published");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(160)
+                        .HasColumnType("character varying(160)")
+                        .HasColumnName("name");
+
+                    b.Property<string>("RegionCode")
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)")
+                        .HasColumnName("region_code");
+
+                    b.Property<string>("TemplateKey")
+                        .IsRequired()
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)")
+                        .HasColumnName("template_key");
+
+                    b.Property<string>("VersionTag")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("version_tag");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TemplateKey")
+                        .IsUnique();
+
+                    b.HasIndex("CropKey", "RegionCode");
+
+                    b.ToTable("crop_schedule_templates", "ssf");
+                });
+
+            modelBuilder.Entity("ShramSafal.Domain.Schedules.ScheduleMigrationEvent", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("event_id");
+
+                    b.Property<Guid>("ActorUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("actor_user_id");
+
+                    b.Property<decimal>("ComplianceAtMigrationPct")
+                        .HasPrecision(5, 2)
+                        .HasColumnType("numeric(5,2)")
+                        .HasColumnName("compliance_at_migration_pct");
+
+                    b.Property<Guid>("CropCycleId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("crop_cycle_id");
+
+                    b.Property<Guid>("FarmId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("farm_id");
+
+                    b.Property<DateTime>("MigratedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("migrated_at_utc");
+
+                    b.Property<Guid>("NewScheduleId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("new_schedule_id");
+
+                    b.Property<Guid>("NewSubscriptionId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("new_subscription_id");
+
+                    b.Property<Guid>("PlotId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("plot_id");
+
+                    b.Property<Guid>("PrevScheduleId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("prev_schedule_id");
+
+                    b.Property<Guid>("PrevSubscriptionId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("prev_subscription_id");
+
+                    b.Property<int>("Reason")
+                        .HasColumnType("integer")
+                        .HasColumnName("reason");
+
+                    b.Property<string>("ReasonText")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("reason_text");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CropCycleId");
+
+                    b.HasIndex("FarmId");
+
+                    b.HasIndex("NewSubscriptionId");
+
+                    b.HasIndex("PlotId");
+
+                    b.HasIndex("PrevSubscriptionId");
+
+                    b.ToTable("schedule_migration_events", "ssf");
+                });
+
+            modelBuilder.Entity("ShramSafal.Domain.Schedules.ScheduleSubscription", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTime>("AdoptedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("adopted_at_utc");
+
+                    b.Property<Guid>("CropCycleId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("crop_cycle_id");
+
+                    b.Property<string>("CropKey")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)")
+                        .HasColumnName("crop_key");
+
+                    b.Property<Guid>("FarmId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("farm_id");
+
+                    b.Property<Guid?>("MigratedFromSubscriptionId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("migrated_from_subscription_id");
+
+                    b.Property<Guid?>("MigratedToSubscriptionId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("migrated_to_subscription_id");
+
+                    b.Property<int?>("MigrationReason")
+                        .HasColumnType("integer")
+                        .HasColumnName("migration_reason");
+
+                    b.Property<Guid>("PlotId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("plot_id");
+
+                    b.Property<Guid>("ScheduleTemplateId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("schedule_template_id");
+
+                    b.Property<string>("ScheduleVersionTag")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("schedule_version_tag");
+
+                    b.Property<int>("State")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0)
+                        .HasColumnName("state");
+
+                    b.Property<DateTime?>("StateChangedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("state_changed_at_utc");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CropCycleId");
+
+                    b.HasIndex("FarmId");
+
+                    b.HasIndex("PlotId");
+
+                    b.HasIndex("ScheduleTemplateId");
+
+                    b.HasIndex("PlotId", "CropKey", "CropCycleId")
+                        .IsUnique()
+                        .HasDatabaseName("ux_sched_sub_active")
+                        .HasFilter("state = 0");
+
+                    b.ToTable("schedule_subscriptions", "ssf");
+                });
+
+            modelBuilder.Entity("ShramSafal.Domain.Subscriptions.SubscriptionProjection", b =>
+                {
+                    b.Property<Guid>("SubscriptionId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("subscription_id");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at_utc");
+
+                    b.Property<Guid>("OwnerAccountId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("owner_account_id");
+
+                    b.Property<string>("PlanCode")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("plan_code");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("integer")
+                        .HasColumnName("status");
+
+                    b.Property<DateTime?>("TrialEndsAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("trial_ends_at_utc");
+
+                    b.Property<DateTime>("UpdatedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at_utc");
+
+                    b.Property<DateTime>("ValidFromUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("valid_from_utc");
+
+                    b.Property<DateTime>("ValidUntilUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("valid_until_utc");
+
+                    b.HasKey("SubscriptionId");
+
+                    b.ToTable((string)null);
+
+                    b.ToView("subscription_projections", "ssf");
+                });
+
             modelBuilder.Entity("ShramSafal.Infrastructure.Persistence.SyncMutationRecord", b =>
                 {
                     b.Property<Guid>("Id")
@@ -1459,6 +1709,37 @@ namespace ShramSafal.Infrastructure.Persistence.Migrations
                         .HasForeignKey("DailyLogId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
+
+                    b.OwnsOne("ShramSafal.Domain.Schedules.ComplianceResult", "Compliance", b1 =>
+                        {
+                            b1.Property<Guid>("LogTaskId")
+                                .HasColumnType("uuid");
+
+                            b1.Property<int?>("DeltaDays")
+                                .HasColumnType("integer")
+                                .HasColumnName("compliance_delta_days");
+
+                            b1.Property<Guid?>("MatchedTaskId")
+                                .HasColumnType("uuid")
+                                .HasColumnName("compliance_matched_task_id");
+
+                            b1.Property<int>("Outcome")
+                                .HasColumnType("integer")
+                                .HasColumnName("compliance_outcome");
+
+                            b1.Property<Guid?>("SubscriptionId")
+                                .HasColumnType("uuid")
+                                .HasColumnName("compliance_subscription_id");
+
+                            b1.HasKey("LogTaskId");
+
+                            b1.ToTable("log_tasks", "ssf");
+
+                            b1.WithOwner()
+                                .HasForeignKey("LogTaskId");
+                        });
+
+                    b.Navigation("Compliance");
                 });
 
             modelBuilder.Entity("ShramSafal.Domain.Logs.VerificationEvent", b =>
@@ -1477,6 +1758,57 @@ namespace ShramSafal.Infrastructure.Persistence.Migrations
                         .HasForeignKey("ScheduleTemplateId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
+                });
+
+            modelBuilder.Entity("ShramSafal.Domain.Schedules.CropScheduleTemplate", b =>
+                {
+                    b.OwnsMany("ShramSafal.Domain.Schedules.PrescribedTask", "Tasks", b1 =>
+                        {
+                            b1.Property<Guid>("schedule_template_id")
+                                .HasColumnType("uuid");
+
+                            b1.Property<Guid>("Id")
+                                .HasColumnType("uuid")
+                                .HasColumnName("id");
+
+                            b1.Property<int>("DayOffsetFromCycleStart")
+                                .HasColumnType("integer")
+                                .HasColumnName("day_offset");
+
+                            b1.Property<string>("Notes")
+                                .HasMaxLength(500)
+                                .HasColumnType("character varying(500)")
+                                .HasColumnName("notes");
+
+                            b1.Property<string>("Stage")
+                                .IsRequired()
+                                .HasMaxLength(60)
+                                .HasColumnType("character varying(60)")
+                                .HasColumnName("stage");
+
+                            b1.Property<string>("TaskType")
+                                .IsRequired()
+                                .HasMaxLength(60)
+                                .HasColumnType("character varying(60)")
+                                .HasColumnName("task_type");
+
+                            b1.Property<int>("ToleranceDaysPlusMinus")
+                                .ValueGeneratedOnAdd()
+                                .HasColumnType("integer")
+                                .HasDefaultValue(2)
+                                .HasColumnName("tolerance_days_plus_minus");
+
+                            b1.HasKey("schedule_template_id", "Id");
+
+                            b1.HasIndex("schedule_template_id");
+
+                            b1.ToTable("crop_schedule_prescribed_tasks", "ssf");
+
+                            b1.WithOwner()
+                                .HasForeignKey("schedule_template_id");
+                        });
+
+                    b.Navigation("Tasks");
                 });
 
             modelBuilder.Entity("ShramSafal.Domain.AI.AiJob", b =>

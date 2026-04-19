@@ -19,4 +19,23 @@ internal static class TypedIdConverters
 
     public static readonly ValueConverter<FarmJoinTokenId, Guid> FarmJoinTokenId =
         new(id => id.Value, value => new FarmJoinTokenId(value));
+
+    public static readonly ValueConverter<ScheduleTemplateId, Guid> ScheduleTemplateId =
+        new(id => id.Value, value => new ScheduleTemplateId(value));
+
+    public static readonly ValueConverter<ScheduleSubscriptionId, Guid> ScheduleSubscriptionId =
+        new(id => id.Value, value => new ScheduleSubscriptionId(value));
+
+    public static readonly ValueConverter<ScheduleSubscriptionId?, Guid?> NullableScheduleSubscriptionId =
+        new(
+            id => id == null ? (Guid?)null : id.Value.Value,
+            value => value == null ? null : new ScheduleSubscriptionId(value.Value));
+
+    public static readonly ValueConverter<PrescribedTaskId, Guid> PrescribedTaskId =
+        new(id => id.Value, value => new PrescribedTaskId(value));
+
+    public static readonly ValueConverter<PrescribedTaskId?, Guid?> NullablePrescribedTaskId =
+        new(
+            id => id == null ? (Guid?)null : id.Value.Value,
+            value => value == null ? null : new PrescribedTaskId(value.Value));
 }

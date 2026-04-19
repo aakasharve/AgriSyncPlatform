@@ -8,7 +8,9 @@ using ShramSafal.Domain.Finance;
 using ShramSafal.Domain.Logs;
 using ShramSafal.Domain.Planning;
 using ShramSafal.Domain.AI;
+using ShramSafal.Domain.Schedules;
 using ShramSafal.Infrastructure.Persistence;
+using ShramSafal.Infrastructure.Seeds;
 using User.Application.Ports;
 using User.Domain.Identity;
 using User.Domain.Membership;
@@ -99,6 +101,7 @@ public class DatabaseSeeder
         await _SSFContext.SaveChangesAsync();
 
         var templateStats = await EnsureScheduleTemplatesAndPlansAsync(cycleContexts, nowUtc);
+        var cropScheduleTemplatesAdded = await EnsureCropScheduleTemplatesAsync(nowUtc);
         var logStats = await EnsureDailyLogsAsync(farm.Id, cycleContexts, ramu.Id, ganesh.Id, nowUtc);
         var costStats = await EnsureCostEntriesAndCorrectionsAsync(farm.Id, cycleContexts, ramu.Id, ganesh.Id, nowUtc);
         var priceAdded = await EnsurePriceConfigsAsync(ramu.Id, nowUtc);
@@ -112,6 +115,7 @@ public class DatabaseSeeder
 
         var totalAdded = templateStats.TemplatesAdded
                          + templateStats.PlannedActivitiesAdded
+                         + cropScheduleTemplatesAdded
                          + logStats.LogsAdded
                          + logStats.TasksAdded
                          + logStats.VerificationsAdded
@@ -253,6 +257,35 @@ public class DatabaseSeeder
         }
 
         return result;
+    }
+
+    private async Task<int> EnsureCropScheduleTemplatesAsync(DateTime nowUtc)
+    {
+        // Phase 3 MIS — ensure the three bootstrap templates are present and
+        // published. Upserting by deterministic id keeps this idempotent
+        // across re-seeds; editing task offsets requires a new version tag
+        // (e.g. "_v2") to avoid mutating already-adopted templates.
+        var seedIds = CropScheduleTemplateSeeds.All.Select(s => s.Id).ToHashSet();
+        var existing = await _SSFContext.CropScheduleTemplates
+            .Where(t => seedIds.Contains(t.Id))
+            .Select(t => t.Id)
+            .ToListAsync();
+        var existingSet = existing.ToHashSet();
+
+        var added = 0;
+        foreach (var seed in CropScheduleTemplateSeeds.All)
+        {
+            if (existingSet.Contains(seed.Id))
+            {
+                continue;
+            }
+
+            var template = seed.ToEntity(nowUtc);
+            await _SSFContext.CropScheduleTemplates.AddAsync(template);
+            added++;
+        }
+
+        return added;
     }
 
     private async Task<TemplateSeedStats> EnsureScheduleTemplatesAndPlansAsync(

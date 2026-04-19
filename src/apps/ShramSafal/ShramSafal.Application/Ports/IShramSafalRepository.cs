@@ -5,6 +5,7 @@ using ShramSafal.Domain.Farms;
 using ShramSafal.Domain.Finance;
 using ShramSafal.Domain.Logs;
 using ShramSafal.Domain.Planning;
+using ShramSafal.Domain.Schedules;
 using ShramSafal.Application.Contracts.Dtos;
 using AgriSync.SharedKernel.Contracts.Ids;
 using AgriSync.SharedKernel.Contracts.Roles;
@@ -80,6 +81,23 @@ public interface IShramSafalRepository
     /// last PrimaryOwner cannot leave).
     /// </summary>
     Task<int> CountActivePrimaryOwnersAsync(Guid farmId, CancellationToken ct = default);
+
+    // --- Schedule domain (Phase 3) ---------------------------------------------------------
+    Task AddCropScheduleTemplateAsync(CropScheduleTemplate template, CancellationToken ct = default);
+    Task<CropScheduleTemplate?> GetCropScheduleTemplateByIdAsync(ScheduleTemplateId templateId, CancellationToken ct = default);
+    Task<List<CropScheduleTemplate>> GetCropScheduleTemplatesForCropAsync(string cropKey, string? regionCode, CancellationToken ct = default);
+
+    Task AddScheduleSubscriptionAsync(ScheduleSubscription subscription, CancellationToken ct = default);
+    Task<ScheduleSubscription?> GetScheduleSubscriptionByIdAsync(ScheduleSubscriptionId subscriptionId, CancellationToken ct = default);
+
+    /// <summary>
+    /// Returns the single <see cref="ScheduleSubscriptionState.Active"/> subscription for
+    /// (<paramref name="plotId"/>, <paramref name="cropKey"/>, <paramref name="cropCycleId"/>)
+    /// or <c>null</c> when none exists. Invariant I-14 guarantees at most one.
+    /// </summary>
+    Task<ScheduleSubscription?> GetActiveScheduleSubscriptionAsync(Guid plotId, string cropKey, Guid cropCycleId, CancellationToken ct = default);
+
+    Task AddScheduleMigrationEventAsync(ScheduleMigrationEvent migrationEvent, CancellationToken ct = default);
 
     Task SaveChangesAsync(CancellationToken ct = default);
 }

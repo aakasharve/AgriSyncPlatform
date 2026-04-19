@@ -36,6 +36,10 @@ public sealed class EntitlementGateTests
         "ShramSafal.Application.UseCases.Finance.AddCostEntry.AddCostEntryHandler",
         "ShramSafal.Application.UseCases.Finance.CorrectCostEntry.CorrectCostEntryHandler",
         "ShramSafal.Application.UseCases.Finance.AllocateGlobalExpense.AllocateGlobalExpenseHandler",
+        "ShramSafal.Application.UseCases.AI.ParseVoiceInput.ParseVoiceInputHandler",
+        "ShramSafal.Application.UseCases.AI.ExtractReceipt.ExtractReceiptHandler",
+        "ShramSafal.Application.UseCases.AI.ExtractPattiImage.ExtractPattiImageHandler",
+        "ShramSafal.Application.UseCases.AI.CreateDocumentSession.CreateDocumentSessionHandler",
     };
 
     [Fact]

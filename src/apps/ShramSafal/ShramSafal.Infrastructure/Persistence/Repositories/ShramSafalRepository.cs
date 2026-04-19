@@ -10,6 +10,7 @@ using ShramSafal.Domain.Farms;
 using ShramSafal.Domain.Finance;
 using ShramSafal.Domain.Logs;
 using ShramSafal.Domain.Planning;
+using ShramSafal.Domain.Schedules;
 
 namespace ShramSafal.Infrastructure.Persistence.Repositories;
 
@@ -585,6 +586,77 @@ internal sealed class ShramSafalRepository(ShramSafalDbContext db) : IShramSafal
         }
 
         return membershipOwners;
+    }
+
+    // --- Schedule domain (Phase 3) -----------------------------------------------------
+
+    public async Task AddCropScheduleTemplateAsync(CropScheduleTemplate template, CancellationToken ct = default)
+    {
+        await db.CropScheduleTemplates.AddAsync(template, ct);
+    }
+
+    public async Task<CropScheduleTemplate?> GetCropScheduleTemplateByIdAsync(
+        ScheduleTemplateId templateId,
+        CancellationToken ct = default)
+    {
+        return await db.CropScheduleTemplates
+            .AsNoTracking()
+            .FirstOrDefaultAsync(t => t.Id == templateId.Value, ct);
+    }
+
+    public async Task<List<CropScheduleTemplate>> GetCropScheduleTemplatesForCropAsync(
+        string cropKey,
+        string? regionCode,
+        CancellationToken ct = default)
+    {
+        var normalizedCrop = cropKey.Trim().ToLowerInvariant();
+        var normalizedRegion = string.IsNullOrWhiteSpace(regionCode)
+            ? null
+            : regionCode.Trim().ToLowerInvariant();
+
+        return await db.CropScheduleTemplates
+            .AsNoTracking()
+            .Where(t => t.CropKey == normalizedCrop
+                        && (normalizedRegion == null || t.RegionCode == normalizedRegion)
+                        && t.IsPublished)
+            .OrderBy(t => t.TemplateKey)
+            .ToListAsync(ct);
+    }
+
+    public async Task AddScheduleSubscriptionAsync(ScheduleSubscription subscription, CancellationToken ct = default)
+    {
+        await db.ScheduleSubscriptions.AddAsync(subscription, ct);
+    }
+
+    public async Task<ScheduleSubscription?> GetScheduleSubscriptionByIdAsync(
+        ScheduleSubscriptionId subscriptionId,
+        CancellationToken ct = default)
+    {
+        return await db.ScheduleSubscriptions
+            .FirstOrDefaultAsync(s => s.Id == subscriptionId.Value, ct);
+    }
+
+    public async Task<ScheduleSubscription?> GetActiveScheduleSubscriptionAsync(
+        Guid plotId,
+        string cropKey,
+        Guid cropCycleId,
+        CancellationToken ct = default)
+    {
+        var normalizedCrop = cropKey.Trim().ToLowerInvariant();
+
+        return await db.ScheduleSubscriptions
+            .AsNoTracking()
+            .FirstOrDefaultAsync(
+                s => s.PlotId == plotId
+                     && s.CropKey == normalizedCrop
+                     && s.CropCycleId == cropCycleId
+                     && s.State == ScheduleSubscriptionState.Active,
+                ct);
+    }
+
+    public async Task AddScheduleMigrationEventAsync(ScheduleMigrationEvent migrationEvent, CancellationToken ct = default)
+    {
+        await db.ScheduleMigrationEvents.AddAsync(migrationEvent, ct);
     }
 
     public async Task SaveChangesAsync(CancellationToken ct = default)

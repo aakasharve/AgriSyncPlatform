@@ -14,6 +14,7 @@ public sealed class ExtractPattiImageHandler(
     IShramSafalRepository repository,
     IAiOrchestrator aiOrchestrator,
     IAiPromptBuilder promptBuilder,
+    IEntitlementPolicy entitlementPolicy,
     IAnalyticsWriter analytics,
     IClock clock)
 {
@@ -34,6 +35,17 @@ public sealed class ExtractPattiImageHandler(
         if (!canAccessFarm)
         {
             return Result.Failure<ExtractPattiImageResult>(ShramSafalErrors.Forbidden);
+        }
+
+        var gate = await EntitlementGate.CheckAsync<ExtractPattiImageResult>(
+            entitlementPolicy,
+            new UserId(command.UserId),
+            new FarmId(command.FarmId),
+            PaidFeature.AiParse,
+            ct);
+        if (gate is not null)
+        {
+            return gate;
         }
 
         var idempotencyKey = string.IsNullOrWhiteSpace(command.IdempotencyKey)

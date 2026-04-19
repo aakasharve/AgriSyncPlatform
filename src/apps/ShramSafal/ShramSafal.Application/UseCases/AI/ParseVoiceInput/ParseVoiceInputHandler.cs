@@ -20,6 +20,7 @@ public sealed class ParseVoiceInputHandler(
     IShramSafalRepository repository,
     IAiOrchestrator aiOrchestrator,
     IAiPromptBuilder promptBuilder,
+    IEntitlementPolicy entitlementPolicy,
     IAnalyticsWriter analytics,
     IClock clock)
 {
@@ -81,6 +82,17 @@ public sealed class ParseVoiceInputHandler(
         if (!canAccessFarm)
         {
             return Result.Failure<VoiceParseResult>(ShramSafalErrors.Forbidden);
+        }
+
+        var gate = await EntitlementGate.CheckAsync<VoiceParseResult>(
+            entitlementPolicy,
+            new UserId(command.UserId),
+            new FarmId(command.FarmId),
+            PaidFeature.AiParse,
+            ct);
+        if (gate is not null)
+        {
+            return gate;
         }
 
         Domain.Farms.Plot? plot = null;
