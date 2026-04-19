@@ -1,5 +1,6 @@
 using System.Text.Json;
 using AgriSync.BuildingBlocks.Results;
+using AgriSync.SharedKernel.Contracts.Ids;
 using ShramSafal.Application.Ports;
 using ShramSafal.Application.Ports.External;
 using ShramSafal.Domain.AI;
@@ -12,7 +13,8 @@ public sealed class CreateDocumentSessionHandler(
     IDocumentExtractionSessionRepository sessionRepository,
     IAttachmentStorageService storageService,
     IAiOrchestrator aiOrchestrator,
-    IAiPromptBuilder promptBuilder)
+    IAiPromptBuilder promptBuilder,
+    IEntitlementPolicy entitlementPolicy)
 {
     public async Task<Result<CreateDocumentSessionResult>> HandleAsync(
         CreateDocumentSessionCommand command,
@@ -35,6 +37,17 @@ public sealed class CreateDocumentSessionHandler(
         if (!canAccessFarm)
         {
             return Result.Failure<CreateDocumentSessionResult>(ShramSafalErrors.Forbidden);
+        }
+
+        var gate = await EntitlementGate.CheckAsync<CreateDocumentSessionResult>(
+            entitlementPolicy,
+            new UserId(command.UserId),
+            new FarmId(command.FarmId),
+            PaidFeature.AiParse,
+            ct);
+        if (gate is not null)
+        {
+            return gate;
         }
 
         var session = DocumentExtractionSession.Create(command.UserId, command.FarmId, command.DocumentType);

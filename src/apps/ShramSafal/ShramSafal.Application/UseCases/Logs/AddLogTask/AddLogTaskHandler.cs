@@ -12,7 +12,8 @@ public sealed class AddLogTaskHandler(
     IShramSafalRepository repository,
     IIdGenerator idGenerator,
     IClock clock,
-    IEntitlementPolicy entitlementPolicy)
+    IEntitlementPolicy entitlementPolicy,
+    IScheduleComplianceService complianceService)
 {
     public async Task<Result<DailyLogDto>> HandleAsync(AddLogTaskCommand command, CancellationToken ct = default)
     {
@@ -47,11 +48,27 @@ public sealed class AddLogTaskHandler(
             PaidFeature.WriteDailyLog, ct);
         if (gate is not null) return gate;
 
+        var cropCycle = await repository.GetCropCycleByIdAsync(log.CropCycleId, ct);
+        if (cropCycle is null)
+        {
+            return Result.Failure<DailyLogDto>(ShramSafalErrors.CropCycleNotFound);
+        }
+
         var task = log.AddTask(
             command.LogTaskId ?? idGenerator.New(),
             command.ActivityType,
             command.Notes,
             command.OccurredAtUtc ?? clock.UtcNow);
+
+        // Phase 3 MIS: stamp compliance on the task inside the same tx (I-17).
+        var compliance = await complianceService.EvaluateAsync(
+            new ScheduleComplianceQuery(
+                log.CropCycleId,
+                command.ActivityType,
+                cropCycle.Stage,
+                log.LogDate),
+            ct);
+        task.StampCompliance(compliance);
 
         await repository.AddAuditEventAsync(
             AuditEvent.Create(
@@ -67,7 +84,9 @@ public sealed class AddLogTaskHandler(
                     taskId = task.Id,
                     task.ActivityType,
                     task.Notes,
-                    task.OccurredAtUtc
+                    task.OccurredAtUtc,
+                    complianceOutcome = compliance.Outcome.ToString(),
+                    complianceDeltaDays = compliance.DeltaDays
                 },
                 command.ClientCommandId,
                 clock.UtcNow),

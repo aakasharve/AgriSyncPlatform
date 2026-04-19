@@ -37,8 +37,14 @@ using ShramSafal.Application.UseCases.Planning.GetStagePlan;
 using ShramSafal.Application.UseCases.Planning.GetTodaysPlan;
 using ShramSafal.Application.UseCases.ReferenceData.GetCropTypes;
 using ShramSafal.Application.UseCases.ReferenceData.GetScheduleTemplates;
+using ShramSafal.Application.UseCases.Schedules.AbandonSchedule;
+using ShramSafal.Application.UseCases.Schedules.AdoptSchedule;
+using ShramSafal.Application.UseCases.Schedules.CompleteSchedule;
+using ShramSafal.Application.UseCases.Schedules.MigrateSchedule;
 using ShramSafal.Application.UseCases.Sync.PullSyncChanges;
 using ShramSafal.Application.UseCases.Sync.PushSyncBatch;
+using ShramSafal.Application.Ports;
+using ShramSafal.Application.Services;
 using ShramSafal.Infrastructure;
 
 namespace ShramSafal.Api;
@@ -99,6 +105,13 @@ public static class DependencyInjection
 
         // Phase 6 — self-exit
         services.AddScoped<ExitMembershipHandler>();
+
+        // Phase 3 MIS — schedule compliance evaluator
+        services.AddScoped<IScheduleComplianceService, ScheduleComplianceService>();
+        services.AddScoped<AdoptScheduleHandler>();
+        services.AddScoped<MigrateScheduleHandler>();
+        services.AddScoped<AbandonScheduleHandler>();
+        services.AddScoped<CompleteScheduleHandler>();
 
         return services;
     }

@@ -34,6 +34,25 @@ internal sealed class LogTaskConfiguration : IEntityTypeConfiguration<LogTask>
 
         builder.HasIndex(x => new { x.DailyLogId, x.OccurredAtUtc });
         builder.Ignore(x => x.DomainEvents);
+
+        // I-17: once stamped, immutable schedule compliance snapshot on the task.
+        builder.OwnsOne(x => x.Compliance, compliance =>
+        {
+            compliance.Property(c => c.SubscriptionId)
+                .HasColumnName("compliance_subscription_id")
+                .HasConversion(TypedIdConverters.NullableScheduleSubscriptionId);
+
+            compliance.Property(c => c.MatchedTaskId)
+                .HasColumnName("compliance_matched_task_id")
+                .HasConversion(TypedIdConverters.NullablePrescribedTaskId);
+
+            compliance.Property(c => c.DeltaDays)
+                .HasColumnName("compliance_delta_days");
+
+            compliance.Property(c => c.Outcome)
+                .HasColumnName("compliance_outcome")
+                .HasConversion<int>()
+                .IsRequired();
+        });
     }
 }
-

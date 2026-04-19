@@ -7,6 +7,7 @@ using ShramSafal.Domain.Farms;
 using ShramSafal.Domain.Finance;
 using ShramSafal.Domain.Logs;
 using ShramSafal.Domain.Planning;
+using ShramSafal.Domain.Schedules;
 using ShramSafal.Domain.Subscriptions;
 
 namespace ShramSafal.Infrastructure.Persistence;
@@ -35,6 +36,9 @@ public sealed class ShramSafalDbContext(DbContextOptions<ShramSafalDbContext> op
     public DbSet<ScheduleTemplate> ScheduleTemplates => Set<ScheduleTemplate>();
     public DbSet<TemplateActivity> TemplateActivities => Set<TemplateActivity>();
     public DbSet<PlannedActivity> PlannedActivities => Set<PlannedActivity>();
+    public DbSet<CropScheduleTemplate> CropScheduleTemplates => Set<CropScheduleTemplate>();
+    public DbSet<ScheduleSubscription> ScheduleSubscriptions => Set<ScheduleSubscription>();
+    public DbSet<ScheduleMigrationEvent> ScheduleMigrationEvents => Set<ScheduleMigrationEvent>();
     public DbSet<DocumentExtractionSession> DocumentExtractionSessions => Set<DocumentExtractionSession>();
     internal DbSet<SyncMutationRecord> SyncMutations => Set<SyncMutationRecord>();
 

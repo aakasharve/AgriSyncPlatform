@@ -6,6 +6,7 @@ using ShramSafal.Domain.Finance;
 using ShramSafal.Domain.Logs;
 using ShramSafal.Domain.Location;
 using ShramSafal.Domain.Planning;
+using ShramSafal.Domain.Schedules;
 
 namespace ShramSafal.Application.Contracts.Dtos;
 
@@ -175,6 +176,22 @@ internal static class DtoMappingExtensions
             attachment.ModifiedAtUtc,
             attachment.UploadedAtUtc,
             attachment.FinalizedAtUtc);
+
+    public static ScheduleSubscriptionDto ToDto(this ScheduleSubscription sub) =>
+        new(
+            sub.Id,
+            sub.FarmId.Value,
+            sub.PlotId,
+            sub.CropCycleId,
+            sub.CropKey,
+            sub.ScheduleTemplateId.Value,
+            sub.ScheduleVersionTag,
+            sub.AdoptedAtUtc,
+            sub.State.ToString(),
+            sub.MigratedFromSubscriptionId?.Value,
+            sub.MigratedToSubscriptionId?.Value,
+            sub.MigrationReason?.ToString(),
+            sub.StateChangedAtUtc);
 
     private static string ToSyncVerificationStatus(this VerificationStatus status) =>
         status switch

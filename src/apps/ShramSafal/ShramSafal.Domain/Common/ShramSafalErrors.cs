@@ -23,4 +23,10 @@ public static class ShramSafalErrors
     public static readonly Error InvalidAiResponse = new("ShramSafal.InvalidAiResponse", "AI parser returned an invalid response payload.");
     public static readonly Error AiParsingFailed = new("ShramSafal.AiParsingFailed", "Voice parsing failed.");
     public static readonly Error InvalidCommand = new("ShramSafal.InvalidCommand", "Request is invalid.");
+    public static readonly Error ScheduleTemplateNotFound = new("ShramSafal.ScheduleTemplateNotFound", "Schedule template was not found.");
+    public static readonly Error ScheduleSubscriptionNotFound = new("ShramSafal.ScheduleSubscriptionNotFound", "Schedule subscription was not found.");
+    public static readonly Error ScheduleAlreadyAdopted = new("ShramSafal.ScheduleAlreadyAdopted", "An active schedule subscription already exists for this plot-crop-cycle.");
+    public static readonly Error ScheduleTemplateUnpublished = new("ShramSafal.ScheduleTemplateUnpublished", "Schedule template has not been published.");
+    public static readonly Error ScheduleTemplateCropMismatch = new("ShramSafal.ScheduleTemplateCropMismatch", "Schedule template crop does not match the crop cycle.");
+    public static readonly Error ScheduleNotActive = new("ShramSafal.ScheduleNotActive", "Schedule subscription is not active and cannot transition.");
 }

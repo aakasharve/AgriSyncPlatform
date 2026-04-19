@@ -588,6 +588,48 @@ public sealed class AiEndpointsTests
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
     }
 
+    [Fact]
+    public async Task VoiceParse_WhenEntitlementDenied_ReturnsStableError_AndDoesNotInvokeAiProvider()
+    {
+        await using var harness = await TestHarness.CreateAsync(
+            FakeAiProviderMode.Success,
+            EntitlementPolicyMode.DenyExpired);
+        var farmId = Guid.NewGuid();
+        await PushCreateFarmAsync(harness.Client, "device-ai-entitlement-1", "req-farm-ai-entitlement-1", farmId, "AI Entitlement Farm");
+
+        var response = await harness.Client.PostAsJsonAsync("/shramsafal/ai/voice-parse", new
+        {
+            farmId,
+            textTranscript = "आज पाणी दिलं.",
+            idempotencyKey = "voice-entitlement-denied-1"
+        });
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        using var doc = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        Assert.Equal("entitlement.subscriptionexpired", doc.RootElement.GetProperty("error").GetString());
+        Assert.Equal(0, harness.Provider.VoiceParseCallCount);
+    }
+
+    [Fact]
+    public async Task CreateReceiptSession_WhenEntitlementDenied_ReturnsStableError_AndDoesNotInvokeAiProvider()
+    {
+        await using var harness = await TestHarness.CreateAsync(
+            FakeAiProviderMode.Success,
+            EntitlementPolicyMode.DenyExpired);
+        var farmId = Guid.NewGuid();
+        await PushCreateFarmAsync(harness.Client, "device-ai-entitlement-2", "req-farm-ai-entitlement-2", farmId, "AI Session Entitlement Farm");
+
+        var response = await PostCreateReceiptSessionAsync(
+            harness.Client,
+            farmId,
+            "receipt-session-entitlement-denied-1");
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        using var doc = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        Assert.Equal("entitlement.subscriptionexpired", doc.RootElement.GetProperty("error").GetString());
+        Assert.Equal(0, harness.Provider.ReceiptCallCount);
+    }
+
     private static async Task PushCreateFarmAsync(
         HttpClient client,
         string deviceId,
@@ -665,6 +707,22 @@ public sealed class AiEndpointsTests
         return await client.PostAsync("/shramsafal/ai/patti-extract", multipart);
     }
 
+    private static async Task<HttpResponseMessage> PostCreateReceiptSessionAsync(
+        HttpClient client,
+        Guid farmId,
+        string idempotencyKey)
+    {
+        using var multipart = new MultipartFormDataContent();
+        multipart.Add(new StringContent(farmId.ToString()), "farmId");
+        multipart.Add(new StringContent(idempotencyKey), "idempotencyKey");
+
+        var image = new ByteArrayContent(new byte[] { 0xFF, 0xD8, 0xFF, 0xD9 });
+        image.Headers.ContentType = new MediaTypeHeaderValue("image/jpeg");
+        multipart.Add(image, "image", "receipt.jpg");
+
+        return await client.PostAsync("/shramsafal/ai/document-sessions/receipt", multipart);
+    }
+
     private sealed class TestHarness(
         WebApplication app,
         HttpClient client,
@@ -675,22 +733,27 @@ public sealed class AiEndpointsTests
         public FakeAiProvider Provider => Providers.Values.First();
         public IReadOnlyDictionary<AiProviderType, FakeAiProvider> Providers { get; } = providers;
 
-        public static async Task<TestHarness> CreateAsync(FakeAiProviderMode mode)
+        public static async Task<TestHarness> CreateAsync(
+            FakeAiProviderMode mode,
+            EntitlementPolicyMode entitlementPolicyMode = EntitlementPolicyMode.Allow)
         {
             var provider = new FakeAiProvider(mode, AiProviderType.Gemini);
-            return await CreateInternalAsync([provider]);
+            return await CreateInternalAsync([provider], entitlementPolicyMode);
         }
 
         public static async Task<TestHarness> CreateDualProviderAsync(
             FakeAiProviderMode sarvamMode,
-            FakeAiProviderMode geminiMode)
+            FakeAiProviderMode geminiMode,
+            EntitlementPolicyMode entitlementPolicyMode = EntitlementPolicyMode.Allow)
         {
             var sarvam = new FakeAiProvider(sarvamMode, AiProviderType.Sarvam);
             var gemini = new FakeAiProvider(geminiMode, AiProviderType.Gemini);
-            return await CreateInternalAsync([sarvam, gemini]);
+            return await CreateInternalAsync([sarvam, gemini], entitlementPolicyMode);
         }
 
-        private static async Task<TestHarness> CreateInternalAsync(IReadOnlyList<FakeAiProvider> aiProviders)
+        private static async Task<TestHarness> CreateInternalAsync(
+            IReadOnlyList<FakeAiProvider> aiProviders,
+            EntitlementPolicyMode entitlementPolicyMode)
         {
             var builder = WebApplication.CreateBuilder(new WebApplicationOptions
             {
@@ -721,9 +784,14 @@ public sealed class AiEndpointsTests
             // Entitlement policy override — Slice 2 gates paid AI features on
             // an active Accounts subscription, but this harness runs without
             // the Accounts module. Tests assert AI pipeline behaviour, not
-            // subscription plumbing, so swap to an always-allow policy.
+            // subscription plumbing, so tests choose an explicit stub mode.
             builder.Services.RemoveAll<IEntitlementPolicy>();
-            builder.Services.AddScoped<IEntitlementPolicy, AllowEntitlementPolicy>();
+            builder.Services.AddScoped<IEntitlementPolicy>(sp => entitlementPolicyMode switch
+            {
+                EntitlementPolicyMode.Allow => new AllowEntitlementPolicy(),
+                EntitlementPolicyMode.DenyExpired => new DenyExpiredEntitlementPolicy(),
+                _ => throw new InvalidOperationException($"Unsupported entitlement policy mode: {entitlementPolicyMode}")
+            });
 
             builder.Services.RemoveAll<IAiProvider>();
             foreach (var aiProvider in aiProviders)
@@ -787,6 +855,12 @@ public sealed class AiEndpointsTests
         FailVoice,
         UnsupportedVoice,
         FailAll
+    }
+
+    private enum EntitlementPolicyMode
+    {
+        Allow,
+        DenyExpired
     }
 
     private sealed class FakeAiProvider(FakeAiProviderMode mode, AiProviderType providerType) : IAiProvider
@@ -960,5 +1034,18 @@ public sealed class AiEndpointsTests
                 Allowed: true,
                 EntitlementReason.Allowed,
                 SubscriptionStatus: null));
+    }
+
+    private sealed class DenyExpiredEntitlementPolicy : IEntitlementPolicy
+    {
+        public Task<EntitlementDecision> EvaluateAsync(
+            AgriSync.SharedKernel.Contracts.Ids.UserId userId,
+            AgriSync.SharedKernel.Contracts.Ids.FarmId farmId,
+            PaidFeature feature,
+            CancellationToken ct = default)
+            => Task.FromResult(new EntitlementDecision(
+                Allowed: false,
+                EntitlementReason.SubscriptionExpired,
+                SubscriptionStatus: 4));
     }
 }
