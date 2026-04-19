@@ -160,27 +160,14 @@ src/clients/mobile-web/vite_log.txt
 **/tsc_errors.txt
 
 # ===========================================
-# §7  MARKETING SITE — JUNK TO EXCLUDE
-#     App code at src/clients/marketing-web/
-#     is committed. Scaffolds and scratch are not.
+# §7  MARKETING SITE — FULL EXCLUSION
+#     Owner keeps marketing-web locally but does
+#     not commit it to this repo (large binary
+#     assets + frame JPGs + WIP scaffolds).
 # ===========================================
 
-# Astro starter template (not our code)
-src/clients/marketing-web/galactic-graham/
-
-# Agent debug output inside marketing dir
-src/clients/marketing-web/output/
-
-# Agent prompt docs / tooling scratch
-src/clients/marketing-web/CINEMATIC_FARM_VISION.md
-src/clients/marketing-web/IMAGE_GENERATION_PROMPTS.md
-src/clients/marketing-web/skills-lock.json
-src/clients/marketing-web/convert_images.py
-
-# Raw asset sources and archives, not shipped runtime assets
-src/clients/marketing-web/public/images/Brand Icon Bundle/
-src/clients/marketing-web/public/images/*.zip
-src/clients/marketing-web/public/images/generated/
+# Entire marketing-web tree is local-only.
+src/clients/marketing-web/
 
 # Root-level scratch scripts used for asset generation
 /scripts/
