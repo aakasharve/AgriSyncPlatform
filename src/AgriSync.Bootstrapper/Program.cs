@@ -4,6 +4,7 @@ using System.Text;
 using System.Threading.RateLimiting;
 using AgriSync.Bootstrapper.Middleware;
 using AgriSync.BuildingBlocks;
+using AgriSync.BuildingBlocks.Analytics;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
@@ -11,6 +12,8 @@ using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Storage;
 using Serilog;
 using Serilog.Context;
+using Accounts.Api;
+using AgriSync.Bootstrapper.Endpoints;
 using ShramSafal.Api;
 using User.Api;
 using User.Infrastructure.Persistence;
@@ -102,6 +105,26 @@ try
 
     builder.Services.AddUserApi(builder.Configuration);
     builder.Services.AddShramSafalApi(builder.Configuration);
+    builder.Services.AddAccountsModule(builder.Configuration);
+
+    var analyticsConnection =
+        builder.Configuration.GetConnectionString("AnalyticsDb")
+        ?? builder.Configuration.GetConnectionString("UserDb")
+        ?? throw new InvalidOperationException(
+            "Connection string 'AnalyticsDb' (or fallback 'UserDb') must be configured for the analytics event rail.");
+    builder.Services.AddAnalytics(options =>
+    {
+        options.UseNpgsql(analyticsConnection, npgsql =>
+        {
+            // Migrations live in the Bootstrapper (which already references Npgsql)
+            // so AgriSync.BuildingBlocks can stay provider-neutral.
+            npgsql.MigrationsAssembly(typeof(Program).Assembly.FullName);
+            npgsql.MigrationsHistoryTable(
+                tableName: "__analytics_migrations_history",
+                schema: AnalyticsDbContext.SchemaName);
+        });
+    });
+    builder.Services.AddHostedService<AgriSync.Bootstrapper.Migrations.BackfillFarmOwnerAccounts>();
     builder.Services.AddTransient<AgriSync.Bootstrapper.Infrastructure.DatabaseSeeder>();
     builder.Services.AddTransient<AgriSync.Bootstrapper.Infrastructure.PurveshDemoSeeder>();
     builder.Services.AddTransient<AgriSync.Bootstrapper.Infrastructure.BlankTestUserSeeder>();
@@ -232,6 +255,8 @@ try
 
     app.MapUserApi();
     app.MapShramSafalApi();
+    app.MapAccountsModuleEndpoints();
+    app.MapFirstFarmBootstrapEndpoints();
 
     await InitializeApplicationDataAsync(app);
 
@@ -456,6 +481,7 @@ static async Task InitializeApplicationDataAsync(WebApplication app)
     {
         var userContext = services.GetRequiredService<User.Infrastructure.Persistence.UserDbContext>();
         var ssfContext = services.GetRequiredService<ShramSafal.Infrastructure.Persistence.ShramSafalDbContext>();
+        var analyticsContext = services.GetRequiredService<AnalyticsDbContext>();
 
         var userSchemaCreated = app.Environment.IsDevelopment()
             ? await EnsureContextTablesCreatedAsync(userContext, "public", "users")
@@ -463,6 +489,12 @@ static async Task InitializeApplicationDataAsync(WebApplication app)
         var ssfSchemaCreated = app.Environment.IsDevelopment()
             ? await EnsureContextTablesCreatedAsync(ssfContext, "ssf", "farms")
             : await ApplyStartupMigrationsIfAllowedAsync(app, ssfContext, "ShramSafalDbContext");
+        // MIS rail — analytics events are append-only. Production deploys should replace
+        // the EF-generated table with the partitioned schema from
+        // _COFOUNDER/01_Operations/Plans/SHRAMSAFAL_MIS_INTEGRATION_PLAN_2026-04-18.md §4.2.
+        var analyticsSchemaCreated = app.Environment.IsDevelopment()
+            ? await EnsureContextTablesCreatedAsync(analyticsContext, "analytics", "events")
+            : await ApplyStartupMigrationsIfAllowedAsync(app, analyticsContext, "AnalyticsDbContext");
 
         var seedBlankTestUser = app.Environment.IsDevelopment() || string.Equals(
             Environment.GetEnvironmentVariable("SEED_BLANK_TEST_USER"),
@@ -512,10 +544,11 @@ static async Task InitializeApplicationDataAsync(WebApplication app)
         }
 
         Log.Information(
-            "Database initialization completed. Environment: {Environment}, UserSchemaChanged: {UserSchemaChanged}, SsfSchemaChanged: {SsfSchemaChanged}, seedRamu: {SeedRamuDemo}, clearPurvesh: {ClearPurveshDemo}, seedPurvesh: {SeedPurveshDemo}",
+            "Database initialization completed. Environment: {Environment}, UserSchemaChanged: {UserSchemaChanged}, SsfSchemaChanged: {SsfSchemaChanged}, AnalyticsSchemaChanged: {AnalyticsSchemaChanged}, seedRamu: {SeedRamuDemo}, clearPurvesh: {ClearPurveshDemo}, seedPurvesh: {SeedPurveshDemo}",
             app.Environment.EnvironmentName,
             userSchemaCreated,
             ssfSchemaCreated,
+            analyticsSchemaCreated,
             seedRamuDemo,
             clearPurveshDemo,
             seedPurveshDemo);

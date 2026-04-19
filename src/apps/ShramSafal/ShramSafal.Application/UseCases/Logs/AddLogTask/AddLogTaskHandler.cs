@@ -1,5 +1,6 @@
 using AgriSync.BuildingBlocks.Abstractions;
 using AgriSync.BuildingBlocks.Results;
+using AgriSync.SharedKernel.Contracts.Ids;
 using ShramSafal.Application.Contracts.Dtos;
 using ShramSafal.Application.Ports;
 using ShramSafal.Domain.Audit;
@@ -10,7 +11,8 @@ namespace ShramSafal.Application.UseCases.Logs.AddLogTask;
 public sealed class AddLogTaskHandler(
     IShramSafalRepository repository,
     IIdGenerator idGenerator,
-    IClock clock)
+    IClock clock,
+    IEntitlementPolicy entitlementPolicy)
 {
     public async Task<Result<DailyLogDto>> HandleAsync(AddLogTaskCommand command, CancellationToken ct = default)
     {
@@ -37,6 +39,13 @@ public sealed class AddLogTaskHandler(
         {
             return Result.Failure<DailyLogDto>(ShramSafalErrors.Forbidden);
         }
+
+        // Phase 5 entitlement gate (PaidFeature.WriteDailyLog — log tasks
+        // are a write on an existing daily log).
+        var gate = await EntitlementGate.CheckAsync<DailyLogDto>(
+            entitlementPolicy, new UserId(command.ActorUserId), new FarmId(log.FarmId),
+            PaidFeature.WriteDailyLog, ct);
+        if (gate is not null) return gate;
 
         var task = log.AddTask(
             command.LogTaskId ?? idGenerator.New(),

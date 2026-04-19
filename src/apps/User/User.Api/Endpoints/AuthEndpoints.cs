@@ -7,6 +7,8 @@ using User.Application.Ports;
 using User.Application.UseCases.Auth.Login;
 using User.Application.UseCases.Auth.RefreshToken;
 using User.Application.UseCases.Auth.RegisterUser;
+using User.Application.UseCases.Auth.StartOtp;
+using User.Application.UseCases.Auth.VerifyOtp;
 using User.Application.UseCases.Users.GetCurrentUser;
 
 namespace User.Api.Endpoints;
@@ -76,6 +78,85 @@ public static class AuthEndpoints
             }
         })
         .WithName("LoginUser")
+        .AllowAnonymous();
+
+        publicGroup.MapPost("/start-otp", async (
+            StartOtpRequest request,
+            StartOtpHandler handler,
+            CancellationToken ct) =>
+        {
+            if (string.IsNullOrWhiteSpace(request?.Phone))
+            {
+                return Results.ValidationProblem(new Dictionary<string, string[]>
+                {
+                    ["phone"] = ["Phone is required."],
+                });
+            }
+
+            var result = await handler.HandleAsync(new StartOtpCommand(request.Phone), ct);
+
+            if (result.IsFailure)
+            {
+                var statusCode = result.Error.Code.StartsWith("otp.rate_limited") ? 429 : 400;
+                return Results.Json(
+                    new { error = result.Error.Code, message = result.Error.Description },
+                    statusCode: statusCode);
+            }
+
+            return Results.Ok(new
+            {
+                phoneNumberNormalized = result.Value!.PhoneNumberNormalized,
+                expiresAtUtc = result.Value.ExpiresAtUtc,
+                resendAfterSeconds = result.Value.ResendAfterSeconds,
+                provider = result.Value.ProviderName,
+            });
+        })
+        .WithName("StartOtp")
+        .AllowAnonymous();
+
+        publicGroup.MapPost("/verify-otp", async (
+            VerifyOtpRequest request,
+            VerifyOtpHandler handler,
+            CancellationToken ct) =>
+        {
+            if (string.IsNullOrWhiteSpace(request?.Phone) || string.IsNullOrWhiteSpace(request?.Otp))
+            {
+                return Results.ValidationProblem(new Dictionary<string, string[]>
+                {
+                    ["phone"] = string.IsNullOrWhiteSpace(request?.Phone) ? ["Phone is required."] : [],
+                    ["otp"] = string.IsNullOrWhiteSpace(request?.Otp) ? ["OTP is required."] : [],
+                });
+            }
+
+            var result = await handler.HandleAsync(
+                new VerifyOtpCommand(request.Phone, request.Otp, request.DisplayName),
+                ct);
+
+            if (result.IsFailure)
+            {
+                var statusCode = result.Error.Code switch
+                {
+                    "otp.mismatch" => 401,
+                    "otp.expired" => 410,
+                    "otp.locked_out" => 429,
+                    "otp.no_pending_challenge" => 404,
+                    _ => 400,
+                };
+                return Results.Json(
+                    new { error = result.Error.Code, message = result.Error.Description },
+                    statusCode: statusCode);
+            }
+
+            return Results.Ok(new
+            {
+                userId = result.Value!.UserId,
+                accessToken = result.Value.AccessToken,
+                refreshToken = result.Value.RefreshToken,
+                expiresAtUtc = result.Value.ExpiresAtUtc,
+                createdNewUser = result.Value.CreatedNewUser,
+            });
+        })
+        .WithName("VerifyOtp")
         .AllowAnonymous();
 
         publicGroup.MapPost("/refresh", async (
@@ -188,3 +269,7 @@ public sealed record RegisterRequest(
 public sealed record LoginRequest(string Phone, string Password);
 
 public sealed record RefreshRequest(string RefreshToken);
+
+public sealed record StartOtpRequest(string? Phone);
+
+public sealed record VerifyOtpRequest(string? Phone, string? Otp, string? DisplayName);

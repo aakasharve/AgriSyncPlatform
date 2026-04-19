@@ -1,4 +1,5 @@
 using AgriSync.BuildingBlocks.Abstractions;
+using AgriSync.BuildingBlocks.Analytics;
 using AgriSync.BuildingBlocks.Results;
 using AgriSync.SharedKernel.Contracts.Ids;
 using ShramSafal.Application.Contracts.Dtos;
@@ -11,7 +12,9 @@ namespace ShramSafal.Application.UseCases.Finance.AddCostEntry;
 public sealed class AddCostEntryHandler(
     IShramSafalRepository repository,
     IIdGenerator idGenerator,
-    IClock clock)
+    IClock clock,
+    IEntitlementPolicy entitlementPolicy,
+    IAnalyticsWriter analytics)
 {
     private const int DuplicateWindowMinutes = 120;
     private const decimal HighAmountThreshold = 25000m;
@@ -45,6 +48,12 @@ public sealed class AddCostEntryHandler(
         {
             return Result.Failure<AddCostEntryResultDto>(ShramSafalErrors.Forbidden);
         }
+
+        // Phase 5 entitlement gate (PaidFeature.EditFinance).
+        var gate = await EntitlementGate.CheckAsync<AddCostEntryResultDto>(
+            entitlementPolicy, new UserId(command.CreatedByUserId), farmId,
+            PaidFeature.EditFinance, ct);
+        if (gate is not null) return gate;
 
         if (command.PlotId is not null)
         {
@@ -121,6 +130,32 @@ public sealed class AddCostEntryHandler(
                 clock.UtcNow),
             ct);
         await repository.SaveChangesAsync(ct);
+
+        // Analytics (Phase 2 Batch D): emit after the final SaveChangesAsync.
+        // OwnerAccountId is null now; Phase 4 backfill resolves it from Farm.
+        await analytics.EmitAsync(new AnalyticsEvent(
+            EventId: Guid.NewGuid(),
+            EventType: AnalyticsEventType.CostEntryAdded,
+            OccurredAtUtc: clock.UtcNow,
+            ActorUserId: new UserId(command.CreatedByUserId),
+            FarmId: farmId,
+            OwnerAccountId: null,
+            ActorRole: command.ActorRole ?? "operator",
+            Trigger: "manual",
+            DeviceOccurredAtUtc: null,
+            SchemaVersion: "v1",
+            PropsJson: System.Text.Json.JsonSerializer.Serialize(new
+            {
+                costEntryId = entry.Id,
+                farmId = command.FarmId,
+                plotId = command.PlotId,
+                cropCycleId = command.CropCycleId,
+                amount = entry.Amount,
+                currencyCode = entry.CurrencyCode,
+                category = entry.Category,
+                dateIncurred = entry.EntryDate,
+                hasReceipt = false
+            })), ct);
 
         return Result.Success(new AddCostEntryResultDto(entry.ToDto(), isPotentialDuplicate));
     }

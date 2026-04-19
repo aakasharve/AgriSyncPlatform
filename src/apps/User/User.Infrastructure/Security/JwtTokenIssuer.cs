@@ -51,4 +51,36 @@ internal sealed class JwtTokenIssuer(IOptions<JwtOptions> jwtOptions) : IJwtToke
 
         return new TokenPair(accessToken, refreshToken, expiresAt);
     }
+
+    public TokenPair GenerateIdentityTokens(Guid userId, bool phoneVerified)
+    {
+        var utcNow = DateTime.UtcNow;
+        var expiresAt = utcNow.AddMinutes(_options.AccessTokenMinutes);
+
+        // Plan §4.2 — identity-only claim set. Anything else is a server
+        // lookup per request.
+        var claims = new List<Claim>
+        {
+            new(JwtRegisteredClaimNames.Sub, userId.ToString()),
+            new(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString()),
+            new("phone_verified", phoneVerified ? "true" : "false"),
+        };
+
+        var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_options.SigningKey));
+        var credentials = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
+
+        var token = new JwtSecurityToken(
+            issuer: _options.Issuer,
+            audience: _options.Audience,
+            claims: claims,
+            notBefore: utcNow,
+            expires: expiresAt,
+            signingCredentials: credentials);
+
+        var accessToken = new JwtSecurityTokenHandler().WriteToken(token);
+        var refreshToken = Convert.ToBase64String(Guid.NewGuid().ToByteArray())
+            + Convert.ToBase64String(Guid.NewGuid().ToByteArray());
+
+        return new TokenPair(accessToken, refreshToken, expiresAt);
+    }
 }

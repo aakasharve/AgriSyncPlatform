@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { QrCode } from 'lucide-react';
 import { useAuth } from '../app/providers/AuthProvider';
 
 interface LoginPageProps { }
@@ -181,7 +182,52 @@ const LoginPage: React.FC<LoginPageProps> = () => {
                     )}
                 </form>
 
-                <div className="mt-8 text-center">
+                <div className="mt-6 space-y-2">
+                    <div className="flex items-center gap-2">
+                        <div className="flex-1 h-px bg-stone-200"></div>
+                        <span className="text-[10px] font-bold uppercase tracking-wider text-stone-400">
+                            मी कामगार आहे · I am a worker
+                        </span>
+                        <div className="flex-1 h-px bg-stone-200"></div>
+                    </div>
+                    <button
+                        type="button"
+                        onClick={() => {
+                            const code = window.prompt('शेतीचा QR स्कॅन करा किंवा कोड टाका\nScan the farm QR or enter the 6-character code:');
+                            if (!code) return;
+                            const trimmed = code.trim();
+                            // Accept either a pasted full URL or just the farm code.
+                            if (trimmed.startsWith('http')) {
+                                try {
+                                    const url = new URL(trimmed);
+                                    const token = url.searchParams.get('t');
+                                    const farm = url.searchParams.get('f');
+                                    const role = url.searchParams.get('r') ?? 'Worker';
+                                    if (token && farm) {
+                                        window.location.assign(`/?join=${encodeURIComponent(token)}&farm=${encodeURIComponent(farm)}&role=${encodeURIComponent(role)}`);
+                                        return;
+                                    }
+                                } catch {
+                                    /* fall through to alert */
+                                }
+                            } else if (/^[0-9A-HJKMNPQRSTVWXYZ]{6}$/i.test(trimmed)) {
+                                // Short code path: we don't have the token here — alert.
+                                window.alert('Please ask the farmer to share the full QR link with you.');
+                                return;
+                            }
+                            window.alert('Link not recognised. Ask the farmer to share the QR link again.');
+                        }}
+                        className="w-full flex items-center justify-center gap-2 rounded-xl border border-emerald-200 bg-white px-4 py-2.5 text-sm font-bold text-emerald-700 hover:bg-emerald-50 transition-colors"
+                    >
+                        <QrCode size={16} />
+                        शेतीच्या QR ने सामील व्हा / Join using farm QR
+                    </button>
+                    <p className="text-[10px] text-stone-400 text-center leading-relaxed">
+                        You'll only need your phone number and the OTP. No password.
+                    </p>
+                </div>
+
+                <div className="mt-6 text-center">
                     <p className="text-xs text-stone-400">
                         AgriSync Platform v1.0
                     </p>

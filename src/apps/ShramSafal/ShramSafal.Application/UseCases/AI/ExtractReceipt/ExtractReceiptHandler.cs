@@ -1,5 +1,9 @@
+using System.Diagnostics;
 using System.Text.Json;
+using AgriSync.BuildingBlocks.Abstractions;
+using AgriSync.BuildingBlocks.Analytics;
 using AgriSync.BuildingBlocks.Results;
+using AgriSync.SharedKernel.Contracts.Ids;
 using ShramSafal.Application.Ports;
 using ShramSafal.Application.Ports.External;
 using ShramSafal.Domain.Common;
@@ -9,7 +13,9 @@ namespace ShramSafal.Application.UseCases.AI.ExtractReceipt;
 public sealed class ExtractReceiptHandler(
     IShramSafalRepository repository,
     IAiOrchestrator aiOrchestrator,
-    IAiPromptBuilder promptBuilder)
+    IAiPromptBuilder promptBuilder,
+    IAnalyticsWriter analytics,
+    IClock clock)
 {
     public async Task<Result<ExtractReceiptResult>> HandleAsync(
         ExtractReceiptCommand command,
@@ -34,6 +40,7 @@ public sealed class ExtractReceiptHandler(
             : command.IdempotencyKey.Trim();
 
         var prompt = promptBuilder.BuildReceiptExtractionPrompt();
+        var stopwatch = Stopwatch.StartNew();
         var orchestration = await aiOrchestrator.ExtractReceiptWithFallbackAsync(
             command.UserId,
             command.FarmId,
@@ -41,6 +48,13 @@ public sealed class ExtractReceiptHandler(
             command.MimeType,
             prompt,
             idempotencyKey,
+            ct);
+        stopwatch.Stop();
+
+        await EmitAiInvocationAsync(
+            command,
+            orchestration,
+            stopwatch.ElapsedMilliseconds,
             ct);
 
         if (!orchestration.Result.Success)
@@ -58,6 +72,37 @@ public sealed class ExtractReceiptHandler(
             orchestration.ProviderUsed.ToString(),
             orchestration.FallbackUsed,
             orchestration.Result.Warnings));
+    }
+
+    private Task EmitAiInvocationAsync(
+        ExtractReceiptCommand command,
+        (ShramSafal.Domain.AI.ReceiptExtractCanonicalResult Result, Guid JobId, ShramSafal.Domain.AI.AiProviderType ProviderUsed, bool FallbackUsed) orchestration,
+        long latencyMs,
+        CancellationToken ct)
+    {
+        return analytics.EmitAsync(new AnalyticsEvent(
+            EventId: Guid.NewGuid(),
+            EventType: AnalyticsEventType.AiInvocation,
+            OccurredAtUtc: clock.UtcNow,
+            ActorUserId: new UserId(command.UserId),
+            FarmId: new FarmId(command.FarmId),
+            OwnerAccountId: null,
+            ActorRole: "operator",
+            Trigger: "photo",
+            DeviceOccurredAtUtc: null,
+            SchemaVersion: "v1",
+            PropsJson: JsonSerializer.Serialize(new
+            {
+                operation = "receipt.extract",
+                jobId = orchestration.JobId,
+                providerUsed = orchestration.ProviderUsed.ToString(),
+                fallbackUsed = orchestration.FallbackUsed,
+                latencyMs,
+                outcome = orchestration.Result.Success ? "success" : "failure",
+                overallConfidence = orchestration.Result.Success ? orchestration.Result.OverallConfidence : (decimal?)null,
+                error = orchestration.Result.Success ? null : orchestration.Result.Error
+            })
+        ), ct);
     }
 
     private static object? ParseJsonOrNull(string? json)

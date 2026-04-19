@@ -1,10 +1,14 @@
+using System.Diagnostics;
 using System.Globalization;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
+using AgriSync.BuildingBlocks.Abstractions;
+using AgriSync.BuildingBlocks.Analytics;
 using AgriSync.BuildingBlocks.Results;
+using AgriSync.SharedKernel.Contracts.Ids;
 using ShramSafal.Application.Ports;
 using ShramSafal.Application.Ports.External;
 using ShramSafal.Domain.AI;
@@ -15,7 +19,9 @@ namespace ShramSafal.Application.UseCases.AI.ParseVoiceInput;
 public sealed class ParseVoiceInputHandler(
     IShramSafalRepository repository,
     IAiOrchestrator aiOrchestrator,
-    IAiPromptBuilder promptBuilder)
+    IAiPromptBuilder promptBuilder,
+    IAnalyticsWriter analytics,
+    IClock clock)
 {
     private static readonly Dictionary<string, int> MarathiNumberTokens = new(StringComparer.OrdinalIgnoreCase)
     {
@@ -110,6 +116,7 @@ public sealed class ParseVoiceInputHandler(
             ? command.IdempotencyKey!.Trim()
             : BuildIdempotencyKey(command, transcript, command.AudioBase64);
 
+        var stopwatch = Stopwatch.StartNew();
         try
         {
             var orchestration = await aiOrchestrator.ParseVoiceWithFallbackAsync(
@@ -124,6 +131,18 @@ public sealed class ParseVoiceInputHandler(
                 inputRawDurationMs: command.InputRawDurationMs,
                 segmentMetadataJson: command.SegmentMetadataJson,
                 requestPayloadHash: command.RequestPayloadHash,
+                ct: ct);
+            stopwatch.Stop();
+
+            await EmitAiInvocationAsync(
+                command,
+                providerUsed: orchestration.ProviderUsed.ToString(),
+                jobId: orchestration.JobId,
+                fallbackUsed: orchestration.FallbackUsed,
+                latencyMs: stopwatch.ElapsedMilliseconds,
+                success: orchestration.Result.Success,
+                overallConfidence: orchestration.Result.Success ? orchestration.Result.OverallConfidence : (decimal?)null,
+                error: orchestration.Result.Success ? null : orchestration.Result.Error,
                 ct: ct);
 
             var canonicalResult = orchestration.Result;
@@ -163,11 +182,59 @@ public sealed class ParseVoiceInputHandler(
         }
         catch (Exception ex)
         {
+            stopwatch.Stop();
+            await EmitAiInvocationAsync(
+                command,
+                providerUsed: "unknown",
+                jobId: Guid.Empty,
+                fallbackUsed: false,
+                latencyMs: stopwatch.ElapsedMilliseconds,
+                success: false,
+                overallConfidence: null,
+                error: ex.Message,
+                ct: ct);
+
             return Result.Failure<VoiceParseResult>(
                 new Error(
                     ShramSafalErrors.AiParsingFailed.Code,
                     $"{ShramSafalErrors.AiParsingFailed.Description} {ex.Message}"));
         }
+    }
+
+    private Task EmitAiInvocationAsync(
+        ParseVoiceInputCommand command,
+        string providerUsed,
+        Guid jobId,
+        bool fallbackUsed,
+        long latencyMs,
+        bool success,
+        decimal? overallConfidence,
+        string? error,
+        CancellationToken ct)
+    {
+        return analytics.EmitAsync(new AnalyticsEvent(
+            EventId: Guid.NewGuid(),
+            EventType: AnalyticsEventType.AiInvocation,
+            OccurredAtUtc: clock.UtcNow,
+            ActorUserId: new UserId(command.UserId),
+            FarmId: new FarmId(command.FarmId),
+            OwnerAccountId: null,
+            ActorRole: "operator",
+            Trigger: "voice",
+            DeviceOccurredAtUtc: null,
+            SchemaVersion: "v1",
+            PropsJson: JsonSerializer.Serialize(new
+            {
+                operation = "voice.parse",
+                jobId,
+                providerUsed,
+                fallbackUsed,
+                latencyMs,
+                outcome = success ? "success" : "failure",
+                overallConfidence,
+                error
+            })
+        ), ct);
     }
 
     private static Stream BuildPayloadStream(

@@ -28,6 +28,10 @@
     <ProjectReference Include="..\apps\User\User.Domain\User.Domain.csproj" />
     <ProjectReference Include="..\apps\User\User.Infrastructure\User.Infrastructure.csproj" />
     <ProjectReference Include="..\apps\User\User.Application\User.Application.csproj" />
+    <ProjectReference Include="..\apps\Accounts\Accounts.Api\Accounts.Api.csproj" />
+    <ProjectReference Include="..\apps\Accounts\Accounts.Application\Accounts.Application.csproj" />
+    <ProjectReference Include="..\apps\Accounts\Accounts.Infrastructure\Accounts.Infrastructure.csproj" />
+    <ProjectReference Include="..\apps\Accounts\Accounts.Domain\Accounts.Domain.csproj" />
   </ItemGroup>
 
 </Project>

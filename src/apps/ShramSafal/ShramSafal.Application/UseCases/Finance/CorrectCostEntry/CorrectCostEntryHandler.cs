@@ -1,4 +1,5 @@
 using AgriSync.BuildingBlocks.Abstractions;
+using AgriSync.BuildingBlocks.Analytics;
 using AgriSync.BuildingBlocks.Results;
 using AgriSync.SharedKernel.Contracts.Ids;
 using AgriSync.SharedKernel.Contracts.Roles;
@@ -12,7 +13,9 @@ namespace ShramSafal.Application.UseCases.Finance.CorrectCostEntry;
 public sealed class CorrectCostEntryHandler(
     IShramSafalRepository repository,
     IIdGenerator idGenerator,
-    IClock clock)
+    IClock clock,
+    IEntitlementPolicy entitlementPolicy,
+    IAnalyticsWriter analytics)
 {
     private const decimal MaxSupportedAmount = 999_999_999m;
 
@@ -47,6 +50,12 @@ public sealed class CorrectCostEntryHandler(
             return Result.Failure<FinanceCorrectionDto>(ShramSafalErrors.Forbidden);
         }
         var resolvedActorRole = actorRole.Value;
+
+        // Phase 5 entitlement gate (PaidFeature.EditFinance).
+        var gate = await EntitlementGate.CheckAsync<FinanceCorrectionDto>(
+            entitlementPolicy, new UserId(command.CorrectedByUserId), entry.FarmId,
+            PaidFeature.EditFinance, ct);
+        if (gate is not null) return gate;
 
         var correction = Domain.Finance.FinanceCorrection.Create(
             command.FinanceCorrectionId ?? idGenerator.New(),
@@ -84,6 +93,30 @@ public sealed class CorrectCostEntryHandler(
                 clock.UtcNow),
             ct);
         await repository.SaveChangesAsync(ct);
+
+        // Analytics (Phase 2 Batch D): emit after the final SaveChangesAsync.
+        // ActorRole is the role resolved via GetUserRoleForFarmAsync, lowercased.
+        await analytics.EmitAsync(new AnalyticsEvent(
+            EventId: Guid.NewGuid(),
+            EventType: AnalyticsEventType.CostEntryCorrected,
+            OccurredAtUtc: clock.UtcNow,
+            ActorUserId: new UserId(command.CorrectedByUserId),
+            FarmId: entry.FarmId,
+            OwnerAccountId: null,
+            ActorRole: resolvedActorRole.ToString().ToLowerInvariant(),
+            Trigger: "manual",
+            DeviceOccurredAtUtc: null,
+            SchemaVersion: "v1",
+            PropsJson: System.Text.Json.JsonSerializer.Serialize(new
+            {
+                costEntryId = entry.Id,
+                farmId = (Guid)entry.FarmId,
+                financeCorrectionId = correction.Id,
+                correctionReason = correction.Reason,
+                priorAmount = correction.OriginalAmount,
+                newAmount = correction.CorrectedAmount,
+                currencyCode = correction.CurrencyCode
+            })), ct);
 
         return Result.Success(correction.ToDto());
     }

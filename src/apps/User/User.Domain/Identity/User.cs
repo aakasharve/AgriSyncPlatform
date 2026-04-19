@@ -44,6 +44,25 @@ public sealed class User : Entity<UserId>
         return user;
     }
 
+    /// <summary>
+    /// Register a user through the OTP path. The stored credential is an
+    /// opaque unusable-hash marker (no password works against it); the
+    /// user authenticates exclusively via phone OTP until they explicitly
+    /// set a password later.
+    /// </summary>
+    public static User RegisterViaOtp(
+        UserId id,
+        PhoneNumber phone,
+        string displayName,
+        string unusablePasswordHash,
+        DateTime utcNow)
+    {
+        var credential = Credential.Create(unusablePasswordHash, utcNow);
+        var user = new User(id, phone, displayName, credential, utcNow);
+        user.Raise(new UserRegisteredEvent(Guid.NewGuid(), utcNow, id, phone.Value, displayName));
+        return user;
+    }
+
     public AppMembership AddMembership(Guid membershipId, string appId, AppRole role, DateTime utcNow)
     {
         if (_memberships.Any(m => m.AppId == appId && !m.IsRevoked))

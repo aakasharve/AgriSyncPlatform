@@ -20,6 +20,7 @@ public static class ModuleEndpoints
         .AllowAnonymous();
 
         group.MapFarmEndpoints();
+        group.MapMembershipEndpoints();
         group.MapLogsEndpoints();
         group.MapFinanceEndpoints();
         group.MapAiEndpoints();

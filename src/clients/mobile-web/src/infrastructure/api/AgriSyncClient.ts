@@ -505,14 +505,16 @@ export class AgriSyncClient {
     }
 
     async login(request: LoginRequest): Promise<AuthResponseDto> {
-        const response = await this.http.post<AuthResponseDto>('/user/auth/login', request);
+        clearAuthSession();
+        const response = await this.authHttp.post<AuthResponseDto>('/user/auth/login', request);
         const session = toAuthSession(response.data);
         setAuthSession(session);
         return response.data;
     }
 
     async register(request: { phone: string; password: string; displayName: string; appId?: string; role?: string }): Promise<AuthResponseDto> {
-        const response = await this.http.post<AuthResponseDto>('/user/auth/register', request);
+        clearAuthSession();
+        const response = await this.authHttp.post<AuthResponseDto>('/user/auth/register', request);
         const session = toAuthSession(response.data);
         setAuthSession(session);
         return response.data;

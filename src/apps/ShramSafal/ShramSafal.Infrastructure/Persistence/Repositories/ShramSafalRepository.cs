@@ -41,7 +41,8 @@ internal sealed class ShramSafalRepository(ShramSafalDbContext db) : IShramSafal
             .FirstOrDefaultAsync(
                 membership => membership.FarmId == typedFarmId &&
                               membership.UserId == typedUserId &&
-                              !membership.IsRevoked,
+                              membership.Status != MembershipStatus.Revoked &&
+                              membership.Status != MembershipStatus.Exited,
                 ct);
     }
 
@@ -60,7 +61,8 @@ internal sealed class ShramSafalRepository(ShramSafalDbContext db) : IShramSafal
 
         var membership = await db.FarmMemberships
             .AsNoTracking()
-            .Where(x => x.FarmId == typedFarmId && x.UserId == typedUserId && !x.IsRevoked)
+            .Where(x => x.FarmId == typedFarmId && x.UserId == typedUserId
+                && x.Status != MembershipStatus.Revoked && x.Status != MembershipStatus.Exited)
             .Select(x => (AppRole?)x.Role)
             .FirstOrDefaultAsync(ct);
 
@@ -466,7 +468,8 @@ internal sealed class ShramSafalRepository(ShramSafalDbContext db) : IShramSafal
 
         var membershipFarmIds = await db.FarmMemberships
             .AsNoTracking()
-            .Where(m => (Guid)m.UserId == userId && !m.IsRevoked)
+            .Where(m => (Guid)m.UserId == userId
+                && m.Status != MembershipStatus.Revoked && m.Status != MembershipStatus.Exited)
             .Select(m => (Guid)m.FarmId)
             .ToListAsync(ct);
 
@@ -555,8 +558,33 @@ internal sealed class ShramSafalRepository(ShramSafalDbContext db) : IShramSafal
             .AnyAsync(
                 membership => membership.FarmId == typedFarmId &&
                               membership.UserId == typedUserId &&
-                              !membership.IsRevoked,
+                              membership.Status != MembershipStatus.Revoked &&
+                              membership.Status != MembershipStatus.Exited,
                 ct);
+    }
+
+    public async Task<int> CountActivePrimaryOwnersAsync(Guid farmId, CancellationToken ct = default)
+    {
+        var typedFarmId = new FarmId(farmId);
+
+        var membershipOwners = await db.FarmMemberships
+            .AsNoTracking()
+            .CountAsync(m => m.FarmId == typedFarmId
+                && m.Status == MembershipStatus.Active
+                && m.Role == AppRole.PrimaryOwner, ct);
+
+        // Fallback for seeded farms: the declared Farm.OwnerUserId also
+        // counts as a PrimaryOwner, even if no explicit membership row
+        // exists. This mirrors the fallback in GetUserRoleForFarmAsync.
+        if (membershipOwners == 0)
+        {
+            var hasDeclaredOwner = await db.Farms
+                .AsNoTracking()
+                .AnyAsync(f => f.Id == typedFarmId, ct);
+            return hasDeclaredOwner ? 1 : 0;
+        }
+
+        return membershipOwners;
     }
 
     public async Task SaveChangesAsync(CancellationToken ct = default)

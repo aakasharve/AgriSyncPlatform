@@ -1,5 +1,7 @@
 using AgriSync.BuildingBlocks.Abstractions;
+using AgriSync.BuildingBlocks.Analytics;
 using AgriSync.BuildingBlocks.Results;
+using AgriSync.SharedKernel.Contracts.Ids;
 using ShramSafal.Application.Contracts.Dtos;
 using ShramSafal.Application.Ports;
 using ShramSafal.Domain.Audit;
@@ -11,7 +13,9 @@ namespace ShramSafal.Application.UseCases.Finance.AllocateGlobalExpense;
 public sealed class AllocateGlobalExpenseHandler(
     IShramSafalRepository repository,
     IIdGenerator idGenerator,
-    IClock clock)
+    IClock clock,
+    IEntitlementPolicy entitlementPolicy,
+    IAnalyticsWriter analytics)
 {
     private const decimal MaxSupportedAmount = 999_999_999m;
 
@@ -45,6 +49,12 @@ public sealed class AllocateGlobalExpenseHandler(
         {
             return Result.Failure<DayLedgerDto>(ShramSafalErrors.Forbidden);
         }
+
+        // Phase 5 entitlement gate (PaidFeature.EditFinance).
+        var gate = await EntitlementGate.CheckAsync<DayLedgerDto>(
+            entitlementPolicy, new UserId(command.CreatedByUserId), costEntry.FarmId,
+            PaidFeature.EditFinance, ct);
+        if (gate is not null) return gate;
 
         var existing = await repository.GetDayLedgerBySourceCostEntryIdAsync(command.CostEntryId, ct);
         if (existing is not null)
@@ -121,6 +131,32 @@ public sealed class AllocateGlobalExpenseHandler(
             ct);
 
         await repository.SaveChangesAsync(ct);
+
+        // Analytics (Phase 2 Batch D): emit after the final SaveChangesAsync.
+        // Allocation policy is upper-cased to match the plan's EQUAL / BY_ACREAGE / CUSTOM tokens.
+        var totalAllocatedAmount = dayLedger.Allocations.Sum(a => a.AllocatedAmount);
+        await analytics.EmitAsync(new AnalyticsEvent(
+            EventId: Guid.NewGuid(),
+            EventType: AnalyticsEventType.GlobalExpenseAllocated,
+            OccurredAtUtc: clock.UtcNow,
+            ActorUserId: new UserId(command.CreatedByUserId),
+            FarmId: costEntry.FarmId,
+            OwnerAccountId: null,
+            ActorRole: command.ActorRole ?? "operator",
+            Trigger: "manual",
+            DeviceOccurredAtUtc: null,
+            SchemaVersion: "v1",
+            PropsJson: System.Text.Json.JsonSerializer.Serialize(new
+            {
+                costEntryId = costEntry.Id,
+                farmId = (Guid)costEntry.FarmId,
+                dayLedgerId = dayLedger.Id,
+                allocationPolicy = normalizedBasis.ToUpperInvariant(),
+                plotCount = dayLedger.Allocations.Count,
+                totalAllocated = totalAllocatedAmount,
+                currencyCode = costEntry.CurrencyCode
+            })), ct);
+
         return Result.Success(dayLedger.ToDto());
     }
 

@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <RootNamespace>Accounts.Infrastructure</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.0">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+    <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Accounts.Application\Accounts.Application.csproj" />
+    <ProjectReference Include="..\Accounts.Domain\Accounts.Domain.csproj" />
+    <ProjectReference Include="..\..\..\AgriSync.SharedKernel\AgriSync.SharedKernel.csproj" />
+    <ProjectReference Include="..\..\..\AgriSync.BuildingBlocks\AgriSync.BuildingBlocks.csproj" />
+  </ItemGroup>
+
+</Project>
