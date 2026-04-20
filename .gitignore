@@ -200,3 +200,4 @@ src/clients/mobile-web/public/demo-photos/*.png
 .uiux-gallery/
 .interface-design/
 
+.worktrees/
