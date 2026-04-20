@@ -13,6 +13,7 @@ const PlaceholderPage = lazy(() => import('@/pages/PlaceholderPage'));
 const OpsLivePage = lazy(() => import('@/pages/ops/OpsLivePage'));
 const OpsErrorsPage = lazy(() => import('@/pages/ops/OpsErrorsPage'));
 const OpsVoicePage = lazy(() => import('@/pages/ops/OpsVoicePage'));
+const NorthStarPage = lazy(() => import('@/pages/metrics/NorthStarPage'));
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -63,20 +64,7 @@ export default function App() {
                   <Route path="/ops/live"   element={<OpsLivePage />} />
                   <Route path="/ops/errors" element={<OpsErrorsPage />} />
                   <Route path="/ops/voice"  element={<OpsVoicePage />} />
-                  <Route
-                    path="/metrics/nsm"
-                    element={
-                      <PlaceholderPage
-                        title="WVFD · North Star"
-                        phase="Phase 3"
-                        bullets={[
-                          'Weekly trend line + goal=4.5',
-                          'Per-farm breakdown table',
-                          'Matches Metabase card exactly',
-                        ]}
-                      />
-                    }
-                  />
+                  <Route path="/metrics/nsm" element={<NorthStarPage />} />
                   <Route
                     path="/farms"
                     element={

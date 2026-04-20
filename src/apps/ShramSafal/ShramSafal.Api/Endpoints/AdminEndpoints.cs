@@ -2,6 +2,7 @@ using System.Security.Claims;
 using ShramSafal.Application.UseCases.Admin.GetOpsHealth;
 using ShramSafal.Application.UseCases.Admin.GetOpsErrors;
 using ShramSafal.Application.UseCases.Admin.GetOpsVoice;
+using ShramSafal.Application.UseCases.Admin.GetWvfdHistory;
 
 namespace ShramSafal.Api.Endpoints;
 
@@ -62,6 +63,20 @@ public static class AdminEndpoints
         })
         .WithName("GetAdminOpsVoice")
         .CacheOutput("AdminLive");
+
+        group.MapGet("/admin/metrics/wvfd", async (
+            ClaimsPrincipal user,
+            GetWvfdHistoryHandler handler,
+            int weeks,
+            CancellationToken ct) =>
+        {
+            if (!IsAdmin(user, out var actorId)) return Results.Forbid();
+            var result = await handler.HandleAsync(
+                new GetWvfdHistoryQuery(Math.Clamp(weeks, 4, 52), actorId), ct);
+            return result.IsSuccess ? Results.Ok(result.Value) : Results.Problem();
+        })
+        .WithName("GetAdminWvfd")
+        .CacheOutput("AdminMaterialized");
 
         return group;
     }

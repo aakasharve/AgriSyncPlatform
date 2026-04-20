@@ -116,6 +116,11 @@ public static class DependencyInjection
         services.AddScoped<ShramSafal.Application.UseCases.Admin.GetOpsErrors.GetOpsErrorsHandler>();
         services.AddScoped<ShramSafal.Application.UseCases.Admin.GetOpsVoice.GetOpsVoiceHandler>();
 
+        // Admin MIS — Phase 3 materialized metrics (WVFD)
+        services.AddScoped<ShramSafal.Application.UseCases.Admin.GetWvfdHistory.GetWvfdHistoryHandler>();
+        services.AddScoped<ShramSafal.Application.Ports.IAdminMisRepository,
+            ShramSafal.Infrastructure.Persistence.Repositories.AdminMisRepository>();
+
         // Phase 3 MIS — schedule compliance evaluator
         services.AddScoped<IScheduleComplianceService, ScheduleComplianceService>();
         services.AddScoped<AdoptScheduleHandler>();
