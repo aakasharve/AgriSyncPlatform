@@ -10,6 +10,9 @@ const HomePage = lazy(() => import('@/pages/HomePage'));
 const LoginPage = lazy(() => import('@/pages/LoginPage'));
 const ForbiddenPage = lazy(() => import('@/pages/ForbiddenPage'));
 const PlaceholderPage = lazy(() => import('@/pages/PlaceholderPage'));
+const OpsLivePage = lazy(() => import('@/pages/ops/OpsLivePage'));
+const OpsErrorsPage = lazy(() => import('@/pages/ops/OpsErrorsPage'));
+const OpsVoicePage = lazy(() => import('@/pages/ops/OpsVoicePage'));
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -57,44 +60,9 @@ export default function App() {
                 >
                   <Route path="/" element={<HomePage />} />
 
-                  <Route
-                    path="/ops/live"
-                    element={
-                      <PlaceholderPage
-                        title="Live Health"
-                        phase="Phase 2"
-                        bullets={[
-                          'Wires GET /shramsafal/admin/ops/health',
-                          'Auto-refresh every 30s',
-                          'R1–R10 alert chips + voice stats + error table',
-                        ]}
-                      />
-                    }
-                  />
-                  <Route
-                    path="/ops/errors"
-                    element={
-                      <PlaceholderPage
-                        title="API Errors"
-                        phase="Phase 2"
-                        bullets={[
-                          'Dedicated GET /shramsafal/admin/ops/errors endpoint',
-                          'Server-side pagination + filters',
-                          'URL-state sync for shareable views',
-                        ]}
-                      />
-                    }
-                  />
-                  <Route
-                    path="/ops/voice"
-                    element={
-                      <PlaceholderPage
-                        title="Voice Pipeline"
-                        phase="Phase 2"
-                        bullets={['14-day trend from mis.voice_pipeline_health', 'Per-provider breakdown']}
-                      />
-                    }
-                  />
+                  <Route path="/ops/live"   element={<OpsLivePage />} />
+                  <Route path="/ops/errors" element={<OpsErrorsPage />} />
+                  <Route path="/ops/voice"  element={<OpsVoicePage />} />
                   <Route
                     path="/metrics/nsm"
                     element={

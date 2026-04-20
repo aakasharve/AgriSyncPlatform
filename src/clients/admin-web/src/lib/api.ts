@@ -33,7 +33,9 @@ export interface AdminResponse<T> {
   meta: {
     source: 'live' | 'live-aggregated' | 'materialized';
     window: string;
+    /** ISO-8601. Backend sends lastRefreshedUtc; older health endpoint has no meta. */
     lastRefreshed: string;
+    lastRefreshedUtc?: string;
     ttlSeconds: number;
   };
 }

@@ -188,4 +188,117 @@ public sealed class AdminOpsRepository(AnalyticsDbContext analyticsContext) : IA
         catch { /* view not yet created */ }
         return (r9, r10);
     }
+
+    // ───────────────────────────────────────────────────────────
+    // Phase 2 additions
+    // ───────────────────────────────────────────────────────────
+
+    public async Task<OpsErrorsPageDto> GetErrorsPagedAsync(
+        int page, int pageSize, string? endpoint, DateTime? since, CancellationToken ct = default)
+    {
+        var conn = analyticsContext.Database.GetDbConnection();
+        var wasOpen = conn.State == System.Data.ConnectionState.Open;
+        if (!wasOpen) await conn.OpenAsync(ct);
+        try
+        {
+            var sinceFilter = since?.ToUniversalTime()
+                ?? DateTime.UtcNow.AddHours(-24);
+            int total = 0;
+            var items = new List<OpsErrorEventDto>();
+
+            using var countCmd = conn.CreateCommand();
+            countCmd.CommandText = $"""
+                SELECT COUNT(*) FROM analytics.events
+                WHERE event_type IN ('api.error', 'api.slow', 'client.error')
+                  AND occurred_at_utc >= @since
+                  {(endpoint is not null ? "AND props->>'endpoint' ILIKE @ep" : "")}
+                """;
+            AddParam(countCmd, "@since", sinceFilter);
+            if (endpoint is not null) AddParam(countCmd, "@ep", $"%{endpoint}%");
+            var rawCount = await countCmd.ExecuteScalarAsync(ct);
+            total = rawCount is long l ? (int)l : rawCount is int i ? i : 0;
+
+            using var dataCmd = conn.CreateCommand();
+            dataCmd.CommandText = $"""
+                SELECT
+                    event_type,
+                    COALESCE(props->>'endpoint', 'unknown'),
+                    (props->>'statusCode')::int,
+                    (props->>'latencyMs')::int,
+                    farm_id,
+                    occurred_at_utc
+                FROM analytics.events
+                WHERE event_type IN ('api.error', 'api.slow', 'client.error')
+                  AND occurred_at_utc >= @since
+                  {(endpoint is not null ? "AND props->>'endpoint' ILIKE @ep" : "")}
+                ORDER BY occurred_at_utc DESC
+                LIMIT @size OFFSET @offset
+                """;
+            AddParam(dataCmd, "@since", sinceFilter);
+            AddParam(dataCmd, "@size", pageSize);
+            AddParam(dataCmd, "@offset", (page - 1) * pageSize);
+            if (endpoint is not null) AddParam(dataCmd, "@ep", $"%{endpoint}%");
+
+            using var r = await dataCmd.ExecuteReaderAsync(ct);
+            while (await r.ReadAsync(ct))
+                items.Add(new OpsErrorEventDto(
+                    r.GetString(0), r.GetString(1),
+                    r.IsDBNull(2) ? null : r.GetInt32(2),
+                    r.IsDBNull(3) ? null : r.GetInt32(3),
+                    r.IsDBNull(4) ? null : r.GetGuid(4),
+                    r.GetDateTime(5)));
+
+            return new OpsErrorsPageDto(items, total, page, pageSize);
+        }
+        catch { return new OpsErrorsPageDto([], 0, page, pageSize); }
+        finally { if (!wasOpen) await conn.CloseAsync(); }
+    }
+
+    public async Task<OpsVoiceTrendDto> GetVoiceTrendAsync(int days, CancellationToken ct = default)
+    {
+        var conn = analyticsContext.Database.GetDbConnection();
+        var wasOpen = conn.State == System.Data.ConnectionState.Open;
+        if (!wasOpen) await conn.OpenAsync(ct);
+        try
+        {
+            using var cmd = conn.CreateCommand();
+            cmd.CommandText = $"""
+                SELECT
+                    DATE(occurred_at_utc AT TIME ZONE 'UTC')                            AS day,
+                    COUNT(*)                                                            AS total,
+                    COUNT(*) FILTER (WHERE props->>'outcome' = 'failure')              AS failures,
+                    COALESCE(ROUND(
+                        (1 - COUNT(*) FILTER (WHERE props->>'outcome' = 'failure')::numeric
+                          / NULLIF(COUNT(*), 0)) * 100, 1), 100)                       AS success_pct,
+                    COALESCE(ROUND(AVG((props->>'latencyMs')::numeric)), 0)            AS avg_latency
+                FROM analytics.events
+                WHERE event_type = 'ai.invocation'
+                  AND occurred_at_utc >= NOW() - INTERVAL '{days} days'
+                GROUP BY day
+                ORDER BY day ASC
+                """;
+
+            var result = new List<OpsVoiceDayDto>();
+            using var r = await cmd.ExecuteReaderAsync(ct);
+            while (await r.ReadAsync(ct))
+                result.Add(new OpsVoiceDayDto(
+                    DateOnly.FromDateTime(r.GetDateTime(0)),
+                    r.IsDBNull(1) ? 0 : (int)r.GetInt64(1),
+                    r.IsDBNull(2) ? 0 : (int)r.GetInt64(2),
+                    r.IsDBNull(3) ? 100m : r.GetDecimal(3),
+                    r.IsDBNull(4) ? 0m : r.GetDecimal(4)));
+
+            return new OpsVoiceTrendDto(result);
+        }
+        catch { return new OpsVoiceTrendDto([]); }
+        finally { if (!wasOpen) await conn.CloseAsync(); }
+    }
+
+    private static void AddParam(System.Data.IDbCommand cmd, string name, object value)
+    {
+        var p = cmd.CreateParameter();
+        p.ParameterName = name;
+        p.Value = value;
+        cmd.Parameters.Add(p);
+    }
 }
