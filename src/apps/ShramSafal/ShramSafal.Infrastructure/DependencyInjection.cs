@@ -157,6 +157,7 @@ public static class DependencyInjection
         });
 
         services.AddScoped<IShramSafalRepository, ShramSafalRepository>();
+        services.AddScoped<IUserDirectory, UserDirectoryService>();
         services.AddScoped<IMisReportRepository, MisReportRepository>();
         services.AddScoped<IAdminOpsRepository, AdminOpsRepository>();
         services.AddScoped<IFarmInvitationRepository, FarmInvitationRepository>();
