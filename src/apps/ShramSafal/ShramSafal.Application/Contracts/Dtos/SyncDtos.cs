@@ -1,3 +1,5 @@
+using ShramSafal.Application.UseCases.Planning.GetAttentionBoard;
+
 namespace ShramSafal.Application.Contracts.Dtos;
 
 public sealed record SyncMutationResultDto(
@@ -42,4 +44,5 @@ public sealed record SyncPullResponseDto(
     IReadOnlyList<CropTypeDto> CropTypes,
     IReadOnlyList<string> ActivityCategories,
     IReadOnlyList<string> CostCategories,
-    string ReferenceDataVersionHash);
+    string ReferenceDataVersionHash,
+    AttentionBoardDto? AttentionBoard);  // null = no cards; pull still succeeds
