@@ -56,6 +56,7 @@ const ReviewInboxSheet = React.lazy(() => import('../../features/logs/components
 const QuickLogSheet = React.lazy(() => import('../../features/logs/components/QuickLogSheet').then(module => ({ default: module.QuickLogSheet })));
 const OnboardingPermissionsPage = React.lazy(() => import('../../pages/OnboardingPermissionsPage'));
 const QrDemoPage = React.lazy(() => import('../../pages/QrDemoPage'));
+const AttentionPage = React.lazy(() => import('../../features/attention/pages/AttentionPage'));
 
 type FeedStatusTone = 'pending' | 'rejected' | 'approved';
 
@@ -545,6 +546,12 @@ const AppRouter: React.FC = () => {
             {currentRoute === 'qr-demo' && (
                 <div className="animate-in fade-in slide-in-from-right-4 duration-300">
                     <QrDemoPage onBack={() => setCurrentRoute('profile')} />
+                </div>
+            )}
+
+            {currentRoute === 'attention' && (
+                <div className="animate-in fade-in slide-in-from-right-4 duration-300">
+                    <AttentionPage />
                 </div>
             )}
 

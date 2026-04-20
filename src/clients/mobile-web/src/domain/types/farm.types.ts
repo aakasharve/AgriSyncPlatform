@@ -389,7 +389,8 @@ export type AppRoute =
     | 'finance-reports'
     | 'finance-settings'
     | 'qr-demo'
-    | 'referrals';
+    | 'referrals'
+    | 'attention';
 
 export interface AudioData {
     blob: Blob;
