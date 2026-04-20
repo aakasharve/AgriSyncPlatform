@@ -5,15 +5,22 @@ import { ThemeProvider } from '@/app/ThemeProvider';
 import { AdminAuthProvider, useAdminAuth } from '@/app/AdminAuthProvider';
 import { WheatWindShader } from '@/app/WheatWindShader';
 import { AdminShell } from '@/app/AdminShell';
+import { CommandPalette } from '@/app/CommandPalette';
 
-const HomePage = lazy(() => import('@/pages/HomePage'));
-const LoginPage = lazy(() => import('@/pages/LoginPage'));
-const ForbiddenPage = lazy(() => import('@/pages/ForbiddenPage'));
-const PlaceholderPage = lazy(() => import('@/pages/PlaceholderPage'));
-const OpsLivePage = lazy(() => import('@/pages/ops/OpsLivePage'));
-const OpsErrorsPage = lazy(() => import('@/pages/ops/OpsErrorsPage'));
-const OpsVoicePage = lazy(() => import('@/pages/ops/OpsVoicePage'));
-const NorthStarPage = lazy(() => import('@/pages/metrics/NorthStarPage'));
+const HomePage               = lazy(() => import('@/pages/HomePage'));
+const LoginPage               = lazy(() => import('@/pages/LoginPage'));
+const ForbiddenPage           = lazy(() => import('@/pages/ForbiddenPage'));
+
+const OpsLivePage             = lazy(() => import('@/pages/ops/OpsLivePage'));
+const OpsErrorsPage           = lazy(() => import('@/pages/ops/OpsErrorsPage'));
+const OpsVoicePage            = lazy(() => import('@/pages/ops/OpsVoicePage'));
+const NorthStarPage           = lazy(() => import('@/pages/metrics/NorthStarPage'));
+const FarmsListPage           = lazy(() => import('@/pages/farms/FarmsListPage'));
+const SilentChurnPage         = lazy(() => import('@/pages/farms/SilentChurnPage'));
+const SufferingPage           = lazy(() => import('@/pages/farms/SufferingPage'));
+const ScheduleTemplatesPage   = lazy(() => import('@/pages/schedules/ScheduleTemplatesPage'));
+const UsersPage               = lazy(() => import('@/pages/users/UsersPage'));
+const SettingsAdminsPage      = lazy(() => import('@/pages/settings/SettingsAdminsPage'));
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -48,6 +55,7 @@ export default function App() {
         <AdminAuthProvider>
           <BrowserRouter>
             <WheatWindShader />
+            <CommandPalette />
             <Suspense fallback={<Fallback />}>
               <Routes>
                 <Route path="/login" element={<LoginPage />} />
@@ -65,46 +73,12 @@ export default function App() {
                   <Route path="/ops/errors" element={<OpsErrorsPage />} />
                   <Route path="/ops/voice"  element={<OpsVoicePage />} />
                   <Route path="/metrics/nsm" element={<NorthStarPage />} />
-                  <Route
-                    path="/farms"
-                    element={
-                      <PlaceholderPage
-                        title="All Farms"
-                        phase="Phase 4"
-                        bullets={['Searchable, filterable, sortable', 'URL state', 'Drill-down to /farms/:farmId']}
-                      />
-                    }
-                  />
-                  <Route
-                    path="/farms/silent-churn"
-                    element={<PlaceholderPage title="Silent Churn" phase="Phase 4" />}
-                  />
-                  <Route
-                    path="/farms/suffering"
-                    element={<PlaceholderPage title="Suffering Watchlist" phase="Phase 4" />}
-                  />
-                  <Route
-                    path="/schedules/templates"
-                    element={<PlaceholderPage title="Schedule Templates" phase="Phase 5" />}
-                  />
-                  <Route
-                    path="/users"
-                    element={<PlaceholderPage title="Users" phase="Phase 5" />}
-                  />
-                  <Route
-                    path="/settings/admins"
-                    element={
-                      <PlaceholderPage
-                        title="Admin Users"
-                        phase="Phase 6"
-                        bullets={[
-                          'Add/remove admin · writes to ssf.admin_users',
-                          'Every write emits admin.added / admin.removed audit event',
-                          'IAdminResolver unions config ∪ DB at JWT issuance',
-                        ]}
-                      />
-                    }
-                  />
+                  <Route path="/farms"                 element={<FarmsListPage />} />
+                  <Route path="/farms/silent-churn"   element={<SilentChurnPage />} />
+                  <Route path="/farms/suffering"      element={<SufferingPage />} />
+                  <Route path="/schedules/templates"  element={<ScheduleTemplatesPage />} />
+                  <Route path="/users"                element={<UsersPage />} />
+                  <Route path="/settings/admins"      element={<SettingsAdminsPage />} />
 
                   <Route path="*" element={<Navigate to="/" replace />} />
                 </Route>

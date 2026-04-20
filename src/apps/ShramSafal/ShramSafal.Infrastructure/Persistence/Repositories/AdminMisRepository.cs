@@ -78,4 +78,175 @@ public sealed class AdminMisRepository(AnalyticsDbContext analyticsContext) : IA
         catch { return new WvfdHistoryDto(0m, null, 4.5m, [], []); }
         finally { if (!wasOpen) await conn.CloseAsync(); }
     }
+
+    // ── Phase 4: Farms ──────────────────────────────────────────────────────
+    public async Task<FarmsListDto> GetFarmsListAsync(
+        int page, int pageSize, string? search, string? tier, CancellationToken ct = default)
+    {
+        var conn = analyticsContext.Database.GetDbConnection();
+        var wasOpen = conn.State == System.Data.ConnectionState.Open;
+        if (!wasOpen) await conn.OpenAsync(ct);
+        try
+        {
+            var fs = !string.IsNullOrWhiteSpace(search);
+            var ft = !string.IsNullOrWhiteSpace(tier);
+            using var countCmd = conn.CreateCommand();
+            countCmd.CommandText = "SELECT COUNT(DISTINCT f.farm_id) FROM ssf.farms f" +
+                (fs ? " WHERE LOWER(f.name) LIKE LOWER(@s)" : "");
+            if (fs) AddParam(countCmd, "@s", $"%{search}%");
+            var rawCount = await countCmd.ExecuteScalarAsync(ct);
+            int total = rawCount is long l ? (int)l : rawCount is int i ? i : 0;
+
+            var items = new List<FarmSummaryDto>();
+            using var dataCmd = conn.CreateCommand();
+            var where = new System.Text.StringBuilder("WHERE 1=1");
+            if (fs) where.Append(" AND LOWER(f.name) LIKE LOWER(@s2)");
+            if (ft) where.Append(" AND w.engagement_tier = @tier");
+            dataCmd.CommandText = $"""
+                SELECT f.farm_id, f.name,
+                    COALESCE(u.phone, '—'),
+                    'trial',
+                    w.wvfd, w.engagement_tier,
+                    COALESCE(e.errors_24h, 0),
+                    f.last_log_at, f.created_at
+                FROM ssf.farms f
+                LEFT JOIN ssf.farm_memberships fm ON fm.farm_id = f.farm_id AND fm.role = 'owner'
+                LEFT JOIN public.users u ON u.user_id = fm.user_id
+                LEFT JOIN mis.wvfd_weekly w ON w.farm_id = f.farm_id
+                    AND w.week_start = (SELECT MAX(week_start) FROM mis.wvfd_weekly)
+                LEFT JOIN (
+                    SELECT farm_id, COUNT(*) AS errors_24h
+                    FROM analytics.events
+                    WHERE event_type IN ('api.error','client.error')
+                      AND occurred_at_utc >= NOW() - INTERVAL '24 hours'
+                      AND farm_id IS NOT NULL
+                    GROUP BY farm_id
+                ) e ON e.farm_id = f.farm_id
+                {where}
+                ORDER BY COALESCE(w.wvfd,-1) DESC, f.created_at DESC
+                LIMIT @size OFFSET @offset
+                """;
+            if (fs) AddParam(dataCmd, "@s2", $"%{search}%");
+            if (ft) AddParam(dataCmd, "@tier", tier!);
+            AddParam(dataCmd, "@size", pageSize);
+            AddParam(dataCmd, "@offset", (page - 1) * pageSize);
+            using var r = await dataCmd.ExecuteReaderAsync(ct);
+            while (await r.ReadAsync(ct))
+                items.Add(new FarmSummaryDto(r.GetGuid(0), r.GetString(1),
+                    r.IsDBNull(2) ? "—" : r.GetString(2),
+                    r.GetString(3),
+                    r.IsDBNull(4) ? null : r.GetDecimal(4),
+                    r.IsDBNull(5) ? null : r.GetString(5),
+                    r.GetInt32(6),
+                    r.IsDBNull(7) ? null : r.GetDateTime(7),
+                    r.GetDateTime(8)));
+            return new FarmsListDto(items, total, page, pageSize);
+        }
+        catch { return new FarmsListDto([], 0, page, pageSize); }
+        finally { if (!wasOpen) await conn.CloseAsync(); }
+    }
+
+    public async Task<IReadOnlyList<SilentChurnItemDto>> GetSilentChurnAsync(CancellationToken ct = default)
+    {
+        var conn = analyticsContext.Database.GetDbConnection();
+        var wasOpen = conn.State == System.Data.ConnectionState.Open;
+        if (!wasOpen) await conn.OpenAsync(ct);
+        try
+        {
+            var items = new List<SilentChurnItemDto>();
+            using var cmd = conn.CreateCommand();
+            cmd.CommandText = """
+                SELECT s.farm_id, COALESCE(f.name, s.farm_id::text),
+                    COALESCE(u.phone, '—'), 'trial', s.weeks_silent, s.last_log_at
+                FROM mis.silent_churn_watchlist s
+                LEFT JOIN ssf.farms f ON f.farm_id = s.farm_id
+                LEFT JOIN ssf.farm_memberships fm ON fm.farm_id = s.farm_id AND fm.role = 'owner'
+                LEFT JOIN public.users u ON u.user_id = fm.user_id
+                ORDER BY s.weeks_silent DESC LIMIT 100
+                """;
+            using var r = await cmd.ExecuteReaderAsync(ct);
+            while (await r.ReadAsync(ct))
+                items.Add(new SilentChurnItemDto(r.GetGuid(0), r.GetString(1), r.GetString(2),
+                    r.GetString(3), r.GetInt32(4), r.IsDBNull(5) ? null : r.GetDateTime(5)));
+            return items;
+        }
+        catch { return []; }
+        finally { if (!wasOpen) await conn.CloseAsync(); }
+    }
+
+    public async Task<IReadOnlyList<SufferingItemDto>> GetSufferingAsync(CancellationToken ct = default)
+    {
+        var conn = analyticsContext.Database.GetDbConnection();
+        var wasOpen = conn.State == System.Data.ConnectionState.Open;
+        if (!wasOpen) await conn.OpenAsync(ct);
+        try
+        {
+            var items = new List<SufferingItemDto>();
+            using var cmd = conn.CreateCommand();
+            cmd.CommandText = """
+                SELECT s.farm_id, COALESCE(f.name, s.farm_id::text),
+                    s.error_count, s.sync_errors, s.log_errors, s.voice_errors, s.last_error_at
+                FROM mis.farmer_suffering_watchlist s
+                LEFT JOIN ssf.farms f ON f.farm_id = s.farm_id
+                ORDER BY s.error_count DESC LIMIT 50
+                """;
+            using var r = await cmd.ExecuteReaderAsync(ct);
+            while (await r.ReadAsync(ct))
+                items.Add(new SufferingItemDto(r.GetGuid(0), r.GetString(1),
+                    r.GetInt32(2), r.GetInt32(3), r.GetInt32(4), r.GetInt32(5), r.GetDateTime(6)));
+            return items;
+        }
+        catch { return []; }
+        finally { if (!wasOpen) await conn.CloseAsync(); }
+    }
+
+    // ── Phase 5: Users ──────────────────────────────────────────────────────
+    public async Task<UsersListDto> GetUsersListAsync(
+        int page, int pageSize, string? search, CancellationToken ct = default)
+    {
+        var conn = analyticsContext.Database.GetDbConnection();
+        var wasOpen = conn.State == System.Data.ConnectionState.Open;
+        if (!wasOpen) await conn.OpenAsync(ct);
+        try
+        {
+            var fs = !string.IsNullOrWhiteSpace(search);
+            using var countCmd = conn.CreateCommand();
+            countCmd.CommandText = "SELECT COUNT(*) FROM public.users u" +
+                (fs ? " WHERE u.phone LIKE @s OR LOWER(u.display_name) LIKE LOWER(@s)" : "");
+            if (fs) AddParam(countCmd, "@s", $"%{search}%");
+            var rawCount = await countCmd.ExecuteScalarAsync(ct);
+            int total = rawCount is long l ? (int)l : rawCount is int i ? i : 0;
+
+            var items = new List<UserSummaryDto>();
+            using var dataCmd = conn.CreateCommand();
+            dataCmd.CommandText =
+                "SELECT u.user_id, u.phone, u.display_name, u.email," +
+                " u.created_at, u.last_login_at" +
+                " FROM public.users u" +
+                (fs ? " WHERE u.phone LIKE @s2 OR LOWER(u.display_name) LIKE LOWER(@s2)" : "") +
+                " ORDER BY u.created_at DESC LIMIT @size OFFSET @offset";
+            if (fs) AddParam(dataCmd, "@s2", $"%{search}%");
+            AddParam(dataCmd, "@size", pageSize);
+            AddParam(dataCmd, "@offset", (page - 1) * pageSize);
+            using var r = await dataCmd.ExecuteReaderAsync(ct);
+            while (await r.ReadAsync(ct))
+                items.Add(new UserSummaryDto(r.GetGuid(0), r.GetString(1),
+                    r.IsDBNull(2) ? null : r.GetString(2),
+                    r.IsDBNull(3) ? null : r.GetString(3),
+                    [],
+                    r.GetDateTime(4),
+                    r.IsDBNull(5) ? null : r.GetDateTime(5)));
+            return new UsersListDto(items, total, page, pageSize);
+        }
+        catch { return new UsersListDto([], 0, page, pageSize); }
+        finally { if (!wasOpen) await conn.CloseAsync(); }
+    }
+
+    private static void AddParam(System.Data.IDbCommand cmd, string name, object value)
+    {
+        var p = cmd.CreateParameter();
+        p.ParameterName = name;
+        p.Value = value;
+        cmd.Parameters.Add(p);
+    }
 }
