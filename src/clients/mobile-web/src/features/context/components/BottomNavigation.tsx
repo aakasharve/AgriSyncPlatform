@@ -59,6 +59,38 @@ const BottomNavigation: React.FC<BottomNavigationProps> = ({ currentRoute, curre
             <div aria-hidden="true" className="pointer-events-none absolute -top-8 left-0 right-0 h-8 bg-gradient-to-b from-transparent to-[rgba(250,250,249,0.92)]" />
             <div className="page-content pl-safe-area pr-safe-area flex h-[80px] items-end justify-center pb-2">
 
+                {/* ATTENTION SECTION */}
+                <button
+                    onClick={() => handleNavClick('attention')}
+                    className={`
+                        flex w-16 flex-col items-center justify-end pb-1 transition-all duration-200 group
+                    `}
+                >
+                    <div className={`
+                        mb-1 rounded-2xl px-2 py-1 transition-all duration-200
+                        ${isActive('attention') ? 'bg-emerald-100' : ''}
+                    `}>
+                        <svg
+                            width="28"
+                            height="28"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke={isActive('attention') ? '#059669' : '#78716c'}
+                            strokeWidth="2"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                        >
+                            <circle cx="12" cy="12" r="10" />
+                            <line x1="12" y1="8" x2="12" y2="12" />
+                            <line x1="12" y1="16" x2="12.01" y2="16" />
+                        </svg>
+                    </div>
+                    <span className={`text-[10px] tracking-tight ${isActive('attention') ? 'font-extrabold text-emerald-700' : 'font-bold text-stone-700'}`}>
+                        Attention
+                    </span>
+                    <span className={`mt-1 h-1 w-1 rounded-full bg-emerald-600 transition-opacity ${isActive('attention') ? 'opacity-100' : 'opacity-0'}`} />
+                </button>
+
                 {/* PROCUREMENT SECTION */}
                 <button
                     onClick={() => handleNavClick('procurement')}

@@ -15,6 +15,7 @@ import { MoneyChip } from '../features/finance/components/MoneyChip';
 import { MoneyLensDrawer } from '../features/finance/components/MoneyLensDrawer';
 import { FinanceFilters } from '../features/finance/finance.types';
 import OfflineEmptyState from '../shared/components/ui/OfflineEmptyState';
+import LineageRibbon from '../features/schedule-authoring/components/LineageRibbon';
 
 interface SchedulerPageProps {
     crops: CropProfile[];
@@ -555,6 +556,13 @@ const SchedulerPage: React.FC<SchedulerPageProps> = ({
                                         <h3 className="text-xl font-black tracking-tight leading-tight">
                                             {scheduleTemplate?.name || 'Active Schedule'}
                                         </h3>
+                                        <LineageRibbon
+                                            derivedFromTemplateId={(scheduleTemplate as Record<string, unknown> | null)?.['derivedFromTemplateId'] as string | null | undefined}
+                                            derivedFromName={(scheduleTemplate as Record<string, unknown> | null)?.['derivedFromName'] as string | null | undefined}
+                                            version={(scheduleTemplate as Record<string, unknown> | null)?.['version'] as number | undefined}
+                                            author={scheduleTemplate?.createdBy}
+                                            publishedAtUtc={(scheduleTemplate as Record<string, unknown> | null)?.['publishedAtUtc'] as string | null | undefined ?? scheduleTemplate?.publishedAt}
+                                        />
                                         {scheduleTemplate && (
                                             <div className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider mt-2 ${ownerBadge.bg} ${ownerBadge.color}`}>
                                                 {ownerBadge.icon}
