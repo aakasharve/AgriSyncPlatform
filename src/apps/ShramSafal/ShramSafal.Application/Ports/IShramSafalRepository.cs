@@ -115,4 +115,12 @@ public interface IShramSafalRepository
     Task<List<ScheduleTemplate>> GetScheduleLineageAsync(Guid rootTemplateId, CancellationToken ct = default);
 
     Task SaveChangesAsync(CancellationToken ct = default);
+
+    // --- CEI Phase 1 §4.4 ----------------------------------------------------------------
+    /// <summary>
+    /// Returns the count of <see cref="ShramSafal.Domain.Logs.DailyLog"/> records for the
+    /// given plot whose <c>CurrentVerificationStatus</c> is
+    /// <see cref="ShramSafal.Domain.Logs.VerificationStatus.Disputed"/>.
+    /// </summary>
+    Task<int> GetDisputedLogCountForPlotAsync(Guid plotId, CancellationToken ct = default);
 }
