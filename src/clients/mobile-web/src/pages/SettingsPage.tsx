@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useAppNavigationState } from '../app/context/AppFeatureContexts';
 import { Settings, Droplets, Users, Tractor, BookOpen, FlaskConical, Bot, Plus, Trash2, Coins, Leaf, Check, Pencil, ChevronDown, ChevronUp, Globe, Shield, MapPin, Mic, Camera } from 'lucide-react';
 import { LedgerDefaults, LabourShift, DailyLog, CropProfile, HarvestConfig } from '../types';
@@ -9,6 +9,8 @@ import { CropSymbol } from '../features/context/components/CropSelector';
 import { useLanguage } from '../i18n/LanguageContext';
 import { Language } from '../i18n/translations';
 import { idGenerator } from '../core/domain/services/IdGenerator';
+import { getMyFarms, type MyFarmDto } from '../features/onboarding/qr/inviteApi';
+import SubscriptionCard from '../features/admin/billing/SubscriptionCard';
 
 interface SettingsPageProps {
     defaults: LedgerDefaults;
@@ -23,6 +25,20 @@ const SettingsPage: React.FC<SettingsPageProps> = ({
 }) => {
     const { setCurrentRoute } = useAppNavigationState();
     const { t, language, setLanguage } = useLanguage();
+
+    // Billing state — fetched once on mount; owner-only section
+    const [currentFarm, setCurrentFarm] = useState<MyFarmDto | null>(null);
+    useEffect(() => {
+        let cancelled = false;
+        getMyFarms().then(farms => {
+            if (!cancelled && farms.length > 0) {
+                const farmId = localStorage.getItem('shramsafal_current_farm_id');
+                const farm = farmId ? farms.find(f => f.farmId === farmId) ?? farms[0] : farms[0];
+                setCurrentFarm(farm);
+            }
+        }).catch(() => { /* billing section just won't render */ });
+        return () => { cancelled = true; };
+    }, []);
 
     // Harvest Configuration state
     const [harvestConfigExpanded, setHarvestConfigExpanded] = useState(false);
@@ -291,6 +307,24 @@ const SettingsPage: React.FC<SettingsPageProps> = ({
                     {crops.length === 0 && <p className="text-xs text-stone-400 italic">No crops available</p>}
                 </div>
             </div>
+
+            {/* Billing — PrimaryOwner only; renders nothing for workers */}
+            {currentFarm && currentFarm.role === 'PrimaryOwner' && (
+                <div>
+                    <h3 className="text-xl font-display font-black text-stone-800 px-1 mb-4">
+                        बिलिंग · Billing
+                    </h3>
+                    <SubscriptionCard
+                        subscription={currentFarm.subscription}
+                        role={currentFarm.role}
+                        onManageBilling={() => {
+                            // TODO(Phase 7): open provider billing portal URL
+                            // For now, surface a friendly message.
+                            window.alert('Billing portal coming soon. Contact support@shramsafal.in.');
+                        }}
+                    />
+                </div>
+            )}
 
             {/* Developer Tools */}
             <div className="glass-panel p-5 mt-6">
