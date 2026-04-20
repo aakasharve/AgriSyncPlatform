@@ -145,6 +145,8 @@ public sealed class SubscriptionEntitlementTests
         public Task<ShramSafal.Domain.Schedules.ScheduleSubscription?> GetScheduleSubscriptionByIdAsync(AgriSync.SharedKernel.Contracts.Ids.ScheduleSubscriptionId id, CancellationToken ct = default) => Task.FromResult<ShramSafal.Domain.Schedules.ScheduleSubscription?>(null);
         public Task<ShramSafal.Domain.Schedules.ScheduleSubscription?> GetActiveScheduleSubscriptionAsync(Guid plotId, string cropKey, Guid cropCycleId, CancellationToken ct = default) => Task.FromResult<ShramSafal.Domain.Schedules.ScheduleSubscription?>(null);
         public Task AddScheduleMigrationEventAsync(ShramSafal.Domain.Schedules.ScheduleMigrationEvent e, CancellationToken ct = default) => Task.CompletedTask;
+        public Task<ShramSafal.Domain.Planning.ScheduleTemplate?> GetScheduleTemplateByIdAsync(Guid templateId, CancellationToken ct = default) => throw new NotImplementedException();
+        public Task<bool> HasActiveOwnerMembershipAsync(Guid userId, CancellationToken ct = default) => throw new NotImplementedException();
     }
 
     private sealed class NullAnalyticsWriter : AgriSync.BuildingBlocks.Analytics.IAnalyticsWriter

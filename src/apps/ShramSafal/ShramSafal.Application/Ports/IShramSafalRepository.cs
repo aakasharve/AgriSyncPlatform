@@ -99,5 +99,14 @@ public interface IShramSafalRepository
 
     Task AddScheduleMigrationEventAsync(ScheduleMigrationEvent migrationEvent, CancellationToken ct = default);
 
+    Task<ScheduleTemplate?> GetScheduleTemplateByIdAsync(Guid templateId, CancellationToken ct = default);
+
+    /// <summary>
+    /// Returns <c>true</c> if the user has at least one <c>Active</c>
+    /// <see cref="FarmMembership"/> with <c>Role >= SecondaryOwner</c>.
+    /// Used to gate Team / Licensed / Public template mutations.
+    /// </summary>
+    Task<bool> HasActiveOwnerMembershipAsync(Guid userId, CancellationToken ct = default);
+
     Task SaveChangesAsync(CancellationToken ct = default);
 }
