@@ -10,6 +10,7 @@ public static class ShramSafalErrors
     public static readonly Error CropCycleOverlap = new("ShramSafal.CropCycleOverlap", "Crop cycle dates overlap an existing cycle on this plot.");
     public static readonly Error DailyLogNotFound = new("ShramSafal.DailyLogNotFound", "Daily log was not found.");
     public static readonly Error DuplicateLogRequest = new("ShramSafal.DuplicateLogRequest", "A log already exists for this idempotency key.");
+    public static readonly Error PlannedActivityNotFound = new("ShramSafal.PlannedActivityNotFound", "Planned activity was not found.");
     public static readonly Error CostEntryNotFound = new("ShramSafal.CostEntryNotFound", "Cost entry was not found.");
     public static readonly Error DayLedgerNotFound = new("ShramSafal.DayLedgerNotFound", "Day ledger was not found.");
     public static readonly Error AttachmentNotFound = new("ShramSafal.AttachmentNotFound", "Attachment was not found.");

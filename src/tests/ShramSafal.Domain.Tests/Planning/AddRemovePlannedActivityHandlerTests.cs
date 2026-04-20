@@ -1,8 +1,9 @@
+using AgriSync.BuildingBlocks.Abstractions;
 using AgriSync.SharedKernel.Contracts.Ids;
 using AgriSync.SharedKernel.Contracts.Roles;
 using ShramSafal.Application.Contracts.Dtos;
 using ShramSafal.Application.Ports;
-using ShramSafal.Application.Services;
+using ShramSafal.Application.UseCases.Planning.OverridePlannedActivity;
 using ShramSafal.Domain.Attachments;
 using ShramSafal.Domain.Audit;
 using ShramSafal.Domain.Crops;
@@ -13,164 +14,136 @@ using ShramSafal.Domain.Planning;
 using ShramSafal.Domain.Schedules;
 using Xunit;
 
-namespace ShramSafal.Domain.Tests.Schedules;
+namespace ShramSafal.Domain.Tests.Planning;
 
-public sealed class ScheduleComplianceServiceTests
+public sealed class AddRemovePlannedActivityHandlerTests
 {
-    private static readonly FarmId Farm = new(Guid.NewGuid());
-    private static readonly Guid Plot = Guid.NewGuid();
-    private static readonly Guid Cycle = Guid.NewGuid();
-    private static readonly DateOnly CycleStart = new(2026, 4, 1);
-    private const string CropKey = "grapes";
-    private const string TaskType = "fertigation";
-    private const string Stage = "flowering";
+    private static readonly DateTime Now = new(2026, 4, 21, 10, 0, 0, DateTimeKind.Utc);
+    private static readonly Guid FarmId = Guid.Parse("ffffffff-ffff-ffff-ffff-ffffffffffff");
+    private static readonly Guid CropCycleId = Guid.Parse("cccccccc-cccc-cccc-cccc-cccccccccccc");
+    private static readonly Guid MukadamId = Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa");
+
+    private static AddLocalPlannedActivityHandler CreateAddHandler(FakeAddRemoveRepo repo) =>
+        new(repo, new FakeSyncMutationStore(), new FakeClock(Now));
+
+    private static RemovePlannedActivityHandler CreateRemoveHandler(FakeAddRemoveRepo repo) =>
+        new(repo, new FakeSyncMutationStore(), new FakeClock(Now));
 
     [Fact]
-    public async Task NoActiveSubscription_ReturnsUnscheduled()
+    public async Task Add_LocalPlannedActivity_HasNullSourceTemplateActivityId()
     {
-        var repo = new FakeRepo
-        {
-            Cycle = BuildCycle(),
-            ActiveSubscription = null,
-        };
+        var repo = new FakeAddRemoveRepo(null, AppRole.Mukadam);
+        var handler = CreateAddHandler(repo);
+        var newId = Guid.NewGuid();
 
-        var service = new ScheduleComplianceService(repo);
-        var result = await service.EvaluateAsync(new ScheduleComplianceQuery(
-            Cycle, TaskType, Stage, CycleStart.AddDays(10)));
+        var result = await handler.HandleAsync(new AddLocalPlannedActivityCommand(
+            NewActivityId: newId,
+            CropCycleId: CropCycleId,
+            FarmId: FarmId,
+            ActivityName: "Drip irrigation",
+            Stage: "Fruiting",
+            PlannedDate: new DateOnly(2026, 5, 1),
+            Reason: "Extra irrigation needed",
+            CallerUserId: MukadamId,
+            ClientCommandId: null));
 
-        Assert.Equal(ComplianceOutcome.Unscheduled, result.Outcome);
-        Assert.Null(result.SubscriptionId);
-        Assert.Null(result.MatchedTaskId);
+        Assert.True(result.IsSuccess);
+        Assert.Single(repo.AddedActivities);
+        var added = repo.AddedActivities[0];
+        Assert.Equal(newId, added.Id);
+        Assert.Null(added.SourceTemplateActivityId);
+        Assert.True(added.IsLocallyAdded);
+        Assert.Single(repo.AuditEvents);
+        Assert.Equal("plan.added", repo.AuditEvents[0].Action);
+        Assert.Equal(1, repo.SaveCalls);
     }
 
     [Fact]
-    public async Task LoggedOnPrescribedDay_ReturnsOnTime()
+    public async Task Remove_TemplateDerivedActivity_SoftDeletes_WithReason()
     {
-        var (subscription, template) = BuildSubscriptionAndTemplate(dayOffset: 10, tolerance: 2);
-        var repo = new FakeRepo
-        {
-            Cycle = BuildCycle(),
-            ActiveSubscription = subscription,
-            Template = template,
-        };
-
-        var service = new ScheduleComplianceService(repo);
-        var result = await service.EvaluateAsync(new ScheduleComplianceQuery(
-            Cycle, TaskType, Stage, CycleStart.AddDays(10)));
-
-        Assert.Equal(ComplianceOutcome.OnTime, result.Outcome);
-        Assert.Equal(0, result.DeltaDays);
-        Assert.Equal(subscription.SubscriptionId, result.SubscriptionId);
-        Assert.Equal(template.Tasks[0].Id, result.MatchedTaskId);
-    }
-
-    [Fact]
-    public async Task LoggedFiveDaysEarly_ReturnsEarly()
-    {
-        var (subscription, template) = BuildSubscriptionAndTemplate(dayOffset: 10, tolerance: 2);
-        var repo = new FakeRepo
-        {
-            Cycle = BuildCycle(),
-            ActiveSubscription = subscription,
-            Template = template,
-        };
-
-        var service = new ScheduleComplianceService(repo);
-        var result = await service.EvaluateAsync(new ScheduleComplianceQuery(
-            Cycle, TaskType, Stage, CycleStart.AddDays(5)));
-
-        Assert.Equal(ComplianceOutcome.Early, result.Outcome);
-        Assert.Equal(-5, result.DeltaDays);
-    }
-
-    [Fact]
-    public async Task LoggedFiveDaysLate_ReturnsLate()
-    {
-        var (subscription, template) = BuildSubscriptionAndTemplate(dayOffset: 10, tolerance: 2);
-        var repo = new FakeRepo
-        {
-            Cycle = BuildCycle(),
-            ActiveSubscription = subscription,
-            Template = template,
-        };
-
-        var service = new ScheduleComplianceService(repo);
-        var result = await service.EvaluateAsync(new ScheduleComplianceQuery(
-            Cycle, TaskType, Stage, CycleStart.AddDays(15)));
-
-        Assert.Equal(ComplianceOutcome.Late, result.Outcome);
-        Assert.Equal(5, result.DeltaDays);
-    }
-
-    private static CropCycle BuildCycle() =>
-        CropCycle.Create(Cycle, Farm, Plot, CropKey, Stage, CycleStart, endDate: null, createdAtUtc: DateTime.UtcNow);
-
-    private static (ScheduleSubscription Subscription, CropScheduleTemplate Template) BuildSubscriptionAndTemplate(
-        int dayOffset,
-        int tolerance)
-    {
-        var templateId = ScheduleTemplateId.New();
-        var task = PrescribedTask.Create(
-            PrescribedTaskId.New(),
-            TaskType,
-            Stage,
-            dayOffset,
-            tolerance);
-
-        var template = CropScheduleTemplate.Create(
-            templateId.Value,
-            templateKey: "test-template-v1",
-            cropKey: CropKey,
-            regionCode: null,
-            name: "Test Template",
-            versionTag: "v1",
-            createdAtUtc: DateTime.UtcNow,
-            tasks: new[] { task });
-        template.Publish();
-
-        var subscription = ScheduleSubscription.Adopt(
+        // Create a template-derived activity (has SourceTemplateActivityId)
+        var activity = PlannedActivity.CreateFromTemplate(
             Guid.NewGuid(),
-            Farm,
-            Plot,
-            Cycle,
-            CropKey,
-            templateId,
-            "v1",
-            DateTime.UtcNow);
+            CropCycleId,
+            "Spray pesticide",
+            "Flowering",
+            new DateOnly(2026, 5, 5),
+            Guid.NewGuid(),
+            Now.AddDays(-3));
 
-        return (subscription, template);
+        var repo = new FakeAddRemoveRepo(activity, AppRole.Mukadam);
+        var handler = CreateRemoveHandler(repo);
+
+        var result = await handler.HandleAsync(new RemovePlannedActivityCommand(
+            PlannedActivityId: activity.Id,
+            FarmId: FarmId,
+            Reason: "Activity skipped due to rain",
+            CallerUserId: MukadamId,
+            ClientCommandId: null));
+
+        Assert.True(result.IsSuccess);
+        Assert.True(activity.IsRemoved);
+        Assert.Equal("Activity skipped due to rain", activity.RemovedReason);
+        Assert.NotNull(activity.RemovedAtUtc);
+        Assert.Single(repo.AuditEvents);
+        Assert.Equal("plan.removed", repo.AuditEvents[0].Action);
+        Assert.Equal(1, repo.SaveCalls);
     }
 
-    // Minimal stub — the service only calls three methods; everything else throws if misused.
-    private sealed class FakeRepo : IShramSafalRepository
+    // ---------------------------------------------------------------------------
+    //  Private fake infrastructure
+    // ---------------------------------------------------------------------------
+
+    private sealed class FakeAddRemoveRepo : IShramSafalRepository
     {
-        public CropCycle? Cycle { get; set; }
-        public ScheduleSubscription? ActiveSubscription { get; set; }
-        public CropScheduleTemplate? Template { get; set; }
+        private readonly PlannedActivity? _existingActivity;
+        private readonly AppRole? _role;
 
-        public Task<CropCycle?> GetCropCycleByIdAsync(Guid cropCycleId, CancellationToken ct = default) =>
-            Task.FromResult(Cycle);
+        public FakeAddRemoveRepo(PlannedActivity? existingActivity, AppRole? role)
+        {
+            _existingActivity = existingActivity;
+            _role = role;
+        }
 
-        public Task<ScheduleSubscription?> GetActiveScheduleSubscriptionAsync(
-            Guid plotId, string cropKey, Guid cropCycleId, CancellationToken ct = default) =>
-            Task.FromResult(ActiveSubscription);
+        public List<PlannedActivity> AddedActivities { get; } = new();
+        public List<AuditEvent> AuditEvents { get; } = new();
+        public int SaveCalls { get; private set; }
 
-        public Task<CropScheduleTemplate?> GetCropScheduleTemplateByIdAsync(
-            ScheduleTemplateId templateId, CancellationToken ct = default) =>
-            Task.FromResult(Template);
+        public Task<PlannedActivity?> GetPlannedActivityByIdAsync(Guid id, CancellationToken ct = default) =>
+            Task.FromResult(_existingActivity?.Id == id ? _existingActivity : null);
 
-        // ---- Unused members — throw if touched by production code paths we don't expect. ----
+        public Task<AppRole?> GetUserRoleForFarmAsync(Guid farmId, Guid userId, CancellationToken ct = default) =>
+            Task.FromResult(_role);
 
+        public Task AddPlannedActivitiesAsync(IEnumerable<PlannedActivity> plannedActivities, CancellationToken ct = default)
+        {
+            AddedActivities.AddRange(plannedActivities);
+            return Task.CompletedTask;
+        }
+
+        public Task AddAuditEventAsync(AuditEvent auditEvent, CancellationToken ct = default)
+        {
+            AuditEvents.Add(auditEvent);
+            return Task.CompletedTask;
+        }
+
+        public Task SaveChangesAsync(CancellationToken ct = default)
+        {
+            SaveCalls++;
+            return Task.CompletedTask;
+        }
+
+        // --- stubs ---
         public Task AddFarmAsync(Farm farm, CancellationToken ct = default) => throw new NotSupportedException();
         public Task<Farm?> GetFarmByIdAsync(Guid farmId, CancellationToken ct = default) => throw new NotSupportedException();
         public Task AddFarmMembershipAsync(FarmMembership membership, CancellationToken ct = default) => throw new NotSupportedException();
         public Task<FarmMembership?> GetFarmMembershipAsync(Guid farmId, Guid userId, CancellationToken ct = default) => throw new NotSupportedException();
-        public Task<AppRole?> GetUserRoleForFarmAsync(Guid farmId, Guid userId, CancellationToken ct = default) => throw new NotSupportedException();
         public Task<bool> IsUserOwnerOfFarmAsync(Guid farmId, Guid userId, CancellationToken ct = default) => throw new NotSupportedException();
         public Task AddPlotAsync(Plot plot, CancellationToken ct = default) => throw new NotSupportedException();
         public Task<Plot?> GetPlotByIdAsync(Guid plotId, CancellationToken ct = default) => throw new NotSupportedException();
         public Task<List<Plot>> GetPlotsByFarmIdAsync(Guid farmId, CancellationToken ct = default) => throw new NotSupportedException();
         public Task AddCropCycleAsync(CropCycle cropCycle, CancellationToken ct = default) => throw new NotSupportedException();
+        public Task<CropCycle?> GetCropCycleByIdAsync(Guid cropCycleId, CancellationToken ct = default) => throw new NotSupportedException();
         public Task<List<CropCycle>> GetCropCyclesByPlotIdAsync(Guid plotId, CancellationToken ct = default) => throw new NotSupportedException();
         public Task AddDailyLogAsync(DailyLog log, CancellationToken ct = default) => throw new NotSupportedException();
         public Task<DailyLog?> GetDailyLogByIdAsync(Guid dailyLogId, CancellationToken ct = default) => throw new NotSupportedException();
@@ -188,11 +161,8 @@ public sealed class ScheduleComplianceServiceTests
         public Task<Attachment?> GetAttachmentByIdAsync(Guid attachmentId, CancellationToken ct = default) => throw new NotSupportedException();
         public Task<List<Attachment>> GetAttachmentsForEntityAsync(Guid entityId, string entityType, CancellationToken ct = default) => throw new NotSupportedException();
         public Task AddPriceConfigAsync(PriceConfig config, CancellationToken ct = default) => throw new NotSupportedException();
-        public Task AddAuditEventAsync(AuditEvent auditEvent, CancellationToken ct = default) => throw new NotSupportedException();
         public Task AddScheduleTemplateAsync(ScheduleTemplate template, CancellationToken ct = default) => throw new NotSupportedException();
         public Task<List<ScheduleTemplate>> GetScheduleTemplatesAsync(CancellationToken ct = default) => throw new NotSupportedException();
-        public Task AddPlannedActivitiesAsync(IEnumerable<PlannedActivity> plannedActivities, CancellationToken ct = default) => throw new NotSupportedException();
-        public Task<PlannedActivity?> GetPlannedActivityByIdAsync(Guid id, CancellationToken ct = default) => throw new NotSupportedException();
         public Task<List<PlannedActivity>> GetPlannedActivitiesByCropCycleIdAsync(Guid cropCycleId, CancellationToken ct = default) => throw new NotSupportedException();
         public Task<List<LogTask>> GetExecutedTasksByCropCycleIdAsync(Guid cropCycleId, CancellationToken ct = default) => throw new NotSupportedException();
         public Task<List<CostEntry>> GetCostEntriesAsync(DateOnly? fromDate, DateOnly? toDate, CancellationToken ct = default) => throw new NotSupportedException();
@@ -215,13 +185,47 @@ public sealed class ScheduleComplianceServiceTests
         public Task<bool> IsUserMemberOfFarmAsync(Guid farmId, Guid userId, CancellationToken ct = default) => throw new NotSupportedException();
         public Task<int> CountActivePrimaryOwnersAsync(Guid farmId, CancellationToken ct = default) => throw new NotSupportedException();
         public Task AddCropScheduleTemplateAsync(CropScheduleTemplate template, CancellationToken ct = default) => throw new NotSupportedException();
+        public Task<CropScheduleTemplate?> GetCropScheduleTemplateByIdAsync(ScheduleTemplateId templateId, CancellationToken ct = default) => throw new NotSupportedException();
         public Task<List<CropScheduleTemplate>> GetCropScheduleTemplatesForCropAsync(string cropKey, string? regionCode, CancellationToken ct = default) => throw new NotSupportedException();
         public Task AddScheduleSubscriptionAsync(ScheduleSubscription subscription, CancellationToken ct = default) => throw new NotSupportedException();
         public Task<ScheduleSubscription?> GetScheduleSubscriptionByIdAsync(ScheduleSubscriptionId subscriptionId, CancellationToken ct = default) => throw new NotSupportedException();
+        public Task<ScheduleSubscription?> GetActiveScheduleSubscriptionAsync(Guid plotId, string cropKey, Guid cropCycleId, CancellationToken ct = default) => throw new NotSupportedException();
         public Task AddScheduleMigrationEventAsync(ScheduleMigrationEvent migrationEvent, CancellationToken ct = default) => throw new NotSupportedException();
         public Task<ScheduleTemplate?> GetScheduleTemplateByIdAsync(Guid templateId, CancellationToken ct = default) => throw new NotSupportedException();
         public Task<bool> HasActiveOwnerMembershipAsync(Guid userId, CancellationToken ct = default) => throw new NotSupportedException();
         public Task<List<ScheduleTemplate>> GetScheduleLineageAsync(Guid rootTemplateId, CancellationToken ct = default) => throw new NotSupportedException();
-        public Task SaveChangesAsync(CancellationToken ct = default) => throw new NotSupportedException();
+    }
+
+    private sealed class FakeClock : IClock
+    {
+        private readonly DateTime _now;
+        public FakeClock(DateTime now) => _now = now;
+        public DateTime UtcNow => _now;
+    }
+
+    private sealed class FakeSyncMutationStore : ISyncMutationStore
+    {
+        private readonly Dictionary<string, StoredSyncMutation> _store = new();
+
+        public Task<StoredSyncMutation?> GetAsync(string deviceId, string clientRequestId, CancellationToken ct = default)
+        {
+            var key = $"{deviceId}::{clientRequestId}";
+            _store.TryGetValue(key, out var result);
+            return Task.FromResult(result);
+        }
+
+        public Task<bool> TryStoreSuccessAsync(
+            string deviceId,
+            string clientRequestId,
+            string mutationType,
+            string responsePayloadJson,
+            DateTime processedAtUtc,
+            CancellationToken ct = default)
+        {
+            var key = $"{deviceId}::{clientRequestId}";
+            if (_store.ContainsKey(key)) return Task.FromResult(false);
+            _store[key] = new StoredSyncMutation(deviceId, clientRequestId, mutationType, responsePayloadJson, processedAtUtc);
+            return Task.FromResult(true);
+        }
     }
 }

@@ -287,6 +287,9 @@ internal sealed class ShramSafalRepository(ShramSafalDbContext db) : IShramSafal
         await db.PlannedActivities.AddRangeAsync(plannedActivities, ct);
     }
 
+    public async Task<PlannedActivity?> GetPlannedActivityByIdAsync(Guid id, CancellationToken ct = default) =>
+        await db.PlannedActivities.FirstOrDefaultAsync(a => a.Id == id, ct);
+
     public async Task<List<PlannedActivity>> GetPlannedActivitiesByCropCycleIdAsync(Guid cropCycleId, CancellationToken ct = default)
     {
         return await db.PlannedActivities

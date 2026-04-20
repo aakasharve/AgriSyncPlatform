@@ -1,8 +1,9 @@
+using AgriSync.BuildingBlocks.Abstractions;
 using AgriSync.SharedKernel.Contracts.Ids;
 using AgriSync.SharedKernel.Contracts.Roles;
 using ShramSafal.Application.Contracts.Dtos;
 using ShramSafal.Application.Ports;
-using ShramSafal.Application.Services;
+using ShramSafal.Application.UseCases.Planning.OverridePlannedActivity;
 using ShramSafal.Domain.Attachments;
 using ShramSafal.Domain.Audit;
 using ShramSafal.Domain.Crops;
@@ -13,164 +14,165 @@ using ShramSafal.Domain.Planning;
 using ShramSafal.Domain.Schedules;
 using Xunit;
 
-namespace ShramSafal.Domain.Tests.Schedules;
+namespace ShramSafal.Domain.Tests.Planning;
 
-public sealed class ScheduleComplianceServiceTests
+public sealed class OverridePlannedActivityHandlerTests
 {
-    private static readonly FarmId Farm = new(Guid.NewGuid());
-    private static readonly Guid Plot = Guid.NewGuid();
-    private static readonly Guid Cycle = Guid.NewGuid();
-    private static readonly DateOnly CycleStart = new(2026, 4, 1);
-    private const string CropKey = "grapes";
-    private const string TaskType = "fertigation";
-    private const string Stage = "flowering";
+    private static readonly DateTime Now = new(2026, 4, 21, 10, 0, 0, DateTimeKind.Utc);
+    private static readonly Guid FarmId = Guid.Parse("ffffffff-ffff-ffff-ffff-ffffffffffff");
+    private static readonly Guid MukadamId = Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa");
+    private static readonly Guid WorkerId = Guid.Parse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb");
 
-    [Fact]
-    public async Task NoActiveSubscription_ReturnsUnscheduled()
-    {
-        var repo = new FakeRepo
-        {
-            Cycle = BuildCycle(),
-            ActiveSubscription = null,
-        };
-
-        var service = new ScheduleComplianceService(repo);
-        var result = await service.EvaluateAsync(new ScheduleComplianceQuery(
-            Cycle, TaskType, Stage, CycleStart.AddDays(10)));
-
-        Assert.Equal(ComplianceOutcome.Unscheduled, result.Outcome);
-        Assert.Null(result.SubscriptionId);
-        Assert.Null(result.MatchedTaskId);
-    }
-
-    [Fact]
-    public async Task LoggedOnPrescribedDay_ReturnsOnTime()
-    {
-        var (subscription, template) = BuildSubscriptionAndTemplate(dayOffset: 10, tolerance: 2);
-        var repo = new FakeRepo
-        {
-            Cycle = BuildCycle(),
-            ActiveSubscription = subscription,
-            Template = template,
-        };
-
-        var service = new ScheduleComplianceService(repo);
-        var result = await service.EvaluateAsync(new ScheduleComplianceQuery(
-            Cycle, TaskType, Stage, CycleStart.AddDays(10)));
-
-        Assert.Equal(ComplianceOutcome.OnTime, result.Outcome);
-        Assert.Equal(0, result.DeltaDays);
-        Assert.Equal(subscription.SubscriptionId, result.SubscriptionId);
-        Assert.Equal(template.Tasks[0].Id, result.MatchedTaskId);
-    }
-
-    [Fact]
-    public async Task LoggedFiveDaysEarly_ReturnsEarly()
-    {
-        var (subscription, template) = BuildSubscriptionAndTemplate(dayOffset: 10, tolerance: 2);
-        var repo = new FakeRepo
-        {
-            Cycle = BuildCycle(),
-            ActiveSubscription = subscription,
-            Template = template,
-        };
-
-        var service = new ScheduleComplianceService(repo);
-        var result = await service.EvaluateAsync(new ScheduleComplianceQuery(
-            Cycle, TaskType, Stage, CycleStart.AddDays(5)));
-
-        Assert.Equal(ComplianceOutcome.Early, result.Outcome);
-        Assert.Equal(-5, result.DeltaDays);
-    }
-
-    [Fact]
-    public async Task LoggedFiveDaysLate_ReturnsLate()
-    {
-        var (subscription, template) = BuildSubscriptionAndTemplate(dayOffset: 10, tolerance: 2);
-        var repo = new FakeRepo
-        {
-            Cycle = BuildCycle(),
-            ActiveSubscription = subscription,
-            Template = template,
-        };
-
-        var service = new ScheduleComplianceService(repo);
-        var result = await service.EvaluateAsync(new ScheduleComplianceQuery(
-            Cycle, TaskType, Stage, CycleStart.AddDays(15)));
-
-        Assert.Equal(ComplianceOutcome.Late, result.Outcome);
-        Assert.Equal(5, result.DeltaDays);
-    }
-
-    private static CropCycle BuildCycle() =>
-        CropCycle.Create(Cycle, Farm, Plot, CropKey, Stage, CycleStart, endDate: null, createdAtUtc: DateTime.UtcNow);
-
-    private static (ScheduleSubscription Subscription, CropScheduleTemplate Template) BuildSubscriptionAndTemplate(
-        int dayOffset,
-        int tolerance)
-    {
-        var templateId = ScheduleTemplateId.New();
-        var task = PrescribedTask.Create(
-            PrescribedTaskId.New(),
-            TaskType,
-            Stage,
-            dayOffset,
-            tolerance);
-
-        var template = CropScheduleTemplate.Create(
-            templateId.Value,
-            templateKey: "test-template-v1",
-            cropKey: CropKey,
-            regionCode: null,
-            name: "Test Template",
-            versionTag: "v1",
-            createdAtUtc: DateTime.UtcNow,
-            tasks: new[] { task });
-        template.Publish();
-
-        var subscription = ScheduleSubscription.Adopt(
+    private static PlannedActivity MakeActivity(Guid? id = null) =>
+        PlannedActivity.CreateFromTemplate(
+            id ?? Guid.NewGuid(),
             Guid.NewGuid(),
-            Farm,
-            Plot,
-            Cycle,
-            CropKey,
-            templateId,
-            "v1",
-            DateTime.UtcNow);
+            "Spray",
+            "Flowering",
+            new DateOnly(2026, 4, 25),
+            Guid.NewGuid(),
+            Now.AddDays(-5));
 
-        return (subscription, template);
+    private static OverridePlannedActivityHandler CreateHandler(FakeOverrideRepo repo) =>
+        new(repo, new FakeSyncMutationStore(), new FakeClock(Now));
+
+    [Fact]
+    public async Task Override_ShiftsDate_EmitsAuditEvent_action_plan_overridden()
+    {
+        var activity = MakeActivity();
+        var repo = new FakeOverrideRepo(activity, AppRole.Mukadam);
+        var handler = CreateHandler(repo);
+
+        var newDate = new DateOnly(2026, 4, 30);
+        var result = await handler.HandleAsync(new OverridePlannedActivityCommand(
+            PlannedActivityId: activity.Id,
+            FarmId: FarmId,
+            NewPlannedDate: newDate,
+            NewActivityName: null,
+            NewStage: null,
+            Reason: "Rain delay",
+            CallerUserId: MukadamId,
+            ClientCommandId: null));
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(newDate, activity.PlannedDate);
+        Assert.Equal("Rain delay", activity.OverrideReason);
+        Assert.Single(repo.AuditEvents);
+        Assert.Equal("plan.overridden", repo.AuditEvents[0].Action);
+        Assert.Equal(1, repo.SaveCalls);
     }
 
-    // Minimal stub — the service only calls three methods; everything else throws if misused.
-    private sealed class FakeRepo : IShramSafalRepository
+    [Fact]
+    public async Task Override_WorkerRole_Returns_Forbidden()
     {
-        public CropCycle? Cycle { get; set; }
-        public ScheduleSubscription? ActiveSubscription { get; set; }
-        public CropScheduleTemplate? Template { get; set; }
+        var activity = MakeActivity();
+        var repo = new FakeOverrideRepo(activity, AppRole.Worker);
+        var handler = CreateHandler(repo);
 
-        public Task<CropCycle?> GetCropCycleByIdAsync(Guid cropCycleId, CancellationToken ct = default) =>
-            Task.FromResult(Cycle);
+        var result = await handler.HandleAsync(new OverridePlannedActivityCommand(
+            PlannedActivityId: activity.Id,
+            FarmId: FarmId,
+            NewPlannedDate: new DateOnly(2026, 4, 30),
+            NewActivityName: null,
+            NewStage: null,
+            Reason: "Test",
+            CallerUserId: WorkerId,
+            ClientCommandId: null));
 
-        public Task<ScheduleSubscription?> GetActiveScheduleSubscriptionAsync(
-            Guid plotId, string cropKey, Guid cropCycleId, CancellationToken ct = default) =>
-            Task.FromResult(ActiveSubscription);
+        Assert.False(result.IsSuccess);
+        Assert.Equal("ShramSafal.Forbidden", result.Error.Code);
+        Assert.Empty(repo.AuditEvents);
+        Assert.Equal(0, repo.SaveCalls);
+    }
 
-        public Task<CropScheduleTemplate?> GetCropScheduleTemplateByIdAsync(
-            ScheduleTemplateId templateId, CancellationToken ct = default) =>
-            Task.FromResult(Template);
+    [Fact]
+    public async Task Override_NotFound_Returns_NotFound()
+    {
+        var repo = new FakeOverrideRepo(null, AppRole.Mukadam);
+        var handler = CreateHandler(repo);
 
-        // ---- Unused members — throw if touched by production code paths we don't expect. ----
+        var result = await handler.HandleAsync(new OverridePlannedActivityCommand(
+            PlannedActivityId: Guid.NewGuid(),
+            FarmId: FarmId,
+            NewPlannedDate: new DateOnly(2026, 4, 30),
+            NewActivityName: null,
+            NewStage: null,
+            Reason: "Test",
+            CallerUserId: MukadamId,
+            ClientCommandId: null));
 
+        Assert.False(result.IsSuccess);
+        Assert.Equal("ShramSafal.PlannedActivityNotFound", result.Error.Code);
+    }
+
+    [Fact]
+    public async Task Override_EmptyReason_Returns_InvalidCommand()
+    {
+        var activity = MakeActivity();
+        var repo = new FakeOverrideRepo(activity, AppRole.Mukadam);
+        var handler = CreateHandler(repo);
+
+        var result = await handler.HandleAsync(new OverridePlannedActivityCommand(
+            PlannedActivityId: activity.Id,
+            FarmId: FarmId,
+            NewPlannedDate: new DateOnly(2026, 4, 30),
+            NewActivityName: null,
+            NewStage: null,
+            Reason: "   ",
+            CallerUserId: MukadamId,
+            ClientCommandId: null));
+
+        Assert.False(result.IsSuccess);
+        Assert.Equal("ShramSafal.InvalidCommand", result.Error.Code);
+    }
+
+    // ---------------------------------------------------------------------------
+    //  Private fake infrastructure
+    // ---------------------------------------------------------------------------
+
+    private sealed class FakeOverrideRepo : IShramSafalRepository
+    {
+        private readonly PlannedActivity? _activity;
+        private readonly AppRole? _role;
+
+        public FakeOverrideRepo(PlannedActivity? activity, AppRole? role)
+        {
+            _activity = activity;
+            _role = role;
+        }
+
+        public List<AuditEvent> AuditEvents { get; } = new();
+        public int SaveCalls { get; private set; }
+
+        public Task<PlannedActivity?> GetPlannedActivityByIdAsync(Guid id, CancellationToken ct = default) =>
+            Task.FromResult(_activity?.Id == id ? _activity : null);
+
+        public Task<AppRole?> GetUserRoleForFarmAsync(Guid farmId, Guid userId, CancellationToken ct = default) =>
+            Task.FromResult(_role);
+
+        public Task AddAuditEventAsync(AuditEvent auditEvent, CancellationToken ct = default)
+        {
+            AuditEvents.Add(auditEvent);
+            return Task.CompletedTask;
+        }
+
+        public Task SaveChangesAsync(CancellationToken ct = default)
+        {
+            SaveCalls++;
+            return Task.CompletedTask;
+        }
+
+        // --- stubs ---
         public Task AddFarmAsync(Farm farm, CancellationToken ct = default) => throw new NotSupportedException();
         public Task<Farm?> GetFarmByIdAsync(Guid farmId, CancellationToken ct = default) => throw new NotSupportedException();
         public Task AddFarmMembershipAsync(FarmMembership membership, CancellationToken ct = default) => throw new NotSupportedException();
         public Task<FarmMembership?> GetFarmMembershipAsync(Guid farmId, Guid userId, CancellationToken ct = default) => throw new NotSupportedException();
-        public Task<AppRole?> GetUserRoleForFarmAsync(Guid farmId, Guid userId, CancellationToken ct = default) => throw new NotSupportedException();
         public Task<bool> IsUserOwnerOfFarmAsync(Guid farmId, Guid userId, CancellationToken ct = default) => throw new NotSupportedException();
         public Task AddPlotAsync(Plot plot, CancellationToken ct = default) => throw new NotSupportedException();
         public Task<Plot?> GetPlotByIdAsync(Guid plotId, CancellationToken ct = default) => throw new NotSupportedException();
         public Task<List<Plot>> GetPlotsByFarmIdAsync(Guid farmId, CancellationToken ct = default) => throw new NotSupportedException();
         public Task AddCropCycleAsync(CropCycle cropCycle, CancellationToken ct = default) => throw new NotSupportedException();
+        public Task<CropCycle?> GetCropCycleByIdAsync(Guid cropCycleId, CancellationToken ct = default) => throw new NotSupportedException();
         public Task<List<CropCycle>> GetCropCyclesByPlotIdAsync(Guid plotId, CancellationToken ct = default) => throw new NotSupportedException();
         public Task AddDailyLogAsync(DailyLog log, CancellationToken ct = default) => throw new NotSupportedException();
         public Task<DailyLog?> GetDailyLogByIdAsync(Guid dailyLogId, CancellationToken ct = default) => throw new NotSupportedException();
@@ -188,11 +190,9 @@ public sealed class ScheduleComplianceServiceTests
         public Task<Attachment?> GetAttachmentByIdAsync(Guid attachmentId, CancellationToken ct = default) => throw new NotSupportedException();
         public Task<List<Attachment>> GetAttachmentsForEntityAsync(Guid entityId, string entityType, CancellationToken ct = default) => throw new NotSupportedException();
         public Task AddPriceConfigAsync(PriceConfig config, CancellationToken ct = default) => throw new NotSupportedException();
-        public Task AddAuditEventAsync(AuditEvent auditEvent, CancellationToken ct = default) => throw new NotSupportedException();
         public Task AddScheduleTemplateAsync(ScheduleTemplate template, CancellationToken ct = default) => throw new NotSupportedException();
         public Task<List<ScheduleTemplate>> GetScheduleTemplatesAsync(CancellationToken ct = default) => throw new NotSupportedException();
         public Task AddPlannedActivitiesAsync(IEnumerable<PlannedActivity> plannedActivities, CancellationToken ct = default) => throw new NotSupportedException();
-        public Task<PlannedActivity?> GetPlannedActivityByIdAsync(Guid id, CancellationToken ct = default) => throw new NotSupportedException();
         public Task<List<PlannedActivity>> GetPlannedActivitiesByCropCycleIdAsync(Guid cropCycleId, CancellationToken ct = default) => throw new NotSupportedException();
         public Task<List<LogTask>> GetExecutedTasksByCropCycleIdAsync(Guid cropCycleId, CancellationToken ct = default) => throw new NotSupportedException();
         public Task<List<CostEntry>> GetCostEntriesAsync(DateOnly? fromDate, DateOnly? toDate, CancellationToken ct = default) => throw new NotSupportedException();
@@ -215,13 +215,47 @@ public sealed class ScheduleComplianceServiceTests
         public Task<bool> IsUserMemberOfFarmAsync(Guid farmId, Guid userId, CancellationToken ct = default) => throw new NotSupportedException();
         public Task<int> CountActivePrimaryOwnersAsync(Guid farmId, CancellationToken ct = default) => throw new NotSupportedException();
         public Task AddCropScheduleTemplateAsync(CropScheduleTemplate template, CancellationToken ct = default) => throw new NotSupportedException();
+        public Task<CropScheduleTemplate?> GetCropScheduleTemplateByIdAsync(ScheduleTemplateId templateId, CancellationToken ct = default) => throw new NotSupportedException();
         public Task<List<CropScheduleTemplate>> GetCropScheduleTemplatesForCropAsync(string cropKey, string? regionCode, CancellationToken ct = default) => throw new NotSupportedException();
         public Task AddScheduleSubscriptionAsync(ScheduleSubscription subscription, CancellationToken ct = default) => throw new NotSupportedException();
         public Task<ScheduleSubscription?> GetScheduleSubscriptionByIdAsync(ScheduleSubscriptionId subscriptionId, CancellationToken ct = default) => throw new NotSupportedException();
+        public Task<ScheduleSubscription?> GetActiveScheduleSubscriptionAsync(Guid plotId, string cropKey, Guid cropCycleId, CancellationToken ct = default) => throw new NotSupportedException();
         public Task AddScheduleMigrationEventAsync(ScheduleMigrationEvent migrationEvent, CancellationToken ct = default) => throw new NotSupportedException();
         public Task<ScheduleTemplate?> GetScheduleTemplateByIdAsync(Guid templateId, CancellationToken ct = default) => throw new NotSupportedException();
         public Task<bool> HasActiveOwnerMembershipAsync(Guid userId, CancellationToken ct = default) => throw new NotSupportedException();
         public Task<List<ScheduleTemplate>> GetScheduleLineageAsync(Guid rootTemplateId, CancellationToken ct = default) => throw new NotSupportedException();
-        public Task SaveChangesAsync(CancellationToken ct = default) => throw new NotSupportedException();
+    }
+
+    private sealed class FakeClock : IClock
+    {
+        private readonly DateTime _now;
+        public FakeClock(DateTime now) => _now = now;
+        public DateTime UtcNow => _now;
+    }
+
+    private sealed class FakeSyncMutationStore : ISyncMutationStore
+    {
+        private readonly Dictionary<string, StoredSyncMutation> _store = new();
+
+        public Task<StoredSyncMutation?> GetAsync(string deviceId, string clientRequestId, CancellationToken ct = default)
+        {
+            var key = $"{deviceId}::{clientRequestId}";
+            _store.TryGetValue(key, out var result);
+            return Task.FromResult(result);
+        }
+
+        public Task<bool> TryStoreSuccessAsync(
+            string deviceId,
+            string clientRequestId,
+            string mutationType,
+            string responsePayloadJson,
+            DateTime processedAtUtc,
+            CancellationToken ct = default)
+        {
+            var key = $"{deviceId}::{clientRequestId}";
+            if (_store.ContainsKey(key)) return Task.FromResult(false);
+            _store[key] = new StoredSyncMutation(deviceId, clientRequestId, mutationType, responsePayloadJson, processedAtUtc);
+            return Task.FromResult(true);
+        }
     }
 }

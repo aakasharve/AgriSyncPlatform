@@ -33,6 +33,7 @@ using ShramSafal.Application.UseCases.Memberships.IssueFarmInvite;
 using ShramSafal.Application.UseCases.Memberships.RotateFarmInvite;
 using ShramSafal.Application.UseCases.Admin.GetOpsHealth;
 using ShramSafal.Application.UseCases.Planning.ComputePlannedVsExecutedDelta;
+using ShramSafal.Application.UseCases.Planning.OverridePlannedActivity;
 using ShramSafal.Application.UseCases.Reports.GetFarmWeekMis;
 using ShramSafal.Application.UseCases.Planning.GeneratePlanFromTemplate;
 using ShramSafal.Application.UseCases.Planning.GetStagePlan;
@@ -84,6 +85,9 @@ public static class DependencyInjection
         services.AddScoped<ComputePlannedVsExecutedDeltaHandler>();
         services.AddScoped<GetTodaysPlanHandler>();
         services.AddScoped<GetStagePlanHandler>();
+        services.AddScoped<OverridePlannedActivityHandler>();
+        services.AddScoped<AddLocalPlannedActivityHandler>();
+        services.AddScoped<RemovePlannedActivityHandler>();
         services.AddScoped<GetScheduleTemplatesHandler>();
         services.AddScoped<GetCropTypesHandler>();
 

@@ -119,6 +119,7 @@ public sealed class SubscriptionEntitlementTests
         public Task AddScheduleTemplateAsync(ShramSafal.Domain.Planning.ScheduleTemplate t, CancellationToken ct = default) => throw new NotImplementedException();
         public Task<List<ShramSafal.Domain.Planning.ScheduleTemplate>> GetScheduleTemplatesAsync(CancellationToken ct = default) => Task.FromResult(new List<ShramSafal.Domain.Planning.ScheduleTemplate>());
         public Task AddPlannedActivitiesAsync(IEnumerable<ShramSafal.Domain.Planning.PlannedActivity> activities, CancellationToken ct = default) => throw new NotImplementedException();
+        public Task<ShramSafal.Domain.Planning.PlannedActivity?> GetPlannedActivityByIdAsync(Guid id, CancellationToken ct = default) => throw new NotImplementedException();
         public Task<List<ShramSafal.Domain.Planning.PlannedActivity>> GetPlannedActivitiesByCropCycleIdAsync(Guid cropCycleId, CancellationToken ct = default) => Task.FromResult(new List<ShramSafal.Domain.Planning.PlannedActivity>());
         public Task<List<ShramSafal.Domain.Logs.LogTask>> GetExecutedTasksByCropCycleIdAsync(Guid cropCycleId, CancellationToken ct = default) => Task.FromResult(new List<ShramSafal.Domain.Logs.LogTask>());
         public Task<List<ShramSafal.Domain.Finance.CostEntry>> GetCostEntriesAsync(DateOnly? fromDate, DateOnly? toDate, CancellationToken ct = default) => Task.FromResult(new List<ShramSafal.Domain.Finance.CostEntry>());
