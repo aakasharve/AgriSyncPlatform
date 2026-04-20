@@ -11,6 +11,7 @@ public sealed class AccountsDbContext(DbContextOptions<AccountsDbContext> option
     public DbSet<OwnerAccount> OwnerAccounts => Set<OwnerAccount>();
     public DbSet<OwnerAccountMembership> OwnerAccountMemberships => Set<OwnerAccountMembership>();
     public DbSet<Subscription> Subscriptions => Set<Subscription>();
+    public DbSet<SubscriptionWebhookEvent> SubscriptionWebhookEvents => Set<SubscriptionWebhookEvent>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
