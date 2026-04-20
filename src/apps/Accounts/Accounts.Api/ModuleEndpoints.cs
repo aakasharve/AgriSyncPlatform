@@ -14,6 +14,7 @@ public static class ModuleEndpoints
             .AllowAnonymous();
 
         endpoints.MapSubscriptionWebhookEndpoints();
+        endpoints.MapAffiliationEndpoints();
 
         return endpoints;
     }

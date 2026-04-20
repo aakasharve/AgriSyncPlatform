@@ -1,6 +1,7 @@
 using Accounts.Application.Ports;
 using Accounts.Infrastructure.Persistence;
 using Accounts.Infrastructure.Persistence.Repositories;
+using Accounts.Domain.Affiliation;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -35,6 +36,7 @@ public static class DependencyInjection
         });
 
         services.AddScoped<ISubscriptionRepository, SubscriptionRepository>();
+        services.AddScoped<IAffiliationRepository, AffiliationRepository>();
 
         return services;
     }

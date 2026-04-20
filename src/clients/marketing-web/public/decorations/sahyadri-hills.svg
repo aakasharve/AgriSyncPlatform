@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1440 140" preserveAspectRatio="none">
+  <!-- Sahyadri / Western Ghat rolling hill silhouette — Nashik-Pune Deccan ridge profile -->
+  <!-- Far hills (lighter) -->
+  <path d="M0,140 L0,100 C50,82 110,65 180,72 C250,80 310,62 390,48 C470,34 540,22 620,38 C700,54 760,70 840,58 C920,46 980,28 1060,35 C1140,42 1200,62 1280,52 C1340,44 1390,65 1440,72 L1440,140 Z" fill="currentColor" opacity="0.4"/>
+  <!-- Near hills (darker) -->
+  <path d="M0,140 L0,110 C40,96 90,80 150,88 C210,96 270,78 340,62 C410,46 470,35 540,44 C610,53 660,72 730,64 C800,56 860,38 940,45 C1020,52 1080,72 1160,65 C1240,58 1300,42 1370,55 C1400,62 1425,80 1440,88 L1440,140 Z" fill="currentColor" opacity="0.7"/>
+  <!-- Foreground ridge -->
+  <path d="M0,140 L0,125 C60,115 130,105 200,112 C270,119 330,106 400,95 C470,84 530,78 600,86 C670,94 720,108 790,102 C860,96 920,82 990,88 C1060,94 1120,108 1190,104 C1260,100 1310,88 1370,95 C1400,99 1425,112 1440,118 L1440,140 Z" fill="currentColor" opacity="1"/>
+  <!-- Village lamp flicker — single px warm light at 75%+ scroll area -->
+  <circle cx="1080" cy="88" r="1.5" fill="#F59E0B" opacity="0.6"/>
+  <circle cx="1078" cy="86" r="3" fill="rgba(245,158,11,0.15)"/>
+</svg>

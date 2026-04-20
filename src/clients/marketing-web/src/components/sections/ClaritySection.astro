@@ -1,0 +1,389 @@
+---
+/**
+ * ClaritySection — Chapter 05 · What You Will See
+ *
+ * Two real app screenshots in 3D tilt cards with mouse-tracking hover effects.
+ * Left:  Crop Activity screen  → screen-crop-activity.png
+ * Right: Daily Log / Home screen → screen-daily-log.png
+ *
+ * Images go in: public/images/app-screens/
+ */
+import { getLangFromUrl, getTranslations } from '../../i18n/translations';
+import AppScreen3D from '../islands/AppScreen3D';
+
+const lang = getLangFromUrl(Astro.url);
+const t = getTranslations(lang);
+const isMr = lang === 'mr';
+---
+
+<section
+  data-scene="clarity"
+  class="relative py-section overflow-hidden"
+  style="background:var(--bg-base);"
+>
+  <!-- Ambient glow pools that add depth behind the phones -->
+  <div class="clarity-glow clarity-glow--left"  aria-hidden="true"></div>
+  <div class="clarity-glow clarity-glow--right" aria-hidden="true"></div>
+
+  <!-- Subtle grain overlay for texture depth -->
+  <div class="clarity-noise" aria-hidden="true"></div>
+
+  <div class="relative z-10 max-w-site mx-auto px-5 md:px-8">
+
+    <!-- Section header -->
+    <div class="text-center max-w-2xl mx-auto mb-14 md:mb-20">
+      <span class="chapter-mark" data-chapter>
+        {isMr ? 'Chapter 05 · तुम्हाला काय दिसेल' : 'Chapter 05 · What You Will See'}
+      </span>
+      <h2
+        class="font-serif text-h2 mb-6"
+        style="color:var(--text-primary);"
+        set:html={isMr
+          ? 'बोललात,<br/>आता हे दिसेल.'
+          : 'You spoke.<br/>This is what appears.'}
+      />
+      <p class="text-body-lg max-w-prose mx-auto" style="color:var(--text-secondary);">
+        {isMr
+          ? 'एकच बोलणे — दोन प्रकारचे दृश्य. काय झाले, किती खर्च झाला, उद्याचे काय.'
+          : 'One conversation — two views. What was done, what was spent, what comes next.'}
+      </p>
+    </div>
+
+    <!-- Phone showcase — two 3D tilt cards -->
+    <div class="clarity-phones">
+
+      <!-- Left phone: Crop Activity -->
+      <div class="clarity-phone-slot clarity-phone-slot--left">
+        <!-- Floating label chip above -->
+        <div class="clarity-chip clarity-chip--teal" aria-hidden="true">
+          <svg width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+          </svg>
+          {isMr ? 'आवाजातून नोंद' : 'Logged by voice'}
+        </div>
+
+        <AppScreen3D
+          client:visible
+          src="/images/app-screens/screen-crop-activity.png"
+          alt={isMr ? 'श्रमसफल अ‍ॅप — क्रॉप अ‍ॅक्टिव्हिटी स्क्रीन' : 'ShramSafal app — Crop Activity screen'}
+          label={isMr ? 'काम नोंद' : 'Work Logged'}
+          sublabel={isMr ? 'काम झाले, खर्च नोंदवला' : 'Activity captured, costs sorted'}
+          badge={isMr ? 'लाइव्ह' : 'Live'}
+          delay={0}
+          tiltMultiplier={1}
+          initialRotateY={-4}
+          floatDir="up"
+        />
+
+        <!-- Floating callout chips around the phone -->
+        <div class="clarity-callout clarity-callout--work">
+          <svg width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M11.42 15.17L17.25 21A2.652 2.652 0 0021 17.25l-5.877-5.877M11.42 15.17l2.496-3.03c.317-.384.74-.626 1.208-.766M11.42 15.17l-4.655 5.653a2.548 2.548 0 11-3.586-3.586l6.837-5.63m5.108-.233c.55-.164 1.163-.188 1.743-.14a4.5 4.5 0 004.486-6.336l-3.276 3.277a3.004 3.004 0 01-2.25-2.25l3.276-3.276a4.5 4.5 0 00-6.336 4.486c.091 1.076-.071 2.264-.904 2.95l-.102.085m-1.745 1.437L5.909 7.5H4.5L2.25 3.75l1.5-1.5L7.5 4.5v1.409l4.26 4.26m-1.745 1.437l1.745-1.437m6.615 8.206L15.75 15.75M4.867 19.125h.008v.008h-.008v-.008z" />
+          </svg>
+          {isMr ? 'फवारणी · सोमवार' : 'Spraying · Monday'}
+        </div>
+        <div class="clarity-callout clarity-callout--labour">
+          <svg width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M15 19.128a9.38 9.38 0 002.625.372 9.337 9.337 0 004.121-.952 4.125 4.125 0 00-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.106A12.318 12.318 0 018.624 21c-2.331 0-4.512-.645-6.374-1.766l-.001-.109a6.375 6.375 0 0111.964-3.07M12 6.375a3.375 3.375 0 11-6.75 0 3.375 3.375 0 016.75 0zm8.25 2.25a2.625 2.625 0 11-5.25 0 2.625 2.625 0 015.25 0z" />
+          </svg>
+          {isMr ? '४ मजूर नोंदवले' : '4 workers logged'}
+        </div>
+      </div>
+
+      <!-- Centre divider arrow (desktop) -->
+      <div class="clarity-arrow" aria-hidden="true">
+        <div class="clarity-arrow__line"></div>
+        <div class="clarity-arrow__label">
+          <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3" />
+          </svg>
+          {isMr ? 'स्पष्ट दिसते' : 'Becomes clear'}
+        </div>
+        <div class="clarity-arrow__line"></div>
+      </div>
+
+      <!-- Right phone: Daily Log -->
+      <div class="clarity-phone-slot clarity-phone-slot--right">
+        <div class="clarity-chip clarity-chip--gold" aria-hidden="true">
+          <svg width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M12 6v12m-3-2.818l.879.659c1.171.879 3.07.879 4.242 0 1.172-.879 1.172-2.303 0-3.182C13.536 12.219 12.768 12 12 12c-.725 0-1.45-.22-2.003-.659-1.106-.879-1.106-2.303 0-3.182s2.9-.879 4.006 0l.415.33" />
+          </svg>
+          {isMr ? 'खर्च दिसतो' : 'Costs visible'}
+        </div>
+
+        <AppScreen3D
+          client:visible
+          src="/images/app-screens/screen-daily-log.png"
+          alt={isMr ? 'श्रमसफल अ‍ॅप — रोजचा लॉग स्क्रीन' : 'ShramSafal app — Daily Log screen'}
+          label={isMr ? 'रोजचा लेखाजोखा' : 'Daily Overview'}
+          sublabel={isMr ? 'काम, खर्च, उद्याचे काय — एकाच नजरेत' : 'Work, cost, tomorrow — one view'}
+          badge={isMr ? 'आज' : 'Today'}
+          delay={800}
+          tiltMultiplier={1}
+          initialRotateY={4}
+          floatDir="down"
+        />
+
+        <div class="clarity-callout clarity-callout--cost">
+          <svg width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M12 6v12m-3-2.818l.879.659c1.171.879 3.07.879 4.242 0 1.172-.879 1.172-2.303 0-3.182C13.536 12.219 12.768 12 12 12c-.725 0-1.45-.22-2.003-.659-1.106-.879-1.106-2.303 0-3.182s2.9-.879 4.006 0l.415.33" />
+          </svg>
+          {isMr ? '₹ २,४०० आज' : '₹ 2,400 today'}
+        </div>
+        <div class="clarity-callout clarity-callout--plot">
+          <svg width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M15 10.5a3 3 0 11-6 0 3 3 0 016 0z" />
+            <path stroke-linecap="round" stroke-linejoin="round" d="M19.5 10.5c0 7.142-7.5 11.25-7.5 11.25S4.5 17.642 4.5 10.5a7.5 7.5 0 1115 0z" />
+          </svg>
+          {isMr ? 'ऊस प्लॉट निवडला' : 'Sugarcane plot'}
+        </div>
+      </div>
+
+    </div><!-- /clarity-phones -->
+
+    <!-- Three feature cards below the phones -->
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-6 max-w-5xl mx-auto mt-16 md:mt-20">
+
+      <div class="clarity-card scene-stagger card-white rounded-xl p-6 hover:shadow-xl hover:-translate-y-1 transition-all duration-300 border-l-4 relative overflow-hidden" style="border-left-color:var(--brand);">
+        <div class="w-10 h-10 rounded-lg flex items-center justify-center mb-4" style="background:rgba(20,83,45,0.08);">
+          <svg class="w-5 h-5" style="color:var(--brand-fresh);" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+          </svg>
+        </div>
+        <h3 class="font-serif text-xl md:text-2xl mb-4 font-bold" style="color:var(--text-primary);">{t.scene6.card1_title}</h3>
+        <ul class="space-y-3">
+          {t.scene6.card1_items.map((item: string) => (
+            <li class="flex items-start gap-2 text-base" style="color:var(--text-secondary);">
+              <svg class="w-4 h-4 mt-0.5 flex-shrink-0" style="color:var(--brand-fresh);" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+              </svg>
+              <span>{item}</span>
+            </li>
+          ))}
+        </ul>
+        <div class="absolute bottom-0 left-0 right-0 h-1" style="background:linear-gradient(to right, rgba(20,83,45,0.18), transparent);"></div>
+      </div>
+
+      <div class="clarity-card scene-stagger card-white rounded-xl p-6 hover:shadow-xl hover:-translate-y-1 transition-all duration-300 border-l-4 relative overflow-hidden" style="border-left-color:var(--gold-warm);">
+        <div class="w-10 h-10 rounded-lg flex items-center justify-center mb-4" style="background:rgba(217,119,6,0.10);">
+          <svg class="w-5 h-5" style="color:var(--gold-warm);" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M12 6v12m-3-2.818l.879.659c1.171.879 3.07.879 4.242 0 1.172-.879 1.172-2.303 0-3.182C13.536 12.219 12.768 12 12 12c-.725 0-1.45-.22-2.003-.659-1.106-.879-1.106-2.303 0-3.182s2.9-.879 4.006 0l.415.33" />
+          </svg>
+        </div>
+        <h3 class="font-serif text-xl md:text-2xl mb-4 font-bold" style="color:var(--text-primary);">{t.scene6.card2_title}</h3>
+        <ul class="space-y-3">
+          {t.scene6.card2_items.map((item: string) => (
+            <li class="flex items-center justify-between text-base">
+              <span style="color:var(--text-secondary);">{item.split('|')[0]}</span>
+              <span class="font-bold tabular-nums" style="color:var(--text-primary);">{item.split('|')[1]}</span>
+            </li>
+          ))}
+        </ul>
+        <div class="mt-3 pt-3 flex items-center justify-between text-base" style="border-top:2px solid rgba(217,119,6,0.16);">
+          <span class="font-bold" style="color:var(--text-primary);">{t.scene6.card2_total_label}</span>
+          <span class="font-bold text-base tabular-nums" style="color:var(--brand-fresh);">{t.scene6.card2_total}</span>
+        </div>
+        <div class="absolute bottom-0 left-0 right-0 h-1" style="background:linear-gradient(to right, rgba(217,119,6,0.18), transparent);"></div>
+      </div>
+
+      <div class="clarity-card scene-stagger card-white rounded-xl p-6 hover:shadow-xl hover:-translate-y-1 transition-all duration-300 border-l-4 relative overflow-hidden" style="border-left-color:var(--gold);">
+        <div class="w-10 h-10 rounded-lg flex items-center justify-center mb-4" style="background:rgba(146,64,14,0.08);">
+          <svg class="w-5 h-5" style="color:var(--gold);" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z" />
+          </svg>
+        </div>
+        <h3 class="font-serif text-xl md:text-2xl mb-4 font-bold" style="color:var(--text-primary);">{t.scene6.card3_title}</h3>
+        <ul class="space-y-3">
+          {t.scene6.card3_items.map((item: string) => (
+            <li class="flex items-start gap-2 text-base" style="color:var(--text-secondary);">
+              <svg class="w-4 h-4 mt-0.5 flex-shrink-0" style="color:var(--gold);" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z" />
+              </svg>
+              <span>{item}</span>
+            </li>
+          ))}
+        </ul>
+        <div class="absolute bottom-0 left-0 right-0 h-1" style="background:linear-gradient(to right, rgba(146,64,14,0.16), transparent);"></div>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<style>
+  /* ── Ambient glow pools ─────────────────────────────────────────────── */
+  .clarity-glow {
+    position: absolute;
+    border-radius: 50%;
+    pointer-events: none;
+    filter: blur(80px);
+    z-index: 0;
+  }
+  .clarity-glow--left {
+    width: 36rem;
+    height: 36rem;
+    left: -8rem;
+    top: 10%;
+    background: radial-gradient(circle, rgba(20,83,45,0.09) 0%, transparent 70%);
+  }
+  .clarity-glow--right {
+    width: 32rem;
+    height: 32rem;
+    right: -6rem;
+    bottom: 8%;
+    background: radial-gradient(circle, rgba(217,119,6,0.08) 0%, transparent 70%);
+  }
+
+  /* ── Noise texture ──────────────────────────────────────────────────── */
+  .clarity-noise {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    z-index: 1;
+    opacity: 0.018;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  }
+
+  /* ── Two-phone layout ───────────────────────────────────────────────── */
+  .clarity-phones {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 3rem;
+    position: relative;
+    z-index: 2;
+  }
+
+  @media (min-width: 900px) {
+    .clarity-phones {
+      flex-direction: row;
+      align-items: flex-start;
+      justify-content: center;
+      gap: 2rem;
+    }
+  }
+
+  /* ── Individual phone slot ──────────────────────────────────────────── */
+  .clarity-phone-slot {
+    position: relative;
+    flex: 0 0 auto;
+    width: min(320px, 88vw);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.75rem;
+  }
+
+  @media (min-width: 900px) {
+    .clarity-phone-slot {
+      width: clamp(240px, 24vw, 320px);
+    }
+    .clarity-phone-slot--left  { margin-top: 2rem; }
+    .clarity-phone-slot--right { margin-top: 0; }
+  }
+
+  /* ── Floating label chip above phone ───────────────────────────────── */
+  .clarity-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.35rem 0.85rem;
+    border-radius: 999px;
+    font-size: 0.7rem;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.14em;
+    margin-bottom: 0.5rem;
+    box-shadow: 0 4px 14px rgba(0,0,0,0.10);
+  }
+
+  .clarity-chip--teal {
+    background: rgba(20,83,45,0.10);
+    color: var(--brand);
+    border: 1px solid rgba(20,83,45,0.18);
+  }
+
+  .clarity-chip--gold {
+    background: rgba(217,119,6,0.10);
+    color: var(--gold);
+    border: 1px solid rgba(217,119,6,0.18);
+  }
+
+  /* ── Floating callout chips around the phones ───────────────────────── */
+  .clarity-callout {
+    position: absolute;
+    z-index: 10;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.4rem 0.8rem;
+    border-radius: 999px;
+    font-size: 0.72rem;
+    font-weight: 700;
+    background: rgba(255,255,255,0.92);
+    border: 1px solid rgba(146,64,14,0.12);
+    box-shadow: 0 6px 20px rgba(0,0,0,0.10);
+    backdrop-filter: blur(8px);
+    animation: callout-drift 6s ease-in-out infinite;
+    white-space: nowrap;
+    color: var(--text-primary);
+  }
+
+  @keyframes callout-drift {
+    0%,100% { transform: translate(0, 0); }
+    50%      { transform: translate(4px, -6px); }
+  }
+
+  .clarity-callout--work   { top: 28%;  left: -4.5rem; animation-delay: 0.3s; }
+  .clarity-callout--labour { bottom: 28%; left: -3.5rem; animation-delay: 1.8s; animation-name: callout-drift-rev; }
+  .clarity-callout--cost   { top: 32%;  right: -4rem;  animation-delay: 0.9s; }
+  .clarity-callout--plot   { bottom: 26%; right: -3rem; animation-delay: 2.4s; animation-name: callout-drift-rev; }
+
+  @keyframes callout-drift-rev {
+    0%,100% { transform: translate(0, 0); }
+    50%      { transform: translate(-4px, -6px); }
+  }
+
+  /* Hide side callouts on narrow screens */
+  @media (max-width: 899px) {
+    .clarity-callout { display: none; }
+  }
+
+  /* ── Centre arrow connector ─────────────────────────────────────────── */
+  .clarity-arrow {
+    display: none;
+  }
+
+  @media (min-width: 900px) {
+    .clarity-arrow {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 0.6rem;
+      flex-shrink: 0;
+      margin-top: 10rem;
+      opacity: 0.65;
+    }
+  }
+
+  .clarity-arrow__line {
+    width: 1px;
+    height: 3rem;
+    background: linear-gradient(to bottom, transparent, rgba(146,64,14,0.30), transparent);
+  }
+
+  .clarity-arrow__label {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.35rem;
+    font-size: 0.62rem;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.18em;
+    color: var(--gold);
+    text-align: center;
+    white-space: nowrap;
+  }
+</style>

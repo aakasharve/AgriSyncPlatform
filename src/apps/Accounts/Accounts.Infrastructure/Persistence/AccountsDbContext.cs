@@ -1,3 +1,4 @@
+using Accounts.Domain.Affiliation;
 using Accounts.Domain.OwnerAccounts;
 using Accounts.Domain.Subscriptions;
 using Microsoft.EntityFrameworkCore;
@@ -12,6 +13,10 @@ public sealed class AccountsDbContext(DbContextOptions<AccountsDbContext> option
     public DbSet<OwnerAccountMembership> OwnerAccountMemberships => Set<OwnerAccountMembership>();
     public DbSet<Subscription> Subscriptions => Set<Subscription>();
     public DbSet<SubscriptionWebhookEvent> SubscriptionWebhookEvents => Set<SubscriptionWebhookEvent>();
+    public DbSet<ReferralCode> ReferralCodes => Set<ReferralCode>();
+    public DbSet<ReferralRelationship> ReferralRelationships => Set<ReferralRelationship>();
+    public DbSet<GrowthEvent> GrowthEvents => Set<GrowthEvent>();
+    public DbSet<BenefitLedgerEntry> BenefitLedgerEntries => Set<BenefitLedgerEntry>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

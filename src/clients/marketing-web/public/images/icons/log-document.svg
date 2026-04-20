@@ -1,0 +1,40 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <defs>
+    <linearGradient id="docGrad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#10b981" />
+      <stop offset="100%" stop-color="#047857" />
+    </linearGradient>
+    <linearGradient id="docPaperGrad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#fff" />
+      <stop offset="100%" stop-color="#f0fdf4" />
+    </linearGradient>
+    <filter id="docShadow">
+      <feDropShadow dx="0" dy="1" stdDeviation="1.5" flood-color="#047857" flood-opacity="0.25" />
+    </filter>
+  </defs>
+
+  <!-- Circle background -->
+  <circle cx="32" cy="32" r="30" fill="url(#docGrad)" filter="url(#docShadow)" />
+
+  <!-- Inner highlight -->
+  <circle cx="32" cy="32" r="28" fill="none" stroke="#34d399" stroke-width="0.5" opacity="0.4" />
+
+  <!-- Document body -->
+  <path d="M20,12 L38,12 L44,18 L44,52 L20,52 Z" fill="url(#docPaperGrad)" rx="2" />
+
+  <!-- Folded corner -->
+  <path d="M38,12 L38,18 L44,18 Z" fill="#d1fae5" />
+  <path d="M38,12 L38,18 L44,18" fill="none" stroke="#a7f3d0" stroke-width="0.5" />
+
+  <!-- Text lines on document -->
+  <g stroke="#059669" stroke-width="1.5" stroke-linecap="round" opacity="0.3">
+    <line x1="24" y1="24" x2="40" y2="24" />
+    <line x1="24" y1="29" x2="38" y2="29" />
+    <line x1="24" y1="34" x2="40" y2="34" />
+    <line x1="24" y1="39" x2="35" y2="39" />
+  </g>
+
+  <!-- Checkmark in circle (bottom-right, overlapping) -->
+  <circle cx="42" cy="46" r="9" fill="#059669" stroke="#047857" stroke-width="1" />
+  <path d="M37,46 L40.5,49.5 L47,43" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" />
+</svg>

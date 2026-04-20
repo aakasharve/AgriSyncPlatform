@@ -23,6 +23,166 @@ namespace Accounts.Infrastructure.Persistence.Migrations
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
+            modelBuilder.Entity("Accounts.Domain.Affiliation.BenefitLedgerEntry", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("BenefitType")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("benefit_type");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamptz")
+                        .HasColumnName("created_at_utc");
+
+                    b.Property<Guid>("OwnerAccountId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("owner_account_id");
+
+                    b.Property<int>("Quantity")
+                        .HasColumnType("integer")
+                        .HasColumnName("quantity");
+
+                    b.Property<Guid>("SourceGrowthEventId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("source_growth_event_id");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("integer")
+                        .HasColumnName("status");
+
+                    b.Property<DateTime?>("StatusChangedAtUtc")
+                        .HasColumnType("timestamptz")
+                        .HasColumnName("status_changed_at_utc");
+
+                    b.Property<string>("Unit")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("unit");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("benefit_ledger_entries", "accounts");
+                });
+
+            modelBuilder.Entity("Accounts.Domain.Affiliation.GrowthEvent", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<int>("EventType")
+                        .HasColumnType("integer")
+                        .HasColumnName("event_type");
+
+                    b.Property<string>("Metadata")
+                        .HasColumnType("text")
+                        .HasColumnName("metadata");
+
+                    b.Property<DateTime>("OccurredAtUtc")
+                        .HasColumnType("timestamptz")
+                        .HasColumnName("occurred_at_utc");
+
+                    b.Property<Guid>("OwnerAccountId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("owner_account_id");
+
+                    b.Property<Guid>("ReferenceId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("reference_id");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("EventType", "ReferenceId")
+                        .IsUnique()
+                        .HasDatabaseName("ux_growth_events_type_reference");
+
+                    b.ToTable("growth_events", "accounts");
+                });
+
+            modelBuilder.Entity("Accounts.Domain.Affiliation.ReferralCode", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("Code")
+                        .IsRequired()
+                        .HasMaxLength(8)
+                        .HasColumnType("character varying(8)")
+                        .HasColumnName("code");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamptz")
+                        .HasColumnName("created_at_utc");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_active");
+
+                    b.Property<Guid>("OwnerAccountId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("owner_account_id");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Code")
+                        .IsUnique()
+                        .HasDatabaseName("ux_referral_codes_active_code")
+                        .HasFilter("is_active = TRUE");
+
+                    b.HasIndex("OwnerAccountId")
+                        .IsUnique()
+                        .HasDatabaseName("ux_referral_codes_owner_active")
+                        .HasFilter("is_active = TRUE");
+
+                    b.ToTable("referral_codes", "accounts");
+                });
+
+            modelBuilder.Entity("Accounts.Domain.Affiliation.ReferralRelationship", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamptz")
+                        .HasColumnName("created_at_utc");
+
+                    b.Property<DateTime?>("QualifiedAtUtc")
+                        .HasColumnType("timestamptz")
+                        .HasColumnName("qualified_at_utc");
+
+                    b.Property<Guid>("ReferralCodeId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("referral_code_id");
+
+                    b.Property<Guid>("ReferredOwnerAccountId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("referred_owner_account_id");
+
+                    b.Property<Guid>("ReferrerOwnerAccountId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("referrer_owner_account_id");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("integer")
+                        .HasColumnName("status");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ReferredOwnerAccountId")
+                        .IsUnique()
+                        .HasDatabaseName("ux_referral_relationships_referred");
+
+                    b.ToTable("referral_relationships", "accounts");
+                });
+
             modelBuilder.Entity("Accounts.Domain.OwnerAccounts.OwnerAccount", b =>
                 {
                     b.Property<Guid>("Id")
