@@ -1,5 +1,6 @@
 using AgriSync.BuildingBlocks.Results;
 using ShramSafal.Application.UseCases.ReferenceData.GetCropTypes;
+using ShramSafal.Application.UseCases.ReferenceData.GetDeviationReasonCodes;
 using ShramSafal.Application.UseCases.ReferenceData.GetScheduleTemplates;
 
 namespace ShramSafal.Api.Endpoints;
@@ -46,6 +47,15 @@ public static class ReferenceDataEndpoints
             return result.IsSuccess ? Results.Ok(result.Value) : ToErrorResult(result.Error);
         })
         .WithName("GetCropTypes");
+
+        referenceGroup.MapGet("/deviation-reason-codes", async (
+            GetDeviationReasonCodesHandler handler,
+            CancellationToken ct) =>
+        {
+            var result = await handler.HandleAsync(ct);
+            return result.IsSuccess ? Results.Ok(result.Value) : ToErrorResult(result.Error);
+        })
+        .WithName("GetDeviationReasonCodes");
 
         referenceGroup.MapGet("/activity-categories", () => Results.Ok(ReferenceDataCatalog.ActivityCategories))
             .WithName("GetActivityCategories");

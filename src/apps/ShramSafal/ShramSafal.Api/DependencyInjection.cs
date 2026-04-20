@@ -39,6 +39,7 @@ using ShramSafal.Application.UseCases.Planning.GeneratePlanFromTemplate;
 using ShramSafal.Application.UseCases.Planning.GetStagePlan;
 using ShramSafal.Application.UseCases.Planning.GetTodaysPlan;
 using ShramSafal.Application.UseCases.ReferenceData.GetCropTypes;
+using ShramSafal.Application.UseCases.ReferenceData.GetDeviationReasonCodes;
 using ShramSafal.Application.UseCases.ReferenceData.GetScheduleTemplates;
 using ShramSafal.Application.UseCases.Schedules.AbandonSchedule;
 using ShramSafal.Application.UseCases.Schedules.AdoptSchedule;
@@ -90,6 +91,7 @@ public static class DependencyInjection
         services.AddScoped<RemovePlannedActivityHandler>();
         services.AddScoped<GetScheduleTemplatesHandler>();
         services.AddScoped<GetCropTypesHandler>();
+        services.AddScoped<GetDeviationReasonCodesHandler>();
 
         services.AddScoped<ParseVoiceInputHandler>();
         services.AddScoped<ExtractReceiptHandler>();
