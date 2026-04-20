@@ -1,0 +1,10 @@
+{
+  "skipPaths": [
+    "src/clients/*/src/i18n/**",
+    "src/clients/*/src/types/**",
+    "src/clients/*/src/**/*.test.tsx",
+    "src/clients/*/src/**/*.spec.tsx",
+    "src/clients/*/src/**/*.test.ts",
+    "src/clients/*/src/**/*.spec.ts"
+  ]
+}

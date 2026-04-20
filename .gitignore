@@ -195,3 +195,8 @@ src/clients/mobile-web/public/demo-photos/*.png
 .mcp.json.tmp
 .mcp.json.new
 
+# UI/UX Gate runtime files (per-developer, per-commit)
+.uiux-gate-passed
+.uiux-gallery/
+.interface-design/
+
