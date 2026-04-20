@@ -17,7 +17,6 @@ namespace Accounts.Application.UseCases.Affiliation.RecordReferral;
 /// </summary>
 public sealed class RecordReferralHandler(
     IAffiliationRepository affiliationRepo,
-    IOwnerAccountRepository ownerAccountRepo,
     IIdGenerator idGenerator,
     IClock clock)
 {

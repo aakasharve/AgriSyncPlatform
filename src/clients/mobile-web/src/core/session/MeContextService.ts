@@ -3,56 +3,69 @@
  * aggregate. The cache is keyed by userId + a 2-minute TTL so the app
  * stays snappy on repeated navigation while staying fresh enough.
  *
- * Multi-tenant plan §6.2.1.
+ * New shape (spec 2026-04-20-user-is-multitenant-base): the server
+ * pre-computes plan strings, per-farm capabilities, and banner alerts so
+ * the frontend is a dumb renderer for a semi-literate Marathi farmer.
  */
 
 import { agriSyncClient } from '../../infrastructure/api/AgriSyncClient';
 
-export interface SubscriptionSnapshot {
-    status: string;
-    statusCode: number;
-    planCode: string;
-    validUntilUtc: string;
-    allowsOwnerWrites: boolean;
+export type MePlan = 'Free' | 'Trial' | 'Pro' | 'PastDue' | 'Expired';
+
+export interface MeCapabilities {
+    canInvite: boolean;
+    canVerify: boolean;
+    canAddCost: boolean;
+    canSeeBilling: boolean;
 }
 
-export interface MeMembership {
-    membershipId: string;
+export interface MeFarm {
     farmId: string;
-    farmName: string;
+    name: string;
     farmCode: string | null;
     ownerAccountId: string;
     role: string;
     status: string;
     joinedVia: string;
-    lastSeenAtUtc: string | null;
-    grantedAtUtc: string;
-    subscription: SubscriptionSnapshot | null;
+    plan: MePlan;
+    planValidUntilUtc: string | null;
+    capabilities: MeCapabilities;
 }
 
-export interface MeOwnerAccount {
-    ownerAccountId: string;
-    accountName: string;
-    isPrimaryOwner: boolean;
-    subscription: (SubscriptionSnapshot & { subscriptionId: string }) | null;
+export interface MeIdentity {
+    userId: string;
+    displayName: string;
+    phoneMasked: string;
+    phoneVerifiedAtUtc: string | null;
+    preferredLanguage: string;
+    authMode: string;
 }
 
-export interface MeAffiliation {
+export interface MeShare {
     referralCode: string | null;
     referralsTotal: number;
     referralsQualified: number;
     benefitsEarned: number;
 }
 
+export type MeAlertKind =
+    | 'verify_phone'
+    | 'plan_expiring'
+    | 'plan_expired'
+    | 'no_farms_yet';
+
+export interface MeAlert {
+    kind: MeAlertKind;
+    severity: 'info' | 'warn' | 'error';
+    farmId?: string | null;
+    daysLeft?: number | null;
+}
+
 export interface MeContext {
-    user: {
-        userId: string;
-        displayName: string;
-        phoneMasked: string;
-    };
-    ownerAccounts: MeOwnerAccount[];
-    memberships: MeMembership[];
-    affiliation: MeAffiliation;
+    me: MeIdentity;
+    farms: MeFarm[];
+    share: MeShare;
+    alerts: MeAlert[];
     serverTimeUtc: string;
 }
 

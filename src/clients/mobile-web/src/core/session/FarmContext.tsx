@@ -1,6 +1,5 @@
 /**
  * FarmContext — real farm context backed by /user/auth/me/context.
- * Replaces the ad-hoc per-page /farms/mine polling introduced in Phase 6.
  *
  * Key behaviours:
  *   - Fetches on mount and after login.
@@ -8,7 +7,8 @@
  *   - `currentFarmId` persists to localStorage; always falls back to first farm.
  *   - `switchFarm` updates localStorage + triggers a context refresh.
  *
- * Multi-tenant plan §6.2.1.
+ * Shape matches spec 2026-04-20-user-is-multitenant-base: pre-computed
+ * capabilities and alerts so consumers render, never compute.
  */
 import React, {
     createContext,
@@ -22,7 +22,7 @@ import {
     fetchMeContext,
     invalidateMeContext,
     type MeContext,
-    type MeMembership,
+    type MeFarm,
 } from './MeContextService';
 import { useAuth } from '../../app/providers/AuthProvider';
 
@@ -32,8 +32,8 @@ interface FarmContextValue {
     meContext: MeContext | null;
     isLoading: boolean;
     currentFarmId: string | null;
-    currentMembership: MeMembership | null;
-    allMemberships: MeMembership[];
+    currentFarm: MeFarm | null;
+    farms: MeFarm[];
     switchFarm: (farmId: string) => void;
     refresh: () => Promise<void>;
 }
@@ -54,8 +54,7 @@ export const FarmContextProvider: React.FC<{ children: React.ReactNode }> = ({ c
         try {
             const ctx = await fetchMeContext({ force });
             setMeContext(ctx);
-            // Ensure currentFarmId points to a real membership.
-            const ids = ctx.memberships.map(m => m.farmId);
+            const ids = ctx.farms.map(f => f.farmId);
             setCurrentFarmId(prev => {
                 const valid = prev && ids.includes(prev) ? prev : (ids[0] ?? null);
                 if (valid) localStorage.setItem(CURRENT_FARM_KEY, valid);
@@ -82,21 +81,21 @@ export const FarmContextProvider: React.FC<{ children: React.ReactNode }> = ({ c
         localStorage.setItem(CURRENT_FARM_KEY, farmId);
     }, []);
 
-    const allMemberships = meContext?.memberships ?? [];
-    const currentMembership = useMemo(
-        () => allMemberships.find(m => m.farmId === currentFarmId) ?? allMemberships[0] ?? null,
-        [allMemberships, currentFarmId],
+    const farms = meContext?.farms ?? [];
+    const currentFarm = useMemo(
+        () => farms.find(f => f.farmId === currentFarmId) ?? farms[0] ?? null,
+        [farms, currentFarmId],
     );
 
     const value = useMemo<FarmContextValue>(() => ({
         meContext,
         isLoading,
         currentFarmId,
-        currentMembership,
-        allMemberships,
+        currentFarm,
+        farms,
         switchFarm,
         refresh: () => refresh(true),
-    }), [meContext, isLoading, currentFarmId, currentMembership, allMemberships, switchFarm, refresh]);
+    }), [meContext, isLoading, currentFarmId, currentFarm, farms, switchFarm, refresh]);
 
     return <FarmCtx.Provider value={value}>{children}</FarmCtx.Provider>;
 };

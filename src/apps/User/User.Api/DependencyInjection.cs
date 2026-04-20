@@ -5,7 +5,7 @@ using User.Application.UseCases.Auth.RefreshToken;
 using User.Application.UseCases.Auth.RegisterUser;
 using User.Application.UseCases.Auth.StartOtp;
 using User.Application.UseCases.Auth.VerifyOtp;
-using User.Application.UseCases.Users.GetCurrentUser;
+using User.Application.UseCases.Users.GetMeContext;
 using User.Infrastructure;
 
 namespace User.Api;
@@ -28,7 +28,7 @@ public static class DependencyInjection
         services.AddScoped<RegisterUserHandler>();
         services.AddScoped<LoginHandler>();
         services.AddScoped<RefreshTokenHandler>();
-        services.AddScoped<GetCurrentUserHandler>();
+        services.AddScoped<GetMeContextHandler>();
         services.AddScoped<StartOtpHandler>();
         services.AddScoped<VerifyOtpHandler>();
 
