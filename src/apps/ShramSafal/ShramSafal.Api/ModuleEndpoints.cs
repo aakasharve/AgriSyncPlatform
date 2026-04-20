@@ -26,6 +26,7 @@ public static class ModuleEndpoints
         group.MapAiEndpoints();
         group.MapAttachmentEndpoints();
         group.MapPlanningEndpoints();
+        group.MapPlannedActivityEndpoints();
         group.MapScheduleTemplateEndpoints();
         group.MapScheduleEndpoints();
         group.MapReportEndpoints();

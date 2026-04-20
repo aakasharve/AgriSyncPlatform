@@ -52,6 +52,7 @@ public interface IShramSafalRepository
     Task AddScheduleTemplateAsync(ScheduleTemplate template, CancellationToken ct = default);
     Task<List<ScheduleTemplate>> GetScheduleTemplatesAsync(CancellationToken ct = default);
     Task AddPlannedActivitiesAsync(IEnumerable<PlannedActivity> plannedActivities, CancellationToken ct = default);
+    Task<PlannedActivity?> GetPlannedActivityByIdAsync(Guid id, CancellationToken ct = default);
     Task<List<PlannedActivity>> GetPlannedActivitiesByCropCycleIdAsync(Guid cropCycleId, CancellationToken ct = default);
     Task<List<LogTask>> GetExecutedTasksByCropCycleIdAsync(Guid cropCycleId, CancellationToken ct = default);
 

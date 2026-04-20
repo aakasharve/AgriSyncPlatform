@@ -145,7 +145,15 @@ internal static class DtoMappingExtensions
             activity.Stage,
             activity.PlannedDate,
             activity.CreatedAtUtc,
-            activity.ModifiedAtUtc);
+            activity.ModifiedAtUtc,
+            activity.SourceTemplateActivityId,
+            new PlannedActivityOverrideMarkers(
+                activity.IsLocallyAdded,
+                activity.IsLocallyChanged,
+                activity.OverrideReason,
+                activity.OverriddenAtUtc,
+                activity.IsRemoved,
+                activity.RemovedReason));
 
     public static AuditEventDto ToDto(this AuditEvent auditEvent) =>
         new(
