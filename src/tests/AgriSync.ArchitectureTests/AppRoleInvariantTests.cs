@@ -62,10 +62,10 @@ public sealed class AppRoleInvariantTests
             var name = skValue.ToString();
             var skInt = (int)skValue;
 
-            var userDomainValue = Enum.Parse(typeof(User.Domain.Membership.AppRole), name, ignoreCase: false);
-            var userDomainInt = (int)userDomainValue;
-
-            userDomainInt.Should().Be(skInt,
+            var parsed = Enum.TryParse(typeof(User.Domain.Membership.AppRole), name, ignoreCase: false, out var userDomainValue);
+            parsed.Should().BeTrue(
+                $"User.Domain.Membership.AppRole must define '{name}' to mirror SharedKernel — CEI-I7");
+            ((int)userDomainValue!).Should().Be(skInt,
                 $"User.Domain.Membership.AppRole.{name} must equal SharedKernel AppRole.{name} ({skInt}) — CEI-I7 mirror invariant");
         }
     }
