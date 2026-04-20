@@ -92,14 +92,21 @@ public sealed class DailyLog : Entity<Guid>
         return log;
     }
 
-    public LogTask AddTask(Guid taskId, string activityType, string? notes, DateTime occurredAtUtc)
+    public LogTask AddTask(
+        Guid taskId,
+        string activityType,
+        string? notes,
+        DateTime occurredAtUtc,
+        ExecutionStatus executionStatus = ExecutionStatus.Completed,
+        string? deviationReasonCode = null,
+        string? deviationNote = null)
     {
         if (string.IsNullOrWhiteSpace(activityType))
         {
             throw new ArgumentException("Activity type is required.", nameof(activityType));
         }
 
-        var task = new LogTask(taskId, Id, activityType.Trim(), notes?.Trim(), occurredAtUtc);
+        var task = new LogTask(taskId, Id, activityType.Trim(), notes?.Trim(), occurredAtUtc, executionStatus, deviationReasonCode, deviationNote);
         _tasks.Add(task);
         ModifiedAtUtc = occurredAtUtc;
         return task;
