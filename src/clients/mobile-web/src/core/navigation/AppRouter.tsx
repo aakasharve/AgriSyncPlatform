@@ -49,6 +49,7 @@ const ReviewInboxPage = React.lazy(() => import('../../pages/ReviewInboxPage'));
 const ReportsPage = React.lazy(() => import('../../pages/ReportsPage'));
 const FinanceSettingsPage = React.lazy(() => import('../../pages/FinanceSettingsPage'));
 const AdminAiOpsPage = React.lazy(() => import('../../features/admin/ai/AdminAiOpsPage').then(module => ({ default: module.AdminAiOpsPage })));
+const ReferralsPage = React.lazy(() => import('../../pages/ReferralsPage'));
 const TaskCreationSheet = React.lazy(() => import('../../features/scheduler/components/TaskCreationSheet'));
 const ReviewInboxSheet = React.lazy(() => import('../../features/logs/components/ReviewInboxSheet'));
 const QuickLogSheet = React.lazy(() => import('../../features/logs/components/QuickLogSheet').then(module => ({ default: module.QuickLogSheet })));
@@ -430,6 +431,7 @@ const AppRouter: React.FC = () => {
                             setCurrentRoute('schedule');
                         }}
                         onOpenFinanceManager={() => setCurrentRoute('finance-manager')}
+                        onOpenReferrals={() => setCurrentRoute('referrals')}
                         onOpenQrDemo={() => setCurrentRoute('qr-demo')}
                     />
                 </div>
@@ -445,6 +447,12 @@ const AppRouter: React.FC = () => {
             {currentRoute === 'ai-admin' && (
                 <div className="animate-in fade-in slide-in-from-right-4 duration-300">
                     <AdminAiOpsPage onBack={() => setCurrentRoute('settings')} />
+                </div>
+            )}
+
+            {currentRoute === 'referrals' && (
+                <div className="animate-in fade-in slide-in-from-right-4 duration-300">
+                    <ReferralsPage />
                 </div>
             )}
 

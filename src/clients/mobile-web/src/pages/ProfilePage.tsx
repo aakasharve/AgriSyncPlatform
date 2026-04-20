@@ -68,6 +68,7 @@ interface ProfilePageProps {
     onDeletePerson?: (id: string) => void;
     onOpenScheduleLibrary?: (cropId?: string) => void;
     onOpenFinanceManager?: () => void;
+    onOpenReferrals?: () => void;
     onOpenQrDemo?: () => void;
 }
 
@@ -1320,7 +1321,7 @@ const UtilitiesManager = ({ profile, onUpdate }: { profile: FarmerProfile, onUpd
 
 // --- MAIN PAGE LAYOUT ---
 
-const ProfilePage: React.FC<ProfilePageProps> = ({ profile, crops, onUpdateProfile, onUpdateCrops, onAddPerson, onDeletePerson, onOpenScheduleLibrary, onOpenFinanceManager, onOpenQrDemo }) => {
+const ProfilePage: React.FC<ProfilePageProps> = ({ profile, crops, onUpdateProfile, onUpdateCrops, onAddPerson, onDeletePerson, onOpenScheduleLibrary, onOpenFinanceManager, onOpenReferrals, onOpenQrDemo }) => {
     const { t } = useLanguage();
     const { logout } = useAuth();
     const [activeTab, setActiveTab] = useState<'identity' | 'structure' | 'utils' | 'plan' | 'machines' | 'health' | 'intelligence' | 'people'>('structure');
@@ -1659,6 +1660,25 @@ const ProfilePage: React.FC<ProfilePageProps> = ({ profile, crops, onUpdateProfi
                             <span className={`text-sm font-bold ${sidebarCollapsed ? 'lg:hidden' : ''}`}>Finance Manager</span>
                             <ArrowRight size={16} className={`ml-auto text-slate-300 group-hover:text-emerald-400 ${sidebarCollapsed ? 'lg:hidden' : ''}`} />
                         </button>
+
+                        {onOpenReferrals && (
+                            <>
+                                <div className={`px-3 py-2 text-xs font-bold text-slate-400 uppercase tracking-wider mt-4 ${sidebarCollapsed ? 'lg:hidden' : ''}`}>Growth</div>
+                                <button
+                                    onClick={onOpenReferrals}
+                                    title={sidebarCollapsed ? 'Referrals & Benefits' : undefined}
+                                    className={`flex items-center w-full rounded-xl text-left text-slate-500 hover:bg-white hover:text-emerald-700 transition-all group
+                                        ${sidebarCollapsed ? 'lg:justify-center lg:p-2 gap-3 p-3' : 'gap-3 p-3'}`}
+                                >
+                                    <div className="text-slate-400 group-hover:text-emerald-600"><Medal size={20} /></div>
+                                    <div className={`min-w-0 ${sidebarCollapsed ? 'lg:hidden' : ''}`}>
+                                        <span className="text-sm font-bold">रेफरल्स · Referrals</span>
+                                        <span className="block text-[10px] text-slate-400">& Benefits</span>
+                                    </div>
+                                    <ArrowRight size={16} className={`ml-auto text-slate-300 group-hover:text-emerald-400 ${sidebarCollapsed ? 'lg:hidden' : ''}`} />
+                                </button>
+                            </>
+                        )}
 
                     </div>
                 </div>

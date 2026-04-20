@@ -18,6 +18,53 @@ public static class AffiliationEndpoints
         // OwnerAccountId is resolved from the JWT caller; no path parameter
         // to avoid the trivial IDOR where any authenticated user could
         // request a code for any accountId.
+        // GET /accounts/affiliation/stats — counters for ReferralsPage
+        endpoints.MapGet("/accounts/affiliation/stats", async (
+            ClaimsPrincipal user,
+            IAffiliationRepository affiliationRepo,
+            IOwnerAccountRepository ownerAccountRepo,
+            CancellationToken ct) =>
+        {
+            if (!Guid.TryParse(user.FindFirstValue("sub"), out var callerUserId))
+                return Results.Unauthorized();
+
+            var account = await ownerAccountRepo.GetByPrimaryOwnerUserIdAsync(new UserId(callerUserId), ct);
+            if (account is null) return Results.Ok(new { referralsTotal = 0, referralsQualified = 0, benefitsEarned = 0 });
+
+            var (total, qualified, benefits) = await affiliationRepo.GetAffiliationStatsAsync(account.Id, ct);
+            return Results.Ok(new { referralsTotal = total, referralsQualified = qualified, benefitsEarned = benefits });
+        })
+        .WithName("GetAffiliationStats")
+        .WithTags("Accounts")
+        .RequireAuthorization();
+
+        // GET /accounts/affiliation/events?limit=20 — recent growth events
+        endpoints.MapGet("/accounts/affiliation/events", async (
+            ClaimsPrincipal user,
+            IAffiliationRepository affiliationRepo,
+            IOwnerAccountRepository ownerAccountRepo,
+            int limit = 20,
+            CancellationToken ct = default) =>
+        {
+            if (!Guid.TryParse(user.FindFirstValue("sub"), out var callerUserId))
+                return Results.Unauthorized();
+
+            var account = await ownerAccountRepo.GetByPrimaryOwnerUserIdAsync(new UserId(callerUserId), ct);
+            if (account is null) return Results.Ok(Array.Empty<object>());
+
+            var events = await affiliationRepo.GetGrowthEventsForOwnerAsync(account.Id, Math.Min(limit, 50), ct);
+            return Results.Ok(events.Select(e => new
+            {
+                id = e.Id.Value.ToString(),
+                eventType = e.EventType.ToString(),
+                occurredAtUtc = e.OccurredAtUtc,
+                metadata = e.Metadata,
+            }));
+        })
+        .WithName("GetAffiliationEvents")
+        .WithTags("Accounts")
+        .RequireAuthorization();
+
         endpoints.MapPost("/accounts/affiliation/code", async (
             ClaimsPrincipal user,
             IOwnerAccountRepository ownerAccountRepo,
