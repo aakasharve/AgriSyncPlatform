@@ -331,6 +331,39 @@ export interface AiDashboardResponse {
     }>;
 }
 
+// --- Admin Ops Health ---
+export interface OpsErrorEventDto {
+    eventType: string;
+    endpoint: string;
+    statusCode?: number;
+    latencyMs?: number;
+    farmId?: string;
+    occurredAtUtc: string;
+}
+
+export interface OpsFarmErrorDto {
+    farmId: string;
+    errorCount: number;
+    syncErrors: number;
+    logErrors: number;
+    voiceErrors: number;
+    lastErrorAt: string;
+}
+
+export interface AdminOpsHealthDto {
+    voiceInvocations24h: number;
+    voiceFailures24h: number;
+    voiceFailureRatePct: number;
+    voiceAvgLatencyMs: number;
+    voiceP95LatencyMs: number;
+    recentErrors: OpsErrorEventDto[];
+    topSufferingFarms: OpsFarmErrorDto[];
+    /** null = alert views not yet created (Ops Phase 2 not deployed) */
+    apiErrorSpike: boolean | null;
+    voiceDegraded: boolean | null;
+    computedAtUtc: string;
+}
+
 // --- Schedule Surface Definitions ---
 export interface CropScheduleTemplateDto {
     id: string;
@@ -901,6 +934,11 @@ export class AgriSyncClient {
 
     async getAiDashboard(): Promise<AiDashboardResponse> {
         const response = await this.http.get<AiDashboardResponse>('/shramsafal/ai/dashboard');
+        return response.data;
+    }
+
+    async getAdminOpsHealth(): Promise<AdminOpsHealthDto> {
+        const response = await this.http.get<AdminOpsHealthDto>('/shramsafal/admin/ops/health');
         return response.data;
     }
 

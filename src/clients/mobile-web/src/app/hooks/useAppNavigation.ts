@@ -14,6 +14,7 @@ const KNOWN_ROUTES: readonly AppRoute[] = [
     'profile',
     'settings',
     'ai-admin',
+    'ops-admin',
     'schedule',
     'procurement',
     'income',

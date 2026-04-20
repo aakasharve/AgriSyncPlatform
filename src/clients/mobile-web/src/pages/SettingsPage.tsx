@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useAppNavigationState } from '../app/context/AppFeatureContexts';
-import { Settings, Droplets, Users, Tractor, BookOpen, FlaskConical, Bot, Plus, Trash2, Coins, Leaf, Check, Pencil, ChevronDown, ChevronUp, Globe, Shield, MapPin, Mic, Camera } from 'lucide-react';
+import { Settings, Droplets, Users, Tractor, BookOpen, FlaskConical, Bot, Plus, Trash2, Coins, Leaf, Check, Pencil, ChevronDown, ChevronUp, Globe, Shield, MapPin, Mic, Camera, Activity } from 'lucide-react';
 import { LedgerDefaults, LabourShift, DailyLog, CropProfile, HarvestConfig } from '../types';
 import { getHarvestConfig } from '../services/harvestService';
 import NotificationTestComponent from '../shared/components/NotificationTestComponent';
@@ -343,6 +343,13 @@ const SettingsPage: React.FC<SettingsPageProps> = ({
                     >
                         <Bot size={20} />
                         Open AI Operations (Admin)
+                    </button>
+                    <button
+                        onClick={() => setCurrentRoute('ops-admin')}
+                        className="w-full py-3 px-4 bg-blue-50 text-blue-800 font-bold rounded-xl hover:bg-blue-100 transition-colors flex items-center justify-center gap-2 active:scale-[0.98]"
+                    >
+                        <Activity size={20} />
+                        Open Ops Health (Admin)
                     </button>
                 </div>
             </div>
