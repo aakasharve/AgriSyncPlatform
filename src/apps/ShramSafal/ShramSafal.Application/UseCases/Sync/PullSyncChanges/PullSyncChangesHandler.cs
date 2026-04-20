@@ -2,6 +2,7 @@ using AgriSync.BuildingBlocks.Abstractions;
 using AgriSync.BuildingBlocks.Results;
 using ShramSafal.Application.Contracts.Dtos;
 using ShramSafal.Application.Ports;
+using ShramSafal.Application.UseCases.Planning.GetAttentionBoard;
 using ShramSafal.Application.UseCases.ReferenceData.GetScheduleTemplates;
 
 namespace ShramSafal.Application.UseCases.Sync.PullSyncChanges;
@@ -9,7 +10,8 @@ namespace ShramSafal.Application.UseCases.Sync.PullSyncChanges;
 public sealed class PullSyncChangesHandler(
     IShramSafalRepository repository,
     IClock clock,
-    GetScheduleTemplatesHandler getScheduleTemplatesHandler)
+    GetScheduleTemplatesHandler getScheduleTemplatesHandler,
+    GetAttentionBoardHandler getAttentionBoardHandler)
 {
     public async Task<Result<SyncPullResponseDto>> HandleAsync(PullSyncChangesQuery query, CancellationToken ct = default)
     {
@@ -89,6 +91,20 @@ public sealed class PullSyncChangesHandler(
             plannedActivities,
             auditEvents);
 
+        // AttentionBoard is computed as a snapshot on every pull.
+        // If computation fails, the pull still succeeds — we pass null.
+        AttentionBoardDto? attentionBoard = null;
+        try
+        {
+            var attentionResult = await getAttentionBoardHandler.HandleAsync(
+                new GetAttentionBoardQuery(query.UserId, serverNowUtc), ct);
+            attentionBoard = attentionResult.IsSuccess ? attentionResult.Value : null;
+        }
+        catch
+        {
+            // Swallow: attention board failures must never fail the pull (CEI §4.2.2)
+        }
+
         var response = new SyncPullResponseDto(
             serverNowUtc,
             nextCursorUtc,
@@ -108,7 +124,8 @@ public sealed class PullSyncChangesHandler(
             cropTypes,
             ReferenceDataCatalog.ActivityCategories,
             ReferenceDataCatalog.CostCategories,
-            referenceDataVersionHash);
+            referenceDataVersionHash,
+            attentionBoard);
 
         return Result.Success(response);
     }
