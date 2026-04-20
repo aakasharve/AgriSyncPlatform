@@ -266,6 +266,15 @@ export interface DexieLogRecord {
 }
 
 // =============================================================================
+// SCHEMA VERSION CONSTANTS
+// =============================================================================
+
+/** Current Dexie schema version — bump this when adding version(N).stores(). */
+export const DATABASE_VERSION = 6;
+/** Reserved for CEI Phase 1 — do NOT use until Task 5.1.1 executes the actual migration. */
+export const CEI_PHASE1_SCHEMA_VERSION = 7;
+
+// =============================================================================
 // DATABASE CLASS
 // =============================================================================
 
