@@ -1,0 +1,233 @@
+{
+  "name": "AgriSync Founder Dashboard",
+  "description": "Tier-0 North Star + Tier-1 guardrails. All metrics from mis.* contracted views. Refresh: nightly 02:00 IST.",
+  "parameters": [
+    {
+      "id": "farm_week_filter",
+      "name": "Week (YYYY-WW)",
+      "type": "string/=",
+      "slug": "week",
+      "default": null
+    }
+  ],
+  "cards": [
+    {
+      "id": 1,
+      "card": {
+        "name": "NSM — WVFD / Farm (rolling 7-day)",
+        "description": "North Star Metric. Target ≥ 4.5. Churn threshold < 3 for 2 consecutive weeks.",
+        "display": "scalar",
+        "dataset_query": {
+          "type": "native",
+          "native": {
+            "query": "SELECT ROUND(AVG(wvfd)::numeric, 2) AS wvfd_per_farm FROM mis.wvfd_weekly WHERE week_start >= CURRENT_DATE - INTERVAL '7 days'",
+            "template-tags": {}
+          }
+        },
+        "visualization_settings": {
+          "scalar.field": "wvfd_per_farm",
+          "column_settings": {
+            "[\"name\",\"wvfd_per_farm\"]": { "number_style": "decimal", "decimals": 2 }
+          }
+        }
+      },
+      "row": 0, "col": 0, "size_x": 4, "size_y": 3
+    },
+    {
+      "id": 2,
+      "card": {
+        "name": "WVFD Trend (last 12 weeks)",
+        "description": "Each point is avg WVFD/farm for that week. Look for sustained ≥ 4.5.",
+        "display": "line",
+        "dataset_query": {
+          "type": "native",
+          "native": {
+            "query": "SELECT week_start, ROUND(AVG(wvfd)::numeric, 2) AS avg_wvfd FROM mis.wvfd_weekly WHERE week_start >= CURRENT_DATE - INTERVAL '84 days' GROUP BY week_start ORDER BY week_start",
+            "template-tags": {}
+          }
+        },
+        "visualization_settings": {
+          "graph.x_axis.title_text": "Week",
+          "graph.y_axis.title_text": "Avg WVFD",
+          "graph.goal_value": 4.5,
+          "graph.show_goal": true
+        }
+      },
+      "row": 0, "col": 4, "size_x": 8, "size_y": 3
+    },
+    {
+      "id": 3,
+      "card": {
+        "name": "D30 Retention — Paying Owners (%)",
+        "description": "Target ≥ 60%. Breach triggers Tier-1 alert.",
+        "display": "scalar",
+        "dataset_query": {
+          "type": "native",
+          "native": {
+            "query": "SELECT ROUND(retention_pct::numeric, 1) AS d30_retention_pct FROM mis.d30_retention_paying ORDER BY cohort_week DESC LIMIT 1",
+            "template-tags": {}
+          }
+        }
+      },
+      "row": 3, "col": 0, "size_x": 3, "size_y": 2
+    },
+    {
+      "id": 4,
+      "card": {
+        "name": "Log→Verify Median Lag (hours)",
+        "description": "Target ≤ 36h. Rising lag = owner disengaging.",
+        "display": "scalar",
+        "dataset_query": {
+          "type": "native",
+          "native": {
+            "query": "SELECT ROUND(median_hours::numeric, 1) AS median_verify_lag_hours FROM mis.log_verify_lag ORDER BY computed_at DESC LIMIT 1",
+            "template-tags": {}
+          }
+        }
+      },
+      "row": 3, "col": 3, "size_x": 3, "size_y": 2
+    },
+    {
+      "id": 5,
+      "card": {
+        "name": "Correction Rate (%)",
+        "description": "Target ≤ 15%. Rising = operator confusion or lying.",
+        "display": "scalar",
+        "dataset_query": {
+          "type": "native",
+          "native": {
+            "query": "SELECT ROUND(correction_rate_pct::numeric, 1) AS correction_rate_pct FROM mis.correction_rate ORDER BY computed_at DESC LIMIT 1",
+            "template-tags": {}
+          }
+        }
+      },
+      "row": 3, "col": 6, "size_x": 3, "size_y": 2
+    },
+    {
+      "id": 6,
+      "card": {
+        "name": "Voice-Log Share (%)",
+        "description": "Target ≥ 40%. Below = AI not earning its cost.",
+        "display": "scalar",
+        "dataset_query": {
+          "type": "native",
+          "native": {
+            "query": "SELECT ROUND(voice_pct::numeric, 1) AS voice_share_pct FROM mis.voice_log_share ORDER BY computed_at DESC LIMIT 1",
+            "template-tags": {}
+          }
+        }
+      },
+      "row": 3, "col": 9, "size_x": 3, "size_y": 2
+    },
+    {
+      "id": 7,
+      "card": {
+        "name": "Schedule Compliance (%)",
+        "description": "Target ≥ 50%. Below 50% = farmers don't believe the schedule.",
+        "display": "scalar",
+        "dataset_query": {
+          "type": "native",
+          "native": {
+            "query": "SELECT ROUND(AVG(compliance_pct)::numeric, 1) AS avg_compliance_pct FROM mis.schedule_compliance_weekly WHERE week_start >= CURRENT_DATE - INTERVAL '7 days'",
+            "template-tags": {}
+          }
+        }
+      },
+      "row": 5, "col": 0, "size_x": 3, "size_y": 2
+    },
+    {
+      "id": 8,
+      "card": {
+        "name": "Engagement Tier Distribution (this week)",
+        "description": "A=Power, B=Core, C=Casual, D=At-risk. PMF = ≥25% in tier A.",
+        "display": "pie",
+        "dataset_query": {
+          "type": "native",
+          "native": {
+            "query": "SELECT tier, COUNT(*) AS farm_count FROM mis.engagement_tier WHERE week_start = (SELECT MAX(week_start) FROM mis.engagement_tier) GROUP BY tier ORDER BY tier",
+            "template-tags": {}
+          }
+        }
+      },
+      "row": 5, "col": 3, "size_x": 4, "size_y": 4
+    },
+    {
+      "id": 9,
+      "card": {
+        "name": "Activation Funnel",
+        "description": "Latest cohort week drop-off per step.",
+        "display": "funnel",
+        "dataset_query": {
+          "type": "native",
+          "native": {
+            "query": "SELECT step_name, count FROM mis.activation_funnel WHERE cohort_week = (SELECT MAX(cohort_week) FROM mis.activation_funnel) ORDER BY step_order",
+            "template-tags": {}
+          }
+        }
+      },
+      "row": 5, "col": 7, "size_x": 5, "size_y": 4
+    },
+    {
+      "id": 10,
+      "card": {
+        "name": "Schedule Migrations This Month",
+        "description": "How many schedules are being swapped. High = catalog iteration happening.",
+        "display": "scalar",
+        "dataset_query": {
+          "type": "native",
+          "native": {
+            "query": "SELECT COUNT(*) AS migrations FROM mis.schedule_migration_rate WHERE week_start >= DATE_TRUNC('month', CURRENT_DATE)",
+            "template-tags": {}
+          }
+        }
+      },
+      "row": 9, "col": 0, "size_x": 3, "size_y": 2
+    },
+    {
+      "id": 11,
+      "card": {
+        "name": "Silent Churn Watchlist (paid, WVFD=0, 2+ weeks)",
+        "description": "Call these farms before they cancel.",
+        "display": "table",
+        "dataset_query": {
+          "type": "native",
+          "native": {
+            "query": "SELECT farm_id, owner_phone, owner_name, weeks_silent, last_log_date FROM mis.silent_churn_watchlist ORDER BY weeks_silent DESC LIMIT 20",
+            "template-tags": {}
+          }
+        }
+      },
+      "row": 9, "col": 3, "size_x": 9, "size_y": 4
+    },
+    {
+      "id": 12,
+      "card": {
+        "name": "AI Cost / Farm (USD, last 7 days)",
+        "description": "Monitor Gemini spend per farm. Budget alert if > $0.50/farm/week.",
+        "display": "scalar",
+        "dataset_query": {
+          "type": "native",
+          "native": {
+            "query": "SELECT ROUND(AVG(cost_usd_7d)::numeric, 4) AS avg_ai_cost_per_farm FROM mis.gemini_cost_per_farm",
+            "template-tags": {}
+          }
+        }
+      },
+      "row": 9, "col": 0, "size_x": 3, "size_y": 2
+    }
+  ],
+  "_contract_version": "v1",
+  "_views_required": [
+    "mis.wvfd_weekly",
+    "mis.d30_retention_paying",
+    "mis.log_verify_lag",
+    "mis.correction_rate",
+    "mis.voice_log_share",
+    "mis.schedule_compliance_weekly",
+    "mis.engagement_tier",
+    "mis.activation_funnel",
+    "mis.schedule_migration_rate",
+    "mis.silent_churn_watchlist",
+    "mis.gemini_cost_per_farm"
+  ]
+}
