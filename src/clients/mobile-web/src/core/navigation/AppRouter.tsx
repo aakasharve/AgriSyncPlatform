@@ -49,6 +49,7 @@ const ReviewInboxPage = React.lazy(() => import('../../pages/ReviewInboxPage'));
 const ReportsPage = React.lazy(() => import('../../pages/ReportsPage'));
 const FinanceSettingsPage = React.lazy(() => import('../../pages/FinanceSettingsPage'));
 const AdminAiOpsPage = React.lazy(() => import('../../features/admin/ai/AdminAiOpsPage').then(module => ({ default: module.AdminAiOpsPage })));
+const AdminOpsPage = React.lazy(() => import('../../features/admin/ops/AdminOpsPage').then(module => ({ default: module.AdminOpsPage })));
 const ReferralsPage = React.lazy(() => import('../../pages/ReferralsPage'));
 const TaskCreationSheet = React.lazy(() => import('../../features/scheduler/components/TaskCreationSheet'));
 const ReviewInboxSheet = React.lazy(() => import('../../features/logs/components/ReviewInboxSheet'));
@@ -447,6 +448,12 @@ const AppRouter: React.FC = () => {
             {currentRoute === 'ai-admin' && (
                 <div className="animate-in fade-in slide-in-from-right-4 duration-300">
                     <AdminAiOpsPage onBack={() => setCurrentRoute('settings')} />
+                </div>
+            )}
+
+            {currentRoute === 'ops-admin' && (
+                <div className="animate-in fade-in slide-in-from-right-4 duration-300">
+                    <AdminOpsPage onBack={() => setCurrentRoute('settings')} />
                 </div>
             )}
 
