@@ -33,6 +33,7 @@ public enum PaidFeature
     OwnerSyncPush = 6,
     WorkerSyncPush = 7,
     WorkerViewAttendance = 8,
+    MisRead = 9,
 }
 
 public enum EntitlementReason

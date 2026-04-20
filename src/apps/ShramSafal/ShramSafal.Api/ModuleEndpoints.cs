@@ -27,6 +27,7 @@ public static class ModuleEndpoints
         group.MapAttachmentEndpoints();
         group.MapPlanningEndpoints();
         group.MapScheduleEndpoints();
+        group.MapReportEndpoints();
         group.MapReferenceDataEndpoints();
         group.MapAuditEndpoints();
         group.MapExportEndpoints();

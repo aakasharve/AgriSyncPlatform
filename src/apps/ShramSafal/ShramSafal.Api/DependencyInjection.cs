@@ -32,6 +32,7 @@ using ShramSafal.Application.UseCases.Memberships.GetMyFarms;
 using ShramSafal.Application.UseCases.Memberships.IssueFarmInvite;
 using ShramSafal.Application.UseCases.Memberships.RotateFarmInvite;
 using ShramSafal.Application.UseCases.Planning.ComputePlannedVsExecutedDelta;
+using ShramSafal.Application.UseCases.Reports.GetFarmWeekMis;
 using ShramSafal.Application.UseCases.Planning.GeneratePlanFromTemplate;
 using ShramSafal.Application.UseCases.Planning.GetStagePlan;
 using ShramSafal.Application.UseCases.Planning.GetTodaysPlan;
@@ -105,6 +106,9 @@ public static class DependencyInjection
 
         // Phase 6 — self-exit
         services.AddScoped<ExitMembershipHandler>();
+
+        // Phase 6 MIS — owner farm-week report
+        services.AddScoped<GetFarmWeekMisHandler>();
 
         // Phase 3 MIS — schedule compliance evaluator
         services.AddScoped<IScheduleComplianceService, ScheduleComplianceService>();

@@ -157,6 +157,7 @@ public static class DependencyInjection
         });
 
         services.AddScoped<IShramSafalRepository, ShramSafalRepository>();
+        services.AddScoped<IMisReportRepository, MisReportRepository>();
         services.AddScoped<IFarmInvitationRepository, FarmInvitationRepository>();
         services.AddScoped<ISubscriptionReader, SubscriptionReader>();
         services.AddScoped<IEntitlementPolicy, DefaultEntitlementPolicy>();
