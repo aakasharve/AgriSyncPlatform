@@ -1,0 +1,96 @@
+using System.Text.Json;
+using AgriSync.BuildingBlocks.Abstractions;
+using AgriSync.BuildingBlocks.Results;
+using AgriSync.SharedKernel.Contracts.Ids;
+using ShramSafal.Application.Ports;
+using ShramSafal.Domain.Audit;
+using ShramSafal.Domain.Common;
+
+namespace ShramSafal.Application.UseCases.Planning.PublishScheduleTemplate;
+
+public sealed class PublishScheduleTemplateHandler(
+    IShramSafalRepository repository,
+    ISyncMutationStore syncMutationStore,
+    IClock clock)
+{
+    private const string MutationType = "schedule.publish";
+
+    public async Task<Result<PublishScheduleTemplateResult>> HandleAsync(
+        PublishScheduleTemplateCommand command,
+        CancellationToken ct = default)
+    {
+        // Step 1: validate
+        if (command.TemplateId == Guid.Empty || command.CallerUserId == Guid.Empty)
+        {
+            return Result.Failure<PublishScheduleTemplateResult>(ShramSafalErrors.InvalidCommand);
+        }
+
+        // Step 2: idempotency check
+        if (!string.IsNullOrWhiteSpace(command.ClientCommandId))
+        {
+            var existing = await syncMutationStore.GetAsync(
+                command.ClientCommandId, command.ClientCommandId, ct);
+            if (existing is not null)
+            {
+                var cached = JsonSerializer.Deserialize<PublishScheduleTemplateResult>(existing.ResponsePayloadJson);
+                if (cached is not null)
+                {
+                    return Result.Success(cached);
+                }
+            }
+        }
+
+        // Step 3: load template
+        var template = await repository.GetScheduleTemplateByIdAsync(command.TemplateId, ct);
+        if (template is null)
+        {
+            return Result.Failure<PublishScheduleTemplateResult>(ShramSafalErrors.ScheduleTemplateNotFound);
+        }
+
+        // Step 4: only the author may publish
+        if (template.CreatedByUserId is null || template.CreatedByUserId.Value.Value != command.CallerUserId)
+        {
+            return Result.Failure<PublishScheduleTemplateResult>(ShramSafalErrors.Forbidden);
+        }
+
+        // Step 5: publish (mutates template in-place)
+        template.Publish(new UserId(command.CallerUserId), clock.UtcNow);
+
+        // Step 6: audit
+        var audit = AuditEvent.Create(
+            entityType: "ScheduleTemplate",
+            entityId: command.TemplateId,
+            action: "schedule.published",
+            actorUserId: command.CallerUserId,
+            actorRole: "user",
+            payload: new
+            {
+                templateId = command.TemplateId,
+                version = template.Version,
+                publishedAtUtc = template.PublishedAtUtc
+            },
+            clientCommandId: command.ClientCommandId,
+            occurredAtUtc: clock.UtcNow);
+
+        await repository.AddAuditEventAsync(audit, ct);
+
+        // Step 7: save
+        await repository.SaveChangesAsync(ct);
+
+        // Step 8: store idempotency result
+        var result = new PublishScheduleTemplateResult(template.PublishedAtUtc!.Value, template.Version);
+
+        if (!string.IsNullOrWhiteSpace(command.ClientCommandId))
+        {
+            await syncMutationStore.TryStoreSuccessAsync(
+                command.ClientCommandId,
+                command.ClientCommandId,
+                MutationType,
+                JsonSerializer.Serialize(result),
+                clock.UtcNow,
+                ct);
+        }
+
+        return Result.Success(result);
+    }
+}
