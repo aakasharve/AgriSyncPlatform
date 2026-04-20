@@ -5,6 +5,7 @@
 
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { Language, translations, t as translate } from './translations';
+import { LanguageSyncFromServer } from './LanguageSyncFromServer';
 
 interface LanguageContextType {
     language: Language;
@@ -35,6 +36,7 @@ export const LanguageProvider: React.FC<{ children: ReactNode }> = ({ children }
 
     return (
         <LanguageContext.Provider value={{ language, setLanguage, t }}>
+            <LanguageSyncFromServer />
             {children}
         </LanguageContext.Provider>
     );

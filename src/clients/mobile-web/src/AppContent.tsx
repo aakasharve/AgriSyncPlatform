@@ -13,6 +13,7 @@ import CropSelector from './features/context/components/CropSelector';
 import InputMethodToggle from './shared/components/ui/InputMethodToggle';
 import BottomNavigation from './features/context/components/BottomNavigation';
 import AppHeader from './features/context/components/AppHeader';
+import MeAlertRail from './features/context/components/MeAlertRail';
 import AppRouter from './core/navigation/AppRouter';
 import ActionToast from './shared/components/ui/ActionToast';
 import WeatherReactionPrompt from './features/weather/components/WeatherReactionPrompt';
@@ -307,8 +308,8 @@ const AppContent: React.FC<AppContentProps> = ({ crops: initialCrops, setCrops }
                 } : undefined}
             />
 
-            {/* Demo indicators */}
-
+            {/* Server-decided banners (verify phone, plan expiring, etc.) */}
+            <MeAlertRail />
 
             {/* Main Content */}
             <main
