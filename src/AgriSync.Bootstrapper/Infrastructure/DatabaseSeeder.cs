@@ -23,6 +23,10 @@ public class DatabaseSeeder
     private const string AppId = "shramsafal";
     private const string SeedVersion = "phase0-seed-v1";
 
+    // Admin user: login with 0000000000 / admin123 in dev.
+    // Add this ID to appsettings.Development.json "Admins" array to activate
+    // the admin JWT claim (membership: shramsafal:admin).
+    public static readonly UserId AdminUserId = new(Guid.Parse("00000000-0000-0000-0000-000000000099"));
     private static readonly UserId PreferredRamuId = new(Guid.Parse("00000000-0000-0000-0000-000000000001"));
     private static readonly UserId PreferredGaneshId = new(Guid.Parse("00000000-0000-0000-0000-000000000002"));
 
@@ -79,6 +83,10 @@ public class DatabaseSeeder
     public async Task<string> SeedDemoDataAsync()
     {
         var nowUtc = DateTime.UtcNow;
+
+        // Admin user (no farm membership — admin claim comes from JWT, not FarmMembership)
+        await EnsureUserAsync(AdminUserId, "0000000000", "AgriSync Admin", "admin123",
+            AppRole.Worker, nowUtc);
 
         var ramu = await EnsureUserAsync(
             PreferredRamuId,

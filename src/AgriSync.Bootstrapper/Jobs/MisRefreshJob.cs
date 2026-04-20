@@ -42,6 +42,12 @@ namespace AgriSync.Bootstrapper.Jobs
             "mis.zero_engagement_farms",
             "mis.activity_heatmap",
             "mis.cohort_quality_score",
+            // Ops Phase 2 — engineering health views
+            "mis.api_health_24h",
+            "mis.farmer_suffering_watchlist",
+            "mis.voice_pipeline_health",
+            "mis.alert_r9_api_error_spike",
+            "mis.alert_r10_voice_degraded",
             // Phase 7 — Red-flag detectors
             "mis.alert_r1_smooth_decay",
             "mis.alert_r2_wau_vs_wvfd",

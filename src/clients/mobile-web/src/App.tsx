@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { installGlobalErrorHandlers } from './infrastructure/telemetry/ClientErrorReporter';
 import { BrowserRouter } from 'react-router-dom';
 import { Capacitor, SystemBars, SystemBarsStyle } from '@capacitor/core';
 import { StatusBar, Style } from '@capacitor/status-bar';
@@ -56,6 +57,9 @@ const AppFrame: React.FC<{
 const App: React.FC = () => {
     const [crops, setCrops] = useState<CropProfile[]>([]);
     const [showSplash, setShowSplash] = useState(true);
+
+    // Ops Phase 3 — catch unhandled JS rejections and report to telemetry
+    useEffect(() => { installGlobalErrorHandlers(); }, []);
 
     useEffect(() => {
         if (!Capacitor.isNativePlatform()) {

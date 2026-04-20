@@ -185,6 +185,8 @@ try
     app.UseAuthentication();
     app.UseRateLimiter();
     app.UseAuthorization();
+    // Ops observability — placed after auth so FarmId claim is available in middleware
+    app.UseMiddleware<AgriSync.Bootstrapper.Middleware.RequestObservabilityMiddleware>();
 
     app.MapGet("/health", () =>
     {
@@ -258,6 +260,49 @@ try
     .WithName("GetVersion")
     .WithTags("System")
     .AllowAnonymous();
+
+    // Ops Phase 1 — client error telemetry (no auth, rate-limited by IP)
+    {
+        var clientErrorCounts = new System.Collections.Concurrent.ConcurrentDictionary<string, (int count, DateTime window)>();
+        app.MapPost("/telemetry/client-error", async (
+            HttpContext ctx,
+            AgriSync.BuildingBlocks.Analytics.IAnalyticsWriter analytics,
+            System.Text.Json.JsonElement body) =>
+        {
+            var ip = ctx.Connection.RemoteIpAddress?.ToString() ?? "unknown";
+            var now = DateTime.UtcNow;
+            var entry = clientErrorCounts.GetOrAdd(ip, _ => (0, now.AddMinutes(1)));
+            if (now > entry.window)
+                entry = (0, now.AddMinutes(1));
+            if (entry.count >= 10)
+                return Results.StatusCode(429);
+            clientErrorCounts[ip] = (entry.count + 1, entry.window);
+
+            var farmIdClaim = ctx.User.FindFirst("farm_id")?.Value
+                           ?? ctx.User.FindFirst("farmId")?.Value;
+            AgriSync.SharedKernel.Contracts.Ids.FarmId? farmId = null;
+            if (farmIdClaim is not null && Guid.TryParse(farmIdClaim, out var fid))
+                farmId = new AgriSync.SharedKernel.Contracts.Ids.FarmId(fid);
+
+            await analytics.EmitAsync(new AgriSync.BuildingBlocks.Analytics.AnalyticsEvent(
+                EventId:            Guid.NewGuid(),
+                EventType:          AgriSync.BuildingBlocks.Analytics.AnalyticsEventType.ClientError,
+                OccurredAtUtc:      DateTime.UtcNow,
+                ActorUserId:        null,
+                FarmId:             farmId,
+                OwnerAccountId:     null,
+                ActorRole:          "client",
+                Trigger:            "browser",
+                DeviceOccurredAtUtc: null,
+                SchemaVersion:      "v1",
+                PropsJson:          body.GetRawText()));
+
+            return Results.NoContent();
+        })
+        .WithName("PostClientError")
+        .WithTags("Telemetry")
+        .AllowAnonymous();
+    }
 
     app.MapUserApi();
     app.MapShramSafalApi();

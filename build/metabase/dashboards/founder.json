@@ -214,6 +214,38 @@
         }
       },
       "row": 9, "col": 0, "size_x": 3, "size_y": 2
+    },
+    {
+      "id": 13,
+      "card": {
+        "name": "Top Failing Endpoints (24h)",
+        "description": "Which API calls are failing most. Empty = no errors yet (Phase 1 middleware not deployed). Refresh nightly.",
+        "display": "table",
+        "dataset_query": {
+          "type": "native",
+          "native": {
+            "query": "SELECT endpoint, error_count, farms_affected, avg_latency_ms, max_latency_ms FROM mis.api_health_24h LIMIT 10",
+            "template-tags": {}
+          }
+        }
+      },
+      "row": 11, "col": 0, "size_x": 7, "size_y": 4
+    },
+    {
+      "id": 14,
+      "card": {
+        "name": "Farmer Suffering Watchlist (7d)",
+        "description": "Farms with 3+ API errors this week. Call them before they complain.",
+        "display": "table",
+        "dataset_query": {
+          "type": "native",
+          "native": {
+            "query": "SELECT farm_id, error_count, sync_errors, log_errors, voice_errors, last_error_at FROM mis.farmer_suffering_watchlist LIMIT 15",
+            "template-tags": {}
+          }
+        }
+      },
+      "row": 11, "col": 7, "size_x": 5, "size_y": 4
     }
   ],
   "_contract_version": "v1",
@@ -228,6 +260,8 @@
     "mis.activation_funnel",
     "mis.schedule_migration_rate",
     "mis.silent_churn_watchlist",
-    "mis.gemini_cost_per_farm"
+    "mis.gemini_cost_per_farm",
+    "mis.api_health_24h",
+    "mis.farmer_suffering_watchlist"
   ]
 }

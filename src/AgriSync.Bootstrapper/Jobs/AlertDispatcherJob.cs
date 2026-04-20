@@ -32,6 +32,8 @@ public sealed class AlertDispatcherJob : BackgroundService
 
     private static readonly string[] AlertViews =
     [
+        "mis.alert_r9_api_error_spike",
+        "mis.alert_r10_voice_degraded",
         "mis.alert_r1_smooth_decay",
         "mis.alert_r2_wau_vs_wvfd",
         "mis.alert_r3_rubber_stamp",
