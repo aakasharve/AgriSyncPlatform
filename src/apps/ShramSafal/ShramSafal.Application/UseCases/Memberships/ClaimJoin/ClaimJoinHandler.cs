@@ -6,6 +6,7 @@ using AgriSync.SharedKernel.Contracts.Roles;
 using Microsoft.Extensions.Logging;
 using ShramSafal.Application.Ports;
 using ShramSafal.Application.UseCases.Memberships.IssueFarmInvite;
+using ShramSafal.Domain.Audit;
 using ShramSafal.Domain.Farms;
 
 namespace ShramSafal.Application.UseCases.Memberships.ClaimJoin;
@@ -120,6 +121,17 @@ public sealed class ClaimJoinHandler(
         membership.ClaimWithoutApproval(utcNow);
 
         await farmRepository.AddFarmMembershipAsync(membership, ct);
+        await farmRepository.AddAuditEventAsync(
+            AuditEvent.Create(
+                farmId: farm.Id.Value,
+                entityType: "FarmMembership",
+                entityId: membership.Id,
+                action: "MemberJoined",
+                actorUserId: command.CallerUserId.Value,
+                actorRole: membership.Role.ToString().ToLowerInvariant(),
+                payload: new { farmId = farm.Id, userId = command.CallerUserId, role = membership.Role.ToString(), joinedVia = "QrScan" },
+                clientCommandId: null,
+                occurredAtUtc: utcNow), ct);
         await farmRepository.SaveChangesAsync(ct);
 
         await analytics.EmitAsync(new AnalyticsEvent(

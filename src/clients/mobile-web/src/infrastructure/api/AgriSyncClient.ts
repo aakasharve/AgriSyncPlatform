@@ -532,6 +532,12 @@ export class AgriSyncClient {
         return response.data;
     }
 
+    /** POST /accounts/affiliation/code — idempotent, returns the caller's referral code. */
+    async generateReferralCode(): Promise<{ code: string }> {
+        const response = await this.http.post<{ code: string }>('/accounts/affiliation/code');
+        return response.data;
+    }
+
     async pushSyncBatch(request: SyncPushRequest): Promise<SyncPushResponse> {
         const response = await this.http.post<SyncPushResponse>('/sync/push', request);
         return response.data;

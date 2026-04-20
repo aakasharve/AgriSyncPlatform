@@ -45,21 +45,11 @@ const ReferralsPage: React.FC = () => {
 
                 setOwnerName(me.displayName);
 
-                const codeRes = await fetch(
-                    `/accounts/${me.ownerAccountId}/affiliation/code`,
-                    {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                            Authorization: `Bearer ${(agriSyncClient as any).getAccessToken?.() ?? ''}`,
-                        },
-                    },
-                );
-                if (cancelled) return;
-
-                if (codeRes.ok) {
-                    const data = await codeRes.json() as { code: string };
-                    setReferralCode(data.code);
+                // Use agriSyncClient so the standard attachAccessToken interceptor
+                // fires — avoids the IDOR that a path-param based endpoint would expose.
+                if (!cancelled) {
+                    const codeData = await agriSyncClient.generateReferralCode();
+                    setReferralCode(codeData.code);
                 }
 
                 // TODO(Phase 7.3.1): fetch /accounts/{accountId}/affiliation/stats
