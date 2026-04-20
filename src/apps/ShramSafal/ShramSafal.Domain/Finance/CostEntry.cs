@@ -1,6 +1,7 @@
 using AgriSync.BuildingBlocks.Domain;
 using AgriSync.SharedKernel.Contracts.Ids;
 using ShramSafal.Domain.Events;
+using ShramSafal.Domain.Location;
 
 namespace ShramSafal.Domain.Finance;
 
@@ -19,6 +20,7 @@ public sealed class CostEntry : Entity<Guid>
         string currencyCode,
         DateOnly entryDate,
         UserId createdByUserId,
+        LocationSnapshot? location,
         DateTime createdAtUtc)
         : base(id)
     {
@@ -31,7 +33,9 @@ public sealed class CostEntry : Entity<Guid>
         CurrencyCode = currencyCode;
         EntryDate = entryDate;
         CreatedByUserId = createdByUserId;
+        Location = location;
         CreatedAtUtc = createdAtUtc;
+        ModifiedAtUtc = createdAtUtc;
     }
 
     public FarmId FarmId { get; private set; }
@@ -43,8 +47,12 @@ public sealed class CostEntry : Entity<Guid>
     public string CurrencyCode { get; private set; } = "INR";
     public DateOnly EntryDate { get; private set; }
     public UserId CreatedByUserId { get; private set; }
+    public LocationSnapshot? Location { get; private set; }
     public DateTime CreatedAtUtc { get; private set; }
+    public DateTime ModifiedAtUtc { get; private set; }
     public bool IsCorrected { get; private set; }
+    public bool IsFlagged { get; private set; }
+    public string? FlagReason { get; private set; }
 
     public static CostEntry Create(
         Guid id,
@@ -57,6 +65,7 @@ public sealed class CostEntry : Entity<Guid>
         string currencyCode,
         DateOnly entryDate,
         UserId createdByUserId,
+        LocationSnapshot? location,
         DateTime createdAtUtc)
     {
         if (string.IsNullOrWhiteSpace(category))
@@ -85,6 +94,7 @@ public sealed class CostEntry : Entity<Guid>
             currencyCode.Trim().ToUpperInvariant(),
             entryDate,
             createdByUserId,
+            location,
             createdAtUtc);
 
         entry.Raise(new CostEntryCreatedEvent(
@@ -97,6 +107,17 @@ public sealed class CostEntry : Entity<Guid>
         return entry;
     }
 
+    public void Flag(string reason)
+    {
+        if (string.IsNullOrWhiteSpace(reason))
+        {
+            throw new ArgumentException("Flag reason is required.", nameof(reason));
+        }
+
+        IsFlagged = true;
+        FlagReason = reason.Trim();
+    }
+
     public void MarkCorrected(
         Guid correctionId,
         decimal correctedAmount,
@@ -104,6 +125,7 @@ public sealed class CostEntry : Entity<Guid>
         DateTime correctedAtUtc)
     {
         IsCorrected = true;
+        ModifiedAtUtc = correctedAtUtc;
         Raise(new CostEntryCorrectedEvent(
             Guid.NewGuid(),
             correctedAtUtc,
@@ -111,5 +133,16 @@ public sealed class CostEntry : Entity<Guid>
             correctionId,
             correctedAmount,
             currencyCode));
+    }
+
+    public void AttachLocation(LocationSnapshot location)
+    {
+        if (Location is not null)
+        {
+            throw new InvalidOperationException("Location is immutable once attached.");
+        }
+
+        Location = location;
+        ModifiedAtUtc = location.CapturedAtUtc;
     }
 }

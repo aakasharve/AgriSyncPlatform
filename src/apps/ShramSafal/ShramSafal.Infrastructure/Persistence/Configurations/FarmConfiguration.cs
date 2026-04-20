@@ -30,6 +30,28 @@ internal sealed class FarmConfiguration : IEntityTypeConfiguration<Farm>
             .HasColumnName("created_at_utc")
             .IsRequired();
 
+        builder.Property(x => x.ModifiedAtUtc)
+            .HasColumnName("modified_at_utc")
+            .IsRequired();
+
+        // Phase 2 multi-tenant fields. NOT NULL post-backfill (invariant I5).
+        builder.Property(x => x.OwnerAccountId)
+            .HasColumnName("owner_account_id")
+            .HasConversion(TypedIdConverters.OwnerAccountId)
+            .IsRequired();
+
+        builder.Property(x => x.FarmCode)
+            .HasColumnName("farm_code")
+            .HasMaxLength(12);
+
+        builder.HasIndex(x => x.ModifiedAtUtc);
+        builder.HasIndex(x => x.OwnerAccountId)
+            .HasDatabaseName("ix_farms_owner_account_id");
+        builder.HasIndex(x => x.FarmCode)
+            .IsUnique()
+            .HasDatabaseName("ux_farms_farm_code")
+            .HasFilter("farm_code IS NOT NULL");
+
         builder.Ignore(x => x.DomainEvents);
     }
 }

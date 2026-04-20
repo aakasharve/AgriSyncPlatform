@@ -1,11 +1,11 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Settings, Calendar, Droplets, SprayCan, Sprout, ChevronDown, ChevronRight, Save, Info, ArrowLeft, Layers, MapPin, Clock, User, Building2, Shield, Sparkles, CheckCircle2, AlertCircle } from 'lucide-react';
+import { Settings, Calendar, CalendarRange, Droplets, SprayCan, Sprout, ChevronDown, ChevronRight, Save, Info, ArrowLeft, Layers, MapPin, Clock, User, Building2, Shield, Sparkles, CheckCircle2, AlertCircle } from 'lucide-react';
 import { CropProfile, Plot, PlotScheduleInstance, CropScheduleTemplate, StageTemplate, PeriodicExpectation, StageOverride, ExpectationOverride, DailyLog, ResourceItem, PlannedTask } from '../types';
-import { getTemplateForCrop, calculateDayNumber, getCurrentStage, createInitialScheduleInstance, derivePlannedItemsForDay, getScheduleById } from '../domain/planning/PlanEngine';
-import { getSchedulesForCrop } from '../data/scheduleLibrary';
+import { getTemplateForCrop, calculateDayNumber, getCurrentStage, createInitialScheduleInstance, derivePlannedItemsForDay, getScheduleById } from '../features/scheduler/planning/ClientPlanEngine';
+import { getAllTemplates } from '../infrastructure/reference/TemplateCatalog';
 import { getEffectivePhaseAndDay, PhaseResult } from '../shared/utils/timelineUtils';
 import SchedulerTimeline from '../features/scheduler/components/SchedulerTimeline';
-import { getDateKey } from '../domain/system/DateKeyService';
+import { getDateKey } from '../core/domain/services/DateKeyService';
 import SlidingCropSelector from '../features/context/components/SlidingCropSelector';
 import ScheduleMaker from '../features/scheduler/components/ScheduleMaker';
 import ScheduleLibraryView from '../features/scheduler/components/ScheduleLibraryView';
@@ -14,6 +14,8 @@ import { financeSelectors } from '../features/finance/financeSelectors';
 import { MoneyChip } from '../features/finance/components/MoneyChip';
 import { MoneyLensDrawer } from '../features/finance/components/MoneyLensDrawer';
 import { FinanceFilters } from '../features/finance/finance.types';
+import OfflineEmptyState from '../shared/components/ui/OfflineEmptyState';
+import LineageRibbon from '../features/schedule-authoring/components/LineageRibbon';
 
 interface SchedulerPageProps {
     crops: CropProfile[];
@@ -25,6 +27,11 @@ interface SchedulerPageProps {
     onOpenTaskCreator?: () => void; // Phase 2: Task Creation
     onCloseDay?: () => void;
 }
+
+const canonicalCropCode = (value: string): string => {
+    const normalized = value.trim().toLowerCase().replace(/[^a-z0-9]+/g, '');
+    return normalized.endsWith('s') ? normalized.slice(0, -1) : normalized;
+};
 
 const SchedulerPage: React.FC<SchedulerPageProps> = ({
     crops,
@@ -48,6 +55,27 @@ const SchedulerPage: React.FC<SchedulerPageProps> = ({
     const [isDirty, setIsDirty] = useState(false);
     const [moneyLensOpen, setMoneyLensOpen] = useState(false);
     const [moneyLensFilters, setMoneyLensFilters] = useState<FinanceFilters>({});
+    const libraryTemplateCount = useMemo(() => {
+        const allowedCropCodes = new Set(crops.map(crop => canonicalCropCode(crop.name)));
+        const byCrop = new Map<string, number[]>();
+        getAllTemplates().forEach(template => {
+            const cropCode = canonicalCropCode(template.cropCode);
+            if (!allowedCropCodes.has(cropCode)) {
+                return;
+            }
+
+            const size = template.periodicExpectations.length + template.oneTimeExpectations.length;
+            const bucket = byCrop.get(cropCode) ?? [];
+            bucket.push(size);
+            byCrop.set(cropCode, bucket);
+        });
+
+        let total = 0;
+        byCrop.forEach(bucket => {
+            total += Math.min(3, bucket.length);
+        });
+        return total;
+    }, [crops]);
 
     // Derived Selection
     const activeCrop = crops.find(c => c.id === selectedCropId);
@@ -293,7 +321,15 @@ const SchedulerPage: React.FC<SchedulerPageProps> = ({
         return { mode: ov?.customFrequencyMode ?? tExp.frequencyMode, value: ov?.customFrequencyValue ?? tExp.frequencyValue, notes: tExp.notes };
     };
 
-    if (crops.length === 0) return <div className="p-8 text-center text-stone-400">No crops available.</div>;
+    if (crops.length === 0) return (
+        <div className="max-w-4xl mx-auto px-4 py-6 pb-24">
+            <OfflineEmptyState
+                icon={<CalendarRange size={40} className="text-slate-300" />}
+                title="No Schedules Yet"
+                message="Add crops and plots in Profile to create farming schedules."
+            />
+        </div>
+    );
 
     // Construct Preview Plot for Editing
     const previewEditingPlot = editingPlot && draftInstance ? { ...editingPlot, schedule: draftInstance } : editingPlot;
@@ -368,7 +404,7 @@ const SchedulerPage: React.FC<SchedulerPageProps> = ({
                         <div className="text-left leading-tight">
                             <span className="block text-sm font-black tracking-tight">LIBRARY</span>
                             <span className="text-[9px] font-bold uppercase tracking-widest opacity-60">
-                                {activeCrop ? `${getSchedulesForCrop(activeCrop.name).length} Options` : 'Templates'}
+                                {`${libraryTemplateCount} Options`}
                             </span>
                         </div>
                     </button>
@@ -470,6 +506,7 @@ const SchedulerPage: React.FC<SchedulerPageProps> = ({
                 <div className="max-w-3xl mx-auto">
                     <ScheduleLibraryView
                         crop={activeCrop}
+                        allCrops={crops}
                         adoptedScheduleId={activeCrop?.activeScheduleId || null}
                         onAdopt={handleAdoptSchedule}
                     />
@@ -519,6 +556,13 @@ const SchedulerPage: React.FC<SchedulerPageProps> = ({
                                         <h3 className="text-xl font-black tracking-tight leading-tight">
                                             {scheduleTemplate?.name || 'Active Schedule'}
                                         </h3>
+                                        <LineageRibbon
+                                            derivedFromTemplateId={(scheduleTemplate as Record<string, unknown> | null)?.['derivedFromTemplateId'] as string | null | undefined}
+                                            derivedFromName={(scheduleTemplate as Record<string, unknown> | null)?.['derivedFromName'] as string | null | undefined}
+                                            version={(scheduleTemplate as Record<string, unknown> | null)?.['version'] as number | undefined}
+                                            author={scheduleTemplate?.createdBy}
+                                            publishedAtUtc={(scheduleTemplate as Record<string, unknown> | null)?.['publishedAtUtc'] as string | null | undefined ?? scheduleTemplate?.publishedAt}
+                                        />
                                         {scheduleTemplate && (
                                             <div className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider mt-2 ${ownerBadge.bg} ${ownerBadge.color}`}>
                                                 {ownerBadge.icon}
@@ -556,7 +600,7 @@ const SchedulerPage: React.FC<SchedulerPageProps> = ({
                                         className="mt-4 w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl border border-white/20 bg-white/10 text-xs font-black uppercase tracking-wider hover:bg-white/20 transition-colors"
                                     >
                                         <Layers size={14} />
-                                        Library ({activeCrop ? getSchedulesForCrop(activeCrop.name).length : 0} schedules available)
+                                        Library ({libraryTemplateCount} schedules available)
                                     </button>
                                 </div>
 
@@ -576,10 +620,10 @@ const SchedulerPage: React.FC<SchedulerPageProps> = ({
                                             {todayPlan.plannedItems.map(item => (
                                                 <div key={item.id} className="flex items-center gap-3 p-3 rounded-xl bg-stone-50 border border-stone-100 hover:bg-stone-100/50 transition-colors">
                                                     <div className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 ${item.category === 'IRRIGATION' ? 'bg-blue-100 text-blue-600' :
-                                                            item.category === 'FERTIGATION' ? 'bg-amber-100 text-amber-600' :
-                                                                item.category === 'FOLIAR_SPRAY' ? 'bg-purple-100 text-purple-600' :
-                                                                    item.category === 'WEED_CONTROL' ? 'bg-green-100 text-green-600' :
-                                                                        'bg-stone-100 text-stone-600'
+                                                        item.category === 'FERTIGATION' ? 'bg-amber-100 text-amber-600' :
+                                                            item.category === 'FOLIAR_SPRAY' ? 'bg-purple-100 text-purple-600' :
+                                                                item.category === 'WEED_CONTROL' ? 'bg-green-100 text-green-600' :
+                                                                    'bg-stone-100 text-stone-600'
                                                         }`}>
                                                         {item.category === 'IRRIGATION' ? <Droplets size={16} /> :
                                                             item.category === 'FOLIAR_SPRAY' ? <SprayCan size={16} /> :
@@ -592,8 +636,8 @@ const SchedulerPage: React.FC<SchedulerPageProps> = ({
                                                         )}
                                                     </div>
                                                     <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-1 rounded-full ${item.type === 'ONE_TIME'
-                                                            ? 'bg-rose-50 text-rose-600 border border-rose-100'
-                                                            : 'bg-stone-100 text-stone-500'
+                                                        ? 'bg-rose-50 text-rose-600 border border-rose-100'
+                                                        : 'bg-stone-100 text-stone-500'
                                                         }`}>
                                                         {item.type === 'ONE_TIME' ? 'Milestone' : 'Routine'}
                                                     </span>
@@ -644,11 +688,11 @@ const SchedulerPage: React.FC<SchedulerPageProps> = ({
 
                                                 return (
                                                     <div key={stage.id} className={`flex items-center gap-3 px-3 py-2 rounded-xl transition-all ${isCurrent ? 'bg-emerald-50 border border-emerald-200' :
-                                                            isPast ? 'opacity-50' : ''
+                                                        isPast ? 'opacity-50' : ''
                                                         }`}>
                                                         <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-black flex-shrink-0 ${isCurrent ? 'bg-emerald-500 text-white shadow-md shadow-emerald-500/30' :
-                                                                isPast ? 'bg-stone-300 text-white' :
-                                                                    'bg-stone-100 text-stone-400'
+                                                            isPast ? 'bg-stone-300 text-white' :
+                                                                'bg-stone-100 text-stone-400'
                                                             }`}>
                                                             {isPast ? '✓' : idx + 1}
                                                         </div>

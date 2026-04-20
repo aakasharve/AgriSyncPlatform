@@ -52,6 +52,7 @@ export interface Translations {
         selectCropFirst: string;
         tapToSelect: string;
         autoStopping: string;
+        discardRecording: string;
         tapToStop: string;
         selectPlotAbove: string;
         startLogging: string;
@@ -313,6 +314,7 @@ export const translations: Record<Language, Translations> = {
             selectCropFirst: 'First Choose the crop or plot where you worked today',
             tapToSelect: 'Tap to Select',
             autoStopping: 'Auto-stopping in {seconds}s...',
+            discardRecording: 'Discard',
             tapToStop: 'Tap icon to stop',
             selectPlotAbove: 'Select a plot using the pills above',
             startLogging: 'Start Logging',
@@ -561,6 +563,7 @@ export const translations: Record<Language, Translations> = {
             selectCropFirst: 'प्रथम आज काम केलेले पीक किंवा प्लॉट निवडा',
             tapToSelect: 'निवडण्यासाठी दाबा',
             autoStopping: '{seconds} सेकंदात आपोआप थांबेल...',
+            discardRecording: 'रद्द करा',
             tapToStop: 'थांबवण्यासाठी दाबा',
             selectPlotAbove: 'वरील गोळ्या वापरून प्लॉट निवडा',
             startLogging: 'नोंद सुरू करा',

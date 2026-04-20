@@ -1,10 +1,10 @@
 import React, { useMemo, useState } from 'react';
 import { AppRoute } from '../types';
 import { financeSelectors } from '../features/finance/financeSelectors';
-import { financeService } from '../features/finance/financeService';
 import { FinanceManagerNav } from '../features/finance/components/FinanceManagerNav';
 import { FinanceFilters } from '../features/finance/finance.types';
 import { TrendingUp, TrendingDown, Calendar, Filter, PieChart, Info } from 'lucide-react';
+import OfflineEmptyState from '../shared/components/ui/OfflineEmptyState';
 
 interface ReportsPageProps {
     currentRoute: AppRoute;
@@ -33,7 +33,7 @@ const ReportsPage: React.FC<ReportsPageProps> = ({ currentRoute, onNavigate }) =
     }, [timeRange]);
 
     const events = useMemo(() => {
-        return financeService.getEffectiveMoneyEvents(filters);
+        return financeSelectors.getEffectiveMoneyEvents(filters);
     }, [filters]);
 
     // Financials
@@ -69,8 +69,8 @@ const ReportsPage: React.FC<ReportsPageProps> = ({ currentRoute, onNavigate }) =
                         key={r}
                         onClick={() => setTimeRange(r)}
                         className={`px-4 py-2 rounded-full text-xs font-bold whitespace-nowrap transition-colors ${timeRange === r
-                                ? 'bg-slate-800 text-white'
-                                : 'bg-white text-slate-500 border border-slate-200 hover:bg-slate-50'
+                            ? 'bg-slate-800 text-white'
+                            : 'bg-white text-slate-500 border border-slate-200 hover:bg-slate-50'
                             }`}
                     >
                         {r.replace('_', ' ')}
@@ -149,7 +149,11 @@ const ReportsPage: React.FC<ReportsPageProps> = ({ currentRoute, onNavigate }) =
                         </div>
                     ))}
                     {expenseByCategory.length === 0 && (
-                        <div className="text-center py-8 text-slate-400 text-sm">No expenses in this period</div>
+                        <OfflineEmptyState
+                            icon={<PieChart size={32} className="text-slate-300" />}
+                            title="Reports Need Data"
+                            message="Add expenses or income records to see financial breakdown here."
+                        />
                     )}
                 </div>
             </div>

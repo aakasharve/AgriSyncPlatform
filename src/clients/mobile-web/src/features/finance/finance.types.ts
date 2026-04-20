@@ -112,6 +112,7 @@ export interface MoneySourcePayload {
     notes?: string;
     attachments?: string[];
     createdByUserId?: string;
+    location?: import('../../infrastructure/api/AgriSyncClient').LocationDto | null;
 }
 
 export interface FinancePipelineBucket {

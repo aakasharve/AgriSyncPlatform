@@ -6,7 +6,7 @@ import {
 import {
     VocabDatabase, VocabMapping, loadVocabDB,
     saveVocabDB, addApprovedMapping
-} from '../../../services/vocabLearner';
+} from '../vocab/vocabStore';
 import Button from '../../../shared/components/ui/Button';
 
 const VocabManager: React.FC = () => {

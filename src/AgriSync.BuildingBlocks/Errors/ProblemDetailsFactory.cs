@@ -7,6 +7,19 @@ public static class ProblemDetailsFactory
 {
     public static ProblemDetails Create(Exception exception, string traceId)
     {
+        if (exception is UnauthorizedAccessException unauthorizedAccessException)
+        {
+            return new ProblemDetails
+            {
+                Title = "forbidden",
+                Detail = string.IsNullOrWhiteSpace(unauthorizedAccessException.Message)
+                    ? "You are not allowed to perform this action."
+                    : unauthorizedAccessException.Message,
+                Status = StatusCodes.Status403Forbidden,
+                Extensions = { ["traceId"] = traceId }
+            };
+        }
+
         if (exception is AppException appException)
         {
             return new ProblemDetails

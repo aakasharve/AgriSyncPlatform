@@ -4,4 +4,7 @@ public sealed record CreatePlotCommand(
     Guid FarmId,
     string Name,
     decimal AreaInAcres,
-    Guid? PlotId = null);
+    Guid ActorUserId,
+    Guid? PlotId = null,
+    string? ActorRole = null,
+    string? ClientCommandId = null);

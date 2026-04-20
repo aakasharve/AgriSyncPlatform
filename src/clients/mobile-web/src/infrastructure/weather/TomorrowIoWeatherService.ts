@@ -2,27 +2,18 @@
 import { WeatherPort } from '../../application/ports/WeatherPort';
 import { PlotGeo } from '../../domain/types';
 import { WeatherStamp, DailyForecast } from '../../features/weather/weather.types';
-import { getDateKey } from '../../domain/system/DateKeyService';
+import { getDateKey } from '../../core/domain/services/DateKeyService';
 import { idGenerator } from '../../core/domain/services/IdGenerator';
 import { systemClock } from '../../core/domain/services/Clock';
 
 const MOCK_DELAY_MS = 600;
 
 class TomorrowIoWeatherService implements WeatherPort {
-    private apiKey: string;
-    private baseUrl = 'https://api.tomorrow.io/v4/weather';
 
     // Simple in-memory cache: "lat,lon,hour" -> Promise<WeatherStamp>
     // Storing Promise to deduplicate simultaneous flights
     private cache = new Map<string, { stamp: WeatherStamp, expiresAt: number }>();
     private forecastCache = new Map<string, { forecast: DailyForecast[], expiresAt: number }>();
-
-    constructor() {
-        this.apiKey = import.meta.env.VITE_WEATHER_API_KEY || '';
-        if (!this.apiKey) {
-            console.warn("⚠️ WeatherService: VITE_WEATHER_API_KEY is missing. Using MOCK mode.");
-        }
-    }
 
     private getCacheKey(geo: PlotGeo): string {
         // Cache bucketed by roughly 1km (3 decimal places) and current hour
@@ -32,8 +23,6 @@ class TomorrowIoWeatherService implements WeatherPort {
     }
 
     async getCurrentWeather(geo: PlotGeo): Promise<WeatherStamp> {
-        if (!this.apiKey) return this.getMockWeather(geo);
-
         const key = this.getCacheKey(geo);
         const cached = this.cache.get(key);
         const now = systemClock.nowEpoch();
@@ -42,7 +31,7 @@ class TomorrowIoWeatherService implements WeatherPort {
             return cached.stamp;
         }
 
-        const stamp = await this.fetchRealWeather(geo);
+        const stamp = await this.getMockWeather(geo);
 
         // Cache for 1 hour
         this.cache.set(key, { stamp, expiresAt: now + 3600 * 1000 });
@@ -50,8 +39,6 @@ class TomorrowIoWeatherService implements WeatherPort {
     }
 
     async getForecast(geo: PlotGeo): Promise<DailyForecast[]> {
-        if (!this.apiKey) return this.getMockForecast(geo);
-
         const key = this.getCacheKey(geo);
         const cached = this.forecastCache.get(key);
         const now = systemClock.nowEpoch();
@@ -60,73 +47,11 @@ class TomorrowIoWeatherService implements WeatherPort {
             return cached.forecast;
         }
 
-        const forecast = await this.fetchRealForecast(geo);
+        const forecast = await this.getMockForecast(geo);
 
         // Cache for 3 hours
         this.forecastCache.set(key, { forecast, expiresAt: now + 3 * 3600 * 1000 });
         return forecast;
-    }
-
-    private async fetchRealWeather(geo: PlotGeo): Promise<WeatherStamp> {
-        try {
-            const url = `${this.baseUrl}/realtime?location=${geo.lat},${geo.lon}&apikey=${this.apiKey}`;
-            const res = await fetch(url);
-            if (!res.ok) throw new Error(`API Error: ${res.status}`);
-
-            const json = await res.json();
-            const vals = json.data.values;
-            const { text, icon } = this.getCodeLabel(vals.weatherCode);
-
-            return {
-                id: `wx_real_${idGenerator.generate()}`,
-                plotId: 'unknown',
-                timestampLocal: systemClock.nowISO(),
-                timestampProvider: json.data.time || systemClock.nowISO(),
-                provider: 'tomorrow.io',
-                tempC: vals.temperature,
-                humidity: vals.humidity,
-                windKph: vals.windSpeed * 3.6,
-                precipMm: vals.precipitationIntensity,
-                cloudCoverPct: vals.cloudCover,
-                conditionText: text,
-                iconCode: icon,
-                rainProbNext6h: vals.precipitationProbability,
-                windGustKph: (vals.windGust || vals.windSpeed) * 3.6,
-                soilMoistureVolumetric0To10: vals.soilMoistureVolumetric0To10 || 0,
-                uvIndex: vals.uvIndex
-            };
-        } catch (e) {
-            console.error("WeatherService Fetch Failed", e);
-            return this.getMockWeather(geo);
-        }
-    }
-
-    private async fetchRealForecast(geo: PlotGeo): Promise<DailyForecast[]> {
-        try {
-            const url = `${this.baseUrl}/forecast?location=${geo.lat},${geo.lon}&timesteps=1d&apikey=${this.apiKey}`;
-            const res = await fetch(url);
-            if (!res.ok) throw new Error(`API Error: ${res.status}`);
-
-            const json = await res.json();
-            const daily = json.timelines.daily;
-
-            return daily.map((d: any) => {
-                const vals = d.values;
-                const { text } = this.getCodeLabel(vals.weatherCodeMax);
-                return {
-                    date: d.time.split('T')[0],
-                    tempMin: vals.temperatureMin,
-                    tempMax: vals.temperatureMax,
-                    rainMm: vals.precipitationSum,
-                    windSpeed: vals.windSpeedAvg * 3.6,
-                    humidity: vals.humidityAvg,
-                    condition: text
-                };
-            }).slice(0, 7);
-        } catch (e) {
-            console.error("WeatherService Forecast Failed", e);
-            return this.getMockForecast(geo);
-        }
     }
 
     // --- MOCKS ---
@@ -140,7 +65,7 @@ class TomorrowIoWeatherService implements WeatherPort {
             timestampLocal: systemClock.nowISO(),
             timestampProvider: systemClock.nowISO(),
             provider: 'mock',
-            tempC: 28 + Math.random() * 5,
+            tempC: Number((28 + Math.random() * 5).toFixed(1)),
             humidity: isRainy ? 85 : 45,
             windKph: 12,
             precipMm: isRainy ? 5.5 : 0,
@@ -224,7 +149,7 @@ class TomorrowIoWeatherService implements WeatherPort {
         // 4. HEAT SPIKE (Absolute)
         if (current.tempC >= THRESHOLDS.TEMP_HEAT_SPIKE) {
             return this.createEvent(current, 'HEAT_SPIKE', 'MEDIUM',
-                `Temperature is very high: ${current.tempC}°C`);
+                `Temperature is very high: ${current.tempC.toFixed(1)}°C`);
         }
 
         // 5. CONDITION CHANGE

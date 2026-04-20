@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none">
+  <rect width="64" height="64" rx="16" fill="#060F07"/>
+  <path d="M12 40C20 32 28 29 36 30C44 31 49 36 52 46H12V40Z" fill="url(#soil)"/>
+  <path d="M17 39C24 28 33 20 42 18C37 27 31 35 23 42" stroke="url(#leaf)" stroke-width="5" stroke-linecap="round"/>
+  <circle cx="46" cy="17" r="5" fill="#F59E0B" opacity=".95"/>
+  <defs>
+    <linearGradient id="leaf" x1="17" y1="42" x2="42" y2="18" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#34D399"/>
+      <stop offset="1" stop-color="#10B981"/>
+    </linearGradient>
+    <linearGradient id="soil" x1="12" y1="46" x2="52" y2="30" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#3F2A14"/>
+      <stop offset="1" stop-color="#6E4617"/>
+    </linearGradient>
+  </defs>
+</svg>

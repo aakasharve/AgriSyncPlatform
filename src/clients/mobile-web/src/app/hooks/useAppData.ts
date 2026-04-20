@@ -4,16 +4,14 @@ import {
     ResourceItem, Person, VerificationStatus, OperatorCapability
 } from '../../types';
 import { useDataSource } from '../providers/DataSourceProvider';
-import {
-    generateDemoPlannedTasks,
-    generateDemoHarvestSessions,
-    generateDemoProcurementExpenses
-} from '../../features/demo/DemoDataService';
 import { HarvestSession } from '../../features/logs/harvest.types';
 import { ProcurementExpense } from '../../features/procurement/procurement.types';
-import { RAMUS_FARM } from '../../data/farmData';
 import { backgroundSyncWorker } from '../../infrastructure/sync/BackgroundSyncWorker';
 import { useAuth } from '../providers/AuthProvider';
+import { generateDemoHarvestSessions, generateDemoPlannedTasks, generateDemoProcurementExpenses } from '../../features/demo/DemoDataService';
+import { getDatabase } from '../../infrastructure/storage/DexieDatabase';
+
+const PLANNED_TASKS_META_KEY = 'agrisync_local_planned_tasks_v1';
 
 export interface UseAppDataResult {
     // State
@@ -160,12 +158,38 @@ export const useAppData = (_props?: UseAppDataProps): UseAppDataResult => {
     useEffect(() => {
         let mounted = true;
 
+        const hydrateRealData = async () => {
+            const db = getDatabase();
+            const loadedCrops = await dataSource.crops.getAll();
+            if (!mounted) return;
+
+            setCrops(loadedCrops.length > 0 ? loadedCrops : []);
+            setRealCrops(loadedCrops);
+
+            const loadedProfile = await dataSource.profile.get();
+            if (!mounted) return;
+            if (loadedProfile && loadedProfile.name) {
+                setFarmerProfile(loadedProfile);
+            }
+
+            const loadedLogs = await dataSource.logs.getAll();
+            if (!mounted) return;
+            setHistory(loadedLogs);
+
+            const plannedTasksMeta = await db.appMeta.get(PLANNED_TASKS_META_KEY);
+            if (!mounted) return;
+            setPlannedTasks(Array.isArray(plannedTasksMeta?.value) ? plannedTasksMeta.value as PlannedTask[] : []);
+            setHarvestSessions([]);
+            setProcurementExpenses([]);
+        };
+
         const loadData = async () => {
             try {
                 if (isDemoMode) {
-                    // DEMO MODE: Use RAMUS_FARM demo data
+                    const loadedCrops = await dataSource.crops.getAll();
+
                     if (mounted) {
-                        setCrops(RAMUS_FARM);
+                        setCrops(loadedCrops);
                         setPlannedTasks(generateDemoPlannedTasks());
                         setHarvestSessions(generateDemoHarvestSessions());
                         setProcurementExpenses(generateDemoProcurementExpenses());
@@ -185,40 +209,53 @@ export const useAppData = (_props?: UseAppDataProps): UseAppDataResult => {
                         await backgroundSyncWorker.triggerNow();
                     }
 
-                    // REAL MODE: Load user's actual data (may be empty)
-                    const loadedCrops = await dataSource.crops.getAll();
-                    if (mounted) {
-                        // Only use loaded crops if they exist, otherwise empty
-                        setCrops(loadedCrops.length > 0 ? loadedCrops : []);
-                        setRealCrops(loadedCrops);
-                    }
-
-                    // Load real profile
-                    const loadedProfile = await dataSource.profile.get();
-                    if (mounted && loadedProfile && loadedProfile.name) {
-                        setFarmerProfile(loadedProfile);
-                    }
-
-                    // Load real logs
-                    const loadedLogs = await dataSource.logs.getAll();
-                    if (mounted) setHistory(loadedLogs);
-
-                    // Clear demo aux data in real mode
-                    if (mounted) {
-                        setPlannedTasks([]);
-                        setHarvestSessions([]);
-                        setProcurementExpenses([]);
-                    }
+                    await hydrateRealData();
                 }
             } catch (err) {
                 console.error("Failed to load app data", err);
             }
         };
 
+        const handleSyncReconciled = () => {
+            if (!isDemoMode) {
+                void hydrateRealData();
+            }
+        };
+
+        if (typeof window !== 'undefined') {
+            window.addEventListener('agrisync:sync-reconciled', handleSyncReconciled);
+        }
+
         loadData();
 
-        return () => { mounted = false; };
+        return () => {
+            mounted = false;
+            if (typeof window !== 'undefined') {
+                window.removeEventListener('agrisync:sync-reconciled', handleSyncReconciled);
+            }
+        };
     }, [dataSource, isDemoMode, isAuthenticated]);
+
+    useEffect(() => {
+        if (isDemoMode) {
+            return;
+        }
+
+        const persistPlannedTasks = async () => {
+            try {
+                const db = getDatabase();
+                await db.appMeta.put({
+                    key: PLANNED_TASKS_META_KEY,
+                    value: plannedTasks,
+                    updatedAt: new Date().toISOString(),
+                });
+            } catch (error) {
+                console.error('Failed to persist planned tasks', error);
+            }
+        };
+
+        void persistPlannedTasks();
+    }, [plannedTasks, isDemoMode]);
 
     // --- HANDLERS ---
 
@@ -227,13 +264,26 @@ export const useAppData = (_props?: UseAppDataProps): UseAppDataResult => {
         await dataSource.crops.save(newCrops);
     };
 
-    const handleAddPerson = (person: Person) => {
-        // TODO: Persist to generic 'PeopleRepository'
-        console.log("Adding person", person);
+    const handleAddPerson = (person: any) => {
+        setFarmerProfile(prev => ({
+            ...prev,
+            operators: [...(prev.operators || []), {
+                id: person.id || `op_${Date.now()}`,
+                name: person.name,
+                role: person.role === 'SECONDARY_OWNER' ? 'SECONDARY_OWNER' : 'WORKER',
+                phone: person.phone,
+                capabilities: [OperatorCapability.LOG_DATA],
+                isVerifier: false,
+                isActive: true
+            }]
+        }));
     };
 
     const handleDeletePerson = (id: string) => {
-        console.log("Deleting person", id);
+        setFarmerProfile(prev => ({
+            ...prev,
+            operators: (prev.operators || []).filter(op => op.id !== id)
+        }));
     };
 
     const handleSaveTask = (task: PlannedTask) => {
@@ -252,7 +302,9 @@ export const useAppData = (_props?: UseAppDataProps): UseAppDataResult => {
 
     return {
         isDemoMode,
-        setIsDemoMode: (val) => setDemoMode(val), // Adapts provider to hook interface
+        setIsDemoMode: (val: boolean) => {
+            void setDemoMode(val); // Fire and forget promise handling
+        }, // Adapts provider to hook interface
         crops, setCrops,
         farmerProfile, setFarmerProfile,
 

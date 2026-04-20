@@ -3,6 +3,7 @@ using AgriSync.BuildingBlocks.Results;
 using AgriSync.SharedKernel.Contracts.Ids;
 using ShramSafal.Application.Contracts.Dtos;
 using ShramSafal.Application.Ports;
+using ShramSafal.Domain.Audit;
 using ShramSafal.Domain.Common;
 
 namespace ShramSafal.Application.UseCases.CropCycles.CreateCropCycle;
@@ -10,7 +11,8 @@ namespace ShramSafal.Application.UseCases.CropCycles.CreateCropCycle;
 public sealed class CreateCropCycleHandler(
     IShramSafalRepository repository,
     IIdGenerator idGenerator,
-    IClock clock)
+    IClock clock,
+    IEntitlementPolicy entitlementPolicy)
 {
     public async Task<Result<CropCycleDto>> HandleAsync(CreateCropCycleCommand command, CancellationToken ct = default)
     {
@@ -18,6 +20,7 @@ public sealed class CreateCropCycleHandler(
 
         if (command.FarmId == Guid.Empty ||
             command.PlotId == Guid.Empty ||
+            command.ActorUserId == Guid.Empty ||
             string.IsNullOrWhiteSpace(command.CropName) ||
             string.IsNullOrWhiteSpace(command.Stage))
         {
@@ -41,6 +44,34 @@ public sealed class CreateCropCycleHandler(
             return Result.Failure<CropCycleDto>(ShramSafalErrors.PlotNotFound);
         }
 
+        var canWriteFarm = await repository.IsUserMemberOfFarmAsync(command.FarmId, command.ActorUserId, ct);
+        if (!canWriteFarm)
+        {
+            return Result.Failure<CropCycleDto>(ShramSafalErrors.Forbidden);
+        }
+
+        // Phase 5 entitlement gate (PaidFeature.CreatePlot tier — crop
+        // cycles live in the same setup-level entitlement as plots).
+        var gate = await EntitlementGate.CheckAsync<CropCycleDto>(
+            entitlementPolicy, new UserId(command.ActorUserId), farmId,
+            PaidFeature.CreatePlot, ct);
+        if (gate is not null) return gate;
+
+        var requestedEndDate = command.EndDate ?? DateOnly.MaxValue;
+        var overlappingCycleExists = (await repository.GetCropCyclesByPlotIdAsync(command.PlotId, ct))
+            .Where(existing => !command.CropCycleId.HasValue || existing.Id != command.CropCycleId.Value)
+            .Any(existing =>
+            {
+                var existingEndDate = existing.EndDate ?? DateOnly.MaxValue;
+                return command.StartDate <= existingEndDate && existing.StartDate <= requestedEndDate;
+            });
+
+        if (overlappingCycleExists)
+        {
+            return Result.Failure<CropCycleDto>(ShramSafalErrors.CropCycleOverlap);
+        }
+
+        var nowUtc = clock.UtcNow;
         var cycle = Domain.Crops.CropCycle.Create(
             command.CropCycleId ?? idGenerator.New(),
             command.FarmId,
@@ -49,9 +80,30 @@ public sealed class CreateCropCycleHandler(
             command.Stage,
             command.StartDate,
             command.EndDate,
-            clock.UtcNow);
+            nowUtc);
 
         await repository.AddCropCycleAsync(cycle, ct);
+        await repository.AddAuditEventAsync(
+            AuditEvent.Create(
+                command.FarmId,
+                "CropCycle",
+                cycle.Id,
+                "Created",
+                command.ActorUserId,
+                command.ActorRole ?? "unknown",
+                new
+                {
+                    cycle.Id,
+                    command.FarmId,
+                    command.PlotId,
+                    cycle.CropName,
+                    cycle.Stage,
+                    cycle.StartDate,
+                    cycle.EndDate
+                },
+                command.ClientCommandId,
+                nowUtc),
+            ct);
         await repository.SaveChangesAsync(ct);
 
         return Result.Success(cycle.ToDto());

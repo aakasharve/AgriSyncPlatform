@@ -5,41 +5,23 @@ import {
     DetailedWeather, WeatherEvent, WeatherReaction, ResourceItem,
     FarmContext, LogScope, AgriLogResponse, LogVerificationStatus
 } from '../../types';
-
-// Page Imports
-import ProfilePage from '../../pages/ProfilePage';
-import SettingsPage from '../../pages/SettingsPage';
-import SchedulerPage from '../../pages/SchedulerPage';
-import ProcurementPage from '../../pages/ProcurementPage';
-import HarvestIncomePage from '../../pages/HarvestIncomePage';
-import ReflectPage from '../../pages/ReflectPage';
-import TestE2EPage from '../../pages/TestE2EPage';
-import { ComparePage } from '../../pages/ComparePage';
-import FinanceManagerHome from '../../pages/FinanceManagerHome';
-import LedgerPage from '../../pages/LedgerPage';
-import PriceBookPage from '../../pages/PriceBookPage';
-import ReviewInboxPage from '../../pages/ReviewInboxPage';
-import ReportsPage from '../../pages/ReportsPage';
-import FinanceSettingsPage from '../../pages/FinanceSettingsPage';
-import CropSelector from '../../features/context/components/CropSelector';
+import CropSelector, { CropSymbol } from '../../features/context/components/CropSelector';
 import InputMethodToggle from '../../shared/components/ui/InputMethodToggle';
 import AudioRecorder from '../../features/voice/components/AudioRecorder';
 import ManualEntry from '../../features/logs/components/ManualEntry';
 import DailyLogCard from '../../features/logs/components/DailyLogCard';
-import TaskCreationSheet from '../../features/scheduler/components/TaskCreationSheet';
-import { Leaf } from 'lucide-react';
+import { Leaf, Droplets, Users, Package, Tractor, Sprout } from 'lucide-react';
 import { getSegmentVisual } from '../../shared/utils/uiUtils'; // We might need to extract this helper too
-import { getDateKey } from '../../domain/system/DateKeyService';
+import { getDateKey } from '../domain/services/DateKeyService';
 import { buildTimelineEntries } from '../../services/transcriptTimelineService';
-import LogWizardContainer from '../../features/logs/components/wizard/LogWizardContainer';
-import ReviewInboxSheet from '../../features/logs/components/ReviewInboxSheet';
-import { QuickLogSheet } from '../../features/logs/components/QuickLogSheet';
 import WeatherWidget from '../../features/weather/components/WeatherWidget';
 import {
     computeDayState,
     formatCurrencyINR
 } from '../../shared/utils/dayState';
+import { hapticFeedback } from '../../shared/utils/haptics';
 import { financeSelectors } from '../../features/finance/financeSelectors';
+import { getCropTheme } from '../../shared/utils/colorTheme';
 import {
     useAppCommandsState,
     useAppDataState,
@@ -51,6 +33,30 @@ import {
     useAppVoiceState,
     useAppWeatherState
 } from '../../app/context/AppFeatureContexts';
+
+const ProfilePage = React.lazy(() => import('../../pages/ProfilePage'));
+const SettingsPage = React.lazy(() => import('../../pages/SettingsPage'));
+const SchedulerPage = React.lazy(() => import('../../pages/SchedulerPage'));
+const ProcurementPage = React.lazy(() => import('../../pages/ProcurementPage'));
+const HarvestIncomePage = React.lazy(() => import('../../pages/HarvestIncomePage'));
+const ReflectPage = React.lazy(() => import('../../pages/ReflectPage'));
+const TestE2EPage = React.lazy(() => import('../../pages/TestE2EPage'));
+const ComparePage = React.lazy(() => import('../../pages/ComparePage').then(module => ({ default: module.ComparePage })));
+const FinanceManagerHome = React.lazy(() => import('../../pages/FinanceManagerHome'));
+const LedgerPage = React.lazy(() => import('../../pages/LedgerPage'));
+const PriceBookPage = React.lazy(() => import('../../pages/PriceBookPage'));
+const ReviewInboxPage = React.lazy(() => import('../../pages/ReviewInboxPage'));
+const ReportsPage = React.lazy(() => import('../../pages/ReportsPage'));
+const FinanceSettingsPage = React.lazy(() => import('../../pages/FinanceSettingsPage'));
+const AdminAiOpsPage = React.lazy(() => import('../../features/admin/ai/AdminAiOpsPage').then(module => ({ default: module.AdminAiOpsPage })));
+const AdminOpsPage = React.lazy(() => import('../../features/admin/ops/AdminOpsPage').then(module => ({ default: module.AdminOpsPage })));
+const ReferralsPage = React.lazy(() => import('../../pages/ReferralsPage'));
+const TaskCreationSheet = React.lazy(() => import('../../features/scheduler/components/TaskCreationSheet'));
+const ReviewInboxSheet = React.lazy(() => import('../../features/logs/components/ReviewInboxSheet'));
+const QuickLogSheet = React.lazy(() => import('../../features/logs/components/QuickLogSheet').then(module => ({ default: module.QuickLogSheet })));
+const OnboardingPermissionsPage = React.lazy(() => import('../../pages/OnboardingPermissionsPage'));
+const QrDemoPage = React.lazy(() => import('../../pages/QrDemoPage'));
+const AttentionPage = React.lazy(() => import('../../features/attention/pages/AttentionPage'));
 
 type FeedStatusTone = 'pending' | 'rejected' | 'approved';
 
@@ -136,8 +142,11 @@ const getSummaryLines = (log: DailyLog): string[] => {
     }
 
     const firstObservation = log.observations?.[0]?.textCleaned || log.observations?.[0]?.textRaw;
-    if (firstObservation && lines.length < 2) {
-        lines.push(`Note: ${truncateLine(firstObservation, 60)}`);
+    const firstActivityNote = log.cropActivities.find(activity => activity.notes)?.notes;
+    const firstIrrigationNote = log.irrigation.find(event => event.notes)?.notes;
+    const firstNote = firstObservation || firstActivityNote || firstIrrigationNote;
+    if (firstNote && lines.length < 2) {
+        lines.push(`Note: ${truncateLine(firstNote, 60)}`);
     }
 
     lines.push(
@@ -146,6 +155,12 @@ const getSummaryLines = (log: DailyLog): string[] => {
 
     return lines.slice(0, 3).map(line => truncateLine(line));
 };
+
+const RouteLoader: React.FC = () => (
+    <div className="flex min-h-[40vh] items-center justify-center text-sm font-semibold text-stone-400">
+        Loading...
+    </div>
+);
 
 const AppRouter: React.FC = () => {
     const navigation = useAppNavigationState();
@@ -156,6 +171,14 @@ const AppRouter: React.FC = () => {
     const weather = useAppWeatherState();
     const trust = useAppTrustState();
     const { handleReset, lastSavedLogSummary, lastSavedLogIds } = useAppUiRuntime();
+    
+    // permissions state
+    const [permissionsGranted, setPermissionsGranted] = React.useState<boolean>(() => {
+        if (typeof window !== 'undefined') {
+            return localStorage.getItem('shramsafal_permissions_granted') === 'true';
+        }
+        return true;
+    });
     const {
         getTodayCounts,
         getContextColorIndicator
@@ -205,8 +228,6 @@ const AppRouter: React.FC = () => {
     const handleVerifyLog = trust.handleVerifyLog;
     const history = isDemoMode ? mockHistory : realHistory;
 
-    // Sathi Wizard State
-    const [showLogWizard, setShowLogWizard] = React.useState(false);
     // DFES Phase 0: Review Inbox State
     const [showReviewInbox, setShowReviewInbox] = React.useState(false);
     // DFES: QuickLogSheet State (INT-3)
@@ -385,7 +406,16 @@ const AppRouter: React.FC = () => {
         window.history.replaceState({}, '', nextUrl);
     }, [setCurrentRoute, setMainView, todayDayState.unverifiedCount]);
 
+    if (!permissionsGranted) {
+        return (
+            <React.Suspense fallback={<RouteLoader />}>
+                <OnboardingPermissionsPage onComplete={() => setPermissionsGranted(true)} />
+            </React.Suspense>
+        );
+    }
+
     return (
+        <React.Suspense fallback={<RouteLoader />}>
         <div className="relative w-full">
             {currentRoute === 'profile' && (
                 <div className="animate-in fade-in slide-in-from-left-4 duration-300">
@@ -403,6 +433,8 @@ const AppRouter: React.FC = () => {
                             setCurrentRoute('schedule');
                         }}
                         onOpenFinanceManager={() => setCurrentRoute('finance-manager')}
+                        onOpenReferrals={() => setCurrentRoute('referrals')}
+                        onOpenQrDemo={() => setCurrentRoute('qr-demo')}
                     />
                 </div>
             )}
@@ -410,7 +442,25 @@ const AppRouter: React.FC = () => {
 
             {currentRoute === 'settings' && (
                 <div className="animate-in fade-in slide-in-from-right-4 duration-300">
-                    <SettingsPage isDemoMode={isDemoMode} onToggleDemo={setIsDemoMode} defaults={ledgerDefaults} onUpdateDefaults={setLedgerDefaults} mockHistory={mockHistory} crops={crops} />
+                    <SettingsPage defaults={ledgerDefaults} onUpdateDefaults={setLedgerDefaults} crops={crops} />
+                </div>
+            )}
+
+            {currentRoute === 'ai-admin' && (
+                <div className="animate-in fade-in slide-in-from-right-4 duration-300">
+                    <AdminAiOpsPage onBack={() => setCurrentRoute('settings')} />
+                </div>
+            )}
+
+            {currentRoute === 'ops-admin' && (
+                <div className="animate-in fade-in slide-in-from-right-4 duration-300">
+                    <AdminOpsPage onBack={() => setCurrentRoute('settings')} />
+                </div>
+            )}
+
+            {currentRoute === 'referrals' && (
+                <div className="animate-in fade-in slide-in-from-right-4 duration-300">
+                    <ReferralsPage />
                 </div>
             )}
 
@@ -491,6 +541,18 @@ const AppRouter: React.FC = () => {
                     currentRoute={currentRoute}
                     onNavigate={setCurrentRoute}
                 />
+            )}
+
+            {currentRoute === 'qr-demo' && (
+                <div className="animate-in fade-in slide-in-from-right-4 duration-300">
+                    <QrDemoPage onBack={() => setCurrentRoute('profile')} />
+                </div>
+            )}
+
+            {currentRoute === 'attention' && (
+                <div className="animate-in fade-in slide-in-from-right-4 duration-300">
+                    <AttentionPage />
+                </div>
             )}
 
             {currentRoute === 'main' && mainView === 'reflect' && (
@@ -753,22 +815,24 @@ const AppRouter: React.FC = () => {
 
                                 <div className={`transition-all duration-500 ${!isContextReady ? 'opacity-90' : ''}`}>
                                     {mode === 'voice' ? (
-                                        <AudioRecorder
-                                            onAudioCaptured={handleAudioReady}
-                                            onTextCaptured={handleTextReady}
-                                            disabled={!isContextReady}
-                                            externalError={error}
-                                            transcript={errorTranscript}
-                                            suggestInteraction={isContextReady}
-                                            onRequestContextSelection={() => {
-                                                const el = document.getElementById('crop-selector-container');
-                                                if (el) {
-                                                    el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                                                    el.classList.add('ring-4', 'ring-emerald-200', 'rounded-xl');
-                                                    setTimeout(() => el.classList.remove('ring-4', 'ring-emerald-200', 'rounded-xl'), 1500);
-                                                }
-                                            }}
-                                        />
+                                        <>
+                                            <AudioRecorder
+                                                onAudioCaptured={handleAudioReady}
+                                                onTextCaptured={handleTextReady}
+                                                disabled={!isContextReady}
+                                                externalError={error}
+                                                transcript={errorTranscript}
+                                                suggestInteraction={isContextReady}
+                                                onRequestContextSelection={() => {
+                                                    const el = document.getElementById('crop-selector-container');
+                                                    if (el) {
+                                                        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                                                        el.classList.add('ring-4', 'ring-emerald-200', 'rounded-xl');
+                                                        setTimeout(() => el.classList.remove('ring-4', 'ring-emerald-200', 'rounded-xl'), 1500);
+                                                    }
+                                                }}
+                                            />
+                                        </>
                                     ) : (
                                         hasActiveLogContext ? (
                                             <ManualEntry
@@ -866,6 +930,7 @@ const AppRouter: React.FC = () => {
                                                     return (
                                                         <DailyLogCard
                                                             key={log.id}
+                                                            logId={log.id}
                                                             workDone={getPrimaryWorkDone(log)}
                                                             plotName={contextDetails.plotName}
                                                             cropName={contextDetails.cropName}
@@ -927,22 +992,62 @@ const AppRouter: React.FC = () => {
                             <div className="absolute -top-10 -right-10 w-40 h-40 bg-emerald-100 rounded-full blur-3xl opacity-50"></div>
 
                             <div className="relative z-10">
-                                <div className="w-20 h-20 bg-white rounded-full flex items-center justify-center mx-auto mb-6 text-emerald-600 shadow-sm border border-emerald-50">
-                                    <Leaf size={40} className="drop-shadow-sm" />
-                                </div>
+                                    <div className="w-20 h-20 bg-white rounded-full flex items-center justify-center mx-auto mb-6 text-emerald-600 shadow-sm border border-emerald-50">
+                                        <Leaf size={40} className="drop-shadow-sm" />
+                                    </div>
                                 <h2 className="text-3xl font-bold text-stone-800 mb-6 tracking-tight">Saved to Ledger</h2>
 
                                 {/* Dynamic Feedback Summary */}
                                 {lastSavedLogSummary && lastSavedLogSummary.length > 0 ? (
                                     <div className="mb-8 space-y-3">
-                                        {lastSavedLogSummary.map((item, idx) => (
-                                            <div key={idx} className="bg-white rounded-2xl p-5 border border-emerald-100 shadow-sm relative overflow-hidden group">
-                                                <div className="absolute inset-0 bg-emerald-50/50 opacity-0 group-hover:opacity-100 transition-opacity"></div>
-                                                <p className="text-stone-700 font-medium text-lg relative z-10">
-                                                    I Understood your <span className="font-bold text-emerald-600 text-xl">{item.count}</span> activities for <span className="font-bold text-stone-900">{item.cropName}</span>
-                                                </p>
-                                            </div>
-                                        ))}
+                                        {lastSavedLogSummary.map((item, idx) => {
+                                            const crop = item.cropId ? crops.find(entry => entry.id === item.cropId) : undefined;
+                                            const theme = getCropTheme(crop?.color || 'bg-emerald-500');
+
+                                            return (
+                                                <div
+                                                    key={`${item.logId}-${idx}`}
+                                                    className={`rounded-[1.8rem] border p-1 shadow-lg ${theme.border} ${theme.shadow}`}
+                                                >
+                                                    <div className={`rounded-[1.5rem] p-4 ${theme.slideBgSelected}`}>
+                                                        <div className="flex items-center gap-3 text-left mb-3">
+                                                            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white shadow-sm ring-1 ring-white/70">
+                                                                {crop ? <CropSymbol name={crop.iconName} size="md" /> : <Leaf size={22} className="text-emerald-600" />}
+                                                            </div>
+                                                            <div className="min-w-0 flex-1">
+                                                                <p className="text-[10px] font-black uppercase tracking-[0.18em] text-stone-500">Stored In</p>
+                                                                <p className="truncate text-base font-black text-stone-900">
+                                                                    {item.cropName} • {item.plotName}
+                                                                </p>
+                                                            </div>
+                                                        </div>
+                                                        {/* Bucket Breakdown */}
+                                                        {(() => {
+                                                            const savedLog = history.find(l => l.id === item.logId);
+                                                            if (!savedLog) return null;
+                                                            const buckets = [
+                                                                { key: 'irrigation', count: (savedLog.irrigation || []).filter(e => (e.durationHours || 0) > 0 || (e.waterVolumeLitres || 0) > 0 || e.method || e.source).length, icon: <Droplets size={13} />, label: 'Irrigation', color: 'bg-blue-100 text-blue-700' },
+                                                                { key: 'labour', count: (savedLog.labour || []).length, icon: <Users size={13} />, label: 'Labour', color: 'bg-amber-100 text-amber-700' },
+                                                                { key: 'inputs', count: (savedLog.inputs || []).length, icon: <Package size={13} />, label: 'Inputs', color: 'bg-purple-100 text-purple-700' },
+                                                                { key: 'machinery', count: (savedLog.machinery || []).length, icon: <Tractor size={13} />, label: 'Machinery', color: 'bg-stone-100 text-stone-700' },
+                                                                { key: 'crop', count: (savedLog.cropActivities || []).length, icon: <Sprout size={13} />, label: 'Crop Work', color: 'bg-emerald-100 text-emerald-700' },
+                                                            ].filter(b => b.count > 0);
+                                                            if (buckets.length === 0) return null;
+                                                            return (
+                                                                <div className="flex flex-wrap gap-2">
+                                                                    {buckets.map(b => (
+                                                                        <span key={b.key} className={`flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-bold ${b.color}`}>
+                                                                            {b.icon}
+                                                                            {b.label} ×{b.count}
+                                                                        </span>
+                                                                    ))}
+                                                                </div>
+                                                            );
+                                                        })()}
+                                                    </div>
+                                                </div>
+                                            );
+                                        })}
                                     </div>
                                 ) : (
                                     <p className="text-stone-500 mb-8">Your activity has been logged successfully.</p>
@@ -953,6 +1058,12 @@ const AppRouter: React.FC = () => {
                                     {lastSavedLogIds && lastSavedLogIds.length > 0 && (
                                         <button
                                             onClick={() => {
+                                                if (lastSavedLogIds.length > 1) {
+                                                    setStatus('idle');
+                                                    setMode('manual');
+                                                    setMainView('log');
+                                                    return;
+                                                }
                                                 const logId = lastSavedLogIds[0];
                                                 const logToEdit = history.find(l => l.id === logId) || mockHistory.find(l => l.id === logId);
                                                 if (logToEdit) {
@@ -962,7 +1073,7 @@ const AppRouter: React.FC = () => {
                                             }}
                                             className="w-full bg-white text-emerald-700 border border-emerald-200 py-4 rounded-xl font-bold text-lg hover:bg-emerald-50 transition-colors mb-1"
                                         >
-                                            Review Details
+                                            {lastSavedLogIds.length > 1 ? 'Review Saved Targets' : 'Review Details'}
                                         </button>
                                     )}
 
@@ -978,18 +1089,6 @@ const AppRouter: React.FC = () => {
                     )}
 
 
-                    {/* SATHI LOG WIZARD */}
-                    <LogWizardContainer
-                        isOpen={showLogWizard}
-                        onClose={() => setShowLogWizard(false)}
-                        profile={farmerProfile}
-                        crops={crops}
-                        onSubmit={(data) => {
-                            console.log("Wizard Submitted:", data);
-                            setShowLogWizard(false);
-                            setStatus('success');
-                        }}
-                    />
 
 
                 </>
@@ -1002,7 +1101,7 @@ const AppRouter: React.FC = () => {
                 onSave={handleSaveTask}
                 crops={crops}
                 selectedCropId={crops[0]?.id}
-                people={farmerProfile.people}
+                people={farmerProfile.operators.map(op => ({ ...op, isActive: op.isActive ?? true }))}
             />
 
             {/* DFES Phase 0: Review Inbox Sheet */}
@@ -1011,7 +1110,7 @@ const AppRouter: React.FC = () => {
                 onClose={() => setShowReviewInbox(false)}
                 logs={history}
                 operators={farmerProfile.operators}
-                currentOperatorId={farmerProfile.activeOperatorId}
+                currentOperatorId={farmerProfile.activeOperatorId || 'owner'}
                 onApproveLog={(logId) => handleVerifyLog(logId, LogVerificationStatus.APPROVED)}
                 onApproveAll={(logIds) => logIds.forEach(id => handleVerifyLog(id, LogVerificationStatus.APPROVED))}
                 onDisputeLog={(logId, note) => handleVerifyLog(logId, LogVerificationStatus.REJECTED, note)}
@@ -1042,7 +1141,11 @@ const AppRouter: React.FC = () => {
                 currentRoute === 'main' && mainView === 'log' && status === 'idle' && !recordingSegment && hasActiveLogContext && (
                     <button
                         onClick={() => setShowQuickLog(true)}
-                        className="fixed bottom-24 left-4 z-40 w-14 h-14 bg-white text-emerald-600 rounded-full shadow-lg shadow-emerald-900/10 border border-emerald-100 flex items-center justify-center active:scale-95 transition-transform"
+                        className="fixed z-40 w-14 h-14 bg-white text-emerald-600 rounded-full shadow-lg shadow-emerald-900/10 border border-emerald-100 flex items-center justify-center active:scale-95 transition-transform"
+                        style={{
+                            bottom: 'calc(6rem + var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px)))',
+                            left: 'max(1rem, var(--safe-area-inset-left, env(safe-area-inset-left, 0px)))'
+                        }}
                         aria-label="Quick Log"
                     >
                         <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
@@ -1053,6 +1156,7 @@ const AppRouter: React.FC = () => {
                 )
             }
         </div >
+        </React.Suspense>
     );
 };
 

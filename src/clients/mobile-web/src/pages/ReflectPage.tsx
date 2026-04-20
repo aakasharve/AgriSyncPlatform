@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
 */
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { DailyLog } from '../features/logs/logs.types';
 import { CropProfile, Plot, LedgerDefaults } from '../types';
 import {
@@ -12,6 +12,7 @@ import {
     CheckSquare, Droplets, Users, Package, Ban, CloudRain, Zap, LayoutList, Grid3X3, Clock, Receipt, StickyNote, Bell
 } from 'lucide-react';
 import DailyWorkSummaryView from '../features/analysis/components/DailyWorkSummaryView';
+import ObservationsPanel from '../features/analysis/components/ObservationsPanel';
 import ToDoTasksBlock from '../features/scheduler/components/ToDoTasksBlock';
 import CollapsibleBlock from '../shared/components/ui/CollapsibleBlock';
 // import PlotChipSelector from '../shared/components/PlotChipSelector'; 
@@ -19,8 +20,8 @@ import SlidingCropSelector from '../features/context/components/SlidingCropSelec
 import '../features/analysis/components/DailyWorkSummary.css';
 import CropSelector, { CropSymbol, PlotMarker } from '../features/context/components/CropSelector';
 import { getPhaseAndDay } from '../shared/utils/timelineUtils';
-import { generateDayWorkSummary } from '../services/workSummaryService';
-import { getDateKey } from '../domain/system/DateKeyService';
+import { generateDayWorkSummary } from '../features/analysis/dayWorkSummary';
+import { getDateKey } from '../core/domain/services/DateKeyService';
 import ReviewInbox from '../features/analysis/components/ReviewInbox';
 import TrustBadge from '../shared/components/ui/TrustBadge';
 import { getHarvestSessions, getOtherIncomeEntries } from '../services/harvestService';
@@ -29,6 +30,11 @@ import CostAnalysisSection from '../features/analysis/components/CostAnalysisSec
 import { MoneyChip } from '../features/finance/components/MoneyChip';
 import { MoneyLensDrawer } from '../features/finance/components/MoneyLensDrawer';
 import { FinanceFilters } from '../features/finance/finance.types';
+import OfflineEmptyState from '../shared/components/ui/OfflineEmptyState';
+import { getDatabase } from '../infrastructure/storage/DexieDatabase';
+import { AttachmentList, useAttachmentRetry } from '../features/attachments';
+import { formatTemperature } from '../shared/utils/weatherFormatter';
+
 
 interface ReflectPageProps {
     history: DailyLog[];
@@ -143,6 +149,25 @@ const getPrimaryActivityName = (log: DailyLog) => {
     if (log.labour.length > 0) return "Labour";
     if (log.machinery.length > 0) return log.machinery[0].type;
     return "Activity";
+};
+
+const getPrimaryLogNote = (log?: DailyLog): string | undefined => {
+    if (!log) {
+        return undefined;
+    }
+
+    const observation = log.observations?.[0];
+    const observationText = (observation?.textCleaned || observation?.textRaw)?.trim();
+    if (observationText) {
+        return observationText;
+    }
+
+    const cropActivityNote = log.cropActivities.find(activity => activity.notes)?.notes?.trim();
+    if (cropActivityNote) {
+        return cropActivityNote;
+    }
+
+    return log.irrigation.find(event => event.notes)?.notes?.trim();
 };
 
 // --- SUB-COMPONENTS ---
@@ -278,16 +303,19 @@ interface CompactCropCardProps {
 const CompactCropCard: React.FC<CompactCropCardProps> = ({ crop, plot, plotIndex, log, date, onClick, onCostClick }) => {
     const status = getDayStatus(log);
     const isBlocked = log?.disturbance?.scope === 'FULL_DAY';
+    const [attachmentCount, setAttachmentCount] = useState<number>(0);
 
     // Data Presence Checks
+    const irrigationBlocked = !!(log?.disturbance?.blockedSegments?.includes('irrigation'));
     const counts = {
         activity: log?.cropActivities?.length || 0,
-        irrigation: log?.irrigation?.length || 0,
+        // Count irrigation events; a blocked-with-issue event still counts as "1" for icon purposes
+        irrigation: (log?.irrigation?.length || 0) + (irrigationBlocked && !log?.irrigation?.length ? 1 : 0),
         labour: log?.labour?.reduce((s, l) => s + (l.count || 0), 0) || 0,
         inputs: log?.inputs?.length || 0,
         machinery: log?.machinery?.length || 0,
         expenses: log?.activityExpenses?.length || 0,
-        notes: log?.observations?.filter(o => o.noteType !== 'reminder' && o.noteType !== 'issue').length || 0,
+        notes: log?.observations?.length || 0,
         reminders: log?.observations?.filter(o => o.noteType === 'reminder').length || 0
     };
 
@@ -298,9 +326,46 @@ const CompactCropCard: React.FC<CompactCropCardProps> = ({ crop, plot, plotIndex
     const targetPlot = plot || crop.plots[0];
     const timeline = getPhaseAndDay(targetPlot, date);
     const plotDisplayName = plot ? plot.name : (crop.plots.length > 1 ? 'All Plots' : crop.plots[0]?.name || 'Main Field');
+    const primaryNote = getPrimaryLogNote(log);
 
     // NEW: Water Adherence Status
     const waterStatus = getIrrigationStatus(date, plot, log);
+    const hasAttachments = attachmentCount > 0;
+
+    useEffect(() => {
+        let cancelled = false;
+
+        const loadAttachmentCount = async () => {
+            const logId = log?.id;
+            if (!logId) {
+                if (!cancelled) {
+                    setAttachmentCount(0);
+                }
+                return;
+            }
+
+            try {
+                const db = getDatabase();
+                const count = await db.attachments
+                    .where('linkedEntityId')
+                    .equals(logId)
+                    .count();
+
+                if (!cancelled) {
+                    setAttachmentCount(count);
+                }
+            } catch {
+                if (!cancelled) {
+                    setAttachmentCount(0);
+                }
+            }
+        };
+
+        void loadAttachmentCount();
+        return () => {
+            cancelled = true;
+        };
+    }, [log?.id]);
 
     // Helper for bucket icons
     const BucketIcon = ({ icon, count, activeColor, label }: { icon: React.ReactNode, count: number, activeColor: string, label: string }) => {
@@ -336,6 +401,11 @@ const CompactCropCard: React.FC<CompactCropCardProps> = ({ crop, plot, plotIndex
                     {/* Cost Pill + Trust Badge */}
                     <div className="flex items-center gap-1.5">
                         {log?.verification?.status && <TrustBadge status={log.verification.status} size="sm" />}
+                        {hasAttachments && (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-blue-50 text-blue-700 border border-blue-100">
+                                Attachments {attachmentCount}
+                            </span>
+                        )}
                         {log?.financialSummary.grandTotal ? (
                             <MoneyChip
                                 amount={log.financialSummary.grandTotal}
@@ -352,12 +422,17 @@ const CompactCropCard: React.FC<CompactCropCardProps> = ({ crop, plot, plotIndex
                 <div className="text-xs font-medium text-slate-500 mb-2 ml-0.5 truncate max-w-full">
                     {plotDisplayName}
                 </div>
+                {primaryNote && (
+                    <div className="text-[10px] font-semibold text-amber-800 bg-amber-50 border border-amber-100 rounded-md px-2 py-1 mb-2 truncate w-full">
+                        {primaryNote}
+                    </div>
+                )}
 
                 {/* 2.5 Weather Display - Per Plot */}
                 {log?.weatherSnapshot && (
                     <div className="flex items-center gap-1.5 text-xs bg-sky-50 px-2 py-1 rounded-lg border border-sky-100 mb-2">
                         <span className="text-base">☀️</span>
-                        <span className="font-bold text-sky-800">{log.weatherSnapshot.current.tempC}°C</span>
+                        <span className="font-bold text-sky-800">{formatTemperature(log.weatherSnapshot.current.tempC)}</span>
                         <span className="text-slate-400">·</span>
                         <span className="font-medium text-slate-600">{log.weatherSnapshot.current.conditionText}</span>
                     </div>
@@ -382,15 +457,15 @@ const CompactCropCard: React.FC<CompactCropCardProps> = ({ crop, plot, plotIndex
                     {isBlocked ? (
                         <div className="flex items-center gap-1.5 text-xs text-amber-700 bg-amber-100/50 p-2 rounded-lg border border-amber-100 justify-center font-bold">
                             <Ban size={14} className="shrink-0" />
-                            Work Stopped: {log.disturbance.reason}
+                            Work Stopped: {log.disturbance?.reason ?? 'Unknown reason'}
                         </div>
                     ) : (
                         <div className="flex flex-wrap gap-1 px-0.5">
                             <BucketIcon icon={<CheckSquare size={12} />} count={counts.activity} label="Act" activeColor="bg-emerald-50 text-emerald-600 border-emerald-100" />
-                            <BucketIcon icon={<Droplets size={12} />} count={counts.irrigation} label="Wat" activeColor="bg-blue-50 text-blue-600 border-blue-100" />
+                            <BucketIcon icon={<Droplets size={12} />} count={counts.irrigation} label="Wat" activeColor={irrigationBlocked ? "bg-amber-50 text-amber-600 border-amber-200" : "bg-blue-50 text-blue-600 border-blue-100"} />
                             <BucketIcon icon={<Users size={12} />} count={counts.labour} label="Lab" activeColor="bg-orange-50 text-orange-600 border-orange-100" />
                             <BucketIcon icon={<Package size={12} />} count={counts.inputs} label="Inp" activeColor="bg-purple-50 text-purple-600 border-purple-100" />
-                            <BucketIcon icon={<Tractor size={12} />} count={counts.machinery} label="Mac" activeColor="bg-slate-100 text-slate-600 border-slate-200" />
+                            <BucketIcon icon={<Tractor size={12} />} count={counts.machinery} label="Mac" activeColor="bg-indigo-50 text-indigo-600 border-indigo-100" />
                             <BucketIcon icon={<img src="/assets/rupee_black.png" alt="Expenses" className={`w-3 h-3 ${counts.expenses > 0 ? 'opacity-80' : 'opacity-30 grayscale'}`} />} count={counts.expenses} label="Exp" activeColor="bg-rose-50 text-rose-600 border-rose-100" />
                             <BucketIcon icon={<StickyNote size={12} />} count={counts.notes} label="Note" activeColor="bg-amber-50 text-amber-600 border-amber-100" />
                             <BucketIcon icon={<Bell size={12} />} count={counts.reminders} label="Rem" activeColor="bg-indigo-50 text-indigo-600 border-indigo-100" />
@@ -456,6 +531,9 @@ const ReflectPage: React.FC<ReflectPageProps> = ({
     const [seasonalIncome, setSeasonalIncome] = useState<number>(0);
     const [moneyLensOpen, setMoneyLensOpen] = useState(false);
     const [moneyLensFilters, setMoneyLensFilters] = useState<FinanceFilters>({});
+    const [selectedLogAttachmentCount, setSelectedLogAttachmentCount] = useState(0);
+    const [showSelectedLogAttachments, setShowSelectedLogAttachments] = useState(false);
+    const { retryUpload } = useAttachmentRetry();
 
     // Update income summary when context changes
     useEffect(() => {
@@ -484,6 +562,42 @@ const ReflectPage: React.FC<ReflectPageProps> = ({
 
     // Block Ordering State
     const [blockOrder, setBlockOrder] = useState<string[]>(['farm-status', 'notes', 'daily-logs']);
+
+    useEffect(() => {
+        let cancelled = false;
+        const selectedLogId = selectedLog?.id;
+        setShowSelectedLogAttachments(false);
+
+        const loadSelectedLogAttachmentCount = async () => {
+            if (!selectedLogId) {
+                if (!cancelled) {
+                    setSelectedLogAttachmentCount(0);
+                }
+                return;
+            }
+
+            try {
+                const db = getDatabase();
+                const count = await db.attachments
+                    .where('linkedEntityId')
+                    .equals(selectedLogId)
+                    .count();
+
+                if (!cancelled) {
+                    setSelectedLogAttachmentCount(count);
+                }
+            } catch {
+                if (!cancelled) {
+                    setSelectedLogAttachmentCount(0);
+                }
+            }
+        };
+
+        void loadSelectedLogAttachmentCount();
+        return () => {
+            cancelled = true;
+        };
+    }, [selectedLog?.id]);
 
     const openLogMoneyLens = (log: DailyLog) => {
         const selection = log.context.selection?.[0];
@@ -546,6 +660,44 @@ const ReflectPage: React.FC<ReflectPageProps> = ({
         saveBlockOrder(newOrder);
     };
     const currentDateStr = getDateKey(currentDate);
+
+    const isLogVisibleInCurrentSelection = (log: DailyLog): boolean => {
+        const context = log.context.selection[0];
+        const cropId = context.cropId;
+
+        if (!viewCrops.includes(cropId)) {
+            return false;
+        }
+
+        const selectedPlots = viewPlots[cropId] || [];
+        if (selectedPlots.length === 0) {
+            return true;
+        }
+
+        return context.selectedPlotIds?.some(plotId => selectedPlots.includes(plotId)) ?? false;
+    };
+
+    const observationsForDate = useMemo(
+        () => history
+            .filter(log => log.date === currentDateStr && isLogVisibleInCurrentSelection(log))
+            .flatMap(log => log.observations ?? []),
+        [history, currentDateStr, viewCrops, viewPlots]
+    );
+
+    const tasksFromTodaysLogs = useMemo(
+        () => history
+            .filter(log => log.date === currentDateStr && isLogVisibleInCurrentSelection(log))
+            .flatMap(log => log.plannedTasks ?? []),
+        [history, currentDateStr, viewCrops, viewPlots]
+    );
+
+    const mergedVisibleTasks = useMemo(() => {
+        const deduped = new Map<string, any>();
+        [...(tasks || []), ...tasksFromTodaysLogs].forEach(task => {
+            deduped.set(task.id, task);
+        });
+        return Array.from(deduped.values());
+    }, [tasks, tasksFromTodaysLogs]);
 
     useEffect(() => {
         if (viewCrops.length === 0 && crops.length > 0) {
@@ -753,13 +905,19 @@ const ReflectPage: React.FC<ReflectPageProps> = ({
     );
 
     const renderNotesBlock = () => (
-        <ToDoTasksBlock
-            tasks={tasks || []} // Use passed tasks
-            crops={crops}
-            selectedCropId={viewCrops.length === 1 ? viewCrops[0] : undefined}
-            onUpdateTask={onUpdateTask || (() => { })}
-            onAddTask={onAddTask}
-        />
+        <div className="space-y-4">
+            <ObservationsPanel
+                observations={observationsForDate}
+                dateStr={currentDate.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
+            />
+            <ToDoTasksBlock
+                tasks={mergedVisibleTasks}
+                crops={crops}
+                selectedCropId={viewCrops.length === 1 ? viewCrops[0] : undefined}
+                onUpdateTask={onUpdateTask || (() => { })}
+                onAddTask={onAddTask}
+            />
+        </div>
     );
 
     const renderDailyLogsBlock = () => (
@@ -837,8 +995,12 @@ const ReflectPage: React.FC<ReflectPageProps> = ({
                         );
                     }
                 }) : (
-                    <div className="col-span-2 text-center py-12 text-slate-400">
-                        <p className="text-sm">Select crops and plots above to see daily activity</p>
+                    <div className="col-span-2">
+                        <OfflineEmptyState
+                            icon={<Calendar size={40} className="text-slate-300" />}
+                            title="No Activity Today"
+                            message="Select crops and plots above, or add your first daily entry."
+                        />
                     </div>
                 )}
             </div>
@@ -854,7 +1016,7 @@ const ReflectPage: React.FC<ReflectPageProps> = ({
             render: renderFarmStatusBlock
         },
         'notes': {
-            title: 'To Do Tasks',
+            title: `Observations & Notes (${observationsForDate.length})`,
             icon: <FileText size={24} />,
             render: renderNotesBlock
         },
@@ -907,7 +1069,7 @@ const ReflectPage: React.FC<ReflectPageProps> = ({
                         id={blockId}
                         title={block.title}
                         icon={block.icon}
-                        defaultOpen={true}
+                        defaultOpen={blockId === 'notes' ? observationsForDate.length > 0 : true}
                         showReorder={true}
                         canMoveUp={index > 0}
                         canMoveDown={index < arr.length - 1}
@@ -1050,11 +1212,22 @@ const ReflectPage: React.FC<ReflectPageProps> = ({
                     selectedDate={calendarViewDate}
                     calendarMode={calendarMode}
                 />
+                
+                {navigate && (
+                    <div className="mt-4 pt-4 border-t border-slate-200">
+                        <button
+                            onClick={() => navigate('finance-ledger')}
+                            className="w-full py-3 bg-white border border-slate-200 hover:border-blue-300 hover:bg-blue-50 active:scale-95 transition-all rounded-xl text-blue-700 font-bold text-sm flex items-center justify-center gap-2 shadow-sm"
+                        >
+                            Open Finance Ledger <ArrowRight size={16} />
+                        </button>
+                    </div>
+                )}
             </AccordionBlock>
 
             {/* Detail Drawer - REDESIGNED FOR SIMPLE SCROLLING */}
             {(selectedLog || emptySelection) && detailInfo && (
-                <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center">
+                <div className="fixed inset-0 z-50 flex items-end justify-center pb-safe-area sm:items-center">
                     {/* Dark background - click to close */}
                     <div
                         className="absolute inset-0 bg-black bg-opacity-60"
@@ -1157,6 +1330,26 @@ const ReflectPage: React.FC<ReflectPageProps> = ({
                         >
                             {selectedLog ? (
                                 <>
+                                    {selectedLogAttachmentCount > 0 && (
+                                        <div className="mb-4 rounded-xl border border-blue-100 bg-blue-50/50 p-3">
+                                            <button
+                                                type="button"
+                                                onClick={() => setShowSelectedLogAttachments(previous => !previous)}
+                                                className="inline-flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-xs font-bold bg-white border border-blue-200 text-blue-700"
+                                            >
+                                                Attachments {selectedLogAttachmentCount}
+                                            </button>
+                                            {showSelectedLogAttachments && (
+                                                <div className="mt-2">
+                                                    <AttachmentList
+                                                        linkedEntityId={selectedLog.id}
+                                                        compact
+                                                        onRetry={retryUpload}
+                                                    />
+                                                </div>
+                                            )}
+                                        </div>
+                                    )}
                                     <DailyWorkSummaryView
                                         key={selectedLog.id}
                                         summary={generateDayWorkSummary(selectedLog, defaults)}

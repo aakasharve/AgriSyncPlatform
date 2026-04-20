@@ -1,0 +1,118 @@
+---
+import { getLangFromUrl, getTranslations } from '../../i18n/translations';
+
+const lang = getLangFromUrl(Astro.url);
+const t = getTranslations(lang);
+---
+
+<section
+  id="problem-hit"
+  data-scene="problem-hit"
+  data-soil="cracked-dry"
+  data-cursor="wilt"
+  class="relative py-section overflow-hidden"
+  style="background:var(--bg-base);"
+>
+  <div class="absolute inset-0 pointer-events-none" style="background:radial-gradient(ellipse 62% 44% at 50% 14%, rgba(146,64,14,0.07) 0%, transparent 44%), radial-gradient(ellipse 44% 28% at 82% 84%, rgba(20,83,45,0.07) 0%, transparent 44%);" aria-hidden="true"></div>
+
+  <div class="relative z-10 max-w-site mx-auto px-5 md:px-8">
+    <div class="text-center max-w-3xl mx-auto mb-10 md:mb-14">
+      <span class="chapter-mark" data-chapter>
+        {lang === 'mr' ? 'Chapter 02 · वेदना' : 'Chapter 02 · Where the Day Breaks'}
+      </span>
+      <h2 class="font-serif text-h2 mb-5" style="color:rgb(29,51,38);" set:html={t.problem_hit.headline.replace(/\n/g, '<br />')} />
+      <p class="text-body-lg max-w-prose mx-auto" style="color:rgba(29,51,38,0.74);">
+        {t.problem_hit.body}
+      </p>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-[1.15fr_0.85fr] gap-8 lg:gap-12 items-center max-w-6xl mx-auto">
+      <div class="grid gap-4" data-reveal-3d-group>
+        {t.problem_hit.pain_lines.map((line: string, i: number) => (
+          <div
+            class="card-white rounded-2xl px-5 py-5 shadow-[0_12px_28px_rgba(146,64,14,0.07)]"
+            data-reveal-3d-item
+          >
+            <div class="flex items-start gap-4">
+              <div class="problem-pin" style={`background:${i % 2 === 0 ? '#D97706' : '#14532D'}`}></div>
+              <div class="min-w-0">
+                <div class="text-[0.68rem] font-extrabold uppercase tracking-[0.28em] mb-2" style="color:rgba(146,64,14,0.55);">
+                  {lang === 'mr' ? `दिवसातील भंग 0${i + 1}` : `Breakpoint 0${i + 1}`}
+                </div>
+                <p class="text-lg md:text-[1.35rem] leading-8 font-semibold" style="color:var(--text-primary);">{line}</p>
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <!-- Cinematic photo panel instead of UI template card -->
+      <div class="problem-photo-panel" data-zoom-section>
+        <img
+          src="/images/characters/problem-burdened-farmer.png"
+          alt={lang === 'mr' ? 'थकलेला शेतकरी — कागद चाळतोय' : 'Farmer reading scattered papers in the field'}
+          class="problem-photo-img"
+          loading="lazy"
+          decoding="async"
+        />
+        <div class="problem-photo-overlay" aria-hidden="true"></div>
+        <blockquote class="problem-photo-caption">
+          {lang === 'mr'
+            ? '"दिवसभर काम झालं, पण नोंद नाही."'
+            : '"The work happened. But there\'s no record."'}
+        </blockquote>
+      </div>
+    </div>
+  </div>
+</section>
+
+<style>
+  .problem-pin {
+    width: 0.5rem;
+    min-width: 0.5rem;
+    align-self: stretch;
+    border-radius: 999px;
+    box-shadow: 0 0 0 6px rgba(255,255,255,0.8);
+  }
+
+  /* Cinematic photo panel */
+  .problem-photo-panel {
+    position: relative;
+    border-radius: 2rem;
+    overflow: hidden;
+    aspect-ratio: 3/4;
+    box-shadow: 0 32px 72px rgba(0,0,0,0.22);
+  }
+
+  .problem-photo-img {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    object-position: center 20%;
+  }
+
+  .problem-photo-overlay {
+    position: absolute;
+    inset: 0;
+    background:
+      linear-gradient(to top, rgba(10,18,12,0.85) 0%, rgba(10,18,12,0.20) 46%, transparent 68%),
+      radial-gradient(ellipse 80% 50% at 50% 0%, rgba(146,64,14,0.08) 0%, transparent 60%);
+  }
+
+  .problem-photo-caption {
+    position: absolute;
+    bottom: 2rem;
+    left: 1.6rem;
+    right: 1.6rem;
+    margin: 0;
+    font-family: var(--font-serif);
+    font-size: clamp(1.05rem, 1.8vw, 1.35rem);
+    font-weight: 400;
+    font-style: italic;
+    line-height: 1.55;
+    color: rgba(242,233,219,0.90);
+    text-shadow: 0 2px 16px rgba(0,0,0,0.50);
+  }
+</style>

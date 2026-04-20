@@ -2,7 +2,6 @@
 import { DailyLog, BucketIssue } from '../../domain/types/log.types';
 import { LogsRepository } from '../ports';
 import { AuditPort } from '../ports/AuditPort';
-import { AuthorizationPolicy } from '../policy/AuthorizationPolicy';
 import { FarmerProfile } from '../../domain/types/farm.types';
 import { updateLog } from './UpdateLog';
 
@@ -33,21 +32,15 @@ export const addIssueToLog = async (
     request: AddIssueRequest,
     repo: LogsRepository,
     auditPort: AuditPort,
-    profile: FarmerProfile
+    _profile: FarmerProfile
 ): Promise<AddIssueResult> => {
-
-    // 1. Authorization
-    if (!AuthorizationPolicy.can('EDIT_LOG', profile)) {
-        return { success: false, error: 'Unauthorized: Cannot edit logs' };
-    }
-
-    // 2. Fetch Log
+    // 1. Fetch Log
     const log = await repo.getById(request.logId);
     if (!log) {
         return { success: false, error: 'Log not found' };
     }
 
-    // 3. Find and Update Target Event
+    // 2. Find and Update Target Event
     let eventFound = false;
     let categoryFound = '';
 
@@ -94,7 +87,7 @@ export const addIssueToLog = async (
         return { success: false, error: 'Target event ID not found in log' };
     }
 
-    // 4. Construct Updated Log Object
+    // 3. Construct Updated Log Object
     const updatedLog: DailyLog = {
         ...log,
         cropActivities: eventFound && categoryFound === 'cropActivities' ? updatedActivities : log.cropActivities,
@@ -104,15 +97,15 @@ export const addIssueToLog = async (
         machinery: eventFound && categoryFound === 'machinery' ? updatedMachinery : log.machinery
     };
 
-    // 5. Save via UpdateLog (Handles Versioning & Audit)
+    // 4. Save via UpdateLog (handles versioning + audit fields)
     const result = await updateLog({
         logId: request.logId,
         updatedData: updatedLog,
         actorId: request.actorId,
         reason: `Added Issue: ${request.issue.issueType} - ${request.reason}`
-    }, repo, profile);
+    }, repo, _profile);
 
-    // 6. Append issue-specific audit record (boundary via AuditPort)
+    // 5. Append issue-specific audit record (boundary via AuditPort)
     if (result.success) {
         await auditPort.append({
             actorId: request.actorId,

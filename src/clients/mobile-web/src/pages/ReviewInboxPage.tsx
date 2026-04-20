@@ -2,6 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { AppRoute } from '../types';
 import { financeSelectors } from '../features/finance/financeSelectors';
 import { financeService } from '../features/finance/financeService';
+import { financeCommandService } from '../features/finance/financeCommandService';
 import { FinanceManagerNav } from '../features/finance/components/FinanceManagerNav';
 import { MoneyChip } from '../features/finance/components/MoneyChip';
 import { MoneyLensDrawer } from '../features/finance/components/MoneyLensDrawer';
@@ -21,7 +22,7 @@ const ReviewInboxPage: React.FC<ReviewInboxPageProps> = ({ currentRoute, onNavig
 
     const approveAllLowRisk = () => {
         const ids = entries.filter(item => !(item.reviewReasons || []).includes('HIGH_AMOUNT')).map(item => item.id);
-        financeService.approveEvents(ids, 'owner');
+        financeCommandService.approveEvents(ids, 'owner');
         setRefresh(v => v + 1);
     };
 
@@ -29,19 +30,19 @@ const ReviewInboxPage: React.FC<ReviewInboxPageProps> = ({ currentRoute, onNavig
         const ids = entries
             .filter(item => item.effectiveAmount >= financeService.getSettings().highAmountThreshold)
             .map(item => item.id);
-        financeService.approveEvents(ids, 'owner');
+        financeCommandService.approveEvents(ids, 'owner');
         setRefresh(v => v + 1);
     };
 
     const approveToday = () => {
         const today = new Date().toISOString().split('T')[0];
         const ids = entries.filter(item => item.dateTime.startsWith(today)).map(item => item.id);
-        financeService.approveEvents(ids, 'owner');
+        financeCommandService.approveEvents(ids, 'owner');
         setRefresh(v => v + 1);
     };
 
     const handleApproveSingle = (id: string) => {
-        financeService.approveEvents([id], 'owner');
+        financeCommandService.approveEvents([id], 'owner');
         setRefresh(v => v + 1);
     };
 

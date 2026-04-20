@@ -47,7 +47,12 @@ internal sealed class PriceConfigConfiguration : IEntityTypeConfiguration<PriceC
             .HasColumnName("created_at_utc")
             .IsRequired();
 
+        builder.Property(x => x.ModifiedAtUtc)
+            .HasColumnName("modified_at_utc")
+            .IsRequired();
+
         builder.HasIndex(x => new { x.ItemName, x.Version }).IsUnique();
+        builder.HasIndex(x => x.ModifiedAtUtc);
         builder.Ignore(x => x.DomainEvents);
     }
 }

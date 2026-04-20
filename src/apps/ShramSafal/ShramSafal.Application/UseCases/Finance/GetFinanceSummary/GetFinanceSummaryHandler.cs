@@ -9,13 +9,26 @@ public sealed class GetFinanceSummaryHandler(IShramSafalRepository repository)
 {
     public async Task<Result<FinanceSummaryDto>> HandleAsync(GetFinanceSummaryQuery query, CancellationToken ct = default)
     {
+        if (query.ActorUserId == Guid.Empty)
+        {
+            return Result.Failure<FinanceSummaryDto>(ShramSafalErrors.InvalidCommand);
+        }
+
         var normalizedGroupBy = NormalizeGroupBy(query.GroupBy);
         if (normalizedGroupBy is null)
         {
             return Result.Failure<FinanceSummaryDto>(ShramSafalErrors.InvalidCommand);
         }
 
-        var entries = await repository.GetCostEntriesAsync(query.FromDate, query.ToDate, ct);
+        var farmIds = await repository.GetFarmIdsForUserAsync(query.ActorUserId, ct);
+        if (farmIds.Count == 0)
+        {
+            return Result.Failure<FinanceSummaryDto>(ShramSafalErrors.Forbidden);
+        }
+
+        var entries = (await repository.GetCostEntriesAsync(query.FromDate, query.ToDate, ct))
+            .Where(entry => farmIds.Contains((Guid)entry.FarmId))
+            .ToList();
         var corrections = await repository.GetCorrectionsForEntriesAsync(entries.Select(e => e.Id), ct);
 
         var latestCorrections = corrections
@@ -87,4 +100,3 @@ public sealed class GetFinanceSummaryHandler(IShramSafalRepository repository)
         };
     }
 }
-

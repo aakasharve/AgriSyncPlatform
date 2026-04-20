@@ -44,6 +44,15 @@ export const StatusBadge: React.FC<StatusBadgeProps> = ({
     showLabel = true
 }) => {
     const { t } = useLanguage();
+    const normalizedStatus = status === LogVerificationStatus.APPROVED
+        ? LogVerificationStatus.VERIFIED
+        : status === LogVerificationStatus.REJECTED
+            ? LogVerificationStatus.DISPUTED
+            : status === LogVerificationStatus.PENDING
+                ? LogVerificationStatus.DRAFT
+                : status === LogVerificationStatus.AUTO_APPROVED
+                    ? LogVerificationStatus.CONFIRMED
+                    : status;
 
     // Visual Config - tweaked for new "Agri-Tech" palette compatibility
     // Using explicit hex values where vars might be too generic, or vars where appropriate
@@ -83,7 +92,7 @@ export const StatusBadge: React.FC<StatusBadgeProps> = ({
             borderColor: '#FED7AA', // orange-200
             Icon: Icons.Pending
         }
-    }[status];
+    }[normalizedStatus];
 
     // Fallback for unknown status
     const finalConfig = config || {

@@ -29,12 +29,16 @@ const Icons = {
 
 interface SyncIndicatorProps {
     status: 'SAVED' | 'PENDING' | 'SYNCED' | 'CONFLICT';
+    pendingCount?: number;
+    failedCount?: number;
     lastSyncedAt?: Date;
     onClick?: () => void;
 }
 
 export const SyncIndicator: React.FC<SyncIndicatorProps> = ({
     status,
+    pendingCount = 0,
+    failedCount = 0,
     lastSyncedAt,
     onClick
 }) => {
@@ -43,25 +47,25 @@ export const SyncIndicator: React.FC<SyncIndicatorProps> = ({
             color: 'text-emerald-600',
             bg: 'bg-emerald-50',
             Icon: Icons.Saved,
-            label: 'Saved locally'
+            label: 'Saved on Phone' // Simplified for Illiterate/Semi-literate
         },
         PENDING: {
-            color: 'text-sky-600',
-            bg: 'bg-sky-50',
+            color: 'text-amber-600',
+            bg: 'bg-amber-50',
             Icon: Icons.Pending,
-            label: 'Syncing...'
+            label: 'Sending...' // Simpler than "Syncing..."
         },
         SYNCED: {
             color: 'text-stone-400',
             bg: 'bg-transparent',
             Icon: Icons.Synced,
-            label: lastSyncedAt ? `Synced ${lastSyncedAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : 'Synced'
+            label: 'Online' // Simpler than "Synced <date>"
         },
         CONFLICT: {
-            color: 'text-amber-600',
-            bg: 'bg-amber-50',
+            color: 'text-red-600',
+            bg: 'bg-red-50',
             Icon: Icons.Conflict,
-            label: 'Sync Issue'
+            label: 'Needs Fix' // Action-oriented
         }
     }[status];
 
@@ -70,11 +74,18 @@ export const SyncIndicator: React.FC<SyncIndicatorProps> = ({
     return (
         <button
             onClick={onClick}
-            className={`flex items-center gap-1.5 px-2 py-1 rounded-full transition-all duration-300 ${color} ${bg} hover:bg-opacity-80 active:scale-95`}
+            className={`relative flex items-center gap-1.5 px-2 py-1 rounded-full transition-all duration-300 ${color} ${bg} hover:bg-opacity-80 active:scale-95`}
             aria-label={label}
         >
             <Icon className="w-2.5 h-2.5" />
-            <span className="text-[10px] font-bold tracking-wide opacity-90">{label}</span>
+            <span className="text-[10px] font-bold tracking-wide opacity-90 pb-[1px]">{label}</span>
+
+            {/* Notification Badge */}
+            {(pendingCount > 0 || failedCount > 0) && (
+                <span className={`absolute -top-1 -right-1 flex h-3 w-3 items-center justify-center rounded-full text-[8px] font-black text-white ${failedCount > 0 ? 'bg-red-500' : 'bg-amber-500'}`}>
+                    {failedCount > 0 ? failedCount : pendingCount}
+                </span>
+            )}
         </button>
     );
 };

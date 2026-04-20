@@ -1,8 +1,9 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Plot, CropProfile, DailyLog, PlannedItem, ExecutedItem } from '../types';
-import { generatePlotComparison } from '../services/compareService';
-import { getScheduleById } from '../data/scheduleLibrary';
-import { parseDateKey } from '../domain/system/DateKeyService';
+
+import { generatePlotComparison } from '../features/compare/plotComparisonService';
+import { getTemplateById as getScheduleById } from '../infrastructure/reference/TemplateCatalog';
+import { parseDateKey } from '../core/domain/services/DateKeyService';
 import SlidingCropSelector from '../features/context/components/SlidingCropSelector';
 import DayCard, { BlockStatus } from '../features/scheduler/components/DayCard';
 import {
@@ -13,6 +14,7 @@ import {
     XCircle,
     PlusCircle,
     Droplets,
+    GitCompare,
     ChevronDown,
     ChevronUp,
     Sprout,
@@ -33,7 +35,7 @@ interface Props {
 }
 
 type CompareCategory = 'ACTIVITY' | 'NUTRITION' | 'SPRAY' | 'IRRIGATION';
-type FarmerStatus = 'ON_TRACK' | 'BEHIND' | 'EXTRA';
+type FarmerStatus = 'ON_TRACK' | 'SLIGHT_LAG' | 'BEHIND' | 'EXTRA';
 type CategoryHealth = 'ON_TRACK' | 'BEHIND' | 'EXTRA';
 
 interface MustDoItem {
@@ -101,6 +103,7 @@ const round1 = (value: number): number => Math.round(value * 10) / 10;
 
 const getStatusText = (status: FarmerStatus): string => {
     if (status === 'ON_TRACK') return 'You are ON TRACK';
+    if (status === 'SLIGHT_LAG') return 'You are SLIGHTLY BEHIND';
     if (status === 'EXTRA') return 'You are doing EXTRA work';
     return 'You are BEHIND';
 };
@@ -110,6 +113,12 @@ const getStatusStyles = (status: FarmerStatus) => {
         return {
             card: 'bg-emerald-50 border-emerald-200',
             chip: 'bg-emerald-600 text-white'
+        };
+    }
+    if (status === 'SLIGHT_LAG') {
+        return {
+            card: 'bg-amber-50 border-amber-200',
+            chip: 'bg-amber-600 text-white'
         };
     }
     if (status === 'EXTRA') {
@@ -122,6 +131,20 @@ const getStatusStyles = (status: FarmerStatus) => {
         card: 'bg-red-50 border-red-200',
         chip: 'bg-red-600 text-white'
     };
+};
+
+const getFarmerStatus = (doneCount: number, missedCount: number, extraCount: number): FarmerStatus => {
+    if (missedCount === 0) {
+        return extraCount > 0 ? 'EXTRA' : 'ON_TRACK';
+    }
+
+    const totalMustDo = doneCount + missedCount;
+    const completionRatio = totalMustDo > 0 ? doneCount / totalMustDo : 0;
+    if (completionRatio >= 0.75) {
+        return 'SLIGHT_LAG';
+    }
+
+    return 'BEHIND';
 };
 
 const getCategoryHealth = (missedCount: number, extraCount: number): CategoryHealth => {
@@ -205,12 +228,26 @@ const matchesPlannedDay = (planned: PlannedItem, day: number): boolean => {
     return false;
 };
 
-const getDateLabelForDay = (referenceDate: string, dayOffset: number): string => {
+const getDateForDay = (referenceDate: string, dayOffset: number): Date => {
     const base = parseDateKey(referenceDate);
     const date = new Date(base);
     date.setDate(base.getDate() + dayOffset);
+    date.setHours(0, 0, 0, 0);
+    return date;
+};
+
+const getDateLabelForDay = (referenceDate: string, dayOffset: number): string => {
+    const date = getDateForDay(referenceDate, dayOffset);
     return date.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
 };
+
+const getRelativeDayFromToday = (targetDate: Date): number => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    return Math.round((targetDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+};
+
+const formatRelativeDay = (value: number): string => (value > 0 ? `+${value}` : `${value}`);
 
 export const ComparePage: React.FC<Props> = ({ plots = [], crops = [], logs = [], onBack }) => {
     if (!crops || crops.length === 0) {
@@ -220,6 +257,30 @@ export const ComparePage: React.FC<Props> = ({ plots = [], crops = [], logs = []
                     <ArrowLeft className="w-6 h-6 text-gray-700" />
                 </button>
                 <p className="text-gray-500 font-medium">No crop data available.</p>
+            </div>
+        );
+    }
+
+    if (!logs || logs.length === 0) {
+        return (
+            <div className="min-h-screen bg-[#F8F6F1] p-4 sm:p-6">
+                <button
+                    onClick={onBack}
+                    className="mb-5 inline-flex items-center gap-2 rounded-full border border-stone-200 bg-white px-3 py-2 text-sm font-semibold text-stone-700 shadow-sm"
+                >
+                    <ArrowLeft className="h-4 w-4" />
+                    Back
+                </button>
+
+                <div className="mx-auto max-w-xl rounded-3xl border-2 border-dashed border-stone-300 bg-white p-8 text-center shadow-sm">
+                    <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-stone-100 text-stone-500">
+                        <GitCompare className="h-8 w-8" />
+                    </div>
+                    <h2 className="text-xl font-black text-stone-900">Nothing to Compare</h2>
+                    <p className="mt-2 text-sm font-medium text-stone-600">
+                        Log some activities first. Compare shows planned vs actual work.
+                    </p>
+                </div>
             </div>
         );
     }
@@ -274,12 +335,19 @@ export const ComparePage: React.FC<Props> = ({ plots = [], crops = [], logs = []
         const stage = comparisonData.currentStage || comparisonData.stages[0];
         if (!stage) return null;
 
-        const plannedCount = stage.buckets.reduce((sum, bucket) => sum + bucket.plannedCount, 0);
-        const doneCount = stage.buckets.reduce((sum, bucket) => sum + bucket.matchedCount, 0);
-        const missedCount = stage.buckets.reduce((sum, bucket) => sum + bucket.missedCount, 0);
-        const extraCount = stage.buckets.reduce((sum, bucket) => sum + bucket.extraCount, 0);
+        const stagesForAnalysis = comparisonData.stages.filter(stageItem => stageItem.plannedStartDay <= comparisonData.currentDay);
+        const analysisBucketEntries = (stagesForAnalysis.length > 0 ? stagesForAnalysis : [stage])
+            .flatMap(stageItem => stageItem.buckets.map(bucket => ({
+                bucket,
+                stageEndDay: stageItem.plannedEndDay
+            })));
 
-        const status: FarmerStatus = missedCount > 0 ? 'BEHIND' : extraCount > 0 ? 'EXTRA' : 'ON_TRACK';
+        const plannedCount = analysisBucketEntries.reduce((sum, entry) => sum + entry.bucket.plannedCount, 0);
+        const doneCount = analysisBucketEntries.reduce((sum, entry) => sum + entry.bucket.matchedCount, 0);
+        const missedCount = analysisBucketEntries.reduce((sum, entry) => sum + entry.bucket.missedCount, 0);
+        const extraCount = analysisBucketEntries.reduce((sum, entry) => sum + entry.bucket.extraCount, 0);
+
+        const status: FarmerStatus = getFarmerStatus(doneCount, missedCount, extraCount);
 
         const irrigationBucket = stage.buckets.find(bucket => bucket.bucketType === 'IRRIGATION');
         const irrigationDuration = Math.max(0.5, (activePlot.irrigationPlan?.durationMinutes || 60) / 60);
@@ -327,22 +395,16 @@ export const ComparePage: React.FC<Props> = ({ plots = [], crops = [], logs = []
 
         const logsById = new Map(plotLogs.map(log => [log.id, log]));
 
-        stage.buckets.forEach(bucket => {
+        analysisBucketEntries.forEach(({ bucket, stageEndDay }) => {
             const category = mapBucketToCategory(bucket.bucketType);
             const executedById = new Map(bucket.executed.map(executed => [executed.id, executed]));
-
-            plannedByCategory[category].push(...bucket.planned);
-            executedByCategory[category].push(...bucket.executed);
-            bucket.executed.forEach(executed => {
-                executedByCategoryId[category].set(executed.id, executed);
-            });
 
             categoryCounts[category].doneCount += bucket.matchedCount;
             categoryCounts[category].missedCount += bucket.missedCount;
             categoryCounts[category].extraCount += bucket.extraCount;
 
             bucket.planned.forEach(planned => {
-                const executed = planned.matchedExecutionId ? executedById.get(planned.matchedExecutionId) : undefined;
+                const executed = (planned.matchedExecutionId ? executedById.get(planned.matchedExecutionId) : undefined) as ExecutedItem | undefined;
                 const plannedText = typeof planned.expectedDay === 'number'
                     ? `Plan: Day ${planned.expectedDay}`
                     : 'Plan: Current phase';
@@ -360,7 +422,7 @@ export const ComparePage: React.FC<Props> = ({ plots = [], crops = [], logs = []
                 } else {
                     const delayDays = typeof planned.expectedDay === 'number'
                         ? Math.max(0, comparisonData.currentDay - planned.expectedDay)
-                        : Math.max(0, comparisonData.currentDay - stage.plannedEndDay);
+                        : Math.max(0, comparisonData.currentDay - stageEndDay);
 
                     categoryCounts[category].missedNames.push(planned.name);
 
@@ -381,15 +443,27 @@ export const ComparePage: React.FC<Props> = ({ plots = [], crops = [], logs = []
             bucket.executed
                 .filter(executed => executed.isExtra)
                 .forEach(executed => {
+                    const relativeDay = formatRelativeDay(
+                        getRelativeDayFromToday(getDateForDay(comparisonData.referenceDate, executed.executedDay))
+                    );
                     extraItems.push({
                         id: `${category}_${executed.id}`,
                         category,
                         name: executed.name,
-                        doneText: `Done: Day ${executed.executedDay}`,
+                        doneText: `Done: Phase Day ${executed.executedDay} (day ${relativeDay})`,
                         reasonText: getExtraReasonFromLog(logsById.get(executed.sourceLogId)),
                         executedDay: executed.executedDay
                     });
                 });
+        });
+
+        stage.buckets.forEach(bucket => {
+            const category = mapBucketToCategory(bucket.bucketType);
+            plannedByCategory[category].push(...bucket.planned);
+            executedByCategory[category].push(...bucket.executed);
+            bucket.executed.forEach(executed => {
+                executedByCategoryId[category].set(executed.id, executed);
+            });
         });
 
         mustDoItems.sort((a, b) => {
@@ -444,8 +518,9 @@ export const ComparePage: React.FC<Props> = ({ plots = [], crops = [], logs = []
                 const plannedNames: string[] = [];
 
                 plannedForDay.forEach(planned => {
-                    const matchedExecution = planned.matchedExecutionId
-                        ? executedByCategoryId[category].get(planned.matchedExecutionId)
+                    const matchedExecutionId = planned.matchedExecutionId;
+                    const matchedExecution = matchedExecutionId
+                        ? executedByCategoryId[category].get(matchedExecutionId)
                         : undefined;
 
                     if (matchedExecution && matchedExecution.executedDay === day) {
@@ -463,7 +538,7 @@ export const ComparePage: React.FC<Props> = ({ plots = [], crops = [], logs = []
                         return;
                     }
 
-                    if (matchedExecution.executedDay > day) {
+                    if (matchedExecution && matchedExecution.executedDay > day) {
                         missedNames.push(`${planned.name} (done Day ${matchedExecution.executedDay})`);
                         return;
                     }
@@ -505,7 +580,10 @@ export const ComparePage: React.FC<Props> = ({ plots = [], crops = [], logs = []
             const dayExtras = extraByDay.get(day) || [];
             const extraEntries = dayExtras.map(item => {
                 const reason = trimReason(item.reasonText);
-                return `${CATEGORY_META[item.category].shortLabel}: ${item.name} (${reason})`;
+                const relativeDay = formatRelativeDay(
+                    getRelativeDayFromToday(getDateForDay(comparisonData.referenceDate, item.executedDay))
+                );
+                return `${CATEGORY_META[item.category].shortLabel}: ${item.name} (day ${relativeDay}, ${reason})`;
             });
 
             scheduleDays.push({

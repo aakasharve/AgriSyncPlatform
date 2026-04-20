@@ -59,11 +59,60 @@ internal sealed class CostEntryConfiguration : IEntityTypeConfiguration<CostEntr
             .HasColumnName("created_at_utc")
             .IsRequired();
 
+        builder.Property(x => x.ModifiedAtUtc)
+            .HasColumnName("modified_at_utc")
+            .IsRequired();
+
+        builder.OwnsOne(x => x.Location, location =>
+        {
+            location.Property(x => x.Latitude)
+                .HasColumnName("location_latitude")
+                .HasPrecision(10, 7);
+
+            location.Property(x => x.Longitude)
+                .HasColumnName("location_longitude")
+                .HasPrecision(10, 7);
+
+            location.Property(x => x.AccuracyMeters)
+                .HasColumnName("location_accuracy_meters")
+                .HasPrecision(10, 2);
+
+            location.Property(x => x.Altitude)
+                .HasColumnName("location_altitude")
+                .HasPrecision(10, 2);
+
+            location.Property(x => x.CapturedAtUtc)
+                .HasColumnName("location_captured_at_utc");
+
+            location.Property(x => x.Provider)
+                .HasColumnName("location_provider")
+                .HasMaxLength(50);
+
+            location.Property(x => x.PermissionState)
+                .HasColumnName("location_permission_state")
+                .HasMaxLength(30);
+        });
+        builder.Navigation(x => x.Location).IsRequired(false);
+
         builder.Property(x => x.IsCorrected)
             .HasColumnName("is_corrected")
             .HasDefaultValue(false);
 
-        builder.HasIndex(x => new { x.EntryDate, x.FarmId });
+        builder.Property(x => x.IsFlagged)
+            .HasColumnName("is_flagged")
+            .HasDefaultValue(false)
+            .IsRequired();
+
+        builder.Property(x => x.FlagReason)
+            .HasColumnName("flag_reason")
+            .HasMaxLength(300);
+
+        builder.HasIndex(x => x.FarmId);
+        builder.HasIndex(x => x.PlotId);
+        builder.HasIndex(x => x.CropCycleId);
+        builder.HasIndex(x => x.CreatedByUserId);
+        builder.HasIndex(x => new { x.FarmId, x.EntryDate });
+        builder.HasIndex(x => x.ModifiedAtUtc);
         builder.Ignore(x => x.DomainEvents);
     }
 }

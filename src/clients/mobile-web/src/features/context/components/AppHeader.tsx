@@ -10,6 +10,8 @@ import PageToggle from '../../../shared/components/ui/PageToggle';
 import { useLanguage } from '../../../i18n/LanguageContext';
 
 import { FarmOperator } from '../../../domain/types/farm.types';
+import FarmContextSwitcher from './FarmContextSwitcher';
+import type { MyFarmDto } from '../../onboarding/qr/inviteApi';
 
 interface AppHeaderProps {
   currentRoute: AppRoute;
@@ -19,6 +21,14 @@ interface AppHeaderProps {
   disabled?: boolean;
   activeOperator?: FarmOperator;
   onVoiceTrigger?: () => void;
+  /** Phase 6 — farm context strip below the main bar. Omit to hide. */
+  farmContext?: {
+    farms: MyFarmDto[];
+    currentFarmId: string | null;
+    onSwitchFarm: (farmId: string) => void;
+    onCreateFarm: () => void;
+    onJoinViaQr: () => void;
+  };
 }
 
 const getUserColor = (name: string) => {
@@ -44,25 +54,26 @@ const AppHeader: React.FC<AppHeaderProps> = ({
   onViewChange,
   disabled,
   activeOperator,
-  onVoiceTrigger
+  onVoiceTrigger,
+  farmContext,
 }) => {
   const { t } = useLanguage();
 
   const userColorClass = activeOperator ? getUserColor(activeOperator.name) : 'border-stone-200 text-stone-500 bg-stone-50';
 
   return (
-    <header className="sticky top-0 z-50 bg-white border-b border-stone-100" style={{ boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
-      <div className="max-w-md mx-auto px-4 h-14 flex items-center justify-between gap-3">
+    <header className="sticky top-0 z-50 border-b border-stone-200 bg-white/95 backdrop-blur" style={{ boxShadow: '0 4px 12px -2px rgba(0,0,0,0.06), 0 1px 0 rgba(0,0,0,0.04)' }}>
+      <div className="page-content pl-safe-area pr-safe-area flex min-h-[56px] items-center justify-between gap-3 py-2">
 
         {/* LEFT: Profile / User Identity */}
         <button
           onClick={() => onNavigate('profile')}
           disabled={disabled}
-          className="flex flex-col items-center justify-center -ml-2 p-1"
+          className="flex min-h-[44px] min-w-[44px] flex-col items-center justify-center rounded-2xl px-1 py-1"
           title={activeOperator ? activeOperator.name : t('header.profile')}
         >
           <div className={`
-             w-8 h-8 flex items-center justify-center rounded-full border-2 transition-all duration-150
+             w-9 h-9 flex items-center justify-center rounded-full border-2 transition-all duration-150
              ${activeOperator ? userColorClass : 'border-transparent bg-stone-100 text-stone-400'}
           `}>
             <User2 size={18} strokeWidth={2.5} />
@@ -109,7 +120,7 @@ const AppHeader: React.FC<AppHeaderProps> = ({
           {onVoiceTrigger && !disabled && (
             <button
               onClick={onVoiceTrigger}
-              className="w-10 h-10 flex items-center justify-center rounded-full text-emerald-600 bg-emerald-50 active:bg-emerald-100 transition-colors duration-150"
+              className="w-11 h-11 flex items-center justify-center rounded-full text-emerald-600 bg-emerald-50 active:bg-emerald-100 transition-colors duration-150"
               title={t('nav.voice')}
             >
               <User2 size={0} className="hidden" /> {/* Hack to keep import valid if unused, but we use Lucide icons */}
@@ -135,7 +146,7 @@ const AppHeader: React.FC<AppHeaderProps> = ({
             onClick={() => onNavigate('settings')}
             disabled={disabled}
             className={`
-              w-10 h-10 flex items-center justify-center rounded-full transition-colors duration-150
+              w-11 h-11 flex items-center justify-center rounded-full transition-colors duration-150
               ${currentRoute === 'settings'
                 ? 'bg-emerald-100 text-emerald-700'
                 : 'text-stone-500 active:bg-stone-100'}
@@ -146,6 +157,20 @@ const AppHeader: React.FC<AppHeaderProps> = ({
         </div>
 
       </div>
+
+      {/* Phase 6 — slim farm-context strip. Always visible when farm data is available. */}
+      {farmContext && (
+        <div className="page-content pl-safe-area pr-safe-area flex items-center justify-start gap-2 border-t border-stone-100 bg-stone-50/60 py-1.5">
+          <FarmContextSwitcher
+            farms={farmContext.farms}
+            currentFarmId={farmContext.currentFarmId}
+            onSwitch={farmContext.onSwitchFarm}
+            onCreateFarm={farmContext.onCreateFarm}
+            onJoinViaQr={farmContext.onJoinViaQr}
+            compact
+          />
+        </div>
+      )}
     </header>
   );
 };

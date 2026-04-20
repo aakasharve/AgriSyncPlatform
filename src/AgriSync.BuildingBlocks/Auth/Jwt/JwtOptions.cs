@@ -8,7 +8,7 @@ public sealed class JwtOptions
 
     public string Audience { get; init; } = "AgriSync.Clients";
 
-    public string SigningKey { get; init; } = "CHANGE_ME_IN_CONFIGURATION";
+    public string SigningKey { get; init; } = string.Empty;
 
-    public int AccessTokenMinutes { get; init; } = 60;
+    public int AccessTokenMinutes { get; init; } = 15;
 }

@@ -6,9 +6,18 @@ export interface AuthSession {
 }
 
 const AUTH_SESSION_KEY = 'agrisync_auth_session_v1';
+export const AUTH_SESSION_CHANGED_EVENT = 'agrisync:auth-session-changed';
 
 function canUseStorage(): boolean {
     return typeof window !== 'undefined' && typeof window.localStorage !== 'undefined';
+}
+
+function notifyAuthSessionChanged(): void {
+    if (typeof window === 'undefined') {
+        return;
+    }
+
+    window.dispatchEvent(new Event(AUTH_SESSION_CHANGED_EVENT));
 }
 
 export function getAuthSession(): AuthSession | null {
@@ -44,6 +53,7 @@ export function setAuthSession(session: AuthSession): void {
     }
 
     window.localStorage.setItem(AUTH_SESSION_KEY, JSON.stringify(session));
+    notifyAuthSessionChanged();
 }
 
 export function clearAuthSession(): void {
@@ -52,6 +62,7 @@ export function clearAuthSession(): void {
     }
 
     window.localStorage.removeItem(AUTH_SESSION_KEY);
+    notifyAuthSessionChanged();
 }
 
 export function hasValidAccessToken(bufferMs = 60_000): boolean {

@@ -1,10 +1,10 @@
 import React, { useMemo, useEffect, useState } from 'react';
 import { Plot, DailyLog } from '../../../types';
-import DayCard, { BlockStatus } from './DayCard';
+import DayCard, { BlockStatus, DayCardProps } from './DayCard';
 import { calculateEffectiveDay } from '../../../shared/utils/timelineUtils';
 import { FileEdit, ArrowLeft } from 'lucide-react';
 import ScheduleDetailModal from './ScheduleDetailModal';
-import { getDateKey } from '../../../domain/system/DateKeyService';
+import { getDateKey } from '../../../core/domain/services/DateKeyService';
 
 import {
     getTemplateForCrop,
@@ -12,7 +12,7 @@ import {
     PlannedTaskDerived,
     getOperationCategory,
     getEffectiveStartDate
-} from '../../../domain/planning/PlanEngine';
+} from '../../../features/scheduler/planning/ClientPlanEngine';
 
 interface SchedulerTimelineProps {
     plot: Plot;
@@ -20,6 +20,52 @@ interface SchedulerTimelineProps {
     onEditLog: (date: string) => void;
     onEditSchedule: () => void;
 }
+
+type TimelineCategory = 'IRRIGATION' | 'NUTRITION' | 'SPRAY' | 'ACTIVITY';
+type TimelineDetail = {
+    text: string;
+    items: PlannedTaskDerived[];
+    notes: string;
+} | null;
+type TimelineDay = {
+    dayNumber: number;
+    dayType: 'PREP' | 'CYCLE';
+    date: Date;
+    dateLabel: string;
+    isToday: boolean;
+    isPast: boolean;
+    stage: { name: string; note: string };
+    status: DayCardProps['status'];
+    notes: {
+        irrigation?: string;
+        nutrition?: string;
+        spray?: string;
+        activity?: string;
+        general: string;
+    };
+    details: {
+        irrigation: TimelineDetail;
+        nutrition: TimelineDetail;
+        spray: TimelineDetail;
+        activity: TimelineDetail;
+    };
+    dayLog?: DailyLog;
+    weatherContext?: DayCardProps['weatherContext'];
+};
+type TimelineGroup = {
+    stageShort: string;
+    stageNote: string;
+    days: TimelineDay[];
+};
+type DetailModalState = {
+    dateLabel: string;
+    dayNumber: number;
+    category: TimelineCategory;
+    status: BlockStatus;
+    note?: string;
+    baseline?: string;
+    logData?: DailyLog;
+};
 
 const SchedulerTimeline: React.FC<SchedulerTimelineProps> = ({ plot, logs, onEditLog, onEditSchedule }) => {
 
@@ -70,7 +116,7 @@ const SchedulerTimeline: React.FC<SchedulerTimelineProps> = ({ plot, logs, onEdi
         const START_DAY = currentDayIndex > 10 ? currentDayIndex - 7 : -15;
         const END_DAY = 240;
 
-        const days = [];
+        const days: TimelineDay[] = [];
 
         // Helper to group PlanItems into UI Categories
         const groupItems = (items: PlannedTaskDerived[]) => {
@@ -90,7 +136,7 @@ const SchedulerTimeline: React.FC<SchedulerTimelineProps> = ({ plot, logs, onEdi
             });
 
             // Format for UI (text + details)
-            const format = (list: PlannedTaskDerived[]) => {
+            const format = (list: PlannedTaskDerived[]): TimelineDetail => {
                 if (list.length === 0) return null;
                 return {
                     text: list.map(i => i.name).join(', '), // Summary text
@@ -169,7 +215,7 @@ const SchedulerTimeline: React.FC<SchedulerTimelineProps> = ({ plot, logs, onEdi
             }
 
             // Weather Context Logic (Existing)
-            let weatherContext: any = undefined;
+            let weatherContext: DayCardProps['weatherContext'] | undefined;
             if (dayLog) {
                 // ... existing logic ...
                 if (dayLog.weatherStamp) {
@@ -235,8 +281,8 @@ const SchedulerTimeline: React.FC<SchedulerTimelineProps> = ({ plot, logs, onEdi
         }
 
         // Grouping by Stage
-        const groups = [];
-        let currentGroup = null;
+        const groups: TimelineGroup[] = [];
+        let currentGroup: TimelineGroup | null = null;
         for (const item of days) {
             const stageName = item.stage.name;
             if (!currentGroup || currentGroup.stageShort !== stageName) {
@@ -250,9 +296,9 @@ const SchedulerTimeline: React.FC<SchedulerTimelineProps> = ({ plot, logs, onEdi
     }, [plot.startDate, plot.schedule, logs, plot.id]);
 
     // Modal State
-    const [detailModal, setDetailModal] = useState<any>(null);
+    const [detailModal, setDetailModal] = useState<DetailModalState | null>(null);
 
-    const handleTapBlock = (day: any, category: 'IRRIGATION' | 'NUTRITION' | 'SPRAY' | 'ACTIVITY') => {
+    const handleTapBlock = (day: TimelineDay, category: TimelineCategory) => {
         const catKey = category.toLowerCase() as 'irrigation' | 'nutrition' | 'spray' | 'activity';
         const detail = day.details[catKey];
         const status = day.status[catKey];

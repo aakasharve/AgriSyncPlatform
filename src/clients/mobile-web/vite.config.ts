@@ -1,29 +1,65 @@
 import path from 'path';
-import { defineConfig, loadEnv } from 'vite';
+import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 
-export default defineConfig(({ mode }) => {
-  const env = loadEnv(mode, '.', '');
+export default defineConfig({
+  server: {
+    port: 3000,
+    host: '0.0.0.0',
+  },
+  plugins: [react()],
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          const normalizedId = id.replace(/\\/g, '/');
+          if (!normalizedId.includes('/node_modules/')) {
+            return;
+          }
 
-  // Validate environment variables without logging sensitive data
-  if (!env.GEMINI_API_KEY) {
-    console.warn('⚠️ Warning: GEMINI_API_KEY not found in environment');
-  }
+          if (
+            normalizedId.includes('/react/') ||
+            normalizedId.includes('/react-dom/') ||
+            normalizedId.includes('/react-router-dom/') ||
+            normalizedId.includes('/react-router/') ||
+            normalizedId.includes('/@remix-run/') ||
+            normalizedId.includes('/scheduler/')
+          ) {
+            return 'framework-vendor';
+          }
 
-  return {
-    server: {
-      port: 3000,
-      host: '0.0.0.0',
+          if (normalizedId.includes('/@react-google-maps/')) {
+            return 'maps-vendor';
+          }
+
+          if (normalizedId.includes('/@capacitor/')) {
+            return 'capacitor-vendor';
+          }
+
+          if (normalizedId.includes('/dexie/')) {
+            return 'storage-vendor';
+          }
+
+          if (normalizedId.includes('/axios/')) {
+            return 'network-vendor';
+          }
+
+          if (normalizedId.includes('/lucide-react/')) {
+            return 'ui-vendor';
+          }
+
+          if (normalizedId.includes('/zod/') || normalizedId.includes('/uuid/')) {
+            return 'utility-vendor';
+          }
+
+          return;
+        },
+      },
     },
-    plugins: [react()],
-    define: {
-      'process.env.API_KEY': JSON.stringify(env.GEMINI_API_KEY),
-      'process.env.GEMINI_API_KEY': JSON.stringify(env.GEMINI_API_KEY)
-    },
-    resolve: {
-      alias: {
-        '@': path.resolve(__dirname, './src'),
-      }
+  },
+  resolve: {
+    alias: {
+      '@': path.resolve(__dirname, './src'),
     }
-  };
+  }
 });

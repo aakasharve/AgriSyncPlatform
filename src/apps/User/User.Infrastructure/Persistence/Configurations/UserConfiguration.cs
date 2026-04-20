@@ -39,6 +39,21 @@ internal sealed class UserConfiguration : IEntityTypeConfiguration<Domain.Identi
         builder.Property(u => u.CreatedAtUtc)
             .HasColumnName("created_at_utc");
 
+        builder.Property(u => u.PhoneVerifiedAtUtc)
+            .HasColumnName("phone_verified_at_utc");
+
+        builder.Property(u => u.PreferredLanguage)
+            .HasColumnName("preferred_language")
+            .HasMaxLength(4)
+            .HasDefaultValue("mr")
+            .IsRequired();
+
+        builder.Property(u => u.AuthMode)
+            .HasColumnName("auth_mode")
+            .HasConversion<int>()
+            .HasDefaultValue(Domain.Identity.AuthMode.Password)
+            .IsRequired();
+
         // Credential — owned entity, stored in same table
         builder.OwnsOne(u => u.Credential, cred =>
         {

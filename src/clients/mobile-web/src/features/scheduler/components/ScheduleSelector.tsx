@@ -14,7 +14,7 @@ import {
     ChevronDown, ChevronUp, Check
 } from 'lucide-react';
 import { CropScheduleTemplate, ScheduleOwnerType } from '../scheduler.types';
-import { getSchedulesForCrop, getAllSchedules } from '../../../data/scheduleLibrary';
+import { getAllTemplates, getTemplatesForCrop } from '../../../infrastructure/reference/TemplateCatalog';
 
 interface ScheduleSelectorProps {
     cropCode: string;  // Filter templates by crop
@@ -54,8 +54,8 @@ const ScheduleSelector: React.FC<ScheduleSelectorProps> = ({ cropCode, selectedT
     const [expandedId, setExpandedId] = useState<string | null>(null);
 
     const templates = useMemo(() => {
-        if (!cropCode) return getAllSchedules();
-        return getSchedulesForCrop(cropCode);
+        if (!cropCode) return getAllTemplates();
+        return getTemplatesForCrop(cropCode);
     }, [cropCode]);
 
     if (templates.length === 0) {

@@ -1,18 +1,24 @@
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using AgriSync.BuildingBlocks.Abstractions;
 using AgriSync.BuildingBlocks.Results;
+using AgriSync.SharedKernel.Contracts.Roles;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Storage;
 using ShramSafal.Application.Contracts.Dtos;
 using ShramSafal.Application.Ports;
+using ShramSafal.Application.UseCases.Attachments.CreateAttachment;
 using ShramSafal.Application.UseCases.CropCycles.CreateCropCycle;
 using ShramSafal.Application.UseCases.Farms.CreateFarm;
 using ShramSafal.Application.UseCases.Farms.CreatePlot;
 using ShramSafal.Application.UseCases.Finance.AddCostEntry;
+using ShramSafal.Application.UseCases.Finance.AllocateGlobalExpense;
 using ShramSafal.Application.UseCases.Finance.CorrectCostEntry;
 using ShramSafal.Application.UseCases.Finance.SetPriceConfigVersion;
 using ShramSafal.Application.UseCases.Logs.AddLogTask;
 using ShramSafal.Application.UseCases.Logs.CreateDailyLog;
 using ShramSafal.Application.UseCases.Logs.VerifyLog;
-using ShramSafal.Domain.Common;
+using ShramSafal.Domain.Location;
 using ShramSafal.Domain.Logs;
 
 namespace ShramSafal.Application.UseCases.Sync.PushSyncBatch;
@@ -20,6 +26,8 @@ namespace ShramSafal.Application.UseCases.Sync.PushSyncBatch;
 public sealed class PushSyncBatchHandler(
     IClock clock,
     ISyncMutationStore syncMutationStore,
+    IShramSafalRepository repository,
+    DbContext dbContext,
     CreateFarmHandler createFarmHandler,
     CreatePlotHandler createPlotHandler,
     CreateCropCycleHandler createCropCycleHandler,
@@ -27,118 +35,165 @@ public sealed class PushSyncBatchHandler(
     AddLogTaskHandler addLogTaskHandler,
     VerifyLogHandler verifyLogHandler,
     AddCostEntryHandler addCostEntryHandler,
+    AllocateGlobalExpenseHandler allocateGlobalExpenseHandler,
     CorrectCostEntryHandler correctCostEntryHandler,
-    SetPriceConfigVersionHandler setPriceConfigVersionHandler)
+    SetPriceConfigVersionHandler setPriceConfigVersionHandler,
+    CreateAttachmentHandler createAttachmentHandler)
 {
     private static readonly JsonSerializerOptions SerializerOptions = new()
     {
         PropertyNameCaseInsensitive = true
     };
+    private static readonly Regex DeviceIdPattern = new(
+        "^[a-zA-Z0-9\\-_]+$",
+        RegexOptions.Compiled | RegexOptions.CultureInvariant,
+        TimeSpan.FromMilliseconds(100));
 
     public async Task<Result<SyncPushResponseDto>> HandleAsync(PushSyncBatchCommand command, CancellationToken ct = default)
     {
-        if (string.IsNullOrWhiteSpace(command.DeviceId))
+        if (string.IsNullOrWhiteSpace(command.DeviceId) || command.AuthenticatedUserId == Guid.Empty)
         {
-            return Result.Failure<SyncPushResponseDto>(ShramSafalErrors.InvalidCommand);
+            return Result.Failure<SyncPushResponseDto>(Domain.Common.ShramSafalErrors.InvalidCommand);
         }
 
+        var actorRole = string.IsNullOrWhiteSpace(command.ActorRole)
+            ? "unknown"
+            : command.ActorRole.Trim();
         var mutations = command.Mutations ?? [];
         var normalizedDeviceId = command.DeviceId.Trim();
+        if (normalizedDeviceId.Length > 128 || !DeviceIdPattern.IsMatch(normalizedDeviceId))
+        {
+            return Result.Failure<SyncPushResponseDto>(Domain.Common.ShramSafalErrors.InvalidCommand);
+        }
+
         var results = new List<SyncMutationResultDto>(mutations.Count);
 
         foreach (var mutation in mutations)
         {
-            var clientRequestId = mutation.ClientRequestId?.Trim();
-            var mutationType = mutation.MutationType?.Trim();
+            results.Add(await ProcessMutationAsync(
+                normalizedDeviceId,
+                mutation,
+                command.AuthenticatedUserId,
+                actorRole,
+                ct));
+        }
 
-            if (string.IsNullOrWhiteSpace(clientRequestId) || string.IsNullOrWhiteSpace(mutationType))
-            {
-                results.Add(new SyncMutationResultDto(
-                    mutation.ClientRequestId ?? string.Empty,
-                    mutation.MutationType ?? string.Empty,
-                    "failed",
-                    null,
-                    ShramSafalErrors.InvalidCommand.Code,
-                    "Each mutation must contain clientRequestId and mutationType."));
-                continue;
-            }
+        return Result.Success(new SyncPushResponseDto(clock.UtcNow, results));
+    }
 
-            var existing = await syncMutationStore.GetAsync(normalizedDeviceId, clientRequestId, ct);
-            if (existing is not null)
+    private async Task<SyncMutationResultDto> ProcessMutationAsync(
+        string deviceId,
+        PushSyncMutationCommand mutation,
+        Guid actorUserId,
+        string actorRole,
+        CancellationToken ct)
+    {
+        var clientRequestId = mutation.ClientRequestId?.Trim();
+        var mutationType = mutation.MutationType?.Trim();
+
+        if (string.IsNullOrWhiteSpace(clientRequestId) || string.IsNullOrWhiteSpace(mutationType))
+        {
+            return CreateFailedResult(
+                mutation.ClientRequestId ?? string.Empty,
+                mutation.MutationType ?? string.Empty,
+                Domain.Common.ShramSafalErrors.InvalidCommand.Code,
+                "Each mutation must contain clientRequestId and mutationType.");
+        }
+
+        var existing = await syncMutationStore.GetAsync(deviceId, clientRequestId, ct);
+        if (existing is not null)
+        {
+            return CreateDuplicateResult(clientRequestId, mutationType, existing);
+        }
+
+        await using var transaction = await BeginTransactionIfSupportedAsync(ct);
+
+        try
+        {
+            var persistedBeforeExecution = await syncMutationStore.GetAsync(deviceId, clientRequestId, ct);
+            if (persistedBeforeExecution is not null)
             {
-                results.Add(new SyncMutationResultDto(
-                    clientRequestId,
-                    mutationType,
-                    "duplicate",
-                    DeserializeStoredPayload(existing.ResponsePayloadJson),
-                    null,
-                    null));
-                continue;
+                await RollbackAsync(transaction, ct);
+                return CreateDuplicateResult(clientRequestId, mutationType, persistedBeforeExecution);
             }
 
             var execution = await ExecuteMutationAsync(
-                normalizedDeviceId,
+                deviceId,
                 clientRequestId,
                 mutationType,
                 mutation.Payload,
+                actorUserId,
+                actorRole,
                 ct);
 
             if (!execution.IsSuccess)
             {
-                results.Add(new SyncMutationResultDto(
-                    clientRequestId,
-                    mutationType,
-                    "failed",
-                    null,
-                    execution.ErrorCode,
-                    execution.ErrorMessage));
-                continue;
+                await RollbackAsync(transaction, ct);
+                return CreateFailedResult(clientRequestId, mutationType, execution.ErrorCode, execution.ErrorMessage);
             }
 
             var responsePayloadJson = JsonSerializer.Serialize(execution.Data, SerializerOptions);
             var stored = await syncMutationStore.TryStoreSuccessAsync(
-                normalizedDeviceId,
+                deviceId,
                 clientRequestId,
                 mutationType,
                 responsePayloadJson,
                 clock.UtcNow,
                 ct);
 
-            if (stored)
+            if (!stored)
             {
-                results.Add(new SyncMutationResultDto(
-                    clientRequestId,
-                    mutationType,
-                    "applied",
-                    execution.Data,
-                    null,
-                    null));
-                continue;
+                await RollbackAsync(transaction, ct);
+                dbContext.ChangeTracker.Clear();
+                return await ResolveDuplicateOrStoreFailureAsync(deviceId, clientRequestId, mutationType, ct);
             }
 
-            var deduplicated = await syncMutationStore.GetAsync(normalizedDeviceId, clientRequestId, ct);
+            if (transaction is not null)
+            {
+                await transaction.CommitAsync(ct);
+            }
+
+            return CreateAppliedResult(clientRequestId, mutationType, execution.Data);
+        }
+        catch (DbUpdateException)
+        {
+            await RollbackAsync(transaction, ct);
+            dbContext.ChangeTracker.Clear();
+
+            var deduplicated = await syncMutationStore.GetAsync(deviceId, clientRequestId, ct);
             if (deduplicated is not null)
             {
-                results.Add(new SyncMutationResultDto(
-                    clientRequestId,
-                    mutationType,
-                    "duplicate",
-                    DeserializeStoredPayload(deduplicated.ResponsePayloadJson),
-                    null,
-                    null));
-                continue;
+                return CreateDuplicateResult(clientRequestId, mutationType, deduplicated);
             }
 
-            results.Add(new SyncMutationResultDto(
+            return CreateFailedResult(
                 clientRequestId,
                 mutationType,
-                "failed",
-                null,
                 "ShramSafal.SyncMutationStoreError",
-                "Mutation was applied but could not be persisted in sync mutation store."));
+                "Mutation failed during persistence and could not be safely deduplicated.");
+        }
+        finally
+        {
+            dbContext.ChangeTracker.Clear();
+        }
+    }
+
+    private async Task<IDbContextTransaction?> BeginTransactionIfSupportedAsync(CancellationToken ct)
+    {
+        if (!dbContext.Database.IsRelational())
+        {
+            return null;
         }
 
-        return Result.Success(new SyncPushResponseDto(clock.UtcNow, results));
+        return await dbContext.Database.BeginTransactionAsync(ct);
+    }
+
+    private static async Task RollbackAsync(IDbContextTransaction? transaction, CancellationToken ct)
+    {
+        if (transaction is not null)
+        {
+            await transaction.RollbackAsync(ct);
+        }
     }
 
     private async Task<MutationExecutionOutcome> ExecuteMutationAsync(
@@ -146,194 +201,556 @@ public sealed class PushSyncBatchHandler(
         string clientRequestId,
         string mutationType,
         JsonElement payload,
+        Guid actorUserId,
+        string actorRole,
         CancellationToken ct)
     {
         switch (mutationType.ToLowerInvariant())
         {
             case "create_farm":
-            {
-                var request = DeserializePayload<CreateFarmMutationPayload>(payload);
-                if (request is null)
-                {
-                    return MutationExecutionOutcome.Failure("ShramSafal.SyncInvalidPayload", "Invalid payload for create_farm.");
-                }
-
-                var result = await createFarmHandler.HandleAsync(
-                    new CreateFarmCommand(request.Name, request.OwnerUserId, request.FarmId),
-                    ct);
-
-                return ToOutcome(result);
-            }
+                return await HandleCreateFarmAsync(clientRequestId, payload, actorUserId, actorRole, ct);
             case "create_plot":
-            {
-                var request = DeserializePayload<CreatePlotMutationPayload>(payload);
-                if (request is null)
-                {
-                    return MutationExecutionOutcome.Failure("ShramSafal.SyncInvalidPayload", "Invalid payload for create_plot.");
-                }
-
-                var result = await createPlotHandler.HandleAsync(
-                    new CreatePlotCommand(request.FarmId, request.Name, request.AreaInAcres, request.PlotId),
-                    ct);
-
-                return ToOutcome(result);
-            }
+                return await HandleCreatePlotAsync(clientRequestId, payload, actorUserId, actorRole, ct);
             case "create_crop_cycle":
-            {
-                var request = DeserializePayload<CreateCropCycleMutationPayload>(payload);
-                if (request is null)
-                {
-                    return MutationExecutionOutcome.Failure("ShramSafal.SyncInvalidPayload", "Invalid payload for create_crop_cycle.");
-                }
-
-                var result = await createCropCycleHandler.HandleAsync(
-                    new CreateCropCycleCommand(
-                        request.FarmId,
-                        request.PlotId,
-                        request.CropName,
-                        request.Stage,
-                        request.StartDate,
-                        request.EndDate,
-                        request.CropCycleId),
-                    ct);
-
-                return ToOutcome(result);
-            }
+                return await HandleCreateCropCycleAsync(clientRequestId, payload, actorUserId, actorRole, ct);
             case "create_daily_log":
-            {
-                var request = DeserializePayload<CreateDailyLogMutationPayload>(payload);
-                if (request is null)
-                {
-                    return MutationExecutionOutcome.Failure("ShramSafal.SyncInvalidPayload", "Invalid payload for create_daily_log.");
-                }
-
-                var result = await createDailyLogHandler.HandleAsync(
-                    new CreateDailyLogCommand(
-                        request.FarmId,
-                        request.PlotId,
-                        request.CropCycleId,
-                        request.OperatorUserId,
-                        request.LogDate,
-                        deviceId,
-                        clientRequestId,
-                        request.DailyLogId),
-                    ct);
-
-                return ToOutcome(result);
-            }
+                return await HandleCreateDailyLogAsync(deviceId, clientRequestId, payload, actorUserId, actorRole, ct);
             case "add_log_task":
-            {
-                var request = DeserializePayload<AddLogTaskMutationPayload>(payload);
-                if (request is null)
-                {
-                    return MutationExecutionOutcome.Failure("ShramSafal.SyncInvalidPayload", "Invalid payload for add_log_task.");
-                }
-
-                var result = await addLogTaskHandler.HandleAsync(
-                    new AddLogTaskCommand(
-                        request.DailyLogId,
-                        request.ActivityType,
-                        request.Notes,
-                        request.OccurredAtUtc,
-                        request.LogTaskId),
-                    ct);
-
-                return ToOutcome(result);
-            }
+                return await HandleAddLogTaskAsync(clientRequestId, payload, actorUserId, actorRole, ct);
             case "verify_log":
-            {
-                var request = DeserializePayload<VerifyLogMutationPayload>(payload);
-                if (request is null)
-                {
-                    return MutationExecutionOutcome.Failure("ShramSafal.SyncInvalidPayload", "Invalid payload for verify_log.");
-                }
-
-                if (!Enum.TryParse<VerificationStatus>(request.Status, true, out var status))
-                {
-                    return MutationExecutionOutcome.Failure("ShramSafal.InvalidVerificationStatus", "Status must be Approved or Rejected.");
-                }
-
-                var result = await verifyLogHandler.HandleAsync(
-                    new VerifyLogCommand(
-                        request.DailyLogId,
-                        status,
-                        request.Reason,
-                        request.VerifiedByUserId,
-                        request.VerificationEventId),
-                    ct);
-
-                return ToOutcome(result);
-            }
+                return await HandleVerifyLogAsync(clientRequestId, payload, actorUserId, actorRole, ct);
             case "add_cost_entry":
-            {
-                var request = DeserializePayload<AddCostEntryMutationPayload>(payload);
-                if (request is null)
-                {
-                    return MutationExecutionOutcome.Failure("ShramSafal.SyncInvalidPayload", "Invalid payload for add_cost_entry.");
-                }
-
-                var result = await addCostEntryHandler.HandleAsync(
-                    new AddCostEntryCommand(
-                        request.FarmId,
-                        request.PlotId,
-                        request.CropCycleId,
-                        request.Category,
-                        request.Description,
-                        request.Amount,
-                        request.CurrencyCode,
-                        request.EntryDate,
-                        request.CreatedByUserId,
-                        request.CostEntryId),
-                    ct);
-
-                return ToOutcome(result);
-            }
+                return await HandleAddCostEntryAsync(clientRequestId, payload, actorUserId, actorRole, ct);
+            case "allocate_global_expense":
+                return await HandleAllocateGlobalExpenseAsync(clientRequestId, payload, actorUserId, actorRole, ct);
             case "correct_cost_entry":
-            {
-                var request = DeserializePayload<CorrectCostEntryMutationPayload>(payload);
-                if (request is null)
-                {
-                    return MutationExecutionOutcome.Failure("ShramSafal.SyncInvalidPayload", "Invalid payload for correct_cost_entry.");
-                }
-
-                var result = await correctCostEntryHandler.HandleAsync(
-                    new CorrectCostEntryCommand(
-                        request.CostEntryId,
-                        request.CorrectedAmount,
-                        request.CurrencyCode,
-                        request.Reason,
-                        request.CorrectedByUserId,
-                        request.FinanceCorrectionId),
-                    ct);
-
-                return ToOutcome(result);
-            }
+                return await HandleCorrectCostEntryAsync(clientRequestId, payload, actorUserId, actorRole, ct);
             case "set_price_config":
-            {
-                var request = DeserializePayload<SetPriceConfigMutationPayload>(payload);
-                if (request is null)
-                {
-                    return MutationExecutionOutcome.Failure("ShramSafal.SyncInvalidPayload", "Invalid payload for set_price_config.");
-                }
-
-                var result = await setPriceConfigVersionHandler.HandleAsync(
-                    new SetPriceConfigVersionCommand(
-                        request.ItemName,
-                        request.UnitPrice,
-                        request.CurrencyCode,
-                        request.EffectiveFrom,
-                        request.Version,
-                        request.CreatedByUserId,
-                        request.PriceConfigId),
-                    ct);
-
-                return ToOutcome(result);
-            }
+                return await HandleSetPriceConfigAsync(clientRequestId, payload, actorUserId, actorRole, ct);
+            case "create_attachment":
+                return await HandleCreateAttachmentAsync(clientRequestId, payload, actorUserId, actorRole, ct);
+            case "add_location":
+                return MutationExecutionOutcome.Failure(
+                    "ShramSafal.InvalidMutationType",
+                    "Mutation type 'add_location' is not allowed as standalone command. Send location with create_daily_log.");
             default:
                 return MutationExecutionOutcome.Failure(
                     "ShramSafal.UnsupportedMutationType",
                     $"Unsupported mutationType '{mutationType}'.");
         }
+    }
+
+    private async Task<MutationExecutionOutcome> HandleCreateFarmAsync(
+        string clientRequestId,
+        JsonElement payload,
+        Guid actorUserId,
+        string actorRole,
+        CancellationToken ct)
+    {
+        if (!PayloadHasOnly(payload, "farmId", "name", "ownerUserId"))
+        {
+            return MutationExecutionOutcome.Failure(
+                "ShramSafal.SyncInvalidPayload",
+                "create_farm payload contains unsupported fields.");
+        }
+
+        var request = DeserializePayload<CreateFarmMutationPayload>(payload);
+        if (request is null || string.IsNullOrWhiteSpace(request.Name))
+        {
+            return MutationExecutionOutcome.Failure("ShramSafal.SyncInvalidPayload", "Invalid payload for create_farm.");
+        }
+
+        var result = await createFarmHandler.HandleAsync(
+            new CreateFarmCommand(
+                request.Name,
+                actorUserId,
+                request.FarmId,
+                actorRole,
+                clientRequestId),
+            ct);
+
+        return ToOutcome(result);
+    }
+
+    private async Task<MutationExecutionOutcome> HandleCreatePlotAsync(
+        string clientRequestId,
+        JsonElement payload,
+        Guid actorUserId,
+        string actorRole,
+        CancellationToken ct)
+    {
+        if (!PayloadHasOnly(payload, "plotId", "farmId", "name", "areaInAcres"))
+        {
+            return MutationExecutionOutcome.Failure(
+                "ShramSafal.SyncInvalidPayload",
+                "create_plot payload contains unsupported fields.");
+        }
+
+        var request = DeserializePayload<CreatePlotMutationPayload>(payload);
+        if (request is null)
+        {
+            return MutationExecutionOutcome.Failure("ShramSafal.SyncInvalidPayload", "Invalid payload for create_plot.");
+        }
+
+        var isMember = await repository.IsUserMemberOfFarmAsync(request.FarmId, actorUserId, ct);
+        if (!isMember)
+        {
+            return MutationExecutionOutcome.Failure("ShramSafal.Forbidden", "User is not a member of the target farm.");
+        }
+
+        var result = await createPlotHandler.HandleAsync(
+            new CreatePlotCommand(
+                request.FarmId,
+                request.Name,
+                request.AreaInAcres,
+                actorUserId,
+                request.PlotId,
+                actorRole,
+                clientRequestId),
+            ct);
+
+        return ToOutcome(result);
+    }
+
+    private async Task<MutationExecutionOutcome> HandleCreateCropCycleAsync(
+        string clientRequestId,
+        JsonElement payload,
+        Guid actorUserId,
+        string actorRole,
+        CancellationToken ct)
+    {
+        if (!PayloadHasOnly(payload, "cropCycleId", "farmId", "plotId", "cropName", "stage", "startDate", "endDate"))
+        {
+            return MutationExecutionOutcome.Failure(
+                "ShramSafal.SyncInvalidPayload",
+                "create_crop_cycle payload contains unsupported fields.");
+        }
+
+        var request = DeserializePayload<CreateCropCycleMutationPayload>(payload);
+        if (request is null)
+        {
+            return MutationExecutionOutcome.Failure("ShramSafal.SyncInvalidPayload", "Invalid payload for create_crop_cycle.");
+        }
+
+        var isMember = await repository.IsUserMemberOfFarmAsync(request.FarmId, actorUserId, ct);
+        if (!isMember)
+        {
+            return MutationExecutionOutcome.Failure("ShramSafal.Forbidden", "User is not a member of the target farm.");
+        }
+
+        var result = await createCropCycleHandler.HandleAsync(
+            new CreateCropCycleCommand(
+                request.FarmId,
+                request.PlotId,
+                request.CropName,
+                request.Stage,
+                request.StartDate,
+                request.EndDate,
+                actorUserId,
+                request.CropCycleId,
+                actorRole,
+                clientRequestId),
+            ct);
+
+        return ToOutcome(result);
+    }
+
+    private async Task<MutationExecutionOutcome> HandleCreateDailyLogAsync(
+        string deviceId,
+        string clientRequestId,
+        JsonElement payload,
+        Guid actorUserId,
+        string actorRole,
+        CancellationToken ct)
+    {
+        if (!PayloadHasOnly(payload, "dailyLogId", "farmId", "plotId", "cropCycleId", "operatorUserId", "logDate", "location"))
+        {
+            return MutationExecutionOutcome.Failure(
+                "ShramSafal.SyncInvalidPayload",
+                "create_daily_log payload contains unsupported fields.");
+        }
+
+        var request = DeserializePayload<CreateDailyLogMutationPayload>(payload);
+        if (request is null)
+        {
+            return MutationExecutionOutcome.Failure("ShramSafal.SyncInvalidPayload", "Invalid payload for create_daily_log.");
+        }
+
+        var isMember = await repository.IsUserMemberOfFarmAsync(request.FarmId, actorUserId, ct);
+        if (!isMember)
+        {
+            return MutationExecutionOutcome.Failure("ShramSafal.Forbidden", "User is not a member of the target farm.");
+        }
+
+        var result = await createDailyLogHandler.HandleAsync(
+            new CreateDailyLogCommand(
+                FarmId: request.FarmId,
+                PlotId: request.PlotId,
+                CropCycleId: request.CropCycleId,
+                RequestedByUserId: actorUserId,
+                OperatorUserId: actorUserId,
+                LogDate: request.LogDate,
+                Location: ToLocationSnapshot(request.Location),
+                DeviceId: deviceId,
+                ClientRequestId: clientRequestId,
+                DailyLogId: request.DailyLogId,
+                ActorRole: actorRole),
+            ct);
+
+        return ToOutcome(result);
+    }
+
+    private async Task<MutationExecutionOutcome> HandleAddLogTaskAsync(
+        string clientRequestId,
+        JsonElement payload,
+        Guid actorUserId,
+        string actorRole,
+        CancellationToken ct)
+    {
+        if (!PayloadHasOnly(payload, "logTaskId", "dailyLogId", "activityType", "notes", "occurredAtUtc"))
+        {
+            return MutationExecutionOutcome.Failure(
+                "ShramSafal.SyncInvalidPayload",
+                "add_log_task payload contains unsupported fields.");
+        }
+
+        var request = DeserializePayload<AddLogTaskMutationPayload>(payload);
+        if (request is null)
+        {
+            return MutationExecutionOutcome.Failure("ShramSafal.SyncInvalidPayload", "Invalid payload for add_log_task.");
+        }
+
+        var dailyLog = await repository.GetDailyLogByIdAsync(request.DailyLogId, ct);
+        if (dailyLog is null)
+        {
+            return MutationExecutionOutcome.Failure("ShramSafal.DailyLogNotFound", "Daily log was not found.");
+        }
+
+        var isMember = await repository.IsUserMemberOfFarmAsync(dailyLog.FarmId, actorUserId, ct);
+        if (!isMember)
+        {
+            return MutationExecutionOutcome.Failure("ShramSafal.Forbidden", "User is not a member of the target farm.");
+        }
+
+        var result = await addLogTaskHandler.HandleAsync(
+            new AddLogTaskCommand(
+                request.DailyLogId,
+                request.ActivityType,
+                request.Notes,
+                request.OccurredAtUtc,
+                request.LogTaskId,
+                actorUserId,
+                actorRole,
+                clientRequestId),
+            ct);
+
+        return ToOutcome(result);
+    }
+
+    private async Task<MutationExecutionOutcome> HandleVerifyLogAsync(
+        string clientRequestId,
+        JsonElement payload,
+        Guid actorUserId,
+        string actorRole,
+        CancellationToken ct)
+    {
+        if (!PayloadHasOnly(payload, "verificationEventId", "dailyLogId", "status", "reason", "verifiedByUserId"))
+        {
+            return MutationExecutionOutcome.Failure(
+                "ShramSafal.SyncInvalidPayload",
+                "verify_log payload contains unsupported fields.");
+        }
+
+        var request = DeserializePayload<VerifyLogMutationPayload>(payload);
+        if (request is null)
+        {
+            return MutationExecutionOutcome.Failure("ShramSafal.SyncInvalidPayload", "Invalid payload for verify_log.");
+        }
+
+        if (!TryMapVerificationStatus(request.Status, out var status))
+        {
+            return MutationExecutionOutcome.Failure(
+                "ShramSafal.InvalidVerificationStatus",
+                "Status must be one of Approved, Rejected, Draft, Confirmed, Verified, Disputed, CorrectionPending.");
+        }
+
+        var dailyLog = await repository.GetDailyLogByIdAsync(request.DailyLogId, ct);
+        if (dailyLog is null)
+        {
+            return MutationExecutionOutcome.Failure("ShramSafal.DailyLogNotFound", "Daily log was not found.");
+        }
+
+        var isMember = await repository.IsUserMemberOfFarmAsync(dailyLog.FarmId, actorUserId, ct);
+        if (!isMember)
+        {
+            return MutationExecutionOutcome.Failure("ShramSafal.Forbidden", "User is not a member of the target farm.");
+        }
+
+        var result = await verifyLogHandler.HandleAsync(
+            new VerifyLogCommand(
+                request.DailyLogId,
+                status,
+                request.Reason,
+                actorUserId,
+                request.VerificationEventId,
+                actorRole,
+                clientRequestId),
+            ct);
+
+        return ToOutcome(result);
+    }
+
+    private async Task<MutationExecutionOutcome> HandleAddCostEntryAsync(
+        string clientRequestId,
+        JsonElement payload,
+        Guid actorUserId,
+        string actorRole,
+        CancellationToken ct)
+    {
+        if (!PayloadHasOnly(payload, "costEntryId", "farmId", "plotId", "cropCycleId", "category", "description", "amount", "currencyCode", "entryDate", "createdByUserId", "location"))
+        {
+            return MutationExecutionOutcome.Failure(
+                "ShramSafal.SyncInvalidPayload",
+                "add_cost_entry payload contains unsupported fields.");
+        }
+
+        var request = DeserializePayload<AddCostEntryMutationPayload>(payload);
+        if (request is null)
+        {
+            return MutationExecutionOutcome.Failure("ShramSafal.SyncInvalidPayload", "Invalid payload for add_cost_entry.");
+        }
+
+        var isMember = await repository.IsUserMemberOfFarmAsync(request.FarmId, actorUserId, ct);
+        if (!isMember)
+        {
+            return MutationExecutionOutcome.Failure("ShramSafal.Forbidden", "User is not a member of the target farm.");
+        }
+
+        var result = await addCostEntryHandler.HandleAsync(
+            new AddCostEntryCommand(
+                FarmId: request.FarmId,
+                PlotId: request.PlotId,
+                CropCycleId: request.CropCycleId,
+                Category: request.Category,
+                Description: request.Description,
+                Amount: request.Amount,
+                CurrencyCode: request.CurrencyCode,
+                EntryDate: request.EntryDate,
+                CreatedByUserId: actorUserId,
+                Location: ToLocationSnapshot(request.Location),
+                CostEntryId: request.CostEntryId,
+                ActorRole: actorRole,
+                ClientCommandId: clientRequestId),
+            ct);
+
+        return ToOutcome(result);
+    }
+
+    private async Task<MutationExecutionOutcome> HandleAllocateGlobalExpenseAsync(
+        string clientRequestId,
+        JsonElement payload,
+        Guid actorUserId,
+        string actorRole,
+        CancellationToken ct)
+    {
+        if (!PayloadHasOnly(payload, "dayLedgerId", "costEntryId", "allocationBasis", "allocations", "createdByUserId"))
+        {
+            return MutationExecutionOutcome.Failure(
+                "ShramSafal.SyncInvalidPayload",
+                "allocate_global_expense payload contains unsupported fields.");
+        }
+
+        var request = DeserializePayload<AllocateGlobalExpenseMutationPayload>(payload);
+        if (request is null || request.CostEntryId == Guid.Empty || string.IsNullOrWhiteSpace(request.AllocationBasis))
+        {
+            return MutationExecutionOutcome.Failure("ShramSafal.SyncInvalidPayload", "Invalid payload for allocate_global_expense.");
+        }
+
+        var mappedAllocations = (request.Allocations ?? [])
+            .Select(a => new AllocateGlobalExpenseAllocationCommand(a.PlotId, a.Amount))
+            .ToList();
+
+        var result = await allocateGlobalExpenseHandler.HandleAsync(
+            new AllocateGlobalExpenseCommand(
+                request.CostEntryId,
+                request.AllocationBasis,
+                mappedAllocations,
+                actorUserId,
+                request.DayLedgerId,
+                actorRole,
+                clientRequestId),
+            ct);
+
+        return ToOutcome(result);
+    }
+
+    private static LocationSnapshot? ToLocationSnapshot(LocationMutationPayload? payload)
+    {
+        if (payload is null)
+        {
+            return null;
+        }
+
+        return new LocationSnapshot
+        {
+            Latitude = payload.Latitude,
+            Longitude = payload.Longitude,
+            AccuracyMeters = payload.AccuracyMeters,
+            Altitude = payload.Altitude,
+            CapturedAtUtc = payload.CapturedAtUtc,
+            Provider = payload.Provider,
+            PermissionState = payload.PermissionState
+        };
+    }
+
+    private async Task<MutationExecutionOutcome> HandleCorrectCostEntryAsync(
+        string clientRequestId,
+        JsonElement payload,
+        Guid actorUserId,
+        string actorRole,
+        CancellationToken ct)
+    {
+        if (!PayloadHasOnly(payload, "financeCorrectionId", "costEntryId", "correctedAmount", "currencyCode", "reason", "correctedByUserId"))
+        {
+            return MutationExecutionOutcome.Failure(
+                "ShramSafal.SyncInvalidPayload",
+                "correct_cost_entry payload contains unsupported fields.");
+        }
+
+        var request = DeserializePayload<CorrectCostEntryMutationPayload>(payload);
+        if (request is null)
+        {
+            return MutationExecutionOutcome.Failure("ShramSafal.SyncInvalidPayload", "Invalid payload for correct_cost_entry.");
+        }
+
+        var costEntry = await repository.GetCostEntryByIdAsync(request.CostEntryId, ct);
+        if (costEntry is null)
+        {
+            return MutationExecutionOutcome.Failure("ShramSafal.CostEntryNotFound", "Cost entry was not found.");
+        }
+
+        var isMember = await repository.IsUserMemberOfFarmAsync(costEntry.FarmId, actorUserId, ct);
+        if (!isMember)
+        {
+            return MutationExecutionOutcome.Failure("ShramSafal.Forbidden", "User is not a member of the target farm.");
+        }
+
+        var result = await correctCostEntryHandler.HandleAsync(
+            new CorrectCostEntryCommand(
+                request.CostEntryId,
+                request.CorrectedAmount,
+                request.CurrencyCode,
+                request.Reason,
+                actorUserId,
+                request.FinanceCorrectionId,
+                actorRole,
+                clientRequestId),
+            ct);
+
+        return ToOutcome(result);
+    }
+
+    private async Task<MutationExecutionOutcome> HandleSetPriceConfigAsync(
+        string clientRequestId,
+        JsonElement payload,
+        Guid actorUserId,
+        string actorRole,
+        CancellationToken ct)
+    {
+        if (!PayloadHasOnly(payload, "priceConfigId", "itemName", "unitPrice", "currencyCode", "effectiveFrom", "version", "createdByUserId"))
+        {
+            return MutationExecutionOutcome.Failure(
+                "ShramSafal.SyncInvalidPayload",
+                "set_price_config payload contains unsupported fields.");
+        }
+
+        var request = DeserializePayload<SetPriceConfigMutationPayload>(payload);
+        if (request is null)
+        {
+            return MutationExecutionOutcome.Failure("ShramSafal.SyncInvalidPayload", "Invalid payload for set_price_config.");
+        }
+
+        var farmIds = await repository.GetFarmIdsForUserAsync(actorUserId, ct);
+        if (farmIds.Count == 0)
+        {
+            return MutationExecutionOutcome.Failure("ShramSafal.Forbidden", "User must belong to at least one farm.");
+        }
+
+        var result = await setPriceConfigVersionHandler.HandleAsync(
+            new SetPriceConfigVersionCommand(
+                request.ItemName,
+                request.UnitPrice,
+                request.CurrencyCode,
+                request.EffectiveFrom,
+                request.Version,
+                actorUserId,
+                request.PriceConfigId,
+                actorRole,
+                clientRequestId),
+            ct);
+
+        return ToOutcome(result);
+    }
+
+    private async Task<MutationExecutionOutcome> HandleCreateAttachmentAsync(
+        string clientRequestId,
+        JsonElement payload,
+        Guid actorUserId,
+        string actorRole,
+        CancellationToken ct)
+    {
+        if (!PayloadHasOnly(payload, "attachmentId", "farmId", "linkedEntityId", "linkedEntityType", "fileName", "mimeType", "createdByUserId"))
+        {
+            return MutationExecutionOutcome.Failure(
+                "ShramSafal.SyncInvalidPayload",
+                "create_attachment payload contains unsupported fields.");
+        }
+
+        var request = DeserializePayload<CreateAttachmentMutationPayload>(payload);
+        if (request is null)
+        {
+            return MutationExecutionOutcome.Failure("ShramSafal.SyncInvalidPayload", "Invalid payload for create_attachment.");
+        }
+
+        var isMember = await repository.IsUserMemberOfFarmAsync(request.FarmId, actorUserId, ct);
+        if (!isMember)
+        {
+            return MutationExecutionOutcome.Failure("ShramSafal.Forbidden", "User is not a member of the target farm.");
+        }
+
+        var result = await createAttachmentHandler.HandleAsync(
+            new CreateAttachmentCommand(
+                request.FarmId,
+                request.LinkedEntityId,
+                request.LinkedEntityType,
+                request.FileName,
+                request.MimeType,
+                actorUserId,
+                request.AttachmentId,
+                actorRole,
+                clientRequestId),
+            ct);
+
+        return ToOutcome(result);
+    }
+
+    private static bool PayloadHasOnly(JsonElement payload, params string[] allowedProperties)
+    {
+        if (payload.ValueKind != JsonValueKind.Object)
+        {
+            return false;
+        }
+
+        var allowed = new HashSet<string>(allowedProperties, StringComparer.OrdinalIgnoreCase);
+        foreach (var property in payload.EnumerateObject())
+        {
+            if (!allowed.Contains(property.Name))
+            {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     private static TPayload? DeserializePayload<TPayload>(JsonElement payload)
@@ -347,6 +764,31 @@ public sealed class PushSyncBatchHandler(
         return payload.Deserialize<TPayload>(SerializerOptions);
     }
 
+    private static bool TryMapVerificationStatus(string? rawStatus, out VerificationStatus status)
+    {
+        if (Enum.TryParse<VerificationStatus>(rawStatus, ignoreCase: true, out status))
+        {
+            return true;
+        }
+
+        var normalized = rawStatus?.Trim().ToLowerInvariant();
+        switch (normalized)
+        {
+            case "approved":
+                status = VerificationStatus.Confirmed;
+                return true;
+            case "rejected":
+                status = VerificationStatus.Disputed;
+                return true;
+            case "pending":
+                status = VerificationStatus.CorrectionPending;
+                return true;
+            default:
+                status = VerificationStatus.Draft;
+                return false;
+        }
+    }
+
     private static object? DeserializeStoredPayload(string payloadJson)
     {
         if (string.IsNullOrWhiteSpace(payloadJson))
@@ -356,6 +798,59 @@ public sealed class PushSyncBatchHandler(
 
         using var document = JsonDocument.Parse(payloadJson);
         return document.RootElement.Clone();
+    }
+
+    private static SyncMutationResultDto CreateAppliedResult(string clientRequestId, string mutationType, object? data)
+    {
+        return new SyncMutationResultDto(clientRequestId, mutationType, "applied", data, null, null);
+    }
+
+    private static SyncMutationResultDto CreateDuplicateResult(
+        string clientRequestId,
+        string mutationType,
+        StoredSyncMutation storedMutation)
+    {
+        return new SyncMutationResultDto(
+            clientRequestId,
+            mutationType,
+            "duplicate",
+            DeserializeStoredPayload(storedMutation.ResponsePayloadJson),
+            null,
+            null);
+    }
+
+    private static SyncMutationResultDto CreateFailedResult(
+        string clientRequestId,
+        string mutationType,
+        string? errorCode,
+        string? errorMessage)
+    {
+        return new SyncMutationResultDto(
+            clientRequestId,
+            mutationType,
+            "failed",
+            null,
+            errorCode,
+            errorMessage);
+    }
+
+    private async Task<SyncMutationResultDto> ResolveDuplicateOrStoreFailureAsync(
+        string deviceId,
+        string clientRequestId,
+        string mutationType,
+        CancellationToken ct)
+    {
+        var deduplicated = await syncMutationStore.GetAsync(deviceId, clientRequestId, ct);
+        if (deduplicated is not null)
+        {
+            return CreateDuplicateResult(clientRequestId, mutationType, deduplicated);
+        }
+
+        return CreateFailedResult(
+            clientRequestId,
+            mutationType,
+            "ShramSafal.SyncMutationStoreError",
+            "Mutation was rolled back because the sync mutation store could not persist the deduplication record.");
     }
 
     private static MutationExecutionOutcome ToOutcome<T>(Result<T> result)
@@ -380,7 +875,7 @@ public sealed class PushSyncBatchHandler(
             new(false, null, errorCode, errorMessage);
     }
 
-    private sealed record CreateFarmMutationPayload(Guid? FarmId, string Name, Guid OwnerUserId);
+    private sealed record CreateFarmMutationPayload(Guid? FarmId, string Name, Guid? OwnerUserId);
 
     private sealed record CreatePlotMutationPayload(Guid? PlotId, Guid FarmId, string Name, decimal AreaInAcres);
 
@@ -398,8 +893,9 @@ public sealed class PushSyncBatchHandler(
         Guid FarmId,
         Guid PlotId,
         Guid CropCycleId,
-        Guid OperatorUserId,
-        DateOnly LogDate);
+        Guid? OperatorUserId,
+        DateOnly LogDate,
+        LocationMutationPayload? Location);
 
     private sealed record AddLogTaskMutationPayload(
         Guid? LogTaskId,
@@ -411,9 +907,10 @@ public sealed class PushSyncBatchHandler(
     private sealed record VerifyLogMutationPayload(
         Guid? VerificationEventId,
         Guid DailyLogId,
-        string Status,
+        string? Status,
+        string? TargetStatus,
         string? Reason,
-        Guid VerifiedByUserId);
+        Guid? VerifiedByUserId);
 
     private sealed record AddCostEntryMutationPayload(
         Guid? CostEntryId,
@@ -425,7 +922,8 @@ public sealed class PushSyncBatchHandler(
         decimal Amount,
         string CurrencyCode,
         DateOnly EntryDate,
-        Guid CreatedByUserId);
+        Guid? CreatedByUserId,
+        LocationMutationPayload? Location);
 
     private sealed record CorrectCostEntryMutationPayload(
         Guid? FinanceCorrectionId,
@@ -433,7 +931,18 @@ public sealed class PushSyncBatchHandler(
         decimal CorrectedAmount,
         string CurrencyCode,
         string Reason,
-        Guid CorrectedByUserId);
+        Guid? CorrectedByUserId);
+
+    private sealed record AllocateGlobalExpenseMutationPayload(
+        Guid? DayLedgerId,
+        Guid CostEntryId,
+        string AllocationBasis,
+        IReadOnlyList<AllocateGlobalExpenseMutationAllocationPayload> Allocations,
+        Guid? CreatedByUserId);
+
+    private sealed record AllocateGlobalExpenseMutationAllocationPayload(
+        Guid PlotId,
+        decimal Amount);
 
     private sealed record SetPriceConfigMutationPayload(
         Guid? PriceConfigId,
@@ -442,5 +951,23 @@ public sealed class PushSyncBatchHandler(
         string CurrencyCode,
         DateOnly EffectiveFrom,
         int Version,
-        Guid CreatedByUserId);
+        Guid? CreatedByUserId);
+
+    private sealed record CreateAttachmentMutationPayload(
+        Guid? AttachmentId,
+        Guid FarmId,
+        Guid LinkedEntityId,
+        string LinkedEntityType,
+        string FileName,
+        string MimeType,
+        Guid? CreatedByUserId);
+
+    private sealed record LocationMutationPayload(
+        decimal Latitude,
+        decimal Longitude,
+        decimal AccuracyMeters,
+        decimal? Altitude,
+        DateTime CapturedAtUtc,
+        string Provider,
+        string PermissionState);
 }

@@ -1,15 +1,62 @@
 /// <reference lib="webworker" />
 
-const CACHE_NAME = 'shramsafal-push-v1';
+const APP_SHELL_CACHE = 'shramsafal-app-shell-v2';
+const API_CACHE = 'shramsafal-api-v2';
+const STATIC_ASSET_PATTERNS = [
+    /^\/$/,
+    /^\/index\.html$/,
+    /^\/assets\//,
+    /^\/icons\//,
+    /^\/manifest/,
+    /^\/pwa-/,
+    /^\/badge-/
+];
 
 self.addEventListener('install', (event) => {
     console.log('[Service Worker] Installing Service Worker ...', event);
-    event.waitUntil(self.skipWaiting());
+    event.waitUntil((async () => {
+        const cache = await caches.open(APP_SHELL_CACHE);
+        await cache.addAll([
+            '/',
+            '/index.html',
+            '/manifest.webmanifest'
+        ]);
+        await self.skipWaiting();
+    })());
 });
 
 self.addEventListener('activate', (event) => {
     console.log('[Service Worker] Activating Service Worker ...', event);
-    return self.clients.claim();
+    event.waitUntil((async () => {
+        const cacheNames = await caches.keys();
+        await Promise.all(
+            cacheNames
+                .filter((name) => ![APP_SHELL_CACHE, API_CACHE].includes(name))
+                .map((name) => caches.delete(name))
+        );
+        await self.clients.claim();
+    })());
+});
+
+self.addEventListener('fetch', (event) => {
+    const { request } = event;
+    if (request.method !== 'GET') {
+        return;
+    }
+
+    const url = new URL(request.url);
+    if (url.origin !== self.location.origin) {
+        return;
+    }
+
+    if (url.pathname.startsWith('/sync/') || url.pathname.startsWith('/shramsafal/') || url.pathname.startsWith('/user/')) {
+        event.respondWith(networkFirst(request));
+        return;
+    }
+
+    if (STATIC_ASSET_PATTERNS.some((pattern) => pattern.test(url.pathname))) {
+        event.respondWith(cacheFirst(request));
+    }
 });
 
 self.addEventListener('push', (event) => {
@@ -98,3 +145,45 @@ self.addEventListener('notificationclick', (event) => {
         })
     );
 });
+
+async function cacheFirst(request) {
+    const cache = await caches.open(APP_SHELL_CACHE);
+    const cached = await cache.match(request);
+    if (cached) {
+        return cached;
+    }
+
+    const response = await fetch(request);
+    if (response && response.ok) {
+        cache.put(request, response.clone());
+    }
+    return response;
+}
+
+async function networkFirst(request) {
+    const cache = await caches.open(API_CACHE);
+    try {
+        const response = await fetchWithTimeout(request, 3000);
+        if (response && response.ok) {
+            cache.put(request, response.clone());
+        }
+        return response;
+    } catch (error) {
+        const cached = await cache.match(request);
+        if (cached) {
+            return cached;
+        }
+
+        throw error;
+    }
+}
+
+async function fetchWithTimeout(request, timeoutMs) {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+        return await fetch(request, { signal: controller.signal });
+    } finally {
+        clearTimeout(timeout);
+    }
+}

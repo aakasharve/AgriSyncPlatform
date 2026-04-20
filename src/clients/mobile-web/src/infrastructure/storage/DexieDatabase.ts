@@ -2,7 +2,8 @@
  * DexieDatabase — DFES V2 Storage Layer
  *
  * IndexedDB-backed database using Dexie.js.
- * 6 tables: logs, outbox, mutationQueue, auditEvents, syncCursors, appMeta.
+ * 9 tables: logs, outbox, mutationQueue, auditEvents, syncCursors, appMeta,
+ * referenceData, attachments, uploadQueue.
  *
  * Replaces localStorage for:
  * - Larger storage capacity (no 5MB limit)
@@ -56,6 +57,7 @@ export interface MutationQueueItem {
     id?: number;
     deviceId: string;
     clientRequestId: string;
+    clientCommandId: string;
     mutationType: string;
     payload: unknown;
     status: MutationQueueStatus;
@@ -63,6 +65,88 @@ export interface MutationQueueItem {
     updatedAt: string;
     retryCount: number;
     lastError?: string;
+}
+
+// =============================================================================
+// ATTACHMENTS (Metadata + local linkage)
+// =============================================================================
+
+export type LocalAttachmentStatus = 'pending' | 'uploading' | 'uploaded' | 'failed';
+
+export interface AttachmentRecord {
+    /** Local attachment id (and server id when provided via attachmentId) */
+    id: string;
+    farmId: string;
+    linkedEntityId?: string;
+    linkedEntityType?: string;
+    /** Device-local file reference used by upload worker */
+    localPath: string;
+    originalFileName: string;
+    mimeType: string;
+    sizeBytes: number;
+    status: LocalAttachmentStatus;
+    remoteAttachmentId?: string;
+    uploadedAtUtc?: string;
+    finalizedAtUtc?: string;
+    createdAt: string;
+    updatedAt: string;
+    retryCount: number;
+    lastError?: string;
+}
+
+// =============================================================================
+// ATTACHMENT UPLOAD QUEUE
+// =============================================================================
+
+export type UploadQueueStatus = 'pending' | 'uploading' | 'retry_wait' | 'failed' | 'completed';
+
+export interface UploadQueueItem {
+    autoId?: number;
+    attachmentId: string;
+    status: UploadQueueStatus;
+    retryCount: number;
+    lastAttemptAt?: string;
+    nextAttemptAt?: string;
+    lastError?: string;
+    createdAt: string;
+    updatedAt: string;
+}
+
+// =============================================================================
+// PENDING AI JOBS (Offline queue for voice/receipt/patti AI requests)
+// =============================================================================
+
+export type PendingAiOperationType = 'voice_parse' | 'receipt_extract' | 'patti_extract';
+export type PendingAiJobStatus = 'pending' | 'processing' | 'failed' | 'failed_permanent' | 'completed';
+
+export interface PendingAiJobContext {
+    farmId?: string;
+    userId?: string;
+    operation?: 'voice' | 'receipt' | 'patti' | 'text';
+    plotId?: string;
+    cropCycleId?: string;
+    cropName?: string;
+    parseContext?: object;
+    textTranscript?: string;
+    idempotencyKey?: string;
+    requestPayloadHash?: string;
+    inputSpeechDurationMs?: number;
+    inputRawDurationMs?: number;
+    segmentMetadataJson?: string;
+}
+
+export interface PendingAiJobRecord {
+    id?: number;
+    operationType: PendingAiOperationType;
+    inputBlob?: Blob;
+    inputMimeType?: string;
+    context: PendingAiJobContext;
+    status: PendingAiJobStatus;
+    createdAt: string;
+    updatedAt: string;
+    retryCount: number;
+    lastError?: string;
+    nextRetryAfterMs?: number;
 }
 
 // =============================================================================
@@ -87,6 +171,134 @@ export interface AppMetaEntry {
 }
 
 // =============================================================================
+// REFERENCE DATA CACHE
+// =============================================================================
+
+export type ReferenceDataKey =
+    | 'scheduleTemplates'
+    | 'cropTypes'
+    | 'activityCategories'
+    | 'costCategories';
+
+export interface ReferenceDataRecord {
+    key: ReferenceDataKey;
+    data: unknown;
+    versionHash: string;
+    updatedAt: string;
+}
+
+// =============================================================================
+// SYNC CACHE TABLES
+// =============================================================================
+
+export interface DayLedgerCacheRecord {
+    id: string;
+    farmId: string;
+    dateKey: string;
+    payload: unknown;
+    updatedAt: string;
+}
+
+export interface PlannedActivityOverrideMarkers {
+    /** Arbitrary override marker map — keys are marker names, values are booleans or strings */
+    [key: string]: boolean | string | null | undefined;
+}
+
+export interface PlannedTaskCacheRecord {
+    id: string;
+    cropCycleId: string;
+    plannedDate: string;
+    payload: unknown;
+    updatedAt: string;
+    /** CEI Phase 1 — template activity that sourced this planned activity */
+    sourceTemplateActivityId?: string | null;
+    /** CEI Phase 1 — override markers applied to this activity */
+    overrideMarkers?: PlannedActivityOverrideMarkers | null;
+}
+
+export interface FarmCacheRecord {
+    id: string;
+    payload: unknown;
+    updatedAt: string;
+}
+
+export interface PlotCacheRecord {
+    id: string;
+    farmId: string;
+    payload: unknown;
+    updatedAt: string;
+}
+
+export interface CropCycleCacheRecord {
+    id: string;
+    farmId: string;
+    plotId: string;
+    payload: unknown;
+    updatedAt: string;
+}
+
+export interface CostEntryCacheRecord {
+    id: string;
+    farmId: string;
+    payload: unknown;
+    updatedAt: string;
+}
+
+export interface FinanceCorrectionCacheRecord {
+    id: string;
+    costEntryId: string;
+    payload: unknown;
+    updatedAt: string;
+}
+
+// =============================================================================
+// SCHEDULE TEMPLATE — shape inside referenceData.data array
+// =============================================================================
+
+/** Shape of each item stored inside referenceData['scheduleTemplates'].data */
+export interface ScheduleTemplateCacheItem {
+    id: string;
+    name?: string;
+    /** CEI Phase 1 — set by server; backfilled to 1 for legacy rows */
+    version?: number;
+    /** CEI Phase 1 — 'Public' | 'Tenant'; backfilled to 'Public' for legacy rows */
+    tenantScope?: string;
+    /** CEI Phase 1 — null for system templates */
+    createdByUserId?: string | null;
+    previousVersionId?: string | null;
+    derivedFromTemplateId?: string | null;
+    publishedAtUtc?: string | null;
+    [key: string]: unknown;
+}
+
+// =============================================================================
+// ATTENTION CARDS (CEI Phase 1)
+// =============================================================================
+
+export interface AttentionCardCacheRecord {
+    cardId: string;
+    farmId: string;
+    rank: string;
+    computedAtUtc: string;
+    // mirror of AttentionCardDto fields
+    farmName: string;
+    plotId: string;
+    plotName: string;
+    cropCycleId?: string | null;
+    stageName?: string | null;
+    titleEn: string;
+    titleMr: string;
+    descriptionEn: string;
+    descriptionMr: string;
+    suggestedAction: string;
+    suggestedActionLabelEn: string;
+    suggestedActionLabelMr: string;
+    overdueTaskCount?: number | null;
+    latestHealthScore?: string | null;
+    unresolvedDisputeCount?: number | null;
+}
+
+// =============================================================================
 // VERSIONED LOG RECORD
 // =============================================================================
 
@@ -105,7 +317,18 @@ export interface DexieLogRecord {
     createdByOperatorId?: string;
     /** Soft-deleted flag for index */
     isDeleted: 0 | 1;
+    /** Server-reported modification timestamp; used to skip stale-pull overwrites */
+    serverModifiedAtUtc?: string;
 }
+
+// =============================================================================
+// SCHEMA VERSION CONSTANTS
+// =============================================================================
+
+/** Current Dexie schema version — bump this when adding version(N).stores(). */
+export const DATABASE_VERSION = 7;
+/** CEI Phase 1 schema version (now active — applied by Task 5.1.1). */
+export const CEI_PHASE1_SCHEMA_VERSION = 7;
 
 // =============================================================================
 // DATABASE CLASS
@@ -115,9 +338,24 @@ export class AgriLogDatabase extends Dexie {
     logs!: Table<DexieLogRecord, string>;
     outbox!: Table<OutboxEvent, number>;
     mutationQueue!: Table<MutationQueueItem, number>;
+    attachments!: Table<AttachmentRecord, string>;
+    uploadQueue!: Table<UploadQueueItem, number>;
+    pendingAiJobs!: Table<PendingAiJobRecord, number>;
     auditEvents!: Table<AuditEvent, string>;
     syncCursors!: Table<SyncCursor, string>;
     appMeta!: Table<AppMetaEntry, string>;
+    referenceData!: Table<ReferenceDataRecord, ReferenceDataKey>;
+    dayLedgers!: Table<DayLedgerCacheRecord, string>;
+    plannedTasks!: Table<PlannedTaskCacheRecord, string>;
+
+    farms!: Table<FarmCacheRecord, string>;
+    plots!: Table<PlotCacheRecord, string>;
+    cropCycles!: Table<CropCycleCacheRecord, string>;
+    costEntries!: Table<CostEntryCacheRecord, string>;
+    financeCorrections!: Table<FinanceCorrectionCacheRecord, string>;
+
+    /** CEI Phase 1 — server-computed attention cards */
+    attentionCards!: Table<AttentionCardCacheRecord, string>;
 
     constructor() {
         super('AgriLogDB');
@@ -147,6 +385,133 @@ export class AgriLogDatabase extends Dexie {
             syncCursors: 'tableName',
             appMeta: 'key',
         });
+
+        this.version(3).stores({
+            logs: 'id, date, verificationStatus, createdByOperatorId, isDeleted, [date+isDeleted], [createdByOperatorId+isDeleted]',
+            outbox: '++id, idempotencyKey, status, action, [status+createdAt]',
+            mutationQueue: '++id, &[deviceId+clientRequestId], status, mutationType, createdAt, [status+createdAt]',
+            auditEvents: 'id, resourceId, action, timestamp, [resourceId+timestamp]',
+            syncCursors: 'tableName',
+            appMeta: 'key',
+            referenceData: 'key, versionHash, updatedAt',
+            dayLedgers: 'id, farmId, dateKey, [farmId+dateKey]',
+            plannedTasks: 'id, cropCycleId, plannedDate, [cropCycleId+plannedDate]',
+        });
+
+        this.version(4).stores({
+            logs: 'id, date, verificationStatus, createdByOperatorId, isDeleted, [date+isDeleted], [createdByOperatorId+isDeleted]',
+            outbox: '++id, idempotencyKey, status, action, [status+createdAt]',
+            mutationQueue: '++id, &[deviceId+clientRequestId], status, mutationType, createdAt, [status+createdAt]',
+            attachments: 'id, farmId, linkedEntityId, linkedEntityType, localPath, status, [linkedEntityId+linkedEntityType], [farmId+status]',
+            uploadQueue: '++autoId, attachmentId, status, retryCount, lastAttemptAt, nextAttemptAt, [status+nextAttemptAt]',
+            auditEvents: 'id, resourceId, action, timestamp, [resourceId+timestamp]',
+            syncCursors: 'tableName',
+            appMeta: 'key',
+            referenceData: 'key, versionHash, updatedAt',
+        });
+
+        this.version(5).stores({
+            logs: 'id, date, verificationStatus, createdByOperatorId, isDeleted, [date+isDeleted], [createdByOperatorId+isDeleted]',
+            outbox: '++id, idempotencyKey, status, action, [status+createdAt]',
+            mutationQueue: '++id, &[deviceId+clientRequestId], status, mutationType, createdAt, [status+createdAt]',
+            attachments: 'id, farmId, linkedEntityId, linkedEntityType, localPath, status, [linkedEntityId+linkedEntityType], [farmId+status]',
+            uploadQueue: '++autoId, attachmentId, status, retryCount, lastAttemptAt, nextAttemptAt, [status+nextAttemptAt]',
+            auditEvents: 'id, resourceId, action, timestamp, [resourceId+timestamp]',
+            syncCursors: 'tableName',
+            appMeta: 'key',
+            referenceData: 'key, versionHash, updatedAt',
+            dayLedgers: 'id, farmId, dateKey, [farmId+dateKey]',
+            plannedTasks: 'id, cropCycleId, plannedDate, [cropCycleId+plannedDate]',
+            farms: 'id, modifiedAtUtc',
+            plots: 'id, farmId, modifiedAtUtc',
+            cropCycles: 'id, farmId, plotId, modifiedAtUtc',
+            costEntries: 'id, farmId, modifiedAtUtc',
+            financeCorrections: 'id, costEntryId, modifiedAtUtc'
+        });
+
+        this.version(6).stores({
+            logs: 'id, date, verificationStatus, createdByOperatorId, isDeleted, [date+isDeleted], [createdByOperatorId+isDeleted]',
+            outbox: '++id, idempotencyKey, status, action, [status+createdAt]',
+            mutationQueue: '++id, &[deviceId+clientRequestId], status, mutationType, createdAt, [status+createdAt]',
+            attachments: 'id, farmId, linkedEntityId, linkedEntityType, localPath, status, [linkedEntityId+linkedEntityType], [farmId+status]',
+            uploadQueue: '++autoId, attachmentId, status, retryCount, lastAttemptAt, nextAttemptAt, [status+nextAttemptAt]',
+            pendingAiJobs: '++id, operationType, status, createdAt, [status+createdAt]',
+            auditEvents: 'id, resourceId, action, timestamp, [resourceId+timestamp]',
+            syncCursors: 'tableName',
+            appMeta: 'key',
+            referenceData: 'key, versionHash, updatedAt',
+            dayLedgers: 'id, farmId, dateKey, [farmId+dateKey]',
+            plannedTasks: 'id, cropCycleId, plannedDate, [cropCycleId+plannedDate]',
+            farms: 'id, modifiedAtUtc',
+            plots: 'id, farmId, modifiedAtUtc',
+            cropCycles: 'id, farmId, plotId, modifiedAtUtc',
+            costEntries: 'id, farmId, modifiedAtUtc',
+            financeCorrections: 'id, costEntryId, modifiedAtUtc'
+        });
+
+        // =====================================================================
+        // CEI Phase 1 — v7: attention cards store + CEI §4.1–§4.4 backfills
+        // =====================================================================
+        this.version(7)
+            .stores({
+                // All v6 stores (unchanged)
+                logs: 'id, date, verificationStatus, createdByOperatorId, isDeleted, [date+isDeleted], [createdByOperatorId+isDeleted]',
+                outbox: '++id, idempotencyKey, status, action, [status+createdAt]',
+                mutationQueue: '++id, &[deviceId+clientRequestId], status, mutationType, createdAt, [status+createdAt]',
+                attachments: 'id, farmId, linkedEntityId, linkedEntityType, localPath, status, [linkedEntityId+linkedEntityType], [farmId+status]',
+                uploadQueue: '++autoId, attachmentId, status, retryCount, lastAttemptAt, nextAttemptAt, [status+nextAttemptAt]',
+                pendingAiJobs: '++id, operationType, status, createdAt, [status+createdAt]',
+                auditEvents: 'id, resourceId, action, timestamp, [resourceId+timestamp]',
+                syncCursors: 'tableName',
+                appMeta: 'key',
+                referenceData: 'key, versionHash, updatedAt',
+                dayLedgers: 'id, farmId, dateKey, [farmId+dateKey]',
+                plannedTasks: 'id, cropCycleId, plannedDate, [cropCycleId+plannedDate]',
+                farms: 'id, modifiedAtUtc',
+                plots: 'id, farmId, modifiedAtUtc',
+                cropCycles: 'id, farmId, plotId, modifiedAtUtc',
+                costEntries: 'id, farmId, modifiedAtUtc',
+                financeCorrections: 'id, costEntryId, modifiedAtUtc',
+                // NEW — CEI Phase 1
+                attentionCards: 'cardId, farmId, rank, computedAtUtc',
+            })
+            .upgrade(async tx => {
+                // CEI-I4: backfill executionStatus = 'Completed' for all existing
+                // log task records. DexieLogRecord stores the mapped DailyLog
+                // (not raw DTOs), so log.log.tasks may be absent — the modify
+                // is a safe no-op for any row that does not have a tasks array.
+                await tx.table('logs').toCollection().modify((record: Record<string, unknown>) => {
+                    const log = record['log'] as Record<string, unknown> | undefined;
+                    if (log && Array.isArray(log['tasks'])) {
+                        log['tasks'] = (log['tasks'] as Array<Record<string, unknown>>).map(task => ({
+                            ...task,
+                            executionStatus: task['executionStatus'] ?? 'Completed',
+                        }));
+                    }
+                });
+
+                // CEI §4.3: backfill schedule template reference data rows.
+                const templateRef = await tx.table('referenceData').get('scheduleTemplates');
+                if (templateRef?.data && Array.isArray(templateRef.data)) {
+                    templateRef.data = (templateRef.data as Array<Record<string, unknown>>).map(t => ({
+                        ...t,
+                        version: t['version'] ?? 1,
+                        tenantScope: t['tenantScope'] ?? 'Public',
+                        createdByUserId: t['createdByUserId'] ?? null,
+                    }));
+                    await tx.table('referenceData').put(templateRef);
+                }
+
+                // CEI §4.2: backfill plannedTasks with new optional fields.
+                await tx.table('plannedTasks').toCollection().modify((task: Record<string, unknown>) => {
+                    if (task['sourceTemplateActivityId'] === undefined) {
+                        task['sourceTemplateActivityId'] = null;
+                    }
+                    if (task['overrideMarkers'] === undefined) {
+                        task['overrideMarkers'] = null;
+                    }
+                });
+            });
     }
 }
 

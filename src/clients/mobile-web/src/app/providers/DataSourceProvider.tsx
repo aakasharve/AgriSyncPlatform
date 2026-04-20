@@ -2,16 +2,17 @@ import React, { createContext, useContext, useState, useEffect, useMemo } from '
 import { AppDataSource } from '../../application/ports/AppDataSource';
 import { AuditPort } from '../../application/ports/AuditPort';
 import { DexieDataSource } from '../../infrastructure/storage/DexieDataSource';
-import { DemoDataSource } from '../../infrastructure/storage/DemoDataSource';
 import { storageNamespace } from '../../infrastructure/storage/StorageNamespace';
 import { MigrationService } from '../../infrastructure/storage/MigrationService';
 import { backgroundSyncWorker } from '../../infrastructure/sync/BackgroundSyncWorker';
-import { generateRollingDemoData, generateDemoHarvestSessions, generateDemoProcurementExpenses, captureMoneyEventsFromLog, DEMO_SEED_VERSION } from '../../features/demo/DemoDataService';
+import { attachmentUploadWorker } from '../../infrastructure/sync/AttachmentUploadWorker';
+import { generateRollingDemoData, generateDemoHarvestSessions, generateDemoProcurementExpenses, DEMO_SEED_VERSION } from '../../features/demo/DemoDataService';
 import { LocalStorageLogsRepository } from '../../infrastructure/storage/LocalStorageLogsRepository';
 import { seedHarvestSessions } from '../../services/harvestService'; // To be refactored later
 import { procurementRepository } from '../../services/procurementRepository'; // To be refactored later
-import { RAMUS_FARM } from '../../data/farmData'; // Default crops for seeding
 import { legacyAuditPort } from '../../infrastructure/audit/LegacyAuditPort';
+import { useAuth } from './AuthProvider';
+import { getDatabase } from '../../infrastructure/storage/DexieDatabase';
 
 // --- CONTEXT ---
 
@@ -25,17 +26,23 @@ interface DataSourceContextValue {
 
 const DataSourceContext = createContext<DataSourceContextValue | null>(null);
 
+const ACTIVE_USER_ID_KEY = 'agrisync_active_user_id_v1';
+const REAL_MODE_LOCAL_STORAGE_KEYS = [
+    'crops',
+    'farmer_profile',
+] as const;
+
 // --- PROVIDER ---
 
 export const DataSourceProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-    // Default to Demo Mode for safety/exploration
-    const [isDemoMode, setIsDemoMode] = useState<boolean>(true);
-    const [isLoading, setIsLoading] = useState<boolean>(false);
+    const { isAuthenticated, session } = useAuth();
+    const [isLoading, setIsLoading] = useState<boolean>(true);
+    const [isDemoMode, setIsDemoMode] = useState<boolean>(false);
 
-    // Select Source based on Mode
     const dataSource = useMemo(() => {
-        return isDemoMode ? DemoDataSource.getInstance() : DexieDataSource.getInstance();
-    }, [isDemoMode]);
+        storageNamespace.setNamespace('user');
+        return DexieDataSource.getInstance();
+    }, []);
 
     // Helper: Seeding Logic (moved from useAppData to keep Data logic contained)
     const seedDemoDataIfNeeded = async () => {
@@ -60,7 +67,7 @@ export const DataSourceProvider: React.FC<{ children: React.ReactNode }> = ({ ch
 
             // Clear Sessions/Configs for all potential plots
             const crops = await dataSource.crops.getAll();
-            const effectiveCrops = crops.length > 0 ? crops : RAMUS_FARM;
+            const effectiveCrops = crops;
 
             effectiveCrops.forEach(c => {
                 c.plots.forEach(p => {
@@ -76,15 +83,14 @@ export const DataSourceProvider: React.FC<{ children: React.ReactNode }> = ({ ch
 
         if (count === 0) {
             console.log("[DataSource] Seeding Demo Data...");
-            const crops = await dataSource.crops.getAll(); // Might be empty if never set? Use RAMUS_FARM defaults?
-            const effectiveCrops = crops.length > 0 ? crops : RAMUS_FARM;
+            const crops = await dataSource.crops.getAll();
+            const effectiveCrops = crops;
 
             // 1. Logs
             const logs = generateRollingDemoData(effectiveCrops);
             await demoRepo.batchSave(logs);
 
-            // 1b. Generate Finance Events
-            logs.forEach(log => captureMoneyEventsFromLog(log));
+            // 1b. Generate Finance Events (Handled internally by DemoDataService now)
 
             // 2. Harvest (Legacy Service call for now)
             const harvestSessions = generateDemoHarvestSessions();
@@ -102,42 +108,96 @@ export const DataSourceProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         // Effect will trigger switch
     };
 
+    const resetAuthenticatedUserCacheIfNeeded = async (nextUserId: string) => {
+        const previousUserId = localStorage.getItem(ACTIVE_USER_ID_KEY);
+        if (previousUserId === nextUserId) {
+            return;
+        }
+
+        console.info(`[DataSource] Authenticated user changed (${previousUserId ?? 'none'} -> ${nextUserId}). Resetting cached user state.`);
+
+        const db = getDatabase();
+        await db.transaction('rw', [
+            db.logs,
+            db.outbox,
+            db.mutationQueue,
+            db.attachments,
+            db.uploadQueue,
+            db.pendingAiJobs,
+            db.auditEvents,
+            db.syncCursors,
+            db.appMeta,
+            db.referenceData,
+            db.dayLedgers,
+            db.plannedTasks,
+            db.farms,
+            db.plots,
+            db.cropCycles,
+            db.costEntries,
+            db.financeCorrections,
+        ], async () => {
+            await Promise.all([
+                db.logs.clear(),
+                db.outbox.clear(),
+                db.mutationQueue.clear(),
+                db.attachments.clear(),
+                db.uploadQueue.clear(),
+                db.pendingAiJobs.clear(),
+                db.auditEvents.clear(),
+                db.syncCursors.clear(),
+                db.appMeta.clear(),
+                db.referenceData.clear(),
+                db.dayLedgers.clear(),
+                db.plannedTasks.clear(),
+                db.farms.clear(),
+                db.plots.clear(),
+                db.cropCycles.clear(),
+                db.costEntries.clear(),
+                db.financeCorrections.clear(),
+            ]);
+        });
+
+        for (const baseKey of REAL_MODE_LOCAL_STORAGE_KEYS) {
+            localStorage.removeItem(storageNamespace.getKey(baseKey));
+        }
+
+        localStorage.setItem(ACTIVE_USER_ID_KEY, nextUserId);
+    };
+
     // Handle Mode Switching & Initialization
     useEffect(() => {
-        const switchMode = async () => {
+        const init = async () => {
             setIsLoading(true);
             try {
+                console.log(`[DataSource] Initializing ${isDemoMode ? 'DEMO' : 'REAL'} mode`);
+                backgroundSyncWorker.stop();
+                attachmentUploadWorker.stop();
+                storageNamespace.setNamespace(isDemoMode ? 'demo' : 'user');
+                await dataSource.initialize();
+                await MigrationService.migrate();
                 if (isDemoMode) {
-                    console.log("[DataSource] Switching to DEMO mode");
-                    backgroundSyncWorker.stop();
-                    storageNamespace.setNamespace('demo');
-                    await dataSource.initialize();
-
-                    // Helper: Auto-Seed Demo Data if empty
                     await seedDemoDataIfNeeded();
-
                 } else {
-                    console.log("[DataSource] Switching to REAL mode");
-                    storageNamespace.setNamespace('user');
-                    await dataSource.initialize();
-
-                    // Run Migrations if needed
-                    await MigrationService.migrate();
+                    if (session?.userId) {
+                        await resetAuthenticatedUserCacheIfNeeded(session.userId);
+                    }
                     backgroundSyncWorker.start();
+                    attachmentUploadWorker.start();
                 }
             } catch (error) {
-                console.error("[DataSource] Switch failed", error);
+                console.error("[DataSource] Init failed", error);
             } finally {
                 setIsLoading(false);
             }
         };
 
-        switchMode();
+        init();
 
         return () => {
             backgroundSyncWorker.stop();
+            attachmentUploadWorker.stop();
         };
-    }, [isDemoMode, dataSource]);
+    }, [isAuthenticated, isDemoMode, dataSource, session?.userId]);
 
     const value: DataSourceContextValue = {
         dataSource,
@@ -146,6 +206,16 @@ export const DataSourceProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         setDemoMode: handleSetDemoMode,
         isLoading
     };
+
+    if (isLoading) {
+        return (
+            <DataSourceContext.Provider value={value}>
+                <div className="min-h-screen flex items-center justify-center bg-surface-100">
+                    <div className="animate-pulse text-stone-400 text-sm font-medium">Loading...</div>
+                </div>
+            </DataSourceContext.Provider>
+        );
+    }
 
     return (
         <DataSourceContext.Provider value={value}>

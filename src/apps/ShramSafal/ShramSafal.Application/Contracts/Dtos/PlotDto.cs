@@ -5,5 +5,5 @@ public sealed record PlotDto(
     Guid FarmId,
     string Name,
     decimal AreaInAcres,
-    DateTime CreatedAtUtc);
-
+    DateTime CreatedAtUtc,
+    DateTime ModifiedAtUtc);

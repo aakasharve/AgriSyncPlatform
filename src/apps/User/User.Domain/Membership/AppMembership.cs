@@ -3,6 +3,13 @@ using AgriSync.SharedKernel.Contracts.Ids;
 
 namespace User.Domain.Membership;
 
+/// <remarks>
+/// Deprecated (spec §3.2). Authorization decisions in ShramSafal now use
+/// <c>FarmMembership</c> (ShramSafal.Domain). This entity is kept in place
+/// for backward-compatibility — do not remove the EF table or class.
+/// Do NOT use this class for any new authorization checks.
+/// </remarks>
+[Obsolete("Use FarmMembership (ShramSafal.Domain.Farms) for authorization; see spec §3.2")]
 public sealed class AppMembership : Entity<Guid>
 {
     private AppMembership() : base(Guid.Empty) { } // EF Core

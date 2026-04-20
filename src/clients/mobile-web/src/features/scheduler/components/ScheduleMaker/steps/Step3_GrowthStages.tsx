@@ -226,7 +226,7 @@ const StageCard: React.FC<{
     // Context Props
     status?: 'PAST' | 'CURRENT' | 'FUTURE',
     dayRange?: { start: number, end: number },
-    domRef?: React.RefObject<HTMLDivElement>
+    domRef?: React.RefObject<HTMLDivElement | null>
 }> = ({ stage, index, onUpdate, onRemove, onDropItem, onUpdateItem, onRemoveItem, onAddDay, onRemoveDay, onUpdateDay, onDropDayItem, onUpdateDayItem, onRemoveDayItem, resources, onAddResource, status = 'FUTURE', dayRange, domRef }) => {
 
     const [isExpanded, setIsExpanded] = useState(false); // Collapsed by default

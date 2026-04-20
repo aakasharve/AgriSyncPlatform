@@ -1,0 +1,79 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 600" width="400" height="600">
+  <defs>
+    <!-- Subtle gradient for depth -->
+    <linearGradient id="silhouetteGrad" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#1a1a2e" />
+      <stop offset="100%" stop-color="#16213e" />
+    </linearGradient>
+  </defs>
+
+  <!-- Farmer silhouette - dignified, confident, profile view facing right -->
+  <g fill="url(#silhouetteGrad)">
+    <!-- Head - slightly tilted up (confident) -->
+    <ellipse cx="195" cy="82" rx="28" ry="32" />
+
+    <!-- Hat brim -->
+    <ellipse cx="200" cy="58" rx="38" ry="8" />
+    <!-- Hat crown -->
+    <path d="M170,58 Q172,30 200,28 Q228,30 230,58 Z" />
+
+    <!-- Neck -->
+    <rect x="186" y="110" width="22" height="18" rx="4" />
+
+    <!-- Shoulders and upper body - broad, strong -->
+    <path d="M142,140 Q160,128 198,128 Q236,128 258,140 Q268,148 272,165 L272,220 Q270,235 260,240 L140,240 Q130,235 128,220 L128,165 Q132,148 142,140 Z" />
+
+    <!-- Collar detail -->
+    <path d="M178,128 L198,145 L218,128" fill="none" stroke="#0d1117" stroke-width="2" />
+
+    <!-- Right arm (phone side) - slightly bent, holding phone up naturally -->
+    <path d="M258,148 Q278,155 290,170 Q300,185 298,210 Q296,230 290,245 Q285,255 278,258" fill="url(#silhouetteGrad)" />
+    <!-- Hand holding phone -->
+    <path d="M278,248 Q282,252 286,250 Q290,248 292,242 Q294,236 292,232 Q288,228 284,230 Q278,234 276,240 Z" />
+    <!-- Phone in hand -->
+    <rect x="280" y="222" width="16" height="28" rx="3" fill="#1a1a2e" />
+    <!-- Phone screen glow hint -->
+    <rect x="282" y="225" width="12" height="20" rx="2" fill="#059669" opacity="0.15" />
+
+    <!-- Left arm - relaxed at side, slight bend -->
+    <path d="M142,148 Q122,155 112,175 Q105,195 108,220 Q110,245 115,270 Q118,290 122,310 Q125,320 128,325" fill="url(#silhouetteGrad)" />
+    <!-- Left hand -->
+    <path d="M125,320 Q120,328 122,335 Q125,340 130,338 Q135,335 134,328 Q133,322 130,318 Z" />
+
+    <!-- Torso - strong, upright posture -->
+    <path d="M140,240 L138,300 Q137,330 140,360 Q142,380 145,390 L255,390 Q258,380 260,360 Q263,330 262,300 L260,240 Z" />
+
+    <!-- Belt/waist detail -->
+    <rect x="140" y="355" width="120" height="12" rx="2" fill="#0d1117" />
+    <rect x="195" y="353" width="14" height="16" rx="3" fill="#0d1117" />
+
+    <!-- Right leg -->
+    <path d="M200,390 Q210,395 218,400 Q230,420 235,460 Q238,500 240,530 Q241,555 242,570 Q243,580 245,585 L260,585 Q262,580 260,570 Q258,560 256,530 Q254,500 252,460 Q248,420 240,395 Z" />
+
+    <!-- Left leg - slight stride -->
+    <path d="M200,390 Q190,395 182,400 Q168,420 162,460 Q158,500 155,530 Q153,555 152,570 Q151,580 150,585 L135,585 Q133,580 135,570 Q137,560 140,530 Q143,500 148,460 Q153,420 162,395 Z" />
+
+    <!-- Right shoe/boot -->
+    <path d="M245,582 Q248,588 255,590 Q265,592 272,590 Q278,586 275,582 Q270,578 260,578 Q250,578 245,582 Z" />
+
+    <!-- Left shoe/boot -->
+    <path d="M150,582 Q147,588 142,590 Q132,592 125,590 Q120,586 123,582 Q128,578 138,578 Q148,578 150,582 Z" />
+
+    <!-- Nose profile detail (facing right) -->
+    <path d="M222,78 Q228,80 230,85 Q228,88 224,88" fill="url(#silhouetteGrad)" />
+
+    <!-- Chin detail -->
+    <path d="M218,100 Q222,106 220,112 Q216,114 212,112" fill="url(#silhouetteGrad)" />
+
+    <!-- Shirt pocket detail -->
+    <rect x="230" y="180" width="20" height="18" rx="2" fill="#0d1117" opacity="0.3" />
+
+    <!-- Subtle fold lines on clothes -->
+    <g stroke="#0d1117" stroke-width="0.8" opacity="0.2" fill="none">
+      <path d="M160,180 Q180,190 200,185" />
+      <path d="M155,220 Q180,225 210,220 Q235,218 250,222" />
+      <path d="M150,280 Q180,285 210,280 Q240,278 255,282" />
+      <path d="M155,340 Q180,345 210,340 Q240,338 250,342" />
+    </g>
+  </g>
+</svg>

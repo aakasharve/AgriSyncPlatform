@@ -5,7 +5,7 @@
 
 import React from 'react';
 import { DayWorkSummary } from '../../../types';
-import { formatCurrency } from '../../../shared/utils/costCalculations';
+import { formatCurrency } from '../../../shared/utils/currency';
 import { Users, Droplets, Tractor, Package, CheckSquare, FileText, User, ShieldCheck, Clock, SprayCan, Leaf } from 'lucide-react';
 
 interface DailyWorkSummaryViewProps {

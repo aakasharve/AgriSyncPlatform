@@ -1,35 +1,44 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useAppNavigationState } from '../app/context/AppFeatureContexts';
-import { Settings, Droplets, Users, Tractor, BookOpen, FlaskConical, Plus, Trash2, Coins, Leaf, Check, Pencil, ChevronDown, ChevronUp, Globe } from 'lucide-react';
+import { Settings, Droplets, Users, Tractor, BookOpen, FlaskConical, Bot, Plus, Trash2, Coins, Leaf, Check, Pencil, ChevronDown, ChevronUp, Globe, Shield, MapPin, Mic, Camera, Activity } from 'lucide-react';
 import { LedgerDefaults, LabourShift, DailyLog, CropProfile, HarvestConfig } from '../types';
 import { getHarvestConfig } from '../services/harvestService';
-import DemoLedger from '../features/analysis/components/DemoLedger';
 import NotificationTestComponent from '../shared/components/NotificationTestComponent';
 import HarvestConfigSheet from '../features/logs/components/harvest/HarvestConfigSheet';
 import { CropSymbol } from '../features/context/components/CropSelector';
 import { useLanguage } from '../i18n/LanguageContext';
 import { Language } from '../i18n/translations';
 import { idGenerator } from '../core/domain/services/IdGenerator';
+import { getMyFarms, type MyFarmDto } from '../features/onboarding/qr/inviteApi';
+import SubscriptionCard from '../features/admin/billing/SubscriptionCard';
 
 interface SettingsPageProps {
-    isDemoMode: boolean;
-    onToggleDemo: (value: boolean) => void;
     defaults: LedgerDefaults;
     onUpdateDefaults: (defaults: LedgerDefaults) => void;
-    mockHistory: DailyLog[];
     crops: CropProfile[];
 }
 
 const SettingsPage: React.FC<SettingsPageProps> = ({
-    isDemoMode,
-    onToggleDemo,
     defaults,
     onUpdateDefaults,
-    mockHistory,
     crops
 }) => {
     const { setCurrentRoute } = useAppNavigationState();
     const { t, language, setLanguage } = useLanguage();
+
+    // Billing state — fetched once on mount; owner-only section
+    const [currentFarm, setCurrentFarm] = useState<MyFarmDto | null>(null);
+    useEffect(() => {
+        let cancelled = false;
+        getMyFarms().then(farms => {
+            if (!cancelled && farms.length > 0) {
+                const farmId = localStorage.getItem('shramsafal_current_farm_id');
+                const farm = farmId ? farms.find(f => f.farmId === farmId) ?? farms[0] : farms[0];
+                setCurrentFarm(farm);
+            }
+        }).catch(() => { /* billing section just won't render */ });
+        return () => { cancelled = true; };
+    }, []);
 
     // Harvest Configuration state
     const [harvestConfigExpanded, setHarvestConfigExpanded] = useState(false);
@@ -120,31 +129,51 @@ const SettingsPage: React.FC<SettingsPageProps> = ({
                 </div>
             </div>
 
-            {/* 1. Demo Data Toggle */}
-            <div className="glass-panel p-5">
-                <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-4">
-                        <div className={`p-3 rounded-2xl transition-colors shadow-sm ${isDemoMode ? 'bg-emerald-100 text-emerald-600' : 'bg-stone-100 text-stone-400'}`}>
-                            <FlaskConical size={24} strokeWidth={2.5} />
-                        </div>
+
+
+            
+            {/* App Permissions */}
+            <div className="pt-4">
+                <h3 className="text-xl font-display font-black text-stone-800 px-1">App Configuration</h3>
+            </div>
+            
+            <div className="glass-panel p-5 mb-6">
+                <div className="flex items-center justify-between mb-4">
+                    <div className="flex items-center gap-4 text-stone-700">
+                        <div className="bg-emerald-100 p-3 rounded-2xl text-emerald-700 shadow-sm"><Shield size={22} strokeWidth={2.5} /></div>
                         <div>
-                            <h3 className="font-bold text-stone-800 text-lg">{t('settings.demoMode')}</h3>
-                            <p className="text-xs text-stone-500 font-medium mt-0.5">{t('settings.demoDescription')}</p>
+                            <h4 className="font-bold text-lg">App Permissions</h4>
+                            <p className="text-xs text-stone-500 mt-1 leading-relaxed">
+                                Manage Camera, Mic, and Location access.
+                            </p>
                         </div>
                     </div>
-                    <button
-                        onClick={() => onToggleDemo(!isDemoMode)}
-                        className={`relative w-14 h-8 rounded-full transition-all duration-300 ease-in-out focus:outline-none focus:ring-4 focus:ring-emerald-500/20 ${isDemoMode ? 'bg-emerald-500 shadow-glow-emerald' : 'bg-stone-200 shadow-inner'}`}
+                </div>
+                <div className="bg-stone-50 rounded-xl p-4 border border-stone-100 flex items-center justify-between">
+                    <div className="flex gap-4">
+                        <div className="flex flex-col items-center gap-1">
+                            <MapPin size={16} className="text-emerald-600" />
+                            <span className="text-[10px] font-bold text-stone-400">GPS</span>
+                        </div>
+                        <div className="flex flex-col items-center gap-1">
+                            <Mic size={16} className="text-emerald-600" />
+                            <span className="text-[10px] font-bold text-stone-400">MIC</span>
+                        </div>
+                        <div className="flex flex-col items-center gap-1">
+                            <Camera size={16} className="text-emerald-600" />
+                            <span className="text-[10px] font-bold text-stone-400">CAM</span>
+                        </div>
+                    </div>
+                    <button 
+                        onClick={() => alert('Please manage site permissions in your browser settings (usually near the URL bar).')}
+                        className="text-xs font-bold text-emerald-700 bg-emerald-100 px-4 py-2 rounded-lg hover:bg-emerald-200 transition-colors"
                     >
-                        <div className={`absolute top-1 left-1 bg-white w-6 h-6 rounded-full shadow-md transition-all duration-300 ease-in-out ${isDemoMode ? 'translate-x-6' : 'translate-x-0'}`} />
+                        Browser Settings
                     </button>
                 </div>
-
-                {/* Ledger Visualization */}
-                {isDemoMode && <div className="mt-4"><DemoLedger mockHistory={mockHistory} /></div>}
             </div>
 
-            <div className="pt-4">
+<div className="pt-4">
                 <h3 className="text-xl font-display font-black text-stone-800 px-1">{t('settings.ledgerConfig')}</h3>
             </div>
 
@@ -258,16 +287,71 @@ const SettingsPage: React.FC<SettingsPageProps> = ({
             {/* Notification Tester */}
             <NotificationTestComponent />
 
+            
+            {/* Manage Crops Data */}
+            <div className="pt-4">
+                <h3 className="text-xl font-display font-black text-stone-800 px-1">Manage Farm Data</h3>
+            </div>
+            <div className="glass-panel p-5 mb-6">
+                <h4 className="font-bold text-lg text-stone-800 mb-2">Delete Crop Data</h4>
+                <p className="text-xs text-stone-500 mb-4">Warning: This action is irreversible. All plots and logs related to the crop will be lost.</p>
+                <div className="space-y-2">
+                    {crops.map(crop => (
+                        <div key={crop.id} className="flex items-center justify-between border border-stone-100 rounded-xl p-3 bg-stone-50">
+                            <span className="font-bold text-sm text-stone-700">{crop.name}</span>
+                            <button className="text-xs font-bold text-red-600 bg-red-50 hover:bg-red-100 px-3 py-1.5 rounded-lg flex items-center gap-1 transition-colors">
+                                <Trash2 size={14} /> Delete
+                            </button>
+                        </div>
+                    ))}
+                    {crops.length === 0 && <p className="text-xs text-stone-400 italic">No crops available</p>}
+                </div>
+            </div>
+
+            {/* Billing — PrimaryOwner only; renders nothing for workers */}
+            {currentFarm && currentFarm.role === 'PrimaryOwner' && (
+                <div>
+                    <h3 className="text-xl font-display font-black text-stone-800 px-1 mb-4">
+                        बिलिंग · Billing
+                    </h3>
+                    <SubscriptionCard
+                        subscription={currentFarm.subscription}
+                        role={currentFarm.role}
+                        onManageBilling={() => {
+                            // TODO(Phase 7): open provider billing portal URL
+                            // For now, surface a friendly message.
+                            window.alert('Billing portal coming soon. Contact support@shramsafal.in.');
+                        }}
+                    />
+                </div>
+            )}
+
             {/* Developer Tools */}
             <div className="glass-panel p-5 mt-6">
                 <h3 className="font-bold text-stone-800 text-lg mb-4">Developer Tools</h3>
-                <button
-                    onClick={() => setCurrentRoute('test-e2e')}
-                    className="w-full py-3 px-4 bg-stone-100 text-stone-700 font-bold rounded-xl hover:bg-stone-200 transition-colors flex items-center justify-center gap-2 active:scale-[0.98]"
-                >
-                    <FlaskConical size={20} />
-                    Open End-to-End Test Page
-                </button>
+                <div className="space-y-2">
+                    <button
+                        onClick={() => setCurrentRoute('test-e2e')}
+                        className="w-full py-3 px-4 bg-stone-100 text-stone-700 font-bold rounded-xl hover:bg-stone-200 transition-colors flex items-center justify-center gap-2 active:scale-[0.98]"
+                    >
+                        <FlaskConical size={20} />
+                        Open End-to-End Test Page
+                    </button>
+                    <button
+                        onClick={() => setCurrentRoute('ai-admin')}
+                        className="w-full py-3 px-4 bg-emerald-100 text-emerald-800 font-bold rounded-xl hover:bg-emerald-200 transition-colors flex items-center justify-center gap-2 active:scale-[0.98]"
+                    >
+                        <Bot size={20} />
+                        Open AI Operations (Admin)
+                    </button>
+                    <button
+                        onClick={() => setCurrentRoute('ops-admin')}
+                        className="w-full py-3 px-4 bg-blue-50 text-blue-800 font-bold rounded-xl hover:bg-blue-100 transition-colors flex items-center justify-center gap-2 active:scale-[0.98]"
+                    >
+                        <Activity size={20} />
+                        Open Ops Health (Admin)
+                    </button>
+                </div>
             </div>
 
         </div>
