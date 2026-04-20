@@ -3,6 +3,10 @@ using ShramSafal.Application.UseCases.Admin.GetOpsHealth;
 using ShramSafal.Application.UseCases.Admin.GetOpsErrors;
 using ShramSafal.Application.UseCases.Admin.GetOpsVoice;
 using ShramSafal.Application.UseCases.Admin.GetWvfdHistory;
+using ShramSafal.Application.UseCases.Admin.GetFarmsList;
+using ShramSafal.Application.UseCases.Admin.GetSilentChurn;
+using ShramSafal.Application.UseCases.Admin.GetSuffering;
+using ShramSafal.Application.UseCases.Admin.GetUsersList;
 
 namespace ShramSafal.Api.Endpoints;
 
@@ -77,6 +81,36 @@ public static class AdminEndpoints
         })
         .WithName("GetAdminWvfd")
         .CacheOutput("AdminMaterialized");
+
+        group.MapGet("/admin/farms", async (ClaimsPrincipal user, GetFarmsListHandler h,
+            int page, int pageSize, string? search, string? tier, CancellationToken ct) =>
+        {
+            if (!IsAdmin(user, out var id)) return Results.Forbid();
+            var r = await h.HandleAsync(new GetFarmsListQuery(Math.Max(1,page), Math.Clamp(pageSize,10,200), search, tier, id), ct);
+            return r.IsSuccess ? Results.Ok(r.Value) : Results.Problem();
+        }).WithName("GetAdminFarms").CacheOutput("AdminLive");
+
+        group.MapGet("/admin/farms/silent-churn", async (ClaimsPrincipal user, GetSilentChurnHandler h, CancellationToken ct) =>
+        {
+            if (!IsAdmin(user, out var id)) return Results.Forbid();
+            var r = await h.HandleAsync(new GetSilentChurnQuery(id), ct);
+            return r.IsSuccess ? Results.Ok(r.Value) : Results.Problem();
+        }).WithName("GetAdminSilentChurn").CacheOutput("AdminMaterialized");
+
+        group.MapGet("/admin/farms/suffering", async (ClaimsPrincipal user, GetSufferingHandler h, CancellationToken ct) =>
+        {
+            if (!IsAdmin(user, out var id)) return Results.Forbid();
+            var r = await h.HandleAsync(new GetSufferingQuery(id), ct);
+            return r.IsSuccess ? Results.Ok(r.Value) : Results.Problem();
+        }).WithName("GetAdminSuffering").CacheOutput("AdminLive");
+
+        group.MapGet("/admin/users", async (ClaimsPrincipal user, GetUsersListHandler h,
+            int page, int pageSize, string? search, CancellationToken ct) =>
+        {
+            if (!IsAdmin(user, out var id)) return Results.Forbid();
+            var r = await h.HandleAsync(new GetUsersListQuery(Math.Max(1,page), Math.Clamp(pageSize,10,200), search, id), ct);
+            return r.IsSuccess ? Results.Ok(r.Value) : Results.Problem();
+        }).WithName("GetAdminUsers").CacheOutput("AdminLive");
 
         return group;
     }
