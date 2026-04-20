@@ -108,5 +108,10 @@ public interface IShramSafalRepository
     /// </summary>
     Task<bool> HasActiveOwnerMembershipAsync(Guid userId, CancellationToken ct = default);
 
+    /// <summary>
+    /// Returns the root template and all templates derived from it (flat list).
+    /// </summary>
+    Task<List<ScheduleTemplate>> GetScheduleLineageAsync(Guid rootTemplateId, CancellationToken ct = default);
+
     Task SaveChangesAsync(CancellationToken ct = default);
 }

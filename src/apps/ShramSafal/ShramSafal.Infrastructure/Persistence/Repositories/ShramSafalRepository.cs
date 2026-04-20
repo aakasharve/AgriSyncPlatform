@@ -267,6 +267,11 @@ internal sealed class ShramSafalRepository(ShramSafalDbContext db) : IShramSafal
                 && (int)m.Role >= (int)AppRole.SecondaryOwner, ct);
     }
 
+    public async Task<List<ScheduleTemplate>> GetScheduleLineageAsync(Guid rootTemplateId, CancellationToken ct = default) =>
+        await db.ScheduleTemplates
+            .Where(t => t.Id == rootTemplateId || t.DerivedFromTemplateId == rootTemplateId)
+            .ToListAsync(ct);
+
     public async Task<List<ScheduleTemplate>> GetScheduleTemplatesAsync(CancellationToken ct = default)
     {
         return await db.ScheduleTemplates
