@@ -1,0 +1,21 @@
+{
+  "id": "dddddddd-dddd-dddd-dddd-dddddddddddd",
+  "name": "Grape Flowering Plan",
+  "cropType": "Grape",
+  "totalDays": 180,
+  "stages": [
+    { "name": "Flowering", "startDay": 1, "endDay": 60 }
+  ],
+  "activities": [
+    {
+      "name": "Spray fungicide",
+      "category": "Spray",
+      "stageName": "Flowering",
+      "startDay": 10,
+      "endDay": 20,
+      "frequencyMode": "Once",
+      "intervalDays": null
+    }
+  ],
+  "versionHash": "abc123"
+}

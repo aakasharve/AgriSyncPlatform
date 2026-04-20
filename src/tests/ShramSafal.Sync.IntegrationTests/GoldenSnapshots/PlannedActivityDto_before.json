@@ -1,0 +1,9 @@
+{
+  "id": "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+  "cropCycleId": "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
+  "activityName": "Spray fungicide",
+  "stage": "Flowering",
+  "plannedDate": "2026-04-01",
+  "createdAtUtc": "2026-01-01T00:00:00Z",
+  "modifiedAtUtc": "2026-01-01T00:00:00Z"
+}
