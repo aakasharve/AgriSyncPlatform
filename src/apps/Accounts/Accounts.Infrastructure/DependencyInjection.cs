@@ -1,4 +1,6 @@
+using Accounts.Application.Ports;
 using Accounts.Infrastructure.Persistence;
+using Accounts.Infrastructure.Persistence.Repositories;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -31,6 +33,8 @@ public static class DependencyInjection
                     schema: AccountsDbContext.SchemaName);
             });
         });
+
+        services.AddScoped<ISubscriptionRepository, SubscriptionRepository>();
 
         return services;
     }
