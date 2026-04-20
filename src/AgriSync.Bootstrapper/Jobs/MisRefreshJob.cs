@@ -22,8 +22,8 @@ namespace AgriSync.Bootstrapper.Jobs
 
         private static readonly string[] ViewsToRefresh = new[]
         {
+            // Phase 4 — Tier 0/1 core views (order matters: wvfd before engagement_tier)
             "mis.wvfd_weekly",
-            "mis.silent_churn_watchlist",
             "mis.d30_retention_paying",
             "mis.log_verify_lag",
             "mis.correction_rate",
@@ -34,7 +34,23 @@ namespace AgriSync.Bootstrapper.Jobs
             "mis.schedule_migration_rate",
             "mis.schedule_abandonment_rate",
             "mis.schedule_unscheduled_ratio",
-            "mis.gemini_cost_per_farm"
+            "mis.gemini_cost_per_farm",
+            // Phase 7 — Behavioral analytics
+            "mis.feature_retention_lift",
+            "mis.new_farm_day_snapshot",
+            "mis.silent_churn_watchlist",  // Phase 7 version replaces Phase 4
+            "mis.zero_engagement_farms",
+            "mis.activity_heatmap",
+            "mis.cohort_quality_score",
+            // Phase 7 — Red-flag detectors
+            "mis.alert_r1_smooth_decay",
+            "mis.alert_r2_wau_vs_wvfd",
+            "mis.alert_r3_rubber_stamp",
+            "mis.alert_r4_voice_decay",
+            "mis.alert_r5_compliance_plateau",
+            "mis.alert_r6_flash_churn",
+            "mis.alert_r7_correction_rising",
+            "mis.alert_r8_referral_quality",
         };
 
         public MisRefreshJob(IServiceProvider serviceProvider, ILogger<MisRefreshJob> logger)
