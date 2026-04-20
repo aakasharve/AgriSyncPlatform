@@ -1,0 +1,139 @@
+---
+import { getLangFromUrl, getTranslations } from '../../i18n/translations';
+import TestimonialCarousel, { type Testimonial } from '../islands/TestimonialCarousel';
+
+const lang = getLangFromUrl(Astro.url);
+const t = getTranslations(lang);
+
+const testimonials: Testimonial[] =
+  lang === 'mr'
+    ? [
+        {
+          quote: 'रोजची नोंद झाली की “काय झालं होतं?” असा प्रश्न कमी होतो. सगळे एकच चित्र पाहतात.',
+          name: 'शेत मालक',
+          role: 'द्राक्ष बाग व्यवस्थापन',
+          location: 'नाशिक',
+          metric: 'Day 30',
+          initials: 'शे',
+        },
+        {
+          quote: 'मुकादमला विचारावं, मजुरांना विचारावं, पुन्हा वही बघावी असं राहत नाही. दिवस संपल्यावर उत्तर तयार असतं.',
+          name: 'परिवार सदस्य',
+          role: 'दैनिक समन्वय',
+          location: 'सांगली',
+          metric: 'Clear day',
+          initials: 'प',
+        },
+        {
+          quote: 'वाद कमी झाले की काम जलद होतं. रेकॉर्डवर विश्वास बसला की निर्णयही हलके होतात.',
+          name: 'सुपरवायझर',
+          role: 'मजूर व प्लॉट फॉलो-अप',
+          location: 'बारामती',
+          metric: '90 days',
+          initials: 'सु',
+        },
+      ]
+    : [
+        {
+          quote: 'Once the day is recorded properly, the argument about what happened starts disappearing. Everyone works from the same picture.',
+          name: 'Farm owner',
+          role: 'Grape orchard operations',
+          location: 'Nashik',
+          metric: 'Day 30',
+          initials: 'FO',
+        },
+        {
+          quote: 'You stop chasing three versions of the truth at night. The answer is already there: what was done, what cost money, what still waits.',
+          name: 'Family operator',
+          role: 'Daily coordination',
+          location: 'Sangli',
+          metric: 'Clear day',
+          initials: 'FA',
+        },
+        {
+          quote: 'Less confusion means fewer unnecessary calls, fewer small fights, and faster decisions. Trust grows because the record holds.',
+          name: 'Supervisor',
+          role: 'Labour and plot follow-up',
+          location: 'Baramati',
+          metric: '90 days',
+          initials: 'SU',
+        },
+      ];
+---
+
+<section data-scene="trust" data-soil="alluvial" data-cursor="hand" class="relative py-section overflow-hidden">
+  <div class="absolute inset-0" style="background:var(--bg-base);"></div>
+  <div
+    class="absolute inset-0 pointer-events-none"
+    style="background:radial-gradient(ellipse 60% 50% at 50% 18%, rgba(20,83,45,0.06) 0%, transparent 52%), radial-gradient(ellipse 46% 34% at 70% 80%, rgba(217,119,6,0.07) 0%, transparent 48%);"
+    aria-hidden="true"
+  ></div>
+
+  <div class="relative z-10 max-w-site mx-auto px-5 md:px-8">
+    <div class="text-center max-w-3xl mx-auto mb-10">
+      <span class="chapter-mark" data-chapter>
+        {lang === 'mr' ? 'Chapter 08 · विश्वास' : 'Chapter 08 · Trust'}
+      </span>
+
+      <h2 class="font-serif text-h2 leading-snug" style="color:var(--text-primary);">
+        {t.scene7.headline_before}
+        <span style="color:var(--brand);">{t.scene7.emphasis1}</span>
+        {t.scene7.headline_mid1}
+        <span style="color:var(--brand);">{t.scene7.emphasis2}</span>
+        {t.scene7.headline_mid2}
+        <span style="color:var(--brand);">{t.scene7.emphasis3}</span>
+        {t.scene7.headline_after}
+      </h2>
+
+      <p class="mt-6 text-body-lg max-w-prose mx-auto" style="color:var(--text-secondary);">
+        {t.scene7.body}
+      </p>
+    </div>
+
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-5 max-w-5xl mx-auto mb-12" data-reveal-3d-group>
+      <div class="card-white rounded-2xl p-6 md:p-7 text-center shadow-[0_12px_32px_rgba(146,64,14,0.08)]" data-reveal-3d-item>
+        <div class="text-[0.68rem] font-extrabold uppercase tracking-[0.28em] mb-3" style="color:var(--gold);">
+          {lang === 'mr' ? 'पहिला थर' : 'Layer 01'}
+        </div>
+        <div class="font-serif text-[clamp(2rem,4vw,3.2rem)] font-bold" style="color:var(--text-primary);">
+          <span data-counter="1">0</span>
+        </div>
+        <p class="mt-3 text-sm md:text-base" style="color:var(--text-secondary);">
+          {lang === 'mr' ? t.scene7.day_label : 'day'}
+        </p>
+      </div>
+
+      <div class="card-white rounded-2xl p-6 md:p-7 text-center shadow-[0_12px_32px_rgba(146,64,14,0.08)]" data-reveal-3d-item>
+        <div class="text-[0.68rem] font-extrabold uppercase tracking-[0.28em] mb-3" style="color:var(--brand-fresh);">
+          {lang === 'mr' ? 'सवय' : 'Cadence'}
+        </div>
+        <div class="font-serif text-[clamp(2rem,4vw,3.2rem)] font-bold" style="color:var(--text-primary);">
+          <span data-counter="30" data-counter-suffix={` ${t.scene7.days_label}`}>0 {t.scene7.days_label}</span>
+        </div>
+        <p class="mt-3 text-sm md:text-base" style="color:var(--text-secondary);">
+          {lang === 'mr' ? 'नोंदींना लय मिळते' : 'Records start feeling consistent'}
+        </p>
+      </div>
+
+      <div class="card-white rounded-2xl p-6 md:p-7 text-center shadow-[0_12px_32px_rgba(146,64,14,0.08)]" data-reveal-3d-item>
+        <div class="text-[0.68rem] font-extrabold uppercase tracking-[0.28em] mb-3" style="color:var(--gold);">
+          {lang === 'mr' ? 'विश्वास' : 'Shared truth'}
+        </div>
+        <div class="font-serif text-[clamp(2rem,4vw,3.2rem)] font-bold" style="color:var(--text-primary);">
+          <span data-counter="90" data-counter-suffix={` ${t.scene7.days_label}`}>0 {t.scene7.days_label}</span>
+        </div>
+        <p class="mt-3 text-sm md:text-base" style="color:var(--text-secondary);">
+          {t.scene7.accumulation}
+        </p>
+      </div>
+    </div>
+  </div>
+
+  <TestimonialCarousel
+    eyebrow={lang === 'mr' ? 'विश्वासाची साक्ष' : 'Proof from the field'}
+    title={lang === 'mr' ? 'जेव्हा नोंद टिकते, विश्वास वाढतो.' : 'When the record holds, trust stops leaking.'}
+    description={lang === 'mr' ? 'विश्वास ही भावना नाही. तो सातत्याने दिसणाऱ्या नोंदीतून तयार होतो.' : 'Trust is not a slogan. It is what builds when the record stays visible day after day.'}
+    testimonials={testimonials}
+    intervalMs={5600}
+  />
+</section>

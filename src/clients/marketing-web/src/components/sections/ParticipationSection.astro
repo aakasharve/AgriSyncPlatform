@@ -1,0 +1,61 @@
+---
+import { getLangFromUrl, getTranslations } from '../../i18n/translations';
+import PartnerFlowVisual from '../svg/PartnerFlowVisual.astro';
+
+const lang = getLangFromUrl(Astro.url);
+const t = getTranslations(lang);
+---
+
+<section
+  data-scene="participation"
+  data-soil="alluvial"
+  data-cursor="hand"
+  class="relative py-section-tight overflow-hidden"
+  style="background:var(--bg-surface);"
+>
+  <div class="absolute inset-0 pointer-events-none" style="background:radial-gradient(ellipse 70% 50% at 50% 8%, rgba(217,119,6,0.08) 0%, transparent 46%), radial-gradient(ellipse 50% 30% at 80% 80%, rgba(20,83,45,0.07) 0%, transparent 48%);" aria-hidden="true"></div>
+
+  <div class="relative z-10 max-w-site mx-auto px-5 md:px-8">
+    <div class="max-w-3xl mx-auto text-center mb-10">
+      <span class="chapter-mark" data-chapter>
+        {lang === 'mr' ? 'Chapter 11 · तुमचा भाग' : 'Chapter 11 · Your Part'}
+      </span>
+      <h2 class="font-serif text-h2 mb-6" style="color:rgb(29,51,38);">
+        {t.participation.headline}
+      </h2>
+      <p class="text-body-lg max-w-prose mx-auto" style="color:rgba(29,51,38,0.74);">
+        {t.participation.body}
+      </p>
+    </div>
+
+    <div class="flex justify-center mb-12">
+      <img 
+        src="/images/characters/participation-ground-truth.png" 
+        alt={lang === 'mr' ? 'सहभाग आणि नोंद' : 'Participation and ground truth'} 
+        class="w-full max-w-2xl h-auto mix-blend-multiply opacity-90 transition-transform duration-700 hover:scale-[1.02]"
+      />
+    </div>
+
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-4 max-w-5xl mx-auto" data-reveal-3d-group>
+      {t.participation.lines.map((line: string, i: number) => (
+        <div
+          class="rounded-2xl bg-white px-5 py-6 border border-[rgba(19,50,36,0.08)] shadow-[0_12px_30px_rgba(0,0,0,0.06)]"
+          data-reveal-3d-item
+        >
+          <div class="text-[0.68rem] font-extrabold uppercase tracking-[0.28em] mb-3" style="color:var(--gold);">
+            {lang === 'mr' ? `टप्पा 0${i + 1}` : `Step 0${i + 1}`}
+          </div>
+          <p class="text-base md:text-lg leading-7 font-medium" style="color:rgba(29,51,38,0.84);">
+            {line}
+          </p>
+        </div>
+      ))}
+    </div>
+
+    <div class="max-w-3xl mx-auto mt-8 rounded-2xl border border-[rgba(19,50,36,0.08)] bg-[rgba(16,185,129,0.08)] px-6 py-5 text-center">
+      <p class="text-base md:text-lg italic font-medium" style="color:rgba(29,51,38,0.76);">
+        {t.participation.closing}
+      </p>
+    </div>
+  </div>
+</section>

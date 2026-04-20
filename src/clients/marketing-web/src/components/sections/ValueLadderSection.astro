@@ -1,0 +1,204 @@
+---
+import { getLangFromUrl, getTranslations } from '../../i18n/translations';
+
+const lang = getLangFromUrl(Astro.url);
+const t = getTranslations(lang);
+---
+
+<section
+  data-scene="value-ladder"
+  data-soil="laterite"
+  data-cursor="coin"
+  class="relative py-section overflow-hidden"
+>
+  <div class="absolute inset-0" style="background:var(--bg-base);"></div>
+  <div class="absolute inset-0 pointer-events-none" style="background:radial-gradient(ellipse 60% 50% at 50% 80%, rgba(245,158,11,0.06) 0%, transparent 60%);" aria-hidden="true"></div>
+
+  <div class="relative z-10 max-w-site mx-auto px-5 md:px-8">
+    <div class="text-center mb-8 md:mb-10">
+      <span class="chapter-mark" data-chapter>
+        {lang === 'mr' ? 'Chapter 06 · ९० दिवसाचे फळ' : 'Chapter 06 · The 90-Day Return'}
+      </span>
+      <h2 class="scene-stagger font-serif text-h2 text-ink mb-6">
+        {t.value_ladder.headline}
+      </h2>
+      <p class="scene-stagger text-body-lg text-ink-secondary max-w-prose mx-auto">
+        {t.value_ladder.intro}
+      </p>
+    </div>
+
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-6 md:gap-8 max-w-5xl mx-auto relative" data-reveal-3d-group>
+      <div class="hidden md:block absolute top-1/2 left-[18%] right-[18%] h-[2px] -translate-y-1/2 pointer-events-none" aria-hidden="true">
+        <div class="value-connector h-full rounded-full" style="background:linear-gradient(to right, transparent, rgba(217,119,6,0.36), transparent);"></div>
+      </div>
+
+      {t.value_ladder.periods.map((period, i: number) => {
+        const sizes = ['md:scale-95', 'md:scale-100', 'md:scale-105'];
+        const pileType = i === 0 ? 'onion' : i === 1 ? 'grape' : 'cane';
+        const pileCount = i === 0 ? 5 : i === 1 ? 7 : 9;
+
+        return (
+          <div
+            data-reveal-3d-item
+            class:list={[
+              'value-period card-white scene-stagger rounded-2xl p-6 md:p-8 shadow-2xl relative',
+              'hover:-translate-y-1 transition-transform duration-300',
+              sizes[i],
+            ]}
+            style={`animation-delay: ${i * 0.15}s;`}
+          >
+            <div class="flex items-center gap-3 mb-5">
+              <div class:list={[
+                'w-10 h-10 md:w-12 md:h-12 rounded-full flex items-center justify-center font-bold font-serif',
+                i === 2 ? 'bg-brand text-white text-xl md:text-2xl' : 'bg-brand/10 text-brand text-lg md:text-xl',
+              ]}>
+                {i === 0 ? '7' : i === 1 ? '30' : (lang === 'mr' ? '१ वर्ष' : '1yr')}
+              </div>
+              <h3 class:list={[
+                'font-serif text-xl md:text-2xl font-bold',
+                i === 2 ? 'text-brand' : 'text-ink',
+              ]}>
+                {period.title}
+              </h3>
+            </div>
+
+            <ul class="space-y-3">
+              {period.points.map((point: string) => (
+                <li class="flex items-start gap-2 text-base text-ink-secondary">
+                  <svg class="w-4 h-4 text-brand mt-1 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+                  </svg>
+                  <span>{point}</span>
+                </li>
+              ))}
+            </ul>
+
+            <div class="mt-6">
+              <div class="flex items-center justify-between mb-1">
+                <span class="value-counter text-xs font-bold text-brand tabular-nums" data-count={`${(i + 1) * 33}`} data-suffix="%">0%</span>
+              </div>
+              <div class="h-2 rounded-full bg-gray-100 overflow-hidden relative">
+                <div
+                  class="value-bar crop-bar h-full bg-gradient-to-r from-brand/60 to-brand rounded-full"
+                  style={`--target-width: ${(i + 1) * 33}%; --bar-target: ${i === 0 ? '25' : i === 1 ? '60' : '100'}%;`}
+                ></div>
+              </div>
+            </div>
+
+            <div class:list={['harvest-pile', `harvest-pile--${pileType}`]} aria-hidden="true">
+              {Array.from({ length: pileCount }, (_, index) => (
+                <span class:list={['harvest-item', `harvest-item--${pileType}`]} style={`--harvest-delay:${index * 0.06}s;`}></span>
+              ))}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  </div>
+</section>
+
+<style>
+  .value-bar {
+    width: 0;
+    transition: width 1.2s ease-out;
+  }
+
+  [data-scene="value-ladder"].scene-visible .value-bar {
+    width: var(--target-width, 33%);
+  }
+
+  .value-period {
+    opacity: 0;
+    transform: translateY(20px);
+    transition: opacity 0.6s ease-out, transform 0.6s ease-out, box-shadow 0.3s ease;
+  }
+
+  [data-scene="value-ladder"].scene-visible .value-period {
+    opacity: 1;
+    transform: translateY(0);
+  }
+
+  .value-period:hover .value-bar {
+    box-shadow: 0 0 8px rgba(5, 150, 105, 0.3);
+  }
+
+  .value-connector {
+    width: 0;
+    transition: width 1.5s ease-out 0.5s;
+  }
+
+  [data-scene="value-ladder"].scene-visible .value-connector {
+    width: 100%;
+  }
+
+  .harvest-pile {
+    display: flex;
+    align-items: end;
+    gap: 0.25rem;
+    min-height: 52px;
+    margin-top: 1rem;
+    padding-top: 0.8rem;
+  }
+
+  .harvest-item {
+    opacity: 0;
+    transform: translateY(10px) scale(0.72);
+    transition: opacity 0.45s ease-out, transform 0.45s ease-out;
+    transition-delay: calc(var(--harvest-delay) + 0.2s);
+  }
+
+  [data-scene="value-ladder"].scene-visible .harvest-item {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+
+  .harvest-item--onion {
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background: radial-gradient(circle at 35% 30%, rgba(254, 243, 199, 0.95), rgba(217, 119, 6, 0.82));
+    box-shadow: inset 0 2px 0 rgba(255,255,255,0.35);
+  }
+
+  .harvest-item--grape {
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background: radial-gradient(circle at 35% 35%, rgba(224, 231, 255, 0.95), rgba(99, 102, 241, 0.82));
+    box-shadow:
+      7px 4px 0 rgba(99, 102, 241, 0.72),
+      3px -8px 0 rgba(129, 140, 248, 0.7);
+  }
+
+  .harvest-item--cane {
+    width: 8px;
+    height: 40px;
+    border-radius: 999px;
+    background: linear-gradient(180deg, rgba(187, 247, 208, 0.95), rgba(22, 163, 74, 0.76));
+    box-shadow: inset 0 -6px 0 rgba(21, 128, 61, 0.28);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .value-bar {
+      width: var(--target-width, 33%);
+      transition: none;
+    }
+
+    .value-period {
+      opacity: 1;
+      transform: none;
+      transition: none;
+    }
+
+    .value-connector {
+      width: 100%;
+      transition: none;
+    }
+
+    .harvest-item {
+      opacity: 1;
+      transform: none;
+      transition: none;
+    }
+  }
+</style>
