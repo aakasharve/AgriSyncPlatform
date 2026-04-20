@@ -126,6 +126,7 @@ try
     });
     builder.Services.AddHostedService<AgriSync.Bootstrapper.Migrations.BackfillFarmOwnerAccounts>();
     builder.Services.AddHostedService<AgriSync.Bootstrapper.Jobs.MisRefreshJob>();
+    builder.Services.AddHostedService<AgriSync.Bootstrapper.Jobs.AlertDispatcherJob>();
     builder.Services.AddHostedService<AgriSync.Bootstrapper.Jobs.SubscriptionReconciliationJob>();
     builder.Services.AddHostedService<AgriSync.Bootstrapper.Jobs.WorkerRetentionJob>();
     builder.Services.AddScoped<AgriSync.Bootstrapper.Jobs.IWorkerRetentionReader,
@@ -262,6 +263,7 @@ try
     app.MapShramSafalApi();
     app.MapAccountsModuleEndpoints();
     app.MapFirstFarmBootstrapEndpoints();
+    app.MapMeContextEndpoints();
 
     await InitializeApplicationDataAsync(app);
 
