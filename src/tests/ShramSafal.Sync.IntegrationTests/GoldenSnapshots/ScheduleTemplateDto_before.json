@@ -13,7 +13,7 @@
       "stageName": "Flowering",
       "startDay": 10,
       "endDay": 20,
-      "frequencyMode": "Once",
+      "frequencyMode": "one_time",
       "intervalDays": null
     }
   ],
