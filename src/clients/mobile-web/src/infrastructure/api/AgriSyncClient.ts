@@ -638,7 +638,7 @@ export class AgriSyncClient {
         return response.data;
     }
 
-    /** GET /user/auth/me/context — aggregate: user + ownerAccounts + memberships + affiliation. */
+    /** GET /user/auth/me/context — aggregate: me + farms (with plan + capabilities) + share + alerts. */
     async getMeContext(): Promise<import('../../core/session/MeContextService').MeContext> {
         const response = await this.http.get('/user/auth/me/context');
         return response.data;

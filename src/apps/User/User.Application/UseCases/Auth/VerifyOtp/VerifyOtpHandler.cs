@@ -89,6 +89,10 @@ public sealed class VerifyOtpHandler(
         if (existingUser is not null)
         {
             user = existingUser;
+            // Existing user just completed OTP — stamp the verification timestamp
+            // so the semi-literate UI stops showing the "verify phone" banner.
+            user.MarkPhoneVerified(utcNow);
+            await userRepository.SaveChangesAsync(ct);
         }
         else
         {

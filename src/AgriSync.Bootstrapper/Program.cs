@@ -107,6 +107,15 @@ try
     builder.Services.AddShramSafalApi(builder.Configuration);
     builder.Services.AddAccountsModule(builder.Configuration);
 
+    // MeContext composition adapters — the only place in the backend that
+    // reads across app DbContexts. Swapped for projection readers later.
+    builder.Services.AddScoped<User.Application.Ports.IAccountsSnapshotReader,
+        AgriSync.Bootstrapper.Adapters.AccountsSnapshotReader>();
+    builder.Services.AddScoped<User.Application.Ports.IFarmMembershipSnapshotReader,
+        AgriSync.Bootstrapper.Adapters.FarmMembershipSnapshotReader>();
+    builder.Services.AddScoped<User.Application.Ports.IAffiliationSnapshotReader,
+        AgriSync.Bootstrapper.Adapters.AffiliationSnapshotReader>();
+
     var analyticsConnection =
         builder.Configuration.GetConnectionString("AnalyticsDb")
         ?? builder.Configuration.GetConnectionString("UserDb")
@@ -308,7 +317,7 @@ try
     app.MapShramSafalApi();
     app.MapAccountsModuleEndpoints();
     app.MapFirstFarmBootstrapEndpoints();
-    app.MapMeContextEndpoints();
+    // /user/auth/me/context now lives in User.Api (mapped by MapUserApi above).
 
     await InitializeApplicationDataAsync(app);
 

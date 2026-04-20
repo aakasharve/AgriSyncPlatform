@@ -9,7 +9,8 @@ using User.Application.UseCases.Auth.RefreshToken;
 using User.Application.UseCases.Auth.RegisterUser;
 using User.Application.UseCases.Auth.StartOtp;
 using User.Application.UseCases.Auth.VerifyOtp;
-using User.Application.UseCases.Users.GetCurrentUser;
+using User.Application.UseCases.Users.GetMeContext;
+using AgriSync.SharedKernel.Contracts.Ids;
 
 namespace User.Api.Endpoints;
 
@@ -193,9 +194,9 @@ public static class AuthEndpoints
         .WithName("LogoutUser")
         .RequireAuthorization();
 
-        group.MapGet("/me", async (
+        group.MapGet("/me/context", async (
             ClaimsPrincipal user,
-            GetCurrentUserHandler handler,
+            GetMeContextHandler handler,
             CancellationToken ct) =>
         {
             if (!TryGetUserId(user, out var userId))
@@ -203,13 +204,13 @@ public static class AuthEndpoints
                 return Results.Unauthorized();
             }
 
-            var result = await handler.HandleAsync(userId, ct);
+            var result = await handler.HandleAsync(new UserId(userId), ct);
 
             return result.IsSuccess
                 ? Results.Ok(result.Value)
                 : Results.NotFound(new { error = result.Error.Code, message = result.Error.Description });
         })
-        .WithName("GetCurrentUser")
+        .WithName("GetMeContext")
         .RequireAuthorization();
 
         return endpoints;
