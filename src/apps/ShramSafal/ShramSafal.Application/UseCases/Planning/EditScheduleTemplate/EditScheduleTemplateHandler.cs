@@ -21,7 +21,7 @@ public sealed class EditScheduleTemplateHandler(
         CancellationToken ct = default)
     {
         // Step 1: validate
-        if (command.SourceTemplateId == Guid.Empty || command.NewTemplateId == Guid.Empty)
+        if (command.SourceTemplateId == Guid.Empty || command.NewTemplateId == Guid.Empty || command.CallerUserId == Guid.Empty)
         {
             return Result.Failure<EditScheduleTemplateResult>(ShramSafalErrors.InvalidCommand);
         }

@@ -23,6 +23,7 @@ public sealed class CloneScheduleTemplateHandler(
         // Step 1: validate
         if (command.SourceTemplateId == Guid.Empty ||
             command.NewTemplateId == Guid.Empty ||
+            command.CallerUserId == Guid.Empty ||
             string.IsNullOrWhiteSpace(command.Reason))
         {
             return Result.Failure<CloneScheduleTemplateResult>(ShramSafalErrors.InvalidCommand);
