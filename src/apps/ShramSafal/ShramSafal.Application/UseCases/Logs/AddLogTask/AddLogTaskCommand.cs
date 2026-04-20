@@ -1,3 +1,5 @@
+using ShramSafal.Domain.Logs;
+
 namespace ShramSafal.Application.UseCases.Logs.AddLogTask;
 
 public sealed record AddLogTaskCommand(
@@ -8,4 +10,7 @@ public sealed record AddLogTaskCommand(
     Guid? LogTaskId = null,
     Guid ActorUserId = default,
     string? ActorRole = null,
-    string? ClientCommandId = null);
+    string? ClientCommandId = null,
+    ExecutionStatus ExecutionStatus = ExecutionStatus.Completed,
+    string? DeviationReasonCode = null,
+    string? DeviationNote = null);

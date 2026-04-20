@@ -3,8 +3,10 @@ using AgriSync.BuildingBlocks.Results;
 using AgriSync.SharedKernel.Contracts.Ids;
 using ShramSafal.Application.Contracts.Dtos;
 using ShramSafal.Application.Ports;
+using ShramSafal.Application.UseCases.ReferenceData.GetDeviationReasonCodes;
 using ShramSafal.Domain.Audit;
 using ShramSafal.Domain.Common;
+using ShramSafal.Domain.Logs;
 
 namespace ShramSafal.Application.UseCases.Logs.AddLogTask;
 
@@ -54,11 +56,28 @@ public sealed class AddLogTaskHandler(
             return Result.Failure<DailyLogDto>(ShramSafalErrors.CropCycleNotFound);
         }
 
+        // Validate deviation reason if non-Completed
+        if (command.ExecutionStatus != ExecutionStatus.Completed)
+        {
+            if (string.IsNullOrWhiteSpace(command.DeviationReasonCode))
+                return Result.Failure<DailyLogDto>(ShramSafalErrors.InvalidCommand);
+
+            if (!GetDeviationReasonCodesHandler.IsValidCode(command.DeviationReasonCode))
+                return Result.Failure<DailyLogDto>(ShramSafalErrors.InvalidCommand);
+        }
+        else if (!string.IsNullOrWhiteSpace(command.DeviationReasonCode))
+        {
+            return Result.Failure<DailyLogDto>(ShramSafalErrors.InvalidCommand);
+        }
+
         var task = log.AddTask(
             command.LogTaskId ?? idGenerator.New(),
             command.ActivityType,
             command.Notes,
-            command.OccurredAtUtc ?? clock.UtcNow);
+            command.OccurredAtUtc ?? clock.UtcNow,
+            command.ExecutionStatus,
+            command.DeviationReasonCode,
+            command.DeviationNote);
 
         // Phase 3 MIS: stamp compliance on the task inside the same tx (I-17).
         var compliance = await complianceService.EvaluateAsync(
