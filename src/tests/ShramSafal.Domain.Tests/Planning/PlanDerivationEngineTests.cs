@@ -60,7 +60,7 @@ public sealed class PlanDerivationEngineTests
             "Grape Template",
             "Vegetative",
             DateTime.UtcNow,
-            [
+            stages: [
                 new StageDefinition("Vegetative", 0, 14),
                 new StageDefinition("Flowering", 15, 30)
             ]);
