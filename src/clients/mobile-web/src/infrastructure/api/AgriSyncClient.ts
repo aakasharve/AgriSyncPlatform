@@ -13,7 +13,10 @@ export type SyncMutationType =
     | 'correct_cost_entry'
     | 'allocate_global_expense'
     | 'set_price_config'
-    | 'create_attachment';
+    | 'create_attachment'
+    | 'adopt_schedule'
+    | 'migrate_schedule'
+    | 'abandon_schedule';
 
 export type VerificationStatus =
     | 'draft'
@@ -243,6 +246,7 @@ export interface SyncPullResponse {
     auditEvents: unknown[];
     operators?: SyncOperatorDto[];
     scheduleTemplates?: unknown[];
+    scheduleSubscriptions?: ScheduleSubscriptionDto[];
     cropTypes?: unknown[];
     activityCategories?: string[];
     costCategories?: string[];
@@ -325,6 +329,57 @@ export interface AiDashboardResponse {
         completedAtUtc?: string;
         providers: string[];
     }>;
+}
+
+// --- Schedule Surface Definitions ---
+export interface CropScheduleTemplateDto {
+    id: string;
+    templateKey: string;
+    cropKey: string;
+    name: string;
+    versionTag: string;
+    isPublished: boolean;
+    tasks: Array<{
+        id: string;
+        taskType: string;
+        stage: string;
+        dayOffsetFromCycleStart: number;
+        toleranceDaysPlusMinus: number;
+    }>;
+}
+
+export interface ScheduleSubscriptionDto {
+    id: string;
+    farmId: string;
+    plotId: string;
+    cropCycleId: string;
+    cropKey: string;
+    scheduleTemplateId: string;
+    scheduleVersionTag: string;
+    adoptedAtUtc: string;
+    state: 'Active' | 'Migrated' | 'Abandoned' | 'Completed';
+    migratedFromSubscriptionId?: string;
+    migrationReason?: string;
+    stateChangedAtUtc?: string;
+}
+
+export interface AdoptScheduleRequest {
+    farmId: string;
+    scheduleTemplateId: string;
+    subscriptionId?: string;
+    clientCommandId?: string;
+}
+
+export interface MigrateScheduleRequest {
+    farmId: string;
+    newScheduleTemplateId: string;
+    reason: string;
+    reasonText?: string;
+}
+
+export interface AbandonScheduleRequest {
+    farmId: string;
+    reasonText?: string;
 }
 
 // --- Document Extraction Session ---
@@ -553,6 +608,28 @@ export class AgriSyncClient {
     /** GET /accounts/affiliation/events — recent growth events. */
     async getAffiliationEvents(limit = 20): Promise<Array<{ id: string; eventType: string; occurredAtUtc: string; metadata: string | null }>> {
         const response = await this.http.get(`/accounts/affiliation/events?limit=${limit}`);
+        return response.data;
+    }
+
+    async getCropScheduleTemplates(cropKey: string): Promise<CropScheduleTemplateDto[]> {
+        const response = await this.http.get<CropScheduleTemplateDto[]>(`/shramsafal/reference-data/crop-schedule-templates`, {
+            params: { cropKey }
+        });
+        return response.data;
+    }
+
+    async adoptSchedule(plotId: string, cycleId: string, body: AdoptScheduleRequest): Promise<ScheduleSubscriptionDto> {
+        const response = await this.http.post<ScheduleSubscriptionDto>(`/shramsafal/plots/${plotId}/cycles/${cycleId}/schedule/adopt`, body);
+        return response.data;
+    }
+
+    async migrateSchedule(plotId: string, cycleId: string, body: MigrateScheduleRequest): Promise<ScheduleSubscriptionDto> {
+        const response = await this.http.post<ScheduleSubscriptionDto>(`/shramsafal/plots/${plotId}/cycles/${cycleId}/schedule/migrate`, body);
+        return response.data;
+    }
+
+    async abandonSchedule(plotId: string, cycleId: string, body: AbandonScheduleRequest): Promise<ScheduleSubscriptionDto> {
+        const response = await this.http.post<ScheduleSubscriptionDto>(`/shramsafal/plots/${plotId}/cycles/${cycleId}/schedule/abandon`, body);
         return response.data;
     }
 
