@@ -4,6 +4,7 @@ using AgriSync.BuildingBlocks.Results;
 using AgriSync.SharedKernel.Contracts.Ids;
 using AgriSync.SharedKernel.Contracts.Roles;
 using ShramSafal.Application.Ports;
+using ShramSafal.Domain.Audit;
 using ShramSafal.Domain.Farms;
 
 namespace ShramSafal.Application.UseCases.Memberships.ExitMembership;
@@ -67,6 +68,17 @@ public sealed class ExitMembershipHandler(
                 "You are the only primary owner of this farm. Promote someone else first."));
         }
 
+        await repository.AddAuditEventAsync(
+            AuditEvent.Create(
+                farmId: farmId.Value,
+                entityType: "FarmMembership",
+                entityId: membership.Id,
+                action: "MemberExited",
+                actorUserId: callerUserId.Value,
+                actorRole: membership.Role.ToString().ToLowerInvariant(),
+                payload: new { farmId = farmId.Value, userId = callerUserId.Value, role = membership.Role.ToString() },
+                clientCommandId: null,
+                occurredAtUtc: exitAtUtc), ct);
         await repository.SaveChangesAsync(ct);
 
         await analytics.EmitAsync(new AnalyticsEvent(

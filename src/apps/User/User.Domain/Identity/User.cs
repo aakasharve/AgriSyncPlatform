@@ -63,6 +63,7 @@ public sealed class User : Entity<UserId>
         return user;
     }
 
+    [Obsolete("AppMembership is deprecated (spec §3.2). Use FarmMembership (ShramSafal.Domain) for authorization.")]
     public AppMembership AddMembership(Guid membershipId, string appId, AppRole role, DateTime utcNow)
     {
         if (_memberships.Any(m => m.AppId == appId && !m.IsRevoked))

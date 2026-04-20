@@ -7,6 +7,7 @@ using AgriSync.BuildingBlocks.Results;
 using AgriSync.SharedKernel.Contracts.Ids;
 using AgriSync.SharedKernel.Contracts.Roles;
 using ShramSafal.Application.Ports;
+using ShramSafal.Domain.Audit;
 using ShramSafal.Domain.Common;
 using ShramSafal.Domain.Farms;
 
@@ -89,6 +90,17 @@ public sealed class IssueFarmInviteHandler(
         if (existing is null)
         {
             await invitationRepository.AddInvitationAsync(invitation, ct);
+            await farmRepository.AddAuditEventAsync(
+                AuditEvent.Create(
+                    farmId: command.FarmId.Value,
+                    entityType: "FarmInvitation",
+                    entityId: invitation.Id.Value,
+                    action: "InvitationIssued",
+                    actorUserId: command.CallerUserId.Value,
+                    actorRole: AppRole.PrimaryOwner.ToString().ToLowerInvariant(),
+                    payload: new { farmId = command.FarmId, invitationId = invitation.Id },
+                    clientCommandId: null,
+                    occurredAtUtc: utcNow), ct);
         }
         await invitationRepository.AddTokenAsync(token, ct);
         await invitationRepository.SaveChangesAsync(ct);
