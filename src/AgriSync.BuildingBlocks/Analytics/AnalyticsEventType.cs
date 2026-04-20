@@ -46,4 +46,12 @@ public static class AnalyticsEventType
     public const string SyncPushed = "sync.pushed";
     public const string SyncPullCompleted = "sync.pull_completed";
     public const string SyncConflict = "sync.conflict";
+
+    // Operational observability (Ops Plan Phase 1)
+    // api.error  = 5xx from server, or 4xx on critical write endpoints
+    // api.slow   = response > 2000ms on write (POST/PUT/PATCH) endpoints
+    // client.error = JS exception or fetch failure from the farmer's browser
+    public const string ApiError    = "api.error";
+    public const string ApiSlow     = "api.slow";
+    public const string ClientError = "client.error";
 }

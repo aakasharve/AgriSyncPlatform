@@ -1,4 +1,5 @@
 import axios, { AxiosError, AxiosInstance, InternalAxiosRequestConfig } from 'axios';
+import { reportClientError } from '../telemetry/ClientErrorReporter';
 import { clearAuthSession, getAuthSession, setAuthSession, type AuthSession } from './AuthTokenStore';
 
 export type SyncMutationType =
@@ -589,7 +590,18 @@ export class AgriSyncClient {
         this.http.interceptors.request.use((config) => this.attachAccessToken(config));
         this.http.interceptors.response.use(
             response => response,
-            error => this.tryRefreshAndRetry(error));
+            (error: AxiosError) => {
+                // Ops Phase 3 — report critical endpoint failures to /telemetry/client-error
+                const url = error.config?.url ?? '';
+                const status = error.response?.status;
+                const isNetworkError = !error.response;
+                if (isNetworkError) {
+                    reportClientError({ type: 'network_error', endpoint: url, message: error.message });
+                } else if (status && status >= 400) {
+                    reportClientError({ type: 'api_failure', endpoint: url, statusCode: status });
+                }
+                return this.tryRefreshAndRetry(error);
+            });
     }
 
     async login(request: LoginRequest): Promise<AuthResponseDto> {
