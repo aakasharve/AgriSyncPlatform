@@ -687,6 +687,18 @@ internal sealed class ShramSafalRepository(ShramSafalDbContext db) : IShramSafal
         await db.SaveChangesAsync(ct);
     }
 
+    // --- CEI Phase 1 §4.4 -----------------------------------------------------------------
+
+    public async Task<int> GetDisputedLogCountForPlotAsync(Guid plotId, CancellationToken ct = default)
+    {
+        var logs = await db.DailyLogs
+            .Where(l => l.PlotId == plotId)
+            .Include(l => l.VerificationEvents)
+            .ToListAsync(ct);
+
+        return logs.Count(l => l.CurrentVerificationStatus == VerificationStatus.Disputed);
+    }
+
     private sealed class OperatorDirectoryRow
     {
         public Guid UserId { get; set; }
