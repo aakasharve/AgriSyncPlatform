@@ -25,6 +25,7 @@ public sealed class CropCycle : Entity<Guid>
         StartDate = startDate;
         EndDate = endDate;
         CreatedAtUtc = createdAtUtc;
+        ModifiedAtUtc = createdAtUtc;
     }
 
     public FarmId FarmId { get; private set; }
@@ -34,6 +35,7 @@ public sealed class CropCycle : Entity<Guid>
     public DateOnly StartDate { get; private set; }
     public DateOnly? EndDate { get; private set; }
     public DateTime CreatedAtUtc { get; private set; }
+    public DateTime ModifiedAtUtc { get; private set; }
 
     public static CropCycle Create(
         Guid id,

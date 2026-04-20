@@ -45,7 +45,12 @@ internal sealed class CropCycleConfiguration : IEntityTypeConfiguration<CropCycl
             .HasColumnName("created_at_utc")
             .IsRequired();
 
+        builder.Property(x => x.ModifiedAtUtc)
+            .HasColumnName("modified_at_utc")
+            .IsRequired();
+
         builder.HasIndex(x => new { x.FarmId, x.PlotId, x.StartDate });
+        builder.HasIndex(x => x.ModifiedAtUtc);
         builder.Ignore(x => x.DomainEvents);
     }
 }

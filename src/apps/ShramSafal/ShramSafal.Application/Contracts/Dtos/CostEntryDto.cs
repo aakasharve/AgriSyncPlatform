@@ -12,5 +12,7 @@ public sealed record CostEntryDto(
     DateOnly EntryDate,
     Guid CreatedByUserId,
     DateTime CreatedAtUtc,
+    DateTime ModifiedAtUtc,
+    LocationDto? Location,
     bool IsCorrected);
 

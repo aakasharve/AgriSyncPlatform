@@ -1,0 +1,63 @@
+---
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import Navbar from '../../components/ui/Navbar.astro';
+import Footer from '../../components/ui/Footer.astro';
+import { getLangFromUrl, getTranslations } from '../../i18n/translations';
+
+const lang = getLangFromUrl(Astro.url);
+const t = getTranslations(lang);
+---
+
+<BaseLayout
+  title={t.future.meta_title}
+  description={t.future.meta_description}
+>
+  <Navbar />
+
+  <main class="pt-24 pb-section">
+    <div class="max-w-site mx-auto px-5 md:px-8">
+      <!-- Back link -->
+      <a
+        href={`/${lang}/`}
+        class="inline-flex items-center gap-1.5 text-sm text-ink-muted hover:text-ink transition-colors mb-10"
+      >
+        <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" />
+        </svg>
+        {t.future.back_link}
+      </a>
+
+      <!-- Title -->
+      <h1
+        class="font-serif text-h2 text-ink mb-6 max-w-3xl"
+        set:html={t.future.title.replace(/\n/g, '<br />')}
+      />
+      <p class="text-body-lg text-ink-secondary max-w-prose mb-14 md:mb-20">
+        {t.future.subtitle}
+      </p>
+
+      <!-- Cards grid -->
+      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+        {t.future.cards.map((card: { icon: string; title: string; body: string }) => (
+          <article class="bg-white rounded-xl p-6 md:p-8 shadow-sm border border-border-soft/50 hover:shadow-md transition-shadow">
+            <!-- Icon -->
+            <div class="text-3xl mb-4" aria-hidden="true">{card.icon}</div>
+            <!-- Title -->
+            <h2 class="font-serif text-lg text-ink mb-2">{card.title}</h2>
+            <!-- Body -->
+            <p class="text-sm text-ink-secondary leading-relaxed">{card.body}</p>
+          </article>
+        ))}
+      </div>
+    </div>
+  </main>
+
+  <Footer />
+
+  <script>
+    import { initScrollAnimations } from '../../scripts/scrollAnimations';
+    document.addEventListener('DOMContentLoaded', () => {
+      initScrollAnimations();
+    });
+  </script>
+</BaseLayout>

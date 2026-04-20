@@ -25,6 +25,7 @@ public sealed class FinanceCorrection : Entity<Guid>
         Reason = reason;
         CorrectedByUserId = correctedByUserId;
         CorrectedAtUtc = correctedAtUtc;
+        ModifiedAtUtc = correctedAtUtc;
     }
 
     public Guid CostEntryId { get; private set; }
@@ -34,6 +35,7 @@ public sealed class FinanceCorrection : Entity<Guid>
     public string Reason { get; private set; } = string.Empty;
     public UserId CorrectedByUserId { get; private set; }
     public DateTime CorrectedAtUtc { get; private set; }
+    public DateTime ModifiedAtUtc { get; private set; }
 
     public static FinanceCorrection Create(
         Guid id,

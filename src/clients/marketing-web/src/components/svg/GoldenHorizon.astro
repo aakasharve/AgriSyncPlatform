@@ -1,0 +1,33 @@
+---
+// src/components/svg/GoldenHorizon.astro
+// A 1px golden gradient divider line. Replaces all wave-SVG white-fill section dividers.
+interface Props {
+  dots?: boolean;   // show soil-dot row below the line
+  class?: string;
+}
+const { dots = false, class: className = '' } = Astro.props;
+---
+
+<div class={`golden-horizon ${className}`} aria-hidden="true" style="position:relative;width:100%;height:20px;pointer-events:none;">
+  <svg viewBox="0 0 1440 20" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="none" style="width:100%;height:100%;display:block;">
+    {/* Main golden line */}
+    <defs>
+      <linearGradient id="gh-grad" x1="0%" y1="0%" x2="100%" y2="0%">
+        <stop offset="0%"   stop-color="rgba(245,158,11,0)" />
+        <stop offset="20%"  stop-color="rgba(245,158,11,0.30)" />
+        <stop offset="80%"  stop-color="rgba(245,158,11,0.30)" />
+        <stop offset="100%" stop-color="rgba(245,158,11,0)" />
+      </linearGradient>
+    </defs>
+    <line x1="0" y1="2" x2="1440" y2="2" stroke="url(#gh-grad)" stroke-width="1" />
+
+    {/* Optional soil dots */}
+    {dots && Array.from({ length: 36 }, (_, i) => (
+      <circle
+        cx={i * 40 + 20} cy={12}
+        r="1.5"
+        fill={`rgba(245,158,11,${0.08 + (i % 3) * 0.04})`}
+      />
+    ))}
+  </svg>
+</div>

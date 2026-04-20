@@ -2,26 +2,80 @@ using AgriSync.BuildingBlocks.Abstractions;
 using AgriSync.BuildingBlocks.Results;
 using ShramSafal.Application.Contracts.Dtos;
 using ShramSafal.Application.Ports;
+using ShramSafal.Application.UseCases.Planning.GetAttentionBoard;
+using ShramSafal.Application.UseCases.ReferenceData.GetScheduleTemplates;
 
 namespace ShramSafal.Application.UseCases.Sync.PullSyncChanges;
 
 public sealed class PullSyncChangesHandler(
     IShramSafalRepository repository,
-    IClock clock)
+    IClock clock,
+    GetScheduleTemplatesHandler getScheduleTemplatesHandler,
+    GetAttentionBoardHandler getAttentionBoardHandler)
 {
     public async Task<Result<SyncPullResponseDto>> HandleAsync(PullSyncChangesQuery query, CancellationToken ct = default)
     {
         var serverNowUtc = clock.UtcNow;
         var sinceUtc = NormalizeCursor(query.SinceUtc, serverNowUtc);
+        var farmIds = await repository.GetFarmIdsForUserAsync(query.UserId, ct);
+        var farmIdSet = farmIds.ToHashSet();
 
-        var farms = await repository.GetFarmsChangedSinceAsync(sinceUtc, ct);
-        var plots = await repository.GetPlotsChangedSinceAsync(sinceUtc, ct);
-        var cropCycles = await repository.GetCropCyclesChangedSinceAsync(sinceUtc, ct);
-        var dailyLogs = await repository.GetDailyLogsChangedSinceAsync(sinceUtc, ct);
-        var costEntries = await repository.GetCostEntriesChangedSinceAsync(sinceUtc, ct);
-        var financeCorrections = await repository.GetFinanceCorrectionsChangedSinceAsync(sinceUtc, ct);
-        var priceConfigs = await repository.GetPriceConfigsChangedSinceAsync(sinceUtc, ct);
-        var plannedActivities = await repository.GetPlannedActivitiesChangedSinceAsync(sinceUtc, ct);
+        var farms = (await repository.GetFarmsChangedSinceAsync(sinceUtc, ct))
+            .Where(f => farmIdSet.Contains((Guid)f.Id))
+            .ToList();
+        var plots = (await repository.GetPlotsChangedSinceAsync(sinceUtc, ct))
+            .Where(p => farmIdSet.Contains((Guid)p.FarmId))
+            .ToList();
+        var cropCycles = (await repository.GetCropCyclesChangedSinceAsync(sinceUtc, ct))
+            .Where(c => farmIdSet.Contains((Guid)c.FarmId))
+            .ToList();
+        var dailyLogs = (await repository.GetDailyLogsChangedSinceAsync(sinceUtc, ct))
+            .Where(l => farmIdSet.Contains((Guid)l.FarmId))
+            .ToList();
+        var attachments = (await repository.GetAttachmentsChangedSinceAsync(sinceUtc, ct))
+            .Where(a => farmIdSet.Contains((Guid)a.FarmId))
+            .ToList();
+        var costEntries = (await repository.GetCostEntriesChangedSinceAsync(sinceUtc, ct))
+            .Where(c => farmIdSet.Contains((Guid)c.FarmId))
+            .ToList();
+        var costEntryIds = costEntries.Select(c => c.Id).ToHashSet();
+        var financeCorrections = (await repository.GetFinanceCorrectionsChangedSinceAsync(sinceUtc, ct))
+            .Where(c => costEntryIds.Contains(c.CostEntryId))
+            .ToList();
+        var dayLedgers = (await repository.GetDayLedgersChangedSinceAsync(sinceUtc, ct))
+            .Where(l => farmIdSet.Contains((Guid)l.FarmId))
+            .ToList();
+        var priceConfigs = (await repository.GetPriceConfigsChangedSinceAsync(sinceUtc, ct))
+            .Where(p => (Guid)p.CreatedByUserId == query.UserId)
+            .ToList();
+        var cropCycleIds = cropCycles.Select(c => c.Id).ToHashSet();
+        var plannedActivities = (await repository.GetPlannedActivitiesChangedSinceAsync(sinceUtc, ct))
+            .Where(a => cropCycleIds.Contains(a.CropCycleId))
+            .ToList();
+        var auditEvents = (await repository.GetAuditEventsChangedSinceAsync(sinceUtc, ct))
+            .Where(a => !a.FarmId.HasValue || farmIdSet.Contains(a.FarmId.Value))
+            .ToList();
+        var templatesResult = await getScheduleTemplatesHandler.HandleAsync(ct);
+        if (!templatesResult.IsSuccess)
+        {
+            return Result.Failure<SyncPullResponseDto>(templatesResult.Error);
+        }
+
+        var scheduleTemplates = templatesResult.Value ?? [];
+        var cropTypes = GetScheduleTemplatesHandler.BuildCropTypes(scheduleTemplates);
+        var referenceDataVersionHash = scheduleTemplates.Count > 0
+            ? scheduleTemplates[0].VersionHash
+            : ReferenceDataCatalog.VersionHash;
+        var operatorIds = CollectOperatorIds(
+            query.UserId,
+            farms,
+            dailyLogs,
+            attachments,
+            costEntries,
+            financeCorrections,
+            dayLedgers,
+            auditEvents);
+        var operators = await repository.GetOperatorsByIdsAsync(operatorIds, ct);
 
         var nextCursorUtc = ComputeNextCursor(
             sinceUtc,
@@ -29,10 +83,27 @@ public sealed class PullSyncChangesHandler(
             plots,
             cropCycles,
             dailyLogs,
+            attachments,
             costEntries,
             financeCorrections,
+            dayLedgers,
             priceConfigs,
-            plannedActivities);
+            plannedActivities,
+            auditEvents);
+
+        // AttentionBoard is computed as a snapshot on every pull.
+        // If computation fails, the pull still succeeds — we pass null.
+        AttentionBoardDto? attentionBoard = null;
+        try
+        {
+            var attentionResult = await getAttentionBoardHandler.HandleAsync(
+                new GetAttentionBoardQuery(query.UserId, serverNowUtc), ct);
+            attentionBoard = attentionResult.IsSuccess ? attentionResult.Value : null;
+        }
+        catch
+        {
+            // Swallow: attention board failures must never fail the pull (CEI §4.2.2)
+        }
 
         var response = new SyncPullResponseDto(
             serverNowUtc,
@@ -41,10 +112,20 @@ public sealed class PullSyncChangesHandler(
             plots.Select(p => p.ToDto()).ToList(),
             cropCycles.Select(c => c.ToDto()).ToList(),
             dailyLogs.Select(l => l.ToDto()).ToList(),
+            attachments.Select(a => a.ToDto()).ToList(),
             costEntries.Select(c => c.ToDto()).ToList(),
             financeCorrections.Select(c => c.ToDto()).ToList(),
+            dayLedgers.Select(l => l.ToDto()).ToList(),
             priceConfigs.Select(c => c.ToDto()).ToList(),
-            plannedActivities.Select(a => a.ToDto()).ToList());
+            plannedActivities.Select(a => a.ToDto()).ToList(),
+            auditEvents.Select(a => a.ToDto()).ToList(),
+            operators.ToList(),
+            scheduleTemplates,
+            cropTypes,
+            ReferenceDataCatalog.ActivityCategories,
+            ReferenceDataCatalog.CostCategories,
+            referenceDataVersionHash,
+            attentionBoard);
 
         return Result.Success(response);
     }
@@ -77,64 +158,141 @@ public sealed class PullSyncChangesHandler(
         IReadOnlyList<Domain.Farms.Plot> plots,
         IReadOnlyList<Domain.Crops.CropCycle> cropCycles,
         IReadOnlyList<Domain.Logs.DailyLog> dailyLogs,
+        IReadOnlyList<Domain.Attachments.Attachment> attachments,
         IReadOnlyList<Domain.Finance.CostEntry> costEntries,
         IReadOnlyList<Domain.Finance.FinanceCorrection> financeCorrections,
+        IReadOnlyList<Domain.Finance.DayLedger> dayLedgers,
         IReadOnlyList<Domain.Finance.PriceConfig> priceConfigs,
-        IReadOnlyList<Domain.Planning.PlannedActivity> plannedActivities)
+        IReadOnlyList<Domain.Planning.PlannedActivity> plannedActivities,
+        IReadOnlyList<Domain.Audit.AuditEvent> auditEvents)
     {
         var maxTimestamp = sinceUtc;
 
         if (farms.Count > 0)
         {
-            maxTimestamp = Max(maxTimestamp, farms.Max(f => f.CreatedAtUtc));
+            maxTimestamp = Max(maxTimestamp, farms.Max(f => f.ModifiedAtUtc));
         }
 
         if (plots.Count > 0)
         {
-            maxTimestamp = Max(maxTimestamp, plots.Max(p => p.CreatedAtUtc));
+            maxTimestamp = Max(maxTimestamp, plots.Max(p => p.ModifiedAtUtc));
         }
 
         if (cropCycles.Count > 0)
         {
-            maxTimestamp = Max(maxTimestamp, cropCycles.Max(c => c.CreatedAtUtc));
+            maxTimestamp = Max(maxTimestamp, cropCycles.Max(c => c.ModifiedAtUtc));
         }
 
-        foreach (var log in dailyLogs)
+        if (dailyLogs.Count > 0)
         {
-            maxTimestamp = Max(maxTimestamp, log.CreatedAtUtc);
-            if (log.Tasks.Count > 0)
-            {
-                maxTimestamp = Max(maxTimestamp, log.Tasks.Max(t => t.OccurredAtUtc));
-            }
+            maxTimestamp = Max(maxTimestamp, dailyLogs.Max(log => log.ModifiedAtUtc));
+        }
 
-            if (log.VerificationEvents.Count > 0)
-            {
-                maxTimestamp = Max(maxTimestamp, log.VerificationEvents.Max(v => v.OccurredAtUtc));
-            }
+        if (attachments.Count > 0)
+        {
+            maxTimestamp = Max(maxTimestamp, attachments.Max(a => a.ModifiedAtUtc));
         }
 
         if (costEntries.Count > 0)
         {
-            maxTimestamp = Max(maxTimestamp, costEntries.Max(c => c.CreatedAtUtc));
+            maxTimestamp = Max(maxTimestamp, costEntries.Max(c => c.ModifiedAtUtc));
         }
 
         if (financeCorrections.Count > 0)
         {
-            maxTimestamp = Max(maxTimestamp, financeCorrections.Max(c => c.CorrectedAtUtc));
+            maxTimestamp = Max(maxTimestamp, financeCorrections.Max(c => c.ModifiedAtUtc));
+        }
+
+        if (dayLedgers.Count > 0)
+        {
+            maxTimestamp = Max(maxTimestamp, dayLedgers.Max(c => c.ModifiedAtUtc));
         }
 
         if (priceConfigs.Count > 0)
         {
-            maxTimestamp = Max(maxTimestamp, priceConfigs.Max(c => c.CreatedAtUtc));
+            maxTimestamp = Max(maxTimestamp, priceConfigs.Max(c => c.ModifiedAtUtc));
+        }
+
+        if (dayLedgers.Count > 0)
+        {
+            maxTimestamp = Max(maxTimestamp, dayLedgers.Max(c => c.CreatedAtUtc));
         }
 
         if (plannedActivities.Count > 0)
         {
-            maxTimestamp = Max(maxTimestamp, plannedActivities.Max(a => a.CreatedAtUtc));
+            maxTimestamp = Max(maxTimestamp, plannedActivities.Max(a => a.ModifiedAtUtc));
+        }
+
+        if (auditEvents.Count > 0)
+        {
+            maxTimestamp = Max(maxTimestamp, auditEvents.Max(a => a.OccurredAtUtc));
         }
 
         return maxTimestamp;
     }
 
     private static DateTime Max(DateTime left, DateTime right) => left >= right ? left : right;
+
+    private static HashSet<Guid> CollectOperatorIds(
+        Guid requestingUserId,
+        IReadOnlyList<Domain.Farms.Farm> farms,
+        IReadOnlyList<Domain.Logs.DailyLog> dailyLogs,
+        IReadOnlyList<Domain.Attachments.Attachment> attachments,
+        IReadOnlyList<Domain.Finance.CostEntry> costEntries,
+        IReadOnlyList<Domain.Finance.FinanceCorrection> financeCorrections,
+        IReadOnlyList<Domain.Finance.DayLedger> dayLedgers,
+        IReadOnlyList<Domain.Audit.AuditEvent> auditEvents)
+    {
+        var ids = new HashSet<Guid>();
+        AddIfValid(requestingUserId, ids);
+
+        foreach (var farm in farms)
+        {
+            AddIfValid((Guid)farm.OwnerUserId, ids);
+        }
+
+        foreach (var log in dailyLogs)
+        {
+            AddIfValid((Guid)log.OperatorUserId, ids);
+            foreach (var verification in log.VerificationEvents)
+            {
+                AddIfValid((Guid)verification.VerifiedByUserId, ids);
+            }
+        }
+
+        foreach (var attachment in attachments)
+        {
+            AddIfValid((Guid)attachment.CreatedByUserId, ids);
+        }
+
+        foreach (var entry in costEntries)
+        {
+            AddIfValid((Guid)entry.CreatedByUserId, ids);
+        }
+
+        foreach (var correction in financeCorrections)
+        {
+            AddIfValid((Guid)correction.CorrectedByUserId, ids);
+        }
+
+        foreach (var ledger in dayLedgers)
+        {
+            AddIfValid((Guid)ledger.CreatedByUserId, ids);
+        }
+
+        foreach (var auditEvent in auditEvents)
+        {
+            AddIfValid((Guid)auditEvent.ActorUserId, ids);
+        }
+
+        return ids;
+    }
+
+    private static void AddIfValid(Guid value, HashSet<Guid> ids)
+    {
+        if (value != Guid.Empty)
+        {
+            ids.Add(value);
+        }
+    }
 }

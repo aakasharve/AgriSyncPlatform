@@ -7,10 +7,10 @@ import React, { useMemo } from 'react';
 import { ClipboardList, Calendar, Inbox } from 'lucide-react';
 import PlannedTaskCard from './PlannedTaskCard';
 import { PlannedTask, CropProfile } from '../../../types';
-import { getCropById } from '../../../data/farmData';
 
 interface PlannedTasksListProps {
     tasks: PlannedTask[];
+    crops?: CropProfile[];
     selectedPlotId?: string;  // For filtering
     onToggleTaskStatus: (taskId: string) => void;
     onViewSource?: (noteId: string) => void;
@@ -26,6 +26,7 @@ interface GroupedTasks {
 
 const PlannedTasksList: React.FC<PlannedTasksListProps> = ({
     tasks,
+    crops = [],
     selectedPlotId,
     onToggleTaskStatus,
     onViewSource
@@ -94,7 +95,7 @@ const PlannedTasksList: React.FC<PlannedTasksListProps> = ({
     const getTaskContext = (task: PlannedTask) => {
         if (!task.cropId) return {};
 
-        const crop = getCropById(task.cropId);
+        const crop = crops.find(item => item.id === task.cropId);
         if (!crop) return {};
 
         const plot = crop.plots.find(p => p.id === task.plotId);

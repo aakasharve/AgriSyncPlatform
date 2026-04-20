@@ -8,5 +8,5 @@ public sealed record CropCycleDto(
     string Stage,
     DateOnly StartDate,
     DateOnly? EndDate,
-    DateTime CreatedAtUtc);
-
+    DateTime CreatedAtUtc,
+    DateTime ModifiedAtUtc);

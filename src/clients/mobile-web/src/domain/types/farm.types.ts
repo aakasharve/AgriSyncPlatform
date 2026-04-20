@@ -231,6 +231,7 @@ export interface FarmMotor {
     powerSourceName?: string;
     linkedWaterSourceId: string;
     schedule?: PowerSchedule;
+    dripDetails?: DripDetails;
 }
 
 export interface FarmMachinery {
@@ -375,6 +376,8 @@ export type AppRoute =
     | 'main'
     | 'profile'
     | 'settings'
+    | 'ai-admin'
+    | 'ops-admin'
     | 'schedule'
     | 'procurement'
     | 'income'
@@ -384,7 +387,10 @@ export type AppRoute =
     | 'finance-price-book'
     | 'finance-review-inbox'
     | 'finance-reports'
-    | 'finance-settings';
+    | 'finance-settings'
+    | 'qr-demo'
+    | 'referrals'
+    | 'attention';
 
 export interface AudioData {
     blob: Blob;

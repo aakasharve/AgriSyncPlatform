@@ -4,6 +4,8 @@ namespace ShramSafal.Application.UseCases.Sync.PushSyncBatch;
 
 public sealed record PushSyncBatchCommand(
     string DeviceId,
+    Guid AuthenticatedUserId,
+    string? ActorRole,
     IReadOnlyList<PushSyncMutationCommand> Mutations);
 
 public sealed record PushSyncMutationCommand(

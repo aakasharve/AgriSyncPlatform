@@ -6,6 +6,8 @@
 import React, { useState } from 'react';
 import { Cloud, CloudRain, Sun, Wind, Droplets, ChevronRight, X, CalendarDays, MapPin } from 'lucide-react';
 import { DetailedWeather, DailyForecast } from '../../../types';
+import { formatTemperature, formatPrecipitation, formatHumidity, formatWindSpeed } from '../../../shared/utils/weatherFormatter';
+
 
 interface WeatherWidgetProps {
     data?: DetailedWeather;
@@ -29,13 +31,13 @@ const MiniCard: React.FC<{ day: DailyForecast }> = ({ day }) => {
             </div>
             <div className="my-1">{icon}</div>
             <div className="text-center w-full">
-                <p className="text-xs font-bold text-stone-800">{day.tempMax}°C</p>
+                <p className="text-xs font-bold text-stone-800">{formatTemperature(day.tempMax)}</p>
                 <div className="h-px bg-stone-200 w-full my-1"></div>
-                <p className="text-[10px] text-stone-500">{day.tempMin}°C</p>
+                <p className="text-[10px] text-stone-500">{formatTemperature(day.tempMin)}</p>
             </div>
             {day.rainMm > 0 && (
                 <div className="flex items-center gap-1 text-[9px] text-blue-600 font-bold bg-blue-50 px-1.5 py-0.5 rounded-full">
-                    <Droplets size={8} /> {day.rainMm}mm
+                    <Droplets size={8} /> {day.rainMm.toFixed(1)}mm
                 </div>
             )}
         </div>
@@ -81,7 +83,7 @@ const WeatherWidget: React.FC<WeatherWidgetProps> = ({ data, isLoading }) => {
                     <div className="text-left space-y-1">
                         <p className="text-xs font-medium text-blue-50 opacity-90">{dateStr} | {timeStr}</p>
                         <div className="flex items-baseline gap-2">
-                            <span className="text-4xl font-bold tracking-tight">{current.current.tempC}°C</span>
+                            <span className="text-4xl font-bold tracking-tight">{formatTemperature(current.current.tempC)}</span>
                             <span className="text-lg opacity-70 font-medium">/ 31.5°C</span>
                         </div>
                         <div className="flex items-center gap-1 text-blue-50 font-medium text-sm pt-1">
@@ -114,7 +116,7 @@ const WeatherWidget: React.FC<WeatherWidgetProps> = ({ data, isLoading }) => {
                                 <div>
                                     <p className="text-xs font-medium text-blue-50 opacity-80">{dateStr} | {timeStr}</p>
                                     <div className="flex items-baseline gap-2 mt-1">
-                                        <span className="text-4xl font-bold">{current.current.tempC}°C</span>
+                                        <span className="text-4xl font-bold">{formatTemperature(current.current.tempC)}</span>
                                         <span className="text-lg opacity-80">/ 31.5°C</span>
                                     </div>
                                     <p className="text-sm font-medium mt-1 flex items-center gap-1">
@@ -134,19 +136,19 @@ const WeatherWidget: React.FC<WeatherWidgetProps> = ({ data, isLoading }) => {
                                 <div className="flex flex-col items-center gap-1">
                                     <CloudRain size={20} className="text-blue-100" />
                                     <span className="text-xs opacity-80">Rain</span>
-                                    <span className="text-sm font-bold">{current.current.precipMm} mm</span>
+                                    <span className="text-sm font-bold">{formatPrecipitation(current.current.precipMm)}</span>
                                 </div>
                                 <div className="w-px bg-white/20 h-full"></div>
                                 <div className="flex flex-col items-center gap-1">
                                     <Droplets size={20} className="text-blue-100" />
                                     <span className="text-xs opacity-80">Humidity</span>
-                                    <span className="text-sm font-bold">{current.current.humidity}%</span>
+                                    <span className="text-sm font-bold">{formatHumidity(current.current.humidity)}</span>
                                 </div>
                                 <div className="w-px bg-white/20 h-full"></div>
                                 <div className="flex flex-col items-center gap-1">
                                     <Wind size={20} className="text-blue-100" />
                                     <span className="text-xs opacity-80">Wind</span>
-                                    <span className="text-sm font-bold">{current.current.windKph} Km/h</span>
+                                    <span className="text-sm font-bold">{formatWindSpeed(current.current.windKph)}</span>
                                 </div>
                             </div>
                         </div>

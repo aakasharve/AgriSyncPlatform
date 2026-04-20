@@ -4,7 +4,7 @@
  */
 
 import React from 'react';
-import { formatCurrency } from '../../../shared/utils/costCalculations';
+import { formatCurrency } from '../../../shared/utils/currency';
 
 interface CostSummaryCardProps {
     totalCost: number;

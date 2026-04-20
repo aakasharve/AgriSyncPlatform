@@ -10,10 +10,16 @@
  * - Application depends on ports, not concrete implementations
  */
 
-import { DailyLog, LogScope, CropProfile, FarmerProfile, LogVerificationStatus } from '../../types';
-import { AgriLogResponse } from '../../domain/ai/contracts/AgriLogResponseSchema';
+import { DailyLog, LogScope, CropProfile, FarmerProfile, LogVerificationStatus, AgriLogResponse } from '../../types';
 import { LogProvenance } from '../../domain/ai/LogProvenance';
-import type { ConfidenceAssessment } from '../../domain/ai/ConfidenceAssessor';
+
+export interface ConfidenceAssessment {
+    fieldConfidences: Record<string, { score: number; level: string; reason?: string }>;
+    suggestedAction: 'auto_confirm' | 'manual_review' | 'ask_clarification';
+    averageScore: number;
+    hasLowConfidenceFields: boolean;
+    lowConfidenceFields: string[];
+}
 
 // ============================================
 // LOGS REPOSITORY PORT
@@ -94,8 +100,25 @@ export interface VoiceParseResult {
 }
 
 export type VoiceInput =
-    | { type: 'audio'; data: string; mimeType: string } // Base64 data
-    | { type: 'text'; content: string };
+    | {
+        type: 'audio';
+        data: string;
+        mimeType: string;
+        idempotencyKey?: string;
+        sessionId?: string;
+        segmentIndex?: number;
+        contentHash?: string;
+        inputSpeechDurationMs?: number;
+        inputRawDurationMs?: number;
+        segmentMetadataJson?: string;
+        requestPayloadHash?: string;
+    }
+    | {
+        type: 'text';
+        content: string;
+        idempotencyKey?: string;
+        requestPayloadHash?: string;
+    };
 
 /**
  * Port for AI voice parsing operations.

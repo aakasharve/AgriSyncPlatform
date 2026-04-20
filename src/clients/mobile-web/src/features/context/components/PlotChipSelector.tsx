@@ -7,6 +7,7 @@ import React from 'react';
 import { CropProfile, Plot } from '../../../types';
 import { Check } from 'lucide-react';
 import { CropSymbol } from './CropSelector';
+import { ComplianceBadge } from '../../scheduler/components/ComplianceBadge';
 
 interface PlotChipSelectorProps {
     crops: CropProfile[];
@@ -14,6 +15,7 @@ interface PlotChipSelectorProps {
     selectedPlots: Record<string, string[]>;
     onSelectionChange: (cropIds: string[], plotIds: Record<string, string[]>) => void;
     singleSelect?: boolean;
+    scheduleStates?: Record<string, { state: string; compliancePct?: number }>;
 }
 
 /**
@@ -25,7 +27,8 @@ const PlotChipSelector: React.FC<PlotChipSelectorProps> = ({
     selectedCrops,
     selectedPlots,
     onSelectionChange,
-    singleSelect = false
+    singleSelect = false,
+    scheduleStates = {}
 }) => {
     const togglePlot = (cropId: string, plotId: string) => {
         if (singleSelect) {
@@ -119,6 +122,7 @@ const PlotChipSelector: React.FC<PlotChipSelectorProps> = ({
                         <div className="space-y-2">
                             {crop.plots.map((plot, idx) => {
                                 const isSelected = cropPlots.includes(plot.id);
+                                const scheduleState = scheduleStates[plot.id] || { state: 'none' };
                                 return (
                                     <button
                                         key={plot.id}
@@ -132,6 +136,11 @@ const PlotChipSelector: React.FC<PlotChipSelectorProps> = ({
                                             <div className="flex items-center gap-2">
                                                 {isSelected && <Check size={14} strokeWidth={3} className="text-white" />}
                                                 <span className="font-bold">{plot.name}</span>
+                                                <ComplianceBadge 
+                                                    state={scheduleState.state as any} 
+                                                    compliancePct={scheduleState.compliancePct} 
+                                                    size="xs" 
+                                                />
                                             </div>
                                             <span className={`text-xs font-bold ${isSelected ? 'text-white/70' : 'text-slate-400'}`}>
                                                 ({String.fromCharCode(65 + idx)})

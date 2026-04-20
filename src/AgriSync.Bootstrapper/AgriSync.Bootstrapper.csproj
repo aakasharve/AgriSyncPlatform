@@ -1,23 +1,37 @@
 <Project Sdk="Microsoft.NET.Sdk.Web">
 
   <PropertyGroup>
-    <TargetFramework>net9.0</TargetFramework>
+    <TargetFramework>net10.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.0">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
     <PackageReference Include="Serilog.AspNetCore" Version="9.0.0" />
     <PackageReference Include="Serilog.Settings.Configuration" Version="9.0.0" />
     <PackageReference Include="Serilog.Sinks.Console" Version="6.0.0" />
+    <PackageReference Include="Serilog.Sinks.File" Version="7.0.0" />
     <PackageReference Include="Swashbuckle.AspNetCore" Version="6.6.2" />
   </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\AgriSync.BuildingBlocks\AgriSync.BuildingBlocks.csproj" />
     <ProjectReference Include="..\AgriSync.SharedKernel\AgriSync.SharedKernel.csproj" />
-    <ProjectReference Include="..\Apps\User\User.Api\User.Api.csproj" />
-    <ProjectReference Include="..\Apps\ShramSafal\ShramSafal.Api\ShramSafal.Api.csproj" />
+    <ProjectReference Include="..\apps\User\User.Api\User.Api.csproj" />
+    <ProjectReference Include="..\apps\ShramSafal\ShramSafal.Api\ShramSafal.Api.csproj" />
+    <ProjectReference Include="..\apps\ShramSafal\ShramSafal.Domain\ShramSafal.Domain.csproj" />
+    <ProjectReference Include="..\apps\ShramSafal\ShramSafal.Infrastructure\ShramSafal.Infrastructure.csproj" />
+    <ProjectReference Include="..\apps\User\User.Domain\User.Domain.csproj" />
+    <ProjectReference Include="..\apps\User\User.Infrastructure\User.Infrastructure.csproj" />
+    <ProjectReference Include="..\apps\User\User.Application\User.Application.csproj" />
+    <ProjectReference Include="..\apps\Accounts\Accounts.Api\Accounts.Api.csproj" />
+    <ProjectReference Include="..\apps\Accounts\Accounts.Application\Accounts.Application.csproj" />
+    <ProjectReference Include="..\apps\Accounts\Accounts.Infrastructure\Accounts.Infrastructure.csproj" />
+    <ProjectReference Include="..\apps\Accounts\Accounts.Domain\Accounts.Domain.csproj" />
   </ItemGroup>
 
 </Project>

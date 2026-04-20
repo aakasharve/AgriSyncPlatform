@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
 import { useLanguage } from '../../../i18n/LanguageContext';
 import { QuickLogChip } from '../../../shared/components/ui/QuickLogChip';
+import { SchedulePickerModal } from '../../scheduler/components/SchedulePickerModal';
+import { AlertCircle } from 'lucide-react';
 
 // --- ICONS (Inline) ---
 const Icons = {
@@ -25,16 +27,34 @@ interface QuickLogSheetProps {
     onClose: () => void;
     onVoiceStart: () => void;
     onTypeSelect: (type: string) => void;
+    plotId?: string;
+    cropKey?: string;
+    cycleId?: string;
+    farmId?: string;
+    hasActiveSchedule?: boolean;
+    overdueTaskName?: string;
 }
 
 export const QuickLogSheet: React.FC<QuickLogSheetProps> = ({
     isOpen,
     onClose,
     onVoiceStart,
-    onTypeSelect
+    onTypeSelect,
+    plotId,
+    cropKey,
+    cycleId,
+    farmId,
+    hasActiveSchedule = true,
+    overdueTaskName
 }) => {
     const { t, language } = useLanguage();
     const [isClosing, setIsClosing] = useState(false);
+    const [showPickerGate, setShowPickerGate] = useState(!hasActiveSchedule);
+    
+    // Reset gate if props change
+    React.useEffect(() => {
+        setShowPickerGate(!hasActiveSchedule);
+    }, [hasActiveSchedule, isOpen]);
 
     const handleClose = () => {
         setIsClosing(true);
@@ -45,6 +65,25 @@ export const QuickLogSheet: React.FC<QuickLogSheetProps> = ({
     };
 
     if (!isOpen) return null;
+
+    if (showPickerGate && plotId && cropKey && cycleId && farmId) {
+        return (
+            <SchedulePickerModal
+                isOpen={true}
+                plotId={plotId}
+                cropKey={cropKey}
+                cycleId={cycleId}
+                farmId={farmId}
+                onClose={(didAdopt) => {
+                    if (didAdopt) {
+                        setShowPickerGate(false);
+                    } else {
+                        onClose();
+                    }
+                }}
+            />
+        );
+    }
 
     return (
         <div className={`fixed inset-0 z-50 flex items-end justify-center sm:items-center`}>
@@ -74,6 +113,18 @@ export const QuickLogSheet: React.FC<QuickLogSheetProps> = ({
                         <Icons.Close />
                     </button>
                 </div>
+
+                {/* Overdue Nudge Banner */}
+                {overdueTaskName && (
+                    <div className="mb-6 p-4 bg-amber-50 rounded-xl border border-amber-200/50 flex items-start gap-3">
+                        <AlertCircle className="text-amber-600 mt-0.5 flex-shrink-0" size={20} />
+                        <div>
+                            <p className="font-bold text-amber-900 text-sm" style={{ fontFamily: '"Noto Sans Devanagari", sans-serif' }}>
+                                ⚠️ "{overdueTaskName}" 3 दिवसांपूर्वी करायचे होते. आज नोंद करा?
+                            </p>
+                        </div>
+                    </div>
+                )}
 
                 {/* Voice Input - Primary Action */}
                 <button

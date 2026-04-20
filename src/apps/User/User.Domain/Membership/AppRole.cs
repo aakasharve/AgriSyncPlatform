@@ -6,8 +6,9 @@ namespace User.Domain.Membership;
 /// </summary>
 public enum AppRole
 {
-    Worker = 0,
-    Mukadam = 1,
-    SecondaryOwner = 2,
-    PrimaryOwner = 3
+    // Keep values mirrored with AgriSync.SharedKernel.Contracts.Roles.AppRole.
+    Worker = (int)AgriSync.SharedKernel.Contracts.Roles.AppRole.Worker,
+    Mukadam = (int)AgriSync.SharedKernel.Contracts.Roles.AppRole.Mukadam,
+    SecondaryOwner = (int)AgriSync.SharedKernel.Contracts.Roles.AppRole.SecondaryOwner,
+    PrimaryOwner = (int)AgriSync.SharedKernel.Contracts.Roles.AppRole.PrimaryOwner
 }

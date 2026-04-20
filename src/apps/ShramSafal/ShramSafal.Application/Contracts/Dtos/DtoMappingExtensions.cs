@@ -1,18 +1,22 @@
 using ShramSafal.Domain.Crops;
+using ShramSafal.Domain.Audit;
+using ShramSafal.Domain.Attachments;
 using ShramSafal.Domain.Farms;
 using ShramSafal.Domain.Finance;
 using ShramSafal.Domain.Logs;
+using ShramSafal.Domain.Location;
 using ShramSafal.Domain.Planning;
+using ShramSafal.Domain.Schedules;
 
 namespace ShramSafal.Application.Contracts.Dtos;
 
 internal static class DtoMappingExtensions
 {
     public static FarmDto ToDto(this Farm farm) =>
-        new(farm.Id, farm.Name, farm.OwnerUserId, farm.CreatedAtUtc);
+        new(farm.Id, farm.Name, farm.OwnerUserId, farm.CreatedAtUtc, farm.ModifiedAtUtc);
 
     public static PlotDto ToDto(this Plot plot) =>
-        new(plot.Id, plot.FarmId, plot.Name, plot.AreaInAcres, plot.CreatedAtUtc);
+        new(plot.Id, plot.FarmId, plot.Name, plot.AreaInAcres, plot.CreatedAtUtc, plot.ModifiedAtUtc);
 
     public static CropCycleDto ToDto(this CropCycle cropCycle) =>
         new(
@@ -23,15 +27,32 @@ internal static class DtoMappingExtensions
             cropCycle.Stage,
             cropCycle.StartDate,
             cropCycle.EndDate,
-            cropCycle.CreatedAtUtc);
+            cropCycle.CreatedAtUtc,
+            cropCycle.ModifiedAtUtc);
+
+    public static LocationDto ToDto(this LocationSnapshot location) =>
+        new(
+            location.Latitude,
+            location.Longitude,
+            location.AccuracyMeters,
+            location.Altitude,
+            location.CapturedAtUtc,
+            location.Provider,
+            location.PermissionState);
 
     public static LogTaskDto ToDto(this LogTask task) =>
-        new(task.Id, task.ActivityType, task.Notes, task.OccurredAtUtc);
+        new(task.Id,
+            task.ActivityType,
+            task.Notes,
+            task.OccurredAtUtc,
+            task.ExecutionStatus.ToString(),
+            task.DeviationReasonCode,
+            task.DeviationNote);
 
     public static VerificationEventDto ToDto(this VerificationEvent verificationEvent) =>
         new(
             verificationEvent.Id,
-            verificationEvent.Status.ToString(),
+            verificationEvent.Status.ToSyncVerificationStatus(),
             verificationEvent.Reason,
             verificationEvent.VerifiedByUserId,
             verificationEvent.OccurredAtUtc);
@@ -46,6 +67,8 @@ internal static class DtoMappingExtensions
             log.LogDate,
             log.IdempotencyKey,
             log.CreatedAtUtc,
+            log.ModifiedAtUtc,
+            log.Location?.ToDto(),
             log.LastVerificationStatus?.ToString(),
             log.Tasks
                 .OrderBy(t => t.OccurredAtUtc)
@@ -69,6 +92,8 @@ internal static class DtoMappingExtensions
             entry.EntryDate,
             entry.CreatedByUserId,
             entry.CreatedAtUtc,
+            entry.ModifiedAtUtc,
+            entry.Location?.ToDto(),
             entry.IsCorrected);
 
     public static FinanceCorrectionDto ToDto(this FinanceCorrection correction) =>
@@ -80,7 +105,31 @@ internal static class DtoMappingExtensions
             correction.CurrencyCode,
             correction.Reason,
             correction.CorrectedByUserId,
-            correction.CorrectedAtUtc);
+            correction.CorrectedAtUtc,
+            correction.ModifiedAtUtc);
+
+    public static DayLedgerAllocationDto ToDto(this DayLedgerAllocation allocation) =>
+        new(
+            allocation.Id,
+            allocation.PlotId,
+            allocation.AllocatedAmount,
+            allocation.CurrencyCode,
+            allocation.AllocatedAtUtc);
+
+    public static DayLedgerDto ToDto(this DayLedger ledger) =>
+        new(
+            ledger.Id,
+            ledger.FarmId,
+            ledger.SourceCostEntryId,
+            ledger.LedgerDate,
+            ledger.AllocationBasis,
+            ledger.CreatedByUserId,
+            ledger.CreatedAtUtc,
+            ledger.ModifiedAtUtc,
+            ledger.Allocations
+                .OrderBy(a => a.AllocatedAtUtc)
+                .Select(ToDto)
+                .ToList());
 
     public static PriceConfigDto ToDto(this PriceConfig config) =>
         new(
@@ -91,7 +140,8 @@ internal static class DtoMappingExtensions
             config.EffectiveFrom,
             config.Version,
             config.CreatedByUserId,
-            config.CreatedAtUtc);
+            config.CreatedAtUtc,
+            config.ModifiedAtUtc);
 
     public static PlannedActivityDto ToDto(this PlannedActivity activity) =>
         new(
@@ -100,6 +150,71 @@ internal static class DtoMappingExtensions
             activity.ActivityName,
             activity.Stage,
             activity.PlannedDate,
-            activity.CreatedAtUtc);
-}
+            activity.CreatedAtUtc,
+            activity.ModifiedAtUtc,
+            activity.SourceTemplateActivityId,
+            new PlannedActivityOverrideMarkers(
+                activity.IsLocallyAdded,
+                activity.IsLocallyChanged,
+                activity.OverrideReason,
+                activity.OverriddenAtUtc,
+                activity.IsRemoved,
+                activity.RemovedReason));
 
+    public static AuditEventDto ToDto(this AuditEvent auditEvent) =>
+        new(
+            auditEvent.Id,
+            auditEvent.FarmId,
+            auditEvent.EntityType,
+            auditEvent.EntityId,
+            auditEvent.Action,
+            auditEvent.ActorUserId,
+            auditEvent.ActorRole,
+            auditEvent.Payload,
+            auditEvent.OccurredAtUtc,
+            auditEvent.ClientCommandId);
+
+    public static AttachmentDto ToDto(this Attachment attachment) =>
+        new(
+            attachment.Id,
+            attachment.FarmId,
+            attachment.LinkedEntityId,
+            attachment.LinkedEntityType,
+            attachment.FileName,
+            attachment.MimeType,
+            attachment.Status.ToString(),
+            attachment.LocalPath,
+            attachment.SizeBytes,
+            attachment.CreatedByUserId,
+            attachment.CreatedAtUtc,
+            attachment.ModifiedAtUtc,
+            attachment.UploadedAtUtc,
+            attachment.FinalizedAtUtc);
+
+    public static ScheduleSubscriptionDto ToDto(this ScheduleSubscription sub) =>
+        new(
+            sub.Id,
+            sub.FarmId.Value,
+            sub.PlotId,
+            sub.CropCycleId,
+            sub.CropKey,
+            sub.ScheduleTemplateId.Value,
+            sub.ScheduleVersionTag,
+            sub.AdoptedAtUtc,
+            sub.State.ToString(),
+            sub.MigratedFromSubscriptionId?.Value,
+            sub.MigratedToSubscriptionId?.Value,
+            sub.MigrationReason?.ToString(),
+            sub.StateChangedAtUtc);
+
+    private static string ToSyncVerificationStatus(this VerificationStatus status) =>
+        status switch
+        {
+            VerificationStatus.Draft => "draft",
+            VerificationStatus.Confirmed => "confirmed",
+            VerificationStatus.Verified => "verified",
+            VerificationStatus.Disputed => "disputed",
+            VerificationStatus.CorrectionPending => "correction_pending",
+            _ => "draft"
+        };
+}

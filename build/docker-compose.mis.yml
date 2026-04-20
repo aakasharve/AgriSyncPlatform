@@ -1,0 +1,71 @@
+# MIS observability stack: Metabase + read-only DB connection
+# Usage:
+#   docker compose -f build/docker-compose.mis.yml up -d
+#
+# Prerequisites:
+#   - AgriSync PostgreSQL running on host (port 5433) with mis_reader role
+#   - Run: psql -U agrisync -c "CREATE ROLE mis_reader LOGIN PASSWORD 'mis_reader_pw';"
+#   - The Phase4_MisSchemaRollups migration already grants SELECT on analytics.* and mis.*
+#   - Set MB_DB_PASS in your .env.mis (copy from .env.mis.example)
+
+version: "3.9"
+
+services:
+  metabase:
+    image: metabase/metabase:v0.50.14
+    container_name: agrisync_metabase
+    restart: unless-stopped
+    ports:
+      - "3001:3000"
+    environment:
+      MB_DB_TYPE: postgres
+      MB_DB_DBNAME: metabase_internal
+      MB_DB_PORT: 5432
+      MB_DB_HOST: metabase_db
+      MB_DB_USER: metabase
+      MB_DB_PASS: ${METABASE_DB_PASS:-metabase_dev}
+      MB_SITE_NAME: "AgriSync MIS"
+      MB_SITE_URL: ${MB_SITE_URL:-http://localhost:3001}
+      MB_EMAIL_FROM_ADDRESS: ${MB_EMAIL_FROM_ADDRESS:-noreply@agrisync.app}
+      JAVA_TIMEZONE: Asia/Kolkata
+    depends_on:
+      metabase_db:
+        condition: service_healthy
+    volumes:
+      - metabase_data:/metabase-data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+
+  metabase_db:
+    image: postgres:16-alpine
+    container_name: agrisync_metabase_db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: metabase_internal
+      POSTGRES_USER: metabase
+      POSTGRES_PASSWORD: ${METABASE_DB_PASS:-metabase_dev}
+    volumes:
+      - metabase_db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U metabase -d metabase_internal"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  metabase_data:
+  metabase_db_data:
+
+# ---- AgriSync data source config (added in Metabase Admin → Databases) ----
+# Host:     host.docker.internal   (or actual host IP)
+# Port:     5433
+# Database: agrisync
+# User:     mis_reader
+# Password: (set AGRISYNC_MIS_READER_PASS in .env.mis)
+# Schemas:  analytics, mis
+# SSL:      disabled (dev) / required (prod)
+# --------------------------------------------------------------------------

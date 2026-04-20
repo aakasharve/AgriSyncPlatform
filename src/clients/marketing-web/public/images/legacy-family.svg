@@ -1,0 +1,218 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 500 400" fill="none">
+  <defs>
+    <!-- Older farmer skin — more weathered -->
+    <linearGradient id="lf-skin-o" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#B8865A"/>
+      <stop offset="100%" stop-color="#956B45"/>
+    </linearGradient>
+    <linearGradient id="lf-skin-od" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#956B45"/>
+      <stop offset="100%" stop-color="#7A5838"/>
+    </linearGradient>
+    <!-- Young person skin — same tone family, slightly lighter -->
+    <linearGradient id="lf-skin-y" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#C4956A"/>
+      <stop offset="100%" stop-color="#A67B5B"/>
+    </linearGradient>
+    <linearGradient id="lf-skin-yd" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#A67B5B"/>
+      <stop offset="100%" stop-color="#8B6545"/>
+    </linearGradient>
+    <!-- Old farmer shirt — faded white -->
+    <linearGradient id="lf-shirt-o" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#E8E2D6"/>
+      <stop offset="100%" stop-color="#D0C8B8"/>
+    </linearGradient>
+    <!-- Young person shirt — slightly greener, modern -->
+    <linearGradient id="lf-shirt-y" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#D1E8D5"/>
+      <stop offset="100%" stop-color="#B8D4BE"/>
+    </linearGradient>
+    <linearGradient id="lf-trouser" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#8B7D6B"/>
+      <stop offset="100%" stop-color="#73685A"/>
+    </linearGradient>
+    <filter id="lf-shd" x="-8%" y="-5%" width="116%" height="112%">
+      <feDropShadow dx="0" dy="2" stdDeviation="3" flood-color="#3D2B1F" flood-opacity="0.1"/>
+    </filter>
+  </defs>
+
+  <!-- Subtle warm ground -->
+  <ellipse cx="250" cy="375" rx="220" ry="30" fill="#A67B5B" opacity="0.1"/>
+
+  <!-- Tree silhouette in background — knowledge, continuity -->
+  <g opacity="0.06" transform="translate(250, 40)">
+    <path d="M0,310 L0,200 C0,200 -80,160 -100,100 C-120,40 -60,-20 0,0 C60,-20 120,40 100,100 C80,160 0,200 0,200Z"
+          fill="#2C1810"/>
+    <!-- Trunk -->
+    <rect x="-8" y="200" width="16" height="120" fill="#2C1810"/>
+  </g>
+
+  <!-- ===== OLDER FARMER (left) — dignified, extending book/record ===== -->
+  <g transform="translate(100, 35)" filter="url(#lf-shd)">
+    <!-- Feet -->
+    <path d="M42,340 C36,341 32,344 32,346 C32,349 38,351 46,350 C52,349 55,346 52,344Z" fill="#5C4A3A"/>
+    <path d="M72,342 C66,343 62,346 62,348 C62,351 68,353 76,352 C82,351 85,348 82,346Z" fill="#5C4A3A"/>
+
+    <!-- Legs -->
+    <path d="M44,285 C43,300 42,325 42,340" stroke="url(#lf-trouser)" stroke-width="15" fill="none" stroke-linecap="round"/>
+    <path d="M70,283 C71,300 72,327 72,342" stroke="url(#lf-trouser)" stroke-width="15" fill="none" stroke-linecap="round"/>
+
+    <!-- Torso -->
+    <path d="M25,110 C22,130 21,170 23,210 L25,280 C25,288 38,292 57,292 C76,292 89,288 89,280 L91,210 C93,170 92,130 89,110 C82,100 70,95 57,95 C44,95 32,100 25,110Z"
+          fill="url(#lf-shirt-o)"/>
+
+    <!-- Gamcha on shoulder -->
+    <path d="M27,115 C18,120 14,140 16,160" stroke="#E8C170" stroke-width="5" fill="none" stroke-linecap="round" opacity="0.7"/>
+    <path d="M24,112 C26,125 27,145 26,158" stroke="#E8C170" stroke-width="4" fill="none" stroke-linecap="round" opacity="0.5"/>
+
+    <!-- Left arm (holding book/record extended toward young person) -->
+    <path d="M25,118 C16,135 10,160 15,185" stroke="url(#lf-skin-o)" stroke-width="10" fill="none" stroke-linecap="round"/>
+    <path d="M15,185 C18,195 25,205 35,210" stroke="url(#lf-skin-od)" stroke-width="8" fill="none" stroke-linecap="round"/>
+
+    <!-- The record/notebook being passed -->
+    <g transform="translate(30, 198) rotate(10)">
+      <rect width="50" height="35" rx="3" fill="#E8C170" stroke="#C49030" stroke-width="0.8"/>
+      <!-- Notebook lines -->
+      <line x1="8" y1="10" x2="42" y2="10" stroke="#C49030" stroke-width="0.4" opacity="0.5"/>
+      <line x1="8" y1="16" x2="38" y2="16" stroke="#C49030" stroke-width="0.4" opacity="0.5"/>
+      <line x1="8" y1="22" x2="40" y2="22" stroke="#C49030" stroke-width="0.4" opacity="0.5"/>
+      <line x1="8" y1="28" x2="35" y2="28" stroke="#C49030" stroke-width="0.4" opacity="0.5"/>
+      <!-- Spine -->
+      <line x1="5" y1="0" x2="5" y2="35" stroke="#C49030" stroke-width="1"/>
+      <!-- Label -->
+      <text x="10" y="8" font-family="system-ui" font-size="4" fill="#7A5838" opacity="0.6">हिशोब</text>
+    </g>
+
+    <!-- Left hand holding notebook -->
+    <path d="M34,208 C32,212 33,216 36,216 C38,214 38,210 36,208Z" fill="url(#lf-skin-od)"/>
+
+    <!-- Right arm at side -->
+    <path d="M89,118 C96,135 100,160 98,185" stroke="url(#lf-skin-o)" stroke-width="10" fill="none" stroke-linecap="round"/>
+    <path d="M98,185 C97,195 96,205 94,212" stroke="url(#lf-skin-od)" stroke-width="8" fill="none" stroke-linecap="round"/>
+    <path d="M94,212 C92,216 93,220 96,220 C98,218 98,214 96,212Z" fill="url(#lf-skin-od)"/>
+
+    <!-- Neck -->
+    <path d="M48,93 C48,88 52,84 57,84 C62,84 66,88 66,93" fill="url(#lf-skin-o)"/>
+    <!-- Neck tendons — age -->
+    <line x1="52" y1="86" x2="52" y2="93" stroke="#956B45" stroke-width="0.4" opacity="0.3"/>
+
+    <!-- Head — older, more angular -->
+    <path d="M38,50 C38,35 44,25 57,25 C70,25 76,35 76,50 L76,65 C76,74 72,82 66,85 C63,87 60,88 57,88 C54,88 51,87 48,85 C42,82 38,74 38,65Z"
+          fill="url(#lf-skin-o)"/>
+
+    <!-- Forehead — more weathered, deeper sun marks -->
+    <path d="M40,46 C40,34 46,26 57,26 C68,26 74,34 74,46 L74,50 C74,50 68,48 57,48 C46,48 40,50 40,50Z"
+          fill="#956B45" opacity="0.3"/>
+    <!-- Forehead lines (age) -->
+    <path d="M45,42 C50,40 64,40 69,42" stroke="#7A5838" stroke-width="0.4" fill="none" opacity="0.3"/>
+    <path d="M47,46 C52,44 62,44 67,46" stroke="#7A5838" stroke-width="0.3" fill="none" opacity="0.25"/>
+
+    <!-- Hair — white/grey -->
+    <path d="M38,46 C38,32 44,22 57,22 C70,22 76,32 76,46 C76,42 70,38 57,38 C44,38 38,42 38,46Z"
+          fill="#9CA3AF"/>
+
+    <!-- Face — dignified, wise, serious -->
+    <!-- Eyebrows — settled -->
+    <path d="M45,52 C47,51 52,51 55,52" stroke="#6B7280" stroke-width="1.2" fill="none"/>
+    <path d="M59,52 C62,51 67,51 69,52" stroke="#6B7280" stroke-width="1.2" fill="none"/>
+
+    <!-- Eyes — calm, knowing -->
+    <ellipse cx="50" cy="57" rx="3" ry="2.2" fill="white"/>
+    <ellipse cx="64" cy="57" rx="3" ry="2.2" fill="white"/>
+    <circle cx="51" cy="57.5" r="1.5" fill="#2C1810"/>
+    <circle cx="65" cy="57.5" r="1.5" fill="#2C1810"/>
+    <!-- Crow's feet (age lines around eyes) -->
+    <path d="M38,56 C39,54 40,55" stroke="#7A5838" stroke-width="0.3" fill="none" opacity="0.3"/>
+    <path d="M38,58 C39,60 40,59" stroke="#7A5838" stroke-width="0.3" fill="none" opacity="0.3"/>
+    <path d="M74,56 C73,54 72,55" stroke="#7A5838" stroke-width="0.3" fill="none" opacity="0.3"/>
+    <path d="M74,58 C73,60 72,59" stroke="#7A5838" stroke-width="0.3" fill="none" opacity="0.3"/>
+
+    <!-- Nose — broader, aged -->
+    <path d="M57,54 C58,58 59,64 57,68 C55,70 53,69 52,67" stroke="#7A5838" stroke-width="0.8" fill="none"/>
+
+    <!-- Moustache — larger, greying -->
+    <path d="M48,71 C52,69 56,68 57,70 C58,68 62,69 66,71"
+          stroke="#6B7280" stroke-width="1.8" fill="none" stroke-linecap="round"/>
+
+    <!-- Mouth — gentle, wise -->
+    <path d="M52,76 C54,77 60,77 62,76" stroke="#7A5838" stroke-width="0.7" fill="none"/>
+
+    <!-- Ear -->
+    <path d="M38,55 C35,55 34,60 35,64 C36,66 37,66 38,64" stroke="#956B45" stroke-width="0.7" fill="url(#lf-skin-o)"/>
+  </g>
+
+  <!-- ===== YOUNGER PERSON (right) — modern, receiving knowledge ===== -->
+  <g transform="translate(270, 50)" filter="url(#lf-shd)">
+    <!-- Feet -->
+    <path d="M40,328 C34,329 30,332 30,334 C30,337 36,339 44,338 C50,337 53,334 50,332Z" fill="#5C4A3A"/>
+    <path d="M68,330 C62,331 58,334 58,336 C58,339 64,341 72,340 C78,339 81,336 78,334Z" fill="#5C4A3A"/>
+
+    <!-- Legs -->
+    <path d="M42,275 C41,295 40,315 40,328" stroke="url(#lf-trouser)" stroke-width="14" fill="none" stroke-linecap="round"/>
+    <path d="M66,273 C67,295 68,317 68,330" stroke="url(#lf-trouser)" stroke-width="14" fill="none" stroke-linecap="round"/>
+
+    <!-- Torso — slightly slimmer, modern fit -->
+    <path d="M26,100 C24,118 23,155 24,195 L26,270 C26,278 38,282 54,282 C70,282 82,278 82,270 L84,195 C85,155 84,118 82,100 C76,92 66,88 54,88 C42,88 32,92 26,100Z"
+          fill="url(#lf-shirt-y)"/>
+
+    <!-- Left arm (reaching to receive book) -->
+    <path d="M26,108 C16,125 10,150 12,175" stroke="url(#lf-skin-y)" stroke-width="9" fill="none" stroke-linecap="round"/>
+    <path d="M12,175 C14,185 20,195 28,200" stroke="url(#lf-skin-yd)" stroke-width="7" fill="none" stroke-linecap="round"/>
+    <!-- Hand reaching -->
+    <path d="M28,198 C26,202 27,206 30,206 C32,204 32,200 30,198Z" fill="url(#lf-skin-yd)"/>
+
+    <!-- Right arm holding phone at side -->
+    <path d="M82,108 C90,122 94,140 92,160" stroke="url(#lf-skin-y)" stroke-width="9" fill="none" stroke-linecap="round"/>
+    <path d="M92,160 C91,170 90,180 88,188" stroke="url(#lf-skin-yd)" stroke-width="7" fill="none" stroke-linecap="round"/>
+
+    <!-- Phone in right hand — next generation tool -->
+    <g transform="translate(80, 182) rotate(-5)">
+      <rect width="22" height="36" rx="3" fill="#1C1917"/>
+      <rect x="2" y="5" width="18" height="26" rx="1.5" fill="#D1FAE5"/>
+      <text x="4" y="14" font-family="system-ui" font-size="3" fill="#059669" opacity="0.6">ShramSafal</text>
+      <rect x="4" y="18" width="12" height="1" rx="0.5" fill="#059669" opacity="0.2"/>
+      <rect x="4" y="22" width="14" height="1" rx="0.5" fill="#059669" opacity="0.2"/>
+    </g>
+    <path d="M86,186 C85,190 86,194 88,194 C90,192 90,188 88,186Z" fill="url(#lf-skin-yd)"/>
+
+    <!-- Neck -->
+    <path d="M46,86 C46,82 49,78 54,78 C59,78 62,82 62,86" fill="url(#lf-skin-y)"/>
+
+    <!-- Head — younger, alert -->
+    <path d="M37,48 C37,35 43,27 54,27 C65,27 71,35 71,48 L71,60 C71,68 67,74 62,77 C59,79 57,80 54,80 C51,80 49,79 46,77 C41,74 37,68 37,60Z"
+          fill="url(#lf-skin-y)"/>
+
+    <!-- Hair — dark, modern cut -->
+    <path d="M37,46 C37,30 43,22 54,22 C65,22 71,30 71,46 C71,40 66,34 54,34 C42,34 37,40 37,46Z"
+          fill="#2C1810"/>
+    <!-- Slightly different hair style — shorter sides -->
+    <path d="M38,42 C38,36 42,32 48,32" stroke="#1A0F0A" stroke-width="0.5" fill="none" opacity="0.2"/>
+    <path d="M70,42 C70,36 66,32 60,32" stroke="#1A0F0A" stroke-width="0.5" fill="none" opacity="0.2"/>
+
+    <!-- Face — young, alert, respectful -->
+    <path d="M44,50 C46,49 50,49 52,50" stroke="#2C1810" stroke-width="1.1" fill="none"/>
+    <path d="M56,50 C59,49 63,49 65,50" stroke="#2C1810" stroke-width="1.1" fill="none"/>
+
+    <ellipse cx="48" cy="55" rx="2.8" ry="2.5" fill="white"/>
+    <ellipse cx="60" cy="55" rx="2.8" ry="2.5" fill="white"/>
+    <circle cx="47" cy="55.5" r="1.5" fill="#2C1810"/>
+    <circle cx="59" cy="55.5" r="1.5" fill="#2C1810"/>
+    <!-- Looking toward elder with respect -->
+    <circle cx="46.5" cy="55" r="0.4" fill="white"/>
+    <circle cx="58.5" cy="55" r="0.4" fill="white"/>
+
+    <path d="M54,52 C55,56 55,60 54,63" stroke="#8B6545" stroke-width="0.6" fill="none"/>
+    <!-- No moustache — younger -->
+    <path d="M50,68 C52,69 56,69 58,68" stroke="#8B6545" stroke-width="0.6" fill="none"/>
+
+    <path d="M37,54 C35,54 34,58 35,61 C36,62 37,62 37,60" stroke="#A67B5B" stroke-width="0.6" fill="url(#lf-skin-y)"/>
+  </g>
+
+  <!-- Subtle wisdom symbols floating between them -->
+  <g opacity="0.1">
+    <circle cx="240" cy="100" r="3" fill="#E8C170"/>
+    <circle cx="255" cy="150" r="2" fill="#E8C170"/>
+    <circle cx="235" cy="180" r="2.5" fill="#E8C170"/>
+  </g>
+</svg>

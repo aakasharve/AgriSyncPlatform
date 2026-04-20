@@ -74,6 +74,7 @@ export interface ProcurementExpense {
     // Evidence
     receiptImageUrl?: string;        // Stored image path
     receiptImageBase64?: string;     // For processing (not stored long-term)
+    attachmentIds?: string[];        // Background-uploaded attachment ids
 
     // AI Processing
     aiExtracted: boolean;            // Was this AI-processed?
@@ -120,6 +121,9 @@ export interface ExpenseSummaryByScope {
 export interface ReceiptExtractionResponse {
     success: boolean;
     confidence: number;              // Overall confidence 0-100
+    queued?: boolean;
+    message?: string;
+    data?: null;
 
     // Extracted data
     vendorName?: string;

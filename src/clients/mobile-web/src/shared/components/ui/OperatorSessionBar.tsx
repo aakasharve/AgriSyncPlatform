@@ -1,9 +1,10 @@
 import React from 'react';
 import { FarmOperator } from '../../../domain/types/farm.types';
-import { AuthorizationPolicy } from '../../../application/policy/AuthorizationPolicy';
 
 import { SyncIndicator } from './SyncIndicator';
 import { useSyncStatus } from '../../../app/hooks/useSyncStatus';
+import { SyncStatusDrawer } from '../../../features/sync';
+import { useSyncQueueStatus } from '../../../features/sync';
 
 // --- ICONS ---
 const Icons = {
@@ -24,6 +25,14 @@ export const OperatorSessionBar: React.FC<OperatorSessionBarProps> = ({
     currentOperator,
     ownerName
 }) => {
+    const [isDrawerOpen, setIsDrawerOpen] = React.useState(false);
+    const roleLabel = {
+        PRIMARY_OWNER: 'Primary Owner',
+        SECONDARY_OWNER: 'Secondary Owner',
+        MUKADAM: 'Mukadam',
+        WORKER: 'Worker',
+    }[currentOperator.role] ?? 'Worker';
+
     // Color config based on role (Visual hierarchy)
     const roleConfig = {
         PRIMARY_OWNER: { bg: 'bg-emerald-100', text: 'text-emerald-900', border: 'border-emerald-200' },
@@ -33,6 +42,7 @@ export const OperatorSessionBar: React.FC<OperatorSessionBarProps> = ({
     }[currentOperator.role] || { bg: 'bg-gray-100', text: 'text-gray-900', border: 'border-gray-200' };
 
     const { status, lastSyncedAt } = useSyncStatus();
+    const queueStatus = useSyncQueueStatus();
 
     return (
         <div className={`flex items-start justify-between px-3 py-2 rounded-lg border ${roleConfig.bg} ${roleConfig.border}`}>
@@ -48,13 +58,24 @@ export const OperatorSessionBar: React.FC<OperatorSessionBarProps> = ({
                         <p className={`text-[11px] font-semibold ${roleConfig.text}`}>
                             Logged in as: {currentOperator.name}
                         </p>
-                        <SyncIndicator status={status} lastSyncedAt={lastSyncedAt} />
+                        <SyncIndicator
+                            status={status}
+                            lastSyncedAt={lastSyncedAt}
+                            pendingCount={queueStatus.pendingCount + queueStatus.pendingUploads + queueStatus.pendingAiJobs}
+                            failedCount={queueStatus.failedCount + queueStatus.failedUploads}
+                            onClick={() => setIsDrawerOpen(true)}
+                        />
                     </div>
                     <p className="text-[10px] opacity-70 uppercase tracking-wide mt-0.5">
-                        {AuthorizationPolicy.getRoleLabel(currentOperator.role)}
+                        {roleLabel}
                     </p>
                 </div>
             </div>
+
+            <SyncStatusDrawer
+                isOpen={isDrawerOpen}
+                onClose={() => setIsDrawerOpen(false)}
+            />
         </div>
     );
 };

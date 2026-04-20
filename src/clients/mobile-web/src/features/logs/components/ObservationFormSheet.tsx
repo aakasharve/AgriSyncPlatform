@@ -6,7 +6,7 @@
 import React, { useState } from 'react';
 import { X, MessageSquare } from 'lucide-react';
 import { ObservationNote, ObservationNoteType, ObservationSeverity } from '../../../types';
-import { getDateKey } from '../../../domain/system/DateKeyService';
+import { getDateKey } from '../../../core/domain/services/DateKeyService';
 
 interface ObservationFormSheetProps {
     onSave: (observation: Partial<ObservationNote>) => void;

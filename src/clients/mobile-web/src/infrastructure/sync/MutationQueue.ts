@@ -1,10 +1,24 @@
 import { getDatabase, type MutationQueueItem } from '../storage/DexieDatabase';
 import { idGenerator } from '../../core/domain/services/IdGenerator';
 import { systemClock } from '../../core/domain/services/Clock';
+import type { SyncMutationType } from '../api/AgriSyncClient';
 
 const DEVICE_ID_KEY = 'agrisync_device_id_v1';
 const SYNC_SCOPE = 'shramsafal';
 const LAST_PULL_META_KEY = 'shramsafal_last_pull_payload';
+const SUPPORTED_MUTATION_TYPES = new Set([
+    'create_farm',
+    'create_plot',
+    'create_crop_cycle',
+    'create_daily_log',
+    'add_log_task',
+    'verify_log',
+    'add_cost_entry',
+    'allocate_global_expense',
+    'correct_cost_entry',
+    'set_price_config',
+    'create_attachment',
+]);
 
 function getOrCreateDeviceId(): string {
     const existing = localStorage.getItem(DEVICE_ID_KEY);
@@ -34,23 +48,30 @@ export class MutationQueue {
     }
 
     async enqueue(
-        mutationType: string,
+        mutationType: SyncMutationType,
         payload: unknown,
-        options?: { clientRequestId?: string; deviceId?: string }
+        options?: { clientRequestId?: string; clientCommandId?: string; deviceId?: string }
     ): Promise<string> {
         if (!mutationType || mutationType.trim().length === 0) {
             throw new Error('mutationType is required');
         }
 
+        const normalizedMutationType = mutationType.trim();
+        if (!SUPPORTED_MUTATION_TYPES.has(normalizedMutationType)) {
+            throw new Error(`Unsupported mutationType '${normalizedMutationType}'.`);
+        }
+
         const db = getDatabase();
         const deviceId = options?.deviceId ?? getOrCreateDeviceId();
         const clientRequestId = options?.clientRequestId ?? idGenerator.generate();
+        const clientCommandId = options?.clientCommandId ?? clientRequestId;
         const now = systemClock.nowISO();
 
         const record: MutationQueueItem = {
             deviceId,
             clientRequestId,
-            mutationType: mutationType.trim(),
+            clientCommandId,
+            mutationType: normalizedMutationType,
             payload,
             status: 'PENDING',
             createdAt: now,
@@ -77,11 +98,13 @@ export class MutationQueue {
 
     async getPending(limit = 50): Promise<MutationQueueItem[]> {
         const db = getDatabase();
-        return db.mutationQueue
+        const items = await db.mutationQueue
             .where('status')
             .equals('PENDING')
             .limit(limit)
             .toArray();
+
+        return items.sort((left, right) => (left.id ?? 0) - (right.id ?? 0));
     }
 
     async markSending(id: number): Promise<void> {

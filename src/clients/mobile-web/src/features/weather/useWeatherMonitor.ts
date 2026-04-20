@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { DetailedWeather, WeatherEvent, WeatherReaction, ScheduleShiftEvent, CropProfile, FarmerProfile, LogScope, PlotGeo } from '../../types';
-import { getDateKey } from '../../domain/system/DateKeyService';
+import { getDateKey } from '../../core/domain/services/DateKeyService';
 import { WeatherPort } from '../../application/ports/WeatherPort';
 import { getWeatherForLocation } from '../../application/usecases/AttachWeatherSnapshot';
 import { idGenerator } from '../../core/domain/services/IdGenerator';

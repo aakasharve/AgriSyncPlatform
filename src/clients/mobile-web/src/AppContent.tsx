@@ -3,7 +3,9 @@
  * Clean Android-style layout: header, content, bottom panel
  */
 
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
+import { Capacitor } from '@capacitor/core';
+import { Keyboard } from '@capacitor/keyboard';
 import { Mic } from 'lucide-react';
 
 import AudioRecorder from './features/voice/components/AudioRecorder'; // Keep for type check/ref if needed
@@ -11,31 +13,24 @@ import CropSelector from './features/context/components/CropSelector';
 import InputMethodToggle from './shared/components/ui/InputMethodToggle';
 import BottomNavigation from './features/context/components/BottomNavigation';
 import AppHeader from './features/context/components/AppHeader';
+import MeAlertRail from './features/context/components/MeAlertRail';
 import AppRouter from './core/navigation/AppRouter';
 import ActionToast from './shared/components/ui/ActionToast';
-import { DEMO_SEED_VERSION } from './features/demo/DemoDataService';
 import WeatherReactionPrompt from './features/weather/components/WeatherReactionPrompt';
 import VoiceListeningOverlay from './features/voice/components/VoiceListeningOverlay';
 
 import { getPhaseAndDay } from './shared/utils/timelineUtils';
-import { getPrimarySelection } from './domain/context/selectors';
-import { getDateKey } from './domain/system/DateKeyService';
+import { getPrimarySelection } from './application/selectors/ContextSelectors';
+import { getDateKey } from './core/domain/services/DateKeyService';
 
 import { CropProfile } from './types';
 import { useAgriLogApp } from './app/compositionRoot';
 import { AppFeatureProviders } from './app/context/AppFeatureContexts';
-import { useAuth } from './app/providers/AuthProvider';
-import LoginPage from './pages/LoginPage';
+import { useTemplateCatalogSync } from './app/hooks/useTemplateCatalogSync';
+import FirstFarmWizard from './features/onboarding/components/FirstFarmWizard';
+import { getMyFarms, type MyFarmDto, type BootstrapFirstFarmResponse } from './features/onboarding/qr/inviteApi';
 
-// Demo Mode pill
-const DemoModeIndicator = () => (
-    <div className="flex justify-center py-1 relative z-50">
-        <div className="glass px-3 py-1 rounded-full flex items-center gap-2 shadow-sm border-emerald-200/50">
-            <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse shadow-[0_0_10px_rgba(16,185,129,0.5)]" />
-            <span className="text-[10px] font-bold uppercase tracking-wide text-emerald-800">Demo Data {DEMO_SEED_VERSION}</span>
-        </div>
-    </div>
-);
+// Demo Mode pill removed
 
 
 
@@ -44,18 +39,113 @@ interface AppContentProps {
     setCrops: React.Dispatch<React.SetStateAction<CropProfile[]>>;
 }
 
-const AppContent: React.FC<AppContentProps> = ({ crops: initialCrops }) => {
+const AppContent: React.FC<AppContentProps> = ({ crops: initialCrops, setCrops }) => {
 
     const app = useAgriLogApp({ initialCrops });
-    const { isAuthenticated } = useAuth();
+    useTemplateCatalogSync();
 
     // Phase 4: Global Voice State (UI concern, so kept here or could be moved to hook)
     const [isGlobalListening, setIsGlobalListening] = useState(false);
+    const [isKeyboardOpen, setIsKeyboardOpen] = useState(false);
+
+    // Phase 6: Farm context — list + current selection, first-farm wizard.
+    const [myFarms, setMyFarms] = useState<MyFarmDto[] | null>(null);
+    const [currentFarmId, setCurrentFarmId] = useState<string | null>(() => {
+        try { return window.localStorage.getItem('shramsafal_current_farm_id') || null; }
+        catch { return null; }
+    });
+    const [showFirstFarmWizard, setShowFirstFarmWizard] = useState(false);
+    const [farmContextRefreshCounter, setFarmContextRefreshCounter] = useState(0);
+
+    useEffect(() => {
+        let cancelled = false;
+        (async () => {
+            try {
+                const farms = await getMyFarms();
+                if (cancelled) return;
+                setMyFarms(farms);
+
+                // If the user has zero farms, auto-open the wizard.
+                if (farms.length === 0) {
+                    setShowFirstFarmWizard(true);
+                    return;
+                }
+
+                // Ensure currentFarmId points to something real.
+                if (!currentFarmId || !farms.some(f => f.farmId === currentFarmId)) {
+                    const next = farms[0].farmId;
+                    setCurrentFarmId(next);
+                    try { window.localStorage.setItem('shramsafal_current_farm_id', next); } catch { /* ignore */ }
+                }
+            } catch {
+                // Not authenticated / server unreachable — keep null; UI handles.
+                if (!cancelled) setMyFarms([]);
+            }
+        })();
+        return () => { cancelled = true; };
+    }, [farmContextRefreshCounter]); // eslint-disable-line react-hooks/exhaustive-deps
+
+    const handleSwitchFarm = (farmId: string) => {
+        setCurrentFarmId(farmId);
+        try { window.localStorage.setItem('shramsafal_current_farm_id', farmId); } catch { /* ignore */ }
+    };
+
+    const handleWizardComplete = (result: BootstrapFirstFarmResponse) => {
+        setShowFirstFarmWizard(false);
+        setCurrentFarmId(result.farmId);
+        try { window.localStorage.setItem('shramsafal_current_farm_id', result.farmId); } catch { /* ignore */ }
+        setFarmContextRefreshCounter(x => x + 1);
+    };
+
+    const handleJoinViaQr = () => {
+        // Deep-link: JoinFarmLandingPage expects `?join=<token>&farm=<code>`.
+        // We don't have a token handy here — route the user to a "paste link"
+        // prompt. Future: a real scanner. For now, redirect to LoginPage's
+        // "Join via farm QR" flow (which prompts for a pasted link).
+        const link = window.prompt('तुमच्या मालकाने शेअर केलेली QR लिंक पेस्ट करा\nPaste the QR link shared by the farmer:');
+        if (!link) return;
+        try {
+            const url = new URL(link.trim());
+            const token = url.searchParams.get('t') ?? url.searchParams.get('join');
+            const farm = url.searchParams.get('f') ?? url.searchParams.get('farm');
+            if (token && farm) {
+                window.location.assign(`/?join=${encodeURIComponent(token)}&farm=${encodeURIComponent(farm)}`);
+                return;
+            }
+        } catch { /* fall through */ }
+        window.alert('Link not recognised. Ask the farmer to share it again.');
+    };
 
     const {
         navigation, context, data, voice, weather, commands, trust,
         toast, setToast, handleReset, lastSavedLogSummary, lastSavedLogIds
     } = app;
+
+    useEffect(() => {
+        setCrops(data.crops);
+    }, [data.crops, setCrops]);
+
+    useEffect(() => {
+        if (!Capacitor.isNativePlatform()) {
+            return;
+        }
+
+        let showListener: { remove: () => Promise<void> } | undefined;
+        let hideListener: { remove: () => Promise<void> } | undefined;
+
+        const registerKeyboardListeners = async () => {
+            showListener = await Keyboard.addListener('keyboardDidShow', () => setIsKeyboardOpen(true));
+            hideListener = await Keyboard.addListener('keyboardDidHide', () => setIsKeyboardOpen(false));
+        };
+
+        void registerKeyboardListeners();
+
+        return () => {
+            setIsKeyboardOpen(false);
+            void showListener?.remove();
+            void hideListener?.remove();
+        };
+    }, []);
 
     // --- VIEW HELPERS ---
     const getContextColorIndicator = () => {
@@ -195,12 +285,8 @@ const AppContent: React.FC<AppContentProps> = ({ crops: initialCrops }) => {
         getContextDisplay
     };
 
-    if (!data.isDemoMode && !isAuthenticated) {
-        return <LoginPage onUseDemoMode={() => data.setIsDemoMode(true)} />;
-    }
-
     return (
-        <div className="min-h-screen bg-surface-100 bg-subtle-mesh text-stone-800 pb-24 font-sans selection:bg-emerald-200">
+        <div className="relative flex h-full flex-col bg-transparent text-stone-800 font-sans selection:bg-emerald-200">
             {/* Top App Bar */}
             <AppHeader
                 currentRoute={navigation.currentRoute}
@@ -213,19 +299,41 @@ const AppContent: React.FC<AppContentProps> = ({ crops: initialCrops }) => {
                     if (typeof navigator !== 'undefined' && navigator.vibrate) navigator.vibrate(40);
                     setIsGlobalListening(true);
                 }}
+                farmContext={myFarms ? {
+                    farms: myFarms,
+                    currentFarmId,
+                    onSwitchFarm: handleSwitchFarm,
+                    onCreateFarm: () => setShowFirstFarmWizard(true),
+                    onJoinViaQr: handleJoinViaQr,
+                } : undefined}
             />
 
-            {/* Demo indicators */}
-            {data.isDemoMode && <DemoModeIndicator />}
+            {/* Server-decided banners (verify phone, plan expiring, etc.) */}
+            <MeAlertRail />
 
             {/* Main Content */}
-            <main className="max-w-md mx-auto min-h-screen relative">
+            <main
+                className="page-content relative flex-1 min-h-0 overflow-y-auto overflow-x-hidden overscroll-none"
+                style={{
+                    paddingBottom: isKeyboardOpen
+                        ? '1.5rem'
+                        : 'calc(6rem + var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px)))'
+                }}
+            >
                 <AppFeatureProviders app={app} helpers={featureHelpers}>
                     <AppRouter />
                 </AppFeatureProviders>
             </main>
 
             {/* --- GLOBAL OVERLAYS --- */}
+
+            {/* Phase 6: First-farm wizard (auto-opens for brand-new users with 0 farms) */}
+            <FirstFarmWizard
+                isOpen={showFirstFarmWizard}
+                onComplete={handleWizardComplete}
+                onDismiss={myFarms && myFarms.length > 0 ? () => setShowFirstFarmWizard(false) : undefined}
+                suggestedOwnerName={data.farmerProfile?.name?.split(' ')[0]}
+            />
 
             {/* Weather Reaction Prompt Overlay */}
             {weather.pendingWeatherEvent && (
@@ -257,6 +365,7 @@ const AppContent: React.FC<AppContentProps> = ({ crops: initialCrops }) => {
                 currentView={navigation.mainView}
                 onNavigate={(route) => navigation.setCurrentRoute(route)}
                 onViewChange={(view) => navigation.setMainView(view)}
+                hidden={isKeyboardOpen}
             />
 
             {/* Toast */}

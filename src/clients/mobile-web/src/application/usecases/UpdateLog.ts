@@ -1,9 +1,8 @@
-
 import { DailyLog, LogVerificationStatus } from '../../domain/types/log.types';
 import { FarmerProfile } from '../../domain/types/farm.types';
 import { PatchEvent } from '../../domain/ledger/PatchEvent';
 import { LogsRepository } from '../ports';
-import { AuthorizationPolicy } from '../policy/AuthorizationPolicy';
+import { mutationQueue } from '../../infrastructure/sync/MutationQueue';
 // import { AuditLogRepository } from '../../infrastructure/storage/AuditLogRepository'; // Deprecated Fix-07
 
 interface UpdateLogRequest {
@@ -31,24 +30,19 @@ export const updateLog = async (
     request: UpdateLogRequest,
     repo: LogsRepository,
     // auditRepo deprecated (Fix-07)
-    actorProfile: FarmerProfile
+    _actorProfile: FarmerProfile
 ): Promise<UpdateLogResponse> => {
     try {
-        // 1. Authorization
-        if (!AuthorizationPolicy.can('EDIT_LOG', actorProfile)) {
-            return { success: false, error: 'Permission denied: Cannot edit logs.' };
-        }
-
-        // 2. Fetch existing
+        // 1. Fetch existing
         const existingLog = await repo.getById(request.logId);
         if (!existingLog) {
             return { success: false, error: 'Log not found.' };
         }
 
-        // 3. Prepare Update Logic
+        // 2. Prepare Update Logic
         let finalLog: DailyLog = { ...existingLog, ...request.updatedData };
 
-        // 4. Handle Verification Invariance
+        // 3. Handle Verification Invariance
         if (existingLog.verification?.status === LogVerificationStatus.APPROVED ||
             existingLog.verification?.status === LogVerificationStatus.AUTO_APPROVED) {
 
@@ -85,11 +79,13 @@ export const updateLog = async (
             finalLog.patches = [...(existingLog.patches || []), patch];
         }
 
-        // 5. Persist with Unified Audit (Fix-07)
-        await repo.save(finalLog, {
-            actorId: request.actorId,
+        // 4. Queue Mutation for backend execution
+        await mutationQueue.enqueue('add_log_task', {
+            dailyLogId: finalLog.id,
+            action: 'UPDATE_LOG',
+            updatedData: request.updatedData,
             reason: request.reason,
-            action: 'UPDATE_LOG'
+            actorId: request.actorId
         });
 
         return { success: true, log: finalLog };

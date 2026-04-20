@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { FinanceFilters, EffectiveMoneyEvent } from '../finance.types';
 import { financeSelectors } from '../financeSelectors';
-import { financeService } from '../financeService';
+import { financeCommandService } from '../financeCommandService';
 
 interface MoneyLensDrawerProps {
     isOpen: boolean;
@@ -42,7 +42,7 @@ export const MoneyLensDrawer: React.FC<MoneyLensDrawerProps> = ({
         if (!selected) return;
         const nextAmount = Number(amount);
         if (Number.isNaN(nextAmount)) return;
-        financeService.applyAdjustment({
+        financeCommandService.applyAdjustment({
             adjustsMoneyEventId: selected.id,
             deltaAmount: nextAmount - selected.effectiveAmount,
             correctedFields: { amount: nextAmount, notes: note },
@@ -135,7 +135,7 @@ export const MoneyLensDrawer: React.FC<MoneyLensDrawerProps> = ({
                                 Save Adjustment
                             </button>
                             <button
-                                onClick={() => financeService.markAsDuplicate(selected.id, currentUserId)}
+                                onClick={() => financeCommandService.markAsDuplicate(selected.id, currentUserId)}
                                 className="rounded-lg bg-amber-600 px-3 py-1 text-xs font-bold text-white"
                             >
                                 Mark Duplicate

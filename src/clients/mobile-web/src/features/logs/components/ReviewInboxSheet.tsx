@@ -15,7 +15,7 @@ import { useLanguage } from '../../../i18n/LanguageContext';
 import { DailyLog, LogVerificationStatus, FarmOperator } from '../../../types';
 import { TrustBadge } from '../../../shared/components/ui/TrustBadge';
 import { Check, X, MessageSquare, ChevronDown, ChevronUp } from 'lucide-react';
-import { getDateKey } from '../../../domain/system/DateKeyService';
+import { getDateKey } from '../../../core/domain/services/DateKeyService';
 import { computeVerificationMetrics } from '../../../shared/utils/dayState';
 
 interface ReviewInboxSheetProps {
@@ -275,6 +275,7 @@ export const ReviewInboxSheet: React.FC<ReviewInboxSheetProps> = ({
             <div className="
                 fixed bottom-0 left-0 right-0 z-50
                 bg-white rounded-t-3xl shadow-2xl
+                pb-safe-area
                 max-h-[85vh] overflow-hidden
                 animate-in slide-in-from-bottom duration-300
             ">

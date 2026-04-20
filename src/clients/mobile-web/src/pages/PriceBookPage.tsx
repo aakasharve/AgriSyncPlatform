@@ -1,9 +1,10 @@
 import React, { useMemo, useState } from 'react';
 import { AppRoute } from '../types';
 import { financeService } from '../features/finance/financeService';
+import { financeCommandService } from '../features/finance/financeCommandService';
 import { MoneyCategory } from '../features/finance/finance.types';
 import { FinanceManagerNav } from '../features/finance/components/FinanceManagerNav';
-import { getDateKey } from '../domain/system/DateKeyService';
+import { getDateKey } from '../core/domain/services/DateKeyService';
 
 const CATEGORIES: MoneyCategory[] = ['Labour', 'Input', 'Machinery', 'Transport', 'Repair', 'Fuel', 'Electricity', 'Other'];
 
@@ -25,7 +26,7 @@ const PriceBookPage: React.FC<PriceBookPageProps> = ({ currentRoute, onNavigate 
     const addItem = () => {
         const parsedPrice = Number(price);
         if (!name.trim() || Number.isNaN(parsedPrice)) return;
-        financeService.createPriceBookItem({
+        financeCommandService.createPriceBookItem({
             name: name.trim(),
             category,
             defaultUnit: unit.trim() || 'unit',

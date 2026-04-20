@@ -8,5 +8,5 @@ public sealed record PriceConfigDto(
     DateOnly EffectiveFrom,
     int Version,
     Guid CreatedByUserId,
-    DateTime CreatedAtUtc);
-
+    DateTime CreatedAtUtc,
+    DateTime ModifiedAtUtc);

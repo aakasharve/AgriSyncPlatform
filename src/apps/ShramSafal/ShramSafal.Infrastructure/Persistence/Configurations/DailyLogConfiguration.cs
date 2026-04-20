@@ -45,9 +45,49 @@ internal sealed class DailyLogConfiguration : IEntityTypeConfiguration<DailyLog>
             .HasColumnName("created_at_utc")
             .IsRequired();
 
+        builder.Property(x => x.ModifiedAtUtc)
+            .HasColumnName("modified_at_utc")
+            .IsRequired();
+
+        builder.OwnsOne(x => x.Location, location =>
+        {
+            location.Property(x => x.Latitude)
+                .HasColumnName("location_latitude")
+                .HasPrecision(10, 7);
+
+            location.Property(x => x.Longitude)
+                .HasColumnName("location_longitude")
+                .HasPrecision(10, 7);
+
+            location.Property(x => x.AccuracyMeters)
+                .HasColumnName("location_accuracy_meters")
+                .HasPrecision(10, 2);
+
+            location.Property(x => x.Altitude)
+                .HasColumnName("location_altitude")
+                .HasPrecision(10, 2);
+
+            location.Property(x => x.CapturedAtUtc)
+                .HasColumnName("location_captured_at_utc");
+
+            location.Property(x => x.Provider)
+                .HasColumnName("location_provider")
+                .HasMaxLength(50);
+
+            location.Property(x => x.PermissionState)
+                .HasColumnName("location_permission_state")
+                .HasMaxLength(30);
+        });
+        builder.Navigation(x => x.Location).IsRequired(false);
+
         builder.HasIndex(x => x.IdempotencyKey)
             .IsUnique()
             .HasFilter("idempotency_key IS NOT NULL");
+        builder.HasIndex(x => x.FarmId);
+        builder.HasIndex(x => new { x.FarmId, x.LogDate });
+        builder.HasIndex(x => x.CropCycleId);
+        builder.HasIndex(x => x.OperatorUserId);
+        builder.HasIndex(x => x.ModifiedAtUtc);
 
         builder.HasMany(x => x.Tasks)
             .WithOne()
@@ -62,6 +102,7 @@ internal sealed class DailyLogConfiguration : IEntityTypeConfiguration<DailyLog>
         builder.Navigation(x => x.Tasks).UsePropertyAccessMode(PropertyAccessMode.Field);
         builder.Navigation(x => x.VerificationEvents).UsePropertyAccessMode(PropertyAccessMode.Field);
 
+        builder.Ignore(x => x.CurrentVerificationStatus);
         builder.Ignore(x => x.LastVerificationStatus);
         builder.Ignore(x => x.DomainEvents);
     }

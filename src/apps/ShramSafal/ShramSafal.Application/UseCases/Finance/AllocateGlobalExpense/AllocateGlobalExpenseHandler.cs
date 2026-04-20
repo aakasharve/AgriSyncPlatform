@@ -1,0 +1,315 @@
+using AgriSync.BuildingBlocks.Abstractions;
+using AgriSync.BuildingBlocks.Analytics;
+using AgriSync.BuildingBlocks.Results;
+using AgriSync.SharedKernel.Contracts.Ids;
+using ShramSafal.Application.Contracts.Dtos;
+using ShramSafal.Application.Ports;
+using ShramSafal.Domain.Audit;
+using ShramSafal.Domain.Common;
+using ShramSafal.Domain.Farms;
+
+namespace ShramSafal.Application.UseCases.Finance.AllocateGlobalExpense;
+
+public sealed class AllocateGlobalExpenseHandler(
+    IShramSafalRepository repository,
+    IIdGenerator idGenerator,
+    IClock clock,
+    IEntitlementPolicy entitlementPolicy,
+    IAnalyticsWriter analytics)
+{
+    private const decimal MaxSupportedAmount = 999_999_999m;
+
+    public async Task<Result<DayLedgerDto>> HandleAsync(AllocateGlobalExpenseCommand command, CancellationToken ct = default)
+    {
+        if (command.CostEntryId == Guid.Empty ||
+            command.CreatedByUserId == Guid.Empty ||
+            string.IsNullOrWhiteSpace(command.AllocationBasis))
+        {
+            return Result.Failure<DayLedgerDto>(ShramSafalErrors.InvalidCommand);
+        }
+
+        if (command.DayLedgerId.HasValue && command.DayLedgerId.Value == Guid.Empty)
+        {
+            return Result.Failure<DayLedgerDto>(ShramSafalErrors.InvalidCommand);
+        }
+
+        var costEntry = await repository.GetCostEntryByIdAsync(command.CostEntryId, ct);
+        if (costEntry is null)
+        {
+            return Result.Failure<DayLedgerDto>(ShramSafalErrors.CostEntryNotFound);
+        }
+
+        if (IsAmountOutOfRange(costEntry.Amount))
+        {
+            return Result.Failure<DayLedgerDto>(CreateInvalidAmountError());
+        }
+
+        var canWriteFarm = await repository.IsUserMemberOfFarmAsync(costEntry.FarmId, command.CreatedByUserId, ct);
+        if (!canWriteFarm)
+        {
+            return Result.Failure<DayLedgerDto>(ShramSafalErrors.Forbidden);
+        }
+
+        // Phase 5 entitlement gate (PaidFeature.EditFinance).
+        var gate = await EntitlementGate.CheckAsync<DayLedgerDto>(
+            entitlementPolicy, new UserId(command.CreatedByUserId), costEntry.FarmId,
+            PaidFeature.EditFinance, ct);
+        if (gate is not null) return gate;
+
+        var existing = await repository.GetDayLedgerBySourceCostEntryIdAsync(command.CostEntryId, ct);
+        if (existing is not null)
+        {
+            return Result.Success(existing.ToDto());
+        }
+
+        var normalizedBasis = NormalizeAllocationBasis(command.AllocationBasis);
+        if (normalizedBasis is null)
+        {
+            return Result.Failure<DayLedgerDto>(ShramSafalErrors.InvalidCommand);
+        }
+
+        var farmPlots = await repository.GetPlotsByFarmIdAsync(costEntry.FarmId, ct);
+        if (farmPlots.Count == 0)
+        {
+            return Result.Failure<DayLedgerDto>(ShramSafalErrors.PlotNotFound);
+        }
+
+        var nowUtc = clock.UtcNow;
+        var allocations = normalizedBasis switch
+        {
+            "equal" => BuildEqualAllocations(costEntry.Amount, costEntry.CurrencyCode, farmPlots, nowUtc),
+            "by_acreage" => BuildAcreageAllocations(costEntry.Amount, costEntry.CurrencyCode, farmPlots, nowUtc),
+            "custom" => BuildCustomAllocations(costEntry.Amount, costEntry.CurrencyCode, farmPlots, command.Allocations, nowUtc),
+            _ => null
+        };
+
+        if (allocations is null || allocations.Count == 0)
+        {
+            return Result.Failure<DayLedgerDto>(ShramSafalErrors.InvalidCommand);
+        }
+
+        var dayLedger = Domain.Finance.DayLedger.Create(
+            command.DayLedgerId ?? idGenerator.New(),
+            costEntry.FarmId,
+            costEntry.Id,
+            costEntry.EntryDate,
+            normalizedBasis,
+            command.CreatedByUserId,
+            allocations,
+            nowUtc);
+
+        // Repository add methods only stage entities; the single SaveChangesAsync call below is
+        // the atomic EF Core commit point for both the ledger and its audit event.
+        await repository.AddDayLedgerAsync(dayLedger, ct);
+        await repository.AddAuditEventAsync(
+            AuditEvent.Create(
+                costEntry.FarmId,
+                "DayLedger",
+                dayLedger.Id,
+                "Allocated",
+                command.CreatedByUserId,
+                command.ActorRole ?? "unknown",
+                new
+                {
+                    dayLedger.Id,
+                    dayLedger.FarmId,
+                    dayLedger.SourceCostEntryId,
+                    dayLedger.LedgerDate,
+                    dayLedger.AllocationBasis,
+                    TotalAmount = costEntry.Amount,
+                    CurrencyCode = costEntry.CurrencyCode,
+                    Allocations = dayLedger.Allocations.Select(a => new
+                    {
+                        a.Id,
+                        a.PlotId,
+                        a.AllocatedAmount,
+                        a.CurrencyCode
+                    }).ToList()
+                },
+                command.ClientCommandId,
+                nowUtc),
+            ct);
+
+        await repository.SaveChangesAsync(ct);
+
+        // Analytics (Phase 2 Batch D): emit after the final SaveChangesAsync.
+        // Allocation policy is upper-cased to match the plan's EQUAL / BY_ACREAGE / CUSTOM tokens.
+        var totalAllocatedAmount = dayLedger.Allocations.Sum(a => a.AllocatedAmount);
+        await analytics.EmitAsync(new AnalyticsEvent(
+            EventId: Guid.NewGuid(),
+            EventType: AnalyticsEventType.GlobalExpenseAllocated,
+            OccurredAtUtc: clock.UtcNow,
+            ActorUserId: new UserId(command.CreatedByUserId),
+            FarmId: costEntry.FarmId,
+            OwnerAccountId: null,
+            ActorRole: command.ActorRole ?? "operator",
+            Trigger: "manual",
+            DeviceOccurredAtUtc: null,
+            SchemaVersion: "v1",
+            PropsJson: System.Text.Json.JsonSerializer.Serialize(new
+            {
+                costEntryId = costEntry.Id,
+                farmId = (Guid)costEntry.FarmId,
+                dayLedgerId = dayLedger.Id,
+                allocationPolicy = normalizedBasis.ToUpperInvariant(),
+                plotCount = dayLedger.Allocations.Count,
+                totalAllocated = totalAllocatedAmount,
+                currencyCode = costEntry.CurrencyCode
+            })), ct);
+
+        return Result.Success(dayLedger.ToDto());
+    }
+
+    private static string? NormalizeAllocationBasis(string rawBasis)
+    {
+        var normalized = rawBasis.Trim().ToLowerInvariant();
+        return normalized switch
+        {
+            "equal" => "equal",
+            "by_acreage" => "by_acreage",
+            "custom" => "custom",
+            _ => null
+        };
+    }
+
+    private static IReadOnlyCollection<Domain.Finance.DayLedgerAllocation>? BuildEqualAllocations(
+        decimal totalAmount,
+        string currencyCode,
+        IReadOnlyList<Plot> plots,
+        DateTime allocatedAtUtc)
+    {
+        var totalCents = ToCents(totalAmount);
+        if (totalCents < plots.Count)
+        {
+            return null;
+        }
+
+        var baseCents = totalCents / plots.Count;
+        var remainder = totalCents % plots.Count;
+        var allocations = new List<Domain.Finance.DayLedgerAllocation>(plots.Count);
+
+        for (var index = 0; index < plots.Count; index++)
+        {
+            var cents = baseCents + (index < remainder ? 1L : 0L);
+            allocations.Add(Domain.Finance.DayLedgerAllocation.Create(
+                Guid.NewGuid(),
+                plots[index].Id,
+                FromCents(cents),
+                currencyCode,
+                allocatedAtUtc));
+        }
+
+        return allocations;
+    }
+
+    private static IReadOnlyCollection<Domain.Finance.DayLedgerAllocation>? BuildAcreageAllocations(
+        decimal totalAmount,
+        string currencyCode,
+        IReadOnlyList<Plot> plots,
+        DateTime allocatedAtUtc)
+    {
+        if (plots.Any(p => p.AreaInAcres <= 0))
+        {
+            return null;
+        }
+
+        var totalArea = plots.Sum(p => p.AreaInAcres);
+        if (totalArea <= 0)
+        {
+            return null;
+        }
+
+        var totalCents = ToCents(totalAmount);
+        if (totalCents < plots.Count)
+        {
+            return null;
+        }
+
+        var allocatedCents = 0L;
+        var allocations = new List<Domain.Finance.DayLedgerAllocation>(plots.Count);
+        for (var index = 0; index < plots.Count; index++)
+        {
+            var plot = plots[index];
+            long cents;
+            if (index == plots.Count - 1)
+            {
+                cents = totalCents - allocatedCents;
+            }
+            else
+            {
+                var ratio = plot.AreaInAcres / totalArea;
+                cents = Math.Max(1L, (long)Math.Floor((double)(totalCents * ratio)));
+                allocatedCents += cents;
+            }
+
+            allocations.Add(Domain.Finance.DayLedgerAllocation.Create(
+                Guid.NewGuid(),
+                plot.Id,
+                FromCents(cents),
+                currencyCode,
+                allocatedAtUtc));
+        }
+
+        return allocations;
+    }
+
+    private static IReadOnlyCollection<Domain.Finance.DayLedgerAllocation>? BuildCustomAllocations(
+        decimal totalAmount,
+        string currencyCode,
+        IReadOnlyList<Plot> farmPlots,
+        IReadOnlyList<AllocateGlobalExpenseAllocationCommand> requestedAllocations,
+        DateTime allocatedAtUtc)
+    {
+        if (requestedAllocations is null || requestedAllocations.Count == 0)
+        {
+            return null;
+        }
+
+        var farmPlotIds = farmPlots.Select(p => p.Id).ToHashSet();
+        if (requestedAllocations.Any(a => a.PlotId == Guid.Empty || a.Amount <= 0 || !farmPlotIds.Contains(a.PlotId)))
+        {
+            return null;
+        }
+
+        var duplicatePlotId = requestedAllocations
+            .GroupBy(a => a.PlotId)
+            .Any(g => g.Count() > 1);
+        if (duplicatePlotId)
+        {
+            return null;
+        }
+
+        var expected = decimal.Round(totalAmount, 2, MidpointRounding.AwayFromZero);
+        var supplied = decimal.Round(requestedAllocations.Sum(a => a.Amount), 2, MidpointRounding.AwayFromZero);
+        if (expected != supplied)
+        {
+            return null;
+        }
+
+        return requestedAllocations
+            .Select(a => Domain.Finance.DayLedgerAllocation.Create(
+                Guid.NewGuid(),
+                a.PlotId,
+                a.Amount,
+                currencyCode,
+                allocatedAtUtc))
+            .ToList();
+    }
+
+    private static bool IsAmountOutOfRange(decimal amount) =>
+        amount <= 0 || amount > MaxSupportedAmount;
+
+    private static Error CreateInvalidAmountError() =>
+        new("ShramSafal.InvalidAmount", "Amount must be greater than zero and no more than 999999999.");
+
+    private static long ToCents(decimal amount)
+    {
+        checked
+        {
+            return (long)decimal.Round(amount * 100m, 0, MidpointRounding.AwayFromZero);
+        }
+    }
+
+    private static decimal FromCents(long cents) =>
+        decimal.Round(cents / 100m, 2, MidpointRounding.AwayFromZero);
+}

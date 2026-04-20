@@ -4,5 +4,5 @@ public sealed record FarmDto(
     Guid Id,
     string Name,
     Guid OwnerUserId,
-    DateTime CreatedAtUtc);
-
+    DateTime CreatedAtUtc,
+    DateTime ModifiedAtUtc);

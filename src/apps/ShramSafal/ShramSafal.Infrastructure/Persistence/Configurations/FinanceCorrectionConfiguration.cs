@@ -48,7 +48,12 @@ internal sealed class FinanceCorrectionConfiguration : IEntityTypeConfiguration<
             .HasColumnName("corrected_at_utc")
             .IsRequired();
 
+        builder.Property(x => x.ModifiedAtUtc)
+            .HasColumnName("modified_at_utc")
+            .IsRequired();
+
         builder.HasIndex(x => new { x.CostEntryId, x.CorrectedAtUtc });
+        builder.HasIndex(x => x.ModifiedAtUtc);
         builder.Ignore(x => x.DomainEvents);
     }
 }

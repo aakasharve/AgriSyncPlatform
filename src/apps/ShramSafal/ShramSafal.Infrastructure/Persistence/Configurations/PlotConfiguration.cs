@@ -34,7 +34,12 @@ internal sealed class PlotConfiguration : IEntityTypeConfiguration<Plot>
             .HasColumnName("created_at_utc")
             .IsRequired();
 
+        builder.Property(x => x.ModifiedAtUtc)
+            .HasColumnName("modified_at_utc")
+            .IsRequired();
+
         builder.HasIndex(x => new { x.FarmId, x.Name });
+        builder.HasIndex(x => x.ModifiedAtUtc);
         builder.Ignore(x => x.DomainEvents);
     }
 }

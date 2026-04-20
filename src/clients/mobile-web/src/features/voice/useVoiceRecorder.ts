@@ -1,10 +1,20 @@
-import { useState } from 'react';
-import { LogVerificationStatus, AppStatus, LogSegment, AudioData, FarmContext, CropProfile, FarmerProfile, InputMode, AgriLogResponse, QuestionForUser } from '../../types';
+import { useRef, useState } from 'react';
+import { AppStatus, LogSegment, AudioData, FarmContext, CropProfile, FarmerProfile, InputMode, AgriLogResponse, QuestionForUser } from '../../types';
 import { LogProvenance } from '../../domain/ai/LogProvenance';
-import { VoiceParserPort, VoiceInput } from '../../application/ports';
+import { VoiceParserPort } from '../../application/ports';
 import { parseVoiceToDraft } from '../../application/usecases/ParseVoiceToDraft';
 import { LogScope } from '../../domain/types/log.types';
-import { hasSuccessfulIrrigation } from '../../domain/ai/IrrigationStatusHeuristics';
+import { VoicePreprocessor } from '../../infrastructure/voice/VoicePreprocessor';
+import { VoiceIdempotency } from '../../infrastructure/voice/VoiceIdempotency';
+import { VoiceSessionMetadata } from '../../infrastructure/voice/types';
+
+const hasSuccessfulIrrigation = (events: Array<{ durationHours?: number; waterVolumeLitres?: number; method?: string; source?: string }>): boolean => {
+    return events.some(event => {
+        if ((event.durationHours || 0) > 0) return true;
+        if ((event.waterVolumeLitres || 0) > 0) return true;
+        return Boolean(event.method || event.source);
+    });
+};
 
 interface UseVoiceRecorderProps {
     currentLogContext: FarmContext | null;
@@ -13,8 +23,8 @@ interface UseVoiceRecorderProps {
     crops: CropProfile[];
     farmerProfile: FarmerProfile;
     setMode: (mode: InputMode) => void;
-    onAutoSave?: (log: AgriLogResponse, provenance?: LogProvenance) => void;
     parser: VoiceParserPort;
+    voicePreprocessor: VoicePreprocessor;
 }
 
 export const useVoiceRecorder = ({
@@ -24,8 +34,8 @@ export const useVoiceRecorder = ({
     crops,
     farmerProfile,
     setMode,
-    onAutoSave,
-    parser
+    parser,
+    voicePreprocessor,
 }: UseVoiceRecorderProps) => {
 
     const [status, setStatus] = useState<AppStatus>('idle');
@@ -36,16 +46,130 @@ export const useVoiceRecorder = ({
     const [recordingSegment, setRecordingSegment] = useState<LogSegment | null>(null);
     const [clarificationNeeded, setClarificationNeeded] = useState<QuestionForUser | null>(null);
     const [pendingTranscript, setPendingTranscript] = useState<string | null>(null);
+    const lastVoiceSessionMetadataRef = useRef<VoiceSessionMetadata | null>(null);
+    const lastVoiceIdempotencySeedRef = useRef<string | null>(null);
+
+    const resolveFarmId = (): string => {
+        const farmId = currentLogContext?.selection
+            .find(selection => typeof selection.farmId === 'string' && selection.farmId.trim().length > 0)
+            ?.farmId;
+        return farmId ?? 'unknown-farm';
+    };
+
+    const resolveUserId = (): string => {
+        const userId = farmerProfile.activeOperatorId?.trim();
+        return userId && userId.length > 0 ? userId : 'unknown-user';
+    };
+
+    const blobToBase64 = async (blob: Blob): Promise<string> => {
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onloadend = () => {
+                const result = typeof reader.result === 'string' ? reader.result : '';
+                if (!result.includes(',')) {
+                    reject(new Error('Unable to encode audio for upload.'));
+                    return;
+                }
+                resolve(result.split(',')[1]);
+            };
+            reader.onerror = () => reject(new Error('FileReader failed while encoding audio.'));
+            reader.readAsDataURL(blob);
+        });
+    };
+
+    type PreprocessedAudioResult = {
+        base64: string;
+        mimeType: string;
+        inputSpeechDurationMs?: number;
+        inputRawDurationMs?: number;
+        segmentMetadataJson?: string;
+        idempotencyKey?: string;
+        requestPayloadHash?: string;
+    };
+
+    const preprocessAudio = async (audioData: AudioData): Promise<PreprocessedAudioResult> => {
+        const farmId = resolveFarmId();
+        const userId = resolveUserId();
+        const sessionId = VoiceIdempotency.createSessionId();
+
+        try {
+            const pipelineOutput = await voicePreprocessor.processBlobAsSingleBlob(
+                audioData.blob,
+                sessionId,
+                farmId,
+            );
+            const deterministicMaterial = await VoiceIdempotency.buildSegmentMaterial({
+                userId,
+                farmId,
+                sessionId,
+                segmentIndex: 0,
+                contentHash: pipelineOutput.contentHash,
+            });
+
+            lastVoiceSessionMetadataRef.current = pipelineOutput.metadata;
+            lastVoiceIdempotencySeedRef.current = deterministicMaterial.deterministicSeed;
+
+            const speechMs = Math.round(pipelineOutput.metadata.totalSpeechDurationMs);
+            const rawMs = Math.round(pipelineOutput.metadata.totalRawDurationMs);
+            const segmentMetadata = {
+                sessionId: pipelineOutput.metadata.sessionId,
+                farmId: pipelineOutput.metadata.farmId,
+                totalSegments: pipelineOutput.metadata.totalSegments,
+                totalSpeechDurationMs: speechMs,
+                totalRawDurationMs: rawMs,
+                totalSilenceRemovedMs: Math.round(pipelineOutput.metadata.totalSilenceRemovedMs),
+            };
+
+            return {
+                base64: await blobToBase64(pipelineOutput.audioBlob),
+                mimeType: pipelineOutput.mimeType,
+                inputSpeechDurationMs: speechMs,
+                inputRawDurationMs: rawMs,
+                segmentMetadataJson: JSON.stringify(segmentMetadata),
+                idempotencyKey: deterministicMaterial.deterministicKey,
+                requestPayloadHash: pipelineOutput.contentHash,
+            };
+        } catch (pipelineError) {
+            console.warn('[VoicePreprocessor] Falling back to raw audio upload.', pipelineError);
+            lastVoiceSessionMetadataRef.current = null;
+            lastVoiceIdempotencySeedRef.current = null;
+            return {
+                base64: audioData.base64,
+                mimeType: audioData.mimeType,
+            };
+        }
+    };
 
     const handleAudioReady = async (audioData: AudioData) => {
-        await processInput({ type: 'audio', data: audioData.base64, mimeType: audioData.mimeType });
+        setStatus('processing');
+        setError(null);
+        const preprocessed = await preprocessAudio(audioData);
+        await processInput({
+            type: 'audio',
+            data: preprocessed.base64,
+            mimeType: preprocessed.mimeType,
+            inputSpeechDurationMs: preprocessed.inputSpeechDurationMs,
+            inputRawDurationMs: preprocessed.inputRawDurationMs,
+            segmentMetadataJson: preprocessed.segmentMetadataJson,
+            idempotencyKey: preprocessed.idempotencyKey,
+            requestPayloadHash: preprocessed.requestPayloadHash,
+        });
     };
 
     const handleTextReady = async (text: string) => {
         await processInput({ type: 'text', data: text }); // mimeType not needed for text
     };
 
-    const processInput = async (input: { type: 'audio' | 'text', data: string, mimeType?: string }) => {
+    const processInput = async (input: {
+        type: 'audio' | 'text';
+        data: string;
+        mimeType?: string;
+        inputSpeechDurationMs?: number;
+        inputRawDurationMs?: number;
+        segmentMetadataJson?: string;
+        idempotencyKey?: string;
+        requestPayloadHash?: string;
+    }) => {
         if (!hasActiveLogContext) {
             // PHASE 25: Allow Global Log (Removed Blocker)
             // We pass a "NULL" flag or leave it as is, Parser handles it.
@@ -74,9 +198,19 @@ export const useVoiceRecorder = ({
         const focusCategory = isSegmentUpdate ? recordingSegment : undefined;
 
         try {
-            // Construct correct payload type
+            // Construct correct payload type — forward preprocessor metadata for audio
+            // so BackendAiClient uses authoritative durations and idempotency key.
             const payload = payloadInput.type === 'audio'
-                ? { type: 'audio' as const, data: payloadInput.data, mimeType: payloadInput.mimeType! }
+                ? {
+                    type: 'audio' as const,
+                    data: payloadInput.data,
+                    mimeType: payloadInput.mimeType!,
+                    inputSpeechDurationMs: payloadInput.inputSpeechDurationMs,
+                    inputRawDurationMs: payloadInput.inputRawDurationMs,
+                    segmentMetadataJson: payloadInput.segmentMetadataJson,
+                    idempotencyKey: payloadInput.idempotencyKey,
+                    requestPayloadHash: payloadInput.requestPayloadHash,
+                }
                 : { type: 'text' as const, content: payloadInput.data };
 
             const result = await parseVoiceToDraft(
@@ -130,28 +264,10 @@ export const useVoiceRecorder = ({
                 return;
             }
 
-            // AUTO-SAVE LOGIC (AV-6: DFES Voice Safety Gate)
-            const suggestedAction = result.confidenceAssessment?.suggestedAction;
-            const hasUnclearSegments = response.unclearSegments && response.unclearSegments.length > 0;
+            // Always show ManualEntry for review — never skip to auto-save.
+            // User must see what was parsed before it is written to the ledger.
 
-            // Auto-save if confidence assessment says auto_confirm,
-            // or legacy fallback: no confidence data AND no unclear segments
-            const shouldAutoSave = suggestedAction === 'auto_confirm'
-                || (!suggestedAction && !hasUnclearSegments);
-
-            if (onAutoSave && !isSegmentUpdate && shouldAutoSave) {
-                // IMPORTANT: Pass provenance so backend can link audio if needed
-                onAutoSave(response, prov);
-
-                // Reset state immediately as we are done
-                setDraftLog(null);
-                setRecordingSegment(null);
-                setClarificationNeeded(null); // Clear any pending clarification
-                setStatus('idle');
-                // Note: The onAutoSave callback in compositionRoot.ts will set status to 'success'
-                return;
-            }
-
+            // FUTURE: if selections.length > 1 and draftLog is ready, auto-open wizard
             if (isSegmentUpdate) {
                 const mergedDraft = { ...draftLog! };
 
@@ -181,7 +297,7 @@ export const useVoiceRecorder = ({
                     }
 
                     const hasWork = mergedDraft.cropActivities.length > 0
-                        || hasSuccessfulIrrigation(mergedDraft.irrigation || [], mergedDraft.fullTranscript)
+                        || hasSuccessfulIrrigation(mergedDraft.irrigation || [])
                         || mergedDraft.labour.length > 0
                         || mergedDraft.inputs.length > 0
                         || mergedDraft.machinery.length > 0;
@@ -191,7 +307,7 @@ export const useVoiceRecorder = ({
                 }
 
                 const hasWorkFinal = mergedDraft.cropActivities.length > 0
-                    || hasSuccessfulIrrigation(mergedDraft.irrigation || [], mergedDraft.fullTranscript)
+                    || hasSuccessfulIrrigation(mergedDraft.irrigation || [])
                     || mergedDraft.labour.length > 0
                     || mergedDraft.inputs.length > 0
                     || mergedDraft.machinery.length > 0;
@@ -233,6 +349,8 @@ export const useVoiceRecorder = ({
         setRecordingSegment(null);
         setClarificationNeeded(null);
         setPendingTranscript(null);
+        lastVoiceSessionMetadataRef.current = null;
+        lastVoiceIdempotencySeedRef.current = null;
         setStatus('idle');
         setError(null);
         setErrorTranscript(undefined);

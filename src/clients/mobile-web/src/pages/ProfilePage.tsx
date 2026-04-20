@@ -4,11 +4,14 @@
 */
 
 import React, { useEffect, useMemo, useState } from 'react';
-import {
+import { 
+    FlaskConical,
+
     User, Zap, MapPin, Plus, Trash2, X, Sprout, Crosshair, Clock,
     Settings2, ArrowRight, Droplets, Tractor, BarChart3, CalendarDays,
     ChevronRight, CheckCircle2, Wrench, Cylinder, ArrowLeft, Save, BrainCircuit,
-    Medal, ShieldCheck, Check, Users, Settings, Phone, AlertTriangle, FileText, Upload, Eye
+    Medal, ShieldCheck, Check, Users, Settings, Phone, AlertTriangle, FileText, Upload, Eye, LogOut,
+    PanelLeftClose, PanelLeftOpen
 } from 'lucide-react';
 import {
     FarmerProfile, WaterResource, FarmMotor,
@@ -23,14 +26,24 @@ import VocabManager from '../features/voice/components/VocabManager';
 import PeopleDirectory from '../features/people/components/PeopleDirectory';
 import { Person, PlotGeoData } from '../types';
 import { AddMemberWizard } from '../features/people/components/AddMemberWizard';
+import FarmInviteQrSheet from '../features/onboarding/qr/FarmInviteQrSheet';
+import { QrCode } from 'lucide-react';
+import EntitlementBanner, { type SubscriptionSnapshotView } from '../features/admin/billing/EntitlementBanner';
+import MembershipsList from '../features/people/components/MembershipsList';
+import type { MyFarmDto } from '../features/onboarding/qr/inviteApi';
 import { PlotMap } from '../features/context/components/PlotMap';
-import { getDateKey } from '../domain/system/DateKeyService';
-import { createInitialScheduleInstance } from '../domain/planning/PlanEngine';
-import { getScheduleById, getSchedulesForCrop } from '../data/scheduleLibrary';
+import { getDateKey } from '../core/domain/services/DateKeyService';
+import { createInitialScheduleInstance } from '../features/scheduler/planning/ClientPlanEngine';
+import { getTemplateById as getScheduleById, getTemplatesForCrop as getSchedulesForCrop } from '../infrastructure/reference/TemplateCatalog';
 import { useLanguage } from '../i18n/LanguageContext';
+import { useAuth } from '../app/providers/AuthProvider';
 import { idGenerator } from '../core/domain/services/IdGenerator';
 import { systemClock } from '../core/domain/services/Clock';
 import ElectricityTimingConfigurator from '../features/profile/components/ElectricityTimingConfigurator';
+import { SoilHealthReportsManager } from '../features/profile/components/SoilHealthReportsManager';
+import { VarietySelector } from '../features/context/components/VarietySelector';
+
+
 
 // Identity verification status for farmer ID
 type IdentityStatus = 'NOT_STARTED' | 'PENDING' | 'VERIFIED' | 'REJECTED';
@@ -55,6 +68,8 @@ interface ProfilePageProps {
     onDeletePerson?: (id: string) => void;
     onOpenScheduleLibrary?: (cropId?: string) => void;
     onOpenFinanceManager?: () => void;
+    onOpenReferrals?: () => void;
+    onOpenQrDemo?: () => void;
 }
 
 // --- CONSTANTS ---
@@ -128,11 +143,7 @@ const PlotWizard: React.FC<PlotWizardProps> = ({ crop, profile, onSave, onCancel
     const [nurseryName, setNurseryName] = useState('');
     const [plantAge, setPlantAge] = useState<number | ''>('');
 
-    const [irrMethod, setIrrMethod] = useState<'Drip' | 'Flood' | 'Sprinkler' | 'None'>('Drip');
-    const [linkedMotorId, setLinkedMotorId] = useState('');
-    const [dripPipeSize, setDripPipeSize] = useState('16mm');
-    const [dripHasFilter, setDripHasFilter] = useState(true);
-    const [dripFlow, setDripFlow] = useState<number | ''>('');
+    
 
     const [selectedMachineIds, setSelectedMachineIds] = useState<string[]>([]);
     const availableSchedules = useMemo(
@@ -206,14 +217,8 @@ const PlotWizard: React.FC<PlotWizardProps> = ({ crop, profile, onSave, onCancel
         };
 
         const infrastructure: PlotInfrastructure = {
-            irrigationMethod: irrMethod,
-            linkedMotorId: linkedMotorId || undefined,
-            linkedMachineryIds: selectedMachineIds,
-            dripDetails: irrMethod === 'Drip' ? {
-                pipeSize: dripPipeSize,
-                hasFilter: dripHasFilter,
-                flowRatePerHour: Number(dripFlow)
-            } : undefined
+            irrigationMethod: 'None',
+            linkedMachineryIds: selectedMachineIds
         };
 
         const plotId = `p_${idGenerator.generate()}`;
@@ -272,13 +277,13 @@ const PlotWizard: React.FC<PlotWizardProps> = ({ crop, profile, onSave, onCancel
                         <div>
                             <h3 className="font-bold text-slate-800">{t('profile.addPlotTo')} {crop.name}</h3>
                             <div className="flex gap-1 mt-1">
-                                {[1, 2, 3, 4].map(s => (
+                                {[1, 2, 3].map(s => (
                                     <div key={s} className={`h-1.5 w-8 rounded-full ${s <= step ? 'bg-emerald-500' : 'bg-slate-200'}`} />
                                 ))}
                             </div>
                         </div>
                     </div>
-                    <span className="text-xs font-bold text-slate-400 uppercase">{t('profile.step')} {step}/4</span>
+                    <span className="text-xs font-bold text-slate-400 uppercase">{t('profile.step')} {step}/3</span>
                 </div>
 
                 <div className="p-6 overflow-y-auto flex-1">
@@ -329,14 +334,14 @@ const PlotWizard: React.FC<PlotWizardProps> = ({ crop, profile, onSave, onCancel
                             </div>
                             <div>
                                 <label className="block text-xs font-bold text-slate-400 uppercase mb-1">{t('profile.variety')}</label>
-                                <input
-                                    className={`w-full p-3 border rounded-xl font-bold outline-none focus:border-emerald-500 ${errors.variety ? 'border-red-500 bg-red-50' : 'border-slate-200'}`}
-                                    placeholder="e.g. Super Sonaka"
+                                <VarietySelector 
+                                    cropName={crop.name}
                                     value={variety}
-                                    onChange={e => {
-                                        setVariety(e.target.value);
+                                    onChange={(v) => {
+                                        setVariety(v);
                                         if (errors.variety) setErrors({ ...errors, variety: '' });
                                     }}
+                                    error={errors.variety}
                                 />
                                 <p className="text-slate-400 text-xs mt-1">Or provide seed/nursery name in next step</p>
                             </div>
@@ -452,84 +457,8 @@ const PlotWizard: React.FC<PlotWizardProps> = ({ crop, profile, onSave, onCancel
                         </div>
                     )}
 
-                    {/* STEP 3: INFRASTRUCTURE */}
+                    {/* STEP 3: SCHEDULE & MACHINERY */}
                     {step === 3 && (
-                        <div className="space-y-5 animate-in slide-in-from-right-4">
-                            <div>
-                                <label className="block text-xs font-bold text-slate-400 uppercase mb-2">{t('profile.irrigationMethod')}</label>
-                                <div className="grid grid-cols-2 gap-2">
-                                    {(['Drip', 'Flood', 'Sprinkler', 'None'] as const).map(m => (
-                                        <button
-                                            key={m}
-                                            onClick={() => setIrrMethod(m)}
-                                            className={`py-3 rounded-xl border font-bold text-sm transition-all ${irrMethod === m ? 'bg-blue-50 border-blue-200 text-blue-700' : 'bg-white border-slate-200 text-slate-500'}`}
-                                        >
-                                            {irrMethodLabels[m]}
-                                        </button>
-                                    ))}
-                                </div>
-                            </div>
-
-                            {irrMethod !== 'None' && (
-                                <div>
-                                    <label className="block text-xs font-bold text-slate-400 uppercase mb-1">{t('profile.linkedMotor')}</label>
-                                    <select
-                                        className="w-full p-3 border border-slate-200 rounded-xl bg-white outline-none"
-                                        value={linkedMotorId}
-                                        onChange={e => setLinkedMotorId(e.target.value)}
-                                    >
-                                        <option value="">{t('profile.selectMotor')}</option>
-                                        {profile.motors.map(m => (
-                                            <option key={m.id} value={m.id}>{m.name} ({m.hp}HP)</option>
-                                        ))}
-                                    </select>
-                                </div>
-                            )}
-
-                            {irrMethod === 'Drip' && (
-                                <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-3">
-                                    <h4 className="text-xs font-bold text-slate-500 uppercase flex items-center gap-1">
-                                        <Droplets size={12} /> {t('profile.dripDetails')}
-                                    </h4>
-                                    <div className="flex gap-3">
-                                        <div className="flex-1">
-                                            <label className="text-[10px] font-bold text-slate-400">{t('profile.pipeSize')}</label>
-                                            <select
-                                                className="w-full mt-1 p-2 rounded-lg border border-slate-200 text-sm font-bold"
-                                                value={dripPipeSize}
-                                                onChange={e => setDripPipeSize(e.target.value)}
-                                            >
-                                                <option value="12mm">12mm</option>
-                                                <option value="16mm">16mm</option>
-                                                <option value="20mm">20mm</option>
-                                                <option value="25mm">25mm</option>
-                                            </select>
-                                        </div>
-                                        <div className="flex-1">
-                                            <label className="text-[10px] font-bold text-slate-400">{t('profile.filter')}</label>
-                                            <div className="flex mt-1">
-                                                <button onClick={() => setDripHasFilter(true)} className={`flex-1 py-2 text-xs font-bold rounded-l-lg border ${dripHasFilter ? 'bg-emerald-500 text-white border-emerald-500' : 'bg-white border-slate-200'}`}>{t('common.yes')}</button>
-                                                <button onClick={() => setDripHasFilter(false)} className={`flex-1 py-2 text-xs font-bold rounded-r-lg border ${!dripHasFilter ? 'bg-slate-500 text-white border-slate-500' : 'bg-white border-slate-200'}`}>{t('common.no')}</button>
-                                            </div>
-                                        </div>
-                                    </div>
-                                    <div>
-                                        <label className="text-[10px] font-bold text-slate-400">{t('profile.flowRate')}</label>
-                                        <input
-                                            type="number"
-                                            className="w-full mt-1 p-2 rounded-lg border border-slate-200 text-sm font-bold"
-                                            placeholder="Optional (e.g. 8000)"
-                                            value={dripFlow}
-                                            onChange={e => setDripFlow(parseFloat(e.target.value))}
-                                        />
-                                    </div>
-                                </div>
-                            )}
-                        </div>
-                    )}
-
-                    {/* STEP 4: MACHINERY */}
-                    {step === 4 && (
                         <div className="space-y-4 animate-in slide-in-from-right-4">
                             <div className="rounded-2xl border border-emerald-200 bg-emerald-50/40 p-4">
                                 <div className="flex items-center justify-between gap-3 mb-3">
@@ -552,10 +481,7 @@ const PlotWizard: React.FC<PlotWizardProps> = ({ crop, profile, onSave, onCancel
                                                     setSelectedTemplateId(template.id);
                                                     if (errors.schedule) setErrors({ ...errors, schedule: '' });
                                                 }}
-                                                className={`w-full text-left rounded-xl border px-3 py-2.5 transition-all ${isSelected
-                                                    ? 'bg-white border-emerald-400 shadow-sm'
-                                                    : 'bg-white/70 border-emerald-200 hover:bg-white'
-                                                    }`}
+                                                className={`w-full text-left rounded-xl border px-3 py-2.5 transition-all ${isSelected ? 'bg-emerald-50 border-emerald-500 shadow-sm ring-1 ring-emerald-500' : 'bg-white/70 border-slate-200 hover:bg-white border-dashed'}`}
                                             >
                                                 <div className="flex items-start justify-between gap-3">
                                                     <div className="min-w-0">
@@ -570,7 +496,7 @@ const PlotWizard: React.FC<PlotWizardProps> = ({ crop, profile, onSave, onCancel
                                                 <div className="flex items-center gap-3 mt-2 text-[10px] font-bold text-slate-500 uppercase tracking-wide">
                                                     <span>{template.totalDurationDays || '-'} days</span>
                                                     <span>{template.followersCount || 0} followers</span>
-                                                    {isSelected && <span className="text-emerald-700">Selected</span>}
+                                                    {isSelected && <span className="text-emerald-700 flex items-center gap-1 bg-white px-2 py-0.5 rounded border border-emerald-200"><CheckCircle2 size={12}/> Selected</span>}
                                                 </div>
                                             </button>
                                         );
@@ -945,10 +871,14 @@ const WaterSourceWizard: React.FC<WaterSourceWizardProps> = ({ profile, onSave, 
         hp: number;
         phase: '1' | '3';
         powerSourceType: 'MSEB' | 'Solar' | 'Generator';
-    }>>([{ name: '', hp: 5, phase: '3', powerSourceType: 'MSEB' }]);
+        hasDrip: boolean;
+        dripPipeSize: string;
+        dripHasFilter: boolean;
+        dripFlow: string;
+    }>>([{ name: '', hp: 5, phase: '3', powerSourceType: 'MSEB', hasDrip: false, dripPipeSize: '16mm', dripHasFilter: true, dripFlow: '' }]);
 
     const addMotorSlot = () => {
-        setMotors([...motors, { name: '', hp: 5, phase: '3', powerSourceType: 'MSEB' }]);
+        setMotors([...motors, { name: '', hp: 5, phase: '3', powerSourceType: 'MSEB', hasDrip: false, dripPipeSize: '16mm', dripHasFilter: true, dripFlow: '' }]);
     };
 
     const removeMotorSlot = (index: number) => {
@@ -989,6 +919,8 @@ const WaterSourceWizard: React.FC<WaterSourceWizardProps> = ({ profile, onSave, 
                 phase: m.phase,
                 powerSourceType: m.powerSourceType,
                 linkedWaterSourceId: sourceId,
+                dripDetails: m.hasDrip ? { pipeSize: m.dripPipeSize, hasFilter: m.dripHasFilter, flowRatePerHour: Number(m.dripFlow) || undefined } : undefined,
+                linkedPlotIds: [],
                 schedule: { windowStart: '22:00', windowEnd: '06:00', days: ['Daily'] as string[], rotationType: 'Weekly' as const }
             }));
 
@@ -1125,6 +1057,46 @@ const WaterSourceWizard: React.FC<WaterSourceWizardProps> = ({ profile, onSave, 
                                                     </select>
                                                 </div>
                                             </div>
+                                            {/* Drip Configuration */}
+                                            <div className="pt-2 border-t border-slate-200">
+                                                <div className="flex items-center justify-between mb-2">
+                                                    <label className="text-[10px] font-bold text-slate-500 uppercase flex items-center gap-1">
+                                                        <Droplets size={12} /> Drip Configuration
+                                                    </label>
+                                                    <div className="flex bg-slate-200 rounded-lg p-0.5">
+                                                        <button onClick={() => updateMotor(index, 'hasDrip', true)} className={`px-2 py-1 text-[10px] font-bold rounded-md ${motor.hasDrip ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500'}`}>Yes</button>
+                                                        <button onClick={() => updateMotor(index, 'hasDrip', false)} className={`px-2 py-1 text-[10px] font-bold rounded-md ${!motor.hasDrip ? 'bg-white text-slate-700 shadow-sm' : 'text-slate-500'}`}>No</button>
+                                                    </div>
+                                                </div>
+                                                
+                                                {motor.hasDrip && (
+                                                    <div className="grid grid-cols-2 gap-2 mt-2 bg-white p-2 border border-slate-100 rounded-xl">
+                                                        <div>
+                                                            <label className="text-[10px] font-bold text-slate-400">Pipe Size</label>
+                                                            <select
+                                                                className="w-full mt-1 p-2 border border-slate-200 rounded-lg text-xs bg-slate-50"
+                                                                value={motor.dripPipeSize}
+                                                                onChange={e => updateMotor(index, 'dripPipeSize', e.target.value)}
+                                                            >
+                                                                <option value="12mm">12mm</option>
+                                                                <option value="16mm">16mm</option>
+                                                                <option value="20mm">20mm</option>
+                                                            </select>
+                                                        </div>
+                                                        <div>
+                                                            <label className="text-[10px] font-bold text-slate-400">Flow Rate L/hr</label>
+                                                            <input
+                                                                type="number"
+                                                                placeholder="e.g. 8000"
+                                                                className="w-full mt-1 p-2 border border-slate-200 rounded-lg text-xs outline-none bg-slate-50"
+                                                                value={motor.dripFlow}
+                                                                onChange={e => updateMotor(index, 'dripFlow', e.target.value)}
+                                                            />
+                                                        </div>
+                                                    </div>
+                                                )}
+                                            </div>
+
                                         </div>
                                     ))}
 
@@ -1282,38 +1254,60 @@ const UtilitiesManager = ({ profile, onUpdate }: { profile: FarmerProfile, onUpd
                                     </div>
                                 </div>
 
-                                {/* Expanded motors list */}
+                                
+                                {/* Expanded motors list (Visual Link Tree) */}
                                 {isExpanded && (
-                                    <div className="border-t border-slate-100 bg-slate-50 p-4 space-y-2">
-                                        {linkedMotors.length === 0 ? (
-                                            <p className="text-sm text-slate-400 text-center py-2">
-                                                No motors configured for this source
-                                            </p>
-                                        ) : (
-                                            linkedMotors.map(motor => (
-                                                <div key={motor.id} className="bg-white p-3 rounded-xl border border-slate-200 flex justify-between items-center">
-                                                    <div className="flex items-center gap-3">
-                                                        <div className="p-1.5 bg-slate-800 text-white rounded-lg">
-                                                            <Settings2 size={16} />
-                                                        </div>
-                                                        <div>
-                                                            <p className="font-bold text-slate-700 text-sm">{motor.name}</p>
-                                                            <p className="text-xs text-slate-500">
-                                                                {motor.hp}HP • {motor.phase} Phase • {motor.powerSourceType}
-                                                            </p>
+                                    <div className="bg-slate-50 p-4 border-t border-slate-100 flex pb-5">
+                                        <div className="w-6 border-l-2 border-slate-300 border-b-2 rounded-bl-xl ml-2 mb-8 mr-4 self-stretch"></div>
+                                        <div className="flex-1 space-y-3 mt-4">
+                                            {linkedMotors.length === 0 ? (
+                                                <p className="text-sm text-slate-400 py-2">No motors linked.</p>
+                                            ) : (
+                                                linkedMotors.map(motor => (
+                                                    <div key={motor.id} className="bg-white p-3 rounded-xl border border-slate-200 shadow-sm relative group">
+                                                        {/* Connector line for multiple items */}
+                                                        <div className="absolute -left-5 top-6 w-5 border-b-2 border-slate-300"></div>
+                                                        
+                                                        <div className="flex justify-between items-start">
+                                                            <div className="flex items-start gap-3">
+                                                                <div className="p-2 bg-slate-800 text-white rounded-xl shadow-inner mt-1">
+                                                                    <Settings2 size={18} />
+                                                                </div>
+                                                                <div>
+                                                                    <p className="font-bold text-slate-800 text-sm">{motor.name}</p>
+                                                                    <p className="text-xs text-slate-500 mb-1">
+                                                                        {motor.hp}HP • {motor.phase} Phase • {motor.powerSourceType}
+                                                                    </p>
+                                                                    {motor.dripDetails && (
+                                                                        <div className="flex items-center gap-1.5 text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-1 rounded-md border border-emerald-100 inline-flex mt-1">
+                                                                            <Droplets size={10} />
+                                                                            Drip: {motor.dripDetails.pipeSize} {motor.dripDetails.hasFilter ? '• Filtered' : ''}
+                                                                        </div>
+                                                                    )}
+                                                                </div>
+                                                            </div>
+                                                            <div className="flex flex-col gap-2 items-end">
+                                                                <button
+                                                                    onClick={() => deleteMotor(motor.id)}
+                                                                    className="p-1.5 text-slate-300 hover:text-red-500 rounded-lg hover:bg-red-50 transition-colors"
+                                                                >
+                                                                    <Trash2 size={16} />
+                                                                </button>
+                                                                <button
+                                                                    onClick={(e) => { e.stopPropagation(); alert('Link to plot functionality coming soon'); }}
+                                                                    className="px-2 py-1 text-[10px] font-bold text-slate-600 bg-slate-100 hover:bg-emerald-50 hover:text-emerald-700 border hover:border-emerald-200 rounded-lg transition-colors flex items-center gap-1 opacity-0 group-hover:opacity-100"
+                                                                >
+                                                                    <MapPin size={10} /> Link to Plot
+                                                                </button>
+                                                            </div>
                                                         </div>
                                                     </div>
-                                                    <button
-                                                        onClick={() => deleteMotor(motor.id)}
-                                                        className="p-1.5 text-slate-300 hover:text-red-500"
-                                                    >
-                                                        <Trash2 size={14} />
-                                                    </button>
-                                                </div>
-                                            ))
-                                        )}
+                                                ))
+                                            )}
+                                        </div>
                                     </div>
                                 )}
+
                             </div>
                         );
                     })
@@ -1327,9 +1321,10 @@ const UtilitiesManager = ({ profile, onUpdate }: { profile: FarmerProfile, onUpd
 
 // --- MAIN PAGE LAYOUT ---
 
-const ProfilePage: React.FC<ProfilePageProps> = ({ profile, crops, onUpdateProfile, onUpdateCrops, onAddPerson, onDeletePerson, onOpenScheduleLibrary, onOpenFinanceManager }) => {
+const ProfilePage: React.FC<ProfilePageProps> = ({ profile, crops, onUpdateProfile, onUpdateCrops, onAddPerson, onDeletePerson, onOpenScheduleLibrary, onOpenFinanceManager, onOpenReferrals, onOpenQrDemo }) => {
     const { t } = useLanguage();
-    const [activeTab, setActiveTab] = useState<'identity' | 'structure' | 'utils' | 'plan' | 'machines' | 'intelligence' | 'people'>('structure');
+    const { logout } = useAuth();
+    const [activeTab, setActiveTab] = useState<'identity' | 'structure' | 'utils' | 'plan' | 'machines' | 'health' | 'intelligence' | 'people'>('structure');
 
     // Crop & Plot State (Reused from previous, simplified)
     const [isAddingCrop, setIsAddingCrop] = useState(false);
@@ -1428,18 +1423,41 @@ const ProfilePage: React.FC<ProfilePageProps> = ({ profile, crops, onUpdateProfi
     const deleteCrop = (id: string) => onUpdateCrops(crops.filter(c => c.id !== id));
     const deletePlot = (cId: string, pId: string) => onUpdateCrops(crops.map(c => c.id === cId ? { ...c, plots: c.plots.filter(p => p.id !== pId) } : c));
 
-    const TabItem = ({ id, label, icon }: { id: typeof activeTab, label: string, icon: React.ReactNode }) => (
-        <button
-            onClick={() => setActiveTab(id)}
-            className={`flex items-center gap-3 w-full p-3 rounded-xl text-left transition-all ${activeTab === id ? 'bg-emerald-50 text-emerald-800 border border-emerald-100 shadow-sm' : 'text-slate-500 hover:bg-white'}`}
-        >
-            <div className={`${activeTab === id ? 'text-emerald-600' : 'text-slate-400'}`}>{icon}</div>
-            <span className="text-sm font-bold">{label}</span>
-            {activeTab === id && <ChevronRight size={16} className="ml-auto text-emerald-400" />}
-        </button>
-    );
+    // Sidebar collapse (web only). Persists across reloads so returning users
+    // keep their preferred layout. On mobile (<lg) the sidebar stacks above
+    // content and this flag is ignored so the Android/small-screen flow is
+    // unchanged.
+    const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(() => {
+        if (typeof window === 'undefined') return false;
+        return window.localStorage.getItem('shramsafal_setup_sidebar_collapsed') === '1';
+    });
+    React.useEffect(() => {
+        window.localStorage.setItem('shramsafal_setup_sidebar_collapsed', sidebarCollapsed ? '1' : '0');
+    }, [sidebarCollapsed]);
+
+    const TabItem = ({ id, label, icon }: { id: typeof activeTab, label: string, icon: React.ReactNode }) => {
+        const isActive = activeTab === id;
+        return (
+            <button
+                onClick={() => setActiveTab(id)}
+                title={sidebarCollapsed ? label : undefined}
+                className={`flex items-center w-full rounded-xl text-left transition-all
+                    ${sidebarCollapsed ? 'lg:justify-center lg:p-2 gap-3 p-3' : 'gap-3 p-3'}
+                    ${isActive ? 'bg-emerald-50 text-emerald-800 border border-emerald-100 shadow-sm' : 'text-slate-500 hover:bg-white'}`}
+            >
+                <div className={`${isActive ? 'text-emerald-600' : 'text-slate-400'}`}>{icon}</div>
+                <span className={`text-sm font-bold ${sidebarCollapsed ? 'lg:hidden' : ''}`}>{label}</span>
+                {isActive && !sidebarCollapsed && <ChevronRight size={16} className="ml-auto text-emerald-400 hidden lg:block" />}
+                {isActive && !sidebarCollapsed && <ChevronRight size={16} className="ml-auto text-emerald-400 lg:hidden" />}
+            </button>
+        );
+    };
 
     const [showMemberWizard, setShowMemberWizard] = useState(false);
+    const [showInviteQr, setShowInviteQr] = useState(false);
+    const [myFarm, setMyFarm] = useState<{ farmId: string; name: string; role: string; subscription: SubscriptionSnapshotView | null } | null>(null);
+    const [myMemberships, setMyMemberships] = useState<MyFarmDto[]>([]);
+    const [farmLookupError, setFarmLookupError] = useState<string | null>(null);
 
     // --- HANDLERS ---
     const handleAddMember = (member: any) => {
@@ -1447,8 +1465,90 @@ const ProfilePage: React.FC<ProfilePageProps> = ({ profile, crops, onUpdateProfi
         setShowMemberWizard(false);
     };
 
+    // When the owner taps "Share farm QR" we need the real server farmId,
+    // not the localStorage phone string. /shramsafal/farms/mine returns
+    // that. Lazy-load on first open.
+    const handleOpenInviteQr = React.useCallback(async () => {
+        setFarmLookupError(null);
+        if (myFarm) {
+            setShowInviteQr(true);
+            return;
+        }
+        try {
+            const { getMyFarms } = await import('../features/onboarding/qr/inviteApi');
+            const farms = await getMyFarms();
+            if (farms.length === 0) {
+                setFarmLookupError('You do not own a farm yet. Ask for help to set one up.');
+                return;
+            }
+            const ownerFarm = farms.find(f => f.role === 'PrimaryOwner' || f.role === 'SecondaryOwner') ?? farms[0];
+            setMyFarm({
+                farmId: ownerFarm.farmId,
+                name: ownerFarm.name,
+                role: ownerFarm.role,
+                subscription: ownerFarm.subscription ?? null,
+            });
+            setShowInviteQr(true);
+        } catch (err) {
+            setFarmLookupError(err instanceof Error ? err.message : 'Could not load your farm.');
+        }
+    }, [myFarm]);
+
+    // Load the farm snapshot on mount so the entitlement banner shows
+    // without waiting for the owner to tap "Share farm QR" first.
+    React.useEffect(() => {
+        let cancelled = false;
+        (async () => {
+            try {
+                const { getMyFarms } = await import('../features/onboarding/qr/inviteApi');
+                const farms = await getMyFarms();
+                if (cancelled) return;
+                setMyMemberships(farms);
+                if (farms.length === 0) return;
+                const ownerFarm = farms.find(f => f.role === 'PrimaryOwner' || f.role === 'SecondaryOwner') ?? farms[0];
+                setMyFarm(prev => prev ?? {
+                    farmId: ownerFarm.farmId,
+                    name: ownerFarm.name,
+                    role: ownerFarm.role,
+                    subscription: ownerFarm.subscription ?? null,
+                });
+            } catch {
+                /* silent — user may not be authenticated yet */
+            }
+        })();
+        return () => { cancelled = true; };
+    }, []);
+
+    const handleExitMembership = React.useCallback(async (farmId: string, _farmName: string) => {
+        const { exitMembership, getMyFarms, isInviteApiError } = await import('../features/onboarding/qr/inviteApi');
+        try {
+            await exitMembership(farmId);
+            const refreshed = await getMyFarms();
+            setMyMemberships(refreshed);
+            if (myFarm?.farmId === farmId) {
+                setMyFarm(null);
+            }
+        } catch (err) {
+            const message = isInviteApiError(err) ? err.message : 'Exit failed.';
+            throw new Error(message);
+        }
+    }, [myFarm?.farmId]);
+
+    // Compute which memberships the caller can't exit — any PrimaryOwner
+    // farm where they're the sole PrimaryOwner. Client-side heuristic; the
+    // server is still the source of truth and will return 409 if we guess wrong.
+    const nonExitableFarmIds = React.useMemo(() => {
+        const ids = new Set<string>();
+        for (const m of myMemberships) {
+            if (m.role === 'PrimaryOwner') {
+                ids.add(m.farmId); // conservative: assume they are the last
+            }
+        }
+        return ids;
+    }, [myMemberships]);
+
     return (
-        <div className="pb-20">
+        <div className="max-w-4xl mx-auto px-4 sm:px-6 pt-4 pb-32">
 
             {/* MEMBER WIZARD */}
             {showMemberWizard && (
@@ -1456,6 +1556,21 @@ const ProfilePage: React.FC<ProfilePageProps> = ({ profile, crops, onUpdateProfi
                     onSave={handleAddMember}
                     onCancel={() => setShowMemberWizard(false)}
                 />
+            )}
+
+            {/* FARM INVITE QR SHEET */}
+            {myFarm && (
+                <FarmInviteQrSheet
+                    isOpen={showInviteQr}
+                    onClose={() => setShowInviteQr(false)}
+                    farmId={myFarm.farmId}
+                    farmName={myFarm.name}
+                />
+            )}
+            {farmLookupError && showInviteQr === false && (
+                <div className="fixed bottom-24 left-1/2 -translate-x-1/2 rounded-xl border border-rose-200 bg-rose-50 px-4 py-2 text-xs font-semibold text-rose-700 shadow-lg z-50">
+                    {farmLookupError}
+                </div>
             )}
 
             {/* Wizard Overlay */}
@@ -1502,33 +1617,74 @@ const ProfilePage: React.FC<ProfilePageProps> = ({ profile, crops, onUpdateProfi
                 </div>
             )}
 
-            <div className="flex flex-col md:flex-row gap-6">
+            <div className="flex flex-col lg:flex-row gap-6">
 
-                {/* SIDEBAR NAVIGATION */}
-                <div className="w-full md:w-64 flex-shrink-0">
+                {/* SIDEBAR NAVIGATION — full width on mobile/tablet (Android-like
+                    flow), side-rail on lg+ desktops. A collapse toggle appears
+                    only on lg+ so narrow viewports never lose content room. */}
+                <div className={`w-full flex-shrink-0 transition-[width] duration-200 ${sidebarCollapsed ? 'lg:w-16' : 'lg:w-64'}`}>
                     <div className="bg-slate-50/50 p-2 rounded-2xl border border-slate-200 space-y-1">
-                        <div className="px-3 py-2 text-xs font-bold text-slate-400 uppercase tracking-wider">{t('profile.setupHub')}</div>
+
+                        {/* Header row: section title + collapse toggle (desktop only) */}
+                        <div className="flex items-center justify-between">
+                            <div className={`px-3 py-2 text-xs font-bold text-slate-400 uppercase tracking-wider ${sidebarCollapsed ? 'lg:hidden' : ''}`}>
+                                {t('profile.setupHub')}
+                            </div>
+                            <button
+                                type="button"
+                                onClick={() => setSidebarCollapsed(v => !v)}
+                                title={sidebarCollapsed ? 'Expand menu' : 'Collapse menu'}
+                                aria-label={sidebarCollapsed ? 'Expand menu' : 'Collapse menu'}
+                                className="hidden lg:inline-flex items-center justify-center ml-auto mr-1 h-8 w-8 rounded-lg text-slate-400 hover:bg-white hover:text-emerald-600 transition-colors"
+                            >
+                                {sidebarCollapsed ? <PanelLeftOpen size={16} /> : <PanelLeftClose size={16} />}
+                            </button>
+                        </div>
+
                         <TabItem id="identity" label={t('profile.farmerIdentity')} icon={<User size={20} />} />
                         <TabItem id="structure" label={t('profile.cropsAndPlots')} icon={<Sprout size={20} />} />
                         <TabItem id="utils" label={t('profile.waterAndPower')} icon={<Zap size={20} />} />
                         {/* <TabItem id="plan" label="Irrigation Plan" icon={<CalendarDays size={20} />} /> */}
                         <TabItem id="machines" label={t('profile.machinery')} icon={<Tractor size={20} />} />
+                        <TabItem id="health" label="Soil & Crop Health" icon={<FlaskConical size={20} />} />
                         <TabItem id="intelligence" label={t('profile.intelligence')} icon={<BrainCircuit size={20} />} />
 
-                        <div className="px-3 py-2 text-xs font-bold text-slate-400 uppercase tracking-wider mt-4">Finance</div>
+                        <div className={`px-3 py-2 text-xs font-bold text-slate-400 uppercase tracking-wider mt-4 ${sidebarCollapsed ? 'lg:hidden' : ''}`}>Finance</div>
                         <button
                             onClick={onOpenFinanceManager}
-                            className="flex items-center gap-3 w-full p-3 rounded-xl text-left text-slate-500 hover:bg-white hover:text-emerald-700 transition-all group"
+                            title={sidebarCollapsed ? 'Finance Manager' : undefined}
+                            className={`flex items-center w-full rounded-xl text-left text-slate-500 hover:bg-white hover:text-emerald-700 transition-all group
+                                ${sidebarCollapsed ? 'lg:justify-center lg:p-2 gap-3 p-3' : 'gap-3 p-3'}`}
                         >
                             <div className="text-slate-400 group-hover:text-emerald-600"><BarChart3 size={20} /></div>
-                            <span className="text-sm font-bold">Finance Manager</span>
-                            <ArrowRight size={16} className="ml-auto text-slate-300 group-hover:text-emerald-400" />
+                            <span className={`text-sm font-bold ${sidebarCollapsed ? 'lg:hidden' : ''}`}>Finance Manager</span>
+                            <ArrowRight size={16} className={`ml-auto text-slate-300 group-hover:text-emerald-400 ${sidebarCollapsed ? 'lg:hidden' : ''}`} />
                         </button>
+
+                        {onOpenReferrals && (
+                            <>
+                                <div className={`px-3 py-2 text-xs font-bold text-slate-400 uppercase tracking-wider mt-4 ${sidebarCollapsed ? 'lg:hidden' : ''}`}>Growth</div>
+                                <button
+                                    onClick={onOpenReferrals}
+                                    title={sidebarCollapsed ? 'Referrals & Benefits' : undefined}
+                                    className={`flex items-center w-full rounded-xl text-left text-slate-500 hover:bg-white hover:text-emerald-700 transition-all group
+                                        ${sidebarCollapsed ? 'lg:justify-center lg:p-2 gap-3 p-3' : 'gap-3 p-3'}`}
+                                >
+                                    <div className="text-slate-400 group-hover:text-emerald-600"><Medal size={20} /></div>
+                                    <div className={`min-w-0 ${sidebarCollapsed ? 'lg:hidden' : ''}`}>
+                                        <span className="text-sm font-bold">रेफरल्स · Referrals</span>
+                                        <span className="block text-[10px] text-slate-400">& Benefits</span>
+                                    </div>
+                                    <ArrowRight size={16} className={`ml-auto text-slate-300 group-hover:text-emerald-400 ${sidebarCollapsed ? 'lg:hidden' : ''}`} />
+                                </button>
+                            </>
+                        )}
+
                     </div>
                 </div>
 
                 {/* CONTENT AREA */}
-                <div className="flex-1">
+                <div className="flex-1 min-w-0">
 
                     {/* 1. IDENTITY */}
                     {activeTab === 'identity' && (
@@ -1606,10 +1762,10 @@ const ProfilePage: React.FC<ProfilePageProps> = ({ profile, crops, onUpdateProfi
                                             )}
                                         </div>
 
-                                        <div className="flex-1">
-                                            <div className="flex items-center gap-2 mb-1">
-                                                <h2 className="text-2xl font-black text-slate-800">{profile.name || '—'}</h2>
-                                                <span className="bg-emerald-100 text-emerald-800 text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wide border border-emerald-200">
+                                        <div className="flex-1 min-w-0">
+                                            <div className="flex flex-wrap items-center gap-x-2 gap-y-1 mb-1">
+                                                <h2 className="text-2xl font-black text-slate-800 break-words">{profile.name || '—'}</h2>
+                                                <span className="bg-emerald-100 text-emerald-800 text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wide border border-emerald-200 whitespace-nowrap">
                                                     {t('profile.primaryOwner')}
                                                 </span>
                                             </div>
@@ -1635,7 +1791,7 @@ const ProfilePage: React.FC<ProfilePageProps> = ({ profile, crops, onUpdateProfi
                                     {/* DETAILED FIELDS - Always visible */}
                                     <div className="mt-6 pt-6 border-t border-slate-100">
                                         <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wide mb-4">Identity Details</h4>
-                                        <div className="grid grid-cols-2 gap-4">
+                                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                             <div className="bg-slate-50 rounded-xl p-3">
                                                 <p className="text-[10px] font-bold text-slate-400 uppercase">Full Name</p>
                                                 <p className="text-sm font-bold text-slate-700">{profile.name || '—'}</p>
@@ -1648,10 +1804,7 @@ const ProfilePage: React.FC<ProfilePageProps> = ({ profile, crops, onUpdateProfi
                                                 <p className="text-[10px] font-bold text-slate-400 uppercase">Village / Taluka / District</p>
                                                 <p className="text-sm font-bold text-slate-700">{profile.village || '—'}</p>
                                             </div>
-                                            <div className="bg-slate-50 rounded-xl p-3">
-                                                <p className="text-[10px] font-bold text-slate-400 uppercase">Farm Role</p>
-                                                <p className="text-sm font-bold text-slate-700">Primary Owner</p>
-                                            </div>
+                                            
                                             <div className="bg-slate-50 rounded-xl p-3">
                                                 <p className="text-[10px] font-bold text-slate-400 uppercase">Land Record (7/12)</p>
                                                 <p className="text-sm font-bold text-slate-500 italic">Not uploaded</p>
@@ -1697,23 +1850,40 @@ const ProfilePage: React.FC<ProfilePageProps> = ({ profile, crops, onUpdateProfi
                                             );
                                         })()}
                                     </div>
+
+                                    {/* LOGOUT ACTION */}
+                                    <div className="mt-4 pt-4 border-t border-slate-100 flex justify-center">
+                                        <button
+                                            onClick={logout}
+                                            className="text-red-500 font-bold text-sm flex items-center gap-2 px-6 py-3 rounded-xl hover:bg-red-50 transition-colors"
+                                        >
+                                            <LogOut size={16} /> Log Out
+                                        </button>
+                                    </div>
                                 </div>
                             </div>
 
-                            <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100">
-                                <div className="flex items-center justify-between">
-                                    <div>
-                                        <h3 className="text-lg font-bold text-slate-800">Finance Manager</h3>
-                                        <p className="text-xs text-slate-500 mt-1">Ledger, Price Book, Review Inbox, Reports and Finance Settings.</p>
-                                    </div>
-                                    <button
-                                        onClick={() => onOpenFinanceManager && onOpenFinanceManager()}
-                                        className="rounded-xl bg-emerald-600 px-4 py-2 text-xs font-bold text-white"
-                                    >
-                                        Open
-                                    </button>
-                                </div>
-                            </div>
+                            
+
+                            {/* Phase 5 entitlement banner — only renders for owners with
+                                subscription trouble or a trial. Workers never see this. */}
+                            {myFarm && (
+                                <EntitlementBanner
+                                    subscription={myFarm.subscription}
+                                    role={myFarm.role}
+                                />
+                            )}
+
+                            {/* Phase 6: Your memberships list with exit flow.
+                                Only renders if the user has farms — zero-farm users
+                                already have the FirstFarmWizard open from AppContent. */}
+                            {myMemberships.length > 0 && (
+                                <MembershipsList
+                                    farms={myMemberships}
+                                    nonExitableFarmIds={nonExitableFarmIds}
+                                    onExit={handleExitMembership}
+                                />
+                            )}
 
                             {/* 2. FARM TEAM HIERARCHY (LAYERS 2 & 3) */}
                             <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100">
@@ -1725,18 +1895,44 @@ const ProfilePage: React.FC<ProfilePageProps> = ({ profile, crops, onUpdateProfi
                                         </h3>
                                         <p className="text-xs text-slate-400 mt-1">{t('profile.manageAccess')}</p>
                                     </div>
-                                    <button
-                                        onClick={() => setShowMemberWizard(true)}
-                                        className="bg-slate-900 text-white px-4 py-2 rounded-xl text-sm font-bold shadow-lg shadow-slate-200 active:scale-95 transition-all flex items-center gap-2"
-                                    >
-                                        <Plus size={16} /> {t('profile.addMember')}
-                                    </button>
+                                    <div className="flex items-center gap-2">
+                                        <button
+                                            onClick={handleOpenInviteQr}
+                                            className="bg-emerald-600 text-white px-4 py-2 rounded-xl text-sm font-bold shadow-lg shadow-emerald-200 active:scale-95 transition-all flex items-center gap-2"
+                                        >
+                                            <QrCode size={16} /> Share farm QR
+                                        </button>
+                                        <button
+                                            onClick={() => setShowMemberWizard(true)}
+                                            className="bg-white text-slate-900 border border-slate-200 px-4 py-2 rounded-xl text-sm font-bold shadow-sm active:scale-95 transition-all flex items-center gap-2"
+                                        >
+                                            <Plus size={16} /> {t('profile.addMember')}
+                                        </button>
+                                    </div>
                                 </div>
+
+                                {/* Prominent invite banner — visible when the team is empty so a first-time farmer knows the QR exists. */}
+                                {(!profile.operators || profile.operators.length === 0) && (
+                                    <button
+                                        onClick={handleOpenInviteQr}
+                                        className="mb-4 w-full text-left rounded-2xl border border-emerald-200 bg-gradient-to-r from-emerald-50 to-white px-4 py-4 shadow-sm hover:border-emerald-300 transition-colors"
+                                    >
+                                        <div className="flex items-center gap-3">
+                                            <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-emerald-600 text-white">
+                                                <QrCode size={20} />
+                                            </div>
+                                            <div className="flex-1 min-w-0">
+                                                <div className="font-bold text-emerald-800">कामगारांना जोडा · Add your workers</div>
+                                                <div className="text-xs text-emerald-700/80">Show them the farm QR. They scan, enter phone, done.</div>
+                                            </div>
+                                        </div>
+                                    </button>
+                                )}
 
                                 <div className="space-y-3">
                                     {/* Existing People or Dummies if none */}
-                                    {(profile.people && profile.people.length > 0) ? (
-                                        profile.people.map(person => {
+                                    {(profile.operators && profile.operators.length > 0) ? (
+                                        profile.operators.map(person => {
                                             const canLog = person.capabilities?.includes(OperatorCapability.LOG_DATA);
                                             return (
                                                 <div key={person.id} className="flex items-center gap-4 p-4 bg-white rounded-2xl border border-slate-100 shadow-sm hover:border-emerald-100 transition-all group">
@@ -1766,7 +1962,7 @@ const ProfilePage: React.FC<ProfilePageProps> = ({ profile, crops, onUpdateProfi
                                                                 const newCaps = canLog
                                                                     ? (person.capabilities || []).filter(c => c !== OperatorCapability.LOG_DATA)
                                                                     : [...(person.capabilities || []), OperatorCapability.LOG_DATA];
-                                                                const updatedPeople = profile.people!.map(p => p.id === person.id ? { ...p, capabilities: newCaps } : p);
+                                                                const updatedPeople = profile.operators!.map(p => p.id === person.id ? { ...p, capabilities: newCaps } as any : p);
                                                                 onUpdateProfile({ ...profile, people: updatedPeople });
                                                             }}
                                                             className={`cursor-pointer flex items-center gap-2 px-3 py-2 rounded-xl border transition-all select-none ${canLog ? 'bg-emerald-50 border-emerald-200' : 'bg-slate-50 border-slate-200 hover:bg-slate-100'}`}
@@ -1798,6 +1994,7 @@ const ProfilePage: React.FC<ProfilePageProps> = ({ profile, crops, onUpdateProfi
                                     )}
                                 </div>
                             </div>
+
                         </div>
                     )}
 
@@ -1868,23 +2065,49 @@ const ProfilePage: React.FC<ProfilePageProps> = ({ profile, crops, onUpdateProfi
                                                     <div className={`p-2 rounded-xl text-white shadow-sm ${crop.color}`}><CropSymbol name={crop.iconName} size="md" /></div>
                                                     <div><h3 className="font-bold text-slate-800">{crop.name}</h3><p className="text-xs text-slate-500">{crop.plots.length} {t('profile.plots')}</p></div>
                                                 </div>
-                                                <button onClick={() => deleteCrop(crop.id)} className="p-2 text-slate-300 hover:text-red-500"><Trash2 size={18} /></button>
+                                                
                                             </div>
                                             <div className="p-2">
-                                                <div className="mx-1 mb-2 rounded-xl border border-blue-100 bg-blue-50/70 px-3 py-2 flex items-center justify-between gap-2">
-                                                    <div>
-                                                        <p className="text-[10px] font-bold uppercase tracking-wider text-blue-700">Schedule Library</p>
-                                                        <p className="text-xs text-blue-800 font-semibold mt-0.5">
-                                                            Schedules available: {getSchedulesForCrop(crop.name).length}
-                                                        </p>
-                                                    </div>
-                                                    <button
-                                                        onClick={() => onOpenScheduleLibrary && onOpenScheduleLibrary(crop.id)}
-                                                        className="px-2.5 py-1.5 rounded-lg text-[11px] font-bold bg-white border border-blue-200 text-blue-700 hover:bg-blue-100 transition-colors"
-                                                    >
-                                                        View schedules
-                                                    </button>
-                                                </div>
+                                                {(() => {
+                                                    const activeSchedule = crop.activeScheduleId ? getScheduleById(crop.activeScheduleId) : null;
+                                                    const altCount = Math.max(0, getSchedulesForCrop(crop.name).length - 1);
+                                                    return (
+                                                        <div className="mx-1 mb-2 rounded-xl border border-emerald-100 bg-emerald-50/50 p-3">
+                                                            <div className="flex items-center justify-between mb-2">
+                                                                <p className="text-[10px] font-bold uppercase tracking-wider text-emerald-700 border border-emerald-200 px-1.5 py-0.5 rounded bg-white">Active Crop Schedule</p>
+                                                                <button 
+                                                                    onClick={() => onOpenScheduleLibrary && onOpenScheduleLibrary(crop.id)}
+                                                                    className="text-[10px] font-bold text-emerald-600 underline"
+                                                                >
+                                                                    {activeSchedule ? 'Change Schedule' : 'Browse Library'}
+                                                                </button>
+                                                            </div>
+                                                            {activeSchedule ? (
+                                                                <div className="flex items-start gap-3 bg-white p-2.5 rounded-lg border border-emerald-100 shadow-sm cursor-pointer hover:border-emerald-300 transition-colors"
+                                                                     onClick={() => onOpenScheduleLibrary && onOpenScheduleLibrary(crop.id)}
+                                                                >
+                                                                    <div className="p-1.5 bg-emerald-100 text-emerald-700 rounded-md mt-0.5">
+                                                                        <CalendarDays size={16} />
+                                                                    </div>
+                                                                    <div>
+                                                                        <p className="text-xs font-bold text-slate-800 leading-tight">{activeSchedule.name}</p>
+                                                                        <p className="text-[10px] text-slate-500 mt-1">{activeSchedule.totalDurationDays || '-'} Days {altCount > 0 ? `• ${altCount} Alternatives Available` : ''}</p>
+                                                                    </div>
+                                                                </div>
+                                                            ) : (
+                                                                <div className="flex items-center justify-between bg-orange-50 p-2.5 rounded-lg border border-orange-200" onClick={() => onOpenScheduleLibrary && onOpenScheduleLibrary(crop.id)}>
+                                                                    <div className="flex items-center gap-2">
+                                                                        <AlertTriangle size={14} className="text-orange-500" />
+                                                                        <p className="text-xs font-bold text-orange-700 leading-tight">No schedule selected</p>
+                                                                    </div>
+                                                                    <button className="px-2 py-1 bg-orange-500 hover:bg-orange-600 text-white rounded text-[10px] font-bold shadow-sm transition-colors">
+                                                                        Setup Now
+                                                                    </button>
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                    );
+                                                })()}
 
                                                 {crop.plots.map(p => (
                                                     <div key={p.id} className="flex justify-between items-center p-3 rounded-xl hover:bg-slate-50 group">
@@ -1942,6 +2165,9 @@ const ProfilePage: React.FC<ProfilePageProps> = ({ profile, crops, onUpdateProfi
 
                     {/* 5. MACHINERY */}
                     {activeTab === 'machines' && <MachineryManager profile={profile} onUpdate={onUpdateProfile} />}
+
+                    {/* 7. SOIL & CROP HEALTH */}
+                    {activeTab === 'health' && <SoilHealthReportsManager profile={profile} onUpdate={onUpdateProfile} />}
 
                     {/* 6. INTELLIGENCE */}
                     {activeTab === 'intelligence' && <VocabManager />}

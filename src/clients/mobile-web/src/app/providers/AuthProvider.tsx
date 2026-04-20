@@ -1,15 +1,23 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import { agriSyncClient, type AuthResponseDto } from '../../infrastructure/api/AgriSyncClient';
-import { clearAuthSession, getAuthSession, setAuthSession, type AuthSession } from '../../infrastructure/api/AuthTokenStore';
+import {
+    AUTH_SESSION_CHANGED_EVENT,
+    clearAuthSession,
+    getAuthSession,
+    setAuthSession,
+    type AuthSession
+} from '../../infrastructure/api/AuthTokenStore';
 
 interface AuthContextValue {
     session: AuthSession | null;
     isAuthenticated: boolean;
     isLoading: boolean;
-    loginError: string | null;
+    authError: string | null;
     login: (phone: string, password: string) => Promise<void>;
+    register: (phone: string, password: string, displayName: string) => Promise<void>;
     logout: () => void;
     refresh: () => Promise<void>;
+    clearAuthError: () => void;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -35,7 +43,7 @@ function hasSessionExpired(session: AuthSession): boolean {
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     const [session, setSession] = useState<AuthSession | null>(() => getAuthSession());
     const [isLoading, setIsLoading] = useState(false);
-    const [loginError, setLoginError] = useState<string | null>(null);
+    const [authError, setAuthError] = useState<string | null>(null);
 
     const syncFromStorage = useCallback(() => {
         setSession(getAuthSession());
@@ -55,7 +63,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             const next = mapSession(refreshed);
             setAuthSession(next);
             setSession(next);
-            setLoginError(null);
+            setAuthError(null);
         } catch {
             clearAuthSession();
             setSession(null);
@@ -85,13 +93,22 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             }
         };
 
+        const onAuthSessionChanged = () => {
+            syncFromStorage();
+        };
+
         window.addEventListener('storage', onStorage);
-        return () => window.removeEventListener('storage', onStorage);
+        window.addEventListener(AUTH_SESSION_CHANGED_EVENT, onAuthSessionChanged);
+
+        return () => {
+            window.removeEventListener('storage', onStorage);
+            window.removeEventListener(AUTH_SESSION_CHANGED_EVENT, onAuthSessionChanged);
+        };
     }, [syncFromStorage]);
 
     const login = useCallback(async (phone: string, password: string) => {
         setIsLoading(true);
-        setLoginError(null);
+        setAuthError(null);
         try {
             const response = await agriSyncClient.login({ phone, password });
             const next = mapSession(response);
@@ -99,28 +116,57 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             setSession(next);
         } catch (error) {
             console.error('[AuthProvider] Login failed', error);
-            setLoginError('Login failed. Check phone/password and try again.');
+            setAuthError('Login failed. Check phone/password and try again.');
             throw error;
         } finally {
             setIsLoading(false);
         }
     }, []);
 
+    const register = useCallback(async (phone: string, password: string, displayName: string) => {
+        setIsLoading(true);
+        setAuthError(null);
+        try {
+            const response = await agriSyncClient.register({
+                phone,
+                password,
+                displayName,
+                appId: 'shramsafal',
+                role: 'PrimaryOwner',
+            });
+            const next = mapSession(response);
+            setAuthSession(next);
+            setSession(next);
+        } catch (error) {
+            console.error('[AuthProvider] Registration failed', error);
+            setAuthError('Registration failed. Use a new phone number and try again.');
+            throw error;
+        } finally {
+            setIsLoading(false);
+        }
+    }, []);
+
+    const clearAuthError = useCallback(() => {
+        setAuthError(null);
+    }, []);
+
     const logout = useCallback(() => {
         clearAuthSession();
         setSession(null);
-        setLoginError(null);
+        setAuthError(null);
     }, []);
 
     const value = useMemo<AuthContextValue>(() => ({
         session,
         isAuthenticated: !!session?.accessToken,
         isLoading,
-        loginError,
+        authError,
         login,
+        register,
         logout,
         refresh,
-    }), [session, isLoading, loginError, login, logout, refresh]);
+        clearAuthError,
+    }), [session, isLoading, authError, login, register, logout, refresh, clearAuthError]);
 
     return (
         <AuthContext.Provider value={value}>

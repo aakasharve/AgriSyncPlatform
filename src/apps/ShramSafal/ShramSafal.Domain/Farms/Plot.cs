@@ -19,12 +19,14 @@ public sealed class Plot : Entity<Guid>
         Name = name;
         AreaInAcres = areaInAcres;
         CreatedAtUtc = createdAtUtc;
+        ModifiedAtUtc = createdAtUtc;
     }
 
     public FarmId FarmId { get; private set; }
     public string Name { get; private set; } = string.Empty;
     public decimal AreaInAcres { get; private set; }
     public DateTime CreatedAtUtc { get; private set; }
+    public DateTime ModifiedAtUtc { get; private set; }
 
     public static Plot Create(
         Guid id,

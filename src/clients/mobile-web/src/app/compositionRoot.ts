@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { CropProfile, InputMode } from '../types';
 
 // Feature Controllers
@@ -11,18 +11,22 @@ import { useLogCommands } from './hooks/useLogCommands';
 import { useVoiceRecorder } from '../features/voice/useVoiceRecorder';
 import { useWeatherMonitor } from '../features/weather/useWeatherMonitor';
 import { useLogContext } from './context/LogContext';
-import { GeminiClient } from '../infrastructure/ai/GeminiClient';
+import { BackendAiClient } from '../infrastructure/ai/BackendAiClient';
 import { weatherService } from '../infrastructure/weather/TomorrowIoWeatherService';
-import { VoiceDraftDispatcher } from '../application/services/VoiceDraftDispatcher';
+import { VoicePreprocessor } from '../infrastructure/voice/VoicePreprocessor';
+import type { LastSavedLogSummaryItem } from './uiRuntimeTypes';
 
 export interface AgriLogAppConfig {
     initialCrops: CropProfile[];
 }
 
+const GLOBAL_TOAST_EVENT = 'agrisync:toast';
+type GlobalToastDetail = { message: string; type: 'success' | 'error' };
+
 export const useAgriLogApp = ({ initialCrops }: AgriLogAppConfig) => {
     // --- 0. UI GLOBAL STATE (Hoisted) ---
     const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
-    const [lastSavedLogSummary, setLastSavedLogSummary] = useState<Array<{ cropName: string, count: number }>>([]);
+    const [lastSavedLogSummary, setLastSavedLogSummary] = useState<LastSavedLogSummaryItem[]>([]);
     const [lastSavedLogIds, setLastSavedLogIds] = useState<string[]>([]);
     const [mode, setMode] = useState<InputMode>('voice');
 
@@ -52,8 +56,8 @@ export const useAgriLogApp = ({ initialCrops }: AgriLogAppConfig) => {
     });
 
     // --- INFRASTRUCTURE ---
-    const parser = useMemo(() => new GeminiClient(), []);
-    const voiceDraftDispatcher = useMemo(() => new VoiceDraftDispatcher(), []);
+    const parser = useMemo(() => new BackendAiClient(), []);
+    const voicePreprocessor = useMemo(() => new VoicePreprocessor(), []);
 
     // --- 4. VOICE RECORDER (Producer) ---
     const voice = useVoiceRecorder({
@@ -65,9 +69,9 @@ export const useAgriLogApp = ({ initialCrops }: AgriLogAppConfig) => {
             setMode(newMode);
             if (newMode === 'voice') navigation.setMainView('log');
         },
-        onAutoSave: (log, prov) => voiceDraftDispatcher.emit(log, prov),
         parser,
-        logScope
+        logScope,
+        voicePreprocessor,
     });
 
     // --- 5. COMMANDS (Consumer) ---
@@ -95,15 +99,29 @@ export const useAgriLogApp = ({ initialCrops }: AgriLogAppConfig) => {
         setStatus: voice.setStatus,
         weatherProvider: weatherService
     });
+    const commandsRef = useRef(commands);
+    commandsRef.current = commands;
 
-    // Bridge event stream: voice -> dispatcher -> commands
     useEffect(() => {
-        const unsubscribe = voiceDraftDispatcher.subscribe((event) => {
-            void commands.handleAutoSave(event.draft, event.provenance);
-        });
+        const handleGlobalToast = (event: Event) => {
+            const detail = (event as CustomEvent<GlobalToastDetail>).detail;
+            if (!detail || typeof detail.message !== 'string' || detail.message.trim().length === 0) {
+                return;
+            }
 
-        return unsubscribe;
-    }, [voiceDraftDispatcher, commands.handleAutoSave]);
+            if (detail.type !== 'success' && detail.type !== 'error') {
+                return;
+            }
+
+            setToast({
+                message: detail.message,
+                type: detail.type,
+            });
+        };
+
+        window.addEventListener(GLOBAL_TOAST_EVENT, handleGlobalToast as EventListener);
+        return () => window.removeEventListener(GLOBAL_TOAST_EVENT, handleGlobalToast as EventListener);
+    }, []);
 
     // --- 6. WEATHER ---
     const weather = useWeatherMonitor({
@@ -112,8 +130,8 @@ export const useAgriLogApp = ({ initialCrops }: AgriLogAppConfig) => {
         setCrops: appData.setCrops,
         logScope,
         hasActiveLogContext,
-        activeCropId,
-        activePlotId,
+        activeCropId: activeCropId ?? null,
+        activePlotId: activePlotId ?? null,
         setError: voice.setError,
         provider: weatherService // Inject infrastructure
     });

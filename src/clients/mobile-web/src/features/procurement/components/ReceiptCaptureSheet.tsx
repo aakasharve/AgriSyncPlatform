@@ -1,14 +1,17 @@
 
 import React, { useState, useRef } from 'react';
 import { Camera, Upload, X, Check, Loader2, AlertTriangle, RefreshCw } from 'lucide-react';
-import { extractReceiptData } from '../../../services/receiptExtractionService';
+import { extractReceiptWithSession, VerificationStatus } from '../receipt/receiptExtractionClient';
 import { ReceiptExtractionResponse, ProcurementExpense, ExpenseScope, CropProfile, Plot } from '../../../types';
 import { ScopeSelectorRadio } from './ScopeSelectorRadio';
 import { procurementRepository } from '../../../services/procurementRepository';
 import { v4 as uuidv4 } from 'uuid';
-import { getDateKey } from '../../../domain/system/DateKeyService';
-import { financeService } from '../../finance/financeService';
+import { getDateKey } from '../../../core/domain/services/DateKeyService';
+import { financeCommandService } from '../../finance/financeCommandService';
 import { MoneyCategory } from '../../finance/finance.types';
+import { captureAttachment } from '../../../application/use-cases/CaptureAttachment';
+import { resolveFarmIdFromSyncState } from '../../../infrastructure/sync/SyncContext';
+import AllocationSelector from '../../finance/components/AllocationSelector';
 
 const mapExpenseCategoryToMoneyCategory = (category: string): MoneyCategory => {
     if (category === 'LABOUR') return 'Labour';
@@ -42,6 +45,20 @@ export const ReceiptCaptureSheet: React.FC<Props> = ({ onClose, onSave, crops, a
     // 3. User Edits (for correction)
     const [editedTotal, setEditedTotal] = useState<number>(0);
     const [editedVendor, setEditedVendor] = useState<string>('');
+    const [attachmentIds, setAttachmentIds] = useState<string[]>([]);
+    const [attachmentCaptureError, setAttachmentCaptureError] = useState<string | null>(null);
+    const [queuedExtractionMessage, setQueuedExtractionMessage] = useState<string | null>(null);
+    const [showAllocation, setShowAllocation] = useState(false);
+    const [savedCostEntryId, setSavedCostEntryId] = useState<string>('');
+
+    // 4. Verification state (two-lane progressive UX)
+    const [verificationStatus, setVerificationStatus] = useState<VerificationStatus | null>(null);
+    // Suggestions for fields the user has already edited — never auto-overwrite, just hint
+    const [suggestedTotal, setSuggestedTotal] = useState<number | null>(null);
+    const [suggestedVendor, setSuggestedVendor] = useState<string | null>(null);
+    // Whether the user has manually changed each field (guard against auto-overwrite)
+    const [userEditedTotal, setUserEditedTotal] = useState(false);
+    const [userEditedVendor, setUserEditedVendor] = useState(false);
 
     const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -50,6 +67,10 @@ export const ReceiptCaptureSheet: React.FC<Props> = ({ onClose, onSave, crops, a
     const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
         if (!file) return;
+
+        setAttachmentCaptureError(null);
+        setAttachmentIds([]);
+        void queueAttachmentCapture(file);
 
         const reader = new FileReader();
         reader.onloadend = () => {
@@ -60,26 +81,91 @@ export const ReceiptCaptureSheet: React.FC<Props> = ({ onClose, onSave, crops, a
         reader.readAsDataURL(file);
     };
 
+    const queueAttachmentCapture = async (file: File): Promise<void> => {
+        try {
+            const farmId = await resolveFarmIdFromSyncState(activePlotId);
+            if (!farmId) {
+                // Sync metadata not yet available — silently skip attachment queuing.
+                // Receipt AI extraction still runs. Attachment can be re-linked after first sync.
+                console.warn('[ReceiptCapture] Farm ID unavailable for attachment queue — skipping queue, extraction continues.');
+                return;
+            }
+
+            const queued = await captureAttachment({
+                source: 'file',
+                farmId,
+                linkedEntityId: farmId,
+                linkedEntityType: 'Farm',
+                file,
+                fileName: file.name,
+                mimeType: file.type
+            });
+
+            setAttachmentIds([queued.id]);
+        } catch (error) {
+            console.error('Attachment queue capture failed', error);
+            // Silent — attachment upload failure does not block receipt extraction or saving.
+        }
+    };
+
     const processImage = async (base64: string) => {
         setIsExtracting(true);
+        setVerificationStatus(null);
+        setQueuedExtractionMessage(null);
+        setSuggestedTotal(null);
+        setSuggestedVendor(null);
+        setUserEditedTotal(false);
+        setUserEditedVendor(false);
+
         try {
-            // Convert to pure base64 if needed by API (strip prefix)
-            const cleanBase64 = base64.split(',')[1];
-            const result = await extractReceiptData(cleanBase64);
+            const result = await extractReceiptWithSession(
+                base64,
+                (update) => {
+                    setVerificationStatus(update.status);
+
+                    if (update.status === 'verified' && update.updated) {
+                        const { grandTotal, vendorName } = update.updated;
+
+                        if (grandTotal !== undefined) {
+                            // Auto-apply if user hasn't touched the field; otherwise suggest
+                            setUserEditedTotal(prev => {
+                                if (!prev) setEditedTotal(grandTotal);
+                                else setSuggestedTotal(grandTotal);
+                                return prev;
+                            });
+                        }
+
+                        if (vendorName !== undefined) {
+                            setUserEditedVendor(prev => {
+                                if (!prev) setEditedVendor(vendorName);
+                                else setSuggestedVendor(vendorName);
+                                return prev;
+                            });
+                        }
+                    }
+                },
+            );
+
+            if (result.queued) {
+                setExtraction(null);
+                setQueuedExtractionMessage(result.message || 'Saved locally. Will process when online.');
+                return;
+            }
 
             setExtraction(result);
-
-            // Auto-fill state from specific result
             setEditedTotal(result.grandTotal || 0);
             setEditedVendor(result.vendorName || '');
-            if (result.suggestedScope !== 'UNKNOWN') setScope(result.suggestedScope);
+            if (result.suggestedScope && result.suggestedScope !== 'UNKNOWN') {
+                setScope(result.suggestedScope);
+            }
 
-            // Try to match crop if suggested
             if (result.suggestedCropName) {
                 const match = crops.find(c => c.name.toLowerCase().includes(result.suggestedCropName!.toLowerCase()));
                 if (match) setSelectedCropId(match.id);
             }
 
+            // Mark that verification is pending (poller has started)
+            setVerificationStatus('pending');
         } catch (e) {
             console.error(e);
             alert("Failed to process image. Please try manual entry.");
@@ -105,6 +191,7 @@ export const ReceiptCaptureSheet: React.FC<Props> = ({ onClose, onSave, crops, a
             grandTotal: editedTotal,
             paymentStatus: 'PAID', // Default assumption, editable later
             receiptImageUrl: image || undefined, // In real app, upload to storage first!
+            attachmentIds: attachmentIds.length > 0 ? attachmentIds : undefined,
             aiExtracted: true,
             userVerified: true,
             aiRawResponse: JSON.stringify(extraction)
@@ -113,7 +200,7 @@ export const ReceiptCaptureSheet: React.FC<Props> = ({ onClose, onSave, crops, a
         procurementRepository.saveExpense(newExpense);
 
         newExpense.lineItems.forEach((item) => {
-            financeService.createMoneyEventFromSource({
+            financeCommandService.createMoneyEventFromSource({
                 type: 'Procurement',
                 sourceId: `${newExpense.id}:${item.id}`,
                 dateTime: new Date(newExpense.date).toISOString(),
@@ -128,9 +215,18 @@ export const ReceiptCaptureSheet: React.FC<Props> = ({ onClose, onSave, crops, a
                 paymentMode: newExpense.paymentStatus === 'CREDIT' ? 'Credit' : 'Cash',
                 vendorName: newExpense.vendorName,
                 createdByUserId: newExpense.operatorId || 'owner',
-                attachments: newExpense.receiptImageUrl ? [newExpense.receiptImageUrl] : []
+                attachments: newExpense.attachmentIds
+                    ?? (newExpense.receiptImageUrl ? [newExpense.receiptImageUrl] : [])
             });
         });
+
+        // If farm-scoped, show allocation step
+        if (scope === 'FARM' && crops.flatMap(c => c.plots).length > 1) {
+            setSavedCostEntryId(newExpense.id);
+            setShowAllocation(true);
+            onSave(); // Notify parent that expense is saved
+            return;
+        }
 
         onSave();
         onClose();
@@ -179,6 +275,22 @@ export const ReceiptCaptureSheet: React.FC<Props> = ({ onClose, onSave, crops, a
                     {/* 2. PREVIEW & PROCESSING */}
                     {image && (
                         <div className="flex flex-col gap-6">
+                            {attachmentCaptureError && (
+                                <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-700">
+                                    {attachmentCaptureError}
+                                </div>
+                            )}
+                            {!attachmentCaptureError && attachmentIds.length > 0 && (
+                                <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-700">
+                                    Attachment queued for background upload.
+                                </div>
+                            )}
+                            {queuedExtractionMessage && (
+                                <div className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-xs font-semibold text-blue-700">
+                                    {queuedExtractionMessage}
+                                </div>
+                            )}
+
                             {/* Image Thumbnail */}
                             <div className="relative w-full h-48 bg-black rounded-xl overflow-hidden shadow-sm shrink-0">
                                 <img src={image} className="w-full h-full object-contain opacity-80" />
@@ -211,16 +323,39 @@ export const ReceiptCaptureSheet: React.FC<Props> = ({ onClose, onSave, crops, a
                                         </div>
                                     )}
 
+                                    {/* Verification Status Badge */}
+                                    {verificationStatus === 'pending' || verificationStatus === 'verifying' ? (
+                                        <div className="flex items-center gap-2 px-3 py-2 bg-blue-50 border border-blue-100 rounded-lg text-blue-700 text-xs font-semibold">
+                                            <Loader2 size={13} className="animate-spin shrink-0" />
+                                            Verifying bill with high-accuracy OCR...
+                                        </div>
+                                    ) : verificationStatus === 'verified' ? (
+                                        <div className="flex items-center gap-2 px-3 py-2 bg-emerald-50 border border-emerald-100 rounded-lg text-emerald-700 text-xs font-semibold">
+                                            <Check size={13} className="shrink-0" />
+                                            Verified ✓ — high-accuracy scan complete
+                                        </div>
+                                    ) : verificationStatus === 'needs_review' ? (
+                                        <div className="flex items-center gap-2 px-3 py-2 bg-amber-50 border border-amber-100 rounded-lg text-amber-700 text-xs font-semibold">
+                                            <AlertTriangle size={13} className="shrink-0" />
+                                            Verification flagged — please double-check amounts
+                                        </div>
+                                    ) : null}
+
                                     {/* Extracted Fields */}
                                     <div className="bg-white p-4 rounded-xl border border-gray-200 space-y-4 shadow-sm">
                                         <div>
                                             <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block mb-1">Vendor/Shop</label>
                                             <input
                                                 value={editedVendor}
-                                                onChange={(e) => setEditedVendor(e.target.value)}
+                                                onChange={(e) => { setEditedVendor(e.target.value); setUserEditedVendor(true); }}
                                                 className="w-full text-base font-bold text-gray-900 border-b border-gray-200 outline-none focus:border-emerald-500 py-1"
                                                 placeholder="Enter vendor name"
                                             />
+                                            {suggestedVendor && suggestedVendor !== editedVendor && (
+                                                <p className="text-[10px] text-amber-600 mt-1">
+                                                    AI suggests: <button className="font-bold underline" onClick={() => { setEditedVendor(suggestedVendor); setSuggestedVendor(null); }}>{suggestedVendor}</button>
+                                                </p>
+                                            )}
                                         </div>
 
                                         {/* Items List (Simplified for prototype) */}
@@ -241,10 +376,15 @@ export const ReceiptCaptureSheet: React.FC<Props> = ({ onClose, onSave, crops, a
                                                 <input
                                                     type="number"
                                                     value={editedTotal}
-                                                    onChange={(e) => setEditedTotal(Number(e.target.value))}
+                                                    onChange={(e) => { setEditedTotal(Number(e.target.value)); setUserEditedTotal(true); }}
                                                     className="w-full text-2xl font-black text-gray-900 border-b border-gray-200 outline-none focus:border-emerald-500 py-1"
                                                 />
                                             </div>
+                                            {suggestedTotal !== null && suggestedTotal !== editedTotal && (
+                                                <p className="text-[10px] text-amber-600 mt-1">
+                                                    AI suggests: <button className="font-bold underline" onClick={() => { setEditedTotal(suggestedTotal!); setSuggestedTotal(null); }}>₹{suggestedTotal}</button>
+                                                </p>
+                                            )}
                                         </div>
                                     </div>
 
@@ -297,8 +437,21 @@ export const ReceiptCaptureSheet: React.FC<Props> = ({ onClose, onSave, crops, a
                     )}
                 </div>
 
+                {/* ALLOCATION FOLLOW-UP */}
+                {showAllocation && (
+                    <div className="flex-1 overflow-y-auto p-4 bg-gray-50">
+                        <AllocationSelector
+                            costEntryId={savedCostEntryId}
+                            totalAmount={editedTotal}
+                            plots={crops.flatMap(c => c.plots)}
+                            onAllocate={() => onClose()}
+                            onCancel={() => onClose()}
+                        />
+                    </div>
+                )}
+
                 {/* FOOTER */}
-                {image && !isExtracting && extraction && (
+                {!showAllocation && image && !isExtracting && extraction && (
                     <div className="flex-none p-4 bg-white border-t border-gray-100 flex gap-3">
                         <button onClick={onClose} className="flex-1 py-4 text-gray-500 font-bold hover:bg-gray-50 rounded-xl">Cancel</button>
                         <button
