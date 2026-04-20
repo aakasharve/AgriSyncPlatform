@@ -186,3 +186,12 @@ src/clients/mobile-web/vite_log.txt
 src/clients/mobile-web/public/demo-photos/*.jpg
 src/clients/mobile-web/public/demo-photos/*.jpeg
 src/clients/mobile-web/public/demo-photos/*.png
+
+# Caveman ecosystem data (per-project runtime stores)
+.cavemem/**
+
+# .mcp.json mutation backups
+.mcp.json.bak-*
+.mcp.json.tmp
+.mcp.json.new
+
