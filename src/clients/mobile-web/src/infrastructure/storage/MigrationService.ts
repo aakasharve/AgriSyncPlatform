@@ -60,7 +60,7 @@ export class MigrationService {
 
         if (import.meta.env.DEV) {
             console.info(
-                `[CEI] Dexie schemaVersion ${CEI_PHASE1_SCHEMA_VERSION} reserved for CEI Phase 1 — migration not yet applied (pending Task 5.1.1)`
+                `[CEI] Dexie schemaVersion ${CEI_PHASE1_SCHEMA_VERSION} active — CEI Phase 1 migration applied (Task 5.1.1)`
             );
         }
 
