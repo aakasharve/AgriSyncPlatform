@@ -252,6 +252,21 @@ internal sealed class ShramSafalRepository(ShramSafalDbContext db) : IShramSafal
         await db.ScheduleTemplates.AddAsync(template, ct);
     }
 
+    public async Task<ScheduleTemplate?> GetScheduleTemplateByIdAsync(Guid templateId, CancellationToken ct = default) =>
+        await db.ScheduleTemplates
+            .Include(t => t.Stages)
+            .Include(t => t.Activities)
+            .FirstOrDefaultAsync(t => t.Id == templateId, ct);
+
+    public async Task<bool> HasActiveOwnerMembershipAsync(Guid userId, CancellationToken ct = default)
+    {
+        var typedUserId = new UserId(userId);
+        return await db.FarmMemberships
+            .AnyAsync(m => m.UserId == typedUserId
+                && m.Status == MembershipStatus.Active
+                && (int)m.Role >= (int)AppRole.SecondaryOwner, ct);
+    }
+
     public async Task<List<ScheduleTemplate>> GetScheduleTemplatesAsync(CancellationToken ct = default)
     {
         return await db.ScheduleTemplates
