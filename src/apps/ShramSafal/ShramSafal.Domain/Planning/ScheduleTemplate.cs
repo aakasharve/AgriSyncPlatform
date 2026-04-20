@@ -1,4 +1,5 @@
 using AgriSync.BuildingBlocks.Domain;
+using AgriSync.SharedKernel.Contracts.Ids;
 using ShramSafal.Domain.Events;
 
 namespace ShramSafal.Domain.Planning;
@@ -15,12 +16,22 @@ public sealed class ScheduleTemplate : Entity<Guid>
         string name,
         string stage,
         DateTime createdAtUtc,
+        UserId? createdByUserId,
+        TenantScope tenantScope,
+        int version,
+        Guid? previousVersionId,
+        Guid? derivedFromTemplateId,
         IEnumerable<StageDefinition>? stages = null)
         : base(id)
     {
         Name = name;
         Stage = stage;
         CreatedAtUtc = createdAtUtc;
+        CreatedByUserId = createdByUserId;
+        TenantScope = tenantScope;
+        Version = version;
+        PreviousVersionId = previousVersionId;
+        DerivedFromTemplateId = derivedFromTemplateId;
         if (stages is not null)
         {
             _stages.AddRange(
@@ -37,11 +48,25 @@ public sealed class ScheduleTemplate : Entity<Guid>
     public IReadOnlyCollection<TemplateActivity> Activities => _activities.AsReadOnly();
     public IReadOnlyCollection<StageDefinition> Stages => _stages.AsReadOnly();
 
+    // New fields — CEI Phase 1
+    public UserId? CreatedByUserId { get; private set; }
+    public TenantScope TenantScope { get; private set; } = TenantScope.Public;
+    public int Version { get; private set; } = 1;
+    public Guid? PreviousVersionId { get; private set; }
+    public Guid? DerivedFromTemplateId { get; private set; }
+    public DateTime? PublishedAtUtc { get; private set; }
+
+    // Single Create factory. Old callers that passed `stages` positionally must now use
+    // named argument `stages:` — but all existing call sites pass only the first 4 params
+    // positionally, so they compile without change. New callers use named params for
+    // createdByUserId / tenantScope.
     public static ScheduleTemplate Create(
         Guid id,
         string name,
         string stage,
         DateTime createdAtUtc,
+        UserId? createdByUserId = null,
+        TenantScope tenantScope = TenantScope.Public,
         IReadOnlyCollection<StageDefinition>? stages = null)
     {
         if (string.IsNullOrWhiteSpace(name))
@@ -54,7 +79,116 @@ public sealed class ScheduleTemplate : Entity<Guid>
             throw new ArgumentException("Template stage is required.", nameof(stage));
         }
 
-        return new ScheduleTemplate(id, name.Trim(), stage.Trim(), createdAtUtc, stages);
+        return new ScheduleTemplate(
+            id,
+            name.Trim(),
+            stage.Trim(),
+            createdAtUtc,
+            createdByUserId,
+            tenantScope,
+            version: 1,
+            previousVersionId: null,
+            derivedFromTemplateId: null,
+            stages);
+    }
+
+    // CEI-I1: copy-on-write edit — produces a NEW template row, original is NOT mutated.
+    public ScheduleTemplate EditCopyOnWrite(
+        Guid newId,
+        string? newName,
+        string? newStage,
+        UserId editedByUserId,
+        DateTime occurredAtUtc)
+    {
+        var copy = new ScheduleTemplate(
+            newId,
+            newName is not null ? newName.Trim() : Name,
+            newStage is not null ? newStage.Trim() : Stage,
+            occurredAtUtc,
+            CreatedByUserId,       // author attribution preserved — CEI-I2
+            TenantScope,
+            version: Version + 1,
+            previousVersionId: Id,
+            derivedFromTemplateId: null, // edit lineage does not chain root
+            _stages.ToList());
+
+        // Copy activities by value onto the new template
+        foreach (var a in _activities)
+        {
+            copy._activities.Add(
+                new TemplateActivity(
+                    Guid.NewGuid(),
+                    newId,
+                    a.ActivityName,
+                    a.OffsetDays,
+                    a.FrequencyMode,
+                    a.IntervalDays));
+        }
+
+        copy.Raise(new ScheduleTemplateEditedEvent(
+            Guid.NewGuid(),
+            occurredAtUtc,
+            newId,
+            Id,
+            copy.Version,
+            editedByUserId));
+
+        return copy;
+    }
+
+    // Clone — produces NEW template, preserves root lineage.
+    public ScheduleTemplate Clone(
+        Guid newId,
+        UserId newOwnerUserId,
+        TenantScope newScope,
+        string reason,
+        DateTime occurredAtUtc)
+    {
+        var copy = new ScheduleTemplate(
+            newId,
+            Name,
+            Stage,
+            occurredAtUtc,
+            newOwnerUserId,
+            newScope,
+            version: 1,
+            previousVersionId: null,
+            derivedFromTemplateId: DerivedFromTemplateId ?? Id, // always points to root
+            _stages.ToList());
+
+        foreach (var a in _activities)
+        {
+            copy._activities.Add(
+                new TemplateActivity(
+                    Guid.NewGuid(),
+                    newId,
+                    a.ActivityName,
+                    a.OffsetDays,
+                    a.FrequencyMode,
+                    a.IntervalDays));
+        }
+
+        copy.Raise(new ScheduleTemplateClonedEvent(
+            Guid.NewGuid(),
+            occurredAtUtc,
+            newId,
+            DerivedFromTemplateId ?? Id,
+            newOwnerUserId,
+            reason));
+
+        return copy;
+    }
+
+    // Publish — mutates this template.
+    public void Publish(UserId publisherUserId, DateTime occurredAtUtc)
+    {
+        PublishedAtUtc = occurredAtUtc;
+        Raise(new ScheduleTemplatePublishedEvent(
+            Guid.NewGuid(),
+            occurredAtUtc,
+            Id,
+            Version,
+            publisherUserId));
     }
 
     public TemplateActivity AddActivity(
