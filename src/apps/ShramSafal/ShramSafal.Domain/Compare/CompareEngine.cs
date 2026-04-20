@@ -24,8 +24,12 @@ public static class CompareEngine
                     .ToList(),
                 StringComparer.OrdinalIgnoreCase);
 
+        // Skipped and Delayed tasks do not count as executed — their planned counterparts
+        // will fall through to the Missing bucket. Partial/Modified/Completed all count.
+        // Partial tasks count as full match in v1 — see CEI §4.3 deferral note.
         var executedByBucket = executed
             .Where(t => !string.IsNullOrWhiteSpace(t.ActivityType))
+            .Where(t => t.ExecutionStatus != ExecutionStatus.Skipped && t.ExecutionStatus != ExecutionStatus.Delayed)
             .GroupBy(t => Categorize(t.ActivityType), StringComparer.OrdinalIgnoreCase)
             .ToDictionary(
                 g => g.Key,
