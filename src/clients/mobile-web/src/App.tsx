@@ -13,6 +13,7 @@ import { DataSourceProvider } from './app/providers/DataSourceProvider';
 import { SelectionProvider } from './app/context/SelectionContext';
 import { AuthProvider } from './app/providers/AuthProvider';
 import { useAuth } from './app/providers/AuthProvider';
+import { FarmContextProvider } from './core/session/FarmContext';
 import { OfflineBanner } from './features/sync';
 import AppShell from './app/components/AppShell';
 import LoginPage from './pages/LoginPage';
@@ -78,6 +79,7 @@ const App: React.FC = () => {
         <BrowserRouter>
             <AppErrorBoundary>
                 <AuthProvider>
+                    <FarmContextProvider>
                     <DataSourceProvider>
                         <LanguageProvider>
                             <SelectionProvider crops={crops}>
@@ -89,6 +91,7 @@ const App: React.FC = () => {
                             </SelectionProvider>
                         </LanguageProvider>
                     </DataSourceProvider>
+                    </FarmContextProvider>
                 </AuthProvider>
             </AppErrorBoundary>
         </BrowserRouter>

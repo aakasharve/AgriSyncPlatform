@@ -538,6 +538,24 @@ export class AgriSyncClient {
         return response.data;
     }
 
+    /** GET /user/auth/me/context — aggregate: user + ownerAccounts + memberships + affiliation. */
+    async getMeContext(): Promise<import('../../core/session/MeContextService').MeContext> {
+        const response = await this.http.get('/user/auth/me/context');
+        return response.data;
+    }
+
+    /** GET /accounts/affiliation/stats — referral counters. */
+    async getAffiliationStats(): Promise<{ referralsTotal: number; referralsQualified: number; benefitsEarned: number }> {
+        const response = await this.http.get('/accounts/affiliation/stats');
+        return response.data;
+    }
+
+    /** GET /accounts/affiliation/events — recent growth events. */
+    async getAffiliationEvents(limit = 20): Promise<Array<{ id: string; eventType: string; occurredAtUtc: string; metadata: string | null }>> {
+        const response = await this.http.get(`/accounts/affiliation/events?limit=${limit}`);
+        return response.data;
+    }
+
     async pushSyncBatch(request: SyncPushRequest): Promise<SyncPushResponse> {
         const response = await this.http.post<SyncPushResponse>('/sync/push', request);
         return response.data;

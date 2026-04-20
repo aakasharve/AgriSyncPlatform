@@ -1,9 +1,15 @@
 import React, { useState } from 'react';
 import { QrCode } from 'lucide-react';
 import { useAuth } from '../app/providers/AuthProvider';
+import OtpLoginForm from '../features/auth/components/OtpLoginForm';
+import OtpVerifyForm from '../features/auth/components/OtpVerifyForm';
+import type { StartOtpResponse } from '../features/auth/data/otpClient';
+import { invalidateMeContext } from '../core/session/MeContextService';
 
 interface LoginPageProps { }
 
+// Top-level auth mode: 'otp' is the primary flow; 'password' is legacy.
+type TopMode = 'otp' | 'password';
 type AuthMode = 'login' | 'register';
 
 function normalizeDemoPhone(input: string): string {
@@ -17,10 +23,16 @@ function normalizeDemoPhone(input: string): string {
 
 const LoginPage: React.FC<LoginPageProps> = () => {
     const { login, register, isLoading, authError, clearAuthError } = useAuth();
+    const [topMode, setTopMode] = useState<TopMode>('otp');
     const [mode, setMode] = useState<AuthMode>('login');
     const [displayName, setDisplayName] = useState('');
     const [phone, setPhone] = useState('');
     const [password, setPassword] = useState('');
+
+    // OTP state
+    const [otpPhone, setOtpPhone] = useState('');
+    const [otpMeta, setOtpMeta] = useState<StartOtpResponse | null>(null);
+
     const isRegisterMode = mode === 'register';
 
     const switchMode = (nextMode: AuthMode) => {
@@ -54,6 +66,74 @@ const LoginPage: React.FC<LoginPageProps> = () => {
         }
     };
 
+    // OTP flow is the primary path (plan §3.6). Password is legacy / dev.
+    if (topMode === 'otp') {
+        return (
+            <div className="min-h-screen-safe bg-transparent text-stone-900 flex items-center justify-center px-4 py-6">
+                <div className="w-full max-w-sm glass-panel p-6 space-y-5 shadow-xl border border-stone-200/70">
+                    <div className="text-center space-y-0.5">
+                        <h1 className="text-2xl font-black font-display text-stone-800">ShramSafal</h1>
+                        <p className="text-[10px] text-stone-400">शेतीचे दैनंदिन सत्य · Daily farm truth</p>
+                    </div>
+
+                    {otpMeta === null ? (
+                        <OtpLoginForm
+                            onOtpSent={(ph, meta) => { setOtpPhone(ph); setOtpMeta(meta); }}
+                        />
+                    ) : (
+                        <OtpVerifyForm
+                            phone={otpPhone}
+                            otpMeta={otpMeta}
+                            onVerified={() => { invalidateMeContext(); /* AuthProvider will pick up session */ }}
+                            onBack={() => setOtpMeta(null)}
+                        />
+                    )}
+
+                    <div className="text-center">
+                        <button
+                            type="button"
+                            onClick={() => setTopMode('password')}
+                            className="text-[10px] text-stone-400 hover:text-stone-600 underline underline-offset-2"
+                        >
+                            पासवर्डने लॉग इन करा / Use password (legacy)
+                        </button>
+                    </div>
+
+                    {/* Worker QR join */}
+                    <div className="mt-2 space-y-1">
+                        <div className="flex items-center gap-2">
+                            <div className="flex-1 h-px bg-stone-200" />
+                            <span className="text-[10px] font-bold uppercase tracking-wider text-stone-400">कामगार आहे?</span>
+                            <div className="flex-1 h-px bg-stone-200" />
+                        </div>
+                        <button
+                            type="button"
+                            onClick={() => {
+                                const code = window.prompt('शेतीचा QR स्कॅन करा किंवा लिंक टाका\nScan the farm QR or paste the invite link:');
+                                if (!code) return;
+                                const trimmed = code.trim();
+                                if (trimmed.startsWith('http')) {
+                                    try {
+                                        const url = new URL(trimmed);
+                                        const token = url.searchParams.get('t');
+                                        const farm = url.searchParams.get('f');
+                                        if (token && farm) {
+                                            window.location.assign(`/?join=${encodeURIComponent(token)}&farm=${encodeURIComponent(farm)}`);
+                                        }
+                                    } catch { /* bad URL */ }
+                                }
+                            }}
+                            className="w-full flex items-center justify-center gap-2 rounded-xl border border-emerald-200 bg-white px-4 py-2.5 text-sm font-bold text-emerald-700 hover:bg-emerald-50 transition-colors"
+                        >
+                            <QrCode size={16} />
+                            शेतीच्या QR ने सामील व्हा / Join via farm QR
+                        </button>
+                    </div>
+                </div>
+            </div>
+        );
+    }
+
     return (
         <div className="min-h-screen-safe bg-transparent text-stone-900 flex items-center justify-center px-4 py-6 pt-safe-area pb-safe-area pl-safe-area pr-safe-area">
             <div className="w-full max-w-none glass-panel p-6 space-y-5 shadow-xl border border-stone-200/70 md:border-0 md:bg-transparent md:shadow-none md:backdrop-blur-none">
@@ -62,9 +142,12 @@ const LoginPage: React.FC<LoginPageProps> = () => {
                     <p className="text-xs text-stone-500 font-medium">
                         {isRegisterMode
                             ? 'Create a real empty farmer account and enter the first-run workflow immediately.'
-                            : 'Sign in with an existing account or use the Purvesh demo account.'}
+                            : 'Sign in with password (legacy). Switch to OTP for the primary flow.'}
                     </p>
                 </div>
+                <button type="button" onClick={() => setTopMode('otp')} className="w-full text-xs font-bold text-emerald-600 hover:text-emerald-700 py-1 rounded-xl border border-emerald-200 bg-emerald-50">
+                    ← OTP ने लॉग इन करा / Back to OTP sign-in (recommended)
+                </button>
 
                 <div className="grid grid-cols-2 gap-2 rounded-xl border border-stone-200 bg-stone-50 p-1">
                     <button

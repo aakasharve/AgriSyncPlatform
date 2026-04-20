@@ -45,17 +45,15 @@ const ReferralsPage: React.FC = () => {
 
                 setOwnerName(me.displayName);
 
-                // Use agriSyncClient so the standard attachAccessToken interceptor
-                // fires — avoids the IDOR that a path-param based endpoint would expose.
-                if (!cancelled) {
-                    const codeData = await agriSyncClient.generateReferralCode();
-                    setReferralCode(codeData.code);
-                }
-
-                // TODO(Phase 7.3.1): fetch /accounts/{accountId}/affiliation/stats
-                // and /accounts/{accountId}/affiliation/events once those endpoints land.
-                setStats({ total: 0, qualified: 0, benefits: 0 });
-                setEvents([]);
+                const [codeData, statsData, eventsData] = await Promise.all([
+                    agriSyncClient.generateReferralCode(),
+                    agriSyncClient.getAffiliationStats(),
+                    agriSyncClient.getAffiliationEvents(20),
+                ]);
+                if (cancelled) return;
+                setReferralCode(codeData.code);
+                setStats({ total: statsData.referralsTotal, qualified: statsData.referralsQualified, benefits: statsData.benefitsEarned });
+                setEvents(eventsData.map(e => ({ id: e.id, eventType: e.eventType as GrowthEventItem['eventType'], occurredAtUtc: e.occurredAtUtc, metadata: e.metadata })));
             } catch (e) {
                 if (!cancelled) setError('Failed to load referral data. Please try again.');
             } finally {
