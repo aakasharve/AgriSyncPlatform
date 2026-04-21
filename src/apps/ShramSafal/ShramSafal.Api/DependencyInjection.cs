@@ -60,6 +60,10 @@ using ShramSafal.Application.UseCases.Tests.RecordTestCollected;
 using ShramSafal.Application.UseCases.Tests.RecordTestResult;
 using ShramSafal.Application.UseCases.Tests.ScheduleTestDueDates;
 using ShramSafal.Application.UseCases.Tests.WaiveTestInstance;
+using ShramSafal.Application.UseCases.Compliance.EvaluateCompliance;
+using ShramSafal.Application.UseCases.Compliance.GetComplianceSignalsForFarm;
+using ShramSafal.Application.UseCases.Compliance.AcknowledgeSignal;
+using ShramSafal.Application.UseCases.Compliance.ResolveSignal;
 using ShramSafal.Application.Ports;
 using ShramSafal.Application.Services;
 using ShramSafal.Infrastructure;
@@ -154,6 +158,12 @@ public static class DependencyInjection
         services.AddScoped<GetTestQueueForCycleHandler>();
         services.AddScoped<GetMissingTestsForFarmHandler>();
         services.AddScoped<MarkOverdueInstancesHandler>();
+
+        // CEI Phase 3 §4.6 — compliance signal handlers
+        services.AddScoped<EvaluateComplianceHandler>();
+        services.AddScoped<GetComplianceSignalsForFarmHandler>();
+        services.AddScoped<AcknowledgeSignalHandler>();
+        services.AddScoped<ResolveSignalHandler>();
 
         return services;
     }

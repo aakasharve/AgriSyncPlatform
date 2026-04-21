@@ -3,6 +3,8 @@ using AgriSync.BuildingBlocks.Results;
 using AgriSync.SharedKernel.Contracts.Ids;
 using ShramSafal.Application.Contracts.Dtos;
 using ShramSafal.Application.Ports;
+using ShramSafal.Application.UseCases.Compliance.EvaluateCompliance;
+using ShramSafal.Application.UseCases.Compliance.GetComplianceSignalsForFarm;
 using ShramSafal.Application.UseCases.Planning.GetAttentionBoard;
 using ShramSafal.Application.UseCases.ReferenceData.GetScheduleTemplates;
 
@@ -15,7 +17,10 @@ public sealed class PullSyncChangesHandler(
     GetAttentionBoardHandler getAttentionBoardHandler,
     ITestInstanceRepository testInstanceRepository,
     ITestProtocolRepository testProtocolRepository,
-    ITestRecommendationRepository testRecommendationRepository)
+    ITestRecommendationRepository testRecommendationRepository,
+    IComplianceSignalRepository complianceSignalRepository,
+    GetComplianceSignalsForFarmHandler getComplianceSignalsHandler,
+    EvaluateComplianceHandler evaluateComplianceHandler)
 {
     public async Task<Result<SyncPullResponseDto>> HandleAsync(PullSyncChangesQuery query, CancellationToken ct = default)
     {
@@ -160,6 +165,51 @@ public sealed class PullSyncChangesHandler(
             }
         }
 
+        // CEI Phase 3 §4.6 — compliance signals since cursor (per farm), with
+        // on-pull freshness trigger: if latest evaluation is >6h old, fire async eval.
+        var complianceSignalDtos = new List<ComplianceSignalDto>();
+        foreach (var fid in farmIds)
+        {
+            var typedFarmId = new FarmId(fid);
+
+            // Freshness check — fire-and-forget if stale (>6 hours)
+            try
+            {
+                var latestEval = await complianceSignalRepository.GetLatestEvaluationTimeAsync(typedFarmId, ct);
+                if (latestEval is null || (serverNowUtc - latestEval.Value).TotalHours > 6)
+                {
+                    // Fire-and-forget: do not await, do not fail the pull if this throws
+                    _ = Task.Run(async () =>
+                    {
+                        try
+                        {
+                            await evaluateComplianceHandler.HandleAsync(
+                                new EvaluateComplianceCommand(typedFarmId),
+                                CancellationToken.None);
+                        }
+                        catch { /* swallow: freshness eval must never fail the pull */ }
+                    }, CancellationToken.None);
+                }
+            }
+            catch { /* swallow */ }
+
+            // Pull signals since cursor
+            try
+            {
+                var signals = await complianceSignalRepository.GetSinceCursorAsync(typedFarmId, sinceUtc, ct);
+                complianceSignalDtos.AddRange(
+                    signals.Select(GetComplianceSignalsForFarmHandler.MapToDto));
+            }
+            catch { /* swallow: compliance failures must never fail the pull */ }
+        }
+
+        // Advance cursor past compliance signals
+        if (complianceSignalDtos.Count > 0)
+        {
+            var maxSignal = complianceSignalDtos.Max(s => s.LastSeenAtUtc);
+            if (maxSignal > nextCursorUtc) nextCursorUtc = maxSignal;
+        }
+
         var response = new SyncPullResponseDto(
             serverNowUtc,
             nextCursorUtc,
@@ -182,7 +232,8 @@ public sealed class PullSyncChangesHandler(
             referenceDataVersionHash,
             attentionBoard,
             testInstanceDtos,
-            testRecommendationDtos);
+            testRecommendationDtos,
+            complianceSignalDtos);
 
         return Result.Success(response);
     }

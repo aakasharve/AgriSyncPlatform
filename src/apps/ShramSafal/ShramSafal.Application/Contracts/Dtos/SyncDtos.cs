@@ -23,6 +23,9 @@ public static class SyncMutationTypes
 {
     public const string AllocateGlobalExpense = "allocate_global_expense";
     public const string VerifyLogV2 = "verify_log_v2";
+    // CEI Phase 3 §4.6 — compliance mutations
+    public const string ComplianceAcknowledge = "compliance.acknowledge";
+    public const string ComplianceResolve = "compliance.resolve";
 }
 
 public sealed record SyncPullResponseDto(
@@ -48,4 +51,6 @@ public sealed record SyncPullResponseDto(
     AttentionBoardDto? AttentionBoard,   // null = no cards; pull still succeeds
     // CEI Phase 2 §4.5 — test stack
     IReadOnlyList<TestInstanceDto> TestInstances,
-    IReadOnlyList<TestRecommendationDto> TestRecommendations);
+    IReadOnlyList<TestRecommendationDto> TestRecommendations,
+    // CEI Phase 3 §4.6 — compliance signals
+    IReadOnlyList<ComplianceSignalDto> ComplianceSignals);
