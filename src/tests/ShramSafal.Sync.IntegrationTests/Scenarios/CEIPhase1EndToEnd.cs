@@ -78,6 +78,35 @@ public sealed class CEIPhase1EndToEnd
             "attentionBoard must always be present in pull response (CEI Phase 1 — may be null)");
     }
 
+    /// <summary>
+    /// CEI Phase 2 §4.5: the sync-pull envelope always includes testInstances and
+    /// testRecommendations arrays (may be empty but the keys must be present so
+    /// offline clients can deserialise the envelope without branching).
+    /// </summary>
+    [Fact]
+    public async Task PullSync_Response_IncludesTestStackArrays()
+    {
+        await using var harness = await TestHarness.CreateAsync();
+
+        var since = Uri.EscapeDataString(DateTime.UnixEpoch.ToString("O"));
+        var resp = await harness.Client.GetAsync($"/sync/pull?since={since}");
+
+        resp.IsSuccessStatusCode.Should().BeTrue(
+            "pull sync must succeed even for a user with no data");
+
+        using var doc = JsonDocument.Parse(await resp.Content.ReadAsStringAsync());
+
+        doc.RootElement.TryGetProperty("testInstances", out var testInstances).Should().BeTrue(
+            "testInstances must always be present in pull response (CEI Phase 2 §4.5)");
+        testInstances.ValueKind.Should().Be(JsonValueKind.Array,
+            "testInstances must be an array even when empty");
+
+        doc.RootElement.TryGetProperty("testRecommendations", out var testRecommendations).Should().BeTrue(
+            "testRecommendations must always be present in pull response (CEI Phase 2 §4.5)");
+        testRecommendations.ValueKind.Should().Be(JsonValueKind.Array,
+            "testRecommendations must be an array even when empty");
+    }
+
     // ---------------------------------------------------------------------------
     // Minimal self-contained test harness (mirrors SyncEndpointsTests.TestHarness)
     // ---------------------------------------------------------------------------

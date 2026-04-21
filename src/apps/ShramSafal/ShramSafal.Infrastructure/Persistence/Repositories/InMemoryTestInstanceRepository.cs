@@ -66,5 +66,18 @@ internal sealed class InMemoryTestInstanceRepository : ITestInstanceRepository
         return Task.FromResult(result);
     }
 
+    public Task<IReadOnlyList<TestInstance>> GetModifiedSinceAsync(
+        IReadOnlyCollection<FarmId> farmIds,
+        DateTime sinceUtc,
+        CancellationToken ct = default)
+    {
+        var farmSet = farmIds.ToHashSet();
+        IReadOnlyList<TestInstance> result = _store.Values
+            .Where(i => farmSet.Contains(i.FarmId) && i.ModifiedAtUtc > sinceUtc)
+            .OrderBy(i => i.ModifiedAtUtc)
+            .ToList();
+        return Task.FromResult(result);
+    }
+
     public Task SaveChangesAsync(CancellationToken ct = default) => Task.CompletedTask;
 }

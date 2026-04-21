@@ -35,5 +35,16 @@ public interface ITestInstanceRepository
     /// </summary>
     Task<IReadOnlyList<TestInstance>> GetOverdueAsync(DateOnly today, CancellationToken ct = default);
 
+    /// <summary>
+    /// CEI Phase 2 §4.5 — sync-pull cursor query. Returns every
+    /// <see cref="TestInstance"/> belonging to one of the given farms whose
+    /// <see cref="TestInstance.ModifiedAtUtc"/> is strictly greater than
+    /// <paramref name="sinceUtc"/>.
+    /// </summary>
+    Task<IReadOnlyList<TestInstance>> GetModifiedSinceAsync(
+        IReadOnlyCollection<FarmId> farmIds,
+        DateTime sinceUtc,
+        CancellationToken ct = default);
+
     Task SaveChangesAsync(CancellationToken ct = default);
 }

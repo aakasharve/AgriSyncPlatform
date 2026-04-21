@@ -502,6 +502,19 @@ public sealed class GetAttentionBoardHandlerTests
             return Task.FromResult(r);
         }
 
+        public Task<IReadOnlyList<TestInstance>> GetModifiedSinceAsync(
+            IReadOnlyCollection<FarmId> farmIds,
+            DateTime sinceUtc,
+            CancellationToken ct = default)
+        {
+            var farmSet = farmIds.ToHashSet();
+            IReadOnlyList<TestInstance> r = _byId.Values
+                .Where(i => farmSet.Contains(i.FarmId) && i.ModifiedAtUtc > sinceUtc)
+                .OrderBy(i => i.ModifiedAtUtc)
+                .ToList();
+            return Task.FromResult(r);
+        }
+
         public Task SaveChangesAsync(CancellationToken ct = default) => Task.CompletedTask;
     }
 }
