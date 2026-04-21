@@ -3,6 +3,7 @@ using AgriSync.SharedKernel.Contracts.Ids;
 using AgriSync.SharedKernel.Contracts.Roles;
 using ShramSafal.Application.Contracts.Dtos;
 using ShramSafal.Domain.Audit;
+using ShramSafal.Domain.Work;
 using ShramSafal.Domain.Attachments;
 using ShramSafal.Application.Ports;
 using ShramSafal.Domain.Crops;
@@ -742,6 +743,18 @@ internal sealed class ShramSafalRepository(ShramSafalDbContext db) : IShramSafal
             .Select(m => (Guid)m.FarmId)
             .Distinct()
             .ToListAsync(ct);
+    }
+
+    // --- CEI Phase 4 §4.8 (Work Trust Ledger) ------------------------------------------
+
+    public async Task AddJobCardAsync(JobCard jobCard, CancellationToken ct = default)
+    {
+        await db.JobCards.AddAsync(jobCard, ct);
+    }
+
+    public async Task<JobCard?> GetJobCardByIdAsync(Guid jobCardId, CancellationToken ct = default)
+    {
+        return await db.JobCards.FindAsync([jobCardId], ct);
     }
 
     private sealed class OperatorDirectoryRow
