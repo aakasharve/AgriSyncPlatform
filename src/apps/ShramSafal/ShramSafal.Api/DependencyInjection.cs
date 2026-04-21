@@ -64,6 +64,17 @@ using ShramSafal.Application.UseCases.Compliance.EvaluateCompliance;
 using ShramSafal.Application.UseCases.Compliance.GetComplianceSignalsForFarm;
 using ShramSafal.Application.UseCases.Compliance.AcknowledgeSignal;
 using ShramSafal.Application.UseCases.Compliance.ResolveSignal;
+using ShramSafal.Application.UseCases.Work.AssignJobCard;
+using ShramSafal.Application.UseCases.Work.CancelJobCard;
+using ShramSafal.Application.UseCases.Work.CompleteJobCard;
+using ShramSafal.Application.UseCases.Work.CreateJobCard;
+using ShramSafal.Application.UseCases.Work.GetJobCardsForFarm;
+using ShramSafal.Application.UseCases.Work.GetJobCardsForWorker;
+using ShramSafal.Application.UseCases.Work.GetWorkerProfile;
+using ShramSafal.Application.UseCases.Work.Handlers;
+using ShramSafal.Application.UseCases.Work.SettleJobCardPayout;
+using ShramSafal.Application.UseCases.Work.StartJobCard;
+using ShramSafal.Application.UseCases.Work.VerifyJobCardForPayout;
 using ShramSafal.Application.Ports;
 using ShramSafal.Application.Services;
 using ShramSafal.Infrastructure;
@@ -164,6 +175,19 @@ public static class DependencyInjection
         services.AddScoped<GetComplianceSignalsForFarmHandler>();
         services.AddScoped<AcknowledgeSignalHandler>();
         services.AddScoped<ResolveSignalHandler>();
+
+        // CEI Phase 4 §4.8 — Work Trust Ledger handlers
+        services.AddScoped<CreateJobCardHandler>();
+        services.AddScoped<AssignJobCardHandler>();
+        services.AddScoped<StartJobCardHandler>();
+        services.AddScoped<CompleteJobCardHandler>();
+        services.AddScoped<VerifyJobCardForPayoutHandler>();
+        services.AddScoped<SettleJobCardPayoutHandler>();
+        services.AddScoped<CancelJobCardHandler>();
+        services.AddScoped<GetJobCardsForFarmHandler>();
+        services.AddScoped<GetJobCardsForWorkerHandler>();
+        services.AddScoped<GetWorkerProfileHandler>();
+        services.AddScoped<OnLogVerifiedAutoVerifyJobCard>();
 
         return services;
     }

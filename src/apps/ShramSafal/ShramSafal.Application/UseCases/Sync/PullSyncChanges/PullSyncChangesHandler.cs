@@ -165,6 +165,20 @@ public sealed class PullSyncChangesHandler(
             }
         }
 
+        // CEI Phase 4 §4.8 — job cards modified since cursor, scoped to caller's farms.
+        List<JobCardDto> jobCardDtos = [];
+        try
+        {
+            var changedJobCards = await repository.GetJobCardsChangedSinceAsync(farmIds, sinceUtc, ct);
+            jobCardDtos = changedJobCards.Select(j => j.ToJobCardDto()).ToList();
+            if (jobCardDtos.Count > 0)
+            {
+                var maxJobCard = changedJobCards.Max(j => j.ModifiedAtUtc);
+                if (maxJobCard > nextCursorUtc) nextCursorUtc = maxJobCard;
+            }
+        }
+        catch { /* swallow: job card failures must not fail the pull */ }
+
         // CEI Phase 3 §4.6 — compliance signals since cursor (per farm), with
         // on-pull freshness trigger: if latest evaluation is >6h old, fire async eval.
         var complianceSignalDtos = new List<ComplianceSignalDto>();
@@ -233,7 +247,8 @@ public sealed class PullSyncChangesHandler(
             attentionBoard,
             testInstanceDtos,
             testRecommendationDtos,
-            complianceSignalDtos);
+            complianceSignalDtos,
+            jobCardDtos);
 
         return Result.Success(response);
     }

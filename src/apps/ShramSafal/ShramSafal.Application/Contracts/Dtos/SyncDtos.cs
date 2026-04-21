@@ -53,4 +53,6 @@ public sealed record SyncPullResponseDto(
     IReadOnlyList<TestInstanceDto> TestInstances,
     IReadOnlyList<TestRecommendationDto> TestRecommendations,
     // CEI Phase 3 §4.6 — compliance signals
-    IReadOnlyList<ComplianceSignalDto> ComplianceSignals);
+    IReadOnlyList<ComplianceSignalDto> ComplianceSignals,
+    // CEI Phase 4 §4.8 — Work Trust Ledger
+    IReadOnlyList<JobCardDto> JobCards);
