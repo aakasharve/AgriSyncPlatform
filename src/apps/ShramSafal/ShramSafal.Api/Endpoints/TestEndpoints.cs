@@ -1,6 +1,7 @@
 using System.Security.Claims;
 using AgriSync.BuildingBlocks.Results;
 using AgriSync.SharedKernel.Contracts.Ids;
+using Microsoft.AspNetCore.Mvc;
 using ShramSafal.Application.UseCases.Tests.CreateTestProtocol;
 using ShramSafal.Application.UseCases.Tests.GetMissingTestsForFarm;
 using ShramSafal.Application.UseCases.Tests.GetTestQueueForCycle;
@@ -198,9 +199,9 @@ public static class TestEndpoints
         group.MapGet("/test-instances/{id:guid}", async (
             Guid id,
             ClaimsPrincipal user,
-            GetTestQueueForCycleHandler handler,
-            ShramSafal.Application.Ports.ITestInstanceRepository instanceRepository,
-            ShramSafal.Application.Ports.ITestProtocolRepository protocolRepository,
+            [FromServices] GetTestQueueForCycleHandler handler,
+            [FromServices] ShramSafal.Application.Ports.ITestInstanceRepository instanceRepository,
+            [FromServices] ShramSafal.Application.Ports.ITestProtocolRepository protocolRepository,
             CancellationToken ct) =>
         {
             if (!EndpointActorContext.TryGetUserId(user, out _))
