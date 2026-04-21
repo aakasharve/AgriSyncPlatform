@@ -12,6 +12,10 @@ interface AttentionCardProps {
      * states.
      */
     onAction?: (card: AttentionCardCacheRecord) => void;
+    /** CEI Phase 3 — open compliance signal count for this plot */
+    openComplianceSignalCount?: number;
+    /** Called when the compliance signal chip is tapped */
+    onComplianceChipTap?: (plotId: string, farmId: string) => void;
 }
 
 const rankBorder: Record<string, string> = {
@@ -21,7 +25,7 @@ const rankBorder: Record<string, string> = {
     Healthy: 'border-emerald-200 bg-white',
 };
 
-const AttentionCard: React.FC<AttentionCardProps> = ({ card, onAction }) => {
+const AttentionCard: React.FC<AttentionCardProps> = ({ card, onAction, openComplianceSignalCount, onComplianceChipTap }) => {
     const border = rankBorder[card.rank] ?? 'border-stone-200 bg-white';
 
     return (
@@ -29,19 +33,33 @@ const AttentionCard: React.FC<AttentionCardProps> = ({ card, onAction }) => {
             {/* Header row */}
             <div className="flex items-start justify-between gap-2">
                 <AttentionRankPill rank={card.rank} />
-                <div className="text-right">
-                    <p
-                        style={{ fontFamily: "'DM Sans', sans-serif" }}
-                        className="text-xs font-semibold text-stone-700 truncate max-w-[140px]"
-                    >
-                        {card.farmName}
-                    </p>
-                    <p
-                        style={{ fontFamily: "'DM Sans', sans-serif" }}
-                        className="text-xs text-stone-400"
-                    >
-                        {card.plotName}
-                    </p>
+                <div className="flex items-center gap-2">
+                    {/* CEI Phase 3 — compliance signal count chip */}
+                    {openComplianceSignalCount != null && openComplianceSignalCount > 0 && (
+                        <button
+                            type="button"
+                            onClick={() => onComplianceChipTap?.(card.plotId, card.farmId)}
+                            className="inline-flex items-center gap-1 rounded-full bg-rose-100 border border-rose-200 px-2 py-0.5 text-[10px] font-semibold text-rose-700 active:bg-rose-200"
+                            style={{ fontFamily: "'DM Sans', sans-serif" }}
+                        >
+                            <span>⚠</span>
+                            <span>{openComplianceSignalCount} signal{openComplianceSignalCount !== 1 ? 's' : ''}</span>
+                        </button>
+                    )}
+                    <div className="text-right">
+                        <p
+                            style={{ fontFamily: "'DM Sans', sans-serif" }}
+                            className="text-xs font-semibold text-stone-700 truncate max-w-[120px]"
+                        >
+                            {card.farmName}
+                        </p>
+                        <p
+                            style={{ fontFamily: "'DM Sans', sans-serif" }}
+                            className="text-xs text-stone-400"
+                        >
+                            {card.plotName}
+                        </p>
+                    </div>
                 </div>
             </div>
 
