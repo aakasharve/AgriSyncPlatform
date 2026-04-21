@@ -1,5 +1,6 @@
 using AgriSync.SharedKernel.Contracts.Ids;
 using AgriSync.SharedKernel.Contracts.Roles;
+using ShramSafal.Application.Contracts.Dtos;
 using ShramSafal.Domain.Tests;
 
 namespace ShramSafal.Application.UseCases.Tests.RecordTestResult;
@@ -21,26 +22,3 @@ public sealed record RecordTestResultResponse(
     Guid TestInstanceId,
     string Status,
     IReadOnlyList<TestRecommendationDto> Recommendations);
-
-/// <summary>Transport shape for a single <see cref="TestRecommendation"/>.</summary>
-public sealed record TestRecommendationDto(
-    Guid RecommendationId,
-    Guid TestInstanceId,
-    string RuleCode,
-    string TitleEn,
-    string TitleMr,
-    string SuggestedActivityName,
-    int SuggestedOffsetDays,
-    DateTime CreatedAtUtc)
-{
-    public static TestRecommendationDto FromDomain(TestRecommendation rec) =>
-        new(
-            RecommendationId: rec.Id,
-            TestInstanceId: rec.TestInstanceId,
-            RuleCode: rec.RuleCode,
-            TitleEn: rec.TitleEn,
-            TitleMr: rec.TitleMr,
-            SuggestedActivityName: rec.SuggestedActivityName,
-            SuggestedOffsetDays: rec.SuggestedOffsetDays,
-            CreatedAtUtc: rec.CreatedAtUtc);
-}
