@@ -105,6 +105,82 @@ public sealed class VerificationStateMachineTests
             log.Verify(Guid.NewGuid(), VerificationStatus.Disputed, null, AppRole.PrimaryOwner, ownerUser, now.AddMinutes(1)));
     }
 
+    // ---------------------------------------------------------------------------
+    //  CEI Phase 2 §4.7 — verification role gate extensions
+    // ---------------------------------------------------------------------------
+
+    [Fact]
+    public void VerificationStateMachine_Agronomist_CanVerifyConfirmed()
+    {
+        // Agronomist must be able to transition Confirmed → Verified.
+        var allowed = VerificationStateMachine.CanTransitionWithRole(
+            VerificationStatus.Confirmed,
+            VerificationStatus.Verified,
+            AppRole.Agronomist);
+
+        Assert.True(allowed);
+    }
+
+    [Fact]
+    public void VerificationStateMachine_FieldScout_CannotVerify()
+    {
+        // FieldScout cannot transition Confirmed → Verified.
+        var allowed = VerificationStateMachine.CanTransitionWithRole(
+            VerificationStatus.Confirmed,
+            VerificationStatus.Verified,
+            AppRole.FieldScout);
+
+        Assert.False(allowed);
+    }
+
+    [Fact]
+    public void VerificationStateMachine_LabOperator_CannotVerify()
+    {
+        // LabOperator has no role in DailyLog verification.
+        var allowed = VerificationStateMachine.CanTransitionWithRole(
+            VerificationStatus.Confirmed,
+            VerificationStatus.Verified,
+            AppRole.LabOperator);
+
+        Assert.False(allowed);
+    }
+
+    [Fact]
+    public void VerificationStateMachine_FpcManager_CanVerifyConfirmed_OnScopedFarm()
+    {
+        // FpcTechnicalManager is treated as equivalent to SecondaryOwner for verification.
+        var allowed = VerificationStateMachine.CanTransitionWithRole(
+            VerificationStatus.Confirmed,
+            VerificationStatus.Verified,
+            AppRole.FpcTechnicalManager);
+
+        Assert.True(allowed);
+    }
+
+    [Fact]
+    public void VerificationStateMachine_FieldScout_CannotConfirm_OnlyDraft()
+    {
+        // FieldScout can only create Draft logs; Draft → Confirmed is also blocked.
+        var allowed = VerificationStateMachine.CanTransitionWithRole(
+            VerificationStatus.Draft,
+            VerificationStatus.Confirmed,
+            AppRole.FieldScout);
+
+        Assert.False(allowed);
+    }
+
+    [Fact]
+    public void VerificationStateMachine_Agronomist_CanDisputeVerified()
+    {
+        // Agronomist shares the OwnerRoles set so may dispute a Verified log.
+        var allowed = VerificationStateMachine.CanTransitionWithRole(
+            VerificationStatus.Verified,
+            VerificationStatus.Disputed,
+            AppRole.Agronomist);
+
+        Assert.True(allowed);
+    }
+
     private static DailyLog CreateLog()
     {
         return DailyLog.Create(

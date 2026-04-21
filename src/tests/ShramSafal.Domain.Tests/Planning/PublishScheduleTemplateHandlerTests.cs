@@ -49,6 +49,7 @@ public sealed class PublishScheduleTemplateHandlerTests
         var result = await handler.HandleAsync(new PublishScheduleTemplateCommand(
             TemplateId: template.Id,
             CallerUserId: OtherId, // NOT the author
+            CallerRole: AppRole.PrimaryOwner,
             ClientCommandId: null));
 
         Assert.False(result.IsSuccess);
@@ -66,6 +67,7 @@ public sealed class PublishScheduleTemplateHandlerTests
         var result = await handler.HandleAsync(new PublishScheduleTemplateCommand(
             TemplateId: template.Id,
             CallerUserId: AuthorId,
+            CallerRole: AppRole.PrimaryOwner,
             ClientCommandId: null));
 
         Assert.True(result.IsSuccess);

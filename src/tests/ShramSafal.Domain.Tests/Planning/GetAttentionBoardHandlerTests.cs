@@ -13,6 +13,7 @@ using ShramSafal.Domain.Finance;
 using ShramSafal.Domain.Logs;
 using ShramSafal.Domain.Planning;
 using ShramSafal.Domain.Schedules;
+using ShramSafal.Domain.Tests;
 using Xunit;
 
 namespace ShramSafal.Domain.Tests.Planning;
@@ -26,7 +27,10 @@ public sealed class GetAttentionBoardHandlerTests
     private static readonly Guid PlotId2 = Guid.Parse("22222222-2222-2222-2222-222222222222");
 
     private static GetAttentionBoardHandler CreateHandler(FakeAttentionRepo repo) =>
-        new(repo, new FakeClock(Now));
+        new(repo, new FakeTestInstanceRepo(), new FakeClock(Now));
+
+    private static GetAttentionBoardHandler CreateHandler(FakeAttentionRepo repo, FakeTestInstanceRepo testRepo) =>
+        new(repo, testRepo, new FakeClock(Now));
 
     // ---------------------------------------------------------------------------
     // 1. A plot with 1 disputed log produces a Critical card
@@ -215,6 +219,54 @@ public sealed class GetAttentionBoardHandlerTests
     }
 
     // ---------------------------------------------------------------------------
+    // 6. CEI Phase 2 §4.5 — missing tests surface as AssignTest cards
+    // ---------------------------------------------------------------------------
+    [Fact]
+    public async Task AttentionBoard_WithMissingTests_ProducesAssignTestCard()
+    {
+        var farmTypedId = new FarmId(FarmId);
+        var ownerTypedId = new UserId(UserId);
+
+        var farm = Farm.Create(farmTypedId, "Ramu Farm", ownerTypedId, Now.AddDays(-100));
+        var plot = Plot.Create(PlotId1, farmTypedId, "Plot A", 2.5m, Now.AddDays(-100));
+        var cycle = CropCycle.Create(
+            Guid.NewGuid(), farmTypedId, PlotId1, "Grapes", "Fruiting",
+            DateOnly.FromDateTime(Now.AddDays(-30)), null, Now.AddDays(-30));
+
+        var repo = new FakeAttentionRepo();
+        repo.AddFarmForUser(UserId, farm);
+        repo.AddPlot(plot);
+        repo.AddCropCycle(PlotId1, cycle);
+        // Note: no disputes, no overdue planned activities — plot would otherwise be Healthy.
+
+        // Seed one Due test instance whose planned due date has already arrived.
+        var today = DateOnly.FromDateTime(Now);
+        var instance = TestInstance.Schedule(
+            id: Guid.NewGuid(),
+            testProtocolId: Guid.NewGuid(),
+            protocolKind: TestProtocolKind.Soil,
+            cropCycleId: cycle.Id,
+            farmId: farmTypedId,
+            plotId: PlotId1,
+            stageName: "Fruiting",
+            plannedDueDate: today.AddDays(-2),
+            createdAtUtc: Now.AddDays(-10));
+
+        var testRepo = new FakeTestInstanceRepo();
+        testRepo.Seed(instance);
+
+        var handler = CreateHandler(repo, testRepo);
+        var result = await handler.HandleAsync(new GetAttentionBoardQuery(UserId), CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        Assert.Single(result.Value.Cards);
+        var card = result.Value.Cards[0];
+        Assert.Equal(AttentionRank.Watch, card.Rank);
+        Assert.Equal(SuggestedActionKind.AssignTest, card.SuggestedAction);
+        Assert.Equal(1, card.MissingTestCount);
+    }
+
+    // ---------------------------------------------------------------------------
     // Private fake infrastructure
     // ---------------------------------------------------------------------------
 
@@ -395,5 +447,74 @@ public sealed class GetAttentionBoardHandlerTests
         private readonly DateTime _now;
         public FakeClock(DateTime now) => _now = now;
         public DateTime UtcNow => _now;
+    }
+
+    private sealed class FakeTestInstanceRepo : ITestInstanceRepository
+    {
+        private readonly Dictionary<Guid, TestInstance> _byId = new();
+
+        public void Seed(TestInstance instance) => _byId[instance.Id] = instance;
+
+        public Task AddAsync(TestInstance instance, CancellationToken ct = default)
+        {
+            _byId[instance.Id] = instance;
+            return Task.CompletedTask;
+        }
+
+        public Task AddRangeAsync(IEnumerable<TestInstance> instances, CancellationToken ct = default)
+        {
+            foreach (var i in instances) _byId[i.Id] = i;
+            return Task.CompletedTask;
+        }
+
+        public Task<TestInstance?> GetByIdAsync(Guid testInstanceId, CancellationToken ct = default)
+        {
+            _byId.TryGetValue(testInstanceId, out var i);
+            return Task.FromResult(i);
+        }
+
+        public Task<IReadOnlyList<TestInstance>> GetByCropCycleIdAsync(Guid cropCycleId, CancellationToken ct = default)
+        {
+            IReadOnlyList<TestInstance> r = _byId.Values
+                .Where(i => i.CropCycleId == cropCycleId)
+                .OrderBy(i => i.PlannedDueDate)
+                .ToList();
+            return Task.FromResult(r);
+        }
+
+        public Task<IReadOnlyList<TestInstance>> GetByFarmIdAndStatusAsync(
+            FarmId farmId,
+            IReadOnlyCollection<TestInstanceStatus> statuses,
+            CancellationToken ct = default)
+        {
+            var statusSet = statuses.ToHashSet();
+            IReadOnlyList<TestInstance> r = _byId.Values
+                .Where(i => i.FarmId == farmId && statusSet.Contains(i.Status))
+                .ToList();
+            return Task.FromResult(r);
+        }
+
+        public Task<IReadOnlyList<TestInstance>> GetOverdueAsync(DateOnly today, CancellationToken ct = default)
+        {
+            IReadOnlyList<TestInstance> r = _byId.Values
+                .Where(i => i.Status == TestInstanceStatus.Due && i.PlannedDueDate < today)
+                .ToList();
+            return Task.FromResult(r);
+        }
+
+        public Task<IReadOnlyList<TestInstance>> GetModifiedSinceAsync(
+            IReadOnlyCollection<FarmId> farmIds,
+            DateTime sinceUtc,
+            CancellationToken ct = default)
+        {
+            var farmSet = farmIds.ToHashSet();
+            IReadOnlyList<TestInstance> r = _byId.Values
+                .Where(i => farmSet.Contains(i.FarmId) && i.ModifiedAtUtc > sinceUtc)
+                .OrderBy(i => i.ModifiedAtUtc)
+                .ToList();
+            return Task.FromResult(r);
+        }
+
+        public Task SaveChangesAsync(CancellationToken ct = default) => Task.CompletedTask;
     }
 }

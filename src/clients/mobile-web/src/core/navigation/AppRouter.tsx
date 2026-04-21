@@ -57,6 +57,8 @@ const QuickLogSheet = React.lazy(() => import('../../features/logs/components/Qu
 const OnboardingPermissionsPage = React.lazy(() => import('../../pages/OnboardingPermissionsPage'));
 const QrDemoPage = React.lazy(() => import('../../pages/QrDemoPage'));
 const AttentionPage = React.lazy(() => import('../../features/attention/pages/AttentionPage'));
+const TestQueuePage = React.lazy(() => import('../../features/tests/pages/TestQueuePage'));
+const TestDetailPage = React.lazy(() => import('../../features/tests/pages/TestDetailPage'));
 
 type FeedStatusTone = 'pending' | 'rejected' | 'approved';
 
@@ -552,6 +554,25 @@ const AppRouter: React.FC = () => {
             {currentRoute === 'attention' && (
                 <div className="animate-in fade-in slide-in-from-right-4 duration-300">
                     <AttentionPage />
+                </div>
+            )}
+
+            {currentRoute === 'tests' && (
+                <div className="animate-in fade-in slide-in-from-right-4 duration-300">
+                    <TestQueuePage onNavigate={setCurrentRoute} />
+                </div>
+            )}
+
+            {currentRoute === 'test-detail' && (
+                <div className="animate-in fade-in slide-in-from-right-4 duration-300">
+                    <TestDetailPage
+                        testInstanceId={(() => {
+                            if (typeof window === 'undefined') return '';
+                            const match = window.location.pathname.match(/\/tests\/([^/?#]+)/);
+                            return match?.[1] ?? '';
+                        })()}
+                        onBack={() => setCurrentRoute('tests')}
+                    />
                 </div>
             )}
 

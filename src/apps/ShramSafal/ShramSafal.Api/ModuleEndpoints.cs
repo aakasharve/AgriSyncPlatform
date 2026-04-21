@@ -35,6 +35,7 @@ public static class ModuleEndpoints
         group.MapReferenceDataEndpoints();
         group.MapAuditEndpoints();
         group.MapExportEndpoints();
+        group.MapTestEndpoints();
         endpoints.MapSyncEndpoints();
 
         return endpoints;
