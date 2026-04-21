@@ -25,6 +25,7 @@ export interface Translations {
         procure: string;
         schedule: string;
         income: string;
+        tests: string;
     };
 
     // Log Page
@@ -291,6 +292,7 @@ export const translations: Record<Language, Translations> = {
             procure: 'Procure',
             schedule: 'Schedule',
             income: 'Income',
+            tests: 'Tests',
         },
         logPage: {
             selectCrop: 'Select Crop',
@@ -540,6 +542,7 @@ export const translations: Record<Language, Translations> = {
             procure: 'खरेदी',
             schedule: 'वेळापत्रक',
             income: 'उत्पन्न',
+            tests: 'चाचण्या',
         },
         logPage: {
             selectCrop: 'पीक निवडा',
