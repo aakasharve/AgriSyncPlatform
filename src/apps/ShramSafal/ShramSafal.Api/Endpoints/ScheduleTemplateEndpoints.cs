@@ -30,6 +30,7 @@ public static class ScheduleTemplateEndpoints
                 SourceTemplateId: id,
                 NewTemplateId: newTemplateId,
                 CallerUserId: actorUserId,
+                CallerRole: EndpointActorContext.GetActorRole(user),
                 NewScope: request.NewScope,
                 Reason: request.Reason,
                 ClientCommandId: request.ClientCommandId);
@@ -83,6 +84,7 @@ public static class ScheduleTemplateEndpoints
             var command = new PublishScheduleTemplateCommand(
                 TemplateId: id,
                 CallerUserId: actorUserId,
+                CallerRole: EndpointActorContext.GetActorRole(user),
                 ClientCommandId: request.ClientCommandId);
 
             var result = await handler.HandleAsync(command, ct);

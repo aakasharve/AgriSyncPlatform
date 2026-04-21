@@ -3,6 +3,7 @@ using AgriSync.BuildingBlocks.Abstractions;
 using AgriSync.BuildingBlocks.Results;
 using AgriSync.SharedKernel.Contracts.Ids;
 using ShramSafal.Application.Ports;
+using ShramSafal.Application.UseCases.Planning.CloneScheduleTemplate;
 using ShramSafal.Domain.Audit;
 using ShramSafal.Domain.Common;
 
@@ -47,8 +48,15 @@ public sealed class PublishScheduleTemplateHandler(
             return Result.Failure<PublishScheduleTemplateResult>(ShramSafalErrors.ScheduleTemplateNotFound);
         }
 
-        // Step 4: only the author may publish
+        // Step 4a: only the author may publish
         if (template.CreatedByUserId is null || template.CreatedByUserId.Value.Value != command.CallerUserId)
+        {
+            return Result.Failure<PublishScheduleTemplateResult>(ShramSafalErrors.Forbidden);
+        }
+
+        // Step 4b: scope role gate (CEI Phase 2 §4.7)
+        // Publishing to Licensed / Team scopes requires the matching role set.
+        if (!ScopeRoleGate.IsAllowed(template.TenantScope, command.CallerRole))
         {
             return Result.Failure<PublishScheduleTemplateResult>(ShramSafalErrors.Forbidden);
         }
