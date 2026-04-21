@@ -61,6 +61,9 @@ const TestQueuePage = React.lazy(() => import('../../features/tests/pages/TestQu
 const TestDetailPage = React.lazy(() => import('../../features/tests/pages/TestDetailPage'));
 const ComplianceSignalsPage = React.lazy(() => import('../../features/compliance/pages/ComplianceSignalsPage'));
 const ServiceProofPage = React.lazy(() => import('../../features/reports/pages/ServiceProofPage'));
+const JobCardsPage = React.lazy(() => import('../../features/work/pages/JobCardsPage'));
+const JobCardDetailPage = React.lazy(() => import('../../features/work/pages/JobCardDetailPage'));
+const WorkerProfilePage = React.lazy(() => import('../../features/work/pages/WorkerProfilePage'));
 
 type FeedStatusTone = 'pending' | 'rejected' | 'approved';
 
@@ -594,6 +597,59 @@ const AppRouter: React.FC = () => {
                     <ServiceProofPage
                         onNavigate={setCurrentRoute}
                         onBack={() => setCurrentRoute('finance-reports')}
+                    />
+                </div>
+            )}
+
+            {/* CEI Phase 4 §4.8 — Job Cards list */}
+            {currentRoute === 'jobs' && (
+                <div className="animate-in fade-in slide-in-from-right-4 duration-300">
+                    <JobCardsPage
+                        onNavigateToDetail={(jobCardId) => {
+                            if (typeof window !== 'undefined') {
+                                window.sessionStorage.setItem('job_card_id', jobCardId);
+                            }
+                            setCurrentRoute('job-detail');
+                        }}
+                    />
+                </div>
+            )}
+
+            {/* CEI Phase 4 §4.8 — Job Card detail */}
+            {currentRoute === 'job-detail' && (
+                <div className="animate-in fade-in slide-in-from-right-4 duration-300">
+                    <JobCardDetailPage
+                        jobCardId={(() => {
+                            if (typeof window === 'undefined') return '';
+                            return window.sessionStorage.getItem('job_card_id') ?? '';
+                        })()}
+                        onBack={() => setCurrentRoute('jobs')}
+                        onNavigateToLedger={() => setCurrentRoute('finance-ledger')}
+                        onNavigateToWorker={(userId) => {
+                            if (typeof window !== 'undefined') {
+                                window.sessionStorage.setItem('worker_profile_user_id', userId);
+                            }
+                            setCurrentRoute('worker-profile');
+                        }}
+                    />
+                </div>
+            )}
+
+            {/* CEI Phase 4 §4.8 — Worker profile */}
+            {currentRoute === 'worker-profile' && (
+                <div className="animate-in fade-in slide-in-from-right-4 duration-300">
+                    <WorkerProfilePage
+                        userId={(() => {
+                            if (typeof window === 'undefined') return '';
+                            return window.sessionStorage.getItem('worker_profile_user_id') ?? '';
+                        })()}
+                        onBack={() => setCurrentRoute('jobs')}
+                        onNavigateToJobCard={(jobCardId) => {
+                            if (typeof window !== 'undefined') {
+                                window.sessionStorage.setItem('job_card_id', jobCardId);
+                            }
+                            setCurrentRoute('job-detail');
+                        }}
                     />
                 </div>
             )}

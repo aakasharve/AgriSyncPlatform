@@ -397,7 +397,13 @@ export type AppRoute =
     /** CEI Phase 3 §4.6 — compliance signals */
     | 'compliance'
     /** CEI Phase 3 §23.2 — service proof export */
-    | 'service-proof';
+    | 'service-proof'
+    /** CEI Phase 4 §4.8 — job cards list */
+    | 'jobs'
+    /** CEI Phase 4 §4.8 — job card detail (id passed via sessionStorage) */
+    | 'job-detail'
+    /** CEI Phase 4 §4.8 — worker profile (id passed via sessionStorage) */
+    | 'worker-profile';
 
 export interface AudioData {
     blob: Blob;
