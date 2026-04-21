@@ -168,6 +168,14 @@ public static class DependencyInjection
         services.AddScoped<IAuthorizationEnforcer, ShramSafalAuthorizationEnforcer>();
         services.AddScoped<IAiJobRepository, AiJobRepository>();
         services.AddScoped<ISyncMutationStore, SyncMutationStore>();
+
+        // CEI Phase 2 §4.5 — placeholder in-memory test-stack repositories.
+        // Full EF-backed wiring lands in CEI Phase 3 once TestInstance /
+        // TestProtocol / TestRecommendation are mapped onto ShramSafalDbContext.
+        services.AddSingleton<ITestInstanceRepository, InMemoryTestInstanceRepository>();
+        services.AddSingleton<ITestProtocolRepository, InMemoryTestProtocolRepository>();
+        services.AddSingleton<ITestRecommendationRepository, InMemoryTestRecommendationRepository>();
+
         services.AddSingleton<AiResponseNormalizer>();
         services.AddSingleton<AiCircuitBreakerRegistry>();
         services.AddSingleton<AiFailureClassifier>();
