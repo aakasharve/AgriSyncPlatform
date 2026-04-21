@@ -52,6 +52,7 @@ using ShramSafal.Application.UseCases.Planning.PublishScheduleTemplate;
 using ShramSafal.Application.UseCases.Planning.GetScheduleLineage;
 using ShramSafal.Application.UseCases.Sync.PullSyncChanges;
 using ShramSafal.Application.UseCases.Sync.PushSyncBatch;
+using ShramSafal.Application.UseCases.Tests.MarkOverdueInstances;
 using ShramSafal.Application.Ports;
 using ShramSafal.Application.Services;
 using ShramSafal.Infrastructure;
@@ -136,6 +137,9 @@ public static class DependencyInjection
         services.AddScoped<MigrateScheduleHandler>();
         services.AddScoped<AbandonScheduleHandler>();
         services.AddScoped<CompleteScheduleHandler>();
+
+        // CEI Phase 2 §4.5 — test-stack overdue sweeper handler
+        services.AddScoped<MarkOverdueInstancesHandler>();
 
         return services;
     }
