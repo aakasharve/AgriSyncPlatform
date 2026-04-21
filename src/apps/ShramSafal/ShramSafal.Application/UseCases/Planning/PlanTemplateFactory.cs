@@ -16,7 +16,7 @@ internal static class PlanTemplateFactory
             $"{cropCycle.CropName} - Derived Template",
             cropCycle.Stage,
             nowUtc,
-            stageDefinitions);
+            stages: stageDefinitions);
 
         AddActivities(cropCycle, plannedActivities, template);
         return template;

@@ -1173,6 +1173,12 @@ const ManualEntry: React.FC<ManualEntryProps> = ({ context, crops, defaults, pro
             </div>
 
 
+            {/* TODO CEI §4.4: Wire ExecutionStatusSelector here for each ActivityCard.
+                Import ExecutionStatusSelector from '../components/ExecutionStatusSelector'
+                and render below the activity list when cropActivities.length > 0.
+                Pass value={act.executionStatus ?? 'Completed'} and
+                onChange={(status, devCode, devNote) => updateExecutionStatus(act.id, status, devCode, devNote)}. */}
+
             {/* COST STRIP (Static Footer) */}
             <div className="mt-8 mb-4 max-w-xl mx-auto animate-in slide-in-from-bottom-2 fade-in duration-500">
                 <div className="bg-white rounded-2xl shadow-sm border border-stone-200 p-2 pl-5 flex items-center justify-between gap-4">

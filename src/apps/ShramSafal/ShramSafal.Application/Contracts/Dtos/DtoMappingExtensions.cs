@@ -41,7 +41,13 @@ internal static class DtoMappingExtensions
             location.PermissionState);
 
     public static LogTaskDto ToDto(this LogTask task) =>
-        new(task.Id, task.ActivityType, task.Notes, task.OccurredAtUtc);
+        new(task.Id,
+            task.ActivityType,
+            task.Notes,
+            task.OccurredAtUtc,
+            task.ExecutionStatus.ToString(),
+            task.DeviationReasonCode,
+            task.DeviationNote);
 
     public static VerificationEventDto ToDto(this VerificationEvent verificationEvent) =>
         new(
@@ -145,7 +151,15 @@ internal static class DtoMappingExtensions
             activity.Stage,
             activity.PlannedDate,
             activity.CreatedAtUtc,
-            activity.ModifiedAtUtc);
+            activity.ModifiedAtUtc,
+            activity.SourceTemplateActivityId,
+            new PlannedActivityOverrideMarkers(
+                activity.IsLocallyAdded,
+                activity.IsLocallyChanged,
+                activity.OverrideReason,
+                activity.OverriddenAtUtc,
+                activity.IsRemoved,
+                activity.RemovedReason));
 
     public static AuditEventDto ToDto(this AuditEvent auditEvent) =>
         new(

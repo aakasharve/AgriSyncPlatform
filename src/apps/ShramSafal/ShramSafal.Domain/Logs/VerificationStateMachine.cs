@@ -4,16 +4,29 @@ namespace ShramSafal.Domain.Logs;
 
 public static class VerificationStateMachine
 {
+    /// <summary>
+    /// Roles that may verify (Confirmed → Verified) or dispute a log.
+    /// Extended in CEI Phase 2 §4.7 to include Agronomist and FpcTechnicalManager.
+    /// </summary>
     private static readonly HashSet<AppRole> OwnerRoles =
     [
         AppRole.PrimaryOwner,
-        AppRole.SecondaryOwner
+        AppRole.SecondaryOwner,
+        AppRole.Agronomist,
+        AppRole.FpcTechnicalManager
     ];
 
+    /// <summary>
+    /// Roles that may confirm (Draft → Confirmed) and participate in correction cycle.
+    /// FieldScout and LabOperator are intentionally excluded — they may only create Draft logs.
+    /// </summary>
     private static readonly HashSet<AppRole> AllRoles =
     [
         AppRole.PrimaryOwner,
         AppRole.SecondaryOwner,
+        AppRole.Agronomist,
+        AppRole.FpcTechnicalManager,
+        AppRole.Consultant,
         AppRole.Mukadam,
         AppRole.Worker
     ];

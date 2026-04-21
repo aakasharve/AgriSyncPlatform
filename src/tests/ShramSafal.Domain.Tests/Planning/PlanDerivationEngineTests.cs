@@ -53,6 +53,27 @@ public sealed class PlanDerivationEngineTests
             template.AddActivity(Guid.NewGuid(), "Spray", 2, FrequencyMode.EveryNDays, 0));
     }
 
+    [Fact]
+    public void GeneratePlan_StampsSourceTemplateActivityId_OnEachPlannedActivity()
+    {
+        var template = BuildTemplate();
+        var startDate = new DateOnly(2026, 1, 1);
+
+        var stageItems = PlanDerivationEngine.DerivePlannedItemsForStage(template, startDate, "Vegetative");
+
+        Assert.NotEmpty(stageItems);
+        Assert.All(stageItems, item =>
+        {
+            Assert.NotNull(item.SourceTemplateActivityId);
+            Assert.NotEqual(Guid.Empty, item.SourceTemplateActivityId!.Value);
+        });
+
+        // Each item's SourceTemplateActivityId must match one of the template activities
+        var templateActivityIds = template.Activities.Select(a => a.Id).ToHashSet();
+        Assert.All(stageItems, item =>
+            Assert.Contains(item.SourceTemplateActivityId!.Value, templateActivityIds));
+    }
+
     private static ScheduleTemplate BuildTemplate()
     {
         var template = ScheduleTemplate.Create(
@@ -60,7 +81,7 @@ public sealed class PlanDerivationEngineTests
             "Grape Template",
             "Vegetative",
             DateTime.UtcNow,
-            [
+            stages: [
                 new StageDefinition("Vegetative", 0, 14),
                 new StageDefinition("Flowering", 15, 30)
             ]);

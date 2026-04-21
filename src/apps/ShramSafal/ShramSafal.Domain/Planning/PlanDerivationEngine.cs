@@ -32,12 +32,13 @@ public static class PlanDerivationEngine
                 continue;
             }
 
-            planned.Add(PlannedActivity.Create(
+            planned.Add(PlannedActivity.CreateFromTemplate(
                 Guid.NewGuid(),
                 Guid.Empty,
                 activity.ActivityName,
                 stageName,
                 targetDate,
+                activity.Id,
                 nowUtc));
         }
 
@@ -197,12 +198,13 @@ public static class PlanDerivationEngine
         string stageName,
         DateTime nowUtc)
     {
-        return PlannedActivity.Create(
+        return PlannedActivity.CreateFromTemplate(
             Guid.NewGuid(),
             Guid.Empty,
             activity.ActivityName,
             stageName,
             startDate.AddDays(dayNumber),
+            activity.Id,
             nowUtc);
     }
 }

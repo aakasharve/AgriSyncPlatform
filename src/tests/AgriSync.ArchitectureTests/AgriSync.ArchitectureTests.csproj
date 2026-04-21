@@ -9,6 +9,7 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageReference Include="FluentAssertions" Version="8.9.0" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="18.0.1" />
     <PackageReference Include="xunit" Version="2.9.3" />
     <PackageReference Include="xunit.runner.visualstudio" Version="3.1.5">
@@ -25,9 +26,15 @@
        project so reflection can verify cross-cutting invariants
        (Phase 5 entitlement gate, Phase 2 analytics rail). -->
   <ItemGroup>
+    <PackageReference Include="Microsoft.EntityFrameworkCore" Version="10.0.3" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" Version="10.0.3" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\..\AgriSync.BuildingBlocks\AgriSync.BuildingBlocks.csproj" />
     <ProjectReference Include="..\..\apps\ShramSafal\ShramSafal.Application\ShramSafal.Application.csproj" />
     <ProjectReference Include="..\..\apps\User\User.Application\User.Application.csproj" />
+    <ProjectReference Include="..\..\apps\User\User.Infrastructure\User.Infrastructure.csproj" />
   </ItemGroup>
 
 </Project>

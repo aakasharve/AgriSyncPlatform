@@ -138,11 +138,14 @@ try
     builder.Services.AddHostedService<AgriSync.Bootstrapper.Jobs.AlertDispatcherJob>();
     builder.Services.AddHostedService<AgriSync.Bootstrapper.Jobs.SubscriptionReconciliationJob>();
     builder.Services.AddHostedService<AgriSync.Bootstrapper.Jobs.WorkerRetentionJob>();
+    // CEI §4.5 — daily sweep at 02:00 UTC that transitions past-due TestInstance rows to Overdue
+    builder.Services.AddHostedService<AgriSync.Bootstrapper.Jobs.TestOverdueSweeper>();
     builder.Services.AddScoped<AgriSync.Bootstrapper.Jobs.IWorkerRetentionReader,
         AgriSync.Bootstrapper.Infrastructure.WorkerRetentionReader>();
     builder.Services.AddTransient<AgriSync.Bootstrapper.Infrastructure.DatabaseSeeder>();
     builder.Services.AddTransient<AgriSync.Bootstrapper.Infrastructure.PurveshDemoSeeder>();
     builder.Services.AddTransient<AgriSync.Bootstrapper.Infrastructure.BlankTestUserSeeder>();
+    builder.Services.AddTransient<ShramSafal.Infrastructure.Persistence.Seeding.TestProtocolSeed>();
 
     QuestPDF.Settings.License = QuestPDF.Infrastructure.LicenseType.Community;
 
@@ -576,6 +579,18 @@ static async Task InitializeApplicationDataAsync(WebApplication app)
             var seeder = services.GetRequiredService<AgriSync.Bootstrapper.Infrastructure.DatabaseSeeder>();
             await seeder.SeedDemoDataAsync();
             Log.Information("Ramu demo seeding completed.");
+        }
+
+        // CEI §4.5 Phase 3 — default Grapes test protocols (idempotent).
+        var seedTestProtocolsV1 = string.Equals(
+            Environment.GetEnvironmentVariable("SEED_TEST_PROTOCOLS_V1"),
+            "true",
+            StringComparison.OrdinalIgnoreCase);
+        if (seedTestProtocolsV1)
+        {
+            var protocolSeeder = services.GetRequiredService<ShramSafal.Infrastructure.Persistence.Seeding.TestProtocolSeed>();
+            var added = await protocolSeeder.SeedAsync(DateTime.UtcNow);
+            Log.Information("Test-protocol seeding completed. New rows added: {Added}", added);
         }
 
         var clearPurveshDemo = string.Equals(

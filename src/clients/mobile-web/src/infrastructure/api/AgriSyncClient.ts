@@ -108,6 +108,9 @@ export interface LogTaskDto {
     activityType: string;
     notes?: string;
     occurredAtUtc: string;
+    executionStatus?: string;
+    deviationReasonCode?: string | null;
+    deviationNote?: string | null;
 }
 
 export interface VerificationEventDto {
@@ -231,6 +234,32 @@ export interface CreateAttachmentResponse {
     uploadUrl: string;
 }
 
+export interface AttentionCardDto {
+    cardId: string;
+    farmId: string;
+    farmName: string;
+    plotId: string;
+    plotName: string;
+    cropCycleId?: string | null;
+    stageName?: string | null;
+    rank: string;
+    computedAtUtc: string;
+    titleEn: string;
+    titleMr: string;
+    descriptionEn: string;
+    descriptionMr: string;
+    suggestedAction: string;
+    suggestedActionLabelEn: string;
+    suggestedActionLabelMr: string;
+    overdueTaskCount?: number | null;
+    latestHealthScore?: string | null;
+    unresolvedDisputeCount?: number | null;
+}
+
+export interface AttentionBoardDto {
+    cards: AttentionCardDto[];
+}
+
 export interface SyncPullResponse {
     serverTimeUtc: string;
     nextCursorUtc: string;
@@ -252,6 +281,7 @@ export interface SyncPullResponse {
     activityCategories?: string[];
     costCategories?: string[];
     referenceDataVersionHash?: string;
+    attentionBoard?: AttentionBoardDto | null;
 }
 
 export interface AiParseResponse {

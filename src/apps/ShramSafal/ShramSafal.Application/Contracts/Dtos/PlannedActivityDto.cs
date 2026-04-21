@@ -7,4 +7,6 @@ public sealed record PlannedActivityDto(
     string Stage,
     DateOnly PlannedDate,
     DateTime CreatedAtUtc,
-    DateTime ModifiedAtUtc);
+    DateTime ModifiedAtUtc,
+    Guid? SourceTemplateActivityId,
+    PlannedActivityOverrideMarkers? OverrideMarkers);

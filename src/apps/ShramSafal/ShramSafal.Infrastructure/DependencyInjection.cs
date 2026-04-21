@@ -157,6 +157,7 @@ public static class DependencyInjection
         });
 
         services.AddScoped<IShramSafalRepository, ShramSafalRepository>();
+        services.AddScoped<IUserDirectory, UserDirectoryService>();
         services.AddScoped<IMisReportRepository, MisReportRepository>();
         services.AddScoped<IAdminOpsRepository, AdminOpsRepository>();
         services.AddScoped<IFarmInvitationRepository, FarmInvitationRepository>();
@@ -167,6 +168,12 @@ public static class DependencyInjection
         services.AddScoped<IAuthorizationEnforcer, ShramSafalAuthorizationEnforcer>();
         services.AddScoped<IAiJobRepository, AiJobRepository>();
         services.AddScoped<ISyncMutationStore, SyncMutationStore>();
+
+        // CEI Phase 3 §4.5 — EF Core-backed test-stack repositories.
+        services.AddScoped<ITestProtocolRepository, TestProtocolRepository>();
+        services.AddScoped<ITestInstanceRepository, TestInstanceRepository>();
+        services.AddScoped<ITestRecommendationRepository, TestRecommendationRepository>();
+
         services.AddSingleton<AiResponseNormalizer>();
         services.AddSingleton<AiCircuitBreakerRegistry>();
         services.AddSingleton<AiFailureClassifier>();

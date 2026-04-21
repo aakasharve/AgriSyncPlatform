@@ -149,6 +149,7 @@ public sealed class GetFarmWeekMisHandlerTests
         public Task AddScheduleTemplateAsync(ShramSafal.Domain.Planning.ScheduleTemplate template, CancellationToken ct = default) => throw new NotSupportedException();
         public Task<System.Collections.Generic.List<ShramSafal.Domain.Planning.ScheduleTemplate>> GetScheduleTemplatesAsync(CancellationToken ct = default) => throw new NotSupportedException();
         public Task AddPlannedActivitiesAsync(System.Collections.Generic.IEnumerable<ShramSafal.Domain.Planning.PlannedActivity> plannedActivities, CancellationToken ct = default) => throw new NotSupportedException();
+        public Task<ShramSafal.Domain.Planning.PlannedActivity?> GetPlannedActivityByIdAsync(Guid id, CancellationToken ct = default) => throw new NotSupportedException();
         public Task<System.Collections.Generic.List<ShramSafal.Domain.Planning.PlannedActivity>> GetPlannedActivitiesByCropCycleIdAsync(Guid cropCycleId, CancellationToken ct = default) => throw new NotSupportedException();
         public Task<System.Collections.Generic.List<ShramSafal.Domain.Logs.LogTask>> GetExecutedTasksByCropCycleIdAsync(Guid cropCycleId, CancellationToken ct = default) => throw new NotSupportedException();
         public Task<System.Collections.Generic.List<ShramSafal.Domain.Finance.CostEntry>> GetCostEntriesAsync(DateOnly? fromDate, DateOnly? toDate, CancellationToken ct = default) => throw new NotSupportedException();
@@ -177,6 +178,10 @@ public sealed class GetFarmWeekMisHandlerTests
         public Task<ShramSafal.Domain.Schedules.ScheduleSubscription?> GetActiveScheduleSubscriptionAsync(Guid plotId, string cropKey, Guid cropCycleId, CancellationToken ct = default) => throw new NotSupportedException();
         public Task<ShramSafal.Domain.Schedules.ScheduleSubscription?> GetScheduleSubscriptionByIdAsync(AgriSync.SharedKernel.Contracts.Ids.ScheduleSubscriptionId subscriptionId, CancellationToken ct = default) => throw new NotSupportedException();
         public Task AddScheduleMigrationEventAsync(ShramSafal.Domain.Schedules.ScheduleMigrationEvent migrationEvent, CancellationToken ct = default) => throw new NotSupportedException();
+        public Task<ShramSafal.Domain.Planning.ScheduleTemplate?> GetScheduleTemplateByIdAsync(Guid templateId, CancellationToken ct = default) => throw new NotSupportedException();
+        public Task<bool> HasActiveOwnerMembershipAsync(Guid userId, CancellationToken ct = default) => throw new NotSupportedException();
+        public Task<List<ShramSafal.Domain.Planning.ScheduleTemplate>> GetScheduleLineageAsync(Guid rootTemplateId, CancellationToken ct = default) => throw new NotSupportedException();
+        public Task<int> GetDisputedLogCountForPlotAsync(Guid plotId, CancellationToken ct = default) => throw new NotSupportedException();
         public Task SaveChangesAsync(CancellationToken ct = default) => throw new NotSupportedException();
     }
 }

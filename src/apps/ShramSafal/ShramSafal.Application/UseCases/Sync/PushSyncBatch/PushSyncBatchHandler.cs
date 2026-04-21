@@ -2,6 +2,7 @@ using System.Text.Json;
 using System.Text.RegularExpressions;
 using AgriSync.BuildingBlocks.Abstractions;
 using AgriSync.BuildingBlocks.Results;
+using AgriSync.SharedKernel.Contracts.Ids;
 using AgriSync.SharedKernel.Contracts.Roles;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage;
@@ -18,8 +19,11 @@ using ShramSafal.Application.UseCases.Finance.SetPriceConfigVersion;
 using ShramSafal.Application.UseCases.Logs.AddLogTask;
 using ShramSafal.Application.UseCases.Logs.CreateDailyLog;
 using ShramSafal.Application.UseCases.Logs.VerifyLog;
+using ShramSafal.Application.UseCases.Tests.RecordTestCollected;
+using ShramSafal.Application.UseCases.Tests.RecordTestResult;
 using ShramSafal.Domain.Location;
 using ShramSafal.Domain.Logs;
+using ShramSafal.Domain.Tests;
 
 namespace ShramSafal.Application.UseCases.Sync.PushSyncBatch;
 
@@ -38,7 +42,10 @@ public sealed class PushSyncBatchHandler(
     AllocateGlobalExpenseHandler allocateGlobalExpenseHandler,
     CorrectCostEntryHandler correctCostEntryHandler,
     SetPriceConfigVersionHandler setPriceConfigVersionHandler,
-    CreateAttachmentHandler createAttachmentHandler)
+    CreateAttachmentHandler createAttachmentHandler,
+    RecordTestCollectedHandler recordTestCollectedHandler,
+    RecordTestResultHandler recordTestResultHandler,
+    ITestInstanceRepository testInstanceRepository)
 {
     private static readonly JsonSerializerOptions SerializerOptions = new()
     {
@@ -229,6 +236,10 @@ public sealed class PushSyncBatchHandler(
                 return await HandleSetPriceConfigAsync(clientRequestId, payload, actorUserId, actorRole, ct);
             case "create_attachment":
                 return await HandleCreateAttachmentAsync(clientRequestId, payload, actorUserId, actorRole, ct);
+            case "testinstance.collected":
+                return await HandleTestInstanceCollectedAsync(clientRequestId, payload, actorUserId, actorRole, ct);
+            case "testinstance.reported":
+                return await HandleTestInstanceReportedAsync(clientRequestId, payload, actorUserId, actorRole, ct);
             case "add_location":
                 return MutationExecutionOutcome.Failure(
                     "ShramSafal.InvalidMutationType",
@@ -734,6 +745,168 @@ public sealed class PushSyncBatchHandler(
         return ToOutcome(result);
     }
 
+    private async Task<MutationExecutionOutcome> HandleTestInstanceCollectedAsync(
+        string clientRequestId,
+        JsonElement payload,
+        Guid actorUserId,
+        string actorRole,
+        CancellationToken ct)
+    {
+        if (!PayloadHasOnly(payload, "testInstanceId"))
+        {
+            return MutationExecutionOutcome.Failure(
+                "ShramSafal.SyncInvalidPayload",
+                "testInstance.collected payload contains unsupported fields.");
+        }
+
+        var request = DeserializePayload<RecordTestCollectedMutationPayload>(payload);
+        if (request is null || request.TestInstanceId == Guid.Empty)
+        {
+            return MutationExecutionOutcome.Failure(
+                "ShramSafal.SyncInvalidPayload",
+                "Invalid payload for testInstance.collected.");
+        }
+
+        if (!TryParseAppRole(actorRole, out var role))
+        {
+            return MutationExecutionOutcome.Failure(
+                "ShramSafal.TestRoleNotAllowed",
+                $"Unknown actorRole '{actorRole}' for testInstance.collected.");
+        }
+
+        // Farm-membership check — resolve the instance's farm first.
+        var instance = await testInstanceRepository.GetByIdAsync(request.TestInstanceId, ct);
+        if (instance is null)
+        {
+            return MutationExecutionOutcome.Failure(
+                "ShramSafal.TestInstanceNotFound",
+                "Test instance was not found.");
+        }
+
+        var isMember = await repository.IsUserMemberOfFarmAsync(instance.FarmId.Value, actorUserId, ct);
+        if (!isMember)
+        {
+            return MutationExecutionOutcome.Failure(
+                "ShramSafal.Forbidden",
+                "User is not a member of the target farm.");
+        }
+
+        var result = await recordTestCollectedHandler.HandleAsync(
+            new RecordTestCollectedCommand(
+                TestInstanceId: request.TestInstanceId,
+                CallerUserId: new UserId(actorUserId),
+                CallerRole: role),
+            ct);
+
+        return ToOutcome(result);
+    }
+
+    private async Task<MutationExecutionOutcome> HandleTestInstanceReportedAsync(
+        string clientRequestId,
+        JsonElement payload,
+        Guid actorUserId,
+        string actorRole,
+        CancellationToken ct)
+    {
+        if (!PayloadHasOnly(payload, "testInstanceId", "results", "attachmentIds", "clientCommandId"))
+        {
+            return MutationExecutionOutcome.Failure(
+                "ShramSafal.SyncInvalidPayload",
+                "testInstance.reported payload contains unsupported fields.");
+        }
+
+        var request = DeserializePayload<RecordTestResultMutationPayload>(payload);
+        if (request is null ||
+            request.TestInstanceId == Guid.Empty ||
+            request.Results is null ||
+            request.Results.Count == 0)
+        {
+            return MutationExecutionOutcome.Failure(
+                "ShramSafal.SyncInvalidPayload",
+                "Invalid payload for testInstance.reported.");
+        }
+
+        if (!TryParseAppRole(actorRole, out var role))
+        {
+            return MutationExecutionOutcome.Failure(
+                "ShramSafal.TestRoleNotAllowed",
+                $"Unknown actorRole '{actorRole}' for testInstance.reported.");
+        }
+
+        var instance = await testInstanceRepository.GetByIdAsync(request.TestInstanceId, ct);
+        if (instance is null)
+        {
+            return MutationExecutionOutcome.Failure(
+                "ShramSafal.TestInstanceNotFound",
+                "Test instance was not found.");
+        }
+
+        var isMember = await repository.IsUserMemberOfFarmAsync(instance.FarmId.Value, actorUserId, ct);
+        if (!isMember)
+        {
+            return MutationExecutionOutcome.Failure(
+                "ShramSafal.Forbidden",
+                "User is not a member of the target farm.");
+        }
+
+        List<TestResult> results;
+        try
+        {
+            results = request.Results
+                .Select(r => TestResult.Create(
+                    r.ParameterCode,
+                    r.ParameterValue,
+                    r.Unit ?? string.Empty,
+                    r.ReferenceRangeLow,
+                    r.ReferenceRangeHigh))
+                .ToList();
+        }
+        catch (ArgumentException)
+        {
+            return MutationExecutionOutcome.Failure(
+                "ShramSafal.SyncInvalidPayload",
+                "One or more test results are invalid.");
+        }
+
+        var attachmentIds = (IReadOnlyCollection<Guid>)(request.AttachmentIds ?? Array.Empty<Guid>());
+
+        var result = await recordTestResultHandler.HandleAsync(
+            new RecordTestResultCommand(
+                TestInstanceId: request.TestInstanceId,
+                Results: results,
+                AttachmentIds: attachmentIds,
+                CallerUserId: new UserId(actorUserId),
+                CallerRole: role,
+                ClientCommandId: request.ClientCommandId ?? clientRequestId),
+            ct);
+
+        return ToOutcome(result);
+    }
+
+    /// <summary>
+    /// Parses the <c>actorRole</c> header string into the strongly-typed
+    /// <see cref="AppRole"/> expected by the test-stack handlers. The string
+    /// may be bare (e.g. <c>"LabOperator"</c>) or prefixed with the context
+    /// (<c>"shramsafal:LabOperator"</c>) — strip the prefix and try to parse.
+    /// </summary>
+    private static bool TryParseAppRole(string actorRole, out AppRole role)
+    {
+        role = default;
+        if (string.IsNullOrWhiteSpace(actorRole))
+        {
+            return false;
+        }
+
+        var raw = actorRole.Trim();
+        var colonIdx = raw.IndexOf(':');
+        if (colonIdx >= 0 && colonIdx < raw.Length - 1)
+        {
+            raw = raw[(colonIdx + 1)..];
+        }
+
+        return Enum.TryParse(raw, ignoreCase: true, out role);
+    }
+
     private static bool PayloadHasOnly(JsonElement payload, params string[] allowedProperties)
     {
         if (payload.ValueKind != JsonValueKind.Object)
@@ -970,4 +1143,19 @@ public sealed class PushSyncBatchHandler(
         DateTime CapturedAtUtc,
         string Provider,
         string PermissionState);
+
+    private sealed record RecordTestCollectedMutationPayload(Guid TestInstanceId);
+
+    private sealed record RecordTestResultMutationPayload(
+        Guid TestInstanceId,
+        IReadOnlyList<TestResultMutationPayload> Results,
+        IReadOnlyList<Guid>? AttachmentIds,
+        string? ClientCommandId);
+
+    private sealed record TestResultMutationPayload(
+        string ParameterCode,
+        string ParameterValue,
+        string? Unit,
+        decimal? ReferenceRangeLow,
+        decimal? ReferenceRangeHigh);
 }

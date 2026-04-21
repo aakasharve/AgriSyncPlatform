@@ -10,6 +10,7 @@ public static class ShramSafalErrors
     public static readonly Error CropCycleOverlap = new("ShramSafal.CropCycleOverlap", "Crop cycle dates overlap an existing cycle on this plot.");
     public static readonly Error DailyLogNotFound = new("ShramSafal.DailyLogNotFound", "Daily log was not found.");
     public static readonly Error DuplicateLogRequest = new("ShramSafal.DuplicateLogRequest", "A log already exists for this idempotency key.");
+    public static readonly Error PlannedActivityNotFound = new("ShramSafal.PlannedActivityNotFound", "Planned activity was not found.");
     public static readonly Error CostEntryNotFound = new("ShramSafal.CostEntryNotFound", "Cost entry was not found.");
     public static readonly Error DayLedgerNotFound = new("ShramSafal.DayLedgerNotFound", "Day ledger was not found.");
     public static readonly Error AttachmentNotFound = new("ShramSafal.AttachmentNotFound", "Attachment was not found.");
@@ -29,4 +30,11 @@ public static class ShramSafalErrors
     public static readonly Error ScheduleTemplateUnpublished = new("ShramSafal.ScheduleTemplateUnpublished", "Schedule template has not been published.");
     public static readonly Error ScheduleTemplateCropMismatch = new("ShramSafal.ScheduleTemplateCropMismatch", "Schedule template crop does not match the crop cycle.");
     public static readonly Error ScheduleNotActive = new("ShramSafal.ScheduleNotActive", "Schedule subscription is not active and cannot transition.");
+
+    // --- CEI Phase 2 §4.5 (Tests) ---------------------------------------------------------
+    public static readonly Error TestProtocolNotFound = new("ShramSafal.TestProtocolNotFound", "Test protocol was not found.");
+    public static readonly Error TestInstanceNotFound = new("ShramSafal.TestInstanceNotFound", "Test instance was not found.");
+    public static readonly Error TestRoleNotAllowed = new("ShramSafal.TestRoleNotAllowed", "Role is not allowed to perform this action on a test.");
+    public static readonly Error TestInvalidState = new("ShramSafal.TestInvalidState", "Test instance is not in a valid state for this action.");
+    public static readonly Error TestAttachmentInvalid = new("ShramSafal.TestAttachmentInvalid", "Attachment is missing, not finalized, or not linked to this test instance.");
 }

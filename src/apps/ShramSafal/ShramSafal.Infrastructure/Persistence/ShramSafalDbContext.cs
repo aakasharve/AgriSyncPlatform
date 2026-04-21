@@ -9,6 +9,7 @@ using ShramSafal.Domain.Logs;
 using ShramSafal.Domain.Planning;
 using ShramSafal.Domain.Schedules;
 using ShramSafal.Domain.Subscriptions;
+using ShramSafal.Domain.Tests;
 
 namespace ShramSafal.Infrastructure.Persistence;
 
@@ -40,6 +41,9 @@ public sealed class ShramSafalDbContext(DbContextOptions<ShramSafalDbContext> op
     public DbSet<ScheduleSubscription> ScheduleSubscriptions => Set<ScheduleSubscription>();
     public DbSet<ScheduleMigrationEvent> ScheduleMigrationEvents => Set<ScheduleMigrationEvent>();
     public DbSet<DocumentExtractionSession> DocumentExtractionSessions => Set<DocumentExtractionSession>();
+    public DbSet<TestProtocol> TestProtocols => Set<TestProtocol>();
+    public DbSet<TestInstance> TestInstances => Set<TestInstance>();
+    public DbSet<TestRecommendation> TestRecommendations => Set<TestRecommendation>();
     internal DbSet<SyncMutationRecord> SyncMutations => Set<SyncMutationRecord>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)

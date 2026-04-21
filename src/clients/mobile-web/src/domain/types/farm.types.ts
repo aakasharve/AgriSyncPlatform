@@ -389,7 +389,11 @@ export type AppRoute =
     | 'finance-reports'
     | 'finance-settings'
     | 'qr-demo'
-    | 'referrals';
+    | 'referrals'
+    | 'attention'
+    /** CEI Phase 2 §4.5 — test queue + detail */
+    | 'tests'
+    | 'test-detail';
 
 export interface AudioData {
     blob: Blob;
