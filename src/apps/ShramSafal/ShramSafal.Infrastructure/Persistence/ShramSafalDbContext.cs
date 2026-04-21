@@ -8,6 +8,7 @@ using ShramSafal.Domain.Farms;
 using ShramSafal.Domain.Finance;
 using ShramSafal.Domain.Logs;
 using ShramSafal.Domain.Planning;
+using ShramSafal.Domain.Work;
 using ShramSafal.Domain.Schedules;
 using ShramSafal.Domain.Subscriptions;
 using ShramSafal.Domain.Tests;
@@ -46,6 +47,7 @@ public sealed class ShramSafalDbContext(DbContextOptions<ShramSafalDbContext> op
     public DbSet<TestInstance> TestInstances => Set<TestInstance>();
     public DbSet<TestRecommendation> TestRecommendations => Set<TestRecommendation>();
     public DbSet<ComplianceSignal> ComplianceSignals => Set<ComplianceSignal>();
+    public DbSet<JobCard> JobCards => Set<JobCard>();
     internal DbSet<SyncMutationRecord> SyncMutations => Set<SyncMutationRecord>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)

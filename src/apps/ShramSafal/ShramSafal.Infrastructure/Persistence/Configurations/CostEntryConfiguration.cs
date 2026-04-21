@@ -26,6 +26,9 @@ internal sealed class CostEntryConfiguration : IEntityTypeConfiguration<CostEntr
         builder.Property(x => x.CropCycleId)
             .HasColumnName("crop_cycle_id");
 
+        builder.Property(x => x.JobCardId)
+            .HasColumnName("job_card_id");
+
         builder.Property(x => x.Category)
             .HasColumnName("category")
             .HasMaxLength(80)
@@ -113,6 +116,8 @@ internal sealed class CostEntryConfiguration : IEntityTypeConfiguration<CostEntr
         builder.HasIndex(x => x.CreatedByUserId);
         builder.HasIndex(x => new { x.FarmId, x.EntryDate });
         builder.HasIndex(x => x.ModifiedAtUtc);
+        builder.HasIndex(x => x.JobCardId)
+            .HasDatabaseName("ix_cost_entries_job_card_id");
         builder.Ignore(x => x.DomainEvents);
     }
 }
