@@ -393,6 +393,8 @@ export const DATABASE_VERSION = 8;
 export const CEI_PHASE1_SCHEMA_VERSION = 7;
 /** CEI Phase 2 schema version — adds test stack (protocols/instances/recs). */
 export const CEI_PHASE2_SCHEMA_VERSION = 8;
+/** CEI Phase 3 schema version — adds compliance signals store (§4.6). RESERVED. */
+export const CEI_PHASE3_SCHEMA_VERSION = 9;
 
 // =============================================================================
 // DATABASE CLASS

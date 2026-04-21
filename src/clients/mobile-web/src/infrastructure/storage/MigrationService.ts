@@ -20,7 +20,7 @@
  * @module infrastructure/storage/MigrationService
  */
 
-import { getDatabase, CEI_PHASE1_SCHEMA_VERSION } from './DexieDatabase';
+import { getDatabase, CEI_PHASE1_SCHEMA_VERSION, CEI_PHASE3_SCHEMA_VERSION } from './DexieDatabase';
 import { STORAGE_KEYS } from './schema';
 import { batchMigrateV1ToV2 } from './migrations/v1ToV2';
 import type { DailyLog } from '../../types';
@@ -61,6 +61,9 @@ export class MigrationService {
         if (import.meta.env.DEV) {
             console.info(
                 `[CEI] Dexie schemaVersion ${CEI_PHASE1_SCHEMA_VERSION} active — CEI Phase 1 migration applied (Task 5.1.1)`
+            );
+            console.info(
+                `[CEI] Dexie schemaVersion ${CEI_PHASE3_SCHEMA_VERSION} RESERVED — CEI Phase 3 compliance signals pending (Task 4.1.1)`
             );
         }
 
