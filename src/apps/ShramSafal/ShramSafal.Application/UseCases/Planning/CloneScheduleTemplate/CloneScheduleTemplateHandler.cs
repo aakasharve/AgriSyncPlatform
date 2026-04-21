@@ -2,6 +2,7 @@ using System.Text.Json;
 using AgriSync.BuildingBlocks.Abstractions;
 using AgriSync.BuildingBlocks.Results;
 using AgriSync.SharedKernel.Contracts.Ids;
+using AgriSync.SharedKernel.Contracts.Roles;
 using ShramSafal.Application.Ports;
 using ShramSafal.Domain.Audit;
 using ShramSafal.Domain.Common;
@@ -51,14 +52,15 @@ public sealed class CloneScheduleTemplateHandler(
             return Result.Failure<CloneScheduleTemplateResult>(ShramSafalErrors.ScheduleTemplateNotFound);
         }
 
-        // Step 4: scope authz — Team/Licensed/Public require owner role
-        if (command.NewScope != TenantScope.Private)
+        // Step 4: scope authz — per-scope role gate (CEI Phase 2 §4.7)
+        //
+        // Public  → only backend seed job; handler path always rejected
+        // Licensed → PrimaryOwner | SecondaryOwner | Agronomist | Consultant
+        // Team     → all Licensed roles + FpcTechnicalManager
+        // Private  → any authenticated farm member (no role restriction)
+        if (!ScopeRoleGate.IsAllowed(command.NewScope, command.CallerRole))
         {
-            var isOwner = await repository.HasActiveOwnerMembershipAsync(command.CallerUserId, ct);
-            if (!isOwner)
-            {
-                return Result.Failure<CloneScheduleTemplateResult>(ShramSafalErrors.Forbidden);
-            }
+            return Result.Failure<CloneScheduleTemplateResult>(ShramSafalErrors.Forbidden);
         }
 
         // Step 5: clone

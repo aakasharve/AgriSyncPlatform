@@ -52,6 +52,7 @@ public sealed class CloneScheduleTemplateHandlerTests
             SourceTemplateId: source.Id,
             NewTemplateId: Guid.NewGuid(),
             CallerUserId: CallerId,
+            CallerRole: AppRole.Worker,
             NewScope: TenantScope.Private,
             Reason: "Personal adaptation",
             ClientCommandId: null));
@@ -76,6 +77,7 @@ public sealed class CloneScheduleTemplateHandlerTests
             SourceTemplateId: source.Id,
             NewTemplateId: Guid.NewGuid(),
             CallerUserId: CallerId,
+            CallerRole: AppRole.Worker,
             NewScope: TenantScope.Team,
             Reason: "Team share",
             ClientCommandId: null));
@@ -97,6 +99,7 @@ public sealed class CloneScheduleTemplateHandlerTests
             SourceTemplateId: source.Id,
             NewTemplateId: Guid.NewGuid(),
             CallerUserId: OwnerCallerId,
+            CallerRole: AppRole.PrimaryOwner,
             NewScope: TenantScope.Team,
             Reason: "Team share",
             ClientCommandId: null));
@@ -117,6 +120,7 @@ public sealed class CloneScheduleTemplateHandlerTests
             SourceTemplateId: Guid.NewGuid(),
             NewTemplateId: Guid.NewGuid(),
             CallerUserId: CallerId,
+            CallerRole: AppRole.Worker,
             NewScope: TenantScope.Private,
             Reason: "test",
             ClientCommandId: null));
@@ -136,6 +140,7 @@ public sealed class CloneScheduleTemplateHandlerTests
             SourceTemplateId: source.Id,
             NewTemplateId: Guid.NewGuid(),
             CallerUserId: CallerId,
+            CallerRole: AppRole.Worker,
             NewScope: TenantScope.Private,
             Reason: "   ",
             ClientCommandId: null));
@@ -158,6 +163,7 @@ public sealed class CloneScheduleTemplateHandlerTests
             SourceTemplateId: source.Id,
             NewTemplateId: newId,
             CallerUserId: CallerId,
+            CallerRole: AppRole.Worker,
             NewScope: TenantScope.Private,
             Reason: "Idempotent test",
             ClientCommandId: clientId));
@@ -170,6 +176,7 @@ public sealed class CloneScheduleTemplateHandlerTests
             SourceTemplateId: source.Id,
             NewTemplateId: Guid.NewGuid(), // different id — should be ignored
             CallerUserId: CallerId,
+            CallerRole: AppRole.Worker,
             NewScope: TenantScope.Private,
             Reason: "Should not create",
             ClientCommandId: clientId));
@@ -178,6 +185,132 @@ public sealed class CloneScheduleTemplateHandlerTests
         // Still only one template was added (second call was idempotent)
         Assert.Single(repo.AddedTemplates);
         Assert.Equal(first.Value.NewTemplateId, second.Value.NewTemplateId);
+    }
+
+    // ---------------------------------------------------------------------------
+    //  CEI Phase 2 §4.7 — License-scope author gate tests
+    // ---------------------------------------------------------------------------
+
+    [Fact]
+    public async Task CloneScheduleTemplate_Agronomist_AllowedToCloneLicensed()
+    {
+        // Agronomist must be permitted to clone into Licensed scope.
+        var source = MakeTemplate();
+        var repo = new FakeCloneRepo(source, hasOwnerMembership: false);
+        var handler = CreateHandler(repo);
+
+        var result = await handler.HandleAsync(new CloneScheduleTemplateCommand(
+            SourceTemplateId: source.Id,
+            NewTemplateId: Guid.NewGuid(),
+            CallerUserId: CallerId,
+            CallerRole: AppRole.Agronomist,
+            NewScope: TenantScope.Licensed,
+            Reason: "Agronomist advisory template",
+            ClientCommandId: null));
+
+        Assert.True(result.IsSuccess);
+        Assert.Single(repo.AddedTemplates);
+        Assert.Equal(TenantScope.Licensed, repo.AddedTemplates[0].TenantScope);
+    }
+
+    [Fact]
+    public async Task CloneScheduleTemplate_Consultant_AllowedToCloneLicensed()
+    {
+        var source = MakeTemplate();
+        var repo = new FakeCloneRepo(source, hasOwnerMembership: false);
+        var handler = CreateHandler(repo);
+
+        var result = await handler.HandleAsync(new CloneScheduleTemplateCommand(
+            SourceTemplateId: source.Id,
+            NewTemplateId: Guid.NewGuid(),
+            CallerUserId: CallerId,
+            CallerRole: AppRole.Consultant,
+            NewScope: TenantScope.Licensed,
+            Reason: "Consultant template",
+            ClientCommandId: null));
+
+        Assert.True(result.IsSuccess);
+        Assert.Single(repo.AddedTemplates);
+    }
+
+    [Fact]
+    public async Task CloneScheduleTemplate_FieldScout_ForbiddenFromLicensed_Returns_Forbidden()
+    {
+        // FieldScout is not in the Licensed-scope allowed set — must be rejected.
+        var source = MakeTemplate();
+        var repo = new FakeCloneRepo(source, hasOwnerMembership: false);
+        var handler = CreateHandler(repo);
+
+        var result = await handler.HandleAsync(new CloneScheduleTemplateCommand(
+            SourceTemplateId: source.Id,
+            NewTemplateId: Guid.NewGuid(),
+            CallerUserId: CallerId,
+            CallerRole: AppRole.FieldScout,
+            NewScope: TenantScope.Licensed,
+            Reason: "Scout trying licensed",
+            ClientCommandId: null));
+
+        Assert.False(result.IsSuccess);
+        Assert.Equal("ShramSafal.Forbidden", result.Error.Code);
+        Assert.Empty(repo.AddedTemplates);
+        Assert.Equal(0, repo.SaveCalls);
+    }
+
+    [Fact]
+    public async Task CloneScheduleTemplate_FpcTechnicalManager_AllowedForTeam_ForbiddenForLicensed()
+    {
+        // FpcTechnicalManager is in TeamRoles but NOT in LicensedRoles.
+        var source = MakeTemplate();
+
+        // Team → allowed
+        var repoTeam = new FakeCloneRepo(source, hasOwnerMembership: false);
+        var handlerTeam = CreateHandler(repoTeam);
+        var teamResult = await handlerTeam.HandleAsync(new CloneScheduleTemplateCommand(
+            SourceTemplateId: source.Id,
+            NewTemplateId: Guid.NewGuid(),
+            CallerUserId: CallerId,
+            CallerRole: AppRole.FpcTechnicalManager,
+            NewScope: TenantScope.Team,
+            Reason: "FPC team share",
+            ClientCommandId: null));
+        Assert.True(teamResult.IsSuccess);
+
+        // Licensed → forbidden
+        var repoLic = new FakeCloneRepo(source, hasOwnerMembership: false);
+        var handlerLic = CreateHandler(repoLic);
+        var licResult = await handlerLic.HandleAsync(new CloneScheduleTemplateCommand(
+            SourceTemplateId: source.Id,
+            NewTemplateId: Guid.NewGuid(),
+            CallerUserId: CallerId,
+            CallerRole: AppRole.FpcTechnicalManager,
+            NewScope: TenantScope.Licensed,
+            Reason: "FPC licensed attempt",
+            ClientCommandId: null));
+        Assert.False(licResult.IsSuccess);
+        Assert.Equal("ShramSafal.Forbidden", licResult.Error.Code);
+    }
+
+    [Fact]
+    public async Task CloneScheduleTemplate_Public_AlwaysForbidden_For_Any_Role()
+    {
+        // Public scope must always be rejected from the handler path.
+        var source = MakeTemplate();
+
+        foreach (var role in new[] { AppRole.PrimaryOwner, AppRole.Agronomist, AppRole.Consultant })
+        {
+            var repo = new FakeCloneRepo(source, hasOwnerMembership: false);
+            var handler = CreateHandler(repo);
+            var result = await handler.HandleAsync(new CloneScheduleTemplateCommand(
+                SourceTemplateId: source.Id,
+                NewTemplateId: Guid.NewGuid(),
+                CallerUserId: CallerId,
+                CallerRole: role,
+                NewScope: TenantScope.Public,
+                Reason: "Attempt public",
+                ClientCommandId: null));
+            Assert.False(result.IsSuccess);
+            Assert.Equal("ShramSafal.Forbidden", result.Error.Code);
+        }
     }
 
     // ---------------------------------------------------------------------------
