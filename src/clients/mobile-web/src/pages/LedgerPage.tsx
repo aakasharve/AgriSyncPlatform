@@ -23,7 +23,7 @@ const LedgerPage: React.FC<LedgerPageProps> = ({ currentRoute, onNavigate }) => 
     const [correctionTarget, setCorrectionTarget] = useState<{ id: string; amount: number; category: string } | null>(null);
     const [expandedAttachments, setExpandedAttachments] = useState<Record<string, boolean>>({});
     const [attachmentCounts, setAttachmentCounts] = useState<Record<string, number>>({});
-    const [filterType, setFilterType] = useState<'All' | 'Income' | 'Expense'>('All');
+    const [filterType, setFilterType] = useState<'All' | 'Income' | 'Expense' | 'LabourPayouts'>('All');
     const [isDetailView, setIsDetailView] = useState(false);
     const { retryUpload } = useAttachmentRetry();
 
@@ -34,6 +34,7 @@ const LedgerPage: React.FC<LedgerPageProps> = ({ currentRoute, onNavigate }) => 
 
     const filteredEvents = useMemo(() => {
         if (filterType === 'All') return events;
+        if (filterType === 'LabourPayouts') return events.filter(e => Boolean((e as typeof e & { jobCardId?: string }).jobCardId));
         return events.filter(e => e.type === filterType);
     }, [events, filterType]);
 
@@ -129,14 +130,14 @@ const LedgerPage: React.FC<LedgerPageProps> = ({ currentRoute, onNavigate }) => 
 
             <div className="flex flex-col gap-3 mb-6">
                 <div className="flex items-center justify-between">
-                    <div className="flex bg-slate-200 p-1 rounded-xl">
-                        {(['All', 'Income', 'Expense'] as const).map(ft => (
+                    <div className="flex bg-slate-200 p-1 rounded-xl overflow-x-auto no-scrollbar">
+                        {(['All', 'Income', 'Expense', 'LabourPayouts'] as const).map(ft => (
                             <button
                                 key={ft}
                                 onClick={() => setFilterType(ft)}
-                                className={`px-4 py-1.5 text-xs font-bold rounded-lg transition-all ${filterType === ft ? 'bg-white shadow text-slate-800' : 'text-slate-500 hover:text-slate-700'}`}
+                                className={`flex-shrink-0 px-4 py-1.5 text-xs font-bold rounded-lg transition-all ${filterType === ft ? 'bg-white shadow text-slate-800' : 'text-slate-500 hover:text-slate-700'}`}
                             >
-                                {ft}
+                                {ft === 'LabourPayouts' ? 'Labour payouts' : ft}
                             </button>
                         ))}
                     </div>
@@ -167,6 +168,7 @@ const LedgerPage: React.FC<LedgerPageProps> = ({ currentRoute, onNavigate }) => 
                             {dayEvents.map(item => {
                                 const isAdjusted = item.trustStatus === 'Adjusted';
                                 const hasCorrection = isAdjusted;
+                                const jobCardId = (item as typeof item & { jobCardId?: string }).jobCardId;
                                 const attachmentCount = attachmentCounts[item.id] ?? 0;
                                 const isAttachmentOpen = !!expandedAttachments[item.id];
 
@@ -205,7 +207,19 @@ const LedgerPage: React.FC<LedgerPageProps> = ({ currentRoute, onNavigate }) => 
                                                                 <CornerDownRight size={8} /> Corrected
                                                             </span>
                                                         )}
-                                                        
+
+                                                        {jobCardId && (
+                                                            <button
+                                                                onClick={e => {
+                                                                    e.stopPropagation();
+                                                                    onNavigate('jobs' as AppRoute);
+                                                                }}
+                                                                className="inline-flex items-center gap-1 text-[9px] font-bold px-1.5 py-0.5 rounded border bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100 transition-colors"
+                                                            >
+                                                                View job
+                                                            </button>
+                                                        )}
+
                                                     </div>
                                                 </div>
                                             </div>
