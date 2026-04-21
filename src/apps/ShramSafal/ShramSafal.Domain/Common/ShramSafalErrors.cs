@@ -37,4 +37,10 @@ public static class ShramSafalErrors
     public static readonly Error TestRoleNotAllowed = new("ShramSafal.TestRoleNotAllowed", "Role is not allowed to perform this action on a test.");
     public static readonly Error TestInvalidState = new("ShramSafal.TestInvalidState", "Test instance is not in a valid state for this action.");
     public static readonly Error TestAttachmentInvalid = new("ShramSafal.TestAttachmentInvalid", "Attachment is missing, not finalized, or not linked to this test instance.");
+
+    // --- CEI Phase 3 §4.6 (Compliance) -------------------------------------------------
+    public static readonly Error ComplianceSignalNotFound = new("ShramSafal.ComplianceSignalNotFound", "Compliance signal was not found.");
+    public static readonly Error ComplianceSignalRoleNotAllowed = new("ShramSafal.ComplianceSignalRoleNotAllowed", "Role is not allowed to perform this action on a compliance signal.");
+    public static readonly Error ComplianceSignalInvalidState = new("ShramSafal.ComplianceSignalInvalidState", "Compliance signal is not in a valid state for this action.");
+    public static readonly Error ComplianceSignalNoteRequired = new("ShramSafal.ComplianceSignalNoteRequired", "A resolution note of at least 3 characters is required.");
 }

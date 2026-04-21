@@ -5,6 +5,7 @@ import { FinanceManagerNav } from '../features/finance/components/FinanceManager
 import { FinanceFilters } from '../features/finance/finance.types';
 import { TrendingUp, TrendingDown, Calendar, Filter, PieChart, Info } from 'lucide-react';
 import OfflineEmptyState from '../shared/components/ui/OfflineEmptyState';
+import { useFarmContext } from '../core/session/FarmContext';
 
 interface ReportsPageProps {
     currentRoute: AppRoute;
@@ -15,6 +16,10 @@ type TimeRange = 'THIS_MONTH' | 'LAST_MONTH' | 'THIS_YEAR' | 'ALL_TIME';
 
 const ReportsPage: React.FC<ReportsPageProps> = ({ currentRoute, onNavigate }) => {
     const [timeRange, setTimeRange] = useState<TimeRange>('THIS_MONTH');
+    const { currentFarm } = useFarmContext();
+    const canSeeServiceProof = currentFarm?.role === 'Agronomist' ||
+        currentFarm?.role === 'Consultant' ||
+        currentFarm?.role === 'PrimaryOwner';
 
     // Filter Logic
     const filters = useMemo((): FinanceFilters => {
@@ -157,6 +162,27 @@ const ReportsPage: React.FC<ReportsPageProps> = ({ currentRoute, onNavigate }) =
                     )}
                 </div>
             </div>
+
+            {/* Service Proof — CEI Phase 3 §23.2 */}
+            {canSeeServiceProof && (
+                <button
+                    onClick={() => onNavigate('service-proof')}
+                    className="w-full rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-left flex items-center gap-3"
+                >
+                    <div className="w-10 h-10 rounded-xl bg-emerald-100 flex items-center justify-center flex-shrink-0">
+                        <PieChart size={20} className="text-emerald-700" />
+                    </div>
+                    <div>
+                        <p style={{ fontFamily: "'Noto Sans Devanagari', sans-serif" }} className="text-sm font-bold text-emerald-900">
+                            सेवेचा पुरावा
+                        </p>
+                        <p style={{ fontFamily: "'DM Sans', sans-serif" }} className="text-xs text-emerald-700">
+                            Service Proof — advisory delivery export
+                        </p>
+                    </div>
+                    <svg className="ml-auto text-emerald-500" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M9 18l6-6-6-6" /></svg>
+                </button>
+            )}
 
             {/* Insight Tip */}
             {profit < 0 && (

@@ -140,6 +140,8 @@ try
     builder.Services.AddHostedService<AgriSync.Bootstrapper.Jobs.WorkerRetentionJob>();
     // CEI §4.5 — daily sweep at 02:00 UTC that transitions past-due TestInstance rows to Overdue
     builder.Services.AddHostedService<AgriSync.Bootstrapper.Jobs.TestOverdueSweeper>();
+    // CEI Phase 3 §4.6 — nightly compliance evaluation sweep at 03:00 UTC
+    builder.Services.AddHostedService<AgriSync.Bootstrapper.Jobs.ComplianceEvaluatorSweeper>();
     builder.Services.AddScoped<AgriSync.Bootstrapper.Jobs.IWorkerRetentionReader,
         AgriSync.Bootstrapper.Infrastructure.WorkerRetentionReader>();
     builder.Services.AddTransient<AgriSync.Bootstrapper.Infrastructure.DatabaseSeeder>();

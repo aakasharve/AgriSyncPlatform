@@ -699,6 +699,51 @@ internal sealed class ShramSafalRepository(ShramSafalDbContext db) : IShramSafal
         return logs.Count(l => l.CurrentVerificationStatus == VerificationStatus.Disputed);
     }
 
+    // --- CEI Phase 3 §4.6 -----------------------------------------------------------------
+
+    public async Task<List<DailyLog>> GetDailyLogsByFarmAsync(FarmId farmId, CancellationToken ct = default)
+    {
+        return await db.DailyLogs
+            .Where(l => l.FarmId == farmId)
+            .Include(l => l.VerificationEvents)
+            .OrderBy(l => l.LogDate)
+            .ToListAsync(ct);
+    }
+
+    public async Task<List<PlannedActivity>> GetPlannedActivitiesForFarmSinceAsync(FarmId farmId, DateOnly sinceDate, CancellationToken ct = default)
+    {
+        // Get all crop cycle IDs for the farm first, then query planned activities
+        var cropCycleIds = await db.CropCycles
+            .Where(c => c.FarmId == farmId)
+            .Select(c => c.Id)
+            .ToListAsync(ct);
+
+        if (cropCycleIds.Count == 0) return [];
+
+        return await db.PlannedActivities
+            .Where(a => cropCycleIds.Contains(a.CropCycleId) && a.PlannedDate >= sinceDate && a.RemovedAtUtc == null)
+            .ToListAsync(ct);
+    }
+
+    public async Task<List<LogTask>> GetLogTasksForFarmSinceAsync(FarmId farmId, DateOnly sinceDate, CancellationToken ct = default)
+    {
+        return await (
+            from task in db.LogTasks
+            join log in db.DailyLogs on task.DailyLogId equals log.Id
+            where log.FarmId == farmId && log.LogDate >= sinceDate
+            select task
+        ).ToListAsync(ct);
+    }
+
+    public async Task<List<Guid>> GetAllActiveFarmIdsAsync(CancellationToken ct = default)
+    {
+        return await db.FarmMemberships
+            .Where(m => m.Status == MembershipStatus.Active)
+            .Select(m => (Guid)m.FarmId)
+            .Distinct()
+            .ToListAsync(ct);
+    }
+
     private sealed class OperatorDirectoryRow
     {
         public Guid UserId { get; set; }

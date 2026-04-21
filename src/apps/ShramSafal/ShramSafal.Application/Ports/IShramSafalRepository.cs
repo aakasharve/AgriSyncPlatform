@@ -123,4 +123,33 @@ public interface IShramSafalRepository
     /// <see cref="ShramSafal.Domain.Logs.VerificationStatus.Disputed"/>.
     /// </summary>
     Task<int> GetDisputedLogCountForPlotAsync(Guid plotId, CancellationToken ct = default);
+
+    // --- CEI Phase 3 §4.6 ----------------------------------------------------------------
+    /// <summary>
+    /// Returns all <see cref="DailyLog"/> records for the given farm.
+    /// Used by the compliance evaluator to assess log coverage.
+    /// </summary>
+    Task<List<DailyLog>> GetDailyLogsByFarmAsync(FarmId farmId, CancellationToken ct = default)
+        => Task.FromResult(new List<DailyLog>());
+
+    /// <summary>
+    /// Returns <see cref="PlannedActivity"/> records for all crop cycles on the given farm
+    /// with <c>PlannedDate >= sinceDate</c>.
+    /// </summary>
+    Task<List<PlannedActivity>> GetPlannedActivitiesForFarmSinceAsync(FarmId farmId, DateOnly sinceDate, CancellationToken ct = default)
+        => Task.FromResult(new List<PlannedActivity>());
+
+    /// <summary>
+    /// Returns <see cref="LogTask"/> records for all daily logs on the given farm
+    /// with log date >= <paramref name="sinceDate"/>.
+    /// </summary>
+    Task<List<LogTask>> GetLogTasksForFarmSinceAsync(FarmId farmId, DateOnly sinceDate, CancellationToken ct = default)
+        => Task.FromResult(new List<LogTask>());
+
+    /// <summary>
+    /// Returns all active farm IDs in the system (farms with at least one active membership).
+    /// Used by the compliance sweeper to evaluate all farms.
+    /// </summary>
+    Task<List<Guid>> GetAllActiveFarmIdsAsync(CancellationToken ct = default)
+        => Task.FromResult(new List<Guid>());
 }

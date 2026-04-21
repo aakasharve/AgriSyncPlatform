@@ -9,6 +9,8 @@ using Microsoft.EntityFrameworkCore.Storage;
 using ShramSafal.Application.Contracts.Dtos;
 using ShramSafal.Application.Ports;
 using ShramSafal.Application.UseCases.Attachments.CreateAttachment;
+using ShramSafal.Application.UseCases.Compliance.AcknowledgeSignal;
+using ShramSafal.Application.UseCases.Compliance.ResolveSignal;
 using ShramSafal.Application.UseCases.CropCycles.CreateCropCycle;
 using ShramSafal.Application.UseCases.Farms.CreateFarm;
 using ShramSafal.Application.UseCases.Farms.CreatePlot;
@@ -45,7 +47,9 @@ public sealed class PushSyncBatchHandler(
     CreateAttachmentHandler createAttachmentHandler,
     RecordTestCollectedHandler recordTestCollectedHandler,
     RecordTestResultHandler recordTestResultHandler,
-    ITestInstanceRepository testInstanceRepository)
+    ITestInstanceRepository testInstanceRepository,
+    AcknowledgeSignalHandler acknowledgeSignalHandler,
+    ResolveSignalHandler resolveSignalHandler)
 {
     private static readonly JsonSerializerOptions SerializerOptions = new()
     {
@@ -240,6 +244,10 @@ public sealed class PushSyncBatchHandler(
                 return await HandleTestInstanceCollectedAsync(clientRequestId, payload, actorUserId, actorRole, ct);
             case "testinstance.reported":
                 return await HandleTestInstanceReportedAsync(clientRequestId, payload, actorUserId, actorRole, ct);
+            case "compliance.acknowledge":
+                return await HandleComplianceAcknowledgeAsync(clientRequestId, payload, actorUserId, actorRole, ct);
+            case "compliance.resolve":
+                return await HandleComplianceResolveAsync(clientRequestId, payload, actorUserId, actorRole, ct);
             case "add_location":
                 return MutationExecutionOutcome.Failure(
                     "ShramSafal.InvalidMutationType",
@@ -1025,6 +1033,70 @@ public sealed class PushSyncBatchHandler(
             "ShramSafal.SyncMutationStoreError",
             "Mutation was rolled back because the sync mutation store could not persist the deduplication record.");
     }
+
+    // --- CEI Phase 3 §4.6 — compliance mutations -------------------------------------------
+
+    private async Task<MutationExecutionOutcome> HandleComplianceAcknowledgeAsync(
+        string clientRequestId,
+        JsonElement payload,
+        Guid actorUserId,
+        string actorRole,
+        CancellationToken ct)
+    {
+        var request = DeserializePayload<ComplianceAcknowledgeMutationPayload>(payload);
+        if (request is null || request.SignalId == Guid.Empty)
+        {
+            return MutationExecutionOutcome.Failure(
+                "ShramSafal.SyncInvalidPayload",
+                "Invalid payload for compliance.acknowledge — signalId is required.");
+        }
+
+        if (!Enum.TryParse<AppRole>(actorRole, ignoreCase: true, out var role))
+            role = AppRole.Worker;
+
+        var command = new AcknowledgeSignalCommand(
+            SignalId: request.SignalId,
+            CallerUserId: new UserId(actorUserId),
+            CallerRole: role);
+
+        var result = await acknowledgeSignalHandler.HandleAsync(command, ct);
+        return result.IsSuccess
+            ? MutationExecutionOutcome.Success(new { signalId = request.SignalId })
+            : MutationExecutionOutcome.Failure(result.Error.Code, result.Error.Description);
+    }
+
+    private async Task<MutationExecutionOutcome> HandleComplianceResolveAsync(
+        string clientRequestId,
+        JsonElement payload,
+        Guid actorUserId,
+        string actorRole,
+        CancellationToken ct)
+    {
+        var request = DeserializePayload<ComplianceResolveMutationPayload>(payload);
+        if (request is null || request.SignalId == Guid.Empty || string.IsNullOrWhiteSpace(request.Note))
+        {
+            return MutationExecutionOutcome.Failure(
+                "ShramSafal.SyncInvalidPayload",
+                "Invalid payload for compliance.resolve — signalId and note are required.");
+        }
+
+        if (!Enum.TryParse<AppRole>(actorRole, ignoreCase: true, out var role))
+            role = AppRole.Worker;
+
+        var command = new ResolveSignalCommand(
+            SignalId: request.SignalId,
+            CallerUserId: new UserId(actorUserId),
+            CallerRole: role,
+            Note: request.Note);
+
+        var result = await resolveSignalHandler.HandleAsync(command, ct);
+        return result.IsSuccess
+            ? MutationExecutionOutcome.Success(new { signalId = request.SignalId })
+            : MutationExecutionOutcome.Failure(result.Error.Code, result.Error.Description);
+    }
+
+    private sealed record ComplianceAcknowledgeMutationPayload(Guid SignalId);
+    private sealed record ComplianceResolveMutationPayload(Guid SignalId, string? Note);
 
     private static MutationExecutionOutcome ToOutcome<T>(Result<T> result)
     {
