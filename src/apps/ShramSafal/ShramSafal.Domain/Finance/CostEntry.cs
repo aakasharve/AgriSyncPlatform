@@ -41,6 +41,7 @@ public sealed class CostEntry : Entity<Guid>
     public FarmId FarmId { get; private set; }
     public Guid? PlotId { get; private set; }
     public Guid? CropCycleId { get; private set; }
+    public Guid? JobCardId { get; private set; }
     public string Category { get; private set; } = string.Empty;
     public string Description { get; private set; } = string.Empty;
     public decimal Amount { get; private set; }
@@ -73,6 +74,11 @@ public sealed class CostEntry : Entity<Guid>
             throw new ArgumentException("Category is required.", nameof(category));
         }
 
+        if (category.Trim().Equals("labour_payout", StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException("Use CreateLabourPayout for labour_payout category.");
+        }
+
         if (amount <= 0)
         {
             throw new ArgumentException("Amount must be greater than zero.", nameof(amount));
@@ -96,6 +102,54 @@ public sealed class CostEntry : Entity<Guid>
             createdByUserId,
             location,
             createdAtUtc);
+
+        entry.Raise(new CostEntryCreatedEvent(
+            Guid.NewGuid(),
+            createdAtUtc,
+            id,
+            entry.Amount,
+            entry.CurrencyCode));
+
+        return entry;
+    }
+
+    public static CostEntry CreateLabourPayout(
+        Guid id,
+        Guid jobCardId,
+        FarmId farmId,
+        Guid? plotId,
+        Guid? cropCycleId,
+        decimal amount,
+        string currencyCode,
+        DateOnly entryDate,
+        UserId createdByUserId,
+        DateTime createdAtUtc)
+    {
+        if (amount <= 0)
+        {
+            throw new ArgumentException("Amount must be greater than zero.", nameof(amount));
+        }
+
+        if (string.IsNullOrWhiteSpace(currencyCode))
+        {
+            throw new ArgumentException("Currency code is required.", nameof(currencyCode));
+        }
+
+        var entry = new CostEntry(
+            id,
+            farmId,
+            plotId,
+            cropCycleId,
+            category: "labour_payout",
+            description: string.Empty,
+            decimal.Round(amount, 2, MidpointRounding.AwayFromZero),
+            currencyCode.Trim().ToUpperInvariant(),
+            entryDate,
+            createdByUserId,
+            location: null,
+            createdAtUtc);
+
+        entry.JobCardId = jobCardId;
 
         entry.Raise(new CostEntryCreatedEvent(
             Guid.NewGuid(),
