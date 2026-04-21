@@ -6,6 +6,7 @@ using ShramSafal.Domain.Finance;
 using ShramSafal.Domain.Logs;
 using ShramSafal.Domain.Planning;
 using ShramSafal.Domain.Schedules;
+using ShramSafal.Domain.Work;
 using ShramSafal.Application.Contracts.Dtos;
 using AgriSync.SharedKernel.Contracts.Ids;
 using AgriSync.SharedKernel.Contracts.Roles;
@@ -152,4 +153,11 @@ public interface IShramSafalRepository
     /// </summary>
     Task<List<Guid>> GetAllActiveFarmIdsAsync(CancellationToken ct = default)
         => Task.FromResult(new List<Guid>());
+
+    // --- CEI Phase 4 §4.8 (Work Trust Ledger) ------------------------------------------
+    Task AddJobCardAsync(JobCard jobCard, CancellationToken ct = default)
+        => throw new NotImplementedException("AddJobCardAsync is not implemented by this repository.");
+
+    Task<JobCard?> GetJobCardByIdAsync(Guid jobCardId, CancellationToken ct = default)
+        => Task.FromResult<JobCard?>(null);
 }

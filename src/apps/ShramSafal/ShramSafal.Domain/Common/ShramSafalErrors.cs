@@ -43,4 +43,12 @@ public static class ShramSafalErrors
     public static readonly Error ComplianceSignalRoleNotAllowed = new("ShramSafal.ComplianceSignalRoleNotAllowed", "Role is not allowed to perform this action on a compliance signal.");
     public static readonly Error ComplianceSignalInvalidState = new("ShramSafal.ComplianceSignalInvalidState", "Compliance signal is not in a valid state for this action.");
     public static readonly Error ComplianceSignalNoteRequired = new("ShramSafal.ComplianceSignalNoteRequired", "A resolution note of at least 3 characters is required.");
+
+    // --- CEI Phase 4 §4.8 (Work Trust Ledger) ------------------------------------------
+    public static readonly Error JobCardNotFound = new("ShramSafal.JobCardNotFound", "Job card was not found.");
+    public static readonly Error JobCardRoleNotAllowed = new("ShramSafal.JobCardRoleNotAllowed", "Role is not allowed to perform this action on a job card.");
+    public static readonly Error JobCardWorkerNotMember = new("ShramSafal.JobCardWorkerNotMember", "The specified worker is not an active member of this farm.");
+    public static readonly Error JobCardInvalidState = new("ShramSafal.JobCardInvalidState", "Job card is not in a valid state for this action.");
+    public static readonly Error JobCardDailyLogMismatch = new("ShramSafal.JobCardDailyLogMismatch", "The daily log does not belong to the same farm and plot as this job card.");
+    public static readonly Error JobCardActivityTypeMismatch = new("ShramSafal.JobCardActivityTypeMismatch", "No task in the daily log matches an activity type on this job card.");
 }
