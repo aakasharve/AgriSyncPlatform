@@ -60,6 +60,7 @@ const AttentionPage = React.lazy(() => import('../../features/attention/pages/At
 const TestQueuePage = React.lazy(() => import('../../features/tests/pages/TestQueuePage'));
 const TestDetailPage = React.lazy(() => import('../../features/tests/pages/TestDetailPage'));
 const ComplianceSignalsPage = React.lazy(() => import('../../features/compliance/pages/ComplianceSignalsPage'));
+const ServiceProofPage = React.lazy(() => import('../../features/reports/pages/ServiceProofPage'));
 
 type FeedStatusTone = 'pending' | 'rejected' | 'approved';
 
@@ -583,6 +584,16 @@ const AppRouter: React.FC = () => {
                     <ComplianceSignalsPage
                         onNavigate={setCurrentRoute}
                         onBack={() => setCurrentRoute('attention')}
+                    />
+                </div>
+            )}
+
+            {/* CEI Phase 3 — service proof export page (§23.2) */}
+            {currentRoute === 'service-proof' && (
+                <div className="animate-in fade-in slide-in-from-right-4 duration-300">
+                    <ServiceProofPage
+                        onNavigate={setCurrentRoute}
+                        onBack={() => setCurrentRoute('finance-reports')}
                     />
                 </div>
             )}
