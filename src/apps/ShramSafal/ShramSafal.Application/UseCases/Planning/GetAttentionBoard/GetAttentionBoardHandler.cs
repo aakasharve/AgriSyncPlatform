@@ -4,6 +4,7 @@ using AgriSync.SharedKernel.Contracts.Ids;
 using ShramSafal.Application.Ports;
 using ShramSafal.Domain.Compare;
 using ShramSafal.Domain.Common;
+using ShramSafal.Domain.Compliance;
 using ShramSafal.Domain.Farms;
 using ShramSafal.Domain.Logs;
 using ShramSafal.Domain.Planning;
@@ -14,6 +15,7 @@ namespace ShramSafal.Application.UseCases.Planning.GetAttentionBoard;
 public sealed class GetAttentionBoardHandler(
     IShramSafalRepository repository,
     ITestInstanceRepository testInstanceRepository,
+    IComplianceSignalRepository complianceSignalRepository,
     IClock clock)
 {
     private static readonly TestInstanceStatus[] MissingStatuses =
@@ -90,13 +92,51 @@ public sealed class GetAttentionBoardHandler(
                 // Determine rank — applies missing-test elevation rules
                 var rank = DetermineRank(health, overdueCount, disputeCount, missingTestCount);
 
-                // Only include non-Healthy plots
-                if (rank == AttentionRank.Healthy) continue;
+                // CEI Phase 3 §4.6 — compliance signal elevation
+                IReadOnlyList<ComplianceSignal> complianceSignals;
+                try
+                {
+                    complianceSignals = await complianceSignalRepository.GetOpenForFarmAsync(
+                        new FarmId(farmId), ct);
+                }
+                catch
+                {
+                    complianceSignals = Array.Empty<ComplianceSignal>();
+                }
+
+                var plotSignals = complianceSignals.Where(s => s.PlotId == plot.Id).ToList();
+                var openComplianceSignalCount = plotSignals.Count;
+                ComplianceSignal? highestSeveritySignal = plotSignals
+                    .OrderByDescending(s => (int)s.Severity)
+                    .FirstOrDefault();
+
+                // Elevate rank based on compliance severity
+                if (highestSeveritySignal is not null)
+                {
+                    rank = highestSeveritySignal.Severity switch
+                    {
+                        ComplianceSeverity.Critical when rank > AttentionRank.Critical
+                            => AttentionRank.Critical,
+                        ComplianceSeverity.NeedsAttention when rank > AttentionRank.NeedsAttention
+                            => AttentionRank.NeedsAttention,
+                        _ => rank
+                    };
+                }
+
+                // Only include non-Healthy plots (or plots with compliance signals)
+                if (rank == AttentionRank.Healthy && openComplianceSignalCount == 0) continue;
+
+                // If the only reason for inclusion is a compliance signal, we still include the plot
+                if (rank == AttentionRank.Healthy && openComplianceSignalCount > 0)
+                {
+                    rank = AttentionRank.Watch;
+                }
 
                 var card = BuildCard(
                     farmId, farm.Name, plot.Id, plot.Name,
                     latestCycle.Id, stageName, rank,
-                    health, overdueCount, disputeCount, missingTestCount, asOf);
+                    health, overdueCount, disputeCount, missingTestCount,
+                    openComplianceSignalCount, highestSeveritySignal, asOf);
 
                 cards.Add(card);
             }
@@ -174,9 +214,12 @@ public sealed class GetAttentionBoardHandler(
         Guid farmId, string farmName, Guid plotId, string plotName,
         Guid cropCycleId, string stageName, AttentionRank rank,
         HealthScore? health, int overdueCount, int disputeCount, int missingTestCount,
+        int openComplianceSignalCount, ComplianceSignal? highestSeveritySignal,
         DateTime asOf)
     {
-        // Determine suggested action and labels based on rank + context
+        // Determine suggested action and labels based on rank + context.
+        // CEI Phase 3 §4.6: prefer highest-severity compliance signal's SuggestedAction
+        // over auto-derived when it produces a more specific action.
         SuggestedActionKind action;
         string labelEn, labelMr;
         string titleEn, titleMr, descEn, descMr;
@@ -188,6 +231,15 @@ public sealed class GetAttentionBoardHandler(
             titleEn = "Log disputes need resolution"; titleMr = "नोंदींमध्ये वाद आहेत";
             descEn = $"{disputeCount} disputed log(s) need attention";
             descMr = $"{disputeCount} नोंदींमध्ये वाद आहे";
+        }
+        else if (rank == AttentionRank.Critical && highestSeveritySignal?.Severity == ComplianceSeverity.Critical)
+        {
+            // Compliance signal drives the critical rank — use its suggested action
+            action = MapComplianceSuggestedAction(highestSeveritySignal.SuggestedAction);
+            labelEn = "View compliance signal"; labelMr = "अनुपालन सिग्नल पहा";
+            titleEn = highestSeveritySignal.TitleEn; titleMr = highestSeveritySignal.TitleMr;
+            descEn = highestSeveritySignal.DescriptionEn;
+            descMr = highestSeveritySignal.DescriptionMr;
         }
         else if (rank == AttentionRank.Critical && health == HealthScore.Critical)
         {
@@ -213,6 +265,14 @@ public sealed class GetAttentionBoardHandler(
             descEn = "Several scheduled tests have not been collected";
             descMr = "अनेक नियोजित चाचण्या घेतल्या गेल्या नाहीत";
         }
+        else if (rank == AttentionRank.NeedsAttention && highestSeveritySignal?.Severity == ComplianceSeverity.NeedsAttention)
+        {
+            action = MapComplianceSuggestedAction(highestSeveritySignal.SuggestedAction);
+            labelEn = "View compliance signal"; labelMr = "अनुपालन सिग्नल पहा";
+            titleEn = highestSeveritySignal.TitleEn; titleMr = highestSeveritySignal.TitleMr;
+            descEn = highestSeveritySignal.DescriptionEn;
+            descMr = highestSeveritySignal.DescriptionMr;
+        }
         else if (rank == AttentionRank.NeedsAttention && health == HealthScore.NeedsAttention)
         {
             action = SuggestedActionKind.OpenStageCompare;
@@ -234,14 +294,25 @@ public sealed class GetAttentionBoardHandler(
             descEn = "Scheduled lab test(s) have not been collected yet";
             descMr = "नियोजित चाचणी अद्याप घेतलेली नाही";
         }
-        else // Watch — overdue tasks fallthrough
+        else // Watch — overdue tasks or compliance signals
         {
-            action = SuggestedActionKind.OpenPlot;
-            labelEn = "Go to plot"; labelMr = "तुकडा पहा";
-            titleEn = overdueCount > 0 ? $"{overdueCount} task(s) slightly behind" : "Plot needs a check";
-            titleMr = overdueCount > 0 ? $"{overdueCount} काम थोडे उशीर" : "तुकडा तपासा";
-            descEn = "A few activities may need follow-up";
-            descMr = "काही कामांवर लक्ष द्यावे";
+            if (openComplianceSignalCount > 0 && overdueCount == 0 && highestSeveritySignal is not null)
+            {
+                action = MapComplianceSuggestedAction(highestSeveritySignal.SuggestedAction);
+                labelEn = "View compliance signal"; labelMr = "अनुपालन सिग्नल पहा";
+                titleEn = highestSeveritySignal.TitleEn; titleMr = highestSeveritySignal.TitleMr;
+                descEn = highestSeveritySignal.DescriptionEn;
+                descMr = highestSeveritySignal.DescriptionMr;
+            }
+            else
+            {
+                action = SuggestedActionKind.OpenPlot;
+                labelEn = "Go to plot"; labelMr = "तुकडा पहा";
+                titleEn = overdueCount > 0 ? $"{overdueCount} task(s) slightly behind" : "Plot needs a check";
+                titleMr = overdueCount > 0 ? $"{overdueCount} काम थोडे उशीर" : "तुकडा तपासा";
+                descEn = "A few activities may need follow-up";
+                descMr = "काही कामांवर लक्ष द्यावे";
+            }
         }
 
         return new AttentionCardDto(
@@ -264,6 +335,21 @@ public sealed class GetAttentionBoardHandler(
             LatestHealthScore: health?.ToString(),
             UnresolvedDisputeCount: disputeCount > 0 ? disputeCount : null,
             MissingTestCount: missingTestCount > 0 ? missingTestCount : null,
+            OpenComplianceSignalCount: openComplianceSignalCount,
             ComputedAtUtc: asOf);
     }
+
+    /// <summary>
+    /// Maps a <see cref="ComplianceSuggestedAction"/> to the attention board's
+    /// <see cref="SuggestedActionKind"/>. Both enums cover overlapping domain actions.
+    /// </summary>
+    private static SuggestedActionKind MapComplianceSuggestedAction(ComplianceSuggestedAction action) =>
+        action switch
+        {
+            ComplianceSuggestedAction.OpenStageCompare => SuggestedActionKind.OpenStageCompare,
+            ComplianceSuggestedAction.AssignTest => SuggestedActionKind.AssignTest,
+            ComplianceSuggestedAction.ResolveDispute => SuggestedActionKind.ResolveDispute,
+            ComplianceSuggestedAction.ScheduleMissingActivity => SuggestedActionKind.ReviewOverdueTasks,
+            _ => SuggestedActionKind.OpenPlot
+        };
 }

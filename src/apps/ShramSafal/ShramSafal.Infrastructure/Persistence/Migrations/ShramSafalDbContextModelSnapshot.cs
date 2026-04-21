@@ -496,6 +496,115 @@ namespace ShramSafal.Infrastructure.Persistence.Migrations
                     b.ToTable("audit_events", "ssf");
                 });
 
+            modelBuilder.Entity("ShramSafal.Domain.Compliance.ComplianceSignal", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("AcknowledgedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("acknowledged_at_utc");
+
+                    b.Property<Guid?>("AcknowledgedByUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("acknowledged_by_user_id");
+
+                    b.Property<Guid?>("CropCycleId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("crop_cycle_id");
+
+                    b.Property<string>("DescriptionEn")
+                        .IsRequired()
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)")
+                        .HasColumnName("description_en");
+
+                    b.Property<string>("DescriptionMr")
+                        .IsRequired()
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)")
+                        .HasColumnName("description_mr");
+
+                    b.Property<Guid>("FarmId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("farm_id");
+
+                    b.Property<DateTime>("FirstSeenAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("first_seen_at_utc");
+
+                    b.Property<DateTime>("LastSeenAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("last_seen_at_utc");
+
+                    b.Property<string>("PayloadJson")
+                        .IsRequired()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("payload_json");
+
+                    b.Property<Guid>("PlotId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("plot_id");
+
+                    b.Property<string>("ResolutionNote")
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)")
+                        .HasColumnName("resolution_note");
+
+                    b.Property<DateTime?>("ResolvedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("resolved_at_utc");
+
+                    b.Property<Guid?>("ResolvedByUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("resolved_by_user_id");
+
+                    b.Property<string>("RuleCode")
+                        .IsRequired()
+                        .HasMaxLength(120)
+                        .HasColumnType("character varying(120)")
+                        .HasColumnName("rule_code");
+
+                    b.Property<string>("Severity")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)")
+                        .HasColumnName("severity");
+
+                    b.Property<string>("SuggestedAction")
+                        .IsRequired()
+                        .HasMaxLength(60)
+                        .HasColumnType("character varying(60)")
+                        .HasColumnName("suggested_action");
+
+                    b.Property<string>("TitleEn")
+                        .IsRequired()
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)")
+                        .HasColumnName("title_en");
+
+                    b.Property<string>("TitleMr")
+                        .IsRequired()
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)")
+                        .HasColumnName("title_mr");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("FarmId")
+                        .HasDatabaseName("ix_compliance_signals_farm_id");
+
+                    b.HasIndex("LastSeenAtUtc")
+                        .HasDatabaseName("ix_compliance_signals_last_seen_at_utc");
+
+                    b.HasIndex("FarmId", "PlotId", "RuleCode", "CropCycleId")
+                        .IsUnique()
+                        .HasDatabaseName("ix_compliance_signals_open_unique")
+                        .HasFilter("resolved_at_utc IS NULL AND acknowledged_at_utc IS NULL");
+
+                    b.ToTable("compliance_signals", "ssf");
+                });
+
             modelBuilder.Entity("ShramSafal.Domain.Crops.CropCycle", b =>
                 {
                     b.Property<Guid>("Id")

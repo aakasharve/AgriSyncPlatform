@@ -27,10 +27,10 @@ public sealed class GetAttentionBoardHandlerTests
     private static readonly Guid PlotId2 = Guid.Parse("22222222-2222-2222-2222-222222222222");
 
     private static GetAttentionBoardHandler CreateHandler(FakeAttentionRepo repo) =>
-        new(repo, new FakeTestInstanceRepo(), new FakeClock(Now));
+        new(repo, new FakeTestInstanceRepo(), new NullComplianceSignalRepository(), new FakeClock(Now));
 
     private static GetAttentionBoardHandler CreateHandler(FakeAttentionRepo repo, FakeTestInstanceRepo testRepo) =>
-        new(repo, testRepo, new FakeClock(Now));
+        new(repo, testRepo, new NullComplianceSignalRepository(), new FakeClock(Now));
 
     // ---------------------------------------------------------------------------
     // 1. A plot with 1 disputed log produces a Critical card
@@ -515,6 +515,24 @@ public sealed class GetAttentionBoardHandlerTests
             return Task.FromResult(r);
         }
 
+        public Task SaveChangesAsync(CancellationToken ct = default) => Task.CompletedTask;
+    }
+
+    private sealed class NullComplianceSignalRepository : ShramSafal.Application.Ports.IComplianceSignalRepository
+    {
+        public Task<ShramSafal.Domain.Compliance.ComplianceSignal?> FindOpenAsync(AgriSync.SharedKernel.Contracts.Ids.FarmId farmId, Guid plotId, string ruleCode, Guid? cropCycleId, CancellationToken ct = default)
+            => Task.FromResult<ShramSafal.Domain.Compliance.ComplianceSignal?>(null);
+        public Task<IReadOnlyList<ShramSafal.Domain.Compliance.ComplianceSignal>> GetOpenForFarmAsync(AgriSync.SharedKernel.Contracts.Ids.FarmId farmId, CancellationToken ct = default)
+            => Task.FromResult<IReadOnlyList<ShramSafal.Domain.Compliance.ComplianceSignal>>(Array.Empty<ShramSafal.Domain.Compliance.ComplianceSignal>());
+        public Task<IReadOnlyList<ShramSafal.Domain.Compliance.ComplianceSignal>> GetForFarmAsync(AgriSync.SharedKernel.Contracts.Ids.FarmId farmId, bool includeResolved, bool includeAcknowledged, CancellationToken ct = default)
+            => Task.FromResult<IReadOnlyList<ShramSafal.Domain.Compliance.ComplianceSignal>>(Array.Empty<ShramSafal.Domain.Compliance.ComplianceSignal>());
+        public Task<ShramSafal.Domain.Compliance.ComplianceSignal?> GetByIdAsync(Guid id, CancellationToken ct = default)
+            => Task.FromResult<ShramSafal.Domain.Compliance.ComplianceSignal?>(null);
+        public Task<IReadOnlyList<ShramSafal.Domain.Compliance.ComplianceSignal>> GetSinceCursorAsync(AgriSync.SharedKernel.Contracts.Ids.FarmId farmId, DateTime cursor, CancellationToken ct = default)
+            => Task.FromResult<IReadOnlyList<ShramSafal.Domain.Compliance.ComplianceSignal>>(Array.Empty<ShramSafal.Domain.Compliance.ComplianceSignal>());
+        public void Add(ShramSafal.Domain.Compliance.ComplianceSignal signal) { }
+        public Task<DateTime?> GetLatestEvaluationTimeAsync(AgriSync.SharedKernel.Contracts.Ids.FarmId farmId, CancellationToken ct = default)
+            => Task.FromResult<DateTime?>(null);
         public Task SaveChangesAsync(CancellationToken ct = default) => Task.CompletedTask;
     }
 }

@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using ShramSafal.Domain.AI;
 using ShramSafal.Domain.Audit;
 using ShramSafal.Domain.Attachments;
+using ShramSafal.Domain.Compliance;
 using ShramSafal.Domain.Crops;
 using ShramSafal.Domain.Farms;
 using ShramSafal.Domain.Finance;
@@ -44,6 +45,7 @@ public sealed class ShramSafalDbContext(DbContextOptions<ShramSafalDbContext> op
     public DbSet<TestProtocol> TestProtocols => Set<TestProtocol>();
     public DbSet<TestInstance> TestInstances => Set<TestInstance>();
     public DbSet<TestRecommendation> TestRecommendations => Set<TestRecommendation>();
+    public DbSet<ComplianceSignal> ComplianceSignals => Set<ComplianceSignal>();
     internal DbSet<SyncMutationRecord> SyncMutations => Set<SyncMutationRecord>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)

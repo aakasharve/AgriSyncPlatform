@@ -393,7 +393,11 @@ export type AppRoute =
     | 'attention'
     /** CEI Phase 2 §4.5 — test queue + detail */
     | 'tests'
-    | 'test-detail';
+    | 'test-detail'
+    /** CEI Phase 3 §4.6 — compliance signals */
+    | 'compliance'
+    /** CEI Phase 3 §23.2 — service proof export */
+    | 'service-proof';
 
 export interface AudioData {
     blob: Blob;
