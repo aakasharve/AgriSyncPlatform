@@ -23,6 +23,13 @@ using ShramSafal.Application.UseCases.Logs.CreateDailyLog;
 using ShramSafal.Application.UseCases.Logs.VerifyLog;
 using ShramSafal.Application.UseCases.Tests.RecordTestCollected;
 using ShramSafal.Application.UseCases.Tests.RecordTestResult;
+using ShramSafal.Application.UseCases.Work.AssignJobCard;
+using ShramSafal.Application.UseCases.Work.CancelJobCard;
+using ShramSafal.Application.UseCases.Work.CompleteJobCard;
+using ShramSafal.Application.UseCases.Work.CreateJobCard;
+using ShramSafal.Application.UseCases.Work.SettleJobCardPayout;
+using ShramSafal.Application.UseCases.Work.StartJobCard;
+using ShramSafal.Application.UseCases.Work.VerifyJobCardForPayout;
 using ShramSafal.Domain.Location;
 using ShramSafal.Domain.Logs;
 using ShramSafal.Domain.Tests;
@@ -49,7 +56,14 @@ public sealed class PushSyncBatchHandler(
     RecordTestResultHandler recordTestResultHandler,
     ITestInstanceRepository testInstanceRepository,
     AcknowledgeSignalHandler acknowledgeSignalHandler,
-    ResolveSignalHandler resolveSignalHandler)
+    ResolveSignalHandler resolveSignalHandler,
+    CreateJobCardHandler createJobCardHandler,
+    AssignJobCardHandler assignJobCardHandler,
+    StartJobCardHandler startJobCardHandler,
+    CompleteJobCardHandler completeJobCardHandler,
+    SettleJobCardPayoutHandler settleJobCardPayoutHandler,
+    CancelJobCardHandler cancelJobCardHandler,
+    VerifyJobCardForPayoutHandler verifyJobCardForPayoutHandler)
 {
     private static readonly JsonSerializerOptions SerializerOptions = new()
     {
@@ -248,6 +262,19 @@ public sealed class PushSyncBatchHandler(
                 return await HandleComplianceAcknowledgeAsync(clientRequestId, payload, actorUserId, actorRole, ct);
             case "compliance.resolve":
                 return await HandleComplianceResolveAsync(clientRequestId, payload, actorUserId, actorRole, ct);
+            // CEI Phase 4 §4.8 — Work Trust Ledger mutations
+            case "jobcard.create":
+                return await HandleJobCardCreateAsync(clientRequestId, payload, actorUserId, actorRole, ct);
+            case "jobcard.assign":
+                return await HandleJobCardAssignAsync(clientRequestId, payload, actorUserId, actorRole, ct);
+            case "jobcard.start":
+                return await HandleJobCardStartAsync(clientRequestId, payload, actorUserId, actorRole, ct);
+            case "jobcard.complete":
+                return await HandleJobCardCompleteAsync(clientRequestId, payload, actorUserId, actorRole, ct);
+            case "jobcard.settle":
+                return await HandleJobCardSettleAsync(clientRequestId, payload, actorUserId, actorRole, ct);
+            case "jobcard.cancel":
+                return await HandleJobCardCancelAsync(clientRequestId, payload, actorUserId, actorRole, ct);
             case "add_location":
                 return MutationExecutionOutcome.Failure(
                     "ShramSafal.InvalidMutationType",
@@ -1095,6 +1122,122 @@ public sealed class PushSyncBatchHandler(
             : MutationExecutionOutcome.Failure(result.Error.Code, result.Error.Description);
     }
 
+    // --- CEI Phase 4 §4.8 — job card mutations -------------------------------------------
+
+    private async Task<MutationExecutionOutcome> HandleJobCardCreateAsync(
+        string clientRequestId, JsonElement payload, Guid actorUserId, string actorRole, CancellationToken ct)
+    {
+        var request = DeserializePayload<JobCardCreateMutationPayload>(payload);
+        if (request is null || request.FarmId == Guid.Empty || request.PlotId == Guid.Empty ||
+            request.LineItems is null || request.LineItems.Count == 0)
+        {
+            return MutationExecutionOutcome.Failure("ShramSafal.SyncInvalidPayload", "Invalid payload for jobcard.create.");
+        }
+
+        if (!Enum.TryParse<AppRole>(actorRole, ignoreCase: true, out var role)) role = AppRole.Worker;
+
+        var result = await createJobCardHandler.HandleAsync(
+            new CreateJobCardCommand(
+                FarmId: new FarmId(request.FarmId),
+                PlotId: request.PlotId,
+                CropCycleId: request.CropCycleId,
+                PlannedDate: request.PlannedDate,
+                LineItems: request.LineItems,
+                CallerUserId: new UserId(actorUserId),
+                ClientCommandId: clientRequestId),
+            ct);
+        return ToOutcome(result);
+    }
+
+    private async Task<MutationExecutionOutcome> HandleJobCardAssignAsync(
+        string clientRequestId, JsonElement payload, Guid actorUserId, string actorRole, CancellationToken ct)
+    {
+        var request = DeserializePayload<JobCardAssignMutationPayload>(payload);
+        if (request is null || request.JobCardId == Guid.Empty || request.WorkerUserId == Guid.Empty)
+            return MutationExecutionOutcome.Failure("ShramSafal.SyncInvalidPayload", "Invalid payload for jobcard.assign.");
+
+        var result = await assignJobCardHandler.HandleAsync(
+            new AssignJobCardCommand(
+                JobCardId: request.JobCardId,
+                WorkerUserId: new UserId(request.WorkerUserId),
+                CallerUserId: new UserId(actorUserId),
+                ClientCommandId: clientRequestId),
+            ct);
+        return ToOutcome(result);
+    }
+
+    private async Task<MutationExecutionOutcome> HandleJobCardStartAsync(
+        string clientRequestId, JsonElement payload, Guid actorUserId, string actorRole, CancellationToken ct)
+    {
+        var request = DeserializePayload<JobCardIdMutationPayload>(payload);
+        if (request is null || request.JobCardId == Guid.Empty)
+            return MutationExecutionOutcome.Failure("ShramSafal.SyncInvalidPayload", "Invalid payload for jobcard.start.");
+
+        var result = await startJobCardHandler.HandleAsync(
+            new StartJobCardCommand(
+                JobCardId: request.JobCardId,
+                CallerUserId: new UserId(actorUserId),
+                ClientCommandId: clientRequestId),
+            ct);
+        return ToOutcome(result);
+    }
+
+    private async Task<MutationExecutionOutcome> HandleJobCardCompleteAsync(
+        string clientRequestId, JsonElement payload, Guid actorUserId, string actorRole, CancellationToken ct)
+    {
+        var request = DeserializePayload<JobCardCompleteMutationPayload>(payload);
+        if (request is null || request.JobCardId == Guid.Empty || request.DailyLogId == Guid.Empty)
+            return MutationExecutionOutcome.Failure("ShramSafal.SyncInvalidPayload", "Invalid payload for jobcard.complete.");
+
+        var result = await completeJobCardHandler.HandleAsync(
+            new CompleteJobCardCommand(
+                JobCardId: request.JobCardId,
+                DailyLogId: request.DailyLogId,
+                CallerUserId: new UserId(actorUserId),
+                ClientCommandId: clientRequestId),
+            ct);
+        return ToOutcome(result);
+    }
+
+    private async Task<MutationExecutionOutcome> HandleJobCardSettleAsync(
+        string clientRequestId, JsonElement payload, Guid actorUserId, string actorRole, CancellationToken ct)
+    {
+        var request = DeserializePayload<JobCardSettleMutationPayload>(payload);
+        if (request is null || request.JobCardId == Guid.Empty || request.ActualPayoutAmount <= 0 ||
+            string.IsNullOrWhiteSpace(request.ActualPayoutCurrencyCode))
+        {
+            return MutationExecutionOutcome.Failure("ShramSafal.SyncInvalidPayload", "Invalid payload for jobcard.settle.");
+        }
+
+        var result = await settleJobCardPayoutHandler.HandleAsync(
+            new SettleJobCardPayoutCommand(
+                JobCardId: request.JobCardId,
+                ActualPayoutAmount: request.ActualPayoutAmount,
+                ActualPayoutCurrencyCode: request.ActualPayoutCurrencyCode,
+                SettlementNote: request.SettlementNote,
+                CallerUserId: new UserId(actorUserId),
+                ClientCommandId: clientRequestId),
+            ct);
+        return ToOutcome(result);
+    }
+
+    private async Task<MutationExecutionOutcome> HandleJobCardCancelAsync(
+        string clientRequestId, JsonElement payload, Guid actorUserId, string actorRole, CancellationToken ct)
+    {
+        var request = DeserializePayload<JobCardCancelMutationPayload>(payload);
+        if (request is null || request.JobCardId == Guid.Empty || string.IsNullOrWhiteSpace(request.Reason))
+            return MutationExecutionOutcome.Failure("ShramSafal.SyncInvalidPayload", "Invalid payload for jobcard.cancel.");
+
+        var result = await cancelJobCardHandler.HandleAsync(
+            new CancelJobCardCommand(
+                JobCardId: request.JobCardId,
+                Reason: request.Reason,
+                CallerUserId: new UserId(actorUserId),
+                ClientCommandId: clientRequestId),
+            ct);
+        return ToOutcome(result);
+    }
+
     private sealed record ComplianceAcknowledgeMutationPayload(Guid SignalId);
     private sealed record ComplianceResolveMutationPayload(Guid SignalId, string? Note);
 
@@ -1230,4 +1373,33 @@ public sealed class PushSyncBatchHandler(
         string? Unit,
         decimal? ReferenceRangeLow,
         decimal? ReferenceRangeHigh);
+
+    // --- CEI Phase 4 §4.8 — job card mutation payload records -------------------
+
+    private sealed record JobCardCreateMutationPayload(
+        Guid FarmId,
+        Guid PlotId,
+        Guid? CropCycleId,
+        DateOnly PlannedDate,
+        IReadOnlyList<Contracts.Dtos.JobCardLineItemDto> LineItems);
+
+    private sealed record JobCardAssignMutationPayload(
+        Guid JobCardId,
+        Guid WorkerUserId);
+
+    private sealed record JobCardIdMutationPayload(Guid JobCardId);
+
+    private sealed record JobCardCompleteMutationPayload(
+        Guid JobCardId,
+        Guid DailyLogId);
+
+    private sealed record JobCardSettleMutationPayload(
+        Guid JobCardId,
+        decimal ActualPayoutAmount,
+        string ActualPayoutCurrencyCode,
+        string? SettlementNote);
+
+    private sealed record JobCardCancelMutationPayload(
+        Guid JobCardId,
+        string Reason);
 }
