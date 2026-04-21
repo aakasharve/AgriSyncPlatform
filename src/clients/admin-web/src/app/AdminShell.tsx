@@ -48,13 +48,13 @@ const GROUP_ORDER: NavItem['group'][] = ['Overview', 'Operations', 'Product', 'F
 
 export function AdminShell() {
   const { mode, toggleMode } = useTheme();
-  const { session } = useAdminAuth();
+  useAdminAuth();
   const location = useLocation();
 
   const crumb = humanizePath(location.pathname);
 
   return (
-    <div className="relative z-10 mx-auto max-w-[1760px] px-8 py-8">
+    <div className="relative z-10 p-2">
       <div className="glass overflow-hidden rounded-2xl">
         <header className="flex h-14 items-center justify-between border-b border-surface-border bg-surface-sidebar px-5">
           <div className="text-[13px] font-semibold text-text-muted">
@@ -73,13 +73,13 @@ export function AdminShell() {
               {mode === 'dark' ? <Sun size={16} /> : <Moon size={16} />}
             </button>
             <div className="grid h-8 w-8 place-items-center rounded-full bg-gradient-to-br from-brand-green to-brand-teal text-[11px] font-bold text-white shadow-[0_3px_10px_rgba(0,200,83,0.4)]">
-              {initialsOf(session?.displayName, session?.phone)}
+              {initialsOf(null, null)}
             </div>
           </div>
         </header>
 
-        <div className="grid min-h-[640px] grid-cols-[240px_1fr]">
-          <aside className="glass-sidebar p-4">
+        <div className="grid grid-cols-[240px_1fr]" style={{height:'calc(100vh - 72px)'}}>
+          <aside className="glass-sidebar overflow-y-auto p-4">
             {GROUP_ORDER.map((group) => {
               const items = NAV.filter((n) => n.group === group);
               if (items.length === 0) return null;
