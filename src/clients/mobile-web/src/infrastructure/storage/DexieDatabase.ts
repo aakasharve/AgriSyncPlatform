@@ -413,13 +413,15 @@ export interface DexieTestRecommendation {
 // =============================================================================
 
 /** Current Dexie schema version — bump this when adding version(N).stores(). */
-export const DATABASE_VERSION = 9;
+export const DATABASE_VERSION = 10; // CEI Phase 4 — job cards + worker profiles (stores added in Task 6.1.1)
 /** CEI Phase 1 schema version (now active — applied by Task 5.1.1). */
 export const CEI_PHASE1_SCHEMA_VERSION = 7;
 /** CEI Phase 2 schema version — adds test stack (protocols/instances/recs). */
 export const CEI_PHASE2_SCHEMA_VERSION = 8;
 /** CEI Phase 3 schema version — adds compliance signals store (§4.6). RESERVED. */
 export const CEI_PHASE3_SCHEMA_VERSION = 9;
+/** CEI Phase 4 schema version — job cards + worker profiles (stores added in Task 6.1.1). RESERVED. */
+export const CEI_PHASE4_SCHEMA_VERSION = 10;
 
 // =============================================================================
 // DATABASE CLASS
