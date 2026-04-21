@@ -322,13 +322,77 @@ export interface DexieLogRecord {
 }
 
 // =============================================================================
+// CEI PHASE 2 — TEST STACK (§4.5)
+// =============================================================================
+
+/** Mirrors ShramSafal.Domain.Tests.TestProtocolKind (numeric for index friendliness). */
+export interface DexieTestProtocol {
+    id: string;
+    name: string;
+    cropType: string;
+    kind: number;
+    periodicity: number;
+    everyNDays?: number;
+    stageNames: string[];
+    parameterCodes: string[];
+    createdByUserId: string;
+    createdAtUtc: string;
+}
+
+export interface DexieTestResult {
+    parameterCode: string;
+    parameterValue: string;
+    unit: string;
+    referenceRangeLow?: number;
+    referenceRangeHigh?: number;
+}
+
+export interface DexieTestInstance {
+    id: string;
+    testProtocolId: string;
+    cropCycleId: string;
+    farmId: string;
+    plotId: string;
+    stageName: string;
+    /** ISO date "YYYY-MM-DD" */
+    plannedDueDate: string;
+    /** 0=Due, 1=Collected, 2=Reported, 3=Overdue, 4=Waived */
+    status: number;
+    collectedByUserId?: string;
+    collectedAtUtc?: string;
+    reportedByUserId?: string;
+    reportedAtUtc?: string;
+    waivedReason?: string;
+    attachmentIds: string[];
+    results: DexieTestResult[];
+    protocolKind: number;
+    modifiedAtUtc: string;
+    createdAtUtc: string;
+    /** Denormalized for list rendering */
+    testProtocolName?: string;
+}
+
+export interface DexieTestRecommendation {
+    id: string;
+    testInstanceId: string;
+    ruleCode: string;
+    titleEn: string;
+    titleMr: string;
+    suggestedActivityName: string;
+    suggestedOffsetDays: number;
+    createdAtUtc: string;
+}
+
+// =============================================================================
 // SCHEMA VERSION CONSTANTS
 // =============================================================================
 
 /** Current Dexie schema version — bump this when adding version(N).stores(). */
-export const DATABASE_VERSION = 7;
+export const DATABASE_VERSION = 8;
 /** CEI Phase 1 schema version (now active — applied by Task 5.1.1). */
 export const CEI_PHASE1_SCHEMA_VERSION = 7;
+/** CEI Phase 2 schema version — adds test stack (protocols/instances/recs). */
+export const CEI_PHASE2_SCHEMA_VERSION = 8;
 
 // =============================================================================
 // DATABASE CLASS
@@ -356,6 +420,11 @@ export class AgriLogDatabase extends Dexie {
 
     /** CEI Phase 1 — server-computed attention cards */
     attentionCards!: Table<AttentionCardCacheRecord, string>;
+
+    /** CEI Phase 2 §4.5 — test stack */
+    testProtocols!: Table<DexieTestProtocol, string>;
+    testInstances!: Table<DexieTestInstance, string>;
+    testRecommendations!: Table<DexieTestRecommendation, string>;
 
     constructor() {
         super('AgriLogDB');
@@ -512,6 +581,36 @@ export class AgriLogDatabase extends Dexie {
                     }
                 });
             });
+
+        // =====================================================================
+        // CEI Phase 2 — v8: test stack (§4.5)
+        //   No upgrade function needed — all three stores are fresh.
+        // =====================================================================
+        this.version(8).stores({
+            // All v7 stores (unchanged)
+            logs: 'id, date, verificationStatus, createdByOperatorId, isDeleted, [date+isDeleted], [createdByOperatorId+isDeleted]',
+            outbox: '++id, idempotencyKey, status, action, [status+createdAt]',
+            mutationQueue: '++id, &[deviceId+clientRequestId], status, mutationType, createdAt, [status+createdAt]',
+            attachments: 'id, farmId, linkedEntityId, linkedEntityType, localPath, status, [linkedEntityId+linkedEntityType], [farmId+status]',
+            uploadQueue: '++autoId, attachmentId, status, retryCount, lastAttemptAt, nextAttemptAt, [status+nextAttemptAt]',
+            pendingAiJobs: '++id, operationType, status, createdAt, [status+createdAt]',
+            auditEvents: 'id, resourceId, action, timestamp, [resourceId+timestamp]',
+            syncCursors: 'tableName',
+            appMeta: 'key',
+            referenceData: 'key, versionHash, updatedAt',
+            dayLedgers: 'id, farmId, dateKey, [farmId+dateKey]',
+            plannedTasks: 'id, cropCycleId, plannedDate, [cropCycleId+plannedDate]',
+            farms: 'id, modifiedAtUtc',
+            plots: 'id, farmId, modifiedAtUtc',
+            cropCycles: 'id, farmId, plotId, modifiedAtUtc',
+            costEntries: 'id, farmId, modifiedAtUtc',
+            financeCorrections: 'id, costEntryId, modifiedAtUtc',
+            attentionCards: 'cardId, farmId, rank, computedAtUtc',
+            // NEW — CEI Phase 2 §4.5 (test stack)
+            testProtocols: 'id, cropType, kind',
+            testInstances: 'id, cropCycleId, farmId, plannedDueDate, status, modifiedAtUtc',
+            testRecommendations: 'id, testInstanceId',
+        });
     }
 }
 

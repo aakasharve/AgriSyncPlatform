@@ -13,6 +13,7 @@
 import React, { useState } from 'react';
 import { LogOut, Sprout, Dot, X, AlertTriangle } from 'lucide-react';
 import type { MyFarmDto } from '../../onboarding/qr/inviteApi';
+import { getRoleLabel } from '../../../shared/roles/roleLabels';
 
 interface MembershipsListProps {
     farms: MyFarmDto[];
@@ -20,13 +21,6 @@ interface MembershipsListProps {
     nonExitableFarmIds?: Set<string>;
     onExit: (farmId: string, farmName: string) => Promise<void>;
 }
-
-const roleStyles: Record<string, { badge: string; label: string }> = {
-    PrimaryOwner: { badge: 'bg-emerald-50 text-emerald-700 border-emerald-200', label: 'मालक · Owner' },
-    SecondaryOwner: { badge: 'bg-blue-50 text-blue-700 border-blue-200', label: 'सहमालक · Co-owner' },
-    Mukadam: { badge: 'bg-orange-50 text-orange-700 border-orange-200', label: 'मुकादम · Mukadam' },
-    Worker: { badge: 'bg-stone-100 text-stone-700 border-stone-200', label: 'कामगार · Worker' },
-};
 
 const MembershipsList: React.FC<MembershipsListProps> = ({ farms, nonExitableFarmIds, onExit }) => {
     const [confirmFarm, setConfirmFarm] = useState<MyFarmDto | null>(null);
@@ -64,7 +58,7 @@ const MembershipsList: React.FC<MembershipsListProps> = ({ farms, nonExitableFar
 
                 <ul className="space-y-2">
                     {farms.map(farm => {
-                        const style = roleStyles[farm.role] ?? roleStyles.Worker;
+                        const roleLabel = getRoleLabel(farm.role);
                         const canExit = !(nonExitableFarmIds?.has(farm.farmId));
                         const trialing = farm.subscription?.statusCode === 1;
                         const active = farm.subscription?.statusCode === 2;
@@ -96,8 +90,8 @@ const MembershipsList: React.FC<MembershipsListProps> = ({ farms, nonExitableFar
                                         )}
                                     </div>
                                     <div className="mt-0.5 flex items-center gap-1.5">
-                                        <span className={`inline-flex items-center rounded-md border px-1.5 py-0.5 text-[10px] font-bold ${style.badge}`}>
-                                            {style.label}
+                                        <span className={`inline-flex items-center rounded-md border px-1.5 py-0.5 text-[10px] font-bold ${roleLabel.badge}`}>
+                                            {roleLabel.display}
                                         </span>
                                         {farm.farmCode && (
                                             <span className="font-mono text-[10px] font-bold tracking-widest text-slate-400">

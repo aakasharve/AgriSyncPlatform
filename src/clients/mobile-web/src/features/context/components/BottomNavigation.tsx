@@ -4,7 +4,7 @@
  */
 
 import React from 'react';
-import { Home, ClipboardList, Package, TrendingUp, User } from 'lucide-react';
+import { FlaskConical } from 'lucide-react';
 import { AppRoute, PageView } from '../../../types';
 import { hapticFeedback } from '../../../shared/utils/haptics';
 import { useLanguage } from '../../../i18n/LanguageContext';
@@ -17,32 +17,6 @@ interface BottomNavigationProps {
     hidden?: boolean;
 }
 
-interface NavItemProps {
-    icon: React.ReactNode;
-    label: string;
-    active: boolean;
-    onClick: () => void;
-}
-
-const NavItem: React.FC<NavItemProps> = ({ icon, label, active, onClick }) => (
-    <button
-        onClick={onClick}
-        className={`
-            flex flex-col items-center justify-center flex-1 py-2 min-h-[56px] transition-colors duration-150
-            ${active ? 'text-emerald-700' : 'text-stone-400 active:text-stone-600'}
-        `}
-    >
-        <div className={`
-            px-5 py-1 rounded-full transition-colors duration-150 mb-0.5
-            ${active ? 'bg-emerald-100' : 'active:bg-stone-100'}
-        `}>
-            {icon}
-        </div>
-        <span className={`text-[11px] font-semibold ${active ? 'text-emerald-700' : 'text-stone-500'}`}>
-            {label}
-        </span>
-    </button>
-);
 
 const BottomNavigation: React.FC<BottomNavigationProps> = ({ currentRoute, currentView, onNavigate, onViewChange, hidden = false }) => {
     const { t } = useLanguage();
@@ -147,7 +121,7 @@ const BottomNavigation: React.FC<BottomNavigationProps> = ({ currentRoute, curre
                 <button
                     onClick={() => handleNavClick('income')}
                     className={`
-                        flex w-20 flex-col items-center justify-end pb-1 transition-all duration-200 group
+                        flex w-16 flex-col items-center justify-end pb-1 transition-all duration-200 group
                     `}
                 >
                     <div className={`
@@ -157,13 +131,37 @@ const BottomNavigation: React.FC<BottomNavigationProps> = ({ currentRoute, curre
                         <img
                             src="/assets/Income_Rb.png"
                             alt="Income"
-                            className={`w-10 h-10 object-contain`}
+                            className={`w-9 h-9 object-contain`}
                         />
                     </div>
                     <span className={`text-[10px] tracking-tight ${isActive('income') ? 'font-extrabold text-emerald-700' : 'font-bold text-stone-700'}`}>
                         {t('nav.income')}
                     </span>
                     <span className={`mt-1 h-1 w-1 rounded-full bg-emerald-600 transition-opacity ${isActive('income') ? 'opacity-100' : 'opacity-0'}`} />
+                </button>
+
+                {/* TESTS SECTION — CEI Phase 2 §4.5 */}
+                <button
+                    onClick={() => handleNavClick('tests')}
+                    aria-label={t('nav.tests')}
+                    className={`
+                        flex w-16 flex-col items-center justify-end pb-1 transition-all duration-200 group
+                    `}
+                >
+                    <div className={`
+                        mb-1 rounded-2xl px-2 py-1 transition-all duration-200
+                        ${isActive('tests') ? 'bg-emerald-100' : ''}
+                    `}>
+                        <FlaskConical
+                            size={28}
+                            strokeWidth={2}
+                            className={isActive('tests') ? 'text-emerald-700' : 'text-stone-500'}
+                        />
+                    </div>
+                    <span className={`text-[10px] tracking-tight ${isActive('tests') ? 'font-extrabold text-emerald-700' : 'font-bold text-stone-700'}`}>
+                        {t('nav.tests')}
+                    </span>
+                    <span className={`mt-1 h-1 w-1 rounded-full bg-emerald-600 transition-opacity ${isActive('tests') ? 'opacity-100' : 'opacity-0'}`} />
                 </button>
 
             </div>

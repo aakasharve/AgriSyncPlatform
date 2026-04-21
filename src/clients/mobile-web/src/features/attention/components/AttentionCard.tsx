@@ -4,6 +4,14 @@ import type { AttentionCardCacheRecord } from '../../../infrastructure/storage/D
 
 interface AttentionCardProps {
     card: AttentionCardCacheRecord;
+    /**
+     * Called when the suggested-action button is tapped. The parent
+     * page decides how to route based on `card.suggestedAction`
+     * (e.g. `AssignTest` → TestQueuePage). When omitted, the button
+     * still renders but does nothing — useful for offline-safe stub
+     * states.
+     */
+    onAction?: (card: AttentionCardCacheRecord) => void;
 }
 
 const rankBorder: Record<string, string> = {
@@ -13,7 +21,7 @@ const rankBorder: Record<string, string> = {
     Healthy: 'border-emerald-200 bg-white',
 };
 
-const AttentionCard: React.FC<AttentionCardProps> = ({ card }) => {
+const AttentionCard: React.FC<AttentionCardProps> = ({ card, onAction }) => {
     const border = rankBorder[card.rank] ?? 'border-stone-200 bg-white';
 
     return (
@@ -91,9 +99,11 @@ const AttentionCard: React.FC<AttentionCardProps> = ({ card }) => {
 
             {/* Primary action button */}
             <button
-                className="w-full rounded-xl bg-emerald-600 py-2.5 text-sm font-semibold text-white active:bg-emerald-700 transition-colors"
+                type="button"
+                className="w-full rounded-xl bg-emerald-600 py-2.5 text-sm font-semibold text-white active:bg-emerald-700 transition-colors disabled:bg-stone-200 disabled:text-stone-400"
                 style={{ fontFamily: "'DM Sans', sans-serif" }}
-                onClick={() => { /* routing handled by parent */ }}
+                onClick={() => onAction?.(card)}
+                disabled={!onAction}
             >
                 <span>{card.suggestedActionLabelMr}</span>
                 <span className="text-emerald-200 ml-1 text-xs">{card.suggestedActionLabelEn}</span>
