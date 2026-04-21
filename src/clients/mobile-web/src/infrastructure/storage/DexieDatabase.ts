@@ -16,6 +16,8 @@
 import Dexie, { type Table } from 'dexie';
 import type { DailyLog } from '../../types';
 import type { AuditEvent } from './AuditLogRepository';
+import type { JobCard } from '../../domain/work/JobCard';
+import type { WorkerProfileData } from '../../domain/work/ReliabilityScore';
 
 // =============================================================================
 // OUTBOX (Pending sync events)
@@ -409,6 +411,24 @@ export interface DexieTestRecommendation {
 }
 
 // =============================================================================
+// CEI PHASE 4 — JOB CARDS (§4.8)
+// =============================================================================
+
+export interface DexieJobCard extends JobCard {
+    /** Redundant field for Dexie compound-index compatibility */
+    modifiedAtUtc: string;
+}
+
+export interface DexieWorkerProfile {
+    /** PK */
+    workerUserId: string;
+    /** Farm this cache was fetched for (part of the profile endpoint path) */
+    scopedFarmId: string;
+    data: WorkerProfileData;
+    cachedAtUtc: string;
+}
+
+// =============================================================================
 // SCHEMA VERSION CONSTANTS
 // =============================================================================
 
@@ -457,6 +477,11 @@ export class AgriLogDatabase extends Dexie {
 
     /** CEI Phase 3 §4.6 — compliance signals */
     complianceSignals!: Table<DexieComplianceSignal, string>;
+
+    /** CEI Phase 4 §4.8 — job cards */
+    jobCards!: Table<DexieJobCard, string>;
+    /** CEI Phase 4 §4.8 — worker profile cache */
+    workerProfiles!: Table<DexieWorkerProfile, string>;
 
     constructor() {
         super('AgriLogDB');
@@ -673,6 +698,39 @@ export class AgriLogDatabase extends Dexie {
             testRecommendations: 'id, testInstanceId',
             // NEW — CEI Phase 3 §4.6 (compliance signals)
             complianceSignals: 'id, farmId, plotId, severity, lastSeenAtUtc, [farmId+isOpen]',
+        });
+
+        // =====================================================================
+        // CEI Phase 4 — v10: job cards + worker profile cache (§4.8)
+        //   No upgrade function needed — both stores are fresh.
+        // =====================================================================
+        this.version(10).stores({
+            // All v9 stores (unchanged)
+            logs: 'id, date, verificationStatus, createdByOperatorId, isDeleted, [date+isDeleted], [createdByOperatorId+isDeleted]',
+            outbox: '++id, idempotencyKey, status, action, [status+createdAt]',
+            mutationQueue: '++id, &[deviceId+clientRequestId], status, mutationType, createdAt, [status+createdAt]',
+            attachments: 'id, farmId, linkedEntityId, linkedEntityType, localPath, status, [linkedEntityId+linkedEntityType], [farmId+status]',
+            uploadQueue: '++autoId, attachmentId, status, retryCount, lastAttemptAt, nextAttemptAt, [status+nextAttemptAt]',
+            pendingAiJobs: '++id, operationType, status, createdAt, [status+createdAt]',
+            auditEvents: 'id, resourceId, action, timestamp, [resourceId+timestamp]',
+            syncCursors: 'tableName',
+            appMeta: 'key',
+            referenceData: 'key, versionHash, updatedAt',
+            dayLedgers: 'id, farmId, dateKey, [farmId+dateKey]',
+            plannedTasks: 'id, cropCycleId, plannedDate, [cropCycleId+plannedDate]',
+            farms: 'id, modifiedAtUtc',
+            plots: 'id, farmId, modifiedAtUtc',
+            cropCycles: 'id, farmId, plotId, modifiedAtUtc',
+            costEntries: 'id, farmId, modifiedAtUtc',
+            financeCorrections: 'id, costEntryId, modifiedAtUtc',
+            attentionCards: 'cardId, farmId, rank, computedAtUtc',
+            testProtocols: 'id, cropType, kind',
+            testInstances: 'id, cropCycleId, farmId, plannedDueDate, status, modifiedAtUtc',
+            testRecommendations: 'id, testInstanceId',
+            complianceSignals: 'id, farmId, plotId, severity, lastSeenAtUtc, [farmId+isOpen]',
+            // NEW — CEI Phase 4 §4.8 (job cards + worker profile cache)
+            jobCards: 'id, farmId, assignedWorkerUserId, status, modifiedAtUtc, [farmId+status]',
+            workerProfiles: 'workerUserId, scopedFarmId',
         });
     }
 }
