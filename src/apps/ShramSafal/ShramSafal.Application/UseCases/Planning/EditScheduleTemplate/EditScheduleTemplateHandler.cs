@@ -3,6 +3,7 @@ using AgriSync.BuildingBlocks.Abstractions;
 using AgriSync.BuildingBlocks.Results;
 using AgriSync.SharedKernel.Contracts.Ids;
 using ShramSafal.Application.Ports;
+using ShramSafal.Application.UseCases.Planning;
 using ShramSafal.Domain.Audit;
 using ShramSafal.Domain.Common;
 using ShramSafal.Domain.Planning;
@@ -59,9 +60,8 @@ public sealed class EditScheduleTemplateHandler(
         }
         else
         {
-            // Non-private: any active owner may edit
-            var isOwner = await repository.HasActiveOwnerMembershipAsync(command.CallerUserId, ct);
-            if (!isOwner)
+            // Non-private: apply the scope/role gate (CEI Phase 2 §4.7)
+            if (!ScopeRoleGate.IsAllowed(source.TenantScope, command.CallerRole))
             {
                 return Result.Failure<EditScheduleTemplateResult>(ShramSafalErrors.Forbidden);
             }
@@ -84,7 +84,7 @@ public sealed class EditScheduleTemplateHandler(
             entityId: command.NewTemplateId,
             action: "schedule.edited",
             actorUserId: command.CallerUserId,
-            actorRole: "user",
+            actorRole: command.CallerRole.ToString().ToLowerInvariant(),
             payload: new
             {
                 sourceId = command.SourceTemplateId,

@@ -1,7 +1,7 @@
 using AgriSync.SharedKernel.Contracts.Roles;
 using ShramSafal.Domain.Planning;
 
-namespace ShramSafal.Application.UseCases.Planning.CloneScheduleTemplate;
+namespace ShramSafal.Application.UseCases.Planning;
 
 /// <summary>
 /// Enforces the CEI Phase 2 §4.7 author-gate rules for schedule template scope promotion.

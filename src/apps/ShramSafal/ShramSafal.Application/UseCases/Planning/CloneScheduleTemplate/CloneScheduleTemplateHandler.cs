@@ -4,6 +4,7 @@ using AgriSync.BuildingBlocks.Results;
 using AgriSync.SharedKernel.Contracts.Ids;
 using AgriSync.SharedKernel.Contracts.Roles;
 using ShramSafal.Application.Ports;
+using ShramSafal.Application.UseCases.Planning;
 using ShramSafal.Domain.Audit;
 using ShramSafal.Domain.Common;
 using ShramSafal.Domain.Planning;
@@ -81,7 +82,7 @@ public sealed class CloneScheduleTemplateHandler(
             entityId: command.NewTemplateId,
             action: "schedule.cloned",
             actorUserId: command.CallerUserId,
-            actorRole: "user",
+            actorRole: command.CallerRole.ToString().ToLowerInvariant(),
             payload: new
             {
                 sourceTemplateId = command.SourceTemplateId,
