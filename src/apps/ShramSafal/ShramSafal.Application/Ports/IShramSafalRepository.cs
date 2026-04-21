@@ -11,6 +11,7 @@ using ShramSafal.Application.Contracts.Dtos;
 using AgriSync.SharedKernel.Contracts.Ids;
 using AgriSync.SharedKernel.Contracts.Roles;
 
+
 namespace ShramSafal.Application.Ports;
 
 public interface IShramSafalRepository
@@ -160,4 +161,36 @@ public interface IShramSafalRepository
 
     Task<JobCard?> GetJobCardByIdAsync(Guid jobCardId, CancellationToken ct = default)
         => Task.FromResult<JobCard?>(null);
+
+    /// <summary>
+    /// Returns the JobCard whose <c>LinkedDailyLogId</c> equals <paramref name="dailyLogId"/>, or null.
+    /// At most one card may be linked to a given log (domain invariant).
+    /// </summary>
+    Task<JobCard?> GetJobCardByLinkedDailyLogIdAsync(Guid dailyLogId, CancellationToken ct = default)
+        => Task.FromResult<JobCard?>(null);
+
+    /// <summary>
+    /// Returns all job cards for the given farm, optionally filtered by status.
+    /// </summary>
+    Task<List<JobCard>> GetJobCardsForFarmAsync(FarmId farmId, JobCardStatus? statusFilter, CancellationToken ct = default)
+        => Task.FromResult(new List<JobCard>());
+
+    /// <summary>
+    /// Returns all job cards assigned to the given worker.
+    /// </summary>
+    Task<List<JobCard>> GetJobCardsForWorkerAsync(UserId workerUserId, CancellationToken ct = default)
+        => Task.FromResult(new List<JobCard>());
+
+    /// <summary>
+    /// Returns all job cards modified since the given cursor for the provided farms.
+    /// Used by sync pull.
+    /// </summary>
+    Task<List<JobCard>> GetJobCardsChangedSinceAsync(IEnumerable<Guid> farmIds, DateTime sinceUtc, CancellationToken ct = default)
+        => Task.FromResult(new List<JobCard>());
+
+    /// <summary>
+    /// Returns worker metrics for ReliabilityScore computation.
+    /// </summary>
+    Task<WorkerMetricsDto> GetWorkerMetricsAsync(UserId workerUserId, Guid? scopedFarmId, DateTime since30d, CancellationToken ct = default)
+        => Task.FromResult(new WorkerMetricsDto(0, 0, 0, 0, 0, 0, 0));
 }

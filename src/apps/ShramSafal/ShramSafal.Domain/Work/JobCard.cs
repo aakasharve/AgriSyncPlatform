@@ -281,6 +281,21 @@ public sealed class JobCard : Entity<Guid>
         Raise(new JobCardCancelledEvent(Id, cancellerUserId, cancellerRole, reason, occurredAtUtc));
     }
 
+    /// <summary>
+    /// CEI-I9 de-auth: reverts the job card from VerifiedForPayout back to Completed.
+    /// Called when the linked DailyLog leaves the Verified state (edit → Draft or → Disputed).
+    /// This operation is only valid when Status == VerifiedForPayout.
+    /// </summary>
+    public void RevertToCompletedFromVerifiedForPayout(DateTime occurredAtUtc)
+    {
+        if (Status != JobCardStatus.VerifiedForPayout)
+            throw new InvalidOperationException(
+                $"Cannot revert a JobCard that is not in VerifiedForPayout status (current: {Status}).");
+
+        Status = JobCardStatus.Completed;
+        ModifiedAtUtc = occurredAtUtc;
+    }
+
     // ─── Private helpers ─────────────────────────────────────────────────────
 
     private static bool IsEligibleToAssign(AppRole role) =>

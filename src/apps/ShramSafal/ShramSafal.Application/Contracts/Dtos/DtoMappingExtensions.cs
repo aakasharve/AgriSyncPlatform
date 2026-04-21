@@ -7,6 +7,7 @@ using ShramSafal.Domain.Logs;
 using ShramSafal.Domain.Location;
 using ShramSafal.Domain.Planning;
 using ShramSafal.Domain.Schedules;
+using ShramSafal.Domain.Work;
 
 namespace ShramSafal.Application.Contracts.Dtos;
 
@@ -206,6 +207,31 @@ internal static class DtoMappingExtensions
             sub.MigratedToSubscriptionId?.Value,
             sub.MigrationReason?.ToString(),
             sub.StateChangedAtUtc);
+
+    public static JobCardDto ToJobCardDto(this JobCard jobCard, string? workerDisplayName = null) =>
+        new(
+            jobCard.Id,
+            jobCard.FarmId.Value,
+            jobCard.PlotId,
+            jobCard.CropCycleId,
+            (Guid)jobCard.CreatedByUserId,
+            jobCard.AssignedWorkerUserId.HasValue ? (Guid)jobCard.AssignedWorkerUserId.Value : null,
+            workerDisplayName,
+            jobCard.PlannedDate,
+            jobCard.Status.ToString(),
+            jobCard.LineItems.Select(li => new JobCardLineItemDto(
+                li.ActivityType,
+                li.ExpectedHours,
+                li.RatePerHour.Amount,
+                li.RatePerHour.Currency.Code,
+                li.Notes)).ToList(),
+            jobCard.EstimatedTotal.Amount,
+            jobCard.EstimatedTotal.Currency.Code,
+            jobCard.LinkedDailyLogId,
+            jobCard.PayoutCostEntryId,
+            jobCard.CancellationReason,
+            jobCard.CreatedAtUtc,
+            jobCard.ModifiedAtUtc);
 
     private static string ToSyncVerificationStatus(this VerificationStatus status) =>
         status switch
