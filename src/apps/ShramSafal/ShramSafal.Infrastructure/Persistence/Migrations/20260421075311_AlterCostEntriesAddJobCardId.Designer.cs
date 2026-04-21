@@ -3,6 +3,7 @@ using System;
 using System.Collections.Generic;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using ShramSafal.Infrastructure.Persistence;
@@ -12,9 +13,11 @@ using ShramSafal.Infrastructure.Persistence;
 namespace ShramSafal.Infrastructure.Persistence.Migrations
 {
     [DbContext(typeof(ShramSafalDbContext))]
-    partial class ShramSafalDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260421075311_AlterCostEntriesAddJobCardId")]
+    partial class AlterCostEntriesAddJobCardId
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
