@@ -30,4 +30,11 @@ public static class ShramSafalErrors
     public static readonly Error ScheduleTemplateUnpublished = new("ShramSafal.ScheduleTemplateUnpublished", "Schedule template has not been published.");
     public static readonly Error ScheduleTemplateCropMismatch = new("ShramSafal.ScheduleTemplateCropMismatch", "Schedule template crop does not match the crop cycle.");
     public static readonly Error ScheduleNotActive = new("ShramSafal.ScheduleNotActive", "Schedule subscription is not active and cannot transition.");
+
+    // --- CEI Phase 2 §4.5 (Tests) ---------------------------------------------------------
+    public static readonly Error TestProtocolNotFound = new("ShramSafal.TestProtocolNotFound", "Test protocol was not found.");
+    public static readonly Error TestInstanceNotFound = new("ShramSafal.TestInstanceNotFound", "Test instance was not found.");
+    public static readonly Error TestRoleNotAllowed = new("ShramSafal.TestRoleNotAllowed", "Role is not allowed to perform this action on a test.");
+    public static readonly Error TestInvalidState = new("ShramSafal.TestInvalidState", "Test instance is not in a valid state for this action.");
+    public static readonly Error TestAttachmentInvalid = new("ShramSafal.TestAttachmentInvalid", "Attachment is missing, not finalized, or not linked to this test instance.");
 }
