@@ -54,6 +54,8 @@ public sealed class JobCard : Entity<Guid>
     public DateTime? CompletedAtUtc { get; private set; }
     public Guid? LinkedDailyLogId { get; private set; }
     public Guid? PayoutCostEntryId { get; private set; }
+    public string? CancellationReason { get; private set; }
+    public UserId? CancelledByUserId { get; private set; }
 
     public IReadOnlyCollection<JobCardLineItem> LineItems => _lineItems.AsReadOnly();
 
@@ -96,6 +98,12 @@ public sealed class JobCard : Entity<Guid>
         var itemList = items.ToList();
         if (itemList.Count == 0)
             throw new ArgumentException("At least one line item is required.", nameof(items));
+
+        var currencies = itemList.Select(i => i.RatePerHour.Currency.Code).Distinct().ToList();
+        if (currencies.Count > 1)
+            throw new ArgumentException(
+                $"All line items must share the same currency. Found: {string.Join(", ", currencies)}.",
+                nameof(items));
 
         var job = new JobCard(id, farmId, plotId, cropCycleId, createdByUserId, plannedDate, itemList, createdAtUtc);
 
@@ -142,6 +150,8 @@ public sealed class JobCard : Entity<Guid>
         StartedAtUtc = occurredAtUtc;
         Status = JobCardStatus.InProgress;
         ModifiedAtUtc = occurredAtUtc;
+
+        Raise(new JobCardStartedEvent(Id, workerUserId, occurredAtUtc));
     }
 
     /// <summary>
@@ -217,7 +227,7 @@ public sealed class JobCard : Entity<Guid>
     /// CEI-I8: Mark the job card as paid out, linking it to a CostEntry.
     /// Requires Status = VerifiedForPayout.
     /// </summary>
-    public void MarkPaidOut(Guid costEntryId, DateTime occurredAtUtc)
+    public void MarkPaidOut(Guid costEntryId, Money payoutAmount, DateTime occurredAtUtc)
     {
         if (Status != JobCardStatus.VerifiedForPayout)
             throw new InvalidOperationException(
@@ -227,12 +237,15 @@ public sealed class JobCard : Entity<Guid>
         Status = JobCardStatus.PaidOut;
         ModifiedAtUtc = occurredAtUtc;
 
-        Raise(new JobCardPaidOutEvent(Id, costEntryId, occurredAtUtc));
+        Raise(new JobCardPaidOutEvent(Id, costEntryId, AssignedWorkerUserId!.Value, payoutAmount, occurredAtUtc));
     }
 
     /// <summary>
     /// Cancel the job card. Allowed from Draft, Assigned, InProgress, or Completed.
     /// Blocked from VerifiedForPayout and PaidOut (terminal guard).
+    /// Two-tier role guard:
+    ///   - Draft | Assigned | InProgress: Mukadam, PrimaryOwner, or SecondaryOwner
+    ///   - Completed: PrimaryOwner or SecondaryOwner only
     /// </summary>
     public void Cancel(UserId cancellerUserId, AppRole cancellerRole, string reason, DateTime occurredAtUtc)
     {
@@ -244,8 +257,28 @@ public sealed class JobCard : Entity<Guid>
         if (Status == JobCardStatus.Cancelled)
             throw new InvalidOperationException("JobCard is already cancelled.");
 
+        if (Status == JobCardStatus.Completed)
+        {
+            if (!IsEligibleToCancelCompleted(cancellerRole))
+                throw new InvalidOperationException(
+                    $"Role {cancellerRole} is not permitted to cancel a Completed job card. " +
+                    "Requires PrimaryOwner or SecondaryOwner.");
+        }
+        else
+        {
+            // Draft | Assigned | InProgress
+            if (!IsEligibleToCancelInProgress(cancellerRole))
+                throw new InvalidOperationException(
+                    $"Role {cancellerRole} is not permitted to cancel this job card. " +
+                    "Requires Mukadam, PrimaryOwner, or SecondaryOwner.");
+        }
+
+        CancellationReason = reason;
+        CancelledByUserId = cancellerUserId;
         Status = JobCardStatus.Cancelled;
         ModifiedAtUtc = occurredAtUtc;
+
+        Raise(new JobCardCancelledEvent(Id, cancellerUserId, cancellerRole, reason, occurredAtUtc));
     }
 
     // ─── Private helpers ─────────────────────────────────────────────────────
@@ -260,4 +293,13 @@ public sealed class JobCard : Entity<Guid>
             or AppRole.SecondaryOwner
             or AppRole.Agronomist
             or AppRole.FpcTechnicalManager;
+
+    private static bool IsEligibleToCancelInProgress(AppRole role) =>
+        role is AppRole.Mukadam
+            or AppRole.PrimaryOwner
+            or AppRole.SecondaryOwner;
+
+    private static bool IsEligibleToCancelCompleted(AppRole role) =>
+        role is AppRole.PrimaryOwner
+            or AppRole.SecondaryOwner;
 }
