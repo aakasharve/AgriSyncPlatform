@@ -48,6 +48,8 @@ export interface MoneyEvent {
     attachments?: string[];
     createdAt: string;
     updatedAt?: string;
+    /** CEI Phase 4 §4.8 — set when this cost entry was created by a job card settlement */
+    jobCardId?: string;
 }
 
 export interface PriceBookItem {
