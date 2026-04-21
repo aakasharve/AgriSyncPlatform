@@ -1,9 +1,37 @@
-import React from 'react';
+import React, { useCallback } from 'react';
 import { useAttentionBoard } from '../hooks/useAttentionBoard';
 import AttentionCard from '../components/AttentionCard';
+import { useAppNavigationState } from '../../../app/context/AppFeatureContexts';
+import type { AttentionCardCacheRecord } from '../../../infrastructure/storage/DexieDatabase';
 
 const AttentionPage: React.FC = () => {
     const { cards, asOf, isLoading } = useAttentionBoard();
+    const { setCurrentRoute } = useAppNavigationState();
+
+    /**
+     * Route attention-card actions. CEI Phase 2 §4.5 task 4.3.1 —
+     * the `AssignTest` suggested action must deep-link to the test
+     * queue with a plot filter so the owner lands directly on the
+     * card they need to action, not a generic list.
+     */
+    const handleCardAction = useCallback((card: AttentionCardCacheRecord) => {
+        const action = card.suggestedAction;
+        if (action === 'AssignTest') {
+            if (typeof window !== 'undefined') {
+                const params = new URLSearchParams();
+                params.set('filter', 'Due');
+                if (card.plotId) params.set('plotId', card.plotId);
+                if (card.cropCycleId) params.set('cropCycleId', card.cropCycleId);
+                window.history.pushState({}, '', `/tests?${params.toString()}`);
+            }
+            setCurrentRoute('tests');
+            return;
+        }
+        // Other suggested actions (OpenReviewInbox, ReviewHealth, etc.)
+        // will be wired in follow-up tasks as the corresponding pages
+        // land. For now we no-op so farmers aren't routed into dead
+        // screens.
+    }, [setCurrentRoute]);
 
     const critical = cards.filter(c => c.rank === 'Critical');
     const needsAttention = cards.filter(c => c.rank === 'NeedsAttention');
@@ -83,7 +111,7 @@ const AttentionPage: React.FC = () => {
                         </h2>
                         <div className="flex flex-col gap-3">
                             {critical.map(card => (
-                                <AttentionCard key={card.cardId} card={card} />
+                                <AttentionCard key={card.cardId} card={card} onAction={handleCardAction} />
                             ))}
                         </div>
                     </div>
@@ -100,7 +128,7 @@ const AttentionPage: React.FC = () => {
                         </h2>
                         <div className="flex flex-col gap-3">
                             {needsAttention.map(card => (
-                                <AttentionCard key={card.cardId} card={card} />
+                                <AttentionCard key={card.cardId} card={card} onAction={handleCardAction} />
                             ))}
                         </div>
                     </div>
@@ -117,7 +145,7 @@ const AttentionPage: React.FC = () => {
                         </h2>
                         <div className="flex flex-col gap-3">
                             {watch.map(card => (
-                                <AttentionCard key={card.cardId} card={card} />
+                                <AttentionCard key={card.cardId} card={card} onAction={handleCardAction} />
                             ))}
                         </div>
                     </div>
