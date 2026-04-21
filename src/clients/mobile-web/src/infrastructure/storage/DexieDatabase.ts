@@ -322,6 +322,31 @@ export interface DexieLogRecord {
 }
 
 // =============================================================================
+// CEI PHASE 3 — COMPLIANCE SIGNALS (§4.6)
+// =============================================================================
+
+export interface DexieComplianceSignal {
+    id: string;
+    farmId: string;
+    plotId: string;
+    cropCycleId?: string | null;
+    ruleCode: string;
+    severity: string; // 'Info' | 'Watch' | 'NeedsAttention' | 'Critical'
+    suggestedAction: string;
+    titleEn: string;
+    titleMr: string;
+    descriptionEn: string;
+    descriptionMr: string;
+    payloadJson: string;
+    firstSeenAtUtc: string;
+    lastSeenAtUtc: string;
+    acknowledgedAtUtc?: string | null;
+    resolvedAtUtc?: string | null;
+    resolutionNote?: string | null;
+    isOpen: boolean;
+}
+
+// =============================================================================
 // CEI PHASE 2 — TEST STACK (§4.5)
 // =============================================================================
 
@@ -388,7 +413,7 @@ export interface DexieTestRecommendation {
 // =============================================================================
 
 /** Current Dexie schema version — bump this when adding version(N).stores(). */
-export const DATABASE_VERSION = 8;
+export const DATABASE_VERSION = 9;
 /** CEI Phase 1 schema version (now active — applied by Task 5.1.1). */
 export const CEI_PHASE1_SCHEMA_VERSION = 7;
 /** CEI Phase 2 schema version — adds test stack (protocols/instances/recs). */
@@ -427,6 +452,9 @@ export class AgriLogDatabase extends Dexie {
     testProtocols!: Table<DexieTestProtocol, string>;
     testInstances!: Table<DexieTestInstance, string>;
     testRecommendations!: Table<DexieTestRecommendation, string>;
+
+    /** CEI Phase 3 §4.6 — compliance signals */
+    complianceSignals!: Table<DexieComplianceSignal, string>;
 
     constructor() {
         super('AgriLogDB');
@@ -612,6 +640,37 @@ export class AgriLogDatabase extends Dexie {
             testProtocols: 'id, cropType, kind',
             testInstances: 'id, cropCycleId, farmId, plannedDueDate, status, modifiedAtUtc',
             testRecommendations: 'id, testInstanceId',
+        });
+
+        // =====================================================================
+        // CEI Phase 3 — v9: compliance signals store (§4.6)
+        //   No upgrade function needed — fresh store, no backfill required.
+        // =====================================================================
+        this.version(9).stores({
+            // All v8 stores (unchanged)
+            logs: 'id, date, verificationStatus, createdByOperatorId, isDeleted, [date+isDeleted], [createdByOperatorId+isDeleted]',
+            outbox: '++id, idempotencyKey, status, action, [status+createdAt]',
+            mutationQueue: '++id, &[deviceId+clientRequestId], status, mutationType, createdAt, [status+createdAt]',
+            attachments: 'id, farmId, linkedEntityId, linkedEntityType, localPath, status, [linkedEntityId+linkedEntityType], [farmId+status]',
+            uploadQueue: '++autoId, attachmentId, status, retryCount, lastAttemptAt, nextAttemptAt, [status+nextAttemptAt]',
+            pendingAiJobs: '++id, operationType, status, createdAt, [status+createdAt]',
+            auditEvents: 'id, resourceId, action, timestamp, [resourceId+timestamp]',
+            syncCursors: 'tableName',
+            appMeta: 'key',
+            referenceData: 'key, versionHash, updatedAt',
+            dayLedgers: 'id, farmId, dateKey, [farmId+dateKey]',
+            plannedTasks: 'id, cropCycleId, plannedDate, [cropCycleId+plannedDate]',
+            farms: 'id, modifiedAtUtc',
+            plots: 'id, farmId, modifiedAtUtc',
+            cropCycles: 'id, farmId, plotId, modifiedAtUtc',
+            costEntries: 'id, farmId, modifiedAtUtc',
+            financeCorrections: 'id, costEntryId, modifiedAtUtc',
+            attentionCards: 'cardId, farmId, rank, computedAtUtc',
+            testProtocols: 'id, cropType, kind',
+            testInstances: 'id, cropCycleId, farmId, plannedDueDate, status, modifiedAtUtc',
+            testRecommendations: 'id, testInstanceId',
+            // NEW — CEI Phase 3 §4.6 (compliance signals)
+            complianceSignals: 'id, farmId, plotId, severity, lastSeenAtUtc, [farmId+isOpen]',
         });
     }
 }

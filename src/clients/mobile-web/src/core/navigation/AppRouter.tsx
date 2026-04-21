@@ -59,6 +59,7 @@ const QrDemoPage = React.lazy(() => import('../../pages/QrDemoPage'));
 const AttentionPage = React.lazy(() => import('../../features/attention/pages/AttentionPage'));
 const TestQueuePage = React.lazy(() => import('../../features/tests/pages/TestQueuePage'));
 const TestDetailPage = React.lazy(() => import('../../features/tests/pages/TestDetailPage'));
+const ComplianceSignalsPage = React.lazy(() => import('../../features/compliance/pages/ComplianceSignalsPage'));
 
 type FeedStatusTone = 'pending' | 'rejected' | 'approved';
 
@@ -572,6 +573,16 @@ const AppRouter: React.FC = () => {
                             return match?.[1] ?? '';
                         })()}
                         onBack={() => setCurrentRoute('tests')}
+                    />
+                </div>
+            )}
+
+            {/* CEI Phase 3 — compliance signals page */}
+            {currentRoute === 'compliance' && (
+                <div className="animate-in fade-in slide-in-from-right-4 duration-300">
+                    <ComplianceSignalsPage
+                        onNavigate={setCurrentRoute}
+                        onBack={() => setCurrentRoute('attention')}
                     />
                 </div>
             )}
