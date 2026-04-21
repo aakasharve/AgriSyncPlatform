@@ -252,6 +252,26 @@ internal sealed class ShramSafalRepository(ShramSafalDbContext db) : IShramSafal
         await db.ScheduleTemplates.AddAsync(template, ct);
     }
 
+    public async Task<ScheduleTemplate?> GetScheduleTemplateByIdAsync(Guid templateId, CancellationToken ct = default) =>
+        await db.ScheduleTemplates
+            .Include(t => t.Stages)
+            .Include(t => t.Activities)
+            .FirstOrDefaultAsync(t => t.Id == templateId, ct);
+
+    public async Task<bool> HasActiveOwnerMembershipAsync(Guid userId, CancellationToken ct = default)
+    {
+        var typedUserId = new UserId(userId);
+        return await db.FarmMemberships
+            .AnyAsync(m => m.UserId == typedUserId
+                && m.Status == MembershipStatus.Active
+                && (int)m.Role >= (int)AppRole.SecondaryOwner, ct);
+    }
+
+    public async Task<List<ScheduleTemplate>> GetScheduleLineageAsync(Guid rootTemplateId, CancellationToken ct = default) =>
+        await db.ScheduleTemplates
+            .Where(t => t.Id == rootTemplateId || t.DerivedFromTemplateId == rootTemplateId)
+            .ToListAsync(ct);
+
     public async Task<List<ScheduleTemplate>> GetScheduleTemplatesAsync(CancellationToken ct = default)
     {
         return await db.ScheduleTemplates
@@ -266,6 +286,9 @@ internal sealed class ShramSafalRepository(ShramSafalDbContext db) : IShramSafal
     {
         await db.PlannedActivities.AddRangeAsync(plannedActivities, ct);
     }
+
+    public async Task<PlannedActivity?> GetPlannedActivityByIdAsync(Guid id, CancellationToken ct = default) =>
+        await db.PlannedActivities.FirstOrDefaultAsync(a => a.Id == id, ct);
 
     public async Task<List<PlannedActivity>> GetPlannedActivitiesByCropCycleIdAsync(Guid cropCycleId, CancellationToken ct = default)
     {
@@ -662,6 +685,18 @@ internal sealed class ShramSafalRepository(ShramSafalDbContext db) : IShramSafal
     public async Task SaveChangesAsync(CancellationToken ct = default)
     {
         await db.SaveChangesAsync(ct);
+    }
+
+    // --- CEI Phase 1 §4.4 -----------------------------------------------------------------
+
+    public async Task<int> GetDisputedLogCountForPlotAsync(Guid plotId, CancellationToken ct = default)
+    {
+        var logs = await db.DailyLogs
+            .Where(l => l.PlotId == plotId)
+            .Include(l => l.VerificationEvents)
+            .ToListAsync(ct);
+
+        return logs.Count(l => l.CurrentVerificationStatus == VerificationStatus.Disputed);
     }
 
     private sealed class OperatorDirectoryRow

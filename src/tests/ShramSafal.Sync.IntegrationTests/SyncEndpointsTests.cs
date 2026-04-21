@@ -27,6 +27,7 @@ using Microsoft.Extensions.Options;
 using ShramSafal.Api;
 using ShramSafal.Application.Ports;
 using ShramSafal.Domain.Farms;
+using ShramSafal.Domain.Tests;
 using ShramSafal.Infrastructure.Persistence;
 using AgriSync.SharedKernel.Contracts.Ids;
 using AgriSync.SharedKernel.Contracts.Roles;
@@ -1175,6 +1176,191 @@ public sealed class SyncEndpointsTests
         }
     }
 
+    [Fact]
+    public async Task Push_TestInstanceCollected_TransitionsDueToCollected()
+    {
+        await using var harness = await TestHarness.CreateAsync();
+        var farmId = Guid.NewGuid();
+
+        await PushCreateFarmAsync(harness.Client, "device-ti-collect", "req-farm-ti-collect", farmId, "Test Collect Farm");
+        await harness.SeedFarmMembershipAsync(farmId, TestUserId, AppRole.LabOperator);
+
+        var instance = await harness.SeedTestInstanceAsync(
+            farmId,
+            plotId: Guid.NewGuid(),
+            cropCycleId: Guid.NewGuid());
+
+        using var request = CreateJsonRequest(
+            HttpMethod.Post,
+            "/sync/push",
+            new
+            {
+                deviceId = "device-ti-collect",
+                mutations = new[]
+                {
+                    new
+                    {
+                        clientRequestId = "req-ti-collect-1",
+                        mutationType = "testInstance.collected",
+                        payload = new
+                        {
+                            testInstanceId = instance.Id
+                        }
+                    }
+                }
+            },
+            TestUserId,
+            "shramsafal:LabOperator");
+
+        var response = await harness.Client.SendAsync(request);
+        response.EnsureSuccessStatusCode();
+
+        using var doc = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        var result = doc.RootElement.GetProperty("results")[0];
+        Assert.Equal("applied", result.GetProperty("status").GetString());
+
+        var data = result.GetProperty("data");
+        Assert.Equal("Collected", data.GetProperty("status").GetString());
+        Assert.Equal(instance.Id, data.GetProperty("testInstanceId").GetGuid());
+    }
+
+    [Fact]
+    public async Task Push_TestInstanceReported_RecordsResultsAndReturnsRecommendations()
+    {
+        await using var harness = await TestHarness.CreateAsync();
+        var farmId = Guid.NewGuid();
+
+        await PushCreateFarmAsync(harness.Client, "device-ti-report", "req-farm-ti-report", farmId, "Test Report Farm");
+        await harness.SeedFarmMembershipAsync(farmId, TestUserId, AppRole.LabOperator);
+
+        var instance = await harness.SeedTestInstanceAsync(
+            farmId,
+            plotId: Guid.NewGuid(),
+            cropCycleId: Guid.NewGuid());
+
+        // Transition Due → Collected first so the Reported push can land.
+        using (var collectRequest = CreateJsonRequest(
+                   HttpMethod.Post,
+                   "/sync/push",
+                   new
+                   {
+                       deviceId = "device-ti-report",
+                       mutations = new[]
+                       {
+                           new
+                           {
+                               clientRequestId = "req-ti-report-collect",
+                               mutationType = "testInstance.collected",
+                               payload = new
+                               {
+                                   testInstanceId = instance.Id
+                               }
+                           }
+                       }
+                   },
+                   TestUserId,
+                   "shramsafal:LabOperator"))
+        {
+            var collectResponse = await harness.Client.SendAsync(collectRequest);
+            collectResponse.EnsureSuccessStatusCode();
+            Assert.Equal("applied", await ReadFirstPushStatusAsync(collectResponse));
+        }
+
+        var attachmentId = Guid.NewGuid();
+
+        using var reportRequest = CreateJsonRequest(
+            HttpMethod.Post,
+            "/sync/push",
+            new
+            {
+                deviceId = "device-ti-report",
+                mutations = new[]
+                {
+                    new
+                    {
+                        clientRequestId = "req-ti-report-result",
+                        mutationType = "testInstance.reported",
+                        payload = new
+                        {
+                            testInstanceId = instance.Id,
+                            results = new[]
+                            {
+                                new
+                                {
+                                    parameterCode = "pH",
+                                    parameterValue = "6.8",
+                                    unit = "pH",
+                                    referenceRangeLow = 6.0m,
+                                    referenceRangeHigh = 7.5m
+                                }
+                            },
+                            attachmentIds = new[] { attachmentId },
+                            clientCommandId = (string?)null
+                        }
+                    }
+                }
+            },
+            TestUserId,
+            "shramsafal:LabOperator");
+
+        var reportResponse = await harness.Client.SendAsync(reportRequest);
+        reportResponse.EnsureSuccessStatusCode();
+
+        using var doc = JsonDocument.Parse(await reportResponse.Content.ReadAsStringAsync());
+        var result = doc.RootElement.GetProperty("results")[0];
+        Assert.Equal("applied", result.GetProperty("status").GetString());
+
+        var data = result.GetProperty("data");
+        Assert.Equal("Reported", data.GetProperty("status").GetString());
+        Assert.True(data.TryGetProperty("recommendations", out var recs));
+        Assert.Equal(JsonValueKind.Array, recs.ValueKind);
+    }
+
+    [Fact]
+    public async Task Push_TestInstanceCollected_RejectsNonMembers()
+    {
+        await using var harness = await TestHarness.CreateAsync();
+        var farmId = Guid.NewGuid();
+
+        await PushCreateFarmAsync(harness.Client, "device-ti-forbidden", "req-farm-ti-forbidden", farmId, "Forbidden Farm");
+        // NOTE: WorkerUserId is NOT added as a member of this farm.
+
+        var instance = await harness.SeedTestInstanceAsync(
+            farmId,
+            plotId: Guid.NewGuid(),
+            cropCycleId: Guid.NewGuid());
+
+        using var request = CreateJsonRequest(
+            HttpMethod.Post,
+            "/sync/push",
+            new
+            {
+                deviceId = "device-ti-forbidden",
+                mutations = new[]
+                {
+                    new
+                    {
+                        clientRequestId = "req-ti-forbidden-1",
+                        mutationType = "testInstance.collected",
+                        payload = new
+                        {
+                            testInstanceId = instance.Id
+                        }
+                    }
+                }
+            },
+            WorkerUserId,
+            "shramsafal:LabOperator");
+
+        var response = await harness.Client.SendAsync(request);
+        response.EnsureSuccessStatusCode();
+
+        using var doc = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        var result = doc.RootElement.GetProperty("results")[0];
+        Assert.Equal("failed", result.GetProperty("status").GetString());
+        Assert.Equal("ShramSafal.Forbidden", result.GetProperty("errorCode").GetString());
+    }
+
     private static async Task PushCreateFarmAsync(
         HttpClient client,
         string deviceId,
@@ -1298,6 +1484,36 @@ public sealed class SyncEndpointsTests
                 role,
                 DateTime.UtcNow));
             await db.SaveChangesAsync();
+        }
+
+        /// <summary>
+        /// Seeds a <see cref="TestInstance"/> in the in-memory test-stack
+        /// repository (CEI Phase 2 placeholder — full EF wiring lands in Phase 3).
+        /// Returns the instance so the caller can reference its Id.
+        /// </summary>
+        public async Task<TestInstance> SeedTestInstanceAsync(
+            Guid farmId,
+            Guid plotId,
+            Guid cropCycleId,
+            Guid? protocolId = null,
+            TestProtocolKind kind = TestProtocolKind.Soil,
+            string stageName = "Fruiting",
+            DateOnly? plannedDueDate = null)
+        {
+            await using var scope = app.Services.CreateAsyncScope();
+            var repo = scope.ServiceProvider.GetRequiredService<ITestInstanceRepository>();
+            var instance = TestInstance.Schedule(
+                id: Guid.NewGuid(),
+                testProtocolId: protocolId ?? Guid.NewGuid(),
+                protocolKind: kind,
+                cropCycleId: cropCycleId,
+                farmId: new FarmId(farmId),
+                plotId: plotId,
+                stageName: stageName,
+                plannedDueDate: plannedDueDate ?? DateOnly.FromDateTime(DateTime.UtcNow),
+                createdAtUtc: DateTime.UtcNow);
+            await repo.AddAsync(instance);
+            return instance;
         }
 
         public async ValueTask DisposeAsync()

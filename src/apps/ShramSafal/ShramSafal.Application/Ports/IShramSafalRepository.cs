@@ -52,6 +52,7 @@ public interface IShramSafalRepository
     Task AddScheduleTemplateAsync(ScheduleTemplate template, CancellationToken ct = default);
     Task<List<ScheduleTemplate>> GetScheduleTemplatesAsync(CancellationToken ct = default);
     Task AddPlannedActivitiesAsync(IEnumerable<PlannedActivity> plannedActivities, CancellationToken ct = default);
+    Task<PlannedActivity?> GetPlannedActivityByIdAsync(Guid id, CancellationToken ct = default);
     Task<List<PlannedActivity>> GetPlannedActivitiesByCropCycleIdAsync(Guid cropCycleId, CancellationToken ct = default);
     Task<List<LogTask>> GetExecutedTasksByCropCycleIdAsync(Guid cropCycleId, CancellationToken ct = default);
 
@@ -99,5 +100,27 @@ public interface IShramSafalRepository
 
     Task AddScheduleMigrationEventAsync(ScheduleMigrationEvent migrationEvent, CancellationToken ct = default);
 
+    Task<ScheduleTemplate?> GetScheduleTemplateByIdAsync(Guid templateId, CancellationToken ct = default);
+
+    /// <summary>
+    /// Returns <c>true</c> if the user has at least one <c>Active</c>
+    /// <see cref="FarmMembership"/> with <c>Role >= SecondaryOwner</c>.
+    /// Used to gate Team / Licensed / Public template mutations.
+    /// </summary>
+    Task<bool> HasActiveOwnerMembershipAsync(Guid userId, CancellationToken ct = default);
+
+    /// <summary>
+    /// Returns the root template and all templates derived from it (flat list).
+    /// </summary>
+    Task<List<ScheduleTemplate>> GetScheduleLineageAsync(Guid rootTemplateId, CancellationToken ct = default);
+
     Task SaveChangesAsync(CancellationToken ct = default);
+
+    // --- CEI Phase 1 §4.4 ----------------------------------------------------------------
+    /// <summary>
+    /// Returns the count of <see cref="ShramSafal.Domain.Logs.DailyLog"/> records for the
+    /// given plot whose <c>CurrentVerificationStatus</c> is
+    /// <see cref="ShramSafal.Domain.Logs.VerificationStatus.Disputed"/>.
+    /// </summary>
+    Task<int> GetDisputedLogCountForPlotAsync(Guid plotId, CancellationToken ct = default);
 }

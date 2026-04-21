@@ -33,18 +33,33 @@ using ShramSafal.Application.UseCases.Memberships.IssueFarmInvite;
 using ShramSafal.Application.UseCases.Memberships.RotateFarmInvite;
 using ShramSafal.Application.UseCases.Admin.GetOpsHealth;
 using ShramSafal.Application.UseCases.Planning.ComputePlannedVsExecutedDelta;
+using ShramSafal.Application.UseCases.Planning.OverridePlannedActivity;
 using ShramSafal.Application.UseCases.Reports.GetFarmWeekMis;
 using ShramSafal.Application.UseCases.Planning.GeneratePlanFromTemplate;
 using ShramSafal.Application.UseCases.Planning.GetStagePlan;
 using ShramSafal.Application.UseCases.Planning.GetTodaysPlan;
 using ShramSafal.Application.UseCases.ReferenceData.GetCropTypes;
+using ShramSafal.Application.UseCases.ReferenceData.GetDeviationReasonCodes;
 using ShramSafal.Application.UseCases.ReferenceData.GetScheduleTemplates;
 using ShramSafal.Application.UseCases.Schedules.AbandonSchedule;
 using ShramSafal.Application.UseCases.Schedules.AdoptSchedule;
 using ShramSafal.Application.UseCases.Schedules.CompleteSchedule;
 using ShramSafal.Application.UseCases.Schedules.MigrateSchedule;
+using ShramSafal.Application.UseCases.Planning.GetAttentionBoard;
+using ShramSafal.Application.UseCases.Planning.CloneScheduleTemplate;
+using ShramSafal.Application.UseCases.Planning.EditScheduleTemplate;
+using ShramSafal.Application.UseCases.Planning.PublishScheduleTemplate;
+using ShramSafal.Application.UseCases.Planning.GetScheduleLineage;
 using ShramSafal.Application.UseCases.Sync.PullSyncChanges;
 using ShramSafal.Application.UseCases.Sync.PushSyncBatch;
+using ShramSafal.Application.UseCases.Tests.CreateTestProtocol;
+using ShramSafal.Application.UseCases.Tests.GetMissingTestsForFarm;
+using ShramSafal.Application.UseCases.Tests.GetTestQueueForCycle;
+using ShramSafal.Application.UseCases.Tests.MarkOverdueInstances;
+using ShramSafal.Application.UseCases.Tests.RecordTestCollected;
+using ShramSafal.Application.UseCases.Tests.RecordTestResult;
+using ShramSafal.Application.UseCases.Tests.ScheduleTestDueDates;
+using ShramSafal.Application.UseCases.Tests.WaiveTestInstance;
 using ShramSafal.Application.Ports;
 using ShramSafal.Application.Services;
 using ShramSafal.Infrastructure;
@@ -84,8 +99,17 @@ public static class DependencyInjection
         services.AddScoped<ComputePlannedVsExecutedDeltaHandler>();
         services.AddScoped<GetTodaysPlanHandler>();
         services.AddScoped<GetStagePlanHandler>();
+        services.AddScoped<OverridePlannedActivityHandler>();
+        services.AddScoped<AddLocalPlannedActivityHandler>();
+        services.AddScoped<RemovePlannedActivityHandler>();
         services.AddScoped<GetScheduleTemplatesHandler>();
+        services.AddScoped<CloneScheduleTemplateHandler>();
+        services.AddScoped<EditScheduleTemplateHandler>();
+        services.AddScoped<PublishScheduleTemplateHandler>();
+        services.AddScoped<GetScheduleLineageHandler>();
+        services.AddScoped<GetAttentionBoardHandler>();
         services.AddScoped<GetCropTypesHandler>();
+        services.AddScoped<GetDeviationReasonCodesHandler>();
 
         services.AddScoped<ParseVoiceInputHandler>();
         services.AddScoped<ExtractReceiptHandler>();
@@ -120,6 +144,16 @@ public static class DependencyInjection
         services.AddScoped<MigrateScheduleHandler>();
         services.AddScoped<AbandonScheduleHandler>();
         services.AddScoped<CompleteScheduleHandler>();
+
+        // CEI Phase 2 §4.5 — test-stack handlers (HTTP + sync surfaces)
+        services.AddScoped<CreateTestProtocolHandler>();
+        services.AddScoped<ScheduleTestDueDatesHandler>();
+        services.AddScoped<RecordTestCollectedHandler>();
+        services.AddScoped<RecordTestResultHandler>();
+        services.AddScoped<WaiveTestInstanceHandler>();
+        services.AddScoped<GetTestQueueForCycleHandler>();
+        services.AddScoped<GetMissingTestsForFarmHandler>();
+        services.AddScoped<MarkOverdueInstancesHandler>();
 
         return services;
     }

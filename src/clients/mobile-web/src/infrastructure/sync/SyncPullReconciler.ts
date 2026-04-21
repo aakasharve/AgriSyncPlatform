@@ -8,6 +8,7 @@ import {
 } from '../../types';
 import {
     type AttachmentDto,
+    type AttentionBoardDto,
     type CropCycleDto,
     type DailyLogDto,
     type DayLedgerDto,
@@ -839,7 +840,7 @@ export async function reconcileSyncPull(payload: SyncPullResponse): Promise<void
     await db.transaction('rw', [
         db.logs, db.attachments, db.uploadQueue, db.appMeta, db.referenceData,
         db.farms, db.plots, db.cropCycles, db.costEntries, db.financeCorrections,
-        db.dayLedgers, db.plannedTasks
+        db.dayLedgers, db.plannedTasks, db.attentionCards
     ], async () => {
         for (const log of logs) {
             // Source-version conflict isolation.
@@ -1083,6 +1084,37 @@ export async function reconcileSyncPull(payload: SyncPullResponse): Promise<void
             value: payload.priceConfigs ?? [],
             updatedAt: receivedAtUtc,
         });
+
+        // CEI Phase 1 — clear and repopulate attention cards on every successful pull.
+        if (payload.attentionBoard) {
+            await db.attentionCards.clear();
+            const attentionBoard = payload.attentionBoard as AttentionBoardDto;
+            if (attentionBoard.cards.length > 0) {
+                await db.attentionCards.bulkPut(
+                    attentionBoard.cards.map(card => ({
+                        cardId: card.cardId,
+                        farmId: card.farmId,
+                        farmName: card.farmName,
+                        plotId: card.plotId,
+                        plotName: card.plotName,
+                        rank: card.rank,
+                        computedAtUtc: card.computedAtUtc,
+                        cropCycleId: card.cropCycleId,
+                        stageName: card.stageName,
+                        titleEn: card.titleEn,
+                        titleMr: card.titleMr,
+                        descriptionEn: card.descriptionEn,
+                        descriptionMr: card.descriptionMr,
+                        suggestedAction: card.suggestedAction,
+                        suggestedActionLabelEn: card.suggestedActionLabelEn,
+                        suggestedActionLabelMr: card.suggestedActionLabelMr,
+                        overdueTaskCount: card.overdueTaskCount,
+                        latestHealthScore: card.latestHealthScore,
+                        unresolvedDisputeCount: card.unresolvedDisputeCount,
+                    }))
+                );
+            }
+        }
 
         await db.appMeta.put({
             key: 'shramsafal_last_reconciled_pull_v1',

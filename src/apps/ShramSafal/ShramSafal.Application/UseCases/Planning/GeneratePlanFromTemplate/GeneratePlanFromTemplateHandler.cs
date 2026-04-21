@@ -1,7 +1,9 @@
 using AgriSync.BuildingBlocks.Abstractions;
 using AgriSync.BuildingBlocks.Results;
+using AgriSync.SharedKernel.Contracts.Ids;
 using ShramSafal.Application.Contracts.Dtos;
 using ShramSafal.Application.Ports;
+using ShramSafal.Application.UseCases.Tests.ScheduleTestDueDates;
 using ShramSafal.Domain.Common;
 
 namespace ShramSafal.Application.UseCases.Planning.GeneratePlanFromTemplate;
@@ -9,7 +11,8 @@ namespace ShramSafal.Application.UseCases.Planning.GeneratePlanFromTemplate;
 public sealed class GeneratePlanFromTemplateHandler(
     IShramSafalRepository repository,
     IIdGenerator idGenerator,
-    IClock clock)
+    IClock clock,
+    ScheduleTestDueDatesHandler? scheduleTestDueDatesHandler = null)
 {
     public async Task<Result<PlanGenerationResultDto>> HandleAsync(
         GeneratePlanFromTemplateCommand command,
@@ -69,6 +72,30 @@ public sealed class GeneratePlanFromTemplateHandler(
         await repository.AddScheduleTemplateAsync(template, ct);
         await repository.AddPlannedActivitiesAsync(plannedActivities, ct);
         await repository.SaveChangesAsync(ct);
+
+        // CEI §4.5 — materialise TestInstance rows for every protocol that
+        // targets this crop type. Non-fatal: best-effort with ordinary DI.
+        if (scheduleTestDueDatesHandler is not null)
+        {
+            var planEnd = plannedActivities.Count == 0
+                ? command.PlanStartDate
+                : plannedActivities.Max(p => p.PlannedDate);
+
+            var stageInfos = new List<CropCycleStageInfo>
+            {
+                new(command.Stage, command.PlanStartDate, planEnd)
+            };
+
+            await scheduleTestDueDatesHandler.HandleAsync(
+                new ScheduleTestDueDatesCommand(
+                    CropCycleId: command.CropCycleId,
+                    FarmId: cropCycle.FarmId,
+                    PlotId: cropCycle.PlotId,
+                    CropType: cropCycle.CropName,
+                    Stages: stageInfos,
+                    ActorUserId: new UserId(command.ActorUserId)),
+                ct);
+        }
 
         return Result.Success(new PlanGenerationResultDto(
             template.Id,
