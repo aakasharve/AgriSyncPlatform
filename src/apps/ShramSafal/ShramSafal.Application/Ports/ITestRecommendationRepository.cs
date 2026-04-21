@@ -15,4 +15,14 @@ public interface ITestRecommendationRepository
     /// ordered by <see cref="TestRecommendation.CreatedAtUtc"/> ascending.
     /// </summary>
     Task<IReadOnlyList<TestRecommendation>> GetByTestInstanceIdAsync(Guid testInstanceId, CancellationToken ct = default);
+
+    /// <summary>
+    /// CEI Phase 2 §4.5 — sync-pull cursor query. Returns every
+    /// <see cref="TestRecommendation"/> whose parent
+    /// <see cref="TestRecommendation.TestInstanceId"/> is in
+    /// <paramref name="testInstanceIds"/>.
+    /// </summary>
+    Task<IReadOnlyList<TestRecommendation>> GetByTestInstanceIdsAsync(
+        IReadOnlyCollection<Guid> testInstanceIds,
+        CancellationToken ct = default);
 }

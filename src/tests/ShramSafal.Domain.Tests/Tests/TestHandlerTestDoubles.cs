@@ -121,6 +121,19 @@ internal sealed class FakeTestInstanceRepository : ITestInstanceRepository
         return Task.FromResult(r);
     }
 
+    public Task<IReadOnlyList<TestInstance>> GetModifiedSinceAsync(
+        IReadOnlyCollection<FarmId> farmIds,
+        DateTime sinceUtc,
+        CancellationToken ct = default)
+    {
+        var farmSet = farmIds.ToHashSet();
+        IReadOnlyList<TestInstance> r = _byId.Values
+            .Where(i => farmSet.Contains(i.FarmId) && i.ModifiedAtUtc > sinceUtc)
+            .OrderBy(i => i.ModifiedAtUtc)
+            .ToList();
+        return Task.FromResult(r);
+    }
+
     public Task SaveChangesAsync(CancellationToken ct = default)
     {
         SaveCalls++;
@@ -142,6 +155,18 @@ internal sealed class FakeTestRecommendationRepository : ITestRecommendationRepo
     {
         IReadOnlyList<TestRecommendation> r = Added
             .Where(x => x.TestInstanceId == testInstanceId)
+            .OrderBy(x => x.CreatedAtUtc)
+            .ToList();
+        return Task.FromResult(r);
+    }
+
+    public Task<IReadOnlyList<TestRecommendation>> GetByTestInstanceIdsAsync(
+        IReadOnlyCollection<Guid> testInstanceIds,
+        CancellationToken ct = default)
+    {
+        var idSet = testInstanceIds.ToHashSet();
+        IReadOnlyList<TestRecommendation> r = Added
+            .Where(x => idSet.Contains(x.TestInstanceId))
             .OrderBy(x => x.CreatedAtUtc)
             .ToList();
         return Task.FromResult(r);

@@ -31,4 +31,16 @@ internal sealed class InMemoryTestRecommendationRepository : ITestRecommendation
             .ToList();
         return Task.FromResult(result);
     }
+
+    public Task<IReadOnlyList<TestRecommendation>> GetByTestInstanceIdsAsync(
+        IReadOnlyCollection<Guid> testInstanceIds,
+        CancellationToken ct = default)
+    {
+        var idSet = testInstanceIds.ToHashSet();
+        IReadOnlyList<TestRecommendation> result = _store
+            .Where(r => idSet.Contains(r.TestInstanceId))
+            .OrderBy(r => r.CreatedAtUtc)
+            .ToList();
+        return Task.FromResult(result);
+    }
 }

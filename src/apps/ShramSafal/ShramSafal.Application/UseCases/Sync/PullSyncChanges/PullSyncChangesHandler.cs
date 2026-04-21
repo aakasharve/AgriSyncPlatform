@@ -1,5 +1,6 @@
 using AgriSync.BuildingBlocks.Abstractions;
 using AgriSync.BuildingBlocks.Results;
+using AgriSync.SharedKernel.Contracts.Ids;
 using ShramSafal.Application.Contracts.Dtos;
 using ShramSafal.Application.Ports;
 using ShramSafal.Application.UseCases.Planning.GetAttentionBoard;
@@ -11,7 +12,10 @@ public sealed class PullSyncChangesHandler(
     IShramSafalRepository repository,
     IClock clock,
     GetScheduleTemplatesHandler getScheduleTemplatesHandler,
-    GetAttentionBoardHandler getAttentionBoardHandler)
+    GetAttentionBoardHandler getAttentionBoardHandler,
+    ITestInstanceRepository testInstanceRepository,
+    ITestProtocolRepository testProtocolRepository,
+    ITestRecommendationRepository testRecommendationRepository)
 {
     public async Task<Result<SyncPullResponseDto>> HandleAsync(PullSyncChangesQuery query, CancellationToken ct = default)
     {
@@ -105,6 +109,57 @@ public sealed class PullSyncChangesHandler(
             // Swallow: attention board failures must never fail the pull (CEI §4.2.2)
         }
 
+        // CEI Phase 2 §4.5 — test instances modified since the cursor, scoped
+        // to the caller's farms. Recommendations follow the parent instances.
+        var typedFarmIds = farmIds.Select(id => new FarmId(id)).ToList();
+        var testInstances = typedFarmIds.Count == 0
+            ? Array.Empty<Domain.Tests.TestInstance>()
+            : (IReadOnlyList<Domain.Tests.TestInstance>)await testInstanceRepository
+                .GetModifiedSinceAsync(typedFarmIds, sinceUtc, ct);
+        var testInstanceIds = testInstances.Select(i => i.Id).ToList();
+        var testRecommendations = testInstanceIds.Count == 0
+            ? Array.Empty<Domain.Tests.TestRecommendation>()
+            : (IReadOnlyList<Domain.Tests.TestRecommendation>)await testRecommendationRepository
+                .GetByTestInstanceIdsAsync(testInstanceIds, ct);
+        // Resolve protocol names for each distinct protocol ID in one pass —
+        // the in-memory stub and the future EF repo both support a single
+        // by-id lookup cheaply.
+        var protocolIds = testInstances.Select(i => i.TestProtocolId).Distinct().ToList();
+        var protocolNames = new Dictionary<Guid, string?>();
+        foreach (var protocolId in protocolIds)
+        {
+            var protocol = await testProtocolRepository.GetByIdAsync(protocolId, ct);
+            protocolNames[protocolId] = protocol?.Name;
+        }
+
+        var testInstanceDtos = testInstances
+            .Select(i => TestInstanceDto.FromDomain(
+                i,
+                protocolNames.TryGetValue(i.TestProtocolId, out var name) ? name : null))
+            .ToList();
+        var testRecommendationDtos = testRecommendations
+            .Select(TestRecommendationDto.FromDomain)
+            .ToList();
+
+        // Advance the cursor past the test-instance / recommendation stream as
+        // well so the next pull starts after the newest row emitted here.
+        if (testInstances.Count > 0)
+        {
+            var maxTestInstance = testInstances.Max(i => i.ModifiedAtUtc);
+            if (maxTestInstance > nextCursorUtc)
+            {
+                nextCursorUtc = maxTestInstance;
+            }
+        }
+        if (testRecommendations.Count > 0)
+        {
+            var maxRec = testRecommendations.Max(r => r.CreatedAtUtc);
+            if (maxRec > nextCursorUtc)
+            {
+                nextCursorUtc = maxRec;
+            }
+        }
+
         var response = new SyncPullResponseDto(
             serverNowUtc,
             nextCursorUtc,
@@ -125,7 +180,9 @@ public sealed class PullSyncChangesHandler(
             ReferenceDataCatalog.ActivityCategories,
             ReferenceDataCatalog.CostCategories,
             referenceDataVersionHash,
-            attentionBoard);
+            attentionBoard,
+            testInstanceDtos,
+            testRecommendationDtos);
 
         return Result.Success(response);
     }

@@ -45,4 +45,7 @@ public sealed record SyncPullResponseDto(
     IReadOnlyList<string> ActivityCategories,
     IReadOnlyList<string> CostCategories,
     string ReferenceDataVersionHash,
-    AttentionBoardDto? AttentionBoard);  // null = no cards; pull still succeeds
+    AttentionBoardDto? AttentionBoard,   // null = no cards; pull still succeeds
+    // CEI Phase 2 §4.5 — test stack
+    IReadOnlyList<TestInstanceDto> TestInstances,
+    IReadOnlyList<TestRecommendationDto> TestRecommendations);

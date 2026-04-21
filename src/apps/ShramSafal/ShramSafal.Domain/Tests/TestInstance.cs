@@ -66,6 +66,7 @@ public sealed class TestInstance : Entity<Guid>
         StageName = stageName;
         PlannedDueDate = plannedDueDate;
         CreatedAtUtc = createdAtUtc;
+        ModifiedAtUtc = createdAtUtc;
         Status = TestInstanceStatus.Due;
     }
 
@@ -84,6 +85,14 @@ public sealed class TestInstance : Entity<Guid>
     public string StageName { get; private set; } = string.Empty;
     public DateOnly PlannedDueDate { get; private set; }
     public DateTime CreatedAtUtc { get; private set; }
+
+    /// <summary>
+    /// CEI Phase 2 §4.5 — updated on every state transition
+    /// (MarkCollected, RecordResult, MarkOverdue, Waive). Used as the cursor
+    /// column for the sync-pull envelope.
+    /// </summary>
+    public DateTime ModifiedAtUtc { get; private set; }
+
     public TestInstanceStatus Status { get; private set; } = TestInstanceStatus.Due;
 
     public UserId? CollectedByUserId { get; private set; }
@@ -172,6 +181,7 @@ public sealed class TestInstance : Entity<Guid>
         Status = TestInstanceStatus.Collected;
         CollectedByUserId = collectorUserId;
         CollectedAtUtc = occurredAtUtc;
+        ModifiedAtUtc = occurredAtUtc;
 
         Raise(new TestInstanceCollectedEvent(
             Guid.NewGuid(),
@@ -228,6 +238,7 @@ public sealed class TestInstance : Entity<Guid>
         Status = TestInstanceStatus.Reported;
         ReportedByUserId = reporterUserId;
         ReportedAtUtc = occurredAtUtc;
+        ModifiedAtUtc = occurredAtUtc;
 
         Raise(new TestInstanceReportedEvent(
             Guid.NewGuid(),
@@ -252,6 +263,7 @@ public sealed class TestInstance : Entity<Guid>
         }
 
         Status = TestInstanceStatus.Overdue;
+        ModifiedAtUtc = occurredAtUtc;
 
         Raise(new TestInstanceOverdueEvent(
             Guid.NewGuid(),
@@ -284,6 +296,7 @@ public sealed class TestInstance : Entity<Guid>
         WaivedReason = reason.Trim();
         WaivedByUserId = waiverUserId;
         WaivedAtUtc = occurredAtUtc;
+        ModifiedAtUtc = occurredAtUtc;
 
         Raise(new TestInstanceWaivedEvent(
             Guid.NewGuid(),

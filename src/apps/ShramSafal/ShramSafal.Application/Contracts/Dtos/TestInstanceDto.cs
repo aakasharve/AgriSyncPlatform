@@ -23,7 +23,8 @@ public sealed record TestInstanceDto(
     Guid? ReportedByUserId,
     DateTime? ReportedAtUtc,
     int AttachmentCount,
-    int ResultCount)
+    int ResultCount,
+    DateTime ModifiedAtUtc)
 {
     public static TestInstanceDto FromDomain(TestInstance instance, string? protocolName = null) =>
         new(
@@ -42,5 +43,6 @@ public sealed record TestInstanceDto(
             ReportedByUserId: instance.ReportedByUserId?.Value,
             ReportedAtUtc: instance.ReportedAtUtc,
             AttachmentCount: instance.AttachmentIds.Count,
-            ResultCount: instance.Results.Count);
+            ResultCount: instance.Results.Count,
+            ModifiedAtUtc: instance.ModifiedAtUtc);
 }
