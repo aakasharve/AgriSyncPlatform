@@ -42,6 +42,9 @@ import { systemClock } from '../core/domain/services/Clock';
 import ElectricityTimingConfigurator from '../features/profile/components/ElectricityTimingConfigurator';
 import { SoilHealthReportsManager } from '../features/profile/components/SoilHealthReportsManager';
 import { VarietySelector } from '../features/context/components/VarietySelector';
+import ReliabilityScoreCard from '../features/work/components/ReliabilityScoreCard';
+import { useWorkerProfile } from '../features/work/hooks/useWorkerProfile';
+import { useFarmContext } from '../core/session/FarmContext';
 
 
 
@@ -1323,7 +1326,7 @@ const UtilitiesManager = ({ profile, onUpdate }: { profile: FarmerProfile, onUpd
 
 const ProfilePage: React.FC<ProfilePageProps> = ({ profile, crops, onUpdateProfile, onUpdateCrops, onAddPerson, onDeletePerson, onOpenScheduleLibrary, onOpenFinanceManager, onOpenReferrals, onOpenQrDemo }) => {
     const { t } = useLanguage();
-    const { logout } = useAuth();
+    const { logout, session: authSession } = useAuth();
     const [activeTab, setActiveTab] = useState<'identity' | 'structure' | 'utils' | 'plan' | 'machines' | 'health' | 'intelligence' | 'people'>('structure');
 
     // Crop & Plot State (Reused from previous, simplified)
@@ -1537,6 +1540,14 @@ const ProfilePage: React.FC<ProfilePageProps> = ({ profile, crops, onUpdateProfi
     // Compute which memberships the caller can't exit — any PrimaryOwner
     // farm where they're the sole PrimaryOwner. Client-side heuristic; the
     // server is still the source of truth and will return 409 if we guess wrong.
+    // CEI Phase 4 §4.8 — show own reliability score if user is a Worker or Mukadam on any farm
+    const { currentFarmId: _profileFarmId } = useFarmContext();
+    const isWorkerOnAnyFarm = myMemberships.some(m => m.role === 'Worker' || m.role === 'Mukadam');
+    const { profile: workerProfile } = useWorkerProfile(
+        isWorkerOnAnyFarm ? (authSession?.userId ?? null) : null,
+        _profileFarmId,
+    );
+
     const nonExitableFarmIds = React.useMemo(() => {
         const ids = new Set<string>();
         for (const m of myMemberships) {
@@ -1883,6 +1894,21 @@ const ProfilePage: React.FC<ProfilePageProps> = ({ profile, crops, onUpdateProfi
                                     nonExitableFarmIds={nonExitableFarmIds}
                                     onExit={handleExitMembership}
                                 />
+                            )}
+
+                            {/* CEI Phase 4 §4.8 — own reliability score (Worker/Mukadam only) */}
+                            {isWorkerOnAnyFarm && workerProfile && (
+                                <div>
+                                    <p
+                                        className="text-[10px] font-bold uppercase tracking-wide text-stone-400 mb-2 px-1"
+                                        style={{ fontFamily: "'DM Sans', sans-serif" }}
+                                    >
+                                        Your reliability
+                                    </p>
+                                    <ReliabilityScoreCard
+                                        score={workerProfile.reliability}
+                                    />
+                                </div>
                             )}
 
                             {/* 2. FARM TEAM HIERARCHY (LAYERS 2 & 3) */}
