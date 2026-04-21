@@ -1,17 +1,17 @@
 using AgriSync.BuildingBlocks.Domain;
-using AgriSync.BuildingBlocks.Money;
 using AgriSync.SharedKernel.Contracts.Ids;
+using AgriSync.SharedKernel.Contracts.Roles;
 
 namespace ShramSafal.Domain.Work;
 
 /// <summary>
-/// CEI-I8: raised when a job card is marked as paid out, linking it to a CostEntry.
+/// Raised when a job card is cancelled.
 /// </summary>
-public sealed record JobCardPaidOutEvent(
+public sealed record JobCardCancelledEvent(
     Guid JobCardId,
-    Guid PayoutCostEntryId,
-    UserId AssignedWorkerUserId,
-    Money PayoutAmount,
+    UserId CancelledByUserId,
+    AppRole CancellerRole,
+    string Reason,
     DateTime OccurredAtUtc) : IDomainEvent
 {
     public Guid EventId { get; } = Guid.NewGuid();

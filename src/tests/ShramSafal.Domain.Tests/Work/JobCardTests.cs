@@ -142,7 +142,7 @@ public sealed class JobCardTests
         job.MarkVerifiedForPayout(VerificationStatus.Verified, UserId.New(), AppRole.PrimaryOwner, Now.AddHours(5));
 
         var costEntryId = Guid.NewGuid();
-        job.MarkPaidOut(costEntryId, Now.AddHours(6));
+        job.MarkPaidOut(costEntryId, job.EstimatedTotal, Now.AddHours(6));
 
         job.Status.Should().Be(JobCardStatus.PaidOut);
         job.PayoutCostEntryId.Should().Be(costEntryId);
@@ -178,5 +178,67 @@ public sealed class JobCardTests
 
         result.IsEligible.Should().BeFalse();
         result.ReasonEn.Should().NotBeNull();
+    }
+
+    // ─── Test 10 ─────────────────────────────────────────────────────────────
+
+    [Fact]
+    public void Assign_WithWorkerRole_Throws()
+    {
+        var job = BuildDraftJobCard();
+
+        var act = () => job.Assign(WorkerId, AssignerId, AppRole.Worker, Now);
+
+        act.Should().Throw<InvalidOperationException>()
+           .WithMessage("*Mukadam*");
+    }
+
+    // ─── Test 11 ─────────────────────────────────────────────────────────────
+
+    [Fact]
+    public void Cancel_InPaidOut_Throws()
+    {
+        var job = BuildDraftJobCard();
+        job.Assign(WorkerId, AssignerId, AppRole.Mukadam, Now);
+        job.Start(WorkerId, Now.AddMinutes(5));
+        job.CompleteWithLog(Guid.NewGuid(), WorkerId, Now.AddHours(4));
+        job.MarkVerifiedForPayout(VerificationStatus.Verified, UserId.New(), AppRole.PrimaryOwner, Now.AddHours(5));
+        job.MarkPaidOut(Guid.NewGuid(), job.EstimatedTotal, Now.AddHours(6));
+
+        var act = () => job.Cancel(UserId.New(), AppRole.PrimaryOwner, "late cancel", Now.AddHours(7));
+
+        act.Should().Throw<InvalidOperationException>()
+           .WithMessage("*terminal*");
+    }
+
+    // ─── Test 12 ─────────────────────────────────────────────────────────────
+
+    [Fact]
+    public void Cancel_Reason_IsPersisted_AndEventRaised()
+    {
+        var job = BuildDraftJobCard();
+        job.Assign(WorkerId, AssignerId, AppRole.Mukadam, Now);
+
+        const string reason = "Weather too harsh";
+        job.Cancel(AssignerId, AppRole.Mukadam, reason, Now.AddHours(1));
+
+        job.Status.Should().Be(JobCardStatus.Cancelled);
+        job.CancellationReason.Should().Be(reason);
+        job.CancelledByUserId.Should().Be(AssignerId);
+        job.DomainEvents.Should().ContainSingle(e => e is JobCardCancelledEvent);
+    }
+
+    // ─── Test 13 ─────────────────────────────────────────────────────────────
+
+    [Fact]
+    public void Start_RaisesJobCardStartedEvent()
+    {
+        var job = BuildDraftJobCard();
+        job.Assign(WorkerId, AssignerId, AppRole.Mukadam, Now);
+
+        job.Start(WorkerId, Now.AddMinutes(5));
+
+        job.Status.Should().Be(JobCardStatus.InProgress);
+        job.DomainEvents.Should().ContainSingle(e => e is JobCardStartedEvent);
     }
 }
