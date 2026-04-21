@@ -13,6 +13,8 @@ using ShramSafal.Application.Contracts.Dtos;
 using ShramSafal.Application.Ports;
 using ShramSafal.Application.UseCases.Logs.CreateDailyLog;
 using ShramSafal.Application.UseCases.Logs.VerifyLog;
+using ShramSafal.Application.UseCases.Work.Handlers;
+using ShramSafal.Application.UseCases.Work.VerifyJobCardForPayout;
 using ShramSafal.Domain.AI;
 using ShramSafal.Domain.Attachments;
 using ShramSafal.Domain.Audit;
@@ -135,13 +137,20 @@ public sealed class LogHandlerAnalyticsTests
         repo.SetMembership(farmGuid, verifierGuid, AppRole.PrimaryOwner);
 
         var analytics = new CapturingAnalyticsWriter();
+        var fixedClock = new FixedClock(verifyAt);
+        var autoVerify = new OnLogVerifiedAutoVerifyJobCard(
+            repo,
+            new VerifyJobCardForPayoutHandler(repo, fixedClock),
+            fixedClock,
+            Microsoft.Extensions.Logging.Abstractions.NullLogger<OnLogVerifiedAutoVerifyJobCard>.Instance);
         var handler = new VerifyLogHandler(
             repo,
             new NoopAuthorizationEnforcer(),
             new FixedIdGenerator(Guid.NewGuid()),
-            new FixedClock(verifyAt),
+            fixedClock,
             new AllowAllEntitlementPolicy(),
-            analytics);
+            analytics,
+            autoVerify);
 
         var command = new VerifyLogCommand(
             DailyLogId: log.Id,

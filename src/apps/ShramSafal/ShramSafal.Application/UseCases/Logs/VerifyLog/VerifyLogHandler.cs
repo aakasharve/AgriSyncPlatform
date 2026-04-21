@@ -6,6 +6,7 @@ using AgriSync.SharedKernel.Contracts.Ids;
 using AgriSync.SharedKernel.Contracts.Roles;
 using ShramSafal.Application.Contracts.Dtos;
 using ShramSafal.Application.Ports;
+using ShramSafal.Application.UseCases.Work.Handlers;
 using ShramSafal.Domain.Audit;
 using ShramSafal.Domain.Common;
 using ShramSafal.Domain.Logs;
@@ -18,7 +19,8 @@ public sealed class VerifyLogHandler(
     IIdGenerator idGenerator,
     IClock clock,
     IEntitlementPolicy entitlementPolicy,
-    IAnalyticsWriter analytics)
+    IAnalyticsWriter analytics,
+    OnLogVerifiedAutoVerifyJobCard autoVerifyJobCard)
 {
     public async Task<Result<DailyLogDto>> HandleAsync(VerifyLogCommand command, CancellationToken ct = default)
     {
@@ -97,6 +99,8 @@ public sealed class VerifyLogHandler(
         }
 
         await repository.SaveChangesAsync(ct);
+
+        await autoVerifyJobCard.HandleAsync(log.Id, verification.Status, new UserId(command.VerifiedByUserId), ct);
 
         await analytics.EmitAsync(new AnalyticsEvent(
             EventId: Guid.NewGuid(),
