@@ -23,7 +23,7 @@ namespace ShramSafal.Domain.Tests;
 /// </summary>
 public sealed class TestInstance : Entity<Guid>
 {
-    private readonly List<Guid> _attachmentIds = [];
+    private readonly HashSet<Guid> _attachmentIds = [];
     private readonly List<TestResult> _results = [];
 
     private static readonly HashSet<AppRole> CollectorRoles =
@@ -94,7 +94,7 @@ public sealed class TestInstance : Entity<Guid>
     public UserId? WaivedByUserId { get; private set; }
     public DateTime? WaivedAtUtc { get; private set; }
 
-    public IReadOnlyCollection<Guid> AttachmentIds => _attachmentIds.AsReadOnly();
+    public IReadOnlyCollection<Guid> AttachmentIds => _attachmentIds;
     public IReadOnlyCollection<TestResult> Results => _results.AsReadOnly();
 
     public static TestInstance Schedule(
@@ -220,10 +220,7 @@ public sealed class TestInstance : Entity<Guid>
                     "Attachment IDs must be non-empty.", nameof(attachmentIds));
             }
 
-            if (!_attachmentIds.Contains(attId))
-            {
-                _attachmentIds.Add(attId);
-            }
+            _attachmentIds.Add(attId);
         }
 
         _results.AddRange(results);
@@ -255,6 +252,11 @@ public sealed class TestInstance : Entity<Guid>
         }
 
         Status = TestInstanceStatus.Overdue;
+
+        Raise(new TestInstanceOverdueEvent(
+            Guid.NewGuid(),
+            occurredAtUtc,
+            Id));
     }
 
     public void Waive(UserId waiverUserId, AppRole callerRole, string reason, DateTime occurredAtUtc)
@@ -282,5 +284,12 @@ public sealed class TestInstance : Entity<Guid>
         WaivedReason = reason.Trim();
         WaivedByUserId = waiverUserId;
         WaivedAtUtc = occurredAtUtc;
+
+        Raise(new TestInstanceWaivedEvent(
+            Guid.NewGuid(),
+            occurredAtUtc,
+            Id,
+            waiverUserId,
+            WaivedReason));
     }
 }

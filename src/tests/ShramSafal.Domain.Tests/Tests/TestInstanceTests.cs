@@ -206,4 +206,18 @@ public sealed class TestInstanceTests
                 UserId.New(), AppRole.LabOperator, DateTime.UtcNow))
             .Should().Throw<InvalidOperationException>();
     }
+
+    [Fact]
+    public void TestInstance_Waive_FromCollected_Throws_InvalidState()
+    {
+        var instance = NewDueInstance();
+        instance.MarkCollected(UserId.New(), AppRole.LabOperator, DateTime.UtcNow);
+
+        // Collected is not a valid source state for Waive
+        FluentActions.Invoking(() => instance.Waive(
+                UserId.New(), AppRole.Agronomist, "not applicable", DateTime.UtcNow))
+            .Should().Throw<InvalidOperationException>();
+
+        instance.Status.Should().Be(TestInstanceStatus.Collected);
+    }
 }

@@ -12,7 +12,22 @@ public sealed record TestResult(
     string ParameterValue,
     string Unit,
     decimal? ReferenceRangeLow,
-    decimal? ReferenceRangeHigh);
+    decimal? ReferenceRangeHigh)
+{
+    public static TestResult Create(
+        string parameterCode,
+        string parameterValue,
+        string unit,
+        decimal? referenceRangeLow,
+        decimal? referenceRangeHigh)
+    {
+        if (string.IsNullOrWhiteSpace(parameterCode))
+            throw new ArgumentException("ParameterCode is required.", nameof(parameterCode));
+        if (parameterValue is null)
+            throw new ArgumentNullException(nameof(parameterValue));
+        return new TestResult(parameterCode.Trim(), parameterValue, unit ?? string.Empty, referenceRangeLow, referenceRangeHigh);
+    }
+}
 
 public static class TestResultExtensions
 {
