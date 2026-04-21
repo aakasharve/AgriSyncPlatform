@@ -757,6 +757,47 @@ internal sealed class ShramSafalRepository(ShramSafalDbContext db) : IShramSafal
         return await db.JobCards.FindAsync([jobCardId], ct);
     }
 
+    public async Task<JobCard?> GetJobCardByLinkedDailyLogIdAsync(Guid dailyLogId, CancellationToken ct = default)
+    {
+        return await db.JobCards
+            .FirstOrDefaultAsync(j => j.LinkedDailyLogId == dailyLogId, ct);
+    }
+
+    public async Task<List<JobCard>> GetJobCardsForFarmAsync(
+        FarmId farmId, JobCardStatus? statusFilter, CancellationToken ct = default)
+    {
+        var query = db.JobCards.Where(j => j.FarmId == farmId);
+        if (statusFilter.HasValue)
+            query = query.Where(j => j.Status == statusFilter.Value);
+        return await query.OrderByDescending(j => j.CreatedAtUtc).ToListAsync(ct);
+    }
+
+    public async Task<List<JobCard>> GetJobCardsForWorkerAsync(
+        UserId workerUserId, CancellationToken ct = default)
+    {
+        return await db.JobCards
+            .Where(j => j.AssignedWorkerUserId == workerUserId)
+            .OrderByDescending(j => j.PlannedDate)
+            .ToListAsync(ct);
+    }
+
+    public async Task<List<JobCard>> GetJobCardsChangedSinceAsync(
+        IEnumerable<Guid> farmIds, DateTime sinceUtc, CancellationToken ct = default)
+    {
+        var farmIdSet = farmIds.ToHashSet();
+        return await db.JobCards
+            .Where(j => farmIdSet.Contains(j.FarmId.Value) && j.ModifiedAtUtc > sinceUtc)
+            .ToListAsync(ct);
+    }
+
+    public Task<WorkerMetricsDto> GetWorkerMetricsAsync(
+        UserId workerUserId, Guid? scopedFarmId, DateTime since30d, CancellationToken ct = default)
+    {
+        // For now return zeroed metrics — ReliabilityScore computation from DB queries
+        // is deferred to a dedicated read-model in a future phase.
+        return Task.FromResult(new WorkerMetricsDto(0, 0, 0, 0, 0, 0, 0));
+    }
+
     private sealed class OperatorDirectoryRow
     {
         public Guid UserId { get; set; }

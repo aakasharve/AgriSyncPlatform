@@ -91,4 +91,9 @@ internal abstract class StubShramSafalRepository : IShramSafalRepository
     // --- CEI Phase 4 §4.8 (Work Trust Ledger) ------------------------------------------
     public virtual Task AddJobCardAsync(JobCard jobCard, CancellationToken ct = default) => Task.CompletedTask;
     public virtual Task<JobCard?> GetJobCardByIdAsync(Guid jobCardId, CancellationToken ct = default) => Task.FromResult<JobCard?>(null);
+    public virtual Task<List<JobCard>> GetJobCardsForFarmAsync(FarmId farmId, JobCardStatus? statusFilter, CancellationToken ct = default) => Task.FromResult(new List<JobCard>());
+    public virtual Task<List<JobCard>> GetJobCardsForWorkerAsync(UserId workerUserId, CancellationToken ct = default) => Task.FromResult(new List<JobCard>());
+    public virtual Task<List<JobCard>> GetJobCardsChangedSinceAsync(IEnumerable<Guid> farmIds, DateTime sinceUtc, CancellationToken ct = default) => Task.FromResult(new List<JobCard>());
+    public virtual Task<WorkerMetricsDto> GetWorkerMetricsAsync(UserId workerUserId, Guid? scopedFarmId, DateTime since30d, CancellationToken ct = default) => Task.FromResult(new WorkerMetricsDto(0, 0, 0, 0, 0, 0, 0));
+    public virtual Task<JobCard?> GetJobCardByLinkedDailyLogIdAsync(Guid dailyLogId, CancellationToken ct = default) => Task.FromResult<JobCard?>(null);
 }
