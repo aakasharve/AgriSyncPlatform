@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using AgriSync.SharedKernel.Contracts.Roles;
 
 namespace ShramSafal.Api.Endpoints;
 
@@ -39,5 +40,13 @@ internal static class EndpointActorContext
         }
 
         return "unknown";
+    }
+
+    public static AppRole GetActorRoleEnum(ClaimsPrincipal user)
+    {
+        var raw = GetActorRole(user);
+        return Enum.TryParse<AppRole>(raw, ignoreCase: true, out var role)
+            ? role
+            : AppRole.Worker; // safest fallback — lowest privilege
     }
 }

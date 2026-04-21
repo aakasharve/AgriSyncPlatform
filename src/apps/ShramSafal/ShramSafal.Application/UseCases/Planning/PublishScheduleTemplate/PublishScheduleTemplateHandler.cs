@@ -3,7 +3,7 @@ using AgriSync.BuildingBlocks.Abstractions;
 using AgriSync.BuildingBlocks.Results;
 using AgriSync.SharedKernel.Contracts.Ids;
 using ShramSafal.Application.Ports;
-using ShramSafal.Application.UseCases.Planning.CloneScheduleTemplate;
+using ShramSafal.Application.UseCases.Planning;
 using ShramSafal.Domain.Audit;
 using ShramSafal.Domain.Common;
 
@@ -70,7 +70,7 @@ public sealed class PublishScheduleTemplateHandler(
             entityId: command.TemplateId,
             action: "schedule.published",
             actorUserId: command.CallerUserId,
-            actorRole: "user",
+            actorRole: command.CallerRole.ToString().ToLowerInvariant(),
             payload: new
             {
                 templateId = command.TemplateId,

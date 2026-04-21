@@ -53,6 +53,7 @@ public sealed class EditScheduleTemplateHandlerTests
             SourceTemplateId: source.Id,
             NewTemplateId: newId,
             CallerUserId: AuthorId,
+            CallerRole: AppRole.PrimaryOwner,
             NewName: "Grape May (Updated)",
             NewStage: null,
             ClientCommandId: null));
@@ -82,6 +83,7 @@ public sealed class EditScheduleTemplateHandlerTests
             SourceTemplateId: source.Id,
             NewTemplateId: Guid.NewGuid(),
             CallerUserId: OtherId, // NOT the author
+            CallerRole: AppRole.PrimaryOwner,
             NewName: "Malicious edit",
             NewStage: null,
             ClientCommandId: null));
@@ -103,6 +105,7 @@ public sealed class EditScheduleTemplateHandlerTests
             SourceTemplateId: source.Id,
             NewTemplateId: Guid.NewGuid(),
             CallerUserId: AuthorId,
+            CallerRole: AppRole.PrimaryOwner,
             NewName: null,
             NewStage: "Ripening",
             ClientCommandId: null));

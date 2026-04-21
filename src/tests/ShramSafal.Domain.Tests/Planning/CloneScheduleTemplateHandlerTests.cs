@@ -234,7 +234,7 @@ public sealed class CloneScheduleTemplateHandlerTests
     }
 
     [Fact]
-    public async Task CloneScheduleTemplate_FieldScout_ForbiddenFromLicensed_Returns_Forbidden()
+    public async Task CloneScheduleTemplate_FieldScout_ForbiddenFromLicensed_Returns_403()
     {
         // FieldScout is not in the Licensed-scope allowed set — must be rejected.
         var source = MakeTemplate();
