@@ -1,6 +1,7 @@
 using AgriSync.BuildingBlocks.Abstractions;
 using AgriSync.BuildingBlocks.Results;
 using AgriSync.SharedKernel.Contracts.Roles;
+using ShramSafal.Application.Contracts.Dtos;
 using ShramSafal.Application.Ports;
 using ShramSafal.Domain.Audit;
 using ShramSafal.Domain.Common;
