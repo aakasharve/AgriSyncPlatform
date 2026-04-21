@@ -23,7 +23,11 @@ namespace ShramSafal.Domain.Tests;
 /// </summary>
 public sealed class TestInstance : Entity<Guid>
 {
-    private readonly HashSet<Guid> _attachmentIds = [];
+    // CEI §4.5 — backed by List<Guid> (not HashSet) so EF Core's InMemory
+    // provider doesn't try to compose a HashSet<->string converter on top of
+    // the native uuid[] mapping. Uniqueness is enforced by the public API
+    // via a Contains-before-Add check in RecordResult.
+    private readonly List<Guid> _attachmentIds = [];
     private readonly List<TestResult> _results = [];
 
     private static readonly HashSet<AppRole> CollectorRoles =
@@ -230,7 +234,10 @@ public sealed class TestInstance : Entity<Guid>
                     "Attachment IDs must be non-empty.", nameof(attachmentIds));
             }
 
-            _attachmentIds.Add(attId);
+            if (!_attachmentIds.Contains(attId))
+            {
+                _attachmentIds.Add(attId);
+            }
         }
 
         _results.AddRange(results);

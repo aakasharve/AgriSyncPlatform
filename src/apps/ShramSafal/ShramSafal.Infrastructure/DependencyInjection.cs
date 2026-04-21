@@ -169,12 +169,10 @@ public static class DependencyInjection
         services.AddScoped<IAiJobRepository, AiJobRepository>();
         services.AddScoped<ISyncMutationStore, SyncMutationStore>();
 
-        // CEI Phase 2 §4.5 — placeholder in-memory test-stack repositories.
-        // Full EF-backed wiring lands in CEI Phase 3 once TestInstance /
-        // TestProtocol / TestRecommendation are mapped onto ShramSafalDbContext.
-        services.AddSingleton<ITestInstanceRepository, InMemoryTestInstanceRepository>();
-        services.AddSingleton<ITestProtocolRepository, InMemoryTestProtocolRepository>();
-        services.AddSingleton<ITestRecommendationRepository, InMemoryTestRecommendationRepository>();
+        // CEI Phase 3 §4.5 — EF Core-backed test-stack repositories.
+        services.AddScoped<ITestProtocolRepository, TestProtocolRepository>();
+        services.AddScoped<ITestInstanceRepository, TestInstanceRepository>();
+        services.AddScoped<ITestRecommendationRepository, TestRecommendationRepository>();
 
         services.AddSingleton<AiResponseNormalizer>();
         services.AddSingleton<AiCircuitBreakerRegistry>();
