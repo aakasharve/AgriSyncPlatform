@@ -721,7 +721,7 @@ internal sealed class ShramSafalRepository(ShramSafalDbContext db) : IShramSafal
         if (cropCycleIds.Count == 0) return [];
 
         return await db.PlannedActivities
-            .Where(a => cropCycleIds.Contains(a.CropCycleId) && a.PlannedDate >= sinceDate && !a.IsRemoved)
+            .Where(a => cropCycleIds.Contains(a.CropCycleId) && a.PlannedDate >= sinceDate && a.RemovedAtUtc == null)
             .ToListAsync(ct);
     }
 
