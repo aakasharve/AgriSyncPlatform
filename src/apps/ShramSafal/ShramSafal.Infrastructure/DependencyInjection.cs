@@ -174,6 +174,9 @@ public static class DependencyInjection
         services.AddScoped<ITestInstanceRepository, TestInstanceRepository>();
         services.AddScoped<ITestRecommendationRepository, TestRecommendationRepository>();
 
+        // CEI Phase 3 §4.6 — compliance signal repository.
+        services.AddScoped<IComplianceSignalRepository, ComplianceSignalRepository>();
+
         services.AddSingleton<AiResponseNormalizer>();
         services.AddSingleton<AiCircuitBreakerRegistry>();
         services.AddSingleton<AiFailureClassifier>();
