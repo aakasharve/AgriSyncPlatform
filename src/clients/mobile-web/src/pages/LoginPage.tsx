@@ -168,9 +168,16 @@ const LoginPage: React.FC<LoginPageProps> = () => {
 
                 <div className="rounded-xl border border-stone-100 bg-stone-50 divide-y divide-stone-100 text-[11px]">
                     <div className="flex items-center justify-between px-3 py-2">
-                        <span className="font-bold text-emerald-700 uppercase tracking-wider">Demo</span>
+                        <span className="font-bold text-emerald-700 uppercase tracking-wider">Demo · Ramu</span>
                         <span className="text-stone-600">
-                            phone: <span className="font-mono font-bold text-stone-800">purvesh</span>
+                            phone: <span className="font-mono font-bold text-stone-800">9999999999</span>
+                            &nbsp;&nbsp;pass: <span className="font-mono font-bold text-stone-800">ramu123</span>
+                        </span>
+                    </div>
+                    <div className="flex items-center justify-between px-3 py-2">
+                        <span className="font-bold text-emerald-700 uppercase tracking-wider">Demo · Purvesh</span>
+                        <span className="text-stone-600">
+                            phone: <span className="font-mono font-bold text-stone-800">9800000001</span>
                             &nbsp;&nbsp;pass: <span className="font-mono font-bold text-stone-800">purvesh123</span>
                         </span>
                     </div>
