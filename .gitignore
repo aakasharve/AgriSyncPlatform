@@ -10,6 +10,9 @@
 #     not application code.
 # ===========================================
 
+# Junk quarantine — auto-managed by /repo-clean
+junk/
+
 # Operations vault (Obsidian knowledge base)
 /_COFOUNDER/
 .obsidian/
@@ -103,6 +106,14 @@ Thumbs.db
 *.err.log
 *.out.log
 
+# Android crash/replay dumps
+android/hs_err_pid*.log
+android/replay_pid*.log
+
+# Agent temp files (preview servers etc.)
+/tmp/agrisync-*.log
+/tmp/agrisync-*.pid
+
 # Agent debug dumps (catch-all patterns)
 build_out.txt
 build_error.txt
@@ -149,6 +160,8 @@ _integr_tests.txt
 # ===========================================
 
 .playwright-cli/
+.playwright-mcp/
+**/.vite/
 **/output/*.png
 **/output/*.jpg
 src/clients/mobile-web/vite_log.txt
