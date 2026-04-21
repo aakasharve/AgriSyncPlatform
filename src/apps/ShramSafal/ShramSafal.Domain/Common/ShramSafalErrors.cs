@@ -51,4 +51,5 @@ public static class ShramSafalErrors
     public static readonly Error JobCardInvalidState = new("ShramSafal.JobCardInvalidState", "Job card is not in a valid state for this action.");
     public static readonly Error JobCardDailyLogMismatch = new("ShramSafal.JobCardDailyLogMismatch", "The daily log does not belong to the same farm and plot as this job card.");
     public static readonly Error JobCardActivityTypeMismatch = new("ShramSafal.JobCardActivityTypeMismatch", "No task in the daily log matches an activity type on this job card.");
+    public static readonly Error UseSettleJobCardForLabourPayout = new("ShramSafal.UseSettleJobCardForLabourPayout", "Use the settle-job-card-payout endpoint to record labour payouts. Direct labour_payout cost entries are not allowed.");
 }

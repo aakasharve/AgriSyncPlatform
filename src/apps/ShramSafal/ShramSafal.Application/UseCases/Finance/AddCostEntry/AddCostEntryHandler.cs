@@ -32,6 +32,12 @@ public sealed class AddCostEntryHandler(
             return Result.Failure<AddCostEntryResultDto>(ShramSafalErrors.InvalidCommand);
         }
 
+        // Labour payouts must go through SettleJobCardPayoutHandler, not this generic endpoint.
+        if (command.Category.Trim().Equals("labour_payout", StringComparison.OrdinalIgnoreCase))
+        {
+            return Result.Failure<AddCostEntryResultDto>(ShramSafalErrors.UseSettleJobCardForLabourPayout);
+        }
+
         if (command.CostEntryId.HasValue && command.CostEntryId.Value == Guid.Empty)
         {
             return Result.Failure<AddCostEntryResultDto>(ShramSafalErrors.InvalidCommand);
