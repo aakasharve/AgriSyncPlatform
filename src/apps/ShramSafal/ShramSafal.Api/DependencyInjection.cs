@@ -150,8 +150,19 @@ public static class DependencyInjection
         // Phase 6 MIS — owner farm-week report
         services.AddScoped<GetFarmWeekMisHandler>();
 
-        // Admin ops — real-time operational health dashboard
+        // Admin ops — real-time operational health dashboard + Phase 2 paginated endpoints
         services.AddScoped<GetOpsHealthHandler>();
+        services.AddScoped<ShramSafal.Application.UseCases.Admin.GetOpsErrors.GetOpsErrorsHandler>();
+        services.AddScoped<ShramSafal.Application.UseCases.Admin.GetOpsVoice.GetOpsVoiceHandler>();
+
+        // Admin MIS — Phase 3+ (WVFD, Farms, Users)
+        services.AddScoped<ShramSafal.Application.UseCases.Admin.GetWvfdHistory.GetWvfdHistoryHandler>();
+        services.AddScoped<ShramSafal.Application.UseCases.Admin.GetFarmsList.GetFarmsListHandler>();
+        services.AddScoped<ShramSafal.Application.UseCases.Admin.GetSilentChurn.GetSilentChurnHandler>();
+        services.AddScoped<ShramSafal.Application.UseCases.Admin.GetSuffering.GetSufferingHandler>();
+        services.AddScoped<ShramSafal.Application.UseCases.Admin.GetUsersList.GetUsersListHandler>();
+        services.AddScoped<ShramSafal.Application.Ports.IAdminMisRepository,
+            ShramSafal.Infrastructure.Persistence.Repositories.AdminMisRepository>();
 
         // Phase 3 MIS — schedule compliance evaluator
         services.AddScoped<IScheduleComplianceService, ScheduleComplianceService>();

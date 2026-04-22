@@ -1,0 +1,241 @@
+@import 'tailwindcss';
+@import 'tw-animate-css';
+
+@custom-variant dark (&:is([data-mode='dark'] *));
+
+/* =====================================================================
+ * AgriSync Admin — Tailwind v4 @theme
+ * Light mode = strict-black text. Dark mode = aesthetic, not inverted.
+ * ===================================================================== */
+@theme {
+  --font-sans: 'Inter', system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+
+  /* Brand — from AgriSync logo */
+  --color-brand-green: #00c853;
+  --color-brand-green-soft: #00f248;
+  --color-brand-teal: #52c0be;
+  --color-brand-mint: #83d1ba;
+  --color-brand-sky: #a9d6d8;
+  --color-brand-leaf: #329128;
+  --color-brand-deep: #0c174b;
+
+  /* Surface + text (light-mode defaults, dark mode overrides via :root[data-mode='dark']) */
+  --color-background: #eefaf3;
+  --color-foreground: #000000;
+  --color-text-primary: #000000;
+  --color-text-secondary: #1a1a1a;
+  --color-text-muted: #333333;
+
+  --color-surface-glass: color-mix(in oklab, #ffffff 74%, transparent);
+  --color-surface-panel: color-mix(in oklab, #ffffff 88%, transparent);
+  --color-surface-kpi: color-mix(in oklab, #ffffff 85%, transparent);
+  --color-surface-sidebar: color-mix(in oklab, #ffffff 55%, transparent);
+  --color-surface-border: color-mix(in oklab, #52c0be 30%, transparent);
+  --color-surface-border-strong: color-mix(in oklab, #52c0be 55%, transparent);
+  --color-row-divider: color-mix(in oklab, #000000 8%, transparent);
+
+  --color-success: #00c853;
+  --color-danger: #dc2626;
+  --color-warning: #f59e0b;
+
+  --radius-card: 1rem;
+  --radius-kpi: 0.875rem;
+}
+
+/* Dark mode (aesthetic, not pure-invert) */
+:root[data-mode='dark'] {
+  --color-background: #0b1416;
+  --color-foreground: #ffffff;
+  --color-text-primary: #ffffff;
+  --color-text-secondary: #f0f0f0;
+  --color-text-muted: #c8c8c8;
+
+  --color-surface-glass: color-mix(in oklab, #12181c 76%, transparent);
+  --color-surface-panel: color-mix(in oklab, #141c1e 88%, transparent);
+  --color-surface-kpi: color-mix(in oklab, #161e20 85%, transparent);
+  --color-surface-sidebar: color-mix(in oklab, #0e1416 70%, transparent);
+  --color-surface-border: color-mix(in oklab, #7dd8d6 28%, transparent);
+  --color-surface-border-strong: color-mix(in oklab, #7dd8d6 60%, transparent);
+  --color-row-divider: color-mix(in oklab, #ffffff 8%, transparent);
+
+  --color-brand-green: #00e36a;
+  --color-brand-teal: #7dd8d6;
+  --color-brand-mint: #a3e8d4;
+  --color-brand-sky: #c9e8ea;
+  --color-brand-leaf: #4fb040;
+}
+:root[data-theme='dusk'] { --color-background: #fbe8d9; }
+:root[data-theme='dusk'][data-mode='dark'] { --color-background: #140c08; }
+
+/* =====================================================================
+ * Base
+ * ===================================================================== */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+html,
+body,
+#root {
+  min-height: 100%;
+}
+body {
+  margin: 0;
+  padding: 0;
+  background: var(--color-background);
+  color: var(--color-foreground);
+  font-family: var(--font-sans);
+  font-size: 14px;
+  line-height: 1.5;
+  font-feature-settings: 'cv11', 'ss01';
+  -webkit-font-smoothing: antialiased;
+  transition: background 0.3s;
+  overflow-x: hidden;
+}
+
+/* =====================================================================
+ * Glass utility classes — used by shell, panels, KPIs.
+ * ===================================================================== */
+.glass {
+  background: var(--color-surface-glass);
+  -webkit-backdrop-filter: blur(30px) saturate(180%);
+  backdrop-filter: blur(30px) saturate(180%);
+  border: 2px solid var(--color-surface-border-strong);
+  border-radius: var(--radius-card);
+  box-shadow:
+    0 12px 44px 0 color-mix(in oklab, var(--color-brand-green) 18%, transparent),
+    0 0 0 1px var(--color-surface-border),
+    inset 0 1px 0 0 color-mix(in oklab, #ffffff 40%, transparent);
+  position: relative;
+  overflow: hidden;
+  color: var(--color-text-primary);
+}
+
+.glass-panel {
+  background: var(--color-surface-panel);
+  -webkit-backdrop-filter: blur(30px) saturate(185%);
+  backdrop-filter: blur(30px) saturate(185%);
+  border: 2px solid var(--color-surface-border-strong);
+  border-radius: var(--radius-card);
+  box-shadow:
+    0 8px 28px color-mix(in oklab, var(--color-brand-green) 12%, transparent),
+    0 0 0 1.5px var(--color-surface-border),
+    inset 0 1px 0 color-mix(in oklab, #ffffff 40%, transparent);
+  position: relative;
+  overflow: hidden;
+  color: var(--color-text-primary);
+}
+.glass-panel::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: linear-gradient(
+    90deg,
+    var(--color-brand-green),
+    var(--color-brand-teal),
+    var(--color-brand-sky)
+  );
+  opacity: 0.75;
+}
+
+.glass-kpi {
+  background: var(--color-surface-kpi);
+  -webkit-backdrop-filter: blur(26px) saturate(185%);
+  backdrop-filter: blur(26px) saturate(185%);
+  border: 1.5px solid var(--color-surface-border-strong);
+  border-radius: var(--radius-kpi);
+  box-shadow:
+    0 6px 22px color-mix(in oklab, var(--color-brand-green) 10%, transparent),
+    0 0 0 1px var(--color-surface-border),
+    inset 0 1px 0 color-mix(in oklab, #ffffff 35%, transparent);
+  transition: transform 0.2s, box-shadow 0.2s, border-color 0.2s;
+  position: relative;
+  overflow: hidden;
+}
+.glass-kpi:hover {
+  transform: translateY(-3px);
+  border-color: var(--color-brand-teal);
+  box-shadow:
+    0 12px 30px color-mix(in oklab, var(--color-brand-green) 22%, transparent),
+    0 0 0 1.5px var(--color-brand-teal),
+    inset 0 1px 0 color-mix(in oklab, #ffffff 50%, transparent);
+}
+.glass-kpi::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    var(--color-brand-teal),
+    var(--color-brand-green),
+    transparent
+  );
+  opacity: 0.6;
+}
+
+.glass-sidebar {
+  background: var(--color-surface-sidebar);
+  -webkit-backdrop-filter: blur(20px);
+  backdrop-filter: blur(20px);
+  border-right: 2px solid var(--color-surface-border);
+}
+
+/* Freshness chip */
+.chip-fresh {
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
+  font-size: 12px;
+  font-weight: 700;
+  padding: 4px 11px;
+  border-radius: 12px;
+  border: 1.5px solid;
+}
+.chip-fresh .dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: currentColor;
+  box-shadow: 0 0 8px currentColor;
+}
+.chip-live {
+  background: color-mix(in oklab, var(--color-success) 22%, transparent);
+  color: color-mix(in oklab, var(--color-success) 80%, #000);
+  border-color: color-mix(in oklab, var(--color-success) 50%, transparent);
+}
+:root[data-mode='dark'] .chip-live {
+  color: #9af5be;
+}
+.chip-mat {
+  background: color-mix(in oklab, var(--color-brand-teal) 28%, transparent);
+  color: color-mix(in oklab, var(--color-brand-teal) 80%, #000);
+  border-color: color-mix(in oklab, var(--color-brand-teal) 60%, transparent);
+}
+:root[data-mode='dark'] .chip-mat {
+  color: #b8edec;
+}
+
+/* Sidebar active nav pill (reused in AdminShell) */
+.nav-active {
+  background: linear-gradient(
+    135deg,
+    color-mix(in oklab, var(--color-brand-green) 22%, transparent),
+    color-mix(in oklab, var(--color-brand-teal) 26%, transparent)
+  );
+  border: 1.5px solid color-mix(in oklab, var(--color-brand-green) 50%, transparent);
+  box-shadow: 0 2px 8px color-mix(in oklab, var(--color-brand-green) 18%, transparent),
+    inset 0 1px 0 color-mix(in oklab, #ffffff 60%, transparent);
+}
+:root[data-mode='dark'] .nav-active {
+  box-shadow: 0 0 0 2px color-mix(in oklab, var(--color-brand-green) 18%, transparent),
+    0 6px 22px color-mix(in oklab, var(--color-brand-green) 18%, transparent);
+}
