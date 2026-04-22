@@ -10,10 +10,12 @@ namespace ShramSafal.Infrastructure.Persistence.Migrations
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.DropIndex(
-                name: "IX_cost_entries_entry_date_farm_id",
-                schema: "ssf",
-                table: "cost_entries");
+            // Idempotent drop — this index was present in some older dev DBs from
+            // manual state but never created by a prior migration, so fresh DBs
+            // bootstrapped from zero would fail on a plain DropIndex. Raw SQL with
+            // IF EXISTS works uniformly.
+            migrationBuilder.Sql(
+                "DROP INDEX IF EXISTS ssf.\"IX_cost_entries_entry_date_farm_id\";");
 
             migrationBuilder.CreateIndex(
                 name: "IX_daily_logs_crop_cycle_id",
