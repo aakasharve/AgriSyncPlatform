@@ -2,7 +2,6 @@ using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Text;
 using AgriSync.BuildingBlocks.Auth.Jwt;
-using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
 using User.Application.Ports;
@@ -10,20 +9,9 @@ using User.Application.Ports;
 namespace User.Infrastructure.Security;
 
 internal sealed class JwtTokenIssuer(
-    IOptions<JwtOptions> jwtOptions,
-    IConfiguration configuration) : IJwtTokenService
+    IOptions<JwtOptions> jwtOptions) : IJwtTokenService
 {
     private readonly JwtOptions _options = jwtOptions.Value;
-
-    // Admin user IDs configured in appsettings (never hardcoded).
-    // Format: "Admins": ["00000000-0000-0000-0000-000000000099"]
-    private readonly HashSet<Guid> _adminIds = configuration
-        .GetSection("Admins")
-        .Get<string[]>()
-        ?.Select(s => Guid.TryParse(s, out var g) ? g : Guid.Empty)
-        .Where(g => g != Guid.Empty)
-        .ToHashSet()
-        ?? [];
 
     public TokenPair GenerateTokens(
         Guid userId,
@@ -47,12 +35,12 @@ internal sealed class JwtTokenIssuer(
             claims.Add(new Claim("membership", $"{m.AppId}:{m.Role}"));
         }
 
-        // System admin claim — emitted if this userId is in the configured Admins list.
-        // This gives the "admin" role without touching the FarmMembership table or AppRole enum.
-        if (_adminIds.Contains(userId))
-        {
-            claims.Add(new Claim("membership", "shramsafal:admin"));
-        }
+        // Note: prior to W0-B, this issuer also stamped a `membership: shramsafal:admin`
+        // claim for userIds listed in appsettings.Admins[]. That path is removed.
+        // Admin status is now resolved per-request from ssf.organization_memberships
+        // by IEntitlementResolver, so admin grants take effect on the NEXT request
+        // after a UI-driven grant — no token revocation needed (tokens are identity,
+        // not authorization). See PlatformAdminBridgeSeeder for the transition seed.
 
         var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_options.SigningKey));
         var credentials = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);

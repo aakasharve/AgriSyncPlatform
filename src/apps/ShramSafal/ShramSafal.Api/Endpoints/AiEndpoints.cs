@@ -16,8 +16,10 @@ using ShramSafal.Application.UseCases.AI.GetAiJobStatus;
 using ShramSafal.Application.UseCases.AI.GetDocumentSession;
 using ShramSafal.Application.UseCases.AI.ParseVoiceInput;
 using ShramSafal.Application.UseCases.AI.UpdateProviderConfig;
+using ShramSafal.Application.Admin.Ports;
 using ShramSafal.Domain.AI;
 using ShramSafal.Domain.Common;
+using ShramSafal.Domain.Organizations;
 
 namespace ShramSafal.Api.Endpoints;
 
@@ -105,19 +107,27 @@ public static class AiEndpoints
         .RequireRateLimiting("ai")
         .RequireAuthorization();
 
+        // /ai/jobs/:id — NOT admin-gated. Any authenticated user can query a job's
+        // status. The admin flag (passed to handler) controls response sensitivity:
+        // raw provider payloads are revealed only to Platform admins. Post-W0-B
+        // pivot, "admin" is sourced from the resolver, not the JWT claim.
         group.MapGet("/ai/jobs/{jobId:guid}", async Task<IResult> (
             Guid jobId,
-            ClaimsPrincipal user,
+            HttpContext http,
+            IEntitlementResolver resolver,
             GetAiJobStatusHandler handler,
             CancellationToken ct) =>
         {
-            if (!EndpointActorContext.TryGetUserId(user, out var actorUserId))
+            if (!EndpointActorContext.TryGetUserId(http.User, out var actorUserId))
             {
                 return Results.Unauthorized();
             }
 
+            var scope = await AdminScopeHelper.TryResolveSilentlyAsync(http, resolver, ct);
+            var isAdmin = scope?.IsPlatformAdmin ?? false;
+
             var result = await handler.HandleAsync(
-                new GetAiJobStatusQuery(jobId, actorUserId, IsAdmin(user)),
+                new GetAiJobStatusQuery(jobId, actorUserId, isAdmin),
                 ct);
 
             return result.IsSuccess ? Results.Ok(result.Value) : ToErrorResult(result.Error);
@@ -127,14 +137,14 @@ public static class AiEndpoints
         .RequireAuthorization();
 
         group.MapGet("/ai/health", async Task<IResult> (
-            ClaimsPrincipal user,
+            HttpContext http,
+            IEntitlementResolver resolver,
             IEnumerable<IAiProvider> providers,
             CancellationToken ct) =>
         {
-            if (!IsAdmin(user))
-            {
-                return Results.Forbid();
-            }
+            var scope = await AdminScopeHelper.ResolveOrDenyAsync(http, resolver, ct);
+            if (scope is null) return Results.Empty;
+            if (!await AdminScopeHelper.RequireReadAsync(http, scope, ModuleKey.OpsVoice)) return Results.Empty;
 
             var statuses = new List<object>();
             foreach (var provider in providers.OrderBy(x => x.ProviderType))
@@ -158,14 +168,14 @@ public static class AiEndpoints
         .RequireAuthorization();
 
         group.MapGet("/ai/config", async Task<IResult> (
-            ClaimsPrincipal user,
+            HttpContext http,
+            IEntitlementResolver resolver,
             IAiJobRepository repository,
             CancellationToken ct) =>
         {
-            if (!IsAdmin(user))
-            {
-                return Results.Forbid();
-            }
+            var scope = await AdminScopeHelper.ResolveOrDenyAsync(http, resolver, ct);
+            if (scope is null) return Results.Empty;
+            if (!await AdminScopeHelper.RequireReadAsync(http, scope, ModuleKey.OpsVoice)) return Results.Empty;
 
             var config = await repository.GetProviderConfigAsync(ct);
             return Results.Ok(ToConfigResponse(config));
@@ -174,26 +184,27 @@ public static class AiEndpoints
         .RequireRateLimiting("ai")
         .RequireAuthorization();
 
+        // Platform-only write — AI provider config is cross-tenant global state.
         group.MapPut("/ai/config", async Task<IResult> (
-            ClaimsPrincipal user,
+            HttpContext http,
+            IEntitlementResolver resolver,
             UpdateAiProviderConfigRequest request,
             UpdateProviderConfigHandler handler,
             CancellationToken ct) =>
         {
-            if (!EndpointActorContext.TryGetUserId(user, out var actorUserId))
+            if (!EndpointActorContext.TryGetUserId(http.User, out var actorUserId))
             {
                 return Results.Unauthorized();
             }
 
-            if (!IsAdmin(user))
-            {
-                return Results.Forbid();
-            }
+            var scope = await AdminScopeHelper.ResolveOrDenyAsync(http, resolver, ct);
+            if (scope is null) return Results.Empty;
+            if (!await AdminScopeHelper.RequirePlatformAdminAsync(http, scope)) return Results.Empty;
 
             var result = await handler.HandleAsync(
                 new UpdateProviderConfigCommand(
                     actorUserId,
-                    EndpointActorContext.GetActorRole(user),
+                    EndpointActorContext.GetActorRole(http.User),
                     request.DefaultProvider,
                     request.FallbackEnabled,
                     request.IsAiProcessingDisabled,
@@ -214,14 +225,14 @@ public static class AiEndpoints
         .RequireAuthorization();
 
         group.MapGet("/ai/dashboard", async Task<IResult> (
-            ClaimsPrincipal user,
+            HttpContext http,
+            IEntitlementResolver resolver,
             GetAiDashboardHandler handler,
             CancellationToken ct) =>
         {
-            if (!IsAdmin(user))
-            {
-                return Results.Forbid();
-            }
+            var scope = await AdminScopeHelper.ResolveOrDenyAsync(http, resolver, ct);
+            if (scope is null) return Results.Empty;
+            if (!await AdminScopeHelper.RequireReadAsync(http, scope, ModuleKey.OpsVoice)) return Results.Empty;
 
             var result = await handler.HandleAsync(new GetAiDashboardQuery(), ct);
             return result.IsSuccess ? Results.Ok(result.Value) : ToErrorResult(result.Error);
@@ -1143,14 +1154,6 @@ public static class AiEndpoints
         return normalized is not null && allowedMimeTypes.Contains(normalized);
     }
 
-    private static bool IsAdmin(ClaimsPrincipal user)
-    {
-        var role = EndpointActorContext.GetActorRole(user);
-        return role.Equals("admin", StringComparison.OrdinalIgnoreCase)
-               || role.Equals("primaryowner", StringComparison.OrdinalIgnoreCase)
-               || role.Equals("primary_owner", StringComparison.OrdinalIgnoreCase)
-               || role.Equals("founder", StringComparison.OrdinalIgnoreCase);
-    }
 
     private static object ToConfigResponse(AiProviderConfig config)
     {

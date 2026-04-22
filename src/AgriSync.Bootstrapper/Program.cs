@@ -103,7 +103,14 @@ try
         options.AddPolicy("AllowFrontend", policy =>
         {
             policy.WithOrigins(allowedOrigins)
-                .WithHeaders("Content-Type", "Authorization", "X-Request-Id", "X-Device-Id")
+                .WithHeaders(
+                    "Content-Type",
+                    "Authorization",
+                    "X-Request-Id",
+                    "X-Device-Id",
+                    // W0-B — admin-web sends this to select the active org when the
+                    // user has multiple memberships (428 Ambiguous response path).
+                    "X-Active-Org-Id")
                 .WithMethods("GET", "POST", "PUT", "DELETE", "OPTIONS")
                 .AllowCredentials();
         });
@@ -153,6 +160,7 @@ try
     builder.Services.AddTransient<AgriSync.Bootstrapper.Infrastructure.DatabaseSeeder>();
     builder.Services.AddTransient<AgriSync.Bootstrapper.Infrastructure.PurveshDemoSeeder>();
     builder.Services.AddTransient<AgriSync.Bootstrapper.Infrastructure.BlankTestUserSeeder>();
+    builder.Services.AddTransient<AgriSync.Bootstrapper.Infrastructure.PlatformAdminBridgeSeeder>();
     builder.Services.AddTransient<ShramSafal.Infrastructure.Persistence.Seeding.TestProtocolSeed>();
 
     QuestPDF.Settings.License = QuestPDF.Infrastructure.LicenseType.Community;
@@ -577,6 +585,20 @@ static async Task InitializeApplicationDataAsync(WebApplication app)
         {
             var blankSeeder = services.GetRequiredService<AgriSync.Bootstrapper.Infrastructure.BlankTestUserSeeder>();
             await blankSeeder.SeedAsync();
+        }
+
+        // W0-B admin auth pivot bridge — ensure every userId in Admins[] config
+        // has a Platform+Owner membership row, so the EntitlementResolver can
+        // recognise them after JwtTokenIssuer stops stamping shramsafal:admin.
+        // Runs on every boot (idempotent). Safe no-op when Admins[] is empty.
+        try
+        {
+            var bridge = services.GetRequiredService<AgriSync.Bootstrapper.Infrastructure.PlatformAdminBridgeSeeder>();
+            await bridge.EnsureAsync();
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "PlatformAdminBridgeSeeder failed — admin login may require manual intervention.");
         }
 
         var seedRamuDemo = string.Equals(
