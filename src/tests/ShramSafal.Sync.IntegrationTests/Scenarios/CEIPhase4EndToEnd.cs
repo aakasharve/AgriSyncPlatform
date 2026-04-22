@@ -296,26 +296,11 @@ public sealed class CEIPhase4EndToEnd
                 "DailyLog must be Verified after two-step verification");
         }
 
-        // ── STEP 8: Ramu calls verify-for-payout explicitly ───────────────────
-        // NOTE: OnLogVerifiedAutoVerifyJobCard is not wired into VerifyLogHandler
-        // (known concern documented in Phase 4 plan). We call the endpoint explicitly.
-        using var verifyForPayoutReq = CreateJsonRequest<object?>(
-            HttpMethod.Post,
-            $"/shramsafal/job-cards/{jobCardId}/verify-for-payout",
-            new { clientCommandId = "jc-verify-payout-001" },
-            RamuUserId,
-            "shramsafal:PrimaryOwner");
-
-        var verifyForPayoutResp = await harness.Client.SendAsync(verifyForPayoutReq);
-        verifyForPayoutResp.StatusCode.Should().Be(HttpStatusCode.OK,
-            "verify-for-payout must succeed once the linked DailyLog is Verified");
-
-        using (var doc = JsonDocument.Parse(await verifyForPayoutResp.Content.ReadAsStringAsync()))
-        {
-            // VerifyJobCardForPayoutResult returns JobCardId.
-            doc.RootElement.GetProperty("jobCardId").GetGuid().Should().Be(jobCardId,
-                "VerifyJobCardForPayout must return the same JobCardId");
-        }
+        // ── STEP 8: Auto-verify-for-payout fired by OnLogVerifiedAutoVerifyJobCard ─
+        // CEI-I9 auto-path (commit 207579c) wires OnLogVerifiedAutoVerifyJobCard into
+        // VerifyLogHandler, so when STEP 7 verified the DailyLog the linked JobCard was
+        // automatically transitioned to VerifiedForPayout — no explicit call needed.
+        // We read back via the status filter to prove the auto-transition happened.
 
         // Assert job card appears in the VerifiedForPayout filter.
         using var getVerifiedJobCardsReq = CreateRequest(
