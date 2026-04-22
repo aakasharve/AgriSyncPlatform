@@ -57,6 +57,8 @@ namespace AgriSync.Bootstrapper.Jobs
             "mis.alert_r6_flash_churn",
             "mis.alert_r7_correction_rising",
             "mis.alert_r8_referral_quality",
+            // W0-A — Admin resolver observability
+            "mis.admin_scope_health",
         };
 
         public MisRefreshJob(IServiceProvider serviceProvider, ILogger<MisRefreshJob> logger)
