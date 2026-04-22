@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { installGlobalErrorHandlers } from './infrastructure/telemetry/ClientErrorReporter';
+import { AdminOpsPreview } from './features/admin/ops/AdminOpsPreview';
 import { BrowserRouter } from 'react-router-dom';
 import { Capacitor, SystemBars, SystemBarsStyle } from '@capacitor/core';
 import { StatusBar, Style } from '@capacitor/status-bar';
@@ -54,12 +55,19 @@ const AppFrame: React.FC<{
     );
 };
 
+// DEV-ONLY: ?preview=ops-admin bypasses auth entirely — mock data only
+const DEV_PREVIEW = typeof window !== 'undefined'
+    && new URLSearchParams(window.location.search).get('preview') === 'ops-admin';
+
 const App: React.FC = () => {
     const [crops, setCrops] = useState<CropProfile[]>([]);
     const [showSplash, setShowSplash] = useState(true);
 
     // Ops Phase 3 — catch unhandled JS rejections and report to telemetry
     useEffect(() => { installGlobalErrorHandlers(); }, []);
+
+    // Dev preview bypass — rendered before any auth providers mount
+    if (DEV_PREVIEW) return <AdminOpsPreview />;
 
     useEffect(() => {
         if (!Capacitor.isNativePlatform()) {
