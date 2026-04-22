@@ -811,6 +811,29 @@ public sealed class AiEndpointsTests
             app.MapShramSafalApi();
 
             await app.StartAsync();
+
+            // W0-B admin pivot — resolver reads ssf.organization_memberships to decide
+            // admin access. The TestAuthHandler stamps TestUserId with a PrimaryOwner
+            // claim but not an admin membership, so for admin-gated AI endpoints
+            // (/ai/health, /ai/config, /ai/dashboard) we seed a Platform+Owner row
+            // directly. Mirrors what PlatformAdminBridgeSeeder does in real boot.
+            await using (var seedScope = app.Services.CreateAsyncScope())
+            {
+                var ctx = seedScope.ServiceProvider.GetRequiredService<ShramSafalDbContext>();
+                var platformOrgId = Guid.Parse("00000000-0000-0000-0000-00000000a000");
+                ctx.Organizations.Add(ShramSafal.Domain.Organizations.Organization.Create(
+                    platformOrgId, "AgriSync Platform",
+                    ShramSafal.Domain.Organizations.OrganizationType.Platform, DateTime.UtcNow));
+                ctx.OrganizationMemberships.Add(
+                    ShramSafal.Domain.Organizations.OrganizationMembership.Create(
+                        Guid.NewGuid(), platformOrgId,
+                        new AgriSync.SharedKernel.Contracts.Ids.UserId(TestUserId),
+                        ShramSafal.Domain.Organizations.OrganizationRole.Owner,
+                        new AgriSync.SharedKernel.Contracts.Ids.UserId(TestUserId),
+                        DateTime.UtcNow));
+                await ctx.SaveChangesAsync();
+            }
+
             var client = app.GetTestClient();
             var providersByType = aiProviders.ToDictionary(x => x.ProviderType);
             return new TestHarness(app, client, storageDirectory, providersByType);

@@ -160,6 +160,14 @@ public static class DependencyInjection
         services.AddScoped<IUserDirectory, UserDirectoryService>();
         services.AddScoped<IMisReportRepository, MisReportRepository>();
         services.AddScoped<IAdminOpsRepository, AdminOpsRepository>();
+
+        // W0-A admin spine — resolver + projector + redactor (wired for W0-B endpoint pivot).
+        services.AddScoped<ShramSafal.Application.Admin.Ports.IEntitlementResolver,
+            ShramSafal.Infrastructure.Admin.EntitlementResolver>();
+        services.AddScoped<ShramSafal.Application.Admin.Ports.IOrgFarmScopeProjector,
+            ShramSafal.Infrastructure.Admin.OrgFarmScopeProjector>();
+        services.AddSingleton<ShramSafal.Application.Admin.Ports.IResponseRedactor,
+            ShramSafal.Infrastructure.Admin.ResponseRedactor>();
         services.AddScoped<IFarmInvitationRepository, FarmInvitationRepository>();
         services.AddScoped<ISubscriptionReader, SubscriptionReader>();
         services.AddScoped<IEntitlementPolicy, DefaultEntitlementPolicy>();
