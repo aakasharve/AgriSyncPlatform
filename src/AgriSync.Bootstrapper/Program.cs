@@ -574,15 +574,17 @@ static async Task InitializeApplicationDataAsync(WebApplication app)
         var accountsSchemaCreated = app.Environment.IsDevelopment()
             ? await EnsureContextTablesCreatedAsync(accountsContext, "accounts", "subscriptions")
             : await ApplyStartupMigrationsIfAllowedAsync(app, accountsContext, "AccountsDbContext");
-        var ssfSchemaCreated = app.Environment.IsDevelopment()
-            ? await EnsureContextTablesCreatedAsync(ssfContext, "ssf", "farms")
-            : await ApplyStartupMigrationsIfAllowedAsync(app, ssfContext, "ShramSafalDbContext");
+        // Analytics MUST come before ShramSafal because ShramSafal's
+        // AddAdminScopeHealthView migration creates a view over analytics.events.
         // MIS rail — analytics events are append-only. Production deploys should replace
         // the EF-generated table with the partitioned schema from
         // _COFOUNDER/01_Operations/Plans/SHRAMSAFAL_MIS_INTEGRATION_PLAN_2026-04-18.md §4.2.
         var analyticsSchemaCreated = app.Environment.IsDevelopment()
             ? await EnsureContextTablesCreatedAsync(analyticsContext, "analytics", "events")
             : await ApplyStartupMigrationsIfAllowedAsync(app, analyticsContext, "AnalyticsDbContext");
+        var ssfSchemaCreated = app.Environment.IsDevelopment()
+            ? await EnsureContextTablesCreatedAsync(ssfContext, "ssf", "farms")
+            : await ApplyStartupMigrationsIfAllowedAsync(app, ssfContext, "ShramSafalDbContext");
 
         var seedBlankTestUser = app.Environment.IsDevelopment() || string.Equals(
             Environment.GetEnvironmentVariable("SEED_BLANK_TEST_USER"),
