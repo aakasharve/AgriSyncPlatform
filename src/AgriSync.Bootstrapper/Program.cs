@@ -598,9 +598,18 @@ static async Task InitializeApplicationDataAsync(WebApplication app)
         var ssfPhaseACreated = app.Environment.IsDevelopment()
             ? await EnsureContextTablesCreatedAsync(ssfContext, "ssf", "farms")
             : await ApplyStartupMigrationsIfAllowedAsync(app, ssfContext, "ShramSafalDbContext (Phase A)", ssfPhaseATarget);
+        // Production: apply analytics only through AnalyticsInitial. The later
+        // analytics migrations (Phase4_MisSchemaRollups, Phase7_Behavioral-
+        // Analytics, Phase_OpsObservability) reference columns that do not
+        // match the live ShramSafal schema (ssf.verifications vs real
+        // ssf.verification_events, lowercase id vs "Id", missing columns
+        // verification_status/is_corrected/...). Applying them at startup
+        // cannot succeed. Deferring until those migrations are reauthored.
+        // See Pending_Tasks handoff entry (filed in Phase 9).
+        const string analyticsProdTarget = "20260419054331_AnalyticsInitial";
         var analyticsSchemaCreated = app.Environment.IsDevelopment()
             ? await EnsureContextTablesCreatedAsync(analyticsContext, "analytics", "events")
-            : await ApplyStartupMigrationsIfAllowedAsync(app, analyticsContext, "AnalyticsDbContext");
+            : await ApplyStartupMigrationsIfAllowedAsync(app, analyticsContext, "AnalyticsDbContext (to AnalyticsInitial)", analyticsProdTarget);
         var ssfPhaseBCreated = app.Environment.IsDevelopment()
             ? false
             : await ApplyStartupMigrationsIfAllowedAsync(app, ssfContext, "ShramSafalDbContext (Phase B)");
