@@ -246,6 +246,42 @@
         }
       },
       "row": 11, "col": 7, "size_x": 5, "size_y": 4
+    },
+    {
+      "id": 15,
+      "card": {
+        "name": "Admin Scope Health (last 24h)",
+        "description": "W0-B resolver observability. Hourly roll-up of admin.scope.* events. Watch for: (a) forbidden_count > 0 sustained = module-gate regression or misconfigured membership; (b) drift_count > 0 = ssf ↔ mis scope-projection mismatch — run OrgFarmScopeProjector.ReconcileAll; (c) resolve_ms_p95 > 50ms = resolver hot-path degradation, inspect ssf.organization_memberships indexes.",
+        "display": "table",
+        "dataset_query": {
+          "type": "native",
+          "native": {
+            "query": "SELECT bucket_hour, resolved_count, ambiguous_count, unauthorized_count, forbidden_count, switch_count, drift_count, resolve_ms_p50, resolve_ms_p95, resolve_ms_p99 FROM mis.admin_scope_health WHERE bucket_hour >= NOW() - INTERVAL '24 hours' ORDER BY bucket_hour DESC",
+            "template-tags": {}
+          }
+        },
+        "visualization_settings": {
+          "table.column_formatting": [
+            {
+              "columns": ["forbidden_count"],
+              "type": "single",
+              "operator": ">",
+              "value": 0,
+              "color": "#EF4444",
+              "highlight_row": false
+            },
+            {
+              "columns": ["drift_count"],
+              "type": "single",
+              "operator": ">",
+              "value": 0,
+              "color": "#F59E0B",
+              "highlight_row": false
+            }
+          ]
+        }
+      },
+      "row": 15, "col": 0, "size_x": 12, "size_y": 4
     }
   ],
   "_contract_version": "v1",
@@ -262,6 +298,7 @@
     "mis.silent_churn_watchlist",
     "mis.gemini_cost_per_farm",
     "mis.api_health_24h",
-    "mis.farmer_suffering_watchlist"
+    "mis.farmer_suffering_watchlist",
+    "mis.admin_scope_health"
   ]
 }

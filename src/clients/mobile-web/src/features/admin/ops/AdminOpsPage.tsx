@@ -1,6 +1,6 @@
 import React from 'react';
 import {
-    Activity, AlertTriangle, ArrowLeft, CheckCircle2,
+    Activity, AlertTriangle, ArrowLeft, CheckCircle2, ExternalLink,
     Mic, RefreshCw, ServerCrash, ShieldAlert, Users, XCircle,
 } from 'lucide-react';
 import { useOpsHealth } from '../../../app/hooks/useOpsHealth';
@@ -114,6 +114,30 @@ export const AdminOpsPage: React.FC<AdminOpsPageProps> = ({ onBack }) => {
 
     return (
         <div className="space-y-4 pb-24">
+            {/* Deprecation banner (T-W0B-03) — this embedded ops surface is preserved
+                for on-the-go checks, but the real tool is the desktop admin console. */}
+            <div className="rounded-xl border-l-4 border-amber-400 bg-amber-50/70 p-3 flex items-start gap-2.5">
+                <ExternalLink size={16} className="text-amber-600 flex-shrink-0 mt-0.5" />
+                <div className="flex-1 text-sm">
+                    <p className="font-semibold text-amber-900">
+                        Open the full admin console on desktop
+                    </p>
+                    <p className="text-xs text-amber-800/80 mt-0.5">
+                        This phone view shows live health only. For dense tables, keyboard-driven
+                        filtering and multi-org switching, use{' '}
+                        <a
+                            href="https://admin.shramsafal.in"
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="font-semibold underline hover:text-amber-700"
+                        >
+                            admin.shramsafal.in
+                        </a>{' '}
+                        on a laptop.
+                    </p>
+                </div>
+            </div>
+
             {/* Header */}
             <div className="glass-panel p-5">
                 <div className="flex flex-wrap items-center justify-between gap-3">
@@ -145,12 +169,16 @@ export const AdminOpsPage: React.FC<AdminOpsPageProps> = ({ onBack }) => {
                 </div>
             </div>
 
-            {/* Forbidden */}
+            {/* Forbidden — user has no admin membership OR no OpsLive module.
+                W0-B: admin is resolved server-side from ssf.organization_memberships. */}
             {forbidden && (
                 <div className="glass-panel p-6 text-center">
                     <XCircle size={32} className="mx-auto text-red-400 mb-2" />
-                    <p className="font-bold text-stone-700">Admin role required</p>
-                    <p className="text-sm text-stone-400 mt-1">This page is only accessible to admin accounts.</p>
+                    <p className="font-bold text-stone-700">Admin access required</p>
+                    <p className="text-sm text-stone-400 mt-1">
+                        Your account does not have an admin membership. Ask a Platform owner to invite
+                        you via the admin console.
+                    </p>
                 </div>
             )}
 
