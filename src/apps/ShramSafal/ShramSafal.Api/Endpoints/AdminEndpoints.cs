@@ -30,6 +30,64 @@ public static class AdminEndpoints
 {
     public static RouteGroupBuilder MapAdminEndpoints(this RouteGroupBuilder group)
     {
+        // GET /admin/me/scope
+        // Self-describing endpoint: tells the client what AdminScope the caller has.
+        // Unlike other admin endpoints, this one never gates on a module (it IS the
+        // gate) and never returns 401/428/403. It returns 200 with a structured
+        // outcome so the client can drive UI state (show switcher / forbidden /
+        // render shell) without parsing error codes.
+        //
+        // Requires authentication (JWT must be valid). If JWT missing → 401 from
+        // auth middleware, not this handler.
+        group.MapGet("/admin/me/scope", async (
+            HttpContext http,
+            IEntitlementResolver resolver,
+            CancellationToken ct) =>
+        {
+            if (!EndpointActorContext.TryGetUserId(http.User, out var userIdGuid))
+            {
+                return Results.Unauthorized();
+            }
+
+            Guid? activeOrgId = null;
+            if (http.Request.Headers.TryGetValue("X-Active-Org-Id", out var raw)
+                && Guid.TryParse(raw.ToString(), out var parsed))
+            {
+                activeOrgId = parsed;
+            }
+
+            var result = await resolver.ResolveAsync(
+                new AgriSync.SharedKernel.Contracts.Ids.UserId(userIdGuid), activeOrgId, ct);
+
+            return Results.Ok(new
+            {
+                outcome = result.Outcome.ToString(),
+                scope = result.Scope is null ? null : new
+                {
+                    userId = userIdGuid,
+                    orgId = result.Scope.OrganizationId,
+                    orgType = result.Scope.OrganizationType.ToString(),
+                    orgRole = result.Scope.OrganizationRole.ToString(),
+                    isPlatformAdmin = result.Scope.IsPlatformAdmin,
+                    modules = result.Scope.Modules.Select(m => new
+                    {
+                        key = m.ModuleKey,
+                        canRead = m.CanRead,
+                        canExport = m.CanExport,
+                        canWrite = m.CanWrite
+                    })
+                },
+                memberships = result.Memberships.Select(m => new
+                {
+                    orgId = m.OrganizationId,
+                    orgName = m.OrganizationName,
+                    orgType = m.OrganizationType.ToString(),
+                    orgRole = m.OrganizationRole.ToString()
+                })
+            });
+        })
+        .WithName("GetAdminMeScope");
+
         group.MapGet("/admin/ops/health", async (
             HttpContext http,
             IEntitlementResolver resolver,
