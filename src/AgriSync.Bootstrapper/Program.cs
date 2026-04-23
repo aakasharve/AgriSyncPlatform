@@ -561,12 +561,19 @@ static async Task InitializeApplicationDataAsync(WebApplication app)
     try
     {
         var userContext = services.GetRequiredService<User.Infrastructure.Persistence.UserDbContext>();
+        var accountsContext = services.GetRequiredService<Accounts.Infrastructure.Persistence.AccountsDbContext>();
         var ssfContext = services.GetRequiredService<ShramSafal.Infrastructure.Persistence.ShramSafalDbContext>();
         var analyticsContext = services.GetRequiredService<AnalyticsDbContext>();
 
         var userSchemaCreated = app.Environment.IsDevelopment()
             ? await EnsureContextTablesCreatedAsync(userContext, "public", "users")
             : await ApplyStartupMigrationsIfAllowedAsync(app, userContext, "UserDbContext");
+        // Accounts schema must exist before ShramSafal migrations run, because
+        // ssf.subscription_projections is a view over accounts.subscriptions
+        // (see 20260418170936_AddSubscriptionProjection).
+        var accountsSchemaCreated = app.Environment.IsDevelopment()
+            ? await EnsureContextTablesCreatedAsync(accountsContext, "accounts", "subscriptions")
+            : await ApplyStartupMigrationsIfAllowedAsync(app, accountsContext, "AccountsDbContext");
         var ssfSchemaCreated = app.Environment.IsDevelopment()
             ? await EnsureContextTablesCreatedAsync(ssfContext, "ssf", "farms")
             : await ApplyStartupMigrationsIfAllowedAsync(app, ssfContext, "ShramSafalDbContext");
@@ -651,9 +658,10 @@ static async Task InitializeApplicationDataAsync(WebApplication app)
         }
 
         Log.Information(
-            "Database initialization completed. Environment: {Environment}, UserSchemaChanged: {UserSchemaChanged}, SsfSchemaChanged: {SsfSchemaChanged}, AnalyticsSchemaChanged: {AnalyticsSchemaChanged}, seedRamu: {SeedRamuDemo}, clearPurvesh: {ClearPurveshDemo}, seedPurvesh: {SeedPurveshDemo}",
+            "Database initialization completed. Environment: {Environment}, UserSchemaChanged: {UserSchemaChanged}, AccountsSchemaChanged: {AccountsSchemaChanged}, SsfSchemaChanged: {SsfSchemaChanged}, AnalyticsSchemaChanged: {AnalyticsSchemaChanged}, seedRamu: {SeedRamuDemo}, clearPurvesh: {ClearPurveshDemo}, seedPurvesh: {SeedPurveshDemo}",
             app.Environment.EnvironmentName,
             userSchemaCreated,
+            accountsSchemaCreated,
             ssfSchemaCreated,
             analyticsSchemaCreated,
             seedRamuDemo,
