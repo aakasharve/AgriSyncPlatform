@@ -9,6 +9,7 @@ using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage;
 using Serilog;
 using Serilog.Context;
@@ -574,17 +575,36 @@ static async Task InitializeApplicationDataAsync(WebApplication app)
         var accountsSchemaCreated = app.Environment.IsDevelopment()
             ? await EnsureContextTablesCreatedAsync(accountsContext, "accounts", "subscriptions")
             : await ApplyStartupMigrationsIfAllowedAsync(app, accountsContext, "AccountsDbContext");
-        // Analytics MUST come before ShramSafal because ShramSafal's
-        // AddAdminScopeHealthView migration creates a view over analytics.events.
+        // Three-way ordering resolution: ShramSafal is split into two phases to
+        // break a circular dependency between ssf and analytics at migration
+        // time.
+        //   (1) ssf Phase A: apply migrations up to and including
+        //       20260421075311_AlterCostEntriesAddJobCardId. This creates
+        //       ssf.daily_logs, ssf.verifications, JobCards and every other
+        //       pre-admin-scope table that analytics' Phase4_MisSchemaRollups
+        //       materialized views SELECT from.
+        //   (2) analytics: apply all migrations. Phase4_MisSchemaRollups can
+        //       now build mis.wvfd_weekly / mis.schedule_migration_rate over
+        //       live ssf.* tables.
+        //   (3) ssf Phase B: apply remaining migrations (20260422175351
+        //       onwards — AddOrganizationsTables, AddEffectiveOrgFarmScopeMis,
+        //       AddAdminScopeHealthView, SeedPlatformOrgAndExistingAdmins).
+        //       AddAdminScopeHealthView creates a view over analytics.events,
+        //       which now exists.
         // MIS rail — analytics events are append-only. Production deploys should replace
         // the EF-generated table with the partitioned schema from
         // _COFOUNDER/01_Operations/Plans/SHRAMSAFAL_MIS_INTEGRATION_PLAN_2026-04-18.md §4.2.
+        const string ssfPhaseATarget = "20260421075311_AlterCostEntriesAddJobCardId";
+        var ssfPhaseACreated = app.Environment.IsDevelopment()
+            ? await EnsureContextTablesCreatedAsync(ssfContext, "ssf", "farms")
+            : await ApplyStartupMigrationsIfAllowedAsync(app, ssfContext, "ShramSafalDbContext (Phase A)", ssfPhaseATarget);
         var analyticsSchemaCreated = app.Environment.IsDevelopment()
             ? await EnsureContextTablesCreatedAsync(analyticsContext, "analytics", "events")
             : await ApplyStartupMigrationsIfAllowedAsync(app, analyticsContext, "AnalyticsDbContext");
-        var ssfSchemaCreated = app.Environment.IsDevelopment()
-            ? await EnsureContextTablesCreatedAsync(ssfContext, "ssf", "farms")
-            : await ApplyStartupMigrationsIfAllowedAsync(app, ssfContext, "ShramSafalDbContext");
+        var ssfPhaseBCreated = app.Environment.IsDevelopment()
+            ? false
+            : await ApplyStartupMigrationsIfAllowedAsync(app, ssfContext, "ShramSafalDbContext (Phase B)");
+        var ssfSchemaCreated = ssfPhaseACreated || ssfPhaseBCreated;
 
         var seedBlankTestUser = app.Environment.IsDevelopment() || string.Equals(
             Environment.GetEnvironmentVariable("SEED_BLANK_TEST_USER"),
@@ -701,13 +721,35 @@ static string ResolveAiRateLimitPartitionKey(HttpContext context)
     return $"ip:{ResolveRemoteIpRateLimitPartitionKey(context)}";
 }
 
-static async Task<bool> ApplyStartupMigrationsIfAllowedAsync(WebApplication app, DbContext context, string contextName)
+static async Task<bool> ApplyStartupMigrationsIfAllowedAsync(WebApplication app, DbContext context, string contextName, string? targetMigration = null)
 {
-    var pendingMigrations = (await context.Database.GetPendingMigrationsAsync()).ToArray();
-    if (pendingMigrations.Length == 0)
+    var pending = (await context.Database.GetPendingMigrationsAsync()).ToArray();
+    if (pending.Length == 0)
     {
         Log.Information("No pending migrations for {ContextName}.", contextName);
         return false;
+    }
+
+    // When a target is supplied, only migrations up to and including the target
+    // are in-scope for this phase. Remaining pending migrations are applied by
+    // a later phase.
+    var inScope = targetMigration is null
+        ? pending
+        : pending.TakeWhile(m => true).ToArray(); // placeholder — replaced below
+
+    if (targetMigration is not null)
+    {
+        var targetIndex = Array.IndexOf(pending, targetMigration);
+        if (targetIndex < 0)
+        {
+            // Target already applied (or not pending) — nothing to do in this phase.
+            Log.Information(
+                "Target migration {Target} for {ContextName} is not pending — Phase already applied or skipped.",
+                targetMigration,
+                contextName);
+            return false;
+        }
+        inScope = pending.Take(targetIndex + 1).ToArray();
     }
 
     var allowProductionStartupMigrations =
@@ -723,8 +765,23 @@ static async Task<bool> ApplyStartupMigrationsIfAllowedAsync(WebApplication app,
             $"Pending migrations detected for {contextName}. Apply them in a deployment step before starting Production.");
     }
 
-    Log.Information("Applying {MigrationCount} pending migrations for {ContextName}: {Migrations}", pendingMigrations.Length, contextName, pendingMigrations);
-    await context.Database.MigrateAsync();
+    Log.Information(
+        "Applying {MigrationCount} pending migrations for {ContextName} (target: {Target}): {Migrations}",
+        inScope.Length,
+        contextName,
+        targetMigration ?? "<latest>",
+        inScope);
+
+    if (targetMigration is null)
+    {
+        await context.Database.MigrateAsync();
+    }
+    else
+    {
+        var migrator = context.Database.GetService<IMigrator>();
+        await migrator.MigrateAsync(targetMigration);
+    }
+
     return true;
 }
 
