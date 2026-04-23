@@ -9,6 +9,8 @@ import { AdminShell } from '@/app/AdminShell';
 import { CommandPalette } from '@/app/CommandPalette';
 import { useAdminScope } from '@/hooks/useAdminScope';
 import { OrgSwitcher } from '@/components/OrgSwitcher';
+import { EntitlementGuard } from '@/components/EntitlementGuard';
+import { ModuleKeys } from '@/lib/moduleKeys';
 
 const HomePage               = lazy(() => import('@/pages/HomePage'));
 const LoginPage               = lazy(() => import('@/pages/LoginPage'));
@@ -116,18 +118,39 @@ export default function App() {
                       </RequireAuth>
                     }
                   >
+                    {/* HomePage is a KPI collage — individual cards can 403 independently without
+                        hiding the whole page. No single module gate fits, so no guard here. */}
                     <Route path="/" element={<HomePage />} />
 
-                    <Route path="/ops/live"   element={<OpsLivePage />} />
-                    <Route path="/ops/errors" element={<OpsErrorsPage />} />
-                    <Route path="/ops/voice"  element={<OpsVoicePage />} />
-                    <Route path="/metrics/nsm" element={<NorthStarPage />} />
-                    <Route path="/farms"                 element={<FarmsListPage />} />
-                    <Route path="/farms/silent-churn"   element={<SilentChurnPage />} />
-                    <Route path="/farms/suffering"      element={<SufferingPage />} />
-                    <Route path="/schedules/templates"  element={<ScheduleTemplatesPage />} />
-                    <Route path="/users"                element={<UsersPage />} />
-                    <Route path="/settings/admins"      element={<SettingsAdminsPage />} />
+                    <Route path="/ops/live" element={
+                      <EntitlementGuard module={ModuleKeys.OpsLive}><OpsLivePage /></EntitlementGuard>
+                    } />
+                    <Route path="/ops/errors" element={
+                      <EntitlementGuard module={ModuleKeys.OpsErrors}><OpsErrorsPage /></EntitlementGuard>
+                    } />
+                    <Route path="/ops/voice" element={
+                      <EntitlementGuard module={ModuleKeys.OpsVoice}><OpsVoicePage /></EntitlementGuard>
+                    } />
+                    <Route path="/metrics/nsm" element={
+                      <EntitlementGuard module={ModuleKeys.MetricsNsm}><NorthStarPage /></EntitlementGuard>
+                    } />
+                    <Route path="/farms" element={
+                      <EntitlementGuard module={ModuleKeys.FarmsList}><FarmsListPage /></EntitlementGuard>
+                    } />
+                    <Route path="/farms/silent-churn" element={
+                      <EntitlementGuard module={ModuleKeys.FarmsSilentChurn}><SilentChurnPage /></EntitlementGuard>
+                    } />
+                    <Route path="/farms/suffering" element={
+                      <EntitlementGuard module={ModuleKeys.FarmsSuffering}><SufferingPage /></EntitlementGuard>
+                    } />
+                    <Route path="/users" element={
+                      <EntitlementGuard module={ModuleKeys.AdminUsers}><UsersPage /></EntitlementGuard>
+                    } />
+                    {/* Schedules + Settings: no matching module key in W0-A's ModuleKey set yet.
+                        Relying on RequireScope (any resolved scope) for now; specific module
+                        gates land when schedule / admin-management surfaces add their keys. */}
+                    <Route path="/schedules/templates" element={<ScheduleTemplatesPage />} />
+                    <Route path="/settings/admins" element={<SettingsAdminsPage />} />
 
                     <Route path="*" element={<Navigate to="/" replace />} />
                   </Route>
