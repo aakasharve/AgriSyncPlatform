@@ -2,7 +2,7 @@ import { useState, type FormEvent } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { Leaf, Wheat, BarChart3, Shield } from 'lucide-react';
 import { adminApi } from '@/lib/api';
-import { isAdminSession, type AdminSession } from '@/lib/auth';
+import { type AdminSession } from '@/lib/auth';
 import { useAdminAuth } from '@/app/AdminAuthProvider';
 
 // Matches User.Application.Contracts.Dtos.AuthResponse exactly
@@ -34,11 +34,9 @@ export default function LoginPage() {
         userId: data.userId,
         expiresAtUtc: data.expiresAtUtc,
       };
-      if (!isAdminSession(session)) {
-        setError('This account does not have admin access.');
-        setSubmitting(false);
-        return;
-      }
+      // Admin access is decided server-side by GET /admin/me/scope after login
+      // (W0-B pivot — tokens are identity, not authorization). If the user has
+      // no memberships, RequireScope will send them to /403.
       auth.login(session);
       const returnTo = (location.state as { from?: string } | null)?.from ?? '/';
       navigate(returnTo, { replace: true });

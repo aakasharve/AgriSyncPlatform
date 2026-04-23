@@ -7,8 +7,12 @@ export interface AdminSession {
   expiresAtUtc: string;
 }
 
-/** Decode JWT payload without verifying signature (verification is server-side). */
-function decodeJwt(token: string): Record<string, unknown> {
+/**
+ * JWT decode helper — kept for any debugging / user-info use cases the
+ * session may need. NOT used for authorization — admin status is resolved
+ * server-side via GET /admin/me/scope (W0-B pivot).
+ */
+export function decodeJwt(token: string): Record<string, unknown> {
   try {
     const [, payload] = token.split('.');
     const padded = payload + '=='.slice((payload.length + 2) % 4 || 0);
@@ -16,19 +20,6 @@ function decodeJwt(token: string): Record<string, unknown> {
   } catch {
     return {};
   }
-}
-
-/** Check whether the JWT inside session carries shramsafal:admin. */
-export function isAdminSession(s: AdminSession | null): boolean {
-  if (!s) return false;
-  const claims = decodeJwt(s.accessToken);
-  const raw = claims['membership'];
-  const memberships: string[] = Array.isArray(raw)
-    ? (raw as string[])
-    : typeof raw === 'string'
-    ? [raw]
-    : [];
-  return memberships.some((m) => m.toLowerCase() === 'shramsafal:admin');
 }
 
 function read(): AdminSession | null {
