@@ -32,7 +32,11 @@ export function useOpsHealth(autoRefreshMs = 30_000): UseOpsHealthState {
             setForbidden(false);
         } catch (err) {
             const status = getStatusCode(err);
-            if (status === 403) {
+            // W0-B admin auth pivot: resolver returns 401 "admin_no_membership"
+            // for farmer accounts that land on this page (no OrganizationMembership row)
+            // and 403 "admin_module_forbidden" for admin scopes without OpsLive read.
+            // Both are "you don't belong here" — collapse into the forbidden state.
+            if (status === 403 || status === 401) {
                 setForbidden(true);
             } else {
                 setError('Failed to load ops health data.');
