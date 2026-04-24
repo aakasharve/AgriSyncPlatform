@@ -212,5 +212,6 @@ src/clients/mobile-web/public/demo-photos/*.png
 .uiux-gate-passed
 .uiux-gallery/
 .interface-design/
+.uiux-design-mode.json
 
 .worktrees/
