@@ -18,7 +18,7 @@ const Step2_WorkBuckets: React.FC<Step2Props> = ({ plotName, initialBuckets, onN
         { id: 'inputs', label: 'Fertilizer/Spray', icon: <FlaskConical size={18} /> },
         { id: 'labour', label: 'Labour', icon: <Users size={18} /> },
         { id: 'machinery', label: 'Machinery', icon: <Tractor size={18} /> },
-        { id: 'crop_activity', label: 'Crop Work (Pruning etc.)', icon: <Sprout size={18} /> },
+        { id: 'cropActivities', label: 'Crop Work (Pruning etc.)', icon: <Sprout size={18} /> },
     ];
 
     const toggleBucket = (id: string) => {

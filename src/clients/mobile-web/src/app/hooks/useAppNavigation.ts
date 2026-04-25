@@ -13,6 +13,7 @@ const KNOWN_ROUTES: readonly AppRoute[] = [
     'main',
     'profile',
     'settings',
+    'voice-journal',
     'ai-admin',
     'ops-admin',
     'schedule',

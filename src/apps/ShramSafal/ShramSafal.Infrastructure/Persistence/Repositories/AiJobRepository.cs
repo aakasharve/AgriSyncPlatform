@@ -51,11 +51,12 @@ internal sealed class AiJobRepository(ShramSafalDbContext db) : IAiJobRepository
 
         if (config is not null)
         {
-            if (config.ReceiptProvider != AiProviderType.Gemini ||
+            if (config.VoiceProvider is null ||
+                config.ReceiptProvider != AiProviderType.Gemini ||
                 config.PattiProvider != AiProviderType.Gemini)
             {
-                // Sarvam image OCR is not a valid synchronous primary path in the current integration.
-                // Normalize stale configs so receipt and patti extraction use the known working Gemini path.
+                // Keep unset operation overrides on the Gemini-primary baseline and prevent
+                // image extraction from drifting to providers without a valid synchronous OCR path.
                 config.UpdateSettings(
                     modifiedByUserId: config.ModifiedByUserId,
                     defaultProvider: config.DefaultProvider,
@@ -66,7 +67,7 @@ internal sealed class AiJobRepository(ShramSafalDbContext db) : IAiJobRepository
                     circuitBreakerResetSeconds: config.CircuitBreakerResetSeconds,
                     voiceConfidenceThreshold: config.VoiceConfidenceThreshold,
                     receiptConfidenceThreshold: config.ReceiptConfidenceThreshold,
-                    voiceProvider: config.VoiceProvider ?? AiProviderType.Sarvam,
+                    voiceProvider: config.VoiceProvider ?? AiProviderType.Gemini,
                     receiptProvider: AiProviderType.Gemini,
                     pattiProvider: AiProviderType.Gemini);
                 await db.SaveChangesAsync(ct);

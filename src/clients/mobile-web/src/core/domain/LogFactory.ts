@@ -7,6 +7,7 @@ import {
 } from '../../types';
 import { getPhaseAndDay } from '../../shared/utils/timelineUtils';
 import { getDateKey } from './services/DateKeyService';
+import { isCompletedIrrigationEvent } from './services/IrrigationCompletionService';
 // import { AgriLogResponse } from '../../domain/ai/contracts/AgriLogResponseSchema'; // REMOVED
 import { LogProvenance } from '../../domain/ai/LogProvenance';
 
@@ -101,7 +102,7 @@ export class LogFactory {
                 plotId
             );
             const plotIrrigation = this.filterEventsForPlot<IrrigationEvent>(
-                data.irrigation as IrrigationEvent[] | undefined,
+                (data.irrigation as IrrigationEvent[] | undefined)?.filter(isCompletedIrrigationEvent),
                 plot.name,
                 plotId
             );
@@ -193,6 +194,14 @@ export class LogFactory {
                 }));
 
             const finalPlannedTasks = [...mirroredTasks, ...manualRemindersAsTasks];
+            const hasExecution = [
+                plotCropActivities,
+                plotIrrigation,
+                plotLabour,
+                plotInputs,
+                plotMachinery,
+                plotActivityExpenses,
+            ].some(events => events.length > 0);
 
             // Trust & Verification Logic
             const isOwner = profile.activeOperatorId === 'owner';
@@ -207,7 +216,7 @@ export class LogFactory {
                 id: idGen.generate(),
                 date: data.date,
                 context: specificContext,
-                dayOutcome: 'WORK_RECORDED', // Default for manual
+                dayOutcome: data.disturbance && !hasExecution ? 'DISTURBANCE_RECORDED' : 'WORK_RECORDED',
 
                 weatherStamp: undefined,
 
@@ -222,6 +231,7 @@ export class LogFactory {
                 activityExpenses: plotActivityExpenses,
                 observations: mirroredObservations,
                 plannedTasks: finalPlannedTasks,
+                disturbance: data.disturbance,
 
                 fullTranscript: data.fullTranscript,
                 manualTotalCost: data.manualTotalCost,
@@ -260,6 +270,7 @@ export class LogFactory {
         idGen: IdGenerator
     ): DailyLog {
         const labour = data.labour || [];
+        const irrigation = (data.irrigation || []).filter(isCompletedIrrigationEvent);
         const inputs = data.inputs || [];
         const machinery = data.machinery || [];
         const activityExpenses = data.activityExpenses || [];
@@ -318,6 +329,14 @@ export class LogFactory {
             }));
 
         const finalPlannedTasks = [...mirroredTasks, ...manualRemindersAsTasks];
+        const hasExecution = [
+            data.cropActivities || [],
+            irrigation,
+            labour,
+            inputs,
+            machinery,
+            activityExpenses,
+        ].some(events => events.length > 0);
 
         const isOwner = profile.activeOperatorId === 'owner';
         const autoApproveAll = profile.trust?.reviewPolicy === 'AUTO_APPROVE_ALL';
@@ -336,16 +355,17 @@ export class LogFactory {
                     selectedPlotNames: []
                 }]
             },
-            dayOutcome: 'WORK_RECORDED',
+            dayOutcome: data.disturbance && !hasExecution ? 'DISTURBANCE_RECORDED' : 'WORK_RECORDED',
             weatherStamp: undefined,
             cropActivities: data.cropActivities || [],
-            irrigation: data.irrigation || [],
+            irrigation,
             labour,
             inputs,
             machinery,
             activityExpenses,
             observations: mirroredObservations,
             plannedTasks: finalPlannedTasks,
+            disturbance: data.disturbance,
             fullTranscript: data.fullTranscript,
             manualTotalCost: data.manualTotalCost,
             financialSummary: {
@@ -542,7 +562,11 @@ export class LogFactory {
                 dayNumberAtLogTime: timeline.day,
 
                 cropActivities: this.filterEventsForPlot<CropActivityEvent>(response.cropActivities, plot.name, plotId),
-                irrigation: this.filterEventsForPlot<IrrigationEvent>(response.irrigation, plot.name, plotId),
+                irrigation: this.filterEventsForPlot<IrrigationEvent>(
+                    response.irrigation?.filter(isCompletedIrrigationEvent),
+                    plot.name,
+                    plotId
+                ),
                 labour: myLabour,
                 inputs: myInputs,
                 machinery: myMachine,
@@ -666,7 +690,7 @@ export class LogFactory {
             dayOutcome: response.dayOutcome,
             weatherStamp: weatherStamps ? weatherStamps[FARM_GLOBAL_ID] : undefined,
             cropActivities: response.cropActivities || [],
-            irrigation: response.irrigation || [],
+            irrigation: (response.irrigation || []).filter(isCompletedIrrigationEvent),
             labour: response.labour || [],
             inputs: response.inputs || [],
             machinery: response.machinery || [],

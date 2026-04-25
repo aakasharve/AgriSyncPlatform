@@ -1,5 +1,6 @@
 using ShramSafal.Application.Ports.External;
 using ShramSafal.Infrastructure.AI;
+using Microsoft.Extensions.Options;
 using Xunit;
 
 namespace ShramSafal.Domain.Tests.AI;
@@ -46,6 +47,23 @@ public sealed class AiPromptBuilderTests
 
         Assert.True(prompt.Length > 2000, $"Prompt appears too short: {prompt.Length}");
         Assert.True(prompt.Length < 30000, $"Prompt appears unexpectedly long: {prompt.Length}");
+    }
+
+    [Fact]
+    public void ModularVoicePrompt_ContainsVersionedBucketModules()
+    {
+        var builder = new AiPromptBuilder(
+            new AiPromptTemplateRegistry(),
+            Options.Create(new AiPromptOptions { UseModularPrompt = true }));
+
+        var prompt = builder.BuildVoiceParsingPrompt(CreateContext());
+
+        Assert.Contains("AGRISYNC_PROMPT_VERSION", prompt, StringComparison.Ordinal);
+        Assert.Contains("Visible Bucket: workDone", prompt, StringComparison.Ordinal);
+        Assert.Contains("Visible Bucket: inputs", prompt, StringComparison.Ordinal);
+        Assert.Contains("INNER MODIFIER", prompt, StringComparison.Ordinal);
+        Assert.Contains("Return this JSON shape exactly", prompt, StringComparison.Ordinal);
+        Assert.DoesNotContain("\"crop_activity\"", prompt, StringComparison.Ordinal);
     }
 
     private static VoiceParseContext CreateContext()

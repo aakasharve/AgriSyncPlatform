@@ -376,6 +376,7 @@ export type AppRoute =
     | 'main'
     | 'profile'
     | 'settings'
+    | 'voice-journal'
     | 'ai-admin'
     | 'ops-admin'
     | 'schedule'

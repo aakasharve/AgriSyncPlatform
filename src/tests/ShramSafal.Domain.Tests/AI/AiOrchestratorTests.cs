@@ -12,7 +12,7 @@ public sealed class AiOrchestratorTests
     public async Task PrimarySucceeds_NoFallback()
     {
         var harness = CreateHarness(CreateConfig());
-        harness.Sarvam.EnqueueVoiceResult(SuccessVoiceResult(0.91m));
+        harness.Gemini.EnqueueVoiceResult(SuccessVoiceResult(0.91m));
 
         var execution = await ExecuteVoiceAsync(
             harness.Orchestrator,
@@ -22,17 +22,17 @@ public sealed class AiOrchestratorTests
 
         Assert.True(execution.Result.Success);
         Assert.False(execution.FallbackUsed);
-        Assert.Equal(AiProviderType.Sarvam, execution.ProviderUsed);
-        Assert.Equal(1, harness.Sarvam.VoiceParseCallCount);
-        Assert.Equal(0, harness.Gemini.VoiceParseCallCount);
+        Assert.Equal(AiProviderType.Gemini, execution.ProviderUsed);
+        Assert.Equal(0, harness.Sarvam.VoiceParseCallCount);
+        Assert.Equal(1, harness.Gemini.VoiceParseCallCount);
     }
 
     [Fact]
     public async Task PrimaryTransientFailure_UsesFallback()
     {
         var harness = CreateHarness(CreateConfig());
-        harness.Sarvam.EnqueueVoiceResult(FailedVoiceResult("timeout transient failure"));
-        harness.Gemini.EnqueueVoiceResult(SuccessVoiceResult(0.88m));
+        harness.Gemini.EnqueueVoiceResult(FailedVoiceResult("timeout transient failure"));
+        harness.Sarvam.EnqueueVoiceResult(SuccessVoiceResult(0.88m));
 
         var execution = await ExecuteVoiceAsync(
             harness.Orchestrator,
@@ -42,7 +42,7 @@ public sealed class AiOrchestratorTests
 
         Assert.True(execution.Result.Success);
         Assert.True(execution.FallbackUsed);
-        Assert.Equal(AiProviderType.Gemini, execution.ProviderUsed);
+        Assert.Equal(AiProviderType.Sarvam, execution.ProviderUsed);
 
         var job = await harness.Repository.GetByIdAsync(execution.JobId);
         Assert.NotNull(job);
@@ -54,8 +54,8 @@ public sealed class AiOrchestratorTests
     public async Task PrimaryUserError_DoesNotFallback()
     {
         var harness = CreateHarness(CreateConfig());
-        harness.Sarvam.EnqueueVoiceResult(FailedVoiceResult("invalid input required field"));
-        harness.Gemini.EnqueueVoiceResult(SuccessVoiceResult(0.90m));
+        harness.Gemini.EnqueueVoiceResult(FailedVoiceResult("invalid input required field"));
+        harness.Sarvam.EnqueueVoiceResult(SuccessVoiceResult(0.90m));
 
         var execution = await ExecuteVoiceAsync(
             harness.Orchestrator,
@@ -65,9 +65,9 @@ public sealed class AiOrchestratorTests
 
         Assert.False(execution.Result.Success);
         Assert.False(execution.FallbackUsed);
-        Assert.Equal(AiProviderType.Sarvam, execution.ProviderUsed);
-        Assert.Equal(1, harness.Sarvam.VoiceParseCallCount);
-        Assert.Equal(0, harness.Gemini.VoiceParseCallCount);
+        Assert.Equal(AiProviderType.Gemini, execution.ProviderUsed);
+        Assert.Equal(0, harness.Sarvam.VoiceParseCallCount);
+        Assert.Equal(1, harness.Gemini.VoiceParseCallCount);
 
         var job = await harness.Repository.GetByIdAsync(execution.JobId);
         Assert.NotNull(job);
@@ -78,8 +78,8 @@ public sealed class AiOrchestratorTests
     public async Task BothFail_JobMarkedFailed()
     {
         var harness = CreateHarness(CreateConfig());
-        harness.Sarvam.EnqueueVoiceResult(FailedVoiceResult("timeout transient failure"));
-        harness.Gemini.EnqueueVoiceResult(FailedVoiceResult("schema parse failure"));
+        harness.Gemini.EnqueueVoiceResult(FailedVoiceResult("timeout transient failure"));
+        harness.Sarvam.EnqueueVoiceResult(FailedVoiceResult("schema parse failure"));
 
         var execution = await ExecuteVoiceAsync(
             harness.Orchestrator,
@@ -89,7 +89,7 @@ public sealed class AiOrchestratorTests
 
         Assert.False(execution.Result.Success);
         Assert.True(execution.FallbackUsed);
-        Assert.Equal(AiProviderType.Gemini, execution.ProviderUsed);
+        Assert.Equal(AiProviderType.Sarvam, execution.ProviderUsed);
 
         var job = await harness.Repository.GetByIdAsync(execution.JobId);
         Assert.NotNull(job);
@@ -101,7 +101,7 @@ public sealed class AiOrchestratorTests
     public async Task IdempotencyKeyHit_ReturnsCachedResultWithoutDuplicateProviderCalls()
     {
         var harness = CreateHarness(CreateConfig());
-        harness.Sarvam.EnqueueVoiceResult(SuccessVoiceResult(0.93m));
+        harness.Gemini.EnqueueVoiceResult(SuccessVoiceResult(0.93m));
         const string key = "orchestrator-idempotency-1";
 
         var first = await ExecuteVoiceAsync(
@@ -118,16 +118,16 @@ public sealed class AiOrchestratorTests
         Assert.True(first.Result.Success);
         Assert.True(second.Result.Success);
         Assert.Equal(first.JobId, second.JobId);
-        Assert.Equal(1, harness.Sarvam.VoiceParseCallCount);
+        Assert.Equal(1, harness.Gemini.VoiceParseCallCount);
     }
 
     [Fact]
     public async Task CircuitBreakerOpens_SkipsPrimaryAndUsesFallback()
     {
         var harness = CreateHarness(CreateConfig(circuitBreakerThreshold: 1, circuitBreakerResetSeconds: 60));
-        harness.Sarvam.EnqueueVoiceResult(FailedVoiceResult("timeout transient failure"));
-        harness.Gemini.EnqueueVoiceResult(SuccessVoiceResult(0.80m));
-        harness.Gemini.EnqueueVoiceResult(SuccessVoiceResult(0.81m));
+        harness.Gemini.EnqueueVoiceResult(FailedVoiceResult("timeout transient failure"));
+        harness.Sarvam.EnqueueVoiceResult(SuccessVoiceResult(0.80m));
+        harness.Sarvam.EnqueueVoiceResult(SuccessVoiceResult(0.81m));
 
         var first = await ExecuteVoiceAsync(
             harness.Orchestrator,
@@ -142,17 +142,17 @@ public sealed class AiOrchestratorTests
 
         Assert.True(first.FallbackUsed);
         Assert.True(second.FallbackUsed);
-        Assert.Equal(1, harness.Sarvam.VoiceParseCallCount);
-        Assert.Equal(2, harness.Gemini.VoiceParseCallCount);
+        Assert.Equal(2, harness.Sarvam.VoiceParseCallCount);
+        Assert.Equal(1, harness.Gemini.VoiceParseCallCount);
     }
 
     [Fact]
     public async Task CircuitBreakerResetsAfterInterval_AllowsPrimaryAgain()
     {
         var harness = CreateHarness(CreateConfig(circuitBreakerThreshold: 1, circuitBreakerResetSeconds: 10));
-        harness.Sarvam.EnqueueVoiceResult(FailedVoiceResult("timeout transient failure"));
-        harness.Gemini.EnqueueVoiceResult(SuccessVoiceResult(0.80m));
-        harness.Sarvam.EnqueueVoiceResult(SuccessVoiceResult(0.92m));
+        harness.Gemini.EnqueueVoiceResult(FailedVoiceResult("timeout transient failure"));
+        harness.Sarvam.EnqueueVoiceResult(SuccessVoiceResult(0.80m));
+        harness.Gemini.EnqueueVoiceResult(SuccessVoiceResult(0.92m));
 
         var first = await ExecuteVoiceAsync(
             harness.Orchestrator,
@@ -168,8 +168,8 @@ public sealed class AiOrchestratorTests
 
         Assert.True(first.FallbackUsed);
         Assert.False(second.FallbackUsed);
-        Assert.Equal(AiProviderType.Sarvam, second.ProviderUsed);
-        Assert.Equal(2, harness.Sarvam.VoiceParseCallCount);
+        Assert.Equal(AiProviderType.Gemini, second.ProviderUsed);
+        Assert.Equal(2, harness.Gemini.VoiceParseCallCount);
     }
 
     private static async Task<(VoiceParseCanonicalResult Result, Guid JobId, AiProviderType ProviderUsed, bool FallbackUsed)> ExecuteVoiceAsync(
@@ -235,7 +235,7 @@ public sealed class AiOrchestratorTests
         var config = AiProviderConfig.CreateDefault();
         config.UpdateSettings(
             modifiedByUserId: Guid.NewGuid(),
-            defaultProvider: AiProviderType.Sarvam,
+            defaultProvider: AiProviderType.Gemini,
             fallbackEnabled: true,
             isAiProcessingDisabled: false,
             maxRetries: maxRetries,

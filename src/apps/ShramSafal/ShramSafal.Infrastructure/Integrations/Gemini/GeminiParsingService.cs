@@ -36,7 +36,7 @@ internal sealed class GeminiParsingService(IOptions<GeminiOptions> optionsAccess
             throw new InvalidOperationException("Gemini API key is not configured. Set GEMINI_API_KEY or Gemini:ApiKey.");
         }
 
-        var model = string.IsNullOrWhiteSpace(_options.Model) ? "gemini-2.0-flash" : _options.Model.Trim();
+        var model = string.IsNullOrWhiteSpace(_options.Model) ? GeminiOptions.DefaultModelId : _options.Model.Trim();
         var stopwatch = Stopwatch.StartNew();
 
         var requestBody = new
@@ -105,6 +105,9 @@ internal sealed class GeminiParsingService(IOptions<GeminiOptions> optionsAccess
             fieldConfidences,
             suggestedAction,
             model,
+            "legacy-gemini-parsing-service",
+            "Gemini",
+            false,
             (int)stopwatch.ElapsedMilliseconds,
             normalizedPayload.ValidationIssues.Count == 0 ? "pass" : "pass_with_warnings");
     }

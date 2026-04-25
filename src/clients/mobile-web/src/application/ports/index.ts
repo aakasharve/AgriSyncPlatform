@@ -12,9 +12,10 @@
 
 import { DailyLog, LogScope, CropProfile, FarmerProfile, LogVerificationStatus, AgriLogResponse } from '../../types';
 import { LogProvenance } from '../../domain/ai/LogProvenance';
+import type { VisibleBucketId } from '../../domain/ai/BucketId';
 
 export interface ConfidenceAssessment {
-    fieldConfidences: Record<string, { score: number; level: string; reason?: string }>;
+    fieldConfidences: Record<string, { score: number; level: string; reason?: string; bucketId?: VisibleBucketId }>;
     suggestedAction: 'auto_confirm' | 'manual_review' | 'ask_clarification';
     averageScore: number;
     hasLowConfidenceFields: boolean;

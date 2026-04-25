@@ -50,7 +50,7 @@ public sealed class AiProviderConfig
     {
         var config = new AiProviderConfig(
             id: Guid.NewGuid(),
-            defaultProvider: AiProviderType.Sarvam,
+            defaultProvider: AiProviderType.Gemini,
             fallbackEnabled: true,
             isAiProcessingDisabled: false,
             maxRetries: 1,
@@ -61,7 +61,7 @@ public sealed class AiProviderConfig
             modifiedByUserId: Guid.Empty,
             modifiedAtUtc: DateTime.UtcNow);
 
-        config.VoiceProvider = AiProviderType.Sarvam;
+        config.VoiceProvider = AiProviderType.Gemini;
         config.ReceiptProvider = AiProviderType.Gemini;
         config.PattiProvider = AiProviderType.Gemini;
         return config;

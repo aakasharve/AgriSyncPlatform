@@ -127,13 +127,16 @@ internal sealed class GeminiAiProvider(
             }
 
             var cleaned = GeminiJsonCleaner.Clean(generated.Content!);
-            var normalized = responseNormalizer.NormalizeVoiceJson(cleaned);
+            var promptVersion = AiPromptLineage.ResolvePromptVersion(systemPrompt);
+            var normalized = responseNormalizer.NormalizeVoiceJson(cleaned, promptVersion: promptVersion);
             var confidence = TryExtractConfidence(normalized) ?? 0.75m;
             rawTranscript ??= TryExtractString(normalized, "fullTranscript");
 
             return new VoiceParseCanonicalResult
             {
                 Success = true,
+                ModelUsed = ResolveModelId(),
+                PromptVersion = promptVersion,
                 NormalizedJson = normalized,
                 RawTranscript = rawTranscript,
                 OverallConfidence = confidence
@@ -241,6 +244,7 @@ internal sealed class GeminiAiProvider(
             return new ReceiptExtractCanonicalResult
             {
                 Success = true,
+                ModelUsed = ResolveModelId(),
                 NormalizedJson = normalized,
                 OverallConfidence = TryExtractConfidence(normalized) ?? 0.70m
             };
@@ -335,12 +339,19 @@ internal sealed class GeminiAiProvider(
 
     private string BuildGenerateContentUrl()
     {
-        var model = string.IsNullOrWhiteSpace(_options.ModelId) ? "gemini-2.0-flash" : _options.ModelId.Trim();
+        var model = ResolveModelId();
         var baseUrl = string.IsNullOrWhiteSpace(_options.BaseUrl)
             ? "https://generativelanguage.googleapis.com/v1beta"
             : _options.BaseUrl.Trim().TrimEnd('/');
 
         return $"{baseUrl}/models/{Uri.EscapeDataString(model)}:generateContent?key={Uri.EscapeDataString(_options.ApiKey)}";
+    }
+
+    private string ResolveModelId()
+    {
+        return string.IsNullOrWhiteSpace(_options.ModelId)
+            ? GeminiOptions.DefaultModelId
+            : _options.ModelId.Trim();
     }
 
     private CancellationTokenSource CreateTimeoutToken(CancellationToken ct)

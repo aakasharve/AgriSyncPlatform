@@ -5,7 +5,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { CropActivityEvent, IrrigationEvent, LabourEvent, MachineryEvent, LedgerDefaults, LabourShift, FarmerProfile, Plot, InputEvent, InputMethod, InputMixItem, InputReason, ActivityExpenseEvent, ObservationNote, PlannedTask, CropProfile, DailyLog } from '../../../types';
+import { CropActivityEvent, IrrigationEvent, LabourEvent, MachineryEvent, LedgerDefaults, LabourShift, FarmerProfile, Plot, InputEvent, InputMethod, InputMixItem, InputReason, ActivityExpenseEvent, ObservationNote, PlannedTask, CropProfile, DailyLog, DisturbanceEvent } from '../../../types';
 import { ArrowRight, ChevronRight, Pen, PlusCircle, Trash, ClipboardList, CheckSquare, Link as LinkIcon, Search, Users, Droplets, Tractor, Check, Clock, ChevronDown, Trash2, PenLine, X, AlertTriangle, User, Zap, Package, FlaskConical, Sprout, Plus, Minus, Receipt, MessageSquare, ListPlus, Bell, Mic, Wrench, Cloud } from 'lucide-react';
 import Button from '../../../shared/components/ui/Button';
 import TrustBadge from '../../../shared/components/ui/TrustBadge';
@@ -15,6 +15,8 @@ import ObservationHubSheet from './ObservationHubSheet';
 import IssueFormSheet from './IssueFormSheet'; // NEW: Shared Issue Form
 import { BucketIssue } from '../../../domain/types/log.types';
 import { procurementRepository } from '../../../services/procurementRepository';
+import { buildWorkDoneTitles } from '../services/workDoneProjection';
+import { isCompletedIrrigationEvent } from '../services/irrigationCompletion';
 
 interface ActivityCardProps {
     activity: CropActivityEvent;
@@ -37,6 +39,7 @@ interface ActivityCardProps {
     onDeleteExpense?: (expId: string) => void;
     observations?: ObservationNote[];
     onAddObservation?: (obs: ObservationNote) => void;
+    draftDisturbance?: DisturbanceEvent;
     plannedTasks?: PlannedTask[];
     crops?: CropProfile[];
     todayLogs?: DailyLog[]; // NEW: To show cumulative daily summary
@@ -1325,6 +1328,7 @@ const ActivityCard: React.FC<ActivityCardProps> = ({
     onDeleteExpense,
     observations = [],
     onAddObservation,
+    draftDisturbance,
     crops = [],
     plannedTasks = [],
     verificationStatus,
@@ -1398,13 +1402,17 @@ const ActivityCard: React.FC<ActivityCardProps> = ({
     };
 
     const getDailyWorkList = () => {
-        const types = new Set<string>();
-        plotTodayLogs.forEach(l => {
-            l.cropActivities.forEach(act => {
-                act.workTypes?.forEach(w => types.add(w));
-            });
-        });
-        return Array.from(types);
+        return buildWorkDoneTitles([
+            ...plotTodayLogs,
+            {
+                cropActivities: [activity],
+                irrigation: linkedData.irrigation ? [linkedData.irrigation] : [],
+                labour: linkedData.labour ? [linkedData.labour] : [],
+                inputs,
+                machinery: linkedData.machinery ? [linkedData.machinery] : [],
+                activityExpenses: expenses,
+            },
+        ]);
     };
 
     // State for Sheets
@@ -1422,8 +1430,11 @@ const ActivityCard: React.FC<ActivityCardProps> = ({
     const isLabourFilled = !!linkedData.labour || dailyLabour.totalWorkers > 0;
     const isLabourIssue = !!linkedData.labour?.issue;
 
-    const isIrrigationFilled = !!linkedData.irrigation || dailyIrrigation > 0;
-    const isIrrigationIssue = !!linkedData.irrigation?.issue;
+    const isLinkedIrrigationCompleted = linkedData.irrigation
+        ? isCompletedIrrigationEvent(linkedData.irrigation)
+        : false;
+    const isIrrigationFilled = isLinkedIrrigationCompleted || dailyIrrigation > 0;
+    const isIrrigationIssue = isLinkedIrrigationCompleted && !!linkedData.irrigation?.issue;
     const isMachineryFilled = !!linkedData.machinery;
     const isMachineryIssue = !!linkedData.machinery?.issue;
 
@@ -1438,7 +1449,7 @@ const ActivityCard: React.FC<ActivityCardProps> = ({
     const isObservationsFilled = generalNotes.length > 0;
 
     // NEW: Work Done is Global if any sub-bucket is filled (EXCLUDING reminders, which are future)
-    const isAnySubBucketFilled = isLabourFilled || isIrrigationFilled || isMachineryFilled || isInputsFilled || isExpensesFilled || isObservationsFilled;
+    const isAnySubBucketFilled = isLabourFilled || isIrrigationFilled || isMachineryFilled || isInputsFilled || isExpensesFilled;
     const isWorkFilled = (activity.workTypes && activity.workTypes.length > 0) || isAnySubBucketFilled;
 
     // Helper to format Labour Chip label
@@ -1673,6 +1684,7 @@ const ActivityCard: React.FC<ActivityCardProps> = ({
                     label="Irrigation"
                     sublabel={(() => {
                         const dailyHours = getDailyIrrigationTotal();
+                        if (isIrrigationFilled && !isLinkedIrrigationCompleted) return `Today: ${dailyHours}h Total Run`;
                         if (isIrrigationIssue) return linkedData.irrigation?.issue?.reason || 'Issue Logged';
                         if (isIrrigationFilled) return `${linkedData.irrigation?.durationHours}h ${linkedData.irrigation?.method} • ${linkedData.irrigation?.source}`;
                         if (dailyHours > 0) return `Today: ${dailyHours}h Total Run`;
@@ -1733,10 +1745,9 @@ const ActivityCard: React.FC<ActivityCardProps> = ({
                 />
 
                 {/* 7.5 Issues & Blockers Bucket (NEW) */}
-                {todayLogs && todayLogs.length > 0 && (() => {
-                    const disturbanceLogs = todayLogs.filter(log => log.disturbance);
-                    const hasDisturbance = disturbanceLogs.length > 0;
-                    const disturbance = disturbanceLogs[0]?.disturbance;
+                {(draftDisturbance || (todayLogs && todayLogs.length > 0)) && (() => {
+                    const disturbance = draftDisturbance || todayLogs.find(log => log.disturbance)?.disturbance;
+                    const hasDisturbance = Boolean(disturbance);
 
                     if (!hasDisturbance) return null;
 
@@ -1906,8 +1917,7 @@ const ActivityCard: React.FC<ActivityCardProps> = ({
                 <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-end justify-center">
                     <div className="bg-white rounded-t-3xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto animate-in slide-in-from-bottom-6 fade-in-20">
                         {(() => {
-                            const disturbanceLogs = todayLogs?.filter((log: DailyLog) => log.disturbance) || [];
-                            const disturbance = disturbanceLogs[0]?.disturbance;
+                            const disturbance = draftDisturbance || todayLogs?.find((log: DailyLog) => log.disturbance)?.disturbance;
 
                             if (!disturbance) return null;
 

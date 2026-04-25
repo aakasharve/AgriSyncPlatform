@@ -10,7 +10,7 @@ import {
     splitLogSubmission,
     type WizardLogContext,
 } from '../../services/logSubmissionService';
-import { deriveBucketsFromParseResult } from '../../services/bucketDerivation';
+import { deriveEditableBucketsFromParseResult } from '../../services/bucketDerivation';
 
 interface LogWizardContainerProps {
     isOpen: boolean;
@@ -37,7 +37,7 @@ const LogWizardContainer: React.FC<LogWizardContainerProps> = ({ isOpen, onClose
 
     if (!isOpen) return null;
 
-    const initialBuckets = voiceParseResult ? deriveBucketsFromParseResult(voiceParseResult) : [];
+    const initialBuckets = voiceParseResult ? deriveEditableBucketsFromParseResult(voiceParseResult) : [];
 
     // --- MANAGE FLOW ---
 

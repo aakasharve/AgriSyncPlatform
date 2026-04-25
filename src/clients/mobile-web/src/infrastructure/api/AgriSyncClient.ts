@@ -1,6 +1,7 @@
 import axios, { AxiosError, AxiosInstance, InternalAxiosRequestConfig } from 'axios';
 import { reportClientError } from '../telemetry/ClientErrorReporter';
 import { clearAuthSession, getAuthSession, setAuthSession, type AuthSession } from './AuthTokenStore';
+import type { VisibleBucketId } from '../../domain/ai/BucketId';
 
 export type SyncMutationType =
     | 'create_farm'
@@ -288,9 +289,12 @@ export interface AiParseResponse {
     success?: boolean;
     parsedLog: Record<string, unknown>;
     confidence: number;
-    fieldConfidences?: Record<string, { score: number; level: string; reason?: string }>;
+    fieldConfidences?: Record<string, { score: number; level: string; reason?: string; bucketId?: VisibleBucketId }>;
     suggestedAction?: string;
     modelUsed?: string;
+    promptVersion?: string;
+    providerUsed?: string;
+    fallbackUsed?: boolean;
     latencyMs?: number;
     validationOutcome?: string;
     jobId?: string;
@@ -342,6 +346,10 @@ export interface AiProviderConfigResponse {
     voiceProvider?: string;
     receiptProvider?: string;
     pattiProvider?: string;
+    resolvedVoiceProvider?: string;
+    resolvedReceiptProvider?: string;
+    resolvedPattiProvider?: string;
+    geminiModelId?: string;
     modifiedAtUtc: string;
     modifiedByUserId: string;
 }

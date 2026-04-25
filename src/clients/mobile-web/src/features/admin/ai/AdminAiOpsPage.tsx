@@ -6,6 +6,7 @@ import { useAiDashboard } from '../../../app/hooks/useAiDashboard';
 import { AiProviderConfigForm } from './AiProviderConfigForm';
 import { AiProviderHealthPanel } from './AiProviderHealthPanel';
 import { AiRecentFailuresTable } from './AiRecentFailuresTable';
+import { AiBucketCorrectionPanel } from './AiBucketCorrectionPanel';
 
 interface AdminAiOpsPageProps {
     onBack: () => void;
@@ -91,6 +92,10 @@ export const AdminAiOpsPage: React.FC<AdminAiOpsPageProps> = ({ onBack }) => {
                     dashboard={dashboard}
                     refreshedAtUtc={refreshedAtUtc}
                 />
+            )}
+
+            {!forbidden && (
+                <AiBucketCorrectionPanel />
             )}
 
             {!forbidden && dashboard && (

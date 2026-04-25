@@ -2,8 +2,10 @@
 import { getAuthSession } from '../api/AuthTokenStore';
 import { agriSyncClient } from '../api/AgriSyncClient';
 import { getDatabase, type PendingAiJobRecord } from '../storage/DexieDatabase';
+import { isVoiceDoomLoopDetectorEnabled } from '../../app/featureFlags';
+import { recordAiFailureSignature } from './AiDoomLoopDetector';
 
-const MAX_RETRIES = 3;
+const MAX_RETRIES = 5;
 const BATCH_LIMIT = 10;
 const AI_JOB_TOAST_EVENT = 'agrisync:toast';
 const PERMANENT_FAILURE_MESSAGE_MR = 'कार्य प्रक्रिया अयशस्वी — पुन्हा प्रयत्न करा';
@@ -73,6 +75,7 @@ export class AiJobWorker {
             lastError: undefined,
             nextRetryAfterMs: undefined,
         });
+        await this.updateVoiceClipStatus(job, 'parsing');
 
         try {
             await this.executeJob(job);
@@ -83,25 +86,35 @@ export class AiJobWorker {
                 lastError: undefined,
                 nextRetryAfterMs: undefined,
             });
+            await this.updateVoiceClipStatus(job, 'parsed');
         } catch (error) {
             const nextRetryCount = job.retryCount + 1;
-            const isPermanentFailure = nextRetryCount >= MAX_RETRIES;
+            const doomLoopDecision = recordAiFailureSignature(job, error);
+            const isDoomLoop = isVoiceDoomLoopDetectorEnabled() && doomLoopDecision.shouldStop;
+            const isPermanentFailure = isDoomLoop || nextRetryCount >= MAX_RETRIES;
             const backoffMs = Math.min(1000 * Math.pow(2, nextRetryCount), 60000);
             const nextRetryAfterMs = Date.now() + backoffMs;
+            const errorMessage = getErrorMessage(error);
 
             await db.pendingAiJobs.update(job.id, {
                 status: isPermanentFailure ? 'failed_permanent' : 'failed',
                 retryCount: nextRetryCount,
                 updatedAt: systemClock.nowISO(),
-                lastError: getErrorMessage(error),
-                nextRetryAfterMs,
+                lastError: isDoomLoop && doomLoopDecision.reason
+                    ? `${errorMessage} (${doomLoopDecision.reason})`
+                    : errorMessage,
+                nextRetryAfterMs: isPermanentFailure ? undefined : nextRetryAfterMs,
+                attemptSignatures: doomLoopDecision.attemptSignatures,
             });
+            await this.updateVoiceClipStatus(job, 'failed', errorMessage);
 
             console.error(JSON.stringify({
                 level: 'error',
                 component: 'AiJobWorker',
                 jobId: job.id,
                 message: 'AI job failed',
+                errorClass: doomLoopDecision.errorClass,
+                doomLoopStopped: isDoomLoop,
                 error: error instanceof Error
                     ? { message: error.message, stack: error.stack }
                     : String(error),
@@ -112,6 +125,24 @@ export class AiJobWorker {
                 emitPermanentFailureToast();
             }
         }
+    }
+
+    private static async updateVoiceClipStatus(
+        job: PendingAiJobWithId,
+        status: 'parsing' | 'parsed' | 'failed',
+        lastError?: string,
+    ): Promise<void> {
+        const clipId = job.context.idempotencyKey;
+        if (!clipId) {
+            return;
+        }
+
+        const db = getDatabase();
+        await db.voiceClips.update(clipId, {
+            status,
+            updatedAt: systemClock.nowISO(),
+            lastError,
+        });
     }
 
     private static async executeJob(job: PendingAiJobWithId): Promise<void> {

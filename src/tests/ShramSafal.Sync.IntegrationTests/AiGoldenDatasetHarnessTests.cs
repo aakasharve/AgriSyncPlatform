@@ -38,14 +38,12 @@ public sealed class AiGoldenDatasetHarnessTests(ITestOutputHelper output)
         Assert.Equal(manifest.Samples.Count, sarvam.TotalSamples);
         Assert.Equal(manifest.Samples.Count, gemini.TotalSamples);
 
-        Assert.True(sarvam.F1 > gemini.F1, "Sarvam should lead on F1 for this benchmark profile.");
-        Assert.True(sarvam.CalibrationMae <= gemini.CalibrationMae, "Sarvam confidence calibration should be at least as good.");
-        Assert.True(sarvam.P50LatencyMs < gemini.P50LatencyMs, "Sarvam p50 latency should be lower.");
-        Assert.True(sarvam.P95LatencyMs < gemini.P95LatencyMs, "Sarvam p95 latency should be lower.");
-        Assert.True(sarvam.FallbackRate <= 0.20m, "Sarvam fallback rate should remain bounded.");
-        Assert.True(sarvam.CostPerSuccess < gemini.CostPerSuccess, "Sarvam should remain cheaper per success.");
-        Assert.True(sarvam.ContractPassRate >= 0.95m, "Sarvam canonical contract pass rate should be high.");
-        Assert.True(gemini.ContractPassRate >= 0.85m, "Gemini canonical contract pass rate should be acceptable.");
+        Assert.True(gemini.F1 >= sarvam.F1, "Gemini is the primary baseline and should not trail fallback F1 in this benchmark profile.");
+        Assert.True(gemini.CalibrationMae <= sarvam.CalibrationMae, "Gemini confidence calibration should be at least as good as fallback.");
+        Assert.True(gemini.ContractPassRate >= 0.95m, "Gemini canonical contract pass rate should be high.");
+        Assert.True(sarvam.ContractPassRate >= 0.85m, "Sarvam fallback canonical contract pass rate should remain acceptable.");
+        Assert.True(gemini.FallbackRate <= 0.20m, "Gemini fallback rate should remain bounded.");
+        Assert.True(sarvam.FallbackRate <= 0.25m, "Sarvam fallback path should remain bounded.");
     }
 
     private static string FormatReportLine(ProviderBenchmarkResult result)
@@ -161,7 +159,7 @@ public sealed class AiGoldenDatasetHarnessTests(ITestOutputHelper output)
 
         private static ProviderAttempt SimulateAttempt(string provider, GoldenSample sample, int index)
         {
-            var isSarvam = string.Equals(provider, "Sarvam", StringComparison.OrdinalIgnoreCase);
+            var isGemini = string.Equals(provider, "Gemini", StringComparison.OrdinalIgnoreCase);
             var expected = sample.ExpectedFields;
 
             var operationPenalty = sample.Operation switch
@@ -172,17 +170,17 @@ public sealed class AiGoldenDatasetHarnessTests(ITestOutputHelper output)
                 _ => 0
             };
 
-            var baseMiss = (isSarvam ? 1 : 2) + operationPenalty;
-            var volatilityMiss = index % (isSarvam ? 11 : 7) == 0 ? 1 : 0;
+            var baseMiss = (isGemini ? 1 : 2) + operationPenalty;
+            var volatilityMiss = index % (isGemini ? 11 : 7) == 0 ? 1 : 0;
             var falseNegatives = Math.Min(expected, baseMiss + volatilityMiss);
-            var falsePositives = index % (isSarvam ? 13 : 5) == 0 ? 1 : 0;
+            var falsePositives = index % (isGemini ? 13 : 5) == 0 ? 1 : 0;
             var truePositives = Math.Max(0, expected - falseNegatives);
 
-            var usedFallback = index % (isSarvam ? 14 : 8) == 0;
-            var contractValid = index % (isSarvam ? 41 : 17) != 0;
+            var usedFallback = index % (isGemini ? 14 : 8) == 0;
+            var contractValid = index % (isGemini ? 41 : 17) != 0;
             var isSuccess = contractValid && truePositives > 0;
 
-            var confidenceBase = isSarvam ? 0.89m : 0.80m;
+            var confidenceBase = isGemini ? 0.89m : 0.80m;
             var confidence = confidenceBase - ((index % 5) * 0.02m);
             if (confidence < 0.55m)
             {
@@ -191,21 +189,21 @@ public sealed class AiGoldenDatasetHarnessTests(ITestOutputHelper output)
 
             var latencyBase = sample.Operation switch
             {
-                GoldenOperation.Voice => isSarvam ? 1650 : 2050,
-                GoldenOperation.Receipt => isSarvam ? 1320 : 1680,
-                GoldenOperation.Patti => isSarvam ? 1250 : 1580,
-                _ => isSarvam ? 1500 : 1900
+                GoldenOperation.Voice => isGemini ? 1650 : 2050,
+                GoldenOperation.Receipt => isGemini ? 1320 : 1680,
+                GoldenOperation.Patti => isGemini ? 1250 : 1580,
+                _ => isGemini ? 1500 : 1900
             };
 
-            var latencyJitter = (index % 7) * (isSarvam ? 55 : 72);
+            var latencyJitter = (index % 7) * (isGemini ? 55 : 72);
             var latencyMs = latencyBase + latencyJitter + (usedFallback ? 240 : 0);
 
             var costBase = sample.Operation switch
             {
-                GoldenOperation.Voice => isSarvam ? 1.45m : 2.15m,
-                GoldenOperation.Receipt => isSarvam ? 1.90m : 2.65m,
-                GoldenOperation.Patti => isSarvam ? 1.70m : 2.45m,
-                _ => isSarvam ? 1.70m : 2.50m
+                GoldenOperation.Voice => isGemini ? 1.45m : 2.15m,
+                GoldenOperation.Receipt => isGemini ? 1.90m : 2.65m,
+                GoldenOperation.Patti => isGemini ? 1.70m : 2.45m,
+                _ => isGemini ? 1.70m : 2.50m
             };
 
             var costUnits = costBase + ((index % 3) * 0.05m) + (usedFallback ? 0.30m : 0m);

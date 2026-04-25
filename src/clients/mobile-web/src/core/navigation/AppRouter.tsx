@@ -36,6 +36,7 @@ import {
 
 const ProfilePage = React.lazy(() => import('../../pages/ProfilePage'));
 const SettingsPage = React.lazy(() => import('../../pages/SettingsPage'));
+const VoiceJournalPage = React.lazy(() => import('../../features/voiceJournal/pages/VoiceJournalPage'));
 const SchedulerPage = React.lazy(() => import('../../pages/SchedulerPage'));
 const ProcurementPage = React.lazy(() => import('../../pages/ProcurementPage'));
 const HarvestIncomePage = React.lazy(() => import('../../pages/HarvestIncomePage'));
@@ -226,7 +227,8 @@ const AppRouter: React.FC = () => {
         error,
         errorTranscript,
         draftLog,
-        setDraftLog
+        setDraftLog,
+        provenance
     } = voice;
 
     const weatherData = weather.weatherData;
@@ -450,6 +452,12 @@ const AppRouter: React.FC = () => {
             {currentRoute === 'settings' && (
                 <div className="animate-in fade-in slide-in-from-right-4 duration-300">
                     <SettingsPage defaults={ledgerDefaults} onUpdateDefaults={setLedgerDefaults} crops={crops} />
+                </div>
+            )}
+
+            {currentRoute === 'voice-journal' && (
+                <div className="animate-in fade-in slide-in-from-right-4 duration-300">
+                    <VoiceJournalPage onBack={() => setCurrentRoute('settings')} />
                 </div>
             )}
 
@@ -942,6 +950,7 @@ const AppRouter: React.FC = () => {
                                                 onSubmit={handleManualSubmit}
                                                 disabled={false}
                                                 initialData={draftLog}
+                                                provenance={provenance}
                                                 onDataConsumed={() => setDraftLog(null)}
                                                 todayCountsMap={(() => {
                                                     const map: Record<string, any> = {};

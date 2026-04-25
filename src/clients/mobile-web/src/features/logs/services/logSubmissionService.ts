@@ -47,7 +47,7 @@ export function buildLogScopeFromWizardContext(context: WizardLogContext): LogSc
 }
 
 function buildCropActivities(data: Record<string, any>, submissionBatchId: string): CropActivityEvent[] {
-    const cropWork = data.crop_activity;
+    const cropWork = data.cropActivities ?? data.crop_activity;
     if (!cropWork?.title?.trim()) {
         return [];
     }

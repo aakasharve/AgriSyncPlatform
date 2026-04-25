@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using ShramSafal.Application.Ports.External;
 using ShramSafal.Domain.AI;
 using ShramSafal.Infrastructure.AI;
@@ -12,9 +13,12 @@ internal sealed class SarvamAiProvider(
     SarvamSttClient sttClient,
     SarvamChatClient chatClient,
     SarvamVisionClient visionClient,
+    IOptions<SarvamOptions> optionsAccessor,
     AiResponseNormalizer responseNormalizer,
     ILogger<SarvamAiProvider> logger) : IAiProvider
 {
+    private readonly SarvamOptions _options = optionsAccessor.Value;
+
     public AiProviderType ProviderType => AiProviderType.Sarvam;
 
     public bool CanHandle(AiOperationType operation)
@@ -83,12 +87,15 @@ internal sealed class SarvamAiProvider(
             }
 
             var cleaned = GeminiJsonCleaner.Clean(completion.Content ?? "{}");
-            var normalized = responseNormalizer.NormalizeVoiceJson(cleaned);
+            var promptVersion = AiPromptLineage.ResolvePromptVersion(systemPrompt);
+            var normalized = responseNormalizer.NormalizeVoiceJson(cleaned, promptVersion: promptVersion);
             var confidence = TryExtractConfidence(normalized) ?? 0.75m;
 
             return new VoiceParseCanonicalResult
             {
                 Success = true,
+                ModelUsed = $"{_options.SttModel}+{_options.ChatModel}",
+                PromptVersion = promptVersion,
                 RawTranscript = transcript,
                 NormalizedJson = normalized,
                 OverallConfidence = confidence
@@ -167,6 +174,7 @@ internal sealed class SarvamAiProvider(
             return new ReceiptExtractCanonicalResult
             {
                 Success = true,
+                ModelUsed = $"{_options.VisionModel}+{_options.ChatModel}",
                 NormalizedJson = normalized,
                 OverallConfidence = TryExtractConfidence(normalized) ?? 0.70m
             };
