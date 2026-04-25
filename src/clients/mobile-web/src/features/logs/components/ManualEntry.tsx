@@ -20,7 +20,7 @@ import {
     FarmContext, CropActivityEvent, IrrigationEvent, LabourEvent,
     MachineryEvent, LedgerDefaults, FarmerProfile, CropProfile,
     WorkflowStep, InputEvent, Plot, AgriLogResponse, TodayCounts, ActivityExpenseEvent, ObservationNote,
-    LogTimelineEntry, PlannedTask, DailyLog, UnclearReason
+    LogTimelineEntry, PlannedTask, DailyLog, UnclearReason, DisturbanceEvent
 } from '../../../types';
 import { BucketIssue } from '../../../domain/types/log.types';
 import UnclearSegmentCard from '../../../shared/components/ui/UnclearSegmentCard';
@@ -28,6 +28,10 @@ import { UnclearSegment } from '../../logs/logs.types';
 import { loadVocabDB, addApprovedMapping } from '../../voice/vocab/vocabStore';
 import { getDateKey } from '../../../core/domain/services/DateKeyService';
 import { getCropTheme } from '../../../shared/utils/colorTheme';
+import { buildWorkDoneProjection } from '../services/workDoneProjection';
+import { isCompletedIrrigationEvent } from '../services/irrigationCompletion';
+import type { LogProvenance } from '../../../domain/ai/LogProvenance';
+import { buildAiCorrectionEvents, persistAiCorrectionEvents } from '../../../infrastructure/ai/CorrectionEventStore';
 
 
 
@@ -132,6 +136,7 @@ interface ManualEntryProps {
         activityExpenses: ActivityExpenseEvent[];
         observations: ObservationNote[];
         plannedTasks: PlannedTask[]; // NEW
+        disturbance?: DisturbanceEvent;
         date: string;
         manualTotalCost?: number;
         fullTranscript?: string;
@@ -139,6 +144,7 @@ interface ManualEntryProps {
     }) => void;
     disabled?: boolean;
     initialData?: AgriLogResponse | null;
+    provenance?: LogProvenance | null;
     onDataConsumed?: () => void;
     todayCountsMap?: Record<string, TodayCounts>;
     transcriptEntries?: LogTimelineEntry[];  // Today's past logs for timeline display
@@ -146,13 +152,14 @@ interface ManualEntryProps {
     onLogSelect?: (logId: string) => void;   // Callback when user selects a log to edit
 }
 
-const ManualEntry: React.FC<ManualEntryProps> = ({ context, crops, defaults, profile, onSubmit, disabled, initialData, onDataConsumed, todayCountsMap, transcriptEntries = [], todayLogs = [], onLogSelect }) => {
+const ManualEntry: React.FC<ManualEntryProps> = ({ context, crops, defaults, profile, onSubmit, disabled, initialData, provenance, onDataConsumed, todayCountsMap, transcriptEntries = [], todayLogs = [], onLogSelect }) => {
 
     // --- STATE ---
     const [cropActivities, setCropActivities] = useState<CropActivityEvent[]>([]);
     const [expenses, setExpenses] = useState<ActivityExpenseEvent[]>([]);
     const [observations, setObservations] = useState<ObservationNote[]>([]); // New Observations State
     const [plannedTasks, setPlannedTasks] = useState<PlannedTask[]>([]); // NEW: Reminders State
+    const [disturbance, setDisturbance] = useState<DisturbanceEvent | undefined>(undefined);
     const [showObservationHub, setShowObservationHub] = useState(false); // Hub Visibility
     const [transcript, setTranscript] = useState<string>(''); // NEW: Transcript State
     const [selectedLogId, setSelectedLogId] = useState<string | null>(null);  // Track which log is being edited
@@ -177,6 +184,7 @@ const ManualEntry: React.FC<ManualEntryProps> = ({ context, crops, defaults, pro
         setExpenses(log.activityExpenses || []);
         setObservations(log.observations || []);
         setPlannedTasks(log.plannedTasks || []); // Hydrate Reminders
+        setDisturbance(log.disturbance);
         setTranscript(log.fullTranscript || '');
 
         // Load linked detail maps
@@ -186,7 +194,7 @@ const ManualEntry: React.FC<ManualEntryProps> = ({ context, crops, defaults, pro
         const newInputMap: Record<string, InputEvent[]> = {};
 
         log.labour?.forEach(l => { if (l.linkedActivityId) newLabourMap[l.linkedActivityId] = l; });
-        log.irrigation?.forEach(i => { if (i.linkedActivityId) newIrrigationMap[i.linkedActivityId] = i; });
+        log.irrigation?.filter(isCompletedIrrigationEvent).forEach(i => { if (i.linkedActivityId) newIrrigationMap[i.linkedActivityId] = i; });
         log.machinery?.forEach(m => { if (m.linkedActivityId) newMachineryMap[m.linkedActivityId] = m; });
         log.inputs?.forEach(inp => {
             if (inp.linkedActivityId) {
@@ -259,6 +267,7 @@ const ManualEntry: React.FC<ManualEntryProps> = ({ context, crops, defaults, pro
     // clearing the form when onDataConsumed() sets initialData → null and
     // re-triggers this same effect.
     const hasVoiceDataBeenApplied = React.useRef(false);
+    const initialAiDataRef = React.useRef<AgriLogResponse | null>(null);
 
     // --- PRE-FILL & HYDRATION ---
     useEffect(() => {
@@ -293,6 +302,7 @@ const ManualEntry: React.FC<ManualEntryProps> = ({ context, crops, defaults, pro
         const currentExpenses: ActivityExpenseEvent[] = [];
         const currentObservations: ObservationNote[] = [];
         const currentTasks: PlannedTask[] = [];
+        let currentDisturbance: DisturbanceEvent | undefined;
 
         if (logsForCurrentPlot.length > 0) {
             logsForCurrentPlot.forEach(log => {
@@ -324,7 +334,7 @@ const ManualEntry: React.FC<ManualEntryProps> = ({ context, crops, defaults, pro
                 });
 
                 // Merge Irrigation
-                log.irrigation?.forEach(irr => {
+                log.irrigation?.filter(isCompletedIrrigationEvent).forEach(irr => {
                     newIrrigationMap[globalActivity.id] = { ...irr, linkedActivityId: globalActivity.id };
                 });
 
@@ -365,29 +375,39 @@ const ManualEntry: React.FC<ManualEntryProps> = ({ context, crops, defaults, pro
                         }
                     });
                 }
+
+                if (log.disturbance && !currentDisturbance) {
+                    currentDisturbance = log.disturbance;
+                }
             });
         }
 
         // 2. SMART DATA OVERLAY (InitialData from Voice)
         if (initialData) {
+            initialAiDataRef.current = initialData;
             // Handle Irrigation
             if (initialData.irrigation && initialData.irrigation.length > 0) {
-                const aiIrrigation = initialData.irrigation[0];
+                const aiIrrigation = initialData.irrigation.find(isCompletedIrrigationEvent);
                 const infra = activePlot.infrastructure;
                 const motorId = infra?.linkedMotorId || '';
                 const source = 'Well';
                 const method = infra?.irrigationMethod || defaults?.irrigation.method || 'drip';
 
-                newIrrigationMap[globalActivity.id] = {
-                    id: `irr_${Date.now()}`,
-                    method: aiIrrigation.method !== 'unknown' && aiIrrigation.method ? aiIrrigation.method : method,
-                    source: aiIrrigation.source !== 'unknown' && aiIrrigation.source ? aiIrrigation.source : source,
-                    durationHours: aiIrrigation.durationHours || 2,
-                    motorId: motorId,
-                    linkedActivityId: globalActivity.id,
-                    sourceText: aiIrrigation.sourceText,
-                    systemInterpretation: aiIrrigation.systemInterpretation
-                };
+                if (aiIrrigation) {
+                    newIrrigationMap[globalActivity.id] = {
+                        id: `irr_${Date.now()}`,
+                        method: aiIrrigation.method !== 'unknown' && aiIrrigation.method ? aiIrrigation.method : method,
+                        source: aiIrrigation.source !== 'unknown' && aiIrrigation.source ? aiIrrigation.source : source,
+                        durationHours: aiIrrigation.durationHours ?? defaults?.irrigation.defaultDuration ?? 2,
+                        waterVolumeLitres: aiIrrigation.waterVolumeLitres,
+                        motorId: motorId,
+                        linkedActivityId: globalActivity.id,
+                        notes: aiIrrigation.notes,
+                        issue: aiIrrigation.issue,
+                        sourceText: aiIrrigation.sourceText,
+                        systemInterpretation: aiIrrigation.systemInterpretation
+                    };
+                }
             }
 
             // Handle Labour
@@ -431,17 +451,27 @@ const ManualEntry: React.FC<ManualEntryProps> = ({ context, crops, defaults, pro
 
             // Handle Inputs
             if (initialData.inputs && initialData.inputs.length > 0) {
-                if (!globalActivity.workTypes?.includes('Manure & Fertilizers')) {
-                    globalActivity.workTypes = [...(globalActivity.workTypes || []), 'Manure & Fertilizers'];
-                }
                 newInputMap[globalActivity.id] = initialData.inputs.map((inp, idx) => ({
                     id: `inp_${Date.now()}_${idx}`,
                     type: (inp.type as any) || 'pesticide',
                     quantity: inp.quantity || 0,
-                    unit: inp.unit || 'L',
+                    unit: inp.unit || 'unit',
                     linkedActivityId: globalActivity.id,
                     method: inp.method || (inp.type === 'fertilizer' ? 'Soil' : 'Spray'),
-                    mix: [{ id: `mix_${Date.now()}`, productName: inp.productName || 'Unknown', dose: 0, unit: 'ml/L' }],
+                    mix: (inp.mix && inp.mix.length > 0)
+                        ? inp.mix.map((item, mixIdx) => ({
+                            ...item,
+                            id: item.id || `mix_${Date.now()}_${idx}_${mixIdx}`,
+                            productName: item.productName || inp.productName || 'Unknown',
+                            dose: item.dose ?? inp.quantity,
+                            unit: item.unit || inp.unit || 'unit',
+                        }))
+                        : [{
+                            id: `mix_${Date.now()}_${idx}`,
+                            productName: inp.productName || 'Unknown',
+                            dose: inp.quantity,
+                            unit: inp.unit || 'unit',
+                        }],
                     sourceText: inp.sourceText,
                     systemInterpretation: inp.systemInterpretation
                 }));
@@ -464,39 +494,8 @@ const ManualEntry: React.FC<ManualEntryProps> = ({ context, crops, defaults, pro
                 newMachineryMap[globalActivity.id] = { id: `mach_${Date.now()}_auto`, type: 'tractor', ownership: 'owned', hoursUsed: 2, linkedActivityId: globalActivity.id };
             }
 
-            // Handle Disturbance → create blocked bucket markers
             if (initialData.disturbance) {
-                const dist = initialData.disturbance;
-                // Map disturbance group to BucketIssue type
-                const issueTypeMap: Record<string, 'MACHINERY' | 'ELECTRICITY' | 'WEATHER' | 'WATER_SOURCE' | 'OTHER'> = {
-                    equipment: 'MACHINERY',
-                    electricity: 'ELECTRICITY',
-                    power: 'ELECTRICITY',
-                    weather: 'WEATHER',
-                    rain: 'WEATHER',
-                    water: 'WATER_SOURCE',
-                };
-                const issueType = issueTypeMap[dist.group?.toLowerCase() || ''] || 'OTHER';
-                const issueSeverity: 'LOW' | 'MEDIUM' | 'HIGH' = (dist.severity as 'LOW' | 'MEDIUM' | 'HIGH') || 'HIGH';
-
-                // Irrigation blocked → create an irrigation event with issue (shows amber bucket)
-                if (dist.blockedSegments?.includes('irrigation') && !newIrrigationMap[globalActivity.id]) {
-                    newIrrigationMap[globalActivity.id] = {
-                        id: `irr_blocked_${Date.now()}`,
-                        method: 'Drip',
-                        source: 'Bore',
-                        durationHours: 0,
-                        linkedActivityId: globalActivity.id,
-                        issue: {
-                            issueType,
-                            reason: dist.reason || 'Equipment failure',
-                            note: dist.note || '',
-                            severity: issueSeverity,
-                            sourceText: dist.note
-                        },
-                        sourceText: dist.note
-                    };
-                }
+                currentDisturbance = initialData.disturbance;
             }
 
             // Handle Expenses/Observations/Tasks/Transcript
@@ -543,6 +542,7 @@ const ManualEntry: React.FC<ManualEntryProps> = ({ context, crops, defaults, pro
         setExpenses(currentExpenses);
         setObservations(currentObservations);
         setPlannedTasks(currentTasks);
+        setDisturbance(currentDisturbance);
         if (initialData) {
             // Mark guard so subsequent re-runs (after onDataConsumed nullifies
             // initialData) do not reset the form we just pre-filled.
@@ -767,13 +767,20 @@ const ManualEntry: React.FC<ManualEntryProps> = ({ context, crops, defaults, pro
 
         // WARNING: Cost > 0 but no details (Heuristic Guard)
         const totalCalculated = allCosts.reduce((a, b) => a + b, 0);
-        const hasWork = cropActivities.some(a => (a.workTypes || []).length > 0) || finalIrrigation.length > 0;
+        const hasWork = buildWorkDoneProjection({
+            cropActivities,
+            irrigation: finalIrrigation,
+            labour: finalLabour,
+            machinery: finalMachinery,
+            inputs: finalInputs,
+            activityExpenses: expenses,
+        }).length > 0;
         if (totalCalculated > 0 && !hasWork && observations.length === 0) {
             const proceed = confirm("⚠️ Costs are recorded but no work activities or observations are listed. Save anyway?");
             if (!proceed) return;
         }
 
-        onSubmit({
+        const userDraft = {
             cropActivities: cropActivities,
             irrigation: finalIrrigation,
             labour: finalLabour,
@@ -782,11 +789,24 @@ const ManualEntry: React.FC<ManualEntryProps> = ({ context, crops, defaults, pro
             activityExpenses: expenses,
             observations,
             plannedTasks, // Include in submission
+            disturbance,
             date: getDateKey(),
             manualTotalCost,
             fullTranscript: transcript,
             originalLogId: selectedLogId || undefined // Pass the ID if we are editing
-        });
+        };
+
+        if (initialAiDataRef.current && provenance?.source === 'ai') {
+            const correctionEvents = buildAiCorrectionEvents({
+                aiDraft: initialAiDataRef.current,
+                userDraft,
+                provenance,
+            });
+            void persistAiCorrectionEvents(correctionEvents)
+                .catch(error => console.warn('[AI correction metrics] Failed to persist correction events.', error));
+        }
+
+        onSubmit(userDraft);
     };
 
     const handleRefineWorkType = (oldType: string, newType: string, mode: 'manual' | 'voice') => {
@@ -1054,6 +1074,7 @@ const ManualEntry: React.FC<ManualEntryProps> = ({ context, crops, defaults, pro
                                 setCropActivities([]);
                                 setExpenses([]);
                                 setObservations([]);
+                                setDisturbance(undefined);
                                 setTranscript('');
                                 setLabourMap({});
                                 setIrrigationMap({});
@@ -1162,6 +1183,7 @@ const ManualEntry: React.FC<ManualEntryProps> = ({ context, crops, defaults, pro
                             }}
                             plannedTasks={plannedTasks} // Sync global tasks to card buckets
                             observations={observations} // Pass all observations
+                            draftDisturbance={disturbance}
                             crops={crops} // Pass crops for HubSheet context
                             onAddObservation={(note) => setObservations([...observations, note])}
                             todayLogs={todayLogs} // Pass full log objects for aggregation

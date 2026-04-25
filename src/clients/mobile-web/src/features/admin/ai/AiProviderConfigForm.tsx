@@ -130,6 +130,13 @@ export const AiProviderConfigForm: React.FC<AiProviderConfigFormProps> = ({
                 </div>
             )}
 
+            <div className="rounded-lg border border-emerald-100 bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-800">
+                Voice: {config.resolvedVoiceProvider ?? config.voiceProvider ?? config.defaultProvider}
+                {' | '}Receipt: {config.resolvedReceiptProvider ?? config.receiptProvider ?? config.defaultProvider}
+                {' | '}Patti: {config.resolvedPattiProvider ?? config.pattiProvider ?? config.defaultProvider}
+                {config.geminiModelId ? ` | Gemini model: ${config.geminiModelId}` : ''}
+            </div>
+
             <div className="grid grid-cols-1 gap-3">
                 <label className="text-sm font-semibold text-stone-700">
                     Default Provider
@@ -138,8 +145,8 @@ export const AiProviderConfigForm: React.FC<AiProviderConfigFormProps> = ({
                         value={form.defaultProvider}
                         onChange={event => update('defaultProvider', event.target.value as ProviderOption)}
                     >
-                        <option value="Sarvam">Sarvam</option>
                         <option value="Gemini">Gemini</option>
+                        <option value="Sarvam">Sarvam</option>
                     </select>
                 </label>
 
@@ -216,8 +223,8 @@ export const AiProviderConfigForm: React.FC<AiProviderConfigFormProps> = ({
                             onChange={event => update('voiceProvider', event.target.value as ProviderOverrideOption)}
                         >
                             <option value="AUTO">Auto</option>
-                            <option value="Sarvam">Sarvam</option>
                             <option value="Gemini">Gemini</option>
+                            <option value="Sarvam">Sarvam</option>
                         </select>
                     </label>
                     <label className="text-sm font-semibold text-stone-700">
@@ -228,8 +235,8 @@ export const AiProviderConfigForm: React.FC<AiProviderConfigFormProps> = ({
                             onChange={event => update('receiptProvider', event.target.value as ProviderOverrideOption)}
                         >
                             <option value="AUTO">Auto</option>
-                            <option value="Sarvam">Sarvam</option>
                             <option value="Gemini">Gemini</option>
+                            <option value="Sarvam">Sarvam</option>
                         </select>
                     </label>
                     <label className="text-sm font-semibold text-stone-700">
@@ -240,8 +247,8 @@ export const AiProviderConfigForm: React.FC<AiProviderConfigFormProps> = ({
                             onChange={event => update('pattiProvider', event.target.value as ProviderOverrideOption)}
                         >
                             <option value="AUTO">Auto</option>
-                            <option value="Sarvam">Sarvam</option>
                             <option value="Gemini">Gemini</option>
+                            <option value="Sarvam">Sarvam</option>
                         </select>
                     </label>
                 </div>

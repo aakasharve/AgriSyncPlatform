@@ -13,6 +13,7 @@ import { procurementRepository } from '../../services/procurementRepository'; //
 import { legacyAuditPort } from '../../infrastructure/audit/LegacyAuditPort';
 import { useAuth } from './AuthProvider';
 import { getDatabase } from '../../infrastructure/storage/DexieDatabase';
+import { purgeExpiredProcessingVoiceClips } from '../../infrastructure/voice/VoiceClipRetention';
 
 // --- CONTEXT ---
 
@@ -124,6 +125,8 @@ export const DataSourceProvider: React.FC<{ children: React.ReactNode }> = ({ ch
             db.attachments,
             db.uploadQueue,
             db.pendingAiJobs,
+            db.voiceClips,
+            db.aiCorrectionEvents,
             db.auditEvents,
             db.syncCursors,
             db.appMeta,
@@ -143,6 +146,8 @@ export const DataSourceProvider: React.FC<{ children: React.ReactNode }> = ({ ch
                 db.attachments.clear(),
                 db.uploadQueue.clear(),
                 db.pendingAiJobs.clear(),
+                db.voiceClips.clear(),
+                db.aiCorrectionEvents.clear(),
                 db.auditEvents.clear(),
                 db.syncCursors.clear(),
                 db.appMeta.clear(),
@@ -181,6 +186,7 @@ export const DataSourceProvider: React.FC<{ children: React.ReactNode }> = ({ ch
                     if (session?.userId) {
                         await resetAuthenticatedUserCacheIfNeeded(session.userId);
                     }
+                    await purgeExpiredProcessingVoiceClips();
                     backgroundSyncWorker.start();
                     attachmentUploadWorker.start();
                 }

@@ -173,6 +173,29 @@ const SettingsPage: React.FC<SettingsPageProps> = ({
                 </div>
             </div>
 
+            <div className="glass-panel p-5 mb-6">
+                <div className="flex items-start justify-between gap-4">
+                    <div className="flex items-start gap-4 text-stone-700">
+                        <div className="bg-emerald-100 p-3 rounded-2xl text-emerald-700 shadow-sm">
+                            <Mic size={22} strokeWidth={2.5} />
+                        </div>
+                        <div>
+                            <h4 className="font-bold text-lg">Voice Journal</h4>
+                            <p className="text-xs text-stone-500 mt-1 leading-relaxed max-w-[280px]">
+                                Replay recent voice logs saved on this device for 30 days.
+                            </p>
+                        </div>
+                    </div>
+                    <button
+                        onClick={() => setCurrentRoute('voice-journal')}
+                        className="shrink-0 rounded-xl bg-emerald-100 px-3 py-2 text-xs font-black text-emerald-800 transition-colors hover:bg-emerald-200 active:scale-95"
+                    >
+                        <BookOpen size={16} className="inline-block mr-1.5 align-[-3px]" />
+                        Open
+                    </button>
+                </div>
+            </div>
+
 <div className="pt-4">
                 <h3 className="text-xl font-display font-black text-stone-800 px-1">{t('settings.ledgerConfig')}</h3>
             </div>

@@ -24,4 +24,8 @@
     <ProjectReference Include="..\..\..\AgriSync.BuildingBlocks\AgriSync.BuildingBlocks.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <EmbeddedResource Include="AI\Prompts\**\*.md" />
+  </ItemGroup>
+
 </Project>

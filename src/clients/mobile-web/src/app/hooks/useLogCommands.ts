@@ -14,6 +14,7 @@ import type { LastSavedLogSummaryItem } from '../uiRuntimeTypes';
 import { LogCommandServiceImpl } from '../../application/services/LogCommandService';
 import { useDataSource } from '../providers/DataSourceProvider';
 import { enqueueLogsForSync } from '../../features/logs/services/logSyncMutationService';
+import { countCompletedIrrigationEvents } from '../../features/logs/services/irrigationCompletion';
 
 export interface UseLogCommandsResult {
     handleAutoSave: (logData: AgriLogResponse, provenance?: LogProvenance) => Promise<void>;
@@ -53,14 +54,6 @@ interface UseLogCommandsProps {
     setLastSavedLogIds: React.Dispatch<React.SetStateAction<string[]>>;
     weatherProvider?: WeatherPort;
 }
-
-const countSuccessfulIrrigationEvents = (events: Array<{ durationHours?: number; waterVolumeLitres?: number; method?: string; source?: string }>): number => {
-    return events.filter(event => {
-        if ((event.durationHours || 0) > 0) return true;
-        if ((event.waterVolumeLitres || 0) > 0) return true;
-        return Boolean(event.method || event.source);
-    }).length;
-};
 
 export const useLogCommands = ({
     hasActiveLogContext,
@@ -112,7 +105,7 @@ export const useLogCommands = ({
                 (log.labour?.length || 0) +
                 (log.inputs?.length || 0) +
                 (log.machinery?.length || 0) +
-                countSuccessfulIrrigationEvents(log.irrigation || []);
+                countCompletedIrrigationEvents(log.irrigation || []);
 
             return {
                 logId: log.id,

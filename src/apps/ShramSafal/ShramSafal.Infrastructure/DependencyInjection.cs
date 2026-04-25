@@ -156,6 +156,15 @@ public static class DependencyInjection
             }
         });
 
+        services.Configure<AiPromptOptions>(options =>
+        {
+            var section = configuration.GetSection(AiPromptOptions.SectionName);
+            if (bool.TryParse(section["UseModularPrompt"], out var useModularPrompt))
+            {
+                options.UseModularPrompt = useModularPrompt;
+            }
+        });
+
         services.AddScoped<IShramSafalRepository, ShramSafalRepository>();
         services.AddScoped<IUserDirectory, UserDirectoryService>();
         services.AddScoped<IMisReportRepository, MisReportRepository>();
@@ -186,6 +195,7 @@ public static class DependencyInjection
         services.AddScoped<IComplianceSignalRepository, ComplianceSignalRepository>();
 
         services.AddSingleton<AiResponseNormalizer>();
+        services.AddSingleton<AiPromptTemplateRegistry>();
         services.AddSingleton<AiCircuitBreakerRegistry>();
         services.AddSingleton<AiFailureClassifier>();
         services.AddSingleton<AiAttemptCostEstimator>();

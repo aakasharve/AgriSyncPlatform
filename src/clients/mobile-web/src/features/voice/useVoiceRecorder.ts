@@ -7,6 +7,7 @@ import { LogScope } from '../../domain/types/log.types';
 import { VoicePreprocessor } from '../../infrastructure/voice/VoicePreprocessor';
 import { VoiceIdempotency } from '../../infrastructure/voice/VoiceIdempotency';
 import { VoiceSessionMetadata } from '../../infrastructure/voice/types';
+import { normalizeLegacyLogSegmentId } from '../../domain/ai/BucketId';
 
 const hasSuccessfulIrrigation = (events: Array<{ durationHours?: number; waterVolumeLitres?: number; method?: string; source?: string }>): boolean => {
     return events.some(event => {
@@ -196,6 +197,7 @@ export const useVoiceRecorder = ({
 
         const isSegmentUpdate = !!draftLog && !!recordingSegment;
         const focusCategory = isSegmentUpdate ? recordingSegment : undefined;
+        const focusBucket = focusCategory ? normalizeLegacyLogSegmentId(focusCategory) : undefined;
 
         try {
             // Construct correct payload type — forward preprocessor metadata for audio
@@ -272,11 +274,11 @@ export const useVoiceRecorder = ({
                 const mergedDraft = { ...draftLog! };
 
                 // Merge Logic aligned with App.tsx
-                if (focusCategory === 'crop_activity' && response.cropActivities.length > 0) mergedDraft.cropActivities = response.cropActivities;
-                if (focusCategory === 'irrigation' && response.irrigation.length > 0) mergedDraft.irrigation = response.irrigation;
-                if (focusCategory === 'labour' && response.labour.length > 0) mergedDraft.labour = response.labour;
-                if (focusCategory === 'input' && response.inputs.length > 0) mergedDraft.inputs = response.inputs;
-                if (focusCategory === 'machinery' && response.machinery.length > 0) mergedDraft.machinery = response.machinery;
+                if (focusBucket === 'cropActivities' && response.cropActivities.length > 0) mergedDraft.cropActivities = response.cropActivities;
+                if (focusBucket === 'irrigation' && response.irrigation.length > 0) mergedDraft.irrigation = response.irrigation;
+                if (focusBucket === 'labour' && response.labour.length > 0) mergedDraft.labour = response.labour;
+                if (focusBucket === 'inputs' && response.inputs.length > 0) mergedDraft.inputs = response.inputs;
+                if (focusBucket === 'machinery' && response.machinery.length > 0) mergedDraft.machinery = response.machinery;
                 if (response.activityExpenses && response.activityExpenses.length > 0) mergedDraft.activityExpenses = response.activityExpenses;
 
                 // Merge transcript (Replace is safer for now as segments are usually re-records)
@@ -317,7 +319,7 @@ export const useVoiceRecorder = ({
                     mergedDraft.dayOutcome = 'DISTURBANCE_RECORDED';
                 }
 
-                if (focusCategory === 'labour' && response.labour.length > 0) {
+                if (focusBucket === 'labour' && response.labour.length > 0) {
                     mergedDraft.questionsForUser = mergedDraft.questionsForUser?.filter(q => q.target !== 'LABOUR');
                 }
 

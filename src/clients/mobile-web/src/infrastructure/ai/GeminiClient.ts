@@ -3,6 +3,7 @@ import { AgriLogResponse, CropProfile, FarmerProfile } from '../../types';
 import { LogScope } from '../../domain/types/log.types';
 import { agriSyncClient } from '../api/AgriSyncClient';
 import { getDatabase } from '../storage/DexieDatabase';
+import { annotateFieldConfidencesWithBuckets } from '../../domain/ai/contracts/FieldConfidence';
 
 function normalizeSuggestedAction(action?: string): 'auto_confirm' | 'manual_review' | 'ask_clarification' {
     const normalized = (action || '').trim().toLowerCase();
@@ -75,7 +76,7 @@ export class GeminiClient implements VoiceParserPort {
                 });
 
             const confidenceScore = Number(apiResult.confidence || 0);
-            const fieldConfidences = apiResult.fieldConfidences ?? {};
+            const fieldConfidences = annotateFieldConfidencesWithBuckets(apiResult.fieldConfidences ?? {});
             const lowConfidenceFields = Object.entries(fieldConfidences)
                 .filter(([, confidence]) => confidence.level?.toLowerCase() === 'low')
                 .map(([field]) => field);
@@ -100,6 +101,9 @@ export class GeminiClient implements VoiceParserPort {
                 provenance: {
                     source: 'ai',
                     model: apiResult.modelUsed,
+                    promptVersion: apiResult.promptVersion,
+                    providerUsed: apiResult.providerUsed,
+                    fallbackUsed: apiResult.fallbackUsed,
                     timestamp: new Date().toISOString(),
                     processingTimeMs: apiResult.latencyMs,
                     confidenceScore,

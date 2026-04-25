@@ -3,6 +3,9 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import type { VisibleBucketId } from '../BucketId';
+import { inferVisibleBucketIdFromFieldPath } from '../BucketId';
+
 export type CorrectionType =
     | 'wrong_value'        // AI extracted a value, user changed it (e.g., 3 hours -> 2 hours)
     | 'wrong_category'     // AI put it in wrong bucket (e.g., irrigation when it was spray input)
@@ -29,4 +32,12 @@ export interface CorrectionEvent {
 
     // Classification
     correctionType: CorrectionType;
+    bucketId?: VisibleBucketId;
+}
+
+export function withCorrectionBucket(event: CorrectionEvent): CorrectionEvent {
+    return {
+        ...event,
+        bucketId: event.bucketId ?? inferVisibleBucketIdFromFieldPath(event.fieldPath),
+    };
 }

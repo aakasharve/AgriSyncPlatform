@@ -3,8 +3,10 @@ import { AgriLogResponse, CropProfile, FarmerProfile } from '../../types';
 import { LogScope } from '../../domain/types/log.types';
 import { agriSyncClient } from '../api/AgriSyncClient';
 import { getAuthSession } from '../api/AuthTokenStore';
-import { getDatabase, type PendingAiJobContext } from '../storage/DexieDatabase';
+import { getDatabase, type PendingAiJobContext, type VoiceClipStatus } from '../storage/DexieDatabase';
 import { IdempotencyKeyFactory } from './IdempotencyKeyFactory';
+import { annotateFieldConfidencesWithBuckets } from '../../domain/ai/contracts/FieldConfidence';
+import { computeProcessingVoiceClipExpiry, purgeExpiredProcessingVoiceClips } from '../voice/VoiceClipRetention';
 
 type VoiceUploadMaterial = {
     audioBlob: Blob;
@@ -173,7 +175,7 @@ export class BackendAiClient implements VoiceParserPort {
                 : await this.submitVoiceTextInput(input, farmId, userId, context, scope);
 
             const confidenceScore = Number(apiResult.confidence || 0);
-            const fieldConfidences = apiResult.fieldConfidences ?? {};
+            const fieldConfidences = annotateFieldConfidencesWithBuckets(apiResult.fieldConfidences ?? {});
             const lowConfidenceFields = Object.entries(fieldConfidences)
                 .filter(([, confidence]) => {
                     const level = confidence?.level;
@@ -206,6 +208,9 @@ export class BackendAiClient implements VoiceParserPort {
                 provenance: {
                     source: 'ai',
                     model: apiResult.modelUsed,
+                    promptVersion: apiResult.promptVersion,
+                    providerUsed: apiResult.providerUsed,
+                    fallbackUsed: apiResult.fallbackUsed,
                     timestamp: new Date().toISOString(),
                     processingTimeMs: apiResult.latencyMs,
                     confidenceScore,
@@ -235,21 +240,37 @@ export class BackendAiClient implements VoiceParserPort {
         scope: LogScope,
     ) {
         const material = await this.resolveVoiceUploadMaterial(input, farmId, userId);
-        return agriSyncClient.parseVoiceLog(
-            material.audioBlob,
-            material.mimeType,
-            parseContext,
-            farmId,
-            {
-                plotId: scope.selectedPlotIds[0],
-                cropCycleId: undefined,
-                idempotencyKey: material.idempotencyKey,
-                requestPayloadHash: material.requestPayloadHash,
-                inputSpeechDurationMs: material.inputSpeechDurationMs,
-                inputRawDurationMs: material.inputRawDurationMs,
-                segmentMetadataJson: material.segmentMetadataJson,
-            },
-        );
+        await this.persistProcessingVoiceClip(material, farmId, scope, 'parsing');
+
+        try {
+            const result = await agriSyncClient.parseVoiceLog(
+                material.audioBlob,
+                material.mimeType,
+                parseContext,
+                farmId,
+                {
+                    plotId: scope.selectedPlotIds[0],
+                    cropCycleId: undefined,
+                    idempotencyKey: material.idempotencyKey,
+                    requestPayloadHash: material.requestPayloadHash,
+                    inputSpeechDurationMs: material.inputSpeechDurationMs,
+                    inputRawDurationMs: material.inputRawDurationMs,
+                    segmentMetadataJson: material.segmentMetadataJson,
+                },
+            );
+            await this.persistProcessingVoiceClip(material, farmId, scope, 'parsed');
+            return result;
+        } catch (error) {
+            await this.persistProcessingVoiceClip(
+                material,
+                farmId,
+                scope,
+                'failed',
+                undefined,
+                error instanceof Error ? error.message : 'Voice parse failed.',
+            );
+            throw error;
+        }
     }
 
     private async submitVoiceTextInput(
@@ -348,7 +369,7 @@ export class BackendAiClient implements VoiceParserPort {
 
         if (input.type === 'audio') {
             const material = await this.resolveVoiceUploadMaterial(input, farmId, userId);
-            await db.pendingAiJobs.add({
+            const pendingJobId = await db.pendingAiJobs.add({
                 operationType: 'voice_parse',
                 inputBlob: material.audioBlob,
                 inputMimeType: material.mimeType,
@@ -366,6 +387,7 @@ export class BackendAiClient implements VoiceParserPort {
                 updatedAt: nowIso,
                 retryCount: 0,
             });
+            await this.persistProcessingVoiceClip(material, farmId, scope, 'queued', pendingJobId);
             return;
         }
 
@@ -395,6 +417,42 @@ export class BackendAiClient implements VoiceParserPort {
             updatedAt: nowIso,
             retryCount: 0,
         });
+    }
+
+    private async persistProcessingVoiceClip(
+        material: VoiceUploadMaterial,
+        farmId: string,
+        scope: LogScope,
+        status: VoiceClipStatus,
+        pendingAiJobId?: number,
+        lastError?: string,
+    ): Promise<void> {
+        const db = getDatabase();
+        const nowIso = new Date().toISOString();
+        const existing = await db.voiceClips.get(material.idempotencyKey);
+        const recordedAtUtc = existing?.recordedAtUtc ?? nowIso;
+
+        await db.voiceClips.put({
+            ...existing,
+            id: material.idempotencyKey,
+            farmId,
+            plotId: scope.selectedPlotIds[0],
+            cropCycleId: undefined,
+            pendingAiJobId: pendingAiJobId ?? existing?.pendingAiJobId,
+            recordedAtUtc,
+            durationMs: material.inputSpeechDurationMs ?? material.inputRawDurationMs ?? existing?.durationMs,
+            mimeType: material.mimeType,
+            sizeBytes: material.audioBlob.size,
+            localBlob: material.audioBlob,
+            status,
+            retentionPolicy: 'processing_30d',
+            expiresAtUtc: existing?.expiresAtUtc ?? computeProcessingVoiceClipExpiry(recordedAtUtc),
+            createdAt: existing?.createdAt ?? nowIso,
+            updatedAt: nowIso,
+            lastError,
+        });
+
+        await purgeExpiredProcessingVoiceClips();
     }
 
     private buildContext(

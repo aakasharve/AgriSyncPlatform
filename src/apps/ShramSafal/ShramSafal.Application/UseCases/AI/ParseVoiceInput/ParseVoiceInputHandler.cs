@@ -146,20 +146,24 @@ public sealed class ParseVoiceInputHandler(
                 ct: ct);
             stopwatch.Stop();
 
-            await EmitAiInvocationAsync(
-                command,
-                providerUsed: orchestration.ProviderUsed.ToString(),
-                jobId: orchestration.JobId,
-                fallbackUsed: orchestration.FallbackUsed,
-                latencyMs: stopwatch.ElapsedMilliseconds,
-                success: orchestration.Result.Success,
-                overallConfidence: orchestration.Result.Success ? orchestration.Result.OverallConfidence : (decimal?)null,
-                error: orchestration.Result.Success ? null : orchestration.Result.Error,
-                ct: ct);
-
             var canonicalResult = orchestration.Result;
             if (!canonicalResult.Success || string.IsNullOrWhiteSpace(canonicalResult.NormalizedJson))
             {
+                await EmitAiInvocationAsync(
+                    command,
+                    providerUsed: orchestration.ProviderUsed.ToString(),
+                    jobId: orchestration.JobId,
+                    fallbackUsed: orchestration.FallbackUsed,
+                    latencyMs: stopwatch.ElapsedMilliseconds,
+                    success: false,
+                    overallConfidence: null,
+                    error: canonicalResult.Error,
+                    modelUsed: canonicalResult.ModelUsed,
+                    promptVersion: canonicalResult.PromptVersion,
+                    validationOutcome: "provider_fail",
+                    fieldConfidenceCount: null,
+                    ct: ct);
+
                 return Result.Failure<VoiceParseResult>(
                     new Error(
                         ShramSafalErrors.AiParsingFailed.Code,
@@ -177,9 +181,10 @@ public sealed class ParseVoiceInputHandler(
                 : InferFallbackConfidence(parsedLog);
             var suggestedAction = DetermineSuggestedAction(fieldConfidences, overallConfidence);
 
-            var modelUsed = orchestration.FallbackUsed
-                ? $"{orchestration.ProviderUsed}:fallback"
-                : orchestration.ProviderUsed.ToString();
+            var providerUsed = orchestration.ProviderUsed.ToString();
+            var modelUsed = string.IsNullOrWhiteSpace(canonicalResult.ModelUsed)
+                ? providerUsed
+                : canonicalResult.ModelUsed.Trim();
 
             var response = new VoiceParseResult(
                 parsedLog,
@@ -187,8 +192,26 @@ public sealed class ParseVoiceInputHandler(
                 fieldConfidences,
                 suggestedAction,
                 modelUsed,
+                canonicalResult.PromptVersion,
+                providerUsed,
+                orchestration.FallbackUsed,
                 0,
                 "pass");
+
+            await EmitAiInvocationAsync(
+                command,
+                providerUsed: providerUsed,
+                jobId: orchestration.JobId,
+                fallbackUsed: orchestration.FallbackUsed,
+                latencyMs: stopwatch.ElapsedMilliseconds,
+                success: true,
+                overallConfidence: response.Confidence,
+                error: null,
+                modelUsed: modelUsed,
+                promptVersion: canonicalResult.PromptVersion,
+                validationOutcome: response.ValidationOutcome,
+                fieldConfidenceCount: fieldConfidences.Count,
+                ct: ct);
 
             return Result.Success(response);
         }
@@ -204,6 +227,10 @@ public sealed class ParseVoiceInputHandler(
                 success: false,
                 overallConfidence: null,
                 error: ex.Message,
+                modelUsed: null,
+                promptVersion: null,
+                validationOutcome: "exception",
+                fieldConfidenceCount: null,
                 ct: ct);
 
             return Result.Failure<VoiceParseResult>(
@@ -222,6 +249,10 @@ public sealed class ParseVoiceInputHandler(
         bool success,
         decimal? overallConfidence,
         string? error,
+        string? modelUsed,
+        string? promptVersion,
+        string? validationOutcome,
+        int? fieldConfidenceCount,
         CancellationToken ct)
     {
         return analytics.EmitAsync(new AnalyticsEvent(
@@ -244,6 +275,15 @@ public sealed class ParseVoiceInputHandler(
                 latencyMs,
                 outcome = success ? "success" : "failure",
                 overallConfidence,
+                modelUsed,
+                promptVersion,
+                validationOutcome,
+                fieldConfidenceCount,
+                inputSpeechDurationMs = command.InputSpeechDurationMs,
+                inputRawDurationMs = command.InputRawDurationMs,
+                hasAudio = !string.IsNullOrWhiteSpace(command.AudioBase64),
+                hasTextTranscript = !string.IsNullOrWhiteSpace(command.TextTranscript),
+                requestPayloadHashPresent = !string.IsNullOrWhiteSpace(command.RequestPayloadHash),
                 error
             })
         ), ct);
@@ -679,7 +719,9 @@ public sealed class ParseVoiceInputHandler(
             {
                 if (property.Value.TryGetDecimal(out var directScore))
                 {
-                    result[property.Name] = FieldConfidence.Create(directScore);
+                    result[property.Name] = FieldConfidence.Create(
+                        directScore,
+                        bucketId: ResolveVisibleBucketId(property.Name));
                 }
 
                 continue;
@@ -693,12 +735,47 @@ public sealed class ParseVoiceInputHandler(
             var score = TryReadDecimal(property.Value, "score") ?? 0.50m;
             var reason = TryReadString(property.Value, "reason");
             var levelLabel = TryReadString(property.Value, "level");
+            var bucketId = TryReadString(property.Value, "bucketId") ?? ResolveVisibleBucketId(property.Name);
             var level = ParseConfidenceLevel(levelLabel, score);
             var normalizedScore = ConfidenceScorePolicy.Normalize(score);
-            result[property.Name] = new FieldConfidence(normalizedScore, level, reason);
+            result[property.Name] = new FieldConfidence(normalizedScore, level, reason, bucketId);
         }
 
         return result;
+    }
+
+    private static string? ResolveVisibleBucketId(string fieldPath)
+    {
+        if (string.IsNullOrWhiteSpace(fieldPath))
+        {
+            return null;
+        }
+
+        var root = fieldPath.Trim();
+        var bracketIndex = root.IndexOf('[');
+        if (bracketIndex >= 0)
+        {
+            root = root[..bracketIndex];
+        }
+
+        var dotIndex = root.IndexOf('.');
+        if (dotIndex >= 0)
+        {
+            root = root[..dotIndex];
+        }
+
+        return root switch
+        {
+            "cropActivities" => "workDone",
+            "irrigation" => "irrigation",
+            "inputs" => "inputs",
+            "labour" => "labour",
+            "machinery" => "machinery",
+            "activityExpenses" => "expenses",
+            "plannedTasks" => "tasks",
+            "observations" => "observations",
+            _ => null
+        };
     }
 
     private static decimal InferFallbackConfidence(JsonElement parsedLog)

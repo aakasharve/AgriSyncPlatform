@@ -34,6 +34,7 @@ import OfflineEmptyState from '../shared/components/ui/OfflineEmptyState';
 import { getDatabase } from '../infrastructure/storage/DexieDatabase';
 import { AttachmentList, useAttachmentRetry } from '../features/attachments';
 import { formatTemperature } from '../shared/utils/weatherFormatter';
+import { countCompletedIrrigationEvents } from '../features/logs/services/irrigationCompletion';
 
 
 interface ReflectPageProps {
@@ -309,8 +310,7 @@ const CompactCropCard: React.FC<CompactCropCardProps> = ({ crop, plot, plotIndex
     const irrigationBlocked = !!(log?.disturbance?.blockedSegments?.includes('irrigation'));
     const counts = {
         activity: log?.cropActivities?.length || 0,
-        // Count irrigation events; a blocked-with-issue event still counts as "1" for icon purposes
-        irrigation: (log?.irrigation?.length || 0) + (irrigationBlocked && !log?.irrigation?.length ? 1 : 0),
+        irrigation: countCompletedIrrigationEvents(log?.irrigation || []),
         labour: log?.labour?.reduce((s, l) => s + (l.count || 0), 0) || 0,
         inputs: log?.inputs?.length || 0,
         machinery: log?.machinery?.length || 0,

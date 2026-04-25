@@ -2,6 +2,8 @@
 export interface LogProvenance {
     source: 'manual' | 'ai';
     model?: string;
+    providerUsed?: string;
+    fallbackUsed?: boolean;
     promptVersion?: string;
     rawTranscript?: string;
     confidenceScore?: number;

@@ -1,10 +1,25 @@
 using System.Text;
+using Microsoft.Extensions.Options;
 using ShramSafal.Application.Ports.External;
 
 namespace ShramSafal.Infrastructure.AI;
 
 internal sealed class AiPromptBuilder : IAiPromptBuilder
 {
+    private readonly AiPromptTemplateRegistry _templateRegistry;
+    private readonly AiPromptOptions _options;
+
+    public AiPromptBuilder()
+        : this(new AiPromptTemplateRegistry(), Options.Create(new AiPromptOptions()))
+    {
+    }
+
+    public AiPromptBuilder(AiPromptTemplateRegistry templateRegistry, IOptions<AiPromptOptions> optionsAccessor)
+    {
+        _templateRegistry = templateRegistry;
+        _options = optionsAccessor.Value;
+    }
+
     public string BuildVoiceParsingPrompt(VoiceParseContext context)
     {
         var farmKnowledge = BuildFarmKnowledge(context);
@@ -12,6 +27,19 @@ internal sealed class AiPromptBuilder : IAiPromptBuilder
         var learnedVocabulary = BuildLearnedVocabulary(context);
         var marathiVocab = MarathiPromptData.BuildVocabListing();
         var fewShotExamples = string.Join(Environment.NewLine + Environment.NewLine, MarathiPromptData.FewShotExamples);
+
+        if (_options.UseModularPrompt)
+        {
+            return _templateRegistry.BuildVoiceParsingPrompt(
+                context,
+                farmKnowledge,
+                visualContext,
+                learnedVocabulary,
+                marathiVocab,
+                string.Join(", ", MarathiPromptData.WorkerMarkers),
+                fewShotExamples);
+        }
+
         var template = """
                        You are ShramSafal Assistant, an intelligent agricultural logging assistant for Indian farmers.
 

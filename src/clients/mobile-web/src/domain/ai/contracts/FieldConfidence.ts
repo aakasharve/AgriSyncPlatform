@@ -7,6 +7,9 @@
  * Layer: Domain (pure types, no imports from UI/infrastructure)
  */
 
+import type { VisibleBucketId } from '../BucketId';
+import { inferVisibleBucketIdFromFieldPath } from '../BucketId';
+
 // =============================================================================
 // CONFIDENCE TYPES
 // =============================================================================
@@ -17,6 +20,7 @@ export interface FieldConfidence {
     level: ConfidenceLevel;
     score: number;       // 0.0 - 1.0
     reason?: string;     // Why the confidence is what it is (e.g., "ambiguous crop name")
+    bucketId?: VisibleBucketId;
 }
 
 /**
@@ -25,6 +29,13 @@ export interface FieldConfidence {
  * plus dot-notation for nested fields (e.g., "cropActivities[0].title").
  */
 export type FieldConfidenceMap = Record<string, FieldConfidence>;
+
+export type RawFieldConfidenceMap = Record<string, {
+    level: string;
+    score: number;
+    reason?: string;
+    bucketId?: VisibleBucketId;
+}>;
 
 /**
  * Suggested action based on overall confidence assessment.
@@ -65,4 +76,29 @@ export const CRITICAL_FIELDS = new Set([
     'inputs.dose',
     'targetPlotName',
 ]) as ReadonlySet<string>;
+
+function normalizeConfidenceLevel(level: string): ConfidenceLevel {
+    const normalized = level.trim().toUpperCase();
+    if (normalized === 'HIGH' || normalized === 'MEDIUM' || normalized === 'LOW') {
+        return normalized;
+    }
+
+    return 'MEDIUM';
+}
+
+export function annotateFieldConfidencesWithBuckets(
+    fieldConfidences: RawFieldConfidenceMap,
+): FieldConfidenceMap {
+    const annotated: FieldConfidenceMap = {};
+
+    for (const [fieldPath, confidence] of Object.entries(fieldConfidences)) {
+        annotated[fieldPath] = {
+            ...confidence,
+            level: normalizeConfidenceLevel(confidence.level),
+            bucketId: confidence.bucketId ?? inferVisibleBucketIdFromFieldPath(fieldPath),
+        };
+    }
+
+    return annotated;
+}
 

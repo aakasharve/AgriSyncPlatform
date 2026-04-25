@@ -1,6 +1,6 @@
 import React from 'react';
 import { FarmContext, TodayCounts, CropProfile } from '../../../types';
-import { MapPin, Calendar, CheckSquare, Droplets, Users, Package, Tractor, DollarSign } from 'lucide-react';
+import { MapPin, Calendar, CheckSquare, Droplets, Users, Package, Tractor, DollarSign, Bell, MessageSquare } from 'lucide-react';
 import { CropSymbol } from './CropSelector';
 import { getCropTheme } from '../../../shared/utils/colorTheme';
 
@@ -31,6 +31,12 @@ const ContextBanner: React.FC<ContextBannerProps> = ({
     // Let's rely on props passed.
 
     const theme = activeCrop ? getCropTheme(activeCrop.color) : getCropTheme('bg-slate-500');
+    const workDoneCount = todayCounts.cropActivities
+        + todayCounts.irrigation
+        + todayCounts.labour
+        + todayCounts.inputs
+        + todayCounts.machinery
+        + todayCounts.activityExpenses;
 
     // Stats Helper
     const StatBadge = ({ label, count, colorClass, bgClass, borderClass }: { label: string, count: number, colorClass: string, bgClass: string, borderClass: string }) => {
@@ -106,22 +112,22 @@ const ContextBanner: React.FC<ContextBannerProps> = ({
                     <div className="flex flex-wrap items-center gap-2 sm:justify-end">
                         {/* Define Stat Config locally or outside */}
                         {[
-                            { key: 'cropActivities', icon: <CheckSquare size={14} />, color: 'text-emerald-600', bg: 'bg-emerald-50', ring: 'ring-emerald-100' },
-                            { key: 'irrigation', icon: <Droplets size={14} />, color: 'text-blue-600', bg: 'bg-blue-50', ring: 'ring-blue-100' },
-                            { key: 'labour', icon: <Users size={14} />, color: 'text-orange-600', bg: 'bg-orange-50', ring: 'ring-orange-100' },
-                            { key: 'inputs', icon: <Package size={14} />, color: 'text-purple-600', bg: 'bg-purple-50', ring: 'ring-purple-100' },
-                            { key: 'machinery', icon: <Tractor size={14} />, color: 'text-stone-600', bg: 'bg-stone-50', ring: 'ring-stone-100' },
-                            { key: 'activityExpenses', icon: <DollarSign size={14} />, color: 'text-rose-600', bg: 'bg-rose-50', ring: 'ring-rose-100' },
-                            // { key: 'observations', ... }, // User requested first 6
-                            // { key: 'disturbance', ... },
-                        ].slice(0, 6).map(stat => {
-                            const count = todayCounts[stat.key as keyof TodayCounts] || 0;
+                            { key: 'workDone', label: 'Work Done', count: workDoneCount, icon: <CheckSquare size={14} />, color: 'text-emerald-600', bg: 'bg-emerald-50', ring: 'ring-emerald-100' },
+                            { key: 'irrigation', label: 'Irrigation', count: todayCounts.irrigation, icon: <Droplets size={14} />, color: 'text-blue-600', bg: 'bg-blue-50', ring: 'ring-blue-100' },
+                            { key: 'inputs', label: 'Inputs', count: todayCounts.inputs, icon: <Package size={14} />, color: 'text-purple-600', bg: 'bg-purple-50', ring: 'ring-purple-100' },
+                            { key: 'labour', label: 'Labour', count: todayCounts.labour, icon: <Users size={14} />, color: 'text-orange-600', bg: 'bg-orange-50', ring: 'ring-orange-100' },
+                            { key: 'machinery', label: 'Machinery', count: todayCounts.machinery, icon: <Tractor size={14} />, color: 'text-stone-600', bg: 'bg-stone-50', ring: 'ring-stone-100' },
+                            { key: 'expenses', label: 'Expenses', count: todayCounts.activityExpenses, icon: <DollarSign size={14} />, color: 'text-rose-600', bg: 'bg-rose-50', ring: 'ring-rose-100' },
+                            { key: 'tasks', label: 'Tasks', count: todayCounts.reminders, icon: <Bell size={14} />, color: 'text-indigo-600', bg: 'bg-indigo-50', ring: 'ring-indigo-100' },
+                            { key: 'observations', label: 'Observations', count: todayCounts.observations, icon: <MessageSquare size={14} />, color: 'text-amber-600', bg: 'bg-amber-50', ring: 'ring-amber-100' },
+                        ].map(stat => {
+                            const count = stat.count || 0;
                             // ALWAYS show icons? Or only if active? User said "show first 6 Buckets... in front of those icons"
                             // If count is 0, maybe dim it? Let's show all 6 but dim 0s.
                             const isActive = count > 0;
 
                             return (
-                                <div key={stat.key} className={`
+                                <div key={stat.key} title={stat.label} aria-label={`${stat.label}: ${count}`} className={`
                                     flex items-center gap-1.5 px-2 py-1.5 rounded-lg border transition-all duration-300
                                     ${isActive ? `${stat.bg} ${stat.color} border-transparent ring-1 ${stat.ring}` : 'bg-slate-50 text-slate-300 border-slate-100'}
                                 `}>

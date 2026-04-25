@@ -6,6 +6,7 @@ using System.Text.Json;
 using AgriSync.BuildingBlocks.Results;
 using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.RateLimiting;
+using Microsoft.Extensions.Options;
 using ShramSafal.Application.Ports;
 using ShramSafal.Application.Ports.External;
 using ShramSafal.Application.UseCases.AI.CreateDocumentSession;
@@ -20,6 +21,7 @@ using ShramSafal.Application.Admin.Ports;
 using ShramSafal.Domain.AI;
 using ShramSafal.Domain.Common;
 using ShramSafal.Domain.Organizations;
+using ShramSafal.Infrastructure.Integrations.Gemini;
 
 namespace ShramSafal.Api.Endpoints;
 
@@ -171,6 +173,7 @@ public static class AiEndpoints
             HttpContext http,
             IEntitlementResolver resolver,
             IAiJobRepository repository,
+            IOptions<GeminiOptions> geminiOptions,
             CancellationToken ct) =>
         {
             var scope = await AdminScopeHelper.ResolveOrDenyAsync(http, resolver, ct);
@@ -178,7 +181,7 @@ public static class AiEndpoints
             if (!await AdminScopeHelper.RequireReadAsync(http, scope, ModuleKey.OpsVoice)) return Results.Empty;
 
             var config = await repository.GetProviderConfigAsync(ct);
-            return Results.Ok(ToConfigResponse(config));
+            return Results.Ok(ToConfigResponse(config, geminiOptions.Value.ModelId));
         })
         .WithName("GetAiProviderConfig")
         .RequireRateLimiting("ai")
@@ -476,6 +479,9 @@ public static class AiEndpoints
             fieldConfidences = parseResult.FieldConfidences,
             suggestedAction = parseResult.SuggestedAction,
             modelUsed = parseResult.ModelUsed,
+            promptVersion = parseResult.PromptVersion,
+            providerUsed = parseResult.ProviderUsed,
+            fallbackUsed = parseResult.FallbackUsed,
             latencyMs = parseResult.LatencyMs,
             validationOutcome = parseResult.ValidationOutcome,
             jobId = job?.Id
@@ -1155,7 +1161,7 @@ public static class AiEndpoints
     }
 
 
-    private static object ToConfigResponse(AiProviderConfig config)
+    private static object ToConfigResponse(AiProviderConfig config, string? geminiModelId = null)
     {
         return new
         {
@@ -1171,6 +1177,10 @@ public static class AiEndpoints
             voiceProvider = config.VoiceProvider?.ToString(),
             receiptProvider = config.ReceiptProvider?.ToString(),
             pattiProvider = config.PattiProvider?.ToString(),
+            resolvedVoiceProvider = config.GetProviderForOperation(AiOperationType.VoiceToStructuredLog).ToString(),
+            resolvedReceiptProvider = config.GetProviderForOperation(AiOperationType.ReceiptToExpenseItems).ToString(),
+            resolvedPattiProvider = config.GetProviderForOperation(AiOperationType.PattiImageToSaleData).ToString(),
+            geminiModelId = string.IsNullOrWhiteSpace(geminiModelId) ? GeminiOptions.DefaultModelId : geminiModelId.Trim(),
             config.ModifiedAtUtc,
             config.ModifiedByUserId
         };

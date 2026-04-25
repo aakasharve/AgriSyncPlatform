@@ -26,7 +26,7 @@ const Step3_Details: React.FC<Step3Props> = ({ bucket, onNext, onBack }) => {
             case 'labour': return 'Labour Details';
             case 'inputs': return 'Fertilizer & Sprays';
             case 'machinery': return 'Machinery Usage';
-            case 'crop_activity': return 'Crop Work Details';
+            case 'cropActivities': return 'Crop Work Details';
             default: return 'Work Details';
         }
     };
@@ -37,7 +37,7 @@ const Step3_Details: React.FC<Step3Props> = ({ bucket, onNext, onBack }) => {
             case 'labour': return 'Who worked today?';
             case 'inputs': return 'What did you apply?';
             case 'machinery': return 'Which machine used?';
-            case 'crop_activity': return 'Name the crop work once and apply it to all selected plots.';
+            case 'cropActivities': return 'Name the crop work once and apply it to all selected plots.';
             default: return 'Enter details';
         }
     };
@@ -179,7 +179,7 @@ const Step3_Details: React.FC<Step3Props> = ({ bucket, onNext, onBack }) => {
                         </div>
                     </div>
                 );
-            case 'crop_activity':
+            case 'cropActivities':
                 return (
                     <div className="space-y-4">
                         <div>

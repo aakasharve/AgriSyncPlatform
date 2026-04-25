@@ -18,6 +18,7 @@ import type { DailyLog } from '../../types';
 import type { AuditEvent } from './AuditLogRepository';
 import type { JobCard } from '../../domain/work/JobCard';
 import type { WorkerProfileData } from '../../domain/work/ReliabilityScore';
+import type { CorrectionEvent } from '../../domain/ai/contracts/CorrectionEvent';
 
 // =============================================================================
 // OUTBOX (Pending sync events)
@@ -121,6 +122,14 @@ export interface UploadQueueItem {
 export type PendingAiOperationType = 'voice_parse' | 'receipt_extract' | 'patti_extract';
 export type PendingAiJobStatus = 'pending' | 'processing' | 'failed' | 'failed_permanent' | 'completed';
 
+export interface PendingAiAttemptSignature {
+    signature: string;
+    errorClass: string;
+    firstSeenAtMs: number;
+    lastSeenAtMs: number;
+    count: number;
+}
+
 export interface PendingAiJobContext {
     farmId?: string;
     userId?: string;
@@ -149,6 +158,33 @@ export interface PendingAiJobRecord {
     retryCount: number;
     lastError?: string;
     nextRetryAfterMs?: number;
+    attemptSignatures?: PendingAiAttemptSignature[];
+}
+
+// =============================================================================
+// VOICE CLIPS (30-day processing journal, no indefinite retention)
+// =============================================================================
+
+export type VoiceClipRetentionPolicy = 'processing_30d';
+export type VoiceClipStatus = 'recorded' | 'queued' | 'parsing' | 'parsed' | 'failed';
+
+export interface VoiceClipCacheRecord {
+    id: string;
+    farmId: string;
+    plotId?: string;
+    cropCycleId?: string;
+    pendingAiJobId?: number;
+    recordedAtUtc: string;
+    durationMs?: number;
+    mimeType: string;
+    sizeBytes: number;
+    localBlob: Blob;
+    status: VoiceClipStatus;
+    retentionPolicy: VoiceClipRetentionPolicy;
+    expiresAtUtc: string;
+    createdAt: string;
+    updatedAt: string;
+    lastError?: string;
 }
 
 // =============================================================================
@@ -220,14 +256,43 @@ export interface PlannedTaskCacheRecord {
 
 export interface FarmCacheRecord {
     id: string;
+    ownerAccountId?: string;
     payload: unknown;
+    syncStatus?: string;
+    serverUpdatedAt?: string;
     updatedAt: string;
+    modifiedAtUtc?: string;
 }
 
 export interface PlotCacheRecord {
     id: string;
     farmId: string;
+    ownerAccountId?: string;
     payload: unknown;
+    syncStatus?: string;
+    serverUpdatedAt?: string;
+    updatedAt: string;
+    modifiedAtUtc?: string;
+}
+
+export interface FarmBoundaryCacheRecord {
+    id: string;
+    farmId: string;
+    ownerAccountId: string;
+    payload: unknown;
+    syncStatus: string;
+    serverUpdatedAt: string;
+    updatedAt: string;
+}
+
+export interface PlotAreaCacheRecord {
+    id: string;
+    plotId: string;
+    farmId: string;
+    ownerAccountId: string;
+    payload: unknown;
+    syncStatus: string;
+    serverUpdatedAt: string;
     updatedAt: string;
 }
 
@@ -433,7 +498,7 @@ export interface DexieWorkerProfile {
 // =============================================================================
 
 /** Current Dexie schema version — bump this when adding version(N).stores(). */
-export const DATABASE_VERSION = 10; // CEI Phase 4 — job cards + worker profiles (stores added in Task 6.1.1)
+export const DATABASE_VERSION = 13; // AI correction events.
 /** CEI Phase 1 schema version (now active — applied by Task 5.1.1). */
 export const CEI_PHASE1_SCHEMA_VERSION = 7;
 /** CEI Phase 2 schema version — adds test stack (protocols/instances/recs). */
@@ -442,6 +507,12 @@ export const CEI_PHASE2_SCHEMA_VERSION = 8;
 export const CEI_PHASE3_SCHEMA_VERSION = 9;
 /** CEI Phase 4 schema version — job cards + worker profiles (stores added in Task 6.1.1). RESERVED. */
 export const CEI_PHASE4_SCHEMA_VERSION = 10;
+/** Farm geography schema version — ownerAccount scoped cache tables. */
+export const FARM_GEOGRAPHY_SCHEMA_VERSION = 11;
+/** AI voice journal schema version — local 30-day processing clips only. */
+export const AI_VOICE_JOURNAL_SCHEMA_VERSION = 12;
+/** AI correction event schema version — per-bucket correction-rate signal. */
+export const AI_CORRECTION_EVENTS_SCHEMA_VERSION = 13;
 
 // =============================================================================
 // DATABASE CLASS
@@ -454,6 +525,8 @@ export class AgriLogDatabase extends Dexie {
     attachments!: Table<AttachmentRecord, string>;
     uploadQueue!: Table<UploadQueueItem, number>;
     pendingAiJobs!: Table<PendingAiJobRecord, number>;
+    voiceClips!: Table<VoiceClipCacheRecord, string>;
+    aiCorrectionEvents!: Table<CorrectionEvent, string>;
     auditEvents!: Table<AuditEvent, string>;
     syncCursors!: Table<SyncCursor, string>;
     appMeta!: Table<AppMetaEntry, string>;
@@ -463,6 +536,8 @@ export class AgriLogDatabase extends Dexie {
 
     farms!: Table<FarmCacheRecord, string>;
     plots!: Table<PlotCacheRecord, string>;
+    farmBoundaries!: Table<FarmBoundaryCacheRecord, string>;
+    plotAreas!: Table<PlotAreaCacheRecord, string>;
     cropCycles!: Table<CropCycleCacheRecord, string>;
     costEntries!: Table<CostEntryCacheRecord, string>;
     financeCorrections!: Table<FinanceCorrectionCacheRecord, string>;
@@ -729,6 +804,111 @@ export class AgriLogDatabase extends Dexie {
             testRecommendations: 'id, testInstanceId',
             complianceSignals: 'id, farmId, plotId, severity, lastSeenAtUtc, [farmId+isOpen]',
             // NEW — CEI Phase 4 §4.8 (job cards + worker profile cache)
+            jobCards: 'id, farmId, assignedWorkerUserId, status, modifiedAtUtc, [farmId+status]',
+            workerProfiles: 'workerUserId, scopedFarmId',
+        });
+
+        // =====================================================================
+        // Farm Geography — v11: owner-account scoped geography cache.
+        //   Backend remains source of truth; these tables only cache confirmed
+        //   rows or queue pending pushes with explicit tenant scope.
+        // =====================================================================
+        this.version(11).stores({
+            logs: 'id, date, verificationStatus, createdByOperatorId, isDeleted, [date+isDeleted], [createdByOperatorId+isDeleted]',
+            outbox: '++id, idempotencyKey, status, action, [status+createdAt]',
+            mutationQueue: '++id, &[deviceId+clientRequestId], status, mutationType, createdAt, [status+createdAt]',
+            attachments: 'id, farmId, linkedEntityId, linkedEntityType, localPath, status, [linkedEntityId+linkedEntityType], [farmId+status]',
+            uploadQueue: '++autoId, attachmentId, status, retryCount, lastAttemptAt, nextAttemptAt, [status+nextAttemptAt]',
+            pendingAiJobs: '++id, operationType, status, createdAt, [status+createdAt]',
+            auditEvents: 'id, resourceId, action, timestamp, [resourceId+timestamp]',
+            syncCursors: 'tableName',
+            appMeta: 'key',
+            referenceData: 'key, versionHash, updatedAt',
+            dayLedgers: 'id, farmId, dateKey, [farmId+dateKey]',
+            plannedTasks: 'id, cropCycleId, plannedDate, [cropCycleId+plannedDate]',
+            farms: 'id, ownerAccountId, [ownerAccountId+id], syncStatus, serverUpdatedAt, modifiedAtUtc',
+            plots: 'id, farmId, ownerAccountId, [ownerAccountId+farmId], syncStatus, serverUpdatedAt, modifiedAtUtc',
+            farmBoundaries: 'id, farmId, ownerAccountId, [ownerAccountId+farmId], syncStatus, serverUpdatedAt',
+            plotAreas: 'id, plotId, farmId, ownerAccountId, [ownerAccountId+farmId], syncStatus, serverUpdatedAt',
+            cropCycles: 'id, farmId, plotId, modifiedAtUtc',
+            costEntries: 'id, farmId, modifiedAtUtc',
+            financeCorrections: 'id, costEntryId, modifiedAtUtc',
+            attentionCards: 'cardId, farmId, rank, computedAtUtc',
+            testProtocols: 'id, cropType, kind',
+            testInstances: 'id, cropCycleId, farmId, plannedDueDate, status, modifiedAtUtc',
+            testRecommendations: 'id, testInstanceId',
+            complianceSignals: 'id, farmId, plotId, severity, lastSeenAtUtc, [farmId+isOpen]',
+            jobCards: 'id, farmId, assignedWorkerUserId, status, modifiedAtUtc, [farmId+status]',
+            workerProfiles: 'workerUserId, scopedFarmId',
+        });
+
+        // =====================================================================
+        // AI Voice Journal — v12: 30-day local processing clips only.
+        //   This is Plan A retention. Plan B retained storage must use a separate
+        //   consent-gated path and must not change this policy in place.
+        // =====================================================================
+        this.version(12).stores({
+            logs: 'id, date, verificationStatus, createdByOperatorId, isDeleted, [date+isDeleted], [createdByOperatorId+isDeleted]',
+            outbox: '++id, idempotencyKey, status, action, [status+createdAt]',
+            mutationQueue: '++id, &[deviceId+clientRequestId], status, mutationType, createdAt, [status+createdAt]',
+            attachments: 'id, farmId, linkedEntityId, linkedEntityType, localPath, status, [linkedEntityId+linkedEntityType], [farmId+status]',
+            uploadQueue: '++autoId, attachmentId, status, retryCount, lastAttemptAt, nextAttemptAt, [status+nextAttemptAt]',
+            pendingAiJobs: '++id, operationType, status, createdAt, [status+createdAt]',
+            voiceClips: 'id, farmId, plotId, cropCycleId, recordedAtUtc, status, retentionPolicy, expiresAtUtc, [farmId+recordedAtUtc]',
+            auditEvents: 'id, resourceId, action, timestamp, [resourceId+timestamp]',
+            syncCursors: 'tableName',
+            appMeta: 'key',
+            referenceData: 'key, versionHash, updatedAt',
+            dayLedgers: 'id, farmId, dateKey, [farmId+dateKey]',
+            plannedTasks: 'id, cropCycleId, plannedDate, [cropCycleId+plannedDate]',
+            farms: 'id, ownerAccountId, [ownerAccountId+id], syncStatus, serverUpdatedAt, modifiedAtUtc',
+            plots: 'id, farmId, ownerAccountId, [ownerAccountId+farmId], syncStatus, serverUpdatedAt, modifiedAtUtc',
+            farmBoundaries: 'id, farmId, ownerAccountId, [ownerAccountId+farmId], syncStatus, serverUpdatedAt',
+            plotAreas: 'id, plotId, farmId, ownerAccountId, [ownerAccountId+farmId], syncStatus, serverUpdatedAt',
+            cropCycles: 'id, farmId, plotId, modifiedAtUtc',
+            costEntries: 'id, farmId, modifiedAtUtc',
+            financeCorrections: 'id, costEntryId, modifiedAtUtc',
+            attentionCards: 'cardId, farmId, rank, computedAtUtc',
+            testProtocols: 'id, cropType, kind',
+            testInstances: 'id, cropCycleId, farmId, plannedDueDate, status, modifiedAtUtc',
+            testRecommendations: 'id, testInstanceId',
+            complianceSignals: 'id, farmId, plotId, severity, lastSeenAtUtc, [farmId+isOpen]',
+            jobCards: 'id, farmId, assignedWorkerUserId, status, modifiedAtUtc, [farmId+status]',
+            workerProfiles: 'workerUserId, scopedFarmId',
+        });
+
+        // =====================================================================
+        // AI Correction Events — v13: bucket-level human correction signal.
+        //   This is local-first telemetry; upload is opt-in and can be added
+        //   later without changing the event contract.
+        // =====================================================================
+        this.version(13).stores({
+            logs: 'id, date, verificationStatus, createdByOperatorId, isDeleted, [date+isDeleted], [createdByOperatorId+isDeleted]',
+            outbox: '++id, idempotencyKey, status, action, [status+createdAt]',
+            mutationQueue: '++id, &[deviceId+clientRequestId], status, mutationType, createdAt, [status+createdAt]',
+            attachments: 'id, farmId, linkedEntityId, linkedEntityType, localPath, status, [linkedEntityId+linkedEntityType], [farmId+status]',
+            uploadQueue: '++autoId, attachmentId, status, retryCount, lastAttemptAt, nextAttemptAt, [status+nextAttemptAt]',
+            pendingAiJobs: '++id, operationType, status, createdAt, [status+createdAt]',
+            voiceClips: 'id, farmId, plotId, cropCycleId, recordedAtUtc, status, retentionPolicy, expiresAtUtc, [farmId+recordedAtUtc]',
+            aiCorrectionEvents: 'id, extractionId, timestamp, correctionType, bucketId, fieldPath',
+            auditEvents: 'id, resourceId, action, timestamp, [resourceId+timestamp]',
+            syncCursors: 'tableName',
+            appMeta: 'key',
+            referenceData: 'key, versionHash, updatedAt',
+            dayLedgers: 'id, farmId, dateKey, [farmId+dateKey]',
+            plannedTasks: 'id, cropCycleId, plannedDate, [cropCycleId+plannedDate]',
+            farms: 'id, ownerAccountId, [ownerAccountId+id], syncStatus, serverUpdatedAt, modifiedAtUtc',
+            plots: 'id, farmId, ownerAccountId, [ownerAccountId+farmId], syncStatus, serverUpdatedAt, modifiedAtUtc',
+            farmBoundaries: 'id, farmId, ownerAccountId, [ownerAccountId+farmId], syncStatus, serverUpdatedAt',
+            plotAreas: 'id, plotId, farmId, ownerAccountId, [ownerAccountId+farmId], syncStatus, serverUpdatedAt',
+            cropCycles: 'id, farmId, plotId, modifiedAtUtc',
+            costEntries: 'id, farmId, modifiedAtUtc',
+            financeCorrections: 'id, costEntryId, modifiedAtUtc',
+            attentionCards: 'cardId, farmId, rank, computedAtUtc',
+            testProtocols: 'id, cropType, kind',
+            testInstances: 'id, cropCycleId, farmId, plannedDueDate, status, modifiedAtUtc',
+            testRecommendations: 'id, testInstanceId',
+            complianceSignals: 'id, farmId, plotId, severity, lastSeenAtUtc, [farmId+isOpen]',
             jobCards: 'id, farmId, assignedWorkerUserId, status, modifiedAtUtc, [farmId+status]',
             workerProfiles: 'workerUserId, scopedFarmId',
         });

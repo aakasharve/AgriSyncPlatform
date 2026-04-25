@@ -140,6 +140,7 @@ public sealed class SarvamAdapterTests
             stt,
             chat,
             vision,
+            options,
             new AiResponseNormalizer(),
             NullLogger<SarvamAiProvider>.Instance);
 
