@@ -12,7 +12,8 @@
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
     "verify:mutation-queue": "node scripts/verify-mutation-queue.mjs",
-    "test:voice-pipeline": "tsx scripts/voice_pipeline_gate_check.ts"
+    "test:voice-pipeline": "tsx scripts/voice_pipeline_gate_check.ts",
+    "test:doom-loop": "tsx scripts/ai_doom_loop_gate_check.ts"
   },
   "dependencies": {
     "@capacitor/android": "^8.2.0",
