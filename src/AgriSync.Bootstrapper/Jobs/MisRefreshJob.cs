@@ -53,6 +53,7 @@ namespace AgriSync.Bootstrapper.Jobs
             "mis.alert_r2_wau_vs_wvfd",
             "mis.alert_r3_rubber_stamp",
             "mis.alert_r4_voice_decay",
+            "mis.schedule_compliance_weekly",   // must refresh before R5 (R5 depends on it)
             "mis.alert_r5_compliance_plateau",
             "mis.alert_r6_flash_churn",
             "mis.alert_r7_correction_rising",
