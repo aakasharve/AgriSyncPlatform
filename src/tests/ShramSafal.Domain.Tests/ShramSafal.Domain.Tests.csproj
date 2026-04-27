@@ -25,9 +25,9 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\Apps\ShramSafal\ShramSafal.Application\ShramSafal.Application.csproj" />
-    <ProjectReference Include="..\..\Apps\ShramSafal\ShramSafal.Domain\ShramSafal.Domain.csproj" />
-    <ProjectReference Include="..\..\Apps\ShramSafal\ShramSafal.Infrastructure\ShramSafal.Infrastructure.csproj" />
+    <ProjectReference Include="..\..\apps\ShramSafal\ShramSafal.Application\ShramSafal.Application.csproj" />
+    <ProjectReference Include="..\..\apps\ShramSafal\ShramSafal.Domain\ShramSafal.Domain.csproj" />
+    <ProjectReference Include="..\..\apps\ShramSafal\ShramSafal.Infrastructure\ShramSafal.Infrastructure.csproj" />
   </ItemGroup>
 
 </Project>
