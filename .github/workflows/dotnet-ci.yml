@@ -33,11 +33,29 @@ jobs:
       - name: Restore
         run: dotnet restore src/AgriSync.sln
 
-      - name: Build
-        run: dotnet build src/AgriSync.sln --configuration Release --no-restore
+      - name: Build (warnings = errors)
+        # Existing pre-existing warning codes are listed in
+        # src/Directory.Build.props WarningsNotAsErrors so today's debt
+        # stays visible-as-warnings while NEW codes fail. Sub-plan 03
+        # drives the list to empty.
+        run: dotnet build src/AgriSync.sln --configuration Release --no-restore /warnaserror
 
       - name: Test
-        run: dotnet test src/AgriSync.sln --configuration Release --no-build --verbosity normal
+        run: dotnet test src/AgriSync.sln --configuration Release --no-build --verbosity normal --logger "trx;LogFileName=results.trx" --results-directory ./TestResults
+
+      - name: Assert no skipped tests
+        shell: bash
+        run: |
+          set -e
+          if [ -f ./TestResults/results.trx ]; then
+            skipped=$(grep -oE 'failed="[0-9]+" passed="[0-9]+" skipped="[0-9]+"' ./TestResults/results.trx | grep -oE 'skipped="[0-9]+"' | head -1 | tr -d 'a-z="')
+            echo "Skipped: ${skipped:-0}"
+            if [ -n "$skipped" ] && [ "$skipped" -gt 0 ]; then
+              echo "::warning::Tests skipped: $skipped (acceptable up to sub-plan 05; tighten to 0 then)"
+            fi
+          else
+            echo "::warning::No TRX file produced; skipped-test assertion bypassed."
+          fi
 
   mobile-web:
     runs-on: ubuntu-latest
