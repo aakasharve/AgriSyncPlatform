@@ -215,3 +215,28 @@ src/clients/mobile-web/public/demo-photos/*.png
 .uiux-design-mode.json
 
 .worktrees/
+
+# ============================================
+# §11  Playwright / E2E artifacts
+#      Sub-plan 05 introduces a real E2E suite.
+#      These globs prevent accidental tracking
+#      of generated screenshots, traces, videos.
+# ============================================
+test-results/
+playwright-report/
+**/playwright-report/
+**/test-results/
+**/*.spec.png
+**/*.snap.png
+**/__screenshots__/
+**/__diff_output__/
+**/blob-report/
+.vitest/
+.coverage/
+coverage/
+
+# ============================================
+# §12  Build artifacts that occasionally slip in
+# ============================================
+**/dist-ssr/
+**/.turbo/
