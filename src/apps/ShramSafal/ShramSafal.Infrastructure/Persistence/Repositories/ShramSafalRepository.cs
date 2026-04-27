@@ -22,6 +22,18 @@ internal sealed class ShramSafalRepository(ShramSafalDbContext db) : IShramSafal
         await db.Farms.AddAsync(farm, ct);
     }
 
+    public async Task AddFarmBoundaryAsync(FarmBoundary boundary, CancellationToken ct = default)
+    {
+        await db.FarmBoundaries.AddAsync(boundary, ct);
+    }
+
+    public async Task<FarmBoundary?> GetActiveFarmBoundaryAsync(Guid farmId, CancellationToken ct = default)
+    {
+        var typedFarmId = new FarmId(farmId);
+        return await db.FarmBoundaries
+            .FirstOrDefaultAsync(boundary => boundary.FarmId == typedFarmId && boundary.IsActive, ct);
+    }
+
     public async Task<Farm?> GetFarmByIdAsync(Guid farmId, CancellationToken ct = default)
     {
         var typedFarmId = new FarmId(farmId);

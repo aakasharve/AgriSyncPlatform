@@ -28,14 +28,11 @@ public sealed class GetMeContextHandler(
             return Result.Failure<MeContextDto>(UserErrors.UserNotFound);
         }
 
-        var accountsTask = accountsReader.GetForUserAsync(userId, ct);
-        var membershipsTask = membershipReader.GetForUserAsync(userId, ct);
-        var affiliationTask = affiliationReader.GetForUserAsync(userId, ct);
-        await Task.WhenAll(accountsTask, membershipsTask, affiliationTask);
-
-        var accounts = accountsTask.Result;
-        var memberships = membershipsTask.Result;
-        var affiliation = affiliationTask.Result;
+        // Serialized: accountsReader + affiliationReader share the scoped AccountsDbContext;
+        // parallel execution trips EF Core's concurrency detector.
+        var accounts = await accountsReader.GetForUserAsync(userId, ct);
+        var memberships = await membershipReader.GetForUserAsync(userId, ct);
+        var affiliation = await affiliationReader.GetForUserAsync(userId, ct);
 
         var utcNow = clock.UtcNow;
 

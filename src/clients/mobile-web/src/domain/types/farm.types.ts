@@ -404,7 +404,9 @@ export type AppRoute =
     /** CEI Phase 4 §4.8 — job card detail (id passed via sessionStorage) */
     | 'job-detail'
     /** CEI Phase 4 §4.8 — worker profile (id passed via sessionStorage) */
-    | 'worker-profile';
+    | 'worker-profile'
+    /** Canonical farm boundary drawing (weather anchor). */
+    | 'farm-boundary';
 
 export interface AudioData {
     blob: Blob;

@@ -22,13 +22,16 @@ namespace ShramSafal.Domain.Tests.Analytics;
 internal sealed class StubShramSafalRepository : IShramSafalRepository
 {
     private readonly Dictionary<Guid, Farm> _farms = new();
+    private readonly List<FarmBoundary> _boundaries = new();
     private readonly Dictionary<Guid, Plot> _plots = new();
     private readonly List<FarmMembership> _memberships = new();
     private readonly List<AuditEvent> _auditEvents = new();
 
     public int SaveCalls { get; private set; }
+    public IReadOnlyList<FarmBoundary> Boundaries => _boundaries;
 
     public void SeedFarm(Farm farm) => _farms[farm.Id.Value] = farm;
+    public void SeedBoundary(FarmBoundary boundary) => _boundaries.Add(boundary);
     public void SeedMembership(FarmMembership membership) => _memberships.Add(membership);
 
     public Task AddFarmAsync(Farm farm, CancellationToken ct = default)
@@ -40,6 +43,18 @@ internal sealed class StubShramSafalRepository : IShramSafalRepository
     public Task<Farm?> GetFarmByIdAsync(Guid farmId, CancellationToken ct = default)
     {
         return Task.FromResult(_farms.TryGetValue(farmId, out var farm) ? farm : null);
+    }
+
+    public Task AddFarmBoundaryAsync(FarmBoundary boundary, CancellationToken ct = default)
+    {
+        _boundaries.Add(boundary);
+        return Task.CompletedTask;
+    }
+
+    public Task<FarmBoundary?> GetActiveFarmBoundaryAsync(Guid farmId, CancellationToken ct = default)
+    {
+        var boundary = _boundaries.FirstOrDefault(x => x.FarmId.Value == farmId && x.IsActive);
+        return Task.FromResult(boundary);
     }
 
     public Task AddFarmMembershipAsync(FarmMembership membership, CancellationToken ct = default)
@@ -87,8 +102,34 @@ internal sealed class StubShramSafalRepository : IShramSafalRepository
         return Task.CompletedTask;
     }
 
-    public Task<bool> IsUserOwnerOfFarmAsync(Guid farmId, Guid userId, CancellationToken ct = default) => throw new NotImplementedException();
-    public Task<bool> IsUserMemberOfFarmAsync(Guid farmId, Guid userId, CancellationToken ct = default) => throw new NotImplementedException();
+    public Task<bool> IsUserOwnerOfFarmAsync(Guid farmId, Guid userId, CancellationToken ct = default)
+    {
+        if (_farms.TryGetValue(farmId, out var farm) && farm.OwnerUserId.Value == userId)
+        {
+            return Task.FromResult(true);
+        }
+
+        var isOwner = _memberships.Any(x =>
+            x.FarmId.Value == farmId &&
+            x.UserId.Value == userId &&
+            x.Status == MembershipStatus.Active &&
+            x.Role is AppRole.PrimaryOwner or AppRole.SecondaryOwner);
+        return Task.FromResult(isOwner);
+    }
+
+    public Task<bool> IsUserMemberOfFarmAsync(Guid farmId, Guid userId, CancellationToken ct = default)
+    {
+        if (_farms.TryGetValue(farmId, out var farm) && farm.OwnerUserId.Value == userId)
+        {
+            return Task.FromResult(true);
+        }
+
+        var isMember = _memberships.Any(x =>
+            x.FarmId.Value == farmId &&
+            x.UserId.Value == userId &&
+            x.Status == MembershipStatus.Active);
+        return Task.FromResult(isMember);
+    }
     public Task<Plot?> GetPlotByIdAsync(Guid plotId, CancellationToken ct = default) => throw new NotImplementedException();
     public Task<List<Plot>> GetPlotsByFarmIdAsync(Guid farmId, CancellationToken ct = default) => throw new NotImplementedException();
     public Task AddCropCycleAsync(CropCycle cropCycle, CancellationToken ct = default) => throw new NotImplementedException();

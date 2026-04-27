@@ -40,10 +40,6 @@ interface AppContentProps {
 }
 
 const AppContent: React.FC<AppContentProps> = ({ crops: initialCrops, setCrops }) => {
-
-    const app = useAgriLogApp({ initialCrops });
-    useTemplateCatalogSync();
-
     // Phase 4: Global Voice State (UI concern, so kept here or could be moved to hook)
     const [isGlobalListening, setIsGlobalListening] = useState(false);
     const [isKeyboardOpen, setIsKeyboardOpen] = useState(false);
@@ -56,6 +52,9 @@ const AppContent: React.FC<AppContentProps> = ({ crops: initialCrops, setCrops }
     });
     const [showFirstFarmWizard, setShowFirstFarmWizard] = useState(false);
     const [farmContextRefreshCounter, setFarmContextRefreshCounter] = useState(0);
+
+    const app = useAgriLogApp({ initialCrops, currentFarmId });
+    useTemplateCatalogSync();
 
     useEffect(() => {
         let cancelled = false;

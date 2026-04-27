@@ -660,6 +660,21 @@ namespace ShramSafal.Infrastructure.Persistence.Migrations
                     b.Property<Guid>("Id")
                         .HasColumnType("uuid");
 
+                    b.Property<double?>("CanonicalCentreLat")
+                        .HasPrecision(10, 7)
+                        .HasColumnType("double precision")
+                        .HasColumnName("canonical_centre_lat");
+
+                    b.Property<double?>("CanonicalCentreLng")
+                        .HasPrecision(10, 7)
+                        .HasColumnType("double precision")
+                        .HasColumnName("canonical_centre_lng");
+
+                    b.Property<string>("CentreSource")
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)")
+                        .HasColumnName("centre_source");
+
                     b.Property<DateTime>("CreatedAtUtc")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at_utc");
@@ -668,6 +683,14 @@ namespace ShramSafal.Infrastructure.Persistence.Migrations
                         .HasMaxLength(12)
                         .HasColumnType("character varying(12)")
                         .HasColumnName("farm_code");
+
+                    b.Property<string>("GeoValidationStatus")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)")
+                        .HasDefaultValue("Unchecked")
+                        .HasColumnName("geo_validation_status");
 
                     b.Property<DateTime>("ModifiedAtUtc")
                         .HasColumnType("timestamp with time zone")
@@ -687,6 +710,23 @@ namespace ShramSafal.Infrastructure.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("owner_user_id");
 
+                    b.Property<decimal?>("TotalGovtAreaAcres")
+                        .HasPrecision(18, 4)
+                        .HasColumnType("numeric(18,4)")
+                        .HasColumnName("total_govt_area_acres");
+
+                    b.Property<decimal?>("TotalMappedAreaAcres")
+                        .HasPrecision(18, 4)
+                        .HasColumnType("numeric(18,4)")
+                        .HasColumnName("total_mapped_area_acres");
+
+                    b.Property<double>("WeatherRadiusKm")
+                        .ValueGeneratedOnAdd()
+                        .HasPrecision(8, 3)
+                        .HasColumnType("double precision")
+                        .HasDefaultValue(3.0)
+                        .HasColumnName("weather_radius_km");
+
                     b.HasKey("Id");
 
                     b.HasIndex("FarmCode")
@@ -699,7 +739,72 @@ namespace ShramSafal.Infrastructure.Persistence.Migrations
                     b.HasIndex("OwnerAccountId")
                         .HasDatabaseName("ix_farms_owner_account_id");
 
+                    b.HasIndex("OwnerAccountId", "Id")
+                        .HasDatabaseName("ix_farms_owner_account_id_id");
+
                     b.ToTable("farms", "ssf");
+                });
+
+            modelBuilder.Entity("ShramSafal.Domain.Farms.FarmBoundary", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTime?>("ArchivedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("archived_at_utc");
+
+                    b.Property<decimal>("CalculatedAreaAcres")
+                        .HasPrecision(18, 4)
+                        .HasColumnType("numeric(18,4)")
+                        .HasColumnName("calculated_area_acres");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at_utc");
+
+                    b.Property<Guid>("FarmId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("farm_id");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_active");
+
+                    b.Property<Guid>("OwnerAccountId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("owner_account_id");
+
+                    b.Property<string>("PolygonGeoJson")
+                        .IsRequired()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("polygon_geo_json");
+
+                    b.Property<string>("Source")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)")
+                        .HasColumnName("source");
+
+                    b.Property<int>("Version")
+                        .HasColumnType("integer")
+                        .HasColumnName("version");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("FarmId")
+                        .IsUnique()
+                        .HasDatabaseName("ux_farm_boundaries_active_farm_id")
+                        .HasFilter("is_active = TRUE");
+
+                    b.HasIndex("FarmId", "IsActive")
+                        .HasDatabaseName("ix_farm_boundaries_farm_id_is_active");
+
+                    b.HasIndex("OwnerAccountId", "FarmId")
+                        .HasDatabaseName("ix_farm_boundaries_owner_account_id_farm_id");
+
+                    b.ToTable("farm_boundaries", "ssf");
                 });
 
             modelBuilder.Entity("ShramSafal.Domain.Farms.FarmInvitation", b =>
@@ -2145,6 +2250,15 @@ namespace ShramSafal.Infrastructure.Persistence.Migrations
                     b.HasOne("ShramSafal.Domain.AI.AiJob", null)
                         .WithMany("Attempts")
                         .HasForeignKey("AiJobId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("ShramSafal.Domain.Farms.FarmBoundary", b =>
+                {
+                    b.HasOne("ShramSafal.Domain.Farms.Farm", null)
+                        .WithMany()
+                        .HasForeignKey("FarmId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
                 });

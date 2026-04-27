@@ -17,6 +17,9 @@ using ShramSafal.Application.UseCases.Export.ExportMonthlyCost;
 using ShramSafal.Application.UseCases.Export.ExportVerificationReport;
 using ShramSafal.Application.UseCases.Farms.CreateFarm;
 using ShramSafal.Application.UseCases.Farms.CreatePlot;
+using ShramSafal.Application.UseCases.Farms.GetFarmDetails;
+using ShramSafal.Application.UseCases.Farms.GetFarmWeather;
+using ShramSafal.Application.UseCases.Farms.UpdateFarmBoundary;
 using ShramSafal.Application.UseCases.Finance.AddCostEntry;
 using ShramSafal.Application.UseCases.Finance.AllocateGlobalExpense;
 using ShramSafal.Application.UseCases.Finance.CorrectCostEntry;
@@ -92,6 +95,9 @@ public static class DependencyInjection
         services.AddScoped<ExportVerificationReportHandler>();
 
         services.AddScoped<CreateFarmHandler>();
+        services.AddScoped<GetFarmDetailsHandler>();
+        services.AddScoped<GetFarmWeatherHandler>();
+        services.AddScoped<UpdateFarmBoundaryHandler>();
         services.AddScoped<CreatePlotHandler>();
         services.AddScoped<CreateCropCycleHandler>();
 

@@ -177,3 +177,16 @@ export type StorageEventListener = (event: StorageEvent) => void;
 // Dedicated audit boundary port
 export type { AuditAction, AuditEntry, AuditPort } from './AuditPort';
 export type { WeatherPort } from './WeatherPort';
+export type {
+    FarmGeographyPort,
+    FarmGeographyRepository,
+    FarmGeographySession,
+} from './FarmGeographyPort';
+export type {
+    DrawCanonicalFarmResult,
+    DrawPlotAreaResult,
+    MapMode,
+    MapPort,
+    MapProvenance,
+    MapResult,
+} from './MapPort';

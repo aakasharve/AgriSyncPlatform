@@ -55,6 +55,10 @@ export type {
     UploadQueueStatus,
     SyncCursor,
     AppMetaEntry,
+    FarmBoundaryCacheRecord,
+    FarmCacheRecord,
+    PlotAreaCacheRecord,
+    PlotCacheRecord,
     DexieLogRecord,
 } from './DexieDatabase';
 

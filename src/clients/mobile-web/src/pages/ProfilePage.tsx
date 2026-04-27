@@ -11,7 +11,7 @@ import {
     Settings2, ArrowRight, Droplets, Tractor, BarChart3, CalendarDays,
     ChevronRight, CheckCircle2, Wrench, Cylinder, ArrowLeft, Save, BrainCircuit,
     Medal, ShieldCheck, Check, Users, Settings, Phone, AlertTriangle, FileText, Upload, Eye, LogOut,
-    PanelLeftClose, PanelLeftOpen
+    PanelLeftClose, PanelLeftOpen, Cloud
 } from 'lucide-react';
 import {
     FarmerProfile, WaterResource, FarmMotor,
@@ -30,7 +30,22 @@ import FarmInviteQrSheet from '../features/onboarding/qr/FarmInviteQrSheet';
 import { QrCode } from 'lucide-react';
 import EntitlementBanner, { type SubscriptionSnapshotView } from '../features/admin/billing/EntitlementBanner';
 import MembershipsList from '../features/people/components/MembershipsList';
-import type { MyFarmDto } from '../features/onboarding/qr/inviteApi';
+import type { MyFarmDto, FarmDetailsDto } from '../features/onboarding/qr/inviteApi';
+import { getFarmDetails, updateFarmBoundary, probeFarmWeather } from '../features/onboarding/qr/inviteApi';
+
+// Local-only flag remembering that the owner explicitly opted in to live weather
+// for a given farm. This is UX consent — the backend always serves weather once
+// the canonical centre is set; this flag just collapses the "Connect Farm to
+// Weather" tile after the user has acknowledged the link.
+const WEATHER_CONNECTED_KEY = (farmId: string) => `farm:weatherConnected:${farmId}`;
+const readWeatherConnected = (farmId: string): boolean => {
+    try { return window.localStorage.getItem(WEATHER_CONNECTED_KEY(farmId)) === 'true'; }
+    catch { return false; }
+};
+const writeWeatherConnected = (farmId: string, value: boolean): void => {
+    try { window.localStorage.setItem(WEATHER_CONNECTED_KEY(farmId), value ? 'true' : 'false'); }
+    catch { /* noop */ }
+};
 import { PlotMap } from '../features/context/components/PlotMap';
 import { getDateKey } from '../core/domain/services/DateKeyService';
 import { createInitialScheduleInstance } from '../features/scheduler/planning/ClientPlanEngine';
@@ -1461,6 +1476,13 @@ const ProfilePage: React.FC<ProfilePageProps> = ({ profile, crops, onUpdateProfi
     const [myFarm, setMyFarm] = useState<{ farmId: string; name: string; role: string; subscription: SubscriptionSnapshotView | null } | null>(null);
     const [myMemberships, setMyMemberships] = useState<MyFarmDto[]>([]);
     const [farmLookupError, setFarmLookupError] = useState<string | null>(null);
+    const [farmDetails, setFarmDetails] = useState<FarmDetailsDto | null>(null);
+    const [showFarmBoundary, setShowFarmBoundary] = useState(false);
+    const [savingBoundary, setSavingBoundary] = useState(false);
+    const [boundaryError, setBoundaryError] = useState<string | null>(null);
+    const [weatherConnected, setWeatherConnected] = useState<boolean>(false);
+    const [connectingWeather, setConnectingWeather] = useState(false);
+    const [connectError, setConnectError] = useState<string | null>(null);
 
     // --- HANDLERS ---
     const handleAddMember = (member: any) => {
@@ -1521,6 +1543,89 @@ const ProfilePage: React.FC<ProfilePageProps> = ({ profile, crops, onUpdateProfi
         })();
         return () => { cancelled = true; };
     }, []);
+
+    // Pull the farm's canonical centre + mapped-area so the Identity card
+    // can show whether the farm boundary has been drawn. Weather needs this
+    // too — without a canonical centre the forecast endpoint returns 400.
+    React.useEffect(() => {
+        if (!myFarm?.farmId) { setFarmDetails(null); return; }
+        let cancelled = false;
+        (async () => {
+            try {
+                const dto = await getFarmDetails(myFarm.farmId);
+                if (!cancelled) setFarmDetails(dto);
+            } catch {
+                if (!cancelled) setFarmDetails(null);
+            }
+        })();
+        return () => { cancelled = true; };
+    }, [myFarm?.farmId]);
+
+    const handleSaveFarmBoundary = React.useCallback(async (geoData: PlotGeoData) => {
+        if (!myFarm?.farmId || savingBoundary) return;
+        setSavingBoundary(true);
+        setBoundaryError(null);
+        try {
+            const updated = await updateFarmBoundary(myFarm.farmId, {
+                boundary: geoData.boundary.map(p => ({ lat: p.lat, lng: p.lng })),
+                centre: { lat: geoData.center.lat, lng: geoData.center.lng },
+                areaAcres: Number(geoData.calculatedAreaAcres.toFixed(4)),
+            });
+            setFarmDetails(updated);
+        } catch (err) {
+            const message = err instanceof Error ? err.message
+                : (typeof err === 'object' && err && 'message' in err) ? String((err as { message: unknown }).message)
+                : 'Could not save farm boundary.';
+            setBoundaryError(message);
+        } finally {
+            setSavingBoundary(false);
+        }
+    }, [myFarm?.farmId, savingBoundary]);
+
+    const handleFinishFarmBoundary = React.useCallback(() => {
+        setShowFarmBoundary(false);
+        setBoundaryError(null);
+        // No reload here — we now want the user to see the intermediate
+        // "Connect Farm to Weather" tile so they own the moment of consent.
+        // The Connect handler reloads after the probe succeeds.
+    }, []);
+
+    // Hydrate the weather-connected flag once the farmId is known. The flag
+    // is per-farm so switching contexts doesn't leak consent across farms.
+    React.useEffect(() => {
+        if (myFarm?.farmId) {
+            setWeatherConnected(readWeatherConnected(myFarm.farmId));
+        } else {
+            setWeatherConnected(false);
+        }
+    }, [myFarm?.farmId]);
+
+    const handleConnectWeather = React.useCallback(async () => {
+        if (!myFarm?.farmId || connectingWeather) return;
+        setConnectingWeather(true);
+        setConnectError(null);
+        try {
+            await probeFarmWeather(myFarm.farmId);
+            writeWeatherConnected(myFarm.farmId, true);
+            setWeatherConnected(true);
+            // Reload so useWeatherMonitor re-inits and the WeatherWidget
+            // leaves its skeleton state on the daily-log page.
+            window.setTimeout(() => window.location.reload(), 200);
+        } catch (err) {
+            const apiErr = err as { error?: string; message?: string };
+            if (apiErr?.error === 'ShramSafal.WeatherProviderNotConfigured') {
+                setConnectError(
+                    'Weather provider not yet available — your boundary is saved. We\'ll auto-enable live weather as soon as the provider key is configured.',
+                );
+            } else if (apiErr?.error === 'ShramSafal.FarmCentreMissing') {
+                setConnectError('Farm boundary missing. Please draw the boundary first.');
+            } else {
+                setConnectError(apiErr?.message ?? 'Could not connect weather. Please try again.');
+            }
+        } finally {
+            setConnectingWeather(false);
+        }
+    }, [myFarm?.farmId, connectingWeather]);
 
     const handleExitMembership = React.useCallback(async (farmId: string, _farmName: string) => {
         const { exitMembership, getMyFarms, isInviteApiError } = await import('../features/onboarding/qr/inviteApi');
@@ -1594,35 +1699,86 @@ const ProfilePage: React.FC<ProfilePageProps> = ({ profile, crops, onUpdateProfi
                 />
             )}
 
-            {/* Map Overlay */}
-            {mappingPlotId && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm animate-in fade-in">
-                    <div className="bg-white w-full max-w-3xl rounded-3xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
-                        <div className="bg-slate-50 p-4 border-b border-slate-100 flex items-center justify-between">
-                            <div>
-                                <h3 className="font-bold text-slate-800 flex items-center gap-2 text-sm sm:text-base">
-                                    <div className="bg-emerald-100 text-emerald-600 p-1.5 rounded-lg"><MapPin size={18} /></div>
-                                    <span>Mapping Plot Boundary for <span className="text-emerald-600">'{crops.find(c => c.id === mappingPlotId.cropId)?.name || 'Crop'}'</span></span>
-                                </h3>
-                                <p className="text-xs text-slate-500 ml-9 mt-0.5">Plot: <span className="font-semibold">{crops.find(c => c.id === mappingPlotId.cropId)?.plots.find(p => p.id === mappingPlotId.plotId)?.name || 'Unknown'}</span></p>
+            {/* Map Overlay — full-bleed bottom sheet on mobile, centered dialog on lg+.
+                z-[60] sits above BottomNavigation (z-50) so the nav is fully covered. */}
+            {mappingPlotId && (() => {
+                const activeCrop = crops.find(c => c.id === mappingPlotId.cropId);
+                const activePlot = activeCrop?.plots.find(p => p.id === mappingPlotId.plotId);
+                return (
+                    <div className="fixed inset-0 z-[60] bg-slate-900/50 backdrop-blur-sm animate-in fade-in lg:flex lg:items-center lg:justify-center lg:p-6">
+                        <div className="bg-white h-full w-full flex flex-col overflow-hidden lg:h-auto lg:max-h-[92vh] lg:max-w-3xl lg:rounded-3xl lg:shadow-2xl">
+                            {/* Compact sticky header */}
+                            <div className="flex-shrink-0 bg-white/95 backdrop-blur-md border-b border-slate-100 px-4 py-3 flex items-center justify-between">
+                                <div className="flex items-center gap-2.5 min-w-0">
+                                    <div className="bg-emerald-100 text-emerald-600 p-1.5 rounded-lg flex-shrink-0">
+                                        <MapPin size={16} />
+                                    </div>
+                                    <div className="leading-tight min-w-0">
+                                        <p className="text-[11px] text-slate-500 truncate">
+                                            {activeCrop?.name || 'Crop'} · <span className="font-semibold text-slate-700">{activePlot?.name || 'Plot'}</span>
+                                        </p>
+                                        <p className="text-sm font-bold text-slate-900">Draw plot boundary</p>
+                                    </div>
+                                </div>
+                                <button
+                                    onClick={() => setMappingPlotId(null)}
+                                    className="p-2 rounded-full text-slate-400 hover:bg-slate-100 flex-shrink-0"
+                                    aria-label="Close"
+                                >
+                                    <X size={18} />
+                                </button>
                             </div>
-                            <button onClick={() => setMappingPlotId(null)} className="p-2 hover:bg-slate-200 rounded-full"><X size={20} className="text-slate-500" /></button>
-                        </div>
-                        <div className="p-0 flex-1 overflow-y-auto bg-slate-100">
-                            <div className="p-4">
+                            {/* Map fills the rest; PlotMap owns its own sticky action bar */}
+                            <div className="flex-1 min-h-0">
                                 <PlotMap
-                                    existingGeoData={crops.find(c => c.id === mappingPlotId.cropId)?.plots.find(p => p.id === mappingPlotId.plotId)?.geoData}
+                                    existingGeoData={activePlot?.geoData}
                                     onPlotComplete={(geoData) => handleSaveMap(mappingPlotId.cropId, mappingPlotId.plotId, geoData)}
+                                    onDone={() => setMappingPlotId(null)}
                                 />
                             </div>
-                            <div className="px-6 pb-6 text-center text-xs text-slate-400">
-                                <Button
-                                    onClick={() => setMappingPlotId(null)}
-                                    className="w-full py-3.5 text-sm bg-emerald-600 hover:bg-emerald-700 shadow-lg"
-                                >
-                                    <CheckCircle2 size={18} className="mr-2" /> {t('profile.saveAndFinish')}
-                                </Button>
+                        </div>
+                    </div>
+                );
+            })()}
+
+            {/* Farm boundary modal — same full-bleed bottom-sheet / lg dialog
+                pattern as the plot boundary overlay above. Without a saved
+                canonical centre the weather endpoint 400s, so this is the
+                pre-requisite entry point wired from the Identity card. */}
+            {showFarmBoundary && myFarm && (
+                <div className="fixed inset-0 z-[60] bg-slate-900/50 backdrop-blur-sm animate-in fade-in lg:flex lg:items-center lg:justify-center lg:p-6">
+                    <div className="bg-white h-full w-full flex flex-col overflow-hidden lg:h-auto lg:max-h-[92vh] lg:max-w-3xl lg:rounded-3xl lg:shadow-2xl">
+                        <div className="flex-shrink-0 bg-white/95 backdrop-blur-md border-b border-slate-100 px-4 py-3 flex items-center justify-between">
+                            <div className="flex items-center gap-2.5 min-w-0">
+                                <div className="bg-emerald-100 text-emerald-600 p-1.5 rounded-lg flex-shrink-0">
+                                    <MapPin size={16} />
+                                </div>
+                                <div className="leading-tight min-w-0">
+                                    <p className="text-[11px] text-slate-500 truncate">
+                                        Farm · <span className="font-semibold text-slate-700">{myFarm.name}</span>
+                                    </p>
+                                    <p className="text-sm font-bold text-slate-900">Draw farm boundary</p>
+                                </div>
                             </div>
+                            <button
+                                onClick={() => { setShowFarmBoundary(false); setBoundaryError(null); }}
+                                className="p-2 rounded-full text-slate-400 hover:bg-slate-100 flex-shrink-0"
+                                aria-label="Close"
+                                disabled={savingBoundary}
+                            >
+                                <X size={18} />
+                            </button>
+                        </div>
+                        {boundaryError && (
+                            <div className="flex-shrink-0 bg-red-50 border-b border-red-100 px-4 py-2 text-xs text-red-700 flex items-center gap-2">
+                                <AlertTriangle size={14} /> {boundaryError}
+                            </div>
+                        )}
+                        <div className="flex-1 min-h-0">
+                            <PlotMap
+                                onPlotComplete={(geoData) => { void handleSaveFarmBoundary(geoData); }}
+                                onDone={handleFinishFarmBoundary}
+                            />
                         </div>
                     </div>
                 </div>
@@ -1861,6 +2017,118 @@ const ProfilePage: React.FC<ProfilePageProps> = ({ profile, crops, onUpdateProfi
                                             );
                                         })()}
                                     </div>
+
+                                    {/* FARM BOUNDARY + WEATHER LINK — three-state flow:
+                                        A) no boundary → red "weather pending" + amber Draw CTA
+                                        B) boundary drawn, weather not yet connected → emerald
+                                           boundary tile + sky-blue "Connect Farm to Weather" CTA
+                                        C) connected → single emerald confirmation row
+                                        Lives directly under the Farmer ID CTA so owners treat it
+                                        as the second "prove who/what you farm" step. */}
+                                    {myFarm && (() => {
+                                        const hasBoundary = !!(farmDetails?.canonicalCentreLat != null && farmDetails?.canonicalCentreLng != null);
+                                        const acres = farmDetails?.totalMappedAreaAcres;
+
+                                        // STATE C — boundary drawn AND weather connected
+                                        if (hasBoundary && weatherConnected) {
+                                            return (
+                                                <div className="mt-4">
+                                                    <div className="w-full rounded-2xl border border-emerald-200 bg-gradient-to-r from-emerald-50 to-white px-4 py-3 flex items-center gap-3">
+                                                        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-600 text-white flex-shrink-0">
+                                                            <CheckCircle2 size={18} />
+                                                        </div>
+                                                        <div className="flex-1 min-w-0">
+                                                            <p className="text-sm font-bold text-emerald-800">
+                                                                Farm boundary drawn · Weather connected
+                                                            </p>
+                                                            <p className="text-xs text-emerald-700/80">
+                                                                {acres != null ? `${Number(acres).toFixed(2)} acres mapped · ` : ''}Live weather is on your daily log.
+                                                            </p>
+                                                        </div>
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => setShowFarmBoundary(true)}
+                                                            className="text-xs font-semibold text-emerald-700 underline hover:text-emerald-900 flex-shrink-0"
+                                                        >
+                                                            Redraw
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            );
+                                        }
+
+                                        // STATE B — boundary drawn, weather not yet connected
+                                        if (hasBoundary) {
+                                            return (
+                                                <div className="mt-4 space-y-3">
+                                                    <button
+                                                        onClick={() => setShowFarmBoundary(true)}
+                                                        className="w-full text-left rounded-2xl border border-emerald-200 bg-gradient-to-r from-emerald-50 to-white px-4 py-3 hover:border-emerald-300 transition-colors flex items-center gap-3"
+                                                    >
+                                                        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-600 text-white flex-shrink-0">
+                                                            <MapPin size={18} />
+                                                        </div>
+                                                        <div className="flex-1 min-w-0">
+                                                            <div className="flex items-center gap-2">
+                                                                <p className="text-sm font-bold text-emerald-800">Farm boundary drawn</p>
+                                                                <CheckCircle2 size={14} className="text-emerald-500" />
+                                                            </div>
+                                                            <p className="text-xs text-emerald-700/80">
+                                                                {acres != null ? `${Number(acres).toFixed(2)} acres · ` : ''}Tap to redraw
+                                                            </p>
+                                                        </div>
+                                                        <ChevronRight size={18} className="text-emerald-400 flex-shrink-0" />
+                                                    </button>
+
+                                                    <div className="rounded-2xl border border-sky-200 bg-gradient-to-br from-sky-50 to-white p-3">
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => { void handleConnectWeather(); }}
+                                                            disabled={connectingWeather}
+                                                            className="w-full py-3 bg-sky-600 text-white font-bold rounded-xl flex items-center justify-center gap-2 hover:bg-sky-700 disabled:opacity-60 disabled:cursor-not-allowed transition-colors shadow-md"
+                                                        >
+                                                            <Cloud size={18} />
+                                                            {connectingWeather ? 'Connecting…' : 'Connect Farm to Weather · हवामान जोडा'}
+                                                        </button>
+                                                        <p className="mt-2 text-[11px] text-sky-900/70 text-center px-2">
+                                                            We'll use your farm's location to fetch live rainfall, temperature, and a 5-day forecast for your daily log.
+                                                        </p>
+                                                        {connectError && (
+                                                            <div className="mt-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-[11px] text-red-700">
+                                                                {connectError}
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                            );
+                                        }
+
+                                        // STATE A — no boundary drawn yet
+                                        return (
+                                            <div className="mt-4 space-y-3">
+                                                <div className="rounded-xl border border-red-200 bg-red-50 px-3 py-2.5 flex items-start gap-2.5">
+                                                    <AlertTriangle size={16} className="text-red-600 flex-shrink-0 mt-0.5" />
+                                                    <div className="flex-1 min-w-0">
+                                                        <p className="text-xs font-bold text-red-800">
+                                                            Weather pending · हवामान बंद आहे
+                                                        </p>
+                                                        <p className="text-[11px] text-red-700/90 mt-0.5">
+                                                            Without drawing your farm boundary, live weather can't show on your daily log.
+                                                        </p>
+                                                    </div>
+                                                </div>
+                                                <button
+                                                    onClick={() => setShowFarmBoundary(true)}
+                                                    className="w-full py-3 bg-amber-500 text-white font-bold rounded-xl flex items-center justify-center gap-2 hover:bg-amber-600 transition-colors shadow-lg"
+                                                >
+                                                    <MapPin size={18} /> Draw Farm Boundary
+                                                </button>
+                                                <p className="text-[11px] text-slate-500 text-center">
+                                                    Unlocks live weather & activity anchoring for your farm.
+                                                </p>
+                                            </div>
+                                        );
+                                    })()}
 
                                     {/* LOGOUT ACTION */}
                                     <div className="mt-4 pt-4 border-t border-slate-100 flex justify-center">
@@ -2136,26 +2404,42 @@ const ProfilePage: React.FC<ProfilePageProps> = ({ profile, crops, onUpdateProfi
                                                 })()}
 
                                                 {crop.plots.map(p => (
-                                                    <div key={p.id} className="flex justify-between items-center p-3 rounded-xl hover:bg-slate-50 group">
-                                                        <div>
-                                                            <div className="font-bold text-slate-700 flex items-center gap-2">
-                                                                {p.name}
-                                                                {!p.geoData && (
-                                                                    <span className="text-[10px] font-bold text-red-600 bg-red-50 px-1.5 py-0.5 rounded border border-red-200 flex items-center gap-0.5">
-                                                                        <AlertTriangle size={10} /> Mapping Pending
-                                                                    </span>
+                                                    <div key={p.id} className="p-3 rounded-xl hover:bg-slate-50 group space-y-2">
+                                                        <div className="flex justify-between items-center">
+                                                            <div>
+                                                                <div className="font-bold text-slate-700 flex items-center gap-2">
+                                                                    {p.name}
+                                                                </div>
+                                                                <div className="text-xs text-slate-400 flex items-center gap-2">
+                                                                    <span>{p.baseline.totalArea} {p.baseline.unit}</span>
+                                                                    {p.infrastructure?.irrigationMethod && <span>• {p.infrastructure.irrigationMethod}</span>}
+                                                                    {p.geoData && <span className="flex items-center gap-0.5 text-emerald-600 font-bold bg-emerald-50 px-1.5 py-0.5 rounded text-[10px]"><MapPin size={10} /> {t('profile.mapped')}</span>}
+                                                                </div>
+                                                            </div>
+                                                            <div className="flex items-center gap-1">
+                                                                {p.geoData && (
+                                                                    <button
+                                                                        onClick={() => setMappingPlotId({ cropId: crop.id, plotId: p.id })}
+                                                                        className="p-2 text-slate-300 hover:text-emerald-500 hover:bg-emerald-50 rounded-lg transition-colors opacity-0 group-hover:opacity-100"
+                                                                        title="Draw plot boundary"
+                                                                    >
+                                                                        <MapPin size={16} />
+                                                                    </button>
                                                                 )}
-                                                            </div>
-                                                            <div className="text-xs text-slate-400 flex items-center gap-2">
-                                                                <span>{p.baseline.totalArea} {p.baseline.unit}</span>
-                                                                {p.infrastructure?.irrigationMethod && <span>• {p.infrastructure.irrigationMethod}</span>}
-                                                                {p.geoData && <span className="flex items-center gap-0.5 text-emerald-600 font-bold bg-emerald-50 px-1.5 py-0.5 rounded text-[10px]"><MapPin size={10} /> {t('profile.mapped')}</span>}
+                                                                <button onClick={() => deletePlot(crop.id, p.id)} className="p-2 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors opacity-0 group-hover:opacity-100" title="Delete plot">
+                                                                    <Trash2 size={16} />
+                                                                </button>
                                                             </div>
                                                         </div>
-                                                        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                                                            <button onClick={() => setMappingPlotId({ cropId: crop.id, plotId: p.id })} className="p-2 text-slate-300 hover:text-emerald-500 hover:bg-emerald-50 rounded-lg transition-colors" title="Map Plot"><MapPin size={16} /></button>
-                                                            <button onClick={() => deletePlot(crop.id, p.id)} className="p-2 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"><Trash2 size={16} /></button>
-                                                        </div>
+                                                        {!p.geoData && (
+                                                            <button
+                                                                onClick={() => setMappingPlotId({ cropId: crop.id, plotId: p.id })}
+                                                                className="w-full py-2.5 bg-emerald-600 text-white text-xs font-bold rounded-lg flex items-center justify-center gap-2 hover:bg-emerald-700 transition-colors shadow-sm"
+                                                                title="Draw plot boundary"
+                                                            >
+                                                                <MapPin size={14} /> Draw plot boundary
+                                                            </button>
+                                                        )}
                                                     </div>
                                                 ))}
                                                 {/* Add Plot Button - Now Triggers Wizard */}
