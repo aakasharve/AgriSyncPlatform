@@ -17,7 +17,7 @@ jobs:
       - name: Block tracked Playwright reports / generated screenshots
         run: |
           set -e
-          pattern='^(playwright-report/|test-results/|.*__screenshots__/|.*\.spec\.png$|.*\.snap\.png$|.*/blob-report/)'
+          pattern='^(playwright-report/|test-results/|.*__screenshots__/|.*\.spec\.png$|.*\.snap\.png$|.*/blob-report/|.*/output/playwright/.*\.png$|.*/output/.*\.png$)'
           tracked=$(git ls-files | grep -E "$pattern" || true)
           if [ -n "$tracked" ]; then
             echo "::error::The following generated artifacts are tracked:" 1>&2
