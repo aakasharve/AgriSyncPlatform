@@ -164,6 +164,9 @@ _integr_tests.txt
 **/.vite/
 **/output/*.png
 **/output/*.jpg
+# Playwright debug screenshots (nested under output/playwright/)
+**/output/**/*.png
+**/output/**/*.jpg
 src/clients/mobile-web/vite_log.txt
 
 # Build / tsc artifact dumps — never commit these

@@ -47,4 +47,4 @@ jobs:
           cache: npm
           cache-dependency-path: src/clients/admin-web/package-lock.json
       - run: npm ci
-      - run: npx eslint --max-warnings 9999 "src/**/*.{ts,tsx}" || true
+      - run: npx eslint --max-warnings 9999 .
