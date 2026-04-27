@@ -12,6 +12,7 @@
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
     "lint": "eslint --max-warnings 9999 \"src/**/*.{ts,tsx}\"",
+    "check:file-sizes": "node scripts/check-file-sizes.mjs",
     "verify:mutation-queue": "node scripts/verify-mutation-queue.mjs",
     "test:voice-pipeline": "tsx scripts/voice_pipeline_gate_check.ts",
     "test:doom-loop": "tsx scripts/ai_doom_loop_gate_check.ts"
