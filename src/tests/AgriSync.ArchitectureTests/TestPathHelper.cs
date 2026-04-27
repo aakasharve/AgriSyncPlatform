@@ -7,11 +7,15 @@ internal static class TestPathHelper
     public static string GetAppsRoot()
     {
         var solutionRoot = GetSolutionRoot();
-        var appsRoot = Path.Combine(solutionRoot, "Apps");
+        // The on-disk folder is lowercase "apps". Windows is case-insensitive
+        // so "Apps" used to resolve there too; Linux/CI is case-sensitive and
+        // requires the exact name. See MEMORY.md "Folder casing" + the .sln
+        // virtual-folder note.
+        var appsRoot = Path.Combine(solutionRoot, "apps");
 
         if (!Directory.Exists(appsRoot))
         {
-            throw new DirectoryNotFoundException($"Apps directory not found at: {appsRoot}");
+            throw new DirectoryNotFoundException($"apps directory not found at: {appsRoot}");
         }
 
         return appsRoot;
