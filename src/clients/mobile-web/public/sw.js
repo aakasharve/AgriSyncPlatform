@@ -1,7 +1,7 @@
 /// <reference lib="webworker" />
 
-const APP_SHELL_CACHE = 'shramsafal-app-shell-v2';
-const API_CACHE = 'shramsafal-api-v2';
+const APP_SHELL_CACHE = 'shramsafal-app-shell-v3';
+const API_CACHE = 'shramsafal-api-v3';
 const STATIC_ASSET_PATTERNS = [
     /^\/$/,
     /^\/index\.html$/,
