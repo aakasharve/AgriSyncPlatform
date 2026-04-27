@@ -1,0 +1,22 @@
+<Project>
+  <!--
+    Sub-plan 01 Task 8 — pre-existing warnings inventory.
+    Sub-plan 03 (Backend Architectural Depth) is the planned scope to drive
+    these to zero and remove this file or shrink the list.
+
+    With this list, new warnings of OTHER codes still fail under
+    /warnaserror; the listed codes remain as warnings (visible in build
+    output but not blocking). See INDUSTRY_GRADE_HARDENING/01 task 8 and
+    the matching pending task entry.
+  -->
+  <PropertyGroup>
+    <WarningsNotAsErrors>
+      $(WarningsNotAsErrors);
+      CS0618;
+      CS8602;
+      CS9113;
+      CS9124;
+      xUnit2009
+    </WarningsNotAsErrors>
+  </PropertyGroup>
+</Project>
