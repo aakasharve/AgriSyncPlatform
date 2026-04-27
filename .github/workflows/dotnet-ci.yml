@@ -17,6 +17,32 @@ jobs:
   build-test:
     runs-on: ubuntu-latest
 
+    # Postgres service: ShramSafal.Admin.IntegrationTests' AdminTestFixture
+    # connects via ADMIN_TESTS_ADMIN_ROOT_CONN (default points at the dev
+    # box's localhost:5433 with password akash123). On the runner, we run
+    # postgres:16 as a service container, expose the standard 5432 to
+    # localhost:5433 (matching local convention), and override the env var
+    # so the fixture finds it.
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: akash123
+          POSTGRES_DB: postgres
+        ports:
+          - 5433:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      # Match AdminTestFixture.DefaultRootConnectionString verbatim — keeps
+      # CI green even if a future test reads the env var directly.
+      ADMIN_TESTS_ADMIN_ROOT_CONN: "Host=localhost;Port=5433;Database=postgres;Username=postgres;Password=akash123"
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -39,6 +65,22 @@ jobs:
         # stays visible-as-warnings while NEW codes fail. Sub-plan 03
         # drives the list to empty.
         run: dotnet build src/AgriSync.sln --configuration Release --no-restore /warnaserror
+
+      - name: Wait for Postgres
+        # Defense-in-depth on top of the service container's --health-cmd:
+        # pg_isready returns 0 only when the server is accepting connections.
+        # Surfacing this as a distinct step gives a clean error if the
+        # service container fails to come up.
+        run: |
+          for i in {1..30}; do
+            if pg_isready -h localhost -p 5433 -U postgres; then
+              echo "Postgres ready after ${i} attempts."
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "::error::Postgres did not become ready within 60s."
+          exit 1
 
       - name: Test
         run: dotnet test src/AgriSync.sln --configuration Release --no-build --verbosity normal --logger "trx;LogFileName=results.trx" --results-directory ./TestResults
