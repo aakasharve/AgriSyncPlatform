@@ -1,0 +1,50 @@
+name: no-stale-artifacts
+
+on:
+  push:
+    branches: [main, akash_edits]
+  pull_request:
+    branches: [main]
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Block tracked Playwright reports / generated screenshots
+        run: |
+          set -e
+          pattern='^(playwright-report/|test-results/|.*__screenshots__/|.*\.spec\.png$|.*\.snap\.png$|.*/blob-report/)'
+          tracked=$(git ls-files | grep -E "$pattern" || true)
+          if [ -n "$tracked" ]; then
+            echo "::error::The following generated artifacts are tracked:" 1>&2
+            echo "$tracked" 1>&2
+            echo "::error::Remove them with 'git rm --cached <file>' and add to .gitignore." 1>&2
+            exit 1
+          fi
+          echo "OK — no stale generated artifacts tracked."
+
+      - name: Block stray .DS_Store / Thumbs.db
+        run: |
+          set -e
+          stray=$(git ls-files | grep -E '(^|/)(\.DS_Store|Thumbs\.db)$' || true)
+          if [ -n "$stray" ]; then
+            echo "::error::OS junk files tracked:" 1>&2
+            echo "$stray" 1>&2
+            exit 1
+          fi
+          echo "OK — no OS junk tracked."
+
+      - name: Block tracked node_modules
+        run: |
+          set -e
+          tracked=$(git ls-files | grep -E '(^|/)node_modules/' || true)
+          if [ -n "$tracked" ]; then
+            echo "::error::node_modules tracked:" 1>&2
+            echo "$tracked" 1>&2
+            exit 1
+          fi
+          echo "OK — no node_modules tracked."
