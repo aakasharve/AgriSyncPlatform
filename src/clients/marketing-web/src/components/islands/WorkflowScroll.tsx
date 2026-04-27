@@ -38,7 +38,7 @@ export default function WorkflowScroll({
     const track = trackRef.current;
     if (!section || !track || steps.length < 2) return;
 
-    let cleanup = () => undefined;
+    let cleanup: (() => void) | undefined;
 
     (async () => {
       const [{ gsap }, { ScrollTrigger }] = await Promise.all([
@@ -108,10 +108,12 @@ export default function WorkflowScroll({
         });
       }, section);
 
-      cleanup = () => ctx.revert();
+      cleanup = () => { ctx.revert(); };
     })();
 
-    return () => cleanup();
+    return () => {
+      cleanup?.();
+    };
   }, [steps.length]);
 
   return (
