@@ -12,6 +12,7 @@ using ShramSafal.Infrastructure.AI;
 using ShramSafal.Infrastructure.Auth;
 using ShramSafal.Infrastructure.Integrations.Gemini;
 using ShramSafal.Infrastructure.Integrations.Sarvam;
+using ShramSafal.Infrastructure.Integrations.Weather;
 using ShramSafal.Infrastructure.Persistence;
 using ShramSafal.Infrastructure.Persistence.Repositories;
 using ShramSafal.Infrastructure.Storage;
@@ -165,6 +166,32 @@ public static class DependencyInjection
             }
         });
 
+        services.Configure<TomorrowIoOptions>(options =>
+        {
+            var section = configuration.GetSection(TomorrowIoOptions.SectionName);
+            if (!string.IsNullOrWhiteSpace(section["ApiKey"]))
+            {
+                options.ApiKey = section["ApiKey"]!.Trim();
+            }
+            if (!string.IsNullOrWhiteSpace(section["BaseUrl"]))
+            {
+                options.BaseUrl = section["BaseUrl"]!.Trim();
+            }
+            if (int.TryParse(section["TimeoutSeconds"], NumberStyles.Integer, CultureInfo.InvariantCulture, out var timeoutSeconds))
+            {
+                options.TimeoutSeconds = timeoutSeconds;
+            }
+        });
+
+        services.PostConfigure<TomorrowIoOptions>(options =>
+        {
+            var key = Environment.GetEnvironmentVariable("TOMORROW_IO_API_KEY");
+            if (!string.IsNullOrWhiteSpace(key))
+            {
+                options.ApiKey = key.Trim();
+            }
+        });
+
         services.AddScoped<IShramSafalRepository, ShramSafalRepository>();
         services.AddScoped<IUserDirectory, UserDirectoryService>();
         services.AddScoped<IMisReportRepository, MisReportRepository>();
@@ -233,6 +260,16 @@ public static class DependencyInjection
                 // Add a buffer beyond the job timeout so the HttpClient doesn't cut the connection
                 client.Timeout = TimeSpan.FromSeconds(timeout + 30);
             });
+
+        services.AddHttpClient("TomorrowIoWeather")
+            .ConfigureHttpClient((sp, client) =>
+            {
+                var weatherOptions = sp.GetRequiredService<IOptions<TomorrowIoOptions>>().Value;
+                var timeout = weatherOptions.TimeoutSeconds <= 0 ? 15 : weatherOptions.TimeoutSeconds;
+                client.Timeout = TimeSpan.FromSeconds(timeout);
+            });
+
+        services.AddScoped<IWeatherProvider, TomorrowIoWeatherProvider>();
 
         services.Configure<StorageOptions>(configuration.GetSection("ShramSafal:Storage"));
         var storageProvider = configuration.GetSection("ShramSafal:Storage:Provider").Value ?? "Local";

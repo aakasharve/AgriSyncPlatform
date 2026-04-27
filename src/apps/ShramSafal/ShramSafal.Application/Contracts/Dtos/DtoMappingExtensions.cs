@@ -14,7 +14,20 @@ namespace ShramSafal.Application.Contracts.Dtos;
 internal static class DtoMappingExtensions
 {
     public static FarmDto ToDto(this Farm farm) =>
-        new(farm.Id, farm.Name, farm.OwnerUserId, farm.CreatedAtUtc, farm.ModifiedAtUtc);
+        new(
+            farm.Id,
+            farm.Name,
+            farm.OwnerUserId,
+            farm.OwnerAccountId,
+            farm.CanonicalCentreLat,
+            farm.CanonicalCentreLng,
+            farm.CentreSource?.ToString(),
+            farm.WeatherRadiusKm,
+            farm.TotalMappedAreaAcres,
+            farm.TotalGovtAreaAcres,
+            farm.GeoValidationStatus.ToString(),
+            farm.CreatedAtUtc,
+            farm.ModifiedAtUtc);
 
     public static PlotDto ToDto(this Plot plot) =>
         new(plot.Id, plot.FarmId, plot.Name, plot.AreaInAcres, plot.CreatedAtUtc, plot.ModifiedAtUtc);

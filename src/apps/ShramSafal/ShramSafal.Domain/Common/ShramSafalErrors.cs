@@ -52,4 +52,8 @@ public static class ShramSafalErrors
     public static readonly Error JobCardDailyLogMismatch = new("ShramSafal.JobCardDailyLogMismatch", "The daily log does not belong to the same farm and plot as this job card.");
     public static readonly Error JobCardActivityTypeMismatch = new("ShramSafal.JobCardActivityTypeMismatch", "No task in the daily log matches an activity type on this job card.");
     public static readonly Error UseSettleJobCardForLabourPayout = new("ShramSafal.UseSettleJobCardForLabourPayout", "Use the settle-job-card-payout endpoint to record labour payouts. Direct labour_payout cost entries are not allowed.");
+
+    // --- Farm Geo / Weather Anchor ---------------------------------------------------------
+    public static readonly Error FarmCentreMissing = new("ShramSafal.FarmCentreMissing", "Farm has no canonical centre; draw the farm boundary before requesting weather.");
+    public static readonly Error WeatherProviderNotConfigured = new("ShramSafal.WeatherProviderNotConfigured", "Weather provider is not configured on this server.");
 }

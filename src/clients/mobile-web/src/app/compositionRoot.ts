@@ -12,18 +12,21 @@ import { useVoiceRecorder } from '../features/voice/useVoiceRecorder';
 import { useWeatherMonitor } from '../features/weather/useWeatherMonitor';
 import { useLogContext } from './context/LogContext';
 import { BackendAiClient } from '../infrastructure/ai/BackendAiClient';
-import { weatherService } from '../infrastructure/weather/TomorrowIoWeatherService';
+import { BackendFarmGeographyClient } from '../infrastructure/farmGeography';
+import { FarmAnchoredWeatherService } from '../infrastructure/weather/FarmAnchoredWeatherService';
+import { BackendWeatherClient } from '../infrastructure/weather/BackendWeatherClient';
 import { VoicePreprocessor } from '../infrastructure/voice/VoicePreprocessor';
 import type { LastSavedLogSummaryItem } from './uiRuntimeTypes';
 
 export interface AgriLogAppConfig {
     initialCrops: CropProfile[];
+    currentFarmId?: string | null;
 }
 
 const GLOBAL_TOAST_EVENT = 'agrisync:toast';
 type GlobalToastDetail = { message: string; type: 'success' | 'error' };
 
-export const useAgriLogApp = ({ initialCrops }: AgriLogAppConfig) => {
+export const useAgriLogApp = ({ initialCrops, currentFarmId }: AgriLogAppConfig) => {
     // --- 0. UI GLOBAL STATE (Hoisted) ---
     const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
     const [lastSavedLogSummary, setLastSavedLogSummary] = useState<LastSavedLogSummaryItem[]>([]);
@@ -58,6 +61,18 @@ export const useAgriLogApp = ({ initialCrops }: AgriLogAppConfig) => {
     // --- INFRASTRUCTURE ---
     const parser = useMemo(() => new BackendAiClient(), []);
     const voicePreprocessor = useMemo(() => new VoicePreprocessor(), []);
+    const farmGeography = useMemo(() => new BackendFarmGeographyClient(), []);
+    const currentFarmIdRef = useRef<string | null>(currentFarmId ?? null);
+    useEffect(() => {
+        currentFarmIdRef.current = currentFarmId ?? null;
+    }, [currentFarmId]);
+    const weatherProvider = useMemo(
+        () => {
+            const backendClient = new BackendWeatherClient(() => currentFarmIdRef.current);
+            return new FarmAnchoredWeatherService(backendClient, farmGeography, () => currentFarmIdRef.current);
+        },
+        [farmGeography],
+    );
 
     // --- 4. VOICE RECORDER (Producer) ---
     const voice = useVoiceRecorder({
@@ -97,7 +112,7 @@ export const useAgriLogApp = ({ initialCrops }: AgriLogAppConfig) => {
         setMode,
         setMainView: navigation.setMainView,
         setStatus: voice.setStatus,
-        weatherProvider: weatherService
+        weatherProvider
     });
     const commandsRef = useRef(commands);
     commandsRef.current = commands;
@@ -132,8 +147,10 @@ export const useAgriLogApp = ({ initialCrops }: AgriLogAppConfig) => {
         hasActiveLogContext,
         activeCropId: activeCropId ?? null,
         activePlotId: activePlotId ?? null,
+        activeFarmId: currentFarmId ?? null,
         setError: voice.setError,
-        provider: weatherService // Inject infrastructure
+        provider: weatherProvider,
+        farmGeography,
     });
 
     // --- 7. TRUST LAYER ---

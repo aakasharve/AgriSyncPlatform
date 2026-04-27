@@ -176,3 +176,88 @@ export const exitMembership = async (farmId: string): Promise<ExitMembershipResp
     if (!response.ok) throw await parseError(response);
     return (await response.json()) as ExitMembershipResponse;
 };
+
+/* ─────────────────────────────────────────────────────────────── */
+/* Farm details + boundary — used by Identity > Draw farm boundary */
+/* ─────────────────────────────────────────────────────────────── */
+
+export interface FarmDetailsDto {
+    id: string;
+    name: string;
+    ownerUserId: string;
+    ownerAccountId: string;
+    canonicalCentreLat: number | null;
+    canonicalCentreLng: number | null;
+    centreSource: string | null;
+    weatherRadiusKm: number;
+    totalMappedAreaAcres: number | null;
+    totalGovtAreaAcres: number | null;
+    geoValidationStatus: string;
+    createdAtUtc: string;
+    modifiedAtUtc: string;
+}
+
+export const getFarmDetails = async (farmId: string): Promise<FarmDetailsDto> => {
+    const response = await fetch(
+        `${resolveBaseUrl()}/shramsafal/farms/${encodeURIComponent(farmId)}`,
+        { method: 'GET', headers: authHeaders() },
+    );
+    if (!response.ok) throw await parseError(response);
+    return (await response.json()) as FarmDetailsDto;
+};
+
+export interface UpdateFarmBoundaryInput {
+    boundary: { lat: number; lng: number }[];
+    centre: { lat: number; lng: number };
+    areaAcres: number;
+}
+
+const boundaryToFeatureGeoJson = (boundary: { lat: number; lng: number }[]): string => {
+    const coordinates = boundary.map(p => [p.lng, p.lat]);
+    if (coordinates.length > 0) {
+        const [fx, fy] = coordinates[0];
+        const [lx, ly] = coordinates[coordinates.length - 1];
+        if (fx !== lx || fy !== ly) coordinates.push([fx, fy]);
+    }
+    return JSON.stringify({
+        type: 'Feature',
+        properties: {},
+        geometry: { type: 'Polygon', coordinates: [coordinates] },
+    });
+};
+
+/**
+ * Probe the farm's weather endpoint to confirm the boundary→provider link
+ * is healthy. Used by the "Connect Farm to Weather" CTA so the user can
+ * explicitly opt in to live weather and we can surface a friendly error
+ * if Tomorrow.io isn't yet configured (HTTP 400 WeatherProviderNotConfigured)
+ * or the canonical centre is missing (FarmCentreMissing).
+ */
+export const probeFarmWeather = async (farmId: string): Promise<void> => {
+    const response = await fetch(
+        `${resolveBaseUrl()}/shramsafal/farms/${encodeURIComponent(farmId)}/weather/current`,
+        { method: 'GET', headers: authHeaders() },
+    );
+    if (!response.ok) throw await parseError(response);
+};
+
+export const updateFarmBoundary = async (
+    farmId: string,
+    input: UpdateFarmBoundaryInput,
+): Promise<FarmDetailsDto> => {
+    const response = await fetch(
+        `${resolveBaseUrl()}/shramsafal/farms/${encodeURIComponent(farmId)}/boundary`,
+        {
+            method: 'PUT',
+            headers: authHeaders(),
+            body: JSON.stringify({
+                polygonGeoJson: boundaryToFeatureGeoJson(input.boundary),
+                centreLat: input.centre.lat,
+                centreLng: input.centre.lng,
+                calculatedAreaAcres: input.areaAcres,
+            }),
+        },
+    );
+    if (!response.ok) throw await parseError(response);
+    return (await response.json()) as FarmDetailsDto;
+};

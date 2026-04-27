@@ -20,6 +20,13 @@ public sealed class Farm : Entity<FarmId>
     public UserId OwnerUserId { get; private set; }
     public DateTime CreatedAtUtc { get; private set; }
     public DateTime ModifiedAtUtc { get; private set; }
+    public double? CanonicalCentreLat { get; private set; }
+    public double? CanonicalCentreLng { get; private set; }
+    public FarmCentreSource? CentreSource { get; private set; }
+    public double WeatherRadiusKm { get; private set; } = 3.0;
+    public decimal? TotalMappedAreaAcres { get; private set; }
+    public decimal? TotalGovtAreaAcres { get; private set; }
+    public GeoValidationStatus GeoValidationStatus { get; private set; } = GeoValidationStatus.Unchecked;
 
     /// <summary>
     /// Reference to the commercial tenant that owns this farm.
@@ -79,6 +86,45 @@ public sealed class Farm : Entity<FarmId>
         }
 
         FarmCode = farmCode.Trim().ToUpperInvariant();
+        ModifiedAtUtc = utcNow;
+    }
+
+    public void SetCanonicalCentre(
+        double latitude,
+        double longitude,
+        FarmCentreSource source,
+        DateTime utcNow)
+    {
+        if (latitude is < -90 or > 90 || double.IsNaN(latitude) || double.IsInfinity(latitude))
+        {
+            throw new ArgumentOutOfRangeException(nameof(latitude), "Latitude must be between -90 and 90.");
+        }
+
+        if (longitude is < -180 or > 180 || double.IsNaN(longitude) || double.IsInfinity(longitude))
+        {
+            throw new ArgumentOutOfRangeException(nameof(longitude), "Longitude must be between -180 and 180.");
+        }
+
+        CanonicalCentreLat = latitude;
+        CanonicalCentreLng = longitude;
+        CentreSource = source;
+        ModifiedAtUtc = utcNow;
+    }
+
+    public void SetMappedArea(decimal totalMappedAreaAcres, DateTime utcNow)
+    {
+        if (totalMappedAreaAcres <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(totalMappedAreaAcres), "Mapped area must be greater than zero.");
+        }
+
+        TotalMappedAreaAcres = totalMappedAreaAcres;
+        ModifiedAtUtc = utcNow;
+    }
+
+    public void MarkGeoValidation(GeoValidationStatus status, DateTime utcNow)
+    {
+        GeoValidationStatus = status;
         ModifiedAtUtc = utcNow;
     }
 }

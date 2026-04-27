@@ -17,6 +17,10 @@ namespace ShramSafal.Application.Ports;
 public interface IShramSafalRepository
 {
     Task AddFarmAsync(Farm farm, CancellationToken ct = default);
+    Task AddFarmBoundaryAsync(FarmBoundary boundary, CancellationToken ct = default)
+        => throw new NotImplementedException("AddFarmBoundaryAsync is not implemented by this repository.");
+    Task<FarmBoundary?> GetActiveFarmBoundaryAsync(Guid farmId, CancellationToken ct = default)
+        => Task.FromResult<FarmBoundary?>(null);
     Task<Farm?> GetFarmByIdAsync(Guid farmId, CancellationToken ct = default);
     Task AddFarmMembershipAsync(FarmMembership membership, CancellationToken ct = default);
     Task<FarmMembership?> GetFarmMembershipAsync(Guid farmId, Guid userId, CancellationToken ct = default);

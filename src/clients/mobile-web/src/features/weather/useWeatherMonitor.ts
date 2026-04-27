@@ -2,9 +2,11 @@ import React, { useState, useEffect } from 'react';
 import { DetailedWeather, WeatherEvent, WeatherReaction, ScheduleShiftEvent, CropProfile, FarmerProfile, LogScope, PlotGeo } from '../../types';
 import { getDateKey } from '../../core/domain/services/DateKeyService';
 import { WeatherPort } from '../../application/ports/WeatherPort';
+import type { FarmGeographyPort } from '../../application/ports/FarmGeographyPort';
 import { getWeatherForLocation } from '../../application/usecases/AttachWeatherSnapshot';
 import { idGenerator } from '../../core/domain/services/IdGenerator';
 import { systemClock } from '../../core/domain/services/Clock';
+import { makeFarmId } from '../../domain/farmGeography/types';
 
 interface UseWeatherMonitorProps {
     farmerProfile: FarmerProfile;
@@ -14,12 +16,14 @@ interface UseWeatherMonitorProps {
     hasActiveLogContext: boolean;
     activeCropId: string | null;
     activePlotId: string | null;
+    activeFarmId?: string | null;
     setError: (msg: string | null) => void;
     provider: WeatherPort;
+    farmGeography?: FarmGeographyPort;
 }
 
 export const useWeatherMonitor = ({
-    farmerProfile, crops, setCrops, logScope, hasActiveLogContext, activeCropId, activePlotId, setError, provider
+    farmerProfile, crops, setCrops, logScope, hasActiveLogContext, activeCropId, activePlotId, activeFarmId, setError, provider, farmGeography
 }: UseWeatherMonitorProps) => {
 
     const [weatherData, setWeatherData] = useState<DetailedWeather | undefined>(undefined);
@@ -30,27 +34,31 @@ export const useWeatherMonitor = ({
     // Init Weather (Header Widget) - Pivot to Plot if selected
     useEffect(() => {
         const fetchW = async () => {
-            // DOMAIN RULE: Weather Truth Hierarchy
-            // 1. Specific Plot (Highest Precision)
-            // 2. Farm Centroid (General Context)
-            // 3. NEVER Device Location (To avoid "Town vs Farm" flip-flop)
-
-            let targetLat = farmerProfile.location?.lat;
-            let targetLon = farmerProfile.location?.lon;
+            // Weather is anchored to the canonical farm centre. Plot/device
+            // coordinates are fallback context only, not weather truth.
+            let targetLat: number | undefined;
+            let targetLon: number | undefined;
             let sourceLabel = 'Farm Center';
 
-            // 1. PREFER PLOT LOCATION
-            if (hasActiveLogContext && activePlotId) {
-                const crop = crops.find(c => c.id === activeCropId);
-                const plot = crop?.plots.find(p => p.id === activePlotId);
-                if (plot?.geo?.lat) {
-                    targetLat = plot.geo.lat;
-                    targetLon = plot.geo.lon;
-                    sourceLabel = `Plot: ${plot.name}`;
+            if (farmGeography && activeFarmId) {
+                try {
+                    const centre = await farmGeography.getFarmCentre(makeFarmId(activeFarmId));
+                    if (centre) {
+                        targetLat = centre.lat;
+                        targetLon = centre.lng;
+                    }
+                } catch {
+                    /* fallback below */
                 }
             }
 
-            if (targetLat && targetLon) {
+            if (targetLat === undefined || targetLon === undefined) {
+                targetLat = farmerProfile.location?.lat;
+                targetLon = farmerProfile.location?.lon;
+                sourceLabel = 'Farm Location';
+            }
+
+            if (typeof targetLat === 'number' && typeof targetLon === 'number') {
                 try {
                     const geo: PlotGeo = { lat: targetLat, lon: targetLon, source: 'approx' };
 
@@ -98,18 +106,19 @@ export const useWeatherMonitor = ({
                     setWeatherData(displayData);
 
                     // RUN CHANGE DETECTION
-                    if (activePlotId) {
-                        const prev = lastWeatherStamps[activePlotId];
+                    const weatherContextId = activePlotId || activeFarmId || 'farm_center';
+                    if (weatherContextId) {
+                        const prev = lastWeatherStamps[weatherContextId];
                         // Inject Context (Plot ID)
                         const contextualStamp = {
                             ...stamp,
-                            plotId: activePlotId || 'farm_center'
+                            plotId: weatherContextId
                         };
 
                         const event = provider.detectWeatherChanges?.(contextualStamp, prev);
 
                         // Update cache
-                        setLastWeatherStamps(prev => ({ ...prev, [activePlotId]: contextualStamp }));
+                        setLastWeatherStamps(prev => ({ ...prev, [weatherContextId]: contextualStamp }));
 
                         if (event) {
                             // Only trigger if we haven't already reacted to this event ID (mock check)
@@ -125,7 +134,7 @@ export const useWeatherMonitor = ({
             }
         };
         fetchW();
-    }, [farmerProfile.location, hasActiveLogContext, activePlotId, activeCropId, crops, provider]); // Expanded deps for safety
+    }, [farmerProfile.location, hasActiveLogContext, activePlotId, activeCropId, activeFarmId, crops, provider, farmGeography]); // Expanded deps for safety
 
     const handleWeatherReaction = (reaction: WeatherReaction) => {
         setWeatherReactions(prev => [reaction, ...prev]);
