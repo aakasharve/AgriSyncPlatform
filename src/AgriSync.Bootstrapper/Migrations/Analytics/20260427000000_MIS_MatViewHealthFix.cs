@@ -72,7 +72,7 @@ WITH day_log AS (
             AND v.status IN ('confirmed', 'verified')
         ) AS verified_within_48h
     FROM ssf.daily_logs l
-    LEFT JOIN ssf.verifications v ON v.log_id = l."Id"
+    LEFT JOIN ssf.verifications v ON v.log_id = l.""Id""
     WHERE l.created_at_utc >= NOW() - INTERVAL '53 weeks'
     GROUP BY l.farm_id,
              date_trunc('week', l.created_at_utc),
@@ -327,7 +327,7 @@ WITH day_log AS (
                 AND v.verified_at_utc <= l.created_at_utc + INTERVAL '48 hours'
                 AND v.status IN ('confirmed','verified')) AS verified_within_48h
     FROM ssf.daily_logs l
-    LEFT JOIN ssf.verifications v ON v.log_id = l."Id"
+    LEFT JOIN ssf.verifications v ON v.log_id = l.""Id""
     WHERE l.created_at_utc >= NOW() - INTERVAL '8 days'
     GROUP BY l.farm_id, DATE_TRUNC('day', l.created_at_utc)
 ),
