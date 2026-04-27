@@ -35,7 +35,11 @@ jobs:
 
   admin-web-lint:
     runs-on: ubuntu-latest
-    if: ${{ hashFiles('src/clients/admin-web/package.json') != '' }}
+    # No if-guard: hashFiles() is a step-time function (the runner's
+    # workspace doesn't exist at job-evaluation time, which causes the
+    # whole workflow to fail YAML validation with "Unrecognized function:
+    # hashFiles"). admin-web's package.json has shipped; the conditional
+    # was defensive scaffolding from before that and broke the workflow.
     defaults:
       run:
         working-directory: src/clients/admin-web
