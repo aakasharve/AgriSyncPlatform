@@ -31,6 +31,7 @@ jobs:
       - run: npm ci
       # Sub-plan 04 will tighten max-warnings; today we only fail on errors.
       - run: npx eslint --max-warnings 9999 "src/**/*.{ts,tsx}"
+      - run: npm run check:file-sizes
 
   admin-web-lint:
     runs-on: ubuntu-latest
