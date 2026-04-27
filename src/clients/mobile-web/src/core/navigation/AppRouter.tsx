@@ -33,6 +33,7 @@ import {
     useAppVoiceState,
     useAppWeatherState
 } from '../../app/context/AppFeatureContexts';
+import { IS_E2E_HARNESS_ENABLED } from '../../app/featureFlags';
 
 const ProfilePage = React.lazy(() => import('../../pages/ProfilePage'));
 const SettingsPage = React.lazy(() => import('../../pages/SettingsPage'));
@@ -41,7 +42,9 @@ const SchedulerPage = React.lazy(() => import('../../pages/SchedulerPage'));
 const ProcurementPage = React.lazy(() => import('../../pages/ProcurementPage'));
 const HarvestIncomePage = React.lazy(() => import('../../pages/HarvestIncomePage'));
 const ReflectPage = React.lazy(() => import('../../pages/ReflectPage'));
-const TestE2EPage = React.lazy(() => import('../../pages/TestE2EPage'));
+const TestE2EPage = IS_E2E_HARNESS_ENABLED
+    ? React.lazy(() => import('../../pages/TestE2EPage'))
+    : null;
 const ComparePage = React.lazy(() => import('../../pages/ComparePage').then(module => ({ default: module.ComparePage })));
 const FinanceManagerHome = React.lazy(() => import('../../pages/FinanceManagerHome'));
 const LedgerPage = React.lazy(() => import('../../pages/LedgerPage'));
@@ -502,7 +505,7 @@ const AppRouter: React.FC = () => {
                 <ProcurementPage crops={crops} />
             )}
 
-            {currentRoute === 'test-e2e' && (
+            {currentRoute === 'test-e2e' && TestE2EPage && (
                 <div className="animate-in fade-in slide-in-from-right-4 duration-300">
                     <TestE2EPage />
                 </div>
