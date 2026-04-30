@@ -1,0 +1,18 @@
+{
+  "name": "@agrisync/sync-contract",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Canonical sync mutation contract (single source of truth for client + server)",
+  "type": "module",
+  "scripts": {
+    "validate": "node scripts/validate.mjs",
+    "generate": "node scripts/generate.mjs",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "ajv": "^8.17.1",
+    "ajv-formats": "^3.0.1",
+    "vitest": "^1.6.0",
+    "zod": "^3.23.8"
+  }
+}
