@@ -23,8 +23,10 @@ public sealed class IssueFarmInviteHandlerNotFoundTests
         var invRepo = new StubFarmInvitationRepository();
         var clock = new FixedClock(new DateTime(2026, 4, 30, 12, 0, 0, DateTimeKind.Utc));
 
+        // Sub-plan 03 Task 8: handler no longer takes IAuthorizationEnforcer
+        // — authorization moved to IssueFarmInviteAuthorizer (pipeline stage).
         var handler = new IssueFarmInviteHandler(
-            invRepo, farmRepo, new AllowAllAuthorizationEnforcer(), clock, analytics);
+            invRepo, farmRepo, clock, analytics);
 
         var unknownFarmId = new FarmId(Guid.Parse("33333333-3333-3333-3333-333333333333"));
         var caller = new UserId(Guid.Parse("11111111-1111-1111-1111-111111111111"));

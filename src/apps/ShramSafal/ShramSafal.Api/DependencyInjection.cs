@@ -150,6 +150,28 @@ public static class DependencyInjection
         services.AddScoped<ClaimJoinHandler>();
         services.AddScoped<GetMyFarmsHandler>();
 
+        // Sub-plan 03 Task 8 — IssueFarmInvite is the POC handler wired
+        // through the explicit HandlerPipeline. Validator + Authorizer +
+        // LoggingBehavior run as decorators around the raw handler. The
+        // endpoint resolves IHandler<IssueFarmInviteCommand, IssueFarmInviteResult>
+        // and gets all three layers without HTTP-level glue.
+        //
+        // Rollout to remaining handlers is filed under T-IGH-03-PIPELINE-ROLLOUT.
+        services.AddScoped<AgriSync.BuildingBlocks.Application.PipelineBehaviors.IValidator<IssueFarmInviteCommand>,
+            IssueFarmInviteValidator>();
+        services.AddScoped<AgriSync.BuildingBlocks.Application.PipelineBehaviors.IAuthorizationCheck<IssueFarmInviteCommand>,
+            IssueFarmInviteAuthorizer>();
+        services.AddScoped<AgriSync.BuildingBlocks.Application.IHandler<IssueFarmInviteCommand, IssueFarmInviteResult>>(sp =>
+            AgriSync.BuildingBlocks.Application.HandlerPipeline.Build(
+                sp.GetRequiredService<IssueFarmInviteHandler>(),
+                new AgriSync.BuildingBlocks.Application.PipelineBehaviors.LoggingBehavior<IssueFarmInviteCommand, IssueFarmInviteResult>(
+                    sp.GetRequiredService<Microsoft.Extensions.Logging.ILogger<
+                        AgriSync.BuildingBlocks.Application.PipelineBehaviors.LoggingBehavior<IssueFarmInviteCommand, IssueFarmInviteResult>>>()),
+                new AgriSync.BuildingBlocks.Application.PipelineBehaviors.ValidationBehavior<IssueFarmInviteCommand, IssueFarmInviteResult>(
+                    sp.GetServices<AgriSync.BuildingBlocks.Application.PipelineBehaviors.IValidator<IssueFarmInviteCommand>>()),
+                new AgriSync.BuildingBlocks.Application.PipelineBehaviors.AuthorizationBehavior<IssueFarmInviteCommand, IssueFarmInviteResult>(
+                    sp.GetServices<AgriSync.BuildingBlocks.Application.PipelineBehaviors.IAuthorizationCheck<IssueFarmInviteCommand>>())));
+
         // Phase 6 — self-exit
         services.AddScoped<ExitMembershipHandler>();
 

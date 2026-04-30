@@ -2,7 +2,7 @@ using System.Security.Cryptography;
 using System.Text;
 using AgriSync.BuildingBlocks.Abstractions;
 using AgriSync.BuildingBlocks.Analytics;
-using AgriSync.BuildingBlocks.Auth;
+using AgriSync.BuildingBlocks.Application;
 using AgriSync.BuildingBlocks.Results;
 using AgriSync.SharedKernel.Contracts.Ids;
 using AgriSync.SharedKernel.Contracts.Roles;
@@ -22,31 +22,39 @@ namespace ShramSafal.Application.UseCases.Memberships.IssueFarmInvite;
 /// already shared on WhatsApp. To invalidate, the owner must explicitly
 /// call rotate.
 ///
-/// Authorization: the caller must be an owner of the farm
-/// (<see cref="IAuthorizationEnforcer.EnsureIsOwner"/>).
+/// <para>
+/// Sub-plan 03 Task 8 — this handler is the POC for the
+/// <c>HandlerPipeline</c>. It implements
+/// <see cref="IHandler{TCommand, TResult}"/> so it can be wrapped
+/// with logging + validation + authorization behaviors at the
+/// composition root. Validation has moved to
+/// <see cref="IssueFarmInviteValidator"/>; authorization has moved
+/// to <see cref="IssueFarmInviteAuthorizer"/>. Direct construction
+/// (legacy tests, ad-hoc consumers) still works — those code paths
+/// just bypass the pipeline and execute the handler body verbatim.
+/// </para>
 /// </summary>
 public sealed class IssueFarmInviteHandler(
     IFarmInvitationRepository invitationRepository,
     IShramSafalRepository farmRepository,
-    IAuthorizationEnforcer authz,
     IClock clock,
     IAnalyticsWriter analytics)
+    : IHandler<IssueFarmInviteCommand, IssueFarmInviteResult>
 {
     public async Task<Result<IssueFarmInviteResult>> HandleAsync(
         IssueFarmInviteCommand command,
         CancellationToken ct = default)
     {
-        if (command.FarmId.IsEmpty || command.CallerUserId.IsEmpty)
-        {
-            return Result.Failure<IssueFarmInviteResult>(ShramSafalErrors.InvalidCommand);
-        }
-
-        await authz.EnsureIsOwner(command.CallerUserId, command.FarmId);
+        // Validation lives in IssueFarmInviteValidator; authorization
+        // lives in IssueFarmInviteAuthorizer. When this handler is
+        // resolved via the pipeline (see HandlerRegistration), both
+        // layers run before we reach this body. When resolved directly
+        // (legacy code paths / unit tests), callers are responsible for
+        // pre-checking the same invariants.
 
         var farm = await farmRepository.GetFarmByIdAsync(command.FarmId.Value, ct);
         if (farm is null)
         {
-            // Sub-plan 03 Task 3: business outcome -> Result.Failure, not throw.
             return Result.Failure<IssueFarmInviteResult>(ShramSafalErrors.FarmNotFound);
         }
 
