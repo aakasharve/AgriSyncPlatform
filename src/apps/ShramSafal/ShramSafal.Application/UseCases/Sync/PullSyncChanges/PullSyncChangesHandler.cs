@@ -114,25 +114,18 @@ public sealed class PullSyncChangesHandler(
         var degraded = new List<DegradedComponent>();
 
         // AttentionBoard is computed as a snapshot on every pull.
-        // If computation fails, the pull still succeeds with a degraded
-        // signal — frontend renders the AttentionBoard tile in a degraded
-        // state instead of getting null with no explanation.
+        // If the inner handler returns Result.Failure (e.g. "no attention
+        // items"), pass null verbatim — that's a normal "nothing to show"
+        // outcome, not a degraded one. We only DEGRADE on a thrown
+        // exception (infrastructure failure: query timeout, transient DB
+        // error, NRE in computation); a Result.Failure is a typed
+        // outcome and stays silent.
         AttentionBoardDto? attentionBoard = null;
         try
         {
             var attentionResult = await getAttentionBoardHandler.HandleAsync(
                 new GetAttentionBoardQuery(query.UserId, serverNowUtc), ct);
             attentionBoard = attentionResult.IsSuccess ? attentionResult.Value : null;
-            if (!attentionResult.IsSuccess && attentionResult.Error is not null)
-            {
-                logger.LogWarning(
-                    "PullSync: AttentionBoard returned failure {ErrorCode}; degrading.",
-                    attentionResult.Error.Code);
-                degraded.Add(new DegradedComponent(
-                    ComponentAttentionBoard,
-                    attentionResult.Error.Code,
-                    attentionResult.Error.Description));
-            }
         }
         catch (Exception ex)
         {
