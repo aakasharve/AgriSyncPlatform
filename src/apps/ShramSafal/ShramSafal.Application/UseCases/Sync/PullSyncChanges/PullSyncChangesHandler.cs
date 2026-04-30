@@ -1,6 +1,7 @@
 using AgriSync.BuildingBlocks.Abstractions;
 using AgriSync.BuildingBlocks.Results;
 using AgriSync.SharedKernel.Contracts.Ids;
+using Microsoft.Extensions.Logging;
 using ShramSafal.Application.Contracts.Dtos;
 using ShramSafal.Application.Ports;
 using ShramSafal.Application.UseCases.Compliance.EvaluateCompliance;
@@ -20,8 +21,15 @@ public sealed class PullSyncChangesHandler(
     ITestRecommendationRepository testRecommendationRepository,
     IComplianceSignalRepository complianceSignalRepository,
     GetComplianceSignalsForFarmHandler getComplianceSignalsHandler,
-    EvaluateComplianceHandler evaluateComplianceHandler)
+    EvaluateComplianceHandler evaluateComplianceHandler,
+    ILogger<PullSyncChangesHandler> logger)
 {
+    // Sub-plan 03 Task 10 — stable component identifiers used in
+    // DegradedComponent.ComponentName. Frontend keys on these.
+    private const string ComponentAttentionBoard = "AttentionBoard";
+    private const string ComponentJobCards = "JobCards";
+    private const string ComponentComplianceFreshness = "ComplianceFreshness";
+    private const string ComponentComplianceSignals = "ComplianceSignals";
     public async Task<Result<SyncPullResponseDto>> HandleAsync(PullSyncChangesQuery query, CancellationToken ct = default)
     {
         var serverNowUtc = clock.UtcNow;
@@ -100,18 +108,41 @@ public sealed class PullSyncChangesHandler(
             plannedActivities,
             auditEvents);
 
+        // Sub-plan 03 Task 10 — collect partial-failure components instead
+        // of swallowing. When non-empty, the cursor will be FROZEN at the
+        // bottom so the next pull retries the same window.
+        var degraded = new List<DegradedComponent>();
+
         // AttentionBoard is computed as a snapshot on every pull.
-        // If computation fails, the pull still succeeds — we pass null.
+        // If computation fails, the pull still succeeds with a degraded
+        // signal — frontend renders the AttentionBoard tile in a degraded
+        // state instead of getting null with no explanation.
         AttentionBoardDto? attentionBoard = null;
         try
         {
             var attentionResult = await getAttentionBoardHandler.HandleAsync(
                 new GetAttentionBoardQuery(query.UserId, serverNowUtc), ct);
             attentionBoard = attentionResult.IsSuccess ? attentionResult.Value : null;
+            if (!attentionResult.IsSuccess && attentionResult.Error is not null)
+            {
+                logger.LogWarning(
+                    "PullSync: AttentionBoard returned failure {ErrorCode}; degrading.",
+                    attentionResult.Error.Code);
+                degraded.Add(new DegradedComponent(
+                    ComponentAttentionBoard,
+                    attentionResult.Error.Code,
+                    attentionResult.Error.Description));
+            }
         }
-        catch
+        catch (Exception ex)
         {
-            // Swallow: attention board failures must never fail the pull (CEI §4.2.2)
+            logger.LogError(ex,
+                "PullSync: AttentionBoard threw {ExceptionType}; degrading.",
+                ex.GetType().Name);
+            degraded.Add(new DegradedComponent(
+                ComponentAttentionBoard,
+                "AttentionBoard.Unavailable",
+                ex.Message));
         }
 
         // CEI Phase 2 §4.5 — test instances modified since the cursor, scoped
@@ -165,7 +196,10 @@ public sealed class PullSyncChangesHandler(
             }
         }
 
-        // CEI Phase 4 §4.8 — job cards modified since cursor, scoped to caller's farms.
+        // CEI Phase 4 §4.8 — job cards modified since cursor, scoped to
+        // caller's farms. On failure: keep the empty list, record a
+        // DegradedComponent, and let the cursor freeze logic at the
+        // bottom keep us on this window.
         List<JobCardDto> jobCardDtos = [];
         try
         {
@@ -177,7 +211,16 @@ public sealed class PullSyncChangesHandler(
                 if (maxJobCard > nextCursorUtc) nextCursorUtc = maxJobCard;
             }
         }
-        catch { /* swallow: job card failures must not fail the pull */ }
+        catch (Exception ex)
+        {
+            logger.LogError(ex,
+                "PullSync: JobCards fetch threw {ExceptionType}; degrading.",
+                ex.GetType().Name);
+            degraded.Add(new DegradedComponent(
+                ComponentJobCards,
+                "JobCards.Unavailable",
+                ex.Message));
+        }
 
         // CEI Phase 3 §4.6 — compliance signals since cursor (per farm), with
         // on-pull freshness trigger: if latest evaluation is >6h old, fire async eval.
@@ -186,26 +229,50 @@ public sealed class PullSyncChangesHandler(
         {
             var typedFarmId = new FarmId(fid);
 
-            // Freshness check — fire-and-forget if stale (>6 hours)
+            // Freshness check — fire-and-forget if stale (>6 hours).
+            // Sub-plan 03 Task 10: capture exceptions instead of swallowing.
+            // The freshness READ (line A) and the BACKGROUND eval (line B)
+            // are separate concerns and degrade independently.
             try
             {
                 var latestEval = await complianceSignalRepository.GetLatestEvaluationTimeAsync(typedFarmId, ct);
                 if (latestEval is null || (serverNowUtc - latestEval.Value).TotalHours > 6)
                 {
-                    // Fire-and-forget: do not await, do not fail the pull if this throws
+                    // Fire-and-forget: do not await; the inner try/catch
+                    // logs into our captured logger so the failure is
+                    // observable even though the outer pull doesn't
+                    // wait for it.
+                    var capturedLogger = logger;
+                    var capturedFarmId = typedFarmId;
                     _ = Task.Run(async () =>
                     {
                         try
                         {
                             await evaluateComplianceHandler.HandleAsync(
-                                new EvaluateComplianceCommand(typedFarmId),
+                                new EvaluateComplianceCommand(capturedFarmId),
                                 CancellationToken.None);
                         }
-                        catch { /* swallow: freshness eval must never fail the pull */ }
+                        catch (Exception ex)
+                        {
+                            capturedLogger.LogWarning(ex,
+                                "PullSync: background ComplianceEvaluation for farm {FarmId} threw {ExceptionType}.",
+                                capturedFarmId, ex.GetType().Name);
+                        }
                     }, CancellationToken.None);
                 }
             }
-            catch { /* swallow */ }
+            catch (Exception ex)
+            {
+                // Freshness read failed — surface as degraded so the
+                // frontend knows the freshness lamp may be stale.
+                logger.LogWarning(ex,
+                    "PullSync: ComplianceFreshness read for farm {FarmId} threw {ExceptionType}; degrading.",
+                    typedFarmId, ex.GetType().Name);
+                degraded.Add(new DegradedComponent(
+                    ComponentComplianceFreshness,
+                    "ComplianceFreshness.Unavailable",
+                    ex.Message));
+            }
 
             // Pull signals since cursor
             try
@@ -214,7 +281,16 @@ public sealed class PullSyncChangesHandler(
                 complianceSignalDtos.AddRange(
                     signals.Select(GetComplianceSignalsForFarmHandler.MapToDto));
             }
-            catch { /* swallow: compliance failures must never fail the pull */ }
+            catch (Exception ex)
+            {
+                logger.LogError(ex,
+                    "PullSync: ComplianceSignals fetch for farm {FarmId} threw {ExceptionType}; degrading.",
+                    typedFarmId, ex.GetType().Name);
+                degraded.Add(new DegradedComponent(
+                    ComponentComplianceSignals,
+                    "ComplianceSignals.Unavailable",
+                    ex.Message));
+            }
         }
 
         // Advance cursor past compliance signals
@@ -222,6 +298,21 @@ public sealed class PullSyncChangesHandler(
         {
             var maxSignal = complianceSignalDtos.Max(s => s.LastSeenAtUtc);
             if (maxSignal > nextCursorUtc) nextCursorUtc = maxSignal;
+        }
+
+        // Sub-plan 03 Task 10 — cursor freeze. If ANY component degraded,
+        // do NOT advance the cursor past where the caller asked to start.
+        // This guarantees the next pull retries the same window so missed
+        // rows from the failed component(s) reach the client eventually.
+        // The cost is a small amount of redundant work per partial-failure
+        // pull; the benefit is no silent data loss when a sub-system
+        // hiccups.
+        if (degraded.Count > 0)
+        {
+            logger.LogWarning(
+                "PullSync: {Count} component(s) degraded; freezing cursor at {SinceUtc} for retry.",
+                degraded.Count, sinceUtc);
+            nextCursorUtc = sinceUtc;
         }
 
         var response = new SyncPullResponseDto(
@@ -248,7 +339,10 @@ public sealed class PullSyncChangesHandler(
             testInstanceDtos,
             testRecommendationDtos,
             complianceSignalDtos,
-            jobCardDtos);
+            jobCardDtos,
+            // Sub-plan 03 Task 10: empty list when healthy; non-empty
+            // signals partial data + frozen cursor.
+            degraded);
 
         return Result.Success(response);
     }

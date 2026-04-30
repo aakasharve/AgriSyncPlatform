@@ -334,9 +334,21 @@ public sealed class ParseVoiceInputHandler(
                     return parsed;
                 }
             }
-            catch (JsonException)
+            catch (JsonException ex)
             {
-                // Ignore malformed context JSON and fallback to minimal context.
+                // Sub-plan 03 Task 10: not a silent swallow — emit an
+                // OTel/Activity event so the malformed-context path is
+                // visible in traces. Static method has no access to
+                // ILogger; Activity.Current is the standards-compliant
+                // observability seam here.
+                System.Diagnostics.Activity.Current?.AddEvent(new System.Diagnostics.ActivityEvent(
+                    "ParseVoice.MalformedContext",
+                    tags: new System.Diagnostics.ActivityTagsCollection
+                    {
+                        ["exception.type"] = ex.GetType().Name,
+                        ["exception.message"] = ex.Message,
+                    }));
+                // Fall through to the minimal-context fallback below.
             }
         }
 

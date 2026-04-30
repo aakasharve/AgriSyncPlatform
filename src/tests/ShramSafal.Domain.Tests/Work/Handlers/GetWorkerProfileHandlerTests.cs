@@ -27,7 +27,7 @@ public sealed class GetWorkerProfileHandlerTests
 
         var repo = new FakeProfileRepo(
             metrics, workerFarmIds: [FarmGuid], callerFarmIds: [FarmGuid]);
-        var handler = new GetWorkerProfileHandler(repo, new FixedClock(Now));
+        var handler = new GetWorkerProfileHandler(repo, new FixedClock(Now), Microsoft.Extensions.Logging.Abstractions.NullLogger<GetWorkerProfileHandler>.Instance);
 
         var result = await handler.HandleAsync(new GetWorkerProfileQuery(WorkerUserId, WorkerUserId));
 
@@ -44,7 +44,7 @@ public sealed class GetWorkerProfileHandlerTests
         var repo = new FakeProfileRepo(
             metrics, workerFarmIds: [FarmGuid], callerFarmIds: []); // caller not on same farm
 
-        var handler = new GetWorkerProfileHandler(repo, new FixedClock(Now));
+        var handler = new GetWorkerProfileHandler(repo, new FixedClock(Now), Microsoft.Extensions.Logging.Abstractions.NullLogger<GetWorkerProfileHandler>.Instance);
 
         var result = await handler.HandleAsync(new GetWorkerProfileQuery(WorkerUserId, OtherUserId));
 
@@ -58,7 +58,7 @@ public sealed class GetWorkerProfileHandlerTests
         var metrics = new WorkerMetricsDto(5, 3, 1, 4, 5, 2, 1, 500m, "INR");
         var repo = new FakeProfileRepo(
             metrics, workerFarmIds: [FarmGuid], callerFarmIds: [FarmGuid]);
-        var handler = new GetWorkerProfileHandler(repo, new FixedClock(Now));
+        var handler = new GetWorkerProfileHandler(repo, new FixedClock(Now), Microsoft.Extensions.Logging.Abstractions.NullLogger<GetWorkerProfileHandler>.Instance);
 
         // Worker queries their own profile — no farm cross-check needed.
         var result = await handler.HandleAsync(new GetWorkerProfileQuery(WorkerUserId, WorkerUserId));

@@ -1,5 +1,6 @@
 using AgriSync.BuildingBlocks.Abstractions;
 using AgriSync.BuildingBlocks.Results;
+using Microsoft.Extensions.Logging;
 using ShramSafal.Application.Contracts.Dtos;
 using ShramSafal.Application.Ports;
 using ShramSafal.Domain.Common;
@@ -14,7 +15,8 @@ namespace ShramSafal.Application.UseCases.Work.GetWorkerProfile;
 /// </summary>
 public sealed class GetWorkerProfileHandler(
     IShramSafalRepository repository,
-    IClock clock)
+    IClock clock,
+    ILogger<GetWorkerProfileHandler> logger)
 {
     public async Task<Result<WorkerProfileDto>> HandleAsync(
         GetWorkerProfileQuery query,
@@ -52,9 +54,15 @@ public sealed class GetWorkerProfileHandler(
             displayName = operators.FirstOrDefault(o => o.UserId == query.WorkerUserId.Value)?.DisplayName
                          ?? string.Empty;
         }
-        catch
+        catch (Exception ex)
         {
-            // Display name is non-critical; proceed with empty string if unavailable.
+            // Sub-plan 03 Task 10: display-name lookup is non-critical
+            // (the rest of WorkerProfile is fully populated above), but
+            // the failure must be observable. Log a Warning + empty
+            // string fallback rather than a silent swallow.
+            logger.LogWarning(ex,
+                "GetWorkerProfile: operator-directory lookup for {WorkerUserId} threw {ExceptionType}; falling back to empty display name.",
+                query.WorkerUserId, ex.GetType().Name);
         }
 
         return Result.Success(new WorkerProfileDto(
