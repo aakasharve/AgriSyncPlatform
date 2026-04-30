@@ -19,15 +19,6 @@ public sealed record SyncOperatorDto(
     string DisplayName,
     string Role);
 
-public static class SyncMutationTypes
-{
-    public const string AllocateGlobalExpense = "allocate_global_expense";
-    public const string VerifyLogV2 = "verify_log_v2";
-    // CEI Phase 3 §4.6 — compliance mutations
-    public const string ComplianceAcknowledge = "compliance.acknowledge";
-    public const string ComplianceResolve = "compliance.resolve";
-}
-
 public sealed record SyncPullResponseDto(
     DateTime ServerTimeUtc,
     DateTime NextCursorUtc,

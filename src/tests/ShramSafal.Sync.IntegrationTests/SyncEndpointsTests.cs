@@ -1201,7 +1201,7 @@ public sealed class SyncEndpointsTests
                     new
                     {
                         clientRequestId = "req-ti-collect-1",
-                        mutationType = "testInstance.collected",
+                        mutationType = "testinstance.collected",
                         payload = new
                         {
                             testInstanceId = instance.Id
@@ -1250,7 +1250,7 @@ public sealed class SyncEndpointsTests
                            new
                            {
                                clientRequestId = "req-ti-report-collect",
-                               mutationType = "testInstance.collected",
+                               mutationType = "testinstance.collected",
                                payload = new
                                {
                                    testInstanceId = instance.Id
@@ -1279,7 +1279,7 @@ public sealed class SyncEndpointsTests
                     new
                     {
                         clientRequestId = "req-ti-report-result",
-                        mutationType = "testInstance.reported",
+                        mutationType = "testinstance.reported",
                         payload = new
                         {
                             testInstanceId = instance.Id,
@@ -1341,7 +1341,7 @@ public sealed class SyncEndpointsTests
                     new
                     {
                         clientRequestId = "req-ti-forbidden-1",
-                        mutationType = "testInstance.collected",
+                        mutationType = "testinstance.collected",
                         payload = new
                         {
                             testInstanceId = instance.Id
