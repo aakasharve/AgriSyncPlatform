@@ -27,8 +27,10 @@ public sealed class IssueFarmInviteHandlerAnalyticsTests
         farmRepo.SeedFarm(farm);
 
         var clock = new FixedClock(now);
+        // Sub-plan 03 Task 8: handler no longer takes IAuthorizationEnforcer
+        // — authorization moved to IssueFarmInviteAuthorizer (pipeline stage).
         var handler = new IssueFarmInviteHandler(
-            invRepo, farmRepo, new AllowAllAuthorizationEnforcer(), clock, analytics);
+            invRepo, farmRepo, clock, analytics);
 
         var result = await handler.HandleAsync(
             new IssueFarmInviteCommand(new FarmId(farmIdGuid), new UserId(ownerUserId)));

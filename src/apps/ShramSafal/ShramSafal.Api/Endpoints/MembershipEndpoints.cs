@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using AgriSync.BuildingBlocks.Application;
 using AgriSync.BuildingBlocks.Results;
 using AgriSync.SharedKernel.Contracts.Ids;
 using ShramSafal.Application.UseCases.Memberships.ClaimJoin;
@@ -14,10 +15,18 @@ public static class MembershipEndpoints
     public static RouteGroupBuilder MapMembershipEndpoints(this RouteGroupBuilder group)
     {
         // Owner-only: get/create the persistent Active invitation+QR for a farm.
+        //
+        // Sub-plan 03 Task 8: this endpoint resolves the PIPELINE-WRAPPED
+        // handler (IHandler<IssueFarmInviteCommand, IssueFarmInviteResult>),
+        // not the raw IssueFarmInviteHandler. Validation + authorization +
+        // logging run as pipeline behaviors before the handler body. The
+        // legacy try/catch UnauthorizedAccessException stays as a defense-
+        // in-depth seam in case any sibling code path throws — the
+        // pipeline's authorizer should normally translate to Result.Failure.
         group.MapPost("/farms/{farmId:guid}/invite-qr", async (
             Guid farmId,
             ClaimsPrincipal user,
-            IssueFarmInviteHandler handler,
+            IHandler<IssueFarmInviteCommand, IssueFarmInviteResult> handler,
             CancellationToken ct) =>
         {
             if (!EndpointActorContext.TryGetUserId(user, out var userId))
