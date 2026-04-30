@@ -8,9 +8,10 @@ namespace AgriSync.BuildingBlocks.Application.PipelineBehaviors;
 /// the pipeline; the inner handler is never invoked.
 ///
 /// <para>
-/// Migrating throw-based <c>IAuthorizationEnforcer.EnsureIsOwner</c>
-/// calls into <see cref="IAuthorizationCheck{TCommand}"/> implementations
-/// is a follow-up — see <c>T-IGH-03-AUTHZ-RESULT</c>.
+/// <c>IAuthorizationEnforcer</c> is now Result-based
+/// (<c>T-IGH-03-AUTHZ-RESULT</c>), so command-specific
+/// <see cref="IAuthorizationCheck{TCommand}"/> implementations should
+/// delegate to it and return the Result directly.
 /// </para>
 /// </summary>
 public interface IAuthorizationCheck<in TCommand>

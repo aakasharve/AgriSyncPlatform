@@ -17,8 +17,8 @@ namespace ShramSafal.Domain.Tests.Memberships;
 /// pipeline. Verifies that:
 /// <list type="number">
 /// <item>The validator surfaces empty IDs as InvalidCommand.</item>
-/// <item>The authorizer translates IAuthorizationEnforcer throws into
-/// a Forbidden Result.Failure.</item>
+/// <item>The authorizer propagates a Forbidden Result.Failure returned
+/// by IAuthorizationEnforcer.</item>
 /// <item>The pipeline-wrapped IHandler short-circuits at the right
 /// stage and only invokes the inner handler when both layers pass.</item>
 /// </list>
@@ -58,7 +58,7 @@ public sealed class IssueFarmInvitePipelineTests
     // ---- Authorizer ----
 
     [Fact]
-    public async Task Authorizer_returns_Success_when_enforcer_does_not_throw()
+    public async Task Authorizer_returns_Success_when_enforcer_allows()
     {
         var authorizer = new IssueFarmInviteAuthorizer(new AllowAllAuthorizationEnforcer());
         var result = await authorizer.AuthorizeAsync(new IssueFarmInviteCommand(Farm, Caller), default);
@@ -66,7 +66,7 @@ public sealed class IssueFarmInvitePipelineTests
     }
 
     [Fact]
-    public async Task Authorizer_returns_Forbidden_when_enforcer_throws_Unauthorized()
+    public async Task Authorizer_returns_Forbidden_when_enforcer_rejects()
     {
         var authorizer = new IssueFarmInviteAuthorizer(new RejectingEnforcer());
         var result = await authorizer.AuthorizeAsync(new IssueFarmInviteCommand(Farm, Caller), default);
