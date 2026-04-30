@@ -112,4 +112,48 @@ public sealed class DependencyRuleTests
             violations.Count == 0,
             "ShramSafal.Domain cannot reference User.Domain:" + Environment.NewLine + string.Join(Environment.NewLine, violations));
     }
+
+    /// <summary>
+    /// Sub-plan 03 Task 4: application handlers must surface business
+    /// outcomes via <c>Result.Failure</c>, never via thrown exceptions.
+    /// Domain-layer invariants (programming errors) keep their throws —
+    /// this test only walks <c>*.Application/UseCases/**/*Handler.cs</c>.
+    /// </summary>
+    [Fact]
+    public void Application_handlers_must_not_throw_InvalidOperationException_or_ArgumentException()
+    {
+        var appsRoot = TestPathHelper.GetAppsRoot();
+        var applicationProjects = Directory.GetFiles(appsRoot, "*.Application.csproj", SearchOption.AllDirectories);
+
+        Assert.NotEmpty(applicationProjects);
+
+        var offenders = new List<string>();
+
+        foreach (var applicationProject in applicationProjects)
+        {
+            var projectDirectory = Path.GetDirectoryName(applicationProject) ?? string.Empty;
+            var useCasesDirectory = Path.Combine(projectDirectory, "UseCases");
+            if (!Directory.Exists(useCasesDirectory))
+            {
+                continue;
+            }
+
+            foreach (var handlerFile in Directory.EnumerateFiles(useCasesDirectory, "*Handler.cs", SearchOption.AllDirectories))
+            {
+                var text = File.ReadAllText(handlerFile);
+                if (text.Contains("throw new InvalidOperationException")
+                    || text.Contains("throw new ArgumentException"))
+                {
+                    offenders.Add(handlerFile);
+                }
+            }
+        }
+
+        Assert.True(
+            offenders.Count == 0,
+            "Application handlers must return Result.Failure, not throw. " +
+            "If you really need an exception (e.g. programming error), file a Pending Task " +
+            "documenting why and reference it from the offending handler:" +
+            Environment.NewLine + string.Join(Environment.NewLine, offenders));
+    }
 }
