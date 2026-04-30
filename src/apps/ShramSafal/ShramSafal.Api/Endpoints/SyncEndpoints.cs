@@ -19,6 +19,7 @@ public static class SyncEndpoints
 
         group.MapPost("/push", async (
             SyncPushRequest request,
+            HttpContext httpContext,
             ClaimsPrincipal user,
             PushSyncBatchHandler handler,
             CancellationToken ct) =>
@@ -30,6 +31,10 @@ public static class SyncEndpoints
 
             var actorRole = EndpointActorContext.GetActorRole(user);
             var mutations = request.Mutations ?? [];
+            // Sub-plan 02 Task 11: forward the X-App-Version header into the
+            // command so the handler can reject mutations that require a
+            // newer client than the one talking to us.
+            var appVersion = httpContext.Request.Headers["X-App-Version"].FirstOrDefault();
             var command = new PushSyncBatchCommand(
                 request.DeviceId,
                 actorUserId,
@@ -39,7 +44,8 @@ public static class SyncEndpoints
                         m.ClientCommandId ?? m.ClientRequestId,
                         m.MutationType,
                         m.Payload.Clone()))
-                    .ToList());
+                    .ToList(),
+                AppVersion: string.IsNullOrWhiteSpace(appVersion) ? null : appVersion);
 
             var result = await handler.HandleAsync(command, ct);
             return result.IsSuccess ? Results.Ok(result.Value) : ToErrorResult(result.Error);

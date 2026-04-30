@@ -3,6 +3,16 @@ import { reportClientError } from '../telemetry/ClientErrorReporter';
 import { clearAuthSession, getAuthSession, setAuthSession, type AuthSession } from './AuthTokenStore';
 import type { VisibleBucketId } from '../../domain/ai/BucketId';
 import { SYNC_MUTATION_TYPES } from '../sync/SyncMutationCatalog';
+import packageJson from '../../../package.json';
+
+// Sub-plan 02 Task 11: client min-version gate.
+// Stamped on every outgoing request as `X-App-Version`. The backend
+// PushSyncBatchHandler compares this against the catalog's
+// descriptor.SinceVersion and rejects mutations with `CLIENT_TOO_OLD`
+// if the client is below the threshold for that mutation. Sub-plan 04
+// will replace this with a build-time inject (vite define) that also
+// embeds the git SHA suffix.
+const APP_VERSION: string = packageJson.version;
 
 // SyncMutationType is the canonical union of mutation names. The single
 // source of truth is sync-contract/schemas/mutation-types.json — see
@@ -618,6 +628,14 @@ export class AgriSyncClient {
         this.authHttp = axios.create({ baseURL });
 
         this.http.interceptors.request.use((config) => this.attachAccessToken(config));
+        this.http.interceptors.request.use((config) => {
+            config.headers.set('X-App-Version', APP_VERSION);
+            return config;
+        });
+        this.authHttp.interceptors.request.use((config) => {
+            config.headers.set('X-App-Version', APP_VERSION);
+            return config;
+        });
         this.http.interceptors.response.use(
             response => response,
             (error: AxiosError) => {
