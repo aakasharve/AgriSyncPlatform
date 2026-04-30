@@ -1186,16 +1186,28 @@ public static class AiEndpoints
         };
     }
 
+    /// <summary>
+    /// Sub-plan 03 bridge: route status code through <c>ErrorKind</c>
+    /// rather than pattern-matching on <c>Error.Code</c> string suffixes.
+    /// Body shape (<c>{error, message}</c>) is preserved verbatim because
+    /// the AI tests + the mobile-web SDK depend on it; switching to
+    /// RFC 7807 is a follow-up contract change.
+    /// </summary>
     private static IResult ToErrorResult(Error error)
     {
-        if (error.Code.EndsWith("Forbidden", StringComparison.Ordinal))
+        var body = new { error = error.Code, message = error.Description };
+        return error.Kind switch
         {
-            return Results.Forbid();
-        }
-
-        return error.Code.EndsWith("NotFound", StringComparison.Ordinal)
-            ? Results.NotFound(new { error = error.Code, message = error.Description })
-            : Results.BadRequest(new { error = error.Code, message = error.Description });
+            ErrorKind.NotFound => Results.NotFound(body),
+            ErrorKind.Forbidden => Results.Forbid(),
+            ErrorKind.Unauthenticated => Results.Unauthorized(),
+            ErrorKind.Conflict => Results.Conflict(body),
+            ErrorKind.Validation => Results.BadRequest(body),
+            // Pre-Sub-plan-03 fallback (preserves test contract):
+            // Internal-classified errors and any unmapped kind keep
+            // the historical 400 + {error, message} shape.
+            _ => Results.BadRequest(body),
+        };
     }
 
     private static IResult UnexpectedNullResult(string operation)
