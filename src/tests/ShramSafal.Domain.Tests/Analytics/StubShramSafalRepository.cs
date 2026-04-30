@@ -186,4 +186,8 @@ internal sealed class StubShramSafalRepository : IShramSafalRepository
     public Task<bool> HasActiveOwnerMembershipAsync(Guid userId, CancellationToken ct = default) => throw new NotImplementedException();
     public Task<List<ScheduleTemplate>> GetScheduleLineageAsync(Guid rootTemplateId, CancellationToken ct = default) => throw new NotImplementedException();
     public Task<int> GetDisputedLogCountForPlotAsync(Guid plotId, CancellationToken ct = default) => throw new NotSupportedException();
+
+    // Sub-plan 03 Task 5 (T-IGH-03-PORT-COMPLETE-MIGRATION):
+    // required interface members; no-op in this test stub.
+    public Task AddJobCardAsync(ShramSafal.Domain.Work.JobCard jobCard, CancellationToken ct = default) => Task.CompletedTask;
 }

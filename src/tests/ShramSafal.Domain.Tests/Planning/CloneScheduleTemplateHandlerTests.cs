@@ -419,7 +419,12 @@ public sealed class CloneScheduleTemplateHandlerTests
         public Task AddScheduleMigrationEventAsync(ScheduleMigrationEvent migrationEvent, CancellationToken ct = default) => throw new NotSupportedException();
         public Task<List<ScheduleTemplate>> GetScheduleLineageAsync(Guid rootTemplateId, CancellationToken ct = default) => throw new NotSupportedException();
         public Task<int> GetDisputedLogCountForPlotAsync(Guid plotId, CancellationToken ct = default) => throw new NotSupportedException();
-    }
+    
+    // Sub-plan 03 Task 5 (T-IGH-03-PORT-COMPLETE-MIGRATION):
+    // required interface members; no-op in this test stub.
+    public Task AddFarmBoundaryAsync(ShramSafal.Domain.Farms.FarmBoundary boundary, CancellationToken ct = default) => Task.CompletedTask;
+    public Task AddJobCardAsync(ShramSafal.Domain.Work.JobCard jobCard, CancellationToken ct = default) => Task.CompletedTask;
+}
 
     private sealed class FakeClock : AgriSync.BuildingBlocks.Abstractions.IClock
     {

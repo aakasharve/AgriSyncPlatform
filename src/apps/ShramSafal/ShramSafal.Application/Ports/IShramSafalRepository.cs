@@ -17,8 +17,13 @@ namespace ShramSafal.Application.Ports;
 public interface IShramSafalRepository
 {
     Task AddFarmAsync(Farm farm, CancellationToken ct = default);
-    Task AddFarmBoundaryAsync(FarmBoundary boundary, CancellationToken ct = default)
-        => throw new NotImplementedException("AddFarmBoundaryAsync is not implemented by this repository.");
+
+    // Sub-plan 03 Task 5 (T-IGH-03-PORT-COMPLETE-MIGRATION): required member.
+    // Was previously a default-impl that threw NotImplementedException —
+    // a runtime landmine if a future implementor forgot to override.
+    // Production ShramSafalRepository overrides; every test stub now
+    // overrides as well (most as Task.CompletedTask no-ops).
+    Task AddFarmBoundaryAsync(FarmBoundary boundary, CancellationToken ct = default);
     Task<FarmBoundary?> GetActiveFarmBoundaryAsync(Guid farmId, CancellationToken ct = default)
         => Task.FromResult<FarmBoundary?>(null);
     Task<Farm?> GetFarmByIdAsync(Guid farmId, CancellationToken ct = default);
@@ -160,8 +165,9 @@ public interface IShramSafalRepository
         => Task.FromResult(new List<Guid>());
 
     // --- CEI Phase 4 §4.8 (Work Trust Ledger) ------------------------------------------
-    Task AddJobCardAsync(JobCard jobCard, CancellationToken ct = default)
-        => throw new NotImplementedException("AddJobCardAsync is not implemented by this repository.");
+
+    // Sub-plan 03 Task 5: required member (see AddFarmBoundaryAsync above).
+    Task AddJobCardAsync(JobCard jobCard, CancellationToken ct = default);
 
     Task<JobCard?> GetJobCardByIdAsync(Guid jobCardId, CancellationToken ct = default)
         => Task.FromResult<JobCard?>(null);
