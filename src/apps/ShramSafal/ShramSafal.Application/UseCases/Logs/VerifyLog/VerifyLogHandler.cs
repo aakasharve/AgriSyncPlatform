@@ -34,9 +34,18 @@ public sealed class VerifyLogHandler(
             return Result.Failure<DailyLogDto>(ShramSafalErrors.InvalidCommand);
         }
 
-        await authorizationEnforcer.EnsureCanVerify(
+        // Sub-plan 03 T-IGH-03-AUTHZ-RESULT: propagate the typed
+        // authorization failure to the caller. The enforcer already
+        // performs the same callerRole/membership check the handler
+        // re-does below, but we keep the explicit handler-level
+        // Forbidden check as defense-in-depth.
+        var authResult = await authorizationEnforcer.EnsureCanVerify(
             new UserId(command.VerifiedByUserId),
             command.DailyLogId);
+        if (!authResult.IsSuccess)
+        {
+            return Result.Failure<DailyLogDto>(authResult.Error);
+        }
 
         var log = await repository.GetDailyLogByIdAsync(command.DailyLogId, ct);
         if (log is null)

@@ -1,24 +1,18 @@
 using AgriSync.BuildingBlocks.Application.PipelineBehaviors;
 using AgriSync.BuildingBlocks.Auth;
 using AgriSync.BuildingBlocks.Results;
-using ShramSafal.Domain.Common;
 
 namespace ShramSafal.Application.UseCases.Memberships.IssueFarmInvite;
 
 /// <summary>
 /// Sub-plan 03 Task 8: ownership check moves OUT of the handler and
 /// into the <see cref="AuthorizationBehavior{TCommand,TResult}"/>
-/// pipeline stage. Wraps the legacy throw-based
-/// <see cref="IAuthorizationEnforcer.EnsureIsOwner"/> in a
-/// transition seam: if the enforcer throws
-/// <see cref="UnauthorizedAccessException"/>, this method translates
-/// it into <c>Result.Failure(ShramSafalErrors.Forbidden)</c>.
-///
-/// <para>
-/// The deeper fix — making <see cref="IAuthorizationEnforcer"/> return
-/// <see cref="Result"/> directly — is filed as
-/// <c>T-IGH-03-AUTHZ-RESULT</c> (Task 12 pending task).
-/// </para>
+/// pipeline stage. Delegates to
+/// <see cref="IAuthorizationEnforcer.EnsureIsOwner"/> which now (per
+/// T-IGH-03-AUTHZ-RESULT) returns <see cref="Result"/> directly —
+/// the previous try/catch seam that translated
+/// <see cref="UnauthorizedAccessException"/> to <c>Result.Failure</c>
+/// was removed when the enforcer adopted the Result-based contract.
 /// </summary>
 public sealed class IssueFarmInviteAuthorizer : IAuthorizationCheck<IssueFarmInviteCommand>
 {
@@ -29,16 +23,6 @@ public sealed class IssueFarmInviteAuthorizer : IAuthorizationCheck<IssueFarmInv
         _authz = authz;
     }
 
-    public async Task<Result> AuthorizeAsync(IssueFarmInviteCommand command, CancellationToken ct)
-    {
-        try
-        {
-            await _authz.EnsureIsOwner(command.CallerUserId, command.FarmId);
-            return Result.Success();
-        }
-        catch (UnauthorizedAccessException)
-        {
-            return Result.Failure(ShramSafalErrors.Forbidden);
-        }
-    }
+    public Task<Result> AuthorizeAsync(IssueFarmInviteCommand command, CancellationToken ct)
+        => _authz.EnsureIsOwner(command.CallerUserId, command.FarmId);
 }

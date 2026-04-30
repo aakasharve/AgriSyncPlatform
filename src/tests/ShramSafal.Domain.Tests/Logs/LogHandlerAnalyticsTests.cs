@@ -224,10 +224,15 @@ public sealed class LogHandlerAnalyticsTests
 
     private sealed class NoopAuthorizationEnforcer : IAuthorizationEnforcer
     {
-        public Task EnsureIsFarmMember(UserId userId, FarmId farmId) => Task.CompletedTask;
-        public Task EnsureIsOwner(UserId userId, FarmId farmId) => Task.CompletedTask;
-        public Task EnsureCanVerify(UserId userId, Guid logId) => Task.CompletedTask;
-        public Task EnsureCanEditLog(UserId userId, Guid logId) => Task.CompletedTask;
+        // T-IGH-03-AUTHZ-RESULT: enforcer returns Result.
+        public Task<AgriSync.BuildingBlocks.Results.Result> EnsureIsFarmMember(UserId userId, FarmId farmId)
+            => Task.FromResult(AgriSync.BuildingBlocks.Results.Result.Success());
+        public Task<AgriSync.BuildingBlocks.Results.Result> EnsureIsOwner(UserId userId, FarmId farmId)
+            => Task.FromResult(AgriSync.BuildingBlocks.Results.Result.Success());
+        public Task<AgriSync.BuildingBlocks.Results.Result> EnsureCanVerify(UserId userId, Guid logId)
+            => Task.FromResult(AgriSync.BuildingBlocks.Results.Result.Success());
+        public Task<AgriSync.BuildingBlocks.Results.Result> EnsureCanEditLog(UserId userId, Guid logId)
+            => Task.FromResult(AgriSync.BuildingBlocks.Results.Result.Success());
     }
 
     /// <summary>

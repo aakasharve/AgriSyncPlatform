@@ -1,92 +1,110 @@
 using AgriSync.BuildingBlocks.Auth;
+using AgriSync.BuildingBlocks.Results;
 using AgriSync.SharedKernel.Contracts.Ids;
 using AgriSync.SharedKernel.Contracts.Roles;
 using ShramSafal.Application.Ports;
+using ShramSafal.Domain.Common;
 
 namespace ShramSafal.Infrastructure.Auth;
 
+/// <summary>
+/// Sub-plan 03 Task 8 follow-up (T-IGH-03-AUTHZ-RESULT): every Ensure*
+/// method returns <see cref="Result"/> instead of throwing. Failures
+/// are tagged via <see cref="ShramSafalErrors"/> so endpoint adapters
+/// + pipeline behaviors can map them to the canonical HTTP status
+/// (Forbidden -> 403, NotFound -> 404, Validation -> 400).
+/// </summary>
 internal sealed class ShramSafalAuthorizationEnforcer(
     IShramSafalRepository repository) : IAuthorizationEnforcer
 {
     private static readonly HashSet<AppRole> OwnerRoles = [AppRole.PrimaryOwner, AppRole.SecondaryOwner];
 
-    public async Task EnsureIsFarmMember(UserId userId, FarmId farmId)
+    public async Task<Result> EnsureIsFarmMember(UserId userId, FarmId farmId)
     {
-        EnsureValidIds(userId, farmId);
+        var validation = ValidateIds(userId, farmId);
+        if (!validation.IsSuccess)
+        {
+            return validation;
+        }
 
         if (await repository.IsUserMemberOfFarmAsync(farmId.Value, userId.Value))
         {
-            return;
+            return Result.Success();
         }
 
-        throw new UnauthorizedAccessException(
-            $"User '{userId}' is not an active farm member for farm '{farmId}'.");
+        return Result.Failure(ShramSafalErrors.Forbidden);
     }
 
-    public async Task EnsureIsOwner(UserId userId, FarmId farmId)
+    public async Task<Result> EnsureIsOwner(UserId userId, FarmId farmId)
     {
-        EnsureValidIds(userId, farmId);
+        var validation = ValidateIds(userId, farmId);
+        if (!validation.IsSuccess)
+        {
+            return validation;
+        }
 
         if (await repository.IsUserOwnerOfFarmAsync(farmId.Value, userId.Value))
         {
-            return;
+            return Result.Success();
         }
 
-        throw new UnauthorizedAccessException(
-            $"User '{userId}' must be an owner to operate on farm '{farmId}'.");
+        return Result.Failure(ShramSafalErrors.Forbidden);
     }
 
-    public async Task EnsureCanVerify(UserId userId, Guid logId)
+    public async Task<Result> EnsureCanVerify(UserId userId, Guid logId)
     {
         if (userId.IsEmpty)
         {
-            throw new UnauthorizedAccessException("Caller user id is required for verification.");
+            return Result.Failure(ShramSafalErrors.InvalidCommand);
         }
 
         if (logId == Guid.Empty)
         {
-            throw new UnauthorizedAccessException("Log id is required for verification.");
+            return Result.Failure(ShramSafalErrors.InvalidCommand);
         }
 
-        var log = await repository.GetDailyLogByIdAsync(logId)
-            ?? throw new UnauthorizedAccessException($"Log '{logId}' was not found or is not accessible.");
+        var log = await repository.GetDailyLogByIdAsync(logId);
+        if (log is null)
+        {
+            return Result.Failure(ShramSafalErrors.DailyLogNotFound);
+        }
 
         var membershipRole = await repository.GetUserRoleForFarmAsync(log.FarmId.Value, userId.Value);
         if (membershipRole is null || !OwnerRoles.Contains(membershipRole.Value))
         {
-            throw new UnauthorizedAccessException(
-                $"User '{userId}' cannot verify log '{logId}'. Verification is owner-only.");
+            return Result.Failure(ShramSafalErrors.Forbidden);
         }
+
+        return Result.Success();
     }
 
-    public async Task EnsureCanEditLog(UserId userId, Guid logId)
+    public async Task<Result> EnsureCanEditLog(UserId userId, Guid logId)
     {
         if (userId.IsEmpty)
         {
-            throw new UnauthorizedAccessException("Caller user id is required to edit logs.");
+            return Result.Failure(ShramSafalErrors.InvalidCommand);
         }
 
         if (logId == Guid.Empty)
         {
-            throw new UnauthorizedAccessException("Log id is required to edit logs.");
+            return Result.Failure(ShramSafalErrors.InvalidCommand);
         }
 
-        var log = await repository.GetDailyLogByIdAsync(logId)
-            ?? throw new UnauthorizedAccessException($"Log '{logId}' was not found or is not accessible.");
+        var log = await repository.GetDailyLogByIdAsync(logId);
+        if (log is null)
+        {
+            return Result.Failure(ShramSafalErrors.DailyLogNotFound);
+        }
 
-        await EnsureIsOwner(userId, log.FarmId);
+        return await EnsureIsOwner(userId, log.FarmId);
     }
 
-    private static void EnsureValidIds(UserId userId, FarmId farmId)
+    private static Result ValidateIds(UserId userId, FarmId farmId)
     {
-        if (userId.IsEmpty)
+        if (userId.IsEmpty || farmId.IsEmpty)
         {
-            throw new UnauthorizedAccessException("Caller user id is required.");
+            return Result.Failure(ShramSafalErrors.InvalidCommand);
         }
-
-        if (farmId.IsEmpty)
-        {
-            throw new UnauthorizedAccessException("Farm id is required.");
-        }
+        return Result.Success();
     }
 }
