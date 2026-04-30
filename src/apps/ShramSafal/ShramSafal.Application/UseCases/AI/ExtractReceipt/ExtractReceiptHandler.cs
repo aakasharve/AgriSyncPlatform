@@ -128,8 +128,17 @@ public sealed class ExtractReceiptHandler(
         {
             return JsonSerializer.Deserialize<object>(json);
         }
-        catch (JsonException)
+        catch (JsonException ex)
         {
+            // Sub-plan 03 Task 10: malformed payload → raw string
+            // fallback. Activity event for observability.
+            System.Diagnostics.Activity.Current?.AddEvent(new System.Diagnostics.ActivityEvent(
+                "ExtractReceipt.MalformedPayload",
+                tags: new System.Diagnostics.ActivityTagsCollection
+                {
+                    ["exception.type"] = ex.GetType().Name,
+                    ["exception.message"] = ex.Message,
+                }));
             return json;
         }
     }

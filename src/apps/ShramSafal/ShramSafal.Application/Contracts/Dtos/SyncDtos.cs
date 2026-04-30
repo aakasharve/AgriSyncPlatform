@@ -49,9 +49,19 @@ public sealed record SyncPullResponseDto(
     IReadOnlyList<JobCardDto> JobCards,
     // Sub-plan 03 Task 10 — partial-failure surface. When non-empty,
     // the response carries PARTIAL data: at least one component fetch
-    // failed, the global NextCursorUtc was FROZEN to SinceUtc so the
-    // next pull retries the same window, and the named components
-    // should display a degraded state in the UI.
+    // failed and the named components should display a degraded state
+    // in the UI.
+    //
+    // Cursor semantics today (post-af7aa83): NextCursorUtc ADVANCES
+    // even on partial failure. Frontend clients must inspect
+    // DegradedComponents (or the X-Degraded response header) and
+    // decide whether to retry the same window — they cannot rely on
+    // the cursor staying at SinceUtc as proof of "data missed."
+    //
+    // The cursor-freeze invariant ("if degraded, do not advance the
+    // cursor so the next pull retries this window") is filed as
+    // T-IGH-03-PULL-CURSOR-FREEZE pending a real-DB fail-injection
+    // test; do not consume the freeze as a contract until that lands.
     //
     // Optional with a default of empty so all existing callers remain
     // wire-compatible — null/missing in the JSON deserializes to []

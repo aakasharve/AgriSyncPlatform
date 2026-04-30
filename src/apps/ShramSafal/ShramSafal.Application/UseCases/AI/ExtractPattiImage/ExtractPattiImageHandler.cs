@@ -126,8 +126,18 @@ public sealed class ExtractPattiImageHandler(
         {
             return JsonSerializer.Deserialize<object>(json);
         }
-        catch (JsonException)
+        catch (JsonException ex)
         {
+            // Sub-plan 03 Task 10: malformed payload falls back to raw
+            // string. Activity event keeps the fallback observable
+            // (static helper; no ILogger).
+            System.Diagnostics.Activity.Current?.AddEvent(new System.Diagnostics.ActivityEvent(
+                "ExtractPattiImage.MalformedPayload",
+                tags: new System.Diagnostics.ActivityTagsCollection
+                {
+                    ["exception.type"] = ex.GetType().Name,
+                    ["exception.message"] = ex.Message,
+                }));
             return json;
         }
     }

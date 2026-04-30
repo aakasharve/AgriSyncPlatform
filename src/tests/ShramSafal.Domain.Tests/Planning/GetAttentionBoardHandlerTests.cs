@@ -27,10 +27,12 @@ public sealed class GetAttentionBoardHandlerTests
     private static readonly Guid PlotId2 = Guid.Parse("22222222-2222-2222-2222-222222222222");
 
     private static GetAttentionBoardHandler CreateHandler(FakeAttentionRepo repo) =>
-        new(repo, new FakeTestInstanceRepo(), new NullComplianceSignalRepository(), new FakeClock(Now));
+        new(repo, new FakeTestInstanceRepo(), new NullComplianceSignalRepository(), new FakeClock(Now),
+            Microsoft.Extensions.Logging.Abstractions.NullLogger<GetAttentionBoardHandler>.Instance);
 
     private static GetAttentionBoardHandler CreateHandler(FakeAttentionRepo repo, FakeTestInstanceRepo testRepo) =>
-        new(repo, testRepo, new NullComplianceSignalRepository(), new FakeClock(Now));
+        new(repo, testRepo, new NullComplianceSignalRepository(), new FakeClock(Now),
+            Microsoft.Extensions.Logging.Abstractions.NullLogger<GetAttentionBoardHandler>.Instance);
 
     // ---------------------------------------------------------------------------
     // 1. A plot with 1 disputed log produces a Critical card
