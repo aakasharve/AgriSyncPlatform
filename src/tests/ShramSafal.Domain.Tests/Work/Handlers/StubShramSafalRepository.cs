@@ -96,4 +96,8 @@ internal abstract class StubShramSafalRepository : IShramSafalRepository
     public virtual Task<List<JobCard>> GetJobCardsChangedSinceAsync(IEnumerable<Guid> farmIds, DateTime sinceUtc, CancellationToken ct = default) => Task.FromResult(new List<JobCard>());
     public virtual Task<WorkerMetricsDto> GetWorkerMetricsAsync(UserId workerUserId, Guid? scopedFarmId, DateTime since30d, CancellationToken ct = default) => Task.FromResult(new WorkerMetricsDto(0, 0, 0, 0, 0, 0, 0));
     public virtual Task<JobCard?> GetJobCardByLinkedDailyLogIdAsync(Guid dailyLogId, CancellationToken ct = default) => Task.FromResult<JobCard?>(null);
+
+    // Sub-plan 03 Task 5 (T-IGH-03-PORT-COMPLETE-MIGRATION):
+    // required interface members; no-op in this test stub.
+    public Task AddFarmBoundaryAsync(ShramSafal.Domain.Farms.FarmBoundary boundary, CancellationToken ct = default) => Task.CompletedTask;
 }
