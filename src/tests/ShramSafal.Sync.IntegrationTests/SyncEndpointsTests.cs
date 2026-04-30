@@ -1469,10 +1469,18 @@ public sealed class SyncEndpointsTests
             // (now re-enabled) cursor-freeze logic and breaks
             // Pull_WithCursor_ReturnsOnlyDeltas. Stub it with an empty
             // in-memory implementation so the harness exercises the
-            // sync contract without InMemory artifacts. A separate
-            // unit test (PullSyncChangesHandlerCursorFreezeTests)
-            // covers the freeze behavior directly with stubs that
-            // explicitly throw.
+            // sync contract without InMemory artifacts.
+            //
+            // NOTE: there is NO dedicated unit test that directly
+            // exercises the cursor-freeze branch with a throwing stub
+            // yet. That coverage is filed as the remaining work item
+            // under T-IGH-03-PULL-CURSOR-FREEZE (PARTIAL_DONE).
+            // What protects the freeze today: (a) this harness's
+            // healthy-path tests prove the freeze does NOT false-trip
+            // when nothing fails, and (b) the architecture gate
+            // (Application_layer_must_not_silently_swallow_exceptions)
+            // ensures any thrown sub-system error surfaces as a
+            // DegradedComponent and therefore triggers the freeze.
             builder.Services.RemoveAll<IComplianceSignalRepository>();
             builder.Services.AddScoped<IComplianceSignalRepository, InMemoryComplianceSignalStub>();
 
