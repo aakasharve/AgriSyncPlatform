@@ -1,4 +1,5 @@
 import { mutationQueue } from '../../../infrastructure/sync/MutationQueue';
+import { SyncMutationName } from '../../../infrastructure/sync/SyncMutationCatalog';
 import { getDateKey } from '../../../core/domain/services/DateKeyService';
 import { idGenerator } from '../../../core/domain/services/IdGenerator';
 import type { LocationPayload } from './CreateDailyLogCommand';
@@ -19,7 +20,7 @@ export interface AddCostEntryPayload {
 export class AddCostEntryCommand {
      static async enqueue(payload: AddCostEntryPayload): Promise<string> {
           const clientRequestId = idGenerator.generate();
-          return mutationQueue.enqueue('add_cost_entry', payload, {
+          return mutationQueue.enqueue(SyncMutationName.AddCostEntry, payload, {
                clientRequestId,
                clientCommandId: clientRequestId
           });

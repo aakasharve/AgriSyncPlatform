@@ -1,4 +1,5 @@
 import { mutationQueue } from '../../../infrastructure/sync/MutationQueue';
+import { SyncMutationName } from '../../../infrastructure/sync/SyncMutationCatalog';
 import { idGenerator } from '../../../core/domain/services/IdGenerator';
 
 export interface AllocationDetailPayload {
@@ -16,7 +17,7 @@ export interface AllocateGlobalExpensePayload {
 export class AllocateGlobalExpenseCommand {
      static async enqueue(payload: AllocateGlobalExpensePayload): Promise<string> {
           const clientRequestId = idGenerator.generate();
-          return mutationQueue.enqueue('allocate_global_expense', payload, {
+          return mutationQueue.enqueue(SyncMutationName.AllocateGlobalExpense, payload, {
                clientRequestId,
                clientCommandId: clientRequestId
           });

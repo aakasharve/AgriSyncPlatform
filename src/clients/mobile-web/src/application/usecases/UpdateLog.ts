@@ -3,6 +3,7 @@ import { FarmerProfile } from '../../domain/types/farm.types';
 import { PatchEvent } from '../../domain/ledger/PatchEvent';
 import { LogsRepository } from '../ports';
 import { mutationQueue } from '../../infrastructure/sync/MutationQueue';
+import { SyncMutationName } from '../../infrastructure/sync/SyncMutationCatalog';
 // import { AuditLogRepository } from '../../infrastructure/storage/AuditLogRepository'; // Deprecated Fix-07
 
 interface UpdateLogRequest {
@@ -80,7 +81,7 @@ export const updateLog = async (
         }
 
         // 4. Queue Mutation for backend execution
-        await mutationQueue.enqueue('add_log_task', {
+        await mutationQueue.enqueue(SyncMutationName.AddLogTask, {
             dailyLogId: finalLog.id,
             action: 'UPDATE_LOG',
             updatedData: request.updatedData,

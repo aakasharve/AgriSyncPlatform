@@ -1,4 +1,5 @@
 import { mutationQueue } from '../../../infrastructure/sync/MutationQueue';
+import { SyncMutationName } from '../../../infrastructure/sync/SyncMutationCatalog';
 import { idGenerator } from '../../../core/domain/services/IdGenerator';
 
 export interface VerifyLogPayload {
@@ -10,7 +11,7 @@ export interface VerifyLogPayload {
 export class VerifyLogCommand {
      static async enqueue(payload: VerifyLogPayload): Promise<string> {
           const clientRequestId = idGenerator.generate();
-          return mutationQueue.enqueue('verify_log', payload, {
+          return mutationQueue.enqueue(SyncMutationName.VerifyLog, payload, {
                clientRequestId,
                clientCommandId: clientRequestId
           });

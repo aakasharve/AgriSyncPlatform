@@ -46,6 +46,27 @@ tsLines.push("});\n");
 tsLines.push("export function isSyncMutationType(value: string): value is SyncMutationType {");
 tsLines.push("  return SYNC_MUTATION_SET.has(value as SyncMutationType);");
 tsLines.push("}\n");
+// PascalCase named constants — symmetric with the C# side. Lets call
+// sites do `mutationQueue.enqueue(SyncMutationName.CreateDailyLog, ...)`
+// instead of bare string literals (forbidden by the
+// local-rules/no-string-mutation-type ESLint rule outside the catalog).
+tsLines.push("/**");
+tsLines.push(" * PascalCase named constants for ergonomic catalog access.");
+tsLines.push(" * Mirrors `SyncMutationCatalog` in the .NET side.");
+tsLines.push(" *");
+tsLines.push(" * Use this everywhere outside the catalog module instead of raw");
+tsLines.push(" * string literals. The eslint rule `local-rules/no-string-mutation-type`");
+tsLines.push(" * enforces this.");
+tsLines.push(" */");
+tsLines.push("export const SyncMutationName = {");
+for (const m of json.mutationTypes) {
+  const constName = m.name
+    .split(/[._]/)
+    .map(w => w[0].toUpperCase() + w.slice(1))
+    .join('');
+  tsLines.push(`  ${constName}: ${JSON.stringify(m.name)},`);
+}
+tsLines.push("} as const satisfies Record<string, SyncMutationType>;\n");
 
 const tsOutPath = fileURLToPath(new URL('../../src/clients/mobile-web/src/infrastructure/sync/SyncMutationCatalog.ts', import.meta.url));
 await mkdir(dirname(tsOutPath), { recursive: true });

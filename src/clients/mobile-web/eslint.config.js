@@ -3,6 +3,9 @@ import globals from 'globals';
 import reactHooks from 'eslint-plugin-react-hooks';
 import tseslint from 'typescript-eslint';
 import { defineConfig, globalIgnores } from 'eslint/config';
+// Local rule from sync-contract — bans raw mutation-name string literals
+// outside the canonical catalog module. See sync-contract/eslint-rules/.
+import noStringMutationType from '../../../sync-contract/eslint-rules/no-string-mutation-type.js';
 
 // Sub-plan 01 (CI quick wins) intentionally introduces ESLint as
 // informational-only: every existing violation is downgraded to warning so
@@ -29,7 +32,17 @@ export default defineConfig([
       sourceType: 'module',
       globals: { ...globals.browser, ...globals.node },
     },
+    plugins: {
+      'local-rules': {
+        rules: {
+          'no-string-mutation-type': noStringMutationType,
+        },
+      },
+    },
     rules: {
+      // Sub-plan 02: mutation names are catalog-only outside the catalog module.
+      'local-rules/no-string-mutation-type': 'error',
+
       // File-size budget — Sub-plan 04 ratchets this to 800.
       'max-lines': ['warn', { max: 1500, skipBlankLines: true, skipComments: true }],
 

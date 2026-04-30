@@ -89,3 +89,46 @@ export const SYNC_MUTATION_CATALOG: Readonly<Record<SyncMutationType, SyncMutati
 export function isSyncMutationType(value: string): value is SyncMutationType {
   return SYNC_MUTATION_SET.has(value as SyncMutationType);
 }
+
+/**
+ * PascalCase named constants for ergonomic catalog access.
+ * Mirrors `SyncMutationCatalog` in the .NET side.
+ *
+ * Use this everywhere outside the catalog module instead of raw
+ * string literals. The eslint rule `local-rules/no-string-mutation-type`
+ * enforces this.
+ */
+export const SyncMutationName = {
+  CreateFarm: "create_farm",
+  CreatePlot: "create_plot",
+  CreateCropCycle: "create_crop_cycle",
+  CreateDailyLog: "create_daily_log",
+  AddLogTask: "add_log_task",
+  VerifyLog: "verify_log",
+  VerifyLogV2: "verify_log_v2",
+  AddCostEntry: "add_cost_entry",
+  CorrectCostEntry: "correct_cost_entry",
+  AllocateGlobalExpense: "allocate_global_expense",
+  SetPriceConfig: "set_price_config",
+  CreateAttachment: "create_attachment",
+  AddLocation: "add_location",
+  SchedulePublish: "schedule.publish",
+  ScheduleEdit: "schedule.edit",
+  ScheduleClone: "schedule.clone",
+  PlanAdd: "plan.add",
+  PlanOverride: "plan.override",
+  PlanRemove: "plan.remove",
+  AdoptSchedule: "adopt_schedule",
+  MigrateSchedule: "migrate_schedule",
+  AbandonSchedule: "abandon_schedule",
+  ComplianceAcknowledge: "compliance.acknowledge",
+  ComplianceResolve: "compliance.resolve",
+  TestinstanceCollected: "testinstance.collected",
+  TestinstanceReported: "testinstance.reported",
+  JobcardCreate: "jobcard.create",
+  JobcardAssign: "jobcard.assign",
+  JobcardStart: "jobcard.start",
+  JobcardComplete: "jobcard.complete",
+  JobcardSettle: "jobcard.settle",
+  JobcardCancel: "jobcard.cancel",
+} as const satisfies Record<string, SyncMutationType>;

@@ -2,6 +2,7 @@ import { CropProfile, DailyLog, FarmerProfile, LogScope } from '../../types';
 import { LogsRepository, VoiceParseResult, WeatherPort } from '../ports';
 import { mutationQueue } from '../../infrastructure/sync/MutationQueue';
 import { backgroundSyncWorker } from '../../infrastructure/sync/BackgroundSyncWorker';
+import { SyncMutationName } from '../../infrastructure/sync/SyncMutationCatalog';
 import type { LocationDto } from '../../infrastructure/api/AgriSyncClient';
 
 export interface CreateLogsFromManualInput {
@@ -55,7 +56,7 @@ export async function createLogsFromManualEntry(
     try {
         const farmId = tryExtractFarmId(input.crops);
 
-        await mutationQueue.enqueue('create_daily_log', {
+        await mutationQueue.enqueue(SyncMutationName.CreateDailyLog, {
             farmId,
             selectedCropIds: input.logScope.selectedCropIds,
             selectedPlotIds: input.logScope.selectedPlotIds,
@@ -90,7 +91,7 @@ export async function createLogsFromVoiceResult(
     try {
         const farmId = tryExtractFarmId(input.crops);
 
-        await mutationQueue.enqueue('create_daily_log', {
+        await mutationQueue.enqueue(SyncMutationName.CreateDailyLog, {
             farmId,
             selectedCropIds: input.logScope.selectedCropIds,
             selectedPlotIds: input.logScope.selectedPlotIds,
