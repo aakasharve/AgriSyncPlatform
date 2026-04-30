@@ -33,7 +33,14 @@ public sealed class RotateFarmInviteHandler(
             return Result.Failure<RotateFarmInviteResult>(ShramSafalErrors.InvalidCommand);
         }
 
-        await authz.EnsureIsOwner(command.CallerUserId, command.FarmId);
+        // Sub-plan 03 T-IGH-03-AUTHZ-RESULT: enforcer returns Result;
+        // propagate any auth failure verbatim to the caller (typed
+        // Forbidden / NotFound / Validation), no try/catch seam needed.
+        var authResult = await authz.EnsureIsOwner(command.CallerUserId, command.FarmId);
+        if (!authResult.IsSuccess)
+        {
+            return Result.Failure<RotateFarmInviteResult>(authResult.Error);
+        }
 
         var farm = await farmRepository.GetFarmByIdAsync(command.FarmId.Value, ct);
         if (farm is null)

@@ -21,10 +21,17 @@ internal sealed class SequentialIdGenerator : IIdGenerator
 
 internal sealed class AllowAllAuthorizationEnforcer : IAuthorizationEnforcer
 {
-    public Task EnsureIsFarmMember(UserId userId, FarmId farmId) => Task.CompletedTask;
-    public Task EnsureIsOwner(UserId userId, FarmId farmId) => Task.CompletedTask;
-    public Task EnsureCanVerify(UserId userId, Guid logId) => Task.CompletedTask;
-    public Task EnsureCanEditLog(UserId userId, Guid logId) => Task.CompletedTask;
+    // T-IGH-03-AUTHZ-RESULT: enforcer returns Result; the test stub
+    // always grants access via Result.Success(). Deny variants live
+    // alongside their tests (e.g. RejectingEnforcer in the pipeline tests).
+    public Task<AgriSync.BuildingBlocks.Results.Result> EnsureIsFarmMember(UserId userId, FarmId farmId)
+        => Task.FromResult(AgriSync.BuildingBlocks.Results.Result.Success());
+    public Task<AgriSync.BuildingBlocks.Results.Result> EnsureIsOwner(UserId userId, FarmId farmId)
+        => Task.FromResult(AgriSync.BuildingBlocks.Results.Result.Success());
+    public Task<AgriSync.BuildingBlocks.Results.Result> EnsureCanVerify(UserId userId, Guid logId)
+        => Task.FromResult(AgriSync.BuildingBlocks.Results.Result.Success());
+    public Task<AgriSync.BuildingBlocks.Results.Result> EnsureCanEditLog(UserId userId, Guid logId)
+        => Task.FromResult(AgriSync.BuildingBlocks.Results.Result.Success());
 }
 
 internal sealed class StubFarmInvitationRepository : IFarmInvitationRepository

@@ -1,5 +1,7 @@
+using AgriSync.BuildingBlocks.Results;
 using AgriSync.SharedKernel.Contracts.Ids;
 using AgriSync.SharedKernel.Contracts.Roles;
+using ShramSafal.Domain.Common;
 using ShramSafal.Domain.Logs;
 using ShramSafal.Infrastructure.Auth;
 using Xunit;
@@ -18,6 +20,16 @@ namespace ShramSafal.Domain.Tests.Auth;
 ///
 /// Trait: <c>Baseline_814ec70</c> — CI filters on this for the mandatory
 /// pre-merge gate.
+///
+/// <para>
+/// Sub-plan 03 T-IGH-03-AUTHZ-RESULT (2026-05-01): the assertions
+/// migrated from <c>Assert.ThrowsAsync&lt;UnauthorizedAccessException&gt;</c>
+/// to inspecting <c>Result.IsSuccess == false</c> with the typed
+/// <see cref="ShramSafalErrors.Forbidden"/> error. The structural
+/// decision being locked in is unchanged — owners-only operations
+/// still reject non-owners. Only the failure SHAPE moved from a
+/// thrown exception to a typed Result.
+/// </para>
 /// </summary>
 [Trait("Suite", "Baseline_814ec70")]
 public sealed class FarmMembershipAuthorizationBaselineTests
@@ -43,14 +55,14 @@ public sealed class FarmMembershipAuthorizationBaselineTests
         repo.AddMembership(FarmA, OwnerOfA, AppRole.PrimaryOwner);
 
         // Acts as owner on their own farm — allowed.
-        await enforcer.EnsureIsFarmMember(OwnerOfA, FarmA);
+        var allowed = await enforcer.EnsureIsFarmMember(OwnerOfA, FarmA);
+        Assert.True(allowed.IsSuccess);
 
         // Same user, different farm — denied.
-        var ex = await Assert.ThrowsAsync<UnauthorizedAccessException>(
-            () => enforcer.EnsureIsFarmMember(OwnerOfA, FarmB));
-
-        Assert.Contains(OwnerOfA.Value.ToString(), ex.Message);
-        Assert.Contains(FarmB.Value.ToString(), ex.Message);
+        var denied = await enforcer.EnsureIsFarmMember(OwnerOfA, FarmB);
+        Assert.False(denied.IsSuccess);
+        Assert.Equal(ShramSafalErrors.Forbidden, denied.Error);
+        Assert.Equal(ErrorKind.Forbidden, denied.Error.Kind);
     }
 
     [Fact(DisplayName = "A worker cannot perform owner-only actions on their own farm")]
@@ -60,13 +72,13 @@ public sealed class FarmMembershipAuthorizationBaselineTests
         repo.AddMembership(FarmA, WorkerOfA, AppRole.Worker);
 
         // The worker can still be detected as a member (read access).
-        await enforcer.EnsureIsFarmMember(WorkerOfA, FarmA);
+        var memberCheck = await enforcer.EnsureIsFarmMember(WorkerOfA, FarmA);
+        Assert.True(memberCheck.IsSuccess);
 
         // But cannot be promoted to an owner-only operation.
-        var ex = await Assert.ThrowsAsync<UnauthorizedAccessException>(
-            () => enforcer.EnsureIsOwner(WorkerOfA, FarmA));
-
-        Assert.Contains("owner", ex.Message, StringComparison.OrdinalIgnoreCase);
+        var ownerCheck = await enforcer.EnsureIsOwner(WorkerOfA, FarmA);
+        Assert.False(ownerCheck.IsSuccess);
+        Assert.Equal(ShramSafalErrors.Forbidden, ownerCheck.Error);
 
         // And cannot verify logs on that farm (the single most sensitive
         // owner-only primitive in ShramSafal).
@@ -82,8 +94,9 @@ public sealed class FarmMembershipAuthorizationBaselineTests
             createdAtUtc: DateTime.UtcNow);
         repo.AddLog(log);
 
-        await Assert.ThrowsAsync<UnauthorizedAccessException>(
-            () => enforcer.EnsureCanVerify(WorkerOfA, log.Id));
+        var verifyCheck = await enforcer.EnsureCanVerify(WorkerOfA, log.Id);
+        Assert.False(verifyCheck.IsSuccess);
+        Assert.Equal(ShramSafalErrors.Forbidden, verifyCheck.Error);
     }
 
     [Fact(DisplayName = "A SecondaryOwner can perform owner-only actions on their assigned farm")]
@@ -92,8 +105,8 @@ public sealed class FarmMembershipAuthorizationBaselineTests
         var (enforcer, repo) = CreateSubject();
         repo.AddMembership(FarmA, SecondaryOwnerOfA, AppRole.SecondaryOwner);
 
-        await enforcer.EnsureIsFarmMember(SecondaryOwnerOfA, FarmA);
-        await enforcer.EnsureIsOwner(SecondaryOwnerOfA, FarmA);
+        Assert.True((await enforcer.EnsureIsFarmMember(SecondaryOwnerOfA, FarmA)).IsSuccess);
+        Assert.True((await enforcer.EnsureIsOwner(SecondaryOwnerOfA, FarmA)).IsSuccess);
 
         var log = DailyLog.Create(
             id: Guid.NewGuid(),
@@ -107,6 +120,6 @@ public sealed class FarmMembershipAuthorizationBaselineTests
             createdAtUtc: DateTime.UtcNow);
         repo.AddLog(log);
 
-        await enforcer.EnsureCanVerify(SecondaryOwnerOfA, log.Id);
+        Assert.True((await enforcer.EnsureCanVerify(SecondaryOwnerOfA, log.Id)).IsSuccess);
     }
 }

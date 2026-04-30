@@ -19,10 +19,13 @@ public static class MembershipEndpoints
         // Sub-plan 03 Task 8: this endpoint resolves the PIPELINE-WRAPPED
         // handler (IHandler<IssueFarmInviteCommand, IssueFarmInviteResult>),
         // not the raw IssueFarmInviteHandler. Validation + authorization +
-        // logging run as pipeline behaviors before the handler body. The
-        // legacy try/catch UnauthorizedAccessException stays as a defense-
-        // in-depth seam in case any sibling code path throws — the
-        // pipeline's authorizer should normally translate to Result.Failure.
+        // logging run as pipeline behaviors before the handler body.
+        //
+        // Sub-plan 03 T-IGH-03-AUTHZ-RESULT: IAuthorizationEnforcer now
+        // returns Result instead of throwing UnauthorizedAccessException,
+        // so the legacy `catch (UnauthorizedAccessException)` defense-in-
+        // depth seam is GONE. The pipeline's authorizer routes auth
+        // failures as typed Result.Failure → ToErrorResult → 403.
         group.MapPost("/farms/{farmId:guid}/invite-qr", async (
             Guid farmId,
             ClaimsPrincipal user,
@@ -34,24 +37,18 @@ public static class MembershipEndpoints
                 return Results.Unauthorized();
             }
 
-            try
-            {
-                var result = await handler.HandleAsync(
-                    new IssueFarmInviteCommand(new FarmId(farmId), new UserId(userId)),
-                    ct);
+            var result = await handler.HandleAsync(
+                new IssueFarmInviteCommand(new FarmId(farmId), new UserId(userId)),
+                ct);
 
-                return result.IsSuccess
-                    ? Results.Ok(InviteResponse.From(result.Value!))
-                    : ToErrorResult(result.Error);
-            }
-            catch (UnauthorizedAccessException)
-            {
-                return Results.Forbid();
-            }
+            return result.IsSuccess
+                ? Results.Ok(InviteResponse.From(result.Value!))
+                : ToErrorResult(result.Error);
         })
         .WithName("IssueFarmInvite");
 
         // Owner-only: explicit rotate. Invalidates the previously-shared QR.
+        // T-IGH-03-AUTHZ-RESULT: enforcer no longer throws, so no catch needed.
         group.MapPost("/farms/{farmId:guid}/invite-qr/rotate", async (
             Guid farmId,
             ClaimsPrincipal user,
@@ -63,20 +60,13 @@ public static class MembershipEndpoints
                 return Results.Unauthorized();
             }
 
-            try
-            {
-                var result = await handler.HandleAsync(
-                    new RotateFarmInviteCommand(new FarmId(farmId), new UserId(userId)),
-                    ct);
+            var result = await handler.HandleAsync(
+                new RotateFarmInviteCommand(new FarmId(farmId), new UserId(userId)),
+                ct);
 
-                return result.IsSuccess
-                    ? Results.Ok(InviteResponse.From(result.Value!.Issued))
-                    : ToErrorResult(result.Error);
-            }
-            catch (UnauthorizedAccessException)
-            {
-                return Results.Forbid();
-            }
+            return result.IsSuccess
+                ? Results.Ok(InviteResponse.From(result.Value!.Issued))
+                : ToErrorResult(result.Error);
         })
         .WithName("RotateFarmInvite");
 

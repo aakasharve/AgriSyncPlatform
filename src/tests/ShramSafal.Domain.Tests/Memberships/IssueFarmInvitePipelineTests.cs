@@ -162,13 +162,15 @@ public sealed class IssueFarmInvitePipelineTests
 
     private sealed class RejectingEnforcer : IAuthorizationEnforcer
     {
-        public Task EnsureIsFarmMember(UserId userId, FarmId farmId)
-            => throw new UnauthorizedAccessException("not a member");
-        public Task EnsureIsOwner(UserId userId, FarmId farmId)
-            => throw new UnauthorizedAccessException("not an owner");
-        public Task EnsureCanVerify(UserId userId, Guid logId)
-            => throw new UnauthorizedAccessException();
-        public Task EnsureCanEditLog(UserId userId, Guid logId)
-            => throw new UnauthorizedAccessException();
+        // T-IGH-03-AUTHZ-RESULT: enforcer returns Result.Failure(Forbidden)
+        // instead of throwing UnauthorizedAccessException.
+        public Task<Result> EnsureIsFarmMember(UserId userId, FarmId farmId)
+            => Task.FromResult(Result.Failure(ShramSafalErrors.Forbidden));
+        public Task<Result> EnsureIsOwner(UserId userId, FarmId farmId)
+            => Task.FromResult(Result.Failure(ShramSafalErrors.Forbidden));
+        public Task<Result> EnsureCanVerify(UserId userId, Guid logId)
+            => Task.FromResult(Result.Failure(ShramSafalErrors.Forbidden));
+        public Task<Result> EnsureCanEditLog(UserId userId, Guid logId)
+            => Task.FromResult(Result.Failure(ShramSafalErrors.Forbidden));
     }
 }
