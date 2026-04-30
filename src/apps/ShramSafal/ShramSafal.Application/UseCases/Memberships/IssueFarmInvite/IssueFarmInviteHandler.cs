@@ -43,8 +43,12 @@ public sealed class IssueFarmInviteHandler(
 
         await authz.EnsureIsOwner(command.CallerUserId, command.FarmId);
 
-        var farm = await farmRepository.GetFarmByIdAsync(command.FarmId.Value, ct)
-            ?? throw new InvalidOperationException($"Farm '{command.FarmId}' not found.");
+        var farm = await farmRepository.GetFarmByIdAsync(command.FarmId.Value, ct);
+        if (farm is null)
+        {
+            // Sub-plan 03 Task 3: business outcome -> Result.Failure, not throw.
+            return Result.Failure<IssueFarmInviteResult>(ShramSafalErrors.FarmNotFound);
+        }
 
         var utcNow = clock.UtcNow;
 

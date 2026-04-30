@@ -156,6 +156,40 @@ public sealed class ApplyProviderEventHandlerTests
         Assert.Equal(1, _repo.SaveCalls);
     }
 
+    /// <summary>
+    /// Sub-plan 03 Task 3: missing ValidUntilUtc on an Activate/Renew event
+    /// must surface as a Result.Failure (Validation kind), not as an
+    /// InvalidOperationException bubbling out of the handler.
+    /// </summary>
+    [Fact]
+    public async Task Activate_Event_WithoutValidUntilUtc_ReturnsValidationFailure()
+    {
+        var subId = new SubscriptionId(Guid.NewGuid());
+        _repo.SeedSubscription(BuildTrialingSubscription(subId));
+
+        var command = new ApplyProviderEventCommand(
+            "evt_activate_no_validuntil",
+            ProviderEventTypes.SubscriptionActivated,
+            subId,
+            _clock.UtcNow,
+            null,                          // ValidUntilUtc deliberately omitted
+            null,
+            "cus_abc",
+            "{}");
+
+        var result = await Handler.HandleAsync(command);
+
+        Assert.False(result.IsSuccess);
+        Assert.NotNull(result.Error);
+        Assert.Equal(AgriSync.BuildingBlocks.Results.ErrorKind.Validation, result.Error.Kind);
+        Assert.Contains("ValidUntilUtc", result.Error.Description);
+
+        // Subscription should NOT have transitioned, and no save should occur
+        // for an aborted command.
+        Assert.Equal(SubscriptionStatus.Trialing, _repo.GetSubscription(subId)!.Status);
+        Assert.Equal(0, _repo.SaveCalls);
+    }
+
     private static ApplyProviderEventCommand BuildActivateCommand(string eventId) =>
         new(eventId, ProviderEventTypes.SubscriptionActivated,
             null, null, null, null, null, "{}");
