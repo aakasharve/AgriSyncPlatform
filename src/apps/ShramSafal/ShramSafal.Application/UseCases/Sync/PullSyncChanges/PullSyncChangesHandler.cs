@@ -300,21 +300,19 @@ public sealed class PullSyncChangesHandler(
             if (maxSignal > nextCursorUtc) nextCursorUtc = maxSignal;
         }
 
-        // Sub-plan 03 Task 10 — degraded-component reporting only.
-        // The cursor-freeze-on-degradation invariant ("if any component
-        // failed, do not advance the cursor so the next pull retries the
-        // same window") interacts unpredictably with the EF InMemory
-        // test provider used by ShramSafal.Sync.IntegrationTests:
-        // benign InMemory artifacts can throw and trigger an unintended
-        // freeze, causing flaky test behavior on CI even when prod-shape
-        // Postgres works fine. The freeze is filed as
-        // T-IGH-03-PULL-CURSOR-FREEZE for a focused implementation
-        // backed by a real-DB integration test.
+        // Sub-plan 03 Task 10 (T-IGH-03-PULL-CURSOR-FREEZE) — cursor
+        // freeze on partial failure. If ANY component degraded,
+        // NextCursorUtc is set BACK to SinceUtc so the next pull
+        // retries the same window. Without this, a partial failure
+        // could silently advance the cursor past data the client
+        // never received (cost: small redundant work on the next pull;
+        // benefit: no silent data loss).
         if (degraded.Count > 0)
         {
             logger.LogWarning(
-                "PullSync: {Count} component(s) degraded; surfacing as DegradedComponents in the response.",
-                degraded.Count);
+                "PullSync: {Count} component(s) degraded ({Components}); freezing NextCursorUtc at {SinceUtc} for retry.",
+                degraded.Count, string.Join(",", degraded.Select(d => d.ComponentName)), sinceUtc);
+            nextCursorUtc = sinceUtc;
         }
 
         var response = new SyncPullResponseDto(
