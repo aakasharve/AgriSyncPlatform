@@ -177,11 +177,30 @@ public static class MembershipEndpoints
         return group;
     }
 
+    /// <summary>
+    /// Sub-plan 03 bridge: route status code through <c>ErrorKind</c>
+    /// rather than pattern-matching on <c>Error.Code</c> string suffixes.
+    /// Body shape (<c>{error, message}</c>) is preserved verbatim because
+    /// frontend + integration tests depend on it; switching to RFC 7807
+    /// would be a breaking contract change tracked in a separate
+    /// pending task.
+    /// </summary>
     private static IResult ToErrorResult(Error error)
     {
-        return error.Code.EndsWith("NotFound", StringComparison.Ordinal)
-            ? Results.NotFound(new { error = error.Code, message = error.Description })
-            : Results.BadRequest(new { error = error.Code, message = error.Description });
+        var body = new { error = error.Code, message = error.Description };
+        return error.Kind switch
+        {
+            ErrorKind.NotFound => Results.NotFound(body),
+            ErrorKind.Forbidden => Results.Forbid(),
+            ErrorKind.Unauthenticated => Results.Unauthorized(),
+            ErrorKind.Conflict => Results.Conflict(body),
+            ErrorKind.Validation => Results.BadRequest(body),
+            // Pre-Sub-plan-03 fallback: Internal-classified errors and
+            // any unmapped kind keep the historical 400 shape so that
+            // existing test contracts continue to pass. Tightening to
+            // 500 for true server faults is a follow-up.
+            _ => Results.BadRequest(body),
+        };
     }
 
     private sealed record InviteResponse(

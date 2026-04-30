@@ -2,6 +2,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using Accounts.Application.UseCases.Subscriptions.ApplyProviderEvent;
+using AgriSync.BuildingBlocks.Results;
 using AgriSync.SharedKernel.Contracts.Ids;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
@@ -109,8 +110,16 @@ public static class SubscriptionWebhookEndpoints
             var result = await handler.HandleAsync(command, ct);
             if (result.IsFailure)
             {
-                logger.LogError("ApplyProviderEventHandler failed: {Error}", result.Error);
-                return Results.Problem(detail: result.Error.Description, statusCode: 500);
+                // Sub-plan 03: route Error.Kind through ProblemDetailsMapper
+                // so a Validation-class failure (e.g. Activate without
+                // ValidUntilUtc) returns 400, not 500. Webhook providers
+                // distinguish "retryable transport error" (5xx) from
+                // "your payload is wrong, fix and resend" (4xx) — using
+                // the right code keeps their backoff sane.
+                logger.LogWarning(
+                    "ApplyProviderEventHandler failed: {ErrorCode} ({Kind}) — {Description}",
+                    result.Error.Code, result.Error.Kind, result.Error.Description);
+                return result.Error.ToHttpResult();
             }
 
             var outcome = result.Value!;
