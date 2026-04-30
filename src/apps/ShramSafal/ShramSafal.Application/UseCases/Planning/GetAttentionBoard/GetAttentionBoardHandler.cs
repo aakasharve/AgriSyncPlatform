@@ -98,13 +98,26 @@ public sealed class GetAttentionBoardHandler(
                 // Sub-plan 03 Task 10: a repository failure here used to be
                 // silently swallowed and produced an empty signals list,
                 // which made the AttentionBoard tile under-elevate plots
-                // with real compliance issues. Log the failure so it shows
-                // in ops dashboards. The caller (PullSyncChangesHandler)
-                // wraps GetAttentionBoardHandler in its own catch and
-                // records the AttentionBoard component as degraded when
-                // ANY exception bubbles, so per-farm signal-fetch failures
-                // surface as a degraded AttentionBoard rather than as a
-                // silently truncated tile.
+                // with real compliance issues. We now log the failure so
+                // it shows in ops dashboards.
+                //
+                // HONEST TRADE-OFF: this catch SOFT-DEGRADES locally — the
+                // exception does NOT bubble to the caller, so when
+                // PullSyncChangesHandler invokes us its outer catch never
+                // fires and the response carries NO `AttentionBoard`
+                // entry in DegradedComponents / X-Degraded. The reasoning:
+                // we iterate compliance signals PER FARM, and a single
+                // farm's repository hiccup shouldn't degrade the whole
+                // AttentionBoard tile across all the caller's farms.
+                // Cost: clients can't tell that one row had truncated
+                // signals from the response payload alone (only ops can,
+                // via logs / OTel events).
+                //
+                // If finer-grained surfacing matters, the right fix is to
+                // expose a per-row `degradedSignals` flag on
+                // AttentionBoardCardDto rather than to bubble the whole
+                // tile. Filed inline as a future refinement; not a
+                // build-blocker today.
                 IReadOnlyList<ComplianceSignal> complianceSignals;
                 try
                 {
@@ -114,7 +127,7 @@ public sealed class GetAttentionBoardHandler(
                 catch (Exception ex)
                 {
                     logger.LogWarning(ex,
-                        "GetAttentionBoard: ComplianceSignalRepository.GetOpenForFarmAsync threw {ExceptionType} for farm {FarmId}; treating signals as empty for this plot row.",
+                        "GetAttentionBoard: ComplianceSignalRepository.GetOpenForFarmAsync threw {ExceptionType} for farm {FarmId}; soft-degrading signals to empty for this plot row (NOT bubbled to PullSync's AttentionBoard degraded surface — see comment above).",
                         ex.GetType().Name, farmId);
                     complianceSignals = Array.Empty<ComplianceSignal>();
                 }
