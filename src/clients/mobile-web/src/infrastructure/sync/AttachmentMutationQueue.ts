@@ -1,14 +1,15 @@
 import type { AttachmentRecord } from '../storage/DexieDatabase';
 import { mutationQueue } from './MutationQueue';
+import { SyncMutationName } from './SyncMutationCatalog';
 
 export function createAttachmentClientRequestId(attachmentId: string): string {
-    return `create_attachment:${attachmentId}`;
+    return `${SyncMutationName.CreateAttachment}:${attachmentId}`;
 }
 
 export async function enqueueCreateAttachmentMutation(attachment: AttachmentRecord): Promise<string> {
     const clientRequestId = createAttachmentClientRequestId(attachment.id);
     return mutationQueue.enqueue(
-        'create_attachment',
+        SyncMutationName.CreateAttachment,
         {
             attachmentId: attachment.id,
             farmId: attachment.farmId,

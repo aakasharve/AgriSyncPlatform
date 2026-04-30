@@ -1,4 +1,5 @@
 import { mutationQueue } from '../../../infrastructure/sync/MutationQueue';
+import { SyncMutationName } from '../../../infrastructure/sync/SyncMutationCatalog';
 
 export interface AddLogTaskPayload {
      dailyLogId: string;
@@ -10,8 +11,8 @@ export interface AddLogTaskPayload {
 
 export class AddLogTaskCommand {
      static async enqueue(payload: AddLogTaskPayload): Promise<string> {
-          const clientRequestId = `add_log_task:${payload.dailyLogId}:${payload.logTaskId}`;
-          return mutationQueue.enqueue('add_log_task', payload, {
+          const clientRequestId = `${SyncMutationName.AddLogTask}:${payload.dailyLogId}:${payload.logTaskId}`;
+          return mutationQueue.enqueue(SyncMutationName.AddLogTask, payload, {
                clientRequestId,
                clientCommandId: clientRequestId
           });

@@ -3,6 +3,7 @@ import { LogsRepository } from '../ports';
 import { AuditPort } from '../ports/AuditPort';
 import { mutationQueue } from '../../infrastructure/sync/MutationQueue';
 import { backgroundSyncWorker } from '../../infrastructure/sync/BackgroundSyncWorker';
+import { SyncMutationName } from '../../infrastructure/sync/SyncMutationCatalog';
 
 export interface VerifyLogInput {
     logId: string;
@@ -55,7 +56,7 @@ export async function verifyLog(
     profile: FarmerProfile
 ): Promise<VerifyResult> {
     try {
-        await mutationQueue.enqueue('verify_log_v2', {
+        await mutationQueue.enqueue(SyncMutationName.VerifyLogV2, {
             dailyLogId: input.logId,
             targetStatus: mapTargetStatus(input.action),
             reason: input.note,
@@ -88,7 +89,7 @@ export async function batchVerifyLogs(
 ): Promise<VerifyResult> {
     try {
         for (const logId of input.logIds) {
-            await mutationQueue.enqueue('verify_log_v2', {
+            await mutationQueue.enqueue(SyncMutationName.VerifyLogV2, {
                 dailyLogId: logId,
                 targetStatus: 'Verified',
                 verifiedByUserId: input.verifierId,

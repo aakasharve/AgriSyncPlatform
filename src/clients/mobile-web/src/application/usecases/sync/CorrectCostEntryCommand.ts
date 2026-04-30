@@ -1,4 +1,5 @@
 import { mutationQueue } from '../../../infrastructure/sync/MutationQueue';
+import { SyncMutationName } from '../../../infrastructure/sync/SyncMutationCatalog';
 import { idGenerator } from '../../../core/domain/services/IdGenerator';
 
 export interface CorrectCostEntryPayload {
@@ -13,7 +14,7 @@ export interface CorrectCostEntryPayload {
 export class CorrectCostEntryCommand {
      static async enqueue(payload: CorrectCostEntryPayload): Promise<string> {
           const clientRequestId = idGenerator.generate();
-          return mutationQueue.enqueue('correct_cost_entry', payload, {
+          return mutationQueue.enqueue(SyncMutationName.CorrectCostEntry, payload, {
                clientRequestId,
                clientCommandId: clientRequestId
           });
