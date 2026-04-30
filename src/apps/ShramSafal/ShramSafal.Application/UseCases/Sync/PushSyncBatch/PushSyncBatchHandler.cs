@@ -7,6 +7,7 @@ using AgriSync.SharedKernel.Contracts.Roles;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage;
 using ShramSafal.Application.Contracts.Dtos;
+using ShramSafal.Application.Contracts.Sync;
 using ShramSafal.Application.Ports;
 using ShramSafal.Application.UseCases.Attachments.CreateAttachment;
 using ShramSafal.Application.UseCases.Compliance.AcknowledgeSignal;
@@ -230,7 +231,18 @@ public sealed class PushSyncBatchHandler(
         string actorRole,
         CancellationToken ct)
     {
-        switch (mutationType.ToLowerInvariant())
+        // Catalog guard — single source of truth is sync-contract/schemas/mutation-types.json.
+        // Names are case-sensitive on purpose; ToLowerInvariant was dropped because
+        // dotted names (compliance.acknowledge, jobcard.create, schedule.publish)
+        // and any future PascalCase entry would silently mismatch under lowercasing.
+        if (!SyncMutationCatalog.IsKnown(mutationType))
+        {
+            return MutationExecutionOutcome.Failure(
+                "MUTATION_TYPE_UNKNOWN",
+                $"Mutation type '{mutationType}' is not registered in the SyncMutationCatalog. Regenerate sync-contract.");
+        }
+
+        switch (mutationType)
         {
             case "create_farm":
                 return await HandleCreateFarmAsync(clientRequestId, payload, actorUserId, actorRole, ct);
@@ -244,6 +256,12 @@ public sealed class PushSyncBatchHandler(
                 return await HandleAddLogTaskAsync(clientRequestId, payload, actorUserId, actorRole, ct);
             case "verify_log":
                 return await HandleVerifyLogAsync(clientRequestId, payload, actorUserId, actorRole, ct);
+            case "verify_log_v2":
+                // Sub-plan 03 wires the v2 verify handler. Until then, return a
+                // typed UNIMPLEMENTED so the surface area is honest.
+                return MutationExecutionOutcome.Failure(
+                    "MUTATION_TYPE_UNIMPLEMENTED",
+                    "verify_log_v2 handler is not yet wired. Falls back to verify_log on the client. Tracked in Sub-plan 03.");
             case "add_cost_entry":
                 return await HandleAddCostEntryAsync(clientRequestId, payload, actorUserId, actorRole, ct);
             case "allocate_global_expense":
@@ -279,10 +297,29 @@ public sealed class PushSyncBatchHandler(
                 return MutationExecutionOutcome.Failure(
                     "ShramSafal.InvalidMutationType",
                     "Mutation type 'add_location' is not allowed as standalone command. Send location with create_daily_log.");
-            default:
+            // Schedule + Plan mutations (Sub-plan 03 wires real handlers).
+            case "schedule.publish":
+            case "schedule.edit":
+            case "schedule.clone":
+            case "plan.add":
+            case "plan.override":
+            case "plan.remove":
+            case "adopt_schedule":
+            case "migrate_schedule":
+            case "abandon_schedule":
                 return MutationExecutionOutcome.Failure(
-                    "ShramSafal.UnsupportedMutationType",
-                    $"Unsupported mutationType '{mutationType}'.");
+                    "MUTATION_TYPE_UNIMPLEMENTED",
+                    $"Mutation type '{mutationType}' is registered in the catalog but its server handler is not yet wired. Tracked in Sub-plan 03.");
+            default:
+                // Catalog drift: a name was added to mutation-types.json but no
+                // case here. The IsKnown guard above caught the unknown-type
+                // path; reaching default with an IsKnown name means the catalog
+                // grew faster than the dispatch. Surface this as a distinct
+                // error so the contract test (which scans this file) can
+                // report exactly which case is missing.
+                return MutationExecutionOutcome.Failure(
+                    "MUTATION_TYPE_UNIMPLEMENTED",
+                    $"Mutation type '{mutationType}' is registered in the catalog but has no dispatch case. Add a case to PushSyncBatchHandler.cs ExecuteMutationAsync.");
         }
     }
 
