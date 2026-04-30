@@ -3,6 +3,7 @@ import { idGenerator } from '../../core/domain/services/IdGenerator';
 import { systemClock } from '../../core/domain/services/Clock';
 import type { SyncMutationType } from '../api/AgriSyncClient';
 import { isSyncMutationType } from './SyncMutationCatalog';
+import { validatePayload } from './PayloadValidator';
 
 const DEVICE_ID_KEY = 'agrisync_device_id_v1';
 const SYNC_SCOPE = 'shramsafal';
@@ -47,6 +48,19 @@ export class MutationQueue {
         const normalizedMutationType = mutationType.trim();
         if (!isSyncMutationType(normalizedMutationType)) {
             throw new Error(`Unsupported mutationType '${normalizedMutationType}'.`);
+        }
+
+        // Sub-plan 02 Task 9: catch malformed payloads at the offline boundary.
+        // Mutations with z.unknown() scaffolds (T-IGH-02-PAYLOADS) accept anything;
+        // strict-typed mutations (create_daily_log, verify_log_v2, add_cost_entry,
+        // create_attachment) reject with a typed error here instead of silently
+        // failing later at the server.
+        const validation = validatePayload(normalizedMutationType, payload);
+        if (!validation.ok) {
+            throw new Error(
+                `Payload validation failed for ${normalizedMutationType}: ` +
+                validation.errors.map((e) => `${e.path || '<root>'} ${e.message}`).join('; ')
+            );
         }
 
         const db = getDatabase();
