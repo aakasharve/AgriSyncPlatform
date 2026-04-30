@@ -109,13 +109,11 @@ public sealed class PullSyncChangesHandler(
             auditEvents);
 
         // Sub-plan 03 Task 10 — collect partial-failure components.
-        // Today: when this list is non-empty, the response carries
+        // When this list is non-empty, the response carries
         // DegradedComponents + the X-Degraded HTTP header so clients
-        // can show a partial-data badge. The cursor STILL advances —
-        // freeze-on-degradation is filed as T-IGH-03-PULL-CURSOR-FREEZE
-        // and needs a real-DB fail-injection test before re-introduction
-        // (InMemory test provider tripped unintended freezes; see
-        // af7aa83 for the revert and the pending task for context).
+        // can show a partial-data badge, AND the cursor-freeze block
+        // below resets NextCursorUtc to SinceUtc so the next pull
+        // retries the same window (no silent data loss).
         var degraded = new List<DegradedComponent>();
 
         // AttentionBoard is computed as a snapshot on every pull.
@@ -196,10 +194,9 @@ public sealed class PullSyncChangesHandler(
 
         // CEI Phase 4 §4.8 — job cards modified since cursor, scoped to
         // caller's farms. On failure: keep the empty list and record a
-        // DegradedComponent. The cursor still advances today; clients
-        // see partial data via DegradedComponents/X-Degraded and decide
-        // their own retry policy (cursor-freeze pending
-        // T-IGH-03-PULL-CURSOR-FREEZE).
+        // DegradedComponent. The cursor-freeze block below picks this
+        // up and rewinds NextCursorUtc so the missed JobCards rows
+        // reach the client on the next pull.
         List<JobCardDto> jobCardDtos = [];
         try
         {
@@ -341,8 +338,8 @@ public sealed class PullSyncChangesHandler(
             complianceSignalDtos,
             jobCardDtos,
             // Sub-plan 03 Task 10: empty list when healthy; non-empty
-            // signals partial data. NextCursorUtc still advances (freeze
-            // pending T-IGH-03-PULL-CURSOR-FREEZE).
+            // signals partial data AND triggers the NextCursorUtc
+            // rewind handled in the if-block above.
             degraded);
 
         return Result.Success(response);
