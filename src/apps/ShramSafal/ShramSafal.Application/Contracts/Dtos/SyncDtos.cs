@@ -46,4 +46,14 @@ public sealed record SyncPullResponseDto(
     // CEI Phase 3 §4.6 — compliance signals
     IReadOnlyList<ComplianceSignalDto> ComplianceSignals,
     // CEI Phase 4 §4.8 — Work Trust Ledger
-    IReadOnlyList<JobCardDto> JobCards);
+    IReadOnlyList<JobCardDto> JobCards,
+    // Sub-plan 03 Task 10 — partial-failure surface. When non-empty,
+    // the response carries PARTIAL data: at least one component fetch
+    // failed, the global NextCursorUtc was FROZEN to SinceUtc so the
+    // next pull retries the same window, and the named components
+    // should display a degraded state in the UI.
+    //
+    // Optional with a default of empty so all existing callers remain
+    // wire-compatible — null/missing in the JSON deserializes to []
+    // for clients that haven't been updated.
+    IReadOnlyList<AgriSync.BuildingBlocks.Results.DegradedComponent>? DegradedComponents = null);

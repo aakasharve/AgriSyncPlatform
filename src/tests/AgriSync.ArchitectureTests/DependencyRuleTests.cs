@@ -114,6 +114,123 @@ public sealed class DependencyRuleTests
     }
 
     /// <summary>
+    /// Sub-plan 03 Task 10: application code must NEVER swallow exceptions
+    /// silently. The forbidden pattern is a catch block whose BODY is
+    /// empty or comment-only:
+    /// <code>
+    ///   catch { }
+    ///   catch { /* swallow */ }
+    ///   catch (Exception) { /* default */ }
+    ///   catch (FooException ex) {  // empty
+    ///   }
+    /// </code>
+    /// Catches whose body re-throws, returns <c>Result.Failure</c>,
+    /// records a <c>DegradedComponent</c>, or logs the exception are
+    /// all permitted — the rule is "no silent swallow", not "must
+    /// capture the variable" (intentional domain-exception translation
+    /// to typed failure is a legitimate seam).
+    /// NO whitelist — every new silent-swallow fails the build.
+    /// </summary>
+    [Fact]
+    public void Application_layer_must_not_silently_swallow_exceptions()
+    {
+        var appsRoot = TestPathHelper.GetAppsRoot();
+        var applicationProjects = Directory.GetFiles(appsRoot, "*.Application.csproj", SearchOption.AllDirectories);
+
+        Assert.NotEmpty(applicationProjects);
+
+        // Match the catch keyword and capture everything until the
+        // CLOSING brace of the catch block (handles bracket nesting
+        // up to a reasonable depth — empty / comment-only bodies are
+        // exactly what we want to flag).
+        // Strategy: find every `catch (...) {` (or `catch {`), then
+        // walk forward counting braces. If the body content (with
+        // // line-comments and /* block-comments */ stripped) is
+        // empty after trim, flag it.
+        var catchOpener = new System.Text.RegularExpressions.Regex(
+            @"\bcatch\b\s*(\([^)]*\))?\s*\{",
+            System.Text.RegularExpressions.RegexOptions.Compiled);
+
+        var offenders = new List<string>();
+
+        foreach (var applicationProject in applicationProjects)
+        {
+            var projectDirectory = Path.GetDirectoryName(applicationProject) ?? string.Empty;
+            foreach (var sourceFile in Directory.EnumerateFiles(projectDirectory, "*.cs", SearchOption.AllDirectories))
+            {
+                if (sourceFile.Contains(Path.DirectorySeparatorChar + "obj" + Path.DirectorySeparatorChar)
+                    || sourceFile.Contains(Path.DirectorySeparatorChar + "bin" + Path.DirectorySeparatorChar))
+                {
+                    continue;
+                }
+                var text = File.ReadAllText(sourceFile);
+                foreach (System.Text.RegularExpressions.Match m in catchOpener.Matches(text))
+                {
+                    var openBraceIdx = m.Index + m.Length - 1; // points at `{`
+                    var bodyEndIdx = FindMatchingBrace(text, openBraceIdx);
+                    if (bodyEndIdx < 0) continue; // unbalanced source — don't false-positive
+                    var body = text.Substring(openBraceIdx + 1, bodyEndIdx - openBraceIdx - 1);
+                    var stripped = StripCommentsAndWhitespace(body);
+                    if (stripped.Length == 0)
+                    {
+                        var lineNumber = text[..m.Index].Count(c => c == '\n') + 1;
+                        var snippet = m.Value.TrimEnd();
+                        offenders.Add($"{sourceFile}:{lineNumber}: {snippet} <empty body>");
+                    }
+                }
+            }
+        }
+
+        Assert.True(
+            offenders.Count == 0,
+            "Application code must NOT silently swallow exceptions. Each " +
+            "catch block must do something observable: re-throw, return " +
+            "Result.Failure, record a DegradedComponent, OR log the " +
+            "exception. Empty / comment-only catch bodies:" +
+            Environment.NewLine + string.Join(Environment.NewLine, offenders));
+    }
+
+    private static int FindMatchingBrace(string text, int openBraceIdx)
+    {
+        var depth = 1;
+        for (var i = openBraceIdx + 1; i < text.Length; i++)
+        {
+            var c = text[i];
+            // Skip string literals (very rough — sufficient for C# without
+            // raw-string features in catch bodies, which would be unusual).
+            if (c == '"')
+            {
+                i++;
+                while (i < text.Length && text[i] != '"')
+                {
+                    if (text[i] == '\\' && i + 1 < text.Length) { i++; }
+                    i++;
+                }
+                continue;
+            }
+            if (c == '{') depth++;
+            else if (c == '}')
+            {
+                depth--;
+                if (depth == 0) return i;
+            }
+        }
+        return -1;
+    }
+
+    private static string StripCommentsAndWhitespace(string body)
+    {
+        // Strip // line comments.
+        var lineCommentStripped = System.Text.RegularExpressions.Regex.Replace(
+            body, @"//[^\n]*", string.Empty);
+        // Strip /* block comments */.
+        var blockCommentStripped = System.Text.RegularExpressions.Regex.Replace(
+            lineCommentStripped, @"/\*.*?\*/", string.Empty,
+            System.Text.RegularExpressions.RegexOptions.Singleline);
+        return blockCommentStripped.Trim();
+    }
+
+    /// <summary>
     /// Sub-plan 03 Task 4: application handlers must surface business
     /// outcomes via <c>Result.Failure</c>, never via thrown exceptions.
     /// Domain-layer invariants (programming errors) keep their throws —

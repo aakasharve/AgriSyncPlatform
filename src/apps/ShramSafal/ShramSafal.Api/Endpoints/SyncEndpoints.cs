@@ -53,6 +53,7 @@ public static class SyncEndpoints
         .WithName("PushSyncBatch");
 
         group.MapGet("/pull", async (
+            HttpContext httpContext,
             string? since,
             ClaimsPrincipal user,
             ILoggerFactory loggerFactory,
@@ -83,7 +84,24 @@ public static class SyncEndpoints
             }
 
             var result = await handler.HandleAsync(new PullSyncChangesQuery(cursor, actorUserId), ct);
-            return result.IsSuccess ? Results.Ok(result.Value) : ToErrorResult(result.Error);
+            if (!result.IsSuccess)
+            {
+                return ToErrorResult(result.Error);
+            }
+
+            // Sub-plan 03 Task 10: surface degraded components as the
+            // X-Degraded response header (comma-separated component
+            // names) so frontend SDK / proxy logs can detect partial
+            // data without parsing the body. The body itself also
+            // carries DegradedComponents (with Description + ErrorCode)
+            // for richer UI rendering.
+            var payload = result.Value!;
+            if (payload.DegradedComponents is { Count: > 0 } components)
+            {
+                httpContext.Response.Headers["X-Degraded"] =
+                    string.Join(",", components.Select(c => c.ComponentName));
+            }
+            return Results.Ok(payload);
         })
         .WithName("PullSyncChanges")
         .WithSummary("Pull sync changes since an ISO 8601 UTC cursor, or 0 for a full sync.");

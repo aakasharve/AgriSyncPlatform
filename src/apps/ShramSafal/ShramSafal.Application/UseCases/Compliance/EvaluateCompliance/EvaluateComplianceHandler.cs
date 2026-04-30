@@ -2,6 +2,7 @@ using System.Text.Json;
 using AgriSync.BuildingBlocks.Abstractions;
 using AgriSync.BuildingBlocks.Results;
 using AgriSync.SharedKernel.Contracts.Ids;
+using Microsoft.Extensions.Logging;
 using ShramSafal.Application.Ports;
 using ShramSafal.Domain.Audit;
 using ShramSafal.Domain.Compare;
@@ -28,7 +29,8 @@ public sealed class EvaluateComplianceHandler(
     IShramSafalRepository repository,
     IComplianceSignalRepository signalRepository,
     ITestInstanceRepository testInstanceRepository,
-    IClock clock)
+    IClock clock,
+    ILogger<EvaluateComplianceHandler> logger)
 {
     private sealed record SignalKey(FarmId FarmId, Guid PlotId, string RuleCode, Guid? CropCycleId);
 
@@ -148,12 +150,23 @@ public sealed class EvaluateComplianceHandler(
                 int prevCount = 0;
                 if (openByKey.TryGetValue(pbKey, out var prevSignal))
                 {
+                    // Sub-plan 03 Task 10: be specific about what we're
+                    // tolerating — a stored payload with the wrong shape
+                    // (legacy data, manual edit) shouldn't fail the whole
+                    // evaluation. Anything else (e.g. NRE) is a real bug
+                    // and must propagate.
                     try
                     {
                         var prev = JsonSerializer.Deserialize<ProtocolBreakPayload>(prevSignal.PayloadJson);
                         prevCount = prev?.ConsecutiveCriticalDays ?? 0;
                     }
-                    catch { /* default to 0 */ }
+                    catch (JsonException ex)
+                    {
+                        logger.LogWarning(ex,
+                            "EvaluateCompliance: malformed PayloadJson on existing ProtocolBreak signal for farm {FarmId} plot {PlotId}; defaulting consecutive-critical-days to 0.",
+                            farmId, plot.Id);
+                        prevCount = 0;
+                    }
                 }
 
                 var newCount = prevCount + 1;
