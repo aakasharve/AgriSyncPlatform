@@ -2,23 +2,15 @@ import axios, { AxiosError, AxiosInstance, InternalAxiosRequestConfig } from 'ax
 import { reportClientError } from '../telemetry/ClientErrorReporter';
 import { clearAuthSession, getAuthSession, setAuthSession, type AuthSession } from './AuthTokenStore';
 import type { VisibleBucketId } from '../../domain/ai/BucketId';
+import { SYNC_MUTATION_TYPES } from '../sync/SyncMutationCatalog';
 
-export type SyncMutationType =
-    | 'create_farm'
-    | 'create_plot'
-    | 'create_crop_cycle'
-    | 'create_daily_log'
-    | 'add_log_task'
-    | 'verify_log'
-    | 'verify_log_v2'
-    | 'add_cost_entry'
-    | 'correct_cost_entry'
-    | 'allocate_global_expense'
-    | 'set_price_config'
-    | 'create_attachment'
-    | 'adopt_schedule'
-    | 'migrate_schedule'
-    | 'abandon_schedule';
+// SyncMutationType is the canonical union of mutation names. The single
+// source of truth is sync-contract/schemas/mutation-types.json — see
+// SyncMutationCatalog.ts (auto-generated). Re-exported here because
+// API layer types historically lived in this module; downstream code
+// continues to import SyncMutationType from AgriSyncClient.
+export type { SyncMutationType } from '../sync/SyncMutationCatalog';
+export { SYNC_MUTATION_TYPES };
 
 export type VerificationStatus =
     | 'draft'

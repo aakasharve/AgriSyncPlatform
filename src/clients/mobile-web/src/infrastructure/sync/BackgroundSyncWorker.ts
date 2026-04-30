@@ -5,25 +5,16 @@ import { getAuthSession } from '../api/AuthTokenStore';
 import { reconcileSyncPull } from './SyncPullReconciler';
 import { getDatabase } from '../storage/DexieDatabase';
 import { AiJobWorker } from './AiJobWorker';
+import { isSyncMutationType } from './SyncMutationCatalog';
 
 function toSyncMutationType(mutationType: string): SyncMutationType | null {
-    const normalized = mutationType.trim().toLowerCase();
-    switch (normalized) {
-        case 'create_farm':
-        case 'create_plot':
-        case 'create_crop_cycle':
-        case 'create_daily_log':
-        case 'add_log_task':
-        case 'verify_log':
-        case 'verify_log_v2':
-        case 'add_cost_entry':
-        case 'correct_cost_entry':
-        case 'allocate_global_expense':
-        case 'set_price_config':
-            return normalized;
-        default:
-            return null;
-    }
+    // Catalog names are case-sensitive — `compliance.acknowledge` and
+    // `jobcard.create` already use lowercase. The previous `.toLowerCase()`
+    // would corrupt any future PascalCase or kebab-case mutation, so it's
+    // dropped. Validation goes through the canonical catalog set, which
+    // is generated from sync-contract/schemas/mutation-types.json.
+    const normalized = mutationType.trim();
+    return isSyncMutationType(normalized) ? normalized : null;
 }
 
 export class BackgroundSyncWorker {

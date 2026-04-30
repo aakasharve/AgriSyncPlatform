@@ -2,23 +2,11 @@ import { getDatabase, type MutationQueueItem } from '../storage/DexieDatabase';
 import { idGenerator } from '../../core/domain/services/IdGenerator';
 import { systemClock } from '../../core/domain/services/Clock';
 import type { SyncMutationType } from '../api/AgriSyncClient';
+import { isSyncMutationType } from './SyncMutationCatalog';
 
 const DEVICE_ID_KEY = 'agrisync_device_id_v1';
 const SYNC_SCOPE = 'shramsafal';
 const LAST_PULL_META_KEY = 'shramsafal_last_pull_payload';
-const SUPPORTED_MUTATION_TYPES = new Set([
-    'create_farm',
-    'create_plot',
-    'create_crop_cycle',
-    'create_daily_log',
-    'add_log_task',
-    'verify_log',
-    'add_cost_entry',
-    'allocate_global_expense',
-    'correct_cost_entry',
-    'set_price_config',
-    'create_attachment',
-]);
 
 function getOrCreateDeviceId(): string {
     const existing = localStorage.getItem(DEVICE_ID_KEY);
@@ -57,7 +45,7 @@ export class MutationQueue {
         }
 
         const normalizedMutationType = mutationType.trim();
-        if (!SUPPORTED_MUTATION_TYPES.has(normalizedMutationType)) {
+        if (!isSyncMutationType(normalizedMutationType)) {
             throw new Error(`Unsupported mutationType '${normalizedMutationType}'.`);
         }
 

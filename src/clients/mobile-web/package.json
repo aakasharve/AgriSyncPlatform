@@ -14,6 +14,8 @@
     "lint": "eslint --max-warnings 9999 \"src/**/*.{ts,tsx}\"",
     "check:file-sizes": "node scripts/check-file-sizes.mjs",
     "verify:mutation-queue": "node scripts/verify-mutation-queue.mjs",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "test:voice-pipeline": "tsx scripts/voice_pipeline_gate_check.ts",
     "test:doom-loop": "tsx scripts/ai_doom_loop_gate_check.ts"
   },
@@ -62,6 +64,7 @@
     "tsx": "^4.21.0",
     "typescript": "~5.8.2",
     "typescript-eslint": "^8.59.0",
-    "vite": "^6.2.0"
+    "vite": "^6.2.0",
+    "vitest": "^3.2.4"
   }
 }
