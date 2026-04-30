@@ -1,5 +1,5 @@
 using AgriSync.BuildingBlocks.Abstractions;
-using AgriSync.BuildingBlocks.Auth;
+using AgriSync.BuildingBlocks.Application;
 using AgriSync.BuildingBlocks.Results;
 using AgriSync.SharedKernel.Contracts.Ids;
 using ShramSafal.Application.Ports;
@@ -16,31 +16,32 @@ namespace ShramSafal.Application.UseCases.Memberships.RotateFarmInvite;
 /// <c>IsRevoked</c> flips; any QR already printed or WhatsApp-shared
 /// will stop working after this call.
 ///
-/// Authorization: owner of the farm only.
+/// <para>
+/// T-IGH-03-PIPELINE-ROLLOUT (RotateFarmInvite): wired through the
+/// explicit <see cref="HandlerPipeline"/>. Validation lives in
+/// <see cref="RotateFarmInviteValidator"/>; ownership authorization
+/// lives in <see cref="RotateFarmInviteAuthorizer"/>. When this handler
+/// is resolved via the pipeline (see DI registration), both layers run
+/// before the body executes; when resolved directly (legacy code paths /
+/// unit tests), callers are responsible for pre-checking the same
+/// invariants.
+/// </para>
 /// </summary>
 public sealed class RotateFarmInviteHandler(
     IFarmInvitationRepository invitationRepository,
     IShramSafalRepository farmRepository,
-    IAuthorizationEnforcer authz,
     IClock clock)
+    : IHandler<RotateFarmInviteCommand, RotateFarmInviteResult>
 {
     public async Task<Result<RotateFarmInviteResult>> HandleAsync(
         RotateFarmInviteCommand command,
         CancellationToken ct = default)
     {
-        if (command.FarmId.IsEmpty || command.CallerUserId.IsEmpty)
-        {
-            return Result.Failure<RotateFarmInviteResult>(ShramSafalErrors.InvalidCommand);
-        }
-
-        // Sub-plan 03 T-IGH-03-AUTHZ-RESULT: enforcer returns Result;
-        // propagate any auth failure verbatim to the caller (typed
-        // Forbidden / NotFound / Validation), no try/catch seam needed.
-        var authResult = await authz.EnsureIsOwner(command.CallerUserId, command.FarmId);
-        if (!authResult.IsSuccess)
-        {
-            return Result.Failure<RotateFarmInviteResult>(authResult.Error);
-        }
+        // Validation lives in RotateFarmInviteValidator; authorization
+        // lives in RotateFarmInviteAuthorizer. Both run as pipeline
+        // behaviors before this body when the handler is resolved through
+        // the pipeline. Direct construction (tests, ad-hoc consumers)
+        // bypasses those decorators by design.
 
         var farm = await farmRepository.GetFarmByIdAsync(command.FarmId.Value, ct);
         if (farm is null)

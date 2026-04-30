@@ -156,7 +156,8 @@ public static class DependencyInjection
         // endpoint resolves IHandler<IssueFarmInviteCommand, IssueFarmInviteResult>
         // and gets all three layers without HTTP-level glue.
         //
-        // Rollout to remaining handlers is filed under T-IGH-03-PIPELINE-ROLLOUT.
+        // T-IGH-03-PIPELINE-ROLLOUT extends this pattern to additional
+        // membership/auth-shaped handlers (RotateFarmInvite below).
         services.AddScoped<AgriSync.BuildingBlocks.Application.PipelineBehaviors.IValidator<IssueFarmInviteCommand>,
             IssueFarmInviteValidator>();
         services.AddScoped<AgriSync.BuildingBlocks.Application.PipelineBehaviors.IAuthorizationCheck<IssueFarmInviteCommand>,
@@ -171,6 +172,26 @@ public static class DependencyInjection
                     sp.GetServices<AgriSync.BuildingBlocks.Application.PipelineBehaviors.IValidator<IssueFarmInviteCommand>>()),
                 new AgriSync.BuildingBlocks.Application.PipelineBehaviors.AuthorizationBehavior<IssueFarmInviteCommand, IssueFarmInviteResult>(
                     sp.GetServices<AgriSync.BuildingBlocks.Application.PipelineBehaviors.IAuthorizationCheck<IssueFarmInviteCommand>>())));
+
+        // T-IGH-03-PIPELINE-ROLLOUT (RotateFarmInvite): same shape as
+        // IssueFarmInvite — owner-only ownership check + non-empty IDs
+        // validation. The endpoint resolves the pipeline-wrapped handler;
+        // the raw RotateFarmInviteHandler stays registered above so any
+        // legacy/direct consumer keeps working.
+        services.AddScoped<AgriSync.BuildingBlocks.Application.PipelineBehaviors.IValidator<RotateFarmInviteCommand>,
+            RotateFarmInviteValidator>();
+        services.AddScoped<AgriSync.BuildingBlocks.Application.PipelineBehaviors.IAuthorizationCheck<RotateFarmInviteCommand>,
+            RotateFarmInviteAuthorizer>();
+        services.AddScoped<AgriSync.BuildingBlocks.Application.IHandler<RotateFarmInviteCommand, RotateFarmInviteResult>>(sp =>
+            AgriSync.BuildingBlocks.Application.HandlerPipeline.Build(
+                sp.GetRequiredService<RotateFarmInviteHandler>(),
+                new AgriSync.BuildingBlocks.Application.PipelineBehaviors.LoggingBehavior<RotateFarmInviteCommand, RotateFarmInviteResult>(
+                    sp.GetRequiredService<Microsoft.Extensions.Logging.ILogger<
+                        AgriSync.BuildingBlocks.Application.PipelineBehaviors.LoggingBehavior<RotateFarmInviteCommand, RotateFarmInviteResult>>>()),
+                new AgriSync.BuildingBlocks.Application.PipelineBehaviors.ValidationBehavior<RotateFarmInviteCommand, RotateFarmInviteResult>(
+                    sp.GetServices<AgriSync.BuildingBlocks.Application.PipelineBehaviors.IValidator<RotateFarmInviteCommand>>()),
+                new AgriSync.BuildingBlocks.Application.PipelineBehaviors.AuthorizationBehavior<RotateFarmInviteCommand, RotateFarmInviteResult>(
+                    sp.GetServices<AgriSync.BuildingBlocks.Application.PipelineBehaviors.IAuthorizationCheck<RotateFarmInviteCommand>>())));
 
         // Phase 6 — self-exit
         services.AddScoped<ExitMembershipHandler>();

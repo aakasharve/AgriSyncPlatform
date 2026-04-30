@@ -48,11 +48,19 @@ public static class MembershipEndpoints
         .WithName("IssueFarmInvite");
 
         // Owner-only: explicit rotate. Invalidates the previously-shared QR.
-        // T-IGH-03-AUTHZ-RESULT: enforcer no longer throws, so no catch needed.
+        //
+        // T-IGH-03-PIPELINE-ROLLOUT: this endpoint resolves the
+        // PIPELINE-WRAPPED handler (IHandler<RotateFarmInviteCommand,
+        // RotateFarmInviteResult>), not the raw RotateFarmInviteHandler.
+        // Validation + authorization + logging run as pipeline behaviors
+        // before the handler body. T-IGH-03-AUTHZ-RESULT means the
+        // enforcer returns Result, so no catch (UnauthorizedAccessException)
+        // seam is needed — auth failures route as typed Result.Failure
+        // → ToErrorResult → 403.
         group.MapPost("/farms/{farmId:guid}/invite-qr/rotate", async (
             Guid farmId,
             ClaimsPrincipal user,
-            RotateFarmInviteHandler handler,
+            IHandler<RotateFarmInviteCommand, RotateFarmInviteResult> handler,
             CancellationToken ct) =>
         {
             if (!EndpointActorContext.TryGetUserId(user, out var userId))
