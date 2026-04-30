@@ -1,6 +1,7 @@
 using System.Text.Json;
 using AgriSync.BuildingBlocks.Results;
 using AgriSync.SharedKernel.Contracts.Ids;
+using Microsoft.Extensions.Logging;
 using ShramSafal.Application.Ports;
 using ShramSafal.Application.Ports.External;
 using ShramSafal.Domain.AI;
@@ -14,7 +15,8 @@ public sealed class CreateDocumentSessionHandler(
     IAttachmentStorageService storageService,
     IAiOrchestrator aiOrchestrator,
     IAiPromptBuilder promptBuilder,
-    IEntitlementPolicy entitlementPolicy)
+    IEntitlementPolicy entitlementPolicy,
+    ILogger<CreateDocumentSessionHandler> logger)
 {
     public async Task<Result<CreateDocumentSessionResult>> HandleAsync(
         CreateDocumentSessionCommand command,
@@ -70,9 +72,16 @@ public sealed class CreateDocumentSessionHandler(
             await storageService.SaveAsync(storagePath, imageBuffer, command.MimeType, ct);
             session.SetInput(storagePath, command.MimeType);
         }
-        catch
+        catch (Exception ex)
         {
-            // Storage failure is non-blocking — draft extraction still proceeds
+            // Sub-plan 03 Task 10: storage failure is recoverable for the
+            // current call (draft extraction can still proceed in-memory)
+            // but MUST be observable. Log a warning so an outage on the
+            // S3 / local-file backend surfaces in ops dashboards even
+            // though the user-visible request still completes.
+            logger.LogWarning(ex,
+                "CreateDocumentSession: storage backend SaveAsync failed for session {SessionId} ({StoragePath}); proceeding without persisted input.",
+                session.Id, storagePath);
             storagePath = string.Empty;
         }
 
@@ -137,8 +146,19 @@ public sealed class CreateDocumentSessionHandler(
         {
             return JsonSerializer.Deserialize<object>(json);
         }
-        catch (JsonException)
+        catch (JsonException ex)
         {
+            // Sub-plan 03 Task 10: malformed audit payload falls back to
+            // the raw string. Emit an OTel/Activity event so the
+            // fallback is observable in traces (this is a static helper;
+            // no ILogger access).
+            System.Diagnostics.Activity.Current?.AddEvent(new System.Diagnostics.ActivityEvent(
+                "CreateDocumentSession.MalformedPayload",
+                tags: new System.Diagnostics.ActivityTagsCollection
+                {
+                    ["exception.type"] = ex.GetType().Name,
+                    ["exception.message"] = ex.Message,
+                }));
             return json;
         }
     }

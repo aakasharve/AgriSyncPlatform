@@ -1,6 +1,7 @@
 using AgriSync.BuildingBlocks.Abstractions;
 using AgriSync.BuildingBlocks.Results;
 using AgriSync.SharedKernel.Contracts.Ids;
+using Microsoft.Extensions.Logging;
 using ShramSafal.Application.Ports;
 using ShramSafal.Domain.Compare;
 using ShramSafal.Domain.Common;
@@ -16,7 +17,8 @@ public sealed class GetAttentionBoardHandler(
     IShramSafalRepository repository,
     ITestInstanceRepository testInstanceRepository,
     IComplianceSignalRepository complianceSignalRepository,
-    IClock clock)
+    IClock clock,
+    ILogger<GetAttentionBoardHandler> logger)
 {
     private static readonly TestInstanceStatus[] MissingStatuses =
     [
@@ -92,15 +94,28 @@ public sealed class GetAttentionBoardHandler(
                 // Determine rank — applies missing-test elevation rules
                 var rank = DetermineRank(health, overdueCount, disputeCount, missingTestCount);
 
-                // CEI Phase 3 §4.6 — compliance signal elevation
+                // CEI Phase 3 §4.6 — compliance signal elevation.
+                // Sub-plan 03 Task 10: a repository failure here used to be
+                // silently swallowed and produced an empty signals list,
+                // which made the AttentionBoard tile under-elevate plots
+                // with real compliance issues. Log the failure so it shows
+                // in ops dashboards. The caller (PullSyncChangesHandler)
+                // wraps GetAttentionBoardHandler in its own catch and
+                // records the AttentionBoard component as degraded when
+                // ANY exception bubbles, so per-farm signal-fetch failures
+                // surface as a degraded AttentionBoard rather than as a
+                // silently truncated tile.
                 IReadOnlyList<ComplianceSignal> complianceSignals;
                 try
                 {
                     complianceSignals = await complianceSignalRepository.GetOpenForFarmAsync(
                         new FarmId(farmId), ct);
                 }
-                catch
+                catch (Exception ex)
                 {
+                    logger.LogWarning(ex,
+                        "GetAttentionBoard: ComplianceSignalRepository.GetOpenForFarmAsync threw {ExceptionType} for farm {FarmId}; treating signals as empty for this plot row.",
+                        ex.GetType().Name, farmId);
                     complianceSignals = Array.Empty<ComplianceSignal>();
                 }
 

@@ -388,8 +388,18 @@ public sealed class ParseVoiceInputHandler(
         {
             root = JsonNode.Parse(normalizedJson)?.AsObject() ?? new JsonObject();
         }
-        catch (JsonException)
+        catch (JsonException ex)
         {
+            // Sub-plan 03 Task 10: malformed normalized JSON falls
+            // through verbatim. Activity event for observability
+            // (static helper; no ILogger).
+            System.Diagnostics.Activity.Current?.AddEvent(new System.Diagnostics.ActivityEvent(
+                "ParseVoiceInput.MalformedNormalizedJson",
+                tags: new System.Diagnostics.ActivityTagsCollection
+                {
+                    ["exception.type"] = ex.GetType().Name,
+                    ["exception.message"] = ex.Message,
+                }));
             return normalizedJson;
         }
 

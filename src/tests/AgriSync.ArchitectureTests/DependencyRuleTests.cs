@@ -115,22 +115,41 @@ public sealed class DependencyRuleTests
 
     /// <summary>
     /// Sub-plan 03 Task 10: application code must NEVER swallow exceptions
-    /// silently. The forbidden pattern is a catch block whose BODY is
-    /// empty or comment-only:
-    /// <code>
-    ///   catch { }
-    ///   catch { /* swallow */ }
-    ///   catch (Exception) { /* default */ }
-    ///   catch (FooException ex) {  // empty
-    ///   }
-    /// </code>
-    /// Catches whose body re-throws, returns <c>Result.Failure</c>,
-    /// records a <c>DegradedComponent</c>, or logs the exception are
-    /// all permitted — the rule is "no silent swallow", not "must
-    /// capture the variable" (intentional domain-exception translation
-    /// to typed failure is a legitimate seam).
-    /// NO whitelist — every new silent-swallow fails the build.
+    /// silently. Two failure modes are flagged:
+    /// <list type="number">
+    /// <item>EMPTY body — <c>catch { }</c>, <c>catch (X) { /* note */ }</c>,
+    /// where after stripping comments the body has nothing in it.</item>
+    /// <item>NON-EMPTY body but NO observability signal — the body
+    /// returns / assigns / falls through without re-throwing,
+    /// producing a <c>Result.Failure</c>, recording a
+    /// <c>DegradedComponent</c>, logging via <c>ILogger</c>, or
+    /// emitting an <c>Activity</c> event. Example:
+    /// <c>catch { storagePath = string.Empty; }</c></item>
+    /// </list>
+    /// The full set of permitted signals is enumerated in
+    /// <see cref="ObservabilityTokens"/>. NO whitelist — every new
+    /// silent-swallow fails the build with the file:line.
     /// </summary>
+    private static readonly string[] ObservabilityTokens =
+    {
+        "throw",                              // re-throw / new exception
+        "Result.Failure",                     // typed failure return
+        "Result.Success",                     // explicit success short-circuit
+        "MutationExecutionOutcome.Failure",   // PushSyncBatch typed-failure builder
+        "MutationExecutionOutcome.Success",   // ditto, success builder
+        "CreateFailedResult",                 // PushSyncBatch private failure helper
+        "CreateDuplicateResult",              // PushSyncBatch private duplicate helper
+        "Activity.Current",                   // OTel observability seam
+        "ActivityEvent",                      // explicit Activity event
+        ".Log",                               // ILogger.LogXxx (anchors on the dot)
+        "_logger",                            // common field name
+        "_log.",                              // alt field name
+        "logger.",                            // local var
+        "Logger.",                            // PascalCase property
+        "degraded.Add",                       // DegradedComponent collection
+        "Degraded.Add",                       // PascalCase variant
+    };
+
     [Fact]
     public void Application_layer_must_not_silently_swallow_exceptions()
     {
@@ -139,14 +158,6 @@ public sealed class DependencyRuleTests
 
         Assert.NotEmpty(applicationProjects);
 
-        // Match the catch keyword and capture everything until the
-        // CLOSING brace of the catch block (handles bracket nesting
-        // up to a reasonable depth — empty / comment-only bodies are
-        // exactly what we want to flag).
-        // Strategy: find every `catch (...) {` (or `catch {`), then
-        // walk forward counting braces. If the body content (with
-        // // line-comments and /* block-comments */ stripped) is
-        // empty after trim, flag it.
         var catchOpener = new System.Text.RegularExpressions.Regex(
             @"\bcatch\b\s*(\([^)]*\))?\s*\{",
             System.Text.RegularExpressions.RegexOptions.Compiled);
@@ -171,11 +182,29 @@ public sealed class DependencyRuleTests
                     if (bodyEndIdx < 0) continue; // unbalanced source — don't false-positive
                     var body = text.Substring(openBraceIdx + 1, bodyEndIdx - openBraceIdx - 1);
                     var stripped = StripCommentsAndWhitespace(body);
+                    var lineNumber = text[..m.Index].Count(c => c == '\n') + 1;
+                    var snippet = m.Value.TrimEnd();
+
                     if (stripped.Length == 0)
                     {
-                        var lineNumber = text[..m.Index].Count(c => c == '\n') + 1;
-                        var snippet = m.Value.TrimEnd();
                         offenders.Add($"{sourceFile}:{lineNumber}: {snippet} <empty body>");
+                        continue;
+                    }
+
+                    // Non-empty body — require at least one observability
+                    // signal. Anything else is a silent swallow.
+                    var hasSignal = false;
+                    foreach (var token in ObservabilityTokens)
+                    {
+                        if (stripped.Contains(token, StringComparison.Ordinal))
+                        {
+                            hasSignal = true;
+                            break;
+                        }
+                    }
+                    if (!hasSignal)
+                    {
+                        offenders.Add($"{sourceFile}:{lineNumber}: {snippet} <body has no observability signal>");
                     }
                 }
             }
@@ -184,9 +213,9 @@ public sealed class DependencyRuleTests
         Assert.True(
             offenders.Count == 0,
             "Application code must NOT silently swallow exceptions. Each " +
-            "catch block must do something observable: re-throw, return " +
-            "Result.Failure, record a DegradedComponent, OR log the " +
-            "exception. Empty / comment-only catch bodies:" +
+            "catch block body must contain at least one of: " +
+            "throw / Result.Failure / Result.Success / Activity.Current / " +
+            "ActivityEvent / .Log* / logger / degraded.Add. Offenders:" +
             Environment.NewLine + string.Join(Environment.NewLine, offenders));
     }
 

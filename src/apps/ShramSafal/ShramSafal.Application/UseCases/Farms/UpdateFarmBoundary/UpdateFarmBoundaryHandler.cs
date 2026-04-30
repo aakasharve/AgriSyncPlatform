@@ -131,8 +131,18 @@ public sealed class UpdateFarmBoundaryHandler(
             return string.Equals(type, "Polygon", StringComparison.OrdinalIgnoreCase) ||
                    string.Equals(type, "MultiPolygon", StringComparison.OrdinalIgnoreCase);
         }
-        catch (JsonException)
+        catch (JsonException ex)
         {
+            // Sub-plan 03 Task 10: malformed GeoJSON returns false (so
+            // the caller surfaces a typed validation error). Activity
+            // event keeps the parser-rejection observable in traces.
+            System.Diagnostics.Activity.Current?.AddEvent(new System.Diagnostics.ActivityEvent(
+                "UpdateFarmBoundary.MalformedGeoJson",
+                tags: new System.Diagnostics.ActivityTagsCollection
+                {
+                    ["exception.type"] = ex.GetType().Name,
+                    ["exception.message"] = ex.Message,
+                }));
             return false;
         }
     }
