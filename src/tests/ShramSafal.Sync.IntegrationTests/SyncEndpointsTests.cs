@@ -1458,6 +1458,24 @@ public sealed class SyncEndpointsTests
             // sync contract, not subscription plumbing.
             builder.Services.RemoveAll<IEntitlementPolicy>();
             builder.Services.AddScoped<IEntitlementPolicy, AllowEntitlementPolicy>();
+
+            // Sub-plan 03 Task 10 (T-IGH-03-PULL-CURSOR-FREEZE): the
+            // production ComplianceSignalRepository uses LINQ patterns
+            // (`MaxAsync` over a value-object filter) that throw
+            // InvalidOperationException under EF InMemory but work fine
+            // against real Postgres. Without this stub, every PullSync
+            // call inside this harness records a spurious "ComplianceFreshness"
+            // / "ComplianceSignals" DegradedComponent, which trips the
+            // (now re-enabled) cursor-freeze logic and breaks
+            // Pull_WithCursor_ReturnsOnlyDeltas. Stub it with an empty
+            // in-memory implementation so the harness exercises the
+            // sync contract without InMemory artifacts. A separate
+            // unit test (PullSyncChangesHandlerCursorFreezeTests)
+            // covers the freeze behavior directly with stubs that
+            // explicitly throw.
+            builder.Services.RemoveAll<IComplianceSignalRepository>();
+            builder.Services.AddScoped<IComplianceSignalRepository, InMemoryComplianceSignalStub>();
+
             var dbRoot = new InMemoryDatabaseRoot();
             var dbName = $"sync-tests-{Guid.NewGuid()}";
             builder.Services.AddDbContext<ShramSafalDbContext>(options =>
@@ -1577,5 +1595,45 @@ public sealed class SyncEndpointsTests
                 Allowed: true,
                 EntitlementReason.Allowed,
                 SubscriptionStatus: null));
+    }
+
+    /// <summary>
+    /// Sub-plan 03 Task 10 (T-IGH-03-PULL-CURSOR-FREEZE) test-rig stub.
+    /// Returns empty / null defaults for every read; no-op for writes.
+    /// Replaces the production <c>ComplianceSignalRepository</c> in the
+    /// sync-tests harness because the production EF Core LINQ uses
+    /// <c>MaxAsync</c> + value-object equality patterns that throw
+    /// <c>InvalidOperationException</c> under the InMemory provider —
+    /// causing PullSync to record spurious DegradedComponents and
+    /// (with cursor-freeze enabled) freeze the cursor, which breaks
+    /// every assertion downstream.
+    /// </summary>
+    private sealed class InMemoryComplianceSignalStub : IComplianceSignalRepository
+    {
+        public Task<ShramSafal.Domain.Compliance.ComplianceSignal?> FindOpenAsync(
+            FarmId farmId, Guid plotId, string ruleCode, Guid? cropCycleId, CancellationToken ct = default)
+            => Task.FromResult<ShramSafal.Domain.Compliance.ComplianceSignal?>(null);
+
+        public Task<IReadOnlyList<ShramSafal.Domain.Compliance.ComplianceSignal>> GetOpenForFarmAsync(
+            FarmId farmId, CancellationToken ct = default)
+            => Task.FromResult<IReadOnlyList<ShramSafal.Domain.Compliance.ComplianceSignal>>(Array.Empty<ShramSafal.Domain.Compliance.ComplianceSignal>());
+
+        public Task<IReadOnlyList<ShramSafal.Domain.Compliance.ComplianceSignal>> GetForFarmAsync(
+            FarmId farmId, bool includeResolved, bool includeAcknowledged, CancellationToken ct = default)
+            => Task.FromResult<IReadOnlyList<ShramSafal.Domain.Compliance.ComplianceSignal>>(Array.Empty<ShramSafal.Domain.Compliance.ComplianceSignal>());
+
+        public Task<ShramSafal.Domain.Compliance.ComplianceSignal?> GetByIdAsync(Guid id, CancellationToken ct = default)
+            => Task.FromResult<ShramSafal.Domain.Compliance.ComplianceSignal?>(null);
+
+        public Task<IReadOnlyList<ShramSafal.Domain.Compliance.ComplianceSignal>> GetSinceCursorAsync(
+            FarmId farmId, DateTime cursor, CancellationToken ct = default)
+            => Task.FromResult<IReadOnlyList<ShramSafal.Domain.Compliance.ComplianceSignal>>(Array.Empty<ShramSafal.Domain.Compliance.ComplianceSignal>());
+
+        public void Add(ShramSafal.Domain.Compliance.ComplianceSignal signal) { /* no-op */ }
+
+        public Task<DateTime?> GetLatestEvaluationTimeAsync(FarmId farmId, CancellationToken ct = default)
+            => Task.FromResult<DateTime?>(null);
+
+        public Task SaveChangesAsync(CancellationToken ct = default) => Task.CompletedTask;
     }
 }
