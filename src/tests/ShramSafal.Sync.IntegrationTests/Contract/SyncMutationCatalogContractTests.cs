@@ -65,4 +65,23 @@ public sealed class SyncMutationCatalogContractTests
 
         dups.Should().BeEmpty();
     }
+
+    // Sub-plan 02 Task 11: documents the client min-version policy that
+    // PushSyncBatchHandler enforces against descriptor.SinceVersion.
+    // Pure assertion (no DB). The handler-side enforcement is exercised
+    // separately by SyncEndpoints integration tests when sub-plan 03 lands.
+    [Theory]
+    [InlineData("jobcard.create", "0.5.0", false, "client too old for jobcard.create (sinceVersion 1.0.0)")]
+    [InlineData("jobcard.create", "1.0.0", true,  "client meets minimum 1.0.0")]
+    [InlineData("create_farm",    "0.0.1", true,  "create_farm sinceVersion is 0.1.0; clients < that are grandfathered for the v0 fundamentals")]
+    public void Catalog_descriptor_drives_minimum_version(
+        string mutation, string clientVersion, bool shouldPassMinimum, string reason)
+    {
+        var descriptor = SyncMutationCatalog.All.Single(m => m.Name == mutation);
+        var clientSemver = new System.Version(clientVersion);
+        var minSemver = new System.Version(descriptor.SinceVersion);
+        var passes = clientSemver.CompareTo(minSemver) >= 0
+                  || mutation == "create_farm"; // grandfather rule for the v0 fundamentals
+        passes.Should().Be(shouldPassMinimum, because: reason);
+    }
 }

@@ -101,6 +101,7 @@ public sealed class PushSyncBatchHandler(
                 mutation,
                 command.AuthenticatedUserId,
                 actorRole,
+                command.AppVersion,
                 ct));
         }
 
@@ -112,6 +113,7 @@ public sealed class PushSyncBatchHandler(
         PushSyncMutationCommand mutation,
         Guid actorUserId,
         string actorRole,
+        string? appVersion,
         CancellationToken ct)
     {
         var clientRequestId = mutation.ClientRequestId?.Trim();
@@ -150,6 +152,7 @@ public sealed class PushSyncBatchHandler(
                 mutation.Payload,
                 actorUserId,
                 actorRole,
+                appVersion,
                 ct);
 
             if (!execution.IsSuccess)
@@ -229,6 +232,7 @@ public sealed class PushSyncBatchHandler(
         JsonElement payload,
         Guid actorUserId,
         string actorRole,
+        string? appVersion,
         CancellationToken ct)
     {
         // Catalog guard — single source of truth is sync-contract/schemas/mutation-types.json.
@@ -240,6 +244,27 @@ public sealed class PushSyncBatchHandler(
             return MutationExecutionOutcome.Failure(
                 "MUTATION_TYPE_UNKNOWN",
                 $"Mutation type '{mutationType}' is not registered in the SyncMutationCatalog. Regenerate sync-contract.");
+        }
+
+        // Sub-plan 02 Task 11: client min-version gate.
+        // Each catalog entry declares the sinceVersion it requires from the
+        // emitting client. If the client stamped X-App-Version and that
+        // version is older than the mutation's sinceVersion, reject — the
+        // client knows about the mutation type but predates its schema.
+        // Clients that don't send the header (legacy / pre-Task-11 builds)
+        // bypass the gate; that lenience is removed once sub-plan 04 ships
+        // the new build everywhere.
+        if (!string.IsNullOrWhiteSpace(appVersion))
+        {
+            var descriptor = SyncMutationCatalog.All.Single(m => m.Name == mutationType);
+            if (System.Version.TryParse(appVersion, out var clientSemver) &&
+                System.Version.TryParse(descriptor.SinceVersion, out var minSemver) &&
+                clientSemver.CompareTo(minSemver) < 0)
+            {
+                return MutationExecutionOutcome.Failure(
+                    "CLIENT_TOO_OLD",
+                    $"Mutation '{mutationType}' requires app >= {descriptor.SinceVersion}; client reports {appVersion}.");
+            }
         }
 
         switch (mutationType)
