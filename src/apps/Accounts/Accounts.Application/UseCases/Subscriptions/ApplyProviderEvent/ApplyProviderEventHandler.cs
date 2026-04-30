@@ -44,7 +44,17 @@ public sealed class ApplyProviderEventHandler(
         var wasUnknown = false;
         if (subscription is not null)
         {
-            wasUnknown = !ApplyEvent(subscription, command, utcNow);
+            var applyResult = ApplyEvent(subscription, command, utcNow);
+            if (!applyResult.IsSuccess)
+            {
+                // Sub-plan 03 Task 3: validation-class command failure is a
+                // Result.Failure, not a thrown exception. Return early WITHOUT
+                // persisting the raw event — a malformed activation payload
+                // means the provider should resend, not that we should record
+                // a half-applied state.
+                return Result.Failure<ApplyProviderEventResult>(applyResult.Error);
+            }
+            wasUnknown = !applyResult.Value;
         }
 
         // Always persist the raw event for audit/forensics regardless of whether
@@ -64,39 +74,49 @@ public sealed class ApplyProviderEventHandler(
         return Result.Success(new ApplyProviderEventResult(WasDuplicate: false, WasUnknownEventType: wasUnknown));
     }
 
-    /// <summary>Returns false when the event type is unrecognised.</summary>
-    private static bool ApplyEvent(Subscription subscription, ApplyProviderEventCommand command, DateTime utcNow)
+    /// <summary>
+    /// Applies the event to the aggregate. Returns a <see cref="Result{T}"/>
+    /// where <c>Value = true</c> when the event was recognized and applied,
+    /// <c>Value = false</c> when the event type is unknown (forensic-only
+    /// path), and <see cref="Result{T}.IsSuccess"/> = false when the
+    /// command violates a precondition (e.g. activation without
+    /// <c>ValidUntilUtc</c>).
+    /// </summary>
+    private static Result<bool> ApplyEvent(Subscription subscription, ApplyProviderEventCommand command, DateTime utcNow)
     {
         switch (command.EventType)
         {
             case ProviderEventTypes.SubscriptionActivated:
             case ProviderEventTypes.SubscriptionRenewed:
+                if (command.ValidUntilUtc is null)
+                {
+                    return Result.Failure<bool>(Error.Validation(
+                        "Accounts.MissingValidUntilUtc",
+                        $"Event '{command.EventType}' requires ValidUntilUtc."));
+                }
                 var validFrom = command.ValidFromUtc ?? utcNow;
-                var validUntil = command.ValidUntilUtc
-                    ?? throw new InvalidOperationException(
-                        $"Event '{command.EventType}' requires ValidUntilUtc.");
-                subscription.Activate(validFrom, validUntil, command.BillingProviderCustomerId, utcNow);
-                return true;
+                subscription.Activate(validFrom, command.ValidUntilUtc.Value, command.BillingProviderCustomerId, utcNow);
+                return Result.Success(true);
 
             case ProviderEventTypes.SubscriptionPastDue:
                 var gracePeriodEnd = command.GracePeriodEndsAtUtc ?? utcNow.AddDays(7);
                 subscription.MarkPastDue(gracePeriodEnd, utcNow);
-                return true;
+                return Result.Success(true);
 
             case ProviderEventTypes.SubscriptionExpired:
                 subscription.Expire(utcNow);
-                return true;
+                return Result.Success(true);
 
             case ProviderEventTypes.SubscriptionCanceled:
                 subscription.Cancel(utcNow);
-                return true;
+                return Result.Success(true);
 
             case ProviderEventTypes.SubscriptionSuspended:
                 subscription.Suspend(utcNow);
-                return true;
+                return Result.Success(true);
 
             default:
-                return false;
+                return Result.Success(false);
         }
     }
 }
