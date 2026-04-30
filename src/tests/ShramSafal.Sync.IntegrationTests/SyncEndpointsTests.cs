@@ -1361,6 +1361,91 @@ public sealed class SyncEndpointsTests
         Assert.Equal("ShramSafal.Forbidden", result.GetProperty("errorCode").GetString());
     }
 
+    /// <summary>
+    /// Sub-plan 03 Task 10 (T-IGH-03-PULL-CURSOR-FREEZE) — explicit
+    /// fail-injection coverage for the cursor-freeze invariant. Pulls
+    /// against a harness whose IComplianceSignalRepository throws on
+    /// GetSinceCursorAsync, asserts the response is 200 with the
+    /// degraded component listed AND NextCursorUtc rewound to SinceUtc,
+    /// then clears the failure and verifies a retry with the SAME
+    /// `since=` parameter returns the missed rows.
+    /// </summary>
+    [Fact]
+    public async Task Pull_WhenComplianceSignalsRepositoryThrows_FreezesCursor_AndSurfacesDegradedComponent_AndRetryDelivers()
+    {
+        var failing = new FailingComplianceSignalStub { FailOnGetSinceCursor = true };
+
+        await using var harness = await TestHarness.CreateAsync(services =>
+        {
+            services.RemoveAll<IComplianceSignalRepository>();
+            services.AddSingleton<IComplianceSignalRepository>(failing);
+        });
+
+        // Seed one farm so a healthy pull would normally return data.
+        var farmId = Guid.NewGuid();
+        await PushCreateFarmAsync(harness.Client, "device-freeze-1", "req-freeze-1", farmId, "Freeze Test Farm");
+
+        var sinceLiteral = DateTime.UnixEpoch.ToString("O");
+        var firstPull = await harness.Client.GetAsync($"/sync/pull?since={Uri.EscapeDataString(sinceLiteral)}");
+
+        // (1) Response status 200.
+        Assert.Equal(System.Net.HttpStatusCode.OK, firstPull.StatusCode);
+
+        // (2) X-Degraded header present and contains the failed component.
+        Assert.True(firstPull.Headers.Contains("X-Degraded"),
+            "X-Degraded header must be present when at least one component degraded.");
+        var degradedHeaderValue = string.Join(",", firstPull.Headers.GetValues("X-Degraded"));
+        Assert.Contains("ComplianceSignals", degradedHeaderValue);
+
+        // (3) Body's `degradedComponents` lists the failed component.
+        using var firstDoc = JsonDocument.Parse(await firstPull.Content.ReadAsStringAsync());
+        var degradedNames = firstDoc.RootElement.GetProperty("degradedComponents")
+            .EnumerateArray()
+            .Select(c => c.GetProperty("componentName").GetString())
+            .ToList();
+        Assert.Contains("ComplianceSignals", degradedNames);
+
+        // (4) NextCursorUtc was rewound to the caller's since (frozen).
+        var firstNextCursor = firstDoc.RootElement.GetProperty("nextCursorUtc").GetDateTime();
+        var sinceUtc = DateTime.SpecifyKind(DateTime.UnixEpoch, DateTimeKind.Utc);
+        Assert.Equal(sinceUtc, firstNextCursor.ToUniversalTime());
+
+        // The failed pull MUST have invoked the failing method
+        // (otherwise the freeze trigger isn't really exercising the
+        // throw — it might have short-circuited elsewhere).
+        Assert.True(failing.GetSinceCursorCallCount > 0,
+            "FailingComplianceSignalStub.GetSinceCursorAsync must have been called.");
+
+        // (5) Clear the failure and retry with the SAME since=. The missed
+        //     farm row should reach the client now that the cursor stayed
+        //     at SinceUtc rather than advancing past it.
+        failing.FailOnGetSinceCursor = false;
+        var retryPull = await harness.Client.GetAsync($"/sync/pull?since={Uri.EscapeDataString(sinceLiteral)}");
+        Assert.Equal(System.Net.HttpStatusCode.OK, retryPull.StatusCode);
+
+        // No degradation this time → no X-Degraded header, no body components.
+        Assert.False(retryPull.Headers.Contains("X-Degraded"));
+        using var retryDoc = JsonDocument.Parse(await retryPull.Content.ReadAsStringAsync());
+        if (retryDoc.RootElement.TryGetProperty("degradedComponents", out var retryDegraded)
+            && retryDegraded.ValueKind == JsonValueKind.Array)
+        {
+            Assert.Empty(retryDegraded.EnumerateArray());
+        }
+
+        var retryFarms = retryDoc.RootElement.GetProperty("farms")
+            .EnumerateArray()
+            .Select(x => x.GetProperty("id").GetGuid())
+            .ToList();
+        Assert.Contains(farmId, retryFarms);
+
+        // Retry's cursor SHOULD have advanced past SinceUtc since the
+        // healthy pull found data — proves the freeze was a one-pull
+        // safety, not a permanent stick.
+        var retryCursor = retryDoc.RootElement.GetProperty("nextCursorUtc").GetDateTime().ToUniversalTime();
+        Assert.True(retryCursor > sinceUtc,
+            $"Retry cursor {retryCursor:O} must advance past since {sinceUtc:O} when the failure clears.");
+    }
+
     private static async Task PushCreateFarmAsync(
         HttpClient client,
         string deviceId,
@@ -1423,7 +1508,19 @@ public sealed class SyncEndpointsTests
     {
         public HttpClient Client { get; } = client;
 
-        public static async Task<TestHarness> CreateAsync()
+        /// <summary>
+        /// Build the test harness with optional last-mile DI overrides.
+        /// The <paramref name="configureExtraServices"/> callback runs
+        /// AFTER all the harness's standard registrations (BuildingBlocks,
+        /// ShramSafal API, the InMemoryComplianceSignalStub, the
+        /// AllowEntitlementPolicy override, the InMemory DbContext) so a
+        /// test that injects a failing-by-design dependency can do so by
+        /// calling <c>RemoveAll&lt;T&gt;()</c> + re-registering. Used by
+        /// <c>PullSyncCursorFreezeTests</c> to wire a deliberately-throwing
+        /// <c>IComplianceSignalRepository</c> per Sub-plan 03 Task 10
+        /// fail-injection coverage (T-IGH-03-PULL-CURSOR-FREEZE).
+        /// </summary>
+        public static async Task<TestHarness> CreateAsync(Action<IServiceCollection>? configureExtraServices = null)
         {
             var builder = WebApplication.CreateBuilder(new WebApplicationOptions
             {
@@ -1488,6 +1585,12 @@ public sealed class SyncEndpointsTests
             var dbName = $"sync-tests-{Guid.NewGuid()}";
             builder.Services.AddDbContext<ShramSafalDbContext>(options =>
                 options.UseInMemoryDatabase(dbName, dbRoot));
+
+            // Last-mile override hook — runs after every standard
+            // registration so a test can replace a specific service
+            // (e.g. inject a throwing IComplianceSignalRepository to
+            // exercise the cursor-freeze branch).
+            configureExtraServices?.Invoke(builder.Services);
 
             var app = builder.Build();
             app.UseAuthentication();
@@ -1616,6 +1719,57 @@ public sealed class SyncEndpointsTests
     /// (with cursor-freeze enabled) freeze the cursor, which breaks
     /// every assertion downstream.
     /// </summary>
+    /// <summary>
+    /// Sub-plan 03 Task 10 (T-IGH-03-PULL-CURSOR-FREEZE) fail-injection stub.
+    /// Behaves identically to <see cref="InMemoryComplianceSignalStub"/>
+    /// EXCEPT that <see cref="GetSinceCursorAsync"/> throws when
+    /// <see cref="FailOnGetSinceCursor"/> is set. The flag is mutable so a
+    /// single test can run two pulls — the first with the failure injected
+    /// (asserts cursor freezes), the second with the failure cleared
+    /// (asserts the missed rows reach the client). Registered via
+    /// <c>TestHarness.CreateAsync(configureExtraServices: ...)</c>.
+    /// </summary>
+    internal sealed class FailingComplianceSignalStub : IComplianceSignalRepository
+    {
+        public bool FailOnGetSinceCursor { get; set; } = true;
+        public int GetSinceCursorCallCount { get; private set; }
+
+        public Task<ShramSafal.Domain.Compliance.ComplianceSignal?> FindOpenAsync(
+            FarmId farmId, Guid plotId, string ruleCode, Guid? cropCycleId, CancellationToken ct = default)
+            => Task.FromResult<ShramSafal.Domain.Compliance.ComplianceSignal?>(null);
+
+        public Task<IReadOnlyList<ShramSafal.Domain.Compliance.ComplianceSignal>> GetOpenForFarmAsync(
+            FarmId farmId, CancellationToken ct = default)
+            => Task.FromResult<IReadOnlyList<ShramSafal.Domain.Compliance.ComplianceSignal>>(Array.Empty<ShramSafal.Domain.Compliance.ComplianceSignal>());
+
+        public Task<IReadOnlyList<ShramSafal.Domain.Compliance.ComplianceSignal>> GetForFarmAsync(
+            FarmId farmId, bool includeResolved, bool includeAcknowledged, CancellationToken ct = default)
+            => Task.FromResult<IReadOnlyList<ShramSafal.Domain.Compliance.ComplianceSignal>>(Array.Empty<ShramSafal.Domain.Compliance.ComplianceSignal>());
+
+        public Task<ShramSafal.Domain.Compliance.ComplianceSignal?> GetByIdAsync(Guid id, CancellationToken ct = default)
+            => Task.FromResult<ShramSafal.Domain.Compliance.ComplianceSignal?>(null);
+
+        public Task<IReadOnlyList<ShramSafal.Domain.Compliance.ComplianceSignal>> GetSinceCursorAsync(
+            FarmId farmId, DateTime cursor, CancellationToken ct = default)
+        {
+            GetSinceCursorCallCount++;
+            if (FailOnGetSinceCursor)
+            {
+                throw new InvalidOperationException(
+                    "Test-injected failure: ComplianceSignalRepository.GetSinceCursorAsync");
+            }
+            return Task.FromResult<IReadOnlyList<ShramSafal.Domain.Compliance.ComplianceSignal>>(
+                Array.Empty<ShramSafal.Domain.Compliance.ComplianceSignal>());
+        }
+
+        public void Add(ShramSafal.Domain.Compliance.ComplianceSignal signal) { /* no-op */ }
+
+        public Task<DateTime?> GetLatestEvaluationTimeAsync(FarmId farmId, CancellationToken ct = default)
+            => Task.FromResult<DateTime?>(null);
+
+        public Task SaveChangesAsync(CancellationToken ct = default) => Task.CompletedTask;
+    }
+
     private sealed class InMemoryComplianceSignalStub : IComplianceSignalRepository
     {
         public Task<ShramSafal.Domain.Compliance.ComplianceSignal?> FindOpenAsync(
