@@ -7,9 +7,11 @@
   "scripts": {
     "validate": "node scripts/validate.mjs",
     "generate": "node scripts/generate.mjs",
+    "typecheck": "tsc --noEmit",
     "test": "vitest run"
   },
   "devDependencies": {
+    "@types/node": "^22.19.17",
     "ajv": "^8.17.1",
     "ajv-formats": "^3.0.1",
     "typescript": "^5.9.3",

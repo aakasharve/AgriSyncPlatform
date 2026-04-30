@@ -50,6 +50,10 @@ jobs:
         run: npm run validate
         working-directory: sync-contract
 
+      - name: TypeScript compile check (sync-contract)
+        run: npm run typecheck
+        working-directory: sync-contract
+
       - name: Regenerate TS + C# catalogs
         run: npm run generate
         working-directory: sync-contract
