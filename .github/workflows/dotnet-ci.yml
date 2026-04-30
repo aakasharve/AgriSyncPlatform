@@ -88,15 +88,39 @@ jobs:
       - name: Assert no skipped tests
         shell: bash
         run: |
-          set -e
-          if [ -f ./TestResults/results.trx ]; then
-            skipped=$(grep -oE 'failed="[0-9]+" passed="[0-9]+" skipped="[0-9]+"' ./TestResults/results.trx | grep -oE 'skipped="[0-9]+"' | head -1 | tr -d 'a-z="')
-            echo "Skipped: ${skipped:-0}"
-            if [ -n "$skipped" ] && [ "$skipped" -gt 0 ]; then
-              echo "::warning::Tests skipped: $skipped (acceptable up to sub-plan 05; tighten to 0 then)"
-            fi
-          else
+          set -euo pipefail
+          trx=./TestResults/results.trx
+          if [ ! -f "$trx" ]; then
             echo "::warning::No TRX file produced; skipped-test assertion bypassed."
+            exit 0
+          fi
+
+          skipped=$(python3 - "$trx" <<'PY'
+          import sys
+          import xml.etree.ElementTree as ET
+
+          root = ET.parse(sys.argv[1]).getroot()
+
+          for node in root.iter():
+              if node.tag.rsplit("}", 1)[-1] != "Counters":
+                  continue
+
+              raw = node.attrib.get("notExecuted") or node.attrib.get("skipped")
+              if raw is None:
+                  print("Counters element has no notExecuted/skipped attribute.", file=sys.stderr)
+                  sys.exit(1)
+
+              print(int(raw))
+              sys.exit(0)
+
+          print("Counters element not found in TRX.", file=sys.stderr)
+          sys.exit(1)
+          PY
+          )
+
+          echo "Skipped: ${skipped:-0}"
+          if [ "${skipped:-0}" -gt 0 ]; then
+            echo "::warning::Tests skipped: $skipped (acceptable up to sub-plan 05; tighten to 0 then)"
           fi
 
   mobile-web:
