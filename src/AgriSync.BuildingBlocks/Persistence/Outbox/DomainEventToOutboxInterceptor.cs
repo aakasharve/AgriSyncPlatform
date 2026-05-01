@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Runtime.CompilerServices;
 using System.Text.Json;
 using AgriSync.BuildingBlocks.Domain;
@@ -34,18 +35,21 @@ namespace AgriSync.BuildingBlocks.Persistence.Outbox;
 /// </para>
 ///
 /// <para>
-/// <b>Known limitation (explicit transactions):</b> when a caller
-/// opens its own transaction via <c>dbContext.Database.BeginTransactionAsync</c>
-/// and then commits or rolls back independently of <c>SaveChangesAsync</c>,
-/// <c>SavedChanges</c> fires after the SQL is sent but BEFORE the
-/// caller's <c>Transaction.Commit</c>. A <c>Transaction.Rollback</c>
-/// after a successful save would still drop the in-memory events even
-/// though the OutboxMessage rows were rolled back with it. Closing
-/// that gap requires a paired <c>IDbTransactionInterceptor</c>
-/// (<c>TransactionCommitted</c> / <c>TransactionFailed</c>); tracked
-/// as a follow-up under <c>T-IGH-03-OUTBOX-WIRING</c>. The interceptor-
-/// only fix here is sufficient for ordinary handler paths that rely on
-/// the implicit transaction <c>SaveChangesAsync</c> wraps around them.
+/// <b>Explicit-transaction rollback safety:</b> when a caller opens
+/// its own transaction via
+/// <c>dbContext.Database.BeginTransactionAsync</c>, <c>SavedChanges</c>
+/// fires after the SQL is sent but BEFORE the caller's
+/// <c>Transaction.Commit</c>. A subsequent <c>Transaction.Rollback</c>
+/// would naively drop the in-memory events even though the
+/// OutboxMessage rows rolled back with the transaction. Closed by
+/// <see cref="OutboxTransactionInterceptor"/> in tandem with
+/// <see cref="RestoreTxSnapshot"/> / <see cref="DiscardTxSnapshot"/>:
+/// snapshots are accumulated per-transaction (keyed by
+/// <see cref="DbContext"/> + <c>TransactionId</c>) so multiple
+/// <c>SaveChanges</c> calls inside one explicit transaction all
+/// re-arm on rollback, and an unrelated implicit-then-explicit-
+/// rollback sequence cannot resurrect events from a different
+/// transaction's already-committed save.
 /// </para>
 /// </summary>
 public sealed class DomainEventToOutboxInterceptor : SaveChangesInterceptor
@@ -68,20 +72,27 @@ public sealed class DomainEventToOutboxInterceptor : SaveChangesInterceptor
     private readonly ConditionalWeakTable<DbContext, PendingState> _pending = new();
 
     /// <summary>
-    /// Per-DbContext "I just cleared these events" snapshot kept alive
-    /// from <see cref="SavedChangesAsync"/> until the next explicit
-    /// transaction commit / rollback / failure. Read by
-    /// <see cref="OutboxTransactionInterceptor"/> on rollback to re-arm
-    /// the in-memory events so a retry resends them.
+    /// Two-level snapshot store: outer key is the
+    /// <see cref="DbContext"/> (held weakly so a context that goes out
+    /// of scope without ever closing its transaction doesn't leak),
+    /// inner key is the active
+    /// <see cref="Microsoft.EntityFrameworkCore.Storage.IDbContextTransaction.TransactionId"/>
+    /// at <c>SavedChanges</c>-time. Multiple <c>SaveChanges</c> calls
+    /// within the same explicit transaction <i>accumulate</i> into the
+    /// same bucket; <see cref="OutboxTransactionInterceptor"/> consumes
+    /// the whole bucket on rollback / failure and removes it on commit.
     ///
     /// <para>
-    /// Only populated when <see cref="SavedChangesAsync"/> actually
-    /// cleared anything; on implicit (auto-commit) saves the snapshot
-    /// is created and never read because no explicit transaction
-    /// callback fires.
+    /// Only populated when <see cref="SavedChangesAsync"/> ran inside
+    /// an explicit transaction (<c>Database.CurrentTransaction</c> is
+    /// non-null). Implicit (auto-commit) saves do not register a
+    /// snapshot at all because there is no caller-visible transaction
+    /// handle for any rollback callback to fire on, and the events are
+    /// already durably committed in the same atomic save as their
+    /// <see cref="OutboxMessage"/> rows.
     /// </para>
     /// </summary>
-    private readonly ConditionalWeakTable<DbContext, List<CommitSnapshotEntry>> _commitSnapshots = new();
+    private readonly ConditionalWeakTable<DbContext, ConcurrentDictionary<Guid, List<CommitSnapshotEntry>>> _txSnapshots = new();
 
     public DomainEventToOutboxInterceptor(TimeProvider clock)
     {
@@ -237,82 +248,112 @@ public sealed class DomainEventToOutboxInterceptor : SaveChangesInterceptor
 
         if (_pending.TryGetValue(context, out var state))
         {
-            // Stash a commit-snapshot ONLY when SaveChanges ran inside
-            // an explicit user-opened transaction. Without that guard,
-            // an implicit SaveChanges would leave a stale snapshot on
-            // the context, and a later unrelated explicit transaction
-            // (with no events) that the caller rolls back would call
-            // OutboxTransactionInterceptor.TransactionRolledBack →
-            // RestoreCommitSnapshot, resurrecting events that were
-            // already successfully published in a prior implicit save.
-            //
-            // Detection: if the DbContext has an active relational
-            // transaction at SavedChanges-time, that's the caller's
-            // explicit transaction (EF's own implicit transaction is
-            // already committed and disposed by this point). The
-            // in-memory provider returns null here, which is the
-            // correct behaviour for auto-commit semantics.
-            var hasExplicitTransaction = context.Database.CurrentTransaction is not null;
-
+            // Always clear the in-memory queue for the snapshotted
+            // count first — events were captured at SavingChanges-time
+            // and stored on PendingClear.Events, so the queue clear is
+            // independent of (and safely ordered before) any tx-bucket
+            // bookkeeping below.
             foreach (var pending in state.Clears)
             {
                 RemoveFirstDomainEventsViaBase(pending.Entity, pending.Count);
             }
 
-            if (hasExplicitTransaction)
+            // Stash a commit-snapshot ONLY when SaveChanges ran inside
+            // an explicit user-opened transaction. Detection: if the
+            // DbContext has an active relational transaction at
+            // SavedChanges-time, that's the caller's explicit
+            // transaction (EF's own implicit transaction is already
+            // committed and disposed by this point). The in-memory
+            // provider returns null here, which is the correct
+            // behaviour for auto-commit semantics.
+            //
+            // Without this guard, a later unrelated explicit
+            // transaction on the same context that the caller rolls
+            // back would call OutboxTransactionInterceptor →
+            // RestoreTxSnapshot and resurrect events that were already
+            // successfully published in a prior implicit save.
+            var currentTx = context.Database.CurrentTransaction;
+            if (currentTx is not null)
             {
-                var snapshot = state.Clears
+                var newEntries = state.Clears
                     .Where(c => c.Events.Count > 0)
                     .Select(c => new CommitSnapshotEntry(c.Entity, c.Events))
                     .ToList();
-                if (snapshot.Count > 0)
+
+                if (newEntries.Count > 0)
                 {
-                    _commitSnapshots.Remove(context);
-                    _commitSnapshots.Add(context, snapshot);
+                    var bucket = _txSnapshots.GetValue(
+                        context,
+                        _ => new ConcurrentDictionary<Guid, List<CommitSnapshotEntry>>());
+                    // Accumulate per-tx: multiple SaveChanges inside
+                    // the same explicit transaction append into the
+                    // same bucket. Rolling back the transaction must
+                    // re-arm EVERY batch's events.
+                    bucket.AddOrUpdate(
+                        currentTx.TransactionId,
+                        addValueFactory: _ => newEntries,
+                        updateValueFactory: (_, existing) =>
+                        {
+                            existing.AddRange(newEntries);
+                            return existing;
+                        });
                 }
             }
-            else
-            {
-                // Implicit-tx (auto-commit) save: events were committed
-                // in the same atomic SaveChanges with the OutboxMessage
-                // rows. There is no caller-visible transaction handle
-                // for a TransactionRolledBack callback to fire on, so
-                // any stale snapshot from a PRIOR explicit save on this
-                // same context must be cleared now to prevent
-                // resurrection on a future unrelated rollback.
-                _commitSnapshots.Remove(context);
-            }
+            // Implicit-tx (auto-commit) saves: events were committed
+            // in the same atomic SaveChanges with the OutboxMessage
+            // rows. No bucket is created because no transaction
+            // callback will ever fire to consume one.
+
             _pending.Remove(context);
         }
     }
 
     /// <summary>
-    /// Called by <see cref="OutboxTransactionInterceptor"/> when an
-    /// explicit transaction rolls back or fails. Re-arms the in-memory
-    /// <see cref="Entity{TId}.DomainEvents"/> queue with the events we
-    /// cleared in <see cref="SavedChangesAsync"/> so the caller's
-    /// retry resends them.
+    /// Called by <see cref="OutboxTransactionInterceptor"/> when the
+    /// explicit transaction identified by <paramref name="transactionId"/>
+    /// rolls back or fails. Re-arms the in-memory
+    /// <see cref="Entity{TId}.DomainEvents"/> queues for every batch
+    /// accumulated under that transaction, in <i>reverse accumulation
+    /// order</i> so multiple saves on the same aggregate preserve the
+    /// caller's original event sequence at the front of the queue.
+    ///
+    /// <para>
+    /// No-op if no bucket exists for the given (context, transactionId)
+    /// pair — that's the correct behaviour both for transactions that
+    /// produced no events and for the redundant case where rollback
+    /// fires after restore has already run (e.g. TransactionFailed
+    /// followed by TransactionRolledBack on some providers).
+    /// </para>
     /// </summary>
-    public void RestoreCommitSnapshot(DbContext context)
+    public void RestoreTxSnapshot(DbContext context, Guid transactionId)
     {
-        if (_commitSnapshots.TryGetValue(context, out var snapshot))
+        if (_txSnapshots.TryGetValue(context, out var bucket)
+            && bucket.TryRemove(transactionId, out var entries))
         {
-            foreach (var entry in snapshot)
+            // Reverse accumulation order: batch N goes back first so
+            // batch N-1's InsertAtFront places earlier events ahead of
+            // it, ending with the original temporal order across the
+            // queue.
+            for (int i = entries.Count - 1; i >= 0; i--)
             {
-                ReinsertDomainEventsAtFrontViaBase(entry.Entity, entry.Events);
+                ReinsertDomainEventsAtFrontViaBase(entries[i].Entity, entries[i].Events);
             }
-            _commitSnapshots.Remove(context);
         }
     }
 
     /// <summary>
     /// Called by <see cref="OutboxTransactionInterceptor"/> after a
-    /// successful explicit commit. Drops the snapshot so it cannot
-    /// accidentally restore on a later rollback that doesn't apply.
+    /// successful explicit commit on the transaction identified by
+    /// <paramref name="transactionId"/>. Drops only that transaction's
+    /// bucket — leaves any other in-flight transaction's bucket on the
+    /// same context untouched.
     /// </summary>
-    public void DiscardCommitSnapshot(DbContext context)
+    public void DiscardTxSnapshot(DbContext context, Guid transactionId)
     {
-        _commitSnapshots.Remove(context);
+        if (_txSnapshots.TryGetValue(context, out var bucket))
+        {
+            bucket.TryRemove(transactionId, out _);
+        }
     }
 
     private void DiscardSnapshot(DbContext? context)

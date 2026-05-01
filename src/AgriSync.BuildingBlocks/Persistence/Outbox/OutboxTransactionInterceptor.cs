@@ -1,9 +1,7 @@
 using System.Data.Common;
-using System.Runtime.CompilerServices;
 using AgriSync.BuildingBlocks.Domain;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
-using Microsoft.EntityFrameworkCore.Storage;
 
 namespace AgriSync.BuildingBlocks.Persistence.Outbox;
 
@@ -25,33 +23,40 @@ namespace AgriSync.BuildingBlocks.Persistence.Outbox;
 /// </para>
 ///
 /// <para>
-/// <b>The fix.</b> When an explicit transaction is started on a
-/// DbContext that uses the outbox interceptors, this interceptor
-/// hooks in and:
-/// <list type="number">
-/// <item>On <see cref="TransactionCommitting"/> /
-/// <see cref="TransactionCommitted"/>: confirms the in-memory clear
-/// that the save-side interceptor staged. Nothing additional is
-/// strictly needed here because the save-side interceptor already
-/// cleared on success — but we record the commit so a parallel
-/// <see cref="TransactionRolledBack"/> for the same transaction
-/// becomes a no-op.</item>
-/// <item>On <see cref="TransactionRolledBack"/> /
-/// <see cref="TransactionFailed"/>: walks the change tracker for any
-/// <see cref="Entity{TId}"/> whose <c>DomainEvents</c> queue is
-/// empty AND whose row was just rolled back, and "re-arms" the
-/// in-memory queue from a snapshot the save-side interceptor stored
-/// on this context for exactly this purpose.</item>
+/// <b>The fix.</b> Snapshots are accumulated by the save-side
+/// interceptor on a per-(DbContext, TransactionId) bucket whenever a
+/// <c>SaveChanges</c> runs inside an explicit transaction. This
+/// transaction interceptor keys discard / restore by the
+/// <see cref="TransactionEventData.TransactionId"/> EF Core hands us
+/// on the end / error callbacks:
+/// <list type="bullet">
+/// <item><see cref="TransactionCommitted"/> /
+/// <see cref="TransactionCommittedAsync"/>: drop that transaction's
+/// bucket — the events are durably published.</item>
+/// <item><see cref="TransactionRolledBack"/> /
+/// <see cref="TransactionRolledBackAsync"/>: restore every accumulated
+/// batch in that bucket onto its aggregate so a retry resends the
+/// events. Earlier batches are restored last so the queue ends up in
+/// original temporal order.</item>
+/// <item><see cref="TransactionFailed"/> /
+/// <see cref="TransactionFailedAsync"/>: a driver-level abort is
+/// treated identically to an explicit rollback.</item>
 /// </list>
 /// </para>
 ///
 /// <para>
-/// <b>Snapshot lifetime.</b> The save-side interceptor stashes a
-/// per-context "events I just cleared" list on a side-table
-/// (<see cref="DomainEventToOutboxInterceptor.RegisterCommitSnapshot"/>)
-/// keyed by <see cref="DbContext"/>. The transaction interceptor reads
-/// that on rollback to restore. After commit (or after a non-rollback
-/// dispose) the snapshot is discarded.
+/// Per-transaction keying matters for two reasons:
+/// <list type="number">
+/// <item>An execution-strategy retry (<c>EnableRetryOnFailure</c>)
+/// re-runs the user's lambda, which opens a NEW transaction with a new
+/// <c>TransactionId</c>. The first attempt's stale bucket cannot leak
+/// into the second attempt.</item>
+/// <item>An implicit save followed by an unrelated explicit rollback
+/// on the same context cannot resurrect events: the implicit save
+/// never created a bucket (no transaction was active at
+/// <c>SavedChanges</c> time), so there is nothing for the unrelated
+/// rollback to find.</item>
+/// </list>
 /// </para>
 /// </summary>
 public sealed class OutboxTransactionInterceptor : DbTransactionInterceptor
@@ -67,7 +72,7 @@ public sealed class OutboxTransactionInterceptor : DbTransactionInterceptor
         DbTransaction transaction,
         TransactionEndEventData eventData)
     {
-        DiscardCommitSnapshot(eventData.Context);
+        Discard(eventData);
         base.TransactionCommitted(transaction, eventData);
     }
 
@@ -76,7 +81,7 @@ public sealed class OutboxTransactionInterceptor : DbTransactionInterceptor
         TransactionEndEventData eventData,
         CancellationToken cancellationToken = default)
     {
-        DiscardCommitSnapshot(eventData.Context);
+        Discard(eventData);
         return base.TransactionCommittedAsync(transaction, eventData, cancellationToken);
     }
 
@@ -84,7 +89,7 @@ public sealed class OutboxTransactionInterceptor : DbTransactionInterceptor
         DbTransaction transaction,
         TransactionEndEventData eventData)
     {
-        RestoreFromCommitSnapshot(eventData.Context);
+        Restore(eventData);
         base.TransactionRolledBack(transaction, eventData);
     }
 
@@ -93,7 +98,7 @@ public sealed class OutboxTransactionInterceptor : DbTransactionInterceptor
         TransactionEndEventData eventData,
         CancellationToken cancellationToken = default)
     {
-        RestoreFromCommitSnapshot(eventData.Context);
+        Restore(eventData);
         return base.TransactionRolledBackAsync(transaction, eventData, cancellationToken);
     }
 
@@ -101,10 +106,9 @@ public sealed class OutboxTransactionInterceptor : DbTransactionInterceptor
         DbTransaction transaction,
         TransactionErrorEventData eventData)
     {
-        // A failed transaction (driver-level abort) is treated the
-        // same as an explicit rollback: re-arm the events so the
-        // caller's retry resends them.
-        RestoreFromCommitSnapshot(eventData.Context);
+        // Driver-level abort: treat as rollback so the caller's retry
+        // resends the events.
+        Restore(eventData);
         base.TransactionFailed(transaction, eventData);
     }
 
@@ -113,25 +117,23 @@ public sealed class OutboxTransactionInterceptor : DbTransactionInterceptor
         TransactionErrorEventData eventData,
         CancellationToken cancellationToken = default)
     {
-        RestoreFromCommitSnapshot(eventData.Context);
+        Restore(eventData);
         return base.TransactionFailedAsync(transaction, eventData, cancellationToken);
     }
 
-    private void RestoreFromCommitSnapshot(DbContext? context)
+    private void Restore(TransactionEventData eventData)
     {
-        if (context is null)
+        if (eventData.Context is { } ctx)
         {
-            return;
+            _saveSide.RestoreTxSnapshot(ctx, eventData.TransactionId);
         }
-        _saveSide.RestoreCommitSnapshot(context);
     }
 
-    private void DiscardCommitSnapshot(DbContext? context)
+    private void Discard(TransactionEventData eventData)
     {
-        if (context is null)
+        if (eventData.Context is { } ctx)
         {
-            return;
+            _saveSide.DiscardTxSnapshot(ctx, eventData.TransactionId);
         }
-        _saveSide.DiscardCommitSnapshot(context);
     }
 }

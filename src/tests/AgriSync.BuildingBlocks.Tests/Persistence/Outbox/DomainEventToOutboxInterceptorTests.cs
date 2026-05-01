@@ -167,6 +167,84 @@ public sealed class DomainEventToOutboxInterceptorTests
     }
 
     [Fact]
+    public async Task Multiple_SaveChangesAsync_inside_one_explicit_transaction_rollback_re_arms_all_event_batches()
+    {
+        // T-IGH-03-OUTBOX-WIRING multi-save regression: when a caller
+        // opens ONE explicit transaction and calls SaveChangesAsync
+        // more than once before rolling back, EVERY batch's events
+        // must be re-armed. The original snapshot was keyed only by
+        // DbContext and replaced on each save, which lost earlier
+        // batches' events on rollback. The fix accumulates batches in
+        // a per-(DbContext, TransactionId) bucket and restores them
+        // in reverse accumulation order so the original temporal
+        // sequence is preserved at the front of the queue.
+        var clock = new FixedTimeProvider(new DateTime(2026, 4, 30, 12, 0, 0, DateTimeKind.Utc));
+        var saveSide = new DomainEventToOutboxInterceptor(clock);
+        var txSide = new OutboxTransactionInterceptor(saveSide);
+
+        await using var ctx = TestEntityDbContext.CreateSqlite(saveSide, txSide);
+        await ctx.Database.EnsureCreatedAsync();
+
+        var a = TestAggregate.Create(Guid.Parse("eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee"), "A");
+        a.Rename("AA"); // a now has [Created, Renamed("AA")] — 2 events queued
+
+        var b = TestAggregate.Create(Guid.Parse("ffffffff-ffff-ffff-ffff-ffffffffffff"), "B");
+        // b has [Created] — 1 event queued
+
+        await using (var tx = await ctx.Database.BeginTransactionAsync())
+        {
+            // First save: stage A. A's 2 events get persisted as
+            // outbox rows and cleared from the in-memory queue.
+            ctx.Aggregates.Add(a);
+            await ctx.SaveChangesAsync();
+            Assert.Empty(a.DomainEvents);
+
+            // Raise another event on A between saves to verify it
+            // survives the rollback as part of the SECOND batch.
+            a.Rename("AAA"); // a now has [Renamed("AAA")] — 1 event
+
+            // Second save: stage B AND clear A's new event in the
+            // SAME SaveChanges, so the bucket accumulates two batches
+            // under the same TransactionId.
+            ctx.Aggregates.Add(b);
+            await ctx.SaveChangesAsync();
+            Assert.Empty(a.DomainEvents);
+            Assert.Empty(b.DomainEvents);
+
+            await tx.RollbackAsync();
+        }
+
+        // Both aggregates' full event histories must be back in
+        // original temporal order. The pre-fix design lost A's
+        // [Created, Renamed("AA")] batch when batch 2 replaced it.
+        Assert.Equal(3, a.DomainEvents.Count);
+        Assert.IsType<TestAggregateCreated>(a.DomainEvents.ElementAt(0));
+        Assert.IsType<TestAggregateRenamed>(a.DomainEvents.ElementAt(1));
+        Assert.IsType<TestAggregateRenamed>(a.DomainEvents.ElementAt(2));
+        Assert.Equal("AA", ((TestAggregateRenamed)a.DomainEvents.ElementAt(1)).Name);
+        Assert.Equal("AAA", ((TestAggregateRenamed)a.DomainEvents.ElementAt(2)).Name);
+
+        Assert.Single(b.DomainEvents);
+        Assert.IsType<TestAggregateCreated>(b.DomainEvents.ElementAt(0));
+
+        // No outbox rows should have committed (the entire
+        // transaction rolled back).
+        Assert.Equal(0, await ctx.OutboxMessages.CountAsync());
+
+        // Retry: replay everything in a fresh successful transaction.
+        // All 4 events should land in the outbox (3 from A + 1 from B).
+        await using (var tx = await ctx.Database.BeginTransactionAsync())
+        {
+            await ctx.SaveChangesAsync();
+            await tx.CommitAsync();
+        }
+
+        Assert.Equal(4, await ctx.OutboxMessages.CountAsync());
+        Assert.Empty(a.DomainEvents);
+        Assert.Empty(b.DomainEvents);
+    }
+
+    [Fact]
     public async Task SaveChangesFailed_keeps_DomainEvents_queued_so_a_retry_resends_them()
     {
         // T-IGH-03-OUTBOX-WIRING rollback-safety regression: the
