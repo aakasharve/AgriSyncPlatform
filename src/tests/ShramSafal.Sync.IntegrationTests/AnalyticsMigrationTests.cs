@@ -183,44 +183,44 @@ public sealed class AnalyticsMigrationTests : IAsyncLifetime
                 $"mis.{matview} must exist after the full migration chain runs (Task 9 production-read set)");
         }
 
-        // Spot-check a known-correct column on wvfd_weekly: week_start.
-        await using (var cmd = new NpgsqlCommand(
-            """
-            SELECT column_name FROM information_schema.columns
-            WHERE table_schema = 'mis' AND table_name = 'wvfd_weekly'
-            ORDER BY ordinal_position;
-            """,
-            checkConn))
-        await using (var reader = await cmd.ExecuteReaderAsync())
+        // Spot-check column shape on wvfd_weekly + correction_rate.
+        // Matviews are NOT in information_schema.columns (Postgres
+        // restricts that view to base tables and views — relkind 'r'
+        // and 'v', not 'm'). We use pg_attribute joined with pg_class
+        // to get the column list for matviews.
+        const string matviewColumnsSql = """
+            SELECT a.attname
+            FROM pg_class c
+            JOIN pg_namespace n ON n.oid = c.relnamespace
+            JOIN pg_attribute a ON a.attrelid = c.oid
+            WHERE n.nspname = 'mis'
+              AND c.relname = @matview
+              AND c.relkind = 'm'
+              AND a.attnum > 0
+              AND NOT a.attisdropped
+            ORDER BY a.attnum;
+            """;
+
+        async Task<List<string>> ReadMatviewColumns(string matview)
         {
             var cols = new List<string>();
+            await using var cmd = new NpgsqlCommand(matviewColumnsSql, checkConn);
+            cmd.Parameters.AddWithValue("matview", matview);
+            await using var reader = await cmd.ExecuteReaderAsync();
             while (await reader.ReadAsync())
             {
                 cols.Add(reader.GetString(0));
             }
-            cols.Should().Contain(new[] { "farm_id", "week_start", "wvfd", "engagement_tier" },
-                "Task 9's wvfd_weekly must expose the columns AdminMisRepository.GetWvfdHistoryAsync queries");
+            return cols;
         }
 
-        // Spot-check correction_rate column shape (D2.A redefinition):
-        // (farm_id, correction_rate_pct).
-        await using (var cmd = new NpgsqlCommand(
-            """
-            SELECT column_name FROM information_schema.columns
-            WHERE table_schema = 'mis' AND table_name = 'correction_rate'
-            ORDER BY ordinal_position;
-            """,
-            checkConn))
-        await using (var reader = await cmd.ExecuteReaderAsync())
-        {
-            var cols = new List<string>();
-            while (await reader.ReadAsync())
-            {
-                cols.Add(reader.GetString(0));
-            }
-            cols.Should().Contain(new[] { "farm_id", "correction_rate_pct" },
-                "Task 9's correction_rate must keep its two-column shape so MisReportRepository's join keeps working");
-        }
+        var wvfdCols = await ReadMatviewColumns("wvfd_weekly");
+        wvfdCols.Should().Contain(new[] { "farm_id", "week_start", "wvfd", "engagement_tier" },
+            "Task 9's wvfd_weekly must expose the columns AdminMisRepository.GetWvfdHistoryAsync queries");
+
+        var correctionCols = await ReadMatviewColumns("correction_rate");
+        correctionCols.Should().Contain(new[] { "farm_id", "correction_rate_pct" },
+            "Task 9's correction_rate must keep its two-column shape so MisReportRepository's join keeps working");
 
         // Negative assertion: the dropped matviews (D1.B + D3.B) MUST
         // NOT exist after the rewrite — keeping them as placeholders
