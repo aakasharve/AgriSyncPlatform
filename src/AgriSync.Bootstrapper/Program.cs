@@ -647,18 +647,18 @@ static async Task InitializeApplicationDataAsync(WebApplication app)
         var ssfPhaseACreated = app.Environment.IsDevelopment()
             ? await EnsureContextTablesCreatedAsync(ssfContext, "ssf", "farms")
             : await ApplyStartupMigrationsIfAllowedAsync(app, ssfContext, "ShramSafalDbContext (Phase A)", ssfPhaseATarget);
-        // Production: apply analytics only through AnalyticsInitial. The later
-        // analytics migrations (Phase4_MisSchemaRollups, Phase7_Behavioral-
-        // Analytics, Phase_OpsObservability) reference columns that do not
-        // match the live ShramSafal schema (ssf.verifications vs real
-        // ssf.verification_events, lowercase id vs "Id", missing columns
-        // verification_status/is_corrected/...). Applying them at startup
-        // cannot succeed. Deferring until those migrations are reauthored.
-        // See Pending_Tasks handoff entry (filed in Phase 9).
-        const string analyticsProdTarget = "20260419054331_AnalyticsInitial";
+        // T-IGH-03-ANALYTICS-MIGRATION-REWRITE (Sub-plan 03 Task 9): the
+        // production cap at AnalyticsInitial was lifted on 2026-05-01.
+        // The 5 broken legacy migrations (Phase4_MisSchemaRollups,
+        // Phase7_BehavioralAnalytics, Phase_OpsObservability,
+        // MIS_MatViewHealthFix, MIS_DropVerificationsCompatView) are now
+        // no-ops; 20260502000000_AnalyticsRewrite is the single canonical
+        // rebuild that bootstraps the mis schema/role and creates the
+        // 10 production-read matviews against the actual ShramSafal
+        // schema. Apply the full chain.
         var analyticsSchemaCreated = app.Environment.IsDevelopment()
             ? await EnsureContextTablesCreatedAsync(analyticsContext, "analytics", "events")
-            : await ApplyStartupMigrationsIfAllowedAsync(app, analyticsContext, "AnalyticsDbContext (to AnalyticsInitial)", analyticsProdTarget);
+            : await ApplyStartupMigrationsIfAllowedAsync(app, analyticsContext, "AnalyticsDbContext (full)");
         var ssfPhaseBCreated = app.Environment.IsDevelopment()
             ? false
             : await ApplyStartupMigrationsIfAllowedAsync(app, ssfContext, "ShramSafalDbContext (Phase B)");
