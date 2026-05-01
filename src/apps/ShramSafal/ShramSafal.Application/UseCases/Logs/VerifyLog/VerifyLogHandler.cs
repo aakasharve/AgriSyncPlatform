@@ -1,6 +1,6 @@
 using AgriSync.BuildingBlocks.Abstractions;
 using AgriSync.BuildingBlocks.Analytics;
-using AgriSync.BuildingBlocks.Auth;
+using AgriSync.BuildingBlocks.Application;
 using AgriSync.BuildingBlocks.Results;
 using AgriSync.SharedKernel.Contracts.Ids;
 using AgriSync.SharedKernel.Contracts.Roles;
@@ -13,39 +13,45 @@ using ShramSafal.Domain.Logs;
 
 namespace ShramSafal.Application.UseCases.Logs.VerifyLog;
 
+/// <summary>
+/// Verifies (or rejects / disputes) a <see cref="DailyLog"/> by emitting
+/// a new <see cref="VerificationEvent"/> through the role-aware state
+/// machine, then runs the auto-verify-job-card hook and emits an
+/// <c>InvitationClaimed</c>-class analytics event.
+///
+/// <para>
+/// T-IGH-03-PIPELINE-ROLLOUT (VerifyLog): caller-shape validation lives
+/// in <see cref="VerifyLogValidator"/>; the strict
+/// owner-tier <see cref="IAuthorizationEnforcer.EnsureCanVerify"/> check
+/// lives in <see cref="VerifyLogAuthorizer"/>. When this handler is
+/// resolved via the pipeline, both run before the body. Direct
+/// construction (legacy unit tests) bypasses those decorators and
+/// exercises only the body's own defense-in-depth checks
+/// (<c>callerRole is null ⇒ Forbidden</c>, entitlement gate, state-
+/// machine error handling). The sync-batch caller
+/// (<c>PushSyncBatchHandler</c>) was migrated to
+/// <see cref="IHandler{TCommand,TResult}"/> alongside this rollout so
+/// its strict auth coverage stays intact.
+/// </para>
+/// </summary>
 public sealed class VerifyLogHandler(
     IShramSafalRepository repository,
-    IAuthorizationEnforcer authorizationEnforcer,
     IIdGenerator idGenerator,
     IClock clock,
     IEntitlementPolicy entitlementPolicy,
     IAnalyticsWriter analytics,
     OnLogVerifiedAutoVerifyJobCard autoVerifyJobCard)
+    : IHandler<VerifyLogCommand, DailyLogDto>
 {
     public async Task<Result<DailyLogDto>> HandleAsync(VerifyLogCommand command, CancellationToken ct = default)
     {
-        if (command.DailyLogId == Guid.Empty || command.VerifiedByUserId == Guid.Empty)
-        {
-            return Result.Failure<DailyLogDto>(ShramSafalErrors.InvalidCommand);
-        }
-
-        if (command.VerificationEventId.HasValue && command.VerificationEventId.Value == Guid.Empty)
-        {
-            return Result.Failure<DailyLogDto>(ShramSafalErrors.InvalidCommand);
-        }
-
-        // Sub-plan 03 T-IGH-03-AUTHZ-RESULT: propagate the typed
-        // authorization failure to the caller. The enforcer already
-        // performs the same callerRole/membership check the handler
-        // re-does below, but we keep the explicit handler-level
-        // Forbidden check as defense-in-depth.
-        var authResult = await authorizationEnforcer.EnsureCanVerify(
-            new UserId(command.VerifiedByUserId),
-            command.DailyLogId);
-        if (!authResult.IsSuccess)
-        {
-            return Result.Failure<DailyLogDto>(authResult.Error);
-        }
+        // Caller-shape validation (DailyLogId / VerifiedByUserId /
+        // explicit-but-empty VerificationEventId) lives in
+        // VerifyLogValidator; the strict owner-tier authorization check
+        // lives in VerifyLogAuthorizer. Both run as pipeline behaviors
+        // before this body when the handler is resolved through the
+        // pipeline. Direct callers must enforce the same invariants
+        // themselves.
 
         var log = await repository.GetDailyLogByIdAsync(command.DailyLogId, ct);
         if (log is null)
@@ -53,6 +59,11 @@ public sealed class VerifyLogHandler(
             return Result.Failure<DailyLogDto>(ShramSafalErrors.DailyLogNotFound);
         }
 
+        // Defense-in-depth: even after the pipeline's EnsureCanVerify, the
+        // body re-confirms that the caller has SOME membership on the
+        // log's farm and uses that role for the state-machine call. This
+        // is the only auth gate that runs for direct (non-pipeline)
+        // consumers, so it must remain.
         var callerRole = await repository.GetUserRoleForFarmAsync((Guid)log.FarmId, command.VerifiedByUserId, ct);
         if (callerRole is null)
         {
