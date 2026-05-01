@@ -14,6 +14,7 @@ using Microsoft.EntityFrameworkCore.Storage;
 using Serilog;
 using Serilog.Context;
 using Accounts.Api;
+using AgriSync.Bootstrapper.Composition;
 using AgriSync.Bootstrapper.Endpoints;
 using ShramSafal.Api;
 using User.Api;
@@ -47,6 +48,12 @@ try
     });
 
     builder.Services.AddBuildingBlocks();
+    // T-IGH-03-OBSERVABILITY-OTEL: traces + metrics with W3C
+    // Trace Context propagation, ASP.NET Core / HttpClient / EF Core /
+    // Npgsql auto-instrumentation, and an OTLP exporter pointed at
+    // OTel:Endpoint (defaults to http://localhost:4317 for local
+    // Jaeger). See AgriSync.Bootstrapper.Composition.OpenTelemetryConfig.
+    builder.Services.AddAgriSyncObservability(builder.Configuration);
     builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
     builder.Services.AddProblemDetails();
     builder.Services.AddEndpointsApiExplorer();
