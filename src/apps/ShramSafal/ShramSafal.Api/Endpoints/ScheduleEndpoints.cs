@@ -25,7 +25,7 @@ public static class ScheduleEndpoints
             Guid cycleId,
             AdoptScheduleRequest request,
             ClaimsPrincipal user,
-            AdoptScheduleHandler handler,
+            AgriSync.BuildingBlocks.Application.IHandler<AdoptScheduleCommand, ShramSafal.Application.Contracts.Dtos.ScheduleSubscriptionDto> handler,
             CancellationToken ct) =>
         {
             if (!EndpointActorContext.TryGetUserId(user, out var actorUserId))

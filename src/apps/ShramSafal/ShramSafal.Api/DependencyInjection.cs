@@ -475,6 +475,108 @@ public static class DependencyInjection
                     sp.GetServices<AgriSync.BuildingBlocks.Application.PipelineBehaviors.IAuthorizationCheck<
                         ShramSafal.Application.UseCases.Farms.UpdateFarmBoundary.UpdateFarmBoundaryCommand>>())));
 
+        // T-IGH-03-PIPELINE-ROLLOUT (AdoptSchedule): caller-shape
+        // validation + farm + plot + cropCycle existence + farm-membership.
+        // Endpoint (POST /plots/{plotId}/cycles/{cycleId}/schedule/adopt)
+        // gets canonical InvalidCommand → FarmNotFound → PlotNotFound →
+        // CropCycleNotFound → Forbidden ordering.
+        services.AddScoped<AgriSync.BuildingBlocks.Application.PipelineBehaviors.IValidator<
+            ShramSafal.Application.UseCases.Schedules.AdoptSchedule.AdoptScheduleCommand>,
+            ShramSafal.Application.UseCases.Schedules.AdoptSchedule.AdoptScheduleValidator>();
+        services.AddScoped<AgriSync.BuildingBlocks.Application.PipelineBehaviors.IAuthorizationCheck<
+            ShramSafal.Application.UseCases.Schedules.AdoptSchedule.AdoptScheduleCommand>,
+            ShramSafal.Application.UseCases.Schedules.AdoptSchedule.AdoptScheduleAuthorizer>();
+        services.AddScoped<AgriSync.BuildingBlocks.Application.IHandler<
+            ShramSafal.Application.UseCases.Schedules.AdoptSchedule.AdoptScheduleCommand,
+            ShramSafal.Application.Contracts.Dtos.ScheduleSubscriptionDto>>(sp =>
+            AgriSync.BuildingBlocks.Application.HandlerPipeline.Build(
+                sp.GetRequiredService<AdoptScheduleHandler>(),
+                new AgriSync.BuildingBlocks.Application.PipelineBehaviors.LoggingBehavior<
+                    ShramSafal.Application.UseCases.Schedules.AdoptSchedule.AdoptScheduleCommand,
+                    ShramSafal.Application.Contracts.Dtos.ScheduleSubscriptionDto>(
+                    sp.GetRequiredService<Microsoft.Extensions.Logging.ILogger<
+                        AgriSync.BuildingBlocks.Application.PipelineBehaviors.LoggingBehavior<
+                            ShramSafal.Application.UseCases.Schedules.AdoptSchedule.AdoptScheduleCommand,
+                            ShramSafal.Application.Contracts.Dtos.ScheduleSubscriptionDto>>>()),
+                new AgriSync.BuildingBlocks.Application.PipelineBehaviors.ValidationBehavior<
+                    ShramSafal.Application.UseCases.Schedules.AdoptSchedule.AdoptScheduleCommand,
+                    ShramSafal.Application.Contracts.Dtos.ScheduleSubscriptionDto>(
+                    sp.GetServices<AgriSync.BuildingBlocks.Application.PipelineBehaviors.IValidator<
+                        ShramSafal.Application.UseCases.Schedules.AdoptSchedule.AdoptScheduleCommand>>()),
+                new AgriSync.BuildingBlocks.Application.PipelineBehaviors.AuthorizationBehavior<
+                    ShramSafal.Application.UseCases.Schedules.AdoptSchedule.AdoptScheduleCommand,
+                    ShramSafal.Application.Contracts.Dtos.ScheduleSubscriptionDto>(
+                    sp.GetServices<AgriSync.BuildingBlocks.Application.PipelineBehaviors.IAuthorizationCheck<
+                        ShramSafal.Application.UseCases.Schedules.AdoptSchedule.AdoptScheduleCommand>>())));
+
+        // T-IGH-03-PIPELINE-ROLLOUT (CorrectCostEntry): caller-shape +
+        // payload-shape (amount range) validation + cost-entry existence
+        // + owner-tier role on the entry's farm. Endpoint
+        // (POST /finance/cost-entry/{id}/correct) gets canonical
+        // InvalidCommand → InvalidAmount → CostEntryNotFound →
+        // Forbidden ordering.
+        services.AddScoped<AgriSync.BuildingBlocks.Application.PipelineBehaviors.IValidator<
+            ShramSafal.Application.UseCases.Finance.CorrectCostEntry.CorrectCostEntryCommand>,
+            ShramSafal.Application.UseCases.Finance.CorrectCostEntry.CorrectCostEntryValidator>();
+        services.AddScoped<AgriSync.BuildingBlocks.Application.PipelineBehaviors.IAuthorizationCheck<
+            ShramSafal.Application.UseCases.Finance.CorrectCostEntry.CorrectCostEntryCommand>,
+            ShramSafal.Application.UseCases.Finance.CorrectCostEntry.CorrectCostEntryAuthorizer>();
+        services.AddScoped<AgriSync.BuildingBlocks.Application.IHandler<
+            ShramSafal.Application.UseCases.Finance.CorrectCostEntry.CorrectCostEntryCommand,
+            ShramSafal.Application.Contracts.Dtos.FinanceCorrectionDto>>(sp =>
+            AgriSync.BuildingBlocks.Application.HandlerPipeline.Build(
+                sp.GetRequiredService<CorrectCostEntryHandler>(),
+                new AgriSync.BuildingBlocks.Application.PipelineBehaviors.LoggingBehavior<
+                    ShramSafal.Application.UseCases.Finance.CorrectCostEntry.CorrectCostEntryCommand,
+                    ShramSafal.Application.Contracts.Dtos.FinanceCorrectionDto>(
+                    sp.GetRequiredService<Microsoft.Extensions.Logging.ILogger<
+                        AgriSync.BuildingBlocks.Application.PipelineBehaviors.LoggingBehavior<
+                            ShramSafal.Application.UseCases.Finance.CorrectCostEntry.CorrectCostEntryCommand,
+                            ShramSafal.Application.Contracts.Dtos.FinanceCorrectionDto>>>()),
+                new AgriSync.BuildingBlocks.Application.PipelineBehaviors.ValidationBehavior<
+                    ShramSafal.Application.UseCases.Finance.CorrectCostEntry.CorrectCostEntryCommand,
+                    ShramSafal.Application.Contracts.Dtos.FinanceCorrectionDto>(
+                    sp.GetServices<AgriSync.BuildingBlocks.Application.PipelineBehaviors.IValidator<
+                        ShramSafal.Application.UseCases.Finance.CorrectCostEntry.CorrectCostEntryCommand>>()),
+                new AgriSync.BuildingBlocks.Application.PipelineBehaviors.AuthorizationBehavior<
+                    ShramSafal.Application.UseCases.Finance.CorrectCostEntry.CorrectCostEntryCommand,
+                    ShramSafal.Application.Contracts.Dtos.FinanceCorrectionDto>(
+                    sp.GetServices<AgriSync.BuildingBlocks.Application.PipelineBehaviors.IAuthorizationCheck<
+                        ShramSafal.Application.UseCases.Finance.CorrectCostEntry.CorrectCostEntryCommand>>())));
+
+        // T-IGH-03-PIPELINE-ROLLOUT (RecordTestCollected): caller-shape
+        // validation + role-based authorization (LabOperator,
+        // SecondaryOwner, Mukadam — CEI §4.5). No repository access in
+        // the authorizer — pure command-shape role check.
+        services.AddScoped<AgriSync.BuildingBlocks.Application.PipelineBehaviors.IValidator<
+            ShramSafal.Application.UseCases.Tests.RecordTestCollected.RecordTestCollectedCommand>,
+            ShramSafal.Application.UseCases.Tests.RecordTestCollected.RecordTestCollectedValidator>();
+        services.AddScoped<AgriSync.BuildingBlocks.Application.PipelineBehaviors.IAuthorizationCheck<
+            ShramSafal.Application.UseCases.Tests.RecordTestCollected.RecordTestCollectedCommand>,
+            ShramSafal.Application.UseCases.Tests.RecordTestCollected.RecordTestCollectedAuthorizer>();
+        services.AddScoped<AgriSync.BuildingBlocks.Application.IHandler<
+            ShramSafal.Application.UseCases.Tests.RecordTestCollected.RecordTestCollectedCommand,
+            ShramSafal.Application.Contracts.Dtos.TestInstanceDto>>(sp =>
+            AgriSync.BuildingBlocks.Application.HandlerPipeline.Build(
+                sp.GetRequiredService<RecordTestCollectedHandler>(),
+                new AgriSync.BuildingBlocks.Application.PipelineBehaviors.LoggingBehavior<
+                    ShramSafal.Application.UseCases.Tests.RecordTestCollected.RecordTestCollectedCommand,
+                    ShramSafal.Application.Contracts.Dtos.TestInstanceDto>(
+                    sp.GetRequiredService<Microsoft.Extensions.Logging.ILogger<
+                        AgriSync.BuildingBlocks.Application.PipelineBehaviors.LoggingBehavior<
+                            ShramSafal.Application.UseCases.Tests.RecordTestCollected.RecordTestCollectedCommand,
+                            ShramSafal.Application.Contracts.Dtos.TestInstanceDto>>>()),
+                new AgriSync.BuildingBlocks.Application.PipelineBehaviors.ValidationBehavior<
+                    ShramSafal.Application.UseCases.Tests.RecordTestCollected.RecordTestCollectedCommand,
+                    ShramSafal.Application.Contracts.Dtos.TestInstanceDto>(
+                    sp.GetServices<AgriSync.BuildingBlocks.Application.PipelineBehaviors.IValidator<
+                        ShramSafal.Application.UseCases.Tests.RecordTestCollected.RecordTestCollectedCommand>>()),
+                new AgriSync.BuildingBlocks.Application.PipelineBehaviors.AuthorizationBehavior<
+                    ShramSafal.Application.UseCases.Tests.RecordTestCollected.RecordTestCollectedCommand,
+                    ShramSafal.Application.Contracts.Dtos.TestInstanceDto>(
+                    sp.GetServices<AgriSync.BuildingBlocks.Application.PipelineBehaviors.IAuthorizationCheck<
+                        ShramSafal.Application.UseCases.Tests.RecordTestCollected.RecordTestCollectedCommand>>())));
+
         // Phase 6 — self-exit
         services.AddScoped<ExitMembershipHandler>();
 

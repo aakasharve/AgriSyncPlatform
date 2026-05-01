@@ -84,7 +84,7 @@ public static class TestEndpoints
         group.MapPost("/test-instances/{id:guid}/collect", async (
             Guid id,
             ClaimsPrincipal user,
-            RecordTestCollectedHandler handler,
+            AgriSync.BuildingBlocks.Application.IHandler<RecordTestCollectedCommand, ShramSafal.Application.Contracts.Dtos.TestInstanceDto> handler,
             CancellationToken ct) =>
         {
             if (!EndpointActorContext.TryGetUserId(user, out var actorUserId))

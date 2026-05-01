@@ -1,4 +1,5 @@
 using AgriSync.BuildingBlocks.Abstractions;
+using AgriSync.BuildingBlocks.Application;
 using AgriSync.BuildingBlocks.Results;
 using AgriSync.SharedKernel.Contracts.Roles;
 using ShramSafal.Application.Contracts.Dtos;
@@ -13,12 +14,23 @@ namespace ShramSafal.Application.UseCases.Tests.RecordTestCollected;
 /// Handler for <see cref="RecordTestCollectedCommand"/>. Role-gates the call,
 /// delegates to <see cref="TestInstance.MarkCollected"/>, persists, and emits
 /// an <see cref="AuditEvent"/> with action <c>test.collected</c>.
+///
+/// <para>
+/// T-IGH-03-PIPELINE-ROLLOUT (RecordTestCollected): caller-shape
+/// validation lives in <see cref="RecordTestCollectedValidator"/>;
+/// role-based authorization lives in
+/// <see cref="RecordTestCollectedAuthorizer"/>. When this handler is
+/// resolved via the pipeline, both run before the body. Body keeps its
+/// role-tier check + existence guard as defense-in-depth for direct
+/// callers.
+/// </para>
 /// </summary>
 public sealed class RecordTestCollectedHandler(
     ITestInstanceRepository testInstanceRepository,
     ITestProtocolRepository testProtocolRepository,
     IShramSafalRepository repository,
     IClock clock)
+    : IHandler<RecordTestCollectedCommand, TestInstanceDto>
 {
     private static readonly HashSet<AppRole> AllowedRoles =
     [

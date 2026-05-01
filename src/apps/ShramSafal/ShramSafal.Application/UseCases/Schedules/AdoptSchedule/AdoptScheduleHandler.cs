@@ -1,4 +1,5 @@
 using AgriSync.BuildingBlocks.Abstractions;
+using AgriSync.BuildingBlocks.Application;
 using AgriSync.BuildingBlocks.Results;
 using AgriSync.SharedKernel.Contracts.Ids;
 using ShramSafal.Application.Contracts.Dtos;
@@ -9,11 +10,25 @@ using ShramSafal.Domain.Schedules;
 
 namespace ShramSafal.Application.UseCases.Schedules.AdoptSchedule;
 
+/// <summary>
+/// Adopts a published schedule template for a (Farm, Plot, CropCycle)
+/// triple, creating a new <see cref="ScheduleSubscription"/> aggregate.
+///
+/// <para>
+/// T-IGH-03-PIPELINE-ROLLOUT (AdoptSchedule): caller-shape validation
+/// lives in <see cref="AdoptScheduleValidator"/>; farm + plot +
+/// cropCycle existence + farm-membership authorization lives in
+/// <see cref="AdoptScheduleAuthorizer"/>. When this handler is resolved
+/// via the pipeline, both run before the body. The body keeps its
+/// inline gates as defense-in-depth for direct callers.
+/// </para>
+/// </summary>
 public sealed class AdoptScheduleHandler(
     IShramSafalRepository repository,
     IIdGenerator idGenerator,
     IClock clock,
     IEntitlementPolicy entitlementPolicy)
+    : IHandler<AdoptScheduleCommand, ScheduleSubscriptionDto>
 {
     public async Task<Result<ScheduleSubscriptionDto>> HandleAsync(
         AdoptScheduleCommand command,

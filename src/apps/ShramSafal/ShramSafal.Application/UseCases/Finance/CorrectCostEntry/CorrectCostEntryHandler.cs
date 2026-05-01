@@ -1,5 +1,6 @@
 using AgriSync.BuildingBlocks.Abstractions;
 using AgriSync.BuildingBlocks.Analytics;
+using AgriSync.BuildingBlocks.Application;
 using AgriSync.BuildingBlocks.Results;
 using AgriSync.SharedKernel.Contracts.Ids;
 using AgriSync.SharedKernel.Contracts.Roles;
@@ -10,12 +11,28 @@ using ShramSafal.Domain.Common;
 
 namespace ShramSafal.Application.UseCases.Finance.CorrectCostEntry;
 
+/// <summary>
+/// Records a correction to an existing cost entry: creates a
+/// <c>FinanceCorrection</c> aggregate referencing the entry, marks
+/// the entry corrected, and emits an audit + analytics event.
+///
+/// <para>
+/// T-IGH-03-PIPELINE-ROLLOUT (CorrectCostEntry): caller-shape +
+/// payload-shape validation lives in
+/// <see cref="CorrectCostEntryValidator"/>; cost-entry existence +
+/// owner-tier role authorization lives in
+/// <see cref="CorrectCostEntryAuthorizer"/>. When this handler is
+/// resolved via the pipeline, both run before the body. The body
+/// keeps its inline gates as defense-in-depth.
+/// </para>
+/// </summary>
 public sealed class CorrectCostEntryHandler(
     IShramSafalRepository repository,
     IIdGenerator idGenerator,
     IClock clock,
     IEntitlementPolicy entitlementPolicy,
     IAnalyticsWriter analytics)
+    : IHandler<CorrectCostEntryCommand, FinanceCorrectionDto>
 {
     private const decimal MaxSupportedAmount = 999_999_999m;
 

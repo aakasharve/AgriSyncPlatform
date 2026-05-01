@@ -118,7 +118,7 @@ public static class FinanceEndpoints
             Guid id,
             CorrectCostEntryRequest request,
             ClaimsPrincipal user,
-            CorrectCostEntryHandler handler,
+            AgriSync.BuildingBlocks.Application.IHandler<CorrectCostEntryCommand, ShramSafal.Application.Contracts.Dtos.FinanceCorrectionDto> handler,
             CancellationToken ct) =>
         {
             if (!EndpointActorContext.TryGetUserId(user, out var actorUserId))
