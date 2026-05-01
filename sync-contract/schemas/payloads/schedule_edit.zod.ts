@@ -1,8 +1,16 @@
-// Sub-plan 02 Task 8 scaffold for schedule.edit.
-// Full payload schema is deferred to T-IGH-02-PAYLOADS (filed in Task 12).
-// Until then, validate as z.unknown() so MutationQueue.enqueue accepts
-// payloads of any shape — backend rejection remains the source of truth.
 import { z } from 'zod';
+import { ZGuid } from './_shared.zod';
 
-export const ScheduleEditPayload = z.unknown();
+// Mirrors EditScheduleTemplateCommand (Planning/EditScheduleTemplate).
+// The sync handler is not yet wired (Sub-plan 03), so this schema is
+// based on the C# command record.
+export const ScheduleEditPayload = z.object({
+  sourceTemplateId: ZGuid,
+  newTemplateId: ZGuid,
+  callerRole: z.string().optional(),
+  newName: z.string().optional(),
+  newStage: z.string().optional(),
+  clientCommandId: z.string().optional(),
+});
+
 export type ScheduleEditPayloadType = z.infer<typeof ScheduleEditPayload>;
