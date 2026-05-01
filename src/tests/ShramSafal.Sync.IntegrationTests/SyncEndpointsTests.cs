@@ -1583,8 +1583,22 @@ public sealed class SyncEndpointsTests
 
             var dbRoot = new InMemoryDatabaseRoot();
             var dbName = $"sync-tests-{Guid.NewGuid()}";
-            builder.Services.AddDbContext<ShramSafalDbContext>(options =>
-                options.UseInMemoryDatabase(dbName, dbRoot));
+            // T-IGH-03-OUTBOX-WIRING: attach the outbox interceptors
+            // to the test DbContext too, so integration tests exercise
+            // the same SaveChanges-side and TransactionRollback-side
+            // outbox plumbing that production runs. The interceptor
+            // services were registered as singletons by
+            // AddShramSafalApi → AddShramSafalInfrastructure earlier.
+            builder.Services.AddDbContext<ShramSafalDbContext>((sp, options) =>
+            {
+                options.UseInMemoryDatabase(dbName, dbRoot);
+                var saveSide = sp.GetService<AgriSync.BuildingBlocks.Persistence.Outbox.DomainEventToOutboxInterceptor>();
+                var txSide = sp.GetService<AgriSync.BuildingBlocks.Persistence.Outbox.OutboxTransactionInterceptor>();
+                if (saveSide is not null && txSide is not null)
+                {
+                    options.AddInterceptors(saveSide, txSide);
+                }
+            });
 
             // Last-mile override hook — runs after every standard
             // registration so a test can replace a specific service
