@@ -61,7 +61,7 @@ const ALLOWLIST = new Map([
     ['pages' + sep + 'JoinFarmLandingPage.tsx', 'T-IGH-04-LOCALSTORAGE-MIGRATION'],
     ['pages' + sep + 'OnboardingPermissionsPage.tsx', 'T-IGH-04-LOCALSTORAGE-MIGRATION'],
     ['pages' + sep + 'ProfilePage.tsx', 'T-IGH-04-LOCALSTORAGE-MIGRATION'],
-    ['pages' + sep + 'ReflectPage.tsx', 'T-IGH-04-LOCALSTORAGE-MIGRATION'],
+    ['features' + sep + 'reflect' + sep + 'ReflectPage.tsx', 'T-IGH-04-LOCALSTORAGE-MIGRATION'],
     ['pages' + sep + 'SettingsPage.tsx', 'T-IGH-04-LOCALSTORAGE-MIGRATION'],
     ['services' + sep + 'harvestService.ts', 'T-IGH-04-LOCALSTORAGE-MIGRATION'],
     ['services' + sep + 'procurementRepository.ts', 'T-IGH-04-LOCALSTORAGE-MIGRATION'],
