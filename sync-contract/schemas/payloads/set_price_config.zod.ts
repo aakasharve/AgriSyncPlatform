@@ -1,8 +1,18 @@
-// Sub-plan 02 Task 8 scaffold for set_price_config.
-// Full payload schema is deferred to T-IGH-02-PAYLOADS (filed in Task 12).
-// Until then, validate as z.unknown() so MutationQueue.enqueue accepts
-// payloads of any shape — backend rejection remains the source of truth.
 import { z } from 'zod';
+import { ZGuid } from './_shared.zod';
 
-export const SetPriceConfigPayload = z.unknown();
+// Mirrors PushSyncBatchHandler.SetPriceConfigMutationPayload.
+// PayloadHasOnly allow-list: priceConfigId, itemName, unitPrice,
+// currencyCode, effectiveFrom, version, createdByUserId.
+// effectiveFrom is DateOnly (yyyy-MM-dd) on the wire.
+export const SetPriceConfigPayload = z.object({
+  priceConfigId: ZGuid.optional(),
+  itemName: z.string().min(1),
+  unitPrice: z.number(),
+  currencyCode: z.string().min(1),
+  effectiveFrom: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'must be yyyy-MM-dd'),
+  version: z.number().int(),
+  createdByUserId: ZGuid.optional(),
+});
+
 export type SetPriceConfigPayloadType = z.infer<typeof SetPriceConfigPayload>;

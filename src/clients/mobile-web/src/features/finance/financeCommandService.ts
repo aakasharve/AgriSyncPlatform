@@ -92,13 +92,18 @@ export const financeCommandService = {
 
         financeService._addPriceBookItem(item);
 
+        // T-IGH-02-PAYLOADS: align with canonical set_price_config wire
+        // shape (PushSyncBatchHandler.SetPriceConfigMutationPayload).
+        // priceConfigId is left undefined here because the server's
+        // ZGuid-typed field doesn't accept the local `pb_*` ids — the
+        // backend will mint a fresh Guid. version=1 marks the new entry
+        // as the first revision.
         void SetPriceConfigCommand.enqueue({
-            configId: item.id,
-            category: item.name,
+            itemName: item.name,
             unitPrice: item.defaultUnitPrice,
             currencyCode: 'INR',
-            unitType: item.defaultUnit,
-            effectiveDate: toDateKey(item.effectiveFrom),
+            effectiveFrom: toDateKey(item.effectiveFrom),
+            version: 1,
         });
         triggerSyncBestEffort();
 
@@ -114,13 +119,16 @@ export const financeCommandService = {
 
         financeService._addAdjustment(next);
 
+        // T-IGH-02-PAYLOADS: align with canonical correct_cost_entry wire
+        // shape (PushSyncBatchHandler.CorrectCostEntryMutationPayload).
+        // financeCorrectionId is left undefined — the local `madj_*` id
+        // can't pass the server's ZGuid validation; the backend mints
+        // its own Guid for the FinanceCorrection idempotency key.
         void CorrectCostEntryCommand.enqueue({
             costEntryId: adjustment.adjustsMoneyEventId,
-            correctionId: next.id,
-            originalAmount: 0, // Requires fetching from previous value if tracking completely, 0 as default shim
             correctedAmount: adjustment.correctedFields?.amount ?? 0,
             currencyCode: 'INR',
-            reason: adjustment.reason || ''
+            reason: adjustment.reason || 'Cost correction'
         });
         triggerSyncBestEffort();
 
