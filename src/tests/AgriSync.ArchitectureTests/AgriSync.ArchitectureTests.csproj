@@ -35,6 +35,22 @@
     <ProjectReference Include="..\..\apps\ShramSafal\ShramSafal.Application\ShramSafal.Application.csproj" />
     <ProjectReference Include="..\..\apps\User\User.Application\User.Application.csproj" />
     <ProjectReference Include="..\..\apps\User\User.Infrastructure\User.Infrastructure.csproj" />
+    <!-- T-IGH-03-OBSERVABILITY-OTEL: reference the bootstrapper so we
+         can invoke its OpenTelemetryConfig extension method against a
+         clean ServiceCollection and assert the W3C traceparent +
+         tracer-provider wiring is intact. -->
+    <ProjectReference Include="..\..\AgriSync.Bootstrapper\AgriSync.Bootstrapper.csproj" />
+  </ItemGroup>
+
+  <!-- T-IGH-03-OBSERVABILITY-OTEL: surfaces the OTel SDK types
+       (TracerProvider, Propagators) for the arch test. The Bootstrapper
+       ProjectReference above brings in the full OpenTelemetry runtime
+       transitively; AddInMemoryCollection comes from the
+       Microsoft.AspNetCore.App framework reference. -->
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+    <PackageReference Include="OpenTelemetry" Version="1.15.3" />
+    <PackageReference Include="OpenTelemetry.Extensions.Hosting" Version="1.15.3" />
   </ItemGroup>
 
 </Project>
