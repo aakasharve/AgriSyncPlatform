@@ -167,6 +167,37 @@ public sealed class PushSyncBatchHandler(
             return CreateDuplicateResult(clientRequestId, mutationType, existing);
         }
 
+        // EnableRetryOnFailure (Npgsql resilience for RDS reboots / failover)
+        // forbids user-initiated transactions outside an execution strategy:
+        // BeginTransactionAsync would throw InvalidOperationException. Routing
+        // the transactional block through the strategy lets it retry the
+        // entire mutation on transient connection errors. Idempotency is safe
+        // because the pre-execution dedup check inside the helper catches a
+        // retry whose first attempt had already committed.
+        var strategy = dbContext.Database.CreateExecutionStrategy();
+        return await strategy.ExecuteAsync(
+            innerCt => ExecuteMutationInTransactionAsync(
+                deviceId,
+                clientRequestId,
+                mutationType,
+                mutation,
+                actorUserId,
+                actorRole,
+                appVersion,
+                innerCt),
+            ct);
+    }
+
+    private async Task<SyncMutationResultDto> ExecuteMutationInTransactionAsync(
+        string deviceId,
+        string clientRequestId,
+        string mutationType,
+        PushSyncMutationCommand mutation,
+        Guid actorUserId,
+        string actorRole,
+        string? appVersion,
+        CancellationToken ct)
+    {
         await using var transaction = await BeginTransactionIfSupportedAsync(ct);
 
         try

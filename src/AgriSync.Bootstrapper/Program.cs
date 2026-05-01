@@ -145,6 +145,10 @@ try
             npgsql.MigrationsHistoryTable(
                 tableName: "__analytics_migrations_history",
                 schema: AnalyticsDbContext.SchemaName);
+            npgsql.EnableRetryOnFailure(
+                maxRetryCount: 5,
+                maxRetryDelay: TimeSpan.FromSeconds(10),
+                errorCodesToAdd: null);
         });
     });
     builder.Services.AddHostedService<AgriSync.Bootstrapper.Migrations.BackfillFarmOwnerAccounts>();

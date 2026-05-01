@@ -32,6 +32,10 @@ public static class DependencyInjection
                 npgsql.MigrationsHistoryTable(
                     tableName: "__accounts_migrations_history",
                     schema: AccountsDbContext.SchemaName);
+                npgsql.EnableRetryOnFailure(
+                    maxRetryCount: 5,
+                    maxRetryDelay: TimeSpan.FromSeconds(10),
+                    errorCodesToAdd: null);
             });
         });
 
