@@ -6,7 +6,12 @@ import { readdir, readFile } from 'node:fs/promises';
 import { join, extname, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const MAX_LINES = 2600;
+// Sub-plan 04 §DoD: every mobile-web .ts/.tsx file must be ≤ 800 lines.
+// All originally-flagged god-files were decomposed in waves 1–3 of the
+// 2026-05-01 hardening session (commits 2be44a9..c05aeb0 on
+// feature/ighardening-04-frontend). Threshold lowered from the legacy
+// 2600 to the canonical Plan 04 cap.
+const MAX_LINES = 800;
 const ROOT = fileURLToPath(new URL('../src', import.meta.url));
 const EXTENSIONS = new Set(['.ts', '.tsx']);
 const SKIP_DIRS = new Set(['node_modules', 'dist', '__tests__', '__mocks__']);
