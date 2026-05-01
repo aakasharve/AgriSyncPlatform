@@ -1,0 +1,38 @@
+name: zap-baseline
+
+# Sub-plan 05 Task 13 — OWASP ZAP weekly passive baseline scan against
+# the staging API.
+#
+# Status: PREP_READY. The target URL `https://staging.api.agrisync.app`
+# does not yet exist (no staging env provisioned). The first scheduled
+# run will fail until Kiro/AWS deploy automation publishes a staging
+# host. That is acceptable noise once a week; the workflow exists so
+# the staging owner has an obvious place to point it.
+#
+# Trigger model: weekly cron + workflow_dispatch. Findings from the
+# first real scan get triaged in T-IGH-05-ZAP-FINDINGS.
+
+on:
+  schedule:
+    - cron: "0 2 * * 1"
+  workflow_dispatch:
+
+jobs:
+  zap:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: ZAP baseline scan against staging
+        run: |
+          docker run --rm -v "$(pwd):/zap/wrk" -t ghcr.io/zaproxy/zaproxy:stable \
+            zap-baseline.py \
+            -t https://staging.api.agrisync.app \
+            -m 1 \
+            -r zap-report.html || true
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: zap-report
+          path: zap-report.html
+          retention-days: 30

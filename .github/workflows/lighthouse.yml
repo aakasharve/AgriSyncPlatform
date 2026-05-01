@@ -1,0 +1,45 @@
+name: lighthouse
+
+# Sub-plan 05 Task 13 — Lighthouse perf + a11y budget for mobile-web.
+#
+# Status: PREP_READY. The thresholds below are deliberately loose
+# (performance >= 0.7, accessibility >= 0.9) because the mobile-web
+# frontend has not yet been restructured (Sub-plan 04). After the
+# restructure ships the perf wins, T-IGH-05-LIGHTHOUSE-BUDGET tightens
+# performance to >= 0.85.
+#
+# Trigger model: workflow_dispatch only for now. We will flip this to
+# `pull_request: branches: [main]` once Sub-plan 04 is REMOTE_GREEN and
+# the budgets are reproducibly met.
+
+on:
+  workflow_dispatch:
+
+jobs:
+  lhci:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: src/clients/mobile-web/package-lock.json
+
+      - name: Build mobile-web
+        working-directory: src/clients/mobile-web
+        run: |
+          npm ci
+          npm run build
+
+      - name: Run Lighthouse CI
+        working-directory: src/clients/mobile-web
+        run: |
+          npm install -g @lhci/cli@0.14.x
+          lhci autorun \
+            --collect.staticDistDir=dist \
+            --upload.target=temporary-public-storage \
+            --assert.preset=lighthouse:recommended \
+            --assert.assertions.categories:performance.minScore=0.7 \
+            --assert.assertions.categories:accessibility.minScore=0.9
