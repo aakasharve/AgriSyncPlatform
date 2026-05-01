@@ -654,7 +654,7 @@ public static class AiEndpoints
             var form = await request.ReadFormAsync(ct);
             if (!TryParseGuid(form["farmId"], out var farmId))
             {
-                return Result.Failure<ParseVoiceHttpRequest>(new Error("ShramSafal.InvalidCommand", "farmId is required."));
+                return Result.Failure<ParseVoiceHttpRequest>(Error.Validation("ShramSafal.InvalidCommand", "farmId is required."));
             }
 
             var plotId = TryParseNullableGuid(form["plotId"]);
@@ -682,7 +682,7 @@ public static class AiEndpoints
             {
                 if (!TryValidateAudioFile(audioFile, out var audioValidationError))
                 {
-                    return Result.Failure<ParseVoiceHttpRequest>(new Error("ShramSafal.InvalidCommand", audioValidationError));
+                    return Result.Failure<ParseVoiceHttpRequest>(Error.Validation("ShramSafal.InvalidCommand", audioValidationError));
                 }
 
                 await using var stream = audioFile.OpenReadStream();
@@ -693,7 +693,7 @@ public static class AiEndpoints
             }
             else if (string.IsNullOrWhiteSpace(textTranscript))
             {
-                return Result.Failure<ParseVoiceHttpRequest>(new Error("ShramSafal.InvalidCommand", "textTranscript or audio is required."));
+                return Result.Failure<ParseVoiceHttpRequest>(Error.Validation("ShramSafal.InvalidCommand", "textTranscript or audio is required."));
             }
 
             var segmentMetadataValidation = ValidateSegmentMetadata(segmentMetadataJson, mimeType, speechDuration, rawDuration);
@@ -720,13 +720,13 @@ public static class AiEndpoints
         var jsonRequest = await request.ReadFromJsonAsync<ParseVoiceInputRequest>(cancellationToken: ct);
         if (jsonRequest is null)
         {
-            return Result.Failure<ParseVoiceHttpRequest>(new Error("ShramSafal.InvalidCommand", "Invalid JSON payload."));
+            return Result.Failure<ParseVoiceHttpRequest>(Error.Validation("ShramSafal.InvalidCommand", "Invalid JSON payload."));
         }
 
         if (string.IsNullOrWhiteSpace(jsonRequest.TextTranscript) &&
             string.IsNullOrWhiteSpace(jsonRequest.AudioBase64))
         {
-            return Result.Failure<ParseVoiceHttpRequest>(new Error("ShramSafal.InvalidCommand", "textTranscript or audioBase64 is required."));
+            return Result.Failure<ParseVoiceHttpRequest>(Error.Validation("ShramSafal.InvalidCommand", "textTranscript or audioBase64 is required."));
         }
 
         if (!string.IsNullOrWhiteSpace(jsonRequest.AudioBase64))
@@ -734,12 +734,12 @@ public static class AiEndpoints
             if (!IsAllowedMimeType(jsonRequest.AudioMimeType, AllowedAudioMimeTypes))
             {
                 return Result.Failure<ParseVoiceHttpRequest>(
-                    new Error("ShramSafal.InvalidCommand", "Unsupported audio mime type."));
+                    Error.Validation("ShramSafal.InvalidCommand", "Unsupported audio mime type."));
             }
 
             if (!TryValidateBase64Payload(jsonRequest.AudioBase64, MaxAudioPayloadBytes, out var base64ValidationError))
             {
-                return Result.Failure<ParseVoiceHttpRequest>(new Error("ShramSafal.InvalidCommand", base64ValidationError));
+                return Result.Failure<ParseVoiceHttpRequest>(Error.Validation("ShramSafal.InvalidCommand", base64ValidationError));
             }
         }
 
@@ -824,19 +824,19 @@ public static class AiEndpoints
     {
         if (speechDurationMs is < 0 || rawDurationMs is < 0)
         {
-            return new Error("ShramSafal.InvalidCommand", "Duration values cannot be negative.");
+            return Error.Validation("ShramSafal.InvalidCommand", "Duration values cannot be negative.");
         }
 
         if (speechDurationMs > MaxVoiceSessionDurationMs || rawDurationMs > MaxVoiceSessionDurationMs)
         {
-            return new Error(
+            return Error.Validation(
                 "ShramSafal.InvalidCommand",
                 $"Voice duration exceeds allowed ceiling of {MaxVoiceSessionDurationMs}ms.");
         }
 
         if (speechDurationMs.HasValue && rawDurationMs.HasValue && rawDurationMs.Value < speechDurationMs.Value)
         {
-            return new Error("ShramSafal.InvalidCommand", "inputRawDurationMs must be >= inputSpeechDurationMs.");
+            return Error.Validation("ShramSafal.InvalidCommand", "inputRawDurationMs must be >= inputSpeechDurationMs.");
         }
 
         return null;
@@ -855,7 +855,7 @@ public static class AiEndpoints
 
         if (segmentMetadataJson.Length > MaxSegmentMetadataLength)
         {
-            return new Error(InvalidSegmentMetadataCode, "segmentMetadata payload is too large.");
+            return Error.Validation(InvalidSegmentMetadataCode, "segmentMetadata payload is too large.");
         }
 
         try
@@ -864,13 +864,13 @@ public static class AiEndpoints
             var root = document.RootElement;
             if (root.ValueKind != JsonValueKind.Object)
             {
-                return new Error(InvalidSegmentMetadataCode, "segmentMetadata must be a JSON object.");
+                return Error.Validation(InvalidSegmentMetadataCode, "segmentMetadata must be a JSON object.");
             }
 
             var totalSegments = TryReadPositiveInt(root, "totalSegments");
             if (totalSegments is <= 0 or > MaxVoiceSegmentsPerSession)
             {
-                return new Error(
+                return Error.Validation(
                     InvalidSegmentMetadataCode,
                     $"totalSegments must be between 1 and {MaxVoiceSegmentsPerSession}.");
             }
@@ -880,7 +880,7 @@ public static class AiEndpoints
             if (totalSpeechDurationMs is > MaxVoiceSessionDurationMs ||
                 totalRawDurationMs is > MaxVoiceSessionDurationMs)
             {
-                return new Error(
+                return Error.Validation(
                     InvalidSegmentMetadataCode,
                     $"segmentMetadata durations must be <= {MaxVoiceSessionDurationMs}ms.");
             }
@@ -889,7 +889,7 @@ public static class AiEndpoints
                 totalRawDurationMs.HasValue &&
                 totalRawDurationMs.Value < totalSpeechDurationMs.Value)
             {
-                return new Error(
+                return Error.Validation(
                     InvalidSegmentMetadataCode,
                     "segmentMetadata totalRawDurationMs must be >= totalSpeechDurationMs.");
             }
@@ -898,7 +898,7 @@ public static class AiEndpoints
                 totalSpeechDurationMs.HasValue &&
                 requestSpeechDurationMs.Value != totalSpeechDurationMs.Value)
             {
-                return new Error(
+                return Error.Validation(
                     InvalidSegmentMetadataCode,
                     "segmentMetadata totalSpeechDurationMs must match inputSpeechDurationMs.");
             }
@@ -907,7 +907,7 @@ public static class AiEndpoints
                 totalRawDurationMs.HasValue &&
                 requestRawDurationMs.Value != totalRawDurationMs.Value)
             {
-                return new Error(
+                return Error.Validation(
                     InvalidSegmentMetadataCode,
                     "segmentMetadata totalRawDurationMs must match inputRawDurationMs.");
             }
@@ -916,20 +916,20 @@ public static class AiEndpoints
             {
                 if (segmentsElement.ValueKind != JsonValueKind.Array)
                 {
-                    return new Error(InvalidSegmentMetadataCode, "segmentMetadata.segments must be an array.");
+                    return Error.Validation(InvalidSegmentMetadataCode, "segmentMetadata.segments must be an array.");
                 }
 
                 var segmentCount = segmentsElement.GetArrayLength();
                 if (segmentCount > MaxVoiceSegmentsPerSession)
                 {
-                    return new Error(
+                    return Error.Validation(
                         InvalidSegmentMetadataCode,
                         $"segmentMetadata.segments exceeds {MaxVoiceSegmentsPerSession} entries.");
                 }
 
                 if (segmentCount > 0 && segmentCount != totalSegments)
                 {
-                    return new Error(
+                    return Error.Validation(
                         InvalidSegmentMetadataCode,
                         "segmentMetadata.segments length must match totalSegments.");
                 }
@@ -939,7 +939,7 @@ public static class AiEndpoints
                 {
                     if (segment.ValueKind != JsonValueKind.Object)
                     {
-                        return new Error(InvalidSegmentMetadataCode, "Each segment entry must be an object.");
+                        return Error.Validation(InvalidSegmentMetadataCode, "Each segment entry must be an object.");
                     }
 
                     var segmentDurationMs = TryReadNonNegativeInt(segment, "durationMs");
@@ -947,7 +947,7 @@ public static class AiEndpoints
                     if (segmentDurationMs is > MaxVoiceSegmentDurationMs ||
                         segmentRawDurationMs is > MaxVoiceSegmentDurationMs)
                     {
-                        return new Error(
+                        return Error.Validation(
                             InvalidSegmentMetadataCode,
                             $"Segment duration must be <= {MaxVoiceSegmentDurationMs}ms.");
                     }
@@ -956,7 +956,7 @@ public static class AiEndpoints
                         segmentRawDurationMs.HasValue &&
                         segmentRawDurationMs.Value < segmentDurationMs.Value)
                     {
-                        return new Error(
+                        return Error.Validation(
                             InvalidSegmentMetadataCode,
                             "segment rawDurationMs must be >= durationMs.");
                     }
@@ -969,7 +969,7 @@ public static class AiEndpoints
                         if (!string.IsNullOrWhiteSpace(segmentMime) &&
                             !string.Equals(segmentMime, normalizedAudioMime, StringComparison.OrdinalIgnoreCase))
                         {
-                            return new Error(
+                            return Error.Validation(
                                 InvalidSegmentMetadataCode,
                                 "segmentMetadata mimeType does not match request audio mime type.");
                         }
@@ -981,7 +981,7 @@ public static class AiEndpoints
         }
         catch (JsonException)
         {
-            return new Error(InvalidSegmentMetadataCode, "segmentMetadata is not valid JSON.");
+            return Error.Validation(InvalidSegmentMetadataCode, "segmentMetadata is not valid JSON.");
         }
     }
 
@@ -1199,8 +1199,13 @@ public static class AiEndpoints
         return error.Kind switch
         {
             ErrorKind.NotFound => Results.NotFound(body),
-            ErrorKind.Forbidden => Results.Forbid(),
-            ErrorKind.Unauthenticated => Results.Unauthorized(),
+            // Forbidden/Unauthenticated keep the {error, message} body
+            // so farmer-facing UI can render the right Marathi message
+            // off `error.Code`. Plain Results.Forbid() / Results.Unauthorized()
+            // would return empty bodies, which existing clients (incl.
+            // T-IGH-03 entitlement-denied tests) rely on.
+            ErrorKind.Forbidden => Results.Json(body, statusCode: StatusCodes.Status403Forbidden),
+            ErrorKind.Unauthenticated => Results.Json(body, statusCode: StatusCodes.Status401Unauthorized),
             ErrorKind.Conflict => Results.Conflict(body),
             ErrorKind.Validation => Results.BadRequest(body),
             // Pre-Sub-plan-03 fallback (preserves test contract):

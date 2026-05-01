@@ -31,13 +31,13 @@ public sealed class ExitMembershipHandler(
     {
         if (farmId.IsEmpty || callerUserId.IsEmpty)
         {
-            return Result.Failure<ExitMembershipResult>(new Error("exit.invalid", "Missing farm or user id."));
+            return Result.Failure<ExitMembershipResult>(Error.Validation("exit.invalid", "Missing farm or user id."));
         }
 
         var membership = await repository.GetFarmMembershipAsync(farmId.Value, callerUserId.Value, ct);
         if (membership is null)
         {
-            return Result.Failure<ExitMembershipResult>(new Error(
+            return Result.Failure<ExitMembershipResult>(Error.NotFound(
                 "exit.no_membership",
                 "You are not a member of this farm."));
         }
@@ -63,7 +63,7 @@ public sealed class ExitMembershipHandler(
         }
         catch (LastPrimaryOwnerRevocationException)
         {
-            return Result.Failure<ExitMembershipResult>(new Error(
+            return Result.Failure<ExitMembershipResult>(Error.Conflict(
                 "exit.last_primary_owner",
                 "You are the only primary owner of this farm. Promote someone else first."));
         }

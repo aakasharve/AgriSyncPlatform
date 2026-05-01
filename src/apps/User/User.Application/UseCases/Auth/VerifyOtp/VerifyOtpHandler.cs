@@ -45,18 +45,18 @@ public sealed class VerifyOtpHandler(
         }
         catch (ArgumentException ex)
         {
-            return Result.Failure<VerifyOtpResult>(new Error("otp.invalid_phone", ex.Message));
+            return Result.Failure<VerifyOtpResult>(Error.Validation("otp.invalid_phone", ex.Message));
         }
 
         if (string.IsNullOrWhiteSpace(command.Otp) || command.Otp.Length < 4)
         {
-            return Result.Failure<VerifyOtpResult>(new Error("otp.invalid_code", "OTP is required."));
+            return Result.Failure<VerifyOtpResult>(Error.Validation("otp.invalid_code", "OTP is required."));
         }
 
         var challenge = await otpRepository.GetPendingByPhoneAsync(phone.Value, ct);
         if (challenge is null)
         {
-            return Result.Failure<VerifyOtpResult>(new Error(
+            return Result.Failure<VerifyOtpResult>(Error.Unauthenticated(
                 "otp.no_pending_challenge",
                 "No active OTP for this phone. Request a new code."));
         }
@@ -72,11 +72,11 @@ public sealed class VerifyOtpHandler(
         {
             var error = outcome switch
             {
-                OtpVerificationOutcome.Mismatch => new Error("otp.mismatch", "OTP did not match."),
-                OtpVerificationOutcome.Expired => new Error("otp.expired", "OTP has expired. Request a new code."),
-                OtpVerificationOutcome.LockedOut => new Error("otp.locked_out", "Too many wrong attempts. Request a new code."),
-                OtpVerificationOutcome.AlreadyConsumed => new Error("otp.already_consumed", "This OTP has already been used."),
-                _ => new Error("otp.unknown", "OTP verification failed."),
+                OtpVerificationOutcome.Mismatch => Error.Unauthenticated("otp.mismatch", "OTP did not match."),
+                OtpVerificationOutcome.Expired => Error.Unauthenticated("otp.expired", "OTP has expired. Request a new code."),
+                OtpVerificationOutcome.LockedOut => Error.Unauthenticated("otp.locked_out", "Too many wrong attempts. Request a new code."),
+                OtpVerificationOutcome.AlreadyConsumed => Error.Unauthenticated("otp.already_consumed", "This OTP has already been used."),
+                _ => Error.Unauthenticated("otp.unknown", "OTP verification failed."),
             };
             return Result.Failure<VerifyOtpResult>(error);
         }
