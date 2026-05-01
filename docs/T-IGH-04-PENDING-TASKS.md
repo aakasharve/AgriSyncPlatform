@@ -23,9 +23,14 @@ The label stays **PARTIAL_FOUNDATION / READY_WITH_CAVEATS** until both Plan 04 D
 
 ## Branch state (current)
 
-`feature/ighardening-04-frontend` has eight commits on top of `akash_edits` head `930742e`:
+`feature/ighardening-04-frontend` has **13 commits** on top of `akash_edits` head `930742e`:
 
 ```
+08799e7 refactor(analysis): T-IGH-04-FILE-DECOMPOSE-EASY-WINS — CostAnalysisSection 865 → 758
+1ccd3d5 refactor(logs): T-IGH-04-FILE-DECOMPOSE-ACTIVITYCARD — split ActivityCard 2025 → 733 + 6 modules
+0ad5d17 refactor(storage): T-IGH-04-FILE-DECOMPOSE-DEXIEDB — split DexieDatabase 1058 → 694 + 14 version files
+439c1a2 refactor(domain): T-IGH-04-FILE-DECOMPOSE-EASY-WINS — LogFactory 865 → 735
+5612928 docs(plan-04): record SyncPullReconciler decomp + expand FILE-DECOMPOSE sub-task scopes
 d558843 refactor(sync): T-IGH-04-SYNC-PULL-DECOMPOSE — extract 6 helper modules from SyncPullReconciler
 2168dd5 docs(plan-04): rewrite handoff for post-rebase + P0 landed state
 20c765a test(sync): worker-flow integration for T-IGH-04-CONFLICT-STATUS-DURABILITY
@@ -35,6 +40,26 @@ c60c0d3 test(deps): add @testing-library/{user-event,jest-dom} + per-file jsdom 
 87b5430 feat(state): T-IGH-04 Task 4 — XState root store + syncMachine + worker bridge
 2be44a9 ci(storage): T-IGH-04 Task 3 — strict localStorage discipline gate + useUiPref hook
 ```
+
+**Wave 2 dispatch model used:** four parallel sub-agents in isolated worktrees, each with file-ownership boundaries. 3 of 4 returned clean commits (LogFactory, DexieDatabase, ActivityCard) which were cherry-picked onto the feature branch. The 4th (CostAnalysisSection) hit a stale-base worktree and stopped per its STOP-on-discrepancy instructions; the task was small enough to ship inline (commit `08799e7`) rather than re-dispatch.
+
+**Per-file decomposition outcomes (this branch):**
+
+| File | Before | After | Cap | Status |
+|---|---|---|---|---|
+| `infrastructure/sync/SyncPullReconciler.ts` | 1150 | **721** | 800 | ✅ |
+| `infrastructure/storage/DexieDatabase.ts` | 1058 | **694** | 800 | ✅ |
+| `core/domain/LogFactory.ts` | 865 | **735** | 800 | ✅ |
+| `features/analysis/components/CostAnalysisSection.tsx` | 865 | **758** | 800 | ✅ |
+| `features/logs/components/ActivityCard.tsx` | 2025 | **12 (shim) + 733 (orchestrator) + 6 modules ≤ 451** | 800 | ✅ |
+| `pages/ProfilePage.tsx` | 2491 | 2515 | 800 | ⏳ pending |
+| `pages/ReflectPage.tsx` | 1453 | 1453 | 800 | ⏳ pending |
+| `core/navigation/AppRouter.tsx` | 1274 | 1282 | 800 | ⏳ pending |
+| `features/logs/components/ManualEntry.tsx` | 1258 | 1258 | 800 | ⏳ pending |
+| `infrastructure/api/AgriSyncClient.ts` | 1092 | 1092 | 800 | ⏳ pending |
+| `pages/ComparePage.tsx` | 1014 | 1014 | 800 | ⏳ pending |
+
+**5 of 11 originally-flagged god-files cleared.** 6 remaining for next session(s).
 
 **Worktree gates (verified `20c765a`):**
 - `tsc --noEmit` silent (exit 0)
@@ -58,14 +83,7 @@ c60c0d3 test(deps): add @testing-library/{user-event,jest-dom} + per-file jsdom 
 | `20c765a` | P0 worker integration — full state-machine lock end-to-end | +4 | +260 |
 | `d558843` | **Sync pull helper extraction** — 6 helpers pulled out, SyncPullReconciler 1150 → 721 lines (below 800 cap) | 0 (snapshot still green) | +549 / −449 |
 
-**Test count progression (on this branch):** 30 baseline → 55 (+25 new tests). Test count unchanged after `d558843` (pure refactor).
-
-**Line-count progression for files this branch touches:**
-
-| File | Pre-rebase | Now | Cap | Status |
-|---|---|---|---|---|
-| `infrastructure/sync/SyncPullReconciler.ts` | 1150 | **721** | 800 | ✅ below cap |
-| Other Plan 04 god-files | unchanged | unchanged | 800 | ⏳ pending — see `T-IGH-04-FILE-DECOMPOSE` below |
+**Test count progression (on this branch):** 30 baseline → **55** (+25 new tests). Test count unchanged after every refactor commit since each is pure-move (snapshot tests + storage durability tests + RejectionPolicy unit tests + worker integration test all stay green throughout).
 
 ---
 
@@ -143,22 +161,29 @@ AppRouter.tsx is 1274 lines (massive `currentRoute === '...'` if-cascade). Targe
 
 ---
 
-### T-IGH-04-FILE-DECOMPOSE (Plan Task 9, P1)
+### T-IGH-04-FILE-DECOMPOSE (Plan Task 9, P1) — 5/11 done
 
-Verifier-expanded set of 8 god-files needing decomposition (last audit 2026-05-01, lines may have drifted slightly post-rebase):
+**Done on this branch (5):**
+- `infrastructure/sync/SyncPullReconciler.ts` 1150 → 721 (`d558843`)
+- `core/domain/LogFactory.ts` 865 → 735 (`439c1a2`)
+- `infrastructure/storage/DexieDatabase.ts` 1058 → 694 + 14 version files (`0ad5d17`)
+- `features/logs/components/ActivityCard.tsx` 2025 → shim + 7 modules all ≤ 733 (`1ccd3d5`)
+- `features/analysis/components/CostAnalysisSection.tsx` 865 → 758 + helpers (`08799e7`)
 
-| File | Lines (last audit) |
-|---|---|
-| `features/logs/components/ActivityCard.tsx` | 2025 |
-| `pages/ReflectPage.tsx` | 1453 |
-| `features/logs/components/ManualEntry.tsx` | 1258 |
-| `infrastructure/api/AgriSyncClient.ts` | 1092 |
-| `pages/ComparePage.tsx` | 1014 |
-| `infrastructure/storage/DexieDatabase.ts` | 944 |
-| `features/analysis/components/CostAnalysisSection.tsx` | 865 |
-| `core/domain/LogFactory.ts` | 865 |
+**Remaining (6):**
 
-Each is independent — sub-agent parallel.
+| File | Lines | Estimated effort | Notes |
+|---|---|---|---|
+| `pages/ProfilePage.tsx` | 2515 | ~3h | Largest single file. Has upstream `9569047` smoke snapshot to lock structure-tab behavior. Plan §Task 6 prescribes 8-section layout under `features/profile/`. |
+| `pages/ReflectPage.tsx` | 1453 | ~2h | Per-section split (timeline, summary, etc.). |
+| `core/navigation/AppRouter.tsx` | 1282 | ~2h | Routes-as-data per Plan §Task 8. Pairs with T-IGH-04-CONFLICT-BADGE-MOUNT. |
+| `features/logs/components/ManualEntry.tsx` | 1258 | ~2h | Sub-form / sub-section extraction. |
+| `infrastructure/api/AgriSyncClient.ts` | 1092 | ~1h | Split by resource module (`auth`, `sync`, `attachments`, `ai`). |
+| `pages/ComparePage.tsx` | 1014 | ~1.5h | Per-comparison-mode split. |
+
+Each is independent — sub-agent parallel. The wave-2 dispatch pattern (`isolation: "worktree"`, base from `feature/ighardening-04-frontend`, commit on ephemeral branch, parent cherry-picks) worked cleanly for 3/4 in this session — same pattern for the next wave.
+
+**Important caveat from this session's wave 2:** the agent worktrees were occasionally created on stale bases (`cdbef5d`, an unrelated initial-history commit). Each agent must run `git reset --hard feature/ighardening-04-frontend` (or `git reset --hard origin/feature/ighardening-04-frontend` once pushed) as the first pre-flight step. Add this to the agent prompt explicitly.
 
 #### T-IGH-04-FILE-DECOMPOSE-ACTIVITYCARD (sub-task scope)
 
