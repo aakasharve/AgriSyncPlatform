@@ -146,33 +146,33 @@ public sealed class AdminMisRepository(AnalyticsDbContext analyticsContext) : IA
         finally { if (!wasOpen) await conn.CloseAsync(); }
     }
 
-    public async Task<IReadOnlyList<SilentChurnItemDto>> GetSilentChurnAsync(CancellationToken ct = default)
-    {
-        var conn = analyticsContext.Database.GetDbConnection();
-        var wasOpen = conn.State == System.Data.ConnectionState.Open;
-        if (!wasOpen) await conn.OpenAsync(ct);
-        try
-        {
-            var items = new List<SilentChurnItemDto>();
-            using var cmd = conn.CreateCommand();
-            cmd.CommandText = """
-                SELECT s.farm_id, COALESCE(f.name, s.farm_id::text),
-                    COALESCE(u.phone, '—'), 'trial', s.weeks_silent, s.last_log_at
-                FROM mis.silent_churn_watchlist s
-                LEFT JOIN ssf.farms f ON f.farm_id = s.farm_id
-                LEFT JOIN ssf.farm_memberships fm ON fm.farm_id = s.farm_id AND fm.role = 'owner'
-                LEFT JOIN public.users u ON u.user_id = fm.user_id
-                ORDER BY s.weeks_silent DESC LIMIT 100
-                """;
-            using var r = await cmd.ExecuteReaderAsync(ct);
-            while (await r.ReadAsync(ct))
-                items.Add(new SilentChurnItemDto(r.GetGuid(0), r.GetString(1), r.GetString(2),
-                    r.GetString(3), r.GetInt32(4), r.IsDBNull(5) ? null : r.GetDateTime(5)));
-            return items;
-        }
-        catch { return []; }
-        finally { if (!wasOpen) await conn.CloseAsync(); }
-    }
+    /// <summary>
+    /// Returns the silent-churn watchlist for admins.
+    ///
+    /// <para>
+    /// <b>Currently a no-signal stub.</b> The legacy
+    /// <c>mis.silent_churn_watchlist</c> matview was dropped on
+    /// 2026-05-01 by Sub-plan 03 Task 9 (T-IGH-03-ANALYTICS-MIGRATION-REWRITE,
+    /// scope correction D1.B). It joined
+    /// <c>accounts.subscriptions.farm_id</c>, which never existed —
+    /// subscriptions are per-OwnerAccount, not per-farm. Faithfully
+    /// rewriting it requires a proper
+    /// subscription → owner_account → farm cross-aggregate model
+    /// (or a read-model projection seeded from analytics events).
+    /// That design work is tracked under
+    /// <c>T-IGH-03-MIS-MATVIEW-REDESIGN</c>.
+    /// </para>
+    ///
+    /// <para>
+    /// Returning an empty list (rather than throwing or paper-over-with-
+    /// FALSE) keeps the admin UI rendering cleanly and removes the
+    /// nightly refresh noise that the broken matview was generating.
+    /// When the redesign lands, this method's body returns to a real
+    /// query.
+    /// </para>
+    /// </summary>
+    public Task<IReadOnlyList<SilentChurnItemDto>> GetSilentChurnAsync(CancellationToken ct = default)
+        => Task.FromResult<IReadOnlyList<SilentChurnItemDto>>([]);
 
     public async Task<IReadOnlyList<SufferingItemDto>> GetSufferingAsync(CancellationToken ct = default)
     {
