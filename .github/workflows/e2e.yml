@@ -1,0 +1,116 @@
+name: e2e
+
+# Sub-plan 05 Task 8 — Playwright E2E pipeline scaffold.
+#
+# Status: PREP_READY. The harness (config + fixtures) lives at
+# src/clients/mobile-web/e2e/ but the 5 critical-path specs (login, offline
+# log capture, sync retry, attachment upload, admin org switch) are not yet
+# authored. They depend on stable data-testid contracts that arrive with
+# Sub-plan 04 (frontend restructure).
+#
+# Trigger model:
+#   - workflow_dispatch only (manual run for early smoke once a spec lands).
+#   - NO push / pull_request triggers yet — we will flip those on once specs
+#     exist and at least one spec is green on chromium + webkit.
+#
+# When specs are added (Sub-plan 04 follow-up):
+#   1. Add `push: branches: [main, akash_edits]` and `pull_request: branches:
+#      [main]` triggers, both with `paths` filters covering e2e/, the
+#      relevant src/ paths, and this file.
+#   2. Verify a green run on `akash_edits` before merging the trigger flip.
+
+on:
+  workflow_dispatch:
+
+jobs:
+  e2e:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: akash123
+          POSTGRES_DB: postgres
+        ports:
+          - 5433:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      ALLOW_E2E_SEED: "true"
+      VITE_E2E_HARNESS: "1"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: src/clients/mobile-web/package-lock.json
+
+      - name: Restore + build backend
+        run: |
+          dotnet restore src/AgriSync.sln
+          dotnet build   src/AgriSync.sln --configuration Release --no-restore
+
+      - name: Install + build mobile-web
+        working-directory: src/clients/mobile-web
+        run: |
+          npm ci
+          npx playwright install --with-deps chromium webkit
+          npm run build
+
+      - name: Spec count gate
+        id: spec-count
+        run: |
+          count=$(find src/clients/mobile-web/e2e/specs -maxdepth 4 -name '*.spec.ts' 2>/dev/null | wc -l)
+          echo "specs=$count" >> "$GITHUB_OUTPUT"
+          if [ "$count" = "0" ]; then
+            echo "::warning::No Playwright specs found yet — exiting 0. Add specs from Sub-plan 05 Tasks 3-7."
+            exit 0
+          fi
+
+      - name: Start backend with E2E flags
+        if: steps.spec-count.outputs.specs != '0'
+        env:
+          ALLOW_E2E_SEED: "true"
+        run: |
+          nohup dotnet run --project src/AgriSync.Bootstrapper --configuration Release --no-build -- --urls http://localhost:5000 > backend.log 2>&1 &
+          for i in $(seq 1 30); do
+            curl -fsS http://localhost:5000/health/ready && break
+            sleep 2
+          done
+
+      - name: Run Playwright
+        if: steps.spec-count.outputs.specs != '0'
+        working-directory: src/clients/mobile-web
+        env:
+          E2E_API_URL: "http://localhost:5000"
+          E2E_BASE_URL: "http://localhost:4173"
+        run: npm run e2e
+
+      - name: Upload Playwright report on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: src/clients/mobile-web/playwright-report
+          retention-days: 7
+
+      - name: Upload backend log on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-log
+          path: backend.log
+          retention-days: 7
