@@ -55,6 +55,59 @@ public sealed class DomainEventToOutboxInterceptorTests
     }
 
     [Fact]
+    public async Task ExplicitTransaction_RolledBack_after_successful_SaveChanges_re_arms_DomainEvents()
+    {
+        // T-IGH-03-OUTBOX-WIRING explicit-transaction rollback
+        // regression: when a caller opens an explicit transaction,
+        // SaveChanges succeeds (so SavedChangesAsync clears events),
+        // and then the caller rolls the transaction back, the
+        // OutboxMessage rows go away with the transaction. The
+        // OutboxTransactionInterceptor must restore the in-memory
+        // events so a retry resends them.
+        //
+        // We can only assert this against a relational provider
+        // because the in-memory provider is non-transactional. We
+        // use the SQLite in-memory provider which supports
+        // transactions; OutboxTransactionInterceptor's TransactionRolledBack
+        // hook fires on it.
+        var clock = new FixedTimeProvider(new DateTime(2026, 4, 30, 12, 0, 0, DateTimeKind.Utc));
+        var saveSide = new DomainEventToOutboxInterceptor(clock);
+        var txSide = new OutboxTransactionInterceptor(saveSide);
+
+        await using var ctx = TestEntityDbContext.CreateSqlite(saveSide, txSide);
+        await ctx.Database.EnsureCreatedAsync();
+
+        var entity = TestAggregate.Create(Guid.Parse("cccccccc-cccc-cccc-cccc-cccccccccccc"), "Z");
+        entity.Rename("ZZ"); // 2 events
+
+        ctx.Aggregates.Add(entity);
+
+        await using (var tx = await ctx.Database.BeginTransactionAsync())
+        {
+            await ctx.SaveChangesAsync();
+            // SavedChanges already cleared the in-memory queue at this
+            // point — that's the bug we're guarding against. The
+            // explicit rollback below should re-arm them via the
+            // transaction interceptor.
+            await tx.RollbackAsync();
+        }
+
+        // Events MUST be back on the aggregate.
+        Assert.Equal(2, entity.DomainEvents.Count);
+
+        // Retry inside a fresh successful transaction: outbox should
+        // commit exactly 2 messages.
+        await using (var tx = await ctx.Database.BeginTransactionAsync())
+        {
+            await ctx.SaveChangesAsync();
+            await tx.CommitAsync();
+        }
+
+        Assert.Equal(2, await ctx.OutboxMessages.CountAsync());
+        Assert.Empty(entity.DomainEvents);
+    }
+
+    [Fact]
     public async Task SaveChangesFailed_keeps_DomainEvents_queued_so_a_retry_resends_them()
     {
         // T-IGH-03-OUTBOX-WIRING rollback-safety regression: the
@@ -193,6 +246,24 @@ public sealed class DomainEventToOutboxInterceptorTests
             var options = new DbContextOptionsBuilder<TestEntityDbContext>()
                 .UseInMemoryDatabase($"outbox-tests-{Guid.NewGuid()}")
                 .AddInterceptors(interceptor, failing)
+                .Options;
+            return new TestEntityDbContext(options, failing);
+        }
+
+        public static TestEntityDbContext CreateSqlite(
+            DomainEventToOutboxInterceptor saveSide,
+            OutboxTransactionInterceptor txSide)
+        {
+            // Sqlite in-memory has real transaction semantics, unlike
+            // EF's in-memory provider. We need a real provider so the
+            // OutboxTransactionInterceptor's TransactionRolledBack hook
+            // fires.
+            var connection = new Microsoft.Data.Sqlite.SqliteConnection("DataSource=:memory:");
+            connection.Open();
+            var failing = new FailingInterceptor();
+            var options = new DbContextOptionsBuilder<TestEntityDbContext>()
+                .UseSqlite(connection)
+                .AddInterceptors(saveSide, txSide, failing)
                 .Options;
             return new TestEntityDbContext(options, failing);
         }

@@ -67,6 +67,22 @@ public sealed class DomainEventToOutboxInterceptor : SaveChangesInterceptor
     /// </summary>
     private readonly ConditionalWeakTable<DbContext, PendingState> _pending = new();
 
+    /// <summary>
+    /// Per-DbContext "I just cleared these events" snapshot kept alive
+    /// from <see cref="SavedChangesAsync"/> until the next explicit
+    /// transaction commit / rollback / failure. Read by
+    /// <see cref="OutboxTransactionInterceptor"/> on rollback to re-arm
+    /// the in-memory events so a retry resends them.
+    ///
+    /// <para>
+    /// Only populated when <see cref="SavedChangesAsync"/> actually
+    /// cleared anything; on implicit (auto-commit) saves the snapshot
+    /// is created and never read because no explicit transaction
+    /// callback fires.
+    /// </para>
+    /// </summary>
+    private readonly ConditionalWeakTable<DbContext, List<CommitSnapshotEntry>> _commitSnapshots = new();
+
     public DomainEventToOutboxInterceptor(TimeProvider clock)
     {
         _clock = clock;
@@ -217,12 +233,56 @@ public sealed class DomainEventToOutboxInterceptor : SaveChangesInterceptor
 
         if (_pending.TryGetValue(context, out var state))
         {
+            // Capture the events we're about to clear into a commit-
+            // snapshot so OutboxTransactionInterceptor can restore them
+            // if the caller rolls back the explicit transaction. For
+            // implicit (auto-commit) saves there is no explicit
+            // transaction interceptor callback, so this snapshot is
+            // simply garbage-collected when the DbContext is disposed.
+            var snapshot = new List<CommitSnapshotEntry>(state.Clears.Count);
             foreach (var pending in state.Clears)
             {
+                var events = GetDomainEventsSnapshot(pending.Entity);
+                var preserved = events.Take(pending.Count).ToList();
+                snapshot.Add(new CommitSnapshotEntry(pending.Entity, preserved));
                 RemoveFirstDomainEventsViaBase(pending.Entity, pending.Count);
+            }
+            if (snapshot.Count > 0)
+            {
+                _commitSnapshots.Remove(context);
+                _commitSnapshots.Add(context, snapshot);
             }
             _pending.Remove(context);
         }
+    }
+
+    /// <summary>
+    /// Called by <see cref="OutboxTransactionInterceptor"/> when an
+    /// explicit transaction rolls back or fails. Re-arms the in-memory
+    /// <see cref="Entity{TId}.DomainEvents"/> queue with the events we
+    /// cleared in <see cref="SavedChangesAsync"/> so the caller's
+    /// retry resends them.
+    /// </summary>
+    public void RestoreCommitSnapshot(DbContext context)
+    {
+        if (_commitSnapshots.TryGetValue(context, out var snapshot))
+        {
+            foreach (var entry in snapshot)
+            {
+                ReinsertDomainEventsAtFrontViaBase(entry.Entity, entry.Events);
+            }
+            _commitSnapshots.Remove(context);
+        }
+    }
+
+    /// <summary>
+    /// Called by <see cref="OutboxTransactionInterceptor"/> after a
+    /// successful explicit commit. Drops the snapshot so it cannot
+    /// accidentally restore on a later rollback that doesn't apply.
+    /// </summary>
+    public void DiscardCommitSnapshot(DbContext context)
+    {
+        _commitSnapshots.Remove(context);
     }
 
     private void DiscardSnapshot(DbContext? context)
@@ -310,7 +370,32 @@ public sealed class DomainEventToOutboxInterceptor : SaveChangesInterceptor
         }
     }
 
+    private static void ReinsertDomainEventsAtFrontViaBase(object entity, IReadOnlyList<IDomainEvent> events)
+    {
+        if (events.Count == 0)
+        {
+            return;
+        }
+        var type = entity.GetType();
+        while (type is not null)
+        {
+            if (type.IsGenericType && type.GetGenericTypeDefinition() == typeof(Entity<>))
+            {
+                var method = type.GetMethod(
+                    nameof(Entity<int>.InsertDomainEventsAtFront),
+                    System.Reflection.BindingFlags.Instance
+                    | System.Reflection.BindingFlags.NonPublic
+                    | System.Reflection.BindingFlags.Public);
+                method?.Invoke(entity, new object[] { events });
+                return;
+            }
+            type = type.BaseType;
+        }
+    }
+
     private readonly record struct PendingClear(object Entity, int Count);
 
     private sealed record PendingState(List<PendingClear> Clears, List<OutboxMessage> Messages);
+
+    private readonly record struct CommitSnapshotEntry(object Entity, IReadOnlyList<IDomainEvent> Events);
 }

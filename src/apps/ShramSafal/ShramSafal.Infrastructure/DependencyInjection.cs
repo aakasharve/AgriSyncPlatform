@@ -2,6 +2,7 @@ using System.Globalization;
 using Amazon;
 using Amazon.S3;
 using AgriSync.BuildingBlocks.Auth;
+using AgriSync.BuildingBlocks.Persistence.Outbox;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -29,7 +30,20 @@ public static class DependencyInjection
             configuration.GetConnectionString("UserDb") ??
             throw new InvalidOperationException("Connection string 'ShramSafalDb' or 'UserDb' is required.");
 
-        services.AddDbContext<ShramSafalDbContext>(options =>
+        // T-IGH-03-OUTBOX-WIRING: outbox interceptors. The save-side
+        // interceptor adds OutboxMessage rows in the same SaveChanges
+        // as the aggregate's writes; the transaction-side interceptor
+        // closes the explicit-transaction rollback hole that the
+        // save-side interceptor cannot cover by itself. Both are
+        // singletons (stateless apart from per-context snapshots
+        // tracked via ConditionalWeakTable, which scope to the
+        // DbContext lifetime).
+        services.AddSingleton<DomainEventToOutboxInterceptor>(sp =>
+            new DomainEventToOutboxInterceptor(TimeProvider.System));
+        services.AddSingleton<OutboxTransactionInterceptor>(sp =>
+            new OutboxTransactionInterceptor(sp.GetRequiredService<DomainEventToOutboxInterceptor>()));
+
+        services.AddDbContext<ShramSafalDbContext>((sp, options) =>
             options.UseNpgsql(
                 connectionString,
                 npgsql =>
@@ -43,7 +57,10 @@ public static class DependencyInjection
                         maxRetryCount: 5,
                         maxRetryDelay: TimeSpan.FromSeconds(10),
                         errorCodesToAdd: null);
-                }));
+                })
+                .AddInterceptors(
+                    sp.GetRequiredService<DomainEventToOutboxInterceptor>(),
+                    sp.GetRequiredService<OutboxTransactionInterceptor>()));
         services.AddScoped<DbContext>(provider => provider.GetRequiredService<ShramSafalDbContext>());
 
         services.Configure<GeminiOptions>(options =>

@@ -151,6 +151,31 @@ try
                 errorCodesToAdd: null);
         });
     });
+    // T-IGH-03-OUTBOX-WIRING: dispatcher + publisher.
+    // ShramSafalDbContext owns the ssf.outbox_messages table (the
+    // DomainEventToOutboxInterceptor adds rows there atomically with
+    // each aggregate write). OutboxDbContext is a read-only view over
+    // the same table used by OutboxDispatcher to poll pending messages.
+    var outboxConnection =
+        builder.Configuration.GetConnectionString("ShramSafalDb")
+        ?? builder.Configuration.GetConnectionString("UserDb")
+        ?? throw new InvalidOperationException(
+            "Connection string 'ShramSafalDb' is required for the outbox dispatcher.");
+    builder.Services.AddDbContext<AgriSync.BuildingBlocks.Persistence.Outbox.OutboxDbContext>(options =>
+        options.UseNpgsql(outboxConnection, npgsql =>
+        {
+            npgsql.EnableRetryOnFailure(
+                maxRetryCount: 5,
+                maxRetryDelay: TimeSpan.FromSeconds(10),
+                errorCodesToAdd: null);
+        }));
+    builder.Services.AddSingleton<TimeProvider>(TimeProvider.System);
+    builder.Services.AddSingleton<AgriSync.BuildingBlocks.Persistence.Outbox.IDomainEventHandlerRegistry,
+        AgriSync.BuildingBlocks.Persistence.Outbox.DiDomainEventHandlerRegistry>();
+    builder.Services.AddScoped<AgriSync.BuildingBlocks.Persistence.Outbox.IOutboxPublisher,
+        AgriSync.BuildingBlocks.Persistence.Outbox.InProcessOutboxPublisher>();
+    builder.Services.AddHostedService<AgriSync.BuildingBlocks.Persistence.Outbox.OutboxDispatcher>();
+
     builder.Services.AddHostedService<AgriSync.Bootstrapper.Migrations.BackfillFarmOwnerAccounts>();
     builder.Services.AddHostedService<AgriSync.Bootstrapper.Jobs.MisRefreshJob>();
     builder.Services.AddHostedService<AgriSync.Bootstrapper.Jobs.AlertDispatcherJob>();

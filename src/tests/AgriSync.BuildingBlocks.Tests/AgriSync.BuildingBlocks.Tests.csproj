@@ -10,6 +10,11 @@
 
   <ItemGroup>
     <PackageReference Include="Microsoft.EntityFrameworkCore.InMemory" Version="10.0.3" />
+    <!-- T-IGH-03-OUTBOX-WIRING: Sqlite provider used by the
+         explicit-transaction rollback regression test. EF's in-memory
+         provider is non-transactional, so it cannot exercise
+         OutboxTransactionInterceptor's TransactionRolledBack hook. -->
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="10.0.3" />
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.3" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="18.0.1" />
     <PackageReference Include="xunit" Version="2.9.3" />
