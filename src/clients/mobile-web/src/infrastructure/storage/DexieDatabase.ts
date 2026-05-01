@@ -494,11 +494,47 @@ export interface DexieWorkerProfile {
 }
 
 // =============================================================================
+// SUB-PLAN 04 — CROPS / FARMER PROFILE / UI PREFS
+// =============================================================================
+
+/**
+ * Crop blob row. The full CropProfile object is stored in `data` so the
+ * repository can return an exact round-trip without flattening domain shape
+ * into Dexie indexes. Index on `id` only.
+ */
+export interface CropRow {
+    id: string;
+    data: unknown;
+    updatedAtMs: number;
+}
+
+/**
+ * Farmer profile singleton. Always keyed at `id='self'` so the profile
+ * repository's `get()`/`save()` are exact-match operations.
+ */
+export interface ProfileRow {
+    id: 'self';
+    data: unknown;
+    updatedAtMs: number;
+}
+
+/**
+ * UI prefs key/value store. Sub-plan 04 Task 3 migrates ad-hoc localStorage
+ * UI prefs (sidebar collapsed, theme, weather-connected flags, etc.) into
+ * this table so the architecture gate (`localStorage.*` only in
+ * infrastructure/storage/) can be enforced.
+ */
+export interface UiPrefRow {
+    key: string;
+    value: unknown;
+}
+
+// =============================================================================
 // SCHEMA VERSION CONSTANTS
 // =============================================================================
 
 /** Current Dexie schema version — bump this when adding version(N).stores(). */
-export const DATABASE_VERSION = 13; // AI correction events.
+export const DATABASE_VERSION = 14; // Sub-plan 04: crops/farmerProfile/uiPrefs.
 /** CEI Phase 1 schema version (now active — applied by Task 5.1.1). */
 export const CEI_PHASE1_SCHEMA_VERSION = 7;
 /** CEI Phase 2 schema version — adds test stack (protocols/instances/recs). */
@@ -513,6 +549,8 @@ export const FARM_GEOGRAPHY_SCHEMA_VERSION = 11;
 export const AI_VOICE_JOURNAL_SCHEMA_VERSION = 12;
 /** AI correction event schema version — per-bucket correction-rate signal. */
 export const AI_CORRECTION_EVENTS_SCHEMA_VERSION = 13;
+/** Sub-plan 04 frontend storage schema — crops, farmerProfile, uiPrefs in Dexie. */
+export const SUBPLAN_04_FRONTEND_STORAGE_SCHEMA_VERSION = 14;
 
 // =============================================================================
 // DATABASE CLASS
@@ -557,6 +595,13 @@ export class AgriLogDatabase extends Dexie {
     jobCards!: Table<DexieJobCard, string>;
     /** CEI Phase 4 §4.8 — worker profile cache */
     workerProfiles!: Table<DexieWorkerProfile, string>;
+
+    /** Sub-plan 04 — crops blob store (replaces `crops` localStorage key). */
+    crops!: Table<CropRow, string>;
+    /** Sub-plan 04 — farmer profile singleton (replaces `farmer_profile` key). */
+    farmerProfile!: Table<ProfileRow, 'self'>;
+    /** Sub-plan 04 — misc UI prefs (sidebar, theme, weather-connected flags). */
+    uiPrefs!: Table<UiPrefRow, string>;
 
     constructor() {
         super('AgriLogDB');
@@ -911,6 +956,46 @@ export class AgriLogDatabase extends Dexie {
             complianceSignals: 'id, farmId, plotId, severity, lastSeenAtUtc, [farmId+isOpen]',
             jobCards: 'id, farmId, assignedWorkerUserId, status, modifiedAtUtc, [farmId+status]',
             workerProfiles: 'workerUserId, scopedFarmId',
+        });
+
+        // =====================================================================
+        // Sub-plan 04 — v14: crops, farmerProfile, uiPrefs in Dexie.
+        //   Replaces the legacy `crops` and `farmer_profile` localStorage keys
+        //   so the localStorage architecture gate (Task 3) can be enforced.
+        //   Migration runs once via LegacyLocalStorageMigrator.
+        // =====================================================================
+        this.version(14).stores({
+            logs: 'id, date, verificationStatus, createdByOperatorId, isDeleted, [date+isDeleted], [createdByOperatorId+isDeleted]',
+            outbox: '++id, idempotencyKey, status, action, [status+createdAt]',
+            mutationQueue: '++id, &[deviceId+clientRequestId], status, mutationType, createdAt, [status+createdAt]',
+            attachments: 'id, farmId, linkedEntityId, linkedEntityType, localPath, status, [linkedEntityId+linkedEntityType], [farmId+status]',
+            uploadQueue: '++autoId, attachmentId, status, retryCount, lastAttemptAt, nextAttemptAt, [status+nextAttemptAt]',
+            pendingAiJobs: '++id, operationType, status, createdAt, [status+createdAt]',
+            voiceClips: 'id, farmId, plotId, cropCycleId, recordedAtUtc, status, retentionPolicy, expiresAtUtc, [farmId+recordedAtUtc]',
+            aiCorrectionEvents: 'id, extractionId, timestamp, correctionType, bucketId, fieldPath',
+            auditEvents: 'id, resourceId, action, timestamp, [resourceId+timestamp]',
+            syncCursors: 'tableName',
+            appMeta: 'key',
+            referenceData: 'key, versionHash, updatedAt',
+            dayLedgers: 'id, farmId, dateKey, [farmId+dateKey]',
+            plannedTasks: 'id, cropCycleId, plannedDate, [cropCycleId+plannedDate]',
+            farms: 'id, ownerAccountId, [ownerAccountId+id], syncStatus, serverUpdatedAt, modifiedAtUtc',
+            plots: 'id, farmId, ownerAccountId, [ownerAccountId+farmId], syncStatus, serverUpdatedAt, modifiedAtUtc',
+            farmBoundaries: 'id, farmId, ownerAccountId, [ownerAccountId+farmId], syncStatus, serverUpdatedAt',
+            plotAreas: 'id, plotId, farmId, ownerAccountId, [ownerAccountId+farmId], syncStatus, serverUpdatedAt',
+            cropCycles: 'id, farmId, plotId, modifiedAtUtc',
+            costEntries: 'id, farmId, modifiedAtUtc',
+            financeCorrections: 'id, costEntryId, modifiedAtUtc',
+            attentionCards: 'cardId, farmId, rank, computedAtUtc',
+            testProtocols: 'id, cropType, kind',
+            testInstances: 'id, cropCycleId, farmId, plannedDueDate, status, modifiedAtUtc',
+            testRecommendations: 'id, testInstanceId',
+            complianceSignals: 'id, farmId, plotId, severity, lastSeenAtUtc, [farmId+isOpen]',
+            jobCards: 'id, farmId, assignedWorkerUserId, status, modifiedAtUtc, [farmId+status]',
+            workerProfiles: 'workerUserId, scopedFarmId',
+            crops: 'id, updatedAtMs',
+            farmerProfile: 'id, updatedAtMs',
+            uiPrefs: 'key',
         });
     }
 }

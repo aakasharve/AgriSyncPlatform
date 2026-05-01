@@ -13,6 +13,7 @@ import { procurementRepository } from '../../services/procurementRepository'; //
 import { legacyAuditPort } from '../../infrastructure/audit/LegacyAuditPort';
 import { useAuth } from './AuthProvider';
 import { getDatabase } from '../../infrastructure/storage/DexieDatabase';
+import { runLegacyLocalStorageMigration } from '../../infrastructure/storage/LegacyLocalStorageMigrator';
 import { purgeExpiredProcessingVoiceClips } from '../../infrastructure/voice/VoiceClipRetention';
 
 // --- CONTEXT ---
@@ -179,6 +180,9 @@ export const DataSourceProvider: React.FC<{ children: React.ReactNode }> = ({ ch
                 attachmentUploadWorker.stop();
                 storageNamespace.setNamespace(isDemoMode ? 'demo' : 'user');
                 await dataSource.initialize();
+                // Sub-plan 04 Task 2: copy any pre-existing crops/farmer_profile
+                // localStorage rows into Dexie. Idempotent — flag-gated.
+                await runLegacyLocalStorageMigration();
                 await MigrationService.migrate();
                 if (isDemoMode) {
                     await seedDemoDataIfNeeded();

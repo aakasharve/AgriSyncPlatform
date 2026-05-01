@@ -118,9 +118,9 @@ describe('SyncPullReconciler (baseline behavior — Task 1a)', () => {
 
         // Strip non-deterministic fields (timestamps the reducer stamps with
         // systemClock.nowISO()) so the snapshot remains stable.
-        const stripDates = <T extends Record<string, unknown>>(rows: T[]) =>
+        const stripDates = (rows: readonly unknown[]): Record<string, unknown>[] =>
             rows.map(r => {
-                const copy: Record<string, unknown> = { ...r };
+                const copy: Record<string, unknown> = { ...(r as Record<string, unknown>) };
                 delete copy.lastSyncedAtUtc;
                 delete copy.lastModifiedLocallyAtUtc;
                 return copy;

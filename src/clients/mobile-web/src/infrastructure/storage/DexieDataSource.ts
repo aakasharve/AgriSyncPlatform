@@ -1,70 +1,15 @@
 import { AppDataSource, CropRepository, ProfileRepository } from '../../application/ports/AppDataSource';
 import { LogsRepository } from '../../application/ports/index';
 import { DexieLogsRepository } from './DexieLogsRepository';
-import { storageNamespace } from './StorageNamespace';
-import { CropProfile, FarmerProfile } from '../../types';
-import { normalizeMojibakeDeep } from '../../shared/utils/textEncoding';
+import { DexieCropsRepository } from './DexieCropsRepository';
+import { DexieProfileRepository } from './DexieProfileRepository';
 
-// Simple LocalStorage implementation for Crops/Profile for now, 
-// as they are not yet in Dexie. 
-// TODO: Move Crops/Profile to Dexie in Phase 3.
-
-class LocalCropRepository implements CropRepository {
-    async getAll(): Promise<CropProfile[]> {
-        const key = storageNamespace.getKey('crops');
-        const stored = localStorage.getItem(key);
-        if (!stored) {
-            return [];
-        }
-
-        try {
-            const parsed = JSON.parse(stored) as CropProfile[];
-            const normalized = normalizeMojibakeDeep(Array.isArray(parsed) ? parsed : []);
-            if (normalized.changed) {
-                localStorage.setItem(key, JSON.stringify(normalized.value));
-            }
-
-            return normalized.value as CropProfile[];
-        } catch {
-            return [];
-        }
-    }
-
-    async save(crops: CropProfile[]): Promise<void> {
-        const key = storageNamespace.getKey('crops');
-        const normalized = normalizeMojibakeDeep(crops).value;
-        localStorage.setItem(key, JSON.stringify(normalized));
-    }
-}
-
-class LocalProfileRepository implements ProfileRepository {
-    async get(): Promise<FarmerProfile> {
-        const key = storageNamespace.getKey('farmer_profile');
-        const stored = localStorage.getItem(key);
-        if (!stored) {
-            return {} as FarmerProfile;
-        }
-
-        try {
-            const parsed = JSON.parse(stored) as FarmerProfile;
-            const normalized = normalizeMojibakeDeep(parsed);
-            if (normalized.changed) {
-                localStorage.setItem(key, JSON.stringify(normalized.value));
-            }
-
-            return normalized.value as FarmerProfile;
-        } catch {
-            return {} as FarmerProfile;
-        }
-    }
-
-    async save(profile: FarmerProfile): Promise<void> {
-        const key = storageNamespace.getKey('farmer_profile');
-        const normalized = normalizeMojibakeDeep(profile).value;
-        localStorage.setItem(key, JSON.stringify(normalized));
-    }
-}
-
+/**
+ * Sub-plan 04 Task 2 — Crops + Profile now live in Dexie via DexieCropsRepository
+ * and DexieProfileRepository. The legacy LocalCropRepository/LocalProfileRepository
+ * inline classes were deleted; LegacyLocalStorageMigrator copies any pre-existing
+ * localStorage rows into Dexie on first load.
+ */
 export class DexieDataSource implements AppDataSource {
     public logs: LogsRepository;
     public crops: CropRepository;
@@ -74,8 +19,8 @@ export class DexieDataSource implements AppDataSource {
 
     private constructor() {
         this.logs = DexieLogsRepository.getInstance();
-        this.crops = new LocalCropRepository();
-        this.profile = new LocalProfileRepository();
+        this.crops = new DexieCropsRepository();
+        this.profile = new DexieProfileRepository();
     }
 
     public static getInstance(): DexieDataSource {
@@ -86,9 +31,8 @@ export class DexieDataSource implements AppDataSource {
     }
 
     async initialize(): Promise<void> {
-        // Dexie auto-opens on first access, but we could explicitly open here
-        // or check migrations.
-        // For now, no-op or simple check
+        // Dexie auto-opens on first access; v14 stores are declared in
+        // DexieDatabase.ts.
     }
 
     async teardown(): Promise<void> {
