@@ -20,45 +20,32 @@ namespace AgriSync.Bootstrapper.Jobs
         private readonly TimeSpan _checkInterval = TimeSpan.FromHours(1);
         private DateTime _lastRunDate = DateTime.MinValue;
 
+        // T-IGH-03-ANALYTICS-MIGRATION-REWRITE (Sub-plan 03 Task 9):
+        // List trimmed 2026-05-01 to match the matview set rebuilt by
+        // 20260502000000_AnalyticsRewrite (production-read surface only).
+        // 22 unqueried/broken matviews from Phase4/Phase7/PhaseOps were
+        // dropped from the rewrite and removed here so the nightly
+        // refresh stops logging "relation does not exist" for them.
+        // Reintroduction of the dropped matviews is tracked under
+        // T-IGH-03-MIS-MATVIEW-REDESIGN — that work needs a proper
+        // subscription→farm cross-aggregate model first.
         private static readonly string[] ViewsToRefresh = new[]
         {
-            // Phase 4 — Tier 0/1 core views (order matters: wvfd before engagement_tier)
+            // ShramSafal verification + log signals
             "mis.wvfd_weekly",
-            "mis.d30_retention_paying",
             "mis.log_verify_lag",
             "mis.correction_rate",
+            // Analytics-events behavioural signals
             "mis.voice_log_share",
-            "mis.activation_funnel",
-            "mis.engagement_tier",
-            "mis.schedule_adoption_rate",
-            "mis.schedule_migration_rate",
-            "mis.schedule_abandonment_rate",
+            "mis.schedule_compliance_weekly",
             "mis.schedule_unscheduled_ratio",
             "mis.gemini_cost_per_farm",
-            // Phase 7 — Behavioral analytics
-            "mis.feature_retention_lift",
-            "mis.new_farm_day_snapshot",
-            "mis.silent_churn_watchlist",  // Phase 7 version replaces Phase 4
-            "mis.zero_engagement_farms",
-            "mis.activity_heatmap",
-            "mis.cohort_quality_score",
-            // Ops Phase 2 — engineering health views
-            "mis.api_health_24h",
+            // Ops health
             "mis.farmer_suffering_watchlist",
-            "mis.voice_pipeline_health",
             "mis.alert_r9_api_error_spike",
             "mis.alert_r10_voice_degraded",
-            // Phase 7 — Red-flag detectors
-            "mis.alert_r1_smooth_decay",
-            "mis.alert_r2_wau_vs_wvfd",
-            "mis.alert_r3_rubber_stamp",
-            "mis.alert_r4_voice_decay",
-            "mis.schedule_compliance_weekly",   // must refresh before R5 (R5 depends on it)
-            "mis.alert_r5_compliance_plateau",
-            "mis.alert_r6_flash_churn",
-            "mis.alert_r7_correction_rising",
-            "mis.alert_r8_referral_quality",
-            // W0-A — Admin resolver observability
+            // W0-A — Admin resolver observability (separate migration,
+            // not in the AnalyticsRewrite scope; refreshes here).
             "mis.admin_scope_health",
         };
 
