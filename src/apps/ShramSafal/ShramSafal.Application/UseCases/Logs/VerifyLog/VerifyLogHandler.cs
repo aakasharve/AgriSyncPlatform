@@ -16,8 +16,8 @@ namespace ShramSafal.Application.UseCases.Logs.VerifyLog;
 /// <summary>
 /// Verifies (or rejects / disputes) a <see cref="DailyLog"/> by emitting
 /// a new <see cref="VerificationEvent"/> through the role-aware state
-/// machine, then runs the auto-verify-job-card hook and emits an
-/// <c>InvitationClaimed</c>-class analytics event.
+/// machine, then runs the auto-verify-job-card hook and emits a
+/// <c>LogVerified</c> analytics event.
 ///
 /// <para>
 /// T-IGH-03-PIPELINE-ROLLOUT (VerifyLog): caller-shape validation lives

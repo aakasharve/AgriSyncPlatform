@@ -33,9 +33,13 @@ namespace ShramSafal.Domain.Tests.Logs;
 /// event, no audit row).</item>
 /// <item>The happy path exercises the full body: the analytics writer
 /// captures one <c>LogVerified</c> event AND the audit log records one
-/// <c>VerificationChanged</c> entry — proving the auto-verify hook ran
-/// (it is invoked unconditionally before analytics on the success path,
-/// returns early when no JobCard is linked, and lets analytics emit).</item>
+/// <c>VerificationChanged</c> entry. Together those prove the body
+/// reached past the auto-verify-job-card hook without throwing —
+/// <c>analytics.EmitAsync</c> is the line immediately after the hook,
+/// so its observation rules out an exception inside the hook. We do
+/// not directly assert on a JobCard side-effect because no JobCard is
+/// linked in this test; the dedicated <c>OnLogVerifiedAutoVerifyJobCard</c>
+/// tests cover the linked-card paths.</item>
 /// </list>
 /// </summary>
 public sealed class VerifyLogPipelineTests
@@ -198,13 +202,14 @@ public sealed class VerifyLogPipelineTests
         Assert.True(result.IsSuccess);
         // The inner body emits exactly one LogVerified analytics event
         // on the success path — its presence proves the pipeline
-        // forwarded the call to the handler body, which in turn
-        // unconditionally invokes the auto-verify-job-card hook BEFORE
-        // emitting analytics. The hook returns early when no JobCard is
-        // linked (the default-implementation of
-        // GetJobCardByLinkedDailyLogIdAsync on IShramSafalRepository
-        // returns null for our minimal repo), so the analytics event
-        // surfaces — proof the auto-verify path ran without throwing.
+        // forwarded the call to the handler body. Because
+        // analytics.EmitAsync is the line immediately AFTER
+        // autoVerifyJobCard.HandleAsync, observing the event also rules
+        // out an exception thrown inside the auto-verify hook (which
+        // would have propagated and failed the test). We do not assert
+        // on a JobCard side-effect here — no JobCard is linked in this
+        // test setup, and the linked-card paths have dedicated coverage
+        // in OnLogVerifiedAutoVerifyJobCardTests.
         Assert.Single(analytics.Events);
         Assert.Equal(AnalyticsEventType.LogVerified, analytics.Events[0].EventType);
         // Audit row is added by the body before SaveChangesAsync.
