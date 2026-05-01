@@ -9,6 +9,15 @@ import App from './App';
 import { TenantProvider } from './core/tenant/TenantContext'; // Correct path
 import { NotificationService } from './shared/services/NotificationService';
 
+// Browser OpenTelemetry SDK boot — strictly env-gated so the import is
+// dead-code-eliminated in production builds (where VITE_OTEL_ENABLED is unset).
+// See src/infrastructure/observability/OtelBrowserSdk.ts (T-IGH-05-FRONTEND-OTEL-SDK).
+if (import.meta.env.VITE_OTEL_ENABLED === '1') {
+    void import('./infrastructure/observability/OtelBrowserSdk').then(({ startBrowserTracing }) => {
+        startBrowserTracing();
+    });
+}
+
 // Register Service Worker for Push Notifications
 NotificationService.registerSW();
 NotificationService.scheduleDisciplineNudges();
