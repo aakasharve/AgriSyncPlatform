@@ -53,7 +53,7 @@ public static class ScheduleEndpoints
             Guid cycleId,
             MigrateScheduleRequest request,
             ClaimsPrincipal user,
-            MigrateScheduleHandler handler,
+            AgriSync.BuildingBlocks.Application.IHandler<MigrateScheduleCommand, ShramSafal.Application.Contracts.Dtos.ScheduleSubscriptionDto> handler,
             CancellationToken ct) =>
         {
             if (!EndpointActorContext.TryGetUserId(user, out var actorUserId))
@@ -93,7 +93,7 @@ public static class ScheduleEndpoints
             Guid cycleId,
             AbandonScheduleRequest request,
             ClaimsPrincipal user,
-            AbandonScheduleHandler handler,
+            AgriSync.BuildingBlocks.Application.IHandler<AbandonScheduleCommand, ShramSafal.Application.Contracts.Dtos.ScheduleSubscriptionDto> handler,
             CancellationToken ct) =>
         {
             if (!EndpointActorContext.TryGetUserId(user, out var actorUserId))
@@ -120,7 +120,7 @@ public static class ScheduleEndpoints
             Guid cycleId,
             CompleteScheduleRequest request,
             ClaimsPrincipal user,
-            CompleteScheduleHandler handler,
+            AgriSync.BuildingBlocks.Application.IHandler<CompleteScheduleCommand, ShramSafal.Application.Contracts.Dtos.ScheduleSubscriptionDto> handler,
             CancellationToken ct) =>
         {
             if (!EndpointActorContext.TryGetUserId(user, out var actorUserId))

@@ -544,6 +544,112 @@ public static class DependencyInjection
                     sp.GetServices<AgriSync.BuildingBlocks.Application.PipelineBehaviors.IAuthorizationCheck<
                         ShramSafal.Application.UseCases.Finance.CorrectCostEntry.CorrectCostEntryCommand>>())));
 
+        // T-IGH-03-PIPELINE-ROLLOUT (MigrateSchedule): caller-shape
+        // validation (5 IDs + explicit-empty NewSubscriptionId/
+        // MigrationEventId) + farm + plot + cropCycle existence +
+        // farm-membership. Endpoint
+        // (POST /plots/{plotId}/cycles/{cycleId}/schedule/migrate)
+        // gets canonical InvalidCommand → FarmNotFound → PlotNotFound →
+        // CropCycleNotFound → Forbidden ordering.
+        services.AddScoped<AgriSync.BuildingBlocks.Application.PipelineBehaviors.IValidator<
+            ShramSafal.Application.UseCases.Schedules.MigrateSchedule.MigrateScheduleCommand>,
+            ShramSafal.Application.UseCases.Schedules.MigrateSchedule.MigrateScheduleValidator>();
+        services.AddScoped<AgriSync.BuildingBlocks.Application.PipelineBehaviors.IAuthorizationCheck<
+            ShramSafal.Application.UseCases.Schedules.MigrateSchedule.MigrateScheduleCommand>,
+            ShramSafal.Application.UseCases.Schedules.MigrateSchedule.MigrateScheduleAuthorizer>();
+        services.AddScoped<AgriSync.BuildingBlocks.Application.IHandler<
+            ShramSafal.Application.UseCases.Schedules.MigrateSchedule.MigrateScheduleCommand,
+            ShramSafal.Application.Contracts.Dtos.ScheduleSubscriptionDto>>(sp =>
+            AgriSync.BuildingBlocks.Application.HandlerPipeline.Build(
+                sp.GetRequiredService<MigrateScheduleHandler>(),
+                new AgriSync.BuildingBlocks.Application.PipelineBehaviors.LoggingBehavior<
+                    ShramSafal.Application.UseCases.Schedules.MigrateSchedule.MigrateScheduleCommand,
+                    ShramSafal.Application.Contracts.Dtos.ScheduleSubscriptionDto>(
+                    sp.GetRequiredService<Microsoft.Extensions.Logging.ILogger<
+                        AgriSync.BuildingBlocks.Application.PipelineBehaviors.LoggingBehavior<
+                            ShramSafal.Application.UseCases.Schedules.MigrateSchedule.MigrateScheduleCommand,
+                            ShramSafal.Application.Contracts.Dtos.ScheduleSubscriptionDto>>>()),
+                new AgriSync.BuildingBlocks.Application.PipelineBehaviors.ValidationBehavior<
+                    ShramSafal.Application.UseCases.Schedules.MigrateSchedule.MigrateScheduleCommand,
+                    ShramSafal.Application.Contracts.Dtos.ScheduleSubscriptionDto>(
+                    sp.GetServices<AgriSync.BuildingBlocks.Application.PipelineBehaviors.IValidator<
+                        ShramSafal.Application.UseCases.Schedules.MigrateSchedule.MigrateScheduleCommand>>()),
+                new AgriSync.BuildingBlocks.Application.PipelineBehaviors.AuthorizationBehavior<
+                    ShramSafal.Application.UseCases.Schedules.MigrateSchedule.MigrateScheduleCommand,
+                    ShramSafal.Application.Contracts.Dtos.ScheduleSubscriptionDto>(
+                    sp.GetServices<AgriSync.BuildingBlocks.Application.PipelineBehaviors.IAuthorizationCheck<
+                        ShramSafal.Application.UseCases.Schedules.MigrateSchedule.MigrateScheduleCommand>>())));
+
+        // T-IGH-03-PIPELINE-ROLLOUT (AbandonSchedule): caller-shape
+        // validation (4 IDs) + farm + plot + cropCycle existence +
+        // farm-membership. Endpoint
+        // (POST /plots/{plotId}/cycles/{cycleId}/schedule/abandon) gets
+        // canonical InvalidCommand → FarmNotFound → PlotNotFound →
+        // CropCycleNotFound → Forbidden ordering.
+        services.AddScoped<AgriSync.BuildingBlocks.Application.PipelineBehaviors.IValidator<
+            ShramSafal.Application.UseCases.Schedules.AbandonSchedule.AbandonScheduleCommand>,
+            ShramSafal.Application.UseCases.Schedules.AbandonSchedule.AbandonScheduleValidator>();
+        services.AddScoped<AgriSync.BuildingBlocks.Application.PipelineBehaviors.IAuthorizationCheck<
+            ShramSafal.Application.UseCases.Schedules.AbandonSchedule.AbandonScheduleCommand>,
+            ShramSafal.Application.UseCases.Schedules.AbandonSchedule.AbandonScheduleAuthorizer>();
+        services.AddScoped<AgriSync.BuildingBlocks.Application.IHandler<
+            ShramSafal.Application.UseCases.Schedules.AbandonSchedule.AbandonScheduleCommand,
+            ShramSafal.Application.Contracts.Dtos.ScheduleSubscriptionDto>>(sp =>
+            AgriSync.BuildingBlocks.Application.HandlerPipeline.Build(
+                sp.GetRequiredService<AbandonScheduleHandler>(),
+                new AgriSync.BuildingBlocks.Application.PipelineBehaviors.LoggingBehavior<
+                    ShramSafal.Application.UseCases.Schedules.AbandonSchedule.AbandonScheduleCommand,
+                    ShramSafal.Application.Contracts.Dtos.ScheduleSubscriptionDto>(
+                    sp.GetRequiredService<Microsoft.Extensions.Logging.ILogger<
+                        AgriSync.BuildingBlocks.Application.PipelineBehaviors.LoggingBehavior<
+                            ShramSafal.Application.UseCases.Schedules.AbandonSchedule.AbandonScheduleCommand,
+                            ShramSafal.Application.Contracts.Dtos.ScheduleSubscriptionDto>>>()),
+                new AgriSync.BuildingBlocks.Application.PipelineBehaviors.ValidationBehavior<
+                    ShramSafal.Application.UseCases.Schedules.AbandonSchedule.AbandonScheduleCommand,
+                    ShramSafal.Application.Contracts.Dtos.ScheduleSubscriptionDto>(
+                    sp.GetServices<AgriSync.BuildingBlocks.Application.PipelineBehaviors.IValidator<
+                        ShramSafal.Application.UseCases.Schedules.AbandonSchedule.AbandonScheduleCommand>>()),
+                new AgriSync.BuildingBlocks.Application.PipelineBehaviors.AuthorizationBehavior<
+                    ShramSafal.Application.UseCases.Schedules.AbandonSchedule.AbandonScheduleCommand,
+                    ShramSafal.Application.Contracts.Dtos.ScheduleSubscriptionDto>(
+                    sp.GetServices<AgriSync.BuildingBlocks.Application.PipelineBehaviors.IAuthorizationCheck<
+                        ShramSafal.Application.UseCases.Schedules.AbandonSchedule.AbandonScheduleCommand>>())));
+
+        // T-IGH-03-PIPELINE-ROLLOUT (CompleteSchedule): caller-shape
+        // validation (4 IDs) + farm + plot + cropCycle existence +
+        // farm-membership. Endpoint
+        // (POST /plots/{plotId}/cycles/{cycleId}/schedule/complete) gets
+        // canonical InvalidCommand → FarmNotFound → PlotNotFound →
+        // CropCycleNotFound → Forbidden ordering.
+        services.AddScoped<AgriSync.BuildingBlocks.Application.PipelineBehaviors.IValidator<
+            ShramSafal.Application.UseCases.Schedules.CompleteSchedule.CompleteScheduleCommand>,
+            ShramSafal.Application.UseCases.Schedules.CompleteSchedule.CompleteScheduleValidator>();
+        services.AddScoped<AgriSync.BuildingBlocks.Application.PipelineBehaviors.IAuthorizationCheck<
+            ShramSafal.Application.UseCases.Schedules.CompleteSchedule.CompleteScheduleCommand>,
+            ShramSafal.Application.UseCases.Schedules.CompleteSchedule.CompleteScheduleAuthorizer>();
+        services.AddScoped<AgriSync.BuildingBlocks.Application.IHandler<
+            ShramSafal.Application.UseCases.Schedules.CompleteSchedule.CompleteScheduleCommand,
+            ShramSafal.Application.Contracts.Dtos.ScheduleSubscriptionDto>>(sp =>
+            AgriSync.BuildingBlocks.Application.HandlerPipeline.Build(
+                sp.GetRequiredService<CompleteScheduleHandler>(),
+                new AgriSync.BuildingBlocks.Application.PipelineBehaviors.LoggingBehavior<
+                    ShramSafal.Application.UseCases.Schedules.CompleteSchedule.CompleteScheduleCommand,
+                    ShramSafal.Application.Contracts.Dtos.ScheduleSubscriptionDto>(
+                    sp.GetRequiredService<Microsoft.Extensions.Logging.ILogger<
+                        AgriSync.BuildingBlocks.Application.PipelineBehaviors.LoggingBehavior<
+                            ShramSafal.Application.UseCases.Schedules.CompleteSchedule.CompleteScheduleCommand,
+                            ShramSafal.Application.Contracts.Dtos.ScheduleSubscriptionDto>>>()),
+                new AgriSync.BuildingBlocks.Application.PipelineBehaviors.ValidationBehavior<
+                    ShramSafal.Application.UseCases.Schedules.CompleteSchedule.CompleteScheduleCommand,
+                    ShramSafal.Application.Contracts.Dtos.ScheduleSubscriptionDto>(
+                    sp.GetServices<AgriSync.BuildingBlocks.Application.PipelineBehaviors.IValidator<
+                        ShramSafal.Application.UseCases.Schedules.CompleteSchedule.CompleteScheduleCommand>>()),
+                new AgriSync.BuildingBlocks.Application.PipelineBehaviors.AuthorizationBehavior<
+                    ShramSafal.Application.UseCases.Schedules.CompleteSchedule.CompleteScheduleCommand,
+                    ShramSafal.Application.Contracts.Dtos.ScheduleSubscriptionDto>(
+                    sp.GetServices<AgriSync.BuildingBlocks.Application.PipelineBehaviors.IAuthorizationCheck<
+                        ShramSafal.Application.UseCases.Schedules.CompleteSchedule.CompleteScheduleCommand>>())));
+
         // T-IGH-03-PIPELINE-ROLLOUT (RecordTestCollected): caller-shape
         // validation + role-based authorization (LabOperator,
         // SecondaryOwner, Mukadam — CEI §4.5). No repository access in

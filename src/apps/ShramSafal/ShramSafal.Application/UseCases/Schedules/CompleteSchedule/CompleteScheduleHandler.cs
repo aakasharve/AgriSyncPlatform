@@ -1,5 +1,6 @@
 using AgriSync.BuildingBlocks.Abstractions;
 using AgriSync.BuildingBlocks.Analytics;
+using AgriSync.BuildingBlocks.Application;
 using AgriSync.BuildingBlocks.Results;
 using AgriSync.SharedKernel.Contracts.Ids;
 using ShramSafal.Application.Contracts.Dtos;
@@ -14,12 +15,22 @@ namespace ShramSafal.Application.UseCases.Schedules.CompleteSchedule;
 /// Phase 3 MIS — transitions the single Active <see cref="ScheduleSubscription"/>
 /// for (plot, cropKey, cycle) to <see cref="ScheduleSubscriptionState.Completed"/>
 /// when the crop cycle reaches its end. Emits <c>schedule.completed</c> analytics.
+///
+/// <para>
+/// T-IGH-03-PIPELINE-ROLLOUT (CompleteSchedule): caller-shape validation
+/// lives in <see cref="CompleteScheduleValidator"/>; farm + plot +
+/// cropCycle existence + farm-membership authorization lives in
+/// <see cref="CompleteScheduleAuthorizer"/>. When this handler is resolved
+/// via the pipeline, both run before the body. The body keeps its
+/// inline gates as defense-in-depth for direct callers.
+/// </para>
 /// </summary>
 public sealed class CompleteScheduleHandler(
     IShramSafalRepository repository,
     IClock clock,
     IEntitlementPolicy entitlementPolicy,
     IAnalyticsWriter analytics)
+    : IHandler<CompleteScheduleCommand, ScheduleSubscriptionDto>
 {
     public async Task<Result<ScheduleSubscriptionDto>> HandleAsync(
         CompleteScheduleCommand command,

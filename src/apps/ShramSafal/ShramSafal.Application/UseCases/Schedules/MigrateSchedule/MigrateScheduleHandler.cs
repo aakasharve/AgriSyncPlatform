@@ -1,5 +1,6 @@
 using AgriSync.BuildingBlocks.Abstractions;
 using AgriSync.BuildingBlocks.Analytics;
+using AgriSync.BuildingBlocks.Application;
 using AgriSync.BuildingBlocks.Results;
 using AgriSync.SharedKernel.Contracts.Ids;
 using ShramSafal.Application.Contracts.Dtos;
@@ -26,6 +27,15 @@ namespace ShramSafal.Application.UseCases.Schedules.MigrateSchedule;
 /// The DB's partial unique index (I-14) is the ultimate safety net for
 /// concurrent adoption/migration attempts: two concurrent callers cannot
 /// both leave an Active row on the same (plotId, cropKey, cropCycleId).
+///
+/// <para>
+/// T-IGH-03-PIPELINE-ROLLOUT (MigrateSchedule): caller-shape validation
+/// lives in <see cref="MigrateScheduleValidator"/>; farm + plot +
+/// cropCycle existence + farm-membership authorization lives in
+/// <see cref="MigrateScheduleAuthorizer"/>. When this handler is resolved
+/// via the pipeline, both run before the body. The body keeps its
+/// inline gates as defense-in-depth for direct callers.
+/// </para>
 /// </summary>
 public sealed class MigrateScheduleHandler(
     IShramSafalRepository repository,
@@ -33,6 +43,7 @@ public sealed class MigrateScheduleHandler(
     IClock clock,
     IEntitlementPolicy entitlementPolicy,
     IAnalyticsWriter analytics)
+    : IHandler<MigrateScheduleCommand, ScheduleSubscriptionDto>
 {
     public async Task<Result<ScheduleSubscriptionDto>> HandleAsync(
         MigrateScheduleCommand command,
