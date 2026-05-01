@@ -65,7 +65,7 @@ public sealed class ClaimJoinHandler(
         {
             // Same error for "not found" and "revoked" — no oracle for
             // attackers probing token space.
-            return Result.Failure<ClaimJoinResult>(new Error(
+            return Result.Failure<ClaimJoinResult>(Error.Unauthenticated(
                 "join.token_invalid",
                 "This QR is no longer valid. Ask the farmer for a new one."));
         }
@@ -73,7 +73,7 @@ public sealed class ClaimJoinHandler(
         var farm = await farmRepository.GetFarmByIdAsync(tokenRow.FarmId.Value, ct);
         if (farm is null)
         {
-            return Result.Failure<ClaimJoinResult>(new Error(
+            return Result.Failure<ClaimJoinResult>(Error.NotFound(
                 "join.farm_missing",
                 "The farm for this QR could not be found."));
         }
@@ -87,7 +87,7 @@ public sealed class ClaimJoinHandler(
             logger.LogWarning(
                 "Claim rejected: token for farm {FarmId} but QR carried farm code '{ClaimedCode}' ≠ '{RealCode}'.",
                 farm.Id, command.FarmCode, farm.FarmCode);
-            return Result.Failure<ClaimJoinResult>(new Error(
+            return Result.Failure<ClaimJoinResult>(Error.Validation(
                 "join.farm_code_mismatch",
                 "This QR looks tampered with. Ask the farmer to share it again."));
         }

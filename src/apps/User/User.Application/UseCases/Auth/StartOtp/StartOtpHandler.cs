@@ -45,7 +45,7 @@ public sealed class StartOtpHandler(
         catch (ArgumentException ex)
         {
             logger.LogWarning(ex, "StartOtp rejected invalid phone.");
-            return Result.Failure<StartOtpResult>(new Error("otp.invalid_phone", ex.Message));
+            return Result.Failure<StartOtpResult>(Error.Validation("otp.invalid_phone", ex.Message));
         }
 
         var utcNow = clock.UtcNow;
@@ -54,7 +54,7 @@ public sealed class StartOtpHandler(
         var shortWindowCount = await otpRepository.CountIssuedSinceAsync(phone.Value, shortWindowStart, ct);
         if (shortWindowCount >= _policy.MaxShortWindowRequests)
         {
-            return Result.Failure<StartOtpResult>(new Error(
+            return Result.Failure<StartOtpResult>(Error.Conflict(
                 "otp.rate_limited",
                 $"Too many OTPs for this phone. Try again after {_policy.ShortWindow.TotalMinutes:F0} minutes."));
         }
@@ -63,7 +63,7 @@ public sealed class StartOtpHandler(
         var longWindowCount = await otpRepository.CountIssuedSinceAsync(phone.Value, longWindowStart, ct);
         if (longWindowCount >= _policy.MaxLongWindowRequests)
         {
-            return Result.Failure<StartOtpResult>(new Error(
+            return Result.Failure<StartOtpResult>(Error.Conflict(
                 "otp.rate_limited_daily",
                 "Daily OTP limit reached for this phone."));
         }

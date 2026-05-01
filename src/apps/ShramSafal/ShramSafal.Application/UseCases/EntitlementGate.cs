@@ -27,7 +27,7 @@ internal static class EntitlementGate
             return null;
         }
 
-        return Result.Failure<T>(new Error(
+        return Result.Failure<T>(Error.Forbidden(
             $"entitlement.{decision.Reason.ToString().ToLowerInvariant()}",
             BuildMessage(decision.Reason)));
     }

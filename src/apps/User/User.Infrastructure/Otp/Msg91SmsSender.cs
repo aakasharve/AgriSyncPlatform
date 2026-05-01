@@ -35,13 +35,13 @@ internal sealed class Msg91SmsSender(
         if (string.IsNullOrWhiteSpace(_options.AuthKey))
         {
             return Result.Failure<SmsDispatchReceipt>(
-                new Error("msg91.missing_authkey", "MSG91 AuthKey is not configured."));
+                Error.Internal("msg91.missing_authkey", "MSG91 AuthKey is not configured."));
         }
 
         if (string.IsNullOrWhiteSpace(_options.TemplateId))
         {
             return Result.Failure<SmsDispatchReceipt>(
-                new Error("msg91.missing_template", "MSG91 DLT TemplateId is not configured."));
+                Error.Internal("msg91.missing_template", "MSG91 DLT TemplateId is not configured."));
         }
 
         var payload = new Msg91SendOtpPayload(
@@ -71,14 +71,14 @@ internal sealed class Msg91SmsSender(
                     SafeTail(phoneNumberInternational),
                     body);
                 return Result.Failure<SmsDispatchReceipt>(
-                    new Error("msg91.http_error", $"MSG91 returned HTTP {(int)response.StatusCode}."));
+                    Error.Internal("msg91.http_error", $"MSG91 returned HTTP {(int)response.StatusCode}."));
             }
 
             var parsed = TryParseResponse(body);
             if (parsed is null)
             {
                 return Result.Failure<SmsDispatchReceipt>(
-                    new Error("msg91.parse_error", "MSG91 returned an unparseable payload."));
+                    Error.Internal("msg91.parse_error", "MSG91 returned an unparseable payload."));
             }
 
             if (!string.Equals(parsed.Type, "success", StringComparison.OrdinalIgnoreCase))
@@ -88,7 +88,7 @@ internal sealed class Msg91SmsSender(
                     SafeTail(phoneNumberInternational),
                     parsed.Message);
                 return Result.Failure<SmsDispatchReceipt>(
-                    new Error("msg91.provider_error", parsed.Message ?? "MSG91 returned an error."));
+                    Error.Internal("msg91.provider_error", parsed.Message ?? "MSG91 returned an error."));
             }
 
             var requestId = parsed.RequestId ?? parsed.Message ?? Guid.NewGuid().ToString("N");
@@ -103,7 +103,7 @@ internal sealed class Msg91SmsSender(
             logger.LogError(ex, "MSG91 send-otp transport failure for phone ending ****{Tail}.",
                 SafeTail(phoneNumberInternational));
             return Result.Failure<SmsDispatchReceipt>(
-                new Error("msg91.transport_error", "Failed to reach MSG91."));
+                Error.Internal("msg91.transport_error", "Failed to reach MSG91."));
         }
     }
 

@@ -39,7 +39,7 @@ public sealed class GetMyFarmsHandler(
     {
         if (command.CallerUserId.IsEmpty)
         {
-            return Result.Failure<MyFarmsResult>(new Error("me.unauthenticated", "Caller must be authenticated."));
+            return Result.Failure<MyFarmsResult>(Error.Unauthenticated("me.unauthenticated", "Caller must be authenticated."));
         }
 
         var farmIds = await repository.GetFarmIdsForUserAsync(command.CallerUserId.Value, ct);

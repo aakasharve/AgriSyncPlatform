@@ -111,7 +111,7 @@ public sealed class CreateDocumentSessionHandler(
         if (!orchestration.Result.Success)
         {
             return Result.Failure<CreateDocumentSessionResult>(
-                new Error(
+                Error.Internal(
                     ShramSafalErrors.AiParsingFailed.Code,
                     orchestration.Result.Error ?? ShramSafalErrors.AiParsingFailed.Description));
         }

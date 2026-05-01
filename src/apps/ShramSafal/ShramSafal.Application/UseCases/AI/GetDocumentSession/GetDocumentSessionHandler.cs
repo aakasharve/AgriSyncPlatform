@@ -20,7 +20,7 @@ public sealed class GetDocumentSessionHandler(IDocumentExtractionSessionReposito
         if (session is null)
         {
             return Result.Failure<GetDocumentSessionResult>(
-                new Error("ShramSafal.SessionNotFound", "Document extraction session was not found."));
+                Error.NotFound("ShramSafal.SessionNotFound", "Document extraction session was not found."));
         }
 
         if (session.UserId != query.UserId)

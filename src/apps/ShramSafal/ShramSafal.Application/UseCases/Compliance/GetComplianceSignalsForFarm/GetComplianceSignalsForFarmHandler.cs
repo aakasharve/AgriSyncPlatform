@@ -17,7 +17,7 @@ public sealed class GetComplianceSignalsForFarmHandler(IComplianceSignalReposito
     {
         if (query is null || query.FarmId.IsEmpty)
             return Result.Failure<IReadOnlyList<ComplianceSignalDto>>(
-                new Error("Compliance.InvalidCommand", "FarmId is required."));
+                Error.Validation("Compliance.InvalidCommand", "FarmId is required."));
 
         var signals = await signalRepository.GetForFarmAsync(
             query.FarmId,

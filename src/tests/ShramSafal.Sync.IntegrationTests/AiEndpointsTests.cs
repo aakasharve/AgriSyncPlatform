@@ -609,7 +609,12 @@ public sealed class AiEndpointsTests
             idempotencyKey = "voice-entitlement-denied-1"
         });
 
-        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        // T-IGH-03-INLINE-ERROR-TAG: entitlement denial now carries
+        // ErrorKind.Forbidden, mapping to HTTP 403 instead of the prior
+        // 400 fallback. Forbidden is the semantically correct status —
+        // the caller authenticated but the subscription state forbids
+        // the action.
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
         using var doc = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
         Assert.Equal("entitlement.subscriptionexpired", doc.RootElement.GetProperty("error").GetString());
         Assert.Equal(0, harness.Provider.VoiceParseCallCount);
@@ -629,7 +634,8 @@ public sealed class AiEndpointsTests
             farmId,
             "receipt-session-entitlement-denied-1");
 
-        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        // T-IGH-03-INLINE-ERROR-TAG: see VoiceParse twin above.
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
         using var doc = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
         Assert.Equal("entitlement.subscriptionexpired", doc.RootElement.GetProperty("error").GetString());
         Assert.Equal(0, harness.Provider.ReceiptCallCount);
