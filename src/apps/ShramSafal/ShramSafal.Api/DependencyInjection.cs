@@ -213,6 +213,42 @@ public static class DependencyInjection
                 new AgriSync.BuildingBlocks.Application.PipelineBehaviors.AuthorizationBehavior<ClaimJoinCommand, ClaimJoinResult>(
                     sp.GetServices<AgriSync.BuildingBlocks.Application.PipelineBehaviors.IAuthorizationCheck<ClaimJoinCommand>>())));
 
+        // T-IGH-03-PIPELINE-ROLLOUT (VerifyLog): caller-shape validation
+        // + role-tier authorization. The endpoint AND the sync-batch
+        // caller (PushSyncBatchHandler) both resolve the pipeline-wrapped
+        // handler so the strict EnsureCanVerify owner-tier check runs on
+        // every entry path. The raw VerifyLogHandler stays registered
+        // above for legacy/test direct construction; those callers fall
+        // back to the body's defense-in-depth membership check.
+        services.AddScoped<AgriSync.BuildingBlocks.Application.PipelineBehaviors.IValidator<
+            ShramSafal.Application.UseCases.Logs.VerifyLog.VerifyLogCommand>,
+            ShramSafal.Application.UseCases.Logs.VerifyLog.VerifyLogValidator>();
+        services.AddScoped<AgriSync.BuildingBlocks.Application.PipelineBehaviors.IAuthorizationCheck<
+            ShramSafal.Application.UseCases.Logs.VerifyLog.VerifyLogCommand>,
+            ShramSafal.Application.UseCases.Logs.VerifyLog.VerifyLogAuthorizer>();
+        services.AddScoped<AgriSync.BuildingBlocks.Application.IHandler<
+            ShramSafal.Application.UseCases.Logs.VerifyLog.VerifyLogCommand,
+            ShramSafal.Application.Contracts.Dtos.DailyLogDto>>(sp =>
+            AgriSync.BuildingBlocks.Application.HandlerPipeline.Build(
+                sp.GetRequiredService<VerifyLogHandler>(),
+                new AgriSync.BuildingBlocks.Application.PipelineBehaviors.LoggingBehavior<
+                    ShramSafal.Application.UseCases.Logs.VerifyLog.VerifyLogCommand,
+                    ShramSafal.Application.Contracts.Dtos.DailyLogDto>(
+                    sp.GetRequiredService<Microsoft.Extensions.Logging.ILogger<
+                        AgriSync.BuildingBlocks.Application.PipelineBehaviors.LoggingBehavior<
+                            ShramSafal.Application.UseCases.Logs.VerifyLog.VerifyLogCommand,
+                            ShramSafal.Application.Contracts.Dtos.DailyLogDto>>>()),
+                new AgriSync.BuildingBlocks.Application.PipelineBehaviors.ValidationBehavior<
+                    ShramSafal.Application.UseCases.Logs.VerifyLog.VerifyLogCommand,
+                    ShramSafal.Application.Contracts.Dtos.DailyLogDto>(
+                    sp.GetServices<AgriSync.BuildingBlocks.Application.PipelineBehaviors.IValidator<
+                        ShramSafal.Application.UseCases.Logs.VerifyLog.VerifyLogCommand>>()),
+                new AgriSync.BuildingBlocks.Application.PipelineBehaviors.AuthorizationBehavior<
+                    ShramSafal.Application.UseCases.Logs.VerifyLog.VerifyLogCommand,
+                    ShramSafal.Application.Contracts.Dtos.DailyLogDto>(
+                    sp.GetServices<AgriSync.BuildingBlocks.Application.PipelineBehaviors.IAuthorizationCheck<
+                        ShramSafal.Application.UseCases.Logs.VerifyLog.VerifyLogCommand>>())));
+
         // Phase 6 — self-exit
         services.AddScoped<ExitMembershipHandler>();
 

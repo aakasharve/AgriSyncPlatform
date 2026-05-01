@@ -1,6 +1,7 @@
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using AgriSync.BuildingBlocks.Abstractions;
+using AgriSync.BuildingBlocks.Application;
 using AgriSync.BuildingBlocks.Results;
 using AgriSync.SharedKernel.Contracts.Ids;
 using AgriSync.SharedKernel.Contracts.Roles;
@@ -47,7 +48,12 @@ public sealed class PushSyncBatchHandler(
     CreateCropCycleHandler createCropCycleHandler,
     CreateDailyLogHandler createDailyLogHandler,
     AddLogTaskHandler addLogTaskHandler,
-    VerifyLogHandler verifyLogHandler,
+    // T-IGH-03-PIPELINE-ROLLOUT (VerifyLog): switched from raw
+    // VerifyLogHandler to the pipeline-wrapped IHandler so the strict
+    // EnsureCanVerify owner-tier authorization keeps running on the
+    // sync entry path (the body's defense-in-depth check is membership-
+    // existence only and would have been a regression on its own).
+    IHandler<VerifyLogCommand, DailyLogDto> verifyLogHandler,
     AddCostEntryHandler addCostEntryHandler,
     AllocateGlobalExpenseHandler allocateGlobalExpenseHandler,
     CorrectCostEntryHandler correctCostEntryHandler,

@@ -1,6 +1,8 @@
 using System.Security.Claims;
+using AgriSync.BuildingBlocks.Application;
 using AgriSync.BuildingBlocks.Results;
 using AgriSync.SharedKernel.Contracts.Roles;
+using ShramSafal.Application.Contracts.Dtos;
 using ShramSafal.Application.Ports;
 using ShramSafal.Application.UseCases.Logs.AddLogTask;
 using ShramSafal.Application.UseCases.Logs.CreateDailyLog;
@@ -70,11 +72,20 @@ public static class LogsEndpoints
         .WithName("AddLogTask")
         .RequireAuthorization();
 
+        // T-IGH-03-PIPELINE-ROLLOUT (VerifyLog): this endpoint resolves
+        // the PIPELINE-WRAPPED handler (IHandler<VerifyLogCommand,
+        // DailyLogDto>). Caller-shape validation (DailyLogId /
+        // VerifiedByUserId / explicit-but-empty VerificationEventId) +
+        // strict owner-tier authorization (EnsureCanVerify) run as
+        // pipeline behaviors before the handler body. The invalid-status
+        // parse → 401 is intentionally preserved verbatim from the
+        // pre-rollout shape; tightening to 400 would be a contract
+        // change tracked separately.
         group.MapPost("/logs/{id:guid}/verify", async (
             Guid id,
             VerifyLogRequest request,
             ClaimsPrincipal user,
-            VerifyLogHandler handler,
+            IHandler<VerifyLogCommand, DailyLogDto> handler,
             CancellationToken ct) =>
         {
             if (!EndpointActorContext.TryGetUserId(user, out var actorUserId))
