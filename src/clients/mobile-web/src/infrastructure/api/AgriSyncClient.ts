@@ -1,18 +1,68 @@
+// Sub-plan 04 Task 9: AgriSyncClient decomposition.
+// This module is now a slim composition entry point. DTOs live in
+// `./dtos`, transport-layer helpers in `./transport`, and resource
+// methods in `./resources/*`. The class keeps its original public API
+// (every previously-exposed method, with the same signature and
+// behavior) so callsites importing `agriSyncClient` need no changes.
+//
+// All previously-exported names — DTOs, request/response types,
+// SyncMutationType, etc. — are re-exported below so existing
+// `from '../../infrastructure/api/AgriSyncClient'` imports continue
+// to compile.
+
 import axios, { AxiosError, AxiosInstance, InternalAxiosRequestConfig } from 'axios';
 import { reportClientError } from '../telemetry/ClientErrorReporter';
-import { clearAuthSession, getAuthSession, setAuthSession, type AuthSession } from './AuthTokenStore';
-import type { VisibleBucketId } from '../../domain/ai/BucketId';
+import {
+    clearAuthSession,
+    getAuthSession,
+    setAuthSession,
+    type AuthSession,
+} from './AuthTokenStore';
 import { SYNC_MUTATION_TYPES } from '../sync/SyncMutationCatalog';
-import packageJson from '../../../package.json';
+import {
+    APP_VERSION,
+    type HttpTransport,
+    type RetriableRequestConfig,
+    resolveApiBaseUrl,
+    shouldSkipAuthRetry,
+    toAuthSession,
+} from './transport';
+import type {
+    AbandonScheduleRequest,
+    AdoptScheduleRequest,
+    AiDashboardResponse,
+    AiHealthResponse,
+    AiJobStatusResponse,
+    AiParseResponse,
+    AiProviderConfigResponse,
+    AdminOpsHealthDto,
+    AttachmentDto,
+    AuthResponseDto,
+    CreateAttachmentRequest,
+    CreateAttachmentResponse,
+    CreateExtractionSessionResponse,
+    CropScheduleTemplateDto,
+    GetExtractionSessionResponse,
+    LoginRequest,
+    MigrateScheduleRequest,
+    ScheduleSubscriptionDto,
+    SyncPullResponse,
+    SyncPushRequest,
+    SyncPushResponse,
+    UpdateAiProviderConfigRequest,
+} from './dtos';
+import * as Auth from './resources/AuthResource';
+import * as Sync from './resources/SyncResource';
+import * as Attachments from './resources/AttachmentsResource';
+import * as Ai from './resources/AiResource';
+import * as Admin from './resources/AdminResource';
+import * as Schedule from './resources/ScheduleResource';
+import * as Export from './resources/ExportResource';
 
-// Sub-plan 02 Task 11: client min-version gate.
-// Stamped on every outgoing request as `X-App-Version`. The backend
-// PushSyncBatchHandler compares this against the catalog's
-// descriptor.SinceVersion and rejects mutations with `CLIENT_TOO_OLD`
-// if the client is below the threshold for that mutation. Sub-plan 04
-// will replace this with a build-time inject (vite define) that also
-// embeds the git SHA suffix.
-const APP_VERSION: string = packageJson.version;
+// ---------------------------------------------------------------------------
+// Re-exports — keep every name the rest of the codebase imports from this
+// module compiling without source changes at the callsites.
+// ---------------------------------------------------------------------------
 
 // SyncMutationType is the canonical union of mutation names. The single
 // source of truth is sync-contract/schemas/mutation-types.json — see
@@ -22,604 +72,60 @@ const APP_VERSION: string = packageJson.version;
 export type { SyncMutationType } from '../sync/SyncMutationCatalog';
 export { SYNC_MUTATION_TYPES };
 
-export type VerificationStatus =
-    | 'draft'
-    | 'confirmed'
-    | 'verified'
-    | 'disputed'
-    | 'correction_pending';
+export type {
+    AbandonScheduleRequest,
+    AdminOpsHealthDto,
+    AdoptScheduleRequest,
+    AiDashboardResponse,
+    AiHealthResponse,
+    AiJobStatusResponse,
+    AiParseResponse,
+    AiProviderConfigResponse,
+    AllowedTransitionsDto,
+    AttachmentDto,
+    AttentionBoardDto,
+    AttentionCardDto,
+    AuthResponseDto,
+    CostEntryDto,
+    CreateAttachmentRequest,
+    CreateAttachmentResponse,
+    CreateExtractionSessionResponse,
+    CropCycleDto,
+    CropScheduleTemplateDto,
+    DailyLogDto,
+    DayLedgerAllocationDto,
+    DayLedgerDto,
+    ExtractionSessionDraftResponse,
+    FarmDto,
+    FinanceCorrectionDto,
+    GetExtractionSessionResponse,
+    LocationDto,
+    LoginRequest,
+    LogTaskDto,
+    MigrateScheduleRequest,
+    OpsErrorEventDto,
+    OpsFarmErrorDto,
+    PlannedTask,
+    PlotDto,
+    ScheduleSubscriptionDto,
+    SyncOperatorDto,
+    SyncPullResponse,
+    SyncPushMutation,
+    SyncPushRequest,
+    SyncPushResponse,
+    SyncPushResult,
+    UpdateAiProviderConfigRequest,
+    VerificationEventDto,
+    VerificationStatus,
+} from './dtos';
 
-export interface LoginRequest {
-    phone: string;
-    password: string;
-}
+// ---------------------------------------------------------------------------
+// Client
+// ---------------------------------------------------------------------------
 
-export interface AuthResponseDto {
-    userId: string;
-    accessToken: string;
-    refreshToken: string;
-    expiresAtUtc: string;
-}
-
-export interface SyncPushMutation {
-    clientRequestId: string;
-    clientCommandId?: string;
-    mutationType: string;
-    payload: unknown;
-}
-
-export interface SyncPushRequest {
-    deviceId: string;
-    mutations: SyncPushMutation[];
-}
-
-export interface SyncPushResult {
-    clientRequestId: string;
-    mutationType: string;
-    status: 'applied' | 'duplicate' | 'failed';
-    data?: unknown;
-    errorCode?: string;
-    errorMessage?: string;
-}
-
-export interface SyncPushResponse {
-    serverTimeUtc: string;
-    results: SyncPushResult[];
-}
-
-export interface FarmDto {
-    id: string;
-    name: string;
-    ownerUserId: string;
-    createdAtUtc: string;
-    modifiedAtUtc: string;
-}
-
-export interface PlotDto {
-    id: string;
-    farmId: string;
-    name: string;
-    areaInAcres: number;
-    createdAtUtc: string;
-    modifiedAtUtc: string;
-}
-
-export interface CropCycleDto {
-    id: string;
-    farmId: string;
-    plotId: string;
-    cropName: string;
-    stage: string;
-    startDate: string;
-    endDate?: string;
-    createdAtUtc: string;
-    modifiedAtUtc: string;
-}
-
-export interface LocationDto {
-    latitude: number;
-    longitude: number;
-    accuracyMeters: number;
-    altitude?: number;
-    capturedAtUtc: string;
-    provider: string;
-    permissionState: string;
-}
-
-export interface LogTaskDto {
-    id: string;
-    activityType: string;
-    notes?: string;
-    occurredAtUtc: string;
-    executionStatus?: string;
-    deviationReasonCode?: string | null;
-    deviationNote?: string | null;
-}
-
-export interface VerificationEventDto {
-    id: string;
-    status: string;
-    reason?: string;
-    verifiedByUserId: string;
-    occurredAtUtc: string;
-}
-
-export interface DailyLogDto {
-    id: string;
-    farmId: string;
-    plotId: string;
-    cropCycleId: string;
-    operatorUserId: string;
-    logDate: string;
-    idempotencyKey?: string;
-    createdAtUtc: string;
-    modifiedAtUtc: string;
-    location?: LocationDto;
-    lastVerificationStatus?: string;
-    tasks: LogTaskDto[];
-    verificationEvents: VerificationEventDto[];
-}
-
-export interface CostEntryDto {
-    id: string;
-    farmId: string;
-    plotId?: string;
-    cropCycleId?: string;
-    category: string;
-    description: string;
-    amount: number;
-    currencyCode: string;
-    entryDate: string;
-    createdByUserId: string;
-    createdAtUtc: string;
-    modifiedAtUtc: string;
-    location?: LocationDto;
-    isCorrected: boolean;
-}
-
-export interface FinanceCorrectionDto {
-    id: string;
-    costEntryId: string;
-    originalAmount: number;
-    correctedAmount: number;
-    currencyCode: string;
-    reason: string;
-    correctedByUserId: string;
-    correctedAtUtc: string;
-    modifiedAtUtc: string;
-}
-
-export interface DayLedgerAllocationDto {
-    id: string;
-    plotId: string;
-    allocatedAmount: number;
-    currencyCode: string;
-    allocatedAtUtc: string;
-}
-
-export interface DayLedgerDto {
-    id: string;
-    farmId: string;
-    sourceCostEntryId: string;
-    ledgerDate: string;
-    allocationBasis: string;
-    createdByUserId: string;
-    createdAtUtc: string;
-    modifiedAtUtc: string;
-    allocations: DayLedgerAllocationDto[];
-}
-
-export interface PlannedTask {
-    id: string;
-    cropCycleId: string;
-    plannedDate: string;
-    taskType: string;
-    description: string;
-    status: string;
-    createdAtUtc: string;
-    modifiedAtUtc: string;
-}
-
-export interface SyncOperatorDto {
-    userId: string;
-    displayName: string;
-    role: string;
-}
-
-export interface AttachmentDto {
-    id: string;
-    farmId: string;
-    linkedEntityId: string;
-    linkedEntityType: string;
-    fileName: string;
-    mimeType: string;
-    status: string;
-    localPath?: string | null;
-    sizeBytes?: number | null;
-    createdByUserId: string;
-    createdAtUtc: string;
-    modifiedAtUtc: string;
-    uploadedAtUtc?: string | null;
-    finalizedAtUtc?: string | null;
-}
-
-export interface CreateAttachmentRequest {
-    farmId: string;
-    linkedEntityId: string;
-    linkedEntityType: string;
-    fileName: string;
-    mimeType: string;
-    attachmentId?: string;
-}
-
-export interface CreateAttachmentResponse {
-    attachment: AttachmentDto;
-    uploadUrl: string;
-}
-
-export interface AttentionCardDto {
-    cardId: string;
-    farmId: string;
-    farmName: string;
-    plotId: string;
-    plotName: string;
-    cropCycleId?: string | null;
-    stageName?: string | null;
-    rank: string;
-    computedAtUtc: string;
-    titleEn: string;
-    titleMr: string;
-    descriptionEn: string;
-    descriptionMr: string;
-    suggestedAction: string;
-    suggestedActionLabelEn: string;
-    suggestedActionLabelMr: string;
-    overdueTaskCount?: number | null;
-    latestHealthScore?: string | null;
-    unresolvedDisputeCount?: number | null;
-}
-
-export interface AttentionBoardDto {
-    cards: AttentionCardDto[];
-}
-
-export interface SyncPullResponse {
-    serverTimeUtc: string;
-    nextCursorUtc: string;
-    farms: FarmDto[];
-    plots: PlotDto[];
-    cropCycles: CropCycleDto[];
-    dailyLogs: DailyLogDto[];
-    attachments: AttachmentDto[];
-    costEntries: CostEntryDto[];
-    financeCorrections: FinanceCorrectionDto[];
-    dayLedgers: DayLedgerDto[];
-    priceConfigs: unknown[];
-    plannedActivities: unknown[];
-    auditEvents: unknown[];
-    operators?: SyncOperatorDto[];
-    scheduleTemplates?: unknown[];
-    scheduleSubscriptions?: ScheduleSubscriptionDto[];
-    cropTypes?: unknown[];
-    activityCategories?: string[];
-    costCategories?: string[];
-    referenceDataVersionHash?: string;
-    attentionBoard?: AttentionBoardDto | null;
-}
-
-export interface AiParseResponse {
-    success?: boolean;
-    parsedLog: Record<string, unknown>;
-    confidence: number;
-    fieldConfidences?: Record<string, { score: number; level: string; reason?: string; bucketId?: VisibleBucketId }>;
-    suggestedAction?: string;
-    modelUsed?: string;
-    promptVersion?: string;
-    providerUsed?: string;
-    fallbackUsed?: boolean;
-    latencyMs?: number;
-    validationOutcome?: string;
-    jobId?: string;
-}
-
-export interface AiJobStatusResponse {
-    id: string;
-    status: string;
-    operationType: string;
-    createdAtUtc: string;
-    completedAtUtc?: string;
-    inputSpeechDurationMs?: number;
-    inputRawDurationMs?: number;
-    inputSessionMetadata?: unknown;
-    attempts: Array<{
-        attemptNumber: number;
-        provider: string;
-        isSuccess: boolean;
-        failureClass: string;
-        errorMessage?: string;
-        latencyMs: number;
-        confidenceScore?: number;
-        estimatedCostUnits?: number;
-        requestPayloadHash?: string;
-        rawProviderResponse?: string;
-        attemptedAtUtc: string;
-    }>;
-    result?: unknown;
-}
-
-export interface AiHealthResponse {
-    module: string;
-    statuses: Array<{
-        provider: string;
-        isHealthy: boolean;
-    }>;
-}
-
-export interface AiProviderConfigResponse {
-    id: string;
-    defaultProvider: string;
-    fallbackEnabled: boolean;
-    isAiProcessingDisabled: boolean;
-    maxRetries: number;
-    circuitBreakerThreshold: number;
-    circuitBreakerResetSeconds: number;
-    voiceConfidenceThreshold: number;
-    receiptConfidenceThreshold: number;
-    voiceProvider?: string;
-    receiptProvider?: string;
-    pattiProvider?: string;
-    resolvedVoiceProvider?: string;
-    resolvedReceiptProvider?: string;
-    resolvedPattiProvider?: string;
-    geminiModelId?: string;
-    modifiedAtUtc: string;
-    modifiedByUserId: string;
-}
-
-export interface AiDashboardResponse {
-    config: AiProviderConfigResponse;
-    sinceUtc: string;
-    providerStats?: Record<string, { successCount: number; failureCount: number }>;
-    successes: Record<string, number>;
-    failures: Record<string, number>;
-    recentJobs: Array<{
-        id: string;
-        operationType: string;
-        status: string;
-        createdAtUtc: string;
-        completedAtUtc?: string;
-        providers: string[];
-    }>;
-}
-
-// --- Admin Ops Health ---
-export interface OpsErrorEventDto {
-    eventType: string;
-    endpoint: string;
-    statusCode?: number;
-    latencyMs?: number;
-    farmId?: string;
-    occurredAtUtc: string;
-}
-
-export interface OpsFarmErrorDto {
-    farmId: string;
-    errorCount: number;
-    syncErrors: number;
-    logErrors: number;
-    voiceErrors: number;
-    lastErrorAt: string;
-}
-
-export interface AdminOpsHealthDto {
-    voiceInvocations24h: number;
-    voiceFailures24h: number;
-    voiceFailureRatePct: number;
-    voiceAvgLatencyMs: number;
-    voiceP95LatencyMs: number;
-    recentErrors: OpsErrorEventDto[];
-    topSufferingFarms: OpsFarmErrorDto[];
-    /** null = alert views not yet created (Ops Phase 2 not deployed) */
-    apiErrorSpike: boolean | null;
-    voiceDegraded: boolean | null;
-    computedAtUtc: string;
-}
-
-// --- Schedule Surface Definitions ---
-export interface CropScheduleTemplateDto {
-    id: string;
-    templateKey: string;
-    cropKey: string;
-    name: string;
-    versionTag: string;
-    isPublished: boolean;
-    tasks: Array<{
-        id: string;
-        taskType: string;
-        stage: string;
-        dayOffsetFromCycleStart: number;
-        toleranceDaysPlusMinus: number;
-    }>;
-}
-
-export interface ScheduleSubscriptionDto {
-    id: string;
-    farmId: string;
-    plotId: string;
-    cropCycleId: string;
-    cropKey: string;
-    scheduleTemplateId: string;
-    scheduleVersionTag: string;
-    adoptedAtUtc: string;
-    state: 'Active' | 'Migrated' | 'Abandoned' | 'Completed';
-    migratedFromSubscriptionId?: string;
-    migrationReason?: string;
-    stateChangedAtUtc?: string;
-}
-
-export interface AdoptScheduleRequest {
-    farmId: string;
-    scheduleTemplateId: string;
-    subscriptionId?: string;
-    clientCommandId?: string;
-}
-
-export interface MigrateScheduleRequest {
-    farmId: string;
-    newScheduleTemplateId: string;
-    reason: string;
-    reasonText?: string;
-}
-
-export interface AbandonScheduleRequest {
-    farmId: string;
-    reasonText?: string;
-}
-
-// --- Document Extraction Session ---
-
-export interface ExtractionSessionDraftResponse {
-    normalizedJson: unknown;
-    overallConfidence: number;
-    jobId?: string;
-    providerUsed?: string;
-    fallbackUsed?: boolean;
-    warnings?: string[];
-}
-
-/** Response from POST /ai/document-sessions/receipt|patti */
-export interface CreateExtractionSessionResponse {
-    success: boolean;
-    sessionId: string;
-    status: string;
-    draft: ExtractionSessionDraftResponse;
-}
-
-/** Response from GET /ai/document-sessions/{sessionId} */
-export interface GetExtractionSessionResponse {
-    sessionId: string;
-    documentType: string;
-    status: string;
-    draftResult: unknown | null;
-    draftConfidence: number;
-    draftProvider: string | null;
-    draftJobId: string | null;
-    verifiedResult: unknown | null;
-    verifiedConfidence: number | null;
-    verificationProvider: string | null;
-    verificationJobId: string | null;
-    createdAtUtc: string;
-    modifiedAtUtc: string;
-}
-
-export interface UpdateAiProviderConfigRequest {
-    defaultProvider?: 'Sarvam' | 'Gemini';
-    fallbackEnabled?: boolean;
-    isAiProcessingDisabled?: boolean;
-    maxRetries?: number;
-    circuitBreakerThreshold?: number;
-    circuitBreakerResetSeconds?: number;
-    voiceConfidenceThreshold?: number;
-    receiptConfidenceThreshold?: number;
-    voiceProvider?: 'Sarvam' | 'Gemini' | null;
-    receiptProvider?: 'Sarvam' | 'Gemini' | null;
-    pattiProvider?: 'Sarvam' | 'Gemini' | null;
-}
-
-export interface AllowedTransitionsDto {
-    currentStatus: string;
-    allowedTransitions: Array<{
-        targetStatus: string;
-        requiredRole: string;
-        description: string;
-    }>;
-}
-
-export interface VerificationEventDto {
-    id: string;
-    logId: string;
-    status: string;
-    verifiedByUserId: string;
-    reason?: string;
-    occurredAtUtc: string;
-}
-
-interface RetriableRequestConfig extends InternalAxiosRequestConfig {
-    _agriSyncRetry?: boolean;
-}
-
-type ViteImportMeta = ImportMeta & {
-    env?: {
-        VITE_AGRISYNC_API_URL?: unknown;
-    };
-};
-
-function resolveApiBaseUrl(): string {
-    const apiUrl = (import.meta as ViteImportMeta).env?.VITE_AGRISYNC_API_URL;
-    if (typeof apiUrl === 'string' && apiUrl.trim().length > 0) {
-        try {
-            const validated = new URL(apiUrl);
-            return validated.toString().replace(/\/+$/, '');
-        } catch {
-            throw new Error(`VITE_AGRISYNC_API_URL is not a valid URL: "${apiUrl}"`);
-        }
-    }
-
-    return '';
-}
-
-function normalizeSyncCursorForApi(sinceCursorIso?: string): string | undefined {
-    if (!sinceCursorIso) {
-        return undefined;
-    }
-
-    const trimmed = sinceCursorIso.trim();
-    if (!trimmed) {
-        return undefined;
-    }
-
-    if (trimmed === '0') {
-        return '0';
-    }
-
-    const parsed = new Date(trimmed);
-    if (Number.isNaN(parsed.getTime())) {
-        return '0';
-    }
-
-    // Backend accepts `yyyy-MM-ddTHH:mm:ssZ` reliably for pull cursors.
-    return parsed.toISOString().replace(/\.\d{3}Z$/, 'Z');
-}
-
-function toAuthSession(dto: AuthResponseDto): AuthSession {
-    return {
-        userId: dto.userId,
-        accessToken: dto.accessToken,
-        refreshToken: dto.refreshToken,
-        expiresAtUtc: dto.expiresAtUtc,
-    };
-}
-
-function shouldSkipAuthRetry(url?: string): boolean {
-    if (!url) {
-        return false;
-    }
-
-    return url.includes('/user/auth/login')
-        || url.includes('/user/auth/register')
-        || url.includes('/user/auth/refresh');
-}
-
-function normalizeVerificationStatus(status: string): VerificationStatus {
-    const normalized = status
-        .trim()
-        .replace(/([a-z])([A-Z])/g, '$1_$2')
-        .replace(/[\s-]+/g, '_')
-        .toLowerCase();
-
-    switch (normalized) {
-        case 'draft':
-        case 'pending':
-            return 'draft';
-        case 'confirmed':
-        case 'auto_approved':
-            return 'confirmed';
-        case 'verified':
-        case 'approved':
-            return 'verified';
-        case 'disputed':
-        case 'rejected':
-            return 'disputed';
-        case 'correction_pending':
-            return 'correction_pending';
-        default:
-            return 'draft';
-    }
-}
-
-export class AgriSyncClient {
-    private readonly http: AxiosInstance;
-    private readonly authHttp: AxiosInstance;
+export class AgriSyncClient implements HttpTransport {
+    readonly http: AxiosInstance;
+    readonly authHttp: AxiosInstance;
     private refreshPromise: Promise<AuthSession | null> | null = null;
 
     constructor() {
@@ -652,136 +158,93 @@ export class AgriSyncClient {
             });
     }
 
-    async login(request: LoginRequest): Promise<AuthResponseDto> {
-        clearAuthSession();
-        const response = await this.authHttp.post<AuthResponseDto>('/user/auth/login', request);
-        const session = toAuthSession(response.data);
-        setAuthSession(session);
-        return response.data;
+    // --- Auth -------------------------------------------------------------
+
+    login(request: LoginRequest): Promise<AuthResponseDto> {
+        return Auth.login(this, request);
     }
 
-    async register(request: { phone: string; password: string; displayName: string; appId?: string; role?: string }): Promise<AuthResponseDto> {
-        clearAuthSession();
-        const response = await this.authHttp.post<AuthResponseDto>('/user/auth/register', request);
-        const session = toAuthSession(response.data);
-        setAuthSession(session);
-        return response.data;
+    register(request: { phone: string; password: string; displayName: string; appId?: string; role?: string }): Promise<AuthResponseDto> {
+        return Auth.register(this, request);
     }
 
-    async refreshToken(refreshToken: string): Promise<AuthResponseDto> {
-        const response = await this.authHttp.post<AuthResponseDto>('/user/auth/refresh', { refreshToken });
-        const session = toAuthSession(response.data);
-        setAuthSession(session);
-        return response.data;
+    refreshToken(refreshToken: string): Promise<AuthResponseDto> {
+        return Auth.refreshToken(this, refreshToken);
     }
 
-    async getCurrentUser(): Promise<unknown> {
-        const response = await this.http.get('/user/auth/me');
-        return response.data;
+    getCurrentUser(): Promise<unknown> {
+        return Auth.getCurrentUser(this);
     }
 
-    /** POST /accounts/affiliation/code — idempotent, returns the caller's referral code. */
-    async generateReferralCode(): Promise<{ code: string }> {
-        const response = await this.http.post<{ code: string }>('/accounts/affiliation/code');
-        return response.data;
+    generateReferralCode(): Promise<{ code: string }> {
+        return Auth.generateReferralCode(this);
     }
 
-    /** GET /user/auth/me/context — aggregate: me + farms (with plan + capabilities) + share + alerts. */
-    async getMeContext(): Promise<import('../../core/session/MeContextService').MeContext> {
-        const response = await this.http.get('/user/auth/me/context');
-        return response.data;
+    getMeContext(): Promise<import('../../core/session/MeContextService').MeContext> {
+        return Auth.getMeContext(this);
     }
 
-    /** GET /accounts/affiliation/stats — referral counters. */
-    async getAffiliationStats(): Promise<{ referralsTotal: number; referralsQualified: number; benefitsEarned: number }> {
-        const response = await this.http.get('/accounts/affiliation/stats');
-        return response.data;
+    getAffiliationStats(): Promise<{ referralsTotal: number; referralsQualified: number; benefitsEarned: number }> {
+        return Auth.getAffiliationStats(this);
     }
 
-    /** GET /accounts/affiliation/events — recent growth events. */
-    async getAffiliationEvents(limit = 20): Promise<Array<{ id: string; eventType: string; occurredAtUtc: string; metadata: string | null }>> {
-        const response = await this.http.get(`/accounts/affiliation/events?limit=${limit}`);
-        return response.data;
+    getAffiliationEvents(limit = 20): Promise<Array<{ id: string; eventType: string; occurredAtUtc: string; metadata: string | null }>> {
+        return Auth.getAffiliationEvents(this, limit);
     }
 
-    async getCropScheduleTemplates(cropKey: string): Promise<CropScheduleTemplateDto[]> {
-        const response = await this.http.get<CropScheduleTemplateDto[]>(`/shramsafal/reference-data/crop-schedule-templates`, {
-            params: { cropKey }
-        });
-        return response.data;
+    // --- Schedule ---------------------------------------------------------
+
+    getCropScheduleTemplates(cropKey: string): Promise<CropScheduleTemplateDto[]> {
+        return Schedule.getCropScheduleTemplates(this, cropKey);
     }
 
-    async adoptSchedule(plotId: string, cycleId: string, body: AdoptScheduleRequest): Promise<ScheduleSubscriptionDto> {
-        const response = await this.http.post<ScheduleSubscriptionDto>(`/shramsafal/plots/${plotId}/cycles/${cycleId}/schedule/adopt`, body);
-        return response.data;
+    adoptSchedule(plotId: string, cycleId: string, body: AdoptScheduleRequest): Promise<ScheduleSubscriptionDto> {
+        return Schedule.adoptSchedule(this, plotId, cycleId, body);
     }
 
-    async migrateSchedule(plotId: string, cycleId: string, body: MigrateScheduleRequest): Promise<ScheduleSubscriptionDto> {
-        const response = await this.http.post<ScheduleSubscriptionDto>(`/shramsafal/plots/${plotId}/cycles/${cycleId}/schedule/migrate`, body);
-        return response.data;
+    migrateSchedule(plotId: string, cycleId: string, body: MigrateScheduleRequest): Promise<ScheduleSubscriptionDto> {
+        return Schedule.migrateSchedule(this, plotId, cycleId, body);
     }
 
-    async abandonSchedule(plotId: string, cycleId: string, body: AbandonScheduleRequest): Promise<ScheduleSubscriptionDto> {
-        const response = await this.http.post<ScheduleSubscriptionDto>(`/shramsafal/plots/${plotId}/cycles/${cycleId}/schedule/abandon`, body);
-        return response.data;
+    abandonSchedule(plotId: string, cycleId: string, body: AbandonScheduleRequest): Promise<ScheduleSubscriptionDto> {
+        return Schedule.abandonSchedule(this, plotId, cycleId, body);
     }
 
-    async pushSyncBatch(request: SyncPushRequest): Promise<SyncPushResponse> {
-        const response = await this.http.post<SyncPushResponse>('/sync/push', request);
-        return response.data;
+    // --- Sync -------------------------------------------------------------
+
+    pushSyncBatch(request: SyncPushRequest): Promise<SyncPushResponse> {
+        return Sync.pushSyncBatch(this, request);
     }
 
-    async pullSyncChanges(sinceCursorIso?: string): Promise<SyncPullResponse> {
-        const normalizedCursor = normalizeSyncCursorForApi(sinceCursorIso);
-        const params = normalizedCursor ? { since: normalizedCursor } : undefined;
-        const response = await this.http.get<SyncPullResponse>('/sync/pull', { params });
-        return response.data;
+    pullSyncChanges(sinceCursorIso?: string): Promise<SyncPullResponse> {
+        return Sync.pullSyncChanges(this, sinceCursorIso);
     }
 
-    async createAttachment(request: CreateAttachmentRequest): Promise<CreateAttachmentResponse> {
-        const response = await this.http.post<CreateAttachmentResponse>('/shramsafal/attachments', request);
-        return response.data;
+    // --- Attachments ------------------------------------------------------
+
+    createAttachment(request: CreateAttachmentRequest): Promise<CreateAttachmentResponse> {
+        return Attachments.createAttachment(this, request);
     }
 
-    async uploadAttachmentFile(
-        attachmentId: string,
-        file: Blob,
-        fileName = 'attachment.bin',
-        mimeType?: string,
-    ): Promise<void> {
-        const payload = mimeType && file.type !== mimeType
-            ? new Blob([file], { type: mimeType })
-            : file;
-
-        const formData = new FormData();
-        formData.append('file', payload, fileName);
-        await this.http.post(`/shramsafal/attachments/${encodeURIComponent(attachmentId)}/upload`, formData);
+    uploadAttachmentFile(attachmentId: string, file: Blob, fileName = 'attachment.bin', mimeType?: string): Promise<void> {
+        return Attachments.uploadAttachmentFile(this, attachmentId, file, fileName, mimeType);
     }
 
-    async getAttachmentMetadata(attachmentId: string): Promise<AttachmentDto> {
-        const response = await this.http.get<AttachmentDto>(`/shramsafal/attachments/${encodeURIComponent(attachmentId)}`);
-        return response.data;
+    getAttachmentMetadata(attachmentId: string): Promise<AttachmentDto> {
+        return Attachments.getAttachmentMetadata(this, attachmentId);
     }
 
     getAttachmentDownloadUrl(attachmentId: string): string {
-        const path = `/shramsafal/attachments/${encodeURIComponent(attachmentId)}/download`;
-        const baseUrl = this.http.defaults.baseURL?.trim();
-
-        if (!baseUrl) {
-            return path;
-        }
-
-        return `${baseUrl.replace(/\/+$/, '')}${path}`;
+        return Attachments.getAttachmentDownloadUrl(this, attachmentId);
     }
 
-    async listAttachments(entityId: string, entityType: string): Promise<AttachmentDto[]> {
-        const response = await this.http.get<AttachmentDto[]>('/shramsafal/attachments', {
-            params: { entityId, entityType },
-        });
-        return response.data;
+    listAttachments(entityId: string, entityType: string): Promise<AttachmentDto[]> {
+        return Attachments.listAttachments(this, entityId, entityType);
     }
 
-    async parseVoice(
+    // --- AI ---------------------------------------------------------------
+
+    parseVoice(
         textTranscript: string,
         options: {
             farmId: string;
@@ -797,26 +260,10 @@ export class AgriSyncClient {
             requestPayloadHash?: string;
         },
     ): Promise<AiParseResponse> {
-        const payload = {
-            farmId: options.farmId,
-            plotId: options.plotId,
-            cropCycleId: options.cropCycleId,
-            textTranscript,
-            audioBase64: options.audioBase64,
-            audioMimeType: options.audioMimeType,
-            idempotencyKey: options.idempotencyKey,
-            contextJson: options.contextJson,
-            inputSpeechDurationMs: options.inputSpeechDurationMs,
-            inputRawDurationMs: options.inputRawDurationMs,
-            segmentMetadataJson: options.segmentMetadataJson,
-            requestPayloadHash: options.requestPayloadHash,
-        };
-
-        const response = await this.http.post<AiParseResponse>('/shramsafal/ai/voice-parse', payload);
-        return response.data;
+        return Ai.parseVoice(this, textTranscript, options);
     }
 
-    async parseVoiceLog(
+    parseVoiceLog(
         audio: Blob,
         mimeType: string,
         context: object,
@@ -831,28 +278,10 @@ export class AgriSyncClient {
             requestPayloadHash?: string;
         },
     ): Promise<AiParseResponse> {
-        const payload = mimeType && audio.type !== mimeType
-            ? new Blob([audio], { type: mimeType })
-            : audio;
-
-        const formData = new FormData();
-        formData.append('audio', payload, 'voice-input.webm');
-        formData.append('farmId', farmId);
-        formData.append('context', JSON.stringify(context));
-
-        if (options?.plotId) formData.append('plotId', options.plotId);
-        if (options?.cropCycleId) formData.append('cropCycleId', options.cropCycleId);
-        if (options?.idempotencyKey) formData.append('idempotencyKey', options.idempotencyKey);
-        if (options?.inputSpeechDurationMs !== undefined) formData.append('inputSpeechDurationMs', `${options.inputSpeechDurationMs}`);
-        if (options?.inputRawDurationMs !== undefined) formData.append('inputRawDurationMs', `${options.inputRawDurationMs}`);
-        if (options?.segmentMetadataJson) formData.append('segmentMetadata', options.segmentMetadataJson);
-        if (options?.requestPayloadHash) formData.append('requestPayloadHash', options.requestPayloadHash);
-
-        const response = await this.http.post<AiParseResponse>('/shramsafal/ai/voice-parse', formData);
-        return response.data;
+        return Ai.parseVoiceLog(this, audio, mimeType, context, farmId, options);
     }
 
-    async parseTextLog(
+    parseTextLog(
         text: string,
         context: object,
         farmId: string,
@@ -866,165 +295,70 @@ export class AgriSyncClient {
             requestPayloadHash?: string;
         },
     ): Promise<AiParseResponse> {
-        const response = await this.http.post<AiParseResponse>('/shramsafal/ai/voice-parse', {
-            farmId,
-            plotId: options?.plotId,
-            cropCycleId: options?.cropCycleId,
-            textTranscript: text,
-            idempotencyKey: options?.idempotencyKey,
-            contextJson: JSON.stringify(context),
-            inputSpeechDurationMs: options?.inputSpeechDurationMs,
-            inputRawDurationMs: options?.inputRawDurationMs,
-            segmentMetadataJson: options?.segmentMetadataJson,
-            requestPayloadHash: options?.requestPayloadHash,
-        });
-        return response.data;
+        return Ai.parseTextLog(this, text, context, farmId, options);
     }
 
-    async extractReceipt(
-        image: Blob,
-        mimeType: string,
-        farmId: string,
-        idempotencyKey?: string,
-    ): Promise<Record<string, unknown>> {
-        const payload = mimeType && image.type !== mimeType
-            ? new Blob([image], { type: mimeType })
-            : image;
-
-        const formData = new FormData();
-        formData.append('image', payload, 'receipt-image.jpg');
-        formData.append('farmId', farmId);
-        if (idempotencyKey) formData.append('idempotencyKey', idempotencyKey);
-
-        const response = await this.http.post<Record<string, unknown>>('/shramsafal/ai/receipt-extract', formData);
-        return response.data;
+    extractReceipt(image: Blob, mimeType: string, farmId: string, idempotencyKey?: string): Promise<Record<string, unknown>> {
+        return Ai.extractReceipt(this, image, mimeType, farmId, idempotencyKey);
     }
 
-    async extractPatti(
-        image: Blob,
-        mimeType: string,
-        cropName: string,
-        farmId: string,
-        idempotencyKey?: string,
-    ): Promise<Record<string, unknown>> {
-        const payload = mimeType && image.type !== mimeType
-            ? new Blob([image], { type: mimeType })
-            : image;
-
-        const formData = new FormData();
-        formData.append('image', payload, 'patti-image.jpg');
-        formData.append('farmId', farmId);
-        formData.append('cropName', cropName);
-        if (idempotencyKey) formData.append('idempotencyKey', idempotencyKey);
-
-        const response = await this.http.post<Record<string, unknown>>('/shramsafal/ai/patti-extract', formData);
-        return response.data;
+    extractPatti(image: Blob, mimeType: string, cropName: string, farmId: string, idempotencyKey?: string): Promise<Record<string, unknown>> {
+        return Ai.extractPatti(this, image, mimeType, cropName, farmId, idempotencyKey);
     }
 
-    async createReceiptSession(
-        farmId: string,
-        image: Blob,
-        mimeType: string,
-        idempotencyKey?: string,
-    ): Promise<CreateExtractionSessionResponse> {
-        const payload = mimeType && image.type !== mimeType
-            ? new Blob([image], { type: mimeType })
-            : image;
-        const formData = new FormData();
-        formData.append('image', payload, 'receipt-image.jpg');
-        formData.append('farmId', farmId);
-        if (idempotencyKey) formData.append('idempotencyKey', idempotencyKey);
-
-        const response = await this.http.post<CreateExtractionSessionResponse>(
-            '/shramsafal/ai/document-sessions/receipt',
-            formData,
-        );
-        return response.data;
+    createReceiptSession(farmId: string, image: Blob, mimeType: string, idempotencyKey?: string): Promise<CreateExtractionSessionResponse> {
+        return Ai.createReceiptSession(this, farmId, image, mimeType, idempotencyKey);
     }
 
-    async createPattiSession(
-        farmId: string,
-        cropName: string,
-        image: Blob,
-        mimeType: string,
-        idempotencyKey?: string,
-    ): Promise<CreateExtractionSessionResponse> {
-        const payload = mimeType && image.type !== mimeType
-            ? new Blob([image], { type: mimeType })
-            : image;
-        const formData = new FormData();
-        formData.append('image', payload, 'patti-image.jpg');
-        formData.append('farmId', farmId);
-        formData.append('cropName', cropName);
-        if (idempotencyKey) formData.append('idempotencyKey', idempotencyKey);
-
-        const response = await this.http.post<CreateExtractionSessionResponse>(
-            '/shramsafal/ai/document-sessions/patti',
-            formData,
-        );
-        return response.data;
+    createPattiSession(farmId: string, cropName: string, image: Blob, mimeType: string, idempotencyKey?: string): Promise<CreateExtractionSessionResponse> {
+        return Ai.createPattiSession(this, farmId, cropName, image, mimeType, idempotencyKey);
     }
 
-    async getExtractionSession(sessionId: string): Promise<GetExtractionSessionResponse> {
-        const response = await this.http.get<GetExtractionSessionResponse>(
-            `/shramsafal/ai/document-sessions/${encodeURIComponent(sessionId)}`,
-        );
-        return response.data;
+    getExtractionSession(sessionId: string): Promise<GetExtractionSessionResponse> {
+        return Ai.getExtractionSession(this, sessionId);
     }
 
-    async getAiJobStatus(jobId: string): Promise<AiJobStatusResponse> {
-        const response = await this.http.get<AiJobStatusResponse>(`/shramsafal/ai/jobs/${encodeURIComponent(jobId)}`);
-        return response.data;
+    getAiJobStatus(jobId: string): Promise<AiJobStatusResponse> {
+        return Ai.getAiJobStatus(this, jobId);
     }
 
-    async getAiHealth(): Promise<AiHealthResponse> {
-        const response = await this.http.get<AiHealthResponse>('/shramsafal/ai/health');
-        return response.data;
+    getAiHealth(): Promise<AiHealthResponse> {
+        return Ai.getAiHealth(this);
     }
 
-    async getAiProviderConfig(): Promise<AiProviderConfigResponse> {
-        const response = await this.http.get<AiProviderConfigResponse>('/shramsafal/ai/config');
-        return response.data;
+    getAiProviderConfig(): Promise<AiProviderConfigResponse> {
+        return Ai.getAiProviderConfig(this);
     }
 
-    async updateAiProviderConfig(request: UpdateAiProviderConfigRequest): Promise<AiProviderConfigResponse> {
-        const response = await this.http.put<AiProviderConfigResponse>('/shramsafal/ai/config', request);
-        return response.data;
+    updateAiProviderConfig(request: UpdateAiProviderConfigRequest): Promise<AiProviderConfigResponse> {
+        return Ai.updateAiProviderConfig(this, request);
     }
 
-    async getAiDashboard(): Promise<AiDashboardResponse> {
-        const response = await this.http.get<AiDashboardResponse>('/shramsafal/ai/dashboard');
-        return response.data;
+    getAiDashboard(): Promise<AiDashboardResponse> {
+        return Ai.getAiDashboard(this);
     }
 
-    async getAdminOpsHealth(): Promise<AdminOpsHealthDto> {
-        const response = await this.http.get<AdminOpsHealthDto>('/shramsafal/admin/ops/health');
-        return response.data;
+    // --- Admin ------------------------------------------------------------
+
+    getAdminOpsHealth(): Promise<AdminOpsHealthDto> {
+        return Admin.getAdminOpsHealth(this);
     }
 
-    async exportDailySummary(farmId: string, date: string): Promise<Blob> {
-        const response = await this.http.get<Blob>('/shramsafal/export/daily-summary', {
-            params: { farmId, date },
-            responseType: 'blob'
-        });
-        return response.data;
+    // --- Export -----------------------------------------------------------
+
+    exportDailySummary(farmId: string, date: string): Promise<Blob> {
+        return Export.exportDailySummary(this, farmId, date);
     }
 
-    async exportMonthlyCost(farmId: string, year: number, month: number): Promise<Blob> {
-        const response = await this.http.get<Blob>('/shramsafal/export/monthly-cost', {
-            params: { farmId, year, month },
-            responseType: 'blob'
-        });
-        return response.data;
+    exportMonthlyCost(farmId: string, year: number, month: number): Promise<Blob> {
+        return Export.exportMonthlyCost(this, farmId, year, month);
     }
 
-    async exportVerificationReport(farmId: string, fromDate: string, toDate: string): Promise<Blob> {
-        const response = await this.http.get<Blob>('/shramsafal/export/verification', {
-            params: { farmId, fromDate, toDate },
-            responseType: 'blob'
-        });
-        return response.data;
+    exportVerificationReport(farmId: string, fromDate: string, toDate: string): Promise<Blob> {
+        return Export.exportVerificationReport(this, farmId, fromDate, toDate);
     }
+
+    // --- Internal: auth interceptor + 401 retry ---------------------------
 
     private attachAccessToken(config: InternalAxiosRequestConfig): InternalAxiosRequestConfig {
         const session = getAuthSession();
