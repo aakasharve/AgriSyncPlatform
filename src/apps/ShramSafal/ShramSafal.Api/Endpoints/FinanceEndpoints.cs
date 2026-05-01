@@ -1,8 +1,10 @@
 using System.Security.Claims;
 using AgriSync.BuildingBlocks.Abstractions;
+using AgriSync.BuildingBlocks.Application;
 using AgriSync.BuildingBlocks.Results;
 using AgriSync.SharedKernel.Contracts.Ids;
 using Microsoft.AspNetCore.Mvc;
+using ShramSafal.Application.Contracts.Dtos;
 using ShramSafal.Application.Ports;
 using ShramSafal.Application.UseCases.Finance.AddCostEntry;
 using ShramSafal.Application.UseCases.Finance.AllocateGlobalExpense;
@@ -44,10 +46,20 @@ public static class FinanceEndpoints
         })
         .WithName("SetPriceConfigVersion");
 
+        // T-IGH-03-PIPELINE-ROLLOUT (AddCostEntry): resolves the
+        // pipeline-wrapped handler. ValidationBehavior surfaces
+        // InvalidCommand / UseSettleJobCardForLabourPayout,
+        // AuthorizationBehavior surfaces FarmNotFound / Forbidden, and
+        // the body re-checks farm + membership as defense-in-depth
+        // before running the entitlement gate, plot lookup, crop-cycle
+        // lookup, duplicate detection, high-amount flagging, audit,
+        // save, and analytics. PushSyncBatchHandler stays on the raw
+        // handler in this rollout pass (per the "only-with-tests"
+        // guardrail).
         group.MapPost("/finance/cost-entry", async (
             AddCostEntryRequest request,
             ClaimsPrincipal user,
-            AddCostEntryHandler handler,
+            IHandler<AddCostEntryCommand, AddCostEntryResultDto> handler,
             CancellationToken ct) =>
         {
             if (!EndpointActorContext.TryGetUserId(user, out var actorUserId))

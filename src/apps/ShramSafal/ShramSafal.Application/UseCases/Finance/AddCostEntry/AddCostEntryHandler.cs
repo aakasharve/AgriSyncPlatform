@@ -1,5 +1,6 @@
 using AgriSync.BuildingBlocks.Abstractions;
 using AgriSync.BuildingBlocks.Analytics;
+using AgriSync.BuildingBlocks.Application;
 using AgriSync.BuildingBlocks.Results;
 using AgriSync.SharedKernel.Contracts.Ids;
 using ShramSafal.Application.Contracts.Dtos;
@@ -9,12 +10,37 @@ using ShramSafal.Domain.Common;
 
 namespace ShramSafal.Application.UseCases.Finance.AddCostEntry;
 
+/// <summary>
+/// Adds a <see cref="Domain.Finance.CostEntry"/> with duplicate
+/// detection, high-amount flagging, audit, save, and analytics.
+///
+/// <para>
+/// T-IGH-03-PIPELINE-ROLLOUT (AddCostEntry): caller-shape validation
+/// (incl. labour-payout routing rule) lives in
+/// <see cref="AddCostEntryValidator"/>; farm-existence + farm-
+/// membership authorization lives in <see cref="AddCostEntryAuthorizer"/>.
+/// When this handler is resolved via the pipeline, both run before the
+/// body. The body retains its own farm-lookup + membership re-check
+/// as defense-in-depth for direct (non-pipeline) consumers — those
+/// checks remain the only auth gate when callers bypass the pipeline.
+/// The endpoint (POST /finance/cost-entry) gets the canonical
+/// <c>InvalidCommand → UseSettleJobCardForLabourPayout →
+/// FarmNotFound → Forbidden → (entitlement) → PlotNotFound /
+/// CropCycleNotFound → body</c> ordering through the pipeline; the
+/// sync entry path (PushSyncBatchHandler.HandleAddCostEntryAsync)
+/// was intentionally NOT migrated in this pass per the rollout's
+/// "only-with-tests" guardrail (sync still resolves the raw handler
+/// and runs its own pre-flight membership check before invoking the
+/// body).
+/// </para>
+/// </summary>
 public sealed class AddCostEntryHandler(
     IShramSafalRepository repository,
     IIdGenerator idGenerator,
     IClock clock,
     IEntitlementPolicy entitlementPolicy,
     IAnalyticsWriter analytics)
+    : IHandler<AddCostEntryCommand, AddCostEntryResultDto>
 {
     private const int DuplicateWindowMinutes = 120;
     private const decimal HighAmountThreshold = 25000m;
@@ -24,24 +50,15 @@ public sealed class AddCostEntryHandler(
     {
         var farmId = new FarmId(command.FarmId);
 
-        if (command.FarmId == Guid.Empty ||
-            command.CreatedByUserId == Guid.Empty ||
-            string.IsNullOrWhiteSpace(command.Category) ||
-            command.Amount <= 0)
-        {
-            return Result.Failure<AddCostEntryResultDto>(ShramSafalErrors.InvalidCommand);
-        }
-
-        // Labour payouts must go through SettleJobCardPayoutHandler, not this generic endpoint.
-        if (command.Category.Trim().Equals("labour_payout", StringComparison.OrdinalIgnoreCase))
-        {
-            return Result.Failure<AddCostEntryResultDto>(ShramSafalErrors.UseSettleJobCardForLabourPayout);
-        }
-
-        if (command.CostEntryId.HasValue && command.CostEntryId.Value == Guid.Empty)
-        {
-            return Result.Failure<AddCostEntryResultDto>(ShramSafalErrors.InvalidCommand);
-        }
+        // Caller-shape validation (empty IDs / blank Category /
+        // non-positive Amount / labour_payout routing rule /
+        // explicit-but-empty CostEntryId) lives in
+        // AddCostEntryValidator; farm-existence + farm-membership
+        // authorization lives in AddCostEntryAuthorizer. Both run as
+        // pipeline behaviors before this body when the handler is
+        // resolved through the pipeline. The body still re-checks
+        // farm + membership below as defense-in-depth — that path is
+        // the only auth gate for direct (non-pipeline) consumers.
 
         var farm = await repository.GetFarmByIdAsync(command.FarmId, ct);
         if (farm is null)

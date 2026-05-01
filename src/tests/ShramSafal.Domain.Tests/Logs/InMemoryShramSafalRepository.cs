@@ -90,10 +90,19 @@ internal sealed class InMemoryShramSafalRepository : IShramSafalRepository
     public Task<List<Plot>> GetPlotsByFarmIdAsync(Guid farmId, CancellationToken ct = default) => throw new NotImplementedException();
     public Task AddCropCycleAsync(CropCycle cropCycle, CancellationToken ct = default) => throw new NotImplementedException();
     public Task<List<CropCycle>> GetCropCyclesByPlotIdAsync(Guid plotId, CancellationToken ct = default) => throw new NotImplementedException();
-    public Task AddCostEntryAsync(CostEntry costEntry, CancellationToken ct = default) => throw new NotImplementedException();
+    // T-IGH-03-PIPELINE-ROLLOUT (AddCostEntry): no-op so the pipeline
+    // happy-path test can save without persistence side-effects we
+    // don't assert on. Tests that assert specific persistence shape
+    // should use a more capable stub or a real DbContext.
+    public Task AddCostEntryAsync(CostEntry costEntry, CancellationToken ct = default) => Task.CompletedTask;
     public Task<CostEntry?> GetCostEntryByIdAsync(Guid costEntryId, CancellationToken ct = default) => throw new NotImplementedException();
     public Task<List<CostEntry>> GetCostEntriesByIdsAsync(IEnumerable<Guid> costEntryIds, CancellationToken ct = default) => throw new NotImplementedException();
-    public Task<List<CostEntry>> GetCostEntriesForDuplicateCheck(FarmId farmId, Guid? plotId, string category, DateTime since, CancellationToken ct = default) => throw new NotImplementedException();
+    // T-IGH-03-PIPELINE-ROLLOUT (AddCostEntry): the AddCostEntry
+    // handler body calls this for duplicate detection on every save.
+    // The pipeline tests don't seed any CostEntries, so an empty list
+    // is the right behaviour — exercising the "no duplicates" path.
+    public Task<List<CostEntry>> GetCostEntriesForDuplicateCheck(FarmId farmId, Guid? plotId, string category, DateTime since, CancellationToken ct = default)
+        => Task.FromResult(new List<CostEntry>());
     public Task AddFinanceCorrectionAsync(FinanceCorrection correction, CancellationToken ct = default) => throw new NotImplementedException();
     public Task AddDayLedgerAsync(DayLedger dayLedger, CancellationToken ct = default) => throw new NotImplementedException();
     public Task<DayLedger?> GetDayLedgerByIdAsync(Guid dayLedgerId, CancellationToken ct = default) => throw new NotImplementedException();

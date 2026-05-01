@@ -213,6 +213,46 @@ public static class DependencyInjection
                 new AgriSync.BuildingBlocks.Application.PipelineBehaviors.AuthorizationBehavior<ClaimJoinCommand, ClaimJoinResult>(
                     sp.GetServices<AgriSync.BuildingBlocks.Application.PipelineBehaviors.IAuthorizationCheck<ClaimJoinCommand>>())));
 
+        // T-IGH-03-PIPELINE-ROLLOUT (AddCostEntry): caller-shape
+        // validation (incl. labour-payout routing rule) +
+        // farm-existence + farm-membership authorization. The endpoint
+        // (POST /finance/cost-entry) gets the canonical
+        // InvalidCommand → UseSettleJobCardForLabourPayout →
+        // FarmNotFound → Forbidden ordering through the pipeline.
+        // PushSyncBatchHandler intentionally still resolves the RAW
+        // AddCostEntryHandler in this rollout pass — sync has its own
+        // pre-flight membership check; migrating without adding sync
+        // integration tests for empty IDs / missing farm / non-member
+        // is held per the "only-with-tests" guardrail.
+        services.AddScoped<AgriSync.BuildingBlocks.Application.PipelineBehaviors.IValidator<
+            ShramSafal.Application.UseCases.Finance.AddCostEntry.AddCostEntryCommand>,
+            ShramSafal.Application.UseCases.Finance.AddCostEntry.AddCostEntryValidator>();
+        services.AddScoped<AgriSync.BuildingBlocks.Application.PipelineBehaviors.IAuthorizationCheck<
+            ShramSafal.Application.UseCases.Finance.AddCostEntry.AddCostEntryCommand>,
+            ShramSafal.Application.UseCases.Finance.AddCostEntry.AddCostEntryAuthorizer>();
+        services.AddScoped<AgriSync.BuildingBlocks.Application.IHandler<
+            ShramSafal.Application.UseCases.Finance.AddCostEntry.AddCostEntryCommand,
+            ShramSafal.Application.Contracts.Dtos.AddCostEntryResultDto>>(sp =>
+            AgriSync.BuildingBlocks.Application.HandlerPipeline.Build(
+                sp.GetRequiredService<AddCostEntryHandler>(),
+                new AgriSync.BuildingBlocks.Application.PipelineBehaviors.LoggingBehavior<
+                    ShramSafal.Application.UseCases.Finance.AddCostEntry.AddCostEntryCommand,
+                    ShramSafal.Application.Contracts.Dtos.AddCostEntryResultDto>(
+                    sp.GetRequiredService<Microsoft.Extensions.Logging.ILogger<
+                        AgriSync.BuildingBlocks.Application.PipelineBehaviors.LoggingBehavior<
+                            ShramSafal.Application.UseCases.Finance.AddCostEntry.AddCostEntryCommand,
+                            ShramSafal.Application.Contracts.Dtos.AddCostEntryResultDto>>>()),
+                new AgriSync.BuildingBlocks.Application.PipelineBehaviors.ValidationBehavior<
+                    ShramSafal.Application.UseCases.Finance.AddCostEntry.AddCostEntryCommand,
+                    ShramSafal.Application.Contracts.Dtos.AddCostEntryResultDto>(
+                    sp.GetServices<AgriSync.BuildingBlocks.Application.PipelineBehaviors.IValidator<
+                        ShramSafal.Application.UseCases.Finance.AddCostEntry.AddCostEntryCommand>>()),
+                new AgriSync.BuildingBlocks.Application.PipelineBehaviors.AuthorizationBehavior<
+                    ShramSafal.Application.UseCases.Finance.AddCostEntry.AddCostEntryCommand,
+                    ShramSafal.Application.Contracts.Dtos.AddCostEntryResultDto>(
+                    sp.GetServices<AgriSync.BuildingBlocks.Application.PipelineBehaviors.IAuthorizationCheck<
+                        ShramSafal.Application.UseCases.Finance.AddCostEntry.AddCostEntryCommand>>())));
+
         // T-IGH-03-PIPELINE-ROLLOUT (CreateDailyLog): caller-shape
         // validation + farm-existence + farm-membership authorization.
         // The endpoint (POST /logs) gets the canonical
