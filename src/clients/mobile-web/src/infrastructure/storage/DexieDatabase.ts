@@ -19,6 +19,20 @@ import type { AuditEvent } from './AuditLogRepository';
 import type { JobCard } from '../../domain/work/JobCard';
 import type { WorkerProfileData } from '../../domain/work/ReliabilityScore';
 import type { CorrectionEvent } from '../../domain/ai/contracts/CorrectionEvent';
+import { applyV1 } from './dexie/versions/v1';
+import { applyV2 } from './dexie/versions/v2';
+import { applyV3 } from './dexie/versions/v3';
+import { applyV4 } from './dexie/versions/v4';
+import { applyV5 } from './dexie/versions/v5';
+import { applyV6 } from './dexie/versions/v6';
+import { applyV7 } from './dexie/versions/v7';
+import { applyV8 } from './dexie/versions/v8';
+import { applyV9 } from './dexie/versions/v9';
+import { applyV10 } from './dexie/versions/v10';
+import { applyV11 } from './dexie/versions/v11';
+import { applyV12 } from './dexie/versions/v12';
+import { applyV13 } from './dexie/versions/v13';
+import { applyV14 } from './dexie/versions/v14';
 
 // =============================================================================
 // OUTBOX (Pending sync events)
@@ -631,401 +645,23 @@ export class AgriLogDatabase extends Dexie {
     constructor() {
         super('AgriLogDB');
 
-        this.version(1).stores({
-            // logs: primary key = id, indexes for common queries
-            logs: 'id, date, verificationStatus, createdByOperatorId, isDeleted, [date+isDeleted], [createdByOperatorId+isDeleted]',
-
-            // outbox: auto-increment id, indexes for sync processing
-            outbox: '++id, idempotencyKey, status, action, [status+createdAt]',
-
-            // auditEvents: primary key = id, indexes for lookups
-            auditEvents: 'id, resourceId, action, timestamp, [resourceId+timestamp]',
-
-            // syncCursors: primary key = tableName
-            syncCursors: 'tableName',
-
-            // appMeta: key-value store
-            appMeta: 'key',
-        });
-
-        this.version(2).stores({
-            logs: 'id, date, verificationStatus, createdByOperatorId, isDeleted, [date+isDeleted], [createdByOperatorId+isDeleted]',
-            outbox: '++id, idempotencyKey, status, action, [status+createdAt]',
-            mutationQueue: '++id, &[deviceId+clientRequestId], status, mutationType, createdAt, [status+createdAt]',
-            auditEvents: 'id, resourceId, action, timestamp, [resourceId+timestamp]',
-            syncCursors: 'tableName',
-            appMeta: 'key',
-        });
-
-        this.version(3).stores({
-            logs: 'id, date, verificationStatus, createdByOperatorId, isDeleted, [date+isDeleted], [createdByOperatorId+isDeleted]',
-            outbox: '++id, idempotencyKey, status, action, [status+createdAt]',
-            mutationQueue: '++id, &[deviceId+clientRequestId], status, mutationType, createdAt, [status+createdAt]',
-            auditEvents: 'id, resourceId, action, timestamp, [resourceId+timestamp]',
-            syncCursors: 'tableName',
-            appMeta: 'key',
-            referenceData: 'key, versionHash, updatedAt',
-            dayLedgers: 'id, farmId, dateKey, [farmId+dateKey]',
-            plannedTasks: 'id, cropCycleId, plannedDate, [cropCycleId+plannedDate]',
-        });
-
-        this.version(4).stores({
-            logs: 'id, date, verificationStatus, createdByOperatorId, isDeleted, [date+isDeleted], [createdByOperatorId+isDeleted]',
-            outbox: '++id, idempotencyKey, status, action, [status+createdAt]',
-            mutationQueue: '++id, &[deviceId+clientRequestId], status, mutationType, createdAt, [status+createdAt]',
-            attachments: 'id, farmId, linkedEntityId, linkedEntityType, localPath, status, [linkedEntityId+linkedEntityType], [farmId+status]',
-            uploadQueue: '++autoId, attachmentId, status, retryCount, lastAttemptAt, nextAttemptAt, [status+nextAttemptAt]',
-            auditEvents: 'id, resourceId, action, timestamp, [resourceId+timestamp]',
-            syncCursors: 'tableName',
-            appMeta: 'key',
-            referenceData: 'key, versionHash, updatedAt',
-        });
-
-        this.version(5).stores({
-            logs: 'id, date, verificationStatus, createdByOperatorId, isDeleted, [date+isDeleted], [createdByOperatorId+isDeleted]',
-            outbox: '++id, idempotencyKey, status, action, [status+createdAt]',
-            mutationQueue: '++id, &[deviceId+clientRequestId], status, mutationType, createdAt, [status+createdAt]',
-            attachments: 'id, farmId, linkedEntityId, linkedEntityType, localPath, status, [linkedEntityId+linkedEntityType], [farmId+status]',
-            uploadQueue: '++autoId, attachmentId, status, retryCount, lastAttemptAt, nextAttemptAt, [status+nextAttemptAt]',
-            auditEvents: 'id, resourceId, action, timestamp, [resourceId+timestamp]',
-            syncCursors: 'tableName',
-            appMeta: 'key',
-            referenceData: 'key, versionHash, updatedAt',
-            dayLedgers: 'id, farmId, dateKey, [farmId+dateKey]',
-            plannedTasks: 'id, cropCycleId, plannedDate, [cropCycleId+plannedDate]',
-            farms: 'id, modifiedAtUtc',
-            plots: 'id, farmId, modifiedAtUtc',
-            cropCycles: 'id, farmId, plotId, modifiedAtUtc',
-            costEntries: 'id, farmId, modifiedAtUtc',
-            financeCorrections: 'id, costEntryId, modifiedAtUtc'
-        });
-
-        this.version(6).stores({
-            logs: 'id, date, verificationStatus, createdByOperatorId, isDeleted, [date+isDeleted], [createdByOperatorId+isDeleted]',
-            outbox: '++id, idempotencyKey, status, action, [status+createdAt]',
-            mutationQueue: '++id, &[deviceId+clientRequestId], status, mutationType, createdAt, [status+createdAt]',
-            attachments: 'id, farmId, linkedEntityId, linkedEntityType, localPath, status, [linkedEntityId+linkedEntityType], [farmId+status]',
-            uploadQueue: '++autoId, attachmentId, status, retryCount, lastAttemptAt, nextAttemptAt, [status+nextAttemptAt]',
-            pendingAiJobs: '++id, operationType, status, createdAt, [status+createdAt]',
-            auditEvents: 'id, resourceId, action, timestamp, [resourceId+timestamp]',
-            syncCursors: 'tableName',
-            appMeta: 'key',
-            referenceData: 'key, versionHash, updatedAt',
-            dayLedgers: 'id, farmId, dateKey, [farmId+dateKey]',
-            plannedTasks: 'id, cropCycleId, plannedDate, [cropCycleId+plannedDate]',
-            farms: 'id, modifiedAtUtc',
-            plots: 'id, farmId, modifiedAtUtc',
-            cropCycles: 'id, farmId, plotId, modifiedAtUtc',
-            costEntries: 'id, farmId, modifiedAtUtc',
-            financeCorrections: 'id, costEntryId, modifiedAtUtc'
-        });
-
-        // =====================================================================
-        // CEI Phase 1 — v7: attention cards store + CEI §4.1–§4.4 backfills
-        // =====================================================================
-        this.version(7)
-            .stores({
-                // All v6 stores (unchanged)
-                logs: 'id, date, verificationStatus, createdByOperatorId, isDeleted, [date+isDeleted], [createdByOperatorId+isDeleted]',
-                outbox: '++id, idempotencyKey, status, action, [status+createdAt]',
-                mutationQueue: '++id, &[deviceId+clientRequestId], status, mutationType, createdAt, [status+createdAt]',
-                attachments: 'id, farmId, linkedEntityId, linkedEntityType, localPath, status, [linkedEntityId+linkedEntityType], [farmId+status]',
-                uploadQueue: '++autoId, attachmentId, status, retryCount, lastAttemptAt, nextAttemptAt, [status+nextAttemptAt]',
-                pendingAiJobs: '++id, operationType, status, createdAt, [status+createdAt]',
-                auditEvents: 'id, resourceId, action, timestamp, [resourceId+timestamp]',
-                syncCursors: 'tableName',
-                appMeta: 'key',
-                referenceData: 'key, versionHash, updatedAt',
-                dayLedgers: 'id, farmId, dateKey, [farmId+dateKey]',
-                plannedTasks: 'id, cropCycleId, plannedDate, [cropCycleId+plannedDate]',
-                farms: 'id, modifiedAtUtc',
-                plots: 'id, farmId, modifiedAtUtc',
-                cropCycles: 'id, farmId, plotId, modifiedAtUtc',
-                costEntries: 'id, farmId, modifiedAtUtc',
-                financeCorrections: 'id, costEntryId, modifiedAtUtc',
-                // NEW — CEI Phase 1
-                attentionCards: 'cardId, farmId, rank, computedAtUtc',
-            })
-            .upgrade(async tx => {
-                // CEI-I4: backfill executionStatus = 'Completed' for all existing
-                // log task records. DexieLogRecord stores the mapped DailyLog
-                // (not raw DTOs), so log.log.tasks may be absent — the modify
-                // is a safe no-op for any row that does not have a tasks array.
-                await tx.table('logs').toCollection().modify((record: Record<string, unknown>) => {
-                    const log = record['log'] as Record<string, unknown> | undefined;
-                    if (log && Array.isArray(log['tasks'])) {
-                        log['tasks'] = (log['tasks'] as Array<Record<string, unknown>>).map(task => ({
-                            ...task,
-                            executionStatus: task['executionStatus'] ?? 'Completed',
-                        }));
-                    }
-                });
-
-                // CEI §4.3: backfill schedule template reference data rows.
-                const templateRef = await tx.table('referenceData').get('scheduleTemplates');
-                if (templateRef?.data && Array.isArray(templateRef.data)) {
-                    templateRef.data = (templateRef.data as Array<Record<string, unknown>>).map(t => ({
-                        ...t,
-                        version: t['version'] ?? 1,
-                        tenantScope: t['tenantScope'] ?? 'Public',
-                        createdByUserId: t['createdByUserId'] ?? null,
-                    }));
-                    await tx.table('referenceData').put(templateRef);
-                }
-
-                // CEI §4.2: backfill plannedTasks with new optional fields.
-                await tx.table('plannedTasks').toCollection().modify((task: Record<string, unknown>) => {
-                    if (task['sourceTemplateActivityId'] === undefined) {
-                        task['sourceTemplateActivityId'] = null;
-                    }
-                    if (task['overrideMarkers'] === undefined) {
-                        task['overrideMarkers'] = null;
-                    }
-                });
-            });
-
-        // =====================================================================
-        // CEI Phase 2 — v8: test stack (§4.5)
-        //   No upgrade function needed — all three stores are fresh.
-        // =====================================================================
-        this.version(8).stores({
-            // All v7 stores (unchanged)
-            logs: 'id, date, verificationStatus, createdByOperatorId, isDeleted, [date+isDeleted], [createdByOperatorId+isDeleted]',
-            outbox: '++id, idempotencyKey, status, action, [status+createdAt]',
-            mutationQueue: '++id, &[deviceId+clientRequestId], status, mutationType, createdAt, [status+createdAt]',
-            attachments: 'id, farmId, linkedEntityId, linkedEntityType, localPath, status, [linkedEntityId+linkedEntityType], [farmId+status]',
-            uploadQueue: '++autoId, attachmentId, status, retryCount, lastAttemptAt, nextAttemptAt, [status+nextAttemptAt]',
-            pendingAiJobs: '++id, operationType, status, createdAt, [status+createdAt]',
-            auditEvents: 'id, resourceId, action, timestamp, [resourceId+timestamp]',
-            syncCursors: 'tableName',
-            appMeta: 'key',
-            referenceData: 'key, versionHash, updatedAt',
-            dayLedgers: 'id, farmId, dateKey, [farmId+dateKey]',
-            plannedTasks: 'id, cropCycleId, plannedDate, [cropCycleId+plannedDate]',
-            farms: 'id, modifiedAtUtc',
-            plots: 'id, farmId, modifiedAtUtc',
-            cropCycles: 'id, farmId, plotId, modifiedAtUtc',
-            costEntries: 'id, farmId, modifiedAtUtc',
-            financeCorrections: 'id, costEntryId, modifiedAtUtc',
-            attentionCards: 'cardId, farmId, rank, computedAtUtc',
-            // NEW — CEI Phase 2 §4.5 (test stack)
-            testProtocols: 'id, cropType, kind',
-            testInstances: 'id, cropCycleId, farmId, plannedDueDate, status, modifiedAtUtc',
-            testRecommendations: 'id, testInstanceId',
-        });
-
-        // =====================================================================
-        // CEI Phase 3 — v9: compliance signals store (§4.6)
-        //   No upgrade function needed — fresh store, no backfill required.
-        // =====================================================================
-        this.version(9).stores({
-            // All v8 stores (unchanged)
-            logs: 'id, date, verificationStatus, createdByOperatorId, isDeleted, [date+isDeleted], [createdByOperatorId+isDeleted]',
-            outbox: '++id, idempotencyKey, status, action, [status+createdAt]',
-            mutationQueue: '++id, &[deviceId+clientRequestId], status, mutationType, createdAt, [status+createdAt]',
-            attachments: 'id, farmId, linkedEntityId, linkedEntityType, localPath, status, [linkedEntityId+linkedEntityType], [farmId+status]',
-            uploadQueue: '++autoId, attachmentId, status, retryCount, lastAttemptAt, nextAttemptAt, [status+nextAttemptAt]',
-            pendingAiJobs: '++id, operationType, status, createdAt, [status+createdAt]',
-            auditEvents: 'id, resourceId, action, timestamp, [resourceId+timestamp]',
-            syncCursors: 'tableName',
-            appMeta: 'key',
-            referenceData: 'key, versionHash, updatedAt',
-            dayLedgers: 'id, farmId, dateKey, [farmId+dateKey]',
-            plannedTasks: 'id, cropCycleId, plannedDate, [cropCycleId+plannedDate]',
-            farms: 'id, modifiedAtUtc',
-            plots: 'id, farmId, modifiedAtUtc',
-            cropCycles: 'id, farmId, plotId, modifiedAtUtc',
-            costEntries: 'id, farmId, modifiedAtUtc',
-            financeCorrections: 'id, costEntryId, modifiedAtUtc',
-            attentionCards: 'cardId, farmId, rank, computedAtUtc',
-            testProtocols: 'id, cropType, kind',
-            testInstances: 'id, cropCycleId, farmId, plannedDueDate, status, modifiedAtUtc',
-            testRecommendations: 'id, testInstanceId',
-            // NEW — CEI Phase 3 §4.6 (compliance signals)
-            complianceSignals: 'id, farmId, plotId, severity, lastSeenAtUtc, [farmId+isOpen]',
-        });
-
-        // =====================================================================
-        // CEI Phase 4 — v10: job cards + worker profile cache (§4.8)
-        //   No upgrade function needed — both stores are fresh.
-        // =====================================================================
-        this.version(10).stores({
-            // All v9 stores (unchanged)
-            logs: 'id, date, verificationStatus, createdByOperatorId, isDeleted, [date+isDeleted], [createdByOperatorId+isDeleted]',
-            outbox: '++id, idempotencyKey, status, action, [status+createdAt]',
-            mutationQueue: '++id, &[deviceId+clientRequestId], status, mutationType, createdAt, [status+createdAt]',
-            attachments: 'id, farmId, linkedEntityId, linkedEntityType, localPath, status, [linkedEntityId+linkedEntityType], [farmId+status]',
-            uploadQueue: '++autoId, attachmentId, status, retryCount, lastAttemptAt, nextAttemptAt, [status+nextAttemptAt]',
-            pendingAiJobs: '++id, operationType, status, createdAt, [status+createdAt]',
-            auditEvents: 'id, resourceId, action, timestamp, [resourceId+timestamp]',
-            syncCursors: 'tableName',
-            appMeta: 'key',
-            referenceData: 'key, versionHash, updatedAt',
-            dayLedgers: 'id, farmId, dateKey, [farmId+dateKey]',
-            plannedTasks: 'id, cropCycleId, plannedDate, [cropCycleId+plannedDate]',
-            farms: 'id, modifiedAtUtc',
-            plots: 'id, farmId, modifiedAtUtc',
-            cropCycles: 'id, farmId, plotId, modifiedAtUtc',
-            costEntries: 'id, farmId, modifiedAtUtc',
-            financeCorrections: 'id, costEntryId, modifiedAtUtc',
-            attentionCards: 'cardId, farmId, rank, computedAtUtc',
-            testProtocols: 'id, cropType, kind',
-            testInstances: 'id, cropCycleId, farmId, plannedDueDate, status, modifiedAtUtc',
-            testRecommendations: 'id, testInstanceId',
-            complianceSignals: 'id, farmId, plotId, severity, lastSeenAtUtc, [farmId+isOpen]',
-            // NEW — CEI Phase 4 §4.8 (job cards + worker profile cache)
-            jobCards: 'id, farmId, assignedWorkerUserId, status, modifiedAtUtc, [farmId+status]',
-            workerProfiles: 'workerUserId, scopedFarmId',
-        });
-
-        // =====================================================================
-        // Farm Geography — v11: owner-account scoped geography cache.
-        //   Backend remains source of truth; these tables only cache confirmed
-        //   rows or queue pending pushes with explicit tenant scope.
-        // =====================================================================
-        this.version(11).stores({
-            logs: 'id, date, verificationStatus, createdByOperatorId, isDeleted, [date+isDeleted], [createdByOperatorId+isDeleted]',
-            outbox: '++id, idempotencyKey, status, action, [status+createdAt]',
-            mutationQueue: '++id, &[deviceId+clientRequestId], status, mutationType, createdAt, [status+createdAt]',
-            attachments: 'id, farmId, linkedEntityId, linkedEntityType, localPath, status, [linkedEntityId+linkedEntityType], [farmId+status]',
-            uploadQueue: '++autoId, attachmentId, status, retryCount, lastAttemptAt, nextAttemptAt, [status+nextAttemptAt]',
-            pendingAiJobs: '++id, operationType, status, createdAt, [status+createdAt]',
-            auditEvents: 'id, resourceId, action, timestamp, [resourceId+timestamp]',
-            syncCursors: 'tableName',
-            appMeta: 'key',
-            referenceData: 'key, versionHash, updatedAt',
-            dayLedgers: 'id, farmId, dateKey, [farmId+dateKey]',
-            plannedTasks: 'id, cropCycleId, plannedDate, [cropCycleId+plannedDate]',
-            farms: 'id, ownerAccountId, [ownerAccountId+id], syncStatus, serverUpdatedAt, modifiedAtUtc',
-            plots: 'id, farmId, ownerAccountId, [ownerAccountId+farmId], syncStatus, serverUpdatedAt, modifiedAtUtc',
-            farmBoundaries: 'id, farmId, ownerAccountId, [ownerAccountId+farmId], syncStatus, serverUpdatedAt',
-            plotAreas: 'id, plotId, farmId, ownerAccountId, [ownerAccountId+farmId], syncStatus, serverUpdatedAt',
-            cropCycles: 'id, farmId, plotId, modifiedAtUtc',
-            costEntries: 'id, farmId, modifiedAtUtc',
-            financeCorrections: 'id, costEntryId, modifiedAtUtc',
-            attentionCards: 'cardId, farmId, rank, computedAtUtc',
-            testProtocols: 'id, cropType, kind',
-            testInstances: 'id, cropCycleId, farmId, plannedDueDate, status, modifiedAtUtc',
-            testRecommendations: 'id, testInstanceId',
-            complianceSignals: 'id, farmId, plotId, severity, lastSeenAtUtc, [farmId+isOpen]',
-            jobCards: 'id, farmId, assignedWorkerUserId, status, modifiedAtUtc, [farmId+status]',
-            workerProfiles: 'workerUserId, scopedFarmId',
-        });
-
-        // =====================================================================
-        // AI Voice Journal — v12: 30-day local processing clips only.
-        //   This is Plan A retention. Plan B retained storage must use a separate
-        //   consent-gated path and must not change this policy in place.
-        // =====================================================================
-        this.version(12).stores({
-            logs: 'id, date, verificationStatus, createdByOperatorId, isDeleted, [date+isDeleted], [createdByOperatorId+isDeleted]',
-            outbox: '++id, idempotencyKey, status, action, [status+createdAt]',
-            mutationQueue: '++id, &[deviceId+clientRequestId], status, mutationType, createdAt, [status+createdAt]',
-            attachments: 'id, farmId, linkedEntityId, linkedEntityType, localPath, status, [linkedEntityId+linkedEntityType], [farmId+status]',
-            uploadQueue: '++autoId, attachmentId, status, retryCount, lastAttemptAt, nextAttemptAt, [status+nextAttemptAt]',
-            pendingAiJobs: '++id, operationType, status, createdAt, [status+createdAt]',
-            voiceClips: 'id, farmId, plotId, cropCycleId, recordedAtUtc, status, retentionPolicy, expiresAtUtc, [farmId+recordedAtUtc]',
-            auditEvents: 'id, resourceId, action, timestamp, [resourceId+timestamp]',
-            syncCursors: 'tableName',
-            appMeta: 'key',
-            referenceData: 'key, versionHash, updatedAt',
-            dayLedgers: 'id, farmId, dateKey, [farmId+dateKey]',
-            plannedTasks: 'id, cropCycleId, plannedDate, [cropCycleId+plannedDate]',
-            farms: 'id, ownerAccountId, [ownerAccountId+id], syncStatus, serverUpdatedAt, modifiedAtUtc',
-            plots: 'id, farmId, ownerAccountId, [ownerAccountId+farmId], syncStatus, serverUpdatedAt, modifiedAtUtc',
-            farmBoundaries: 'id, farmId, ownerAccountId, [ownerAccountId+farmId], syncStatus, serverUpdatedAt',
-            plotAreas: 'id, plotId, farmId, ownerAccountId, [ownerAccountId+farmId], syncStatus, serverUpdatedAt',
-            cropCycles: 'id, farmId, plotId, modifiedAtUtc',
-            costEntries: 'id, farmId, modifiedAtUtc',
-            financeCorrections: 'id, costEntryId, modifiedAtUtc',
-            attentionCards: 'cardId, farmId, rank, computedAtUtc',
-            testProtocols: 'id, cropType, kind',
-            testInstances: 'id, cropCycleId, farmId, plannedDueDate, status, modifiedAtUtc',
-            testRecommendations: 'id, testInstanceId',
-            complianceSignals: 'id, farmId, plotId, severity, lastSeenAtUtc, [farmId+isOpen]',
-            jobCards: 'id, farmId, assignedWorkerUserId, status, modifiedAtUtc, [farmId+status]',
-            workerProfiles: 'workerUserId, scopedFarmId',
-        });
-
-        // =====================================================================
-        // AI Correction Events — v13: bucket-level human correction signal.
-        //   This is local-first telemetry; upload is opt-in and can be added
-        //   later without changing the event contract.
-        // =====================================================================
-        this.version(13).stores({
-            logs: 'id, date, verificationStatus, createdByOperatorId, isDeleted, [date+isDeleted], [createdByOperatorId+isDeleted]',
-            outbox: '++id, idempotencyKey, status, action, [status+createdAt]',
-            mutationQueue: '++id, &[deviceId+clientRequestId], status, mutationType, createdAt, [status+createdAt]',
-            attachments: 'id, farmId, linkedEntityId, linkedEntityType, localPath, status, [linkedEntityId+linkedEntityType], [farmId+status]',
-            uploadQueue: '++autoId, attachmentId, status, retryCount, lastAttemptAt, nextAttemptAt, [status+nextAttemptAt]',
-            pendingAiJobs: '++id, operationType, status, createdAt, [status+createdAt]',
-            voiceClips: 'id, farmId, plotId, cropCycleId, recordedAtUtc, status, retentionPolicy, expiresAtUtc, [farmId+recordedAtUtc]',
-            aiCorrectionEvents: 'id, extractionId, timestamp, correctionType, bucketId, fieldPath',
-            auditEvents: 'id, resourceId, action, timestamp, [resourceId+timestamp]',
-            syncCursors: 'tableName',
-            appMeta: 'key',
-            referenceData: 'key, versionHash, updatedAt',
-            dayLedgers: 'id, farmId, dateKey, [farmId+dateKey]',
-            plannedTasks: 'id, cropCycleId, plannedDate, [cropCycleId+plannedDate]',
-            farms: 'id, ownerAccountId, [ownerAccountId+id], syncStatus, serverUpdatedAt, modifiedAtUtc',
-            plots: 'id, farmId, ownerAccountId, [ownerAccountId+farmId], syncStatus, serverUpdatedAt, modifiedAtUtc',
-            farmBoundaries: 'id, farmId, ownerAccountId, [ownerAccountId+farmId], syncStatus, serverUpdatedAt',
-            plotAreas: 'id, plotId, farmId, ownerAccountId, [ownerAccountId+farmId], syncStatus, serverUpdatedAt',
-            cropCycles: 'id, farmId, plotId, modifiedAtUtc',
-            costEntries: 'id, farmId, modifiedAtUtc',
-            financeCorrections: 'id, costEntryId, modifiedAtUtc',
-            attentionCards: 'cardId, farmId, rank, computedAtUtc',
-            testProtocols: 'id, cropType, kind',
-            testInstances: 'id, cropCycleId, farmId, plannedDueDate, status, modifiedAtUtc',
-            testRecommendations: 'id, testInstanceId',
-            complianceSignals: 'id, farmId, plotId, severity, lastSeenAtUtc, [farmId+isOpen]',
-            jobCards: 'id, farmId, assignedWorkerUserId, status, modifiedAtUtc, [farmId+status]',
-            workerProfiles: 'workerUserId, scopedFarmId',
-        });
-
-        // =====================================================================
-        // Sub-plan 04 Task 2 — v14: frontend storage unification.
-        //   Adds crops + farmerProfile + uiPrefs stores so the React app can
-        //   move off localStorage for these surfaces. No upgrade function —
-        //   all three stores are fresh; existing localStorage data is moved
-        //   in by `LegacyLocalStorageMigrator` on app startup, not by a Dexie
-        //   schema upgrade.
-        // =====================================================================
-        this.version(14).stores({
-            // All v13 stores (unchanged)
-            logs: 'id, date, verificationStatus, createdByOperatorId, isDeleted, [date+isDeleted], [createdByOperatorId+isDeleted]',
-            outbox: '++id, idempotencyKey, status, action, [status+createdAt]',
-            mutationQueue: '++id, &[deviceId+clientRequestId], status, mutationType, createdAt, [status+createdAt]',
-            attachments: 'id, farmId, linkedEntityId, linkedEntityType, localPath, status, [linkedEntityId+linkedEntityType], [farmId+status]',
-            uploadQueue: '++autoId, attachmentId, status, retryCount, lastAttemptAt, nextAttemptAt, [status+nextAttemptAt]',
-            pendingAiJobs: '++id, operationType, status, createdAt, [status+createdAt]',
-            voiceClips: 'id, farmId, plotId, cropCycleId, recordedAtUtc, status, retentionPolicy, expiresAtUtc, [farmId+recordedAtUtc]',
-            aiCorrectionEvents: 'id, extractionId, timestamp, correctionType, bucketId, fieldPath',
-            auditEvents: 'id, resourceId, action, timestamp, [resourceId+timestamp]',
-            syncCursors: 'tableName',
-            appMeta: 'key',
-            referenceData: 'key, versionHash, updatedAt',
-            dayLedgers: 'id, farmId, dateKey, [farmId+dateKey]',
-            plannedTasks: 'id, cropCycleId, plannedDate, [cropCycleId+plannedDate]',
-            farms: 'id, ownerAccountId, [ownerAccountId+id], syncStatus, serverUpdatedAt, modifiedAtUtc',
-            plots: 'id, farmId, ownerAccountId, [ownerAccountId+farmId], syncStatus, serverUpdatedAt, modifiedAtUtc',
-            farmBoundaries: 'id, farmId, ownerAccountId, [ownerAccountId+farmId], syncStatus, serverUpdatedAt',
-            plotAreas: 'id, plotId, farmId, ownerAccountId, [ownerAccountId+farmId], syncStatus, serverUpdatedAt',
-            cropCycles: 'id, farmId, plotId, modifiedAtUtc',
-            costEntries: 'id, farmId, modifiedAtUtc',
-            financeCorrections: 'id, costEntryId, modifiedAtUtc',
-            attentionCards: 'cardId, farmId, rank, computedAtUtc',
-            testProtocols: 'id, cropType, kind',
-            testInstances: 'id, cropCycleId, farmId, plannedDueDate, status, modifiedAtUtc',
-            testRecommendations: 'id, testInstanceId',
-            complianceSignals: 'id, farmId, plotId, severity, lastSeenAtUtc, [farmId+isOpen]',
-            jobCards: 'id, farmId, assignedWorkerUserId, status, modifiedAtUtc, [farmId+status]',
-            workerProfiles: 'workerUserId, scopedFarmId',
-            // NEW — Sub-plan 04 Task 2 (frontend storage unification)
-            crops: 'id, updatedAtMs',
-            farmerProfile: 'id, updatedAtMs',
-            uiPrefs: 'key',
-        });
+        // Schema versions are declared in dexie/versions/v{N}.ts. Each applyVN
+        // call performs `this.version(N).stores({...})` (and any `.upgrade()`
+        // chain). Order matters — Dexie applies migrations sequentially.
+        applyV1(this);
+        applyV2(this);
+        applyV3(this);
+        applyV4(this);
+        applyV5(this);
+        applyV6(this);
+        applyV7(this);
+        applyV8(this);
+        applyV9(this);
+        applyV10(this);
+        applyV11(this);
+        applyV12(this);
+        applyV13(this);
+        applyV14(this);
     }
 }
 
