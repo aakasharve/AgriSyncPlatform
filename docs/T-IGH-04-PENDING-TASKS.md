@@ -23,9 +23,11 @@ The label stays **PARTIAL_FOUNDATION / READY_WITH_CAVEATS** until both Plan 04 D
 
 ## Branch state (current)
 
-`feature/ighardening-04-frontend` has six commits on top of `akash_edits` head `930742e`:
+`feature/ighardening-04-frontend` has eight commits on top of `akash_edits` head `930742e`:
 
 ```
+d558843 refactor(sync): T-IGH-04-SYNC-PULL-DECOMPOSE — extract 6 helper modules from SyncPullReconciler
+2168dd5 docs(plan-04): rewrite handoff for post-rebase + P0 landed state
 20c765a test(sync): worker-flow integration for T-IGH-04-CONFLICT-STATUS-DURABILITY
 acb8208 feat(sync): T-IGH-04-CONFLICT-STATUS-DURABILITY (P0) — durable rejected_user_review state
 c60c0d3 test(deps): add @testing-library/{user-event,jest-dom} + per-file jsdom directive (T-IGH-04 Task 5 finalize)
@@ -54,8 +56,16 @@ c60c0d3 test(deps): add @testing-library/{user-event,jest-dom} + per-file jsdom 
 | `c60c0d3` | Test infra finalize: `@testing-library/{user-event,jest-dom}` + per-file `// @vitest-environment jsdom` directive | 0 | +66 |
 | `acb8208` | **P0 conflict status durability** — extend `MutationQueueStatus` to `\| REJECTED_USER_REVIEW \| REJECTED_DROPPED`, add `RejectionPolicy.ts`, branch worker on category, soft-delete on discard | +17 | +515 / −38 |
 | `20c765a` | P0 worker integration — full state-machine lock end-to-end | +4 | +260 |
+| `d558843` | **Sync pull helper extraction** — 6 helpers pulled out, SyncPullReconciler 1150 → 721 lines (below 800 cap) | 0 (snapshot still green) | +549 / −449 |
 
-**Test count progression (on this branch):** 30 baseline → 55 (+25 new tests).
+**Test count progression (on this branch):** 30 baseline → 55 (+25 new tests). Test count unchanged after `d558843` (pure refactor).
+
+**Line-count progression for files this branch touches:**
+
+| File | Pre-rebase | Now | Cap | Status |
+|---|---|---|---|---|
+| `infrastructure/sync/SyncPullReconciler.ts` | 1150 | **721** | 800 | ✅ below cap |
+| Other Plan 04 god-files | unchanged | unchanged | 800 | ⏳ pending — see `T-IGH-04-FILE-DECOMPOSE` below |
 
 ---
 
@@ -103,9 +113,27 @@ ProfilePage.tsx is 2491 lines; target is orchestrator ≤ 250 + 8 sections + 2 h
 
 ---
 
-### T-IGH-04-SYNC-PULL-DECOMPOSE (Plan Task 7, P1)
+### T-IGH-04-SYNC-PULL-DECOMPOSE (Plan Task 7, P1) — PARTIALLY DONE
 
-SyncPullReconciler.ts is 1150 lines. Plan layout: orchestrator + 10 reconcilers/helpers under `features/sync/pull/`. Upstream `c5c1640` snapshot test locks behavior. Per-reconciler files apply naturally.
+**What landed in session 2 (`d558843`):** Helper extraction phase. Six modules pulled out of `SyncPullReconciler.ts`:
+
+| Helper | Lines | Source |
+|---|---|---|
+| `helpers/mapVerificationStatus.ts` | 38 | extracted verbatim |
+| `helpers/mapAttachmentStatus.ts` | 24 | extracted verbatim |
+| `helpers/normalizeActivityType.ts` | 44 | normalize + 4 isXActivity predicates |
+| `helpers/operatorRole.ts` | 49 | mapOperatorRole + capabilitiesForRole |
+| `helpers/cropIdentity.ts` | 61 | toCropId + pickIconName + normalizeCropTypeKey + readCropTypeReferences |
+| `helpers/plotSchedule.ts` | 94 | defaultPlotSchedule + ensureCrop + upsertPlot + CROP_COLORS |
+| `helpers/purveshDemoEnrichment.ts` | 175 | isPurveshDemoOwner + buildDefaults + fillMissing + enrichCrops |
+
+**Result:** SyncPullReconciler.ts went from **1150 → 721 lines** (below the 800 cap). Upstream `c5c1640` snapshot test still green; all 55 vitest tests pass.
+
+#### T-IGH-04-SYNC-PULL-DECOMPOSE-PHASE-2 (remaining)
+
+The plan's full target was orchestrator + **10 per-resource reconciler files** under `features/sync/pull/reconcilers/`. The composite helpers (`buildProfileFromSync`, `toDailyLog`, `readExistingProfile/writeProfile`, `readExistingCrops/writeCrops`) and the orchestrator body still live inline in `SyncPullReconciler.ts`. Splitting them into per-resource reconciler functions (farmReconciler, plotReconciler, cropCycleReconciler, dailyLogReconciler, attachmentReconciler, costEntryReconciler, plannedActivityReconciler, attentionBoardReconciler, referenceDataReconciler, profileReconciler) is the next phase.
+
+Pairs naturally with `T-SP04-DEXIE-CUTOVER-SYNC-BRIDGE` — the per-resource reconciler split is the natural place to redirect each `localStorage.setItem` call to its Dexie repo. Doing both at once avoids two separate touches of the reconciler.
 
 ---
 
@@ -131,6 +159,62 @@ Verifier-expanded set of 8 god-files needing decomposition (last audit 2026-05-0
 | `core/domain/LogFactory.ts` | 865 |
 
 Each is independent — sub-agent parallel.
+
+#### T-IGH-04-FILE-DECOMPOSE-ACTIVITYCARD (sub-task scope)
+
+**Inventory (lines from current branch):**
+
+```
+21–50    interface ActivityCardProps                  30 lines
+51–233   const BucketItem = (...) => { ... }          183 lines  (leaf)
+234–279  const InventorySuggestions = (...) => {...}  46 lines   (leaf)
+280–659  const InputDetailSheet = (...) => {...}      380 lines  (uses BucketItem)
+660–738  const ExpenseDetailSheet = (...) => {...}    79 lines
+739–1177 const DetailSheet = (...) => {...}           439 lines  (uses BucketItem)
+1178–1312 const WorkDetailSheet = (...) => {...}      135 lines
+1313–2024 const ActivityCard: React.FC<...> = ...     712 lines
+2025     export default ActivityCard;
+```
+
+**Decomposition plan (target layout under `features/logs/components/activity-card/`):**
+
+```
+activity-card/
+  ActivityCard.tsx             (orchestrator, ≤ 250)
+  ActivityCardProps.ts         (interface)
+  components/
+    BucketItem.tsx             (leaf)
+    InventorySuggestions.tsx   (leaf)
+  sheets/
+    DetailSheet.tsx            (labour/irrigation/machinery)
+    InputDetailSheet.tsx
+    ExpenseDetailSheet.tsx
+    WorkDetailSheet.tsx
+```
+
+**Each sheet is self-contained** — looking at `DetailSheet`'s signature, every consumer prop is passed in (data, defaults, profile, currentPlot, callbacks). No closure-captured state from ActivityCard's body. So each sheet can move file-by-file with `import` updates only — no prop ballooning.
+
+**Order:** extract `BucketItem` first (it's the dep of two sheets), then sheets one at a time, then slim ActivityCard. After `BucketItem` + 4 sheets land, ActivityCard.tsx ≈ 763 lines (below 800).
+
+**Verification:** the codebase has no existing ActivityCard test; behavioral parity rests on visual review during Sub-plan 05 E2E. Worth adding a smoke render test in this task using TestProviders + a minimal CropActivityEvent fixture, even if not snapshot-detailed — at least catches "does it mount" regressions during the sheet moves.
+
+**Why deferred:** session 2 ran out of context after the SyncPullReconciler decomp + the rebase reconciliation work; ActivityCard's 6-sheet move is a clean 60–90 min focused session.
+
+#### T-IGH-04-FILE-DECOMPOSE-EASY-WINS
+
+`CostAnalysisSection.tsx` (865) and `LogFactory.ts` (865) are each only 65 lines over the 800 cap. Each needs a single small extraction (e.g., one helper or one sub-component) to clear the gate. ~15 min each. Lowest-effort wins in this set.
+
+#### T-IGH-04-FILE-DECOMPOSE-DEXIEDB
+
+`DexieDatabase.ts` (944) carries v1–v14 `version(N).stores({...})` blocks — each a structurally similar declaration. Extract to `infrastructure/storage/dexie/versions/{v1..v14}.ts` and have `DexieDatabase.ts` orchestrate via a single import + register loop. Per-version files become ≤ 60 lines each. ~30 min.
+
+#### T-IGH-04-FILE-DECOMPOSE-AGRISYNCCLIENT
+
+`AgriSyncClient.ts` (1092) is the API SDK. Split by resource: `infrastructure/api/{auth,sync,attachments,ai}/*.ts`. Re-export from a slim `AgriSyncClient.ts` for backwards-compat during transition. ~45 min.
+
+#### T-IGH-04-FILE-DECOMPOSE-PAGES
+
+The four `pages/*` god-files (`ReflectPage`, `ManualEntry`, `ComparePage` — note `ManualEntry` lives under `features/logs/components/` not `pages/`, but same pattern) each follow the per-section split pattern from Plan §Task 6. Estimated 60–90 min each.
 
 ---
 
