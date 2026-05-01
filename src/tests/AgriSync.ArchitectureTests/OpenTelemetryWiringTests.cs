@@ -61,6 +61,11 @@ public sealed class OpenTelemetryWiringTests
             // W3C Trace Context header name. If a future change wires
             // a B3-only or Jaeger-only propagator, this assertion
             // will fail loudly.
+            // propagator.Fields is annotated as ISet<string>? on the
+            // base; assert non-null first so the Contains call is
+            // null-safe and Release builds (warnings-as-errors) stay
+            // green.
+            Assert.NotNull(propagator.Fields);
             Assert.Contains("traceparent", propagator.Fields);
         }
         finally
