@@ -1,0 +1,86 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`SyncPullReconciler (baseline behavior — Task 1a) > reduces a minimal payload into a deterministic Dexie + localStorage snapshot 1`] = `
+{
+  "cropCycles": [
+    {
+      "farmId": "farm_1",
+      "id": "cycle_1",
+      "payload": {
+        "createdAtUtc": "2026-01-01T00:00:00.000Z",
+        "cropName": "Grapes",
+        "farmId": "farm_1",
+        "id": "cycle_1",
+        "modifiedAtUtc": "2026-03-15T00:00:00.000Z",
+        "plotId": "plot_1",
+        "stage": "flowering",
+        "startDate": "2026-01-01",
+      },
+      "plotId": "plot_1",
+      "updatedAt": "2026-04-01T12:00:00.000Z",
+    },
+  ],
+  "crops": [
+    {
+      "activeScheduleId": null,
+      "color": "bg-emerald-500",
+      "createdAt": "2026-04-01T12:00:00.000Z",
+      "iconName": "Grape",
+      "id": "crop_grapes",
+      "name": "Grapes",
+      "plots": [
+        {
+          "baseline": {
+            "totalArea": 2.5,
+            "unit": "Acre",
+          },
+          "createdAt": "2026-03-01T00:00:00.000Z",
+          "id": "plot_1",
+          "name": "North Field",
+          "schedule": {
+            "expectationOverrides": [],
+            "id": "sch_plot_1",
+            "plotId": "plot_1",
+            "referenceDate": "2026-01-01",
+            "referenceType": "PLANTING",
+            "stageOverrides": [],
+            "templateId": "fallback_template",
+          },
+          "startDate": "2026-01-01",
+          "variety": "Grapes",
+        },
+      ],
+      "supportedTasks": [],
+      "workflow": [],
+    },
+  ],
+  "farms": [
+    {
+      "id": "farm_1",
+      "payload": {
+        "createdAtUtc": "2026-03-01T00:00:00.000Z",
+        "id": "farm_1",
+        "modifiedAtUtc": "2026-03-15T00:00:00.000Z",
+        "name": "Test Farm",
+        "ownerUserId": "user_owner",
+      },
+      "updatedAt": "2026-04-01T12:00:00.000Z",
+    },
+  ],
+  "plots": [
+    {
+      "farmId": "farm_1",
+      "id": "plot_1",
+      "payload": {
+        "areaInAcres": 2.5,
+        "createdAtUtc": "2026-03-01T00:00:00.000Z",
+        "farmId": "farm_1",
+        "id": "plot_1",
+        "modifiedAtUtc": "2026-03-15T00:00:00.000Z",
+        "name": "North Field",
+      },
+      "updatedAt": "2026-04-01T12:00:00.000Z",
+    },
+  ],
+}
+`;
