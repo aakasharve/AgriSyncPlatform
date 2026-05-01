@@ -7,6 +7,7 @@ import { getDatabase } from '../storage/DexieDatabase';
 import { AiJobWorker } from './AiJobWorker';
 import { isSyncMutationType } from './SyncMutationCatalog';
 import { getRootStore } from '../../app/state/RootStore';
+import { categorizeRejection } from './RejectionPolicy';
 
 // Sub-plan 04 Task 4 — bridge worker → syncMachine. Wrapped so the worker
 // never crashes if the root store hasn't been instantiated (e.g., during
@@ -142,6 +143,9 @@ export class BackgroundSyncWorker {
         notifySync({ type: 'TRIGGER' });
         try {
             await mutationQueue.resetInFlightMutations();
+            // markFailedAsPending only flips status === 'FAILED' rows back to
+            // PENDING. REJECTED_USER_REVIEW and REJECTED_DROPPED are durable
+            // and stay put across cycles per T-IGH-04-CONFLICT-STATUS-DURABILITY.
             await mutationQueue.markFailedAsPending();
             await this.pushPendingMutations();
             await this.pullLatestDeltas();
@@ -210,12 +214,10 @@ export class BackgroundSyncWorker {
                 const result = byClientRequestId.get(mutation.clientRequestId);
 
                 if (!result) {
+                    // No-result is transient — server didn't respond for
+                    // this row. Mark FAILED so auto-retry tries again next
+                    // cycle. Do NOT churn the syncMachine for transients.
                     await mutationQueue.markFailed(mutationId, 'No push result returned for mutation.');
-                    notifySync({
-                        type: 'MUTATION_REJECTED',
-                        mutationId: mutation.clientRequestId,
-                        reason: 'NO_RESULT',
-                    });
                     continue;
                 }
 
@@ -224,23 +226,36 @@ export class BackgroundSyncWorker {
                     continue;
                 }
 
+                // Server-rejected. T-IGH-04-CONFLICT-STATUS-DURABILITY:
+                // categorize via RejectionPolicy. Permanent → durable
+                // REJECTED_USER_REVIEW (skips auto-retry, surfaces in
+                // OfflineConflictPage). Transient → FAILED (auto-retry).
                 const errorMessage = result.errorMessage ?? result.errorCode ?? 'Unknown sync error';
-                await mutationQueue.markFailed(mutationId, errorMessage);
-                notifySync({
-                    type: 'MUTATION_REJECTED',
-                    mutationId: mutation.clientRequestId,
-                    reason: result.errorCode ?? errorMessage,
+                const category = categorizeRejection({
+                    errorCode: result.errorCode,
+                    errorMessage: result.errorMessage,
                 });
+
+                if (category === 'PERMANENT') {
+                    await mutationQueue.markRejectedUserReview(mutationId, errorMessage);
+                    notifySync({
+                        type: 'MUTATION_REJECTED',
+                        mutationId: mutation.clientRequestId,
+                        reason: result.errorCode ?? errorMessage,
+                    });
+                } else {
+                    await mutationQueue.markFailed(mutationId, errorMessage);
+                    // Transient — silently retries next cycle. No
+                    // syncMachine event so the badge doesn't churn.
+                }
             }
         } catch (error) {
+            // Cycle-level failure (e.g., network error before any results
+            // returned). All in-flight mutations failed transiently —
+            // mark FAILED across the batch, no syncMachine churn.
             const message = error instanceof Error ? error.message : 'Unknown push error';
             for (const mutation of supportedMutations) {
                 await mutationQueue.markFailed(mutation.id as number, message);
-                notifySync({
-                    type: 'MUTATION_REJECTED',
-                    mutationId: mutation.clientRequestId,
-                    reason: message,
-                });
             }
         }
     }
