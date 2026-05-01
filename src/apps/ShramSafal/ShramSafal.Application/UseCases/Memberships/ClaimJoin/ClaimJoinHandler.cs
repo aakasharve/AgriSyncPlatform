@@ -1,5 +1,6 @@
 using AgriSync.BuildingBlocks.Abstractions;
 using AgriSync.BuildingBlocks.Analytics;
+using AgriSync.BuildingBlocks.Application;
 using AgriSync.BuildingBlocks.Results;
 using AgriSync.SharedKernel.Contracts.Ids;
 using AgriSync.SharedKernel.Contracts.Roles;
@@ -28,6 +29,17 @@ namespace ShramSafal.Application.UseCases.Memberships.ClaimJoin;
 ///     caller has both a valid OTP-verified JWT AND a valid token, they
 ///     are allowed to become a member. Owner-side permissions are
 ///     checked separately at issue / rotate time.
+///
+/// <para>
+/// T-IGH-03-PIPELINE-ROLLOUT (ClaimJoin): caller-shape validation lives
+/// in <see cref="ClaimJoinValidator"/>; ownership has no authorizer (the
+/// token IS the authorization artifact). When this handler is resolved
+/// via the pipeline, the validator runs before the body. Direct
+/// construction (legacy unit tests) bypasses that decorator and exercises
+/// the body verbatim — body still owns token-hash lookup, revoked-token
+/// handling, farm-not-found, farm-code mismatch, idempotency, audit,
+/// save, and analytics.
+/// </para>
 /// </summary>
 public sealed class ClaimJoinHandler(
     IFarmInvitationRepository invitationRepository,
@@ -36,25 +48,15 @@ public sealed class ClaimJoinHandler(
     IClock clock,
     ILogger<ClaimJoinHandler> logger,
     IAnalyticsWriter analytics)
+    : IHandler<ClaimJoinCommand, ClaimJoinResult>
 {
     public async Task<Result<ClaimJoinResult>> HandleAsync(ClaimJoinCommand command, CancellationToken ct = default)
     {
-        if (command.CallerUserId.IsEmpty)
-        {
-            return Result.Failure<ClaimJoinResult>(new Error("join.unauthenticated", "Caller must be authenticated."));
-        }
-
-        if (!command.PhoneVerified)
-        {
-            return Result.Failure<ClaimJoinResult>(new Error(
-                "join.phone_not_verified",
-                "Verify your phone via OTP before joining a farm."));
-        }
-
-        if (string.IsNullOrWhiteSpace(command.Token) || string.IsNullOrWhiteSpace(command.FarmCode))
-        {
-            return Result.Failure<ClaimJoinResult>(new Error("join.invalid_payload", "Scan the farm QR again."));
-        }
+        // Caller-shape validation (CallerUserId.IsEmpty / PhoneVerified /
+        // Token+FarmCode non-whitespace) lives in ClaimJoinValidator and
+        // runs as a pipeline stage. The body trusts those gates have
+        // already passed when reached through IHandler<,>; direct callers
+        // must enforce the same invariants themselves.
 
         var tokenHash = IssueFarmInviteHandler.ComputeTokenHash(command.Token);
         var tokenRow = await invitationRepository.GetTokenByHashAsync(tokenHash, ct);

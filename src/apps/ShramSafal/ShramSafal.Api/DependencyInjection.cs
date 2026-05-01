@@ -193,6 +193,26 @@ public static class DependencyInjection
                 new AgriSync.BuildingBlocks.Application.PipelineBehaviors.AuthorizationBehavior<RotateFarmInviteCommand, RotateFarmInviteResult>(
                     sp.GetServices<AgriSync.BuildingBlocks.Application.PipelineBehaviors.IAuthorizationCheck<RotateFarmInviteCommand>>())));
 
+        // T-IGH-03-PIPELINE-ROLLOUT (ClaimJoin): validation-only pipeline
+        // — the token IS the authorization artifact for the worker-side
+        // claim, so no IAuthorizationCheck<ClaimJoinCommand> is wired.
+        // The AuthorizationBehavior still runs as a no-op decorator
+        // (zero registered checks ⇒ pass-through) for consistency with
+        // the other rolled-out handlers; if a future task adds a
+        // ClaimJoinAuthorizer, only the registration line needs to land.
+        services.AddScoped<AgriSync.BuildingBlocks.Application.PipelineBehaviors.IValidator<ClaimJoinCommand>,
+            ClaimJoinValidator>();
+        services.AddScoped<AgriSync.BuildingBlocks.Application.IHandler<ClaimJoinCommand, ClaimJoinResult>>(sp =>
+            AgriSync.BuildingBlocks.Application.HandlerPipeline.Build(
+                sp.GetRequiredService<ClaimJoinHandler>(),
+                new AgriSync.BuildingBlocks.Application.PipelineBehaviors.LoggingBehavior<ClaimJoinCommand, ClaimJoinResult>(
+                    sp.GetRequiredService<Microsoft.Extensions.Logging.ILogger<
+                        AgriSync.BuildingBlocks.Application.PipelineBehaviors.LoggingBehavior<ClaimJoinCommand, ClaimJoinResult>>>()),
+                new AgriSync.BuildingBlocks.Application.PipelineBehaviors.ValidationBehavior<ClaimJoinCommand, ClaimJoinResult>(
+                    sp.GetServices<AgriSync.BuildingBlocks.Application.PipelineBehaviors.IValidator<ClaimJoinCommand>>()),
+                new AgriSync.BuildingBlocks.Application.PipelineBehaviors.AuthorizationBehavior<ClaimJoinCommand, ClaimJoinResult>(
+                    sp.GetServices<AgriSync.BuildingBlocks.Application.PipelineBehaviors.IAuthorizationCheck<ClaimJoinCommand>>())));
+
         // Phase 6 — self-exit
         services.AddScoped<ExitMembershipHandler>();
 
