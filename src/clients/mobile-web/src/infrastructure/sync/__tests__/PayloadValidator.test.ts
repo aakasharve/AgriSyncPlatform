@@ -23,10 +23,29 @@ describe('PayloadValidator', () => {
     }
   });
 
-  it('returns ok for mutations with z.unknown() scaffold (no false positives)', () => {
-    // jobcard.create has a z.unknown() scaffold today (T-IGH-02-PAYLOADS).
-    // Validator must not block until the schema is hardened.
+  it('rejects malformed jobcard.create payloads (T-IGH-02-PAYLOADS hardened the schema)', () => {
+    // jobcard.create now has a strict schema; the historical
+    // {anything: true} smoke is no longer a meaningful pass-through.
+    // Replaced with a true validation check: missing required fields
+    // must surface as a validation error.
     const result = validatePayload(SyncMutationName.JobcardCreate, { anything: true });
+    expect(result.ok).toBe(false);
+  });
+
+  it('passes valid jobcard.create payloads', () => {
+    const result = validatePayload(SyncMutationName.JobcardCreate, {
+      farmId: '11111111-1111-1111-1111-111111111111',
+      plotId: '22222222-2222-2222-2222-222222222222',
+      plannedDate: '2026-05-15',
+      lineItems: [
+        {
+          activityType: 'Pruning',
+          expectedHours: 8,
+          ratePerHourAmount: 200,
+          ratePerHourCurrencyCode: 'INR',
+        },
+      ],
+    });
     expect(result.ok).toBe(true);
   });
 
