@@ -13,6 +13,7 @@
     "typecheck": "tsc --noEmit",
     "lint": "eslint --max-warnings 9999 \"src/**/*.{ts,tsx}\"",
     "check:file-sizes": "node scripts/check-file-sizes.mjs",
+    "check:storage-discipline": "node scripts/check-storage-discipline.mjs",
     "verify:mutation-queue": "node scripts/verify-mutation-queue.mjs",
     "test": "vitest run",
     "test:watch": "vitest",
