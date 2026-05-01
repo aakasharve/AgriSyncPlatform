@@ -32,7 +32,18 @@ public static class DependencyInjection
         services.AddDbContext<ShramSafalDbContext>(options =>
             options.UseNpgsql(
                 connectionString,
-                npgsql => npgsql.MigrationsHistoryTable("__ef_migrations", "ssf")));
+                npgsql =>
+                {
+                    npgsql.MigrationsHistoryTable("__ef_migrations", "ssf");
+                    // PushSyncBatchHandler routes its transactional block
+                    // through dbContext.Database.CreateExecutionStrategy()
+                    // so user-initiated BeginTransactionAsync stays
+                    // compatible with the retrying strategy.
+                    npgsql.EnableRetryOnFailure(
+                        maxRetryCount: 5,
+                        maxRetryDelay: TimeSpan.FromSeconds(10),
+                        errorCodesToAdd: null);
+                }));
         services.AddScoped<DbContext>(provider => provider.GetRequiredService<ShramSafalDbContext>());
 
         services.Configure<GeminiOptions>(options =>
