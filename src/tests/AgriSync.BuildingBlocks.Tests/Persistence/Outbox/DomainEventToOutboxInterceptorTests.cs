@@ -55,6 +55,65 @@ public sealed class DomainEventToOutboxInterceptorTests
     }
 
     [Fact]
+    public async Task Implicit_save_followed_by_unrelated_explicit_rollback_does_NOT_resurrect_already_committed_events()
+    {
+        // T-IGH-03-OUTBOX-WIRING hardening regression: the original
+        // commit-snapshot stashed events on EVERY SavedChangesAsync,
+        // including auto-commit (implicit) saves. A later unrelated
+        // explicit transaction on the same context that rolled back
+        // — even with no events of its own — would call
+        // OutboxTransactionInterceptor.TransactionRolledBack →
+        // RestoreCommitSnapshot and resurrect events that were already
+        // successfully published. The fix only stashes the snapshot
+        // when SavedChanges runs inside an explicit transaction
+        // (Database.CurrentTransaction is non-null), and clears any
+        // stale prior snapshot on every implicit save.
+        var clock = new FixedTimeProvider(new DateTime(2026, 4, 30, 12, 0, 0, DateTimeKind.Utc));
+        var saveSide = new DomainEventToOutboxInterceptor(clock);
+        var txSide = new OutboxTransactionInterceptor(saveSide);
+
+        await using var ctx = TestEntityDbContext.CreateSqlite(saveSide, txSide);
+        await ctx.Database.EnsureCreatedAsync();
+
+        // 1. Implicit save: aggregate raises events, SaveChangesAsync
+        //    auto-commits, OutboxMessages get persisted, events are
+        //    cleared. No explicit transaction in play.
+        var entity = TestAggregate.Create(Guid.Parse("dddddddd-dddd-dddd-dddd-dddddddddddd"), "A");
+        entity.Rename("AA"); // 2 events queued
+        ctx.Aggregates.Add(entity);
+        await ctx.SaveChangesAsync();
+
+        Assert.Equal(2, await ctx.OutboxMessages.CountAsync());
+        Assert.Empty(entity.DomainEvents);
+
+        // 2. Open a NEW explicit transaction with NO events of our
+        //    own, then roll it back. The save-side interceptor must
+        //    NOT have stashed the implicit-save events as a commit
+        //    snapshot, so this rollback must NOT resurrect them.
+        await using (var tx = await ctx.Database.BeginTransactionAsync())
+        {
+            // Touch a non-aggregate row so the SaveChanges has
+            // SOMETHING to do but doesn't go through the outbox flow
+            // (no events on the entity above; nothing else is
+            // tracking events).
+            // Using SaveChangesAsync with an empty change set is also
+            // fine; the interceptor's SavingChanges path just records
+            // an empty pending state.
+            await ctx.SaveChangesAsync();
+            await tx.RollbackAsync();
+        }
+
+        // The aggregate's in-memory queue MUST stay empty — the
+        // already-published events must not be resurrected by the
+        // unrelated rollback.
+        Assert.Empty(entity.DomainEvents);
+
+        // The committed OutboxMessages must still be exactly 2 — no
+        // duplicates, no resurrection-driven re-publishing.
+        Assert.Equal(2, await ctx.OutboxMessages.CountAsync());
+    }
+
+    [Fact]
     public async Task ExplicitTransaction_RolledBack_after_successful_SaveChanges_re_arms_DomainEvents()
     {
         // T-IGH-03-OUTBOX-WIRING explicit-transaction rollback

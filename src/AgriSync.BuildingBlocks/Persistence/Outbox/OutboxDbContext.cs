@@ -7,20 +7,37 @@ namespace AgriSync.BuildingBlocks.Persistence.Outbox;
 /// <see cref="OutboxDispatcher"/> to poll pending outbox messages.
 ///
 /// <para>
-/// The actual <c>outbox_messages</c> table is owned by the writing
-/// DbContext that produced the message (e.g. <c>ShramSafalDbContext</c>
-/// owns <c>ssf.outbox_messages</c>). This dispatcher-side context maps
-/// to the same physical table via the schema declared at registration
-/// time so it can read pending rows and update <c>ProcessedOnUtc</c> /
-/// <c>Error</c> columns. It does NOT participate in migrations.
+/// The physical <c>ssf.outbox_messages</c> table is OWNED by
+/// <c>ShramSafalDbContext</c> (created and evolved by its
+/// <c>AddOutboxMessages</c> EF migration). Three writing DbContexts
+/// CURRENTLY persist into the same physical table:
+/// <list type="bullet">
+/// <item><c>ShramSafalDbContext</c> — owner; events from
+/// <c>DailyLog</c>, <c>VerificationEvent</c>, etc.</item>
+/// <item><c>UserDbContext</c> — events from <c>User</c> aggregate
+/// (UserRegistered, MembershipChanged); maps via
+/// <c>ToTable("outbox_messages","ssf").ExcludeFromMigrations()</c>.</item>
+/// <item><c>AccountsDbContext</c> — events from <c>OwnerAccount</c> /
+/// <c>Subscription</c>; same cross-schema-write pattern.</item>
+/// </list>
 /// </para>
 ///
 /// <para>
-/// Today only ShramSafal writes outbox messages, so the dispatcher
-/// reads from <c>ssf.outbox_messages</c>. Adding a second writing
-/// DbContext means either expanding the dispatcher to poll multiple
-/// tables (preferred long-term) or moving the outbox table to a
-/// shared schema. Tracked under the same PIPELINE-ROLLOUT continuation.
+/// This dispatcher-side context maps to the same physical table via
+/// the schema declared at registration time so it can read pending
+/// rows and update <c>ProcessedOnUtc</c> / <c>Error</c> columns. It
+/// does NOT participate in migrations.
+/// </para>
+///
+/// <para>
+/// <b>Hard deployment invariant:</b> all three writing DbContexts
+/// AND this dispatcher-side context MUST point at the same physical
+/// Postgres database. If a future deploy splits them onto separate
+/// databases, the dispatcher would only see ShramSafal's writes and
+/// User+Accounts events would queue but never publish. The
+/// bootstrapper logs a warning at startup if the dispatcher's
+/// connection string doesn't share host+port+database with the
+/// ShramSafal writing context.
 /// </para>
 /// </summary>
 public sealed class OutboxDbContext : DbContext
