@@ -32,6 +32,9 @@ jobs:
       # Sub-plan 04 will tighten max-warnings; today we only fail on errors.
       - run: npx eslint --max-warnings 9999 "src/**/*.{ts,tsx}"
       - run: npm run check:file-sizes
+      # Sub-plan 04 Task 3 — localStorage architecture gate (strict; fails on
+      # any new violation outside the named allow-list).
+      - run: npm run check:storage-discipline
 
   admin-web-lint:
     runs-on: ubuntu-latest
