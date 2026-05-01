@@ -1,6 +1,13 @@
+// @vitest-environment jsdom
 /**
  * Sub-plan 04 Task 5 — OfflineConflictPage rendering + retry/discard flow.
+ *
+ * Per the integration-branch design choice (akash_edits commit 19a31b9):
+ * the global vitest environment stays 'node'; React-rendering tests opt
+ * into jsdom via the per-file directive above. jest-dom matchers are
+ * imported per-file rather than via a global setupFiles entry.
  */
+import '@testing-library/jest-dom/vitest';
 import React from 'react';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
