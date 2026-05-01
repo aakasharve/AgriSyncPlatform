@@ -1,0 +1,53 @@
+/**
+ * @license
+ * SPDX-License-Identifier: Apache-2.0
+*/
+
+import {
+    CropActivityEvent,
+    IrrigationEvent,
+    LabourEvent,
+    MachineryEvent,
+    LedgerDefaults,
+    FarmerProfile,
+    Plot,
+    InputEvent,
+    ActivityExpenseEvent,
+    ObservationNote,
+    PlannedTask,
+    CropProfile,
+    DailyLog,
+    DisturbanceEvent,
+    LogVerificationStatus,
+} from '../../../../types';
+import { BucketIssue } from '../../../../domain/types/log.types';
+
+export interface ActivityCardProps {
+    activity: CropActivityEvent;
+    linkedData: {
+        labour?: LabourEvent;
+        irrigation?: IrrigationEvent;
+        machinery?: MachineryEvent;
+    };
+    inputs: InputEvent[]; // NEW: Inputs as array
+    onUpdateDetails: (type: 'labour' | 'irrigation' | 'machinery' | 'input', data: any) => void;
+    onUpdateWorkTypes?: (types: string[]) => void;
+    onDeleteActivity: () => void;
+    defaults: LedgerDefaults;
+    profile: FarmerProfile;
+    currentPlot?: Plot;
+    cropContractUnit?: string;
+    expenses?: ActivityExpenseEvent[];
+    onAddExpense?: (exp: ActivityExpenseEvent) => void;
+    onUpdateExpenses?: (exp: ActivityExpenseEvent) => void;
+    onDeleteExpense?: (expId: string) => void;
+    observations?: ObservationNote[];
+    onAddObservation?: (obs: ObservationNote) => void;
+    draftDisturbance?: DisturbanceEvent;
+    plannedTasks?: PlannedTask[];
+    crops?: CropProfile[];
+    todayLogs?: DailyLog[]; // NEW: To show cumulative daily summary
+    onRefineWorkType?: (oldType: string, newType: string, mode: 'manual' | 'voice') => void;
+    verificationStatus?: LogVerificationStatus; // DFES Phase 0: Trust badge
+    onUpdateIssue?: (issue: BucketIssue | undefined) => void; // NEW
+}
