@@ -214,13 +214,22 @@ public static class DependencyInjection
                     sp.GetServices<AgriSync.BuildingBlocks.Application.PipelineBehaviors.IAuthorizationCheck<ClaimJoinCommand>>())));
 
         // T-IGH-03-PIPELINE-ROLLOUT (AddLogTask): caller-shape validation
-        // + log-lookup-plus-membership authorization. Endpoint AND
-        // PushSyncBatchHandler both resolve the pipeline-wrapped handler
-        // so InvalidCommand → DailyLogNotFound → Forbidden ordering is
-        // preserved on every entry path. The authorizer takes
-        // IShramSafalRepository directly (no IAuthorizationEnforcer
-        // method exactly matches "any member of the log's farm"; adding
-        // one would cascade to ~5 test stubs and is deferred).
+        // + log-lookup-plus-membership authorization. The endpoint
+        // (/logs/{id}/tasks) gets the canonical InvalidCommand →
+        // DailyLogNotFound → Forbidden ordering through the pipeline.
+        // PushSyncBatchHandler also resolves the pipeline-wrapped handler,
+        // but its HandleAddLogTaskAsync pre-flight check still runs
+        // GetDailyLogByIdAsync + IsUserMemberOfFarmAsync BEFORE the
+        // pipeline (pre-rollout behaviour, intentionally preserved here),
+        // so on the sync path an empty DailyLogId surfaces as
+        // DailyLogNotFound rather than the pipeline's InvalidCommand.
+        // The pipeline's incremental contribution on sync is caller-
+        // shape validation (blank ActivityType / explicit-empty LogTaskId)
+        // for commands where the log exists and the caller is a member.
+        // The authorizer takes IShramSafalRepository directly (no
+        // IAuthorizationEnforcer method exactly matches "any member of
+        // the log's farm"; adding one would cascade to ~5 test stubs
+        // and is deferred).
         services.AddScoped<AgriSync.BuildingBlocks.Application.PipelineBehaviors.IValidator<
             ShramSafal.Application.UseCases.Logs.AddLogTask.AddLogTaskCommand>,
             ShramSafal.Application.UseCases.Logs.AddLogTask.AddLogTaskValidator>();
