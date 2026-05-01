@@ -213,6 +213,14 @@ try
     builder.Services.AddTransient<AgriSync.Bootstrapper.Infrastructure.PlatformAdminBridgeSeeder>();
     builder.Services.AddTransient<ShramSafal.Infrastructure.Persistence.Seeding.TestProtocolSeed>();
 
+    // Sub-plan 05 Task 2: Playwright E2E control plane. Registered only when the
+    // ALLOW_E2E_SEED env flag is set to "true". The toggle singleton is also
+    // gated on the same flag so production never sees the type in DI.
+    if (AgriSync.Bootstrapper.Endpoints.E2eTestEndpoints.IsEnabled())
+    {
+        builder.Services.AddSingleton<AgriSync.Bootstrapper.Endpoints.E2eFailPushesToggle>();
+    }
+
     QuestPDF.Settings.License = QuestPDF.Infrastructure.LicenseType.Community;
 
     var app = builder.Build();
@@ -388,6 +396,9 @@ try
     app.MapAccountsModuleEndpoints();
     app.MapFirstFarmBootstrapEndpoints();
     // /user/auth/me/context now lives in User.Api (mapped by MapUserApi above).
+
+    // Sub-plan 05 Task 2: maps /__e2e/* only if ALLOW_E2E_SEED=true.
+    app.MapE2eEndpoints();
 
     await InitializeApplicationDataAsync(app);
 
