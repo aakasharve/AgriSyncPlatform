@@ -47,7 +47,14 @@ public sealed class PushSyncBatchHandler(
     CreatePlotHandler createPlotHandler,
     CreateCropCycleHandler createCropCycleHandler,
     CreateDailyLogHandler createDailyLogHandler,
-    AddLogTaskHandler addLogTaskHandler,
+    // T-IGH-03-PIPELINE-ROLLOUT (AddLogTask): switched from raw
+    // AddLogTaskHandler to the pipeline-wrapped IHandler so caller-
+    // shape validation + log-lookup + membership authorization run on
+    // the sync entry path. Unlike the VerifyLog migration, the pipeline
+    // and body checks are equivalent (both "any farm member"), so this
+    // is shape consistency rather than a correctness fix — but it
+    // future-proofs sync against any future tightening of the rule.
+    IHandler<AddLogTaskCommand, DailyLogDto> addLogTaskHandler,
     // T-IGH-03-PIPELINE-ROLLOUT (VerifyLog): switched from raw
     // VerifyLogHandler to the pipeline-wrapped IHandler so the strict
     // EnsureCanVerify owner-tier authorization keeps running on the

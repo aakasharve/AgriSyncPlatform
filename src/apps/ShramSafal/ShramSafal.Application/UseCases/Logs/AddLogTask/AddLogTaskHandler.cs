@@ -1,4 +1,5 @@
 using AgriSync.BuildingBlocks.Abstractions;
+using AgriSync.BuildingBlocks.Application;
 using AgriSync.BuildingBlocks.Results;
 using AgriSync.SharedKernel.Contracts.Ids;
 using ShramSafal.Application.Contracts.Dtos;
@@ -10,26 +11,50 @@ using ShramSafal.Domain.Logs;
 
 namespace ShramSafal.Application.UseCases.Logs.AddLogTask;
 
+/// <summary>
+/// Adds a <see cref="LogTask"/> to an existing <see cref="DailyLog"/>
+/// (idempotent on <see cref="AddLogTaskCommand.LogTaskId"/>),
+/// stamps schedule compliance, emits an audit row, and saves.
+///
+/// <para>
+/// T-IGH-03-PIPELINE-ROLLOUT (AddLogTask): caller-shape validation
+/// lives in <see cref="AddLogTaskValidator"/>; membership authorization
+/// lives in <see cref="AddLogTaskAuthorizer"/>. When this handler is
+/// resolved via the pipeline, both run before the body. The body
+/// retains its own log-lookup + membership re-check as defense-in-depth
+/// for direct (non-pipeline) consumers — those checks are the only
+/// auth path when callers bypass the pipeline. The sync-batch caller
+/// (<c>PushSyncBatchHandler</c>) was migrated to
+/// <see cref="IHandler{TCommand,TResult}"/> alongside this rollout
+/// to keep validation + auth coverage on the sync entry path.
+/// </para>
+///
+/// <para>
+/// Error ordering is preserved verbatim:
+/// <c>InvalidCommand → DailyLogNotFound → Forbidden</c>. The pipeline
+/// runs validator first, authorizer second (which surfaces
+/// DailyLogNotFound before Forbidden internally), then the body
+/// (which re-checks the same gates plus deeper domain invariants).
+/// </para>
+/// </summary>
 public sealed class AddLogTaskHandler(
     IShramSafalRepository repository,
     IIdGenerator idGenerator,
     IClock clock,
     IEntitlementPolicy entitlementPolicy,
     IScheduleComplianceService complianceService)
+    : IHandler<AddLogTaskCommand, DailyLogDto>
 {
     public async Task<Result<DailyLogDto>> HandleAsync(AddLogTaskCommand command, CancellationToken ct = default)
     {
-        if (command.DailyLogId == Guid.Empty ||
-            command.ActorUserId == Guid.Empty ||
-            string.IsNullOrWhiteSpace(command.ActivityType))
-        {
-            return Result.Failure<DailyLogDto>(ShramSafalErrors.InvalidCommand);
-        }
-
-        if (command.LogTaskId.HasValue && command.LogTaskId.Value == Guid.Empty)
-        {
-            return Result.Failure<DailyLogDto>(ShramSafalErrors.InvalidCommand);
-        }
+        // Caller-shape validation (DailyLogId / ActorUserId / ActivityType
+        // / explicit-but-empty LogTaskId) lives in AddLogTaskValidator;
+        // log-lookup-plus-membership authorization lives in
+        // AddLogTaskAuthorizer. Both run as pipeline behaviors before
+        // this body when the handler is resolved through the pipeline.
+        // The body still performs its own log-lookup + membership check
+        // below — that path is defense-in-depth and the only auth gate
+        // for direct (non-pipeline) consumers.
 
         var log = await repository.GetDailyLogByIdAsync(command.DailyLogId, ct);
         if (log is null)

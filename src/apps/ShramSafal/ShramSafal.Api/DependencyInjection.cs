@@ -213,6 +213,43 @@ public static class DependencyInjection
                 new AgriSync.BuildingBlocks.Application.PipelineBehaviors.AuthorizationBehavior<ClaimJoinCommand, ClaimJoinResult>(
                     sp.GetServices<AgriSync.BuildingBlocks.Application.PipelineBehaviors.IAuthorizationCheck<ClaimJoinCommand>>())));
 
+        // T-IGH-03-PIPELINE-ROLLOUT (AddLogTask): caller-shape validation
+        // + log-lookup-plus-membership authorization. Endpoint AND
+        // PushSyncBatchHandler both resolve the pipeline-wrapped handler
+        // so InvalidCommand → DailyLogNotFound → Forbidden ordering is
+        // preserved on every entry path. The authorizer takes
+        // IShramSafalRepository directly (no IAuthorizationEnforcer
+        // method exactly matches "any member of the log's farm"; adding
+        // one would cascade to ~5 test stubs and is deferred).
+        services.AddScoped<AgriSync.BuildingBlocks.Application.PipelineBehaviors.IValidator<
+            ShramSafal.Application.UseCases.Logs.AddLogTask.AddLogTaskCommand>,
+            ShramSafal.Application.UseCases.Logs.AddLogTask.AddLogTaskValidator>();
+        services.AddScoped<AgriSync.BuildingBlocks.Application.PipelineBehaviors.IAuthorizationCheck<
+            ShramSafal.Application.UseCases.Logs.AddLogTask.AddLogTaskCommand>,
+            ShramSafal.Application.UseCases.Logs.AddLogTask.AddLogTaskAuthorizer>();
+        services.AddScoped<AgriSync.BuildingBlocks.Application.IHandler<
+            ShramSafal.Application.UseCases.Logs.AddLogTask.AddLogTaskCommand,
+            ShramSafal.Application.Contracts.Dtos.DailyLogDto>>(sp =>
+            AgriSync.BuildingBlocks.Application.HandlerPipeline.Build(
+                sp.GetRequiredService<AddLogTaskHandler>(),
+                new AgriSync.BuildingBlocks.Application.PipelineBehaviors.LoggingBehavior<
+                    ShramSafal.Application.UseCases.Logs.AddLogTask.AddLogTaskCommand,
+                    ShramSafal.Application.Contracts.Dtos.DailyLogDto>(
+                    sp.GetRequiredService<Microsoft.Extensions.Logging.ILogger<
+                        AgriSync.BuildingBlocks.Application.PipelineBehaviors.LoggingBehavior<
+                            ShramSafal.Application.UseCases.Logs.AddLogTask.AddLogTaskCommand,
+                            ShramSafal.Application.Contracts.Dtos.DailyLogDto>>>()),
+                new AgriSync.BuildingBlocks.Application.PipelineBehaviors.ValidationBehavior<
+                    ShramSafal.Application.UseCases.Logs.AddLogTask.AddLogTaskCommand,
+                    ShramSafal.Application.Contracts.Dtos.DailyLogDto>(
+                    sp.GetServices<AgriSync.BuildingBlocks.Application.PipelineBehaviors.IValidator<
+                        ShramSafal.Application.UseCases.Logs.AddLogTask.AddLogTaskCommand>>()),
+                new AgriSync.BuildingBlocks.Application.PipelineBehaviors.AuthorizationBehavior<
+                    ShramSafal.Application.UseCases.Logs.AddLogTask.AddLogTaskCommand,
+                    ShramSafal.Application.Contracts.Dtos.DailyLogDto>(
+                    sp.GetServices<AgriSync.BuildingBlocks.Application.PipelineBehaviors.IAuthorizationCheck<
+                        ShramSafal.Application.UseCases.Logs.AddLogTask.AddLogTaskCommand>>())));
+
         // T-IGH-03-PIPELINE-ROLLOUT (VerifyLog): caller-shape validation
         // + role-tier authorization. The endpoint AND the sync-batch
         // caller (PushSyncBatchHandler) both resolve the pipeline-wrapped
