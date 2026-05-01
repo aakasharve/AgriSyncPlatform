@@ -9,18 +9,37 @@
 
 ## Branch base divergence (FIX BEFORE NEXT SESSION)
 
-`feature/ighardening-04-frontend` was branched from `akash_edits` at `b41e1c8` on 2026-05-01. Since then `akash_edits` advanced by **two commits** (both Sub-plan 05 PREP continuations, not Plan 04):
+`feature/ighardening-04-frontend` was branched from `akash_edits` at `b41e1c8` on 2026-05-01. Since then `akash_edits` has been re-shaped:
+
+**Current `akash_edits` head: `b1a4095`** — adds two Plan 04 Task 1 scaffolding commits directly on the integration branch:
 
 ```
-5e270b1 ci: add e2e/lighthouse/zap workflow scaffolds (workflow_dispatch only)
-ffa9352 feat(e2e-api): /__e2e/{reset,seed,fail-pushes,status} env-gated (Sub-plan 05 Task 2)
+b1a4095 test(scaffold): add minimal TestProviders.tsx for Sub-plan 04 (Task 1, Commit B)
+fadfe86 test(profile): add ProfileTab type + initialTab prop seam (Sub-plan 04 Task 1, Commit A)
+b41e1c8 feat(security): add browser-side AI call audit script    ← branch point for this worktree
 ```
 
-**Action before next Plan 04 session:**
-1. Confirm classification (these are 05 PREP_READY, no Plan 04 collisions).
-2. Rebase `feature/ighardening-04-frontend` onto current `akash_edits` head (`5e270b1`).
-3. Re-run all four pre-flight gates after rebase: mobile-web tsc, mobile-web vitest, marketing-web tsc, dotnet test Release.
-4. Verify the post-rebase Task 1a snapshot still matches (no drift introduced by rebase).
+**Earlier 05 PREP commits parked away from the integration branch:**
+
+```
+parked/sub-plan-05-bot-commits:
+  5e270b1 ci: add e2e/lighthouse/zap workflow scaffolds (workflow_dispatch only)
+  ffa9352 feat(e2e-api): /__e2e/{reset,seed,fail-pushes,status} env-gated (Sub-plan 05 Task 2)
+```
+
+**What `fadfe86` + `b1a4095` already landed on `akash_edits`:**
+- `ProfileTab` union exported from `pages/ProfilePage.tsx` and an optional `initialTab?: ProfileTab` prop wired so snapshot tests can render each of the 8 tabs deterministically without simulating clicks. Production default `'structure'` preserved.
+- Pass-through `src/shared/test/TestProviders.tsx` — minimal stable composition seat. Per the commit message, **per-file `vi.mock` is the recipe** for ProfilePage's contexts (LanguageContext, AuthProvider, FarmContext, etc.). TestProviders intentionally does NOT pre-mock those modules.
+
+This is the Task 1b *prerequisite scaffolding* I had originally filed under `T-IGH-04-PROFILE-SNAPSHOT`. The remaining work is now scoped down — see the updated scope in that section below.
+
+**Action before next Plan 04 session (in order):**
+1. Classify the two parked commits — they are Sub-plan 05 PREP continuation; do not graft them onto `feature/ighardening-04-frontend`.
+2. Rebase `feature/ighardening-04-frontend` onto **`b1a4095`** (current `akash_edits` head), not `5e270b1`.
+3. After rebase, watch for a potential conflict in `pages/ProfilePage.tsx` — the worktree's Task 1a behavior snapshot test does not import `ProfilePage`, so the conflict surface is small, but the integration branch's `initialTab` prop seam should "just stick" since the worktree never modified that file.
+4. Watch for a potential conflict in `src/shared/test/` — the worktree's Task 1a created `src/test/setup.ts`; the integration branch's commit B added `src/shared/test/TestProviders.tsx`. Different paths, should not collide.
+5. Re-run all four pre-flight gates after rebase: mobile-web tsc, mobile-web vitest, marketing-web tsc, dotnet test Release. Confirm the worktree's 32 tests still pass alongside any tests `b1a4095` may bring.
+6. Verify the post-rebase Task 1a snapshot still matches (no drift introduced by rebase).
 
 ---
 
@@ -156,17 +175,32 @@ Sub-plan 05 E2E asserts on conflict-resolution flow.
 
 ---
 
-### T-IGH-04-PROFILE-SNAPSHOT (P1)
+### T-IGH-04-PROFILE-SNAPSHOT (P1) — scope reduced after akash_edits rebase
 
-**Origin:** Sub-plan 04 Task 1b. Deferred from session 1 because ProfilePage takes 12+ props + 4 hooks (`useLanguage`, `useAuth`, `useFarmContext`, `useWorkerProfile`) + network calls (`inviteApi.{getFarmDetails,updateFarmBoundary,probeFarmWeather}`) + direct localStorage reads (`WEATHER_CONNECTED_KEY`). A real DOM snapshot demands a TestProviders fixture with mocks for each — ~2h focused work.
+**Origin:** Sub-plan 04 Task 1b. Was deferred from session 1 because ProfilePage takes 12+ props + 4 hooks + network calls + direct localStorage reads. Two **prerequisite** commits subsequently landed on `akash_edits` directly:
 
-**Scope:**
-1. Create `src/shared/test/TestProviders.tsx` wrapping `I18nextProvider`, a stub `AuthProvider`, a stub `DataSourceProvider`, and `AppFeatureContexts` minimally enough to render any Page. Use `vi.mock` for `inviteApi` and `useWorkerProfile`. Provide a `MemoryFakeDataSource` that returns deterministic empty crops + profile.
-2. Create `src/pages/__snapshots__/ProfilePage.snapshot.test.tsx` matching the plan's example. Use `it.each` over the 8 tabs.
-3. Snapshots live with the test file under `__snapshots__/`.
-4. Keep this as Task 6's prerequisite — landing 6 without 1b means we lose the regression safety net for the 8-section split.
+- `fadfe86` exports `ProfileTab` and adds the `initialTab?: ProfileTab` prop seam (test-only, removed in Task 6).
+- `b1a4095` adds a pass-through `src/shared/test/TestProviders.tsx` with the explicit "per-file `vi.mock`" recipe in its JSDoc.
 
-**DoD:** All 8 tab snapshots stable across 3 consecutive `npx vitest run` invocations. Snapshots include only DOM, not GSAP/animation transient state.
+After the worktree rebases onto `b1a4095`, the remaining scope is:
+
+**Remaining scope (≈45-60 min, down from ~2h):**
+1. Create `src/pages/__snapshots__/ProfilePage.snapshot.test.tsx`. Use `it.each(['identity','structure','utils','plan','machines','health','intelligence','people'] as const)` to render each tab via the existing `initialTab` prop.
+2. At the top of the test file, declare `vi.mock` for the modules ProfilePage imports that fire side effects:
+   - `'../i18n/LanguageContext'` — return `{ t: (k: string) => k, language: 'en' }`.
+   - `'../app/providers/AuthProvider'` — return `{ session: { userId: 'test-user' }, isAuthenticated: true }`.
+   - `'../core/session/FarmContext'` — return `{ currentFarmId: 'farm_test', myFarms: [] }`.
+   - `'../features/work/hooks/useWorkerProfile'` — return `{ profile: null, loading: false }`.
+   - `'../features/onboarding/qr/inviteApi'` — return stub functions for `getFarmDetails`, `updateFarmBoundary`, `probeFarmWeather`.
+3. Provide deterministic stub props (12+ fields) — most can be empty arrays / no-op callbacks.
+4. Wrap render in `<TestProviders>` (the pass-through wrapper from `b1a4095`).
+5. Capture `container.innerHTML` per tab; snapshot via `toMatchSnapshot()`.
+6. Snapshot stability check: `vi.spyOn(systemClock, 'nowISO').mockReturnValue(FROZEN_NOW_ISO)` if any tab renders a relative timestamp.
+7. Run twice consecutively to confirm no rewrite.
+
+**DoD:** All 8 tab snapshots stable across 3 consecutive `npx vitest run` invocations. Snapshots capture DOM only — no GSAP transient state, no Date.now() leaks. Task 6 (ProfilePage decomposition) can run after this lands as a guardrail.
+
+**Note for the implementing agent:** the `b1a4095` commit message explicitly says "TestProviders intentionally does NOT pre-mock those modules" — stay in that lane; do not pre-mock inside `TestProviders.tsx`. Mocks belong in the test file, hoisted to the top.
 
 ---
 
@@ -377,16 +411,23 @@ When the vault dirty-state is classified, update `_COFOUNDER/Projects/AgriSync/O
 ```
 Status: PARTIAL_FOUNDATION — Tasks 1a, 2, 3, 4, 5 LANDED on
         feature/ighardening-04-frontend (worktree, 6 commits
-        00a0670..e8b7334; doc edits in subsequent commits). Each landed
-        task carries remaining work toward Plan 04 DoD:
+        00a0670..e8b7334; doc-correction commits ba6bbe1 and the
+        2026-05-01 rebase-base correction follow). Each landed task
+        carries remaining work toward Plan 04 DoD:
+          - Task 1b: prerequisites (ProfileTab seam + TestProviders
+            scaffold) landed directly on akash_edits as fadfe86 and
+            b1a4095; the snapshot test itself is still pending under
+            T-IGH-04-PROFILE-SNAPSHOT (now ~45-60 min, scope reduced).
           - Task 3: gate enforces NEW violations only; allow-list of 21
             entries drains in T-IGH-04-LOCALSTORAGE-MIGRATION.
           - Task 5: badge created but not mounted; rejected-state
             durability gap blocks DoD (T-IGH-04-CONFLICT-STATUS-DURABILITY,
             P0).
-          - Tasks 1b, 6, 7, 8, 9, 10 and DoD verification deferred to
+          - Tasks 6, 7, 8, 9, 10 and DoD verification deferred to
             follow-up sessions per docs/T-IGH-04-PENDING-TASKS.md.
-        Branch base is b41e1c8; rebase onto 5e270b1 before next session.
+        Branch base is b41e1c8; rebase onto akash_edits head b1a4095
+        before next session. Earlier 05 PREP commits (ffa9352, 5e270b1)
+        live on parked/sub-plan-05-bot-commits, not on akash_edits.
 ```
 
 Move this document into `_COFOUNDER/Projects/AgriSync/Operations/Pending_Tasks/` and update its `_INDEX.md`.
@@ -396,12 +437,13 @@ Move this document into `_COFOUNDER/Projects/AgriSync/Operations/Pending_Tasks/`
 ## Branch handling
 
 - **Branch:** `feature/ighardening-04-frontend` is isolated in `.worktrees/ighardening-04-frontend/`.
-- **Base:** branched from `akash_edits` at `b41e1c8` on 2026-05-01. **Out of date** — `akash_edits` head is now `5e270b1` (two new 05 PREP commits, see "Branch base divergence" at top). **Rebase before next Plan 04 session.**
+- **Base:** branched from `akash_edits` at `b41e1c8` on 2026-05-01. **Out of date** — `akash_edits` head is now `b1a4095` (two new Plan 04 Task 1 scaffolding commits — `fadfe86` ProfileTab seam, `b1a4095` minimal TestProviders). **Rebase onto `b1a4095` before next Plan 04 session.**
+- **Parked:** the earlier 05 PREP commits (`ffa9352` /__e2e/ endpoints, `5e270b1` e2e/lighthouse/zap workflows) now live on `parked/sub-plan-05-bot-commits`, not on `akash_edits`. Do not graft them onto `feature/ighardening-04-frontend`.
 - **Merge into `akash_edits`:** wait until at least T-IGH-04-CONFLICT-STATUS-DURABILITY (P0) lands plus Tasks 6 + 7 + 8 — the heaviest decompositions. Merging the foundation alone leaves Plan 04 DoD unfulfilled and the conflict UX architecturally racy.
 - **Push to origin:** not done by this session. User decision; the verifier brief did not explicitly authorize push.
-- **Plan 05 status:** PREP_READY only; the new local commits on `akash_edits` are 05 PREP continuation, not 05 green. Do not write specs against Plan 04 selectors/screens until Tasks 6-9 stabilize them. Do not assert E2E against the conflict UX until T-IGH-04-CONFLICT-STATUS-DURABILITY lands.
+- **Plan 05 status:** PREP_READY only. The parked PREP commits are not 05 green. Do not write specs against Plan 04 selectors/screens until Tasks 6-9 stabilize them. Do not assert E2E against the conflict UX until T-IGH-04-CONFLICT-STATUS-DURABILITY lands.
 - **Pre-existing flake noted:** `SyncMutationCatalog.contract.test.ts > legacy module AgriSyncClient re-exports SyncMutationType from catalog` times out at 5s under cold full-suite vitest run (passes in 246ms isolated). Resolves naturally when AgriSyncClient is decomposed in T-IGH-04-FILE-DECOMPOSE.
 
 ---
 
-*Originally authored 2026-05-01 by Claude Opus 4.7 in worktree session 1. Updated 2026-05-01 (same session, post-verifier round) to correct overclaimed wording — Tasks 1-5 are PARTIAL_FOUNDATION, not fully shipped against Plan 04 DoD; T-IGH-04-CONFLICT-STATUS-DURABILITY (P0) added; branch base divergence noted.*
+*Originally authored 2026-05-01 by Claude Opus 4.7 in worktree session 1. Updated 2026-05-01 (same session, two post-verifier rounds): first to correct overclaimed wording — Tasks 1-5 are PARTIAL_FOUNDATION, not fully shipped against Plan 04 DoD; T-IGH-04-CONFLICT-STATUS-DURABILITY (P0) added. Then to correct the branch-base note again after `akash_edits` was re-shaped — rebase target is now `b1a4095` (with Task 1 scaffolding fadfe86 + b1a4095 already on the integration branch); 05 PREP commits parked on `parked/sub-plan-05-bot-commits`. T-IGH-04-PROFILE-SNAPSHOT scope reduced accordingly.*
