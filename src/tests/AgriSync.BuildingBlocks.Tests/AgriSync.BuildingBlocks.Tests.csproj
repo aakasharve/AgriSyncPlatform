@@ -16,6 +16,12 @@
          OutboxTransactionInterceptor's TransactionRolledBack hook. -->
     <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="10.0.3" />
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.3" />
+    <!-- T-IGH-03-OUTBOX-PUBLISHER-IMPL: FakeTimeProvider for retry/DLQ
+         tests; concrete logging + DI extensions for the subscriber
+         harness. -->
+    <PackageReference Include="Microsoft.Extensions.TimeProvider.Testing" Version="9.0.0" />
+    <PackageReference Include="Microsoft.Extensions.Logging" Version="10.0.3" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="10.0.3" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="18.0.1" />
     <PackageReference Include="xunit" Version="2.9.3" />
     <PackageReference Include="xunit.runner.visualstudio" Version="3.1.5">
@@ -30,6 +36,12 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\AgriSync.BuildingBlocks\AgriSync.BuildingBlocks.csproj" />
+    <!-- T-IGH-03-OUTBOX-PUBLISHER-IMPL:
+         SubscriptionLifecycleAuditSubscriberTests exercises the first
+         production IDomainEventHandler<T> subscriber. -->
+    <ProjectReference Include="..\..\apps\Accounts\Accounts.Application\Accounts.Application.csproj" />
+    <ProjectReference Include="..\..\apps\Accounts\Accounts.Domain\Accounts.Domain.csproj" />
+    <ProjectReference Include="..\..\AgriSync.SharedKernel\AgriSync.SharedKernel.csproj" />
   </ItemGroup>
 
 </Project>
