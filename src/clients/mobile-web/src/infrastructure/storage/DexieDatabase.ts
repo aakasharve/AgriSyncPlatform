@@ -494,11 +494,48 @@ export interface DexieWorkerProfile {
 }
 
 // =============================================================================
+// SUB-PLAN 04 TASK 2 — FRONTEND STORAGE UNIFICATION
+// =============================================================================
+
+/**
+ * Crop blob row. The full CropProfile is stored as `data`; `id` is the crop's
+ * stable id (e.g. `crop_grapes`). `updatedAtMs` lets us detect stale rows
+ * during the legacy-localStorage migration without changing the CropProfile
+ * schema itself.
+ */
+export interface CropRow {
+    id: string;
+    data: unknown;
+    updatedAtMs: number;
+}
+
+/**
+ * Farmer profile blob row. Singleton: id is always `'self'`. Storing the full
+ * FarmerProfile as `data` keeps the existing FarmerProfile shape untouched
+ * while moving the storage substrate from localStorage to Dexie.
+ */
+export interface ProfileRow {
+    id: 'self';
+    data: unknown;
+    updatedAtMs: number;
+}
+
+/**
+ * UI preferences key-value store (sidebar collapsed, theme, etc). Replaces
+ * the per-key localStorage scatter for non-essential UX prefs that don't need
+ * to be in localStorage's sync namespace.
+ */
+export interface UiPrefRow {
+    key: string;
+    value: unknown;
+}
+
+// =============================================================================
 // SCHEMA VERSION CONSTANTS
 // =============================================================================
 
 /** Current Dexie schema version — bump this when adding version(N).stores(). */
-export const DATABASE_VERSION = 13; // AI correction events.
+export const DATABASE_VERSION = 14; // Sub-plan 04 Task 2 frontend storage unification.
 /** CEI Phase 1 schema version (now active — applied by Task 5.1.1). */
 export const CEI_PHASE1_SCHEMA_VERSION = 7;
 /** CEI Phase 2 schema version — adds test stack (protocols/instances/recs). */
@@ -513,6 +550,8 @@ export const FARM_GEOGRAPHY_SCHEMA_VERSION = 11;
 export const AI_VOICE_JOURNAL_SCHEMA_VERSION = 12;
 /** AI correction event schema version — per-bucket correction-rate signal. */
 export const AI_CORRECTION_EVENTS_SCHEMA_VERSION = 13;
+/** Sub-plan 04 Task 2 — crops + farmerProfile + uiPrefs unification (away from localStorage). */
+export const SUBPLAN_04_FRONTEND_STORAGE_SCHEMA_VERSION = 14;
 
 // =============================================================================
 // DATABASE CLASS
@@ -557,6 +596,13 @@ export class AgriLogDatabase extends Dexie {
     jobCards!: Table<DexieJobCard, string>;
     /** CEI Phase 4 §4.8 — worker profile cache */
     workerProfiles!: Table<DexieWorkerProfile, string>;
+
+    /** Sub-plan 04 Task 2 — crops as Dexie rows (away from localStorage). */
+    crops!: Table<CropRow, string>;
+    /** Sub-plan 04 Task 2 — farmer profile singleton (away from localStorage). */
+    farmerProfile!: Table<ProfileRow, 'self'>;
+    /** Sub-plan 04 Task 2 — misc UI preferences key-value store. */
+    uiPrefs!: Table<UiPrefRow, string>;
 
     constructor() {
         super('AgriLogDB');
@@ -911,6 +957,50 @@ export class AgriLogDatabase extends Dexie {
             complianceSignals: 'id, farmId, plotId, severity, lastSeenAtUtc, [farmId+isOpen]',
             jobCards: 'id, farmId, assignedWorkerUserId, status, modifiedAtUtc, [farmId+status]',
             workerProfiles: 'workerUserId, scopedFarmId',
+        });
+
+        // =====================================================================
+        // Sub-plan 04 Task 2 — v14: frontend storage unification.
+        //   Adds crops + farmerProfile + uiPrefs stores so the React app can
+        //   move off localStorage for these surfaces. No upgrade function —
+        //   all three stores are fresh; existing localStorage data is moved
+        //   in by `LegacyLocalStorageMigrator` on app startup, not by a Dexie
+        //   schema upgrade.
+        // =====================================================================
+        this.version(14).stores({
+            // All v13 stores (unchanged)
+            logs: 'id, date, verificationStatus, createdByOperatorId, isDeleted, [date+isDeleted], [createdByOperatorId+isDeleted]',
+            outbox: '++id, idempotencyKey, status, action, [status+createdAt]',
+            mutationQueue: '++id, &[deviceId+clientRequestId], status, mutationType, createdAt, [status+createdAt]',
+            attachments: 'id, farmId, linkedEntityId, linkedEntityType, localPath, status, [linkedEntityId+linkedEntityType], [farmId+status]',
+            uploadQueue: '++autoId, attachmentId, status, retryCount, lastAttemptAt, nextAttemptAt, [status+nextAttemptAt]',
+            pendingAiJobs: '++id, operationType, status, createdAt, [status+createdAt]',
+            voiceClips: 'id, farmId, plotId, cropCycleId, recordedAtUtc, status, retentionPolicy, expiresAtUtc, [farmId+recordedAtUtc]',
+            aiCorrectionEvents: 'id, extractionId, timestamp, correctionType, bucketId, fieldPath',
+            auditEvents: 'id, resourceId, action, timestamp, [resourceId+timestamp]',
+            syncCursors: 'tableName',
+            appMeta: 'key',
+            referenceData: 'key, versionHash, updatedAt',
+            dayLedgers: 'id, farmId, dateKey, [farmId+dateKey]',
+            plannedTasks: 'id, cropCycleId, plannedDate, [cropCycleId+plannedDate]',
+            farms: 'id, ownerAccountId, [ownerAccountId+id], syncStatus, serverUpdatedAt, modifiedAtUtc',
+            plots: 'id, farmId, ownerAccountId, [ownerAccountId+farmId], syncStatus, serverUpdatedAt, modifiedAtUtc',
+            farmBoundaries: 'id, farmId, ownerAccountId, [ownerAccountId+farmId], syncStatus, serverUpdatedAt',
+            plotAreas: 'id, plotId, farmId, ownerAccountId, [ownerAccountId+farmId], syncStatus, serverUpdatedAt',
+            cropCycles: 'id, farmId, plotId, modifiedAtUtc',
+            costEntries: 'id, farmId, modifiedAtUtc',
+            financeCorrections: 'id, costEntryId, modifiedAtUtc',
+            attentionCards: 'cardId, farmId, rank, computedAtUtc',
+            testProtocols: 'id, cropType, kind',
+            testInstances: 'id, cropCycleId, farmId, plannedDueDate, status, modifiedAtUtc',
+            testRecommendations: 'id, testInstanceId',
+            complianceSignals: 'id, farmId, plotId, severity, lastSeenAtUtc, [farmId+isOpen]',
+            jobCards: 'id, farmId, assignedWorkerUserId, status, modifiedAtUtc, [farmId+status]',
+            workerProfiles: 'workerUserId, scopedFarmId',
+            // NEW — Sub-plan 04 Task 2 (frontend storage unification)
+            crops: 'id, updatedAtMs',
+            farmerProfile: 'id, updatedAtMs',
+            uiPrefs: 'key',
         });
     }
 }
