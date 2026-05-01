@@ -60,7 +60,11 @@ const ALLOWLIST = new Map([
     ['infrastructure' + sep + 'sync' + sep + 'SyncPullReconciler.ts', 'T-IGH-04-LOCALSTORAGE-MIGRATION'],
     ['pages' + sep + 'JoinFarmLandingPage.tsx', 'T-IGH-04-LOCALSTORAGE-MIGRATION'],
     ['pages' + sep + 'OnboardingPermissionsPage.tsx', 'T-IGH-04-LOCALSTORAGE-MIGRATION'],
-    ['pages' + sep + 'ProfilePage.tsx', 'T-IGH-04-LOCALSTORAGE-MIGRATION'],
+    // Sub-plan 04 Task 6 split moved ProfilePage to features/profile/.
+    // The pages/ shim no longer touches localStorage; the orchestrator
+    // under features/profile/ holds WEATHER_CONNECTED_KEY and the
+    // sidebar-collapsed flag until the useUiPref migration lands.
+    ['features' + sep + 'profile' + sep + 'ProfilePage.tsx', 'T-IGH-04-LOCALSTORAGE-MIGRATION'],
     ['pages' + sep + 'ReflectPage.tsx', 'T-IGH-04-LOCALSTORAGE-MIGRATION'],
     ['pages' + sep + 'SettingsPage.tsx', 'T-IGH-04-LOCALSTORAGE-MIGRATION'],
     ['services' + sep + 'harvestService.ts', 'T-IGH-04-LOCALSTORAGE-MIGRATION'],
