@@ -16,6 +16,21 @@ import { idGenerator, IdGenerator } from './services/IdGenerator';
 import { systemClock, Clock } from './services/Clock';
 import { VersionRegistry } from '../contracts/VersionRegistry';
 
+// Pure plot-allocation / cost-sum helpers extracted to keep this file under
+// the Plan 04 §DoD 800-line cap. Behavior-neutral move; see helpers file.
+import {
+    scopeChildId,
+    filterEventsForPlot,
+    allocateLabourForPlot,
+    allocateInputsForPlot,
+    allocateMachineryForPlot,
+    allocateActivityExpensesForPlot,
+    sumLabourCost,
+    sumInputCost,
+    sumMachineryCost,
+    sumExpenseCost
+} from './helpers/log-factory-helpers';
+
 const FARM_GLOBAL_ID = 'FARM_GLOBAL';
 const FARM_GLOBAL_NAME = 'Entire Farm';
 
@@ -24,10 +39,6 @@ const FARM_GLOBAL_NAME = 'Entire Farm';
  * Ensures consistent IDs, Metadata, and Trust Layer compliance.
  */
 export class LogFactory {
-    private static scopeChildId(baseId: string, plotId: string): string {
-        return `${baseId}::${plotId}`;
-    }
-
     private static buildPlannedTasksFromObservationCandidates(
         observations: ObservationNote[] | undefined,
         plotId: string,
@@ -38,7 +49,7 @@ export class LogFactory {
         return (observations || [])
             .filter(observation => observation.noteType === 'reminder' && (observation.extractedTasks?.length || 0) > 0)
             .flatMap(observation => (observation.extractedTasks || []).map(task => ({
-                id: this.scopeChildId(task.id || idGen.generate(), plotId),
+                id: scopeChildId(task.id || idGen.generate(), plotId),
                 title: task.title,
                 description: task.rawText || observation.textCleaned || observation.textRaw,
                 dueDate: task.dueDate,
@@ -96,38 +107,38 @@ export class LogFactory {
                 }]
             };
 
-            const plotCropActivities = this.filterEventsForPlot<CropActivityEvent>(
+            const plotCropActivities = filterEventsForPlot<CropActivityEvent>(
                 data.cropActivities as CropActivityEvent[] | undefined,
                 plot.name,
                 plotId
             );
-            const plotIrrigation = this.filterEventsForPlot<IrrigationEvent>(
+            const plotIrrigation = filterEventsForPlot<IrrigationEvent>(
                 (data.irrigation as IrrigationEvent[] | undefined)?.filter(isCompletedIrrigationEvent),
                 plot.name,
                 plotId
             );
-            const plotLabour = this.allocateLabourForPlot(
+            const plotLabour = allocateLabourForPlot(
                 data.labour,
                 plot.name,
                 plotId,
                 index,
                 targetPlotIds.length
             );
-            const plotInputs = this.allocateInputsForPlot(
+            const plotInputs = allocateInputsForPlot(
                 data.inputs,
                 plot.name,
                 plotId,
                 index,
                 targetPlotIds.length
             );
-            const plotMachinery = this.allocateMachineryForPlot(
+            const plotMachinery = allocateMachineryForPlot(
                 data.machinery,
                 plot.name,
                 plotId,
                 index,
                 targetPlotIds.length
             );
-            const plotActivityExpenses = this.allocateActivityExpensesForPlot(
+            const plotActivityExpenses = allocateActivityExpensesForPlot(
                 data.activityExpenses,
                 plot.name,
                 plotId,
@@ -136,16 +147,16 @@ export class LogFactory {
             );
 
             // Recalculate Costs for this Plot
-            const labourCost = this.sumLabourCost(plotLabour);
-            const machineCost = this.sumMachineryCost(plotMachinery);
+            const labourCost = sumLabourCost(plotLabour);
+            const machineCost = sumMachineryCost(plotMachinery);
             const inputCost = 0;
-            const expenseCost = this.sumExpenseCost(plotActivityExpenses);
+            const expenseCost = sumExpenseCost(plotActivityExpenses);
             const plotGrandTotal = labourCost + machineCost + inputCost + expenseCost;
 
             // MIRROR: Handle Planned Tasks from Manual Entry
             const mirroredTasks: PlannedTask[] = data.plannedTasks?.map((t: any) => ({
                 ...t,
-                id: this.scopeChildId(t.id || idGen.generate(), plotId),
+                id: scopeChildId(t.id || idGen.generate(), plotId),
                 plotId: plotId,
                 cropId: crop.id,
                 createdAt: t.createdAt || nowISO
@@ -153,7 +164,7 @@ export class LogFactory {
 
             const normalizedObservations: ObservationNote[] = (data.observations || []).map((obs: ObservationNote) => ({
                 ...obs,
-                id: this.scopeChildId(obs.id || idGen.generate(), plotId),
+                id: scopeChildId(obs.id || idGen.generate(), plotId),
                 plotId,
                 cropId: obs.cropId || crop.id,
                 dateKey: obs.dateKey || data.date,
@@ -456,28 +467,28 @@ export class LogFactory {
                 }]
             };
 
-            const myLabour = this.allocateLabourForPlot(
+            const myLabour = allocateLabourForPlot(
                 response.labour,
                 plot.name,
                 plotId,
                 index,
                 targetPlotIds.length
             );
-            const myInputs = this.allocateInputsForPlot(
+            const myInputs = allocateInputsForPlot(
                 response.inputs,
                 plot.name,
                 plotId,
                 index,
                 targetPlotIds.length
             );
-            const myMachine = this.allocateMachineryForPlot(
+            const myMachine = allocateMachineryForPlot(
                 response.machinery,
                 plot.name,
                 plotId,
                 index,
                 targetPlotIds.length
             );
-            const myExpenses = this.allocateActivityExpensesForPlot(
+            const myExpenses = allocateActivityExpensesForPlot(
                 mappedExpenses,
                 plot.name,
                 plotId,
@@ -486,10 +497,10 @@ export class LogFactory {
             );
 
             // Recalculate cost for this plot
-            const lCost = this.sumLabourCost(myLabour);
-            const iCost = this.sumInputCost(myInputs);
-            const mCost = this.sumMachineryCost(myMachine);
-            const eCost = this.sumExpenseCost(myExpenses);
+            const lCost = sumLabourCost(myLabour);
+            const iCost = sumInputCost(myInputs);
+            const mCost = sumMachineryCost(myMachine);
+            const eCost = sumExpenseCost(myExpenses);
 
             const isOwner = profile.activeOperatorId === 'owner';
             const autoApprove = profile.trust?.reviewPolicy === 'AUTO_APPROVE_ALL' ||
@@ -511,7 +522,7 @@ export class LogFactory {
             const mirroredObservations: ObservationNote[] = [
                 ...(response.observations?.map((obs: any) => ({
                     ...obs,
-                    id: this.scopeChildId(obs.id || idGen.generate(), plotId),
+                    id: scopeChildId(obs.id || idGen.generate(), plotId),
                     plotId,
                     cropId: obs.cropId || crop.id,
                     dateKey: obs.dateKey || getDateKey(),
@@ -561,8 +572,8 @@ export class LogFactory {
                 phaseAtLogTime: timeline.phase,
                 dayNumberAtLogTime: timeline.day,
 
-                cropActivities: this.filterEventsForPlot<CropActivityEvent>(response.cropActivities, plot.name, plotId),
-                irrigation: this.filterEventsForPlot<IrrigationEvent>(
+                cropActivities: filterEventsForPlot<CropActivityEvent>(response.cropActivities, plot.name, plotId),
+                irrigation: filterEventsForPlot<IrrigationEvent>(
                     response.irrigation?.filter(isCompletedIrrigationEvent),
                     plot.name,
                     plotId
@@ -721,145 +732,4 @@ export class LogFactory {
         };
     }
 
-    private static filterEventsForPlot<T extends { id: string; targetPlotName?: string }>(
-        events: T[] | undefined,
-        plotName: string,
-        plotId: string
-    ): T[] {
-        return (events || [])
-            .filter(event => !event.targetPlotName || event.targetPlotName === plotName)
-            .map(event => ({
-                ...event,
-                id: this.scopeChildId(event.id, plotId)
-            }));
-    }
-
-    private static allocateLabourForPlot(
-        labourEvents: LabourEvent[] | undefined,
-        plotName: string,
-        plotId: string,
-        plotIndex: number,
-        plotCount: number
-    ): LabourEvent[] {
-        return (labourEvents || [])
-            .filter(event => !event.targetPlotName || event.targetPlotName === plotName)
-            .map(event => {
-                const isShared = !event.targetPlotName;
-                return {
-                    ...event,
-                    id: this.scopeChildId(event.id, plotId),
-                    totalCost: this.allocateOptionalAmount(event.totalCost, isShared, plotIndex, plotCount)
-                };
-            });
-    }
-
-    private static allocateInputsForPlot(
-        inputEvents: InputEvent[] | undefined,
-        plotName: string,
-        plotId: string,
-        plotIndex: number,
-        plotCount: number
-    ): InputEvent[] {
-        return (inputEvents || [])
-            .filter(event => !event.targetPlotName || event.targetPlotName === plotName)
-            .map(event => {
-                const isShared = !event.targetPlotName;
-                return {
-                    ...event,
-                    id: this.scopeChildId(event.id, plotId),
-                    cost: this.allocateOptionalAmount(event.cost, isShared, plotIndex, plotCount),
-                    mix: (event.mix || []).map(item => ({
-                        ...item,
-                        id: this.scopeChildId(item.id, plotId)
-                    }))
-                };
-            });
-    }
-
-    private static allocateMachineryForPlot(
-        machineryEvents: MachineryEvent[] | undefined,
-        plotName: string,
-        plotId: string,
-        plotIndex: number,
-        plotCount: number
-    ): MachineryEvent[] {
-        return (machineryEvents || [])
-            .filter(event => !event.targetPlotName || event.targetPlotName === plotName)
-            .map(event => {
-                const isShared = !event.targetPlotName;
-                return {
-                    ...event,
-                    id: this.scopeChildId(event.id, plotId),
-                    rentalCost: this.allocateOptionalAmount(event.rentalCost, isShared, plotIndex, plotCount),
-                    fuelCost: this.allocateOptionalAmount(event.fuelCost, isShared, plotIndex, plotCount)
-                };
-            });
-    }
-
-    private static allocateActivityExpensesForPlot(
-        expenseEvents: ActivityExpenseEvent[] | undefined,
-        plotName: string,
-        plotId: string,
-        plotIndex: number,
-        plotCount: number
-    ): ActivityExpenseEvent[] {
-        return (expenseEvents || [])
-            .filter(event => {
-                const targetPlotName = (event as any).targetPlotName as string | undefined;
-                return !targetPlotName || targetPlotName === plotName;
-            })
-            .map(event => {
-                const targetPlotName = (event as any).targetPlotName as string | undefined;
-                const isShared = !targetPlotName;
-
-                return {
-                    ...event,
-                    id: this.scopeChildId(event.id, plotId),
-                    totalAmount: this.allocateOptionalAmount(event.totalAmount, isShared, plotIndex, plotCount),
-                    items: (event.items || []).map(item => ({
-                        ...item,
-                        id: this.scopeChildId(item.id, plotId),
-                        total: this.allocateOptionalAmount(item.total, isShared, plotIndex, plotCount)
-                    }))
-                };
-            });
-    }
-
-    private static allocateOptionalAmount(
-        value: number | null | undefined,
-        isShared: boolean,
-        plotIndex: number,
-        plotCount: number
-    ): number | undefined {
-        if (value === null || value === undefined) return undefined;
-        if (!isShared || plotCount <= 1) return value;
-        return this.allocateAmountAcrossPlots(value, plotIndex, plotCount);
-    }
-
-    private static allocateAmountAcrossPlots(total: number, plotIndex: number, plotCount: number): number {
-        if (plotCount <= 1) return total;
-
-        const totalCents = Math.round(total * 100);
-        const baseShare = Math.trunc(totalCents / plotCount);
-        const remainder = totalCents - (baseShare * plotCount);
-        const shareCents = baseShare + (plotIndex < remainder ? 1 : 0);
-
-        return shareCents / 100;
-    }
-
-    private static sumLabourCost(events: LabourEvent[]): number {
-        return events.reduce((sum, event) => sum + (event.totalCost || 0), 0);
-    }
-
-    private static sumInputCost(events: InputEvent[]): number {
-        return events.reduce((sum, event) => sum + (event.cost || 0), 0);
-    }
-
-    private static sumMachineryCost(events: MachineryEvent[]): number {
-        return events.reduce((sum, event) => sum + (event.rentalCost || event.fuelCost || 0), 0);
-    }
-
-    private static sumExpenseCost(events: ActivityExpenseEvent[]): number {
-        return events.reduce((sum, event) => sum + (event.totalAmount || 0), 0);
-    }
 }
