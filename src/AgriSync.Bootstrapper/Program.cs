@@ -170,11 +170,24 @@ try
                 errorCodesToAdd: null);
         }));
     builder.Services.AddSingleton<TimeProvider>(TimeProvider.System);
-    builder.Services.AddSingleton<AgriSync.BuildingBlocks.Persistence.Outbox.IDomainEventHandlerRegistry,
+    // T-IGH-03-OUTBOX-WIRING: registry MUST be scoped (not singleton)
+    // so its captured IServiceProvider is the dispatcher's per-cycle
+    // scope, not the root container. Resolving an
+    // IDomainEventHandler<T> with scoped DbContext dependencies from
+    // the root provider would either throw at runtime or hand back a
+    // root-resolved DbContext that outlives the dispatcher cycle.
+    builder.Services.AddScoped<AgriSync.BuildingBlocks.Persistence.Outbox.IDomainEventHandlerRegistry,
         AgriSync.BuildingBlocks.Persistence.Outbox.DiDomainEventHandlerRegistry>();
     builder.Services.AddScoped<AgriSync.BuildingBlocks.Persistence.Outbox.IOutboxPublisher,
         AgriSync.BuildingBlocks.Persistence.Outbox.InProcessOutboxPublisher>();
     builder.Services.AddHostedService<AgriSync.BuildingBlocks.Persistence.Outbox.OutboxDispatcher>();
+    // T-IGH-03-OUTBOX-WIRING shared-DB invariant: warns at startup if
+    // OutboxDbContext doesn't share host+port+database with the
+    // writing DbContexts. Cross-schema-writes from User+Accounts into
+    // ssf.outbox_messages only work when all four contexts target the
+    // same physical Postgres database; a future deploy that splits
+    // them would silently break event delivery.
+    builder.Services.AddHostedService<AgriSync.BuildingBlocks.Persistence.Outbox.OutboxConnectionInvariantChecker>();
 
     builder.Services.AddHostedService<AgriSync.Bootstrapper.Migrations.BackfillFarmOwnerAccounts>();
     builder.Services.AddHostedService<AgriSync.Bootstrapper.Jobs.MisRefreshJob>();

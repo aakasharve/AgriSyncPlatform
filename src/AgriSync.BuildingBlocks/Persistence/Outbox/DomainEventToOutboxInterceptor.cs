@@ -207,7 +207,11 @@ public sealed class DomainEventToOutboxInterceptor : SaveChangesInterceptor
                     occurredOnUtc: occurredOnUtc));
             }
 
-            snapshot.Add(new PendingClear(entity, events.Count));
+            // Record the exact events we serialized so a later
+            // explicit-transaction rollback (via OutboxTransactionInterceptor)
+            // can restore them without touching the queue between
+            // SavingChanges and SavedChanges.
+            snapshot.Add(new PendingClear(entity, events.Count, events));
         }
 
         if (messages.Count > 0)
@@ -233,24 +237,50 @@ public sealed class DomainEventToOutboxInterceptor : SaveChangesInterceptor
 
         if (_pending.TryGetValue(context, out var state))
         {
-            // Capture the events we're about to clear into a commit-
-            // snapshot so OutboxTransactionInterceptor can restore them
-            // if the caller rolls back the explicit transaction. For
-            // implicit (auto-commit) saves there is no explicit
-            // transaction interceptor callback, so this snapshot is
-            // simply garbage-collected when the DbContext is disposed.
-            var snapshot = new List<CommitSnapshotEntry>(state.Clears.Count);
+            // Stash a commit-snapshot ONLY when SaveChanges ran inside
+            // an explicit user-opened transaction. Without that guard,
+            // an implicit SaveChanges would leave a stale snapshot on
+            // the context, and a later unrelated explicit transaction
+            // (with no events) that the caller rolls back would call
+            // OutboxTransactionInterceptor.TransactionRolledBack →
+            // RestoreCommitSnapshot, resurrecting events that were
+            // already successfully published in a prior implicit save.
+            //
+            // Detection: if the DbContext has an active relational
+            // transaction at SavedChanges-time, that's the caller's
+            // explicit transaction (EF's own implicit transaction is
+            // already committed and disposed by this point). The
+            // in-memory provider returns null here, which is the
+            // correct behaviour for auto-commit semantics.
+            var hasExplicitTransaction = context.Database.CurrentTransaction is not null;
+
             foreach (var pending in state.Clears)
             {
-                var events = GetDomainEventsSnapshot(pending.Entity);
-                var preserved = events.Take(pending.Count).ToList();
-                snapshot.Add(new CommitSnapshotEntry(pending.Entity, preserved));
                 RemoveFirstDomainEventsViaBase(pending.Entity, pending.Count);
             }
-            if (snapshot.Count > 0)
+
+            if (hasExplicitTransaction)
             {
+                var snapshot = state.Clears
+                    .Where(c => c.Events.Count > 0)
+                    .Select(c => new CommitSnapshotEntry(c.Entity, c.Events))
+                    .ToList();
+                if (snapshot.Count > 0)
+                {
+                    _commitSnapshots.Remove(context);
+                    _commitSnapshots.Add(context, snapshot);
+                }
+            }
+            else
+            {
+                // Implicit-tx (auto-commit) save: events were committed
+                // in the same atomic SaveChanges with the OutboxMessage
+                // rows. There is no caller-visible transaction handle
+                // for a TransactionRolledBack callback to fire on, so
+                // any stale snapshot from a PRIOR explicit save on this
+                // same context must be cleared now to prevent
+                // resurrection on a future unrelated rollback.
                 _commitSnapshots.Remove(context);
-                _commitSnapshots.Add(context, snapshot);
             }
             _pending.Remove(context);
         }
@@ -393,7 +423,7 @@ public sealed class DomainEventToOutboxInterceptor : SaveChangesInterceptor
         }
     }
 
-    private readonly record struct PendingClear(object Entity, int Count);
+    private readonly record struct PendingClear(object Entity, int Count, IReadOnlyList<IDomainEvent> Events);
 
     private sealed record PendingState(List<PendingClear> Clears, List<OutboxMessage> Messages);
 
