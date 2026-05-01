@@ -55,6 +55,43 @@ public sealed class DomainEventToOutboxInterceptorTests
     }
 
     [Fact]
+    public async Task SaveChangesFailed_keeps_DomainEvents_queued_so_a_retry_resends_them()
+    {
+        // T-IGH-03-OUTBOX-WIRING rollback-safety regression: the
+        // previous interceptor cleared events inside SavingChanges,
+        // so a failed SaveChanges silently dropped them. The fix
+        // moves the clear to SavedChanges and leaves the in-memory
+        // queue untouched on SaveChangesFailed.
+        var clock = new FixedTimeProvider(new DateTime(2026, 4, 30, 12, 0, 0, DateTimeKind.Utc));
+        var interceptor = new DomainEventToOutboxInterceptor(clock);
+
+        await using var ctx = TestEntityDbContext.Create(interceptor);
+        var entity = TestAggregate.Create(Guid.Parse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"), "X");
+        entity.Rename("Y"); // 2 events queued total: Created + Renamed
+
+        ctx.Aggregates.Add(entity);
+
+        // Force SaveChangesAsync to throw by registering a failing
+        // SaveChanges interceptor that runs AFTER ours. Its
+        // SavingChangesAsync override will throw, which means
+        // SaveChangesFailedAsync fires on our interceptor.
+        ctx.AddFailingInterceptor();
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => ctx.SaveChangesAsync());
+
+        // Events MUST stay queued on the aggregate.
+        Assert.Equal(2, entity.DomainEvents.Count);
+
+        // Drop the failing interceptor and retry — events should now
+        // make it to the outbox.
+        ctx.RemoveFailingInterceptor();
+        await ctx.SaveChangesAsync();
+
+        Assert.Equal(2, await ctx.OutboxMessages.CountAsync());
+        Assert.Empty(entity.DomainEvents); // cleared after the successful save
+    }
+
+    [Fact]
     public async Task SavingChanges_with_no_domain_events_writes_no_outbox_rows()
     {
         var clock = new FixedTimeProvider(new DateTime(2026, 4, 30, 12, 0, 0, DateTimeKind.Utc));
@@ -109,20 +146,55 @@ public sealed class DomainEventToOutboxInterceptorTests
         }
     }
 
+    /// <summary>
+    /// Toggleable interceptor used by the rollback-safety regression
+    /// test to make a single SaveChangesAsync throw without permanently
+    /// breaking the context. Registered alongside the real
+    /// DomainEventToOutboxInterceptor; runs AFTER it (interceptor order
+    /// follows registration order) so that our interceptor's
+    /// SavingChanges has already snapshotted + queued OutboxMessages
+    /// when we throw, exercising the SaveChangesFailedAsync path.
+    /// </summary>
+    private sealed class FailingInterceptor : SaveChangesInterceptor
+    {
+        public bool ShouldFail { get; set; }
+
+        public override ValueTask<InterceptionResult<int>> SavingChangesAsync(
+            DbContextEventData eventData,
+            InterceptionResult<int> result,
+            CancellationToken cancellationToken = default)
+        {
+            if (ShouldFail)
+            {
+                throw new InvalidOperationException("forced save failure");
+            }
+            return base.SavingChangesAsync(eventData, result, cancellationToken);
+        }
+    }
+
     private sealed class TestEntityDbContext : DbContext
     {
         public DbSet<TestAggregate> Aggregates => Set<TestAggregate>();
         public DbSet<OutboxMessage> OutboxMessages => Set<OutboxMessage>();
 
-        private TestEntityDbContext(DbContextOptions<TestEntityDbContext> options) : base(options) { }
+        private readonly FailingInterceptor _failing;
+
+        private TestEntityDbContext(DbContextOptions<TestEntityDbContext> options, FailingInterceptor failing) : base(options)
+        {
+            _failing = failing;
+        }
+
+        public void AddFailingInterceptor() => _failing.ShouldFail = true;
+        public void RemoveFailingInterceptor() => _failing.ShouldFail = false;
 
         public static TestEntityDbContext Create(DomainEventToOutboxInterceptor interceptor)
         {
+            var failing = new FailingInterceptor();
             var options = new DbContextOptionsBuilder<TestEntityDbContext>()
                 .UseInMemoryDatabase($"outbox-tests-{Guid.NewGuid()}")
-                .AddInterceptors(interceptor)
+                .AddInterceptors(interceptor, failing)
                 .Options;
-            return new TestEntityDbContext(options);
+            return new TestEntityDbContext(options, failing);
         }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
