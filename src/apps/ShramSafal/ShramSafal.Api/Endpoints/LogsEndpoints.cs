@@ -46,11 +46,17 @@ public static class LogsEndpoints
         .WithName("CreateDailyLog")
         .RequireAuthorization();
 
+        // T-IGH-03-PIPELINE-ROLLOUT (AddLogTask): resolves the pipeline-
+        // wrapped handler. ValidationBehavior surfaces InvalidCommand,
+        // AuthorizationBehavior surfaces DailyLogNotFound or Forbidden,
+        // and the handler body re-checks the same gates as defense-in-
+        // depth before running the entitlement gate, deviation-reason
+        // policy, AddTask, compliance stamping, audit, and SaveChanges.
         group.MapPost("/logs/{id:guid}/tasks", async (
             Guid id,
             AddLogTaskRequest request,
             ClaimsPrincipal user,
-            AddLogTaskHandler handler,
+            IHandler<AddLogTaskCommand, DailyLogDto> handler,
             CancellationToken ct) =>
         {
             if (!EndpointActorContext.TryGetUserId(user, out var actorUserId))
