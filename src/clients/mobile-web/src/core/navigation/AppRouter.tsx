@@ -68,6 +68,8 @@ const ServiceProofPage = React.lazy(() => import('../../features/reports/pages/S
 const JobCardsPage = React.lazy(() => import('../../features/work/pages/JobCardsPage'));
 const JobCardDetailPage = React.lazy(() => import('../../features/work/pages/JobCardDetailPage'));
 const WorkerProfilePage = React.lazy(() => import('../../features/work/pages/WorkerProfilePage'));
+// Sub-plan 04 Task 5 — offline conflict resolution.
+const OfflineConflictPage = React.lazy(() => import('../../features/sync/conflict/OfflineConflictPage'));
 
 type FeedStatusTone = 'pending' | 'rejected' | 'approved';
 
@@ -479,6 +481,12 @@ const AppRouter: React.FC = () => {
             {currentRoute === 'referrals' && (
                 <div className="animate-in fade-in slide-in-from-right-4 duration-300">
                     <ReferralsPage />
+                </div>
+            )}
+
+            {currentRoute === 'offline-conflicts' && (
+                <div className="animate-in fade-in slide-in-from-right-4 duration-300">
+                    <OfflineConflictPage onBack={() => setCurrentRoute('main')} />
                 </div>
             )}
 

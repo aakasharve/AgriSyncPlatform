@@ -392,6 +392,8 @@ export type AppRoute =
     | 'qr-demo'
     | 'referrals'
     | 'attention'
+    /** Sub-plan 04 Task 5 — offline conflict resolution UI. */
+    | 'offline-conflicts'
     /** CEI Phase 2 §4.5 — test queue + detail */
     | 'tests'
     | 'test-detail'
