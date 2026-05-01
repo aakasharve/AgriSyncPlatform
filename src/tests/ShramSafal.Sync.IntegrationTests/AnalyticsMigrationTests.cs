@@ -122,8 +122,23 @@ public sealed class AnalyticsMigrationTests : IAsyncLifetime
         // Before Task 9, the legacy Phase4 migration would fail here
         // with `relation "ssf.verifications" does not exist` (or one
         // of a dozen other column-mismatch errors).
+        //
+        // The analytics migrations live in `AgriSync.Bootstrapper` (so
+        // BuildingBlocks stays provider-neutral) while the
+        // `AnalyticsDbContext` lives in BuildingBlocks. Without the
+        // explicit `MigrationsAssembly` pointer, EF Core scans the
+        // DbContext's own assembly, finds no migrations, and silently
+        // applies zero — leaving `analytics.events` uncreated and
+        // breaking the SSF Phase B migrations that join it.
+        // Mirror production's wiring (`Program.cs` AnalyticsDb registration).
         var analyticsOpts = new DbContextOptionsBuilder<AnalyticsDbContext>()
-            .UseNpgsql(conn)
+            .UseNpgsql(conn, npgsql =>
+            {
+                npgsql.MigrationsAssembly(typeof(AgriSync.Bootstrapper.Migrations.Analytics.AnalyticsRewrite).Assembly.FullName);
+                npgsql.MigrationsHistoryTable(
+                    tableName: "__analytics_migrations_history",
+                    schema: AnalyticsDbContext.SchemaName);
+            })
             .Options;
         await using (var analytics = new AnalyticsDbContext(analyticsOpts))
         {
