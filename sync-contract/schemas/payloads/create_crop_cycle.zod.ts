@@ -1,8 +1,20 @@
-// Sub-plan 02 Task 8 scaffold for create_crop_cycle.
-// Full payload schema is deferred to T-IGH-02-PAYLOADS (filed in Task 12).
-// Until then, validate as z.unknown() so MutationQueue.enqueue accepts
-// payloads of any shape — backend rejection remains the source of truth.
 import { z } from 'zod';
+import { ZGuid } from './_shared.zod';
 
-export const CreateCropCyclePayload = z.unknown();
+// Mirrors PushSyncBatchHandler.CreateCropCycleMutationPayload.
+// PayloadHasOnly allow-list: cropCycleId, farmId, plotId, cropName, stage,
+// startDate, endDate. Date fields are DateOnly on the server (yyyy-MM-dd).
+export const CreateCropCyclePayload = z.object({
+  cropCycleId: ZGuid.optional(),
+  farmId: ZGuid,
+  plotId: ZGuid,
+  cropName: z.string().min(1),
+  stage: z.string().min(1),
+  startDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'must be yyyy-MM-dd'),
+  endDate: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, 'must be yyyy-MM-dd')
+    .optional(),
+});
+
 export type CreateCropCyclePayloadType = z.infer<typeof CreateCropCyclePayload>;
