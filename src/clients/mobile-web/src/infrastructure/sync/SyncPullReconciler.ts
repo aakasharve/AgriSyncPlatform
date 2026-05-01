@@ -18,7 +18,8 @@ import {
     type PlannedTask as PlannedTaskDto
 } from '../api/AgriSyncClient';
 import { getDatabase, type AttachmentRecord } from '../storage/DexieDatabase';
-import { storageNamespace } from '../storage/StorageNamespace';
+import { DexieCropsRepository } from '../storage/DexieCropsRepository';
+import { DexieProfileRepository } from '../storage/DexieProfileRepository';
 import { getDateKey } from '../../core/domain/services/DateKeyService';
 import { setScheduleTemplatesFromReferenceData } from '../reference/TemplateCatalog';
 import { normalizeMojibakeDeep, normalizeMojibakeText } from '../../shared/utils/textEncoding';
@@ -492,24 +493,10 @@ function enrichPurveshDemoCrops(crops: CropProfile[], profile: FarmerProfile | n
     return crops;
 }
 
-function readExistingProfile(): FarmerProfile | null {
-    const key = storageNamespace.getKey('farmer_profile');
-    const raw = localStorage.getItem(key);
-    if (!raw) {
-        return null;
-    }
-
-    try {
-        return JSON.parse(raw) as FarmerProfile;
-    } catch {
-        return null;
-    }
-}
-
-function writeProfile(profile: FarmerProfile): void {
-    const key = storageNamespace.getKey('farmer_profile');
-    localStorage.setItem(key, JSON.stringify(profile));
-}
+// readExistingProfile / writeProfile removed in T-SP04-DEXIE-CUTOVER-SYNC-BRIDGE
+// (2026-05-01). Profile reads/writes go through DexieProfileRepository inside
+// reconcileSyncPull so the substrate sync writes to is the same substrate the
+// UI reads from.
 
 function buildProfileFromSync(
     operators: SyncOperatorDto[],
@@ -724,27 +711,11 @@ function toDailyLog(
     };
 }
 
-function readExistingCrops(): CropProfile[] {
-    const key = storageNamespace.getKey('crops');
-    const raw = localStorage.getItem(key);
-    if (!raw) {
-        return [];
-    }
-
-    try {
-        const parsed = JSON.parse(raw) as CropProfile[];
-        const normalized = normalizeMojibakeDeep(Array.isArray(parsed) ? parsed : []);
-        return normalized.value as CropProfile[];
-    } catch {
-        return [];
-    }
-}
-
-function writeCrops(crops: CropProfile[]): void {
-    const key = storageNamespace.getKey('crops');
-    const normalized = normalizeMojibakeDeep(crops).value;
-    localStorage.setItem(key, JSON.stringify(normalized));
-}
+// readExistingCrops / writeCrops removed in T-SP04-DEXIE-CUTOVER-SYNC-BRIDGE
+// (2026-05-01). Crop reads/writes go through DexieCropsRepository inside
+// reconcileSyncPull. Normalization (normalizeMojibakeDeep) still runs — it's
+// applied internally by the repositories, so the on-the-wire mojibake-repair
+// behavior is preserved.
 
 export async function reconcileSyncPull(payload: SyncPullResponse): Promise<void> {
     const referencePayload = payload as SyncPullReferenceDataPayload;
@@ -758,7 +729,13 @@ export async function reconcileSyncPull(payload: SyncPullResponse): Promise<void
     const dayLedgers = payload.dayLedgers ?? [];
     const plannedTasks = payload.plannedActivities as PlannedTaskDto[] ?? [];
 
-    const existingCrops = readExistingCrops();
+    // Substrate is Dexie post T-SP04-DEXIE-CUTOVER-SYNC-BRIDGE (2026-05-01).
+    // The repositories instantiate cleanly (no constructor params) because they
+    // are stateless wrappers around getDatabase().
+    const cropsRepo = new DexieCropsRepository();
+    const profileRepo = new DexieProfileRepository();
+
+    const existingCrops = await cropsRepo.getAll();
     const cropsById = new Map(existingCrops.map(crop => [crop.id, crop]));
 
     const plotsById = new Map(payload.plots.map(plot => [plot.id, plot]));
@@ -780,16 +757,25 @@ export async function reconcileSyncPull(payload: SyncPullResponse): Promise<void
     }
 
     const receivedAtUtc = systemClock.nowISO();
-    const existingProfile = readExistingProfile();
+    // DexieProfileRepository.get() returns `{} as FarmerProfile` for a missing
+    // singleton row; convert that back to null at the boundary so
+    // buildProfileFromSync's existing null-vs-real semantics keep working
+    // (line 520's `!existingProfile` early-return + line 556's
+    // `if (finalOperators.length === 0) return existingProfile`).
+    const profileFromRepo = await profileRepo.get();
+    const existingProfile: FarmerProfile | null =
+        profileFromRepo && Object.keys(profileFromRepo).length > 0
+            ? profileFromRepo
+            : null;
     const reconciledProfile = buildProfileFromSync(
         operators,
         payload.farms[0]?.ownerUserId,
         existingProfile,
         receivedAtUtc);
     const mergedCrops = enrichPurveshDemoCrops([...cropsById.values()], reconciledProfile);
-    writeCrops(mergedCrops);
+    await cropsRepo.save(mergedCrops);
     if (reconciledProfile) {
-        writeProfile(reconciledProfile);
+        await profileRepo.save(reconciledProfile);
     }
 
     const plotLookup = new Map<string, { cropId: string; cropName: string; plotName: string }>();
