@@ -16,10 +16,18 @@ public static class LogsEndpoints
 {
     public static RouteGroupBuilder MapLogsEndpoints(this RouteGroupBuilder group)
     {
+        // T-IGH-03-PIPELINE-ROLLOUT (CreateDailyLog): resolves the
+        // pipeline-wrapped handler. ValidationBehavior surfaces
+        // InvalidCommand, AuthorizationBehavior surfaces FarmNotFound
+        // or Forbidden, and the body re-checks both as defense-in-depth
+        // before running the entitlement gate, plot lookup, crop-cycle
+        // lookup, idempotency, audit, save, and analytics. Sync's
+        // PushSyncBatchHandler still resolves the raw handler in this
+        // rollout pass (per the "only-with-tests" guardrail).
         group.MapPost("/logs", async (
             CreateDailyLogRequest request,
             ClaimsPrincipal user,
-            CreateDailyLogHandler handler,
+            IHandler<CreateDailyLogCommand, DailyLogDto> handler,
             CancellationToken ct) =>
         {
             if (!EndpointActorContext.TryGetUserId(user, out var actorUserId))

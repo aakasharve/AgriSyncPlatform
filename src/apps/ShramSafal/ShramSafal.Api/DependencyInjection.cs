@@ -213,6 +213,47 @@ public static class DependencyInjection
                 new AgriSync.BuildingBlocks.Application.PipelineBehaviors.AuthorizationBehavior<ClaimJoinCommand, ClaimJoinResult>(
                     sp.GetServices<AgriSync.BuildingBlocks.Application.PipelineBehaviors.IAuthorizationCheck<ClaimJoinCommand>>())));
 
+        // T-IGH-03-PIPELINE-ROLLOUT (CreateDailyLog): caller-shape
+        // validation + farm-existence + farm-membership authorization.
+        // The endpoint (POST /logs) gets the canonical
+        // InvalidCommand → FarmNotFound → Forbidden ordering through
+        // the pipeline. PushSyncBatchHandler intentionally still
+        // resolves the RAW CreateDailyLogHandler in this rollout pass
+        // — its HandleCreateDailyLogAsync runs a pre-flight membership
+        // check before invoking the body, and migrating sync without
+        // adding sync integration tests for empty IDs / missing farm /
+        // non-member would only document a sync-pipeline interaction
+        // that lacks coverage. Tracked as a follow-up under
+        // PIPELINE-ROLLOUT.
+        services.AddScoped<AgriSync.BuildingBlocks.Application.PipelineBehaviors.IValidator<
+            ShramSafal.Application.UseCases.Logs.CreateDailyLog.CreateDailyLogCommand>,
+            ShramSafal.Application.UseCases.Logs.CreateDailyLog.CreateDailyLogValidator>();
+        services.AddScoped<AgriSync.BuildingBlocks.Application.PipelineBehaviors.IAuthorizationCheck<
+            ShramSafal.Application.UseCases.Logs.CreateDailyLog.CreateDailyLogCommand>,
+            ShramSafal.Application.UseCases.Logs.CreateDailyLog.CreateDailyLogAuthorizer>();
+        services.AddScoped<AgriSync.BuildingBlocks.Application.IHandler<
+            ShramSafal.Application.UseCases.Logs.CreateDailyLog.CreateDailyLogCommand,
+            ShramSafal.Application.Contracts.Dtos.DailyLogDto>>(sp =>
+            AgriSync.BuildingBlocks.Application.HandlerPipeline.Build(
+                sp.GetRequiredService<CreateDailyLogHandler>(),
+                new AgriSync.BuildingBlocks.Application.PipelineBehaviors.LoggingBehavior<
+                    ShramSafal.Application.UseCases.Logs.CreateDailyLog.CreateDailyLogCommand,
+                    ShramSafal.Application.Contracts.Dtos.DailyLogDto>(
+                    sp.GetRequiredService<Microsoft.Extensions.Logging.ILogger<
+                        AgriSync.BuildingBlocks.Application.PipelineBehaviors.LoggingBehavior<
+                            ShramSafal.Application.UseCases.Logs.CreateDailyLog.CreateDailyLogCommand,
+                            ShramSafal.Application.Contracts.Dtos.DailyLogDto>>>()),
+                new AgriSync.BuildingBlocks.Application.PipelineBehaviors.ValidationBehavior<
+                    ShramSafal.Application.UseCases.Logs.CreateDailyLog.CreateDailyLogCommand,
+                    ShramSafal.Application.Contracts.Dtos.DailyLogDto>(
+                    sp.GetServices<AgriSync.BuildingBlocks.Application.PipelineBehaviors.IValidator<
+                        ShramSafal.Application.UseCases.Logs.CreateDailyLog.CreateDailyLogCommand>>()),
+                new AgriSync.BuildingBlocks.Application.PipelineBehaviors.AuthorizationBehavior<
+                    ShramSafal.Application.UseCases.Logs.CreateDailyLog.CreateDailyLogCommand,
+                    ShramSafal.Application.Contracts.Dtos.DailyLogDto>(
+                    sp.GetServices<AgriSync.BuildingBlocks.Application.PipelineBehaviors.IAuthorizationCheck<
+                        ShramSafal.Application.UseCases.Logs.CreateDailyLog.CreateDailyLogCommand>>())));
+
         // T-IGH-03-PIPELINE-ROLLOUT (AddLogTask): caller-shape validation
         // + log-lookup-plus-membership authorization. The endpoint
         // (/logs/{id}/tasks) gets the canonical InvalidCommand →
