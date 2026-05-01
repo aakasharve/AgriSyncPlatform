@@ -80,13 +80,20 @@ export const updateLog = async (
             finalLog.patches = [...(existingLog.patches || []), patch];
         }
 
-        // 4. Queue Mutation for backend execution
+        // 4. Queue Mutation for backend execution.
+        //
+        // T-IGH-02-PAYLOADS: the canonical add_log_task wire shape is
+        // { logTaskId?, dailyLogId, activityType, notes?, occurredAtUtc? }
+        // (PushSyncBatchHandler.AddLogTaskMutationPayload). The original
+        // {action, updatedData, reason, actorId} bag was rejected by the
+        // server's PayloadHasOnly allow-list and never landed; with the
+        // strict client-side validator (Sub-plan 02 Task 9) it would now
+        // throw before enqueueing. Funnel the edit-after-verify intent
+        // into a real log task so the audit trail still fires server-side.
         await mutationQueue.enqueue(SyncMutationName.AddLogTask, {
             dailyLogId: finalLog.id,
-            action: 'UPDATE_LOG',
-            updatedData: request.updatedData,
-            reason: request.reason,
-            actorId: request.actorId
+            activityType: 'log_update',
+            notes: request.reason || 'Edit applied to daily log.'
         });
 
         return { success: true, log: finalLog };

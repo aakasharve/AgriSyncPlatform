@@ -1,8 +1,18 @@
-// Sub-plan 02 Task 8 scaffold for verify_log.
-// Full payload schema is deferred to T-IGH-02-PAYLOADS (filed in Task 12).
-// Until then, validate as z.unknown() so MutationQueue.enqueue accepts
-// payloads of any shape — backend rejection remains the source of truth.
 import { z } from 'zod';
+import { ZGuid } from './_shared.zod';
 
-export const VerifyLogPayload = z.unknown();
+// Deprecated by verify_log_v2. Mirrors
+// PushSyncBatchHandler.VerifyLogMutationPayload — accepts either `status`
+// or `targetStatus` (the server's TryMapVerificationStatus normalizes
+// both). All Guid fields except dailyLogId are optional on the wire
+// (the server fills VerifiedByUserId from the auth context).
+export const VerifyLogPayload = z.object({
+  verificationEventId: ZGuid.optional(),
+  dailyLogId: ZGuid,
+  status: z.string().optional(),
+  targetStatus: z.string().optional(),
+  reason: z.string().optional(),
+  verifiedByUserId: ZGuid.optional(),
+});
+
 export type VerifyLogPayloadType = z.infer<typeof VerifyLogPayload>;

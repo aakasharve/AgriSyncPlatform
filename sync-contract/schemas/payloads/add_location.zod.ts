@@ -1,8 +1,20 @@
-// Sub-plan 02 Task 8 scaffold for add_location.
-// Full payload schema is deferred to T-IGH-02-PAYLOADS (filed in Task 12).
-// Until then, validate as z.unknown() so MutationQueue.enqueue accepts
-// payloads of any shape — backend rejection remains the source of truth.
 import { z } from 'zod';
+import { ZIsoDate } from './_shared.zod';
 
-export const AddLocationPayload = z.unknown();
+// add_location is rejected by the server as a standalone mutation
+// ("Send location with create_daily_log"), but the shape is reserved
+// for forward-compat. Mirrors
+// PushSyncBatchHandler.LocationMutationPayload — the same record the
+// server reads when location rides along on create_daily_log /
+// add_cost_entry.
+export const AddLocationPayload = z.object({
+  latitude: z.number(),
+  longitude: z.number(),
+  accuracyMeters: z.number().nonnegative(),
+  altitude: z.number().optional(),
+  capturedAtUtc: ZIsoDate,
+  provider: z.string().min(1),
+  permissionState: z.string().min(1),
+});
+
 export type AddLocationPayloadType = z.infer<typeof AddLocationPayload>;
