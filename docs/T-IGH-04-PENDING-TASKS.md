@@ -1,8 +1,8 @@
-# T-IGH-04 Sub-plan 04 Frontend Restructure — Pending Tasks (post-rebase)
+# T-IGH-04 Sub-plan 04 Frontend Restructure — Pending Tasks (post-wave-3)
 
 > **Branch:** `feature/ighardening-04-frontend` (parent repo).
 > **Worktree:** `.worktrees/ighardening-04-frontend/`.
-> **Status:** **PARTIAL_FOUNDATION** — rebase done, P0 conflict durability landed. Tasks 6–10 remain.
+> **Status:** **PARTIAL** — Plan 04 §DoD line-cap (≤ 800 lines per .ts/.tsx file) **CLEARED**. P0 conflict durability shipped. Remaining: T-IGH-04-LOCALSTORAGE-MIGRATION (drain 21 allow-list entries to 0), T-SP04-DEXIE-CUTOVER-SYNC-BRIDGE, plus the smaller follow-ups.
 > **Why this doc lives here:** the `_COFOUNDER` private vault is dirty with unrelated work, so per the verifier instruction we did not write into `_COFOUNDER/.../Pending_Tasks/`. Move this document there once the vault is classified.
 
 ---
@@ -11,21 +11,34 @@
 
 **Plan 04 continues now. Do not wait for full Plan 03 completion.**
 
-Plan 04's direct frontend dependencies are stable on `akash_edits`: sync mutation catalog, error/problem details, degraded headers, cursor-freeze behavior, backend CI baseline, and (newly landed) Plan 03 Task 9 analytics migration (`e75960f`).
+Plan 04's direct frontend dependencies are stable on `akash_edits`: sync mutation catalog, error/problem details, degraded headers, cursor-freeze behavior, backend CI baseline, and (landed) Plan 03 Task 9 analytics migration (`e75960f`).
 
-**Continue:** T-IGH-04-PROFILE-DECOMPOSE, T-IGH-04-SYNC-PULL-DECOMPOSE, T-IGH-04-ROUTER-DECOMPOSE, T-IGH-04-FILE-DECOMPOSE, T-IGH-04-LOCALSTORAGE-MIGRATION, T-SP04-DEXIE-CUTOVER-SYNC-BRIDGE.
+**Done on this branch:**
+- File-size cap (≤ 800 lines per .ts/.tsx): **CLEARED** for all 11 originally-flagged god-files. Gate now enforces 800 (was 2600).
+- T-IGH-04-CONFLICT-STATUS-DURABILITY (P0): **shipped** with 21 unit + integration tests.
+- Tasks 3, 4, 5: shipped in earlier sessions (see commits 2be44a9, 87b5430, 34be159).
+
+**Continue:** T-IGH-04-LOCALSTORAGE-MIGRATION (drain the 21 allow-list entries), T-SP04-DEXIE-CUTOVER-SYNC-BRIDGE, T-IGH-04-CONFLICT-BADGE-MOUNT, T-IGH-04-CONFLICT-EDIT, T-IGH-04-XSTATE-NAV (P2 follow-ups).
 
 **Do NOT claim:** Plan 03 REMOTE_GREEN, Plan 04 DONE, Plan 05 final E2E green, master plan complete.
 
-The label stays **PARTIAL_FOUNDATION / READY_WITH_CAVEATS** until both Plan 04 DoD and Plan 03 Task 11 (OTel smoke) close.
+The label stays **PARTIAL_FOUNDATION / READY_WITH_CAVEATS** until both Plan 04 DoD (in particular: localStorage allow-list drains to zero) and Plan 03 Task 11 (OTel smoke) close.
 
 ---
 
 ## Branch state (current)
 
-`feature/ighardening-04-frontend` has **13 commits** on top of `akash_edits` head `930742e`:
+`feature/ighardening-04-frontend` has **21 commits** on top of `akash_edits` head `930742e`:
 
 ```
+1cd8327 ci(file-sizes): T-IGH-04-ESLINT-TIGHTEN — drop file-size gate from 2600 to 800 (Plan 04 §DoD)
+c05aeb0 refactor(profile): T-IGH-04-PROFILE-DECOMPOSE — split ProfilePage into 8-section layout (with conflict resolution)
+f2280c0 refactor(reflect): T-IGH-04-FILE-DECOMPOSE-REFLECTPAGE — split ReflectPage into per-section files
+9cf762c refactor(logs): T-IGH-04-FILE-DECOMPOSE-MANUALENTRY — split ManualEntry into sub-form modules
+e0a499f refactor(compare): T-IGH-04-FILE-DECOMPOSE-COMPAREPAGE — bring ComparePage under 800-line cap
+c6316cb refactor(routing): T-IGH-04-ROUTER-DECOMPOSE — routes-as-data + slim AppRouter
+93cbc23 refactor(api): T-IGH-04-FILE-DECOMPOSE-AGRISYNCCLIENT — split by resource module
+7d388cf docs(plan-04): record wave-2 parallel-agent decomp progress (5 of 11 god-files done)
 08799e7 refactor(analysis): T-IGH-04-FILE-DECOMPOSE-EASY-WINS — CostAnalysisSection 865 → 758
 1ccd3d5 refactor(logs): T-IGH-04-FILE-DECOMPOSE-ACTIVITYCARD — split ActivityCard 2025 → 733 + 6 modules
 0ad5d17 refactor(storage): T-IGH-04-FILE-DECOMPOSE-DEXIEDB — split DexieDatabase 1058 → 694 + 14 version files
@@ -41,25 +54,29 @@ c60c0d3 test(deps): add @testing-library/{user-event,jest-dom} + per-file jsdom 
 2be44a9 ci(storage): T-IGH-04 Task 3 — strict localStorage discipline gate + useUiPref hook
 ```
 
-**Wave 2 dispatch model used:** four parallel sub-agents in isolated worktrees, each with file-ownership boundaries. 3 of 4 returned clean commits (LogFactory, DexieDatabase, ActivityCard) which were cherry-picked onto the feature branch. The 4th (CostAnalysisSection) hit a stale-base worktree and stopped per its STOP-on-discrepancy instructions; the task was small enough to ship inline (commit `08799e7`) rather than re-dispatch.
+**Wave 1 (sequential, session 2):** SyncPullReconciler decomposed inline (commit `d558843`), 6 helpers extracted.
 
-**Per-file decomposition outcomes (this branch):**
+**Wave 2 (parallel agents, session 3 first dispatch):** 3 of 4 agents returned clean commits — LogFactory (`439c1a2`), DexieDatabase (`0ad5d17`), ActivityCard (`1ccd3d5`). 4th (CostAnalysisSection) hit a stale-base worktree, stopped per STOP-on-discrepancy instructions; shipped inline as `08799e7`.
+
+**Wave 3 (parallel agents, session 3 second dispatch):** **all 6 of 6 agents returned clean commits** — AgriSyncClient (`93cbc23`), AppRouter (`c6316cb`), ComparePage (`e0a499f`), ManualEntry (`9cf762c`), ReflectPage (`f2280c0`), ProfilePage (`c05aeb0`). Wave 3 used the explicit `git reset --hard feature/ighardening-04-frontend` pre-flight step which fixed the stale-base issue. One conflict in `scripts/check-storage-discipline.mjs` (both ReflectPage + ProfilePage agents repointed allow-list entries) was resolved manually during the cherry-pick continue.
+
+**Per-file decomposition outcomes — ALL 11 god-files cleared the 800-line cap:**
 
 | File | Before | After | Cap | Status |
 |---|---|---|---|---|
 | `infrastructure/sync/SyncPullReconciler.ts` | 1150 | **721** | 800 | ✅ |
-| `infrastructure/storage/DexieDatabase.ts` | 1058 | **694** | 800 | ✅ |
+| `infrastructure/storage/DexieDatabase.ts` | 1058 | **694** + 14 version files | 800 | ✅ |
 | `core/domain/LogFactory.ts` | 865 | **735** | 800 | ✅ |
-| `features/analysis/components/CostAnalysisSection.tsx` | 865 | **758** | 800 | ✅ |
-| `features/logs/components/ActivityCard.tsx` | 2025 | **12 (shim) + 733 (orchestrator) + 6 modules ≤ 451** | 800 | ✅ |
-| `pages/ProfilePage.tsx` | 2491 | 2515 | 800 | ⏳ pending |
-| `pages/ReflectPage.tsx` | 1453 | 1453 | 800 | ⏳ pending |
-| `core/navigation/AppRouter.tsx` | 1274 | 1282 | 800 | ⏳ pending |
-| `features/logs/components/ManualEntry.tsx` | 1258 | 1258 | 800 | ⏳ pending |
-| `infrastructure/api/AgriSyncClient.ts` | 1092 | 1092 | 800 | ⏳ pending |
-| `pages/ComparePage.tsx` | 1014 | 1014 | 800 | ⏳ pending |
+| `features/analysis/components/CostAnalysisSection.tsx` | 865 | **758** + helpers | 800 | ✅ |
+| `features/logs/components/ActivityCard.tsx` | 2025 | **12 (shim) + 733 (orchestrator) + 6 modules** | 800 | ✅ |
+| `pages/ProfilePage.tsx` | 2515 | **5 (shim) + 750 (orchestrator) + 8 sections + 2 hooks + 3 wizards** | 800 | ✅ |
+| `pages/ReflectPage.tsx` | 1453 | **6 (shim) + 601 (orchestrator) + 2 sections + 3 components + helpers + types** | 800 | ✅ |
+| `core/navigation/AppRouter.tsx` | 1282 | **341** + 5 module files (largest 599) | 800 | ✅ |
+| `features/logs/components/ManualEntry.tsx` | 1258 | **1 (shim) + 685 (orchestrator) + 6 components + hook + service + types** | 800 | ✅ |
+| `infrastructure/api/AgriSyncClient.ts` | 1092 | **426** + dtos.ts + transport.ts + 7 resources | 800 | ✅ |
+| `pages/ComparePage.tsx` | 1014 | **498** + 554-line helpers (in-place) | 800 | ✅ |
 
-**5 of 11 originally-flagged god-files cleared.** 6 remaining for next session(s).
+**11 of 11 god-files cleared.** Plan 04 §DoD line-cap requirement: **MET.** File-size gate `MAX_LINES` lowered from 2600 → 800 in `1cd8327`; gate exits clean.
 
 **Worktree gates (verified `20c765a`):**
 - `tsc --noEmit` silent (exit 0)
