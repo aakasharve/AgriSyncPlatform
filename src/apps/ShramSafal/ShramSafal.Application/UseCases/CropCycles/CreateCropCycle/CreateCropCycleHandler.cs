@@ -1,4 +1,5 @@
 using AgriSync.BuildingBlocks.Abstractions;
+using AgriSync.BuildingBlocks.Application;
 using AgriSync.BuildingBlocks.Results;
 using AgriSync.SharedKernel.Contracts.Ids;
 using ShramSafal.Application.Contracts.Dtos;
@@ -8,11 +9,27 @@ using ShramSafal.Domain.Common;
 
 namespace ShramSafal.Application.UseCases.CropCycles.CreateCropCycle;
 
+/// <summary>
+/// Creates a <see cref="Domain.Crops.CropCycle"/> on a (Farm, Plot) pair
+/// with start/end dates and crop metadata.
+///
+/// <para>
+/// T-IGH-03-PIPELINE-ROLLOUT (CreateCropCycle): caller-shape validation
+/// lives in <see cref="CreateCropCycleValidator"/>; farm-existence +
+/// plot-existence-on-farm + farm-membership authorization lives in
+/// <see cref="CreateCropCycleAuthorizer"/>. When this handler is
+/// resolved via the pipeline, both run before the body. The body keeps
+/// its inline gates (farm + plot lookup, membership, entitlement, cycle
+/// overlap) as defense-in-depth for direct callers; those checks remain
+/// the only gate when the pipeline is bypassed.
+/// </para>
+/// </summary>
 public sealed class CreateCropCycleHandler(
     IShramSafalRepository repository,
     IIdGenerator idGenerator,
     IClock clock,
     IEntitlementPolicy entitlementPolicy)
+    : IHandler<CreateCropCycleCommand, CropCycleDto>
 {
     public async Task<Result<CropCycleDto>> HandleAsync(CreateCropCycleCommand command, CancellationToken ct = default)
     {

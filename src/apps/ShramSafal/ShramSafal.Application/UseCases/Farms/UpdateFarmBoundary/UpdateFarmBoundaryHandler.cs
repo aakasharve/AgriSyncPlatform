@@ -1,4 +1,5 @@
 using AgriSync.BuildingBlocks.Abstractions;
+using AgriSync.BuildingBlocks.Application;
 using AgriSync.BuildingBlocks.Results;
 using System.Text.Json;
 using ShramSafal.Application.Contracts.Dtos;
@@ -9,10 +10,29 @@ using ShramSafal.Domain.Farms;
 
 namespace ShramSafal.Application.UseCases.Farms.UpdateFarmBoundary;
 
+/// <summary>
+/// Records a new farm boundary (canonical centre, mapped area, polygon
+/// + GeoValidationStatus.SelfDeclared). Archives any prior active
+/// boundary and bumps the version.
+///
+/// <para>
+/// T-IGH-03-PIPELINE-ROLLOUT (UpdateFarmBoundary): caller-shape +
+/// payload-shape validation lives in
+/// <see cref="UpdateFarmBoundaryValidator"/>; farm-existence + owner
+/// authorization lives in <see cref="UpdateFarmBoundaryAuthorizer"/>.
+/// When this handler is resolved via the pipeline, both run before the
+/// body. The body retains its inline gates (farm lookup, owner check,
+/// <c>OwnerAccountId.IsEmpty</c> defense) as defense-in-depth for
+/// direct callers; the OwnerAccountId check is intentionally not
+/// extracted because it's I/O-state-bound (not a property of the
+/// command alone).
+/// </para>
+/// </summary>
 public sealed class UpdateFarmBoundaryHandler(
     IShramSafalRepository repository,
     IIdGenerator idGenerator,
     IClock clock)
+    : IHandler<UpdateFarmBoundaryCommand, FarmDto>
 {
     public async Task<Result<FarmDto>> HandleAsync(
         UpdateFarmBoundaryCommand command,

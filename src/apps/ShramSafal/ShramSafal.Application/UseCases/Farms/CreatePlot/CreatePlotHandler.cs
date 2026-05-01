@@ -1,5 +1,6 @@
 using AgriSync.BuildingBlocks.Abstractions;
 using AgriSync.BuildingBlocks.Analytics;
+using AgriSync.BuildingBlocks.Application;
 using AgriSync.BuildingBlocks.Results;
 using AgriSync.SharedKernel.Contracts.Ids;
 using AgriSync.SharedKernel.Contracts.Roles;
@@ -10,12 +11,29 @@ using ShramSafal.Domain.Common;
 
 namespace ShramSafal.Application.UseCases.Farms.CreatePlot;
 
+/// <summary>
+/// Creates a <see cref="Domain.Farms.Plot"/> on a given farm.
+///
+/// <para>
+/// T-IGH-03-PIPELINE-ROLLOUT (CreatePlot): caller-shape validation lives
+/// in <see cref="CreatePlotValidator"/>; farm-existence + owner-tier
+/// authorization lives in <see cref="CreatePlotAuthorizer"/>. When this
+/// handler is resolved via the pipeline, both run before the body. The
+/// body retains its inline gates (farm lookup + role-tier check +
+/// entitlement gate) as defense-in-depth — those checks remain the only
+/// gate when callers bypass the pipeline (legacy unit tests, future
+/// internal consumers). The endpoint path (POST /farms/{id}/plots) gets
+/// the canonical <c>InvalidCommand → FarmNotFound → Forbidden</c>
+/// ordering through the pipeline.
+/// </para>
+/// </summary>
 public sealed class CreatePlotHandler(
     IShramSafalRepository repository,
     IIdGenerator idGenerator,
     IClock clock,
     IEntitlementPolicy entitlementPolicy,
     IAnalyticsWriter analytics)
+    : IHandler<CreatePlotCommand, PlotDto>
 {
     public async Task<Result<PlotDto>> HandleAsync(CreatePlotCommand command, CancellationToken ct = default)
     {

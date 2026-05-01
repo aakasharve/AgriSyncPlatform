@@ -376,6 +376,105 @@ public static class DependencyInjection
                     sp.GetServices<AgriSync.BuildingBlocks.Application.PipelineBehaviors.IAuthorizationCheck<
                         ShramSafal.Application.UseCases.Logs.VerifyLog.VerifyLogCommand>>())));
 
+        // T-IGH-03-PIPELINE-ROLLOUT (CreatePlot): caller-shape validation
+        // + farm-existence + owner-tier authorization. Endpoint
+        // (POST /farms/{id}/plots) gets canonical
+        // InvalidCommand → FarmNotFound → Forbidden ordering.
+        services.AddScoped<AgriSync.BuildingBlocks.Application.PipelineBehaviors.IValidator<
+            ShramSafal.Application.UseCases.Farms.CreatePlot.CreatePlotCommand>,
+            ShramSafal.Application.UseCases.Farms.CreatePlot.CreatePlotValidator>();
+        services.AddScoped<AgriSync.BuildingBlocks.Application.PipelineBehaviors.IAuthorizationCheck<
+            ShramSafal.Application.UseCases.Farms.CreatePlot.CreatePlotCommand>,
+            ShramSafal.Application.UseCases.Farms.CreatePlot.CreatePlotAuthorizer>();
+        services.AddScoped<AgriSync.BuildingBlocks.Application.IHandler<
+            ShramSafal.Application.UseCases.Farms.CreatePlot.CreatePlotCommand,
+            ShramSafal.Application.Contracts.Dtos.PlotDto>>(sp =>
+            AgriSync.BuildingBlocks.Application.HandlerPipeline.Build(
+                sp.GetRequiredService<CreatePlotHandler>(),
+                new AgriSync.BuildingBlocks.Application.PipelineBehaviors.LoggingBehavior<
+                    ShramSafal.Application.UseCases.Farms.CreatePlot.CreatePlotCommand,
+                    ShramSafal.Application.Contracts.Dtos.PlotDto>(
+                    sp.GetRequiredService<Microsoft.Extensions.Logging.ILogger<
+                        AgriSync.BuildingBlocks.Application.PipelineBehaviors.LoggingBehavior<
+                            ShramSafal.Application.UseCases.Farms.CreatePlot.CreatePlotCommand,
+                            ShramSafal.Application.Contracts.Dtos.PlotDto>>>()),
+                new AgriSync.BuildingBlocks.Application.PipelineBehaviors.ValidationBehavior<
+                    ShramSafal.Application.UseCases.Farms.CreatePlot.CreatePlotCommand,
+                    ShramSafal.Application.Contracts.Dtos.PlotDto>(
+                    sp.GetServices<AgriSync.BuildingBlocks.Application.PipelineBehaviors.IValidator<
+                        ShramSafal.Application.UseCases.Farms.CreatePlot.CreatePlotCommand>>()),
+                new AgriSync.BuildingBlocks.Application.PipelineBehaviors.AuthorizationBehavior<
+                    ShramSafal.Application.UseCases.Farms.CreatePlot.CreatePlotCommand,
+                    ShramSafal.Application.Contracts.Dtos.PlotDto>(
+                    sp.GetServices<AgriSync.BuildingBlocks.Application.PipelineBehaviors.IAuthorizationCheck<
+                        ShramSafal.Application.UseCases.Farms.CreatePlot.CreatePlotCommand>>())));
+
+        // T-IGH-03-PIPELINE-ROLLOUT (CreateCropCycle): caller-shape +
+        // farm-existence + plot-existence-on-farm + farm-membership.
+        // Endpoint (POST /cropcycles) gets canonical
+        // InvalidCommand → FarmNotFound → PlotNotFound → Forbidden.
+        services.AddScoped<AgriSync.BuildingBlocks.Application.PipelineBehaviors.IValidator<
+            ShramSafal.Application.UseCases.CropCycles.CreateCropCycle.CreateCropCycleCommand>,
+            ShramSafal.Application.UseCases.CropCycles.CreateCropCycle.CreateCropCycleValidator>();
+        services.AddScoped<AgriSync.BuildingBlocks.Application.PipelineBehaviors.IAuthorizationCheck<
+            ShramSafal.Application.UseCases.CropCycles.CreateCropCycle.CreateCropCycleCommand>,
+            ShramSafal.Application.UseCases.CropCycles.CreateCropCycle.CreateCropCycleAuthorizer>();
+        services.AddScoped<AgriSync.BuildingBlocks.Application.IHandler<
+            ShramSafal.Application.UseCases.CropCycles.CreateCropCycle.CreateCropCycleCommand,
+            ShramSafal.Application.Contracts.Dtos.CropCycleDto>>(sp =>
+            AgriSync.BuildingBlocks.Application.HandlerPipeline.Build(
+                sp.GetRequiredService<CreateCropCycleHandler>(),
+                new AgriSync.BuildingBlocks.Application.PipelineBehaviors.LoggingBehavior<
+                    ShramSafal.Application.UseCases.CropCycles.CreateCropCycle.CreateCropCycleCommand,
+                    ShramSafal.Application.Contracts.Dtos.CropCycleDto>(
+                    sp.GetRequiredService<Microsoft.Extensions.Logging.ILogger<
+                        AgriSync.BuildingBlocks.Application.PipelineBehaviors.LoggingBehavior<
+                            ShramSafal.Application.UseCases.CropCycles.CreateCropCycle.CreateCropCycleCommand,
+                            ShramSafal.Application.Contracts.Dtos.CropCycleDto>>>()),
+                new AgriSync.BuildingBlocks.Application.PipelineBehaviors.ValidationBehavior<
+                    ShramSafal.Application.UseCases.CropCycles.CreateCropCycle.CreateCropCycleCommand,
+                    ShramSafal.Application.Contracts.Dtos.CropCycleDto>(
+                    sp.GetServices<AgriSync.BuildingBlocks.Application.PipelineBehaviors.IValidator<
+                        ShramSafal.Application.UseCases.CropCycles.CreateCropCycle.CreateCropCycleCommand>>()),
+                new AgriSync.BuildingBlocks.Application.PipelineBehaviors.AuthorizationBehavior<
+                    ShramSafal.Application.UseCases.CropCycles.CreateCropCycle.CreateCropCycleCommand,
+                    ShramSafal.Application.Contracts.Dtos.CropCycleDto>(
+                    sp.GetServices<AgriSync.BuildingBlocks.Application.PipelineBehaviors.IAuthorizationCheck<
+                        ShramSafal.Application.UseCases.CropCycles.CreateCropCycle.CreateCropCycleCommand>>())));
+
+        // T-IGH-03-PIPELINE-ROLLOUT (UpdateFarmBoundary): caller-shape +
+        // payload-shape (GeoJSON) validation + farm-existence + owner.
+        // Endpoint (PUT /farms/{id}/boundary) gets canonical
+        // InvalidCommand → FarmNotFound → Forbidden ordering.
+        services.AddScoped<AgriSync.BuildingBlocks.Application.PipelineBehaviors.IValidator<
+            ShramSafal.Application.UseCases.Farms.UpdateFarmBoundary.UpdateFarmBoundaryCommand>,
+            ShramSafal.Application.UseCases.Farms.UpdateFarmBoundary.UpdateFarmBoundaryValidator>();
+        services.AddScoped<AgriSync.BuildingBlocks.Application.PipelineBehaviors.IAuthorizationCheck<
+            ShramSafal.Application.UseCases.Farms.UpdateFarmBoundary.UpdateFarmBoundaryCommand>,
+            ShramSafal.Application.UseCases.Farms.UpdateFarmBoundary.UpdateFarmBoundaryAuthorizer>();
+        services.AddScoped<AgriSync.BuildingBlocks.Application.IHandler<
+            ShramSafal.Application.UseCases.Farms.UpdateFarmBoundary.UpdateFarmBoundaryCommand,
+            ShramSafal.Application.Contracts.Dtos.FarmDto>>(sp =>
+            AgriSync.BuildingBlocks.Application.HandlerPipeline.Build(
+                sp.GetRequiredService<UpdateFarmBoundaryHandler>(),
+                new AgriSync.BuildingBlocks.Application.PipelineBehaviors.LoggingBehavior<
+                    ShramSafal.Application.UseCases.Farms.UpdateFarmBoundary.UpdateFarmBoundaryCommand,
+                    ShramSafal.Application.Contracts.Dtos.FarmDto>(
+                    sp.GetRequiredService<Microsoft.Extensions.Logging.ILogger<
+                        AgriSync.BuildingBlocks.Application.PipelineBehaviors.LoggingBehavior<
+                            ShramSafal.Application.UseCases.Farms.UpdateFarmBoundary.UpdateFarmBoundaryCommand,
+                            ShramSafal.Application.Contracts.Dtos.FarmDto>>>()),
+                new AgriSync.BuildingBlocks.Application.PipelineBehaviors.ValidationBehavior<
+                    ShramSafal.Application.UseCases.Farms.UpdateFarmBoundary.UpdateFarmBoundaryCommand,
+                    ShramSafal.Application.Contracts.Dtos.FarmDto>(
+                    sp.GetServices<AgriSync.BuildingBlocks.Application.PipelineBehaviors.IValidator<
+                        ShramSafal.Application.UseCases.Farms.UpdateFarmBoundary.UpdateFarmBoundaryCommand>>()),
+                new AgriSync.BuildingBlocks.Application.PipelineBehaviors.AuthorizationBehavior<
+                    ShramSafal.Application.UseCases.Farms.UpdateFarmBoundary.UpdateFarmBoundaryCommand,
+                    ShramSafal.Application.Contracts.Dtos.FarmDto>(
+                    sp.GetServices<AgriSync.BuildingBlocks.Application.PipelineBehaviors.IAuthorizationCheck<
+                        ShramSafal.Application.UseCases.Farms.UpdateFarmBoundary.UpdateFarmBoundaryCommand>>())));
+
         // Phase 6 — self-exit
         services.AddScoped<ExitMembershipHandler>();
 
