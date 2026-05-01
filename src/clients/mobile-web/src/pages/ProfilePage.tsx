@@ -74,6 +74,23 @@ const getIdentityStatus = (profile: FarmerProfile): IdentityStatus => {
     return 'PENDING'; // Default to PENDING to show the red banner
 };
 
+/**
+ * The eight tabs rendered by ProfilePage. Exported so tests (and any future
+ * deep-link helper) can address tabs without re-declaring the literal union.
+ *
+ * Sub-plan 04 Task 1 introduces the `initialTab` test seam on ProfilePageProps;
+ * Task 6 removes the prop once tabs become route segments under `features/profile/`.
+ */
+export type ProfileTab =
+    | 'identity'
+    | 'structure'
+    | 'utils'
+    | 'plan'
+    | 'machines'
+    | 'health'
+    | 'intelligence'
+    | 'people';
+
 interface ProfilePageProps {
     profile: FarmerProfile;
     crops: CropProfile[];
@@ -88,6 +105,13 @@ interface ProfilePageProps {
     onOpenFinanceManager?: () => void;
     onOpenReferrals?: () => void;
     onOpenQrDemo?: () => void;
+    /**
+     * Test-only seam: lets snapshot tests render each tab deterministically
+     * without simulating a click. Removed in Sub-plan 04 Task 6 once tabs
+     * become route segments. Falls through to 'structure' (the production
+     * default) when undefined.
+     */
+    initialTab?: ProfileTab;
 }
 
 // --- CONSTANTS ---
@@ -1339,10 +1363,10 @@ const UtilitiesManager = ({ profile, onUpdate }: { profile: FarmerProfile, onUpd
 
 // --- MAIN PAGE LAYOUT ---
 
-const ProfilePage: React.FC<ProfilePageProps> = ({ profile, crops, onUpdateProfile, onUpdateCrops, onAddPerson, onDeletePerson, onOpenScheduleLibrary, onOpenFinanceManager, onOpenReferrals, onOpenQrDemo }) => {
+const ProfilePage: React.FC<ProfilePageProps> = ({ profile, crops, onUpdateProfile, onUpdateCrops, onAddPerson, onDeletePerson, onOpenScheduleLibrary, onOpenFinanceManager, onOpenReferrals, onOpenQrDemo, initialTab }) => {
     const { t } = useLanguage();
     const { logout, session: authSession } = useAuth();
-    const [activeTab, setActiveTab] = useState<'identity' | 'structure' | 'utils' | 'plan' | 'machines' | 'health' | 'intelligence' | 'people'>('structure');
+    const [activeTab, setActiveTab] = useState<ProfileTab>(initialTab ?? 'structure');
 
     // Crop & Plot State (Reused from previous, simplified)
     const [isAddingCrop, setIsAddingCrop] = useState(false);
