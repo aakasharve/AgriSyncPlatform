@@ -11,9 +11,10 @@
 
 `feature/ighardening-04-frontend` was branched from `akash_edits` at `b41e1c8` on 2026-05-01. Since then `akash_edits` has been re-shaped:
 
-**Current `akash_edits` head: `b1a4095`** — adds two Plan 04 Task 1 scaffolding commits directly on the integration branch:
+**Current `akash_edits` head: `19a31b9`** — adds three Plan 04 Task 1 scaffolding commits directly on the integration branch:
 
 ```
+19a31b9 chore(deps): add jsdom + @testing-library/react devDeps (Sub-plan 04 Task 1, Commit C1)
 b1a4095 test(scaffold): add minimal TestProviders.tsx for Sub-plan 04 (Task 1, Commit B)
 fadfe86 test(profile): add ProfileTab type + initialTab prop seam (Sub-plan 04 Task 1, Commit A)
 b41e1c8 feat(security): add browser-side AI call audit script    ← branch point for this worktree
@@ -27,19 +28,52 @@ parked/sub-plan-05-bot-commits:
   ffa9352 feat(e2e-api): /__e2e/{reset,seed,fail-pushes,status} env-gated (Sub-plan 05 Task 2)
 ```
 
-**What `fadfe86` + `b1a4095` already landed on `akash_edits`:**
-- `ProfileTab` union exported from `pages/ProfilePage.tsx` and an optional `initialTab?: ProfileTab` prop wired so snapshot tests can render each of the 8 tabs deterministically without simulating clicks. Production default `'structure'` preserved.
-- Pass-through `src/shared/test/TestProviders.tsx` — minimal stable composition seat. Per the commit message, **per-file `vi.mock` is the recipe** for ProfilePage's contexts (LanguageContext, AuthProvider, FarmContext, etc.). TestProviders intentionally does NOT pre-mock those modules.
+**What `fadfe86` + `b1a4095` + `19a31b9` already landed on `akash_edits`:**
+- (`fadfe86`) `ProfileTab` union exported from `pages/ProfilePage.tsx` and an optional `initialTab?: ProfileTab` prop wired so snapshot tests can render each of the 8 tabs deterministically without simulating clicks. Production default `'structure'` preserved.
+- (`b1a4095`) Pass-through `src/shared/test/TestProviders.tsx` — minimal stable composition seat. Per the commit message, **per-file `vi.mock` is the recipe** for ProfilePage's contexts (LanguageContext, AuthProvider, FarmContext, etc.). TestProviders intentionally does NOT pre-mock those modules.
+- (`19a31b9`) `jsdom` + `@testing-library/react` added as devDeps. **Design choice flagged in the commit message:** the global `vitest.config.ts` environment stays `'node'`; tests that need DOM use a per-file `// @vitest-environment jsdom` directive. Existing 8 contract/payload tests stay fast in node env.
 
 This is the Task 1b *prerequisite scaffolding* I had originally filed under `T-IGH-04-PROFILE-SNAPSHOT`. The remaining work is now scoped down — see the updated scope in that section below.
 
+### ⚠ Design tension surfaced by `19a31b9` — must reconcile during rebase
+
+My Task 1a commit (`00a0670`) on this worktree took the **opposite** vitest config direction. It:
+- Switched `vitest.config.ts` global `environment` from `'node'` to `'jsdom'`.
+- Added a global `setupFiles: ['./src/test/setup.ts']`.
+- The setup file globally imports `fake-indexeddb/auto` and `@testing-library/jest-dom/vitest`.
+- Added these additional devDeps not in `19a31b9`: `@testing-library/user-event`, `@testing-library/jest-dom`, `fake-indexeddb`, plus `@vitejs/plugin-react`.
+
+The integration branch's design (per-file `@vitest-environment jsdom` directive, no global setup) is more conservative — keeps the existing 8 node-env tests fast and isolates DOM/IndexedDB shims to the tests that need them. **My worktree's design contradicts this.**
+
+**Reconciliation rule for the rebase:**
+1. **Resolve the philosophy in favor of `19a31b9`** — it landed first on the integration branch and the commit message documents the deliberate choice. Global env stays `'node'`; setupFiles stay empty.
+2. Drop my `vitest.config.ts` global-env change. Keep the `@vitejs/plugin-react` plugin entry (needed for any JSX transform).
+3. Move `fake-indexeddb/auto` + `jest-dom/vitest` registrations out of `src/test/setup.ts`. Either:
+   - **Per-file**: import `fake-indexeddb/auto` at the top of each test that uses Dexie (`SyncPullReconciler.behavior.test.ts`, `DexieCropsRepository.test.ts`, `DexieProfileRepository.test.ts`, `LegacyLocalStorageMigrator.test.ts`).
+   - **Or keep `setup.ts` but gate it via a `setupFiles` *array per project* split** — likely overkill at this scale.
+   - Recommended: per-file imports.
+4. Add `// @vitest-environment jsdom` directive at the top of every test that calls `render()` or accesses `document`/`window` (`OfflineConflictPage.test.tsx` and any future React-rendering tests). The Dexie tests don't need `jsdom` — `fake-indexeddb/auto` works in node env.
+5. `src/test/setup.ts` becomes optional. If kept, it should hold only the `structuredClone` polyfill (jsdom 29 bug workaround) — and only loaded in the directive-jsdom context. Easier to drop the file outright.
+6. Keep the four extra devDeps from my Task 1a (`@testing-library/user-event`, `@testing-library/jest-dom`, `fake-indexeddb`, `@vitejs/plugin-react`). They're needed by the per-file approach too. `19a31b9` only added the minimum for ProfilePage's smoke test; the worktree's storage + sync tests need more.
+7. Verify `package-lock.json` reconciles cleanly. The two branches touched it independently; `npm install` after picking the merged `package.json` regenerates it.
+
+**Test surface impact after reconciliation:** all 32 worktree tests must still pass. Specifically:
+- `SyncPullReconciler.behavior.test.ts` — add `import 'fake-indexeddb/auto'` at top.
+- `DexieCropsRepository.test.ts`, `DexieProfileRepository.test.ts`, `LegacyLocalStorageMigrator.test.ts` — same.
+- `syncMachine.test.ts` — pure node-env, no change.
+- `OfflineConflictPage.test.tsx` — add `// @vitest-environment jsdom` directive at top + `import '@testing-library/jest-dom/vitest'` for matchers.
+- `SyncMutationCatalog.contract.test.ts`, `PayloadValidator.test.ts` — pure node, no change.
+
 **Action before next Plan 04 session (in order):**
 1. Classify the two parked commits — they are Sub-plan 05 PREP continuation; do not graft them onto `feature/ighardening-04-frontend`.
-2. Rebase `feature/ighardening-04-frontend` onto **`b1a4095`** (current `akash_edits` head), not `5e270b1`.
-3. After rebase, watch for a potential conflict in `pages/ProfilePage.tsx` — the worktree's Task 1a behavior snapshot test does not import `ProfilePage`, so the conflict surface is small, but the integration branch's `initialTab` prop seam should "just stick" since the worktree never modified that file.
-4. Watch for a potential conflict in `src/shared/test/` — the worktree's Task 1a created `src/test/setup.ts`; the integration branch's commit B added `src/shared/test/TestProviders.tsx`. Different paths, should not collide.
-5. Re-run all four pre-flight gates after rebase: mobile-web tsc, mobile-web vitest, marketing-web tsc, dotnet test Release. Confirm the worktree's 32 tests still pass alongside any tests `b1a4095` may bring.
-6. Verify the post-rebase Task 1a snapshot still matches (no drift introduced by rebase).
+2. Rebase `feature/ighardening-04-frontend` onto **`19a31b9`** (current `akash_edits` head).
+3. **Expected conflict — `package.json` + `package-lock.json`.** Both branches added `jsdom` + `@testing-library/react`. Resolution: take the union — keep `19a31b9`'s entries plus the worktree's additional devDeps (`@testing-library/user-event`, `@testing-library/jest-dom`, `fake-indexeddb`, `@vitejs/plugin-react`). Re-run `npm install` to regenerate the lockfile cleanly.
+4. **Expected conflict — `vitest.config.ts`.** See "Design tension" callout above. Resolve in favor of `19a31b9`'s philosophy: keep global env `'node'`, no global setupFiles, but keep the `@vitejs/plugin-react` plugin entry from the worktree.
+5. **Expected per-file edits, no conflicts but required updates** to four worktree test files: add `import 'fake-indexeddb/auto'` to the three Dexie/SyncPullReconciler tests, add `// @vitest-environment jsdom` directive + jest-dom import to `OfflineConflictPage.test.tsx`. Drop `src/test/setup.ts` after this is done.
+6. Watch for a potential conflict in `pages/ProfilePage.tsx` — the worktree never modified this file (Task 1a was logic-only, not React-rendering), so the integration branch's `initialTab` prop seam should "just stick".
+7. Watch for a potential overlap in `src/shared/test/` — the worktree's Task 1a created `src/test/setup.ts` (different path); the integration branch's commit B created `src/shared/test/TestProviders.tsx`. No path collision; just drop my `setup.ts` per step 5.
+8. Re-run all four pre-flight gates after rebase: mobile-web tsc, mobile-web vitest, marketing-web tsc, dotnet test Release. Confirm the worktree's 32 tests still pass alongside any tests the three new Task 1 scaffolding commits bring.
+9. Verify the post-rebase Task 1a snapshot still matches (no drift introduced by rebase or by the env switch).
 
 ---
 
@@ -50,7 +84,7 @@ Each landed task has remaining work before it satisfies Plan 04 DoD:
 | Task | Landed | Remaining toward DoD |
 |---|---|---|
 | **1a** SyncPullReconciler snapshot + test infra | ✅ behavioral lock + jsdom/fake-indexeddb/testing-library scaffold | none — this one is fully done as scoped |
-| **1b** ProfilePage TestProviders + tabs snapshot | ❌ **NOT LANDED** | All of it. Filed as `T-IGH-04-PROFILE-SNAPSHOT` below. Prereq for Task 6. |
+| **1b** ProfilePage TestProviders + tabs snapshot | ⚠️ **Prereq scaffolding landed on `akash_edits`** (`fadfe86` ProfileTab seam, `b1a4095` minimal TestProviders, `19a31b9` jsdom+@testing-library/react devDeps); **snapshot test itself still pending** | The actual `ProfilePage.snapshot.test.tsx` with per-file `vi.mock` declarations + `it.each` over 8 tabs. Filed as `T-IGH-04-PROFILE-SNAPSHOT` below; remaining scope ≈45-60min after rebase. Prereq for Task 6. |
 | **2** Crops/Profile/uiPrefs in Dexie | ✅ schema v14 + repos + migrator | T-IGH-04-LEGACY-STORAGE-CLEANUP — drop the legacy `crops` and `farmer_profile` localStorage keys after one release of soak. |
 | **3** localStorage architecture gate | ✅ **NEW-violation gate only** | Allow-list still has **21 entries**. Plan 04 DoD says "`localStorage.*` only inside `infrastructure/storage/`" — that requires the allow-list at zero. Filed as `T-IGH-04-LOCALSTORAGE-MIGRATION`. |
 | **4** XState root store + syncMachine + worker bridge | ✅ machine in tree + worker emits events | **Conflict status durability is broken** — see `T-IGH-04-CONFLICT-STATUS-DURABILITY` (P0). Without it, the conflict UX shipped in Task 5 is racy. |
@@ -372,7 +406,11 @@ After the worktree rebases onto `b1a4095`, the remaining scope is:
 ```
 Session A0 (BEFORE anything else):
             Rebase feature/ighardening-04-frontend onto current akash_edits
-            (5e270b1) and re-run all four pre-flight gates. ~15 min.
+            (19a31b9) and re-run all four pre-flight gates. Expect
+            package.json/package-lock + vitest.config.ts conflicts; resolve
+            per the "Design tension" callout — keep global env 'node',
+            move shims per-file. ~30-45 min including the test-file
+            directive edits.
 
 Session A:  T-IGH-04-CONFLICT-STATUS-DURABILITY  (~2h, P0, sequential)
             ↑ Closes Task 5's architectural gap before anything else
@@ -415,9 +453,14 @@ Status: PARTIAL_FOUNDATION — Tasks 1a, 2, 3, 4, 5 LANDED on
         2026-05-01 rebase-base correction follow). Each landed task
         carries remaining work toward Plan 04 DoD:
           - Task 1b: prerequisites (ProfileTab seam + TestProviders
-            scaffold) landed directly on akash_edits as fadfe86 and
-            b1a4095; the snapshot test itself is still pending under
+            scaffold + jsdom/@testing-library/react devDeps) landed
+            directly on akash_edits as fadfe86, b1a4095, 19a31b9; the
+            snapshot test itself is still pending under
             T-IGH-04-PROFILE-SNAPSHOT (now ~45-60 min, scope reduced).
+            Note design choice: integration branch keeps global vitest
+            env 'node' with per-file `// @vitest-environment jsdom`
+            directives — worktree's Task 1a took the opposite line
+            (global jsdom) and must reconcile during rebase.
           - Task 3: gate enforces NEW violations only; allow-list of 21
             entries drains in T-IGH-04-LOCALSTORAGE-MIGRATION.
           - Task 5: badge created but not mounted; rejected-state
@@ -425,7 +468,7 @@ Status: PARTIAL_FOUNDATION — Tasks 1a, 2, 3, 4, 5 LANDED on
             P0).
           - Tasks 6, 7, 8, 9, 10 and DoD verification deferred to
             follow-up sessions per docs/T-IGH-04-PENDING-TASKS.md.
-        Branch base is b41e1c8; rebase onto akash_edits head b1a4095
+        Branch base is b41e1c8; rebase onto akash_edits head 19a31b9
         before next session. Earlier 05 PREP commits (ffa9352, 5e270b1)
         live on parked/sub-plan-05-bot-commits, not on akash_edits.
 ```
@@ -437,7 +480,7 @@ Move this document into `_COFOUNDER/Projects/AgriSync/Operations/Pending_Tasks/`
 ## Branch handling
 
 - **Branch:** `feature/ighardening-04-frontend` is isolated in `.worktrees/ighardening-04-frontend/`.
-- **Base:** branched from `akash_edits` at `b41e1c8` on 2026-05-01. **Out of date** — `akash_edits` head is now `b1a4095` (two new Plan 04 Task 1 scaffolding commits — `fadfe86` ProfileTab seam, `b1a4095` minimal TestProviders). **Rebase onto `b1a4095` before next Plan 04 session.**
+- **Base:** branched from `akash_edits` at `b41e1c8` on 2026-05-01. **Out of date** — `akash_edits` head is now `19a31b9` (three Plan 04 Task 1 scaffolding commits — `fadfe86` ProfileTab seam, `b1a4095` minimal TestProviders, `19a31b9` jsdom+@testing-library/react devDeps). **Rebase onto `19a31b9` before next Plan 04 session.** Expect `package.json` / `package-lock.json` and `vitest.config.ts` conflicts; resolve per the "Design tension" callout near the top of this doc.
 - **Parked:** the earlier 05 PREP commits (`ffa9352` /__e2e/ endpoints, `5e270b1` e2e/lighthouse/zap workflows) now live on `parked/sub-plan-05-bot-commits`, not on `akash_edits`. Do not graft them onto `feature/ighardening-04-frontend`.
 - **Merge into `akash_edits`:** wait until at least T-IGH-04-CONFLICT-STATUS-DURABILITY (P0) lands plus Tasks 6 + 7 + 8 — the heaviest decompositions. Merging the foundation alone leaves Plan 04 DoD unfulfilled and the conflict UX architecturally racy.
 - **Push to origin:** not done by this session. User decision; the verifier brief did not explicitly authorize push.
@@ -446,4 +489,4 @@ Move this document into `_COFOUNDER/Projects/AgriSync/Operations/Pending_Tasks/`
 
 ---
 
-*Originally authored 2026-05-01 by Claude Opus 4.7 in worktree session 1. Updated 2026-05-01 (same session, two post-verifier rounds): first to correct overclaimed wording — Tasks 1-5 are PARTIAL_FOUNDATION, not fully shipped against Plan 04 DoD; T-IGH-04-CONFLICT-STATUS-DURABILITY (P0) added. Then to correct the branch-base note again after `akash_edits` was re-shaped — rebase target is now `b1a4095` (with Task 1 scaffolding fadfe86 + b1a4095 already on the integration branch); 05 PREP commits parked on `parked/sub-plan-05-bot-commits`. T-IGH-04-PROFILE-SNAPSHOT scope reduced accordingly.*
+*Originally authored 2026-05-01 by Claude Opus 4.7 in worktree session 1. Updated 2026-05-01 (same session, three post-verifier rounds): (1) corrected overclaimed wording — Tasks 1-5 are PARTIAL_FOUNDATION, not fully shipped against Plan 04 DoD; T-IGH-04-CONFLICT-STATUS-DURABILITY (P0) added. (2) Corrected the branch-base note after `akash_edits` was re-shaped — rebase target became `b1a4095` (with Task 1 scaffolding `fadfe86` + `b1a4095` on the integration branch); 05 PREP commits parked on `parked/sub-plan-05-bot-commits`; T-IGH-04-PROFILE-SNAPSHOT scope reduced accordingly. (3) Re-corrected branch base again — `akash_edits` advanced to `19a31b9` adding jsdom + @testing-library/react devDeps via per-file `// @vitest-environment jsdom` directive (NOT global env switch). Worktree's Task 1a took the opposite design choice; "Design tension" callout added; rebase action list updated; reality-check table for Task 1b corrected from "NOT LANDED / All of it" to "Prereq scaffolding landed; snapshot test pending". Stale Session A0 head `5e270b1` typo fixed to `19a31b9`.*
