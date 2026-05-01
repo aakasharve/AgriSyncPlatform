@@ -1,3 +1,4 @@
+using System.Runtime.CompilerServices;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Npgsql;
@@ -5,33 +6,54 @@ using OpenTelemetry.Metrics;
 using OpenTelemetry.Resources;
 using OpenTelemetry.Trace;
 
+[assembly: InternalsVisibleTo("AgriSync.ArchitectureTests")]
+
 namespace AgriSync.Bootstrapper.Composition;
 
 /// <summary>
 /// T-IGH-03-OBSERVABILITY-OTEL: wires the OpenTelemetry SDK with W3C
 /// Trace Context propagation, ASP.NET Core / HttpClient / EF Core /
-/// Npgsql auto-instrumentation, and an OTLP exporter pointed at a
-/// local Jaeger collector by default.
+/// Npgsql auto-instrumentation, and (conditionally) an OTLP exporter.
 ///
 /// <para>
-/// <b>Why W3C Trace Context.</b> ASP.NET Core's
-/// <c>AddAspNetCoreInstrumentation</c> + the OTel SDK default
-/// propagator together produce <c>traceparent</c> response headers
-/// and propagate inbound <c>traceparent</c> through outgoing HTTP
-/// (via <c>AddHttpClientInstrumentation</c>) so that any future
-/// service split keeps a single trace across the boundary. This
-/// matches the plan's Sub-plan 03 Task 11 acceptance.
+/// <b>What the W3C Trace Context wiring actually does.</b> The OTel
+/// SDK default text-map propagator is a composite of the
+/// W3C TraceContext propagator and the W3C Baggage propagator. With
+/// <c>AddAspNetCoreInstrumentation</c>, an inbound HTTP request's
+/// <c>traceparent</c> header is EXTRACTED by the propagator so the
+/// server-side activity becomes a child of the caller's trace.
+/// With <c>AddHttpClientInstrumentation</c>, an outbound HTTP
+/// request's <c>traceparent</c> header is INJECTED by the propagator
+/// so downstream services join the same trace. ASP.NET Core does
+/// NOT add a <c>traceparent</c> response header by default, and we
+/// do not configure one — clients must not rely on response headers
+/// for trace correlation; they correlate via outbound trace
+/// propagation or by querying the collector with a known trace id.
 /// </para>
 ///
 /// <para>
-/// <b>Configuration.</b> Reads two keys from <c>IConfiguration</c>:
-/// <c>OTel:ServiceName</c> (defaults to <c>"agrisync"</c>) and
-/// <c>OTel:Endpoint</c> (defaults to <c>http://localhost:4317</c>,
-/// the Jaeger all-in-one OTLP gRPC port). Production deploys override
-/// either via env vars (<c>OTel__ServiceName</c>,
-/// <c>OTel__Endpoint</c>) or via the standard OTel env var
-/// <c>OTEL_EXPORTER_OTLP_ENDPOINT</c> which the SDK honours
-/// automatically when no explicit endpoint is set.
+/// <b>OTLP exporter endpoint precedence.</b> In order:
+/// <list type="number">
+/// <item>The standard OTel env var <c>OTEL_EXPORTER_OTLP_ENDPOINT</c>
+/// (read directly via <see cref="Environment.GetEnvironmentVariable(string)"/>
+/// so it always wins over .NET configuration sources).</item>
+/// <item><c>OTel:Endpoint</c> from <see cref="IConfiguration"/>
+/// (which includes <c>appsettings.Development.json</c> →
+/// <c>http://localhost:4317</c> for the local Jaeger smoke, plus
+/// any <c>OTel__Endpoint</c> env-var override).</item>
+/// <item>If neither source supplies a parseable absolute URI, the
+/// OTLP exporter is NOT registered. Traces still flow inside the
+/// SDK (so unit tests can observe activities) but nothing leaves
+/// the process. This is the desired Production-default: ship
+/// nothing unless someone has wired a collector explicitly.</item>
+/// </list>
+/// </para>
+///
+/// <para>
+/// <b>Configuration.</b> <c>OTel:ServiceName</c> defaults to
+/// <c>"agrisync"</c> and SHOULD be set per-environment
+/// (<c>OTel__ServiceName=agrisync-prod-eu</c>) so traces are easy
+/// to filter in the collector.
 /// </para>
 ///
 /// <para>
@@ -40,8 +62,12 @@ namespace AgriSync.Bootstrapper.Composition;
 /// docker run --rm --name agrisync-jaeger \
 ///   -p 16686:16686 -p 4317:4317 jaegertracing/all-in-one:latest
 /// dotnet run --project src/AgriSync.Bootstrapper
-/// # hit GET /health, GET /health/ready, then a real endpoint
-/// # open http://localhost:16686 and confirm trace tree
+/// # Send an inbound traceparent so the trace id in Jaeger is
+/// # deterministic and easy to find:
+/// curl -H "traceparent: 00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01" \
+///   http://localhost:5000/health
+/// # Open http://localhost:16686, select service "agrisync-dev",
+/// # search for trace id 4bf92f3577b34da6a3ce929d0e0e4736.
 /// </code>
 /// </para>
 /// </summary>
@@ -55,52 +81,79 @@ public static class OpenTelemetryConfig
     public const string DefaultServiceName = "agrisync";
 
     /// <summary>
-    /// Default OTLP endpoint matching the Jaeger all-in-one image's
-    /// gRPC receiver. Production deploys SHOULD set this to whatever
-    /// collector address the deployed graph is using.
+    /// Standard OTel SDK env var that takes precedence over
+    /// <c>OTel:Endpoint</c> in <see cref="IConfiguration"/>. Documented
+    /// at <see href="https://opentelemetry.io/docs/specs/otel/protocol/exporter/"/>.
     /// </summary>
-    public const string DefaultOtlpEndpoint = "http://localhost:4317";
+    public const string OtlpEndpointEnvVar = "OTEL_EXPORTER_OTLP_ENDPOINT";
 
     /// <summary>
-    /// Registers the OpenTelemetry SDK with traces + metrics. Idempotent;
-    /// safe to call once at composition root.
+    /// Registers the OpenTelemetry SDK with traces + metrics. The
+    /// OTLP exporter is registered only when an endpoint resolves
+    /// from <see cref="OtlpEndpointEnvVar"/> or <c>OTel:Endpoint</c>;
+    /// otherwise no exporter is wired and traces stay inside the
+    /// process. Idempotent; safe to call once at composition root.
     /// </summary>
     public static IServiceCollection AddAgriSyncObservability(
         this IServiceCollection services,
         IConfiguration configuration)
     {
         var serviceName = configuration["OTel:ServiceName"] ?? DefaultServiceName;
-        var endpointRaw = configuration["OTel:Endpoint"] ?? DefaultOtlpEndpoint;
-
-        if (!Uri.TryCreate(endpointRaw, UriKind.Absolute, out var endpoint))
-        {
-            // Fall back to default rather than crash on misconfiguration —
-            // a bad OTel endpoint should not take down the whole host.
-            endpoint = new Uri(DefaultOtlpEndpoint);
-        }
+        var endpoint = ResolveOtlpEndpoint(configuration);
 
         services.AddOpenTelemetry()
             .ConfigureResource(rb => rb
                 .AddService(serviceName: serviceName, serviceVersion: TryGetAssemblyVersion()))
-            .WithTracing(tracing => tracing
-                .AddSource("AgriSync.*")
-                .AddAspNetCoreInstrumentation(o => o.RecordException = true)
-                .AddHttpClientInstrumentation()
-                // EF Core instrumentation: defaults are privacy-safe
-                // (statement text NOT captured) so we accept defaults.
-                // The 1.15.x API removed the SetDbStatementForText
-                // option that earlier docs reference; the modern
-                // equivalent is to leave it off.
-                .AddEntityFrameworkCoreInstrumentation()
-                .AddNpgsql()
-                .AddOtlpExporter(o => o.Endpoint = endpoint))
-            .WithMetrics(metrics => metrics
-                .AddAspNetCoreInstrumentation()
-                .AddHttpClientInstrumentation()
-                .AddRuntimeInstrumentation()
-                .AddOtlpExporter(o => o.Endpoint = endpoint));
+            .WithTracing(tracing =>
+            {
+                tracing
+                    .AddSource("AgriSync.*")
+                    .AddAspNetCoreInstrumentation(o => o.RecordException = true)
+                    .AddHttpClientInstrumentation()
+                    // EF Core instrumentation: defaults are privacy-safe
+                    // (statement text NOT captured). The 1.15.x API
+                    // removed the SetDbStatementForText option earlier
+                    // docs reference; the modern equivalent is the
+                    // default.
+                    .AddEntityFrameworkCoreInstrumentation()
+                    .AddNpgsql();
+                if (endpoint is not null)
+                {
+                    tracing.AddOtlpExporter(o => o.Endpoint = endpoint);
+                }
+            })
+            .WithMetrics(metrics =>
+            {
+                metrics
+                    .AddAspNetCoreInstrumentation()
+                    .AddHttpClientInstrumentation()
+                    .AddRuntimeInstrumentation();
+                if (endpoint is not null)
+                {
+                    metrics.AddOtlpExporter(o => o.Endpoint = endpoint);
+                }
+            });
 
         return services;
+    }
+
+    /// <summary>
+    /// Resolves the OTLP endpoint per the documented precedence:
+    /// <see cref="OtlpEndpointEnvVar"/> → <c>OTel:Endpoint</c> →
+    /// <c>null</c>. A bad URI from either source is treated the
+    /// same as "not configured" so a typo cannot crash the host.
+    /// Exposed as <c>internal</c> for the architecture test that
+    /// asserts the precedence directly.
+    /// </summary>
+    internal static Uri? ResolveOtlpEndpoint(IConfiguration configuration)
+    {
+        var raw = Environment.GetEnvironmentVariable(OtlpEndpointEnvVar)
+                  ?? configuration["OTel:Endpoint"];
+        if (string.IsNullOrWhiteSpace(raw))
+        {
+            return null;
+        }
+        return Uri.TryCreate(raw, UriKind.Absolute, out var parsed) ? parsed : null;
     }
 
     private static string TryGetAssemblyVersion()
