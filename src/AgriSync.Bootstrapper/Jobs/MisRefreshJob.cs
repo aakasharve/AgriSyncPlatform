@@ -27,6 +27,13 @@ namespace AgriSync.Bootstrapper.Jobs
         // dropped from the rewrite and removed here so the nightly
         // refresh stops logging "relation does not exist" for them.
         //
+        // T-IGH-03-MIS-MATVIEW-REDESIGN Bucket 1 (2026-05-01, ADR-0004 α):
+        // Restored mis.subscription_farms (denormalised cross-aggregate
+        // projection) plus its two consumers — mis.silent_churn_watchlist
+        // and mis.zero_engagement_farms. Refresh ORDER MATTERS: the
+        // projection must refresh BEFORE its consumers so they see the
+        // current Subscription→Farm link snapshot.
+        //
         // T-IGH-03-MIS-MATVIEW-REDESIGN Buckets 2/3/4 (2026-05-03):
         // 13 matviews restored by 20260502020000_RestoreBuckets234Matviews
         // — only matviews with a documented in-tree consumer
@@ -59,6 +66,11 @@ namespace AgriSync.Bootstrapper.Jobs
             // W0-A — Admin resolver observability (separate migration,
             // not in the AnalyticsRewrite scope; refreshes here).
             "mis.admin_scope_health",
+            // Bucket 1 — Subscription-aware churn-watch dashboards.
+            // ORDER: projection first, consumers second.
+            "mis.subscription_farms",
+            "mis.silent_churn_watchlist",
+            "mis.zero_engagement_farms",
             // Bucket 2 (Metabase founder dashboard cards 3/8/9/10).
             // engagement_tier depends on wvfd_weekly — listed AFTER it.
             "mis.engagement_tier",
