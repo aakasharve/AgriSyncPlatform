@@ -1,3 +1,4 @@
+using AgriSync.BuildingBlocks.Persistence.Outbox;
 using Microsoft.EntityFrameworkCore;
 using ShramSafal.Domain.AI;
 using ShramSafal.Domain.Audit;
@@ -55,9 +56,25 @@ public sealed class ShramSafalDbContext(DbContextOptions<ShramSafalDbContext> op
     public DbSet<OrganizationFarmScope> OrganizationFarmScopes => Set<OrganizationFarmScope>();
     internal DbSet<SyncMutationRecord> SyncMutations => Set<SyncMutationRecord>();
 
+    /// <summary>
+    /// T-IGH-03-OUTBOX-WIRING: outbox queue. Domain events raised on
+    /// any tracked aggregate are flushed into this DbSet by
+    /// <see cref="DomainEventToOutboxInterceptor"/> in the same
+    /// SaveChanges call as the aggregate's writes, so the OutboxMessage
+    /// row is committed atomically with the business state.
+    /// </summary>
+    public DbSet<OutboxMessage> OutboxMessages => Set<OutboxMessage>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.HasDefaultSchema("ssf");
         modelBuilder.ApplyConfigurationsFromAssembly(typeof(ShramSafalDbContext).Assembly);
+
+        // T-IGH-03-OUTBOX-WIRING: outbox table sits alongside the
+        // ShramSafal aggregates in the ssf schema so the
+        // DomainEventToOutboxInterceptor can write OutboxMessage rows
+        // in the same transaction as the aggregate. Configuration is
+        // shared with the OutboxDbContext / other writing contexts.
+        modelBuilder.ApplyConfiguration(new OutboxMessageConfiguration());
     }
 }

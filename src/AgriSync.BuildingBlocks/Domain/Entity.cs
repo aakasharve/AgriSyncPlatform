@@ -48,6 +48,28 @@ public abstract class Entity<TId>
         _domainEvents.RemoveRange(0, count);
     }
 
+    /// <summary>
+    /// Re-inserts <paramref name="events"/> at the FRONT of the queue
+    /// in their original order. Used by
+    /// <c>OutboxTransactionInterceptor</c> to undo a successful
+    /// <c>SavedChanges</c> clear when the caller subsequently rolls
+    /// the explicit transaction back: the OutboxMessage rows were
+    /// rolled back with the transaction, so the in-memory events must
+    /// come back too for a retry to resend them.
+    /// </summary>
+    internal void InsertDomainEventsAtFront(IReadOnlyList<IDomainEvent> events)
+    {
+        if (events is null || events.Count == 0)
+        {
+            return;
+        }
+        // Insert in reverse so the original order is preserved at the front.
+        for (int i = events.Count - 1; i >= 0; i--)
+        {
+            _domainEvents.Insert(0, events[i]);
+        }
+    }
+
     public override bool Equals(object? obj)
     {
         if (obj is not Entity<TId> other)
