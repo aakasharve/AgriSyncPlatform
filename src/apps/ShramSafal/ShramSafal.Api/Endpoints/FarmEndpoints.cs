@@ -84,7 +84,7 @@ public static class FarmEndpoints
             Guid farmId,
             UpdateFarmBoundaryRequest request,
             ClaimsPrincipal user,
-            UpdateFarmBoundaryHandler handler,
+            AgriSync.BuildingBlocks.Application.IHandler<UpdateFarmBoundaryCommand, ShramSafal.Application.Contracts.Dtos.FarmDto> handler,
             CancellationToken ct) =>
         {
             if (!EndpointActorContext.TryGetUserId(user, out var actorUserId))
@@ -108,7 +108,7 @@ public static class FarmEndpoints
         group.MapPost("/plots", async (
             CreatePlotRequest request,
             ClaimsPrincipal user,
-            CreatePlotHandler handler,
+            AgriSync.BuildingBlocks.Application.IHandler<CreatePlotCommand, ShramSafal.Application.Contracts.Dtos.PlotDto> handler,
             CancellationToken ct) =>
         {
             if (!EndpointActorContext.TryGetUserId(user, out var actorUserId))
@@ -131,7 +131,7 @@ public static class FarmEndpoints
         group.MapPost("/cropcycles", async (
             CreateCropCycleRequest request,
             ClaimsPrincipal user,
-            CreateCropCycleHandler handler,
+            AgriSync.BuildingBlocks.Application.IHandler<CreateCropCycleCommand, ShramSafal.Application.Contracts.Dtos.CropCycleDto> handler,
             CancellationToken ct) =>
         {
             if (!EndpointActorContext.TryGetUserId(user, out var actorUserId))
