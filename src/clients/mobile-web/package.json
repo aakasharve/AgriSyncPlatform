@@ -17,7 +17,11 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:voice-pipeline": "tsx scripts/voice_pipeline_gate_check.ts",
-    "test:doom-loop": "tsx scripts/ai_doom_loop_gate_check.ts"
+    "test:doom-loop": "tsx scripts/ai_doom_loop_gate_check.ts",
+    "e2e": "playwright test",
+    "e2e:ui": "playwright test --ui",
+    "e2e:install": "playwright install --with-deps",
+    "audit:ai-calls": "node scripts/ai-call-audit.mjs"
   },
   "dependencies": {
     "@capacitor/android": "^8.2.0",
@@ -48,6 +52,7 @@
   "devDependencies": {
     "@capacitor/assets": "^3.0.5",
     "@eslint/js": "^9.39.4",
+    "@playwright/test": "^1.59.1",
     "@types/google.maps": "^3.58.1",
     "@types/node": "^22.14.0",
     "@types/react-dom": "^19.2.3",
