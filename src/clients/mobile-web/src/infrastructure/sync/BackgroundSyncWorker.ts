@@ -6,6 +6,18 @@ import { reconcileSyncPull } from './SyncPullReconciler';
 import { getDatabase } from '../storage/DexieDatabase';
 import { AiJobWorker } from './AiJobWorker';
 import { isSyncMutationType } from './SyncMutationCatalog';
+import { getRootStore } from '../../app/state/RootStore';
+
+// Sub-plan 04 Task 4 — bridge worker → syncMachine. Wrapped so the worker
+// never crashes if the root store hasn't been instantiated (e.g., during
+// early app boot before AppContent mounts).
+function notifySync(event: Parameters<ReturnType<typeof getRootStore>['sync']['send']>[0]): void {
+    try {
+        getRootStore().sync.send(event);
+    } catch {
+        // Actor not ready or already torn down; ignore.
+    }
+}
 
 function toSyncMutationType(mutationType: string): SyncMutationType | null {
     // Catalog names are case-sensitive — `compliance.acknowledge` and
@@ -127,11 +139,21 @@ export class BackgroundSyncWorker {
     }
 
     private async executeCycle(): Promise<void> {
-        await mutationQueue.resetInFlightMutations();
-        await mutationQueue.markFailedAsPending();
-        await this.pushPendingMutations();
-        await this.pullLatestDeltas();
-        await AiJobWorker.run();
+        notifySync({ type: 'TRIGGER' });
+        try {
+            await mutationQueue.resetInFlightMutations();
+            await mutationQueue.markFailedAsPending();
+            await this.pushPendingMutations();
+            await this.pullLatestDeltas();
+            await AiJobWorker.run();
+            notifySync({ type: 'SYNC_DONE' });
+        } catch (error) {
+            // Per-mutation rejections were already emitted inside
+            // pushPendingMutations; emit SYNC_DONE so the actor can settle
+            // its state regardless of cycle-level failure.
+            notifySync({ type: 'SYNC_DONE' });
+            throw error;
+        }
     }
 
     private async pushPendingMutations(): Promise<void> {
@@ -189,6 +211,11 @@ export class BackgroundSyncWorker {
 
                 if (!result) {
                     await mutationQueue.markFailed(mutationId, 'No push result returned for mutation.');
+                    notifySync({
+                        type: 'MUTATION_REJECTED',
+                        mutationId: mutation.clientRequestId,
+                        reason: 'NO_RESULT',
+                    });
                     continue;
                 }
 
@@ -199,11 +226,21 @@ export class BackgroundSyncWorker {
 
                 const errorMessage = result.errorMessage ?? result.errorCode ?? 'Unknown sync error';
                 await mutationQueue.markFailed(mutationId, errorMessage);
+                notifySync({
+                    type: 'MUTATION_REJECTED',
+                    mutationId: mutation.clientRequestId,
+                    reason: result.errorCode ?? errorMessage,
+                });
             }
         } catch (error) {
             const message = error instanceof Error ? error.message : 'Unknown push error';
             for (const mutation of supportedMutations) {
                 await mutationQueue.markFailed(mutation.id as number, message);
+                notifySync({
+                    type: 'MUTATION_REJECTED',
+                    mutationId: mutation.clientRequestId,
+                    reason: message,
+                });
             }
         }
     }
