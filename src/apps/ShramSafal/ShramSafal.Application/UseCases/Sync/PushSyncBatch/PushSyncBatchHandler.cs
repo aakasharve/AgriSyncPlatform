@@ -48,18 +48,38 @@ public sealed class PushSyncBatchHandler(
     CreateCropCycleHandler createCropCycleHandler,
     CreateDailyLogHandler createDailyLogHandler,
     // T-IGH-03-PIPELINE-ROLLOUT (AddLogTask): switched from raw
-    // AddLogTaskHandler to the pipeline-wrapped IHandler so caller-
-    // shape validation + log-lookup + membership authorization run on
-    // the sync entry path. Unlike the VerifyLog migration, the pipeline
-    // and body checks are equivalent (both "any farm member"), so this
-    // is shape consistency rather than a correctness fix — but it
-    // future-proofs sync against any future tightening of the rule.
+    // AddLogTaskHandler to the pipeline-wrapped IHandler.
+    //
+    // IMPORTANT: HandleAddLogTaskAsync below runs its own pre-flight
+    // GetDailyLogByIdAsync + IsUserMemberOfFarmAsync checks BEFORE
+    // invoking this handler (those checks pre-date the rollout and
+    // remain in place). That means on the sync entry path the
+    // canonical pipeline ordering "InvalidCommand → DailyLogNotFound
+    // → Forbidden" is NOT what the wire sees: an empty DailyLogId,
+    // for example, is masked as DailyLogNotFound by the pre-check
+    // before the validator's InvalidCommand can fire. The pipeline's
+    // additional contribution on the sync path is therefore narrow:
+    // caller-shape validation for blank ActivityType / explicit-empty
+    // LogTaskId on commands where the log exists and the caller is a
+    // member. The endpoint path (/logs/{id}/tasks) is the entry that
+    // gets the full canonical pipeline ordering.
+    //
+    // Removing the pre-checks would make the pipeline canonical on
+    // sync too, but that requires sync integration tests for empty
+    // DailyLogId / missing log / non-member that don't exist yet.
+    // Tracked as a follow-up under PIPELINE-ROLLOUT.
     IHandler<AddLogTaskCommand, DailyLogDto> addLogTaskHandler,
     // T-IGH-03-PIPELINE-ROLLOUT (VerifyLog): switched from raw
     // VerifyLogHandler to the pipeline-wrapped IHandler so the strict
     // EnsureCanVerify owner-tier authorization keeps running on the
     // sync entry path (the body's defense-in-depth check is membership-
     // existence only and would have been a regression on its own).
+    //
+    // Same caveat as AddLogTask: HandleVerifyLogAsync below has its
+    // own pre-flight DailyLogNotFound + Forbidden checks before the
+    // pipeline runs. The correctness win (EnsureCanVerify on sync) is
+    // real because that owner-tier check did not exist anywhere else
+    // on the sync path. The ordering win is endpoint-only.
     IHandler<VerifyLogCommand, DailyLogDto> verifyLogHandler,
     AddCostEntryHandler addCostEntryHandler,
     AllocateGlobalExpenseHandler allocateGlobalExpenseHandler,
