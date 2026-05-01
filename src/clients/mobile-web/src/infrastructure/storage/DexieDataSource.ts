@@ -1,69 +1,25 @@
+/**
+ * @license
+ * SPDX-License-Identifier: Apache-2.0
+ *
+ * DexieDataSource — single point of entry for all client-side data access.
+ *
+ * Sub-plan 04 Task 2 / T-SP04-DEXIE-CUTOVER-SYNC-BRIDGE (2026-05-01) cut
+ * over the crops + profile repositories from localStorage to Dexie. The
+ * previous LocalCropRepository / LocalProfileRepository classes are gone;
+ * Dexie is now the source of truth and SyncPullReconciler writes the same
+ * substrate that this data source reads from.
+ *
+ * Legacy localStorage entries for `crops` and `farmer_profile` are imported
+ * once on first boot via LegacyLocalStorageMigrator and then become inert.
+ * Production code must not read those keys directly anymore.
+ */
+
 import { AppDataSource, CropRepository, ProfileRepository } from '../../application/ports/AppDataSource';
 import { LogsRepository } from '../../application/ports/index';
 import { DexieLogsRepository } from './DexieLogsRepository';
-import { storageNamespace } from './StorageNamespace';
-import { CropProfile, FarmerProfile } from '../../types';
-import { normalizeMojibakeDeep } from '../../shared/utils/textEncoding';
-
-// Simple LocalStorage implementation for Crops/Profile for now, 
-// as they are not yet in Dexie. 
-// TODO: Move Crops/Profile to Dexie in Phase 3.
-
-class LocalCropRepository implements CropRepository {
-    async getAll(): Promise<CropProfile[]> {
-        const key = storageNamespace.getKey('crops');
-        const stored = localStorage.getItem(key);
-        if (!stored) {
-            return [];
-        }
-
-        try {
-            const parsed = JSON.parse(stored) as CropProfile[];
-            const normalized = normalizeMojibakeDeep(Array.isArray(parsed) ? parsed : []);
-            if (normalized.changed) {
-                localStorage.setItem(key, JSON.stringify(normalized.value));
-            }
-
-            return normalized.value as CropProfile[];
-        } catch {
-            return [];
-        }
-    }
-
-    async save(crops: CropProfile[]): Promise<void> {
-        const key = storageNamespace.getKey('crops');
-        const normalized = normalizeMojibakeDeep(crops).value;
-        localStorage.setItem(key, JSON.stringify(normalized));
-    }
-}
-
-class LocalProfileRepository implements ProfileRepository {
-    async get(): Promise<FarmerProfile> {
-        const key = storageNamespace.getKey('farmer_profile');
-        const stored = localStorage.getItem(key);
-        if (!stored) {
-            return {} as FarmerProfile;
-        }
-
-        try {
-            const parsed = JSON.parse(stored) as FarmerProfile;
-            const normalized = normalizeMojibakeDeep(parsed);
-            if (normalized.changed) {
-                localStorage.setItem(key, JSON.stringify(normalized.value));
-            }
-
-            return normalized.value as FarmerProfile;
-        } catch {
-            return {} as FarmerProfile;
-        }
-    }
-
-    async save(profile: FarmerProfile): Promise<void> {
-        const key = storageNamespace.getKey('farmer_profile');
-        const normalized = normalizeMojibakeDeep(profile).value;
-        localStorage.setItem(key, JSON.stringify(normalized));
-    }
-}
+import { DexieCropsRepository } from './DexieCropsRepository';
+import { DexieProfileRepository } from './DexieProfileRepository';
 
 export class DexieDataSource implements AppDataSource {
     public logs: LogsRepository;
@@ -74,8 +30,8 @@ export class DexieDataSource implements AppDataSource {
 
     private constructor() {
         this.logs = DexieLogsRepository.getInstance();
-        this.crops = new LocalCropRepository();
-        this.profile = new LocalProfileRepository();
+        this.crops = new DexieCropsRepository();
+        this.profile = new DexieProfileRepository();
     }
 
     public static getInstance(): DexieDataSource {
@@ -86,9 +42,8 @@ export class DexieDataSource implements AppDataSource {
     }
 
     async initialize(): Promise<void> {
-        // Dexie auto-opens on first access, but we could explicitly open here
-        // or check migrations.
-        // For now, no-op or simple check
+        // Dexie auto-opens on first access; the singleton in DexieDatabase.ts
+        // handles version upgrades transparently. No explicit open() needed.
     }
 
     async teardown(): Promise<void> {

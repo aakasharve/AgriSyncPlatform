@@ -3,75 +3,31 @@
  * @license
  * SPDX-License-Identifier: Apache-2.0
  *
- * Sub-plan 04 Task 1 — SyncPullReconciler localStorage-only behavior baseline (D-shallow).
+ * Sub-plan 04 Task 1 — SyncPullReconciler behavior baseline.
  *
- * Locks the **localStorage** write contract of `reconcileSyncPull` from a fixed
- * SyncPullResponse. Sub-plan 04 Task 2 migrates these localStorage writes into
- * Dexie; this snapshot is the contract that migration must preserve.
+ * REPLACED 2026-05-01 by T-SP04-DEXIE-CUTOVER-SYNC-BRIDGE: this test originally
+ * locked the localStorage write contract (D-shallow). The bridge cut over the
+ * substrate to Dexie, so the snapshot now locks the Dexie write contract — the
+ * actual UI-read substrate post-cutover. Same intent ("what does a fixed
+ * SyncPullResponse produce as state?"), different storage layer.
  *
  * Scope:
- *   - In:  `farmer_profile` and `crops` localStorage keys (the two surfaces
- *          reconcileSyncPull writes to localStorage today).
- *   - Out: Dexie tables. Per the Sub-plan 04 plan amendment for Task 1,
- *          per-table Dexie snapshots are deferred until Task 2 lands the
- *          storage-boundary refactor — at which point the schema/write API
- *          stabilizes and snapshotting it is no longer pre-churn.
+ *   - In:  the Dexie `crops` and `farmerProfile` rows after a fixed
+ *          SyncPullResponse fixture flows through `reconcileSyncPull`.
+ *   - Out: per-table Dexie snapshots for sync caches (logs, attachments,
+ *          farms, plots, cropCycles, etc). Those tables are unchanged by
+ *          the cutover and are not in this test's scope.
  *
- * The Dexie module is `vi.mock`ed to a Proxy that no-ops every method on
- * every table, including `transaction(...)` which simply invokes its callback.
- * `systemClock` is mocked to a fixed ISO timestamp so the snapshot is stable
- * across runs.
+ * `fake-indexeddb/auto` registers a real IndexedDB shim, so Dexie writes
+ * actually persist and can be read back. systemClock + idGenerator stay
+ * mocked for snapshot determinism.
  */
 
+import 'fake-indexeddb/auto';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 
-// ---- Dexie no-op fake ----
-//
-// reconcileSyncPull touches mutationQueue, logs, attachments, uploadQueue,
-// appMeta, referenceData, farms, plots, cropCycles, costEntries,
-// financeCorrections, dayLedgers, plannedTasks, attentionCards. The Proxy
-// below answers any property as a fakeTable, including methods like put,
-// get, where, toArray. transaction() runs its callback inline.
-const makeFakeQuery = () => {
-    const query: Record<string, unknown> = {};
-    query.anyOf = () => query;
-    query.equals = () => query;
-    query.toArray = async () => [];
-    query.first = async () => undefined;
-    query.update = async () => undefined;
-    return query;
-};
-
-const makeFakeTable = () => ({
-    toArray: async () => [],
-    get: async () => undefined,
-    put: async () => undefined,
-    update: async () => undefined,
-    add: async () => undefined,
-    delete: async () => undefined,
-    where: () => makeFakeQuery(),
-    orderBy: () => makeFakeQuery(),
-});
-
-const fakeDb = new Proxy({}, {
-    get(_target, prop) {
-        if (prop === 'transaction') {
-            return async (
-                _mode: string,
-                _tables: unknown[],
-                fn: () => Promise<void>,
-            ) => fn();
-        }
-        return makeFakeTable();
-    },
-});
-
-vi.mock('../../storage/DexieDatabase', () => ({
-    getDatabase: () => fakeDb,
-}));
-
-// TemplateCatalog mutates an in-memory map, not localStorage; mock to avoid
-// runtime side effects bleeding across tests.
+// TemplateCatalog mutates an in-memory map, not Dexie; mock to avoid runtime
+// side effects bleeding across tests.
 vi.mock('../../reference/TemplateCatalog', () => ({
     setScheduleTemplatesFromReferenceData: vi.fn(),
 }));
@@ -98,6 +54,7 @@ vi.mock('../../../core/domain/services/IdGenerator', () => {
 });
 
 import { reconcileSyncPull } from '../SyncPullReconciler';
+import { resetDatabase, getDatabase } from '../../storage/DexieDatabase';
 import type { SyncPullResponse } from '../../api/AgriSyncClient';
 
 const fixture: SyncPullResponse = {
@@ -161,20 +118,29 @@ const fixture: SyncPullResponse = {
     referenceDataVersionHash: 'test-ref-hash-v1',
 };
 
-describe('SyncPullReconciler — localStorage behavior baseline (Sub-plan 04 Task 1, D-shallow)', () => {
-    beforeEach(() => {
+describe('SyncPullReconciler — Dexie behavior baseline (T-SP04-DEXIE-CUTOVER-SYNC-BRIDGE)', () => {
+    beforeEach(async () => {
+        const db = getDatabase();
+        await db.delete();
+        await resetDatabase();
         localStorage.clear();
     });
 
-    it('writes deterministic farmer_profile and crops localStorage keys from a fixed pull payload', async () => {
+    it('writes deterministic crops and farmerProfile rows to Dexie from a fixed pull payload', async () => {
         await reconcileSyncPull(fixture);
 
-        const profileRaw = localStorage.getItem('farmer_profile');
-        const cropsRaw = localStorage.getItem('crops');
+        const db = getDatabase();
+        // Strip volatile updatedAtMs from the crop rows so the snapshot is
+        // stable across runs without having to mock Date.now() (the repos
+        // call Date.now() directly, not systemClock).
+        const cropRows = (await db.crops.toArray())
+            .map(r => ({ id: r.id, data: r.data }))
+            .sort((a, b) => a.id.localeCompare(b.id));
+        const profileRow = await db.farmerProfile.get('self');
+        const profileSnapshot = profileRow
+            ? { id: profileRow.id, data: profileRow.data }
+            : null;
 
-        expect({
-            farmer_profile: profileRaw === null ? null : JSON.parse(profileRaw),
-            crops: cropsRaw === null ? [] : JSON.parse(cropsRaw),
-        }).toMatchSnapshot();
+        expect({ crops: cropRows, farmerProfile: profileSnapshot }).toMatchSnapshot();
     });
 });

@@ -1,87 +1,98 @@
 // Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
 
-exports[`SyncPullReconciler — localStorage behavior baseline (Sub-plan 04 Task 1, D-shallow) > writes deterministic farmer_profile and crops localStorage keys from a fixed pull payload 1`] = `
+exports[`SyncPullReconciler — Dexie behavior baseline (T-SP04-DEXIE-CUTOVER-SYNC-BRIDGE) > writes deterministic crops and farmerProfile rows to Dexie from a fixed pull payload 1`] = `
 {
   "crops": [
     {
-      "activeScheduleId": null,
-      "color": "bg-emerald-500",
-      "createdAt": "2026-05-01T12:00:00.000Z",
-      "iconName": "Grape",
+      "data": {
+        "activeScheduleId": null,
+        "color": "bg-emerald-500",
+        "createdAt": "2026-05-01T12:00:00.000Z",
+        "iconName": "Grape",
+        "id": "crop_grapes",
+        "name": "Grapes",
+        "plots": [
+          {
+            "baseline": {
+              "totalArea": 2.5,
+              "unit": "Acre",
+            },
+            "createdAt": "2026-04-01T00:00:00.000Z",
+            "id": "plot-1",
+            "name": "North Field",
+            "schedule": {
+              "expectationOverrides": [],
+              "id": "sch_plot-1",
+              "plotId": "plot-1",
+              "referenceDate": "2026-03-01",
+              "referenceType": "PLANTING",
+              "stageOverrides": [],
+              "templateId": "fallback_template",
+            },
+            "startDate": "2026-03-01",
+            "variety": "Grapes",
+          },
+        ],
+        "supportedTasks": [],
+        "workflow": [],
+      },
       "id": "crop_grapes",
-      "name": "Grapes",
-      "plots": [
-        {
-          "baseline": {
-            "totalArea": 2.5,
-            "unit": "Acre",
-          },
-          "createdAt": "2026-04-01T00:00:00.000Z",
-          "id": "plot-1",
-          "name": "North Field",
-          "schedule": {
-            "expectationOverrides": [],
-            "id": "sch_plot-1",
-            "plotId": "plot-1",
-            "referenceDate": "2026-03-01",
-            "referenceType": "PLANTING",
-            "stageOverrides": [],
-            "templateId": "fallback_template",
-          },
-          "startDate": "2026-03-01",
-          "variety": "Grapes",
-        },
-      ],
-      "supportedTasks": [],
-      "workflow": [],
     },
   ],
-  "farmer_profile": {
-    "activeOperatorId": "user-1",
-    "infrastructure": {
-      "filtrationType": "Screen",
-      "waterManagement": "Decentralized",
-    },
-    "language": "mr",
-    "location": {
-      "lat": 0,
-      "lon": 0,
-      "source": "unknown",
-      "updatedAt": "2026-05-01T12:00:00.000Z",
-    },
-    "motors": [],
-    "name": "Ramu Patil",
-    "operators": [
-      {
-        "capabilities": [
-          "VIEW_ALL",
-          "LOG_DATA",
-          "APPROVE_LOGS",
-          "MANAGE_PEOPLE",
-          "MANAGE_SETTINGS",
-        ],
-        "id": "user-1",
-        "isActive": true,
-        "isVerifier": true,
-        "name": "Ramu Patil",
-        "role": "PRIMARY_OWNER",
+  "farmerProfile": {
+    "data": {
+      "activeOperatorId": "user-1",
+      "electricityTiming": undefined,
+      "infrastructure": {
+        "filtrationType": "Screen",
+        "waterManagement": "Decentralized",
       },
-      {
-        "capabilities": [
-          "VIEW_ALL",
-          "LOG_DATA",
-        ],
-        "id": "user-2",
-        "isActive": true,
-        "isVerifier": false,
-        "name": "Helper Mukadam",
-        "role": "MUKADAM",
+      "landHoldings": undefined,
+      "language": "mr",
+      "location": {
+        "lat": 0,
+        "lon": 0,
+        "source": "unknown",
+        "updatedAt": "2026-05-01T12:00:00.000Z",
       },
-    ],
-    "phone": "",
-    "verificationStatus": "Unverified",
-    "village": "",
-    "waterResources": [],
+      "machineries": undefined,
+      "motors": [],
+      "name": "Ramu Patil",
+      "operators": [
+        {
+          "capabilities": [
+            "VIEW_ALL",
+            "LOG_DATA",
+            "APPROVE_LOGS",
+            "MANAGE_PEOPLE",
+            "MANAGE_SETTINGS",
+          ],
+          "id": "user-1",
+          "isActive": true,
+          "isVerifier": true,
+          "name": "Ramu Patil",
+          "role": "PRIMARY_OWNER",
+        },
+        {
+          "capabilities": [
+            "VIEW_ALL",
+            "LOG_DATA",
+          ],
+          "id": "user-2",
+          "isActive": true,
+          "isVerifier": false,
+          "name": "Helper Mukadam",
+          "role": "MUKADAM",
+        },
+      ],
+      "people": undefined,
+      "phone": "",
+      "trust": undefined,
+      "verificationStatus": "Unverified",
+      "village": "",
+      "waterResources": [],
+    },
+    "id": "self",
   },
 }
 `;

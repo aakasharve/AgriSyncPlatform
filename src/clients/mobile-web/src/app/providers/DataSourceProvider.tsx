@@ -13,6 +13,7 @@ import { procurementRepository } from '../../services/procurementRepository'; //
 import { legacyAuditPort } from '../../infrastructure/audit/LegacyAuditPort';
 import { useAuth } from './AuthProvider';
 import { getDatabase } from '../../infrastructure/storage/DexieDatabase';
+import { runLegacyLocalStorageMigration } from '../../infrastructure/storage/LegacyLocalStorageMigrator';
 import { purgeExpiredProcessingVoiceClips } from '../../infrastructure/voice/VoiceClipRetention';
 
 // --- CONTEXT ---
@@ -55,6 +56,11 @@ export const DataSourceProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         if (currentVersion !== DEMO_SEED_VERSION) {
             console.log(`[DataSource] Demo Data Version Mismatch (${currentVersion} vs ${DEMO_SEED_VERSION}). Resetting...`);
             await demoRepo.clearAll();
+            // T-SP04-DEXIE-CUTOVER-SYNC-BRIDGE (2026-05-01): Dexie crops is
+            // the source of truth post-cutover. The legacy localStorage
+            // 'crops' removal stays as defense-in-depth (legacy entries may
+            // still exist from pre-migration installs).
+            await getDatabase().crops.clear();
             localStorage.removeItem(storageNamespace.getKey('crops'));
 
             // Clear Procurement
@@ -138,6 +144,12 @@ export const DataSourceProvider: React.FC<{ children: React.ReactNode }> = ({ ch
             db.cropCycles,
             db.costEntries,
             db.financeCorrections,
+            // T-SP04-DEXIE-CUTOVER-SYNC-BRIDGE (2026-05-01): Dexie crops +
+            // farmerProfile are now the source of truth for those surfaces.
+            // User-switch must clear them along with the rest of the
+            // per-user cache.
+            db.crops,
+            db.farmerProfile,
         ], async () => {
             await Promise.all([
                 db.logs.clear(),
@@ -159,9 +171,17 @@ export const DataSourceProvider: React.FC<{ children: React.ReactNode }> = ({ ch
                 db.cropCycles.clear(),
                 db.costEntries.clear(),
                 db.financeCorrections.clear(),
+                db.crops.clear(),
+                db.farmerProfile.clear(),
             ]);
         });
 
+        // Defense-in-depth: clear the legacy localStorage entries too. The
+        // migrator left them in place as a safety net; on user-switch we
+        // clear them so the next user's first boot doesn't accidentally
+        // re-import the previous user's data via the migrator's once-only
+        // flag (the flag is also reset implicitly because the next boot
+        // sees no localStorage source data to import).
         for (const baseKey of REAL_MODE_LOCAL_STORAGE_KEYS) {
             localStorage.removeItem(storageNamespace.getKey(baseKey));
         }
@@ -180,6 +200,13 @@ export const DataSourceProvider: React.FC<{ children: React.ReactNode }> = ({ ch
                 storageNamespace.setNamespace(isDemoMode ? 'demo' : 'user');
                 await dataSource.initialize();
                 await MigrationService.migrate();
+                // T-SP04-DEXIE-CUTOVER-SYNC-BRIDGE (2026-05-01): one-time
+                // backfill of legacy localStorage crops + farmer_profile into
+                // Dexie. The migrator is gated by its own once-only flag and
+                // is a no-op on subsequent boots. Runs AFTER MigrationService
+                // (so Dexie has the right schema) and BEFORE the demo/real
+                // branch (so both modes see the imported data on first boot).
+                await runLegacyLocalStorageMigration();
                 if (isDemoMode) {
                     await seedDemoDataIfNeeded();
                 } else {
