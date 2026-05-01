@@ -5,6 +5,7 @@ using Accounts.Domain.Affiliation;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 
 namespace Accounts.Infrastructure;
 
@@ -25,7 +26,16 @@ public static class DependencyInjection
             ?? throw new InvalidOperationException(
                 $"Connection string '{ConnectionStringName}' (or fallback 'UserDb') must be configured.");
 
-        services.AddDbContext<AccountsDbContext>(options =>
+        // T-IGH-03-OUTBOX-WIRING: outbox interceptors. Domain events
+        // raised by Subscription / OwnerAccount aggregates flow into
+        // the shared ssf.outbox_messages table.
+        services.TryAddSingleton<AgriSync.BuildingBlocks.Persistence.Outbox.DomainEventToOutboxInterceptor>(sp =>
+            new AgriSync.BuildingBlocks.Persistence.Outbox.DomainEventToOutboxInterceptor(TimeProvider.System));
+        services.TryAddSingleton<AgriSync.BuildingBlocks.Persistence.Outbox.OutboxTransactionInterceptor>(sp =>
+            new AgriSync.BuildingBlocks.Persistence.Outbox.OutboxTransactionInterceptor(
+                sp.GetRequiredService<AgriSync.BuildingBlocks.Persistence.Outbox.DomainEventToOutboxInterceptor>()));
+
+        services.AddDbContext<AccountsDbContext>((sp, options) =>
         {
             options.UseNpgsql(connectionString, npgsql =>
             {
@@ -36,7 +46,10 @@ public static class DependencyInjection
                     maxRetryCount: 5,
                     maxRetryDelay: TimeSpan.FromSeconds(10),
                     errorCodesToAdd: null);
-            });
+            })
+            .AddInterceptors(
+                sp.GetRequiredService<AgriSync.BuildingBlocks.Persistence.Outbox.DomainEventToOutboxInterceptor>(),
+                sp.GetRequiredService<AgriSync.BuildingBlocks.Persistence.Outbox.OutboxTransactionInterceptor>());
         });
 
         services.AddScoped<IOwnerAccountRepository, OwnerAccountRepository>();

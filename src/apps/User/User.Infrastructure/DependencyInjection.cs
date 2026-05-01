@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using User.Application.Ports;
 using User.Application.Ports.External;
 using User.Infrastructure.Otp;
@@ -14,7 +15,17 @@ public static class DependencyInjection
 {
     public static IServiceCollection AddUserInfrastructure(this IServiceCollection services, IConfiguration configuration)
     {
-        services.AddDbContext<UserDbContext>(options =>
+        // T-IGH-03-OUTBOX-WIRING: register the outbox interceptors and
+        // attach them to UserDbContext so domain events raised by
+        // User aggregates (UserRegisteredEvent, MembershipChangedEvent)
+        // land in the shared ssf.outbox_messages table.
+        services.TryAddSingleton<AgriSync.BuildingBlocks.Persistence.Outbox.DomainEventToOutboxInterceptor>(sp =>
+            new AgriSync.BuildingBlocks.Persistence.Outbox.DomainEventToOutboxInterceptor(TimeProvider.System));
+        services.TryAddSingleton<AgriSync.BuildingBlocks.Persistence.Outbox.OutboxTransactionInterceptor>(sp =>
+            new AgriSync.BuildingBlocks.Persistence.Outbox.OutboxTransactionInterceptor(
+                sp.GetRequiredService<AgriSync.BuildingBlocks.Persistence.Outbox.DomainEventToOutboxInterceptor>()));
+
+        services.AddDbContext<UserDbContext>((sp, options) =>
             options.UseNpgsql(
                 configuration.GetConnectionString("UserDb"),
                 npgsql =>
@@ -24,7 +35,10 @@ public static class DependencyInjection
                         maxRetryCount: 5,
                         maxRetryDelay: TimeSpan.FromSeconds(10),
                         errorCodesToAdd: null);
-                }));
+                })
+                .AddInterceptors(
+                    sp.GetRequiredService<AgriSync.BuildingBlocks.Persistence.Outbox.DomainEventToOutboxInterceptor>(),
+                    sp.GetRequiredService<AgriSync.BuildingBlocks.Persistence.Outbox.OutboxTransactionInterceptor>()));
 
         services.AddScoped<IUserRepository, UserRepository>();
         services.AddScoped<IRefreshTokenRepository, RefreshTokenRepository>();

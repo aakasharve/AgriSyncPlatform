@@ -4,6 +4,7 @@ using Amazon.S3;
 using AgriSync.BuildingBlocks.Auth;
 using AgriSync.BuildingBlocks.Persistence.Outbox;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
@@ -38,9 +39,9 @@ public static class DependencyInjection
         // singletons (stateless apart from per-context snapshots
         // tracked via ConditionalWeakTable, which scope to the
         // DbContext lifetime).
-        services.AddSingleton<DomainEventToOutboxInterceptor>(sp =>
+        services.TryAddSingleton<DomainEventToOutboxInterceptor>(sp =>
             new DomainEventToOutboxInterceptor(TimeProvider.System));
-        services.AddSingleton<OutboxTransactionInterceptor>(sp =>
+        services.TryAddSingleton<OutboxTransactionInterceptor>(sp =>
             new OutboxTransactionInterceptor(sp.GetRequiredService<DomainEventToOutboxInterceptor>()));
 
         services.AddDbContext<ShramSafalDbContext>((sp, options) =>
