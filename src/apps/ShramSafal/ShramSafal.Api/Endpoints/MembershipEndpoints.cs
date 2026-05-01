@@ -79,10 +79,19 @@ public static class MembershipEndpoints
         .WithName("RotateFarmInvite");
 
         // Worker-side: redeem the token and create a FarmMembership.
+        //
+        // T-IGH-03-PIPELINE-ROLLOUT (ClaimJoin): this endpoint resolves
+        // the PIPELINE-WRAPPED handler (IHandler<ClaimJoinCommand,
+        // ClaimJoinResult>). Caller-shape validation (CallerUserId
+        // empty / phone-not-verified / missing token+code) runs as a
+        // pipeline behavior before the handler body. The error body
+        // shape ({error, message}) and join.* code → status mapping
+        // below are preserved verbatim because the frontend's
+        // JoinFarmLandingPage branches on err.error.
         group.MapPost("/join/claim", async (
             ClaimJoinRequest request,
             ClaimsPrincipal user,
-            ClaimJoinHandler handler,
+            IHandler<ClaimJoinCommand, ClaimJoinResult> handler,
             CancellationToken ct) =>
         {
             if (!EndpointActorContext.TryGetUserId(user, out var userId))

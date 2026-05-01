@@ -83,4 +83,14 @@ public static class ShramSafalErrors
     // --- Farm Geo / Weather Anchor ---------------------------------------------------------
     public static readonly Error FarmCentreMissing = Error.Conflict("ShramSafal.FarmCentreMissing", "Farm has no canonical centre; draw the farm boundary before requesting weather.");
     public static readonly Error WeatherProviderNotConfigured = Error.Internal("ShramSafal.WeatherProviderNotConfigured", "Weather provider is not configured on this server.");
+
+    // --- Memberships / ClaimJoin (T-IGH-03-PIPELINE-ROLLOUT) -------------------------------
+    // Codes preserved verbatim (frontend + endpoint status switch depend
+    // on them). The endpoint maps "join.phone_not_verified" => 403 and
+    // the rest fall through to 400/401/404/409 per its own switch; the
+    // ErrorKind tags here match those statuses so any future converger
+    // onto ProblemDetailsMapper produces the same HTTP shape.
+    public static readonly Error JoinUnauthenticated = Error.Unauthenticated("join.unauthenticated", "Caller must be authenticated.");
+    public static readonly Error JoinPhoneNotVerified = Error.Forbidden("join.phone_not_verified", "Verify your phone via OTP before joining a farm.");
+    public static readonly Error JoinInvalidPayload = Error.Validation("join.invalid_payload", "Scan the farm QR again.");
 }
