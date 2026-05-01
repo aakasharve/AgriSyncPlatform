@@ -7,6 +7,33 @@
 
 ---
 
+## Execution stance (Akash, 2026-05-01)
+
+**Plan 04 continues now. Do not wait for full Plan 03 completion.**
+
+Plan 04's direct frontend dependencies are already stable enough on `akash_edits`: sync mutation catalog, error/problem details, degraded headers, cursor-freeze behavior, and backend CI baseline. Waiting for Plan 03 Task 9 analytics migration or Task 11 OTel smoke would stall ProfilePage decomposition, Dexie migration, routing cleanup, and local conflict UX structure for infra/evidence blockers that do not materially change them.
+
+**Continue:**
+- T-IGH-04-CONFLICT-STATUS-DURABILITY (P0, first after rebase)
+- T-IGH-04-PROFILE-SNAPSHOT, T-IGH-04-PROFILE-DECOMPOSE
+- T-IGH-04-SYNC-PULL-DECOMPOSE
+- T-IGH-04-ROUTER-DECOMPOSE
+- T-IGH-04-FILE-DECOMPOSE
+- T-IGH-04-LOCALSTORAGE-MIGRATION (drain to zero)
+- frontend tests + local gates (file-size, storage discipline)
+
+**Do NOT claim:**
+- Plan 03 REMOTE_GREEN
+- Plan 04 DONE / REMOTE_GREEN
+- Plan 05 final E2E green
+- master plan complete
+
+The label stays **PARTIAL_FOUNDATION / READY_WITH_CAVEATS** until both Plan 04's own DoD and Plan 03's remaining infra gates (Task 9 analytics migration, Task 11 OTel smoke) are actually closed.
+
+**Branch chaos is the immediate operational risk, not Plan 03 incompleteness.** Stabilize the rebase onto `19a31b9` first (resolves the documented vitest-env design conflict), then land `T-IGH-04-CONFLICT-STATUS-DURABILITY`, then continue.
+
+---
+
 ## Branch base divergence (FIX BEFORE NEXT SESSION)
 
 `feature/ighardening-04-frontend` was branched from `akash_edits` at `b41e1c8` on 2026-05-01. Since then `akash_edits` has been re-shaped:
