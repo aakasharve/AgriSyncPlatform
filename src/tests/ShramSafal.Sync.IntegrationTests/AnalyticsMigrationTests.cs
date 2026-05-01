@@ -4,6 +4,8 @@ using Accounts.Infrastructure.Persistence;
 using AgriSync.BuildingBlocks.Analytics;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Npgsql;
 using ShramSafal.Infrastructure.Persistence;
 using Testcontainers.PostgreSql;
@@ -91,26 +93,49 @@ public sealed class AnalyticsMigrationTests : IAsyncLifetime
             await accounts.Database.MigrateAsync();
         }
 
-        // Apply ShramSafal schema (ssf.daily_logs, ssf.verification_events
-        // and friends — the matview SQL joins these).
+        // Apply ShramSafal schema in two phases, mirroring
+        // AgriSync.Bootstrapper/Program.cs's startup ordering:
+        //
+        //   Phase A (up to AlterCostEntriesAddJobCardId): creates
+        //     ssf.daily_logs, ssf.verification_events, etc. — every
+        //     SSF table that downstream matviews join.
+        //   ↓ Analytics chain (creates analytics.events).
+        //   Phase B (the rest, including AddAdminScopeHealthView): the
+        //     late SSF migrations that reference analytics.events,
+        //     which only exists after the analytics chain runs.
+        //
+        // Without this split the SSF AddAdminScopeHealthView migration
+        // fails with `relation "analytics.events" does not exist`.
+        // The same target string lives in
+        // AgriSync.Bootstrapper/Program.cs as ssfPhaseATarget.
+        const string ssfPhaseATarget = "20260421075311_AlterCostEntriesAddJobCardId";
         var ssfOpts = new DbContextOptionsBuilder<ShramSafalDbContext>()
             .UseNpgsql(conn)
             .Options;
         await using (var ssf = new ShramSafalDbContext(ssfOpts))
         {
-            await ssf.Database.MigrateAsync();
+            var migrator = ssf.Database.GetService<IMigrator>();
+            await migrator.MigrateAsync(ssfPhaseATarget);
         }
 
         // Apply analytics chain — including the new AnalyticsRewrite.
         // Before Task 9, the legacy Phase4 migration would fail here
-        // with `relation "ssf.verifications" does not exist` (or one of
-        // a dozen other column-mismatch errors).
+        // with `relation "ssf.verifications" does not exist` (or one
+        // of a dozen other column-mismatch errors).
         var analyticsOpts = new DbContextOptionsBuilder<AnalyticsDbContext>()
             .UseNpgsql(conn)
             .Options;
         await using (var analytics = new AnalyticsDbContext(analyticsOpts))
         {
             await analytics.Database.MigrateAsync();
+        }
+
+        // Apply SSF Phase B — the rest of the SSF chain. AddAdminScopeHealthView
+        // and any other late migrations that join analytics.events now
+        // succeed because the Analytics chain above created the table.
+        await using (var ssf = new ShramSafalDbContext(ssfOpts))
+        {
+            await ssf.Database.MigrateAsync();
         }
 
         // Assert: every matview the production code reads exists
