@@ -1,8 +1,18 @@
-// Sub-plan 02 Task 8 scaffold for plan.add.
-// Full payload schema is deferred to T-IGH-02-PAYLOADS (filed in Task 12).
-// Until then, validate as z.unknown() so MutationQueue.enqueue accepts
-// payloads of any shape — backend rejection remains the source of truth.
 import { z } from 'zod';
+import { ZGuid } from './_shared.zod';
 
-export const PlanAddPayload = z.unknown();
+// Mirrors AddLocalPlannedActivityCommand
+// (Planning/OverridePlannedActivity/AddLocalPlannedActivityCommand.cs).
+// Sync handler not yet wired (Sub-plan 03). PlannedDate is DateOnly.
+export const PlanAddPayload = z.object({
+  newActivityId: ZGuid,
+  cropCycleId: ZGuid,
+  farmId: ZGuid,
+  activityName: z.string().min(1),
+  stage: z.string().min(1),
+  plannedDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'must be yyyy-MM-dd'),
+  reason: z.string().min(1),
+  clientCommandId: z.string().optional(),
+});
+
 export type PlanAddPayloadType = z.infer<typeof PlanAddPayload>;

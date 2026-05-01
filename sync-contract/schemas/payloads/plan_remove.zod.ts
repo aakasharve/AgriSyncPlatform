@@ -1,8 +1,14 @@
-// Sub-plan 02 Task 8 scaffold for plan.remove.
-// Full payload schema is deferred to T-IGH-02-PAYLOADS (filed in Task 12).
-// Until then, validate as z.unknown() so MutationQueue.enqueue accepts
-// payloads of any shape — backend rejection remains the source of truth.
 import { z } from 'zod';
+import { ZGuid } from './_shared.zod';
 
-export const PlanRemovePayload = z.unknown();
+// Mirrors RemovePlannedActivityCommand
+// (Planning/OverridePlannedActivity/RemovePlannedActivityCommand.cs).
+// Sync handler not yet wired (Sub-plan 03).
+export const PlanRemovePayload = z.object({
+  plannedActivityId: ZGuid,
+  farmId: ZGuid,
+  reason: z.string().min(1),
+  clientCommandId: z.string().optional(),
+});
+
 export type PlanRemovePayloadType = z.infer<typeof PlanRemovePayload>;
