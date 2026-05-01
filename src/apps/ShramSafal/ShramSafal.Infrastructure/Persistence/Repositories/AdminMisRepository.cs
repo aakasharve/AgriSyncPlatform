@@ -150,29 +150,63 @@ public sealed class AdminMisRepository(AnalyticsDbContext analyticsContext) : IA
     /// Returns the silent-churn watchlist for admins.
     ///
     /// <para>
-    /// <b>Currently a no-signal stub.</b> The legacy
-    /// <c>mis.silent_churn_watchlist</c> matview was dropped on
-    /// 2026-05-01 by Sub-plan 03 Task 9 (T-IGH-03-ANALYTICS-MIGRATION-REWRITE,
-    /// scope correction D1.B). It joined
-    /// <c>accounts.subscriptions.farm_id</c>, which never existed —
-    /// subscriptions are per-OwnerAccount, not per-farm. Faithfully
-    /// rewriting it requires a proper
-    /// subscription → owner_account → farm cross-aggregate model
-    /// (or a read-model projection seeded from analytics events).
-    /// That design work is tracked under
-    /// <c>T-IGH-03-MIS-MATVIEW-REDESIGN</c>.
+    /// Reads <c>mis.silent_churn_watchlist</c>, the matview that joins
+    /// <c>mis.subscription_farms</c> (denormalised cross-aggregate
+    /// projection per ADR-0004 α) with <c>analytics.events</c> to
+    /// surface farms whose subscriptions are still active but have not
+    /// produced a <c>log.created</c> event in the last 14 days.
     /// </para>
     ///
     /// <para>
-    /// Returning an empty list (rather than throwing or paper-over-with-
-    /// FALSE) keeps the admin UI rendering cleanly and removes the
-    /// nightly refresh noise that the broken matview was generating.
-    /// When the redesign lands, this method's body returns to a real
-    /// query.
+    /// Restored on 2026-05-01 by T-IGH-03-MIS-MATVIEW-REDESIGN Bucket 1
+    /// (migration <c>20260502010000_AddSubscriptionFarmsAndChurnMatviews</c>).
+    /// Falls back to an empty list if the matview is empty or if the
+    /// query throws — same graceful pattern as the other Get* methods.
     /// </para>
     /// </summary>
-    public Task<IReadOnlyList<SilentChurnItemDto>> GetSilentChurnAsync(CancellationToken ct = default)
-        => Task.FromResult<IReadOnlyList<SilentChurnItemDto>>([]);
+    public async Task<IReadOnlyList<SilentChurnItemDto>> GetSilentChurnAsync(CancellationToken ct = default)
+    {
+        var conn = analyticsContext.Database.GetDbConnection();
+        var wasOpen = conn.State == System.Data.ConnectionState.Open;
+        if (!wasOpen) await conn.OpenAsync(ct);
+        try
+        {
+            var items = new List<SilentChurnItemDto>();
+            using var cmd = conn.CreateCommand();
+            // Join the matview with ssf.farms (for canonical farm name as
+            // a fallback) and public.users (for the primary owner's
+            // phone via owner_account_memberships → user). Days_since_last_log
+            // is rendered as ceil(days/7) weeks for the dashboard.
+            cmd.CommandText = """
+                SELECT
+                    s.farm_id,
+                    COALESCE(s.farm_name, 'Unknown')        AS name,
+                    COALESCE(u.phone, '—')                  AS owner_phone,
+                    COALESCE(s.plan_code, 'trial')          AS plan,
+                    GREATEST(1, (s.days_since_last_log / 7)) AS weeks_silent,
+                    s.last_log_at
+                FROM mis.silent_churn_watchlist s
+                LEFT JOIN accounts.owner_accounts oa
+                    ON oa.owner_account_id = s.owner_account_id
+                LEFT JOIN public.users u
+                    ON u."Id" = oa.primary_owner_user_id
+                ORDER BY s.days_since_last_log DESC
+                LIMIT 50
+                """;
+            using var r = await cmd.ExecuteReaderAsync(ct);
+            while (await r.ReadAsync(ct))
+                items.Add(new SilentChurnItemDto(
+                    FarmId:     r.GetGuid(0),
+                    Name:       r.GetString(1),
+                    OwnerPhone: r.IsDBNull(2) ? "—" : r.GetString(2),
+                    Plan:       r.GetString(3),
+                    WeeksSilent: r.GetInt32(4),
+                    LastLogAt:  r.IsDBNull(5) ? null : r.GetDateTime(5)));
+            return items;
+        }
+        catch { return []; }
+        finally { if (!wasOpen) await conn.CloseAsync(); }
+    }
 
     public async Task<IReadOnlyList<SufferingItemDto>> GetSufferingAsync(CancellationToken ct = default)
     {

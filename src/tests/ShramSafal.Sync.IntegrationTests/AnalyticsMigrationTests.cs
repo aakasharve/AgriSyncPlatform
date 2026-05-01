@@ -170,6 +170,11 @@ public sealed class AnalyticsMigrationTests : IAsyncLifetime
             "farmer_suffering_watchlist",
             "alert_r9_api_error_spike",
             "alert_r10_voice_degraded",
+            // T-IGH-03-MIS-MATVIEW-REDESIGN Bucket 1 (ADR-0004 α, restored
+            // on 2026-05-01 by 20260502010000_AddSubscriptionFarmsAndChurnMatviews).
+            "subscription_farms",
+            "silent_churn_watchlist",
+            "zero_engagement_farms",
             // T-IGH-03-MIS-MATVIEW-REDESIGN Buckets 2/3/4 (2026-05-03):
             // 13 matviews restored by 20260502020000_RestoreBuckets234Matviews.
             // Each one has a documented in-tree consumer:
@@ -243,6 +248,39 @@ public sealed class AnalyticsMigrationTests : IAsyncLifetime
         correctionCols.Should().Contain(new[] { "farm_id", "correction_rate_pct" },
             "Task 9's correction_rate must keep its two-column shape so MisReportRepository's join keeps working");
 
+        // Bucket 1 column-shape spot checks (ADR-0004 α). Each consuming
+        // matview must expose the contract its repository reads.
+        var subscriptionFarmsCols = await ReadMatviewColumns("subscription_farms");
+        subscriptionFarmsCols.Should().Contain(
+            new[]
+            {
+                "subscription_id", "owner_account_id", "plan_code", "subscription_status",
+                "valid_from_utc", "valid_until_utc", "trial_ends_at_utc",
+                "subscription_started_at_utc", "user_id", "farm_id", "farm_name",
+                "farm_owner_account_id", "oam_role", "fm_role",
+            },
+            "Bucket 1's subscription_farms exposes the 4-hop link projection columns its consuming matviews join on");
+
+        var silentChurnCols = await ReadMatviewColumns("silent_churn_watchlist");
+        silentChurnCols.Should().Contain(
+            new[]
+            {
+                "subscription_id", "owner_account_id", "farm_id", "farm_name",
+                "plan_code", "subscription_status", "subscription_started_at_utc",
+                "last_log_at", "days_since_last_log",
+            },
+            "Bucket 1's silent_churn_watchlist exposes the columns AdminMisRepository.GetSilentChurnAsync queries");
+
+        var zeroEngagementCols = await ReadMatviewColumns("zero_engagement_farms");
+        zeroEngagementCols.Should().Contain(
+            new[]
+            {
+                "subscription_id", "owner_account_id", "farm_id", "farm_name",
+                "plan_code", "subscription_status", "subscription_started_at_utc",
+                "days_since_subscription",
+            },
+            "Bucket 1's zero_engagement_farms exposes the columns the never-logged-yet dashboard reads");
+
         // T-IGH-03-MIS-MATVIEW-REDESIGN Buckets 2/3/4 column contracts.
         // Each spot-check matches the SQL the consumer already runs
         // (Metabase founder.json card N, or AlertDispatcherJob's
@@ -288,16 +326,13 @@ public sealed class AnalyticsMigrationTests : IAsyncLifetime
         }
 
         // Negative assertion: the still-deferred matviews (NO-CONSUMER set)
-        // MUST NOT exist on a fresh DB. 7 from the original 22 stay dropped
-        // until at least one consumer (Metabase card / scheduled report /
-        // admin endpoint / alert rule) lands; tracked in
-        // T-IGH-03-MIS-MATVIEW-REDESIGN's "Bucket 2/3/4 investigation" section.
+        // MUST NOT exist on a fresh DB. After Bucket 1 + Buckets 2/3/4
+        // restorations on akash_edits (2026-05-01 + 2026-05-03), 7 from
+        // the original 22 dropped matviews stay deferred until at least
+        // one consumer (Metabase card / scheduled report / admin endpoint
+        // / alert rule) lands; tracked in T-IGH-03-MIS-MATVIEW-REDESIGN.
         var droppedMatviews = new[]
         {
-            // Bucket 1 stays dropped on this branch (its restoration is on
-            // a separate commit not yet merged into akash_edits).
-            "silent_churn_watchlist",
-            "zero_engagement_farms",
             // Bucket 2 NO-CONSUMER subset.
             "schedule_adoption_rate",
             "schedule_abandonment_rate",
