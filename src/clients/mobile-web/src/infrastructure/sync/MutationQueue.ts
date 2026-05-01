@@ -137,6 +137,52 @@ export class MutationQueue {
         });
     }
 
+    /**
+     * Sub-plan 04 / T-IGH-04-CONFLICT-STATUS-DURABILITY: mark a row as
+     * durably rejected. The row will NOT be picked up by markFailedAsPending —
+     * the user must explicitly retry or discard via OfflineConflictPage.
+     */
+    async markRejectedUserReview(id: number, error: string): Promise<void> {
+        const db = getDatabase();
+        const existing = await db.mutationQueue.get(id);
+        await db.mutationQueue.update(id, {
+            status: 'REJECTED_USER_REVIEW',
+            updatedAt: systemClock.nowISO(),
+            retryCount: (existing?.retryCount ?? 0) + 1,
+            lastError: error,
+        });
+    }
+
+    /**
+     * Soft-delete: user explicitly chose to drop a REJECTED_USER_REVIEW row.
+     * Kept for audit + Sub-plan 05 E2E assertion. Never returned by
+     * getPending(); never included in the conflict UI list().
+     */
+    async markRejectedDropped(id: number): Promise<void> {
+        const db = getDatabase();
+        await db.mutationQueue.update(id, {
+            status: 'REJECTED_DROPPED',
+            updatedAt: systemClock.nowISO(),
+        });
+    }
+
+    /**
+     * Returns the rows that need user attention (durable rejections).
+     * Used by ConflictResolutionService.list().
+     */
+    async getRejectedUserReview(): Promise<MutationQueueItem[]> {
+        const db = getDatabase();
+        const items = await db.mutationQueue
+            .where('status')
+            .equals('REJECTED_USER_REVIEW')
+            .toArray();
+        return items.sort((left, right) => (left.id ?? 0) - (right.id ?? 0));
+    }
+
+    /**
+     * Auto-retry path. Filters strictly by status === 'FAILED' so durable
+     * REJECTED_USER_REVIEW and REJECTED_DROPPED rows are NEVER auto-retried.
+     */
     async markFailedAsPending(maxRetryCount = 5): Promise<void> {
         const db = getDatabase();
         const failed = await db.mutationQueue.where('status').equals('FAILED').toArray();

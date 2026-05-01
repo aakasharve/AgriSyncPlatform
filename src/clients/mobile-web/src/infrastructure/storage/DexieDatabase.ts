@@ -54,7 +54,31 @@ export interface OutboxEvent {
 // MUTATION QUEUE (Backend sync-ready queue)
 // =============================================================================
 
-export type MutationQueueStatus = 'PENDING' | 'SENDING' | 'APPLIED' | 'FAILED';
+/**
+ * Sub-plan 04 Task 5 / T-IGH-04-CONFLICT-STATUS-DURABILITY:
+ * - PENDING            queued, eligible for next worker cycle.
+ * - SENDING            in flight to server.
+ * - APPLIED            server accepted (or duplicate).
+ * - FAILED             transient failure (network blip, unknown error).
+ *                      Eligible for auto-retry via markFailedAsPending.
+ * - REJECTED_USER_REVIEW
+ *                      DURABLE rejection — server gave an error code that
+ *                      RejectionPolicy classifies as "permanent" (CLIENT_TOO_OLD,
+ *                      MUTATION_TYPE_UNKNOWN, MUTATION_TYPE_UNIMPLEMENTED, etc.).
+ *                      markFailedAsPending must SKIP these; the user must
+ *                      explicitly retry or discard via OfflineConflictPage.
+ * - REJECTED_DROPPED   user explicitly discarded a REJECTED_USER_REVIEW row.
+ *                      Soft-delete — kept for audit + Sub-plan 05 E2E
+ *                      assertion. Never returned by getPending(); never
+ *                      included in conflict UI list().
+ */
+export type MutationQueueStatus =
+    | 'PENDING'
+    | 'SENDING'
+    | 'APPLIED'
+    | 'FAILED'
+    | 'REJECTED_USER_REVIEW'
+    | 'REJECTED_DROPPED';
 
 export interface MutationQueueItem {
     id?: number;
