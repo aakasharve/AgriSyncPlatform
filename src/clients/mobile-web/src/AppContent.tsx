@@ -29,6 +29,7 @@ import { AppFeatureProviders } from './app/context/AppFeatureContexts';
 import { useTemplateCatalogSync } from './app/hooks/useTemplateCatalogSync';
 import FirstFarmWizard from './features/onboarding/components/FirstFarmWizard';
 import { getMyFarms, type MyFarmDto, type BootstrapFirstFarmResponse } from './features/onboarding/qr/inviteApi';
+import { SessionStore } from './infrastructure/storage/SessionStore';
 
 // Demo Mode pill removed
 
@@ -47,8 +48,7 @@ const AppContent: React.FC<AppContentProps> = ({ crops: initialCrops, setCrops }
     // Phase 6: Farm context — list + current selection, first-farm wizard.
     const [myFarms, setMyFarms] = useState<MyFarmDto[] | null>(null);
     const [currentFarmId, setCurrentFarmId] = useState<string | null>(() => {
-        try { return window.localStorage.getItem('shramsafal_current_farm_id') || null; }
-        catch { return null; }
+        return SessionStore.getCurrentFarmId() || null;
     });
     const [showFirstFarmWizard, setShowFirstFarmWizard] = useState(false);
     const [farmContextRefreshCounter, setFarmContextRefreshCounter] = useState(0);
@@ -74,7 +74,7 @@ const AppContent: React.FC<AppContentProps> = ({ crops: initialCrops, setCrops }
                 if (!currentFarmId || !farms.some(f => f.farmId === currentFarmId)) {
                     const next = farms[0].farmId;
                     setCurrentFarmId(next);
-                    try { window.localStorage.setItem('shramsafal_current_farm_id', next); } catch { /* ignore */ }
+                    SessionStore.setCurrentFarmId(next);
                 }
             } catch {
                 // Not authenticated / server unreachable — keep null; UI handles.
@@ -86,13 +86,13 @@ const AppContent: React.FC<AppContentProps> = ({ crops: initialCrops, setCrops }
 
     const handleSwitchFarm = (farmId: string) => {
         setCurrentFarmId(farmId);
-        try { window.localStorage.setItem('shramsafal_current_farm_id', farmId); } catch { /* ignore */ }
+        SessionStore.setCurrentFarmId(farmId);
     };
 
     const handleWizardComplete = (result: BootstrapFirstFarmResponse) => {
         setShowFirstFarmWizard(false);
         setCurrentFarmId(result.farmId);
-        try { window.localStorage.setItem('shramsafal_current_farm_id', result.farmId); } catch { /* ignore */ }
+        SessionStore.setCurrentFarmId(result.farmId);
         setFarmContextRefreshCounter(x => x + 1);
     };
 
