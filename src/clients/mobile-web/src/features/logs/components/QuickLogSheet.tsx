@@ -64,6 +64,11 @@ export const QuickLogSheet: React.FC<QuickLogSheetProps> = ({
         }, 200); // Animation duration
     };
 
+    const handleTypeSelect = (type: string) => {
+        onTypeSelect(type);
+        handleClose();
+    };
+
     if (!isOpen) return null;
 
     if (showPickerGate && plotId && cropKey && cycleId && farmId) {
@@ -150,27 +155,32 @@ export const QuickLogSheet: React.FC<QuickLogSheetProps> = ({
                         <QuickLogChip
                             label={t('workSummary.irrigation')}
                             category="irrigation"
-                            onClick={() => onTypeSelect('irrigation')}
+                            onClick={() => handleTypeSelect('irrigation')}
+                            testId="quick-log-chip-irrigation"
                         />
                         <QuickLogChip
                             label={t('workSummary.labour')}
                             category="labour"
-                            onClick={() => onTypeSelect('labour')}
+                            onClick={() => handleTypeSelect('labour')}
+                            testId="quick-log-chip-labour"
                         />
                         <QuickLogChip
                             label={t('workSummary.inputs')}
                             category="input"
-                            onClick={() => onTypeSelect('inputs')}
+                            onClick={() => handleTypeSelect('inputs')}
+                            testId="quick-log-chip-inputs"
                         />
                         <QuickLogChip
                             label="Harvest"
                             category="activity"
-                            onClick={() => onTypeSelect('harvest')}
+                            onClick={() => handleTypeSelect('harvest')}
+                            testId="quick-log-chip-harvest"
                         />
                         <QuickLogChip
                             label="Scouting"
                             category="activity"
-                            onClick={() => onTypeSelect('scouting')}
+                            onClick={() => handleTypeSelect('scouting')}
+                            testId="quick-log-chip-scouting"
                         />
                     </div>
                 </div>
@@ -178,8 +188,9 @@ export const QuickLogSheet: React.FC<QuickLogSheetProps> = ({
                 {/* No Work Today Option */}
                 <div className="mt-6 pt-4 border-t border-gray-100">
                     <button
+                        data-testid="quick-log-chip-no-work"
                         className="w-full py-3 px-4 rounded-xl border border-gray-200 text-gray-600 font-medium text-sm hover:bg-gray-50 hover:border-gray-300 transition-all flex items-center justify-center gap-2"
-                        onClick={() => onTypeSelect('no_work')}
+                        onClick={() => handleTypeSelect('no_work')}
                     >
                         <span className="w-2 h-2 rounded-full bg-gray-400" />
                         {t('dfes.noWorkToday')}

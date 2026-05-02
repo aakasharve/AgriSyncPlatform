@@ -130,6 +130,7 @@ jobs:
       - name: Start backend (migrations + seed on boot)
         run: |
           nohup dotnet run \
+            --no-launch-profile \
             --project src/AgriSync.Bootstrapper \
             --configuration Release \
             --no-build \
