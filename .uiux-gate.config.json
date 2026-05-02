@@ -5,6 +5,7 @@
     "src/clients/*/src/**/*.test.tsx",
     "src/clients/*/src/**/*.spec.tsx",
     "src/clients/*/src/**/*.test.ts",
-    "src/clients/*/src/**/*.spec.ts"
+    "src/clients/*/src/**/*.spec.ts",
+    "src/clients/mobile-web/src/index.tsx"
   ]
 }

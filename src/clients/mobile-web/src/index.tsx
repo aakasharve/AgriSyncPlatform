@@ -3,6 +3,16 @@
  * SPDX-License-Identifier: Apache-2.0
 */
 
+// Browser tracing must be initialised before React renders so that the
+// initial page-load span captures the full hydration cost.
+if (import.meta.env.VITE_OTEL_ENABLED === '1') {
+  // Dynamic import keeps OTel out of the main bundle in production builds
+  // where VITE_OTEL_ENABLED is unset, enabling tree-shaking.
+  import('./infrastructure/observability/OtelBrowserSdk').then(({ startBrowserTracing }) => {
+    startBrowserTracing();
+  });
+}
+
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import './index.css';
