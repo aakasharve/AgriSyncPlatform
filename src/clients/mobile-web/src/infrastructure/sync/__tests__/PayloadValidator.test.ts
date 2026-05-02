@@ -3,20 +3,21 @@ import { validatePayload } from '../PayloadValidator';
 import { SyncMutationName } from '../SyncMutationCatalog';
 
 describe('PayloadValidator', () => {
-  it('passes valid create_daily_log payloads', () => {
+  it('passes valid create_daily_log payloads (canonical wire format)', () => {
+    // Schema mirrors the backend allowlist + the client's CreateDailyLogCommand.
+    // See sync-contract/schemas/payloads/create_daily_log.zod.ts for history.
     const result = validatePayload(SyncMutationName.CreateDailyLog, {
-      clientRequestId: 'req-1',
-      logId: '11111111-1111-1111-1111-111111111111',
+      dailyLogId: '11111111-1111-1111-1111-111111111111',
       farmId: '22222222-2222-2222-2222-222222222222',
-      plotIds: ['33333333-3333-3333-3333-333333333333'],
-      capturedAt: '2026-04-27T10:00:00Z',
-      inputMode: 'voice',
+      plotId: '33333333-3333-3333-3333-333333333333',
+      cropCycleId: '44444444-4444-4444-4444-444444444444',
+      logDate: '2026-04-27',
     });
     expect(result.ok).toBe(true);
   });
 
   it('rejects payloads missing required fields', () => {
-    const result = validatePayload(SyncMutationName.CreateDailyLog, { logId: 'not-a-guid' });
+    const result = validatePayload(SyncMutationName.CreateDailyLog, { dailyLogId: 'not-a-guid' });
     expect(result.ok).toBe(false);
     if (!result.ok) {
       expect(result.errors.length).toBeGreaterThan(0);
