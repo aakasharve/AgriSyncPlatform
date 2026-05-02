@@ -1,25 +1,24 @@
 name: e2e
 
-# Sub-plan 05 Task 8 — Playwright E2E pipeline scaffold.
-#
-# Status: PREP_READY. The harness (config + fixtures) lives at
-# src/clients/mobile-web/e2e/ but the 5 critical-path specs (login, offline
-# log capture, sync retry, attachment upload, admin org switch) are not yet
-# authored. They depend on stable data-testid contracts that arrive with
-# Sub-plan 04 (frontend restructure).
-#
-# Trigger model:
-#   - workflow_dispatch only (manual run for early smoke once a spec lands).
-#   - NO push / pull_request triggers yet — we will flip those on once specs
-#     exist and at least one spec is green on chromium + webkit.
-#
-# When specs are added (Sub-plan 04 follow-up):
-#   1. Add `push: branches: [main, akash_edits]` and `pull_request: branches:
-#      [main]` triggers, both with `paths` filters covering e2e/, the
-#      relevant src/ paths, and this file.
-#   2. Verify a green run on `akash_edits` before merging the trigger flip.
+# Sub-plan 05 Task 8 — E2E pipeline. Real Postgres + .NET 10 backend + Playwright.
+# Updated: specs exist (Phase 3b + later), spec-count gate removed, migrations
+# applied via ALLOW_PRODUCTION_STARTUP_MIGRATIONS=true on startup.
 
 on:
+  push:
+    branches: [akash_edits, main]
+    paths:
+      - 'src/clients/mobile-web/**'
+      - 'src/AgriSync.Bootstrapper/**'
+      - 'src/apps/**'
+      - '.github/workflows/e2e.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'src/clients/mobile-web/**'
+      - 'src/AgriSync.Bootstrapper/**'
+      - 'src/apps/**'
+      - '.github/workflows/e2e.yml'
   workflow_dispatch:
 
 jobs:
@@ -32,7 +31,7 @@ jobs:
         env:
           POSTGRES_USER: postgres
           POSTGRES_PASSWORD: akash123
-          POSTGRES_DB: postgres
+          POSTGRES_DB: agrisync
         ports:
           - 5433:5432
         options: >-
@@ -42,64 +41,124 @@ jobs:
           --health-retries 10
 
     env:
+      # Connection strings — mirror dotnet-ci conventions (port 5433, password akash123).
+      # AccountsDb and AnalyticsDb fall back to UserDb in Program.cs when not set,
+      # so two strings are sufficient.
+      ConnectionStrings__UserDb: "Host=localhost;Port=5433;Database=agrisync;Username=postgres;Password=akash123"
+      ConnectionStrings__ShramSafalDb: "Host=localhost;Port=5433;Database=agrisync;Username=postgres;Password=akash123"
+      # JWT signing key (non-secret CI value; min 32 chars)
+      Jwt__SigningKey: "ci-e2e-only-not-a-secret-key-32ch"
+      # Non-Development, non-Production environment so the backend takes the
+      # ApplyStartupMigrationsIfAllowedAsync path (not EnsureContextTablesCreated).
+      ASPNETCORE_ENVIRONMENT: "CI"
+      # Allow startup-time EF migrations in this controlled CI context.
+      ALLOW_PRODUCTION_STARTUP_MIGRATIONS: "true"
+      # E2E seed endpoints and fail-push toggle.
       ALLOW_E2E_SEED: "true"
+      # Seed the canonical Ramu demo user so login specs can authenticate.
+      SEED_RAMU_DEMO: "true"
+      # Allow Playwright's preview server (Vite 4173) through CORS.
+      Cors__AllowedOrigins__0: "http://localhost:4173"
+      Cors__AllowedOrigins__1: "http://localhost:5173"
+      Cors__AllowedOrigins__2: "http://localhost:4000"
+      Cors__AllowedOrigins__3: "http://localhost"
+      # Disable OTEL exporter in CI (no Jaeger running).
+      OTel__Endpoint: ""
+      # Frontend harness flag.
       VITE_E2E_HARNESS: "1"
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
 
-      - uses: actions/setup-dotnet@v4
+      - name: Setup .NET 10 SDK
+        uses: actions/setup-dotnet@v4
         with:
           dotnet-version: "10.0.x"
 
-      - uses: actions/setup-node@v4
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
         with:
           node-version: "20"
           cache: npm
           cache-dependency-path: src/clients/mobile-web/package-lock.json
+
+      - name: Wait for Postgres
+        # Defense-in-depth on top of service container --health-cmd.
+        run: |
+          for i in {1..30}; do
+            if pg_isready -h localhost -p 5433 -U postgres; then
+              echo "Postgres ready after ${i} attempts."
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "::error::Postgres did not become ready within 60s."
+          exit 1
 
       - name: Restore + build backend
         run: |
           dotnet restore src/AgriSync.sln
           dotnet build   src/AgriSync.sln --configuration Release --no-restore
 
-      - name: Install + build mobile-web
+      - name: Install sync-contract deps
+        run: npm ci
+        working-directory: sync-contract
+
+      - name: Install mobile-web deps
+        run: npm ci
+        working-directory: src/clients/mobile-web
+
+      - name: Install Playwright browsers
+        # --with-deps installs OS-level browser dependencies. If this fails we
+        # want to know (don't suppress), but we capture the exit code and emit a
+        # clear error rather than letting a cryptic failure hide below.
         working-directory: src/clients/mobile-web
         run: |
-          npm ci
-          npx playwright install --with-deps chromium webkit
-          npm run build
-
-      - name: Spec count gate
-        id: spec-count
-        run: |
-          count=$(find src/clients/mobile-web/e2e/specs -maxdepth 4 -name '*.spec.ts' 2>/dev/null | wc -l)
-          echo "specs=$count" >> "$GITHUB_OUTPUT"
-          if [ "$count" = "0" ]; then
-            echo "::warning::No Playwright specs found yet — exiting 0. Add specs from Sub-plan 05 Tasks 3-7."
-            exit 0
+          if ! npx playwright install --with-deps chromium webkit; then
+            echo "::error::Playwright browser install failed. Check OS deps or network access."
+            exit 1
           fi
 
-      - name: Start backend with E2E flags
-        if: steps.spec-count.outputs.specs != '0'
-        env:
-          ALLOW_E2E_SEED: "true"
+      - name: Build mobile-web
+        working-directory: src/clients/mobile-web
+        run: npm run build
+
+      - name: Start backend (migrations + seed on boot)
         run: |
-          nohup dotnet run --project src/AgriSync.Bootstrapper --configuration Release --no-build -- --urls http://localhost:5000 > backend.log 2>&1 &
+          nohup dotnet run \
+            --project src/AgriSync.Bootstrapper \
+            --configuration Release \
+            --no-build \
+            -- --urls http://localhost:5000 \
+            > backend.log 2>&1 &
+          echo "Backend PID: $!"
+
+      - name: Wait for backend /health/ready
+        # Polls every 2s for up to 60s. Exits 1 if still not ready, which surfaces
+        # as a clear CI failure rather than a flaky Playwright timeout.
+        run: |
           for i in $(seq 1 30); do
-            curl -fsS http://localhost:5000/health/ready && break
+            status=$(curl -o /dev/null -w "%{http_code}" -fsS http://localhost:5000/health/ready 2>/dev/null || echo "000")
+            if [ "$status" = "200" ]; then
+              echo "Backend ready after ${i} attempts (status 200)."
+              exit 0
+            fi
+            echo "Attempt ${i}: /health/ready returned ${status} — waiting..."
             sleep 2
           done
+          echo "::error::Backend did not become ready within 60s. Last 50 lines of backend.log:"
+          tail -n 50 backend.log || true
+          exit 1
 
-      - name: Run Playwright
-        if: steps.spec-count.outputs.specs != '0'
+      - name: Run Playwright specs
         working-directory: src/clients/mobile-web
         env:
           E2E_API_URL: "http://localhost:5000"
           E2E_BASE_URL: "http://localhost:4173"
         run: npm run e2e
 
-      - name: Upload Playwright report on failure
+      - name: Upload Playwright report
         if: failure()
         uses: actions/upload-artifact@v4
         with:
@@ -107,10 +166,14 @@ jobs:
           path: src/clients/mobile-web/playwright-report
           retention-days: 7
 
-      - name: Upload backend log on failure
+      - name: Upload backend log
         if: failure()
         uses: actions/upload-artifact@v4
         with:
           name: backend-log
           path: backend.log
           retention-days: 7
+
+      - name: Dump dotnet info on failure
+        if: failure()
+        run: dotnet --info
