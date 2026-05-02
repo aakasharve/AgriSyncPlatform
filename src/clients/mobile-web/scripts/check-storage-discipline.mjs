@@ -54,26 +54,17 @@ const ALLOWLIST = new Map([
     ['features' + sep + 'finance' + sep + 'financeService.ts', 'T-IGH-04-LOCALSTORAGE-MIGRATION'],
     ['features' + sep + 'onboarding' + sep + 'qr' + sep + 'farmInviteStore.ts', 'T-IGH-04-LOCALSTORAGE-MIGRATION'],
     ['features' + sep + 'voice' + sep + 'vocab' + sep + 'vocabStore.ts', 'T-IGH-04-LOCALSTORAGE-MIGRATION'],
-    ['i18n' + sep + 'LanguageContext.tsx', 'T-IGH-04-LOCALSTORAGE-MIGRATION'],
     ['infrastructure' + sep + 'api' + sep + 'AuthTokenStore.ts', 'T-IGH-04-LOCALSTORAGE-MIGRATION'],
     ['infrastructure' + sep + 'sync' + sep + 'MutationQueue.ts', 'T-IGH-04-LOCALSTORAGE-MIGRATION'],
     ['infrastructure' + sep + 'sync' + sep + 'SyncPullReconciler.ts', 'T-IGH-04-LOCALSTORAGE-MIGRATION'],
-    ['pages' + sep + 'JoinFarmLandingPage.tsx', 'T-IGH-04-LOCALSTORAGE-MIGRATION'],
-    ['pages' + sep + 'OnboardingPermissionsPage.tsx', 'T-IGH-04-LOCALSTORAGE-MIGRATION'],
-    // Sub-plan 04 Task 6 split moved ProfilePage to features/profile/.
-    // The pages/ shim no longer touches localStorage; the orchestrator
-    // under features/profile/ holds WEATHER_CONNECTED_KEY and the
-    // sidebar-collapsed flag until the useUiPref migration lands.
-    ['features' + sep + 'profile' + sep + 'ProfilePage.tsx', 'T-IGH-04-LOCALSTORAGE-MIGRATION'],
-    // Sub-plan 04 Task 9 split moved ReflectPage to features/reflect/.
-    // The pages/ shim no longer touches localStorage; the orchestrator
-    // under features/reflect/ holds the 'reflect-block-order' localStorage
-    // call until the useUiPref migration lands.
-    ['features' + sep + 'reflect' + sep + 'ReflectPage.tsx', 'T-IGH-04-LOCALSTORAGE-MIGRATION'],
-    ['pages' + sep + 'SettingsPage.tsx', 'T-IGH-04-LOCALSTORAGE-MIGRATION'],
     ['services' + sep + 'harvestService.ts', 'T-IGH-04-LOCALSTORAGE-MIGRATION'],
     ['services' + sep + 'procurementRepository.ts', 'T-IGH-04-LOCALSTORAGE-MIGRATION'],
-    ['shared' + sep + 'components' + sep + 'ui' + sep + 'CollapsibleBlock.tsx', 'T-IGH-04-LOCALSTORAGE-MIGRATION'],
+    // T-IGH-04-LOCALSTORAGE-MIGRATION wave-4-A — module-level singleton
+    // (object literal, not a React component) so it cannot consume the
+    // useUiPref hook directly. The discipline-nudge sent flags read from
+    // an event handler scheduled via setTimeout; migrating would require
+    // a non-React storage adapter under infrastructure/storage/. Tracked
+    // as a follow-up; intentionally kept allow-listed for this wave.
     ['shared' + sep + 'services' + sep + 'NotificationService.ts', 'T-IGH-04-LOCALSTORAGE-MIGRATION'],
 ]);
 

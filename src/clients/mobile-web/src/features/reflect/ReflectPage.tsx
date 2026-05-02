@@ -27,6 +27,7 @@ import { FinanceFilters } from '../finance/finance.types';
 import OfflineEmptyState from '../../shared/components/ui/OfflineEmptyState';
 import { getDatabase } from '../../infrastructure/storage/DexieDatabase';
 import { useAttachmentRetry } from '../attachments';
+import { useUiPref } from '../../shared/hooks/useUiPref';
 
 import { ReflectPageProps } from './ReflectPageProps';
 import { getLogForDate, getLogForSpecificPlot } from './helpers';
@@ -120,7 +121,12 @@ const ReflectPage: React.FC<ReflectPageProps> = ({
     }, [viewCrops, viewPlots, history]);
 
     // Block Ordering State
-    const [blockOrder, setBlockOrder] = useState<string[]>(['farm-status', 'notes', 'daily-logs']);
+    // Sub-plan 04 Task 3 — block order persists through useUiPref (Dexie's
+    // uiPrefs). Initial render returns the default order; the persisted
+    // value swaps in once Dexie load resolves. Previously the useEffect
+    // below read 'reflect-block-order' from localStorage on mount.
+    const DEFAULT_BLOCK_ORDER: string[] = ['farm-status', 'notes', 'daily-logs'];
+    const [blockOrder, setBlockOrder] = useUiPref<string[]>('reflect-block-order', DEFAULT_BLOCK_ORDER);
 
     useEffect(() => {
         let cancelled = false;
@@ -169,7 +175,6 @@ const ReflectPage: React.FC<ReflectPageProps> = ({
         setMoneyLensOpen(true);
     };
 
-    // Load block order from localStorage
     // Initialize selection to ALL plots on mount (if empty)
     useEffect(() => {
         if (viewCrops.length === 0 && crops.length > 0) {
@@ -189,24 +194,9 @@ const ReflectPage: React.FC<ReflectPageProps> = ({
             setViewPlots(allPlots);
         }
     }, [crops]);
-    useEffect(() => {
-        const savedOrder = localStorage.getItem('reflect-block-order');
-        if (savedOrder) {
-            try {
-                setBlockOrder(JSON.parse(savedOrder));
-            } catch (e) {
-                console.error('Failed to parse saved block order', e);
-            }
-        }
-    }, []);
 
-    // Save block order to localStorage
-    const saveBlockOrder = (newOrder: string[]) => {
-        setBlockOrder(newOrder);
-        localStorage.setItem('reflect-block-order', JSON.stringify(newOrder));
-    };
-
-    // Block reordering handlers
+    // Block reordering handlers — persistence is handled inside useUiPref's
+    // setter (writes to Dexie's uiPrefs).
     const moveBlock = (blockId: string, direction: 'up' | 'down') => {
         const currentIndex = blockOrder.indexOf(blockId);
         if (currentIndex === -1) return;
@@ -216,7 +206,7 @@ const ReflectPage: React.FC<ReflectPageProps> = ({
 
         const newOrder = [...blockOrder];
         [newOrder[currentIndex], newOrder[newIndex]] = [newOrder[newIndex], newOrder[currentIndex]];
-        saveBlockOrder(newOrder);
+        setBlockOrder(newOrder);
     };
     const currentDateStr = getDateKey(currentDate);
 
