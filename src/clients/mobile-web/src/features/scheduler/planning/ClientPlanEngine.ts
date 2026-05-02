@@ -17,9 +17,7 @@ import {
     StageTemplate,
     OperationType,
     OperationCategory,
-    FrequencyMode,
-    PeriodicExpectation,
-    OneTimeExpectation
+    FrequencyMode
 } from '../scheduler.types';
 
 import {

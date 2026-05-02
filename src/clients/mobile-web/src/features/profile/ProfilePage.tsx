@@ -12,7 +12,6 @@
 import React, { useState } from 'react';
 import { idGenerator } from '../../core/domain/services/IdGenerator';
 import { useUiPref } from '../../shared/hooks/useUiPref';
-import { useLanguage } from '../../i18n/LanguageContext';
 import { useAuth } from '../../app/providers/AuthProvider';
 import { useFarmContext } from '../../core/session/FarmContext';
 import { useWorkerProfile } from '../work/hooks/useWorkerProfile';

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useAppNavigationState } from '../app/context/AppFeatureContexts';
-import { Settings, Droplets, Users, Tractor, BookOpen, FlaskConical, Bot, Plus, Trash2, Coins, Leaf, Check, Pencil, ChevronDown, ChevronUp, Globe, Shield, MapPin, Mic, Camera, Activity } from 'lucide-react';
-import { LedgerDefaults, LabourShift, DailyLog, CropProfile, HarvestConfig } from '../types';
+import { BookOpen, FlaskConical, Bot, Trash2, Coins, Leaf, Check, Pencil, ChevronDown, Globe, Shield, MapPin, Mic, Camera, Activity } from 'lucide-react';
+import { LedgerDefaults, LabourShift, CropProfile, HarvestConfig } from '../types';
 import { getHarvestConfig } from '../services/harvestService';
 import NotificationTestComponent from '../shared/components/NotificationTestComponent';
 import HarvestConfigSheet from '../features/logs/components/harvest/HarvestConfigSheet';

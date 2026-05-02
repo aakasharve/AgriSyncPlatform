@@ -38,13 +38,12 @@ import {
     ObservationNoteType,
     ObservationSeverity,
     DisturbanceEvent,
-    TaskCandidate,
     LogVerification,
     LogVerificationStatus,
     WeatherStamp,
     PlannedTask
 } from '../../types';
-import { HarvestSession, HarvestDayEntry, SaleEntry } from '../logs/harvest.types';
+import { HarvestSession, HarvestDayEntry } from '../logs/harvest.types';
 import { ProcurementExpense } from '../procurement/procurement.types';
 import { getDateKey, getTodayKey } from '../../core/domain/services/DateKeyService';
 import { idGenerator } from '../../core/domain/services/IdGenerator';

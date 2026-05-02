@@ -5,7 +5,7 @@
 
 import React from 'react';
 import {
-    AgriLogResponse, DailyLog, LogSegment, LogVerificationStatus
+    AgriLogResponse, DailyLog
 } from '../../types';
 import CropSelector, { CropSymbol } from '../../features/context/components/CropSelector';
 import InputMethodToggle from '../../shared/components/ui/InputMethodToggle';

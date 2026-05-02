@@ -13,7 +13,7 @@ import {
     Calendar, Clock, Layers, User, Building2, Shield, Sparkles,
     ChevronDown, ChevronUp, Check
 } from 'lucide-react';
-import { CropScheduleTemplate, ScheduleOwnerType } from '../scheduler.types';
+import { ScheduleOwnerType } from '../scheduler.types';
 import { getAllTemplates, getTemplatesForCrop } from '../../../infrastructure/reference/TemplateCatalog';
 
 interface ScheduleSelectorProps {

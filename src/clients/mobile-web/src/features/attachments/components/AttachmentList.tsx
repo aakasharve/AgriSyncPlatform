@@ -6,7 +6,7 @@
  */
 
 import React, { useEffect, useState } from 'react';
-import { Paperclip, FileText, Image, Film } from 'lucide-react';
+import { FileText, Image, Film } from 'lucide-react';
 import { getDatabase, type AttachmentRecord } from '../../../infrastructure/storage/DexieDatabase';
 import AttachmentStatusBadge from './AttachmentStatusBadge';
 import AttachmentPreview from './AttachmentPreview';

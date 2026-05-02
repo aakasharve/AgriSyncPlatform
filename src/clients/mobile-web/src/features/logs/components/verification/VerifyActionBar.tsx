@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Check, X, AlertTriangle, Clock, RotateCcw } from 'lucide-react';
+import { Check, AlertTriangle, Clock } from 'lucide-react';
 import VerificationReasonInput from './VerificationReasonInput';
 
 interface AllowedTransition {

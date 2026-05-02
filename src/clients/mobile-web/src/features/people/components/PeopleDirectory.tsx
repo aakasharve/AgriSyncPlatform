@@ -5,7 +5,7 @@
 
 import React, { useState } from 'react';
 import { Person } from '../../../types';
-import { Users, Plus, Phone, Trash2, CheckCircle2 } from 'lucide-react';
+import { Users, Plus, Phone, Trash2 } from 'lucide-react';
 import { idGenerator } from '../../../core/domain/services/IdGenerator';
 
 interface PeopleDirectoryProps {

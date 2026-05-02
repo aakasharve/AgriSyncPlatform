@@ -1,5 +1,5 @@
 import React from 'react';
-import { Droplets, Sprout, SprayCan, CheckCircle2, AlertTriangle, XCircle, Minus, Hammer, AlertCircle, Thermometer, Cloud, Wind } from 'lucide-react';
+import { Droplets, Sprout, SprayCan, CheckCircle2, Hammer, AlertCircle, Thermometer, Cloud } from 'lucide-react';
 import { formatTemperature, formatHumidity } from '../../../shared/utils/weatherFormatter';
 
 

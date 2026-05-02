@@ -4,7 +4,7 @@
 */
 
 import React, { useState } from 'react';
-import { Cloud, CloudRain, Sun, Wind, Droplets, ChevronRight, X, CalendarDays, MapPin } from 'lucide-react';
+import { Cloud, CloudRain, Sun, Wind, Droplets, X, MapPin } from 'lucide-react';
 import { DetailedWeather, DailyForecast } from '../../../types';
 import { formatTemperature, formatPrecipitation, formatHumidity, formatWindSpeed } from '../../../shared/utils/weatherFormatter';
 

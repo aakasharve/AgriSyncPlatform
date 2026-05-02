@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { GripVertical, Sprout, SprayCan, Hammer, Droplets, Plus, X } from 'lucide-react';
+import { Sprout, SprayCan, Hammer, Droplets, Plus } from 'lucide-react';
 
 interface TrayItem {
     id: string;

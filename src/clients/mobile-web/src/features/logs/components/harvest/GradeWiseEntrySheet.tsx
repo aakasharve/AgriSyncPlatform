@@ -6,8 +6,6 @@
 import React, { useState, useEffect } from 'react';
 import {
     HarvestSession,
-    HarvestUnit,
-    ProduceGrade,
     DEFAULT_PRODUCE_GRADES,
     SaleEntry
 } from '../../../../types';
@@ -16,7 +14,6 @@ import {
     Plus,
     Trash2,
     Save,
-    IndianRupee,
     Scale,
     Package
 } from 'lucide-react';

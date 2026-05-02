@@ -4,9 +4,8 @@
  */
 
 import React, { useState, useEffect } from 'react';
-import { Trash2, Plus, X, ShoppingBag, Receipt, ChevronDown, ChevronUp } from 'lucide-react';
+import { Trash2, Plus, X, ChevronDown, ChevronUp } from 'lucide-react';
 import { ActivityExpenseEvent, ExpenseItem } from '../../../types';
-import Button from '../../../shared/components/ui/Button';
 
 interface ActivityExpenseCardProps {
     expense: ActivityExpenseEvent;

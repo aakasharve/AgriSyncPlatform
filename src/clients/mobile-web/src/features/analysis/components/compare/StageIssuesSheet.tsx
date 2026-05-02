@@ -1,6 +1,6 @@
 
 import React from 'react';
-import { StageComparisonUnit, IssueSummary } from '../../../../types';
+import { StageComparisonUnit } from '../../../../types';
 import { X, AlertTriangle, Calendar, AlertCircle, CheckCircle2 } from 'lucide-react';
 
 interface Props {

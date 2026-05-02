@@ -40,41 +40,8 @@ interface Props {
 }
 
 export const ComparePage: React.FC<Props> = ({ plots = [], crops = [], logs = [], onBack }) => {
-    if (!crops || crops.length === 0) {
-        return (
-            <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center">
-                <button onClick={onBack} className="absolute top-4 left-4 p-2 rounded-full bg-white shadow-sm">
-                    <ArrowLeft className="w-6 h-6 text-gray-700" />
-                </button>
-                <p className="text-gray-500 font-medium">No crop data available.</p>
-            </div>
-        );
-    }
-
-    if (!logs || logs.length === 0) {
-        return (
-            <div className="min-h-screen bg-[#F8F6F1] p-4 sm:p-6">
-                <button
-                    onClick={onBack}
-                    className="mb-5 inline-flex items-center gap-2 rounded-full border border-stone-200 bg-white px-3 py-2 text-sm font-semibold text-stone-700 shadow-sm"
-                >
-                    <ArrowLeft className="h-4 w-4" />
-                    Back
-                </button>
-
-                <div className="mx-auto max-w-xl rounded-3xl border-2 border-dashed border-stone-300 bg-white p-8 text-center shadow-sm">
-                    <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-stone-100 text-stone-500">
-                        <GitCompare className="h-8 w-8" />
-                    </div>
-                    <h2 className="text-xl font-black text-stone-900">Nothing to Compare</h2>
-                    <p className="mt-2 text-sm font-medium text-stone-600">
-                        Log some activities first. Compare shows planned vs actual work.
-                    </p>
-                </div>
-            </div>
-        );
-    }
-
+    // T-IGH-04-LINT-RATCHET — react-hooks/rules-of-hooks: every hook must run on
+    // every render. Hoist them above the empty-state early-return guards.
     const [selectedCropId, setSelectedCropId] = useState<string>(crops[0]?.id || '');
     const [selectedPlotIds, setSelectedPlotIds] = useState<string[]>([]);
     const [isScheduleReplicaOpen, setIsScheduleReplicaOpen] = useState<boolean>(false);
@@ -141,6 +108,43 @@ export const ComparePage: React.FC<Props> = ({ plots = [], crops = [], logs = []
     }, [report, activeCrop?.id, activePlot?.id, logs.length]);
 
     const statusStyles = report ? getStatusStyles(report.status) : null;
+
+    // Empty-state guards (formerly above the hooks; moved here to preserve
+    // hook-call order). Render-time conditionals only — no hook calls below.
+    if (!crops || crops.length === 0) {
+        return (
+            <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center">
+                <button onClick={onBack} className="absolute top-4 left-4 p-2 rounded-full bg-white shadow-sm">
+                    <ArrowLeft className="w-6 h-6 text-gray-700" />
+                </button>
+                <p className="text-gray-500 font-medium">No crop data available.</p>
+            </div>
+        );
+    }
+
+    if (!logs || logs.length === 0) {
+        return (
+            <div className="min-h-screen bg-[#F8F6F1] p-4 sm:p-6">
+                <button
+                    onClick={onBack}
+                    className="mb-5 inline-flex items-center gap-2 rounded-full border border-stone-200 bg-white px-3 py-2 text-sm font-semibold text-stone-700 shadow-sm"
+                >
+                    <ArrowLeft className="h-4 w-4" />
+                    Back
+                </button>
+
+                <div className="mx-auto max-w-xl rounded-3xl border-2 border-dashed border-stone-300 bg-white p-8 text-center shadow-sm">
+                    <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-stone-100 text-stone-500">
+                        <GitCompare className="h-8 w-8" />
+                    </div>
+                    <h2 className="text-xl font-black text-stone-900">Nothing to Compare</h2>
+                    <p className="mt-2 text-sm font-medium text-stone-600">
+                        Log some activities first. Compare shows planned vs actual work.
+                    </p>
+                </div>
+            </div>
+        );
+    }
 
     return (
         <div className="pb-24 max-w-4xl mx-auto px-4 sm:px-6 py-6 font-sans">

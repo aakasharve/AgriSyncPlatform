@@ -18,11 +18,9 @@ import {
     TrendingUp,
     AlertCircle,
     ChevronRight,
-    Leaf,
     Calendar,
     Archive,
-    DollarSign,
-    ArrowLeft, // Kept for safety, though unused in new design
+    DollarSign, // Kept for safety, though unused in new design
     Pencil
 } from 'lucide-react';
 import { getHarvestSessions, getHarvestConfig, startHarvestSession, getOtherIncomeEntries } from '../services/harvestService';
@@ -32,7 +30,6 @@ import GradeWiseEntrySheet from '../features/logs/components/harvest/GradeWiseEn
 import PattiUploadSheet from '../features/logs/components/harvest/PattiUploadSheet';
 import PendingHarvestBanner from '../features/logs/components/harvest/PendingHarvestBanner';
 import OtherIncomeSheet from '../features/logs/components/harvest/OtherIncomeSheet';
-import Button from '../shared/components/ui/Button';
 import { MoneyChip } from '../features/finance/components/MoneyChip';
 import { MoneyLensDrawer } from '../features/finance/components/MoneyLensDrawer';
 import { FinanceFilters } from '../features/finance/finance.types';

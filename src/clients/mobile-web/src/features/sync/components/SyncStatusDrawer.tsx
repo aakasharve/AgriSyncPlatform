@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, RefreshCw, Wifi, WifiOff, Cloud, CloudOff, Cpu, Upload, AlertCircle, CheckCircle, Clock } from 'lucide-react';
+import { X, RefreshCw, Wifi, WifiOff, Cpu, Upload, AlertCircle, CheckCircle, Clock } from 'lucide-react';
 import { useSyncQueueStatus } from '../hooks/useSyncQueueStatus';
 import { backgroundSyncWorker } from '../../../infrastructure/sync/BackgroundSyncWorker';
 import { getDatabase } from '../../../infrastructure/storage/DexieDatabase';

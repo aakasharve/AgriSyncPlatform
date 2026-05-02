@@ -4,7 +4,7 @@
  */
 
 import React from 'react';
-import { CropProfile, Plot } from '../../../types';
+import { CropProfile } from '../../../types';
 import { Check } from 'lucide-react';
 import { CropSymbol } from './CropSelector';
 import { ComplianceBadge } from '../../scheduler/components/ComplianceBadge';

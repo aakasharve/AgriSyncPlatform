@@ -6,10 +6,9 @@
  * Uses the MeContext farms + membership data passed via props.
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import type { JobCard } from '../../../domain/work/JobCard';
 import type { AssignWorkerRequest } from '../data/jobCardsClient';
-import { useFarmContext } from '../../../core/session/FarmContext';
 import { getRoleLabel } from '../../../shared/roles/roleLabels';
 
 interface FarmMember {

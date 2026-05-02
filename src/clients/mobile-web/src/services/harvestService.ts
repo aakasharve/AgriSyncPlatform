@@ -6,10 +6,7 @@
 import {
     HarvestConfig,
     HarvestSession,
-    HarvestPattern,
     HarvestUnit,
-    ProduceGrade,
-    DEFAULT_PRODUCE_GRADES,
     OtherIncomeEntry
 } from '../features/logs/harvest.types';
 import {

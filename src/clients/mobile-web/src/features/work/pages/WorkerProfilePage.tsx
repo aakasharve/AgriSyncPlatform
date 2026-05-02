@@ -14,7 +14,6 @@ import { useFarmContext } from '../../../core/session/FarmContext';
 import { useWorkerProfile } from '../hooks/useWorkerProfile';
 import ReliabilityScoreCard from '../components/ReliabilityScoreCard';
 import JobCardRow from '../components/JobCardRow';
-import type { JobCard } from '../../../domain/work/JobCard';
 import { getRoleLabel } from '../../../shared/roles/roleLabels';
 
 interface WorkerProfilePageProps {

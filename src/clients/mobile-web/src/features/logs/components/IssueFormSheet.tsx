@@ -1,7 +1,7 @@
 
 import React, { useState } from 'react';
 import { createPortal } from 'react-dom';
-import { X, AlertTriangle, MessageSquare, AlertCircle } from 'lucide-react';
+import { X, AlertTriangle, MessageSquare } from 'lucide-react';
 import { BucketIssue, BucketIssueType, BucketIssueSeverity } from '../../../domain/types/log.types';
 import Button from '../../../shared/components/ui/Button';
 

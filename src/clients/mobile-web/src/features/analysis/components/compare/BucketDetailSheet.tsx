@@ -1,7 +1,7 @@
 
 import React from 'react';
 import { ExecutionBucket } from '../../../../types';
-import { X, CheckCircle2, XCircle, PlusCircle, Clock, Calendar, AlertCircle, ChevronDown } from 'lucide-react';
+import { X, CheckCircle2, XCircle, PlusCircle, Clock, Calendar, AlertCircle } from 'lucide-react';
 
 interface Props {
     bucket: ExecutionBucket;

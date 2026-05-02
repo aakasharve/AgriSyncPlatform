@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Trash2, Droplets, Sprout, SprayCan, Hammer, CheckCircle2, ChevronDown, ChevronUp, AlertCircle, CalendarDays, Layers } from 'lucide-react';
+import { Plus, Trash2, CheckCircle2, ChevronDown, ChevronUp, AlertCircle } from 'lucide-react';
 import { ResourceItem } from '../../../../../types';
 import { idGenerator } from '../../../../../core/domain/services/IdGenerator';
 

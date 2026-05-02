@@ -5,9 +5,8 @@ import { FinanceManagerNav } from '../features/finance/components/FinanceManager
 import { MoneyChip } from '../features/finance/components/MoneyChip';
 import { MoneyLensDrawer } from '../features/finance/components/MoneyLensDrawer';
 import { FinanceFilters } from '../features/finance/finance.types';
-import { FileText, Filter, Search, Layers, Edit3, CornerDownRight, Paperclip, ChevronDown, ChevronUp } from 'lucide-react';
+import { Search, Layers, Edit3, CornerDownRight } from 'lucide-react';
 import { getDatabase } from '../infrastructure/storage/DexieDatabase';
-import { AttachmentList } from '../features/attachments';
 import { useAttachmentRetry } from '../features/attachments/hooks/useAttachmentRetry';
 import CostCorrectionSheet from '../features/finance/components/CostCorrectionSheet';
 import { ExportButton } from '../features/export';

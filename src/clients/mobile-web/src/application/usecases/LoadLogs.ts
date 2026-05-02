@@ -19,7 +19,7 @@
 
 import { DailyLog, LogVerificationStatus, CropProfile } from '../../types';
 import { LogsRepository } from '../ports';
-import { getDateKey, getTodayKey } from '../../core/domain/services/DateKeyService';
+import { getTodayKey } from '../../core/domain/services/DateKeyService';
 
 /**
  * Filter options for loading logs.

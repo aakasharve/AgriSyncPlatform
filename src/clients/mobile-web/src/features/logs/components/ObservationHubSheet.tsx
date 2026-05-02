@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { ObservationNote, CropProfile } from '../../../types';
-import { X, Mic, Send, AlertCircle, Calendar, Tag, CheckSquare, Plus, Check, Clock, StickyNote, Bell, AlertTriangle } from 'lucide-react';
+import { X, Mic, Check } from 'lucide-react';
 
 interface ObservationHubSheetProps {
     isOpen: boolean;

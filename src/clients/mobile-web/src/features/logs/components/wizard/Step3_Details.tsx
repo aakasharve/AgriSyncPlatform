@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import SathiCard from '../../../sathi/components/SathiCard';
 import Button from '../../../../shared/components/ui/Button';
-import { IrrigationEvent, LabourEvent, MachineryEvent, InputEvent, CropActivityEvent } from '../../../../types'; // Adjusted imports
+// Adjusted imports
 
 // NOTE: We are creating a simplified, unified interface for this step.
 // In a real implementation, we might import specific sub-forms (IrrigationForm, LabourForm) 

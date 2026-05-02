@@ -1,6 +1,5 @@
 import { mutationQueue } from '../../../infrastructure/sync/MutationQueue';
 import { SyncMutationName } from '../../../infrastructure/sync/SyncMutationCatalog';
-import { getDateKey } from '../../../core/domain/services/DateKeyService';
 import { idGenerator } from '../../../core/domain/services/IdGenerator';
 import type { LocationPayload } from './CreateDailyLogCommand';
 
