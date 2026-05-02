@@ -1,4 +1,6 @@
 using AgriSync.Bootstrapper.Composition;
+using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -261,6 +263,97 @@ public sealed class OpenTelemetryWiringTests
         finally
         {
             sp.Dispose();
+        }
+    }
+
+    // ----------------------------------------------------------------
+    // T-IGH-05-PROMETHEUS-EXPORTER: HTTP-level route test
+    // ----------------------------------------------------------------
+
+    /// <summary>
+    /// Exercises the actual HTTP route for <c>/metrics</c> using a
+    /// <see cref="TestServer"/>. The test builds a minimal
+    /// <see cref="WebApplication"/> that only wires OTel observability
+    /// and the Prometheus endpoint — no databases, no auth — then issues
+    /// a real <c>GET /metrics</c> request and asserts:
+    /// <list type="bullet">
+    /// <item>The response status is 200 OK.</item>
+    /// <item>The <c>Content-Type</c> starts with <c>text/plain</c>
+    ///   (Prometheus exposition format; minor version differences in the
+    ///   suffix are tolerated).</item>
+    /// <item>The response body is non-empty — at minimum the runtime
+    ///   metrics counters registered by <c>.AddRuntimeInstrumentation()</c>
+    ///   will appear once the scrape is triggered.</item>
+    /// </list>
+    /// This test would FAIL if <c>app.MapPrometheusEndpoint()</c> were
+    /// removed from the wiring, which the DI-only tests cannot detect.
+    /// </summary>
+    [Fact]
+    public async Task MapPrometheusEndpoint_metrics_route_returns_200_with_text_plain_content_type()
+    {
+        // Arrange: build a minimal WebApplication — no databases, no auth.
+        // We suppress the configuration requirement in the Bootstrapper by
+        // providing an empty in-memory config; the OTel SDK defaults to
+        // no OTLP exporter when OTel:Endpoint is absent.
+        var builder = WebApplication.CreateBuilder();
+
+        var config = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["OTel:ServiceName"] = "agrisync-metrics-http-test"
+            })
+            .Build();
+
+        builder.Configuration.AddInMemoryCollection(new Dictionary<string, string?>
+        {
+            ["OTel:ServiceName"] = "agrisync-metrics-http-test"
+        });
+
+        builder.Services.AddAgriSyncObservability(config);
+        builder.Services.AddLogging(lb => lb.ClearProviders());
+        // The Prometheus endpoint carries DisableCorsAttribute metadata.
+        // ASP.NET Core requires the CORS middleware to be present in the
+        // pipeline even when the attribute disables CORS — the middleware
+        // reads the attribute and short-circuits. Register a no-op policy
+        // so the middleware is present without any cross-origin grants.
+        builder.Services.AddCors();
+
+        // Wire in the TestServer so we can issue in-process HTTP requests
+        // without binding to a real TCP port.
+        builder.WebHost.UseTestServer();
+
+        var app = builder.Build();
+        // CORS middleware MUST be added before endpoint routing when CORS
+        // metadata is present on any endpoint (including /metrics).
+        app.UseCors();
+        app.MapPrometheusEndpoint();
+
+        await app.StartAsync();
+        try
+        {
+            // Act: issue GET /metrics via the TestServer's HttpClient.
+            var client = app.GetTestClient();
+            var response = await client.GetAsync("/metrics");
+
+            // Assert: 200 OK
+            Assert.Equal(System.Net.HttpStatusCode.OK, response.StatusCode);
+
+            // Assert: content-type starts with "text/plain" (Prometheus
+            // exposition format). Be tolerant of the trailing
+            // "; version=0.0.4; charset=utf-8" suffix.
+            var contentType = response.Content.Headers.ContentType?.MediaType;
+            Assert.NotNull(contentType);
+            Assert.StartsWith("text/plain", contentType, StringComparison.OrdinalIgnoreCase);
+
+            // Assert: body is non-empty — runtime metrics counters must appear.
+            var body = await response.Content.ReadAsStringAsync();
+            Assert.False(string.IsNullOrWhiteSpace(body),
+                "Expected non-empty Prometheus metrics body from /metrics but got an empty response.");
+        }
+        finally
+        {
+            await app.StopAsync();
+            await app.DisposeAsync();
         }
     }
 
