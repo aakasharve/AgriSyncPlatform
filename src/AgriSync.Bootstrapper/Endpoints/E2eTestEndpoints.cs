@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Routing;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using ShramSafal.Application.Abstractions.Sync;
 using ShramSafal.Infrastructure.Persistence;
 
 namespace AgriSync.Bootstrapper.Endpoints;
@@ -180,13 +181,25 @@ public static class E2eTestEndpoints
 }
 
 /// <summary>
-/// In-memory toggle observed by the (future) sync push handler when
-/// <see cref="E2eTestEndpoints.IsEnabled"/> is true. Registered as a
-/// singleton in DI when the env flag is on. Wiring the toggle into
-/// <c>PushSyncBatchHandler</c> is deferred — see Pending_Tasks/
-/// T-IGH-05-FAIL-PUSHES-WIRING.
+/// In-memory toggle observed by <c>PushSyncBatchHandler</c> when
+/// <see cref="E2eTestEndpoints.IsEnabled"/> is true via
+/// <see cref="E2eFailPushesProbeAdapter"/>. Registered as a singleton in
+/// DI when the env flag is on.
 /// </summary>
 public sealed class E2eFailPushesToggle
 {
     public string? Reason { get; set; }
+}
+
+/// <summary>
+/// Sub-plan 05 Task 2a (T-IGH-05-FAIL-PUSHES-WIRING).
+/// Thin adapter that bridges <see cref="E2eFailPushesToggle"/> (Bootstrapper)
+/// to <see cref="IE2eFailPushesProbe"/> (Application layer).
+/// Registered by <c>Program.cs</c> when <c>ALLOW_E2E_SEED=true</c>,
+/// after the default <see cref="ShramSafal.Application.Abstractions.Sync.NoOpFailPushesProbe"/>
+/// registration — the later registration wins in DI.
+/// </summary>
+internal sealed class E2eFailPushesProbeAdapter(E2eFailPushesToggle toggle) : IE2eFailPushesProbe
+{
+    public string? FailReason => toggle.Reason;
 }

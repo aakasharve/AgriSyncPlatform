@@ -1504,7 +1504,7 @@ public sealed class SyncEndpointsTests
         return request;
     }
 
-    private sealed class TestHarness(WebApplication app, HttpClient client, string storageDirectory) : IAsyncDisposable
+    internal sealed class TestHarness(WebApplication app, HttpClient client, string storageDirectory) : IAsyncDisposable
     {
         public HttpClient Client { get; } = client;
 

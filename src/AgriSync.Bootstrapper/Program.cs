@@ -216,9 +216,16 @@ try
     // Sub-plan 05 Task 2: Playwright E2E control plane. Registered only when the
     // ALLOW_E2E_SEED env flag is set to "true". The toggle singleton is also
     // gated on the same flag so production never sees the type in DI.
+    // Sub-plan 05 Task 2a (T-IGH-05-FAIL-PUSHES-WIRING): also re-registers
+    // IE2eFailPushesProbe as an adapter over E2eFailPushesToggle. This
+    // registration happens AFTER AddShramSafalApi registered the no-op default,
+    // so it wins via IServiceCollection last-registration-wins semantics.
     if (AgriSync.Bootstrapper.Endpoints.E2eTestEndpoints.IsEnabled())
     {
         builder.Services.AddSingleton<AgriSync.Bootstrapper.Endpoints.E2eFailPushesToggle>();
+        builder.Services.AddSingleton<ShramSafal.Application.Abstractions.Sync.IE2eFailPushesProbe>(sp =>
+            new AgriSync.Bootstrapper.Endpoints.E2eFailPushesProbeAdapter(
+                sp.GetRequiredService<AgriSync.Bootstrapper.Endpoints.E2eFailPushesToggle>()));
     }
 
     QuestPDF.Settings.License = QuestPDF.Infrastructure.LicenseType.Community;
