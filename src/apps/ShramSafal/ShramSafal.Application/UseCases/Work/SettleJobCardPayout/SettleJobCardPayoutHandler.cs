@@ -1,4 +1,5 @@
 using AgriSync.BuildingBlocks.Abstractions;
+using AgriSync.BuildingBlocks.Application;
 using AgriSync.BuildingBlocks.Money;
 using AgriSync.BuildingBlocks.Results;
 using AgriSync.SharedKernel.Contracts.Ids;
@@ -16,11 +17,25 @@ namespace ShramSafal.Application.UseCases.Work.SettleJobCardPayout;
 /// Settles a labour payout for a VerifiedForPayout JobCard.
 /// Creates a CostEntry of category "labour_payout" and transitions the JobCard to PaidOut.
 /// Restricted to PrimaryOwner and SecondaryOwner only.
+///
+/// <para>
+/// T-IGH-03-PIPELINE-ROLLOUT (SettleJobCardPayout): wired through the
+/// explicit <see cref="HandlerPipeline"/>. Caller-shape + payout-amount
+/// validation lives in <see cref="SettleJobCardPayoutValidator"/>;
+/// job-card-existence + Owner-tier authorization lives in
+/// <see cref="SettleJobCardPayoutAuthorizer"/>. When this handler is
+/// resolved via the pipeline (see DI registration), both layers run
+/// before the body executes; when resolved directly (legacy tests),
+/// the body's inline guards continue to enforce the same invariants
+/// as defense-in-depth (the JobCardInvalidState status check stays in
+/// the body because it's an aggregate-state invariant).
+/// </para>
 /// </summary>
 public sealed class SettleJobCardPayoutHandler(
     IShramSafalRepository repository,
     IIdGenerator idGenerator,
     IClock clock)
+    : IHandler<SettleJobCardPayoutCommand, SettleJobCardPayoutResult>
 {
     public async Task<Result<SettleJobCardPayoutResult>> HandleAsync(
         SettleJobCardPayoutCommand command,

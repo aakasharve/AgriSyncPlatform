@@ -103,7 +103,13 @@ public sealed class PushSyncBatchHandler(
     // is the canonical entry path on both sync and HTTP for this
     // command — no pre-check duplication, no masking caveats.
     IHandler<CompleteJobCardCommand, CompleteJobCardResult> completeJobCardHandler,
-    SettleJobCardPayoutHandler settleJobCardPayoutHandler,
+    // T-IGH-03-PIPELINE-ROLLOUT (SettleJobCardPayout): switched from
+    // raw SettleJobCardPayoutHandler to the pipeline-wrapped IHandler.
+    // HandleJobCardSettleAsync's pre-flight (empty-id, amount > 0,
+    // non-empty currency) overlaps the validator exactly; the pipeline
+    // additionally enforces caller-shape (CallerUserId.IsEmpty), so
+    // the pipeline ordering is canonical on both sync and HTTP.
+    IHandler<SettleJobCardPayoutCommand, SettleJobCardPayoutResult> settleJobCardPayoutHandler,
     // T-IGH-03-PIPELINE-ROLLOUT (CancelJobCard): switched from raw
     // CancelJobCardHandler to the pipeline-wrapped IHandler. The sync
     // pre-flight in HandleJobCardCancelAsync is empty-id +
