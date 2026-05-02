@@ -34,13 +34,9 @@ test.describe('Offline log capture', () => {
         await expect(fab).toBeVisible({ timeout: 10_000 });
         await fab.click();
 
-        // --- Select manual input mode ---
+        // --- Select the quick chip. The chip closes the sheet and lands on
+        // ManualEntry with the selected segment active.
         await page.getByTestId('quick-log-chip-irrigation').click();
-
-        // Switch to manual mode via the InputMethodToggle
-        const manualToggle = page.getByTestId('input-method-manual');
-        await expect(manualToggle).toBeVisible({ timeout: 10_000 });
-        await manualToggle.click();
 
         // --- Interact with ManualEntry form ---
         // The ManualEntry uses chip-based activity selection (no <select>).

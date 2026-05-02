@@ -11,6 +11,7 @@ import { financeCommandService } from '../../finance/financeCommandService';
 import { MoneyCategory } from '../../finance/finance.types';
 import { captureAttachment } from '../../../application/use-cases/CaptureAttachment';
 import { resolveFarmIdFromSyncState } from '../../../infrastructure/sync/SyncContext';
+import { attachmentUploadWorker } from '../../../infrastructure/sync/AttachmentUploadWorker';
 import AllocationSelector from '../../finance/components/AllocationSelector';
 
 const mapExpenseCategoryToMoneyCategory = (category: string): MoneyCategory => {
@@ -102,6 +103,7 @@ export const ReceiptCaptureSheet: React.FC<Props> = ({ onClose, onSave, crops, a
             });
 
             setAttachmentIds([queued.id]);
+            void attachmentUploadWorker.triggerNow();
         } catch (error) {
             console.error('Attachment queue capture failed', error);
             // Silent — attachment upload failure does not block receipt extraction or saving.
