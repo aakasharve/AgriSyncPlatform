@@ -3,9 +3,9 @@
 import { z } from 'zod';
 import { ZGuid } from './_shared.zod';
 
-export const JobcardCancelPayload = z.object({
+export const JobCardCancelPayload = z.object({
     jobCardId: ZGuid,
     reason: z.string().min(1),
 });
 
-export type JobcardCancelPayloadType = z.infer<typeof JobcardCancelPayload>;
+export type JobCardCancelPayloadType = z.infer<typeof JobCardCancelPayload>;

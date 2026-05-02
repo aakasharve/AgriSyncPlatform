@@ -316,22 +316,22 @@ describe('CreateAttachmentPayload', () => {
 // Tests (lab)
 // ──────────────────────────────────────────────────────────────────────
 
-describe('TestinstanceCollectedPayload', () => {
+describe('TestInstanceCollectedPayload', () => {
     it('accepts a valid payload', () => {
-        const r = payloads.TestinstanceCollectedPayload.safeParse({
+        const r = payloads.TestInstanceCollectedPayload.safeParse({
             testInstanceId: VALID_GUID_A,
         });
         expect(r.success).toBe(true);
     });
     it('rejects missing testInstanceId', () => {
-        const r = payloads.TestinstanceCollectedPayload.safeParse({});
+        const r = payloads.TestInstanceCollectedPayload.safeParse({});
         expect(r.success).toBe(false);
     });
 });
 
-describe('TestinstanceReportedPayload', () => {
+describe('TestInstanceReportedPayload', () => {
     it('accepts a valid payload', () => {
-        const r = payloads.TestinstanceReportedPayload.safeParse({
+        const r = payloads.TestInstanceReportedPayload.safeParse({
             testInstanceId: VALID_GUID_A,
             results: [
                 { parameterCode: 'pH', parameterValue: '6.4' },
@@ -341,7 +341,7 @@ describe('TestinstanceReportedPayload', () => {
         expect(r.success).toBe(true);
     });
     it('rejects empty results', () => {
-        const r = payloads.TestinstanceReportedPayload.safeParse({
+        const r = payloads.TestInstanceReportedPayload.safeParse({
             testInstanceId: VALID_GUID_A,
             results: [],
         });
@@ -353,9 +353,9 @@ describe('TestinstanceReportedPayload', () => {
 // Job cards
 // ──────────────────────────────────────────────────────────────────────
 
-describe('JobcardCreatePayload', () => {
+describe('JobCardCreatePayload', () => {
     it('accepts a valid payload', () => {
-        const r = payloads.JobcardCreatePayload.safeParse({
+        const r = payloads.JobCardCreatePayload.safeParse({
             farmId: VALID_GUID_A,
             plotId: VALID_GUID_B,
             cropCycleId: VALID_GUID_C,
@@ -372,7 +372,7 @@ describe('JobcardCreatePayload', () => {
         expect(r.success).toBe(true);
     });
     it('rejects empty lineItems', () => {
-        const r = payloads.JobcardCreatePayload.safeParse({
+        const r = payloads.JobCardCreatePayload.safeParse({
             farmId: VALID_GUID_A,
             plotId: VALID_GUID_B,
             plannedDate: VALID_LOG_DATE,
@@ -382,48 +382,48 @@ describe('JobcardCreatePayload', () => {
     });
 });
 
-describe('JobcardAssignPayload', () => {
+describe('JobCardAssignPayload', () => {
     it('accepts a valid payload', () => {
-        const r = payloads.JobcardAssignPayload.safeParse({
+        const r = payloads.JobCardAssignPayload.safeParse({
             jobCardId: VALID_GUID_A,
             workerUserId: VALID_GUID_B,
         });
         expect(r.success).toBe(true);
     });
     it('rejects missing workerUserId', () => {
-        const r = payloads.JobcardAssignPayload.safeParse({ jobCardId: VALID_GUID_A });
+        const r = payloads.JobCardAssignPayload.safeParse({ jobCardId: VALID_GUID_A });
         expect(r.success).toBe(false);
     });
 });
 
-describe('JobcardStartPayload', () => {
+describe('JobCardStartPayload', () => {
     it('accepts a valid payload', () => {
-        const r = payloads.JobcardStartPayload.safeParse({ jobCardId: VALID_GUID_A });
+        const r = payloads.JobCardStartPayload.safeParse({ jobCardId: VALID_GUID_A });
         expect(r.success).toBe(true);
     });
     it('rejects non-UUID jobCardId', () => {
-        const r = payloads.JobcardStartPayload.safeParse({ jobCardId: 'nope' });
+        const r = payloads.JobCardStartPayload.safeParse({ jobCardId: 'nope' });
         expect(r.success).toBe(false);
     });
 });
 
-describe('JobcardCompletePayload', () => {
+describe('JobCardCompletePayload', () => {
     it('accepts a valid payload', () => {
-        const r = payloads.JobcardCompletePayload.safeParse({
+        const r = payloads.JobCardCompletePayload.safeParse({
             jobCardId: VALID_GUID_A,
             dailyLogId: VALID_GUID_B,
         });
         expect(r.success).toBe(true);
     });
     it('rejects missing dailyLogId', () => {
-        const r = payloads.JobcardCompletePayload.safeParse({ jobCardId: VALID_GUID_A });
+        const r = payloads.JobCardCompletePayload.safeParse({ jobCardId: VALID_GUID_A });
         expect(r.success).toBe(false);
     });
 });
 
-describe('JobcardSettlePayload', () => {
+describe('JobCardSettlePayload', () => {
     it('accepts a valid payload', () => {
-        const r = payloads.JobcardSettlePayload.safeParse({
+        const r = payloads.JobCardSettlePayload.safeParse({
             jobCardId: VALID_GUID_A,
             actualPayoutAmount: 200,
             actualPayoutCurrencyCode: 'INR',
@@ -432,7 +432,7 @@ describe('JobcardSettlePayload', () => {
         expect(r.success).toBe(true);
     });
     it('rejects empty currency code', () => {
-        const r = payloads.JobcardSettlePayload.safeParse({
+        const r = payloads.JobCardSettlePayload.safeParse({
             jobCardId: VALID_GUID_A,
             actualPayoutAmount: 200,
             actualPayoutCurrencyCode: '',
@@ -441,16 +441,16 @@ describe('JobcardSettlePayload', () => {
     });
 });
 
-describe('JobcardCancelPayload', () => {
+describe('JobCardCancelPayload', () => {
     it('accepts a valid payload', () => {
-        const r = payloads.JobcardCancelPayload.safeParse({
+        const r = payloads.JobCardCancelPayload.safeParse({
             jobCardId: VALID_GUID_A,
             reason: 'Worker unavailable',
         });
         expect(r.success).toBe(true);
     });
     it('rejects empty reason', () => {
-        const r = payloads.JobcardCancelPayload.safeParse({
+        const r = payloads.JobCardCancelPayload.safeParse({
             jobCardId: VALID_GUID_A,
             reason: '',
         });
@@ -537,9 +537,9 @@ describe('AbandonSchedulePayload', () => {
 // header in each .zod.ts for rationale.
 // ──────────────────────────────────────────────────────────────────────
 
-describe('SchedulePublishPayload', () => {
+describe('PublishSchedulePayload', () => {
     it('accepts a valid payload (passes extra fields through)', () => {
-        const r = payloads.SchedulePublishPayload.safeParse({
+        const r = payloads.PublishSchedulePayload.safeParse({
             scheduleTemplateId: VALID_GUID_A,
             actorUserId: VALID_GUID_B,
             futureFieldNotYetSpecified: 'tolerated',
@@ -547,21 +547,21 @@ describe('SchedulePublishPayload', () => {
         expect(r.success).toBe(true);
     });
     it('rejects missing scheduleTemplateId', () => {
-        const r = payloads.SchedulePublishPayload.safeParse({ actorUserId: VALID_GUID_B });
+        const r = payloads.PublishSchedulePayload.safeParse({ actorUserId: VALID_GUID_B });
         expect(r.success).toBe(false);
     });
 });
 
-describe('ScheduleEditPayload', () => {
+describe('EditSchedulePayload', () => {
     it('accepts a valid payload', () => {
-        const r = payloads.ScheduleEditPayload.safeParse({
+        const r = payloads.EditSchedulePayload.safeParse({
             scheduleTemplateId: VALID_GUID_A,
             actorUserId: VALID_GUID_B,
         });
         expect(r.success).toBe(true);
     });
     it('rejects non-UUID scheduleTemplateId', () => {
-        const r = payloads.ScheduleEditPayload.safeParse({
+        const r = payloads.EditSchedulePayload.safeParse({
             scheduleTemplateId: 'nope',
             actorUserId: VALID_GUID_B,
         });
@@ -569,23 +569,23 @@ describe('ScheduleEditPayload', () => {
     });
 });
 
-describe('ScheduleClonePayload', () => {
+describe('CloneSchedulePayload', () => {
     it('accepts a valid payload', () => {
-        const r = payloads.ScheduleClonePayload.safeParse({
+        const r = payloads.CloneSchedulePayload.safeParse({
             sourceScheduleTemplateId: VALID_GUID_A,
             actorUserId: VALID_GUID_B,
         });
         expect(r.success).toBe(true);
     });
     it('rejects missing sourceScheduleTemplateId', () => {
-        const r = payloads.ScheduleClonePayload.safeParse({ actorUserId: VALID_GUID_B });
+        const r = payloads.CloneSchedulePayload.safeParse({ actorUserId: VALID_GUID_B });
         expect(r.success).toBe(false);
     });
 });
 
-describe('PlanAddPayload', () => {
+describe('AddPlannedPayload', () => {
     it('accepts a valid payload', () => {
-        const r = payloads.PlanAddPayload.safeParse({
+        const r = payloads.AddPlannedPayload.safeParse({
             farmId: VALID_GUID_A,
             plotId: VALID_GUID_B,
             cropCycleId: VALID_GUID_C,
@@ -594,7 +594,7 @@ describe('PlanAddPayload', () => {
         expect(r.success).toBe(true);
     });
     it('rejects missing cropCycleId', () => {
-        const r = payloads.PlanAddPayload.safeParse({
+        const r = payloads.AddPlannedPayload.safeParse({
             farmId: VALID_GUID_A,
             plotId: VALID_GUID_B,
             actorUserId: VALID_GUID_D,
@@ -603,9 +603,9 @@ describe('PlanAddPayload', () => {
     });
 });
 
-describe('PlanOverridePayload', () => {
+describe('OverridePlannedPayload', () => {
     it('accepts a valid payload', () => {
-        const r = payloads.PlanOverridePayload.safeParse({
+        const r = payloads.OverridePlannedPayload.safeParse({
             farmId: VALID_GUID_A,
             plotId: VALID_GUID_B,
             cropCycleId: VALID_GUID_C,
@@ -615,7 +615,7 @@ describe('PlanOverridePayload', () => {
         expect(r.success).toBe(true);
     });
     it('rejects missing plannedActivityId', () => {
-        const r = payloads.PlanOverridePayload.safeParse({
+        const r = payloads.OverridePlannedPayload.safeParse({
             farmId: VALID_GUID_A,
             plotId: VALID_GUID_B,
             cropCycleId: VALID_GUID_C,
@@ -625,9 +625,9 @@ describe('PlanOverridePayload', () => {
     });
 });
 
-describe('PlanRemovePayload', () => {
+describe('RemovePlannedPayload', () => {
     it('accepts a valid payload', () => {
-        const r = payloads.PlanRemovePayload.safeParse({
+        const r = payloads.RemovePlannedPayload.safeParse({
             farmId: VALID_GUID_A,
             plotId: VALID_GUID_B,
             cropCycleId: VALID_GUID_C,
@@ -637,7 +637,7 @@ describe('PlanRemovePayload', () => {
         expect(r.success).toBe(true);
     });
     it('rejects non-UUID plannedActivityId', () => {
-        const r = payloads.PlanRemovePayload.safeParse({
+        const r = payloads.RemovePlannedPayload.safeParse({
             farmId: VALID_GUID_A,
             plotId: VALID_GUID_B,
             cropCycleId: VALID_GUID_C,

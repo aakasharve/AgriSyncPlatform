@@ -12,4 +12,16 @@
     <Nullable>enable</Nullable>
   </PropertyGroup>
 
+  <!-- T-IGH-02-CS-PAYLOADS — single source of truth for sync mutation
+       payloads. Generated from sync-contract/schemas/payloads/*.zod.ts
+       by `npm run generate:csharp` (Zod runtime introspection → C#).
+       Linked rather than copied so the on-disk files live next to the
+       Zod schemas they're generated from. Regenerate after every Zod
+       change via `cd sync-contract && npm run generate`. -->
+  <ItemGroup>
+    <Compile Include="..\..\..\..\sync-contract\schemas\payloads-csharp\*.cs">
+      <Link>Contracts\Sync\Payloads\%(Filename)%(Extension)</Link>
+    </Compile>
+  </ItemGroup>
+
 </Project>

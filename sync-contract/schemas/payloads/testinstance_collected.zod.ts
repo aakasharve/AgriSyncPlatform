@@ -3,8 +3,8 @@
 import { z } from 'zod';
 import { ZGuid } from './_shared.zod';
 
-export const TestinstanceCollectedPayload = z.object({
+export const TestInstanceCollectedPayload = z.object({
     testInstanceId: ZGuid,
 });
 
-export type TestinstanceCollectedPayloadType = z.infer<typeof TestinstanceCollectedPayload>;
+export type TestInstanceCollectedPayloadType = z.infer<typeof TestInstanceCollectedPayload>;

@@ -13,7 +13,7 @@
 import { z } from 'zod';
 import { ZGuid } from './_shared.zod';
 
-export const SchedulePublishPayload = z
+export const PublishSchedulePayload = z
     .object({
         scheduleTemplateId: ZGuid,
         actorUserId: ZGuid,
@@ -22,4 +22,4 @@ export const SchedulePublishPayload = z
     })
     .passthrough();
 
-export type SchedulePublishPayloadType = z.infer<typeof SchedulePublishPayload>;
+export type PublishSchedulePayloadType = z.infer<typeof PublishSchedulePayload>;

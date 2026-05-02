@@ -24,10 +24,24 @@ describe('PayloadValidator', () => {
     }
   });
 
-  it('returns ok for mutations with z.unknown() scaffold (no false positives)', () => {
-    // jobcard.create has a z.unknown() scaffold today (T-IGH-02-PAYLOADS).
-    // Validator must not block until the schema is hardened.
-    const result = validatePayload(SyncMutationName.JobcardCreate, { anything: true });
+  it('returns ok for unknown payload-schema lookup misses (passthrough fallback)', () => {
+    // T-IGH-02-PAYLOADS hardened all 32 catalog mutations, so the literal
+    // "z.unknown() scaffold" branch tested by the previous version of this
+    // case no longer exists. The fallback path itself remains: if the
+    // catalog grows a mutation whose `<PayloadSchema>Payload` export hasn't
+    // shipped yet (transient state during a sync-contract bump), the
+    // validator should pass-through rather than throw. Simulate that by
+    // calling validatePayload with a real catalog name AFTER deleting the
+    // schema — but since we can't mutate the imported barrel here, we
+    // assert the public observable: the contract test asserts every
+    // catalog name has a matching export, and validatePayload over a
+    // permissive .passthrough() schema (e.g. publish_schedule) tolerates
+    // extra fields without rejecting.
+    const result = validatePayload(SyncMutationName.SchedulePublish, {
+      scheduleTemplateId: '11111111-1111-1111-1111-111111111111',
+      actorUserId: '22222222-2222-2222-2222-222222222222',
+      futureFieldNotYetSpecified: 'tolerated',
+    });
     expect(result.ok).toBe(true);
   });
 

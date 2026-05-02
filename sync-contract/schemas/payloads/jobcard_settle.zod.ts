@@ -3,11 +3,11 @@
 import { z } from 'zod';
 import { ZGuid } from './_shared.zod';
 
-export const JobcardSettlePayload = z.object({
+export const JobCardSettlePayload = z.object({
     jobCardId: ZGuid,
     actualPayoutAmount: z.number(),
     actualPayoutCurrencyCode: z.string().min(1),
     settlementNote: z.string().optional(),
 });
 
-export type JobcardSettlePayloadType = z.infer<typeof JobcardSettlePayload>;
+export type JobCardSettlePayloadType = z.infer<typeof JobCardSettlePayload>;

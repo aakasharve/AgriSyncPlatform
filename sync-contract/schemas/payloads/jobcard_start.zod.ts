@@ -4,8 +4,8 @@
 import { z } from 'zod';
 import { ZGuid } from './_shared.zod';
 
-export const JobcardStartPayload = z.object({
+export const JobCardStartPayload = z.object({
     jobCardId: ZGuid,
 });
 
-export type JobcardStartPayloadType = z.infer<typeof JobcardStartPayload>;
+export type JobCardStartPayloadType = z.infer<typeof JobCardStartPayload>;

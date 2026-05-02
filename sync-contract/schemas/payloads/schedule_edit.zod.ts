@@ -5,7 +5,7 @@
 import { z } from 'zod';
 import { ZGuid } from './_shared.zod';
 
-export const ScheduleEditPayload = z
+export const EditSchedulePayload = z
     .object({
         scheduleTemplateId: ZGuid,
         actorUserId: ZGuid,
@@ -14,4 +14,4 @@ export const ScheduleEditPayload = z
     })
     .passthrough();
 
-export type ScheduleEditPayloadType = z.infer<typeof ScheduleEditPayload>;
+export type EditSchedulePayloadType = z.infer<typeof EditSchedulePayload>;
