@@ -53,7 +53,8 @@ vi.mock('../../../core/domain/services/IdGenerator', () => {
     };
 });
 
-import { reconcileSyncPull } from '../SyncPullReconciler';
+// Sub-plan 04 Task 7 — reconciler relocated to features/sync/pull/.
+import { reconcileSyncPull } from '../../../features/sync/pull/SyncPullReconciler';
 import { resetDatabase, getDatabase } from '../../storage/DexieDatabase';
 import type { SyncPullResponse } from '../../api/AgriSyncClient';
 
