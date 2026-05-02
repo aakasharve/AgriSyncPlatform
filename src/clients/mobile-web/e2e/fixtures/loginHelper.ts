@@ -39,6 +39,16 @@ export async function loginViaPassword(
     const submitButton = page.locator('button[type="submit"]').first();
     await submitButton.click();
 
+    // After a successful login the app may show the OnboardingPermissionsPage
+    // (if `shramsafal_permissions_granted` has not been set in Dexie yet — fresh
+    // seed always has this unset). Dismiss it via the "Skip for now" button so
+    // the main view renders and home-greeting becomes visible.
+    const skipBtn = page.getByTestId('onboarding-skip');
+    const isPermissionsPage = await skipBtn.isVisible({ timeout: 5_000 }).catch(() => false);
+    if (isPermissionsPage) {
+        await skipBtn.click();
+    }
+
     // Auth + initial sync pull takes a moment; home-greeting only appears once
     // both complete. Generous timeout for CI.
     await expect(page.getByTestId('home-greeting')).toBeVisible({ timeout: 30_000 });
