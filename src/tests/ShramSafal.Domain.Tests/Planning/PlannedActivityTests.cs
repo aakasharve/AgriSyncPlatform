@@ -68,4 +68,36 @@ public sealed class PlannedActivityTests
         var act = () => activity.Override(null, null, null, UserId.New(), "  ", DateTime.UtcNow);
         act.Should().Throw<ArgumentException>();
     }
+
+    /// <summary>
+    /// T-IGH-01-WARN-CLEANUP regression: DatabaseSeeder + PurveshDemoSeeder
+    /// were migrated from <see cref="PlannedActivity.Create"/> (obsolete) to
+    /// <see cref="PlannedActivity.CreateLocallyAdded"/>. Seeded planned
+    /// activities now carry the sentinel reasons "seed:database" /
+    /// "seed:purvesh-demo" so they are grep-able later, and present as
+    /// IsLocallyAdded + IsLocallyChanged in the UI (matching their semantics:
+    /// they are NOT linked to any template activity row).
+    /// </summary>
+    [Theory]
+    [InlineData("seed:database")]
+    [InlineData("seed:purvesh-demo")]
+    public void SeederShape_LocallyAdded_HasSentinelReasonAndOverrideMarkers(string sentinelReason)
+    {
+        var ownerId = UserId.New();
+        var activity = PlannedActivity.CreateLocallyAdded(
+            Guid.NewGuid(),
+            Guid.NewGuid(),
+            "Drip Irrigation",
+            "Pruning",
+            DateOnly.FromDateTime(DateTime.Today),
+            ownerId,
+            sentinelReason,
+            DateTime.UtcNow);
+
+        activity.OverrideReason.Should().Be(sentinelReason);
+        activity.OverriddenByUserId.Should().Be(ownerId);
+        activity.SourceTemplateActivityId.Should().BeNull();
+        activity.IsLocallyAdded.Should().BeTrue();
+        activity.IsLocallyChanged.Should().BeTrue();
+    }
 }

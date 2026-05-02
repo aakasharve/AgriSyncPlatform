@@ -114,7 +114,7 @@ public class DatabaseSeeder
         var cycleContexts = await EnsurePlotsAndCropCyclesAsync(farm.Id, nowUtc);
         await _SSFContext.SaveChangesAsync();
 
-        var templateStats = await EnsureScheduleTemplatesAndPlansAsync(cycleContexts, nowUtc);
+        var templateStats = await EnsureScheduleTemplatesAndPlansAsync(cycleContexts, ramu.Id, nowUtc);
         var cropScheduleTemplatesAdded = await EnsureCropScheduleTemplatesAsync(nowUtc);
         var logStats = await EnsureDailyLogsAsync(farm.Id, cycleContexts, ramu.Id, ganesh.Id, nowUtc);
         var costStats = await EnsureCostEntriesAndCorrectionsAsync(farm.Id, cycleContexts, ramu.Id, ganesh.Id, nowUtc);
@@ -313,6 +313,7 @@ public class DatabaseSeeder
 
     private async Task<TemplateSeedStats> EnsureScheduleTemplatesAndPlansAsync(
         IReadOnlyList<PlotCycleContext> cycleContexts,
+        UserId ownerUserId,
         DateTime nowUtc)
     {
         var cycleIds = cycleContexts.Select(c => c.CropCycleId).ToHashSet();
@@ -386,12 +387,19 @@ public class DatabaseSeeder
                 var plannedId = CreateDeterministicGuid($"{SeedVersion}:planned:{plannedKey}");
                 var createdAt = nowUtc.AddDays(planned.DayOffset - 1);
 
-                var plannedActivity = PlannedActivity.Create(
+                // Seeded as a locally-added activity owned by the farm's primary
+                // owner. The sentinel reason "seed:database" makes these rows
+                // grep-able in the demo dataset; UI badges flag them as
+                // locally-added (IsLocallyChanged=true) which matches their
+                // semantics — they are NOT linked to any template activity.
+                var plannedActivity = PlannedActivity.CreateLocallyAdded(
                     plannedId,
                     context.CropCycleId,
                     planned.ActivityName,
                     planned.Stage,
                     plannedDate,
+                    ownerUserId,
+                    "seed:database",
                     createdAt);
 
                 _SSFContext.PlannedActivities.Add(plannedActivity);
