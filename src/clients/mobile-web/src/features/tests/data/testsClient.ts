@@ -15,7 +15,7 @@
  * numeric form that `DexieTestInstance.status` stores.
  */
 
-import { getAuthSession } from '../../../infrastructure/api/AuthTokenStore';
+import { getAuthSession } from '../../../infrastructure/storage/AuthTokenStore';
 import type {
     DexieTestInstance,
     DexieTestResult,

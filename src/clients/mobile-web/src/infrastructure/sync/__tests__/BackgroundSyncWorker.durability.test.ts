@@ -64,7 +64,7 @@ vi.mock('../../api/AgriSyncClient', async () => {
     };
 });
 
-vi.mock('../../api/AuthTokenStore', () => ({
+vi.mock('../../storage/AuthTokenStore', () => ({
     getAuthSession: () => ({ userId: 'test-user', accessToken: 'test', refreshToken: 'test', expiresAtUtc: '2099-01-01T00:00:00Z' }),
 }));
 

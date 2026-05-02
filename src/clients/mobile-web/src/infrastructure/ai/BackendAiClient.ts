@@ -2,7 +2,7 @@ import { VoiceInput, VoiceParseResult, VoiceParserPort } from '../../application
 import { AgriLogResponse, CropProfile, FarmerProfile } from '../../types';
 import { LogScope } from '../../domain/types/log.types';
 import { agriSyncClient } from '../api/AgriSyncClient';
-import { getAuthSession } from '../api/AuthTokenStore';
+import { getAuthSession } from '../storage/AuthTokenStore';
 import { getDatabase, type PendingAiJobContext, type VoiceClipStatus } from '../storage/DexieDatabase';
 import { IdempotencyKeyFactory } from './IdempotencyKeyFactory';
 import { annotateFieldConfidencesWithBuckets } from '../../domain/ai/contracts/FieldConfidence';

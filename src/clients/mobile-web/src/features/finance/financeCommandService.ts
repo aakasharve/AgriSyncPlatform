@@ -9,7 +9,7 @@
 
 import { idGenerator } from '../../core/domain/services/IdGenerator';
 import { systemClock } from '../../core/domain/services/Clock';
-import { getAuthSession } from '../../infrastructure/api/AuthTokenStore';
+import { getAuthSession } from '../../infrastructure/storage/AuthTokenStore';
 import { backgroundSyncWorker } from '../../infrastructure/sync/BackgroundSyncWorker';
 import { AddCostEntryCommand } from '../../application/usecases/sync/AddCostEntryCommand';
 import { SetPriceConfigCommand } from '../../application/usecases/sync/SetPriceConfigCommand';

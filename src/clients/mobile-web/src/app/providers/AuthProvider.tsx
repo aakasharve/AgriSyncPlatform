@@ -6,7 +6,7 @@ import {
     getAuthSession,
     setAuthSession,
     type AuthSession
-} from '../../infrastructure/api/AuthTokenStore';
+} from '../../infrastructure/storage/AuthTokenStore';
 
 interface AuthContextValue {
     session: AuthSession | null;

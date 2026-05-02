@@ -5,7 +5,7 @@
 
 import type { AxiosInstance, InternalAxiosRequestConfig } from 'axios';
 import packageJson from '../../../package.json';
-import type { AuthSession } from './AuthTokenStore';
+import type { AuthSession } from '../storage/AuthTokenStore';
 import type { AuthResponseDto, VerificationStatus } from './dtos';
 
 // Sub-plan 02 Task 11: client min-version gate.
