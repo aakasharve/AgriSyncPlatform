@@ -30,6 +30,12 @@ public class DatabaseSeeder
     private static readonly UserId PreferredRamuId = new(Guid.Parse("00000000-0000-0000-0000-000000000001"));
     private static readonly UserId PreferredGaneshId = new(Guid.Parse("00000000-0000-0000-0000-000000000002"));
 
+    // Deterministic OwnerAccountId for Ramu's farm. Required by schema invariant
+    // I5 (farms.owner_account_id NOT NULL). Stored cross-app (no FK to AccountsDb),
+    // so no AccountsDb row is needed. Mirrors the pattern in
+    // src/AgriSync.Bootstrapper/Endpoints/E2eFixtureSeeder.cs.
+    private static readonly OwnerAccountId RamuOwnerAccountId = new(Guid.Parse("00000000-0000-0000-0000-0000000000c1"));
+
     private static readonly int[] LogDayOffsets = [0, 2, 5, 8, 11, 15, 20, 27];
 
     private static readonly PlotSeed[] PlotSeeds =
@@ -206,11 +212,20 @@ public class DatabaseSeeder
         var farm = await _SSFContext.Farms.FirstOrDefaultAsync(f => f.OwnerUserId == ownerUserId);
         if (farm is not null)
         {
+            // Idempotency: if a previous run wrote Guid.Empty (older seeder
+            // version that didn't satisfy schema invariant I5), back-fill the
+            // OwnerAccountId now. Multi-tenant queries scoping by
+            // OwnerAccountId would silently fail otherwise.
+            if (farm.OwnerAccountId.IsEmpty)
+            {
+                farm.AttachToOwnerAccount(RamuOwnerAccountId, nowUtc);
+            }
             return farm;
         }
 
         var farmId = new FarmId(CreateDeterministicGuid($"{SeedVersion}:farm:ramu"));
         farm = Farm.Create(farmId, "Ramu's Farm", ownerUserId, nowUtc);
+        farm.AttachToOwnerAccount(RamuOwnerAccountId, nowUtc);
         _SSFContext.Farms.Add(farm);
         return farm;
     }
