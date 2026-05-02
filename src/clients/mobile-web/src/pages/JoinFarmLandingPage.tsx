@@ -20,6 +20,7 @@ import { recordJoinAttempt } from '../features/onboarding/qr/farmInviteStore';
 import { setAuthSession } from '../infrastructure/api/AuthTokenStore';
 import { startOtp, verifyOtp, isOtpError } from '../features/auth/data/otpClient';
 import { claimFarmJoin, isInviteApiError } from '../features/onboarding/qr/inviteApi';
+import { useUiPref } from '../shared/hooks/useUiPref';
 
 type Step = 'phone' | 'otp' | 'done' | 'invalid';
 
@@ -89,6 +90,17 @@ interface JoinFarmLandingPageProps {
     onExit?: () => void;
 }
 
+interface LastJoinedFarmRecord {
+    farmCode: string;
+    farmId: string;
+    farmName: string;
+    role: string;
+    membershipId: string;
+    joinedAtUtc: string;
+    phone: string;
+    userId: string;
+}
+
 const JoinFarmLandingPage: React.FC<JoinFarmLandingPageProps> = ({ onComplete, onExit }) => {
     const context = useMemo(() => readJoinContextFromUrl(), []);
     const [step, setStep] = useState<Step>(context ? 'phone' : 'invalid');
@@ -97,6 +109,13 @@ const JoinFarmLandingPage: React.FC<JoinFarmLandingPageProps> = ({ onComplete, o
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const otpInputRef = useRef<HTMLInputElement | null>(null);
+
+    // Sub-plan 04 Task 3 — both prefs now live in Dexie's uiPrefs via
+    // useUiPref. The "last joined farm" record was previously persisted as
+    // a JSON-encoded string in localStorage; useUiPref stores the object
+    // directly (no JSON.stringify boundary).
+    const [, setPermissionsGranted] = useUiPref<boolean>('shramsafal_permissions_granted', false);
+    const [, setLastJoinedFarm] = useUiPref<LastJoinedFarmRecord | null>('shramsafal_last_joined_farm_v1', null);
 
     useEffect(() => {
         if (step === 'otp') {
@@ -169,30 +188,23 @@ const JoinFarmLandingPage: React.FC<JoinFarmLandingPageProps> = ({ onComplete, o
                 expiresAtUtc: result.expiresAtUtc,
             });
 
-            if (typeof window !== 'undefined') {
-                window.localStorage.setItem('shramsafal_permissions_granted', 'true');
-            }
+            setPermissionsGranted(true);
 
             // Step 2: redeem the QR token to create the FarmMembership.
             // The auth session from step 1 is already stored so this
             // fetch carries the Authorization: Bearer header.
             const claim = await claimFarmJoin(context.token, context.farmCode);
 
-            if (typeof window !== 'undefined') {
-                window.localStorage.setItem(
-                    'shramsafal_last_joined_farm_v1',
-                    JSON.stringify({
-                        farmCode: context.farmCode,
-                        farmId: claim.farmId,
-                        farmName: claim.farmName,
-                        role: claim.role,
-                        membershipId: claim.membershipId,
-                        joinedAtUtc: new Date().toISOString(),
-                        phone,
-                        userId: result.userId,
-                    }),
-                );
-            }
+            setLastJoinedFarm({
+                farmCode: context.farmCode,
+                farmId: claim.farmId,
+                farmName: claim.farmName,
+                role: claim.role,
+                membershipId: claim.membershipId,
+                joinedAtUtc: new Date().toISOString(),
+                phone,
+                userId: result.userId,
+            });
             recordJoinAttempt(context.farmCode, context.token, 'verified');
 
             setStep('done');

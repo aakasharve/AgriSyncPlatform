@@ -17,10 +17,11 @@
  *   - Backwards-compat: `pages/ProfilePage.tsx` is now a 2-line shim
  *     re-exporting this module so AppRouter's lazy import + the upstream
  *     snapshot test continue to work without modification.
- *   - localStorage: this file holds the WEATHER_CONNECTED_KEY +
- *     `shramsafal_setup_sidebar_collapsed` flags (T-IGH-04-LOCALSTORAGE-MIGRATION).
- *     The check-storage-discipline allow-list is updated to point at the new
- *     path. Migration to useUiPref is a follow-up.
+ *   - Storage: this file holds the WEATHER_CONNECTED (per-farm) +
+ *     `shramsafal_setup_sidebar_collapsed` flags. Both now persist through
+ *     the useUiPref hook (Dexie's uiPrefs table) — the original
+ *     localStorage paths have been retired in
+ *     T-IGH-04-LOCALSTORAGE-MIGRATION wave-4-A.
  */
 
 import React, { useEffect, useMemo, useState } from 'react';
@@ -47,19 +48,11 @@ import type { SubscriptionSnapshotView } from '../admin/billing/EntitlementBanne
 import type { MyFarmDto, FarmDetailsDto } from '../onboarding/qr/inviteApi';
 import { getFarmDetails, updateFarmBoundary, probeFarmWeather } from '../onboarding/qr/inviteApi';
 
-// Local-only flag remembering that the owner explicitly opted in to live weather
-// for a given farm. This is UX consent — the backend always serves weather once
-// the canonical centre is set; this flag just collapses the "Connect Farm to
-// Weather" tile after the user has acknowledged the link.
-const WEATHER_CONNECTED_KEY = (farmId: string) => `farm:weatherConnected:${farmId}`;
-const readWeatherConnected = (farmId: string): boolean => {
-    try { return window.localStorage.getItem(WEATHER_CONNECTED_KEY(farmId)) === 'true'; }
-    catch { return false; }
-};
-const writeWeatherConnected = (farmId: string, value: boolean): void => {
-    try { window.localStorage.setItem(WEATHER_CONNECTED_KEY(farmId), value ? 'true' : 'false'); }
-    catch { /* noop */ }
-};
+// Per-farm UX consent flag remembering that the owner explicitly opted in to
+// live weather. The backend always serves weather once the canonical centre
+// is set; this flag just collapses the "Connect Farm to Weather" tile after
+// the user has acknowledged the link. Persists through useUiPref (Dexie).
+const weatherConnectedKey = (farmId: string) => `farm:weatherConnected:${farmId}`;
 import { PlotMap } from '../context/components/PlotMap';
 import { getDateKey } from '../../core/domain/services/DateKeyService';
 import { getTemplateById as getScheduleById, getTemplatesForCrop as getSchedulesForCrop } from '../../infrastructure/reference/TemplateCatalog';
@@ -69,6 +62,7 @@ import { idGenerator } from '../../core/domain/services/IdGenerator';
 import { systemClock } from '../../core/domain/services/Clock';
 import { useWorkerProfile } from '../work/hooks/useWorkerProfile';
 import { useFarmContext } from '../../core/session/FarmContext';
+import { useUiPref } from '../../shared/hooks/useUiPref';
 
 import IdentitySection from './sections/IdentitySection';
 import StructureSection from './sections/StructureSection';
@@ -270,14 +264,11 @@ const ProfilePage: React.FC<ProfilePageProps> = ({ profile, crops, onUpdateProfi
     // Sidebar collapse (web only). Persists across reloads so returning users
     // keep their preferred layout. On mobile (<lg) the sidebar stacks above
     // content and this flag is ignored so the Android/small-screen flow is
-    // unchanged.
-    const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(() => {
-        if (typeof window === 'undefined') return false;
-        return window.localStorage.getItem('shramsafal_setup_sidebar_collapsed') === '1';
-    });
-    React.useEffect(() => {
-        window.localStorage.setItem('shramsafal_setup_sidebar_collapsed', sidebarCollapsed ? '1' : '0');
-    }, [sidebarCollapsed]);
+    // unchanged. Sub-plan 04 Task 3 — useUiPref returns the `false` fallback
+    // on the first render and swaps in the persisted value once Dexie load
+    // resolves; on desktop this is a one-frame layout flicker compared to
+    // the previous synchronous read.
+    const [sidebarCollapsed, setSidebarCollapsed] = useUiPref<boolean>('shramsafal_setup_sidebar_collapsed', false);
 
     const TabItem = ({ id, label, icon }: { id: typeof activeTab, label: string, icon: React.ReactNode }) => {
         const isActive = activeTab === id;
@@ -306,7 +297,17 @@ const ProfilePage: React.FC<ProfilePageProps> = ({ profile, crops, onUpdateProfi
     const [showFarmBoundary, setShowFarmBoundary] = useState(false);
     const [savingBoundary, setSavingBoundary] = useState(false);
     const [boundaryError, setBoundaryError] = useState<string | null>(null);
-    const [weatherConnected, setWeatherConnected] = useState<boolean>(false);
+    // Sub-plan 04 Task 3 — per-farm weather-connected flag now persists
+    // through useUiPref. The hook key changes whenever myFarm.farmId
+    // changes, so Dexie automatically re-loads the right farm's value;
+    // when no farm is loaded we point at a sentinel key whose value is
+    // never written, keeping the hook unconditional. The previous
+    // useEffect that copied localStorage → state on farmId change is
+    // therefore redundant and has been removed.
+    const weatherPrefKey = weatherConnectedKey(myFarm?.farmId ?? '__no_farm__');
+    const [weatherConnectedRaw, setWeatherConnectedPref] = useUiPref<boolean>(weatherPrefKey, false);
+    // Mask the sentinel-keyed value so the UI shows false when no farm is loaded.
+    const weatherConnected = myFarm?.farmId ? weatherConnectedRaw : false;
     const [connectingWeather, setConnectingWeather] = useState(false);
     const [connectError, setConnectError] = useState<string | null>(null);
 
@@ -416,24 +417,15 @@ const ProfilePage: React.FC<ProfilePageProps> = ({ profile, crops, onUpdateProfi
         // The Connect handler reloads after the probe succeeds.
     }, []);
 
-    // Hydrate the weather-connected flag once the farmId is known. The flag
-    // is per-farm so switching contexts doesn't leak consent across farms.
-    React.useEffect(() => {
-        if (myFarm?.farmId) {
-            setWeatherConnected(readWeatherConnected(myFarm.farmId));
-        } else {
-            setWeatherConnected(false);
-        }
-    }, [myFarm?.farmId]);
-
     const handleConnectWeather = React.useCallback(async () => {
         if (!myFarm?.farmId || connectingWeather) return;
         setConnectingWeather(true);
         setConnectError(null);
         try {
             await probeFarmWeather(myFarm.farmId);
-            writeWeatherConnected(myFarm.farmId, true);
-            setWeatherConnected(true);
+            // useUiPref persists this through Dexie's uiPrefs keyed by
+            // weatherConnectedKey(myFarm.farmId).
+            setWeatherConnectedPref(true);
             // Reload so useWeatherMonitor re-inits and the WeatherWidget
             // leaves its skeleton state on the daily-log page.
             window.setTimeout(() => window.location.reload(), 200);
@@ -624,7 +616,7 @@ const ProfilePage: React.FC<ProfilePageProps> = ({ profile, crops, onUpdateProfi
                             </div>
                             <button
                                 type="button"
-                                onClick={() => setSidebarCollapsed(v => !v)}
+                                onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
                                 title={sidebarCollapsed ? 'Expand menu' : 'Collapse menu'}
                                 aria-label={sidebarCollapsed ? 'Expand menu' : 'Collapse menu'}
                                 className="hidden lg:inline-flex items-center justify-center ml-auto mr-1 h-8 w-8 rounded-lg text-slate-400 hover:bg-white hover:text-emerald-600 transition-colors"

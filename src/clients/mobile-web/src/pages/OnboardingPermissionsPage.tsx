@@ -1,12 +1,17 @@
 import React, { useState, useEffect } from 'react';
 import { Shield, MapPin, Mic, Camera, HardDrive, CheckCircle2, ChevronRight, Check } from 'lucide-react';
 import Button from '../shared/components/ui/Button';
+import { useUiPref } from '../shared/hooks/useUiPref';
 
 interface OnboardingPermissionsPageProps {
      onComplete: () => void;
 }
 
 const OnboardingPermissionsPage: React.FC<OnboardingPermissionsPageProps> = ({ onComplete }) => {
+     // Sub-plan 04 Task 3 — `shramsafal_permissions_granted` flag now lives
+     // in Dexie's uiPrefs via useUiPref. Only writes happen in this view.
+     const [, setPermissionsGranted] = useUiPref<boolean>('shramsafal_permissions_granted', false);
+
      const [permissions, setPermissions] = useState({
           location: false,
           microphone: false,
@@ -58,18 +63,18 @@ const OnboardingPermissionsPage: React.FC<OnboardingPermissionsPageProps> = ({ o
                }
 
                // Regardless of actual browser grant (since we can't force user), we record the flow completion
-               localStorage.setItem('shramsafal_permissions_granted', 'true');
+               setPermissionsGranted(true);
                onComplete();
           } catch (error) {
                console.error('Error requesting permissions', error);
                // Default to advance anyway to avoid hard block, since this is web
-               localStorage.setItem('shramsafal_permissions_granted', 'true');
+               setPermissionsGranted(true);
                onComplete();
           }
      };
 
      const skipOrSave = () => {
-          localStorage.setItem('shramsafal_permissions_granted', 'true');
+          setPermissionsGranted(true);
           onComplete();
      };
 
