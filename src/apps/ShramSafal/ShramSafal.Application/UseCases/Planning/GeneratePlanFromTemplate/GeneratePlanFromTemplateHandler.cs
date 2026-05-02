@@ -55,15 +55,21 @@ public sealed class GeneratePlanFromTemplateHandler(
 
         foreach (var activity in command.Activities)
         {
-            template.AddActivity(idGenerator.New(), activity.ActivityName, activity.OffsetDays);
+            // Capture the template-activity id so we can stamp it onto the
+            // planned activity via CreateFromTemplate. Without this link the
+            // planner can't tell template-driven rows apart from
+            // locally-added ones.
+            var templateActivityId = idGenerator.New();
+            template.AddActivity(templateActivityId, activity.ActivityName, activity.OffsetDays);
 
             var plannedDate = command.PlanStartDate.AddDays(activity.OffsetDays);
-            plannedActivities.Add(Domain.Planning.PlannedActivity.Create(
+            plannedActivities.Add(Domain.Planning.PlannedActivity.CreateFromTemplate(
                 idGenerator.New(),
                 command.CropCycleId,
                 activity.ActivityName,
                 command.Stage,
                 plannedDate,
+                templateActivityId,
                 utcNow));
         }
 
