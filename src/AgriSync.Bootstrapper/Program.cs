@@ -116,6 +116,10 @@ try
                     "Authorization",
                     "X-Request-Id",
                     "X-Device-Id",
+                    "X-App-Version",
+                    "traceparent",
+                    "tracestate",
+                    "baggage",
                     // W0-B — admin-web sends this to select the active org when the
                     // user has multiple memberships (428 Ambiguous response path).
                     "X-Active-Org-Id")
