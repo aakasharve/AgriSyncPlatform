@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using AgriSync.BuildingBlocks.Application;
 using AgriSync.BuildingBlocks.Results;
 using AgriSync.SharedKernel.Contracts.Ids;
 using ShramSafal.Application.UseCases.Work.AssignJobCard;
@@ -92,11 +93,15 @@ public static class JobCardEndpoints
         .WithName("StartJobCard");
 
         // POST /job-cards/{id}/complete → 200
+        // T-IGH-03-PIPELINE-ROLLOUT (CompleteJobCard): resolves the
+        // pipeline-wrapped IHandler so the canonical
+        // InvalidCommand → JobCardNotFound → Forbidden ordering runs
+        // before the body's substantive checks.
         group.MapPost("/job-cards/{id:guid}/complete", async (
             Guid id,
             CompleteJobCardRequest request,
             ClaimsPrincipal user,
-            CompleteJobCardHandler handler,
+            IHandler<CompleteJobCardCommand, CompleteJobCardResult> handler,
             CancellationToken ct) =>
         {
             if (!EndpointActorContext.TryGetUserId(user, out var actorUserId))

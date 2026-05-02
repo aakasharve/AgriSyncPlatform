@@ -95,7 +95,14 @@ public sealed class PushSyncBatchHandler(
     CreateJobCardHandler createJobCardHandler,
     AssignJobCardHandler assignJobCardHandler,
     StartJobCardHandler startJobCardHandler,
-    CompleteJobCardHandler completeJobCardHandler,
+    // T-IGH-03-PIPELINE-ROLLOUT (CompleteJobCard): switched from raw
+    // CompleteJobCardHandler to the pipeline-wrapped IHandler. The sync
+    // pre-flight in HandleJobCardCompleteAsync below is just an empty-
+    // id null-payload check (no overlapping membership lookup), so the
+    // pipeline's InvalidCommand → JobCardNotFound → Forbidden ordering
+    // is the canonical entry path on both sync and HTTP for this
+    // command — no pre-check duplication, no masking caveats.
+    IHandler<CompleteJobCardCommand, CompleteJobCardResult> completeJobCardHandler,
     SettleJobCardPayoutHandler settleJobCardPayoutHandler,
     CancelJobCardHandler cancelJobCardHandler,
     // Sub-plan 05 Task 2a (T-IGH-05-FAIL-PUSHES-WIRING): E2E test probe.
