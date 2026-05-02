@@ -6,13 +6,13 @@
  *
  * Plot + crop ensure/upsert helpers used during sync pull reconciliation.
  * They mutate the in-memory `cropsById` map / crop.plots array; the
- * reconciler then persists the merged result via writeCrops().
+ * reconciler then persists the merged result via the crops repository.
  */
 
-import { systemClock } from '../../../core/domain/services/Clock';
-import { normalizeMojibakeText } from '../../../shared/utils/textEncoding';
-import type { CropProfile, Plot } from '../../../types';
-import type { CropCycleDto, PlotDto } from '../../api/AgriSyncClient';
+import { systemClock } from '../../../../core/domain/services/Clock';
+import { normalizeMojibakeText } from '../../../../shared/utils/textEncoding';
+import type { CropProfile, Plot } from '../../../../types';
+import type { CropCycleDto, PlotDto } from '../../../../infrastructure/api/AgriSyncClient';
 import { pickIconName, toCropId } from './cropIdentity';
 
 export const CROP_COLORS = [

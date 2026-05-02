@@ -2,7 +2,7 @@ import { mutationQueue } from './MutationQueue';
 import { systemClock } from '../../core/domain/services/Clock';
 import { agriSyncClient, type SyncMutationType } from '../api/AgriSyncClient';
 import { getAuthSession } from '../storage/AuthTokenStore';
-import { reconcileSyncPull } from './SyncPullReconciler';
+import { reconcileSyncPull } from '../../features/sync/pull/SyncPullReconciler';
 import { getDatabase } from '../storage/DexieDatabase';
 import { AiJobWorker } from './AiJobWorker';
 import { isSyncMutationType } from './SyncMutationCatalog';
