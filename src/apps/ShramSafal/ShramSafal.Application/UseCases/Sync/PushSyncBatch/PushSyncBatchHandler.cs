@@ -113,6 +113,7 @@ public sealed class PushSyncBatchHandler(
         "^[a-zA-Z0-9\\-_]+$",
         RegexOptions.Compiled | RegexOptions.CultureInvariant,
         TimeSpan.FromMilliseconds(100));
+    private const string MutationTypeUnimplementedCode = "MUTATION_TYPE_UNIMPLEMENTED";
 
     public async Task<Result<SyncPushResponseDto>> HandleAsync(PushSyncBatchCommand command, CancellationToken ct = default)
     {
@@ -178,7 +179,7 @@ public sealed class PushSyncBatchHandler(
             return CreateFailedResult(
                 clientRequestId,
                 mutationType,
-                "MUTATION_TYPE_UNIMPLEMENTED",
+                MutationTypeUnimplementedCode,
                 $"E2E forced failure: {probeReason}");
         }
 
@@ -370,7 +371,7 @@ public sealed class PushSyncBatchHandler(
                 // Sub-plan 03 wires the v2 verify handler. Until then, return a
                 // typed UNIMPLEMENTED so the surface area is honest.
                 return MutationExecutionOutcome.Failure(
-                    "MUTATION_TYPE_UNIMPLEMENTED",
+                    MutationTypeUnimplementedCode,
                     "verify_log_v2 handler is not yet wired. Falls back to verify_log on the client. Tracked in Sub-plan 03.");
             case "add_cost_entry":
                 return await HandleAddCostEntryAsync(clientRequestId, payload, actorUserId, actorRole, ct);
@@ -418,7 +419,7 @@ public sealed class PushSyncBatchHandler(
             case "migrate_schedule":
             case "abandon_schedule":
                 return MutationExecutionOutcome.Failure(
-                    "MUTATION_TYPE_UNIMPLEMENTED",
+                    MutationTypeUnimplementedCode,
                     $"Mutation type '{mutationType}' is registered in the catalog but its server handler is not yet wired. Tracked in Sub-plan 03.");
             default:
                 // Catalog drift: a name was added to mutation-types.json but no
@@ -428,7 +429,7 @@ public sealed class PushSyncBatchHandler(
                 // error so the contract test (which scans this file) can
                 // report exactly which case is missing.
                 return MutationExecutionOutcome.Failure(
-                    "MUTATION_TYPE_UNIMPLEMENTED",
+                    MutationTypeUnimplementedCode,
                     $"Mutation type '{mutationType}' is registered in the catalog but has no dispatch case. Add a case to PushSyncBatchHandler.cs ExecuteMutationAsync.");
         }
     }
