@@ -19,8 +19,8 @@
     "test:watch": "vitest",
     "test:voice-pipeline": "tsx scripts/voice_pipeline_gate_check.ts",
     "test:doom-loop": "tsx scripts/ai_doom_loop_gate_check.ts",
-    "e2e": "playwright test",
-    "e2e:ui": "playwright test --ui",
+    "e2e": "playwright test --config e2e/playwright.config.ts",
+    "e2e:ui": "playwright test --config e2e/playwright.config.ts --ui",
     "e2e:install": "playwright install --with-deps",
     "audit:ai-calls": "node scripts/ai-call-audit.mjs"
   },
