@@ -6,7 +6,7 @@
  * Operator role normalization + role → capability mapping.
  */
 
-import { OperatorCapability, type FarmOperator } from '../../../types';
+import { OperatorCapability, type FarmOperator } from '../../../../types';
 
 export function mapOperatorRole(rawRole?: string): FarmOperator['role'] {
     const normalized = (rawRole ?? '').trim().toUpperCase();

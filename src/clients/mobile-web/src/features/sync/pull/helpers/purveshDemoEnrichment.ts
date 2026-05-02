@@ -12,8 +12,8 @@
  * carry demo concerns inline.
  */
 
-import { VerificationStatus, type CropProfile, type FarmOperator, type FarmerProfile, type Plot } from '../../../types';
-import { normalizeMojibakeText } from '../../../shared/utils/textEncoding';
+import { VerificationStatus, type CropProfile, type FarmOperator, type FarmerProfile, type Plot } from '../../../../types';
+import { normalizeMojibakeText } from '../../../../shared/utils/textEncoding';
 
 export function isPurveshDemoOwner(name: string): boolean {
     return name.trim().toLowerCase().includes('purvesh');

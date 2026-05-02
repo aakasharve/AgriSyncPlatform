@@ -6,7 +6,7 @@
  * Maps server-side attachment status strings to AttachmentRecord status.
  */
 
-import type { AttachmentRecord } from '../../storage/DexieDatabase';
+import type { AttachmentRecord } from '../../../../infrastructure/storage/DexieDatabase';
 
 export function mapAttachmentStatus(status?: string): AttachmentRecord['status'] {
     if (!status) {
