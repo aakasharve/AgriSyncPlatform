@@ -28,8 +28,8 @@ import { financeCommandService } from '../features/finance/financeCommandService
 
 // Mock storage for simple prototype
 // In a real app, this would be in localStorage or a database
-let HARVEST_CONFIGS: Record<string, HarvestConfig> = {};
-let HARVEST_SESSIONS: Record<string, HarvestSession[]> = {};
+const HARVEST_CONFIGS: Record<string, HarvestConfig> = {};
+const HARVEST_SESSIONS: Record<string, HarvestSession[]> = {};
 
 export const CROP_HARVEST_PRESETS: Record<string, HarvestUnit[]> = {
     // Fruits

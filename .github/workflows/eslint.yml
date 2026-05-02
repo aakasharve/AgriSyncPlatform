@@ -29,8 +29,12 @@ jobs:
           cache: npm
           cache-dependency-path: src/clients/mobile-web/package-lock.json
       - run: npm ci
-      # Sub-plan 04 will tighten max-warnings; today we only fail on errors.
-      - run: npx eslint --max-warnings 9999 "src/**/*.{ts,tsx}"
+      # Sub-plan 04 Task 10 — ratchet floor. Started at 9999 (Sub-plan 01
+       # informational mode), tightened to 600 here so any new warning
+       # blocks CI. Sub-plan 05 will drive it to 50 then 0; the
+       # T-IGH-04-LINT-RATCHET pending task tracks the per-rule cleanup
+       # required to land each step.
+      - run: npx eslint --max-warnings 600 "src/**/*.{ts,tsx}"
       - run: npm run check:file-sizes
       # Sub-plan 04 Task 3 — localStorage architecture gate (strict; fails on
       # any new violation outside the named allow-list).

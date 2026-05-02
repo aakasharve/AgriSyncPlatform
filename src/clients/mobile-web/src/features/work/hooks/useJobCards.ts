@@ -60,7 +60,7 @@ export function useJobCards({ farmId, statusFilter }: UseJobCardsOptions): UseJo
 
         const loadCached = async () => {
             const db = getDatabase();
-            let query = db.jobCards.where('farmId').equals(farmId);
+            const query = db.jobCards.where('farmId').equals(farmId);
             const all = await query.toArray();
             const filtered = statusFilter
                 ? all.filter(c => c.status === statusFilter)

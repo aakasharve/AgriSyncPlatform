@@ -37,7 +37,7 @@ const ObservationHubSheet: React.FC<ObservationHubSheetProps> = ({
     const handleSave = () => {
         if (!inputText.trim()) return;
 
-        let newNote: ObservationNote = {
+        const newNote: ObservationNote = {
             id: crypto.randomUUID(),
             plotId: selectedPlotId || 'unknown_plot',
             cropId: selectedCropId,
