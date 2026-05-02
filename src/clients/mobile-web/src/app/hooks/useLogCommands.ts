@@ -13,16 +13,15 @@ import type { LogSegment } from '../../domain/types/log.types';
 
 // ARCHITECTURE FIX: Import Service Class and Hook
 import { LogCommandServiceImpl } from '../../application/services/LogCommandService';
-import { ManualLogFormData } from '../../application/usecases/CreateLog';
+import { ManualEntryLogData } from '../../core/domain/LogFactory';
 import { useDataSource } from '../providers/DataSourceProvider';
 import { enqueueLogsForSync } from '../../features/logs/services/logSyncMutationService';
 import { countCompletedIrrigationEvents } from '../../features/logs/services/irrigationCompletion';
 
-// Manual submit accepts the form payload plus a few UI-orchestration fields
-// (date / originalLogId / etc.). It's wider than ManualLogFormData on purpose.
-export type ManualSubmitPayload = ManualLogFormData & {
-    originalLogId?: string;
-};
+// Manual submit reuses ManualEntryLogData (the LogFactory contract). The
+// originalLogId field already exists on ManualEntryLogData; alias is kept
+// here for callsite readability.
+export type ManualSubmitPayload = ManualEntryLogData;
 
 export interface UseLogCommandsResult {
     handleAutoSave: (logData: AgriLogResponse, provenance?: LogProvenance) => Promise<void>;

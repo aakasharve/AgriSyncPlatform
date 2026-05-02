@@ -1,7 +1,7 @@
 // Skill: multi-tenant-saas-architecture
 // Purpose: Manage tenant lifecycle and data partitioning rules.
 
-interface TenantConfig {
+interface _TenantConfig {
     features: string[];
     maxUsers: number;
 }

@@ -9,7 +9,7 @@ interface Step1Props {
     selectedCropId: string;
     selectedPlotId: string;
     plantationDate: string;
-    onUpdate: (field: string, value: any) => void;
+    onUpdate: (field: string, value: unknown) => void;
 }
 
 const Step1_CropSelection: React.FC<Step1Props> = ({ crops, selectedCropId, selectedPlotId, plantationDate, onUpdate }) => {

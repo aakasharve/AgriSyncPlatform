@@ -44,7 +44,6 @@ const ReflectPage: React.FC<ReflectPageProps> = ({
     crops,
     ledgerDefaults,
     onEditLog,
-    onUpdateNote,
     tasks,
     onUpdateTask,
     onAddTask,
@@ -401,7 +400,7 @@ const ReflectPage: React.FC<ReflectPageProps> = ({
                             ? crop.plots.filter(p => selectedPlotsForCrop.includes(p.id))
                             : crop.plots;
 
-                        return plotsToShow.map((plot, idx) => {
+                        return plotsToShow.map((plot, _idx) => {
                             const originalIndex = crop.plots.findIndex(p => p.id === plot.id);
                             return (
                                 <CompactCropCard

@@ -1,8 +1,7 @@
 import { AgriLogResponse } from '../../types';
 import { LogProvenance } from '../../domain/ai/LogProvenance';
 import { LogScope, CropProfile, FarmerProfile, DailyLog } from '../../types';
-import { LogFactory } from '../../core/domain/LogFactory';
-import { ManualLogFormData } from '../usecases/CreateLog';
+import { LogFactory, ManualEntryLogData } from '../../core/domain/LogFactory';
 import { LogsRepository } from '../ports';
 import { WeatherPort } from '../ports/WeatherPort';
 import { idGenerator } from '../../core/domain/services/IdGenerator';
@@ -22,7 +21,7 @@ export interface LogCommandService {
     ): Promise<DailyLog[]>;
 
     createFromManual(
-        data: ManualLogFormData,
+        data: ManualEntryLogData,
         scope: LogScope,
         crops: CropProfile[],
         profile: FarmerProfile
@@ -91,7 +90,7 @@ export class LogCommandServiceImpl implements LogCommandService {
      * Returns Hydrated logs.
      */
     async createFromManual(
-        data: ManualLogFormData,
+        data: ManualEntryLogData,
         scope: LogScope,
         crops: CropProfile[],
         profile: FarmerProfile
