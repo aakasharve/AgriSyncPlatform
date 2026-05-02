@@ -74,12 +74,34 @@ test.describe('Sync retry after rejected mutation', () => {
         // --- Clear the fail-pushes toggle so retry can succeed ---
         await setFailPushes(null);
 
-        // --- Click the retry button for the first (and only) conflict row ---
-        // OfflineConflictPage renders per-row buttons as data-testid="retry-<mutationId>"
-        // Use a role + name match as fallback when we don't know the mutationId upfront.
-        const retryBtn = page.getByRole('button', { name: /पुन्हा/i }).first();
-        await expect(retryBtn).toBeVisible({ timeout: 10_000 });
-        await retryBtn.click();
+        // --- Click retry on every conflict row, in order ---
+        //
+        // OfflineConflictPage's handleRetry only flips ONE mutation
+        // (REJECTED_USER_REVIEW → PENDING) per click; siblings stay rejected
+        // until the user retries them too. A single-save flow can produce
+        // multiple mutations (1 create_daily_log + N add_log_task — the
+        // exact number depends on what ActivityLedger / LogFactory derive
+        // from the manual entry), so we keep clicking the first retry
+        // button until none are left, then assert the empty state.
+        //
+        // The optimistic UI removal in handleRetry (`setItems(prev =>
+        // prev.filter(...))` ) means the loop terminates quickly in the
+        // happy path. If retry() throws (e.g. the toggle was still armed),
+        // the row stays and we'd loop forever — guard with a hard cap.
+        const retryButtons = page.getByRole('button', { name: /पुन्हा/i });
+        await expect(retryButtons.first()).toBeVisible({ timeout: 10_000 });
+
+        const MAX_RETRY_CLICKS = 10;
+        for (let i = 0; i < MAX_RETRY_CLICKS; i++) {
+            const stillVisible = await retryButtons
+                .first()
+                .isVisible({ timeout: 1_000 })
+                .catch(() => false);
+            if (!stillVisible) break;
+            await retryButtons.first().click();
+            // Yield to React for the optimistic state update + sync trigger.
+            await page.waitForTimeout(250);
+        }
 
         // --- Assert conflict-empty is shown (all conflicts resolved) ---
         const conflictEmpty = page.getByTestId('conflict-empty');
