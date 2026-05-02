@@ -254,7 +254,7 @@ const InputDetailSheet = ({
                         </div>
 
                         <div className="space-y-2">
-                            {mix.map((item, idx) => (
+                            {mix.map((item, _idx) => (
                                 <div key={item.id} className="gap-2 items-center animate-in slide-in-from-left-2 rounded-xl border border-slate-100 p-2 bg-slate-50/50">
                                     {/* Top Row: Product Name & Linkage */}
                                     <div className="flex gap-2 mb-2 items-start">

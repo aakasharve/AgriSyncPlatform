@@ -133,7 +133,7 @@ const ActivityExpenseCard: React.FC<ActivityExpenseCardProps> = ({ expense, onUp
 
                     {mode === 'itemized' && (
                         <div className="space-y-2">
-                            {expense.items.map((item, idx) => (
+                            {expense.items.map((item, _idx) => (
                                 <div key={item.id} className="flex gap-2 items-center">
                                     <input
                                         className="flex-1 p-2 bg-stone-50 rounded-lg text-sm font-bold text-stone-700 outline-none border border-transparent focus:border-stone-200"

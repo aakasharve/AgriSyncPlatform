@@ -40,7 +40,7 @@ interface HarvestIncomePageProps {
     onBack: () => void;
 }
 
-const HarvestIncomePage: React.FC<HarvestIncomePageProps> = ({ context, crops, onBack }) => {
+const HarvestIncomePage: React.FC<HarvestIncomePageProps> = ({ context, crops, onBack: _onBack }) => {
     // Selection State
     const [selectedCropId, setSelectedCropId] = useState<string | null>(null);
     const [selectedPlotId, setSelectedPlotId] = useState<string | null>(null);
@@ -139,7 +139,7 @@ const HarvestIncomePage: React.FC<HarvestIncomePageProps> = ({ context, crops, o
         setShowEntrySheet(false);
     };
 
-    const handlePendingAction = (session: HarvestSession, action: 'SALE_ENTRY' | 'PAYMENT_ENTRY') => {
+    const handlePendingAction = (session: HarvestSession, _action: 'SALE_ENTRY' | 'PAYMENT_ENTRY') => {
         setSelectedSessionId(session.id);
         setShowEntrySheet(true); // Simplified for now
     };

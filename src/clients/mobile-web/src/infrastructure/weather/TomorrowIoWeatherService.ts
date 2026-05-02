@@ -56,7 +56,7 @@ class TomorrowIoWeatherService implements WeatherPort {
 
     // --- MOCKS ---
 
-    private async getMockWeather(geo: PlotGeo): Promise<WeatherStamp> {
+    private async getMockWeather(_geo: PlotGeo): Promise<WeatherStamp> {
         await new Promise(r => setTimeout(r, MOCK_DELAY_MS));
         const isRainy = Math.random() > 0.85;
         return {
@@ -78,7 +78,7 @@ class TomorrowIoWeatherService implements WeatherPort {
         };
     }
 
-    private async getMockForecast(geo: PlotGeo): Promise<DailyForecast[]> {
+    private async getMockForecast(_geo: PlotGeo): Promise<DailyForecast[]> {
         await new Promise(r => setTimeout(r, MOCK_DELAY_MS));
         const forecasts: DailyForecast[] = [];
         const today = new Date();

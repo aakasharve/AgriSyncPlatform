@@ -108,7 +108,7 @@ const JobCardDetailPage: React.FC<JobCardDetailPageProps> = ({
 
     const statusColor = STATUS_COLORS[card.status] ?? 'bg-stone-100 text-stone-600';
     const statusLabel = STATUS_LABELS[card.status] ?? { en: card.status, mr: card.status };
-    const totalLineItemAmount = card.lineItems.reduce(
+    const _totalLineItemAmount = card.lineItems.reduce(
         (sum, item) => sum + item.expectedHours * item.ratePerHourAmount, 0
     );
 

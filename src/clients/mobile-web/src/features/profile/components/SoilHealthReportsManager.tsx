@@ -7,7 +7,7 @@ interface SoilHealthReportsManagerProps {
     onUpdate: (profile: FarmerProfile) => void;
 }
 
-export const SoilHealthReportsManager: React.FC<SoilHealthReportsManagerProps> = ({ profile, onUpdate }) => {
+export const SoilHealthReportsManager: React.FC<SoilHealthReportsManagerProps> = ({ profile: _profile, onUpdate: _onUpdate }) => {
     const [isUploading, setIsUploading] = useState(false);
     const [reports, setReports] = useState<any[]>([]);
 

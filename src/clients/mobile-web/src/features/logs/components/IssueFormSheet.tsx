@@ -54,7 +54,7 @@ const SEVERITIES: { level: BucketIssueSeverity, label: string, color: string }[]
     { level: 'HIGH', label: 'Critical - Work stopped', color: 'bg-red-100 text-red-800 border-red-200' },
 ];
 
-export const IssueFormSheet: React.FC<IssueFormSheetProps> = ({ onSave, onClose, initialData, isOpen = true, bucketType }) => {
+export const IssueFormSheet: React.FC<IssueFormSheetProps> = ({ onSave, onClose, initialData, isOpen = true, bucketType: _bucketType }) => {
     const [issueType, setIssueType] = useState<BucketIssueType>(initialData?.issueType || 'OTHER');
     const [reason, setReason] = useState(initialData?.reason || '');
     const [severity, setSeverity] = useState<BucketIssueSeverity>(initialData?.severity || 'LOW');

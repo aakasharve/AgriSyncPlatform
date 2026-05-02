@@ -24,7 +24,7 @@ interface PlotChipSelectorProps {
  */
 const PlotChipSelector: React.FC<PlotChipSelectorProps> = ({
     crops,
-    selectedCrops,
+    selectedCrops: _selectedCrops,
     selectedPlots,
     onSelectionChange,
     singleSelect = false,
@@ -85,7 +85,7 @@ const PlotChipSelector: React.FC<PlotChipSelectorProps> = ({
 
                 const cropPlots = selectedPlots[crop.id] || [];
                 const allSelected = cropPlots.length === crop.plots.length;
-                const someSelected = cropPlots.length > 0 && !allSelected;
+                const _someSelected = cropPlots.length > 0 && !allSelected;
 
                 return (
                     <div

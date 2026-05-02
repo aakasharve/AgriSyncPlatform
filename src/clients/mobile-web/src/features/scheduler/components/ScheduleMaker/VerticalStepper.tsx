@@ -18,10 +18,10 @@ const VerticalStepper: React.FC<VerticalStepperProps> = ({ steps, currentStep })
             {/* Connecting Line - Behind circles */}
             <div className="absolute left-[19px] top-4 bottom-10 w-0.5 bg-stone-100 z-0" />
 
-            {steps.map((step, index) => {
+            {steps.map((step, _index) => {
                 const isActive = step.id === currentStep;
                 const isCompleted = step.id < currentStep;
-                const isFuture = step.id > currentStep;
+                const _isFuture = step.id > currentStep;
 
                 return (
                     <div key={step.id} className="relative flex gap-5 mb-8 last:mb-0 z-10 group">

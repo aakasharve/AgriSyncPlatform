@@ -50,7 +50,7 @@ const SettingsPage: React.FC<SettingsPageProps> = ({
     const [harvestConfigExpanded, setHarvestConfigExpanded] = useState(false);
     const [editingPlotId, setEditingPlotId] = useState<string | null>(null);
     const [editingCrop, setEditingCrop] = useState<CropProfile | null>(null);
-    const [configRefreshKey, setConfigRefreshKey] = useState(0);
+    const [_configRefreshKey, setConfigRefreshKey] = useState(0);
 
     const handleDefaultChange = (category: keyof LedgerDefaults, field: string, value: any) => {
         onUpdateDefaults({
@@ -62,7 +62,7 @@ const SettingsPage: React.FC<SettingsPageProps> = ({
         });
     };
 
-    const addShift = () => {
+    const _addShift = () => {
         const newShift: LabourShift = {
             id: `shift_${idGenerator.generate()}`,
             name: 'New Shift',
@@ -73,12 +73,12 @@ const SettingsPage: React.FC<SettingsPageProps> = ({
         handleDefaultChange('labour', 'shifts', newShifts);
     };
 
-    const updateShift = (id: string, field: keyof LabourShift, value: any) => {
+    const _updateShift = (id: string, field: keyof LabourShift, value: any) => {
         const newShifts = defaults.labour.shifts.map(s => s.id === id ? { ...s, [field]: value } : s);
         handleDefaultChange('labour', 'shifts', newShifts);
     };
 
-    const deleteShift = (id: string) => {
+    const _deleteShift = (id: string) => {
         const newShifts = defaults.labour.shifts.filter(s => s.id !== id);
         handleDefaultChange('labour', 'shifts', newShifts);
     };

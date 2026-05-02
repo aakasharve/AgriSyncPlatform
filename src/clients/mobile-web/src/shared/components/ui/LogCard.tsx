@@ -24,7 +24,7 @@ export const LogCard: React.FC<LogCardProps> = ({
     onClick,
     details
 }) => {
-    const { t } = useLanguage();
+    const { t: _t } = useLanguage();
 
     return (
         <div

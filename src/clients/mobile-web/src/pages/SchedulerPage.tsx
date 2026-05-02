@@ -40,7 +40,7 @@ const SchedulerPage: React.FC<SchedulerPageProps> = ({
     onUpdateCrops,
     userResources,
     onAddResource,
-    onOpenTaskCreator,
+    onOpenTaskCreator: _onOpenTaskCreator,
     onCloseDay
 }) => {
     // Selection State
@@ -51,8 +51,8 @@ const SchedulerPage: React.FC<SchedulerPageProps> = ({
     // Editor State (for Rules - ONE PLOT ONLY)
     const [activeTemplate, setActiveTemplate] = useState<CropScheduleTemplate | null>(null);
     const [draftInstance, setDraftInstance] = useState<PlotScheduleInstance | null>(null);
-    const [openStageId, setOpenStageId] = useState<string | null>(null);
-    const [isDirty, setIsDirty] = useState(false);
+    const [_openStageId, _setOpenStageId] = useState<string | null>(null);
+    const [_isDirty, setIsDirty] = useState(false);
     const [moneyLensOpen, setMoneyLensOpen] = useState(false);
     const [moneyLensFilters, setMoneyLensFilters] = useState<FinanceFilters>({});
     const libraryTemplateCount = useMemo(() => {
@@ -245,7 +245,7 @@ const SchedulerPage: React.FC<SchedulerPageProps> = ({
     };
 
     // --- SELECTION HANDLER ---
-    const handleCropSelectionChange = (cIds: string[], pMap: Record<string, string[]>) => {
+    const _handleCropSelectionChange = (cIds: string[], pMap: Record<string, string[]>) => {
         // Enforce Single Crop & Single Plot
         let targetCropId = selectedCropId;
 
@@ -273,7 +273,7 @@ const SchedulerPage: React.FC<SchedulerPageProps> = ({
     };
 
     // --- EDIT HANDLERS (Same as before) ---
-    const handleStageBoundaryChange = (stageId: string, field: 'start' | 'end', val: number) => {
+    const _handleStageBoundaryChange = (stageId: string, field: 'start' | 'end', val: number) => {
         if (!draftInstance) return;
         const overrides = [...draftInstance.stageOverrides];
         const existingIdx = overrides.findIndex(o => o.stageId === stageId);
@@ -286,7 +286,7 @@ const SchedulerPage: React.FC<SchedulerPageProps> = ({
         setIsDirty(true);
     };
 
-    const updateExpectationOverride = (stageId: string, category: 'IRRIGATION' | 'FERTIGATION' | 'FOLIAR_SPRAY', field: 'mode' | 'value', value: any) => {
+    const _updateExpectationOverride = (stageId: string, category: 'IRRIGATION' | 'FERTIGATION' | 'FOLIAR_SPRAY', field: 'mode' | 'value', value: any) => {
         if (!draftInstance || !activeTemplate) return;
         const targetExp = activeTemplate.periodicExpectations.find(pe => {
             if (pe.stageId !== stageId) return false;
@@ -307,13 +307,13 @@ const SchedulerPage: React.FC<SchedulerPageProps> = ({
         setIsDirty(true);
     };
 
-    const getEffectiveStage = (tStage: StageTemplate) => {
+    const _getEffectiveStage = (tStage: StageTemplate) => {
         if (!draftInstance) return tStage;
         const ov = draftInstance.stageOverrides.find(o => o.stageId === tStage.id);
         return { ...tStage, dayStart: ov?.customDayStart ?? tStage.dayStart, dayEnd: ov?.customDayEnd ?? tStage.dayEnd };
     };
 
-    const getEffectiveExpectation = (stageId: string, categoryKeyword: string) => {
+    const _getEffectiveExpectation = (stageId: string, categoryKeyword: string) => {
         if (!activeTemplate || !draftInstance) return null;
         const tExp = activeTemplate.periodicExpectations.find(pe => pe.stageId === stageId && pe.operationTypeId.includes(categoryKeyword));
         if (!tExp) return null;
@@ -684,7 +684,7 @@ const SchedulerPage: React.FC<SchedulerPageProps> = ({
                                             {scheduleTemplate.stages.map((stage, idx) => {
                                                 const isCurrent = currentStage?.id === stage.id;
                                                 const isPast = dayNumber > stage.dayEnd;
-                                                const isFuture = dayNumber < stage.dayStart;
+                                                const _isFuture = dayNumber < stage.dayStart;
 
                                                 return (
                                                     <div key={stage.id} className={`flex items-center gap-3 px-3 py-2 rounded-xl transition-all ${isCurrent ? 'bg-emerald-50 border border-emerald-200' :

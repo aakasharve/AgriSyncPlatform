@@ -27,7 +27,7 @@ export const MigrationSheet: React.FC<MigrationSheetProps> = ({
     plotId,
     cycleId,
     farmId,
-    currentTemplateId,
+    currentTemplateId: _currentTemplateId,
     onClose
 }) => {
     const [selectedReason, setSelectedReason] = useState<string>('');

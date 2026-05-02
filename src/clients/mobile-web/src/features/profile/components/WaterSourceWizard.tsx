@@ -23,7 +23,7 @@ interface WaterSourceWizardProps {
     onCancel: () => void;
 }
 
-const WaterSourceWizard: React.FC<WaterSourceWizardProps> = ({ profile, onSave, onCancel }) => {
+const WaterSourceWizard: React.FC<WaterSourceWizardProps> = ({ profile: _profile, onSave, onCancel }) => {
     const [step, setStep] = useState(1); // 1 = source details, 2 = motors
 
     // Source state

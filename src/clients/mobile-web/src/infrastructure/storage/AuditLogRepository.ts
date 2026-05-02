@@ -52,7 +52,7 @@ export class AuditLogRepository {
      * @deprecated Fix-07: Use LogsRepository.save(log, { ...audit }) instead.
      * This method is now a no-op to prevent split-brain audit logs.
      */
-    async append(event: Omit<AuditEvent, 'id' | 'timestamp'>): Promise<void> {
+    async append(_event: Omit<AuditEvent, 'id' | 'timestamp'>): Promise<void> {
         console.warn('AuditLogRepository.append is deprecated. Use LogsRepository.save() with audit context.');
         // No-op
     }
