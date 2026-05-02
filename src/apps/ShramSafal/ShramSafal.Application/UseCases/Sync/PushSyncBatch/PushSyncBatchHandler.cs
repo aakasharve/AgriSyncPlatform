@@ -98,7 +98,6 @@ public sealed class PushSyncBatchHandler(
     CompleteJobCardHandler completeJobCardHandler,
     SettleJobCardPayoutHandler settleJobCardPayoutHandler,
     CancelJobCardHandler cancelJobCardHandler,
-    VerifyJobCardForPayoutHandler verifyJobCardForPayoutHandler,
     // Sub-plan 05 Task 2a (T-IGH-05-FAIL-PUSHES-WIRING): E2E test probe.
     // Production default: NoOpFailPushesProbe (always returns null).
     // When ALLOW_E2E_SEED=true the Bootstrapper re-registers an adapter over

@@ -132,9 +132,13 @@ public sealed class CEIPhase3EndToEnd
     // Helpers
     // -----------------------------------------------------------------------
 
-    private sealed class TestHarness(WebApplication app, HttpClient client, string storageDir) : IAsyncDisposable
+    private sealed class TestHarness(WebApplication app, HttpClient client) : IAsyncDisposable
     {
-        public HttpClient Client { get; } = client;
+        // Expression-bodied properties reference the captured primary-ctor
+        // fields directly; a `{ get; } = client` initializer would create a
+        // second backing field for the same value (CS9124). The
+        // `storageDir` parameter was never read — dropped per CS9113.
+        public HttpClient Client => client;
         public WebApplication App => app;
 
         public static async Task<TestHarness> CreateAsync()
@@ -183,7 +187,7 @@ public sealed class CEIPhase3EndToEnd
                 new System.Net.Http.Headers.AuthenticationHeaderValue("Test",
                     $"{Guid.Parse("11111111-1111-1111-1111-111111111111")}|shramsafal:PrimaryOwner");
 
-            return new TestHarness(app, client, storageDir);
+            return new TestHarness(app, client);
         }
 
         public async Task SeedPlannedActivitiesAsync(Guid farmId, Guid plotId, Guid cropCycleId, int count, DateTime asOf)

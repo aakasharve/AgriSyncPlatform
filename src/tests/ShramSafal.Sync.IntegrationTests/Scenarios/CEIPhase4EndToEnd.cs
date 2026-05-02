@@ -453,7 +453,10 @@ public sealed class CEIPhase4EndToEnd
 
     private sealed class TestHarness(WebApplication app, HttpClient client, string storageDir) : IAsyncDisposable
     {
-        public HttpClient Client { get; } = client;
+        // Expression-bodied to reuse the captured primary-ctor field;
+        // `{ get; } = client` would create a second backing field
+        // (CS9124).
+        public HttpClient Client => client;
 
         /// <summary>Returns the shared HttpClient which sends requests as the current user
         /// based on per-request headers (see TestAuthHandler). Used for sync push which

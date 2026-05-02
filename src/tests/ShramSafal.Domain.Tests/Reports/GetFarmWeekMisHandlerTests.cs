@@ -74,7 +74,7 @@ public sealed class GetFarmWeekMisHandlerTests
 
         Assert.True(result.IsFailure);
         // EntitlementGate maps SubscriptionExpired to its own error code, not generic Forbidden
-        Assert.True(result.Error.Code.StartsWith("entitlement.", StringComparison.Ordinal));
+        Assert.StartsWith("entitlement.", result.Error.Code, StringComparison.Ordinal);
     }
 
     // ---- Helpers ----

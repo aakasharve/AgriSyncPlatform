@@ -1,22 +1,33 @@
 <Project>
   <!--
     Sub-plan 01 Task 8 — pre-existing warnings inventory.
-    Sub-plan 03 (Backend Architectural Depth) is the planned scope to drive
-    these to zero and remove this file or shrink the list.
+
+    Partial cleanup shipped 2026-05-02 (T-IGH-01-WARN-CLEANUP):
+      - CS9113 (3 sites)   → fixed; removed from suppression list
+      - CS9124 (2 sites)   → fixed; removed from suppression list
+      - xUnit2009 (1 site) → fixed; removed from suppression list
+
+    Remaining (still suppressed, tracked under WARN-CLEANUP pending task):
+      - CS8602 (21 sites) — domain-test `result.Value.X` derefs and 3
+        endpoint sites. Needs a Result<T>.Value nullability rework
+        (e.g. `[MemberNotNullWhen(true, nameof(Value))]` on a new
+        `IsSuccess` overload + tests gain a leading `Assert.True(
+        result.IsSuccess)`), not a per-site `!` operator dump.
+      - CS0618 (20 sites) — `User.AddMembership(...)` and
+        `PlannedActivity.Create(...)` deprecated calls in *Seeder.cs.
+        Migration path: switch to FarmMembership + CreateFromTemplate /
+        CreateLocallyAdded. Touches production seed code; deserves its
+        own PR with seed regression tests.
 
     With this list, new warnings of OTHER codes still fail under
     /warnaserror; the listed codes remain as warnings (visible in build
-    output but not blocking). See INDUSTRY_GRADE_HARDENING/01 task 8 and
-    the matching pending task entry.
+    output but not blocking).
   -->
   <PropertyGroup>
     <WarningsNotAsErrors>
       $(WarningsNotAsErrors);
       CS0618;
-      CS8602;
-      CS9113;
-      CS9124;
-      xUnit2009
+      CS8602
     </WarningsNotAsErrors>
   </PropertyGroup>
 </Project>
