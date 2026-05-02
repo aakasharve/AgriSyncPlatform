@@ -59,7 +59,7 @@ public sealed class AdminTwoOrgsSeederTests
         Assert.True(root.TryGetProperty("summary",  out _),            "response must have summary");
 
         Assert.Equal(E2eFixtureSeeder.AdminUserIdValue.ToString(), userId.GetString());
-        Assert.Equal("8888888888",     phone.GetString());
+        Assert.Equal("7777777777",     phone.GetString());
         Assert.Equal("admin123",       password.GetString());
         Assert.Equal(E2eFixtureSeeder.FarmAId.ToString(), farmId.GetString());
         Assert.Equal("admin_two_orgs", fixture.GetString());

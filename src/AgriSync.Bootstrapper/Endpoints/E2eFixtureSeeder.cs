@@ -27,7 +27,12 @@ public sealed class E2eFixtureSeeder(
     // Fixture constants
     // -----------------------------------------------------------------------
     private const string FixtureName      = "admin_two_orgs";
-    private const string AdminPhone       = "8888888888";
+    // NOTE: distinct from DatabaseSeeder's Ganesh phone (8888888888). When the
+    // ramu fixture runs first and admin_two_orgs runs after a /__e2e/reset,
+    // the ssf tables are truncated but ssf.users (in `public` schema) is not.
+    // Re-using 8888888888 collided on IX_users_phone — see CI failure on
+    // 35bb920. Pick a deterministic value not used by DatabaseSeeder fixtures.
+    private const string AdminPhone       = "7777777777";
     private const string AdminPassword    = "admin123";
     private const string AdminDisplayName = "E2E Admin";
     private const string AppId            = "shramsafal";

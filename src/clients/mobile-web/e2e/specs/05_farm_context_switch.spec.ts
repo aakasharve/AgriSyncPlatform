@@ -8,7 +8,8 @@
  *  4. Switch to Farm Beta and see the pill update to reflect the new active farm.
  *
  * Fixture: admin_two_orgs
- *   - Phone 8888888888 / password admin123
+ *   - Phone 7777777777 / password admin123 (distinct from DatabaseSeeder
+ *     which uses 8888888888 for Ganesh)
  *   - Two farms: "E2E Farm Alpha" (FarmAId) and "E2E Farm Beta" (FarmBId)
  *   - Both farms have the admin user as OwnerUserId, so getMyFarms returns 2 entries.
  *
@@ -36,7 +37,7 @@ async function loginAsAdmin(page: import('@playwright/test').Page) {
         .locator('input[type="tel"], input[placeholder*="phone"]')
         .first();
     await phoneInput.waitFor({ timeout: 15_000 });
-    await phoneInput.fill('8888888888');
+    await phoneInput.fill('7777777777');
 
     const passwordInput = page.locator('input[type="password"]').first();
     await passwordInput.waitFor({ timeout: 10_000 });
