@@ -259,6 +259,7 @@ export const ReceiptCaptureSheet: React.FC<Props> = ({ onClose, onSave, crops, a
                                 <span className="text-emerald-100 text-sm">Scan a receipt or bill</span>
                             </button>
                             <input
+                                data-testid="attachment-input"
                                 type="file"
                                 accept="image/*"
                                 capture="environment"
@@ -281,7 +282,7 @@ export const ReceiptCaptureSheet: React.FC<Props> = ({ onClose, onSave, crops, a
                                 </div>
                             )}
                             {!attachmentCaptureError && attachmentIds.length > 0 && (
-                                <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-700">
+                                <div data-testid="attachment-queued-banner" className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-700">
                                     Attachment queued for background upload.
                                 </div>
                             )}

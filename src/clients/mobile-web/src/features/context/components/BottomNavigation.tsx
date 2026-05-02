@@ -67,6 +67,7 @@ const BottomNavigation: React.FC<BottomNavigationProps> = ({ currentRoute, curre
 
                 {/* PROCUREMENT SECTION */}
                 <button
+                    data-testid="procurement-nav-btn"
                     onClick={() => handleNavClick('procurement')}
                     className={`
                         flex w-20 flex-col items-center justify-end pb-1 transition-all duration-200 group
