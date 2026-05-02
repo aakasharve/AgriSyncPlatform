@@ -1,4 +1,5 @@
 using AgriSync.BuildingBlocks.Abstractions;
+using AgriSync.BuildingBlocks.Application;
 using AgriSync.BuildingBlocks.Results;
 using AgriSync.SharedKernel.Contracts.Roles;
 using ShramSafal.Application.Ports;
@@ -14,7 +15,7 @@ namespace ShramSafal.Application.UseCases.Compliance.ResolveSignal;
 public sealed class ResolveSignalHandler(
     IComplianceSignalRepository signalRepository,
     IShramSafalRepository repository,
-    IClock clock)
+    IClock clock) : IHandler<ResolveSignalCommand>
 {
     private static readonly HashSet<AppRole> AllowedRoles =
     [

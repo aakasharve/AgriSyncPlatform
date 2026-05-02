@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using AgriSync.BuildingBlocks.Application;
 using AgriSync.BuildingBlocks.Results;
 using AgriSync.SharedKernel.Contracts.Ids;
 using AgriSync.SharedKernel.Contracts.Roles;
@@ -52,7 +53,7 @@ public static class ComplianceEndpoints
         group.MapPost("/compliance/{signalId:guid}/acknowledge", async (
             Guid signalId,
             ClaimsPrincipal user,
-            AcknowledgeSignalHandler handler,
+            IHandler<AcknowledgeSignalCommand> handler,
             CancellationToken ct) =>
         {
             if (!EndpointActorContext.TryGetUserId(user, out var actorUserId))
@@ -73,7 +74,7 @@ public static class ComplianceEndpoints
             Guid signalId,
             ResolveSignalRequest request,
             ClaimsPrincipal user,
-            ResolveSignalHandler handler,
+            IHandler<ResolveSignalCommand> handler,
             CancellationToken ct) =>
         {
             if (!EndpointActorContext.TryGetUserId(user, out var actorUserId))
@@ -94,7 +95,7 @@ public static class ComplianceEndpoints
         group.MapPost("/compliance/evaluate/{farmId:guid}", async (
             Guid farmId,
             ClaimsPrincipal user,
-            EvaluateComplianceHandler handler,
+            IHandler<EvaluateComplianceCommand, EvaluateComplianceResult> handler,
             CancellationToken ct) =>
         {
             if (!EndpointActorContext.TryGetUserId(user, out _))

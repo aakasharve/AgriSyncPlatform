@@ -1,4 +1,6 @@
 using AgriSync.BuildingBlocks.Abstractions;
+using AgriSync.BuildingBlocks.Application;
+using AgriSync.BuildingBlocks.Results;
 using ShramSafal.Application.Ports;
 using ShramSafal.Domain.Audit;
 using ShramSafal.Domain.Tests;
@@ -18,7 +20,7 @@ namespace ShramSafal.Application.UseCases.Tests.MarkOverdueInstances;
 public sealed class MarkOverdueInstancesHandler(
     ITestInstanceRepository testInstanceRepository,
     IShramSafalRepository repository,
-    IClock clock)
+    IClock clock) : IHandler<MarkOverdueInstancesCommand, int>
 {
     /// <summary>
     /// Sentinel actor id used by background jobs for audit rows. The all-ones
@@ -28,7 +30,7 @@ public sealed class MarkOverdueInstancesHandler(
     public static readonly Guid SystemActorUserId =
         new("ffffffff-ffff-ffff-ffff-ffffffffffff");
 
-    public async Task<int> HandleAsync(
+    public async Task<Result<int>> HandleAsync(
         MarkOverdueInstancesCommand command,
         CancellationToken ct = default)
     {
@@ -38,7 +40,7 @@ public sealed class MarkOverdueInstancesHandler(
         var candidates = await testInstanceRepository.GetOverdueAsync(today, ct);
         if (candidates.Count == 0)
         {
-            return 0;
+            return Result.Success(0);
         }
 
         var marked = 0;
@@ -76,12 +78,12 @@ public sealed class MarkOverdueInstancesHandler(
 
         if (marked == 0)
         {
-            return 0;
+            return Result.Success(0);
         }
 
         await testInstanceRepository.SaveChangesAsync(ct);
         await repository.SaveChangesAsync(ct);
 
-        return marked;
+        return Result.Success(marked);
     }
 }

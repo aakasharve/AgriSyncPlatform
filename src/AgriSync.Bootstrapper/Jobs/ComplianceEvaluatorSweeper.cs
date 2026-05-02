@@ -1,3 +1,4 @@
+using AgriSync.BuildingBlocks.Application;
 using AgriSync.SharedKernel.Contracts.Ids;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -62,7 +63,7 @@ public sealed class ComplianceEvaluatorSweeper(
             try
             {
                 await using var scope = scopeFactory.CreateAsyncScope();
-                var handler = scope.ServiceProvider.GetRequiredService<EvaluateComplianceHandler>();
+                var handler = scope.ServiceProvider.GetRequiredService<IHandler<EvaluateComplianceCommand, EvaluateComplianceResult>>();
                 var result = await handler.HandleAsync(
                     new EvaluateComplianceCommand(new FarmId(farmId)), ct);
 

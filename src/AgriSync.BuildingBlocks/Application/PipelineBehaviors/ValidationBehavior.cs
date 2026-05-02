@@ -41,3 +41,30 @@ public sealed class ValidationBehavior<TCommand, TResult> : IPipelineBehavior<TC
         return Task.FromResult(Result.Failure<TResult>(combined));
     }
 }
+
+public sealed class ValidationBehavior<TCommand> : IPipelineBehavior<TCommand>
+{
+    private readonly IEnumerable<IValidator<TCommand>> _validators;
+
+    public ValidationBehavior(IEnumerable<IValidator<TCommand>> validators)
+    {
+        _validators = validators;
+    }
+
+    public Task<Result> HandleAsync(
+        TCommand command,
+        IHandler<TCommand> next,
+        CancellationToken ct)
+    {
+        var errors = _validators.SelectMany(v => v.Validate(command)).ToList();
+        if (errors.Count == 0)
+        {
+            return next.HandleAsync(command, ct);
+        }
+
+        var first = errors[0];
+        var detail = string.Join("; ", errors.Select(e => $"{e.Code}: {e.Description}"));
+        var combined = new Error(first.Code, detail, first.Kind);
+        return Task.FromResult(Result.Failure(combined));
+    }
+}

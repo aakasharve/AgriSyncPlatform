@@ -37,11 +37,38 @@ public static class HandlerPipeline
         return current;
     }
 
+    /// <summary>
+    /// No-result overload. Mirrors the typed-result pipeline but returns a
+    /// plain <see cref="Result"/> envelope.
+    /// </summary>
+    public static IHandler<TCommand> Build<TCommand>(
+        IHandler<TCommand> innermost,
+        params IPipelineBehavior<TCommand>[] behaviors)
+    {
+        ArgumentNullException.ThrowIfNull(innermost);
+        ArgumentNullException.ThrowIfNull(behaviors);
+
+        IHandler<TCommand> current = innermost;
+        for (var i = behaviors.Length - 1; i >= 0; i--)
+        {
+            current = new BehaviorAdapter<TCommand>(behaviors[i], current);
+        }
+        return current;
+    }
+
     private sealed class BehaviorAdapter<TCommand, TResult>(
         IPipelineBehavior<TCommand, TResult> behavior,
         IHandler<TCommand, TResult> next) : IHandler<TCommand, TResult>
     {
         public Task<Result<TResult>> HandleAsync(TCommand command, CancellationToken ct = default)
+            => behavior.HandleAsync(command, next, ct);
+    }
+
+    private sealed class BehaviorAdapter<TCommand>(
+        IPipelineBehavior<TCommand> behavior,
+        IHandler<TCommand> next) : IHandler<TCommand>
+    {
+        public Task<Result> HandleAsync(TCommand command, CancellationToken ct = default)
             => behavior.HandleAsync(command, next, ct);
     }
 }

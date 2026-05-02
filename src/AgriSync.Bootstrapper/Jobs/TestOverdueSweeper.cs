@@ -1,3 +1,4 @@
+using AgriSync.BuildingBlocks.Application;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
@@ -37,11 +38,21 @@ public sealed class TestOverdueSweeper(
     private async Task RunPassAsync(CancellationToken ct)
     {
         await using var scope = scopeFactory.CreateAsyncScope();
-        var handler = scope.ServiceProvider.GetRequiredService<MarkOverdueInstancesHandler>();
+        var handler = scope.ServiceProvider.GetRequiredService<IHandler<MarkOverdueInstancesCommand, int>>();
 
         try
         {
-            var marked = await handler.HandleAsync(new MarkOverdueInstancesCommand(), ct);
+            var result = await handler.HandleAsync(new MarkOverdueInstancesCommand(), ct);
+            if (!result.IsSuccess)
+            {
+                logger.LogWarning(
+                    "TestOverdueSweeper returned failure {ErrorCode}: {Description}.",
+                    result.Error.Code,
+                    result.Error.Description);
+                return;
+            }
+
+            var marked = result.Value;
             if (marked > 0)
             {
                 logger.LogInformation(
