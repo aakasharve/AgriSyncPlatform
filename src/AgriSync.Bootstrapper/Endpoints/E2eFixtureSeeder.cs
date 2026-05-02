@@ -44,6 +44,11 @@ public sealed class E2eFixtureSeeder(
     public static readonly Guid FarmScopeAId         = Guid.Parse("00000000-0000-0000-0000-0000000000c1");
     public static readonly Guid FarmScopeBId         = Guid.Parse("00000000-0000-0000-0000-0000000000c2");
 
+    // OwnerAccountId constants — one per org, satisfying the NOT NULL
+    // schema invariant (I5). No FK to AccountsDb; cross-app reference only.
+    public static readonly Guid OwnerAccountAIdValue = Guid.Parse("00000000-0000-0000-0000-0000000000d1");
+    public static readonly Guid OwnerAccountBIdValue = Guid.Parse("00000000-0000-0000-0000-0000000000d2");
+
     // -----------------------------------------------------------------------
     // Main entry point
     // -----------------------------------------------------------------------
@@ -68,9 +73,11 @@ public sealed class E2eFixtureSeeder(
         var memAAdded = await EnsureMembershipAsync(MembershipAId, OrgAId, adminUserId, OrganizationRole.Owner, nowUtc, ct);
         var memBAdded = await EnsureMembershipAsync(MembershipBId, OrgBId, adminUserId, OrganizationRole.Owner, nowUtc, ct);
 
-        // 4. Farms
-        var farmAAdded = await EnsureFarmAsync(FarmAId, "E2E Farm Alpha", adminUserId, nowUtc, ct);
-        var farmBAdded = await EnsureFarmAsync(FarmBId, "E2E Farm Beta",  adminUserId, nowUtc, ct);
+        // 4. Farms (OwnerAccountId must be non-empty per schema invariant I5)
+        var ownerAccountAId = new OwnerAccountId(OwnerAccountAIdValue);
+        var ownerAccountBId = new OwnerAccountId(OwnerAccountBIdValue);
+        var farmAAdded = await EnsureFarmAsync(FarmAId, "E2E Farm Alpha", adminUserId, ownerAccountAId, nowUtc, ct);
+        var farmBAdded = await EnsureFarmAsync(FarmBId, "E2E Farm Beta",  adminUserId, ownerAccountBId, nowUtc, ct);
 
         // 5. Farm scopes (Explicit — no PlatformWildcard needed for tests)
         var scopeAAdded = await EnsureFarmScopeAsync(FarmScopeAId, OrgAId, new FarmId(FarmAId), adminUserId, nowUtc, ct);
@@ -185,19 +192,28 @@ public sealed class E2eFixtureSeeder(
         Guid farmId,
         string name,
         UserId ownerUserId,
+        OwnerAccountId ownerAccountId,
         DateTime nowUtc,
         CancellationToken ct)
     {
         var farmKey = new FarmId(farmId);
-        var exists = await ssfContext.Farms
-            .AnyAsync(f => f.Id == farmKey, ct);
+        var existing = await ssfContext.Farms
+            .FirstOrDefaultAsync(f => f.Id == farmKey, ct);
 
-        if (exists)
+        if (existing is not null)
         {
+            // Idempotency: if a previous run wrote Guid.Empty (bug in an older
+            // seeder version), back-fill the OwnerAccountId now.
+            if (existing.OwnerAccountId.IsEmpty)
+            {
+                existing.AttachToOwnerAccount(ownerAccountId, nowUtc);
+            }
+
             return false;
         }
 
         var farm = Farm.Create(farmKey, name, ownerUserId, nowUtc);
+        farm.AttachToOwnerAccount(ownerAccountId, nowUtc);
         ssfContext.Farms.Add(farm);
         return true;
     }

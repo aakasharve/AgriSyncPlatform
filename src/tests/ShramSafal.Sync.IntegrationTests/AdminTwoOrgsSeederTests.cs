@@ -91,12 +91,25 @@ public sealed class AdminTwoOrgsSeederTests
             m => m.Id == E2eFixtureSeeder.MembershipAId || m.Id == E2eFixtureSeeder.MembershipBId);
         Assert.Equal(2, memCount);
 
-        // 2 farms
+        // 2 farms — also assert OwnerAccountId is non-empty (schema invariant I5)
         var farmAKey = new AgriSync.SharedKernel.Contracts.Ids.FarmId(E2eFixtureSeeder.FarmAId);
         var farmBKey = new AgriSync.SharedKernel.Contracts.Ids.FarmId(E2eFixtureSeeder.FarmBId);
         var farmCount = await ssf.Farms.CountAsync(
             f => f.Id == farmAKey || f.Id == farmBKey);
         Assert.Equal(2, farmCount);
+
+        var farmA = await ssf.Farms.FirstOrDefaultAsync(f => f.Id == farmAKey);
+        var farmB = await ssf.Farms.FirstOrDefaultAsync(f => f.Id == farmBKey);
+        Assert.NotNull(farmA);
+        Assert.NotNull(farmB);
+        Assert.False(farmA.OwnerAccountId.IsEmpty,
+            "Farm A must have a non-empty OwnerAccountId (schema invariant I5)");
+        Assert.False(farmB.OwnerAccountId.IsEmpty,
+            "Farm B must have a non-empty OwnerAccountId (schema invariant I5)");
+        Assert.Equal(new AgriSync.SharedKernel.Contracts.Ids.OwnerAccountId(E2eFixtureSeeder.OwnerAccountAIdValue),
+            farmA.OwnerAccountId);
+        Assert.Equal(new AgriSync.SharedKernel.Contracts.Ids.OwnerAccountId(E2eFixtureSeeder.OwnerAccountBIdValue),
+            farmB.OwnerAccountId);
 
         // 2 farm-scopes
         var scopeCount = await ssf.OrganizationFarmScopes.CountAsync(
@@ -139,6 +152,16 @@ public sealed class AdminTwoOrgsSeederTests
         var farmCount = await ssf.Farms.CountAsync(
             f => f.Id == farmAKey || f.Id == farmBKey);
         Assert.Equal(2, farmCount);
+
+        // After both calls OwnerAccountId must still be non-empty (invariant I5 survives idempotency)
+        var farmA = await ssf.Farms.FirstOrDefaultAsync(f => f.Id == farmAKey);
+        var farmB = await ssf.Farms.FirstOrDefaultAsync(f => f.Id == farmBKey);
+        Assert.NotNull(farmA);
+        Assert.NotNull(farmB);
+        Assert.False(farmA.OwnerAccountId.IsEmpty,
+            "Farm A OwnerAccountId must remain non-empty after idempotent re-seed");
+        Assert.False(farmB.OwnerAccountId.IsEmpty,
+            "Farm B OwnerAccountId must remain non-empty after idempotent re-seed");
 
         var scopeCount = await ssf.OrganizationFarmScopes.CountAsync(
             s => s.Id == E2eFixtureSeeder.FarmScopeAId || s.Id == E2eFixtureSeeder.FarmScopeBId);
