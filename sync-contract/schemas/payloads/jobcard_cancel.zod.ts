@@ -1,8 +1,11 @@
-// Sub-plan 02 Task 8 scaffold for jobcard.cancel.
-// Full payload schema is deferred to T-IGH-02-PAYLOADS (filed in Task 12).
-// Until then, validate as z.unknown() so MutationQueue.enqueue accepts
-// payloads of any shape — backend rejection remains the source of truth.
+// T-IGH-02-PAYLOADS: canonical payload schema for jobcard.cancel.
+// Mirrors the backend handler's JobCardCancelMutationPayload record.
 import { z } from 'zod';
+import { ZGuid } from './_shared.zod';
 
-export const JobcardCancelPayload = z.unknown();
+export const JobcardCancelPayload = z.object({
+    jobCardId: ZGuid,
+    reason: z.string().min(1),
+});
+
 export type JobcardCancelPayloadType = z.infer<typeof JobcardCancelPayload>;

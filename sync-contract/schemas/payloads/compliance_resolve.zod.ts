@@ -1,8 +1,11 @@
-// Sub-plan 02 Task 8 scaffold for compliance.resolve.
-// Full payload schema is deferred to T-IGH-02-PAYLOADS (filed in Task 12).
-// Until then, validate as z.unknown() so MutationQueue.enqueue accepts
-// payloads of any shape — backend rejection remains the source of truth.
+// T-IGH-02-PAYLOADS: canonical payload schema for compliance.resolve.
+// Mirrors the backend handler's ComplianceResolveMutationPayload record.
 import { z } from 'zod';
+import { ZGuid } from './_shared.zod';
 
-export const ComplianceResolvePayload = z.unknown();
+export const ComplianceResolvePayload = z.object({
+    signalId: ZGuid,
+    note: z.string().optional(),
+});
+
 export type ComplianceResolvePayloadType = z.infer<typeof ComplianceResolvePayload>;
