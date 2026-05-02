@@ -41,19 +41,22 @@ test.describe('Offline log capture', () => {
         await expect(fab).toBeVisible({ timeout: 10_000 });
         await fab.click();
 
-        // --- Select the quick chip. The chip closes the sheet and lands on
-        // ManualEntry with the selected segment active.
+        // --- Select the irrigation quick chip. The chip closes the sheet and
+        // lands on ManualEntry with the irrigation segment seeded into the
+        // active log. We deliberately do NOT click an additional activity
+        // chip from the body of ManualEntry afterwards — the sheet's close
+        // animation lasts ~200ms, and a broad "any button matching
+        // pruning|weeding|...|harvest" locator would pin to the still-mounted
+        // QuickLogSheet harvest chip during that window, racing the close.
+        // The irrigation seeding from the quick-log chip alone is enough to
+        // produce a saveable log.
         await page.getByTestId('quick-log-chip-irrigation').click();
 
-        // --- Interact with ManualEntry form ---
-        // The ManualEntry uses chip-based activity selection (no <select>).
-        // Click the first available activity chip / common-activity button.
-        const activityChip = page.locator('button').filter({ hasText: /pruning|weeding|spraying|irrigation|labour|harvest/i }).first();
-        if (await activityChip.isVisible({ timeout: 3_000 }).catch(() => false)) {
-            await activityChip.click();
-        }
-
         // --- Save the log ---
+        // Wait for the QuickLogSheet to fully unmount (no more chip-irrigation
+        // testid in the DOM) before clicking save, so we know we're in the
+        // ManualEntry context.
+        await expect(page.getByTestId('quick-log-chip-irrigation')).toHaveCount(0, { timeout: 5_000 });
         const saveBtn = page.getByTestId('manual-save-button');
         await expect(saveBtn).toBeVisible({ timeout: 10_000 });
         await saveBtn.click();
