@@ -40,7 +40,7 @@ public class PdfReportExportService : IReportExportService
         var toDate = fromDate.AddMonths(1).AddDays(-1);
 
         var ledgers = await _repository.GetDayLedgersForFarm(farmId, fromDate, toDate, ct);
-        
+
         var report = new MonthlyCostReport(farm, fromDate, toDate, ledgers);
         return report.GeneratePdf();
     }

@@ -112,27 +112,27 @@ public static class PlanDerivationEngine
                     break;
 
                 case FrequencyMode.EveryNDays:
-                {
-                    var interval = Math.Max(1, activity.IntervalDays);
-                    var firstDue = AlignFirstDueDay(activity.OffsetDays, stageStart, interval);
-                    for (var day = firstDue; day <= stageEnd; day += interval)
                     {
-                        planned.Add(CreatePlannedItem(activity, startDate, day, stageName, nowUtc));
+                        var interval = Math.Max(1, activity.IntervalDays);
+                        var firstDue = AlignFirstDueDay(activity.OffsetDays, stageStart, interval);
+                        for (var day = firstDue; day <= stageEnd; day += interval)
+                        {
+                            planned.Add(CreatePlannedItem(activity, startDate, day, stageName, nowUtc));
+                        }
+                        break;
                     }
-                    break;
-                }
 
                 case FrequencyMode.PerWeek:
-                {
-                    var occurrencesPerWeek = Math.Max(1, activity.IntervalDays);
-                    var interval = Math.Max(1, (int)Math.Floor(7d / occurrencesPerWeek));
-                    var firstDue = AlignFirstDueDay(activity.OffsetDays, stageStart, interval);
-                    for (var day = firstDue; day <= stageEnd; day += interval)
                     {
-                        planned.Add(CreatePlannedItem(activity, startDate, day, stageName, nowUtc));
+                        var occurrencesPerWeek = Math.Max(1, activity.IntervalDays);
+                        var interval = Math.Max(1, (int)Math.Floor(7d / occurrencesPerWeek));
+                        var firstDue = AlignFirstDueDay(activity.OffsetDays, stageStart, interval);
+                        for (var day = firstDue; day <= stageEnd; day += interval)
+                        {
+                            planned.Add(CreatePlannedItem(activity, startDate, day, stageName, nowUtc));
+                        }
+                        break;
                     }
-                    break;
-                }
             }
         }
 

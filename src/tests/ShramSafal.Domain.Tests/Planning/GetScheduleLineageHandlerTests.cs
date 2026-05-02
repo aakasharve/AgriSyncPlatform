@@ -130,12 +130,12 @@ public sealed class GetScheduleLineageHandlerTests
         public Task AddScheduleMigrationEventAsync(Domain.Schedules.ScheduleMigrationEvent migrationEvent, CancellationToken ct = default) => throw new NotSupportedException();
         public Task SaveChangesAsync(CancellationToken ct = default) => throw new NotSupportedException();
         public Task<int> GetDisputedLogCountForPlotAsync(Guid plotId, CancellationToken ct = default) => throw new NotSupportedException();
-    
-    // Sub-plan 03 Task 5 (T-IGH-03-PORT-COMPLETE-MIGRATION):
-    // required interface members; no-op in this test stub.
-    public Task AddFarmBoundaryAsync(ShramSafal.Domain.Farms.FarmBoundary boundary, CancellationToken ct = default) => Task.CompletedTask;
-    public Task AddJobCardAsync(ShramSafal.Domain.Work.JobCard jobCard, CancellationToken ct = default) => Task.CompletedTask;
-}
+
+        // Sub-plan 03 Task 5 (T-IGH-03-PORT-COMPLETE-MIGRATION):
+        // required interface members; no-op in this test stub.
+        public Task AddFarmBoundaryAsync(ShramSafal.Domain.Farms.FarmBoundary boundary, CancellationToken ct = default) => Task.CompletedTask;
+        public Task AddJobCardAsync(ShramSafal.Domain.Work.JobCard jobCard, CancellationToken ct = default) => Task.CompletedTask;
+    }
 
     private sealed class FakeUserDirectory(List<(Guid Id, string Name)> users) : IUserDirectory
     {

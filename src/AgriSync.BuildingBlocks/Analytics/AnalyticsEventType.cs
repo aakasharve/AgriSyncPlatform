@@ -51,16 +51,16 @@ public static class AnalyticsEventType
     // api.error  = 5xx from server, or 4xx on critical write endpoints
     // api.slow   = response > 2000ms on write (POST/PUT/PATCH) endpoints
     // client.error = JS exception or fetch failure from the farmer's browser
-    public const string ApiError    = "api.error";
-    public const string ApiSlow     = "api.slow";
+    public const string ApiError = "api.error";
+    public const string ApiSlow = "api.slow";
     public const string ClientError = "client.error";
 
     // Admin scope resolution (W0-A §4.4b). Emitted by IEntitlementResolver
     // + OrgFarmScopeProjector. Powers mis.admin_scope_health (Metabase card 15).
-    public const string AdminScopeResolved      = "admin.scope.resolved";
-    public const string AdminScopeAmbiguous     = "admin.scope.ambiguous";
-    public const string AdminScopeUnauthorized  = "admin.scope.unauthorized";
-    public const string AdminScopeForbidden     = "admin.scope.forbidden";
-    public const string AdminActiveOrgSwitched  = "admin.active_org.switched";
+    public const string AdminScopeResolved = "admin.scope.resolved";
+    public const string AdminScopeAmbiguous = "admin.scope.ambiguous";
+    public const string AdminScopeUnauthorized = "admin.scope.unauthorized";
+    public const string AdminScopeForbidden = "admin.scope.forbidden";
+    public const string AdminActiveOrgSwitched = "admin.active_org.switched";
     public const string AdminScopeDriftDetected = "admin.scope.drift_detected";
 }

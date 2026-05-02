@@ -34,10 +34,10 @@ internal static class ScopeRoleGate
     public static bool IsAllowed(TenantScope scope, AppRole role) =>
         scope switch
         {
-            TenantScope.Private  => true,            // any authenticated farm member
-            TenantScope.Team     => TeamRoles.Contains(role),
+            TenantScope.Private => true,            // any authenticated farm member
+            TenantScope.Team => TeamRoles.Contains(role),
             TenantScope.Licensed => LicensedRoles.Contains(role),
-            TenantScope.Public   => false,           // only backend seed job — never via handler
-            _                    => false
+            TenantScope.Public => false,           // only backend seed job — never via handler
+            _ => false
         };
 }

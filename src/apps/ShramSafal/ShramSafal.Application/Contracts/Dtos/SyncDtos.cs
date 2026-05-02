@@ -40,7 +40,7 @@ public sealed record SyncPullResponseDto(
     IReadOnlyList<string> CostCategories,
     string ReferenceDataVersionHash,
     AttentionBoardDto? AttentionBoard,   // null = no cards; pull still succeeds
-    // CEI Phase 2 §4.5 — test stack
+                                         // CEI Phase 2 §4.5 — test stack
     IReadOnlyList<TestInstanceDto> TestInstances,
     IReadOnlyList<TestRecommendationDto> TestRecommendations,
     // CEI Phase 3 §4.6 — compliance signals

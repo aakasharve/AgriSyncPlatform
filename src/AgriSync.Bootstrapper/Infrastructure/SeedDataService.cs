@@ -24,7 +24,7 @@ public class SeedDataService
         // 1. Ensure User Exists
         var userId = new UserId(Guid.Parse("00000000-0000-0000-0000-000000000001")); // Fixed ID for demo user
         var phone = "9999999999";
-        
+
         var user = await _userContext.Users.FirstOrDefaultAsync(u => u.Phone.Value == phone);
         if (user == null)
         {
@@ -36,7 +36,7 @@ public class SeedDataService
             if (user == null) return "No user found. Please login/register via app or /test/login first.";
             userId = user.Id;
         }
-        else 
+        else
         {
             userId = user.Id;
         }
@@ -45,9 +45,9 @@ public class SeedDataService
         var existingFarm = await _SSFContext.Farms.FirstOrDefaultAsync(f => f.OwnerUserId == userId);
         if (existingFarm != null)
         {
-             // Cleanup for fresh seed? Or just return?
-             // Let's return for now to avoid duplicates.
-             return "Farm already exists for this user. tailored seeding skipped.";
+            // Cleanup for fresh seed? Or just return?
+            // Let's return for now to avoid duplicates.
+            return "Farm already exists for this user. tailored seeding skipped.";
         }
 
         // 3. Create Ramus Farm
@@ -59,7 +59,7 @@ public class SeedDataService
         // Grapes
         await CreatePlotAndCrop(farmId, "Export Plot (A)", 2.0m, "Grapes", "Pruning", userId);
         await CreatePlotAndCrop(farmId, "Local Plot (B)", 1.5m, "Grapes", "Pruning", userId);
-        
+
         // Pomegranate
         await CreatePlotAndCrop(farmId, "Bhagwa #1", 2.0m, "Pomegranate", "Bahar Treatment", userId);
         await CreatePlotAndCrop(farmId, "Bhagwa #2", 2.0m, "Pomegranate", "Fertigation", userId);
@@ -84,20 +84,20 @@ public class SeedDataService
 
         // CropCycle
         var cropCycleId = Guid.NewGuid();
-        var cropCycle = CropCycle.Create(cropCycleId, farmId, plotId, cropName, stage, 
+        var cropCycle = CropCycle.Create(cropCycleId, farmId, plotId, cropName, stage,
             DateOnly.FromDateTime(DateTime.UtcNow.AddDays(-30)), null, DateTime.UtcNow);
         _SSFContext.CropCycles.Add(cropCycle);
 
         // Logs (Simulate random activity)
-        var log = DailyLog.Create(Guid.NewGuid(), farmId, plotId, cropCycleId, userId, 
-            DateOnly.FromDateTime(DateTime.UtcNow), 
-            Guid.NewGuid().ToString(), 
+        var log = DailyLog.Create(Guid.NewGuid(), farmId, plotId, cropCycleId, userId,
+            DateOnly.FromDateTime(DateTime.UtcNow),
+            Guid.NewGuid().ToString(),
             null,
             DateTime.UtcNow);
-        
+
         log.AddTask(Guid.NewGuid(), "Irrigation", "Drip irrigation for 2 hours", DateTime.UtcNow);
         log.AddTask(Guid.NewGuid(), "Observation", "Crop looks healthy", DateTime.UtcNow);
-        
+
         _SSFContext.DailyLogs.Add(log);
     }
 }

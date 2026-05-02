@@ -34,12 +34,12 @@ internal static class EntitlementGate
 
     private static string BuildMessage(EntitlementReason reason) => reason switch
     {
-        EntitlementReason.NoMembership                => "You are not an active member of this farm.",
-        EntitlementReason.SubscriptionMissing         => "This farm has no active subscription. Ask the owner to start one.",
+        EntitlementReason.NoMembership => "You are not an active member of this farm.",
+        EntitlementReason.SubscriptionMissing => "This farm has no active subscription. Ask the owner to start one.",
         EntitlementReason.SubscriptionPastDueForWrite => "Farm subscription is past due. This action is read-only until billing is resolved.",
-        EntitlementReason.SubscriptionExpired         => "Farm subscription has expired. Renew to continue.",
-        EntitlementReason.SubscriptionCanceled        => "Farm subscription was cancelled. Renew to continue.",
-        EntitlementReason.SubscriptionSuspended       => "Farm subscription is suspended. Contact support.",
-        _                                             => "This action is not allowed at the moment.",
+        EntitlementReason.SubscriptionExpired => "Farm subscription has expired. Renew to continue.",
+        EntitlementReason.SubscriptionCanceled => "Farm subscription was cancelled. Renew to continue.",
+        EntitlementReason.SubscriptionSuspended => "Farm subscription is suspended. Contact support.",
+        _ => "This action is not allowed at the moment.",
     };
 }

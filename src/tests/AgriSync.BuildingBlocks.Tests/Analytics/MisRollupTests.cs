@@ -15,7 +15,7 @@ namespace AgriSync.BuildingBlocks.Tests.Analytics
             // into `ssf.daily_logs` and `ssf.verifications` respectively, 
             // run `REFRESH MATERIALIZED VIEW CONCURRENTLY mis.wvfd_weekly;`,
             // and verify that the view correctly calculates the wvfd.
-            
+
             // For now, testing the Category filter and pipeline.
             Assert.True(true);
             await Task.CompletedTask;

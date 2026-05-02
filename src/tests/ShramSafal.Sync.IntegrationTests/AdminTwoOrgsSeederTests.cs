@@ -51,16 +51,16 @@ public sealed class AdminTwoOrgsSeederTests
         using var doc = JsonDocument.Parse(body);
         var root = doc.RootElement;
 
-        Assert.True(root.TryGetProperty("userId",   out var userId),   "response must have userId");
-        Assert.True(root.TryGetProperty("phone",    out var phone),    "response must have phone");
+        Assert.True(root.TryGetProperty("userId", out var userId), "response must have userId");
+        Assert.True(root.TryGetProperty("phone", out var phone), "response must have phone");
         Assert.True(root.TryGetProperty("password", out var password), "response must have password");
-        Assert.True(root.TryGetProperty("farmId",   out var farmId),   "response must have farmId");
-        Assert.True(root.TryGetProperty("fixture",  out var fixture),  "response must have fixture");
-        Assert.True(root.TryGetProperty("summary",  out _),            "response must have summary");
+        Assert.True(root.TryGetProperty("farmId", out var farmId), "response must have farmId");
+        Assert.True(root.TryGetProperty("fixture", out var fixture), "response must have fixture");
+        Assert.True(root.TryGetProperty("summary", out _), "response must have summary");
 
         Assert.Equal(E2eFixtureSeeder.AdminUserIdValue.ToString(), userId.GetString());
-        Assert.Equal("7777777777",     phone.GetString());
-        Assert.Equal("admin123",       password.GetString());
+        Assert.Equal("7777777777", phone.GetString());
+        Assert.Equal("admin123", password.GetString());
         Assert.Equal(E2eFixtureSeeder.FarmAId.ToString(), farmId.GetString());
         Assert.Equal("admin_two_orgs", fixture.GetString());
     }
@@ -73,7 +73,7 @@ public sealed class AdminTwoOrgsSeederTests
         await harness.Client.PostAsJsonAsync("/__e2e/seed", new { fixture = "admin_two_orgs" });
 
         await using var scope = harness.App.Services.CreateAsyncScope();
-        var ssf  = scope.ServiceProvider.GetRequiredService<ShramSafalDbContext>();
+        var ssf = scope.ServiceProvider.GetRequiredService<ShramSafalDbContext>();
         var user = scope.ServiceProvider.GetRequiredService<UserDbContext>();
 
         // 1 admin user
@@ -132,7 +132,7 @@ public sealed class AdminTwoOrgsSeederTests
 
         // Counts must be identical after two calls
         await using var scope = harness.App.Services.CreateAsyncScope();
-        var ssf  = scope.ServiceProvider.GetRequiredService<ShramSafalDbContext>();
+        var ssf = scope.ServiceProvider.GetRequiredService<ShramSafalDbContext>();
         var user = scope.ServiceProvider.GetRequiredService<UserDbContext>();
 
         var userCount = await user.Users.CountAsync(
@@ -187,7 +187,7 @@ public sealed class AdminTwoOrgsSeederTests
     private sealed class AdminSeedHarness(WebApplication app, HttpClient client, string? previousEnvValue)
         : IAsyncDisposable
     {
-        public HttpClient  Client { get; } = client;
+        public HttpClient Client { get; } = client;
         public WebApplication App { get; } = app;
 
         public static async Task<AdminSeedHarness> CreateAsync()
@@ -210,7 +210,7 @@ public sealed class AdminTwoOrgsSeederTests
             builder.Configuration.AddInMemoryCollection(
                 new System.Collections.Generic.Dictionary<string, string?>
                 {
-                    ["ConnectionStrings:UserDb"]       = "Host=localhost;Database=test",
+                    ["ConnectionStrings:UserDb"] = "Host=localhost;Database=test",
                     ["ConnectionStrings:ShramSafalDb"] = "Host=localhost;Database=test",
                     ["ShramSafal:Storage:DataDirectory"] = System.IO.Path.Combine(
                         System.IO.Path.GetTempPath(), "agrisync-admin-seed-tests", Guid.NewGuid().ToString("N")),
@@ -225,9 +225,9 @@ public sealed class AdminTwoOrgsSeederTests
             builder.Services.AddUserApi(builder.Configuration);
 
             // Override ShramSafalDbContext → InMemory
-            var ssfDbName  = $"admin-seed-ssf-{Guid.NewGuid()}";
+            var ssfDbName = $"admin-seed-ssf-{Guid.NewGuid()}";
             var userDbName = $"admin-seed-user-{Guid.NewGuid()}";
-            var ssfDbRoot  = new InMemoryDatabaseRoot();
+            var ssfDbRoot = new InMemoryDatabaseRoot();
             var userDbRoot = new InMemoryDatabaseRoot();
 
             builder.Services.RemoveAll<DbContextOptions<ShramSafalDbContext>>();
@@ -236,7 +236,7 @@ public sealed class AdminTwoOrgsSeederTests
             {
                 options.UseInMemoryDatabase(ssfDbName, ssfDbRoot);
                 var saveSide = sp.GetService<AgriSync.BuildingBlocks.Persistence.Outbox.DomainEventToOutboxInterceptor>();
-                var txSide   = sp.GetService<AgriSync.BuildingBlocks.Persistence.Outbox.OutboxTransactionInterceptor>();
+                var txSide = sp.GetService<AgriSync.BuildingBlocks.Persistence.Outbox.OutboxTransactionInterceptor>();
                 if (saveSide is not null && txSide is not null)
                 {
                     options.AddInterceptors(saveSide, txSide);
@@ -250,7 +250,7 @@ public sealed class AdminTwoOrgsSeederTests
             {
                 options.UseInMemoryDatabase(userDbName, userDbRoot);
                 var saveSide = sp.GetService<AgriSync.BuildingBlocks.Persistence.Outbox.DomainEventToOutboxInterceptor>();
-                var txSide   = sp.GetService<AgriSync.BuildingBlocks.Persistence.Outbox.OutboxTransactionInterceptor>();
+                var txSide = sp.GetService<AgriSync.BuildingBlocks.Persistence.Outbox.OutboxTransactionInterceptor>();
                 if (saveSide is not null && txSide is not null)
                 {
                     options.AddInterceptors(saveSide, txSide);

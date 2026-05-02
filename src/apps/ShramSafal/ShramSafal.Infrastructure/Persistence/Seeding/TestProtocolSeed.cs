@@ -22,10 +22,10 @@ public sealed class TestProtocolSeed
     private static readonly UserId SystemUserId = new(Guid.Parse("00000000-0000-0000-0000-000000000099"));
 
     /// <summary>Stable protocol ids so re-seeding reproduces the same row identities.</summary>
-    private static readonly Guid SoilBasicId         = Guid.Parse("a1000000-0000-0000-0000-000000000001");
-    private static readonly Guid PetioleMonthlyId    = Guid.Parse("a1000000-0000-0000-0000-000000000002");
+    private static readonly Guid SoilBasicId = Guid.Parse("a1000000-0000-0000-0000-000000000001");
+    private static readonly Guid PetioleMonthlyId = Guid.Parse("a1000000-0000-0000-0000-000000000002");
     private static readonly Guid ResiduePreHarvestId = Guid.Parse("a1000000-0000-0000-0000-000000000003");
-    private static readonly Guid DrainagePreCycleId  = Guid.Parse("a1000000-0000-0000-0000-000000000004");
+    private static readonly Guid DrainagePreCycleId = Guid.Parse("a1000000-0000-0000-0000-000000000004");
 
     private const string GrapesCrop = "Grapes";
 

@@ -102,7 +102,7 @@ try
 
     builder.Services.AddOutputCache(opts =>
     {
-        opts.AddPolicy("AdminLive",       p => p.Expire(TimeSpan.FromSeconds(30)));
+        opts.AddPolicy("AdminLive", p => p.Expire(TimeSpan.FromSeconds(30)));
         opts.AddPolicy("AdminMaterialized", p => p.Expire(TimeSpan.FromMinutes(5)));
     });
 
@@ -391,17 +391,17 @@ try
                 farmId = new AgriSync.SharedKernel.Contracts.Ids.FarmId(fid);
 
             await analytics.EmitAsync(new AgriSync.BuildingBlocks.Analytics.AnalyticsEvent(
-                EventId:            Guid.NewGuid(),
-                EventType:          AgriSync.BuildingBlocks.Analytics.AnalyticsEventType.ClientError,
-                OccurredAtUtc:      DateTime.UtcNow,
-                ActorUserId:        null,
-                FarmId:             farmId,
-                OwnerAccountId:     null,
-                ActorRole:          "client",
-                Trigger:            "browser",
+                EventId: Guid.NewGuid(),
+                EventType: AgriSync.BuildingBlocks.Analytics.AnalyticsEventType.ClientError,
+                OccurredAtUtc: DateTime.UtcNow,
+                ActorUserId: null,
+                FarmId: farmId,
+                OwnerAccountId: null,
+                ActorRole: "client",
+                Trigger: "browser",
                 DeviceOccurredAtUtc: null,
-                SchemaVersion:      "v1",
-                PropsJson:          body.GetRawText()));
+                SchemaVersion: "v1",
+                PropsJson: body.GetRawText()));
 
             return Results.NoContent();
         })

@@ -40,25 +40,25 @@ public sealed class EntitlementMatrixTests
     public void Every_OrgType_Role_Pair_Returns_SomeEntry_For_AdminSelf()
     {
         foreach (var t in Enum.GetValues<OrganizationType>())
-        foreach (var r in Enum.GetValues<OrganizationRole>())
-        {
-            var entries = EntitlementMatrix.For(t, r);
-            entries.Should().Contain(e => e.ModuleKey == ModuleKey.AdminSelf && e.CanRead,
-                $"({t}, {r}) must see admin.self");
-        }
+            foreach (var r in Enum.GetValues<OrganizationRole>())
+            {
+                var entries = EntitlementMatrix.For(t, r);
+                entries.Should().Contain(e => e.ModuleKey == ModuleKey.AdminSelf && e.CanRead,
+                    $"({t}, {r}) must see admin.self");
+            }
     }
 
     [Fact]
     public void Matrix_Returns_One_Entry_Per_ModuleKey()
     {
         foreach (var t in Enum.GetValues<OrganizationType>())
-        foreach (var r in Enum.GetValues<OrganizationRole>())
-        {
-            var entries = EntitlementMatrix.For(t, r);
-            entries.Select(e => e.ModuleKey).Should().OnlyHaveUniqueItems(
-                $"({t}, {r}) returned duplicate module keys");
-            entries.Count.Should().Be(ModuleKey.All.Count,
-                $"({t}, {r}) missing module entries");
-        }
+            foreach (var r in Enum.GetValues<OrganizationRole>())
+            {
+                var entries = EntitlementMatrix.For(t, r);
+                entries.Select(e => e.ModuleKey).Should().OnlyHaveUniqueItems(
+                    $"({t}, {r}) returned duplicate module keys");
+                entries.Count.Should().Be(ModuleKey.All.Count,
+                    $"({t}, {r}) missing module entries");
+            }
     }
 }
