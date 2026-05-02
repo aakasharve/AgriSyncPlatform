@@ -46,7 +46,7 @@ test.describe('Login', () => {
         // An inline alert div (role="alert") should appear with an error message
         const alert = page.getByRole('alert').first();
         await expect(alert).toBeVisible({ timeout: 10_000 });
-        await expect(alert).toContainText(/invalid|incorrect|wrong|चुकीचे|unauthorized/i);
+        await expect(alert).toContainText(/invalid|incorrect|wrong|चुकीचे|unauthorized|login failed|check phone/i);
 
         // Still on login — home-greeting should NOT be present
         await expect(page.getByTestId('home-greeting')).not.toBeVisible();

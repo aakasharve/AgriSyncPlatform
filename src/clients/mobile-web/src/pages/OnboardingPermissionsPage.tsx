@@ -163,6 +163,7 @@ const OnboardingPermissionsPage: React.FC<OnboardingPermissionsPageProps> = ({ o
                               Allow All Permissions
                          </Button>
                          <button
+                              data-testid="onboarding-skip"
                               onClick={skipOrSave}
                               className="w-full py-2.5 text-xs font-bold text-slate-400 hover:text-slate-600 transition-colors"
                          >
