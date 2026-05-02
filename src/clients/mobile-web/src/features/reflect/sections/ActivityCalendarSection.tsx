@@ -174,7 +174,7 @@ const ActivityCalendarSection: React.FC<ActivityCalendarSectionProps> = ({
 
                 {calendarMode === 'week' && (
                     <div className="space-y-2">
-                        {calendarDays.map((date, i) => {
+                        {calendarDays.map((date, _i) => {
                             if (!date) return null;
                             const { isBlocked, disturbanceGroup, hasGlobal, logs, isRainyDay } = getDayMetrics(date);
                             const isSelected = isSameDate(date, currentDate);
