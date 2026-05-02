@@ -226,6 +226,8 @@ try
         builder.Services.AddSingleton<ShramSafal.Application.Abstractions.Sync.IE2eFailPushesProbe>(sp =>
             new AgriSync.Bootstrapper.Endpoints.E2eFailPushesProbeAdapter(
                 sp.GetRequiredService<AgriSync.Bootstrapper.Endpoints.E2eFailPushesToggle>()));
+        // T-IGH-05-ADMIN-TWO-ORGS-SEEDER: admin_two_orgs fixture seeder.
+        builder.Services.AddTransient<AgriSync.Bootstrapper.Endpoints.E2eFixtureSeeder>();
     }
 
     QuestPDF.Settings.License = QuestPDF.Infrastructure.LicenseType.Community;
