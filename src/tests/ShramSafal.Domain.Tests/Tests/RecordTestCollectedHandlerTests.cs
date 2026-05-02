@@ -74,7 +74,11 @@ public sealed class RecordTestCollectedHandlerTests
             CallerUserId: caller,
             CallerRole: AppRole.LabOperator));
 
-        result.IsSuccess.Should().BeTrue();
+        // xUnit's Assert.True carries [DoesNotReturnIf(false)] which combined
+        // with Result<T>.IsSuccess's [MemberNotNullWhen] teaches the nullable
+        // analyzer that Value is non-null below; FluentAssertions'
+        // .Should().BeTrue() does not.
+        Assert.True(result.IsSuccess);
         result.Value.Status.Should().Be("Collected");
         result.Value.TestProtocolName.Should().Be("Grape soil");
         result.Value.CollectedByUserId.Should().Be(caller.Value);

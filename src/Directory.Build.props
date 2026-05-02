@@ -2,17 +2,19 @@
   <!--
     Sub-plan 01 Task 8 — pre-existing warnings inventory.
 
-    Partial cleanup shipped 2026-05-02 (T-IGH-01-WARN-CLEANUP):
-      - CS9113 (3 sites)   → fixed; removed from suppression list
-      - CS9124 (2 sites)   → fixed; removed from suppression list
-      - xUnit2009 (1 site) → fixed; removed from suppression list
+    Cleanup history (T-IGH-01-WARN-CLEANUP):
+      2026-05-02 (commit c443180):
+        - CS9113 (3 sites)   → fixed; removed from suppression list
+        - CS9124 (2 sites)   → fixed; removed from suppression list
+        - xUnit2009 (1 site) → fixed; removed from suppression list
+      2026-05-02 (this commit):
+        - CS8602 (21 sites)  → fixed via [MemberNotNullWhen(true, "Value")]
+                              annotation on a new Result<T>.IsSuccess
+                              shadow + 3 FluentAssertions tests switched
+                              to xUnit's annotated Assert.True; removed
+                              from suppression list.
 
-    Remaining (still suppressed, tracked under WARN-CLEANUP pending task):
-      - CS8602 (21 sites) — domain-test `result.Value.X` derefs and 3
-        endpoint sites. Needs a Result<T>.Value nullability rework
-        (e.g. `[MemberNotNullWhen(true, nameof(Value))]` on a new
-        `IsSuccess` overload + tests gain a leading `Assert.True(
-        result.IsSuccess)`), not a per-site `!` operator dump.
+    Remaining (still suppressed):
       - CS0618 (20 sites) — `User.AddMembership(...)` and
         `PlannedActivity.Create(...)` deprecated calls in *Seeder.cs.
         Migration path: switch to FarmMembership + CreateFromTemplate /
@@ -26,8 +28,7 @@
   <PropertyGroup>
     <WarningsNotAsErrors>
       $(WarningsNotAsErrors);
-      CS0618;
-      CS8602
+      CS0618
     </WarningsNotAsErrors>
   </PropertyGroup>
 </Project>

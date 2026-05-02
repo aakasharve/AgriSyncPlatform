@@ -61,7 +61,7 @@ public sealed class RecordTestResultHandlerTests
             CallerRole: AppRole.LabOperator,
             ClientCommandId: "cmd-1"));
 
-        result.IsSuccess.Should().BeTrue();
+        Assert.True(result.IsSuccess); // [DoesNotReturnIf(false)] + [MemberNotNullWhen] enables Value deref
         result.Value.Status.Should().Be("Reported");
         result.Value.Recommendations.Should().HaveCount(1);
         result.Value.Recommendations[0].RuleCode.Should().Be("soil.ph.low.apply-lime");
@@ -94,7 +94,7 @@ public sealed class RecordTestResultHandlerTests
             CallerRole: AppRole.LabOperator,
             ClientCommandId: null));
 
-        result.IsSuccess.Should().BeTrue();
+        Assert.True(result.IsSuccess); // [DoesNotReturnIf(false)] + [MemberNotNullWhen] enables Value deref
         result.Value.Status.Should().Be("Reported");
         result.Value.Recommendations.Should().BeEmpty();
         recRepo.Added.Should().BeEmpty();

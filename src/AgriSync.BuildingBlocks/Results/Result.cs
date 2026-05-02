@@ -1,3 +1,5 @@
+using System.Diagnostics.CodeAnalysis;
+
 namespace AgriSync.BuildingBlocks.Results;
 
 public class Result
@@ -42,4 +44,16 @@ public sealed class Result<TValue> : Result
     }
 
     public TValue? Value { get; }
+
+    /// <summary>
+    /// Shadows <see cref="Result.IsSuccess"/> to add a flow-analysis hint for
+    /// the C# nullable analyzer: when this returns <see langword="true"/>,
+    /// <see cref="Value"/> is non-null. Callers with the static type
+    /// <c>Result&lt;T&gt;</c> can therefore dereference <see cref="Value"/>
+    /// after a guard like <c>Assert.True(result.IsSuccess)</c> or a
+    /// <c>result.IsSuccess ? … : …</c> ternary without triggering CS8602.
+    /// Production-shape: identical behaviour to <see cref="Result.IsSuccess"/>.
+    /// </summary>
+    [MemberNotNullWhen(returnValue: true, nameof(Value))]
+    public new bool IsSuccess => base.IsSuccess;
 }
