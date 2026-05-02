@@ -94,7 +94,7 @@ const DailyLogCard: React.FC<DailyLogCardProps> = ({
     const hasAttachments = resolvedAttachmentCount > 0;
 
     return (
-        <div className="w-full bg-white rounded-2xl shadow-sm border border-slate-100 hover:border-emerald-200 hover:shadow-md transition-all mb-3 relative overflow-hidden">
+        <div data-testid="log-list-item" className="w-full bg-white rounded-2xl shadow-sm border border-slate-100 hover:border-emerald-200 hover:shadow-md transition-all mb-3 relative overflow-hidden">
             {/* Color bar */}
             <div className={`absolute top-0 left-0 bottom-0 w-1 ${cropColor}`} />
 

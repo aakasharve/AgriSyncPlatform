@@ -74,6 +74,7 @@ export const SyncIndicator: React.FC<SyncIndicatorProps> = ({
     return (
         <button
             onClick={onClick}
+            data-testid="sync-status-indicator"
             className={`relative flex items-center gap-1.5 px-2 py-1 rounded-full transition-all duration-300 ${color} ${bg} hover:bg-opacity-80 active:scale-95`}
             aria-label={label}
         >

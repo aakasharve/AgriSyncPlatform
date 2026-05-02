@@ -122,7 +122,10 @@ export const renderLogView = (ctx: AppRouterContext): React.ReactNode => {
 
                             <div className="flex items-center justify-between px-1">
                                 <p className="text-base font-black tracking-tight text-stone-800">Daily Log</p>
-                                <span className="inline-flex items-center rounded-full bg-emerald-50 border border-emerald-200 px-2.5 py-1 text-[11px] font-bold text-emerald-700">
+                                <span
+                                    className="inline-flex items-center rounded-full bg-emerald-50 border border-emerald-200 px-2.5 py-1 text-[11px] font-bold text-emerald-700"
+                                    data-testid="home-greeting"
+                                >
                                     Owner: {ownerDisplayName}
                                 </span>
                             </div>

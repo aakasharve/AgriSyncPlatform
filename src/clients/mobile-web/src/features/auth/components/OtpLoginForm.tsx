@@ -78,7 +78,7 @@ const OtpLoginForm: React.FC<OtpLoginFormProps> = ({ onOtpSent }) => {
             </div>
 
             {error && (
-                <div className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-semibold text-rose-700">
+                <div role="alert" className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-semibold text-rose-700">
                     {error}
                 </div>
             )}
