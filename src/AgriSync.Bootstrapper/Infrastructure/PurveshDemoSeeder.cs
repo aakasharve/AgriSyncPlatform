@@ -426,7 +426,7 @@ public sealed class PurveshDemoSeeder
         var purvesh = usersByKey["purvesh"];
         var farm = await EnsureFarmAsync(purvesh.Id, nowUtc, cancellationToken);
         var plotContexts = await EnsurePlotsAndCropCyclesAsync(farm.Id, nowUtc, cancellationToken);
-        var phase3Stats = await EnsureScheduleTemplatesAndPlannedActivitiesAsync(plotContexts, nowUtc, cancellationToken);
+        var phase3Stats = await EnsureScheduleTemplatesAndPlannedActivitiesAsync(plotContexts, purvesh.Id, nowUtc, cancellationToken);
         var contextByPlotKey = plotContexts.ToDictionary(c => c.Seed.Key, c => c, StringComparer.Ordinal);
         var phase4LogStats = await EnsureDailyLogsAndVerificationsAsync(
             farm.Id,
@@ -780,6 +780,7 @@ public sealed class PurveshDemoSeeder
 
     private async Task<Phase3Stats> EnsureScheduleTemplatesAndPlannedActivitiesAsync(
         IReadOnlyList<PlotCycleContext> plotContexts,
+        UserId ownerUserId,
         DateTime nowUtc,
         CancellationToken cancellationToken)
     {
@@ -875,12 +876,19 @@ public sealed class PurveshDemoSeeder
                     $"{SeedVersion}:planned:{context.Seed.Key}:{plannedSeed.DayOffset}:{Normalize(plannedSeed.ActivityName)}");
                 var createdAt = nowUtc.AddDays(context.Seed.StartOffsetDays + plannedSeed.DayOffset);
 
-                var plannedActivity = PlannedActivity.Create(
+                // Seeded as a locally-added activity owned by Purvesh (the demo
+                // farm's primary owner). The sentinel reason "seed:purvesh-demo"
+                // makes these rows grep-able in the demo dataset; UI badges flag
+                // them as locally-added (IsLocallyChanged=true) which matches
+                // their semantics — they are NOT linked to any template activity.
+                var plannedActivity = PlannedActivity.CreateLocallyAdded(
                     plannedId,
                     context.CropCycleId,
                     plannedSeed.ActivityName,
                     plannedSeed.Stage,
                     plannedDate,
+                    ownerUserId,
+                    "seed:purvesh-demo",
                     createdAt);
 
                 _ssfContext.PlannedActivities.Add(plannedActivity);
