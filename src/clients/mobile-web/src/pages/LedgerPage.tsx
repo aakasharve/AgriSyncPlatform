@@ -20,11 +20,11 @@ const LedgerPage: React.FC<LedgerPageProps> = ({ currentRoute, onNavigate }) => 
     const [drawerFilter, setDrawerFilter] = useState<FinanceFilters | null>(null);
     const [refreshKey, setRefreshKey] = useState(0);
     const [correctionTarget, setCorrectionTarget] = useState<{ id: string; amount: number; category: string } | null>(null);
-    const [expandedAttachments, setExpandedAttachments] = useState<Record<string, boolean>>({});
+    const [expandedAttachments, _setExpandedAttachments] = useState<Record<string, boolean>>({});
     const [attachmentCounts, setAttachmentCounts] = useState<Record<string, number>>({});
     const [filterType, setFilterType] = useState<'All' | 'Income' | 'Expense' | 'LabourPayouts'>('All');
     const [isDetailView, setIsDetailView] = useState(false);
-    const { retryUpload } = useAttachmentRetry();
+    const { retryUpload: _retryUpload } = useAttachmentRetry();
 
     const events = useMemo(() => financeSelectors.getEffectiveMoneyEvents(), [currentRoute, drawerFilter, refreshKey]);
 
@@ -168,8 +168,8 @@ const LedgerPage: React.FC<LedgerPageProps> = ({ currentRoute, onNavigate }) => 
                                 const isAdjusted = item.trustStatus === 'Adjusted';
                                 const hasCorrection = isAdjusted;
                                 const jobCardId = (item as typeof item & { jobCardId?: string }).jobCardId;
-                                const attachmentCount = attachmentCounts[item.id] ?? 0;
-                                const isAttachmentOpen = !!expandedAttachments[item.id];
+                                const _attachmentCount = attachmentCounts[item.id] ?? 0;
+                                const _isAttachmentOpen = !!expandedAttachments[item.id];
 
                                 return (
                                     <div

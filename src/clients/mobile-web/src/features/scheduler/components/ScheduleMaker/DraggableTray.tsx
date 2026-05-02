@@ -14,7 +14,7 @@ interface DraggableTrayProps {
     onAddNew?: (type: string, name: string) => void;
 }
 
-const DraggableTray: React.FC<DraggableTrayProps> = ({ items, title, onAddNew }) => {
+const DraggableTray: React.FC<DraggableTrayProps> = ({ items, title: _title, onAddNew }) => {
     const [activeTab, setActiveTab] = useState<string>('NUTRITION');
     const [isAdding, setIsAdding] = useState(false);
     const [newName, setNewName] = useState('');
@@ -44,7 +44,7 @@ const DraggableTray: React.FC<DraggableTrayProps> = ({ items, title, onAddNew })
         }
     };
 
-    const getTabStyles = (id: string, color: string, isActive: boolean) => {
+    const _getTabStyles = (id: string, color: string, isActive: boolean) => {
         if (!isActive) return 'bg-white text-stone-500 border-stone-200 hover:bg-stone-50 hover:border-stone-300';
         switch (color) {
             case 'emerald': return 'bg-emerald-100 text-emerald-700 border-emerald-200 ring-2 ring-emerald-100 ring-offset-1';
@@ -55,7 +55,7 @@ const DraggableTray: React.FC<DraggableTrayProps> = ({ items, title, onAddNew })
         }
     };
 
-    const getBadgeStyle = (color: string) => {
+    const _getBadgeStyle = (color: string) => {
         switch (color) {
             case 'emerald': return 'border-emerald-200';
             case 'rose': return 'border-rose-200';

@@ -27,12 +27,12 @@ interface DailySummaryStripProps {
 }
 
 export const DailySummaryStrip: React.FC<DailySummaryStripProps> = ({
-    date,
+    date: _date,
     stats,
     isToday,
     onViewDetails
 }) => {
-    const { logsCount, totalSpent, pendingTasks, verifiedCount, unverifiedCount } = stats;
+    const { logsCount, totalSpent, pendingTasks, verifiedCount: _verifiedCount, unverifiedCount } = stats;
 
     // Format currency in Indian Rupees
     const formatCurrency = (amount: number) => {

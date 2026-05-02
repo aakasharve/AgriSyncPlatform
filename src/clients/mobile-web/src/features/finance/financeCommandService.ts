@@ -87,7 +87,7 @@ export const financeCommandService = {
     },
 
     createPriceBookItem(input: Omit<PriceBookItem, 'id'>): PriceBookItem {
-        const createdByUserId = getCurrentUserId();
+        const _createdByUserId = getCurrentUserId();
         const item: PriceBookItem = { ...input, id: `pb_${idGenerator.generate()}` };
 
         financeService._addPriceBookItem(item);

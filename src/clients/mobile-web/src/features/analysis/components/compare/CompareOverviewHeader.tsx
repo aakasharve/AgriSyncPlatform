@@ -19,7 +19,7 @@ export const CompareOverviewHeader: React.FC<Props> = ({ summary }) => {
     };
 
     const config = getHealthConfig(summary.overallHealth);
-    const completionAngle = (summary.overallCompletionPercent / 100) * 360;
+    const _completionAngle = (summary.overallCompletionPercent / 100) * 360;
 
     return (
         <div className="space-y-3">

@@ -21,7 +21,7 @@ const ExpenseDetailSheet = ({
     const [reason, setReason] = useState(initialData?.reason || '');
     const [amount, setAmount] = useState<number>(initialData?.totalAmount || 0);
     const [notes, setNotes] = useState(initialData?.notes || '');
-    const [items, setItems] = useState<ExpenseItem[]>(initialData?.items || []);
+    const [items, _setItems] = useState<ExpenseItem[]>(initialData?.items || []);
 
     const handleSave = () => {
         const newEvent: ActivityExpenseEvent = {

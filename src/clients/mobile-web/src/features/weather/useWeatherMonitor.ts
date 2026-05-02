@@ -23,7 +23,7 @@ interface UseWeatherMonitorProps {
 }
 
 export const useWeatherMonitor = ({
-    farmerProfile, crops, setCrops, logScope, hasActiveLogContext, activeCropId, activePlotId, activeFarmId, setError, provider, farmGeography
+    farmerProfile, crops, setCrops, logScope: _logScope, hasActiveLogContext, activeCropId, activePlotId, activeFarmId, setError, provider, farmGeography
 }: UseWeatherMonitorProps) => {
 
     const [weatherData, setWeatherData] = useState<DetailedWeather | undefined>(undefined);

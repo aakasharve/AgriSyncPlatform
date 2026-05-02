@@ -23,7 +23,7 @@ const SlidingCropSelector: React.FC<SlidingCropSelectorProps> = ({
     onCropSelect,
     selectedPlotIds,
     onPlotSelect,
-    mode = 'single'
+    mode: _mode = 'single'
 }) => {
     const scrollContainerRef = useRef<HTMLDivElement>(null);
     const itemRefs = useRef<Record<string, HTMLButtonElement | null>>({});

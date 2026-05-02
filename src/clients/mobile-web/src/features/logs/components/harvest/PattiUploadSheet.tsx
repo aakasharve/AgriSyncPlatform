@@ -24,7 +24,7 @@ interface PattiUploadSheetProps {
     onDataExtracted: (data: any) => void;
 }
 
-const PattiUploadSheet: React.FC<PattiUploadSheetProps> = ({ session, cropName, onClose, onDataExtracted }) => {
+const PattiUploadSheet: React.FC<PattiUploadSheetProps> = ({ session: _session, cropName, onClose, onDataExtracted }) => {
     const [status, setStatus] = useState<'IDLE' | 'UPLOADING' | 'ANALYZING' | 'SUCCESS' | 'ERROR'>('IDLE');
     const [previewUrl, setPreviewUrl] = useState<string | null>(null);
     const [errorMsg, setErrorMsg] = useState<string>('');
@@ -64,7 +64,7 @@ const PattiUploadSheet: React.FC<PattiUploadSheetProps> = ({ session, cropName, 
                     setErrorMsg("Could not read the receipt. Please try again or enter manually.");
                 }
             };
-        } catch (err) {
+        } catch (_err) {
             setStatus('ERROR');
             setErrorMsg("File reading failed.");
         }

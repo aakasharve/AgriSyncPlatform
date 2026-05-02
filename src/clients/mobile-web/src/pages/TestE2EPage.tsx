@@ -5,19 +5,19 @@ import { LogVerificationStatus } from '../types';
 import { useDataSource } from '../app/providers/DataSourceProvider';
 
 const TestE2EPage: React.FC = () => {
-    const { currentLogContext } = useAppLogState();
+    const { currentLogContext: _currentLogContext } = useAppLogState();
     // Use the exposed service from the hook result
-    const { service } = useAppCommandsState();
+    const { service: _service } = useAppCommandsState();
     const { handleVerifyLog } = useAppTrustState();
     const { realHistory, mockHistory, isDemoMode } = useAppDataState();
-    const { auditPort } = useDataSource();
+    const { auditPort: _auditPort } = useDataSource();
 
     const [status, setStatus] = useState<string>('Idle');
-    const [lastLogId, setLastLogId] = useState<string | null>(null);
+    const [_lastLogId, setLastLogId] = useState<string | null>(null);
 
     const history = isDemoMode ? mockHistory : realHistory;
 
-    const runVoiceTest = async () => {
+    const _runVoiceTest = async () => {
         setStatus('Running Voice Test...');
         try {
             // 1. Simulate Voice Input
@@ -26,7 +26,7 @@ const TestE2EPage: React.FC = () => {
 
             // Mock AgriLogResponse as if parsing happened
             // In a real E2E we might want to test parsing, but here we test the COMMAND FLOW
-            const mockParsedData = {
+            const _mockParsedData = {
                 summary: transcription,
                 labour: [{
                     count: 1,

@@ -25,7 +25,7 @@ const ActivityCard: React.FC<ActivityCardProps> = ({
     onUpdateDetails,
     onUpdateWorkTypes,
     onRefineWorkType,
-    onDeleteActivity,
+    onDeleteActivity: _onDeleteActivity,
     defaults,
     profile,
     currentPlot,
@@ -129,8 +129,8 @@ const ActivityCard: React.FC<ActivityCardProps> = ({
 
     // Aggregation-Aware Filled States
     const dailyLabour = getDailyLabourTotal();
-    const dailyIrrigationHours = getDailyIrrigationTotal();
-    const dailyMachineryHours = getDailyMachineryTotal();
+    const _dailyIrrigationHours = getDailyIrrigationTotal();
+    const _dailyMachineryHours = getDailyMachineryTotal();
     const dailyInputCount = getDailyInputsTotal();
     const dailyExpenseTotal = getDailyExpenseTotal();
     const dailyIrrigation = getDailyIrrigationTotal();
@@ -557,7 +557,7 @@ const ActivityCard: React.FC<ActivityCardProps> = ({
                     placeholder="Outcome (e.g. 5 rows done)"
                     className="w-full pl-8 p-2 bg-slate-50 border border-slate-100 rounded-lg text-sm focus:bg-white focus:border-slate-300 outline-none transition-colors"
                     defaultValue={activity.notes}
-                    onBlur={(e) => { /* Update logic if needed */ }}
+                    onBlur={(_e) => { /* Update logic if needed */ }}
                 />
             </div>
 

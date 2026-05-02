@@ -39,7 +39,7 @@ const DailyLogCard: React.FC<DailyLogCardProps> = ({
     cropColor,
     loggedBy,
     timeLabel,
-    statusLabel,
+    statusLabel: _statusLabel,
     statusTone,
     counts,
     summaryLines = [],

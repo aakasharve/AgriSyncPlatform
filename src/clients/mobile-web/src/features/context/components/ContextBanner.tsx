@@ -14,7 +14,7 @@ interface ContextBannerProps {
 
 const ContextBanner: React.FC<ContextBannerProps> = ({
     date,
-    context,
+    context: _context,
     activeCrop,
     activePlotName,
     todayCounts,
@@ -39,7 +39,7 @@ const ContextBanner: React.FC<ContextBannerProps> = ({
         + todayCounts.activityExpenses;
 
     // Stats Helper
-    const StatBadge = ({ label, count, colorClass, bgClass, borderClass }: { label: string, count: number, colorClass: string, bgClass: string, borderClass: string }) => {
+    const _StatBadge = ({ label, count, colorClass, bgClass, borderClass }: { label: string, count: number, colorClass: string, bgClass: string, borderClass: string }) => {
         if (count === 0) return null;
         return (
             <div className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg border shadow-sm ${bgClass} ${borderClass}`}>

@@ -56,7 +56,7 @@ export const SelectionProvider: React.FC<SelectionProviderProps> = ({ crops, chi
         setSelectedPlotIds([]);
     }, []);
 
-    const togglePlot = useCallback((plotId: string) => {
+    const _togglePlot = useCallback((plotId: string) => {
         setSelectedPlotIds(prev => {
             const isSelected = prev.includes(plotId);
             if (isSelected) {

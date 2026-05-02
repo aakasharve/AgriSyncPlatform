@@ -18,7 +18,7 @@ interface ScheduleMakerProps {
     onAddResource: (r: ResourceItem) => void;
 }
 
-const ScheduleMaker: React.FC<ScheduleMakerProps> = ({ crops, onSave, onCancel, userResources, onAddResource }) => {
+const ScheduleMaker: React.FC<ScheduleMakerProps> = ({ crops, onSave, onCancel: _onCancel, userResources, onAddResource }) => {
     // 0 = Intent (Modify vs New), 1 = Crop/Date, 2 = Prep, 3 = Stages
     const [activeSection, setActiveSection] = useState<number>(0);
 

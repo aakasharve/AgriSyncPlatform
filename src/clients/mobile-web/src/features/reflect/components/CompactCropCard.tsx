@@ -28,7 +28,7 @@ interface CompactCropCardProps {
     onCostClick?: (log: DailyLog) => void;
 }
 
-const CompactCropCard: React.FC<CompactCropCardProps> = ({ crop, plot, plotIndex, log, date, onClick, onCostClick }) => {
+const CompactCropCard: React.FC<CompactCropCardProps> = ({ crop, plot, plotIndex: _plotIndex, log, date, onClick, onCostClick }) => {
     const status = getDayStatus(log);
     const isBlocked = log?.disturbance?.scope === 'FULL_DAY';
     const [attachmentCount, setAttachmentCount] = useState<number>(0);
@@ -95,7 +95,7 @@ const CompactCropCard: React.FC<CompactCropCardProps> = ({ crop, plot, plotIndex
     }, [log?.id]);
 
     // Helper for bucket icons
-    const BucketIcon = ({ icon, count, activeColor, label }: { icon: React.ReactNode, count: number, activeColor: string, label: string }) => {
+    const BucketIcon = ({ icon, count, activeColor, label: _label }: { icon: React.ReactNode, count: number, activeColor: string, label: string }) => {
         const isActive = count > 0;
         return (
             <div className={`flex flex-col items-center justify-center p-1 rounded-lg border flex-1 transition-all min-w-[30px] ${isActive ? activeColor : 'bg-slate-50 border-slate-100 text-slate-300'}`}>

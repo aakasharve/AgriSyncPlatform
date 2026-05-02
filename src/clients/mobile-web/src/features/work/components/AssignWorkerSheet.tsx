@@ -39,7 +39,7 @@ const ASSIGNABLE_ROLES = ['Worker', 'Mukadam'];
 
 const AssignWorkerSheet: React.FC<AssignWorkerSheetProps> = ({
     card,
-    farmId,
+    farmId: _farmId,
     members = [],
     onClose,
     onAssigned,

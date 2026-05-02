@@ -47,7 +47,7 @@ const NEEDS_REASON = new Set(['disputed', 'correction_pending']);
 
 const VerifyActionBar: React.FC<VerifyActionBarProps> = ({
     logId,
-    currentStatus,
+    currentStatus: _currentStatus,
     allowedTransitions,
     onTransition,
     isProcessing = false,

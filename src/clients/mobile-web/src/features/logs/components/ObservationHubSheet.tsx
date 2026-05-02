@@ -18,7 +18,7 @@ const ObservationHubSheet: React.FC<ObservationHubSheetProps> = ({
     isOpen,
     onClose,
     onSave,
-    existingNotes,
+    existingNotes: _existingNotes,
     crops,
     selectedCropId,
     selectedPlotId,
@@ -26,7 +26,7 @@ const ObservationHubSheet: React.FC<ObservationHubSheetProps> = ({
     initialType = 'observation'
 }) => {
     const [inputText, setInputText] = useState('');
-    const [type, setType] = useState<'observation' | 'reminder'>(initialType);
+    const [type, _setType] = useState<'observation' | 'reminder'>(initialType);
 
     if (!isOpen) return null;
 

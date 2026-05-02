@@ -29,7 +29,7 @@ import LabourReview from './components/LabourReview';
 import ActivityLedger from './components/ActivityLedger';
 import CostStrip from './components/CostStrip';
 
-const ManualEntry: React.FC<ManualEntryProps> = ({ context, crops, defaults, profile, onSubmit, disabled, initialData, provenance, onDataConsumed, todayCountsMap, transcriptEntries = [], todayLogs = [], onLogSelect }) => {
+const ManualEntry: React.FC<ManualEntryProps> = ({ context, crops, defaults, profile, onSubmit, disabled: _disabled, initialData, provenance, onDataConsumed, todayCountsMap, transcriptEntries = [], todayLogs = [], onLogSelect }) => {
 
     // --- STATE ---
     const [cropActivities, setCropActivities] = useState<CropActivityEvent[]>([]);
@@ -42,7 +42,7 @@ const ManualEntry: React.FC<ManualEntryProps> = ({ context, crops, defaults, pro
     const [selectedLogId, setSelectedLogId] = useState<string | null>(null);  // Track which log is being edited
 
     // New Harvest State
-    const [showHarvestConfig, setShowHarvestConfig] = useState(false);
+    const [_showHarvestConfig, setShowHarvestConfig] = useState(false);
     const [pendingHarvestActivity, setPendingHarvestActivity] = useState<CropActivityEvent | null>(null);
 
     // Phase 7: Unclear Segments
@@ -94,7 +94,7 @@ const ManualEntry: React.FC<ManualEntryProps> = ({ context, crops, defaults, pro
     const [customInput, setCustomInput] = useState('');
 
     // Common Activities
-    const [commonActivities, setCommonActivities] = useState<WorkflowStep[]>([]);
+    const [_commonActivities, setCommonActivities] = useState<WorkflowStep[]>([]);
 
     // Active Context for Defaults
     const [activeCrop, setActiveCrop] = useState<CropProfile | undefined>(undefined);
@@ -215,7 +215,7 @@ const ManualEntry: React.FC<ManualEntryProps> = ({ context, crops, defaults, pro
     };
 
     // Handle Config Save
-    const handleHarvestConfigSaved = (config: HarvestConfig) => {
+    const _handleHarvestConfigSaved = (config: HarvestConfig) => {
         if (!activePlot) return;
 
         // Auto-start a session since they are trying to log harvest
@@ -234,7 +234,7 @@ const ManualEntry: React.FC<ManualEntryProps> = ({ context, crops, defaults, pro
         setShowHarvestConfig(false);
     };
 
-    const addActivity = (name: string, isCommon: boolean = false) => {
+    const addActivity = (name: string, _isCommon: boolean = false) => {
         // Instead of adding a NEW card, we add this 'name' as a workType to the global card
 
         let globalCard = cropActivities[0];
@@ -296,7 +296,7 @@ const ManualEntry: React.FC<ManualEntryProps> = ({ context, crops, defaults, pro
         }
     };
 
-    const addExpense = () => {
+    const _addExpense = () => {
         const newExpense: ActivityExpenseEvent = {
             id: `exp_${Date.now()}`,
             reason: '',
@@ -306,15 +306,15 @@ const ManualEntry: React.FC<ManualEntryProps> = ({ context, crops, defaults, pro
         setExpenses([...expenses, newExpense]);
     };
 
-    const updateExpense = (updated: ActivityExpenseEvent) => {
+    const _updateExpense = (updated: ActivityExpenseEvent) => {
         setExpenses(expenses.map(e => e.id === updated.id ? updated : e));
     };
 
-    const deleteExpense = (id: string) => {
+    const _deleteExpense = (id: string) => {
         setExpenses(expenses.filter(e => e.id !== id));
     };
 
-    const handleAddCustom = (e: React.FormEvent) => {
+    const _handleAddCustom = (e: React.FormEvent) => {
         e.preventDefault();
         if (customInput.trim()) {
             addActivity(customInput.trim(), false);
@@ -322,7 +322,7 @@ const ManualEntry: React.FC<ManualEntryProps> = ({ context, crops, defaults, pro
         }
     };
 
-    const renameActivity = (id: string, newName: string) => {
+    const _renameActivity = (id: string, newName: string) => {
         setCropActivities(cropActivities.map(t => t.id === id ? { ...t, title: newName } : t));
     };
 
@@ -427,7 +427,7 @@ const ManualEntry: React.FC<ManualEntryProps> = ({ context, crops, defaults, pro
 
     // --- RENDER HELPERS ---
 
-    const renderPlotSelector = () => {
+    const _renderPlotSelector = () => {
         if (!context) return null;
 
         return (

@@ -40,7 +40,7 @@ export const SyncIndicator: React.FC<SyncIndicatorProps> = ({
     status,
     pendingCount = 0,
     failedCount = 0,
-    lastSyncedAt,
+    lastSyncedAt: _lastSyncedAt,
     onClick,
     testId
 }) => {

@@ -54,7 +54,7 @@ const ReferralsPage: React.FC = () => {
                 setReferralCode(codeData.code);
                 setStats({ total: statsData.referralsTotal, qualified: statsData.referralsQualified, benefits: statsData.benefitsEarned });
                 setEvents(eventsData.map(e => ({ id: e.id, eventType: e.eventType as GrowthEventItem['eventType'], occurredAtUtc: e.occurredAtUtc, metadata: e.metadata })));
-            } catch (e) {
+            } catch (_e) {
                 if (!cancelled) setError('Failed to load referral data. Please try again.');
             } finally {
                 if (!cancelled) setLoading(false);

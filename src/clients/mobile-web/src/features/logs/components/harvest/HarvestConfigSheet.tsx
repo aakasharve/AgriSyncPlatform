@@ -40,7 +40,7 @@ const HarvestConfigSheet: React.FC<HarvestConfigSheetProps> = ({
     // Form State
     const [pattern, setPattern] = useState<HarvestPattern | null>(null);
     const [primaryUnit, setPrimaryUnit] = useState<HarvestUnit | null>(null);
-    const [secondaryUnit, setSecondaryUnit] = useState<HarvestUnit | null>(null);
+    const [secondaryUnit, _setSecondaryUnit] = useState<HarvestUnit | null>(null);
 
     // Suggested Data
     const suggestedUnits = getSuggestedUnitsForCrop(crop.name);

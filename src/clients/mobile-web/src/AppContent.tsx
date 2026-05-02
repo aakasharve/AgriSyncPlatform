@@ -55,8 +55,8 @@ const AppContent: React.FC<AppContentProps> = ({ crops: initialCrops, setCrops }
     useTemplateCatalogSync();
 
     const {
-        navigation, context, data, voice, weather, commands, trust,
-        toast, setToast, handleReset, lastSavedLogSummary, lastSavedLogIds,
+        navigation, context, data, voice, weather, commands: _commands, trust: _trust,
+        toast, setToast, handleReset: _handleReset, lastSavedLogSummary: _lastSavedLogSummary, lastSavedLogIds: _lastSavedLogIds,
     } = app;
 
     useEffect(() => {

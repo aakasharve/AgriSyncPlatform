@@ -60,7 +60,7 @@ interface JobCardsPageProps {
 
 const JobCardsPage: React.FC<JobCardsPageProps> = ({ onNavigateToDetail }) => {
     const { currentFarmId } = useFarmContext();
-    const { jobCards, isLoading, assignJobCard, startJobCard, settleJobCard, cancelJobCard, refresh } = useJobCards({ farmId: currentFarmId });
+    const { jobCards, isLoading, assignJobCard, startJobCard, settleJobCard, cancelJobCard: _cancelJobCard, refresh } = useJobCards({ farmId: currentFarmId });
 
     const [activeFilter, setActiveFilter] = useState<FilterChip>('Assigned');
     const [expandedBands, setExpandedBands] = useState<Record<string, boolean>>(

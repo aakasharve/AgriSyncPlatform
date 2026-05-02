@@ -131,7 +131,7 @@ export const calculateEffectiveDay = (plot: Plot, targetDate: Date | string = ne
 };
 
 // Stub for getTimelineBlocks (under development)
-export const getTimelineBlocks = (plot: Plot, logs: any[]): any[] => {
+export const getTimelineBlocks = (_plot: Plot, _logs: any[]): any[] => {
     // TODO: Implement timeline block generation from plot schedule and logs
     console.warn('getTimelineBlocks is not yet implemented');
     return [];
