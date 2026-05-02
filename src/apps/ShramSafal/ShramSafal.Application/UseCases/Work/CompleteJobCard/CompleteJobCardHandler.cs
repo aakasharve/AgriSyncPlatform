@@ -1,4 +1,5 @@
 using AgriSync.BuildingBlocks.Abstractions;
+using AgriSync.BuildingBlocks.Application;
 using AgriSync.BuildingBlocks.Results;
 using ShramSafal.Application.Ports;
 using ShramSafal.Domain.Audit;
@@ -11,10 +12,22 @@ namespace ShramSafal.Application.UseCases.Work.CompleteJobCard;
 /// Completes a JobCard and links it to a DailyLog.
 /// Validates that the daily log belongs to the same farm+plot and shares at least
 /// one ActivityType with the job card's line items.
+///
+/// <para>
+/// T-IGH-03-PIPELINE-ROLLOUT (CompleteJobCard): wired through the
+/// explicit <see cref="HandlerPipeline"/>. Caller-shape validation lives
+/// in <see cref="CompleteJobCardValidator"/>; job-card-existence + farm-
+/// membership authorization lives in <see cref="CompleteJobCardAuthorizer"/>.
+/// When this handler is resolved via the pipeline (see DI registration),
+/// both layers run before the body executes; when resolved directly
+/// (legacy tests), the body's defense-in-depth load + match checks
+/// continue to enforce the same invariants.
+/// </para>
 /// </summary>
 public sealed class CompleteJobCardHandler(
     IShramSafalRepository repository,
     IClock clock)
+    : IHandler<CompleteJobCardCommand, CompleteJobCardResult>
 {
     public async Task<Result<CompleteJobCardResult>> HandleAsync(
         CompleteJobCardCommand command,
