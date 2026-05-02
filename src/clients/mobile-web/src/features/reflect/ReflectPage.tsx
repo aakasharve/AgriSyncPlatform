@@ -5,7 +5,7 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import { DailyLog } from '../logs/logs.types';
-import { CropProfile, Plot, LedgerDefaults } from '../../types';
+import { CropProfile, Plot, LedgerDefaults, PlannedTask } from '../../types';
 import {
     Calendar, ChevronRight, ArrowRight,
     BarChart3, TrendingUp, LayoutGrid, PieChart, FileText,
@@ -241,7 +241,7 @@ const ReflectPage: React.FC<ReflectPageProps> = ({
     );
 
     const mergedVisibleTasks = useMemo(() => {
-        const deduped = new Map<string, any>();
+        const deduped = new Map<string, PlannedTask>();
         [...(tasks || []), ...tasksFromTodaysLogs].forEach(task => {
             deduped.set(task.id, task);
         });

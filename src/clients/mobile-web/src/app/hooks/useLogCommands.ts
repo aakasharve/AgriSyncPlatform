@@ -1,7 +1,7 @@
 import { useCallback, useMemo } from 'react';
 import {
     AgriLogResponse, LogScope, CropProfile, FarmerProfile, DailyLog,
-    InputMode, PageView, AppStatus, PlannedTask
+    InputMode, PageView, AppStatus, PlannedTask, ObservationNote
 } from '../../types';
 import { LogProvenance } from '../../domain/ai/LogProvenance';
 import { logger } from '../../infrastructure/observability/Logger';
@@ -9,19 +9,27 @@ import { CorrelationId } from '../../infrastructure/observability/CorrelationCon
 import { WeatherPort } from '../../application/ports/WeatherPort';
 import { computeDayState } from '../../shared/utils/dayState';
 import type { LastSavedLogSummaryItem } from '../uiRuntimeTypes';
+import type { LogSegment } from '../../domain/types/log.types';
 
 // ARCHITECTURE FIX: Import Service Class and Hook
 import { LogCommandServiceImpl } from '../../application/services/LogCommandService';
+import { ManualLogFormData } from '../../application/usecases/CreateLog';
 import { useDataSource } from '../providers/DataSourceProvider';
 import { enqueueLogsForSync } from '../../features/logs/services/logSyncMutationService';
 import { countCompletedIrrigationEvents } from '../../features/logs/services/irrigationCompletion';
 
+// Manual submit accepts the form payload plus a few UI-orchestration fields
+// (date / originalLogId / etc.). It's wider than ManualLogFormData on purpose.
+export type ManualSubmitPayload = ManualLogFormData & {
+    originalLogId?: string;
+};
+
 export interface UseLogCommandsResult {
     handleAutoSave: (logData: AgriLogResponse, provenance?: LogProvenance) => Promise<void>;
     handleFinalConfirm: (editedData: AgriLogResponse | null, draftLog: AgriLogResponse | null) => Promise<void>;
-    handleManualSubmit: (data: any) => Promise<void>;
+    handleManualSubmit: (data: ManualSubmitPayload) => Promise<void>;
     handleWizardSubmit: (logs: DailyLog[]) => Promise<void>;
-    handleUpdateNote: (logId: string, noteId: string, updates: any) => void;
+    handleUpdateNote: (logId: string, noteId: string, updates: Partial<ObservationNote>) => void;
     // Exposed for testing/advanced usage
     service: LogCommandServiceImpl;
 }
@@ -39,14 +47,14 @@ interface UseLogCommandsProps {
     setHistory: React.Dispatch<React.SetStateAction<DailyLog[]>>;
 
     // Deprecated setters (ignored in new logic but kept for prop compatibility if not updated in parent)
-    setMockHistory?: any;
-    setRealHistory?: any;
+    setMockHistory?: React.Dispatch<React.SetStateAction<DailyLog[]>>;
+    setRealHistory?: React.Dispatch<React.SetStateAction<DailyLog[]>>;
 
     setPlannedTasks: React.Dispatch<React.SetStateAction<PlannedTask[]>>;
     setToast: (toast: { message: string; type: 'success' | 'error' } | null) => void;
     setError: (msg: string | null) => void;
     setDraftLog: (log: AgriLogResponse | null) => void;
-    setRecordingSegment: (seg: any) => void;
+    setRecordingSegment: (seg: LogSegment | null) => void;
     setMode: (mode: InputMode) => void;
     setMainView: (view: PageView) => void;
     setStatus: (status: AppStatus) => void;
@@ -279,7 +287,7 @@ export const useLogCommands = ({
     }, [hasActiveLogContext, logScope, crops, farmerProfile, logCommandService, setHistory, setPlannedTasks, setDraftLog, setRecordingSegment, setMode, setMainView, setStatus, setError, setLastSavedLogSummary, setLastSavedLogIds, computeClosureDelta, history, setToast]);
 
     // --- MANUAL SUBMIT ---
-    const handleManualSubmit = useCallback(async (data: any) => {
+    const handleManualSubmit = useCallback(async (data: ManualSubmitPayload) => {
         if (!hasActiveLogContext) return; // SAFE GUARD
         try {
             if (data.originalLogId) {
@@ -389,7 +397,7 @@ export const useLogCommands = ({
     // Note Updating - Simplified
     // This should also use Service if possible, but keeping lightweight update logic
     // Just ensure it updates the current 'history' state
-    const handleUpdateNote = useCallback((logId: string, noteId: string, updates: any) => {
+    const handleUpdateNote = useCallback((logId: string, noteId: string, updates: Partial<ObservationNote>) => {
         const updater = (prevInfo: DailyLog[]) => prevInfo.map(log => {
             if (log.id !== logId) return log;
             return {

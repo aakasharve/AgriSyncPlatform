@@ -91,8 +91,9 @@ export const updateLog = async (
 
         return { success: true, log: finalLog };
 
-    } catch (e: any) {
+    } catch (e: unknown) {
         console.error('UpdateLog Error:', e);
-        return { success: false, error: e.message || 'Unknown error during update' };
+        const message = e instanceof Error ? e.message : 'Unknown error during update';
+        return { success: false, error: message };
     }
 };

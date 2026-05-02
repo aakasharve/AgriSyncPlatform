@@ -1,12 +1,13 @@
 import React, { createContext, useContext } from 'react';
 import type { ReactNode } from 'react';
 import type { useAgriLogApp } from '../compositionRoot';
+import type { TodayCounts } from '../../types';
 
 type AgriLogRuntime = ReturnType<typeof useAgriLogApp>;
 
 interface ViewHelpers {
-    getTodayCounts: (plotId: string, dateStr: string) => any;
-    getTodayPlotData: () => any[];
+    getTodayCounts: (plotId: string, dateStr: string) => TodayCounts;
+    getTodayPlotData: () => unknown[];
     getContextColorIndicator: () => ReactNode;
     getContextDisplay: () => ReactNode;
 }
