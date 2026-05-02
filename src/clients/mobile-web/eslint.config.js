@@ -12,10 +12,47 @@ import noStringMutationType from '../../../sync-contract/eslint-rules/no-string-
 // CI exits 0 today. Sub-plan 04 (frontend restructure) is responsible for
 // driving the warning count to zero and re-promoting select rules to error.
 
-// Build a "all rules → warn" map for every react-hooks rule the plugin ships.
-// Programmatic so future rule additions in the plugin don't require config edits.
+// Build the warning map for react-hooks rules. The canonical rules
+// (rules-of-hooks, exhaustive-deps) stay as warnings everywhere; the
+// React Compiler experimental rules ship in eslint-plugin-react-hooks
+// v5+ but are designed for green-field code, not retrofit, and produce
+// hundreds of false positives against AgriSync's existing component tree.
+// Sub-plan 04 Task 10: disable the experimental set; keep the canonical
+// pair so legitimate hooks bugs still surface.
+//
+// Re-promotion plan: once the React Compiler is stable AND the team has
+// done a dedicated wave-N pass to address its findings, flip these back
+// to 'warn' and progressively to 'error'. Tracked in
+// _COFOUNDER pending-task T-IGH-04-REACT-COMPILER-RULES.
+const REACT_COMPILER_EXPERIMENTAL_RULES = new Set([
+  'static-components',
+  'immutability',
+  'purity',
+  'preserve-manual-memoization',
+  'set-state-in-effect',
+  'set-state-in-render',
+  'memo-dependencies',
+  'todo',
+  'use-memo',
+  'hooks',
+  'invariant',
+  'fbt',
+  'globals',
+  'preserve-using-static',
+  'unsupported-syntax',
+  'config',
+  'capitalized-calls',
+  'gating',
+  'refs',
+  'incompatible-library',
+  'error-boundaries',
+  'component-hook-factories',
+]);
 const reactHooksRules = Object.fromEntries(
-  Object.keys(reactHooks.rules || {}).map((name) => [`react-hooks/${name}`, 'warn']),
+  Object.keys(reactHooks.rules || {}).map((name) => [
+    `react-hooks/${name}`,
+    REACT_COMPILER_EXPERIMENTAL_RULES.has(name) ? 'off' : 'warn',
+  ]),
 );
 
 export default defineConfig([
@@ -48,7 +85,18 @@ export default defineConfig([
 
       // Existing-debt rules (kept on but as warnings until Sub-plan 04).
       '@typescript-eslint/no-explicit-any': 'warn',
-      '@typescript-eslint/no-unused-vars': 'warn',
+      '@typescript-eslint/no-unused-vars': ['warn', {
+        // Underscore-prefixed args/vars are an intentional convention:
+        // "I know this is unused but the signature requires it" or
+        // "destructured, then ignored". Sub-plan 04 Task 10 honors that
+        // convention so no-unused-vars only fires on genuinely-unused
+        // identifiers. Restores eslint baseline behavior with TS.
+        argsIgnorePattern: '^_',
+        varsIgnorePattern: '^_',
+        caughtErrorsIgnorePattern: '^_',
+        destructuredArrayIgnorePattern: '^_',
+        ignoreRestSiblings: true,
+      }],
       '@typescript-eslint/no-empty-object-type': 'warn',
       '@typescript-eslint/no-unused-expressions': 'warn',
       'no-empty': ['warn', { allowEmptyCatch: true }],

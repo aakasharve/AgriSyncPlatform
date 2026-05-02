@@ -277,7 +277,7 @@ const SchedulerPage: React.FC<SchedulerPageProps> = ({
         if (!draftInstance) return;
         const overrides = [...draftInstance.stageOverrides];
         const existingIdx = overrides.findIndex(o => o.stageId === stageId);
-        let newOverride: StageOverride = existingIdx >= 0 ? { ...overrides[existingIdx] } : { stageId };
+        const newOverride: StageOverride = existingIdx >= 0 ? { ...overrides[existingIdx] } : { stageId };
         if (field === 'start') newOverride.customDayStart = val;
         if (field === 'end') newOverride.customDayEnd = val;
         if (existingIdx >= 0) overrides[existingIdx] = newOverride;
@@ -298,7 +298,7 @@ const SchedulerPage: React.FC<SchedulerPageProps> = ({
         if (!targetExp) return;
         const overrides = [...draftInstance.expectationOverrides];
         const existingIdx = overrides.findIndex(o => o.expectationId === targetExp.id);
-        let newOverride: ExpectationOverride = existingIdx >= 0 ? { ...overrides[existingIdx] } : { expectationId: targetExp.id };
+        const newOverride: ExpectationOverride = existingIdx >= 0 ? { ...overrides[existingIdx] } : { expectationId: targetExp.id };
         if (field === 'mode') newOverride.customFrequencyMode = value;
         if (field === 'value') newOverride.customFrequencyValue = value;
         if (existingIdx >= 0) overrides[existingIdx] = newOverride;
