@@ -184,7 +184,12 @@ public static class E2eTestEndpoints
 /// </summary>
 public sealed class E2eFailPushesToggle
 {
-    public string? Reason { get; set; }
+    private string? _reason;
+    public string? Reason
+    {
+        get => Volatile.Read(ref _reason);
+        set => Volatile.Write(ref _reason, value);
+    }
 }
 
 /// <summary>
