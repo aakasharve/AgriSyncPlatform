@@ -32,33 +32,10 @@ const SKIP_DIRS = new Set([
 
 /**
  * Files explicitly waived from the gate while their migration ships in
- * named follow-up tasks. Each entry MUST cite the pending-task code so the
- * list can be audited and shrunk. Adding a new entry without a matching
- * pending task is a review-blocking violation.
+ * named follow-up tasks. Empty by design: Sub-plan 04 requires all raw
+ * localStorage access to live under infrastructure/storage/.
  */
-const ALLOWLIST = new Map([
-    // T-IGH-04-LOCALSTORAGE-MIGRATION (P1) — bulk of pre-existing violators
-    // are scheduled for migration in a follow-up that decomposes by area:
-    //   pages/   -> useUiPref hook
-    //   services/-> legacy services slated for deletion (Task 10 restricts
-    //               imports; deletion is a separate follow-up)
-    //   i18n/    -> useUiPref hook
-    //   features/-> per-feature Dexie repos or storage adapters
-    //   core/    -> SessionStore + AppRouter routing-state migration
-    //   sync/    -> co-located with Task 7 SyncPullReconciler split
-    ['core' + sep + 'navigation' + sep + 'AppRouter.tsx', 'T-IGH-04-LOCALSTORAGE-MIGRATION'],
-    ['infrastructure' + sep + 'sync' + sep + 'MutationQueue.ts', 'T-IGH-04-LOCALSTORAGE-MIGRATION'],
-    ['infrastructure' + sep + 'sync' + sep + 'SyncPullReconciler.ts', 'T-IGH-04-LOCALSTORAGE-MIGRATION'],
-    ['services' + sep + 'harvestService.ts', 'T-IGH-04-LOCALSTORAGE-MIGRATION'],
-    ['services' + sep + 'procurementRepository.ts', 'T-IGH-04-LOCALSTORAGE-MIGRATION'],
-    // T-IGH-04-LOCALSTORAGE-MIGRATION wave-4-A — module-level singleton
-    // (object literal, not a React component) so it cannot consume the
-    // useUiPref hook directly. The discipline-nudge sent flags read from
-    // an event handler scheduled via setTimeout; migrating would require
-    // a non-React storage adapter under infrastructure/storage/. Tracked
-    // as a follow-up; intentionally kept allow-listed for this wave.
-    ['shared' + sep + 'services' + sep + 'NotificationService.ts', 'T-IGH-04-LOCALSTORAGE-MIGRATION'],
-]);
+const ALLOWLIST = new Map();
 
 let violations = 0;
 let allowed = 0;

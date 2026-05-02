@@ -22,6 +22,7 @@ import { AppRouterContext } from './routeContext';
 import { SIMPLE_ROUTE_RENDERERS } from './simpleRoutes';
 import { renderReflectView, renderCompareView, renderLogView } from './mainView';
 import { renderGlobalSheets } from './globalSheets';
+import { useUiPref } from '../../shared/hooks/useUiPref';
 
 // Sub-plan 04 Task 8 — Routes-as-data decomposition.
 // AppRouter is now a thin orchestrator that:
@@ -44,12 +45,10 @@ const AppRouter: React.FC = () => {
     const { handleReset, lastSavedLogSummary, lastSavedLogIds } = useAppUiRuntime();
 
     // permissions state
-    const [permissionsGranted, setPermissionsGranted] = React.useState<boolean>(() => {
-        if (typeof window !== 'undefined') {
-            return localStorage.getItem('shramsafal_permissions_granted') === 'true';
-        }
-        return true;
-    });
+    const [permissionsGranted, setPermissionsGranted] = useUiPref<boolean>(
+        'shramsafal_permissions_granted',
+        typeof window === 'undefined',
+    );
     const {
         getTodayCounts,
         getContextColorIndicator

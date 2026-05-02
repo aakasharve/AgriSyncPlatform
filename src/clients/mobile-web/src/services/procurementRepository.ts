@@ -5,15 +5,15 @@ import {
     ExpenseScope,
     ExpenseCategory
 } from '../types';
-import { storageNamespace } from '../infrastructure/storage/StorageNamespace';
-
-const PROCUREMENT_STORAGE_KEY = 'dfes_procurement_expenses';
+import {
+    readProcurementExpensesRaw,
+    writeProcurementExpensesRaw,
+} from '../infrastructure/storage/ProcurementLegacyStore';
 
 // --- Helper: Load/Save ---
 const loadExpenses = (): ProcurementExpense[] => {
     try {
-        const key = storageNamespace.getKey(PROCUREMENT_STORAGE_KEY);
-        const raw = localStorage.getItem(key);
+        const raw = readProcurementExpensesRaw();
         return raw ? JSON.parse(raw) : [];
     } catch (e) {
         console.error("Failed to load procurement expenses", e);
@@ -23,8 +23,7 @@ const loadExpenses = (): ProcurementExpense[] => {
 
 const saveExpenses = (expenses: ProcurementExpense[]) => {
     try {
-        const key = storageNamespace.getKey(PROCUREMENT_STORAGE_KEY);
-        localStorage.setItem(key, JSON.stringify(expenses));
+        writeProcurementExpensesRaw(JSON.stringify(expenses));
     } catch (e) {
         console.error("Failed to save procurement expenses", e);
     }

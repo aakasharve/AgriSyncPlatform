@@ -12,7 +12,14 @@ import {
     DEFAULT_PRODUCE_GRADES,
     OtherIncomeEntry
 } from '../features/logs/harvest.types';
-import { storageNamespace } from '../infrastructure/storage/StorageNamespace';
+import {
+    readHarvestConfigRaw,
+    readHarvestSessionsRaw,
+    readOtherIncomeRaw,
+    writeHarvestConfigRaw,
+    writeHarvestSessionsRaw,
+    writeOtherIncomeRaw,
+} from '../infrastructure/storage/HarvestLegacyStore';
 import { idGenerator } from '../core/domain/services/IdGenerator';
 import { systemClock } from '../core/domain/services/Clock';
 import { financeCommandService } from '../features/finance/financeCommandService';
@@ -93,9 +100,7 @@ export const CROP_HARVEST_PRESETS: Record<string, HarvestUnit[]> = {
  */
 export const getHarvestConfig = (plotId: string): HarvestConfig | null => {
     // Check local storage first (simulated persistence)
-    const baseKey = `harvest_config_${plotId}`;
-    const key = storageNamespace.getKey(baseKey);
-    const stored = localStorage.getItem(key);
+    const stored = readHarvestConfigRaw(plotId);
     if (stored) {
         try {
             return JSON.parse(stored);
@@ -113,9 +118,7 @@ export const getHarvestConfig = (plotId: string): HarvestConfig | null => {
  */
 export const saveHarvestConfig = (config: HarvestConfig): void => {
     HARVEST_CONFIGS[config.plotId] = config;
-    const baseKey = `harvest_config_${config.plotId}`;
-    const key = storageNamespace.getKey(baseKey);
-    localStorage.setItem(key, JSON.stringify(config));
+    writeHarvestConfigRaw(config.plotId, JSON.stringify(config));
 };
 
 /**
@@ -123,9 +126,7 @@ export const saveHarvestConfig = (config: HarvestConfig): void => {
  */
 export const getHarvestSessions = (plotId: string, cropId: string): HarvestSession[] => {
     const keyStr = `${plotId}_${cropId}`;
-    const baseKey = `harvest_sessions_${keyStr}`;
-    const storageKey = storageNamespace.getKey(baseKey);
-    const stored = localStorage.getItem(storageKey);
+    const stored = readHarvestSessionsRaw(plotId, cropId);
 
     if (stored) {
         try {
@@ -187,9 +188,7 @@ export const startHarvestSession = (
     const updatedSessions = [newSession, ...sessions]; // Newest first
     HARVEST_SESSIONS[keyStr] = updatedSessions;
 
-    const baseKey = `harvest_sessions_${keyStr}`;
-    const storageKey = storageNamespace.getKey(baseKey);
-    localStorage.setItem(storageKey, JSON.stringify(updatedSessions));
+    writeHarvestSessionsRaw(plotId, cropId, JSON.stringify(updatedSessions));
 
     return newSession;
 };
@@ -200,21 +199,19 @@ export const startHarvestSession = (
 export const seedHarvestSessions = (sessions: HarvestSession[]): void => {
     sessions.forEach(session => {
         const keyStr = `${session.plotId}_${session.cropId}`;
-        const baseKey = `harvest_sessions_${keyStr}`;
-        const storageKey = storageNamespace.getKey(baseKey);
 
         // Get existing or init empty
         // We probably want to overwrite or append? For seeding, usually overwrite if empty.
         // But here we are iterating one by one.
         // Simplified: Just append this session to the list for this plot/crop
 
-        const existingRaw = localStorage.getItem(storageKey);
+        const existingRaw = readHarvestSessionsRaw(session.plotId, session.cropId);
         const existing: HarvestSession[] = existingRaw ? JSON.parse(existingRaw) : [];
 
         // Avoid duplicates
         if (!existing.some(s => s.id === session.id)) {
             const updated = [session, ...existing];
-            localStorage.setItem(storageKey, JSON.stringify(updated));
+            writeHarvestSessionsRaw(session.plotId, session.cropId, JSON.stringify(updated));
             HARVEST_SESSIONS[keyStr] = updated;
         }
     });
@@ -253,8 +250,7 @@ export const getSuggestedUnitsForCrop = (cropName: string): HarvestUnit[] => {
 // let OTHER_INCOME_ENTRIES: OtherIncomeEntry[] = [];
 
 const getStoredOtherIncome = (): OtherIncomeEntry[] => {
-    const key = storageNamespace.getKey('harvest_other_income');
-    const stored = localStorage.getItem(key);
+    const stored = readOtherIncomeRaw();
     if (stored) {
         try {
             return JSON.parse(stored);
@@ -285,8 +281,7 @@ export const addOtherIncomeEntry = (entry: Omit<OtherIncomeEntry, 'id'>): OtherI
     const updatedEntries = [newEntry, ...currentEntries];
 
     // Save
-    const key = storageNamespace.getKey('harvest_other_income');
-    localStorage.setItem(key, JSON.stringify(updatedEntries));
+    writeOtherIncomeRaw(JSON.stringify(updatedEntries));
 
     financeCommandService.createMoneyEventFromSource({
         type: 'Income',
@@ -313,9 +308,7 @@ export const updateHarvestSession = (session: HarvestSession): void => {
     HARVEST_SESSIONS[keyStr] = updatedSessions;
 
     // Persist
-    const baseKey = `harvest_sessions_${keyStr}`;
-    const storageKey = storageNamespace.getKey(baseKey);
-    localStorage.setItem(storageKey, JSON.stringify(updatedSessions));
+    writeHarvestSessionsRaw(session.plotId, session.cropId, JSON.stringify(updatedSessions));
 
     // Finance Integration: Sync Sales
     session.saleEntries.forEach(sale => {

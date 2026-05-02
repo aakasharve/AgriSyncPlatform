@@ -1,6 +1,11 @@
 
 import { systemClock } from '../../core/domain/services/Clock';
 import { getDateKey } from '../../core/domain/services/DateKeyService';
+import {
+    isMorningRhythmNudgeEnabled,
+    markDisciplineNudgeSent,
+    wasDisciplineNudgeSent,
+} from '../../infrastructure/storage/NotificationNudgeStore';
 
 // Extend NotificationOptions for newer properties
 interface ExtendedNotificationOptions extends NotificationOptions {
@@ -8,8 +13,6 @@ interface ExtendedNotificationOptions extends NotificationOptions {
     image?: string;
 }
 
-const DISCIPLINE_MORNING_ENABLED_KEY = 'shramsafal.enable_morning_rhythm_nudge';
-const DISCIPLINE_SENT_PREFIX = 'shramsafal.nudge_sent';
 const DISCIPLINE_ONE_DAY_MS = 24 * 60 * 60 * 1000;
 const disciplineTimers: number[] = [];
 
@@ -107,13 +110,12 @@ export const NotificationService = {
         ) => {
             const fire = () => {
                 const dayKey = getDateKey();
-                const sentKey = `${DISCIPLINE_SENT_PREFIX}.${id}.${dayKey}`;
-                if (!window.localStorage.getItem(sentKey)) {
+                if (!wasDisciplineNudgeSent(id, dayKey)) {
                     void NotificationService.showLocalNotification(title, {
                         ...options,
                         body
                     });
-                    window.localStorage.setItem(sentKey, '1');
+                    markDisciplineNudgeSent(id, dayKey);
                 }
 
                 const repeatTimer = window.setTimeout(fire, DISCIPLINE_ONE_DAY_MS);
@@ -140,7 +142,7 @@ export const NotificationService = {
             }
         );
 
-        if (window.localStorage.getItem(DISCIPLINE_MORNING_ENABLED_KEY) === 'true') {
+        if (isMorningRhythmNudgeEnabled()) {
             scheduleDaily(
                 'morning_rhythm',
                 'Today: Stage + Weather + Tasks in 10 seconds',
