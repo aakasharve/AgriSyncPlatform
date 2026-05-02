@@ -15,7 +15,7 @@
 import { test, expect } from '@playwright/test';
 import { resetAndSeed, setFailPushes } from '../fixtures/seed.api';
 import { loginViaPassword } from '../fixtures/loginHelper';
-import { selectFarmWideLogContext } from '../fixtures/logContextHelper';
+import { selectFirstPlotLogContext } from '../fixtures/logContextHelper';
 
 test.describe('Sync retry after rejected mutation', () => {
     test('rejected mutation surfaces in OfflineConflictPage and can be retried after fix', async ({ page }) => {
@@ -24,9 +24,13 @@ test.describe('Sync retry after rejected mutation', () => {
         // Arm the push-rejection toggle BEFORE logging in
         await setFailPushes('CLIENT_TOO_OLD');
 
-        // --- Login ---
+        // --- Login + pick a real plot context ---
+        // Entire-Farm context produces selectedPlotIds=[], which causes
+        // enqueueLogsForSync to skip the log entirely. With nothing in the
+        // queue there is no /sync/push call, no rejection, and the
+        // conflict-badge never renders. See logContextHelper docstring.
         await loginViaPassword(page, '9999999999', 'ramu123');
-        await selectFarmWideLogContext(page);
+        await selectFirstPlotLogContext(page);
 
         // --- Capture a log (online, but pushes will be rejected by server) ---
         // Switch to manual mode to create a log quickly without voice

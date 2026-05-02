@@ -18,7 +18,8 @@
  * trivially testable and reusable on ProfilePage + AppHeader.
  */
 
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { ChevronDown, Sprout, Plus, QrCode, CheckCircle2, X } from 'lucide-react';
 import type { MyFarmDto } from '../../onboarding/qr/inviteApi';
 
@@ -148,10 +149,25 @@ const FarmSwitcherSheet: React.FC<FarmSwitcherSheetProps> = ({
     onCreateFarm,
     onJoinViaQr,
 }) => {
-    return (
+    useEffect(() => {
+        const handleKey = (event: KeyboardEvent) => {
+            if (event.key === 'Escape') {
+                event.preventDefault();
+                onClose();
+            }
+        };
+        window.addEventListener('keydown', handleKey);
+        return () => window.removeEventListener('keydown', handleKey);
+    }, [onClose]);
+
+    if (typeof document === 'undefined') {
+        return null;
+    }
+
+    return createPortal(
         <div
             data-testid="farm-switcher-sheet"
-            className="fixed inset-0 z-50 flex items-end justify-center bg-stone-900/50 backdrop-blur-sm sm:items-center"
+            className="fixed inset-0 z-[100] flex items-end justify-center bg-stone-900/50 backdrop-blur-sm sm:items-center"
             onClick={onClose}
         >
             <div
@@ -240,7 +256,8 @@ const FarmSwitcherSheet: React.FC<FarmSwitcherSheetProps> = ({
                     </div>
                 </div>
             </div>
-        </div>
+        </div>,
+        document.body,
     );
 };
 
