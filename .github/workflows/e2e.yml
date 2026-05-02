@@ -66,6 +66,9 @@ jobs:
       OTel__Endpoint: ""
       # Frontend harness flag.
       VITE_E2E_HARNESS: "1"
+      # Vite reads this at BUILD time (transport.ts) — must be set before
+      # `npm run build` so the URL is baked into the dist/ bundle.
+      VITE_AGRISYNC_API_URL: "http://localhost:5000"
 
     steps:
       - name: Checkout
