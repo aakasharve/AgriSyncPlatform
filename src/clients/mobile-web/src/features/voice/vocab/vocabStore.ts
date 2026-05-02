@@ -1,9 +1,13 @@
 /**
  * Local vocabulary store used by manual corrections and vocabulary review UI.
  * Server-side parsing is authoritative; this store is only a local aid.
+ *
+ * Raw localStorage I/O lives behind the VocabStore adapter under
+ * infrastructure/storage/ so this module stays free of direct
+ * localStorage calls (Sub-plan 04 §DoD).
  */
 
-const STORAGE_KEY = 'agrilog_vocab_db_v2';
+import { readVocabRaw, writeVocabRaw } from '../../../infrastructure/storage/VocabStore';
 
 export type VocabCategory =
     | 'labour_male'
@@ -64,11 +68,11 @@ export function saveVocabDB(vocabDB: VocabDatabase): void {
     const normalized = normalizeDb(vocabDB);
     normalized.lastUpdated = nowIso();
     normalized.totalMappings = normalized.mappings.length;
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(normalized));
+    writeVocabRaw(JSON.stringify(normalized));
 }
 
 export function loadVocabDB(): VocabDatabase {
-    const raw = localStorage.getItem(STORAGE_KEY);
+    const raw = readVocabRaw();
     if (!raw) {
         const initialized = initializeVocabDB();
         saveVocabDB(initialized);

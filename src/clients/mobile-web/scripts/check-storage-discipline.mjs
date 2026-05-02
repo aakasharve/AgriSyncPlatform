@@ -46,11 +46,7 @@ const ALLOWLIST = new Map([
     //   features/-> per-feature Dexie repos or storage adapters
     //   core/    -> SessionStore + AppRouter routing-state migration
     //   sync/    -> co-located with Task 7 SyncPullReconciler split
-    ['core' + sep + 'data' + sep + 'LocalDB.ts', 'T-IGH-04-LOCALSTORAGE-MIGRATION'],
     ['core' + sep + 'navigation' + sep + 'AppRouter.tsx', 'T-IGH-04-LOCALSTORAGE-MIGRATION'],
-    ['features' + sep + 'finance' + sep + 'financeService.ts', 'T-IGH-04-LOCALSTORAGE-MIGRATION'],
-    ['features' + sep + 'onboarding' + sep + 'qr' + sep + 'farmInviteStore.ts', 'T-IGH-04-LOCALSTORAGE-MIGRATION'],
-    ['features' + sep + 'voice' + sep + 'vocab' + sep + 'vocabStore.ts', 'T-IGH-04-LOCALSTORAGE-MIGRATION'],
     ['infrastructure' + sep + 'sync' + sep + 'MutationQueue.ts', 'T-IGH-04-LOCALSTORAGE-MIGRATION'],
     ['infrastructure' + sep + 'sync' + sep + 'SyncPullReconciler.ts', 'T-IGH-04-LOCALSTORAGE-MIGRATION'],
     ['services' + sep + 'harvestService.ts', 'T-IGH-04-LOCALSTORAGE-MIGRATION'],
