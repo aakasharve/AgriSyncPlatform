@@ -602,6 +602,45 @@ public static class DependencyInjection
                     sp.GetServices<AgriSync.BuildingBlocks.Application.PipelineBehaviors.IAuthorizationCheck<
                         ShramSafal.Application.UseCases.Work.CompleteJobCard.CompleteJobCardCommand>>())));
 
+        // T-IGH-03-PIPELINE-ROLLOUT (CancelJobCard): caller-shape +
+        // non-empty-Reason validation + job-card-existence + farm-
+        // membership authorization. The role-tier check (who may cancel
+        // from which state) stays inside JobCard.Cancel because it
+        // depends on the aggregate's current status. Endpoint
+        // (POST /job-cards/{id}/cancel) AND sync
+        // (PushSyncBatchHandler.HandleJobCardCancelAsync) both resolve
+        // the pipeline-wrapped handler — sync's pre-flight is just
+        // empty-id + non-empty-Reason; same guards as the validator,
+        // so the pipeline ordering is canonical on both surfaces.
+        services.AddScoped<AgriSync.BuildingBlocks.Application.PipelineBehaviors.IValidator<
+            ShramSafal.Application.UseCases.Work.CancelJobCard.CancelJobCardCommand>,
+            ShramSafal.Application.UseCases.Work.CancelJobCard.CancelJobCardValidator>();
+        services.AddScoped<AgriSync.BuildingBlocks.Application.PipelineBehaviors.IAuthorizationCheck<
+            ShramSafal.Application.UseCases.Work.CancelJobCard.CancelJobCardCommand>,
+            ShramSafal.Application.UseCases.Work.CancelJobCard.CancelJobCardAuthorizer>();
+        services.AddScoped<AgriSync.BuildingBlocks.Application.IHandler<
+            ShramSafal.Application.UseCases.Work.CancelJobCard.CancelJobCardCommand,
+            ShramSafal.Application.UseCases.Work.CancelJobCard.CancelJobCardResult>>(sp =>
+            AgriSync.BuildingBlocks.Application.HandlerPipeline.Build(
+                sp.GetRequiredService<CancelJobCardHandler>(),
+                new AgriSync.BuildingBlocks.Application.PipelineBehaviors.LoggingBehavior<
+                    ShramSafal.Application.UseCases.Work.CancelJobCard.CancelJobCardCommand,
+                    ShramSafal.Application.UseCases.Work.CancelJobCard.CancelJobCardResult>(
+                    sp.GetRequiredService<Microsoft.Extensions.Logging.ILogger<
+                        AgriSync.BuildingBlocks.Application.PipelineBehaviors.LoggingBehavior<
+                            ShramSafal.Application.UseCases.Work.CancelJobCard.CancelJobCardCommand,
+                            ShramSafal.Application.UseCases.Work.CancelJobCard.CancelJobCardResult>>>()),
+                new AgriSync.BuildingBlocks.Application.PipelineBehaviors.ValidationBehavior<
+                    ShramSafal.Application.UseCases.Work.CancelJobCard.CancelJobCardCommand,
+                    ShramSafal.Application.UseCases.Work.CancelJobCard.CancelJobCardResult>(
+                    sp.GetServices<AgriSync.BuildingBlocks.Application.PipelineBehaviors.IValidator<
+                        ShramSafal.Application.UseCases.Work.CancelJobCard.CancelJobCardCommand>>()),
+                new AgriSync.BuildingBlocks.Application.PipelineBehaviors.AuthorizationBehavior<
+                    ShramSafal.Application.UseCases.Work.CancelJobCard.CancelJobCardCommand,
+                    ShramSafal.Application.UseCases.Work.CancelJobCard.CancelJobCardResult>(
+                    sp.GetServices<AgriSync.BuildingBlocks.Application.PipelineBehaviors.IAuthorizationCheck<
+                        ShramSafal.Application.UseCases.Work.CancelJobCard.CancelJobCardCommand>>())));
+
         return services;
     }
 }

@@ -1,4 +1,5 @@
 using AgriSync.BuildingBlocks.Abstractions;
+using AgriSync.BuildingBlocks.Application;
 using AgriSync.BuildingBlocks.Results;
 using ShramSafal.Application.Ports;
 using ShramSafal.Domain.Audit;
@@ -11,10 +12,24 @@ namespace ShramSafal.Application.UseCases.Work.CancelJobCard;
 /// Cancels a JobCard. Allowed from Draft, Assigned, InProgress, or Completed.
 /// Blocked from VerifiedForPayout and PaidOut (terminal states).
 /// Role gate enforced by the domain.
+///
+/// <para>
+/// T-IGH-03-PIPELINE-ROLLOUT (CancelJobCard): wired through the
+/// explicit <see cref="HandlerPipeline"/>. Caller-shape + reason
+/// validation lives in <see cref="CancelJobCardValidator"/>; job-card-
+/// existence + farm-membership authorization lives in
+/// <see cref="CancelJobCardAuthorizer"/>. When this handler is resolved
+/// via the pipeline (see DI registration), both layers run before the
+/// body executes; when resolved directly (legacy tests), the body's
+/// inline guards (Reason check, JobCardNotFound, role-resolution
+/// Forbidden) continue to enforce the same invariants as
+/// defense-in-depth.
+/// </para>
 /// </summary>
 public sealed class CancelJobCardHandler(
     IShramSafalRepository repository,
     IClock clock)
+    : IHandler<CancelJobCardCommand, CancelJobCardResult>
 {
     public async Task<Result<CancelJobCardResult>> HandleAsync(
         CancelJobCardCommand command,
