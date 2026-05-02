@@ -150,6 +150,7 @@ const FarmSwitcherSheet: React.FC<FarmSwitcherSheetProps> = ({
 }) => {
     return (
         <div
+            data-testid="farm-switcher-sheet"
             className="fixed inset-0 z-50 flex items-end justify-center bg-stone-900/50 backdrop-blur-sm sm:items-center"
             onClick={onClose}
         >
@@ -160,6 +161,7 @@ const FarmSwitcherSheet: React.FC<FarmSwitcherSheetProps> = ({
                 <button
                     type="button"
                     onClick={onClose}
+                    data-testid="farm-switcher-close"
                     aria-label="Close"
                     className="absolute right-3 top-3 rounded-full bg-stone-100 p-2 text-stone-600 hover:bg-stone-200"
                 >

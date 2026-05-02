@@ -235,27 +235,9 @@ public sealed class PullSyncChangesHandler(
                 var latestEval = await complianceSignalRepository.GetLatestEvaluationTimeAsync(typedFarmId, ct);
                 if (latestEval is null || (serverNowUtc - latestEval.Value).TotalHours > 6)
                 {
-                    // Fire-and-forget: do not await; the inner try/catch
-                    // logs into our captured logger so the failure is
-                    // observable even though the outer pull doesn't
-                    // wait for it.
-                    var capturedLogger = logger;
-                    var capturedFarmId = typedFarmId;
-                    _ = Task.Run(async () =>
-                    {
-                        try
-                        {
-                            await evaluateComplianceHandler.HandleAsync(
-                                new EvaluateComplianceCommand(capturedFarmId),
-                                CancellationToken.None);
-                        }
-                        catch (Exception ex)
-                        {
-                            capturedLogger.LogWarning(ex,
-                                "PullSync: background ComplianceEvaluation for farm {FarmId} threw {ExceptionType}.",
-                                capturedFarmId, ex.GetType().Name);
-                        }
-                    }, CancellationToken.None);
+                    await evaluateComplianceHandler.HandleAsync(
+                        new EvaluateComplianceCommand(typedFarmId),
+                        ct);
                 }
             }
             catch (Exception ex)

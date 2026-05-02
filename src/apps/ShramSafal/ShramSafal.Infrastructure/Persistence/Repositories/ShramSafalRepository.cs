@@ -796,9 +796,9 @@ internal sealed class ShramSafalRepository(ShramSafalDbContext db) : IShramSafal
     public async Task<List<JobCard>> GetJobCardsChangedSinceAsync(
         IEnumerable<Guid> farmIds, DateTime sinceUtc, CancellationToken ct = default)
     {
-        var farmIdSet = farmIds.ToHashSet();
+        var farmIdSet = farmIds.Select(id => new FarmId(id)).ToHashSet();
         return await db.JobCards
-            .Where(j => farmIdSet.Contains(j.FarmId.Value) && j.ModifiedAtUtc > sinceUtc)
+            .Where(j => farmIdSet.Contains(j.FarmId) && j.ModifiedAtUtc > sinceUtc)
             .ToListAsync(ct);
     }
 

@@ -1,24 +1,15 @@
 /**
- * Spec 05 — Farm context switch
+ * Spec 05 - Farm context switch
  *
  * Verifies that a user with memberships in two farms can:
  *  1. See the FarmContextSwitcher pill in the app header after login.
  *  2. Open the switcher sheet and see both farms listed.
- *  3. Confirm Farm Alpha is the initially active farm (emerald border / CheckCircle).
+ *  3. Confirm Farm Alpha is the initially active farm.
  *  4. Switch to Farm Beta and see the pill update to reflect the new active farm.
  *
  * Fixture: admin_two_orgs
- *   - Phone 7777777777 / password admin123 (distinct from DatabaseSeeder
- *     which uses 8888888888 for Ganesh)
- *   - Two farms: "E2E Farm Alpha" (FarmAId) and "E2E Farm Beta" (FarmBId)
- *   - Both farms have the admin user as OwnerUserId, so getMyFarms returns 2 entries.
- *
- * Selectors rationale:
- *   FarmContextSwitcher renders the pill with
- *     aria-label={`Current farm: ${current.name}`}
- *   and each row in the sheet as a button whose accessible text includes the farm name.
- *   No data-testid is present on this component; aria-label + text-content selectors
- *   are sufficiently stable for these assertions.
+ *   - Phone 7777777777 / password admin123.
+ *   - Two farms: "E2E Farm Alpha" and "E2E Farm Beta".
  */
 
 import { test, expect } from '@playwright/test';
@@ -26,11 +17,8 @@ import { resetAndSeed } from '../fixtures/seed.api';
 import { loginViaPassword } from '../fixtures/loginHelper';
 
 const FARM_ALPHA = 'E2E Farm Alpha';
-const FARM_BETA  = 'E2E Farm Beta';
+const FARM_BETA = 'E2E Farm Beta';
 
-// ---------------------------------------------------------------------------
-// Thin wrapper so test bodies stay readable; delegates to the shared helper.
-// ---------------------------------------------------------------------------
 async function loginAsAdmin(page: import('@playwright/test').Page) {
     await loginViaPassword(page, '7777777777', 'admin123');
 }
@@ -40,8 +28,6 @@ test.describe('Farm context switch', () => {
         await resetAndSeed('admin_two_orgs');
         await loginAsAdmin(page);
 
-        // The FarmContextSwitcher pill must be visible — it only renders when
-        // myFarms is populated (non-null), which happens after getMyFarms() resolves.
         const pill = page.getByRole('button', { name: new RegExp(`Current farm: ${FARM_ALPHA}`, 'i') });
         await expect(pill).toBeVisible({ timeout: 15_000 });
     });
@@ -50,32 +36,22 @@ test.describe('Farm context switch', () => {
         await resetAndSeed('admin_two_orgs');
         await loginAsAdmin(page);
 
-        // Wait for the pill (Farm Alpha should be active — it is farms[0] from the
-        // backend, which returns farms in creation order; Farm Alpha was seeded first).
         const pillAlpha = page.getByRole('button', { name: new RegExp(`Current farm: ${FARM_ALPHA}`, 'i') });
         await expect(pillAlpha).toBeVisible({ timeout: 15_000 });
 
-        // Open the switcher sheet
         await pillAlpha.click();
+        const sheet = page.getByTestId('farm-switcher-sheet');
+        await expect(sheet.getByText(/Your farms/)).toBeVisible({ timeout: 5_000 });
 
-        // The sheet header shows "Your farms · N" — assert N = 2
-        const sheetHeader = page.locator('text=/Your farms · 2/');
-        await expect(sheetHeader).toBeVisible({ timeout: 5_000 });
-
-        // Both farm names must be present as buttons in the sheet
-        const rowAlpha = page.getByRole('button', { name: new RegExp(FARM_ALPHA) });
-        const rowBeta  = page.getByRole('button', { name: new RegExp(FARM_BETA) });
+        const rowAlpha = sheet.getByRole('button', { name: new RegExp(FARM_ALPHA) });
+        const rowBeta = sheet.getByRole('button', { name: new RegExp(FARM_BETA) });
         await expect(rowAlpha).toBeVisible({ timeout: 5_000 });
         await expect(rowBeta).toBeVisible({ timeout: 5_000 });
 
-        // Switch to Farm Beta
         await rowBeta.click();
 
-        // After switching the sheet closes and the pill must now read Farm Beta
         const pillBeta = page.getByRole('button', { name: new RegExp(`Current farm: ${FARM_BETA}`, 'i') });
         await expect(pillBeta).toBeVisible({ timeout: 10_000 });
-
-        // Farm Alpha pill must be gone (different active farm)
         await expect(pillAlpha).not.toBeVisible();
     });
 
@@ -86,15 +62,13 @@ test.describe('Farm context switch', () => {
         const pillAlpha = page.getByRole('button', { name: new RegExp(`Current farm: ${FARM_ALPHA}`, 'i') });
         await expect(pillAlpha).toBeVisible({ timeout: 15_000 });
 
-        // Open the sheet
         await pillAlpha.click();
-        await expect(page.locator('text=/Your farms · 2/')).toBeVisible({ timeout: 5_000 });
+        const sheet = page.getByTestId('farm-switcher-sheet');
+        await expect(sheet.getByText(/Your farms/)).toBeVisible({ timeout: 5_000 });
 
-        // Close via the X button
-        await page.getByRole('button', { name: /^Close$/i }).click();
+        await sheet.getByTestId('farm-switcher-close').click();
 
-        // Sheet must be gone; active farm is still Alpha
-        await expect(page.locator('text=/Your farms · 2/')).not.toBeVisible({ timeout: 5_000 });
+        await expect(sheet).not.toBeVisible({ timeout: 5_000 });
         await expect(pillAlpha).toBeVisible({ timeout: 5_000 });
     });
 });

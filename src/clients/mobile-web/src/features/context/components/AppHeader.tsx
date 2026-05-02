@@ -12,6 +12,9 @@ import { useLanguage } from '../../../i18n/LanguageContext';
 import { FarmOperator } from '../../../domain/types/farm.types';
 import FarmContextSwitcher from './FarmContextSwitcher';
 import type { MyFarmDto } from '../../onboarding/qr/inviteApi';
+import { SyncIndicator } from '../../../shared/components/ui/SyncIndicator';
+import { useSyncStatus } from '../../../app/hooks/useSyncStatus';
+import { useSyncQueueStatus, SyncStatusDrawer } from '../../sync';
 
 interface AppHeaderProps {
   currentRoute: AppRoute;
@@ -58,6 +61,9 @@ const AppHeader: React.FC<AppHeaderProps> = ({
   farmContext,
 }) => {
   const { t } = useLanguage();
+  const [isSyncDrawerOpen, setIsSyncDrawerOpen] = React.useState(false);
+  const { status: syncStatus, lastSyncedAt } = useSyncStatus();
+  const queueStatus = useSyncQueueStatus();
 
   const userColorClass = activeOperator ? getUserColor(activeOperator.name) : 'border-stone-200 text-stone-500 bg-stone-50';
 
@@ -160,7 +166,7 @@ const AppHeader: React.FC<AppHeaderProps> = ({
 
       {/* Phase 6 — slim farm-context strip. Always visible when farm data is available. */}
       {farmContext && (
-        <div className="page-content pl-safe-area pr-safe-area flex items-center justify-start gap-2 border-t border-stone-100 bg-stone-50/60 py-1.5">
+        <div className="page-content pl-safe-area pr-safe-area flex items-center justify-between gap-2 border-t border-stone-100 bg-stone-50/60 py-1.5">
           <FarmContextSwitcher
             farms={farmContext.farms}
             currentFarmId={farmContext.currentFarmId}
@@ -169,8 +175,20 @@ const AppHeader: React.FC<AppHeaderProps> = ({
             onJoinViaQr={farmContext.onJoinViaQr}
             compact
           />
+          <SyncIndicator
+            status={syncStatus}
+            lastSyncedAt={lastSyncedAt}
+            pendingCount={queueStatus.pendingCount + queueStatus.pendingUploads + queueStatus.pendingAiJobs}
+            failedCount={queueStatus.failedCount + queueStatus.failedUploads}
+            onClick={() => setIsSyncDrawerOpen(true)}
+            testId="sync-status-indicator"
+          />
         </div>
       )}
+      <SyncStatusDrawer
+        isOpen={isSyncDrawerOpen}
+        onClose={() => setIsSyncDrawerOpen(false)}
+      />
     </header>
   );
 };
