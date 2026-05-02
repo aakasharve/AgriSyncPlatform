@@ -10,18 +10,6 @@ interface Props {
 }
 
 const IncomePage: React.FC<Props> = ({ crops = [] }) => {
-    if (!crops || crops.length === 0) {
-        return (
-            <div className="max-w-4xl mx-auto px-4 py-6 pb-24">
-                <OfflineEmptyState
-                    icon={<TrendingUp size={40} className="text-slate-300" />}
-                    title="No Income Recorded"
-                    message="Add crops and record harvest sales to track your farm income."
-                />
-            </div>
-        );
-    }
-
     const [selectedCropId, setSelectedCropId] = useState<string>(crops[0]?.id || '');
     const [selectedPlotIds, setSelectedPlotIds] = useState<string[]>([]);
 
@@ -36,6 +24,18 @@ const IncomePage: React.FC<Props> = ({ crops = [] }) => {
 
     const activePlotId = selectedPlotIds[0];
     const activeCrop = crops.find(c => c.id === selectedCropId);
+
+    if (!crops || crops.length === 0) {
+        return (
+            <div className="max-w-4xl mx-auto px-4 py-6 pb-24">
+                <OfflineEmptyState
+                    icon={<TrendingUp size={40} className="text-slate-300" />}
+                    title="No Income Recorded"
+                    message="Add crops and record harvest sales to track your farm income."
+                />
+            </div>
+        );
+    }
 
     // --- REPLICATING SCHEDULER PAGE LAYOUT (Standard Flow) ---
     return (

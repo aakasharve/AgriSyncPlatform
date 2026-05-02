@@ -14,6 +14,7 @@ import userEvent from '@testing-library/user-event';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import OfflineConflictPage from '../OfflineConflictPage';
 import { ConflictResolutionService } from '../ConflictResolutionService';
+import { SyncMutationName } from '../../../../infrastructure/sync/SyncMutationCatalog';
 
 vi.mock('../ConflictResolutionService', () => ({
     ConflictResolutionService: {
@@ -45,7 +46,7 @@ describe('OfflineConflictPage', () => {
         mockedService.list.mockResolvedValue([
             {
                 mutationId: 'm1',
-                mutationType: 'create_daily_log',
+                mutationType: SyncMutationName.CreateDailyLog,
                 capturedAt: '2026-04-01T10:00:00Z',
                 reason: 'CLIENT_TOO_OLD',
                 hint: 'अॅप अपडेट करा',
@@ -53,7 +54,7 @@ describe('OfflineConflictPage', () => {
             },
             {
                 mutationId: 'm2',
-                mutationType: 'verify_log_v2',
+                mutationType: SyncMutationName.VerifyLogV2,
                 capturedAt: '2026-04-01T10:05:00Z',
                 reason: 'NO_RESULT',
                 hint: undefined,
@@ -80,7 +81,7 @@ describe('OfflineConflictPage', () => {
         mockedService.list.mockResolvedValue([
             {
                 mutationId: 'mx',
-                mutationType: 'create_plot',
+                mutationType: SyncMutationName.CreatePlot,
                 capturedAt: '2026-04-01T10:00:00Z',
                 reason: 'X',
                 hint: undefined,

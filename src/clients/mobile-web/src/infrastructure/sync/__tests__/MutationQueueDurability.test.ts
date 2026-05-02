@@ -19,6 +19,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { resetDatabase, getDatabase } from '../../storage/DexieDatabase';
 import { MutationQueue } from '../MutationQueue';
 import { systemClock } from '../../../core/domain/services/Clock';
+import { SyncMutationName } from '../SyncMutationCatalog';
 
 const FROZEN_NOW_ISO = '2026-04-01T12:00:00.000Z';
 
@@ -38,7 +39,7 @@ async function seedRow(status: 'PENDING' | 'SENDING' | 'APPLIED' | 'FAILED' | 'R
         deviceId: 'test-device',
         clientRequestId: overrides.clientRequestId ?? `req-${status.toLowerCase()}-${Math.random().toString(36).slice(2, 8)}`,
         clientCommandId: 'cmd-1',
-        mutationType: 'create_daily_log',
+        mutationType: SyncMutationName.CreateDailyLog,
         payload: { sample: true },
         status,
         createdAt: FROZEN_NOW_ISO,

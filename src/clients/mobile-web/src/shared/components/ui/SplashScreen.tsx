@@ -1,5 +1,5 @@
 
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useCallback, useEffect, useState, useRef } from 'react';
 
 interface SplashScreenProps {
     onComplete: () => void;
@@ -8,6 +8,12 @@ interface SplashScreenProps {
 const SplashScreen: React.FC<SplashScreenProps> = ({ onComplete }) => {
     const [isVisible, setIsVisible] = useState(true);
     const videoRef = useRef<HTMLVideoElement>(null);
+
+    const handleComplete = useCallback(() => {
+        setIsVisible(false);
+        // Wait for fade out transition
+        setTimeout(onComplete, 500);
+    }, [onComplete]);
 
     useEffect(() => {
         const videoElement = videoRef.current;
@@ -32,13 +38,7 @@ const SplashScreen: React.FC<SplashScreenProps> = ({ onComplete }) => {
         return () => {
             clearTimeout(safetyTimer);
         };
-    }, []);
-
-    const handleComplete = () => {
-        setIsVisible(false);
-        // Wait for fade out transition
-        setTimeout(onComplete, 500);
-    };
+    }, [handleComplete]);
 
     return (
         <div

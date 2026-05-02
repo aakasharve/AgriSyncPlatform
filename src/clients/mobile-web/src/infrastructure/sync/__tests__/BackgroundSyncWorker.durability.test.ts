@@ -100,6 +100,7 @@ Object.defineProperty(window.navigator, 'onLine', { value: true, configurable: t
 import { mutationQueue } from '../MutationQueue';
 import { backgroundSyncWorker } from '../BackgroundSyncWorker';
 import { ConflictResolutionService } from '../../../features/sync/conflict/ConflictResolutionService';
+import { SyncMutationName } from '../SyncMutationCatalog';
 
 async function freshDb() {
     const db = getDatabase();
@@ -127,7 +128,7 @@ describe('BackgroundSyncWorker — T-IGH-04-CONFLICT-STATUS-DURABILITY (worker i
     });
 
     it('permanently-rejected mutation lands in REJECTED_USER_REVIEW after one cycle', async () => {
-        const requestId = await mutationQueue.enqueue('create_daily_log', { sample: true });
+        const requestId = await mutationQueue.enqueue(SyncMutationName.CreateDailyLog, { sample: true });
         pushBatchMock.mockImplementationOnce(async (request: { mutations: Array<{ clientRequestId: string; mutationType: string }> }) => ({
             serverTimeUtc: FROZEN_NOW_ISO,
             results: request.mutations.map(m => ({
@@ -150,7 +151,7 @@ describe('BackgroundSyncWorker — T-IGH-04-CONFLICT-STATUS-DURABILITY (worker i
     });
 
     it('REJECTED_USER_REVIEW persists across 3 cycles (auto-retry isolation)', async () => {
-        const requestId = await mutationQueue.enqueue('create_daily_log', { sample: true });
+        const requestId = await mutationQueue.enqueue(SyncMutationName.CreateDailyLog, { sample: true });
 
         // First cycle: permanent rejection → REJECTED_USER_REVIEW.
         pushBatchMock.mockImplementationOnce(async (request: { mutations: Array<{ clientRequestId: string; mutationType: string }> }) => ({
@@ -190,7 +191,7 @@ describe('BackgroundSyncWorker — T-IGH-04-CONFLICT-STATUS-DURABILITY (worker i
     });
 
     it('transiently-failed mutation stays as FAILED, gets re-queued, and can succeed on retry', async () => {
-        const requestId = await mutationQueue.enqueue('create_daily_log', { sample: true });
+        const requestId = await mutationQueue.enqueue(SyncMutationName.CreateDailyLog, { sample: true });
 
         // Cycle 1: transient failure (no errorCode → fall through to RETRYABLE).
         pushBatchMock.mockImplementationOnce(async (request: { mutations: Array<{ clientRequestId: string; mutationType: string }> }) => ({
@@ -223,7 +224,7 @@ describe('BackgroundSyncWorker — T-IGH-04-CONFLICT-STATUS-DURABILITY (worker i
     });
 
     it('ConflictResolutionService.list returns the durable rejection; discard soft-deletes it', async () => {
-        const requestId = await mutationQueue.enqueue('create_daily_log', { sample: true });
+        const requestId = await mutationQueue.enqueue(SyncMutationName.CreateDailyLog, { sample: true });
         pushBatchMock.mockImplementationOnce(async (request: { mutations: Array<{ clientRequestId: string; mutationType: string }> }) => ({
             serverTimeUtc: FROZEN_NOW_ISO,
             results: request.mutations.map(m => ({
