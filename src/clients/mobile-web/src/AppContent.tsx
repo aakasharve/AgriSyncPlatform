@@ -27,6 +27,7 @@ import { CropProfile } from './types';
 import { useAgriLogApp } from './app/compositionRoot';
 import { AppFeatureProviders } from './app/context/AppFeatureContexts';
 import { useTemplateCatalogSync } from './app/hooks/useTemplateCatalogSync';
+import { useAuth } from './app/providers/AuthProvider';
 import FirstFarmWizard from './features/onboarding/components/FirstFarmWizard';
 import { getMyFarms, type MyFarmDto, type BootstrapFirstFarmResponse } from './features/onboarding/qr/inviteApi';
 import { SessionStore } from './infrastructure/storage/SessionStore';
@@ -52,11 +53,18 @@ const AppContent: React.FC<AppContentProps> = ({ crops: initialCrops, setCrops }
     });
     const [showFirstFarmWizard, setShowFirstFarmWizard] = useState(false);
     const [farmContextRefreshCounter, setFarmContextRefreshCounter] = useState(0);
+    const { isAuthenticated, session } = useAuth();
 
     const app = useAgriLogApp({ initialCrops, currentFarmId });
     useTemplateCatalogSync();
 
     useEffect(() => {
+        if (!isAuthenticated) {
+            setMyFarms(null);
+            setShowFirstFarmWizard(false);
+            return;
+        }
+
         let cancelled = false;
         (async () => {
             try {
@@ -82,7 +90,7 @@ const AppContent: React.FC<AppContentProps> = ({ crops: initialCrops, setCrops }
             }
         })();
         return () => { cancelled = true; };
-    }, [farmContextRefreshCounter]); // eslint-disable-line react-hooks/exhaustive-deps
+    }, [farmContextRefreshCounter, isAuthenticated, session?.userId]); // eslint-disable-line react-hooks/exhaustive-deps
 
     const handleSwitchFarm = (farmId: string) => {
         setCurrentFarmId(farmId);

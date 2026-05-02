@@ -16,6 +16,7 @@ import { test, expect } from '@playwright/test';
 import { resetAndSeed } from '../fixtures/seed.api';
 import { goOffline, goOnline } from '../fixtures/offlineHelper';
 import { loginViaPassword } from '../fixtures/loginHelper';
+import { selectFarmWideLogContext } from '../fixtures/logContextHelper';
 
 test.describe('Offline log capture', () => {
     test('user can log a daily activity while offline; it queues and syncs on reconnect', async ({ page }) => {
@@ -23,6 +24,7 @@ test.describe('Offline log capture', () => {
 
         // --- Login ---
         await loginViaPassword(page, '9999999999', 'ramu123');
+        await selectFarmWideLogContext(page);
 
         // --- Go offline ---
         await goOffline(page);
