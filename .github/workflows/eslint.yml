@@ -8,7 +8,10 @@ on:
       - 'src/clients/admin-web/**'
       - '.github/workflows/eslint.yml'
   pull_request:
-    branches: [main]
+    # Sub-plan 04 close-out — also gate PRs that target akash_edits so
+    # the integration branch's mid-cycle PRs (e.g. claude/sp04-frontend)
+    # surface their lint + size + storage-discipline checks before merge.
+    branches: [main, akash_edits]
     paths:
       - 'src/clients/mobile-web/**'
       - 'src/clients/admin-web/**'
