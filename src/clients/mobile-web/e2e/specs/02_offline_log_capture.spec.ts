@@ -2,29 +2,36 @@
  * Spec 02 — Offline log capture + sync on reconnect
  *
  * Verifies that:
- *  1. A user can create a daily log while offline (optimistic UI shows immediately).
- *  2. The sync queue shows a pending count of 1.
+ *  1. A user can create a daily log while offline (optimistic save → success view).
+ *  2. The sync queue accumulates the pending mutation while offline.
  *  3. Triggering sync after going back online drains the queue to 0.
  *
  * Flow overview:
- *  login → go offline → FAB → manual mode → fill activity chip/notes → save
- *  → assert log-list-item shows notes text
- *  → open sync drawer → assert pending count = 1
- *  → go online → click Sync Now → assert pending count = 0
+ *  login → pick first crop+plot context (NOT Entire Farm — see helper docstring)
+ *   → go offline → FAB → manual mode → fill activity chip → save
+ *   → assert "Saved to Ledger" success view
+ *   → open sync drawer → assert pending count > 0
+ *   → go online → click Sync Now → assert pending count = 0
+ *
+ * Why a real plot context (not Entire Farm)?
+ *  enqueueLogsForSync needs `selection.selectedPlotIds[0]` to resolve a sync
+ *  target. FARM_GLOBAL produces an empty plotId array, so the log gets saved
+ *  locally but never queued for /sync/push — meaning sync-pending-count would
+ *  stay at 0 and the test could never observe the offline → drain transition.
  */
 import { test, expect } from '@playwright/test';
 import { resetAndSeed } from '../fixtures/seed.api';
 import { goOffline, goOnline } from '../fixtures/offlineHelper';
 import { loginViaPassword } from '../fixtures/loginHelper';
-import { selectFarmWideLogContext } from '../fixtures/logContextHelper';
+import { selectFirstPlotLogContext } from '../fixtures/logContextHelper';
 
 test.describe('Offline log capture', () => {
     test('user can log a daily activity while offline; it queues and syncs on reconnect', async ({ page }) => {
         await resetAndSeed('ramu');
 
-        // --- Login ---
+        // --- Login + pick a real plot so sync mutations actually queue ---
         await loginViaPassword(page, '9999999999', 'ramu123');
-        await selectFarmWideLogContext(page);
+        await selectFirstPlotLogContext(page);
 
         // --- Go offline ---
         await goOffline(page);
@@ -51,11 +58,14 @@ test.describe('Offline log capture', () => {
         await expect(saveBtn).toBeVisible({ timeout: 10_000 });
         await saveBtn.click();
 
-        // --- Assert optimistic entry in list ---
-        const logItem = page.getByTestId('log-list-item').first();
-        await expect(logItem).toBeVisible({ timeout: 10_000 });
+        // --- Assert optimistic save: status='success' renders the "Saved to
+        // Ledger" view. The DailyLogCard timeline (data-testid="log-list-item")
+        // is hidden while in this terminal state, so we anchor on the success
+        // view's testid instead.
+        const savedView = page.getByTestId('saved-to-ledger');
+        await expect(savedView).toBeVisible({ timeout: 15_000 });
 
-        // --- Open sync status drawer ---
+        // --- Open sync status drawer (header indicator stays mounted) ---
         const syncIndicator = page.getByTestId('sync-status-indicator');
         await expect(syncIndicator).toBeVisible({ timeout: 10_000 });
         await syncIndicator.click();

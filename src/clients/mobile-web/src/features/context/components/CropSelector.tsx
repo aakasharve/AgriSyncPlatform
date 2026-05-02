@@ -416,6 +416,7 @@ const CropSelector: React.FC<CropSelectorProps> = ({
                                                 return (
                                                     <button
                                                         key={plot.id}
+                                                        data-testid="plot-tray-button"
                                                         onClick={() => handlePlotToggle(crop.id, plot.id)}
                                                         disabled={disabled}
                                                         className={`
