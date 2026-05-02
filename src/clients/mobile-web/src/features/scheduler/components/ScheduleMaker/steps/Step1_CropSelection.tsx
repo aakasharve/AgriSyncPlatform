@@ -1,5 +1,5 @@
 import React from 'react';
-import { CropProfile, Plot } from '../../../../../types';
+import { CropProfile } from '../../../../../types';
 import SlidingCropSelector from '../../../../context/components/SlidingCropSelector';
 import { Calendar, MapPin } from 'lucide-react';
 import { getCropTheme } from '../../../../../shared/utils/colorTheme';

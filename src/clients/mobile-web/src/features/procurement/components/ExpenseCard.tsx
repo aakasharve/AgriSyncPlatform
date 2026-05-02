@@ -1,7 +1,7 @@
 
 import React from 'react';
 import { ProcurementExpense } from '../../../types';
-import { Calendar, Tag, ChevronRight, AlertCircle, Link as LinkIcon } from 'lucide-react';
+import { Calendar, Tag, AlertCircle, Link as LinkIcon } from 'lucide-react';
 import { MoneyChip } from '../../finance/components/MoneyChip';
 
 interface Props {

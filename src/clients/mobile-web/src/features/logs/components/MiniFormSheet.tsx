@@ -4,9 +4,9 @@
 */
 
 import React, { useState, useEffect } from 'react';
-import { X, Check, Droplets, Users, Package, Tractor, CheckSquare } from 'lucide-react';
+import { X, Droplets, Users, Package, Tractor, CheckSquare } from 'lucide-react';
 import Button from '../../../shared/components/ui/Button';
-import { CropProfile, Plot, LedgerDefaults } from '../../../types';
+import { LedgerDefaults } from '../../../types';
 
 type CategoryType = 'task' | 'irrigation' | 'labour' | 'input' | 'machinery';
 

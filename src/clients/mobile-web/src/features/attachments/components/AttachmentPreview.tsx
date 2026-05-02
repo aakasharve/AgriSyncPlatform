@@ -6,7 +6,7 @@
  */
 
 import React from 'react';
-import { X, Download, FileText } from 'lucide-react';
+import { X, FileText } from 'lucide-react';
 import type { AttachmentRecord } from '../../../infrastructure/storage/DexieDatabase';
 
 interface AttachmentPreviewProps {

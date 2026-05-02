@@ -3,7 +3,7 @@ import { AppRoute } from '../types';
 import { financeSelectors } from '../features/finance/financeSelectors';
 import { FinanceManagerNav } from '../features/finance/components/FinanceManagerNav';
 import { FinanceFilters } from '../features/finance/finance.types';
-import { TrendingUp, TrendingDown, Calendar, Filter, PieChart, Info } from 'lucide-react';
+import { TrendingUp, TrendingDown, PieChart, Info } from 'lucide-react';
 import OfflineEmptyState from '../shared/components/ui/OfflineEmptyState';
 import { useFarmContext } from '../core/session/FarmContext';
 

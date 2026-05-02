@@ -1,7 +1,7 @@
 
 import React from 'react';
 import { ExpenseScope } from '../../../types';
-import { Sprout, MapPin, Warehouse, HelpCircle } from 'lucide-react';
+import { Sprout, MapPin, Warehouse } from 'lucide-react';
 
 interface Props {
     value: ExpenseScope;

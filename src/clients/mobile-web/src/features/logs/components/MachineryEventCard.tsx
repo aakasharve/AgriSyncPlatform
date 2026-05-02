@@ -5,7 +5,6 @@
 
 import React, { useState } from 'react';
 import { Tractor, ChevronDown, ChevronUp } from 'lucide-react';
-import { MachineryEvent } from '../../../types';
 import { formatCurrency } from '../../../shared/utils/currency';
 
 export interface MachinerySummary {

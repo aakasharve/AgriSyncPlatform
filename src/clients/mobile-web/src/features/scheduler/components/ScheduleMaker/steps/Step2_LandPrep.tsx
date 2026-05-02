@@ -1,5 +1,5 @@
 import React from 'react';
-import { Calendar, ChevronUp, ChevronDown, Trash2, Clock, CheckCircle2 } from 'lucide-react';
+import { ChevronUp, ChevronDown, Trash2, Clock, CheckCircle2 } from 'lucide-react';
 import DraggableTray from '../DraggableTray';
 import { idGenerator } from '../../../../../core/domain/services/IdGenerator';
 

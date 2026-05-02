@@ -7,7 +7,7 @@ import { FinanceManagerNav } from '../features/finance/components/FinanceManager
 import { MoneyChip } from '../features/finance/components/MoneyChip';
 import { MoneyLensDrawer } from '../features/finance/components/MoneyLensDrawer';
 import { FinanceFilters } from '../features/finance/finance.types';
-import { AlertTriangle, CheckCircle, Clock } from 'lucide-react';
+import { AlertTriangle, CheckCircle } from 'lucide-react';
 
 interface ReviewInboxPageProps {
     currentRoute: AppRoute;

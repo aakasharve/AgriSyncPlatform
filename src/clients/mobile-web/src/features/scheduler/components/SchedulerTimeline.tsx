@@ -2,7 +2,7 @@ import React, { useMemo, useEffect, useState } from 'react';
 import { Plot, DailyLog } from '../../../types';
 import DayCard, { BlockStatus, DayCardProps } from './DayCard';
 import { calculateEffectiveDay } from '../../../shared/utils/timelineUtils';
-import { FileEdit, ArrowLeft } from 'lucide-react';
+import { ArrowLeft } from 'lucide-react';
 import ScheduleDetailModal from './ScheduleDetailModal';
 import { getDateKey } from '../../../core/domain/services/DateKeyService';
 
@@ -10,7 +10,6 @@ import {
     getTemplateForCrop,
     derivePlannedItemsForDay,
     PlannedTaskDerived,
-    getOperationCategory,
     getEffectiveStartDate
 } from '../../../features/scheduler/planning/ClientPlanEngine';
 

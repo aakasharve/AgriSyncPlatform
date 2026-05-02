@@ -5,7 +5,6 @@
 
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { Mic, Square, AlertCircle, ArrowUp, X } from 'lucide-react';
-import Button from '../../../shared/components/ui/Button';
 import { AudioData } from '../../../types';
 import { useLanguage } from '../../../i18n/LanguageContext';
 import { hapticFeedback } from '../../../shared/utils/haptics';

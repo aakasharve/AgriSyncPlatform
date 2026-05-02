@@ -1,13 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import {
-    Book, Check, X, Edit2, Search, Trash2,
-    BrainCircuit, ThumbsUp, HelpCircle
+    Book, Check, Edit2, Search, Trash2,
+    BrainCircuit, ThumbsUp
 } from 'lucide-react';
 import {
     VocabDatabase, VocabMapping, loadVocabDB,
-    saveVocabDB, addApprovedMapping
+    saveVocabDB
 } from '../vocab/vocabStore';
-import Button from '../../../shared/components/ui/Button';
 
 const VocabManager: React.FC = () => {
     const [vocabDB, setVocabDB] = useState<VocabDatabase | null>(null);

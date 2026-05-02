@@ -5,7 +5,7 @@
 
 import React, { useState } from 'react';
 import { DailyLog, LogVerificationStatus, FarmOperator } from '../../../types';
-import { CheckCircle2, XCircle, Clock, ChevronRight, User, Calendar, DollarSign, Leaf } from 'lucide-react';
+import { CheckCircle2, Clock, User, Calendar, DollarSign, Leaf } from 'lucide-react';
 
 interface ReviewInboxProps {
     pendingLogs: DailyLog[];

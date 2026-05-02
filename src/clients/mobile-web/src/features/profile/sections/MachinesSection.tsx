@@ -10,9 +10,8 @@
  */
 
 import React, { useState } from 'react';
-import { Plus, Trash2, X, Tractor, Wrench } from 'lucide-react';
+import { Plus, Trash2, Tractor, Wrench } from 'lucide-react';
 import { FarmerProfile, FarmMachinery } from '../../../types';
-import Button from '../../../shared/components/ui/Button';
 import { useLanguage } from '../../../i18n/LanguageContext';
 import { idGenerator } from '../../../core/domain/services/IdGenerator';
 import AddMachineWizard from '../components/AddMachineWizard';

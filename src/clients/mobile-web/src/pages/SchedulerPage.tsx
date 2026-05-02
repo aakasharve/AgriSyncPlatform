@@ -1,9 +1,9 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Settings, Calendar, CalendarRange, Droplets, SprayCan, Sprout, ChevronDown, ChevronRight, Save, Info, ArrowLeft, Layers, MapPin, Clock, User, Building2, Shield, Sparkles, CheckCircle2, AlertCircle } from 'lucide-react';
-import { CropProfile, Plot, PlotScheduleInstance, CropScheduleTemplate, StageTemplate, PeriodicExpectation, StageOverride, ExpectationOverride, DailyLog, ResourceItem, PlannedTask } from '../types';
+import { Settings, Calendar, CalendarRange, Droplets, SprayCan, Sprout, Info, Layers, MapPin, Clock, User, Building2, Shield, Sparkles, CheckCircle2 } from 'lucide-react';
+import { CropProfile, PlotScheduleInstance, CropScheduleTemplate, StageTemplate, StageOverride, ExpectationOverride, DailyLog, ResourceItem, PlannedTask } from '../types';
 import { getTemplateForCrop, calculateDayNumber, getCurrentStage, createInitialScheduleInstance, derivePlannedItemsForDay, getScheduleById } from '../features/scheduler/planning/ClientPlanEngine';
 import { getAllTemplates } from '../infrastructure/reference/TemplateCatalog';
-import { getEffectivePhaseAndDay, PhaseResult } from '../shared/utils/timelineUtils';
+import { getEffectivePhaseAndDay } from '../shared/utils/timelineUtils';
 import SchedulerTimeline from '../features/scheduler/components/SchedulerTimeline';
 import { getDateKey } from '../core/domain/services/DateKeyService';
 import SlidingCropSelector from '../features/context/components/SlidingCropSelector';

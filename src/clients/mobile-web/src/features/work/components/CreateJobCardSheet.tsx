@@ -12,7 +12,6 @@
  */
 
 import React, { useState, useMemo } from 'react';
-import { getDatabase } from '../../../infrastructure/storage/DexieDatabase';
 import type { JobCardLineItem } from '../../../domain/work/JobCard';
 import type { CreateJobCardRequest } from '../data/jobCardsClient';
 import { createJobCard } from '../data/jobCardsClient';

@@ -4,7 +4,7 @@
  */
 
 import React, { createContext, useContext, ReactNode } from 'react';
-import { Language, translations, t as translate } from './translations';
+import { Language, t as translate } from './translations';
 import { LanguageSyncFromServer } from './LanguageSyncFromServer';
 import { useUiPref } from '../shared/hooks/useUiPref';
 
