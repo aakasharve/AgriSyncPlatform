@@ -29,6 +29,7 @@ const InputMethodToggle: React.FC<InputMethodToggleProps> = ({ mode, onChange, d
                 <button
                     onClick={() => onChange('voice')}
                     disabled={disabled}
+                    data-testid="input-method-voice"
                     className={`
                         flex-1 flex items-center justify-center py-3 rounded-xl text-sm font-bold transition-all duration-200 relative z-10
                         ${mode === 'voice'
@@ -43,6 +44,7 @@ const InputMethodToggle: React.FC<InputMethodToggleProps> = ({ mode, onChange, d
                 <button
                     onClick={() => onChange('manual')}
                     disabled={disabled}
+                    data-testid="input-method-manual"
                     className={`
                         flex-1 flex items-center justify-center py-3 rounded-xl text-sm font-bold transition-all duration-200 relative z-10
                         ${mode === 'manual'

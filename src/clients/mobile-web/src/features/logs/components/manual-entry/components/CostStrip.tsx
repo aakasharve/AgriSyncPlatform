@@ -46,6 +46,7 @@ const CostStrip: React.FC<CostStripProps> = ({
                 {/* Action Button */}
                 <Button
                     onClick={onSaveDay}
+                    data-testid="manual-save-button"
                     className={`rounded-xl px-8 py-4 text-white shadow-lg shrink-0 whitespace-nowrap text-lg font-bold transition-colors ${selectedLogId
                         ? 'bg-amber-600 hover:bg-amber-700 shadow-amber-200'
                         : 'bg-emerald-600 hover:bg-emerald-700 shadow-emerald-200'

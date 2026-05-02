@@ -250,7 +250,7 @@ const LoginPage: React.FC<LoginPageProps> = () => {
                     </div>
 
                     {authError && (
-                        <div className="text-xs font-semibold text-rose-700 bg-rose-50 border border-rose-200 rounded-lg px-3 py-2">
+                        <div role="alert" className="text-xs font-semibold text-rose-700 bg-rose-50 border border-rose-200 rounded-lg px-3 py-2">
                             {authError}
                         </div>
                     )}

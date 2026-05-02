@@ -75,6 +75,7 @@ export const renderGlobalSheets = (ctx: AppRouterContext): React.ReactNode => {
                 currentRoute === 'main' && mainView === 'log' && status === 'idle' && !recordingSegment && hasActiveLogContext && (
                     <button
                         onClick={() => setShowQuickLog(true)}
+                        data-testid="add-log-fab"
                         className="fixed z-40 w-14 h-14 bg-white text-emerald-600 rounded-full shadow-lg shadow-emerald-900/10 border border-emerald-100 flex items-center justify-center active:scale-95 transition-transform"
                         style={{
                             bottom: 'calc(6rem + var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px)))',

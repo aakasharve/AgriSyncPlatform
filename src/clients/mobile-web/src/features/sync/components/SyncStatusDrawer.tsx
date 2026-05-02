@@ -126,6 +126,8 @@ const SyncStatusDrawer: React.FC<Props> = ({ isOpen, onClose }) => {
 
                     {/* Body */}
                     <div className="flex-1 overflow-y-auto p-4 space-y-4">
+                         {/* E2E: always-present pending count for Playwright assertions */}
+                         <span data-testid="sync-pending-count" aria-label={`${totalPending} pending`} className="sr-only">{totalPending}</span>
 
                          {/* 1. Connection */}
                          <div className={`flex items-center gap-3 p-3 rounded-xl border ${status.isOnline ? 'bg-emerald-50 border-emerald-200' : 'bg-red-50 border-red-200'}`}>
@@ -234,6 +236,7 @@ const SyncStatusDrawer: React.FC<Props> = ({ isOpen, onClose }) => {
                          <button
                               onClick={handleSyncNow}
                               disabled={isSyncing || !status.isOnline}
+                              data-testid="sync-trigger-now"
                               className="w-full py-3 bg-slate-800 text-white font-bold rounded-xl flex items-center justify-center gap-2 disabled:opacity-50 transition-all active:scale-[0.98]"
                          >
                               <RefreshCw size={16} className={isSyncing ? 'animate-spin' : ''} />
