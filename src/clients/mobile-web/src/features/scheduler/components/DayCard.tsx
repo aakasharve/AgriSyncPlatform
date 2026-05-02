@@ -1,5 +1,5 @@
 import React from 'react';
-import { Droplets, Sprout, SprayCan, CheckCircle2, Hammer, AlertCircle, Thermometer, Cloud } from 'lucide-react';
+import { Droplets, Sprout, SprayCan, CheckCircle2, Hammer, AlertCircle, Thermometer, Cloud, type LucideIcon } from 'lucide-react';
 import { formatTemperature, formatHumidity } from '../../../shared/utils/weatherFormatter';
 
 
@@ -46,7 +46,7 @@ const NotebookCell = ({
     colorClass,
     compact = false
 }: {
-    icon: any,
+    icon: LucideIcon,
     status: BlockStatus,
     note?: string,
     onClick: () => void,

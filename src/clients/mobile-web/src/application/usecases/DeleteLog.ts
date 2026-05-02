@@ -52,8 +52,9 @@ export const deleteLog = async (
 
         return { success: true };
 
-    } catch (e: any) {
+    } catch (e: unknown) {
         console.error('DeleteLog Error:', e);
-        return { success: false, error: e.message || 'Unknown error during delete' };
+        const message = e instanceof Error ? e.message : 'Unknown error during delete';
+        return { success: false, error: message };
     }
 };

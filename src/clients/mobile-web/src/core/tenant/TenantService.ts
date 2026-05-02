@@ -19,8 +19,8 @@ class TenantService {
     }
 
     // Identify which tenant owns a piece of data
-    getTenantIdForResource(resource: any): string | null {
-        return resource.tenantId || null;
+    getTenantIdForResource(resource: { tenantId?: string | null } | null | undefined): string | null {
+        return resource?.tenantId ?? null;
     }
 
     // Enforce data boundary

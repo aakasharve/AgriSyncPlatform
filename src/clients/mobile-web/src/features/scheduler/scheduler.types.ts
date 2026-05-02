@@ -113,7 +113,7 @@ export interface PlotScheduleInstance {
     expectationOverrides: ExpectationOverride[];
 
     // Legacy/UI compatibility — inline stages (to be deprecated in favor of template lookup)
-    stages?: any[];
+    stages?: unknown[];
 }
 
 export interface ScheduleShiftEvent {

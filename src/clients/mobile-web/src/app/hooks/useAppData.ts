@@ -264,7 +264,7 @@ export const useAppData = (_props?: UseAppDataProps): UseAppDataResult => {
         await dataSource.crops.save(newCrops);
     };
 
-    const handleAddPerson = (person: any) => {
+    const handleAddPerson = (person: { id?: string; name: string; role?: string; phone?: string }) => {
         setFarmerProfile(prev => ({
             ...prev,
             operators: [...(prev.operators || []), {

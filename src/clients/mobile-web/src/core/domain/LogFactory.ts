@@ -1,8 +1,9 @@
 import {
     DailyLog, FarmContext, LogScope, FarmerProfile, CropProfile,
     LogVerificationStatus, WeatherStamp,
-    CropActivityEvent, IrrigationEvent,
-    ActivityExpenseEvent, ObservationNote, PlannedTask, AgriLogResponse
+    CropActivityEvent, IrrigationEvent, LabourEvent, InputEvent, MachineryEvent,
+    ActivityExpenseEvent, ObservationNote, PlannedTask, AgriLogResponse,
+    DisturbanceEvent
 } from '../../types';
 import { getPhaseAndDay } from '../../shared/utils/timelineUtils';
 import { getDateKey } from './services/DateKeyService';

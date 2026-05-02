@@ -5,9 +5,11 @@ import { systemClock } from '../domain/services/Clock';
 
 type EventType = 'SYNC_FAILURE' | 'AI_CORRECTION' | 'LOG_CREATED' | 'APP_CRASH';
 
+type TelemetryPayload = Record<string, unknown>;
+
 interface TelemetryEvent {
     type: EventType;
-    payload: any;
+    payload: TelemetryPayload;
     timestamp: number;
     tenantId?: string;
 }
@@ -24,7 +26,7 @@ export class TelemetryService {
         return TelemetryService.instance;
     }
 
-    track(type: EventType, payload: any) {
+    track(type: EventType, payload: TelemetryPayload) {
         const event: TelemetryEvent = {
             type,
             payload,
@@ -34,8 +36,9 @@ export class TelemetryService {
         console.log('[Telemetry]', event);
     }
 
-    trackSyncFailure(error: any) {
-        this.track('SYNC_FAILURE', { error: error.message });
+    trackSyncFailure(error: unknown) {
+        const message = error instanceof Error ? error.message : String(error);
+        this.track('SYNC_FAILURE', { error: message });
     }
 
     trackCorrection(original: string, corrected: string) {

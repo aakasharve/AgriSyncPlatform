@@ -5,7 +5,7 @@
 
 import { useState } from 'react';
 import { createPortal } from 'react-dom';
-import { ActivityExpenseEvent } from '../../../../../types';
+import { ActivityExpenseEvent, ExpenseItem } from '../../../../../types';
 import { X } from 'lucide-react';
 import Button from '../../../../../shared/components/ui/Button';
 
@@ -21,7 +21,7 @@ const ExpenseDetailSheet = ({
     const [reason, setReason] = useState(initialData?.reason || '');
     const [amount, setAmount] = useState<number>(initialData?.totalAmount || 0);
     const [notes, setNotes] = useState(initialData?.notes || '');
-    const [items, setItems] = useState<any[]>(initialData?.items || []);
+    const [items, setItems] = useState<ExpenseItem[]>(initialData?.items || []);
 
     const handleSave = () => {
         const newEvent: ActivityExpenseEvent = {
