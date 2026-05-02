@@ -6,6 +6,7 @@ interface QuickLogChipProps {
     category: 'activity' | 'input' | 'labour' | 'irrigation';
     onClick: () => void;
     selected?: boolean;
+    testId?: string;
 }
 
 export const QuickLogChip: React.FC<QuickLogChipProps> = ({
@@ -13,7 +14,8 @@ export const QuickLogChip: React.FC<QuickLogChipProps> = ({
     icon,
     category,
     onClick,
-    selected = false
+    selected = false,
+    testId
 }) => {
     // Category-specific styles (subtle tinting)
     const categoryStyles = {
@@ -25,6 +27,7 @@ export const QuickLogChip: React.FC<QuickLogChipProps> = ({
 
     return (
         <button
+            data-testid={testId}
             onClick={onClick}
             className={`
         relative flex items-center gap-2 px-3 py-2 rounded-xl border transition-all active:scale-95

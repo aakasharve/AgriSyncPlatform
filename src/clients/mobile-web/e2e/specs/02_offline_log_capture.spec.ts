@@ -35,16 +35,7 @@ test.describe('Offline log capture', () => {
         await fab.click();
 
         // --- Select manual input mode ---
-        // The QuickLogSheet may show a list of type chips; click the first manual/type chip
-        // to reach the ManualEntry form. Then click input-method-manual toggle.
-        // First, click any chip that transitions to the log view (e.g. the first QuickLogChip)
-        const firstChip = page.locator('[data-testid^="quick-log-chip"], .quick-log-chip, button').filter({ hasText: /irrigation|labour|input|harvest|scouting/i }).first();
-        if (await firstChip.isVisible({ timeout: 3_000 }).catch(() => false)) {
-            await firstChip.click();
-        } else {
-            // Fallback: close the sheet and directly switch to manual mode in the toggle
-            await page.keyboard.press('Escape');
-        }
+        await page.getByTestId('quick-log-chip-irrigation').click();
 
         // Switch to manual mode via the InputMethodToggle
         const manualToggle = page.getByTestId('input-method-manual');
