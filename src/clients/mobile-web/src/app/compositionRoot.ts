@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { CropProfile, InputMode } from '../types';
 
 // Feature Controllers
@@ -62,16 +62,13 @@ export const useAgriLogApp = ({ initialCrops, currentFarmId }: AgriLogAppConfig)
     const parser = useMemo(() => new BackendAiClient(), []);
     const voicePreprocessor = useMemo(() => new VoicePreprocessor(), []);
     const farmGeography = useMemo(() => new BackendFarmGeographyClient(), []);
-    const currentFarmIdRef = useRef<string | null>(currentFarmId ?? null);
-    useEffect(() => {
-        currentFarmIdRef.current = currentFarmId ?? null;
-    }, [currentFarmId]);
     const weatherProvider = useMemo(
         () => {
-            const backendClient = new BackendWeatherClient(() => currentFarmIdRef.current);
-            return new FarmAnchoredWeatherService(backendClient, farmGeography, () => currentFarmIdRef.current);
+            const getCurrentFarmId = () => currentFarmId ?? null;
+            const backendClient = new BackendWeatherClient(getCurrentFarmId);
+            return new FarmAnchoredWeatherService(backendClient, farmGeography, getCurrentFarmId);
         },
-        [farmGeography],
+        [currentFarmId, farmGeography],
     );
 
     // --- 4. VOICE RECORDER (Producer) ---
@@ -114,9 +111,6 @@ export const useAgriLogApp = ({ initialCrops, currentFarmId }: AgriLogAppConfig)
         setStatus: voice.setStatus,
         weatherProvider
     });
-    const commandsRef = useRef(commands);
-    commandsRef.current = commands;
-
     useEffect(() => {
         const handleGlobalToast = (event: Event) => {
             const detail = (event as CustomEvent<GlobalToastDetail>).detail;
@@ -167,8 +161,10 @@ export const useAgriLogApp = ({ initialCrops, currentFarmId }: AgriLogAppConfig)
     useEffect(() => {
         if (!hasActiveLogContext) {
             voice.handleResetVoice();
-            setMode('voice');
+            const resetModeHandle = window.setTimeout(() => setMode('voice'), 0);
+            return () => window.clearTimeout(resetModeHandle);
         }
+        return undefined;
     }, [hasActiveLogContext]);
 
     return {

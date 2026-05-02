@@ -66,9 +66,8 @@ const App: React.FC = () => {
     // Ops Phase 3 — catch unhandled JS rejections and report to telemetry
     useEffect(() => { installGlobalErrorHandlers(); }, []);
 
-    // Dev preview bypass — rendered before any auth providers mount
-    if (DEV_PREVIEW) return <AdminOpsPreview />;
-
+    // Native shell bars are configured after hooks are declared so preview mode
+    // does not change hook ordering.
     useEffect(() => {
         if (!Capacitor.isNativePlatform()) {
             return;
@@ -86,6 +85,9 @@ const App: React.FC = () => {
 
         void configureNativeBars();
     }, []);
+
+    // Dev preview bypass: rendered before any auth providers mount.
+    if (DEV_PREVIEW) return <AdminOpsPreview />;
 
     return (
         <BrowserRouter>
