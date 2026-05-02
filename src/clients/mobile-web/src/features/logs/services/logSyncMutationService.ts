@@ -1,9 +1,28 @@
 import { AddLogTaskCommand } from '../../../application/usecases/sync/AddLogTaskCommand';
 import { CreateDailyLogCommand } from '../../../application/usecases/sync/CreateDailyLogCommand';
+import { idGenerator } from '../../../core/domain/services/IdGenerator';
 import { type CropCycleDto, type PlotDto } from '../../../infrastructure/api/AgriSyncClient';
 import { getDatabase } from '../../../infrastructure/storage/DexieDatabase';
 import { backgroundSyncWorker } from '../../../infrastructure/sync/BackgroundSyncWorker';
 import { type DailyLog } from '../../../types';
+
+// The backend's AddLogTaskMutationPayload deserializes logTaskId as a
+// nullable Guid. Local domain code, however, freely uses non-UUID strings
+// like 'act_global_daily', `irr_${Date.now()}`, or scoped composites like
+// 'act_global_daily::<plotUuid>' for in-memory state keying. If those land
+// on the wire as-is, /sync/push returns 500 and the cycle never produces
+// REJECTED → the conflict-badge / retry UI starves. So at the sync
+// boundary we replace any non-UUID logTaskId with a freshly generated v4
+// UUID. The payload is then memoised inside the mutation queue, so retries
+// reuse the same UUID and stay idempotent.
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function ensureUuid(localId: string | undefined): string {
+    if (localId && UUID_REGEX.test(localId)) {
+        return localId;
+    }
+    return idGenerator.generate();
+}
 
 interface ResolvedLogSyncTarget {
     farmId: string;
@@ -40,7 +59,7 @@ function buildTaskPayloads(log: DailyLog): LogTaskMutationPayload[] {
 
     log.cropActivities.forEach(activity => {
         payloads.push({
-            logTaskId: activity.id,
+            logTaskId: ensureUuid(activity.id),
             activityType: activity.workTypes?.[0] || activity.title,
             notes: activity.notes,
             occurredAtUtc,
@@ -49,7 +68,7 @@ function buildTaskPayloads(log: DailyLog): LogTaskMutationPayload[] {
 
     log.irrigation.forEach(event => {
         payloads.push({
-            logTaskId: event.id,
+            logTaskId: ensureUuid(event.id),
             activityType: 'Irrigation',
             notes: buildTaskNotes([
                 event.method ? `Method: ${event.method}` : undefined,
@@ -63,7 +82,7 @@ function buildTaskPayloads(log: DailyLog): LogTaskMutationPayload[] {
 
     log.labour.forEach(event => {
         payloads.push({
-            logTaskId: event.id,
+            logTaskId: ensureUuid(event.id),
             activityType: event.activity || 'Labour',
             notes: buildTaskNotes([
                 event.count ? `Workers: ${event.count}` : undefined,
@@ -81,7 +100,7 @@ function buildTaskPayloads(log: DailyLog): LogTaskMutationPayload[] {
             : `Spray ${productName}`;
 
         payloads.push({
-            logTaskId: event.id,
+            logTaskId: ensureUuid(event.id),
             activityType,
             notes: buildTaskNotes([
                 event.quantity ? `Qty: ${event.quantity} ${event.unit || ''}` : undefined,
@@ -94,7 +113,7 @@ function buildTaskPayloads(log: DailyLog): LogTaskMutationPayload[] {
 
     log.machinery.forEach(event => {
         payloads.push({
-            logTaskId: event.id,
+            logTaskId: ensureUuid(event.id),
             activityType: `Machinery ${event.type}`,
             notes: buildTaskNotes([
                 event.hoursUsed ? `Hours: ${event.hoursUsed}` : undefined,
@@ -108,7 +127,7 @@ function buildTaskPayloads(log: DailyLog): LogTaskMutationPayload[] {
 
     log.observations?.forEach(event => {
         payloads.push({
-            logTaskId: event.id,
+            logTaskId: ensureUuid(event.id),
             activityType: event.noteType === 'reminder' ? 'Reminder' : 'Observation',
             notes: event.textCleaned || event.textRaw,
             occurredAtUtc,
