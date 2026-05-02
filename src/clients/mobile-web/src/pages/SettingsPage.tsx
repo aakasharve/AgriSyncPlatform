@@ -11,6 +11,7 @@ import { Language } from '../i18n/translations';
 import { idGenerator } from '../core/domain/services/IdGenerator';
 import { getMyFarms, type MyFarmDto } from '../features/onboarding/qr/inviteApi';
 import SubscriptionCard from '../features/admin/billing/SubscriptionCard';
+import { useUiPref } from '../shared/hooks/useUiPref';
 
 interface SettingsPageProps {
     defaults: LedgerDefaults;
@@ -26,19 +27,24 @@ const SettingsPage: React.FC<SettingsPageProps> = ({
     const { setCurrentRoute } = useAppNavigationState();
     const { t, language, setLanguage } = useLanguage();
 
-    // Billing state — fetched once on mount; owner-only section
+    // Billing state — fetched once farmId resolves from Dexie. Owner-only section.
+    // Sub-plan 04 Task 3 — current-farm-id now lives in Dexie via useUiPref.
+    // Initial render returns null fallback; the effect re-runs when the
+    // persisted value swaps in, matching the original behaviour.
+    const [currentFarmIdPref] = useUiPref<string | null>('shramsafal_current_farm_id', null);
     const [currentFarm, setCurrentFarm] = useState<MyFarmDto | null>(null);
     useEffect(() => {
         let cancelled = false;
         getMyFarms().then(farms => {
             if (!cancelled && farms.length > 0) {
-                const farmId = localStorage.getItem('shramsafal_current_farm_id');
-                const farm = farmId ? farms.find(f => f.farmId === farmId) ?? farms[0] : farms[0];
+                const farm = currentFarmIdPref
+                    ? farms.find(f => f.farmId === currentFarmIdPref) ?? farms[0]
+                    : farms[0];
                 setCurrentFarm(farm);
             }
         }).catch(() => { /* billing section just won't render */ });
         return () => { cancelled = true; };
-    }, []);
+    }, [currentFarmIdPref]);
 
     // Harvest Configuration state
     const [harvestConfigExpanded, setHarvestConfigExpanded] = useState(false);

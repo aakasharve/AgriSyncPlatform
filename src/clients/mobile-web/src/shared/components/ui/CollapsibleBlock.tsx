@@ -3,8 +3,9 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useEffect } from 'react';
-import { ChevronDown, ChevronUp, ArrowUp, ArrowDown } from 'lucide-react';
+import React from 'react';
+import { ChevronDown, ArrowUp, ArrowDown } from 'lucide-react';
+import { useUiPref } from '../../hooks/useUiPref';
 
 interface CollapsibleBlockProps {
     id: string;
@@ -22,7 +23,12 @@ interface CollapsibleBlockProps {
 
 /**
  * Collapsible Block Component
- * Reusable accordion wrapper for Reflect page sections
+ * Reusable accordion wrapper for Reflect page sections.
+ *
+ * State persists through useUiPref → Dexie's uiPrefs table (Sub-plan 04
+ * Task 3 architecture). Initial render shows defaultOpen as the fallback;
+ * the persisted value swaps in once Dexie load resolves. When `collapsible`
+ * is false the section is always open and the persisted value is ignored.
  */
 const CollapsibleBlock: React.FC<CollapsibleBlockProps> = ({
     id,
@@ -37,26 +43,13 @@ const CollapsibleBlock: React.FC<CollapsibleBlockProps> = ({
     onMoveDown,
     collapsible = true
 }) => {
-    const [isOpen, setIsOpen] = useState(defaultOpen);
+    const [persistedOpen, setPersistedOpen] = useUiPref<boolean>(`collapsible-${id}`, defaultOpen);
+    // When the section is non-collapsible, force-open regardless of stored value.
+    const isOpen = collapsible ? persistedOpen : true;
 
-    // Load saved state from localStorage
-    useEffect(() => {
-        if (!collapsible) {
-            setIsOpen(true);
-            return;
-        }
-        const saved = localStorage.getItem(`collapsible-${id}`);
-        if (saved !== null) {
-            setIsOpen(saved === 'true');
-        }
-    }, [id, collapsible]);
-
-    // Save state to localStorage
     const toggleOpen = () => {
         if (!collapsible) return;
-        const newState = !isOpen;
-        setIsOpen(newState);
-        localStorage.setItem(`collapsible-${id}`, String(newState));
+        setPersistedOpen(!isOpen);
     };
 
     return (

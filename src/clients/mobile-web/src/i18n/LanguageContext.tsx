@@ -3,9 +3,10 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import React, { createContext, useContext, ReactNode } from 'react';
 import { Language, translations, t as translate } from './translations';
 import { LanguageSyncFromServer } from './LanguageSyncFromServer';
+import { useUiPref } from '../shared/hooks/useUiPref';
 
 interface LanguageContextType {
     language: Language;
@@ -16,20 +17,15 @@ interface LanguageContextType {
 const LanguageContext = createContext<LanguageContextType | undefined>(undefined);
 
 export const LanguageProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
-    const [language, setLanguageState] = useState<Language>('en');
+    // Sub-plan 04 Task 3 — language preference now lives in Dexie's uiPrefs
+    // (via useUiPref). Initial render returns the 'en' fallback; the
+    // persisted value swaps in once Dexie load resolves, matching the
+    // previous useEffect-on-mount behaviour byte-for-byte.
+    const [storedLanguage, setStoredLanguage] = useUiPref<Language>('agrilog_language', 'en');
+    const language: Language = storedLanguage === 'en' || storedLanguage === 'mr' ? storedLanguage : 'en';
 
-    // Load saved language on mount
-    useEffect(() => {
-        const saved = localStorage.getItem('agrilog_language') as Language;
-        if (saved && (saved === 'en' || saved === 'mr')) {
-            setLanguageState(saved);
-        }
-    }, []);
-
-    // Save language when changed
     const setLanguage = (lang: Language) => {
-        setLanguageState(lang);
-        localStorage.setItem('agrilog_language', lang);
+        setStoredLanguage(lang);
     };
 
     const t = (key: string) => translate(key, language);
