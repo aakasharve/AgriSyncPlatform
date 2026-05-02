@@ -23,12 +23,18 @@ public sealed class CompareEngineDeviationTests
     private static List<PlannedActivity> PlannedWith(string activityName) =>
         new()
         {
-            PlannedActivity.Create(
+            // Synthetic test fixture — no source template, so use
+            // CreateLocallyAdded with a sentinel reason. CompareEngine
+            // doesn't branch on IsLocallyChanged, so this is
+            // shape-equivalent to the obsolete Create() factory.
+            PlannedActivity.CreateLocallyAdded(
                 Guid.NewGuid(),
                 Guid.NewGuid(),
                 activityName,
                 "Vegetative",
                 new DateOnly(2026, 4, 21),
+                new UserId(Guid.NewGuid()),
+                "test-fixture",
                 DateTime.UtcNow)
         };
 
