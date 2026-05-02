@@ -80,6 +80,7 @@ using ShramSafal.Application.UseCases.Work.Handlers;
 using ShramSafal.Application.UseCases.Work.SettleJobCardPayout;
 using ShramSafal.Application.UseCases.Work.StartJobCard;
 using ShramSafal.Application.UseCases.Work.VerifyJobCardForPayout;
+using ShramSafal.Application.Abstractions.Sync;
 using ShramSafal.Application.Ports;
 using ShramSafal.Application.Services;
 using ShramSafal.Infrastructure;
@@ -145,6 +146,12 @@ public static class DependencyInjection
 
         services.AddScoped<PushSyncBatchHandler>();
         services.AddScoped<PullSyncChangesHandler>();
+
+        // Sub-plan 05 Task 2a (T-IGH-05-FAIL-PUSHES-WIRING): production default —
+        // never forces push failures. The Bootstrapper re-registers an adapter over
+        // E2eFailPushesToggle when ALLOW_E2E_SEED=true (that registration must land
+        // AFTER this one in DI ordering so it wins via Replace).
+        services.AddSingleton<IE2eFailPushesProbe>(NoOpFailPushesProbe.Instance);
 
         // Phase 4 — QR invitation + join
         services.AddScoped<IssueFarmInviteHandler>();

@@ -7,6 +7,7 @@ using AgriSync.SharedKernel.Contracts.Ids;
 using AgriSync.SharedKernel.Contracts.Roles;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage;
+using ShramSafal.Application.Abstractions.Sync;
 using ShramSafal.Application.Contracts.Dtos;
 using ShramSafal.Application.Contracts.Sync;
 using ShramSafal.Application.Ports;
@@ -97,7 +98,12 @@ public sealed class PushSyncBatchHandler(
     CompleteJobCardHandler completeJobCardHandler,
     SettleJobCardPayoutHandler settleJobCardPayoutHandler,
     CancelJobCardHandler cancelJobCardHandler,
-    VerifyJobCardForPayoutHandler verifyJobCardForPayoutHandler)
+    VerifyJobCardForPayoutHandler verifyJobCardForPayoutHandler,
+    // Sub-plan 05 Task 2a (T-IGH-05-FAIL-PUSHES-WIRING): E2E test probe.
+    // Production default: NoOpFailPushesProbe (always returns null).
+    // When ALLOW_E2E_SEED=true the Bootstrapper re-registers an adapter over
+    // E2eFailPushesToggle so the Playwright harness can arm forced failures.
+    IE2eFailPushesProbe failPushesProbe)
 {
     private static readonly JsonSerializerOptions SerializerOptions = new()
     {
@@ -159,6 +165,21 @@ public sealed class PushSyncBatchHandler(
                 mutation.MutationType ?? string.Empty,
                 Domain.Common.ShramSafalErrors.InvalidCommand.Code,
                 "Each mutation must contain clientRequestId and mutationType.");
+        }
+
+        // Sub-plan 05 Task 2a (T-IGH-05-FAIL-PUSHES-WIRING): E2E test probe.
+        // When the probe reports a failure reason, short-circuit every mutation
+        // so the Playwright harness can exercise the client retry path.
+        // Re-uses the existing MUTATION_TYPE_UNIMPLEMENTED error code to avoid
+        // introducing a new ErrorKind — production never reaches this branch.
+        var probeReason = failPushesProbe.FailReason;
+        if (probeReason is not null)
+        {
+            return CreateFailedResult(
+                clientRequestId,
+                mutationType,
+                "MUTATION_TYPE_UNIMPLEMENTED",
+                $"E2E forced failure: {probeReason}");
         }
 
         var existing = await syncMutationStore.GetAsync(deviceId, clientRequestId, ct);
