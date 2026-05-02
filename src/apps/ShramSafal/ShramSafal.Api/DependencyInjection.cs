@@ -1,3 +1,5 @@
+using AgriSync.BuildingBlocks.Application;
+using AgriSync.BuildingBlocks.Application.PipelineBehaviors;
 using ShramSafal.Application.UseCases.Attachments.CreateAttachment;
 using ShramSafal.Application.UseCases.Attachments.GetAttachmentFile;
 using ShramSafal.Application.UseCases.Attachments.GetAttachmentMetadata;
@@ -511,12 +513,37 @@ public static class DependencyInjection
         services.AddScoped<GetTestQueueForCycleHandler>();
         services.AddScoped<GetMissingTestsForFarmHandler>();
         services.AddScoped<MarkOverdueInstancesHandler>();
+        services.AddScoped<IHandler<WaiveTestInstanceCommand>>(sp =>
+            HandlerPipeline.Build(
+                sp.GetRequiredService<WaiveTestInstanceHandler>(),
+                new LoggingBehavior<WaiveTestInstanceCommand>(
+                    sp.GetRequiredService<ILogger<LoggingBehavior<WaiveTestInstanceCommand>>>())));
+        services.AddScoped<IHandler<MarkOverdueInstancesCommand, int>>(sp =>
+            HandlerPipeline.Build(
+                sp.GetRequiredService<MarkOverdueInstancesHandler>(),
+                new LoggingBehavior<MarkOverdueInstancesCommand, int>(
+                    sp.GetRequiredService<ILogger<LoggingBehavior<MarkOverdueInstancesCommand, int>>>())));
 
         // CEI Phase 3 §4.6 — compliance signal handlers
         services.AddScoped<EvaluateComplianceHandler>();
         services.AddScoped<GetComplianceSignalsForFarmHandler>();
         services.AddScoped<AcknowledgeSignalHandler>();
         services.AddScoped<ResolveSignalHandler>();
+        services.AddScoped<IHandler<EvaluateComplianceCommand, EvaluateComplianceResult>>(sp =>
+            HandlerPipeline.Build(
+                sp.GetRequiredService<EvaluateComplianceHandler>(),
+                new LoggingBehavior<EvaluateComplianceCommand, EvaluateComplianceResult>(
+                    sp.GetRequiredService<ILogger<LoggingBehavior<EvaluateComplianceCommand, EvaluateComplianceResult>>>())));
+        services.AddScoped<IHandler<AcknowledgeSignalCommand>>(sp =>
+            HandlerPipeline.Build(
+                sp.GetRequiredService<AcknowledgeSignalHandler>(),
+                new LoggingBehavior<AcknowledgeSignalCommand>(
+                    sp.GetRequiredService<ILogger<LoggingBehavior<AcknowledgeSignalCommand>>>())));
+        services.AddScoped<IHandler<ResolveSignalCommand>>(sp =>
+            HandlerPipeline.Build(
+                sp.GetRequiredService<ResolveSignalHandler>(),
+                new LoggingBehavior<ResolveSignalCommand>(
+                    sp.GetRequiredService<ILogger<LoggingBehavior<ResolveSignalCommand>>>())));
 
         // CEI Phase 4 §4.8 — Work Trust Ledger handlers
         services.AddScoped<CreateJobCardHandler>();

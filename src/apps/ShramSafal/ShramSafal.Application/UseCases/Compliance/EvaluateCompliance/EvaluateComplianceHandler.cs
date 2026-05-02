@@ -1,5 +1,6 @@
 using System.Text.Json;
 using AgriSync.BuildingBlocks.Abstractions;
+using AgriSync.BuildingBlocks.Application;
 using AgriSync.BuildingBlocks.Results;
 using AgriSync.SharedKernel.Contracts.Ids;
 using Microsoft.Extensions.Logging;
@@ -30,7 +31,7 @@ public sealed class EvaluateComplianceHandler(
     IComplianceSignalRepository signalRepository,
     ITestInstanceRepository testInstanceRepository,
     IClock clock,
-    ILogger<EvaluateComplianceHandler> logger)
+    ILogger<EvaluateComplianceHandler> logger) : IHandler<EvaluateComplianceCommand, EvaluateComplianceResult>
 {
     private sealed record SignalKey(FarmId FarmId, Guid PlotId, string RuleCode, Guid? CropCycleId);
 

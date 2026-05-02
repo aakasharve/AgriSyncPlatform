@@ -21,6 +21,16 @@ public interface IHandler<TCommand, TResult>
 }
 
 /// <summary>
+/// No-result handler variant for commands whose observable outcome is only
+/// success/failure. This keeps Result-only use cases in the same explicit
+/// pipeline model without inventing dummy response DTOs.
+/// </summary>
+public interface IHandler<TCommand>
+{
+    Task<Result> HandleAsync(TCommand command, CancellationToken ct = default);
+}
+
+/// <summary>
 /// A pipeline behavior wraps an <see cref="IHandler{TCommand, TResult}"/>.
 /// Implementations may short-circuit (return <c>Result.Failure</c> without
 /// calling <paramref name="next"/>), pass through, or post-process.
@@ -31,5 +41,16 @@ public interface IPipelineBehavior<TCommand, TResult>
     Task<Result<TResult>> HandleAsync(
         TCommand command,
         IHandler<TCommand, TResult> next,
+        CancellationToken ct);
+}
+
+/// <summary>
+/// Pipeline behavior for no-result command handlers.
+/// </summary>
+public interface IPipelineBehavior<TCommand>
+{
+    Task<Result> HandleAsync(
+        TCommand command,
+        IHandler<TCommand> next,
         CancellationToken ct);
 }

@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using AgriSync.BuildingBlocks.Application;
 using AgriSync.BuildingBlocks.Results;
 using AgriSync.SharedKernel.Contracts.Ids;
 using Microsoft.AspNetCore.Mvc;
@@ -149,7 +150,7 @@ public static class TestEndpoints
             Guid id,
             WaiveTestInstanceRequest request,
             ClaimsPrincipal user,
-            WaiveTestInstanceHandler handler,
+            IHandler<WaiveTestInstanceCommand> handler,
             CancellationToken ct) =>
         {
             if (!EndpointActorContext.TryGetUserId(user, out var actorUserId))

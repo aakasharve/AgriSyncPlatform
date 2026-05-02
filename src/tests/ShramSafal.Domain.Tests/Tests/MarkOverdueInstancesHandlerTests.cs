@@ -57,9 +57,10 @@ public sealed class MarkOverdueInstancesHandlerTests
 
         var handler = new MarkOverdueInstancesHandler(instanceRepo, auditRepo, clock);
 
-        var count = await handler.HandleAsync(new MarkOverdueInstancesCommand());
+        var result = await handler.HandleAsync(new MarkOverdueInstancesCommand());
 
-        count.Should().Be(2);
+        result.IsSuccess.Should().BeTrue();
+        result.Value.Should().Be(2);
 
         pastDue1.Status.Should().Be(TestInstanceStatus.Overdue);
         pastDue2.Status.Should().Be(TestInstanceStatus.Overdue);
@@ -88,9 +89,10 @@ public sealed class MarkOverdueInstancesHandlerTests
 
         var handler = new MarkOverdueInstancesHandler(instanceRepo, auditRepo, clock);
 
-        var count = await handler.HandleAsync(new MarkOverdueInstancesCommand());
+        var result = await handler.HandleAsync(new MarkOverdueInstancesCommand());
 
-        count.Should().Be(0);
+        result.IsSuccess.Should().BeTrue();
+        result.Value.Should().Be(0);
         auditRepo.AuditEvents.Should().BeEmpty();
     }
 }

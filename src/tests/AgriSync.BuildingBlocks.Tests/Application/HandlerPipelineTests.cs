@@ -20,6 +20,17 @@ public sealed class HandlerPipelineTests
             => Task.FromResult(Result.Success(new SampleResult(cmd.Value)));
     }
 
+    private sealed class NoResultEchoHandler : IHandler<SampleCommand>
+    {
+        public int Calls { get; private set; }
+
+        public Task<Result> HandleAsync(SampleCommand cmd, CancellationToken _ = default)
+        {
+            Calls++;
+            return Task.FromResult(Result.Success());
+        }
+    }
+
     private sealed class TraceBehavior(List<string> trace, string label)
         : IPipelineBehavior<SampleCommand, SampleResult>
     {
@@ -44,6 +55,21 @@ public sealed class HandlerPipelineTests
             CancellationToken ct)
             => Task.FromResult(Result.Failure<SampleResult>(
                 new Error(failureCode, "blocked", ErrorKind.Forbidden)));
+    }
+
+    private sealed class NoResultTraceBehavior(List<string> trace, string label)
+        : IPipelineBehavior<SampleCommand>
+    {
+        public async Task<Result> HandleAsync(
+            SampleCommand cmd,
+            IHandler<SampleCommand> next,
+            CancellationToken ct)
+        {
+            trace.Add($"{label}:before");
+            var r = await next.HandleAsync(cmd, ct);
+            trace.Add($"{label}:after");
+            return r;
+        }
     }
 
     [Fact]
@@ -94,5 +120,24 @@ public sealed class HandlerPipelineTests
     {
         Assert.Throws<ArgumentNullException>(() =>
             HandlerPipeline.Build<SampleCommand, SampleResult>(null!));
+    }
+
+    [Fact]
+    public async Task Build_no_result_invokes_behaviors_outer_to_inner_then_unwinds()
+    {
+        var trace = new List<string>();
+        var inner = new NoResultEchoHandler();
+        var pipeline = HandlerPipeline.Build(
+            inner,
+            new NoResultTraceBehavior(trace, "outer"),
+            new NoResultTraceBehavior(trace, "inner"));
+
+        var result = await pipeline.HandleAsync(new SampleCommand("hi"));
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(1, inner.Calls);
+        Assert.Equal(
+            new[] { "outer:before", "inner:before", "inner:after", "outer:after" },
+            trace);
     }
 }

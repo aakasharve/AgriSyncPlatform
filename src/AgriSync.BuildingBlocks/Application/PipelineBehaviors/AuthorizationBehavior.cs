@@ -44,3 +44,29 @@ public sealed class AuthorizationBehavior<TCommand, TResult> : IPipelineBehavior
         return await next.HandleAsync(command, ct);
     }
 }
+
+public sealed class AuthorizationBehavior<TCommand> : IPipelineBehavior<TCommand>
+{
+    private readonly IEnumerable<IAuthorizationCheck<TCommand>> _checks;
+
+    public AuthorizationBehavior(IEnumerable<IAuthorizationCheck<TCommand>> checks)
+    {
+        _checks = checks;
+    }
+
+    public async Task<Result> HandleAsync(
+        TCommand command,
+        IHandler<TCommand> next,
+        CancellationToken ct)
+    {
+        foreach (var check in _checks)
+        {
+            var r = await check.AuthorizeAsync(command, ct);
+            if (!r.IsSuccess)
+            {
+                return Result.Failure(r.Error);
+            }
+        }
+        return await next.HandleAsync(command, ct);
+    }
+}

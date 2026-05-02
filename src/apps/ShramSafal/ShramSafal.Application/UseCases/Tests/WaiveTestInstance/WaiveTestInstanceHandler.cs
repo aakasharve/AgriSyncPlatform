@@ -1,4 +1,5 @@
 using AgriSync.BuildingBlocks.Abstractions;
+using AgriSync.BuildingBlocks.Application;
 using AgriSync.BuildingBlocks.Results;
 using AgriSync.SharedKernel.Contracts.Roles;
 using ShramSafal.Application.Ports;
@@ -16,7 +17,7 @@ namespace ShramSafal.Application.UseCases.Tests.WaiveTestInstance;
 public sealed class WaiveTestInstanceHandler(
     ITestInstanceRepository testInstanceRepository,
     IShramSafalRepository repository,
-    IClock clock)
+    IClock clock) : IHandler<WaiveTestInstanceCommand>
 {
     private static readonly HashSet<AppRole> AllowedRoles =
     [

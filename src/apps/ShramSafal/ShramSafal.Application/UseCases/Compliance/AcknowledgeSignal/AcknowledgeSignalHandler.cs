@@ -1,4 +1,5 @@
 using AgriSync.BuildingBlocks.Abstractions;
+using AgriSync.BuildingBlocks.Application;
 using AgriSync.BuildingBlocks.Results;
 using AgriSync.SharedKernel.Contracts.Roles;
 using ShramSafal.Application.Ports;
@@ -14,7 +15,7 @@ namespace ShramSafal.Application.UseCases.Compliance.AcknowledgeSignal;
 public sealed class AcknowledgeSignalHandler(
     IComplianceSignalRepository signalRepository,
     IShramSafalRepository repository,
-    IClock clock)
+    IClock clock) : IHandler<AcknowledgeSignalCommand>
 {
     // Mukadam (1) and all higher roles may acknowledge
     private static readonly HashSet<AppRole> AllowedRoles =
