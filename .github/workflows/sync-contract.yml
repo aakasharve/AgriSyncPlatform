@@ -23,7 +23,8 @@ on:
       - 'src/apps/ShramSafal/ShramSafal.Application/Contracts/Sync/SyncMutationCatalog.cs'
       - '.github/workflows/sync-contract.yml'
   pull_request:
-    branches: [main]
+    # Sub-plan 04 close-out — also gate PRs targeting akash_edits.
+    branches: [main, akash_edits]
     paths:
       - 'sync-contract/**'
       - 'src/clients/mobile-web/src/infrastructure/sync/SyncMutationCatalog.ts'
