@@ -6,7 +6,7 @@
  * Maps server-side verification status strings to LogVerificationStatus.
  */
 
-import { LogVerificationStatus } from '../../../types';
+import { LogVerificationStatus } from '../../../../types';
 
 export function mapVerificationStatus(status?: string): LogVerificationStatus {
     if (!status) {
