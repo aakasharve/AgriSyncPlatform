@@ -7,6 +7,7 @@ import React from 'react';
 import { LogSegment, LogVerificationStatus } from '../../types';
 import { TaskCreationSheet, ReviewInboxSheet, QuickLogSheet } from './lazyComponents';
 import { AppRouterContext } from './routeContext';
+import { ConflictBadge } from '../../features/sync/conflict/ConflictBadge';
 
 export const renderGlobalSheets = (ctx: AppRouterContext): React.ReactNode => {
     const {
@@ -15,11 +16,18 @@ export const renderGlobalSheets = (ctx: AppRouterContext): React.ReactNode => {
         showReviewInbox, setShowReviewInbox, history, handleVerifyLog,
         showQuickLog, setShowQuickLog,
         setMode, setStatus, setRecordingSegment,
-        currentRoute, mainView, status, recordingSegment, hasActiveLogContext
+        currentRoute, setCurrentRoute, mainView, status, recordingSegment, hasActiveLogContext
     } = ctx;
 
     return (
         <>
+            <div
+                className="fixed right-4 z-50"
+                style={{ top: 'max(1rem, var(--safe-area-inset-top, env(safe-area-inset-top, 0px)))' }}
+            >
+                <ConflictBadge onClick={() => setCurrentRoute('offline-conflicts')} />
+            </div>
+
             {/* GLOBAL SHEETS */}
             <TaskCreationSheet
                 isOpen={showTaskCreationSheet}

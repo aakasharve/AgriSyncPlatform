@@ -4,19 +4,19 @@ import { systemClock } from '../../core/domain/services/Clock';
 import type { SyncMutationType } from '../api/AgriSyncClient';
 import { isSyncMutationType } from './SyncMutationCatalog';
 import { validatePayload } from './PayloadValidator';
+import { readDeviceId, writeDeviceId } from '../storage/DeviceIdStore';
 
-const DEVICE_ID_KEY = 'agrisync_device_id_v1';
 const SYNC_SCOPE = 'shramsafal';
 const LAST_PULL_META_KEY = 'shramsafal_last_pull_payload';
 
 function getOrCreateDeviceId(): string {
-    const existing = localStorage.getItem(DEVICE_ID_KEY);
+    const existing = readDeviceId();
     if (existing) {
         return existing;
     }
 
     const created = idGenerator.generate();
-    localStorage.setItem(DEVICE_ID_KEY, created);
+    writeDeviceId(created);
     return created;
 }
 
