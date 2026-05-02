@@ -66,14 +66,14 @@ public sealed class AdminMisRepository(AnalyticsDbContext analyticsContext) : IA
             }
 
             decimal current = weekRows.Count > 0 ? weekRows[^1].AvgWvfd : 0m;
-            decimal? prior  = weekRows.Count > 1 ? weekRows[^2].AvgWvfd : null;
+            decimal? prior = weekRows.Count > 1 ? weekRows[^2].AvgWvfd : null;
 
             return new WvfdHistoryDto(
                 CurrentWvfd: current,
-                PriorWvfd:   prior,
-                GoalWvfd:    4.5m,
-                Weeks:       weekRows,
-                TopFarms:    farmRows);
+                PriorWvfd: prior,
+                GoalWvfd: 4.5m,
+                Weeks: weekRows,
+                TopFarms: farmRows);
         }
         catch { return new WvfdHistoryDto(0m, null, 4.5m, [], []); }
         finally { if (!wasOpen) await conn.CloseAsync(); }

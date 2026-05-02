@@ -117,30 +117,30 @@ public static class E2eTestEndpoints
             switch (fixture)
             {
                 case "ramu":
-                {
-                    var seeder = scope.ServiceProvider.GetRequiredService<DatabaseSeeder>();
-                    var summary = await seeder.SeedDemoDataAsync();
-                    var result = new
                     {
-                        userId = "00000000-0000-0000-0000-000000000001",
-                        phone = "9999999999",
-                        password = "ramu123",
-                        farmId = "",
-                        fixture,
-                        summary,
-                    };
-                    return Results.Ok(result);
-                }
+                        var seeder = scope.ServiceProvider.GetRequiredService<DatabaseSeeder>();
+                        var summary = await seeder.SeedDemoDataAsync();
+                        var result = new
+                        {
+                            userId = "00000000-0000-0000-0000-000000000001",
+                            phone = "9999999999",
+                            password = "ramu123",
+                            farmId = "",
+                            fixture,
+                            summary,
+                        };
+                        return Results.Ok(result);
+                    }
                 case "admin_two_orgs":
-                {
-                    var adminSeeder = scope.ServiceProvider.GetRequiredService<E2eFixtureSeeder>();
-                    var result = await adminSeeder.SeedAdminTwoOrgsAsync(ct);
-                    return Results.Ok(result);
-                }
+                    {
+                        var adminSeeder = scope.ServiceProvider.GetRequiredService<E2eFixtureSeeder>();
+                        var result = await adminSeeder.SeedAdminTwoOrgsAsync(ct);
+                        return Results.Ok(result);
+                    }
                 default:
-                {
-                    return Results.BadRequest(new { error = "unknown_fixture", fixture });
-                }
+                    {
+                        return Results.BadRequest(new { error = "unknown_fixture", fixture });
+                    }
             }
         })
         .WithName("E2eSeed");

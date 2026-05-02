@@ -72,8 +72,8 @@ public sealed class SyncMutationCatalogContractTests
     // separately by SyncEndpoints integration tests when sub-plan 03 lands.
     [Theory]
     [InlineData("jobcard.create", "0.5.0", false, "client too old for jobcard.create (sinceVersion 1.0.0)")]
-    [InlineData("jobcard.create", "1.0.0", true,  "client meets minimum 1.0.0")]
-    [InlineData("create_farm",    "0.0.1", true,  "create_farm sinceVersion is 0.1.0; clients < that are grandfathered for the v0 fundamentals")]
+    [InlineData("jobcard.create", "1.0.0", true, "client meets minimum 1.0.0")]
+    [InlineData("create_farm", "0.0.1", true, "create_farm sinceVersion is 0.1.0; clients < that are grandfathered for the v0 fundamentals")]
     public void Catalog_descriptor_drives_minimum_version(
         string mutation, string clientVersion, bool shouldPassMinimum, string reason)
     {

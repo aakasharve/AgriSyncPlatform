@@ -42,8 +42,8 @@ public sealed class RequestObservabilityMiddleware(
 
         var status = ctx.Response.StatusCode;
         var method = ctx.Request.Method;
-        var path   = ctx.Request.Path.Value ?? string.Empty;
-        var ms     = (int)sw.ElapsedMilliseconds;
+        var path = ctx.Request.Path.Value ?? string.Empty;
+        var ms = (int)sw.ElapsedMilliseconds;
         var isWrite = method is "POST" or "PUT" or "PATCH" or "DELETE";
 
         var isError = status >= 500;
@@ -65,9 +65,9 @@ public sealed class RequestObservabilityMiddleware(
 
         var props = System.Text.Json.JsonSerializer.Serialize(new
         {
-            endpoint  = $"{method} {path}",
+            endpoint = $"{method} {path}",
             statusCode = status,
-            latencyMs  = ms,
+            latencyMs = ms,
             traceId
         });
 
@@ -76,20 +76,20 @@ public sealed class RequestObservabilityMiddleware(
         {
             try
             {
-                using var scope   = scopeFactory.CreateScope();
+                using var scope = scopeFactory.CreateScope();
                 var analytics = scope.ServiceProvider.GetRequiredService<IAnalyticsWriter>();
                 await analytics.EmitAsync(new AnalyticsEvent(
-                    EventId:            Guid.NewGuid(),
-                    EventType:          eventType,
-                    OccurredAtUtc:      DateTime.UtcNow,
-                    ActorUserId:        null,
-                    FarmId:             farmId.HasValue ? new AgriSync.SharedKernel.Contracts.Ids.FarmId(farmId.Value) : null,
-                    OwnerAccountId:     null,
-                    ActorRole:          "system",
-                    Trigger:            "middleware",
+                    EventId: Guid.NewGuid(),
+                    EventType: eventType,
+                    OccurredAtUtc: DateTime.UtcNow,
+                    ActorUserId: null,
+                    FarmId: farmId.HasValue ? new AgriSync.SharedKernel.Contracts.Ids.FarmId(farmId.Value) : null,
+                    OwnerAccountId: null,
+                    ActorRole: "system",
+                    Trigger: "middleware",
                     DeviceOccurredAtUtc: null,
-                    SchemaVersion:      "v1",
-                    PropsJson:          props));
+                    SchemaVersion: "v1",
+                    PropsJson: props));
             }
             catch (Exception ex)
             {

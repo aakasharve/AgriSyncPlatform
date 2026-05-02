@@ -62,7 +62,7 @@ namespace AgriSync.Bootstrapper.Jobs
             while (!stoppingToken.IsCancellationRequested)
             {
                 var now = DateTime.UtcNow;
-                
+
                 // CRON: 0 2 * * * (Run at 2 AM UTC)
                 // Since this runs in a loop, we check if it is past 2 AM and we haven't run today.
                 if (now.Hour >= 2 && _lastRunDate.Date < now.Date)

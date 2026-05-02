@@ -66,6 +66,17 @@ jobs:
         # drives the list to empty.
         run: dotnet build src/AgriSync.sln --configuration Release --no-restore /warnaserror
 
+      - name: Format check
+        # T-IGH-01-FORMAT — fails the build if any C# file in the
+        # solution drifts from `dotnet format`'s normalised output.
+        # Severity is `warn` so style-rule warnings (IDE0xxx /
+        # whitespace) gate; only `error`-severity rules would gate at
+        # `--severity error`. Re-add this step alongside any new
+        # solution-wide formatting decision (e.g. tabs-vs-spaces,
+        # max-line-length) by editing `.editorconfig`, not by skipping
+        # this step.
+        run: dotnet format src/AgriSync.sln --verify-no-changes --severity warn
+
       - name: Wait for Postgres
         # Defense-in-depth on top of the service container's --health-cmd:
         # pg_isready returns 0 only when the server is accepting connections.

@@ -26,28 +26,28 @@ public sealed class E2eFixtureSeeder(
     // -----------------------------------------------------------------------
     // Fixture constants
     // -----------------------------------------------------------------------
-    private const string FixtureName      = "admin_two_orgs";
+    private const string FixtureName = "admin_two_orgs";
     // NOTE: distinct from DatabaseSeeder's Ganesh phone (8888888888). When the
     // ramu fixture runs first and admin_two_orgs runs after a /__e2e/reset,
     // the ssf tables are truncated but ssf.users (in `public` schema) is not.
     // Re-using 8888888888 collided on IX_users_phone — see CI failure on
     // 35bb920. Pick a deterministic value not used by DatabaseSeeder fixtures.
-    private const string AdminPhone       = "7777777777";
-    private const string AdminPassword    = "admin123";
+    private const string AdminPhone = "7777777777";
+    private const string AdminPassword = "admin123";
     private const string AdminDisplayName = "E2E Admin";
-    private const string AppId            = "shramsafal";
+    private const string AppId = "shramsafal";
 
     // Deterministic IDs — guaranteed never to collide with the ramu fixture
     // (which uses SHA-256-derived GUIDs keyed on "phase0-seed-v1:...").
-    public static readonly Guid AdminUserIdValue      = Guid.Parse("00000000-0000-0000-0000-000000000098");
-    public static readonly Guid OrgAId               = Guid.Parse("00000000-0000-0000-0000-0000000000a1");
-    public static readonly Guid OrgBId               = Guid.Parse("00000000-0000-0000-0000-0000000000a2");
-    public static readonly Guid MembershipAId        = Guid.Parse("00000000-0000-0000-0000-0000000000b1");
-    public static readonly Guid MembershipBId        = Guid.Parse("00000000-0000-0000-0000-0000000000b2");
-    public static readonly Guid FarmAId              = Guid.Parse("00000000-0000-0000-0000-0000000000f1");
-    public static readonly Guid FarmBId              = Guid.Parse("00000000-0000-0000-0000-0000000000f2");
-    public static readonly Guid FarmScopeAId         = Guid.Parse("00000000-0000-0000-0000-0000000000c1");
-    public static readonly Guid FarmScopeBId         = Guid.Parse("00000000-0000-0000-0000-0000000000c2");
+    public static readonly Guid AdminUserIdValue = Guid.Parse("00000000-0000-0000-0000-000000000098");
+    public static readonly Guid OrgAId = Guid.Parse("00000000-0000-0000-0000-0000000000a1");
+    public static readonly Guid OrgBId = Guid.Parse("00000000-0000-0000-0000-0000000000a2");
+    public static readonly Guid MembershipAId = Guid.Parse("00000000-0000-0000-0000-0000000000b1");
+    public static readonly Guid MembershipBId = Guid.Parse("00000000-0000-0000-0000-0000000000b2");
+    public static readonly Guid FarmAId = Guid.Parse("00000000-0000-0000-0000-0000000000f1");
+    public static readonly Guid FarmBId = Guid.Parse("00000000-0000-0000-0000-0000000000f2");
+    public static readonly Guid FarmScopeAId = Guid.Parse("00000000-0000-0000-0000-0000000000c1");
+    public static readonly Guid FarmScopeBId = Guid.Parse("00000000-0000-0000-0000-0000000000c2");
 
     // OwnerAccountId constants — one per org, satisfying the NOT NULL
     // schema invariant (I5). No FK to AccountsDb; cross-app reference only.
@@ -72,7 +72,7 @@ public sealed class E2eFixtureSeeder(
 
         // 2. Organisations A + B (ShramSafalDbContext)
         var orgAAdded = await EnsureOrganizationAsync(OrgAId, "E2E Org Alpha (FPO)", OrganizationType.FPO, nowUtc, ct);
-        var orgBAdded = await EnsureOrganizationAsync(OrgBId, "E2E Org Beta (FPO)",  OrganizationType.FPO, nowUtc, ct);
+        var orgBAdded = await EnsureOrganizationAsync(OrgBId, "E2E Org Beta (FPO)", OrganizationType.FPO, nowUtc, ct);
 
         // 3. Memberships
         var memAAdded = await EnsureMembershipAsync(MembershipAId, OrgAId, adminUserId, OrganizationRole.Owner, nowUtc, ct);
@@ -82,7 +82,7 @@ public sealed class E2eFixtureSeeder(
         var ownerAccountAId = new OwnerAccountId(OwnerAccountAIdValue);
         var ownerAccountBId = new OwnerAccountId(OwnerAccountBIdValue);
         var farmAAdded = await EnsureFarmAsync(FarmAId, "E2E Farm Alpha", adminUserId, ownerAccountAId, nowUtc, ct);
-        var farmBAdded = await EnsureFarmAsync(FarmBId, "E2E Farm Beta",  adminUserId, ownerAccountBId, nowUtc, ct);
+        var farmBAdded = await EnsureFarmAsync(FarmBId, "E2E Farm Beta", adminUserId, ownerAccountBId, nowUtc, ct);
 
         // 5. Farm scopes (Explicit — no PlatformWildcard needed for tests)
         var scopeAAdded = await EnsureFarmScopeAsync(FarmScopeAId, OrgAId, new FarmId(FarmAId), adminUserId, nowUtc, ct);
@@ -102,11 +102,11 @@ public sealed class E2eFixtureSeeder(
 
         return new
         {
-            userId   = AdminUserIdValue.ToString(),
-            phone    = AdminPhone,
+            userId = AdminUserIdValue.ToString(),
+            phone = AdminPhone,
             password = AdminPassword,
-            farmId   = FarmAId.ToString(),
-            fixture  = FixtureName,
+            farmId = FarmAId.ToString(),
+            fixture = FixtureName,
             summary,
         };
     }
