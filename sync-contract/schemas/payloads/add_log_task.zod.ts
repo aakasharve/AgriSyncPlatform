@@ -1,8 +1,15 @@
-// Sub-plan 02 Task 8 scaffold for add_log_task.
-// Full payload schema is deferred to T-IGH-02-PAYLOADS (filed in Task 12).
-// Until then, validate as z.unknown() so MutationQueue.enqueue accepts
-// payloads of any shape — backend rejection remains the source of truth.
+// T-IGH-02-PAYLOADS: canonical payload schema for add_log_task.
+// Mirrors the backend handler's AddLogTaskMutationPayload record.
+// occurredAtUtc is an ISO datetime (DateTime?), not YYYY-MM-DD.
 import { z } from 'zod';
+import { ZGuid, ZIsoDate } from './_shared.zod';
 
-export const AddLogTaskPayload = z.unknown();
+export const AddLogTaskPayload = z.object({
+    logTaskId: ZGuid.optional(),
+    dailyLogId: ZGuid,
+    activityType: z.string().min(1),
+    notes: z.string().optional(),
+    occurredAtUtc: ZIsoDate.optional(),
+});
+
 export type AddLogTaskPayloadType = z.infer<typeof AddLogTaskPayload>;

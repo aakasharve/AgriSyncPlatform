@@ -1,8 +1,13 @@
-// Sub-plan 02 Task 8 scaffold for jobcard.settle.
-// Full payload schema is deferred to T-IGH-02-PAYLOADS (filed in Task 12).
-// Until then, validate as z.unknown() so MutationQueue.enqueue accepts
-// payloads of any shape — backend rejection remains the source of truth.
+// T-IGH-02-PAYLOADS: canonical payload schema for jobcard.settle.
+// Mirrors the backend handler's JobCardSettleMutationPayload record.
 import { z } from 'zod';
+import { ZGuid } from './_shared.zod';
 
-export const JobcardSettlePayload = z.unknown();
+export const JobcardSettlePayload = z.object({
+    jobCardId: ZGuid,
+    actualPayoutAmount: z.number(),
+    actualPayoutCurrencyCode: z.string().min(1),
+    settlementNote: z.string().optional(),
+});
+
 export type JobcardSettlePayloadType = z.infer<typeof JobcardSettlePayload>;

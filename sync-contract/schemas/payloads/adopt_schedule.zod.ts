@@ -1,8 +1,19 @@
-// Sub-plan 02 Task 8 scaffold for adopt_schedule.
-// Full payload schema is deferred to T-IGH-02-PAYLOADS (filed in Task 12).
-// Until then, validate as z.unknown() so MutationQueue.enqueue accepts
-// payloads of any shape — backend rejection remains the source of truth.
+// T-IGH-02-PAYLOADS: canonical payload schema for adopt_schedule.
+// Server handler is registered in PushSyncBatchHandler but currently
+// returns MUTATION_TYPE_UNIMPLEMENTED — the schema mirrors the
+// AdoptScheduleCommand domain record so it's ready when wiring lands.
 import { z } from 'zod';
+import { ZGuid } from './_shared.zod';
 
-export const AdoptSchedulePayload = z.unknown();
+export const AdoptSchedulePayload = z.object({
+    farmId: ZGuid,
+    plotId: ZGuid,
+    cropCycleId: ZGuid,
+    scheduleTemplateId: ZGuid,
+    actorUserId: ZGuid,
+    actorRole: z.string().optional(),
+    clientCommandId: z.string().optional(),
+    subscriptionId: ZGuid.optional(),
+});
+
 export type AdoptSchedulePayloadType = z.infer<typeof AdoptSchedulePayload>;

@@ -1,8 +1,20 @@
-// Sub-plan 02 Task 8 scaffold for plan.override.
-// Full payload schema is deferred to T-IGH-02-PAYLOADS (filed in Task 12).
-// Until then, validate as z.unknown() so MutationQueue.enqueue accepts
-// payloads of any shape — backend rejection remains the source of truth.
+// T-IGH-02-PAYLOADS: canonical payload schema for plan.override.
+// Server handler returns MUTATION_TYPE_UNIMPLEMENTED today — see header
+// comment in schedule_publish.zod.ts for the rationale behind the
+// permissive (passthrough) shape.
 import { z } from 'zod';
+import { ZGuid } from './_shared.zod';
 
-export const PlanOverridePayload = z.unknown();
+export const PlanOverridePayload = z
+    .object({
+        farmId: ZGuid,
+        plotId: ZGuid,
+        cropCycleId: ZGuid,
+        plannedActivityId: ZGuid,
+        actorUserId: ZGuid,
+        actorRole: z.string().optional(),
+        clientCommandId: z.string().optional(),
+    })
+    .passthrough();
+
 export type PlanOverridePayloadType = z.infer<typeof PlanOverridePayload>;

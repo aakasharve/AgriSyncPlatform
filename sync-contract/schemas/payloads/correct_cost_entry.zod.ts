@@ -1,8 +1,15 @@
-// Sub-plan 02 Task 8 scaffold for correct_cost_entry.
-// Full payload schema is deferred to T-IGH-02-PAYLOADS (filed in Task 12).
-// Until then, validate as z.unknown() so MutationQueue.enqueue accepts
-// payloads of any shape — backend rejection remains the source of truth.
+// T-IGH-02-PAYLOADS: canonical payload schema for correct_cost_entry.
+// Mirrors the backend handler's CorrectCostEntryMutationPayload record.
 import { z } from 'zod';
+import { ZGuid } from './_shared.zod';
 
-export const CorrectCostEntryPayload = z.unknown();
+export const CorrectCostEntryPayload = z.object({
+    financeCorrectionId: ZGuid.optional(),
+    costEntryId: ZGuid,
+    correctedAmount: z.number(),
+    currencyCode: z.string().min(1),
+    reason: z.string().min(1),
+    correctedByUserId: ZGuid.optional(),
+});
+
 export type CorrectCostEntryPayloadType = z.infer<typeof CorrectCostEntryPayload>;

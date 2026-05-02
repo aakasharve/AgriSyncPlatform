@@ -1,10 +1,14 @@
 // Barrel export for all 32 payload schemas. Imported by the frontend
 // PayloadValidator and any future backend C# code-gen.
 //
-// 4 of 32 are fully typed today (CreateDailyLog, VerifyLogV2,
-// AddCostEntry, CreateAttachment — the four mutations responsible for
-// ~85% of production sync traffic per the AI pipeline analytics).
-// The other 28 are z.unknown() scaffolds tracked under T-IGH-02-PAYLOADS.
+// All 32 are concrete Zod objects after T-IGH-02-PAYLOADS. Wired
+// mutations (24) mirror the backend's *MutationPayload records or the
+// matching domain Command. Three schedule mutations (adopt / migrate /
+// abandon) mirror their domain Commands while the server handler still
+// returns MUTATION_TYPE_UNIMPLEMENTED. Seven truly-speculative
+// mutations (schedule.publish / .edit / .clone, plan.add / .override /
+// .remove, add_location) use a `.passthrough()` shape so the contract
+// is no longer z.unknown but doesn't lock down a future field list.
 export * from './_shared.zod';
 export { CreateFarmPayload } from './create_farm.zod';
 export { CreatePlotPayload } from './create_plot.zod';
