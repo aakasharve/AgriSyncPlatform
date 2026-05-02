@@ -62,7 +62,7 @@ const AttachmentStatusBadge: React.FC<AttachmentStatusBadgeProps> = ({ status, o
      const { Icon, color, label } = config;
 
      return (
-          <span className={`inline-flex items-center gap-1 text-[10px] font-bold px-1.5 py-0.5 rounded-md border ${color}`}>
+          <span data-testid="attachment-status" className={`inline-flex items-center gap-1 text-[10px] font-bold px-1.5 py-0.5 rounded-md border ${color}`}>
                {state === 'uploading' ? (
                     <span className="w-2.5 h-2.5 border border-blue-400 border-t-transparent rounded-full animate-spin" />
                ) : (

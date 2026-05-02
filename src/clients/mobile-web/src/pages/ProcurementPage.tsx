@@ -154,6 +154,7 @@ const ProcurementPage: React.FC<Props> = ({ crops = [] }) => {
                     />
                 </div>
                 <button
+                    data-testid="scan-receipt-btn"
                     onClick={() => setShowCaptureSheet(true)}
                     className="flex-none bg-stone-800 text-white px-5 rounded-xl font-bold text-sm shadow-lg shadow-stone-200 flex items-center gap-2 active:scale-95 transition-all"
                 >
