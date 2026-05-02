@@ -18,7 +18,7 @@ interface BottomNavigationProps {
 }
 
 
-const BottomNavigation: React.FC<BottomNavigationProps> = ({ currentRoute, currentView, onNavigate, onViewChange, hidden = false }) => {
+const BottomNavigation: React.FC<BottomNavigationProps> = ({ currentRoute, currentView: _currentView, onNavigate, onViewChange: _onViewChange, hidden = false }) => {
     const { t } = useLanguage();
 
     const handleNavClick = (route: AppRoute) => {

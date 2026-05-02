@@ -25,7 +25,7 @@ const VoiceListeningOverlay: React.FC<VoiceListeningOverlayProps> = ({
 
     const {
         isRecording,
-        duration,
+        duration: _duration,
         error,
         startRecording,
         stopRecording,

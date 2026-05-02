@@ -227,7 +227,7 @@ const StageCard: React.FC<{
     status?: 'PAST' | 'CURRENT' | 'FUTURE',
     dayRange?: { start: number, end: number },
     domRef?: React.RefObject<HTMLDivElement | null>
-}> = ({ stage, index, onUpdate, onRemove, onDropItem, onUpdateItem, onRemoveItem, onAddDay, onRemoveDay, onUpdateDay, onDropDayItem, onUpdateDayItem, onRemoveDayItem, resources, onAddResource, status = 'FUTURE', dayRange, domRef }) => {
+}> = ({ stage, index, onUpdate, onRemove, onDropItem, onUpdateItem, onRemoveItem, onAddDay, onRemoveDay, onUpdateDay, onDropDayItem, onUpdateDayItem, onRemoveDayItem, resources, onAddResource: _onAddResource, status = 'FUTURE', dayRange, domRef }) => {
 
     const [isExpanded, setIsExpanded] = useState(false); // Collapsed by default
 
@@ -541,7 +541,7 @@ const Step3_GrowthStages: React.FC<Step3Props> = ({ data, onUpdate, isActive, on
     };
 
     // Day Items
-    const handleAddDayToStage = (idx: number, type: string, item: any) => {
+    const _handleAddDayToStage = (_idx: number, _type: string, _item: any) => {
         const newStages = [...stages];
         // Note: Add logic here if needed for adding days
         onUpdate('stages', newStages);

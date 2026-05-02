@@ -540,7 +540,7 @@ function determineOverallHealth(
     return 'NEEDS_ATTENTION';
 }
 
-function determineBucketHealth(planned: number, matched: number, missed: number): 'ON_TRACK' | 'SLIGHT_LAG' | 'SIGNIFICANT_LAG' | 'CRITICAL' {
+function determineBucketHealth(planned: number, matched: number, _missed: number): 'ON_TRACK' | 'SLIGHT_LAG' | 'SIGNIFICANT_LAG' | 'CRITICAL' {
     if (planned === 0) return 'ON_TRACK';
     const ratio = matched / planned;
     if (ratio >= 0.8) return 'ON_TRACK';

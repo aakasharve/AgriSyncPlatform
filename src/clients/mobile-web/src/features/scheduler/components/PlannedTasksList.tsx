@@ -108,7 +108,7 @@ const PlannedTasksList: React.FC<PlannedTasksListProps> = ({
     };
 
     // Render a group section
-    const renderGroup = (title: string, tasks: PlannedTask[], icon: React.ReactNode, emptyMessage: string) => {
+    const renderGroup = (title: string, tasks: PlannedTask[], icon: React.ReactNode, _emptyMessage: string) => {
         if (tasks.length === 0) return null;
 
         return (

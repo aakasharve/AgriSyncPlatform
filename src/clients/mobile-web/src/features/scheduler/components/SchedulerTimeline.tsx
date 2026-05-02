@@ -66,7 +66,7 @@ type DetailModalState = {
     logData?: DailyLog;
 };
 
-const SchedulerTimeline: React.FC<SchedulerTimelineProps> = ({ plot, logs, onEditLog, onEditSchedule }) => {
+const SchedulerTimeline: React.FC<SchedulerTimelineProps> = ({ plot, logs, onEditLog: _onEditLog, onEditSchedule: _onEditSchedule }) => {
 
     const instance = plot.schedule;
 

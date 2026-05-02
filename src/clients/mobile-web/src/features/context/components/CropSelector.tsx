@@ -212,10 +212,10 @@ const CropSelector: React.FC<CropSelectorProps> = ({
 
     const isGlobalSelected = selectedCrops.includes('FARM_GLOBAL');
 
-    const cardPadding = compact ? 'p-2' : 'p-4';
+    const _cardPadding = compact ? 'p-2' : 'p-4';
     const fontSize = compact ? 'text-xs' : 'text-lg';
     const minHeight = compact ? 'auto' : (mode === 'log' ? '140px' : 'auto');
-    const gap = compact ? 'gap-2' : 'gap-3 sm:gap-4';
+    const _gap = compact ? 'gap-2' : 'gap-3 sm:gap-4';
 
     return (
         <div className="w-full space-y-4">

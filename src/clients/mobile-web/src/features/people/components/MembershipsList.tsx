@@ -61,7 +61,7 @@ const MembershipsList: React.FC<MembershipsListProps> = ({ farms, nonExitableFar
                         const roleLabel = getRoleLabel(farm.role);
                         const canExit = !(nonExitableFarmIds?.has(farm.farmId));
                         const trialing = farm.subscription?.statusCode === 1;
-                        const active = farm.subscription?.statusCode === 2;
+                        const _active = farm.subscription?.statusCode === 2;
                         const paused = farm.subscription
                             ? !farm.subscription.allowsOwnerWrites
                             : false;

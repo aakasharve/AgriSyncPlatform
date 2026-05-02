@@ -58,8 +58,8 @@ export const ReceiptCaptureSheet: React.FC<Props> = ({ onClose, onSave, crops, a
     const [suggestedTotal, setSuggestedTotal] = useState<number | null>(null);
     const [suggestedVendor, setSuggestedVendor] = useState<string | null>(null);
     // Whether the user has manually changed each field (guard against auto-overwrite)
-    const [userEditedTotal, setUserEditedTotal] = useState(false);
-    const [userEditedVendor, setUserEditedVendor] = useState(false);
+    const [_userEditedTotal, setUserEditedTotal] = useState(false);
+    const [_userEditedVendor, setUserEditedVendor] = useState(false);
 
     const fileInputRef = useRef<HTMLInputElement>(null);
 

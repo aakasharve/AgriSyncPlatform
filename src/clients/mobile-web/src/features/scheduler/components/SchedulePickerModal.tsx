@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Check, ChevronRight, Loader2, X } from 'lucide-react';
-import { agriSyncClient, CropScheduleTemplateDto } from '../../../infrastructure/api/AgriSyncClient';
+import { agriSyncClient, CropScheduleTemplateDto, ScheduleSubscriptionDto } from '../../../infrastructure/api/AgriSyncClient';
 
 interface SchedulePickerModalProps {
     isOpen: boolean;

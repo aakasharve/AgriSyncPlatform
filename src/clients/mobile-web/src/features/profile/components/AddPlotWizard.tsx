@@ -161,9 +161,9 @@ const AddPlotWizard: React.FC<PlotWizardProps> = ({ crop, profile, onSave, onCan
     };
     const prevStep = () => setStep(step - 1);
 
-    const progress = (step / 4) * 100;
+    const _progress = (step / 4) * 100;
 
-    const irrMethodLabels: Record<string, string> = {
+    const _irrMethodLabels: Record<string, string> = {
         'Drip': t('profile.drip'),
         'Flood': t('profile.flood'),
         'Sprinkler': t('profile.sprinkler'),
