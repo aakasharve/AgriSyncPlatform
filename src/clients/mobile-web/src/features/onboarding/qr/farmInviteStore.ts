@@ -10,8 +10,12 @@
  */
 
 import { issueFarmInvite, type FarmInviteQr, type JoinRole } from './qrTokenClient';
-
-const STORAGE_KEY = 'shramsafal_farm_invite_v1';
+import {
+    readInviteStoreRaw,
+    writeInviteStoreRaw,
+    readJoinAttemptsRaw,
+    writeJoinAttemptsRaw,
+} from '../../../infrastructure/storage/FarmInviteStore';
 
 interface PersistedInvite {
     farmId: string;
@@ -26,9 +30,8 @@ interface PersistedInvite {
 type InviteStore = Record<string, PersistedInvite>;
 
 const readStore = (): InviteStore => {
-    if (typeof window === 'undefined') return {};
     try {
-        const raw = window.localStorage.getItem(STORAGE_KEY);
+        const raw = readInviteStoreRaw();
         if (!raw) return {};
         const parsed = JSON.parse(raw);
         if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
@@ -41,12 +44,7 @@ const readStore = (): InviteStore => {
 };
 
 const writeStore = (store: InviteStore): void => {
-    if (typeof window === 'undefined') return;
-    try {
-        window.localStorage.setItem(STORAGE_KEY, JSON.stringify(store));
-    } catch {
-        // Storage full / denied — silent, the QR is still usable in-memory.
-    }
+    writeInviteStoreRaw(JSON.stringify(store));
 };
 
 export const getOrIssueFarmInvite = (farmId: string, farmName: string): FarmInviteQr => {
@@ -101,10 +99,8 @@ export const recordJoinAttempt = (
 ): void => {
     // Lightweight telemetry for the demo phase; real backend will emit
     // FarmInvitationClaimed.v1 / FarmMembershipCreated.v1 via Outbox.
-    if (typeof window === 'undefined') return;
     try {
-        const key = 'shramsafal_join_attempts_v1';
-        const raw = window.localStorage.getItem(key);
+        const raw = readJoinAttemptsRaw();
         const list = raw ? JSON.parse(raw) : [];
         if (Array.isArray(list)) {
             list.push({
@@ -113,7 +109,7 @@ export const recordJoinAttempt = (
                 outcome,
                 atUtc: new Date().toISOString(),
             });
-            window.localStorage.setItem(key, JSON.stringify(list.slice(-20)));
+            writeJoinAttemptsRaw(JSON.stringify(list.slice(-20)));
         }
     } catch {
         // best-effort only

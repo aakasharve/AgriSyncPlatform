@@ -10,14 +10,16 @@ import { idGenerator } from '../../core/domain/services/IdGenerator';
 import { systemClock } from '../../core/domain/services/Clock';
 import { getDatabase } from '../../infrastructure/storage/DexieDatabase';
 import {
+    readFinanceSettingsRaw,
+    writeFinanceSettingsRaw,
+} from '../../infrastructure/storage/FinanceLegacyStore';
+import {
     FinanceSettings,
     MoneyAdjustment,
     MoneyCategory,
     MoneyEvent,
     PriceBookItem,
 } from './finance.types';
-
-const FINANCE_SETTINGS_KEY = 'finance_settings';
 
 const DEFAULT_SETTINGS: FinanceSettings = {
     highAmountThreshold: 25000,
@@ -234,7 +236,7 @@ export const financeService = {
 
     getSettings(): FinanceSettings {
         try {
-            const raw = localStorage.getItem(FINANCE_SETTINGS_KEY);
+            const raw = readFinanceSettingsRaw();
             return raw ? JSON.parse(raw) as FinanceSettings : DEFAULT_SETTINGS;
         } catch {
             return DEFAULT_SETTINGS;
@@ -242,7 +244,7 @@ export const financeService = {
     },
 
     saveSettings(settings: FinanceSettings): void {
-        localStorage.setItem(FINANCE_SETTINGS_KEY, JSON.stringify(settings));
+        writeFinanceSettingsRaw(JSON.stringify(settings));
     },
 
     // ── Raw reads from Dexie cache ─────────────────────────────────────
