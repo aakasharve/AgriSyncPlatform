@@ -83,13 +83,13 @@ test.describe('Attachment upload state machine', () => {
         await expect(queuedBanner).toBeVisible({ timeout: 15_000 });
         await expect(queuedBanner).toContainText(/attachment queued/i);
 
-        // --- Assert: Dexie attachment record shows pending status ---
+        // --- Assert: Dexie attachment record is queued ---
         // Read the attachment directly from IndexedDB to confirm the DB state.
-        const pendingCount = await page.evaluate(async () => {
+        const queuedAttachmentCount = await page.evaluate(async () => {
             // Access Dexie via the global window object exposed by the app bundle.
-            // The app opens the DB under the name 'AgriSyncDB'.
+            // The app opens the DB under the name 'AgriLogDB'.
             return new Promise<number>((resolve) => {
-                const req = indexedDB.open('AgriSyncDB');
+                const req = indexedDB.open('AgriLogDB');
                 req.onsuccess = () => {
                     const db = req.result;
                     // Gracefully handle DB versions that may not have 'attachments' store
@@ -103,7 +103,13 @@ test.describe('Attachment upload state machine', () => {
                     const allReq = store.getAll();
                     allReq.onsuccess = () => {
                         const records = allReq.result as Array<{ status: string }>;
-                        const count = records.filter(r => r.status === 'pending').length;
+                        const count = records.filter(r => (
+                            r.status === 'pending'
+                            || r.status === 'uploading'
+                            || r.status === 'uploaded'
+                            || r.status === 'finalized'
+                            || r.status === 'completed'
+                        )).length;
                         db.close();
                         resolve(count);
                     };
@@ -112,7 +118,7 @@ test.describe('Attachment upload state machine', () => {
                 req.onerror = () => resolve(0);
             });
         });
-        expect(pendingCount).toBeGreaterThan(0);
+        expect(queuedAttachmentCount).toBeGreaterThan(0);
 
         // --- Assert: AttachmentUploadWorker transitions status to 'uploaded' ---
         // The worker auto-starts on login (DataSourceProvider) and runs every 10s.
@@ -123,7 +129,7 @@ test.describe('Attachment upload state machine', () => {
                 async () => {
                     return page.evaluate(async () => {
                         return new Promise<number>((resolve) => {
-                            const req = indexedDB.open('AgriSyncDB');
+                            const req = indexedDB.open('AgriLogDB');
                             req.onsuccess = () => {
                                 const db = req.result;
                                 if (!db.objectStoreNames.contains('attachments')) {

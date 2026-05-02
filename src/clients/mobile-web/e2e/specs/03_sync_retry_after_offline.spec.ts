@@ -15,6 +15,7 @@
 import { test, expect } from '@playwright/test';
 import { resetAndSeed, setFailPushes } from '../fixtures/seed.api';
 import { loginViaPassword } from '../fixtures/loginHelper';
+import { selectFarmWideLogContext } from '../fixtures/logContextHelper';
 
 test.describe('Sync retry after rejected mutation', () => {
     test('rejected mutation surfaces in OfflineConflictPage and can be retried after fix', async ({ page }) => {
@@ -25,6 +26,7 @@ test.describe('Sync retry after rejected mutation', () => {
 
         // --- Login ---
         await loginViaPassword(page, '9999999999', 'ramu123');
+        await selectFarmWideLogContext(page);
 
         // --- Capture a log (online, but pushes will be rejected by server) ---
         // Switch to manual mode to create a log quickly without voice
