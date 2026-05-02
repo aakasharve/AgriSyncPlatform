@@ -5,7 +5,7 @@
 import { z } from 'zod';
 import { ZGuid } from './_shared.zod';
 
-export const PlanOverridePayload = z
+export const OverridePlannedPayload = z
     .object({
         farmId: ZGuid,
         plotId: ZGuid,
@@ -17,4 +17,4 @@ export const PlanOverridePayload = z
     })
     .passthrough();
 
-export type PlanOverridePayloadType = z.infer<typeof PlanOverridePayload>;
+export type OverridePlannedPayloadType = z.infer<typeof OverridePlannedPayload>;

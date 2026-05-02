@@ -3,9 +3,9 @@
 import { z } from 'zod';
 import { ZGuid } from './_shared.zod';
 
-export const JobcardCompletePayload = z.object({
+export const JobCardCompletePayload = z.object({
     jobCardId: ZGuid,
     dailyLogId: ZGuid,
 });
 
-export type JobcardCompletePayloadType = z.infer<typeof JobcardCompletePayload>;
+export type JobCardCompletePayloadType = z.infer<typeof JobCardCompletePayload>;

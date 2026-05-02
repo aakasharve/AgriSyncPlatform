@@ -5,7 +5,7 @@
 import { z } from 'zod';
 import { ZGuid } from './_shared.zod';
 
-export const PlanRemovePayload = z
+export const RemovePlannedPayload = z
     .object({
         farmId: ZGuid,
         plotId: ZGuid,
@@ -17,4 +17,4 @@ export const PlanRemovePayload = z
     })
     .passthrough();
 
-export type PlanRemovePayloadType = z.infer<typeof PlanRemovePayload>;
+export type RemovePlannedPayloadType = z.infer<typeof RemovePlannedPayload>;

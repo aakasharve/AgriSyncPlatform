@@ -17,7 +17,7 @@ const JobCardLineItem = z.object({
     notes: z.string().optional(),
 });
 
-export const JobcardCreatePayload = z.object({
+export const JobCardCreatePayload = z.object({
     farmId: ZGuid,
     plotId: ZGuid,
     cropCycleId: ZGuid.optional(),
@@ -25,4 +25,4 @@ export const JobcardCreatePayload = z.object({
     lineItems: z.array(JobCardLineItem).min(1),
 });
 
-export type JobcardCreatePayloadType = z.infer<typeof JobcardCreatePayload>;
+export type JobCardCreatePayloadType = z.infer<typeof JobCardCreatePayload>;

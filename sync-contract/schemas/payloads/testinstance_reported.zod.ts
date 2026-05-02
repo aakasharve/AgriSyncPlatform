@@ -12,11 +12,11 @@ const TestResultPayload = z.object({
     referenceRangeHigh: z.number().optional(),
 });
 
-export const TestinstanceReportedPayload = z.object({
+export const TestInstanceReportedPayload = z.object({
     testInstanceId: ZGuid,
     results: z.array(TestResultPayload).min(1),
     attachmentIds: z.array(ZGuid).optional(),
     clientCommandId: z.string().optional(),
 });
 
-export type TestinstanceReportedPayloadType = z.infer<typeof TestinstanceReportedPayload>;
+export type TestInstanceReportedPayloadType = z.infer<typeof TestInstanceReportedPayload>;
