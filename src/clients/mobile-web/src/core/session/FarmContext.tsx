@@ -25,8 +25,7 @@ import {
     type MeFarm,
 } from './MeContextService';
 import { useAuth } from '../../app/providers/AuthProvider';
-
-const CURRENT_FARM_KEY = 'shramsafal_current_farm_id';
+import { SessionStore } from '../../infrastructure/storage/SessionStore';
 
 interface FarmContextValue {
     meContext: MeContext | null;
@@ -45,7 +44,7 @@ export const FarmContextProvider: React.FC<{ children: React.ReactNode }> = ({ c
     const [meContext, setMeContext] = useState<MeContext | null>(null);
     const [isLoading, setIsLoading] = useState(false);
     const [currentFarmId, setCurrentFarmId] = useState<string | null>(
-        () => localStorage.getItem(CURRENT_FARM_KEY),
+        () => SessionStore.getCurrentFarmId(),
     );
 
     const refresh = useCallback(async (force = false) => {
@@ -57,7 +56,7 @@ export const FarmContextProvider: React.FC<{ children: React.ReactNode }> = ({ c
             const ids = ctx.farms.map(f => f.farmId);
             setCurrentFarmId(prev => {
                 const valid = prev && ids.includes(prev) ? prev : (ids[0] ?? null);
-                if (valid) localStorage.setItem(CURRENT_FARM_KEY, valid);
+                if (valid) SessionStore.setCurrentFarmId(valid);
                 return valid;
             });
         } catch {
@@ -78,7 +77,7 @@ export const FarmContextProvider: React.FC<{ children: React.ReactNode }> = ({ c
 
     const switchFarm = useCallback((farmId: string) => {
         setCurrentFarmId(farmId);
-        localStorage.setItem(CURRENT_FARM_KEY, farmId);
+        SessionStore.setCurrentFarmId(farmId);
     }, []);
 
     const farms = meContext?.farms ?? [];
