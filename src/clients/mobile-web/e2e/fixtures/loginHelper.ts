@@ -39,17 +39,39 @@ export async function loginViaPassword(
     const submitButton = page.locator('button[type="submit"]').first();
     await submitButton.click();
 
-    // After a successful login the app may show the OnboardingPermissionsPage
-    // (if `shramsafal_permissions_granted` has not been set in Dexie yet — fresh
-    // seed always has this unset). Dismiss it via the "Skip for now" button so
-    // the main view renders and home-greeting becomes visible.
-    const skipBtn = page.getByTestId('onboarding-skip');
-    const isPermissionsPage = await skipBtn.isVisible({ timeout: 5_000 }).catch(() => false);
-    if (isPermissionsPage) {
-        await skipBtn.click();
+    const landing = await waitForLoginLanding(page);
+    if (landing === 'permissions') {
+        await page.getByTestId('onboarding-skip').click();
     }
 
     // Auth + initial sync pull takes a moment; home-greeting only appears once
     // both complete. Generous timeout for CI.
     await expect(page.getByTestId('home-greeting')).toBeVisible({ timeout: 30_000 });
+}
+
+async function waitForLoginLanding(page: Page): Promise<'home' | 'permissions'> {
+    const deadline = Date.now() + 30_000;
+    const homeGreeting = page.getByTestId('home-greeting');
+    const skipBtn = page.getByTestId('onboarding-skip');
+    const alert = page.getByRole('alert').first();
+
+    while (Date.now() < deadline) {
+        if (await homeGreeting.isVisible().catch(() => false)) {
+            return 'home';
+        }
+
+        if (await skipBtn.isVisible().catch(() => false)) {
+            return 'permissions';
+        }
+
+        if (await alert.isVisible().catch(() => false)) {
+            const text = (await alert.textContent())?.trim() ?? 'unknown auth error';
+            throw new Error(`Login failed before the app shell rendered: ${text}`);
+        }
+
+        await page.waitForTimeout(250);
+    }
+
+    await expect(homeGreeting).toBeVisible({ timeout: 1 });
+    return 'home';
 }

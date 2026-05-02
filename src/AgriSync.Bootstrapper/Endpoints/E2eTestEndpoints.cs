@@ -16,7 +16,8 @@ namespace AgriSync.Bootstrapper.Endpoints;
 /// being literally <c>"true"</c>. Production must never set this flag.
 ///
 /// Endpoints:
-///   POST /__e2e/reset        TRUNCATEs the mutable ssf tables.
+///   POST /__e2e/reset        TRUNCATEs the mutable ssf tables and clears
+///                            in-memory E2E harness toggles.
 ///   POST /__e2e/seed         Delegates to the existing DatabaseSeeder for the
 ///                            "ramu" fixture; returns 501 for fixtures that are
 ///                            not yet implemented.
@@ -65,10 +66,13 @@ public static class E2eTestEndpoints
 
         group.MapPost("/reset", async (
             IServiceScopeFactory scopes,
+            E2eFailPushesToggle failPushes,
             ILoggerFactory loggerFactory,
             CancellationToken ct) =>
         {
             var logger = loggerFactory.CreateLogger("AgriSync.Bootstrapper.E2eTestEndpoints");
+            failPushes.Reason = null;
+
             using var scope = scopes.CreateScope();
             var ssf = scope.ServiceProvider.GetRequiredService<ShramSafalDbContext>();
 
