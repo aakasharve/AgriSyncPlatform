@@ -602,6 +602,46 @@ public static class DependencyInjection
                     sp.GetServices<AgriSync.BuildingBlocks.Application.PipelineBehaviors.IAuthorizationCheck<
                         ShramSafal.Application.UseCases.Work.CompleteJobCard.CompleteJobCardCommand>>())));
 
+        // T-IGH-03-PIPELINE-ROLLOUT (SettleJobCardPayout): caller-shape
+        // + payout-amount + currency-code validation + job-card-existence
+        // + Owner-tier (PrimaryOwner/SecondaryOwner) authorization. The
+        // status-machine gate (must be VerifiedForPayout) stays in the
+        // body because it's an aggregate-state invariant. Endpoint
+        // (POST /job-cards/{id}/settle) AND sync
+        // (PushSyncBatchHandler.HandleJobCardSettleAsync) both resolve
+        // the pipeline-wrapped handler — sync's pre-flight (empty-id,
+        // amount > 0, non-empty currency) overlaps the validator
+        // exactly, so the pipeline ordering is canonical on both
+        // surfaces.
+        services.AddScoped<AgriSync.BuildingBlocks.Application.PipelineBehaviors.IValidator<
+            ShramSafal.Application.UseCases.Work.SettleJobCardPayout.SettleJobCardPayoutCommand>,
+            ShramSafal.Application.UseCases.Work.SettleJobCardPayout.SettleJobCardPayoutValidator>();
+        services.AddScoped<AgriSync.BuildingBlocks.Application.PipelineBehaviors.IAuthorizationCheck<
+            ShramSafal.Application.UseCases.Work.SettleJobCardPayout.SettleJobCardPayoutCommand>,
+            ShramSafal.Application.UseCases.Work.SettleJobCardPayout.SettleJobCardPayoutAuthorizer>();
+        services.AddScoped<AgriSync.BuildingBlocks.Application.IHandler<
+            ShramSafal.Application.UseCases.Work.SettleJobCardPayout.SettleJobCardPayoutCommand,
+            ShramSafal.Application.UseCases.Work.SettleJobCardPayout.SettleJobCardPayoutResult>>(sp =>
+            AgriSync.BuildingBlocks.Application.HandlerPipeline.Build(
+                sp.GetRequiredService<SettleJobCardPayoutHandler>(),
+                new AgriSync.BuildingBlocks.Application.PipelineBehaviors.LoggingBehavior<
+                    ShramSafal.Application.UseCases.Work.SettleJobCardPayout.SettleJobCardPayoutCommand,
+                    ShramSafal.Application.UseCases.Work.SettleJobCardPayout.SettleJobCardPayoutResult>(
+                    sp.GetRequiredService<Microsoft.Extensions.Logging.ILogger<
+                        AgriSync.BuildingBlocks.Application.PipelineBehaviors.LoggingBehavior<
+                            ShramSafal.Application.UseCases.Work.SettleJobCardPayout.SettleJobCardPayoutCommand,
+                            ShramSafal.Application.UseCases.Work.SettleJobCardPayout.SettleJobCardPayoutResult>>>()),
+                new AgriSync.BuildingBlocks.Application.PipelineBehaviors.ValidationBehavior<
+                    ShramSafal.Application.UseCases.Work.SettleJobCardPayout.SettleJobCardPayoutCommand,
+                    ShramSafal.Application.UseCases.Work.SettleJobCardPayout.SettleJobCardPayoutResult>(
+                    sp.GetServices<AgriSync.BuildingBlocks.Application.PipelineBehaviors.IValidator<
+                        ShramSafal.Application.UseCases.Work.SettleJobCardPayout.SettleJobCardPayoutCommand>>()),
+                new AgriSync.BuildingBlocks.Application.PipelineBehaviors.AuthorizationBehavior<
+                    ShramSafal.Application.UseCases.Work.SettleJobCardPayout.SettleJobCardPayoutCommand,
+                    ShramSafal.Application.UseCases.Work.SettleJobCardPayout.SettleJobCardPayoutResult>(
+                    sp.GetServices<AgriSync.BuildingBlocks.Application.PipelineBehaviors.IAuthorizationCheck<
+                        ShramSafal.Application.UseCases.Work.SettleJobCardPayout.SettleJobCardPayoutCommand>>())));
+
         // T-IGH-03-PIPELINE-ROLLOUT (CancelJobCard): caller-shape +
         // non-empty-Reason validation + job-card-existence + farm-
         // membership authorization. The role-tier check (who may cancel
