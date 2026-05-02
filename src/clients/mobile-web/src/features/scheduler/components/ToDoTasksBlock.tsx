@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { PlannedTask, CropProfile } from '../../../types';
-import { Check, Clock, AlertTriangle } from 'lucide-react';
+import { Check, AlertTriangle } from 'lucide-react';
 
 interface ToDoTasksBlockProps {
     tasks: PlannedTask[]; // Phase 2: Consumes PlannedTask[] now

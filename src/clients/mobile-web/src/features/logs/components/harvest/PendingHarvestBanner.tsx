@@ -5,7 +5,7 @@
 
 import React from 'react';
 import { HarvestSession } from '../../../../types';
-import { AlertCircle, ArrowRight, Clock, IndianRupee } from 'lucide-react';
+import { ArrowRight, Clock, IndianRupee } from 'lucide-react';
 
 interface PendingHarvestBannerProps {
     sessions: HarvestSession[];

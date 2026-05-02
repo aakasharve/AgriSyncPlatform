@@ -1,6 +1,7 @@
 import js from '@eslint/js';
 import globals from 'globals';
 import reactHooks from 'eslint-plugin-react-hooks';
+import unusedImports from 'eslint-plugin-unused-imports';
 import tseslint from 'typescript-eslint';
 import { defineConfig, globalIgnores } from 'eslint/config';
 // Local rule from sync-contract — bans raw mutation-name string literals
@@ -75,6 +76,12 @@ export default defineConfig([
           'no-string-mutation-type': noStringMutationType,
         },
       },
+      // T-IGH-04-LINT-RATCHET — eslint-plugin-unused-imports gives us an
+      // autofix path for unused imports (the canonical
+      // @typescript-eslint/no-unused-vars rule does NOT autofix imports).
+      // We delegate the import-checking half to this plugin; the canonical
+      // rule then only handles unused vars / params / destructures.
+      'unused-imports': unusedImports,
     },
     rules: {
       // Sub-plan 02: mutation names are catalog-only outside the catalog module.
@@ -83,6 +90,9 @@ export default defineConfig([
       // File-size budget — Sub-plan 04 ratchets this to 800.
       'max-lines': ['warn', { max: 1500, skipBlankLines: true, skipComments: true }],
 
+      // T-IGH-04-LINT-RATCHET: autofix-able unused-import detection. Disabling
+      // the import half of the canonical rule keeps the responsibilities clean.
+      'unused-imports/no-unused-imports': 'warn',
       // Existing-debt rules (kept on but as warnings until Sub-plan 04).
       '@typescript-eslint/no-explicit-any': 'warn',
       '@typescript-eslint/no-unused-vars': ['warn', {

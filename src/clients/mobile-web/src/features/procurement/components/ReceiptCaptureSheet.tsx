@@ -1,8 +1,8 @@
 
 import React, { useState, useRef } from 'react';
-import { Camera, Upload, X, Check, Loader2, AlertTriangle, RefreshCw } from 'lucide-react';
+import { Camera, X, Check, Loader2, AlertTriangle } from 'lucide-react';
 import { extractReceiptWithSession, VerificationStatus } from '../receipt/receiptExtractionClient';
-import { ReceiptExtractionResponse, ProcurementExpense, ExpenseScope, CropProfile, Plot } from '../../../types';
+import { ReceiptExtractionResponse, ProcurementExpense, ExpenseScope, CropProfile } from '../../../types';
 import { ScopeSelectorRadio } from './ScopeSelectorRadio';
 import { procurementRepository } from '../../../services/procurementRepository';
 import { v4 as uuidv4 } from 'uuid';

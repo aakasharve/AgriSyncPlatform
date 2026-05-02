@@ -4,30 +4,23 @@
  */
 
 import React, { useState, useEffect } from 'react';
-import { Plus, ListPlus, ChevronRight, Check, CheckSquare, StickyNote, Droplets, Users, ArrowUp, Edit3, Bell, Trash2 } from 'lucide-react';
-import { CropSymbol } from '../../../context/components/CropSelector';
+import { ListPlus } from 'lucide-react';
 import SlidingCropSelector from '../../../context/components/SlidingCropSelector';
-import { getActiveHarvestSession, startHarvestSession } from '../../../../services/harvestService';
-import HarvestConfigSheet from '../harvest/HarvestConfigSheet';
+import { startHarvestSession } from '../../../../services/harvestService';
 import { HarvestConfig } from '../../../../types';
-import ActivityExpenseCard from '../ActivityExpenseCard';
 import ObservationHubSheet from '../ObservationHubSheet';
-import {
-    FarmContext, CropActivityEvent, IrrigationEvent, LabourEvent,
-    MachineryEvent, LedgerDefaults, FarmerProfile, CropProfile,
-    WorkflowStep, InputEvent, Plot, AgriLogResponse, TodayCounts, ActivityExpenseEvent, ObservationNote,
-    LogTimelineEntry, PlannedTask, DailyLog, UnclearReason, DisturbanceEvent
+import { CropActivityEvent, IrrigationEvent, LabourEvent,
+    MachineryEvent, CropProfile,
+    WorkflowStep, InputEvent, Plot, AgriLogResponse, ActivityExpenseEvent, ObservationNote, PlannedTask, UnclearReason, DisturbanceEvent
 } from '../../../../types';
 import { BucketIssue } from '../../../../domain/types/log.types';
 import { UnclearSegment } from '../../../logs/logs.types';
 import { loadVocabDB, addApprovedMapping } from '../../../voice/vocab/vocabStore';
 import { getDateKey } from '../../../../core/domain/services/DateKeyService';
 import { buildWorkDoneProjection } from '../../services/workDoneProjection';
-import { isCompletedIrrigationEvent } from '../../services/irrigationCompletion';
-import type { LogProvenance } from '../../../../domain/ai/LogProvenance';
 import { buildAiCorrectionEvents, persistAiCorrectionEvents } from '../../../../infrastructure/ai/CorrectionEventStore';
 
-import { SAFE_DEFAULTS, ManualEntryProps, TargetSelectionGroup } from './types';
+import { ManualEntryProps, TargetSelectionGroup } from './types';
 import { useManualEntryHydration } from './hooks/useManualEntryHydration';
 import { buildLinkedDetailMaps } from './services/loadLogIntoEditor';
 import ManualEntryHeader from './components/ManualEntryHeader';

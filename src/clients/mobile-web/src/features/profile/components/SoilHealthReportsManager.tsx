@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
 import { FlaskConical, Plus, FileText, Trash2, Calendar, CheckCircle2 } from 'lucide-react';
 import { FarmerProfile } from '../../../types';
-import Button from '../../../shared/components/ui/Button';
 
 interface SoilHealthReportsManagerProps {
     profile: FarmerProfile;

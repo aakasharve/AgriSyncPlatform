@@ -7,8 +7,6 @@ import { getHarvestSessions, getOtherIncomeEntries } from '../../../services/har
 import { CropSymbol } from '../../context/components/CropSelector';
 // Sub-plan 04 Task 9 — chart palette + geometry + date + scope-filter helpers extracted.
 import {
-    CHART_COLORS,
-    BAR_GRADIENTS,
     getPaletteColor,
     getBarGradient,
     darkenHex,
@@ -27,7 +25,6 @@ import {
     getNonGlobalSelections,
     getUniquePlotIds,
     getScopedLogCost,
-    type ScopeSelection,
 } from './costAnalysisHelpers';
 
 type CalendarMode = 'week' | 'month';

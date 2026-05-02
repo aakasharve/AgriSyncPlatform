@@ -5,8 +5,7 @@
 
 import React, { useState, useRef } from 'react';
 import {
-    HarvestSession,
-    SaleEntry
+    HarvestSession
 } from '../../../../types';
 import {
     X,
@@ -14,10 +13,8 @@ import {
     Loader2,
     Check,
     AlertTriangle,
-    ScanLine,
-    Image as ImageIcon
+    ScanLine
 } from 'lucide-react';
-import Button from '../../../../shared/components/ui/Button';
 import { processPattiImage } from '../../../../services/pattiImageService';
 
 interface PattiUploadSheetProps {

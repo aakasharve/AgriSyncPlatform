@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import {
     CropProfile,
     HarvestPattern,
@@ -13,11 +13,9 @@ import {
 import {
     X,
     Check,
-    ChevronRight,
     Scale,
     Package,
-    Hash, // For count
-    Calendar,
+    Hash,
     ArrowRight
 } from 'lucide-react';
 import { getSuggestedUnitsForCrop, saveHarvestConfig } from '../../../../services/harvestService';

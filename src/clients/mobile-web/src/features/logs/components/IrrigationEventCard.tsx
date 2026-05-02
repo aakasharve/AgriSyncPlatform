@@ -5,7 +5,6 @@
 
 import React, { useState } from 'react';
 import { Droplets, ChevronDown, ChevronUp } from 'lucide-react';
-import { IrrigationEvent } from '../../../types';
 import { formatCurrency } from '../../../shared/utils/currency';
 
 export interface IrrigationSummary {

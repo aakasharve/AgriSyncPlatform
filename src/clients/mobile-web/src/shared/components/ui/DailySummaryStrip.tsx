@@ -12,7 +12,6 @@
  */
 
 import React from 'react';
-import { LogVerificationStatus } from '../../../features/logs/logs.types';
 
 interface DailySummaryStripProps {
     date: string; // YYYY-MM-DD

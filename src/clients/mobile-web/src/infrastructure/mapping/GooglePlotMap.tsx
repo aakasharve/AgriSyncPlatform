@@ -1,7 +1,7 @@
 import React, { useCallback, useRef, useState, useEffect } from 'react';
 import { GoogleMap, useJsApiLoader, DrawingManager, Polygon } from '@react-google-maps/api';
 import { PlotGeoData, GeoPoint } from '../../types';
-import { MapPin, Eraser, Navigation, Undo, Check, X, MousePointerClick, Hand, PenTool, MousePointer2, GripHorizontal, BarChart3 } from 'lucide-react';
+import { Eraser, Navigation, Undo, Check, MousePointerClick, Hand, PenTool, MousePointer2, GripHorizontal, BarChart3 } from 'lucide-react';
 import { getGoogleMapsApiKey, GOOGLE_MAPS_LIBRARIES, GOOGLE_MAPS_SCRIPT_ID } from './googleMapsConfig';
 
 interface PlotMapProps {

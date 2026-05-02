@@ -1,5 +1,5 @@
 import React from 'react';
-import { CheckCircle, Calendar, MapPin, Layers, ArrowRight } from 'lucide-react';
+import { CheckCircle, Calendar, MapPin, Layers } from 'lucide-react';
 
 interface Step4Props {
     data: any;

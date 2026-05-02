@@ -5,7 +5,6 @@
  */
 import React from 'react';
 import { AdminOpsHealthDto } from '../../../infrastructure/api/AgriSyncClient';
-import { AdminOpsPage } from './AdminOpsPage';
 
 const MOCK: AdminOpsHealthDto = {
     voiceInvocations24h: 247,

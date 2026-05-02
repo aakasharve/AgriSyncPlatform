@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Shield, MapPin, Mic, Camera, HardDrive, CheckCircle2, ChevronRight, Check } from 'lucide-react';
+import { Shield, MapPin, Mic, Camera, HardDrive, CheckCircle2 } from 'lucide-react';
 import Button from '../shared/components/ui/Button';
 import { useUiPref } from '../shared/hooks/useUiPref';
 

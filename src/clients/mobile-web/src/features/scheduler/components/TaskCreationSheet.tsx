@@ -4,8 +4,8 @@
  */
 
 import React, { useState } from 'react';
-import { PlannedTask, CropProfile, Plot, Person } from '../../../types';
-import { X, Calendar, Check, AlertTriangle, Clock, Tag, User } from 'lucide-react';
+import { PlannedTask, CropProfile, Person } from '../../../types';
+import { X, Calendar, Check, AlertTriangle, User } from 'lucide-react';
 import { getDateKey } from '../../../core/domain/services/DateKeyService';
 
 interface TaskCreationSheetProps {

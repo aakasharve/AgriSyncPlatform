@@ -7,8 +7,7 @@
  */
 
 import React, { useEffect, useMemo, useState } from 'react';
-import {
-    Plus, Trash2, X, Crosshair, ArrowRight, ArrowLeft, Save,
+import { X, ArrowRight, Save,
     CheckCircle2, Wrench, AlertTriangle, Tractor
 } from 'lucide-react';
 import {

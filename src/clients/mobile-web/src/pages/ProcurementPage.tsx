@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { Package, Search, Filter, Camera, Plus } from 'lucide-react';
+import { Package, Search, Camera, Plus } from 'lucide-react';
 import SlidingCropSelector from '../features/context/components/SlidingCropSelector';
 import { CropProfile, ProcurementExpense } from '../types';
 import { procurementRepository } from '../services/procurementRepository';
