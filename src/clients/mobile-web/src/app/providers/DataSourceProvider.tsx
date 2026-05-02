@@ -14,6 +14,7 @@ import { legacyAuditPort } from '../../infrastructure/audit/LegacyAuditPort';
 import { useAuth } from './AuthProvider';
 import { getDatabase } from '../../infrastructure/storage/DexieDatabase';
 import { runLegacyLocalStorageMigration } from '../../infrastructure/storage/LegacyLocalStorageMigrator';
+import { DemoModeStore } from '../../infrastructure/storage/DemoModeStore';
 import { purgeExpiredProcessingVoiceClips } from '../../infrastructure/voice/VoiceClipRetention';
 
 // --- CONTEXT ---
@@ -27,12 +28,6 @@ interface DataSourceContextValue {
 }
 
 const DataSourceContext = createContext<DataSourceContextValue | null>(null);
-
-const ACTIVE_USER_ID_KEY = 'agrisync_active_user_id_v1';
-const REAL_MODE_LOCAL_STORAGE_KEYS = [
-    'crops',
-    'farmer_profile',
-] as const;
 
 // --- PROVIDER ---
 
@@ -50,27 +45,25 @@ export const DataSourceProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     const seedDemoDataIfNeeded = async () => {
         const demoRepo = LocalStorageLogsRepository.getInstance(); // Access directly or via dataSource.logs
         // Version Check & Reset
-        const versionKey = storageNamespace.getKey('demo_data_version');
-        const currentVersion = localStorage.getItem(versionKey);
+        const currentVersion = DemoModeStore.getDemoDataVersion();
 
         if (currentVersion !== DEMO_SEED_VERSION) {
             console.log(`[DataSource] Demo Data Version Mismatch (${currentVersion} vs ${DEMO_SEED_VERSION}). Resetting...`);
             await demoRepo.clearAll();
             // T-SP04-DEXIE-CUTOVER-SYNC-BRIDGE (2026-05-01): Dexie crops is
-            // the source of truth post-cutover. The legacy localStorage
-            // 'crops' removal stays as defense-in-depth (legacy entries may
-            // still exist from pre-migration installs).
+            // the source of truth post-cutover. The legacy localStorage clear
+            // stays as defense-in-depth for pre-migration installs.
             await getDatabase().crops.clear();
-            localStorage.removeItem(storageNamespace.getKey('crops'));
+            DemoModeStore.clearLegacyCrops();
 
             // Clear Procurement
-            localStorage.removeItem(storageNamespace.getKey('dfes_procurement_expenses'));
+            DemoModeStore.clearProcurementExpenses();
 
             // Clear Harvest & Other Income
-            localStorage.removeItem(storageNamespace.getKey('harvest_other_income'));
+            DemoModeStore.clearHarvestOtherIncome();
 
             // Clear Finance Events (MoneyEvents)
-            localStorage.removeItem(storageNamespace.getKey('money_events'));
+            DemoModeStore.clearMoneyEvents();
 
             // Clear Sessions/Configs for all potential plots
             const crops = await dataSource.crops.getAll();
@@ -78,12 +71,12 @@ export const DataSourceProvider: React.FC<{ children: React.ReactNode }> = ({ ch
 
             effectiveCrops.forEach(c => {
                 c.plots.forEach(p => {
-                    localStorage.removeItem(storageNamespace.getKey(`harvest_config_${p.id}`));
-                    localStorage.removeItem(storageNamespace.getKey(`harvest_sessions_${p.id}_${c.id}`));
+                    DemoModeStore.clearHarvestConfig(p.id);
+                    DemoModeStore.clearHarvestSessions(p.id, c.id);
                 });
             });
 
-            localStorage.setItem(versionKey, DEMO_SEED_VERSION);
+            DemoModeStore.setDemoDataVersion(DEMO_SEED_VERSION);
         }
 
         const count = await demoRepo.count();
@@ -116,7 +109,7 @@ export const DataSourceProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     };
 
     const resetAuthenticatedUserCacheIfNeeded = async (nextUserId: string) => {
-        const previousUserId = localStorage.getItem(ACTIVE_USER_ID_KEY);
+        const previousUserId = DemoModeStore.getActiveUserId();
         if (previousUserId === nextUserId) {
             return;
         }
@@ -180,13 +173,11 @@ export const DataSourceProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         // migrator left them in place as a safety net; on user-switch we
         // clear them so the next user's first boot doesn't accidentally
         // re-import the previous user's data via the migrator's once-only
-        // flag (the flag is also reset implicitly because the next boot
-        // sees no localStorage source data to import).
-        for (const baseKey of REAL_MODE_LOCAL_STORAGE_KEYS) {
-            localStorage.removeItem(storageNamespace.getKey(baseKey));
-        }
+        // flag.
+        DemoModeStore.clearLegacyCrops();
+        DemoModeStore.clearLegacyFarmerProfile();
 
-        localStorage.setItem(ACTIVE_USER_ID_KEY, nextUserId);
+        DemoModeStore.setActiveUserId(nextUserId);
     };
 
     // Handle Mode Switching & Initialization
