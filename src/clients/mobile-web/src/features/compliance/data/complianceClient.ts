@@ -1,4 +1,4 @@
-import { getAuthSession } from '../../../infrastructure/api/AuthTokenStore';
+import { getAuthSession } from '../../../infrastructure/storage/AuthTokenStore';
 
 export interface ComplianceSignalDto {
     id: string;

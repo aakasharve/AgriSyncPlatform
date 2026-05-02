@@ -1,5 +1,5 @@
 import { systemClock } from '../../core/domain/services/Clock';
-import { getAuthSession } from '../api/AuthTokenStore';
+import { getAuthSession } from '../storage/AuthTokenStore';
 import { agriSyncClient, type AttachmentDto } from '../api/AgriSyncClient';
 import { type DeviceFilesService, webDeviceFilesService } from '../device/DeviceFilesService';
 import { getDatabase, type AttachmentRecord, type UploadQueueItem } from '../storage/DexieDatabase';

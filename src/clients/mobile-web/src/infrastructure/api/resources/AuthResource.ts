@@ -2,7 +2,7 @@
 // Methods are byte-for-byte equivalent to the originals on
 // AgriSyncClient. The slim AgriSyncClient class delegates here.
 
-import { clearAuthSession, setAuthSession } from '../AuthTokenStore';
+import { clearAuthSession, setAuthSession } from '../../storage/AuthTokenStore';
 import type { AuthResponseDto, LoginRequest } from '../dtos';
 import { toAuthSession, type HttpTransport } from '../transport';
 

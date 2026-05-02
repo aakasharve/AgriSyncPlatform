@@ -1,4 +1,4 @@
-import { getAuthSession } from '../api/AuthTokenStore';
+import { getAuthSession } from '../storage/AuthTokenStore';
 import type {
     BoundaryAlignment,
     Farm,

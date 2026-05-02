@@ -1,5 +1,5 @@
 ﻿import { systemClock } from '../../core/domain/services/Clock';
-import { getAuthSession } from '../api/AuthTokenStore';
+import { getAuthSession } from '../storage/AuthTokenStore';
 import { agriSyncClient } from '../api/AgriSyncClient';
 import { getDatabase, type PendingAiJobRecord } from '../storage/DexieDatabase';
 import { isVoiceDoomLoopDetectorEnabled } from '../../app/featureFlags';

@@ -6,7 +6,7 @@
  */
 import React, { useEffect, useRef, useState } from 'react';
 import { verifyOtp, type StartOtpResponse, type OtpError } from '../data/otpClient';
-import { setAuthSession } from '../../../infrastructure/api/AuthTokenStore';
+import { setAuthSession } from '../../../infrastructure/storage/AuthTokenStore';
 
 interface OtpVerifyFormProps {
     phone: string;

@@ -52,7 +52,6 @@ const ALLOWLIST = new Map([
     ['features' + sep + 'finance' + sep + 'financeService.ts', 'T-IGH-04-LOCALSTORAGE-MIGRATION'],
     ['features' + sep + 'onboarding' + sep + 'qr' + sep + 'farmInviteStore.ts', 'T-IGH-04-LOCALSTORAGE-MIGRATION'],
     ['features' + sep + 'voice' + sep + 'vocab' + sep + 'vocabStore.ts', 'T-IGH-04-LOCALSTORAGE-MIGRATION'],
-    ['infrastructure' + sep + 'api' + sep + 'AuthTokenStore.ts', 'T-IGH-04-LOCALSTORAGE-MIGRATION'],
     ['infrastructure' + sep + 'sync' + sep + 'MutationQueue.ts', 'T-IGH-04-LOCALSTORAGE-MIGRATION'],
     ['infrastructure' + sep + 'sync' + sep + 'SyncPullReconciler.ts', 'T-IGH-04-LOCALSTORAGE-MIGRATION'],
     ['services' + sep + 'harvestService.ts', 'T-IGH-04-LOCALSTORAGE-MIGRATION'],
