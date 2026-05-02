@@ -96,13 +96,17 @@ export function allocateActivityExpensesForPlot(
     plotIndex: number,
     plotCount: number
 ): ActivityExpenseEvent[] {
+    // ActivityExpenseEvent does not declare `targetPlotName` (unlike sibling
+    // event types) but voice/manual payloads may still attach it for plot
+    // bucketing. Read it through a narrowed structural type instead of `any`.
+    type WithTargetPlot = ActivityExpenseEvent & { targetPlotName?: string };
     return (expenseEvents || [])
         .filter(event => {
-            const targetPlotName = (event as any).targetPlotName as string | undefined;
+            const targetPlotName = (event as WithTargetPlot).targetPlotName;
             return !targetPlotName || targetPlotName === plotName;
         })
         .map(event => {
-            const targetPlotName = (event as any).targetPlotName as string | undefined;
+            const targetPlotName = (event as WithTargetPlot).targetPlotName;
             const isShared = !targetPlotName;
 
             return {

@@ -31,6 +31,7 @@ import {
     IrrigationEvent,
     LabourEvent,
     InputEvent,
+    InputReason,
     MachineryEvent,
     CropProfile,
     ActivityExpenseEvent,
@@ -44,7 +45,7 @@ import {
     PlannedTask
 } from '../../types';
 import { HarvestSession, HarvestDayEntry } from '../logs/harvest.types';
-import { ProcurementExpense } from '../procurement/procurement.types';
+import { ProcurementExpense, ExpenseLineItem } from '../procurement/procurement.types';
 import { getDateKey, getTodayKey } from '../../core/domain/services/DateKeyService';
 import { idGenerator } from '../../core/domain/services/IdGenerator';
 
@@ -137,7 +138,15 @@ const SPRAY_SCHEDULE: Record<string, number[]> = {
 
 // Issue days: specific days where problems occur
 // This creates "Stories" for the dashboard
-const ISSUE_SCHEDULE = [
+type IssueScheduleSeverity = 'normal' | 'important' | 'urgent' | 'high';
+interface IssueScheduleEntry {
+    day: number;
+    cropId: string;
+    type: 'pest' | 'disease' | 'resource' | 'irrigation' | 'weather';
+    description: string;
+    severity: IssueScheduleSeverity;
+}
+const ISSUE_SCHEDULE: IssueScheduleEntry[] = [
     // Early Season Issues
     { day: -82, cropId: 'c1', type: 'pest', description: 'Thrips population building up', severity: 'normal' },
     { day: -65, cropId: 'c2', type: 'disease', description: 'Bacterial blight spots seen on p2_2', severity: 'important' },
@@ -152,6 +161,12 @@ const ISSUE_SCHEDULE = [
     { day: -12, cropId: 'c4', type: 'weather', description: 'Cloudy weather - risk of blight', severity: 'normal' },
     { day: -5, cropId: 'p2_2', type: 'pest', description: 'Fruit borer observed', severity: 'urgent' }, // Validates p2_2 is problematic
 ];
+
+// The schedule allows a wider 'high' value than ObservationSeverity. Cast at
+// the boundary to preserve existing runtime behavior (the literal flows through
+// untouched, matching the prior `as any` pass-through).
+const toObservationSeverity = (s: IssueScheduleSeverity): ObservationSeverity =>
+    s as ObservationSeverity;
 
 // --- HARVEST SCHEDULES ---
 // 1. Onion Harvest (Current, last 5 days)
@@ -231,7 +246,7 @@ const buildIrrigationEvent = (linkedActivityId: string, plotId: string, crop: Cr
     return {
         id: getRandomId('irr'),
         linkedActivityId,
-        method: method as any,
+        method,
         source: rPick(['Well', 'Borewell', 'Canal']),
         durationHours: Math.round(duration / 60 * 10) / 10,
         notes: rMaybe(0.2) ? 'Routine flow' : undefined
@@ -272,24 +287,24 @@ const buildLabourEvent = (linkedActivityId: string, workType: string, isHeavy: b
     };
 };
 
-const buildInputEvent = (linkedActivityId: string, reason: string, method?: 'Spray' | 'Drip' | 'Soil', overrideType?: string): InputEvent => {
+const buildInputEvent = (linkedActivityId: string, reason: InputReason, method?: 'Spray' | 'Drip' | 'Soil', overrideType?: InputEvent['type']): InputEvent => {
     const isFertigation = method === 'Drip' || method === 'Soil' || reason === 'Growth';
     const product = isFertigation ? rPick(['Urea', '19:19:19', 'Potash', 'Magnesium']) : rPick(['Mancozeb', 'Confidor', 'Curacron', 'Trace', 'Gibberellic']);
-    const type = overrideType || (isFertigation ? 'fertilizer' : 'pesticide');
+    const type: InputEvent['type'] = overrideType || (isFertigation ? 'fertilizer' : 'pesticide');
     const finalMethod = method || (isFertigation ? 'Drip' : 'Spray');
 
     return {
         id: getRandomId('inp'),
         linkedActivityId,
         method: finalMethod,
-        type: type as any,
+        type,
         mix: [{
             id: getRandomId('mix'),
             productName: product,
             dose: isFertigation ? rPick([5, 10]) : rPick([1, 2]),
             unit: isFertigation ? 'kg' : 'ml/L'
         }],
-        reason: reason as any,
+        reason,
         cost: rInt(800, 3500),
         notes: `Applied for ${reason}`
     };
@@ -297,11 +312,13 @@ const buildInputEvent = (linkedActivityId: string, reason: string, method?: 'Spr
 
 const buildObservation = (dateStr: string, crop: CropProfile, plotId: string, text: string, noteType: ObservationNoteType, severity: ObservationSeverity): ObservationNote => {
     const obsId = getRandomId('obs');
+    // TaskCandidate.priority is 'normal' | 'high'; collapse the wider severity scale.
+    const taskPriority: 'normal' | 'high' = severity === 'normal' ? 'normal' : 'high';
     const tasks = noteType === 'reminder' ? [{
         id: getRandomId('task'),
         title: text,
         plotId,
-        priority: severity as any,
+        priority: taskPriority,
         status: 'pending' as const,
         sourceNoteId: obsId,
         dueDate: dateStr,
@@ -451,7 +468,7 @@ export const generateRollingDemoData = (crops: CropProfile[]): DailyLog[] => {
                 if (crop) {
                     const plotIds = crop.plots.map(p => p.id);
                     const actId = getRandomId('act');
-                    const reason = rPick(['Preventive', 'Growth', 'Pest']);
+                    const reason = rPick(['Preventive', 'Growth', 'Pest'] as const);
                     logs.push(buildLog(dateStr, crop, plotIds, {
                         cropActivities: [{ id: actId, title: `${reason} Spray`, workTypes: ['Spraying'], status: 'completed', isCommonActivity: true }],
                         inputs: [buildInputEvent(actId, reason, 'Spray')],
@@ -482,7 +499,7 @@ export const generateRollingDemoData = (crops: CropProfile[]): DailyLog[] => {
                     logs.push(buildLog(dateStr, crop, [plot.id], {
                         cropActivities: [{ id: actId, title: 'Irrigation & Patrol', workTypes: ['Irrigation'], status: 'completed' }],
                         irrigation: [buildIrrigationEvent(actId, plot.id, crop)],
-                        observations: issue ? [buildObservation(dateStr, crop, plot.id, issue.description, issue.type === 'weather' ? 'reminder' : 'issue', issue.severity as any)] : [],
+                        observations: issue ? [buildObservation(dateStr, crop, plot.id, issue.description, issue.type === 'weather' ? 'reminder' : 'issue', toObservationSeverity(issue.severity))] : [],
                         fullTranscript: 'Water given according to schedule.'
                     }, 'WORK_RECORDED', undefined, getOperatorForDay(dayOffset, plot.id)));
                 }
@@ -636,7 +653,10 @@ export const generateDemoProcurementExpenses = (): ProcurementExpense[] => {
             amountPaid: amount,
             paymentStatus: 'PAID',
             subtotal: amount,
-            lineItems: [{ id: `li_${i}`, name: 'Material Purchase', quantity: 1, unit: 'Lump', unitPrice: amount, totalAmount: amount, category: rPick(['FERTILIZER', 'PESTICIDE', 'MACHINERY']) as any, aiConfidence: 100 }],
+            // 'MACHINERY' is not a real ExpenseCategory ('MACHINERY_RENTAL' is),
+            // but the demo seed has historically emitted it. Cast preserves
+            // runtime behavior; reconciling the literal is a separate fix.
+            lineItems: [{ id: `li_${i}`, name: 'Material Purchase', quantity: 1, unit: 'Lump', unitPrice: amount, totalAmount: amount, category: rPick(['FERTILIZER', 'PESTICIDE', 'MACHINERY']) as ExpenseLineItem['category'], aiConfidence: 100 }],
             operatorId: 'owner',
             aiExtracted: true,
             userVerified: true

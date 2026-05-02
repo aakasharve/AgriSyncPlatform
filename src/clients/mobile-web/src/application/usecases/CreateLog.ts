@@ -5,8 +5,14 @@ import { backgroundSyncWorker } from '../../infrastructure/sync/BackgroundSyncWo
 import { SyncMutationName } from '../../infrastructure/sync/SyncMutationCatalog';
 import type { LocationDto } from '../../infrastructure/api/AgriSyncClient';
 
+// Manual entry payload is a record-shaped draft built by the form layer; the
+// canonical shape is enforced in the manual-entry feature, not here, so we
+// type it loosely as a JSON record. Voice/auto-save flows use a different
+// input type (CreateLogsFromVoiceInput).
+export type ManualLogFormData = Record<string, unknown>;
+
 export interface CreateLogsFromManualInput {
-    formData: any;
+    formData: ManualLogFormData;
     logScope: LogScope;
     crops: CropProfile[];
     profile: FarmerProfile;
@@ -31,7 +37,9 @@ export interface CreateLogsResult {
 function tryExtractFarmId(crops: CropProfile[]): string | undefined {
     for (const crop of crops) {
         for (const plot of crop.plots) {
-            const candidate = (plot as any).farmId;
+            // Plot doesn't declare farmId at this layer, but real records may
+            // carry it. Read through a structural narrow rather than `any`.
+            const candidate = (plot as { farmId?: unknown }).farmId;
             if (typeof candidate === 'string' && candidate.length > 0) {
                 return candidate;
             }

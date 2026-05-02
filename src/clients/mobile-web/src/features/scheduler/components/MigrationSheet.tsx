@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Loader2, X } from 'lucide-react';
-import { agriSyncClient, MigrateScheduleRequest } from '../../../infrastructure/api/AgriSyncClient';
+import { agriSyncClient, MigrateScheduleRequest, ScheduleSubscriptionDto } from '../../../infrastructure/api/AgriSyncClient';
 import ScheduleSelector from './ScheduleSelector';
 
 interface MigrationSheetProps {

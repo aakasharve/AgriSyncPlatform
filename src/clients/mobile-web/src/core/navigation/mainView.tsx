@@ -5,7 +5,7 @@
 
 import React from 'react';
 import {
-    AgriLogResponse, DailyLog
+    AgriLogResponse, DailyLog, TodayCounts, FarmContext
 } from '../../types';
 import CropSelector, { CropSymbol } from '../../features/context/components/CropSelector';
 import InputMethodToggle from '../../shared/components/ui/InputMethodToggle';
@@ -351,7 +351,7 @@ export const renderLogView = (ctx: AppRouterContext): React.ReactNode => {
                                         provenance={provenance}
                                         onDataConsumed={() => setDraftLog(null)}
                                         todayCountsMap={(() => {
-                                            const map: Record<string, any> = {};
+                                            const map: Record<string, TodayCounts> = {};
                                             if (currentLogContext) {
                                                 const todayStr = getDateKey();
                                                 const pids = new Set<string>();
@@ -370,7 +370,7 @@ export const renderLogView = (ctx: AppRouterContext): React.ReactNode => {
 
                                             const todayLogsLocal = history.filter(log =>
                                                 log.date === todayStr &&
-                                                log.context?.selection?.some((sel: any) =>
+                                                log.context?.selection?.some((sel: FarmContext['selection'][number]) =>
                                                     sel.selectedPlotIds?.some((pid: string) => contextPlotIds.has(pid))
                                                 )
                                             );
@@ -384,7 +384,7 @@ export const renderLogView = (ctx: AppRouterContext): React.ReactNode => {
 
                                             return history.filter(log =>
                                                 log.date === todayStr &&
-                                                log.context?.selection?.some((sel: any) =>
+                                                log.context?.selection?.some((sel: FarmContext['selection'][number]) =>
                                                     sel.selectedPlotIds?.some((pid: string) => contextPlotIds.has(pid))
                                                 )
                                             );

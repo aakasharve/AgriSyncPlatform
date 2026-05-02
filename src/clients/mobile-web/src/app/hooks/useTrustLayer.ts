@@ -14,9 +14,9 @@ interface UseTrustLayerProps {
     setFarmerProfile: React.Dispatch<React.SetStateAction<FarmerProfile>>;
     // Unified History Setter
     setHistory: React.Dispatch<React.SetStateAction<DailyLog[]>>;
-    // Deprecated setters
-    setMockHistory?: any;
-    setRealHistory?: any;
+    // Deprecated setters (kept on the prop bag for backward compatibility)
+    setMockHistory?: React.Dispatch<React.SetStateAction<DailyLog[]>>;
+    setRealHistory?: React.Dispatch<React.SetStateAction<DailyLog[]>>;
     isDemoMode: boolean; // Kept via props but unused for logic branching now
 }
 

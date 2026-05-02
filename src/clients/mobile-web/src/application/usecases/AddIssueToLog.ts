@@ -44,8 +44,10 @@ export const addIssueToLog = async (
     let eventFound = false;
     let categoryFound = '';
 
-    // Helper to inject issue
-    const injectIssue = (collection: any[]) => {
+    // Helper to inject issue. The buckets injected through this helper share
+    // the {id, issue?} shape needed here; a generic constraint preserves the
+    // element type at each call site.
+    const injectIssue = <T extends { id: string; issue?: BucketIssue }>(collection: T[]): T[] => {
         return collection.map(item => {
             if (item.id === request.targetEventId) {
                 eventFound = true;

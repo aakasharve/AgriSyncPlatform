@@ -30,7 +30,16 @@ const DateControlBar: React.FC<DateControlBarProps> = ({
     };
     const triggerPicker = () => {
         if (inputRef.current) {
-            try { (inputRef.current as any).showPicker(); } catch (e) { inputRef.current.click(); }
+            const input = inputRef.current as HTMLInputElement & { showPicker?: () => void };
+            try {
+                if (typeof input.showPicker === 'function') {
+                    input.showPicker();
+                } else {
+                    input.click();
+                }
+            } catch {
+                input.click();
+            }
         }
     };
 
