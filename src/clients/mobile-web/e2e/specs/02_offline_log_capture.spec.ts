@@ -15,23 +15,14 @@
 import { test, expect } from '@playwright/test';
 import { resetAndSeed } from '../fixtures/seed.api';
 import { goOffline, goOnline } from '../fixtures/offlineHelper';
+import { loginViaPassword } from '../fixtures/loginHelper';
 
 test.describe('Offline log capture', () => {
     test('user can log a daily activity while offline; it queues and syncs on reconnect', async ({ page }) => {
         await resetAndSeed('ramu');
 
         // --- Login ---
-        await page.goto('/');
-        const phoneInput = page.locator('input[type="tel"], input[placeholder*="phone"], input[placeholder*="9999"]').first();
-        await phoneInput.waitFor({ timeout: 15_000 });
-        await phoneInput.fill('9999999999');
-
-        const passwordInput = page.locator('input[type="password"]').first();
-        await passwordInput.waitFor({ timeout: 10_000 });
-        await passwordInput.fill('ramu123');
-
-        await page.getByRole('button', { name: /sign in|login|submit/i }).first().click();
-        await expect(page.getByTestId('home-greeting')).toBeVisible({ timeout: 20_000 });
+        await loginViaPassword(page, '9999999999', 'ramu123');
 
         // --- Go offline ---
         await goOffline(page);
