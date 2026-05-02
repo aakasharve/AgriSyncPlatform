@@ -129,13 +129,9 @@ public static class E2eTestEndpoints
                 }
                 case "admin_two_orgs":
                 {
-                    logger.LogWarning("E2E seed fixture {Fixture} requested but not implemented", fixture);
-                    return Results.Json(new
-                    {
-                        error = "fixture_not_implemented",
-                        fixture,
-                        followup = "T-IGH-05-ADMIN-TWO-ORGS-SEEDER",
-                    }, statusCode: StatusCodes.Status501NotImplemented);
+                    var adminSeeder = scope.ServiceProvider.GetRequiredService<E2eFixtureSeeder>();
+                    var result = await adminSeeder.SeedAdminTwoOrgsAsync(ct);
+                    return Results.Ok(result);
                 }
                 default:
                 {
