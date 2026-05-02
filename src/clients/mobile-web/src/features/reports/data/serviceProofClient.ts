@@ -1,4 +1,4 @@
-import { getAuthSession } from '../../../infrastructure/api/AuthTokenStore';
+import { getAuthSession } from '../../../infrastructure/storage/AuthTokenStore';
 
 interface ViteImportMeta {
     env?: { VITE_AGRISYNC_API_URL?: unknown };

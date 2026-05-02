@@ -5,7 +5,7 @@
  * @module features/work/data/jobCardsClient
  */
 
-import { getAuthSession } from '../../../infrastructure/api/AuthTokenStore';
+import { getAuthSession } from '../../../infrastructure/storage/AuthTokenStore';
 import type { JobCard, JobCardLineItem } from '../../../domain/work/JobCard';
 import type { WorkerProfileData } from '../../../domain/work/ReliabilityScore';
 

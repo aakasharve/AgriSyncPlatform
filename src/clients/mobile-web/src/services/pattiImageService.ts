@@ -4,7 +4,7 @@
  */
 
 import { agriSyncClient } from '../infrastructure/api/AgriSyncClient';
-import { getAuthSession } from '../infrastructure/api/AuthTokenStore';
+import { getAuthSession } from '../infrastructure/storage/AuthTokenStore';
 import { IdempotencyKeyFactory } from '../infrastructure/ai/IdempotencyKeyFactory';
 import { getDatabase } from '../infrastructure/storage/DexieDatabase';
 

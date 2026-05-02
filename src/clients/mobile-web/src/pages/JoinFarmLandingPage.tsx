@@ -17,7 +17,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { CheckCircle2, ArrowRight, Phone, MessageCircleMore, Leaf } from 'lucide-react';
 import { parseJoinPayload, type JoinRole } from '../features/onboarding/qr/qrTokenClient';
 import { recordJoinAttempt } from '../features/onboarding/qr/farmInviteStore';
-import { setAuthSession } from '../infrastructure/api/AuthTokenStore';
+import { setAuthSession } from '../infrastructure/storage/AuthTokenStore';
 import { startOtp, verifyOtp, isOtpError } from '../features/auth/data/otpClient';
 import { claimFarmJoin, isInviteApiError } from '../features/onboarding/qr/inviteApi';
 import { useUiPref } from '../shared/hooks/useUiPref';

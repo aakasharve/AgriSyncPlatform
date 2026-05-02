@@ -11,7 +11,7 @@
  * carry `phone_verified=true` (enforced server-side).
  */
 
-import { getAuthSession } from '../../../infrastructure/api/AuthTokenStore';
+import { getAuthSession } from '../../../infrastructure/storage/AuthTokenStore';
 
 interface ViteImportMeta {
     env?: {

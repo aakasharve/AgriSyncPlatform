@@ -1,7 +1,7 @@
 import { WeatherPort } from '../../application/ports/WeatherPort';
 import { PlotGeo } from '../../domain/types';
 import { WeatherStamp, DailyForecast } from '../../features/weather/weather.types';
-import { getAuthSession } from '../api/AuthTokenStore';
+import { getAuthSession } from '../storage/AuthTokenStore';
 import { idGenerator } from '../../core/domain/services/IdGenerator';
 import { systemClock } from '../../core/domain/services/Clock';
 

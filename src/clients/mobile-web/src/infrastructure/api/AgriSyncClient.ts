@@ -17,7 +17,7 @@ import {
     getAuthSession,
     setAuthSession,
     type AuthSession,
-} from './AuthTokenStore';
+} from '../storage/AuthTokenStore';
 import { SYNC_MUTATION_TYPES } from '../sync/SyncMutationCatalog';
 import {
     APP_VERSION,
