@@ -72,7 +72,7 @@ export const useAppData = (_props?: UseAppDataProps): UseAppDataResult => {
     // Start with empty crops - will be populated based on demo mode
     const [crops, setCrops] = useState<CropProfile[]>([]);
     // Separate state for user's real crops (persisted)
-    const [realCrops, setRealCrops] = useState<CropProfile[]>([]);
+    const [_realCrops, setRealCrops] = useState<CropProfile[]>([]);
     const [farmerProfile, setFarmerProfile] = useState<FarmerProfile>({
         name: 'Shetkari Raja',
         village: 'Nashik',

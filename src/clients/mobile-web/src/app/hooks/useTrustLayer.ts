@@ -24,7 +24,6 @@ export const useTrustLayer = ({
     farmerProfile,
     setFarmerProfile,
     setHistory,
-    isDemoMode
 }: UseTrustLayerProps): UseTrustLayerResult => {
 
     const { dataSource, auditPort } = useDataSource();

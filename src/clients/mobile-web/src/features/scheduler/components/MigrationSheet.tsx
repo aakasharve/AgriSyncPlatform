@@ -10,7 +10,7 @@ interface MigrationSheetProps {
     cycleId: string;
     farmId: string;
     currentTemplateId?: string;
-    onClose: (didMigrate: boolean, result?: any) => void;
+    onClose: (didMigrate: boolean, result?: ScheduleSubscriptionDto) => void;
 }
 
 const REASON_OPTIONS = [

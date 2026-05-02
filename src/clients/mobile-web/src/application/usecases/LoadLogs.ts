@@ -109,7 +109,7 @@ export async function loadLogsWithFilter(
  */
 export async function getTodaySummary(
     repository: LogsRepository,
-    crops: CropProfile[]
+    _crops: CropProfile[]
 ): Promise<TodaySummary> {
     const todayLogs = await loadTodayLogs(repository);
 

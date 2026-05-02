@@ -8,7 +8,7 @@ interface SchedulePickerModalProps {
     plotId: string;
     cycleId: string;
     farmId: string;
-    onClose: (didAdopt: boolean, subscription?: any) => void;
+    onClose: (didAdopt: boolean, subscription?: ScheduleSubscriptionDto) => void;
 }
 
 export const SchedulePickerModal: React.FC<SchedulePickerModalProps> = ({

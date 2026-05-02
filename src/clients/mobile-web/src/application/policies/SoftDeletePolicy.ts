@@ -16,7 +16,7 @@ export class SoftDeletePolicy {
     /**
      * Check if a log must be preserved (soft-deleted).
      */
-    static shouldSoftDelete(log: DailyLog): boolean {
+    static shouldSoftDelete(_log: DailyLog): boolean {
         // For now, ALWAYS soft delete to prevent data loss.
         // In the future, we might allow hard delete for 'draft' logs that were created < 1 hour ago.
         return true;
@@ -26,7 +26,7 @@ export class SoftDeletePolicy {
      * Check if a specific actor is allowed to delete this log.
      * (This overlaps with AuthorizationPolicy, but this is domain-rule level)
      */
-    static canDelete(log: DailyLog, actorId: string): boolean {
+    static canDelete(log: DailyLog, _actorId: string): boolean {
         // Verification status check
         if (log.verification?.status === LogVerificationStatus.APPROVED) {
             // Even if allowed, it will be a soft delete.

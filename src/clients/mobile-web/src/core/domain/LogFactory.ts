@@ -35,6 +35,30 @@ const FARM_GLOBAL_ID = 'FARM_GLOBAL';
 const FARM_GLOBAL_NAME = 'Entire Farm';
 
 /**
+ * Shape of the manual-entry form data passed into LogFactory.
+ *
+ * Built from the ManualEntry feature's onSubmit payload (see
+ * features/logs/components/manual-entry/types.ts ManualEntryProps.onSubmit).
+ * Keep this in sync with that contract — duplicating here avoids reaching
+ * across the layer boundary into a feature module.
+ */
+export interface ManualEntryLogData {
+    cropActivities?: CropActivityEvent[];
+    irrigation?: IrrigationEvent[];
+    labour?: LabourEvent[];
+    inputs?: InputEvent[];
+    machinery?: MachineryEvent[];
+    activityExpenses?: ActivityExpenseEvent[];
+    observations?: ObservationNote[];
+    plannedTasks?: PlannedTask[];
+    disturbance?: DisturbanceEvent;
+    date: string;
+    manualTotalCost?: number;
+    fullTranscript?: string;
+    originalLogId?: string;
+}
+
+/**
  * LogFactory: Centralized creation of DailyLog entities.
  * Ensures consistent IDs, Metadata, and Trust Layer compliance.
  */
@@ -71,7 +95,7 @@ export class LogFactory {
      * Creates a set of DailyLogs (one per plot) from a Manual Entry form data.
      */
     static createFromManualEntry(
-        data: any, // Raw form data (typed as any during transition)
+        data: ManualEntryLogData,
         logScope: LogScope,
         crops: CropProfile[],
         profile: FarmerProfile,
@@ -154,7 +178,7 @@ export class LogFactory {
             const plotGrandTotal = labourCost + machineCost + inputCost + expenseCost;
 
             // MIRROR: Handle Planned Tasks from Manual Entry
-            const mirroredTasks: PlannedTask[] = data.plannedTasks?.map((t: any) => ({
+            const mirroredTasks: PlannedTask[] = data.plannedTasks?.map((t: PlannedTask) => ({
                 ...t,
                 id: scopeChildId(t.id || idGen.generate(), plotId),
                 plotId: plotId,
@@ -182,7 +206,11 @@ export class LogFactory {
                     textRaw: t.title,
                     textCleaned: `Planned Task: ${t.title}`,
                     noteType: 'reminder' as const,
-                    severity: (t.priority || 'normal') as any,
+                    // PlannedTask.priority is 'normal' | 'high' but
+                    // ObservationNote.severity is 'normal' | 'important' | 'urgent'.
+                    // The legacy mapping passed the raw priority through; cast
+                    // preserves that runtime behavior.
+                    severity: (t.priority || 'normal') as ObservationNote['severity'],
                     aiConfidence: 100,
                     tags: ['manual_task']
                 }))
@@ -275,24 +303,24 @@ export class LogFactory {
     }
 
     private static createFarmGlobalManualLog(
-        data: any,
+        data: ManualEntryLogData,
         profile: FarmerProfile,
         nowISO: string,
         idGen: IdGenerator
     ): DailyLog {
-        const labour = data.labour || [];
-        const irrigation = (data.irrigation || []).filter(isCompletedIrrigationEvent);
-        const inputs = data.inputs || [];
-        const machinery = data.machinery || [];
-        const activityExpenses = data.activityExpenses || [];
+        const labour: LabourEvent[] = data.labour || [];
+        const irrigation: IrrigationEvent[] = (data.irrigation || []).filter(isCompletedIrrigationEvent);
+        const inputs: InputEvent[] = data.inputs || [];
+        const machinery: MachineryEvent[] = data.machinery || [];
+        const activityExpenses: ActivityExpenseEvent[] = data.activityExpenses || [];
 
-        const labourCost = labour.reduce((s: number, l: any) => s + (l.totalCost || 0), 0);
-        const machineCost = machinery.reduce((s: number, m: any) => s + (m.rentalCost || m.fuelCost || 0), 0);
-        const inputCost = inputs.reduce((s: number, i: any) => s + (i.cost || 0), 0);
-        const expenseCost = activityExpenses.reduce((s: number, e: any) => s + (e.totalAmount || 0), 0);
+        const labourCost = labour.reduce((s: number, l: LabourEvent) => s + (l.totalCost || 0), 0);
+        const machineCost = machinery.reduce((s: number, m: MachineryEvent) => s + (m.rentalCost || m.fuelCost || 0), 0);
+        const inputCost = inputs.reduce((s: number, i: InputEvent) => s + (i.cost || 0), 0);
+        const expenseCost = activityExpenses.reduce((s: number, e: ActivityExpenseEvent) => s + (e.totalAmount || 0), 0);
         const grandTotal = labourCost + machineCost + inputCost + expenseCost;
 
-        const mirroredTasks: PlannedTask[] = data.plannedTasks?.map((t: any) => ({
+        const mirroredTasks: PlannedTask[] = data.plannedTasks?.map((t: PlannedTask) => ({
             ...t,
             id: t.id || idGen.generate(),
             plotId: t.plotId || FARM_GLOBAL_ID,
@@ -318,7 +346,8 @@ export class LogFactory {
                 textRaw: t.title,
                 textCleaned: `Planned Task: ${t.title}`,
                 noteType: 'reminder' as const,
-                severity: (t.priority || 'normal') as any,
+                // See note above: legacy mapping passes priority through.
+                severity: (t.priority || 'normal') as ObservationNote['severity'],
                 aiConfidence: 100,
                 tags: ['manual_task']
             }))
@@ -418,15 +447,15 @@ export class LogFactory {
         const nowISO = clock.nowISO();
 
         // Shared Costs
-        const laborCostGlobal = response.labour?.reduce((s: number, x: any) => s + (x.totalCost || 0), 0) || 0;
-        const machineCostGlobal = response.machinery?.reduce((s: number, x: any) => s + (x.rentalCost || 0), 0) || 0;
-        const inputCostGlobal = response.inputs?.reduce((s: number, x: any) => s + (x.cost || 0), 0) || 0;
-        const expenseCostGlobal = response.activityExpenses?.reduce((s: number, x: any) => s + (x.totalAmount || 0), 0) || 0;
+        const laborCostGlobal = response.labour?.reduce((s: number, x: LabourEvent) => s + (x.totalCost || 0), 0) || 0;
+        const machineCostGlobal = response.machinery?.reduce((s: number, x: MachineryEvent) => s + (x.rentalCost || 0), 0) || 0;
+        const inputCostGlobal = response.inputs?.reduce((s: number, x: InputEvent) => s + (x.cost || 0), 0) || 0;
+        const expenseCostGlobal = response.activityExpenses?.reduce((s: number, x: ActivityExpenseEvent) => s + (x.totalAmount || 0), 0) || 0;
 
         // Expense Item Casting Fix
-        const mappedExpenses: ActivityExpenseEvent[] = (response.activityExpenses || []).map((exp: any) => ({
+        const mappedExpenses: ActivityExpenseEvent[] = (response.activityExpenses || []).map((exp: ActivityExpenseEvent) => ({
             ...exp,
-            items: (exp.items || []).map((item: any) => ({
+            items: (exp.items || []).map((item: ActivityExpenseEvent['items'][number]) => ({
                 ...item,
                 qty: item.qty || 1, // Default to 1 if missing to satisfy strict type
                 unit: item.unit || 'unit'
@@ -507,7 +536,7 @@ export class LogFactory {
                 (profile.trust?.reviewPolicy === 'AUTO_APPROVE_OWNER' && isOwner);
 
             // MIRROR: Handle Planned Tasks from Voice
-            const mirroredTasks: PlannedTask[] = response.plannedTasks?.map((pt: any) => ({
+            const mirroredTasks: PlannedTask[] = response.plannedTasks?.map((pt) => ({
                 id: idGen.generate(),
                 title: pt.title,
                 status: 'pending',
@@ -520,7 +549,7 @@ export class LogFactory {
             })) || [];
 
             const mirroredObservations: ObservationNote[] = [
-                ...(response.observations?.map((obs: any) => ({
+                ...(response.observations?.map((obs) => ({
                     ...obs,
                     id: scopeChildId(obs.id || idGen.generate(), plotId),
                     plotId,
@@ -633,7 +662,7 @@ export class LogFactory {
         const autoApprove = profile.trust?.reviewPolicy === 'AUTO_APPROVE_ALL' ||
             (profile.trust?.reviewPolicy === 'AUTO_APPROVE_OWNER' && isOwner);
 
-        const mirroredTasks: PlannedTask[] = response.plannedTasks?.map((pt: any) => ({
+        const mirroredTasks: PlannedTask[] = response.plannedTasks?.map((pt) => ({
             id: idGen.generate(),
             title: pt.title,
             status: 'pending',
@@ -646,7 +675,7 @@ export class LogFactory {
         })) || [];
 
         const mirroredObservations: ObservationNote[] = [
-            ...(response.observations?.map((obs: any) => ({
+            ...(response.observations?.map((obs) => ({
                 ...obs,
                 id: obs.id || idGen.generate(),
                 plotId: obs.plotId || FARM_GLOBAL_ID,

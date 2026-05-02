@@ -1,6 +1,7 @@
 import React from 'react';
 import { X, Calendar, Droplets, Sprout, SprayCan, Hammer, Clock, AlertCircle } from 'lucide-react';
 import { BlockStatus } from './DayCard';
+import { DailyLog } from '../../../types';
 
 export interface ScheduleDetailModalProps {
     isOpen: boolean;
@@ -12,7 +13,7 @@ export interface ScheduleDetailModalProps {
         status: BlockStatus;
         note?: string; // One-time intervention note (e.g. "Hydrogen Cyanamide")
         baseline?: string; // Periodic rule (e.g. "Every 3 days")
-        logData?: any; // If status is DONE, what was actually logged
+        logData?: DailyLog; // If status is DONE, what was actually logged
     } | null;
 }
 
