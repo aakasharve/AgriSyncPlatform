@@ -58,7 +58,7 @@ export function useManualEntryHydration(params: HydrationParams): void {
 
         // 1. Core State Hydration (Existing Data Merging)
         // Ensure Global Activity Card Exists
-        let globalActivity: CropActivityEvent = {
+        const globalActivity: CropActivityEvent = {
             id: 'act_global_daily',
             title: 'Crop Activity',
             status: 'completed',

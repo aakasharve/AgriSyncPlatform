@@ -41,7 +41,7 @@ export const updateLog = async (
         }
 
         // 2. Prepare Update Logic
-        let finalLog: DailyLog = { ...existingLog, ...request.updatedData };
+        const finalLog: DailyLog = { ...existingLog, ...request.updatedData };
 
         // 3. Handle Verification Invariance
         if (existingLog.verification?.status === LogVerificationStatus.APPROVED ||
