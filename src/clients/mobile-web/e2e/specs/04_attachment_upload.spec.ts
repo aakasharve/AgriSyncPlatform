@@ -29,6 +29,7 @@
 
 import { test, expect } from '@playwright/test';
 import { resetAndSeed } from '../fixtures/seed.api';
+import { loginViaPassword } from '../fixtures/loginHelper';
 
 // Minimal 1×1 transparent PNG — inline base64, no binary file committed.
 // Generated from: Buffer containing the canonical 1×1 PNG bytes.
@@ -44,20 +45,9 @@ test.describe('Attachment upload state machine', () => {
         await resetAndSeed('ramu');
 
         // --- Login ---
-        await page.goto('/');
-        const phoneInput = page.locator('input[type="tel"], input[placeholder*="phone"], input[placeholder*="9999"]').first();
-        await phoneInput.waitFor({ timeout: 15_000 });
-        await phoneInput.fill('9999999999');
-
-        const passwordInput = page.locator('input[type="password"]').first();
-        await passwordInput.waitFor({ timeout: 10_000 });
-        await passwordInput.fill('ramu123');
-
-        await page.getByRole('button', { name: /sign in|login|submit/i }).first().click();
-
-        // Wait for home to load — this also ensures the initial sync pull has run
-        // (shramsafal_last_pull_payload is written during pull; farmId will be available).
-        await expect(page.getByTestId('home-greeting')).toBeVisible({ timeout: 20_000 });
+        // loginViaPassword also waits for home-greeting, which ensures the initial
+        // sync pull has run (shramsafal_last_pull_payload is written; farmId available).
+        await loginViaPassword(page, '9999999999', 'ramu123');
 
         // --- Navigate to Procurement via bottom nav (state-machine routing — NOT page.goto) ---
         const procurementNavBtn = page.getByTestId('procurement-nav-btn');

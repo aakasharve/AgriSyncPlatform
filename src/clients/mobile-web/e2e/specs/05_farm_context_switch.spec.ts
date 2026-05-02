@@ -23,30 +23,16 @@
 
 import { test, expect } from '@playwright/test';
 import { resetAndSeed } from '../fixtures/seed.api';
+import { loginViaPassword } from '../fixtures/loginHelper';
 
 const FARM_ALPHA = 'E2E Farm Alpha';
 const FARM_BETA  = 'E2E Farm Beta';
 
 // ---------------------------------------------------------------------------
-// Shared login helper (mirrors pattern used in specs 01–03)
+// Thin wrapper so test bodies stay readable; delegates to the shared helper.
 // ---------------------------------------------------------------------------
 async function loginAsAdmin(page: import('@playwright/test').Page) {
-    await page.goto('/');
-
-    const phoneInput = page
-        .locator('input[type="tel"], input[placeholder*="phone"]')
-        .first();
-    await phoneInput.waitFor({ timeout: 15_000 });
-    await phoneInput.fill('7777777777');
-
-    const passwordInput = page.locator('input[type="password"]').first();
-    await passwordInput.waitFor({ timeout: 10_000 });
-    await passwordInput.fill('admin123');
-
-    await page.getByRole('button', { name: /sign in|login|submit/i }).first().click();
-
-    // Wait until the app has rendered the home greeting (auth + data load done)
-    await expect(page.getByTestId('home-greeting')).toBeVisible({ timeout: 25_000 });
+    await loginViaPassword(page, '7777777777', 'admin123');
 }
 
 test.describe('Farm context switch', () => {

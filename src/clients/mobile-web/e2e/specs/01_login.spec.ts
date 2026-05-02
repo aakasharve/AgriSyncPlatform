@@ -9,34 +9,13 @@
  */
 import { test, expect } from '@playwright/test';
 import { resetAndSeed } from '../fixtures/seed.api';
+import { loginViaPassword } from '../fixtures/loginHelper';
 
 test.describe('Login', () => {
     test('login with seeded user lands on home', async ({ page }) => {
         await resetAndSeed('ramu');
 
-        await page.goto('/');
-
-        // If already showing the login page directly, or wait for it to load
-        await page.waitForURL(/\/|login/, { timeout: 15_000 });
-
-        // The app may redirect unauthenticated users to login automatically;
-        // wait for the password input to be visible.
-        const phoneInput = page.locator('input[type="tel"], input[placeholder*="phone"], input[placeholder*="9999"]').first();
-        await phoneInput.waitFor({ timeout: 15_000 });
-        await phoneInput.fill('9999999999');
-
-        // Move to password field — there may be a "Next" step or a combined form
-        const passwordInput = page.locator('input[type="password"]').first();
-        await passwordInput.waitFor({ timeout: 10_000 });
-        await passwordInput.fill('ramu123');
-
-        // Submit
-        const submitBtn = page.getByRole('button', { name: /sign in|login|submit/i }).first();
-        await submitBtn.click();
-
-        // Assert home-greeting is visible (owner name displayed post-login)
-        const greeting = page.getByTestId('home-greeting');
-        await expect(greeting).toBeVisible({ timeout: 20_000 });
+        await loginViaPassword(page, '9999999999', 'ramu123');
 
         // Assert we are no longer on the /login route
         await expect(page).not.toHaveURL(/login/i);
@@ -45,17 +24,23 @@ test.describe('Login', () => {
     test('invalid password shows inline error and stays on login', async ({ page }) => {
         await resetAndSeed('ramu');
 
+        // Negative test — cannot use loginViaPassword (it asserts success).
+        // Inline the toggle-to-password flow with a WRONG password.
         await page.goto('/');
 
-        const phoneInput = page.locator('input[type="tel"], input[placeholder*="phone"], input[placeholder*="9999"]').first();
-        await phoneInput.waitFor({ timeout: 15_000 });
+        const useLegacyButton = page.getByRole('button', { name: /password.*legacy|पासवर्डने/i });
+        await useLegacyButton.waitFor({ timeout: 15_000 });
+        await useLegacyButton.click();
+
+        const phoneInput = page.locator('#auth-phone');
+        await phoneInput.waitFor({ timeout: 10_000 });
         await phoneInput.fill('9999999999');
 
-        const passwordInput = page.locator('input[type="password"]').first();
+        const passwordInput = page.locator('#auth-password');
         await passwordInput.waitFor({ timeout: 10_000 });
         await passwordInput.fill('wrong_password_xyz');
 
-        const submitBtn = page.getByRole('button', { name: /sign in|login|submit/i }).first();
+        const submitBtn = page.locator('button[type="submit"]').first();
         await submitBtn.click();
 
         // An inline alert div (role="alert") should appear with an error message
