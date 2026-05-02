@@ -170,6 +170,27 @@ public sealed class AnalyticsMigrationTests : IAsyncLifetime
             "farmer_suffering_watchlist",
             "alert_r9_api_error_spike",
             "alert_r10_voice_degraded",
+            // T-IGH-03-MIS-MATVIEW-REDESIGN Buckets 2/3/4 (2026-05-03):
+            // 13 matviews restored by 20260502020000_RestoreBuckets234Matviews.
+            // Each one has a documented in-tree consumer:
+            //   * engagement_tier / activation_funnel / d30_retention_paying /
+            //     schedule_migration_rate / api_health_24h
+            //     -> build/metabase/dashboards/founder.json (cards 8,9,3,10,13).
+            //   * alert_r1..alert_r8
+            //     -> AgriSync.Bootstrapper.Jobs.AlertDispatcherJob.AlertViews.
+            "engagement_tier",
+            "activation_funnel",
+            "d30_retention_paying",
+            "schedule_migration_rate",
+            "api_health_24h",
+            "alert_r1_smooth_decay",
+            "alert_r2_wau_vs_wvfd",
+            "alert_r3_rubber_stamp",
+            "alert_r4_voice_decay",
+            "alert_r5_compliance_plateau",
+            "alert_r6_flash_churn",
+            "alert_r7_correction_rising",
+            "alert_r8_referral_quality",
         };
 
         foreach (var matview in requiredMatviews)
@@ -222,23 +243,35 @@ public sealed class AnalyticsMigrationTests : IAsyncLifetime
         correctionCols.Should().Contain(new[] { "farm_id", "correction_rate_pct" },
             "Task 9's correction_rate must keep its two-column shape so MisReportRepository's join keeps working");
 
-        // Negative assertion: the dropped matviews (D1.B + D3.B) MUST
-        // NOT exist after the rewrite — keeping them as placeholders
-        // would hide debt and keep MisRefreshJob noise alive.
-        var droppedMatviews = new[]
+        // T-IGH-03-MIS-MATVIEW-REDESIGN Buckets 2/3/4 column contracts.
+        // Each spot-check matches the SQL the consumer already runs
+        // (Metabase founder.json card N, or AlertDispatcherJob's
+        // 'SELECT detector, description FROM {view} WHERE breached = true').
+        var engagementTierCols = await ReadMatviewColumns("engagement_tier");
+        engagementTierCols.Should().Contain(new[] { "week_start", "tier", "farm_count" },
+            "Bucket 2 — Metabase founder dashboard card 8 selects (tier, COUNT) and filters by week_start");
+
+        var activationFunnelCols = await ReadMatviewColumns("activation_funnel");
+        activationFunnelCols.Should().Contain(new[] { "cohort_week", "step_order", "step_name", "count" },
+            "Bucket 2 — Metabase founder dashboard card 9 selects (step_name, count) and orders by step_order, filters by cohort_week");
+
+        var d30RetentionCols = await ReadMatviewColumns("d30_retention_paying");
+        d30RetentionCols.Should().Contain(new[] { "cohort_week", "retention_pct" },
+            "Bucket 2 — Metabase founder dashboard card 3 selects retention_pct ordered by cohort_week DESC");
+
+        var scheduleMigrationCols = await ReadMatviewColumns("schedule_migration_rate");
+        scheduleMigrationCols.Should().Contain(new[] { "week_start" },
+            "Bucket 2 — Metabase founder dashboard card 10 filters by week_start (>= start of current month)");
+
+        var apiHealthCols = await ReadMatviewColumns("api_health_24h");
+        apiHealthCols.Should().Contain(new[] { "endpoint", "error_count", "farms_affected", "avg_latency_ms", "max_latency_ms" },
+            "Bucket 4 — Metabase founder dashboard card 13 selects all five columns directly");
+
+        // Bucket 3 — every R1..R8 alert matview must expose the same
+        // four-column shape AlertDispatcherJob already understands
+        // (matches R9 + R10): id INT, detector TEXT, description TEXT, breached BOOL.
+        foreach (var alertView in new[]
         {
-            "silent_churn_watchlist",
-            "zero_engagement_farms",
-            "engagement_tier",
-            "activation_funnel",
-            "d30_retention_paying",
-            "schedule_adoption_rate",
-            "schedule_migration_rate",
-            "schedule_abandonment_rate",
-            "feature_retention_lift",
-            "new_farm_day_snapshot",
-            "activity_heatmap",
-            "cohort_quality_score",
             "alert_r1_smooth_decay",
             "alert_r2_wau_vs_wvfd",
             "alert_r3_rubber_stamp",
@@ -247,7 +280,33 @@ public sealed class AnalyticsMigrationTests : IAsyncLifetime
             "alert_r6_flash_churn",
             "alert_r7_correction_rising",
             "alert_r8_referral_quality",
-            "api_health_24h",
+        })
+        {
+            var cols = await ReadMatviewColumns(alertView);
+            cols.Should().Contain(new[] { "id", "detector", "description", "breached" },
+                $"Bucket 3 — {alertView} must match AlertDispatcherJob's 'SELECT detector, description FROM {{view}} WHERE breached = true' contract");
+        }
+
+        // Negative assertion: the still-deferred matviews (NO-CONSUMER set)
+        // MUST NOT exist on a fresh DB. 7 from the original 22 stay dropped
+        // until at least one consumer (Metabase card / scheduled report /
+        // admin endpoint / alert rule) lands; tracked in
+        // T-IGH-03-MIS-MATVIEW-REDESIGN's "Bucket 2/3/4 investigation" section.
+        var droppedMatviews = new[]
+        {
+            // Bucket 1 stays dropped on this branch (its restoration is on
+            // a separate commit not yet merged into akash_edits).
+            "silent_churn_watchlist",
+            "zero_engagement_farms",
+            // Bucket 2 NO-CONSUMER subset.
+            "schedule_adoption_rate",
+            "schedule_abandonment_rate",
+            "feature_retention_lift",
+            "new_farm_day_snapshot",
+            "activity_heatmap",
+            "cohort_quality_score",
+            // Bucket 4 NO-CONSUMER subset (AdminOpsRepository.GetVoiceTrendAsync
+            // queries analytics.events directly; no Metabase card references it).
             "voice_pipeline_health",
         };
 
