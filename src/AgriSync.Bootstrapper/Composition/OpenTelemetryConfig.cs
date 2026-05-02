@@ -127,7 +127,12 @@ public static class OpenTelemetryConfig
                 metrics
                     .AddAspNetCoreInstrumentation()
                     .AddHttpClientInstrumentation()
-                    .AddRuntimeInstrumentation();
+                    .AddRuntimeInstrumentation()
+                    // T-IGH-05-PROMETHEUS-EXPORTER: always register the Prometheus
+                    // pull exporter so /metrics is available regardless of whether
+                    // an OTLP push collector is configured. The endpoint is mapped
+                    // in PrometheusExporterConfig.MapPrometheusEndpoint().
+                    .AddPrometheusExporter();
                 if (endpoint is not null)
                 {
                     metrics.AddOtlpExporter(o => o.Endpoint = endpoint);
