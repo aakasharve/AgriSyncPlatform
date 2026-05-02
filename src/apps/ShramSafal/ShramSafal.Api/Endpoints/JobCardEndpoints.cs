@@ -164,11 +164,15 @@ public static class JobCardEndpoints
         .WithName("SettleJobCardPayout");
 
         // POST /job-cards/{id}/cancel → 200
+        // T-IGH-03-PIPELINE-ROLLOUT (CancelJobCard): resolves the
+        // pipeline-wrapped IHandler so the canonical
+        // InvalidCommand → JobCardNotFound → Forbidden ordering runs
+        // before the body's role-tier + state-machine checks.
         group.MapPost("/job-cards/{id:guid}/cancel", async (
             Guid id,
             CancelJobCardRequest request,
             ClaimsPrincipal user,
-            CancelJobCardHandler handler,
+            IHandler<CancelJobCardCommand, CancelJobCardResult> handler,
             CancellationToken ct) =>
         {
             if (!EndpointActorContext.TryGetUserId(user, out var actorUserId))

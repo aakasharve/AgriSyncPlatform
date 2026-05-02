@@ -104,7 +104,14 @@ public sealed class PushSyncBatchHandler(
     // command — no pre-check duplication, no masking caveats.
     IHandler<CompleteJobCardCommand, CompleteJobCardResult> completeJobCardHandler,
     SettleJobCardPayoutHandler settleJobCardPayoutHandler,
-    CancelJobCardHandler cancelJobCardHandler,
+    // T-IGH-03-PIPELINE-ROLLOUT (CancelJobCard): switched from raw
+    // CancelJobCardHandler to the pipeline-wrapped IHandler. The sync
+    // pre-flight in HandleJobCardCancelAsync is empty-id +
+    // non-empty-Reason, the same gates as the validator. No overlapping
+    // membership lookup, so the pipeline's
+    // InvalidCommand → JobCardNotFound → Forbidden ordering is the
+    // canonical entry path on both sync and HTTP.
+    IHandler<CancelJobCardCommand, CancelJobCardResult> cancelJobCardHandler,
     // Sub-plan 05 Task 2a (T-IGH-05-FAIL-PUSHES-WIRING): E2E test probe.
     // Production default: NoOpFailPushesProbe (always returns null).
     // When ALLOW_E2E_SEED=true the Bootstrapper re-registers an adapter over
