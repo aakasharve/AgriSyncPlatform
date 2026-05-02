@@ -196,12 +196,12 @@ public sealed class AdminMisRepository(AnalyticsDbContext analyticsContext) : IA
             using var r = await cmd.ExecuteReaderAsync(ct);
             while (await r.ReadAsync(ct))
                 items.Add(new SilentChurnItemDto(
-                    FarmId:     r.GetGuid(0),
-                    Name:       r.GetString(1),
+                    FarmId: r.GetGuid(0),
+                    Name: r.GetString(1),
                     OwnerPhone: r.IsDBNull(2) ? "—" : r.GetString(2),
-                    Plan:       r.GetString(3),
+                    Plan: r.GetString(3),
                     WeeksSilent: r.GetInt32(4),
-                    LastLogAt:  r.IsDBNull(5) ? null : r.GetDateTime(5)));
+                    LastLogAt: r.IsDBNull(5) ? null : r.GetDateTime(5)));
             return items;
         }
         catch { return []; }
