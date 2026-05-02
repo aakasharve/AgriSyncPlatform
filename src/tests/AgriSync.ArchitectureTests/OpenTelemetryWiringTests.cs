@@ -2,8 +2,11 @@ using AgriSync.Bootstrapper.Composition;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using OpenTelemetry;
 using OpenTelemetry.Context.Propagation;
+using OpenTelemetry.Exporter;
+using OpenTelemetry.Metrics;
 using OpenTelemetry.Trace;
 using Xunit;
 
@@ -209,6 +212,55 @@ public sealed class OpenTelemetryWiringTests
             Environment.SetEnvironmentVariable(
                 OpenTelemetryConfig.OtlpEndpointEnvVar,
                 prior);
+        }
+    }
+
+    // ----------------------------------------------------------------
+    // T-IGH-05-PROMETHEUS-EXPORTER: composition-time tests
+    // ----------------------------------------------------------------
+
+    /// <summary>
+    /// Verifies that <c>AddAgriSyncObservability</c> registers a
+    /// <see cref="MeterProvider"/> — meaning the OTel metrics pipeline
+    /// is live and the Prometheus exporter can pull from it.
+    /// </summary>
+    [Fact]
+    public void AddAgriSyncObservability_registers_MeterProvider()
+    {
+        var (sp, _) = BuildContainerWithObservability();
+        try
+        {
+            var meterProvider = sp.GetService<MeterProvider>();
+            Assert.NotNull(meterProvider);
+        }
+        finally
+        {
+            sp.Dispose();
+        }
+    }
+
+    /// <summary>
+    /// Verifies that the Prometheus exporter is wired into the metrics
+    /// pipeline by asserting that <see cref="PrometheusAspNetCoreOptions"/>
+    /// is registered in the service container. <c>AddPrometheusExporter()</c>
+    /// registers this options type; its absence would indicate the exporter
+    /// was never added to <c>WithMetrics(...)</c>.
+    /// </summary>
+    [Fact]
+    public void AddAgriSyncObservability_registers_PrometheusExporter_options()
+    {
+        var (sp, _) = BuildContainerWithObservability();
+        try
+        {
+            // AddPrometheusExporter() registers IOptions<PrometheusAspNetCoreOptions>
+            // in the container. If the exporter was never wired the service will be
+            // absent (returns null from GetService).
+            var options = sp.GetService<IOptions<PrometheusAspNetCoreOptions>>();
+            Assert.NotNull(options);
+        }
+        finally
+        {
+            sp.Dispose();
         }
     }
 

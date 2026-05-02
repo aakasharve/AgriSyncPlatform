@@ -357,6 +357,12 @@ try
     .WithTags("System")
     .AllowAnonymous();
 
+    // T-IGH-05-PROMETHEUS-EXPORTER: /metrics scraping endpoint (anonymous, same
+    // posture as /health). The Prometheus exporter is registered in
+    // AddAgriSyncObservability via WithMetrics(...).AddPrometheusExporter().
+    // Production hardening (IP allowlist / VPC-internal binding) is a follow-up.
+    app.MapPrometheusEndpoint();
+
     // Ops Phase 1 — client error telemetry (no auth, rate-limited by IP)
     {
         var clientErrorCounts = new System.Collections.Concurrent.ConcurrentDictionary<string, (int count, DateTime window)>();
