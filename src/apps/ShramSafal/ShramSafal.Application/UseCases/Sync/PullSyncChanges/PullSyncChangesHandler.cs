@@ -20,7 +20,6 @@ public sealed class PullSyncChangesHandler(
     ITestProtocolRepository testProtocolRepository,
     ITestRecommendationRepository testRecommendationRepository,
     IComplianceSignalRepository complianceSignalRepository,
-    GetComplianceSignalsForFarmHandler getComplianceSignalsHandler,
     EvaluateComplianceHandler evaluateComplianceHandler,
     ILogger<PullSyncChangesHandler> logger)
 {
