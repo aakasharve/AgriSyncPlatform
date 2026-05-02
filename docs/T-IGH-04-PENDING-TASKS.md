@@ -1,8 +1,8 @@
-# T-IGH-04 Sub-plan 04 Frontend Restructure — Pending Tasks (post-wave-3)
+# T-IGH-04 Sub-plan 04 Frontend Restructure — Pending Tasks (post-wave-4)
 
 > **Branch:** `feature/ighardening-04-frontend` (parent repo).
 > **Worktree:** `.worktrees/ighardening-04-frontend/`.
-> **Status:** **PARTIAL** — Plan 04 §DoD line-cap (≤ 800 lines per .ts/.tsx file) **CLEARED**. P0 conflict durability shipped. Remaining: T-IGH-04-LOCALSTORAGE-MIGRATION (drain 21 allow-list entries to 0), T-SP04-DEXIE-CUTOVER-SYNC-BRIDGE, plus the smaller follow-ups.
+> **Status:** **PARTIAL** — Plan 04 §DoD line-cap **CLEARED**. P0 conflict durability **shipped**. localStorage discipline allow-list drained from 21 → **6** in wave 4. Remaining: 6 stubborn allow-list entries that need module-level adapters (services scheduled for deletion, sync infrastructure deferred to T-SP04-DEXIE-CUTOVER-SYNC-BRIDGE, AppRouter pending its 'shramsafal_permissions_granted' migration, NotificationService kept as module-singleton).
 > **Why this doc lives here:** the `_COFOUNDER` private vault is dirty with unrelated work, so per the verifier instruction we did not write into `_COFOUNDER/.../Pending_Tasks/`. Move this document there once the vault is classified.
 
 ---
@@ -14,23 +14,40 @@
 Plan 04's direct frontend dependencies are stable on `akash_edits`: sync mutation catalog, error/problem details, degraded headers, cursor-freeze behavior, backend CI baseline, and (landed) Plan 03 Task 9 analytics migration (`e75960f`).
 
 **Done on this branch:**
-- File-size cap (≤ 800 lines per .ts/.tsx): **CLEARED** for all 11 originally-flagged god-files. Gate now enforces 800 (was 2600).
+- File-size cap (≤ 800 lines per .ts/.tsx): **CLEARED** for all 11 originally-flagged god-files. Gate enforces 800 (was 2600).
 - T-IGH-04-CONFLICT-STATUS-DURABILITY (P0): **shipped** with 21 unit + integration tests.
 - Tasks 3, 4, 5: shipped in earlier sessions (see commits 2be44a9, 87b5430, 34be159).
+- T-IGH-04-LOCALSTORAGE-MIGRATION wave 4: **15 of 21 allow-list entries drained.** New storage adapters under `infrastructure/storage/`: `SessionStore.ts`, `DemoModeStore.ts`, `VocabStore.ts`, `FarmInviteStore.ts`, `FinanceLegacyStore.ts`. `AuthTokenStore.ts` relocated from `infrastructure/api/`. `LocalDB.ts` relocated from `core/data/`. 7 files migrated to `useUiPref` hook (Settings, OnboardingPermissions, JoinFarm, ProfilePage WEATHER_CONNECTED_KEY, ReflectPage 'reflect-block-order', LanguageContext, CollapsibleBlock).
 
-**Continue:** T-IGH-04-LOCALSTORAGE-MIGRATION (drain the 21 allow-list entries), T-SP04-DEXIE-CUTOVER-SYNC-BRIDGE, T-IGH-04-CONFLICT-BADGE-MOUNT, T-IGH-04-CONFLICT-EDIT, T-IGH-04-XSTATE-NAV (P2 follow-ups).
+**Continue:** T-SP04-DEXIE-CUTOVER-SYNC-BRIDGE, T-IGH-04-CONFLICT-BADGE-MOUNT, T-IGH-04-CONFLICT-EDIT (P2), T-IGH-04-XSTATE-NAV (P2). The remaining 6 allow-list entries each have specific reasons (see "Remaining allow-list" section below).
 
 **Do NOT claim:** Plan 03 REMOTE_GREEN, Plan 04 DONE, Plan 05 final E2E green, master plan complete.
 
-The label stays **PARTIAL_FOUNDATION / READY_WITH_CAVEATS** until both Plan 04 DoD (in particular: localStorage allow-list drains to zero) and Plan 03 Task 11 (OTel smoke) close.
+The label stays **PARTIAL / READY_WITH_CAVEATS** until the 6 remaining allow-list entries are addressed and Plan 03 Task 11 (OTel smoke) closes.
+
+## Remaining allow-list (6 entries)
+
+| File | Reason | Disposition |
+|---|---|---|
+| `core/navigation/AppRouter.tsx` | Reads `'shramsafal_permissions_granted'` (separate key from current_farm_id) | Migrate to useUiPref in a small follow-up; AppRouter is already decomposed in c6316cb. |
+| `infrastructure/sync/MutationQueue.ts` | Reads `agrisync_device_id_v1` at module init; needs sync access before Dexie opens | Behind a small `infrastructure/storage/MutationQueueMeta.ts` adapter (function-based, not React hook). |
+| `infrastructure/sync/SyncPullReconciler.ts` | Writes `crops` + `farmer_profile` localStorage keys for legacy compat | **Deferred** to `T-SP04-DEXIE-CUTOVER-SYNC-BRIDGE` — paired with the per-resource reconciler split. |
+| `services/harvestService.ts` | **Slated for deletion** in Plan §Task 10 (legacy service) | Drop the file once `features/finance/financeService.ts` and `app/providers/DataSourceProvider.tsx` consumers have migrated to a feature hook. |
+| `services/procurementRepository.ts` | **Slated for deletion** (same as harvestService) | Same drop pattern. |
+| `shared/services/NotificationService.ts` | Module-level object literal singleton; not a React component, can't use useUiPref | Either restructure to a hook OR provide a function-based storage adapter. Tracked as a follow-up. |
 
 ---
 
 ## Branch state (current)
 
-`feature/ighardening-04-frontend` has **21 commits** on top of `akash_edits` head `930742e`:
+`feature/ighardening-04-frontend` has **27 commits** on top of `akash_edits` head `930742e`:
 
 ```
+3299108 feat(storage): T-IGH-04-LOCALSTORAGE-MIGRATION wave-4-E — LocalDB + per-feature storage adapters
+0bd5f76 feat(storage): T-IGH-04-LOCALSTORAGE-MIGRATION wave-4-D — DemoModeStore extraction
+44f5993 refactor(storage): T-IGH-04-LOCALSTORAGE-MIGRATION wave-4-C — relocate AuthTokenStore
+0117a36 feat(storage): T-IGH-04-LOCALSTORAGE-MIGRATION wave-4-B — SessionStore for current_farm_id
+711a17a feat(storage): T-IGH-04-LOCALSTORAGE-MIGRATION wave-4-A — useUiPref migrations
 1cd8327 ci(file-sizes): T-IGH-04-ESLINT-TIGHTEN — drop file-size gate from 2600 to 800 (Plan 04 §DoD)
 c05aeb0 refactor(profile): T-IGH-04-PROFILE-DECOMPOSE — split ProfilePage into 8-section layout (with conflict resolution)
 f2280c0 refactor(reflect): T-IGH-04-FILE-DECOMPOSE-REFLECTPAGE — split ReflectPage into per-section files
