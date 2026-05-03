@@ -87,20 +87,31 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ap-south-1
 
-      - name: Upload APK to S3 (versioned + latest)
+      - name: Upload APK to S3 (versioned + latest + marketing site)
         run: |
           SHA_SHORT=$(git rev-parse --short HEAD)
+          # app bucket — versioned + latest
           aws s3 cp "$APK_PATH" \
             "s3://shramsafal-app-prod/apk/shramsafal-${SHA_SHORT}.apk" \
             --content-type application/vnd.android.package-archive \
-            --cache-control "max-age=31536000, public"
+            --cache-control "max-age=31536000"
           aws s3 cp "$APK_PATH" \
             "s3://shramsafal-app-prod/apk/shramsafal-latest.apk" \
             --content-type application/vnd.android.package-archive \
             --cache-control "no-cache, no-store, must-revalidate"
+          # marketing site — /download/ path so shramsafal.in/download/shramsafal-latest.apk works
+          aws s3 cp "$APK_PATH" \
+            "s3://shramsafal-marketing-prod/download/shramsafal-latest.apk" \
+            --content-type application/vnd.android.package-archive \
+            --cache-control "no-cache, no-store, must-revalidate"
+          # Invalidate marketing site CloudFront for the download path
+          aws cloudfront create-invalidation \
+            --distribution-id E2M06A2B71ZW1O \
+            --paths "/download/shramsafal-latest.apk" \
+            --output text --query "Invalidation.Id"
           echo "✅ APK published:"
+          echo "   Download: https://shramsafal.in/download/shramsafal-latest.apk"
           echo "   Versioned: https://app.shramsafal.in/apk/shramsafal-${SHA_SHORT}.apk"
-          echo "   Latest:    https://app.shramsafal.in/apk/shramsafal-latest.apk"
 
       - name: Upload APK as workflow artifact
         uses: actions/upload-artifact@v4
