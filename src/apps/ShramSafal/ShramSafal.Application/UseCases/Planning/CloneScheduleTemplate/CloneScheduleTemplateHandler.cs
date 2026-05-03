@@ -1,5 +1,6 @@
 using System.Text.Json;
 using AgriSync.BuildingBlocks.Abstractions;
+using AgriSync.BuildingBlocks.Application;
 using AgriSync.BuildingBlocks.Results;
 using AgriSync.SharedKernel.Contracts.Ids;
 using AgriSync.SharedKernel.Contracts.Roles;
@@ -11,10 +12,26 @@ using ShramSafal.Domain.Planning;
 
 namespace ShramSafal.Application.UseCases.Planning.CloneScheduleTemplate;
 
+/// <summary>
+/// CEI Phase 2 §4.7 — clones a schedule template with copy-on-write
+/// semantics. Source template stays untouched; a new template is created
+/// at the requested <see cref="TenantScope"/>.
+///
+/// <para>
+/// T-IGH-03-PIPELINE-ROLLOUT (CloneScheduleTemplate): caller-shape
+/// validation lives in <see cref="CloneScheduleTemplateValidator"/>;
+/// source-template existence + per-scope role gate authorization lives
+/// in <see cref="CloneScheduleTemplateAuthorizer"/>. When this handler
+/// is resolved via the pipeline, both run before the body. The body
+/// keeps its inline gates as defense-in-depth for direct callers
+/// (legacy domain tests).
+/// </para>
+/// </summary>
 public sealed class CloneScheduleTemplateHandler(
     IShramSafalRepository repository,
     ISyncMutationStore syncMutationStore,
     IClock clock)
+    : IHandler<CloneScheduleTemplateCommand, CloneScheduleTemplateResult>
 {
     private const string MutationType = "schedule.clone";
 
