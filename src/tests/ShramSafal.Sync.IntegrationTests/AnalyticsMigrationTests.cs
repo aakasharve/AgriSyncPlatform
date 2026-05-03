@@ -108,7 +108,13 @@ public sealed class AnalyticsMigrationTests : IAsyncLifetime
         // fails with `relation "analytics.events" does not exist`.
         // The same target string lives in
         // AgriSync.Bootstrapper/Program.cs as ssfPhaseATarget.
-        const string ssfPhaseATarget = "20260421075311_AlterCostEntriesAddJobCardId";
+        //
+        // DWC v2 (2026-05-03): bumped from AlterCostEntriesAddJobCardId to
+        // WtlV0Entities because the DWC analytics matviews
+        // (20260505000000_DwcV2Matviews) reference ssf.workers which is
+        // created by WtlV0Entities. WtlV0Entities does NOT reference
+        // analytics.events so it is safe to include in Phase A.
+        const string ssfPhaseATarget = "20260504000000_WtlV0Entities";
         var ssfOpts = new DbContextOptionsBuilder<ShramSafalDbContext>()
             .UseNpgsql(conn)
             .Options;

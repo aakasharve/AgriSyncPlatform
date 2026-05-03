@@ -679,22 +679,20 @@ static async Task InitializeApplicationDataAsync(WebApplication app)
         // break a circular dependency between ssf and analytics at migration
         // time.
         //   (1) ssf Phase A: apply migrations up to and including
-        //       20260421075311_AlterCostEntriesAddJobCardId. This creates
-        //       ssf.daily_logs, ssf.verifications, JobCards and every other
-        //       pre-admin-scope table that analytics' Phase4_MisSchemaRollups
-        //       materialized views SELECT from.
-        //   (2) analytics: apply all migrations. Phase4_MisSchemaRollups can
-        //       now build mis.wvfd_weekly / mis.schedule_migration_rate over
-        //       live ssf.* tables.
-        //   (3) ssf Phase B: apply remaining migrations (20260422175351
-        //       onwards — AddOrganizationsTables, AddEffectiveOrgFarmScopeMis,
-        //       AddAdminScopeHealthView, SeedPlatformOrgAndExistingAdmins).
-        //       AddAdminScopeHealthView creates a view over analytics.events,
-        //       which now exists.
-        // MIS rail — analytics events are append-only. Production deploys should replace
-        // the EF-generated table with the partitioned schema from
-        // _COFOUNDER/01_Operations/Plans/SHRAMSAFAL_MIS_INTEGRATION_PLAN_2026-04-18.md §4.2.
-        const string ssfPhaseATarget = "20260421075311_AlterCostEntriesAddJobCardId";
+        //       20260504000000_WtlV0Entities. This covers all SSF tables that
+        //       analytics matviews SELECT from, including ssf.daily_logs,
+        //       ssf.verification_events, ssf.job_cards, and ssf.workers
+        //       (DWC v2 — referenced by 20260505000000_DwcV2Matviews).
+        //   (2) analytics: apply all migrations. Phase4_MisSchemaRollups and
+        //       DwcV2Matviews can now build their matviews over live ssf.* tables.
+        //   (3) ssf Phase B: apply remaining migrations. AddAdminScopeHealthView
+        //       (20260422180547) creates a view over analytics.events, which
+        //       now exists after step 2.
+        // Note: WtlV0Entities (20260504) does NOT reference analytics.events,
+        // so it is safe to include in Phase A even though it was authored after
+        // AddAdminScopeHealthView (20260422).
+        // MIS rail — analytics events are append-only.
+        const string ssfPhaseATarget = "20260504000000_WtlV0Entities";
         var ssfPhaseACreated = app.Environment.IsDevelopment()
             ? await EnsureContextTablesCreatedAsync(ssfContext, "ssf", "farms")
             : await ApplyStartupMigrationsIfAllowedAsync(app, ssfContext, "ShramSafalDbContext (Phase A)", ssfPhaseATarget);
