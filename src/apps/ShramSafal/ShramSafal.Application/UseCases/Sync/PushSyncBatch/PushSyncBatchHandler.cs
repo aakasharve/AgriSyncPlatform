@@ -102,7 +102,16 @@ public sealed class PushSyncBatchHandler(
     // this command. No pre-check duplication on the role-tier check;
     // no masking caveats.
     IHandler<CreateJobCardCommand, CreateJobCardResult> createJobCardHandler,
-    AssignJobCardHandler assignJobCardHandler,
+    // T-IGH-03-PIPELINE-ROLLOUT (AssignJobCard): switched from raw
+    // AssignJobCardHandler to the pipeline-wrapped IHandler. The sync
+    // pre-flight in HandleJobCardAssignAsync below is empty-id checks
+    // on JobCardId / WorkerUserId — the same gates as the validator,
+    // with no overlapping role lookup. The pipeline's
+    // InvalidCommand → JobCardNotFound → Forbidden →
+    // JobCardRoleNotAllowed ordering is therefore the canonical entry
+    // path on both sync and HTTP for this command. No pre-check
+    // duplication, no masking caveats.
+    IHandler<AssignJobCardCommand, AssignJobCardResult> assignJobCardHandler,
     StartJobCardHandler startJobCardHandler,
     // T-IGH-03-PIPELINE-ROLLOUT (CompleteJobCard): switched from raw
     // CompleteJobCardHandler to the pipeline-wrapped IHandler. The sync
