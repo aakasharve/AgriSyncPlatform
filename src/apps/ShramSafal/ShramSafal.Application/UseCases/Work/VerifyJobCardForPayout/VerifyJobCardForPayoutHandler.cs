@@ -1,4 +1,5 @@
 using AgriSync.BuildingBlocks.Abstractions;
+using AgriSync.BuildingBlocks.Application;
 using AgriSync.BuildingBlocks.Results;
 using AgriSync.SharedKernel.Contracts.Roles;
 using ShramSafal.Application.Ports;
@@ -12,10 +13,27 @@ namespace ShramSafal.Application.UseCases.Work.VerifyJobCardForPayout;
 /// Marks a Completed JobCard as VerifiedForPayout after checking:
 ///   - The linked DailyLog is in Verified status (CEI-I9)
 ///   - The caller holds an eligible role: PrimaryOwner, SecondaryOwner, Agronomist, or FpcTechnicalManager
+///
+/// <para>
+/// T-IGH-03-PIPELINE-ROLLOUT (VerifyJobCardForPayout): wired through
+/// the explicit <see cref="HandlerPipeline"/>. Caller-shape validation
+/// (empty IDs) lives in <see cref="VerifyJobCardForPayoutValidator"/>;
+/// job-card-existence + role-tier (Owner / Agronomist /
+/// FpcTechnicalManager) authorization lives in
+/// <see cref="VerifyJobCardForPayoutAuthorizer"/>. When this handler
+/// is resolved via the pipeline (see DI registration), both layers
+/// run before the body executes; when resolved directly (legacy
+/// tests), the body's inline guards continue to enforce the same
+/// invariants. The aggregate-state checks (linked-daily-log present,
+/// DailyLog existence, CEI-I9 linked-log-must-be-Verified) stay in
+/// the body — they all surface as JobCardInvalidState /
+/// DailyLogNotFound.
+/// </para>
 /// </summary>
 public sealed class VerifyJobCardForPayoutHandler(
     IShramSafalRepository repository,
     IClock clock)
+    : IHandler<VerifyJobCardForPayoutCommand, VerifyJobCardForPayoutResult>
 {
     public async Task<Result<VerifyJobCardForPayoutResult>> HandleAsync(
         VerifyJobCardForPayoutCommand command,

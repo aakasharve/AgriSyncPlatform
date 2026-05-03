@@ -133,11 +133,17 @@ public static class JobCardEndpoints
         .WithName("CompleteJobCard");
 
         // POST /job-cards/{id}/verify-for-payout → 200
+        // T-IGH-03-PIPELINE-ROLLOUT (VerifyJobCardForPayout): resolves
+        // the pipeline-wrapped IHandler so the canonical
+        // InvalidCommand → JobCardNotFound → Forbidden →
+        // JobCardRoleNotAllowed ordering runs before the body's
+        // aggregate-state checks (linked-daily-log present,
+        // DailyLogNotFound, CEI-I9 verified-log invariant).
         group.MapPost("/job-cards/{id:guid}/verify-for-payout", async (
             Guid id,
             VerifyJobCardForPayoutRequest request,
             ClaimsPrincipal user,
-            VerifyJobCardForPayoutHandler handler,
+            IHandler<VerifyJobCardForPayoutCommand, VerifyJobCardForPayoutResult> handler,
             CancellationToken ct) =>
         {
             if (!EndpointActorContext.TryGetUserId(user, out var actorUserId))
