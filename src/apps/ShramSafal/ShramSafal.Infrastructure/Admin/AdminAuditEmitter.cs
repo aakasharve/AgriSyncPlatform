@@ -31,22 +31,19 @@ namespace ShramSafal.Infrastructure.Admin;
 /// guarantee is delegated.
 /// </para>
 /// <para>
-/// Actor (caller) identity is intentionally not embedded in
-/// <c>actor_user_id</c> right now: the existing
-/// <see cref="ICurrentUser"/> abstraction has no <c>HttpContextAccessor</c>
-/// adapter wired, and threading the userId through every
-/// <see cref="IAdminAuditEmitter.EmitFarmerLookupAsync"/> call would
-/// change the port's signature (and break the W0-A
-/// <c>admin-scope-guard</c> shape). The forensic signal that matters at
-/// this layer is "<c>orgId X</c> queried <c>farmId Y</c>" — the actor
-/// userId is recovered separately from the request log when needed.
-/// Wiring an <see cref="ICurrentUser"/> adapter is tracked as a Phase C
-/// follow-up.
+/// Actor identity is sourced from <see cref="ICurrentUser"/>
+/// (HttpContext-backed in production, fake in tests). The vocabulary
+/// registry (<c>EventVocabulary["admin.farmer_lookup"]</c>) requires
+/// <c>actorUserId</c> in the props bag; the value is also stamped on the
+/// envelope's <see cref="AnalyticsEvent.ActorUserId"/> column so the
+/// dedicated index <c>ix_analytics_events_actor_time</c> is hit when
+/// auditors query "all lookups by user X".
 /// </para>
 /// </remarks>
 public sealed class AdminAuditEmitter(
     IAnalyticsWriter writer,
-    IClock clock) : IAdminAuditEmitter
+    IClock clock,
+    ICurrentUser currentUser) : IAdminAuditEmitter
 {
     /// <summary>
     /// JSON event-type literal that lands in <c>analytics.events.event_type</c>.
@@ -61,8 +58,20 @@ public sealed class AdminAuditEmitter(
         string modeName,
         CancellationToken ct = default)
     {
+        // Resolve the actor once. ICurrentUser.UserId is null on
+        // anonymous / background paths; the vocabulary requires
+        // actorUserId so we still serialize the key (with null) rather
+        // than omit it — keeps the JSON shape stable and lets the
+        // vocabulary validator surface the null at ingest time instead
+        // of silently dropping the field.
+        var actorRaw = currentUser.UserId;
+        UserId? actorUserId = Guid.TryParse(actorRaw, out var actorGuid)
+            ? new UserId(actorGuid)
+            : null;
+
         var props = JsonSerializer.Serialize(new
         {
+            actorUserId = actorRaw,
             scopeOrgId = scope.OrganizationId,
             scopeOrgType = scope.OrganizationType.ToString(),
             scopeOrgRole = scope.OrganizationRole.ToString(),
@@ -74,7 +83,7 @@ public sealed class AdminAuditEmitter(
             EventId: Guid.NewGuid(),
             EventType: EventTypeName,
             OccurredAtUtc: clock.UtcNow,
-            ActorUserId: null,
+            ActorUserId: actorUserId,
             FarmId: targetFarmId == Guid.Empty ? null : new FarmId(targetFarmId),
             OwnerAccountId: null,
             ActorRole: "admin",

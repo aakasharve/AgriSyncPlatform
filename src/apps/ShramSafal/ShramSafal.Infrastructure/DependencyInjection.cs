@@ -1,6 +1,7 @@
 using System.Globalization;
 using Amazon;
 using Amazon.S3;
+using AgriSync.BuildingBlocks.Abstractions;
 using AgriSync.BuildingBlocks.Auth;
 using AgriSync.BuildingBlocks.Persistence.Outbox;
 using Microsoft.EntityFrameworkCore;
@@ -285,6 +286,12 @@ public static class DependencyInjection
         // AddAnalytics in the Bootstrapper); the dedicated
         // IAnalyticsEventRepository the plan sketches lands in Phase
         // C.4 and is a one-line constructor swap from there.
+        // ICurrentUser + IHttpContextAccessor are required so the
+        // emitter stamps actor_user_id on every admin.farmer_lookup
+        // row (vocabulary contract — see EventVocabulary.Registry
+        // entry for "admin.farmer_lookup").
+        services.AddHttpContextAccessor();
+        services.TryAddScoped<ICurrentUser, HttpContextCurrentUser>();
         services.AddScoped<ShramSafal.Application.Admin.IAdminAuditEmitter,
             ShramSafal.Infrastructure.Admin.AdminAuditEmitter>();
 

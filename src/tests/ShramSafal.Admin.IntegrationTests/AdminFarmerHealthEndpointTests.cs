@@ -156,11 +156,13 @@ public sealed class AdminFarmerHealthEndpointTests
 
             var orgId = Guid.Parse("a0000000-0000-0000-0000-000000000099");
             var farmId = Guid.Parse("b0000000-0000-0000-0000-000000000099");
+            var actorId = Guid.Parse("c0000000-0000-0000-0000-000000000099");
             var adminScope = MakePlatformOwnerScope(orgId);
 
             var clock = new FrozenClock(new DateTime(2026, 5, 3, 12, 0, 0, DateTimeKind.Utc));
             var writer = new AnalyticsWriter(ctx, NullLogger<AnalyticsWriter>.Instance);
-            var emitter = new AdminAuditEmitter(writer, clock);
+            var currentUser = new FakeCurrentUser(actorId.ToString());
+            var emitter = new AdminAuditEmitter(writer, clock, currentUser);
 
             await emitter.EmitFarmerLookupAsync(adminScope, farmId, "ModeA_Drilldown", CancellationToken.None);
 
@@ -179,9 +181,15 @@ public sealed class AdminFarmerHealthEndpointTests
                 "the emitter must use IClock so tests can pin the timestamp");
             newest.FarmId.Should().NotBeNull();
             newest.FarmId!.Value.Value.Should().Be(farmId);
+            newest.ActorUserId.Should().NotBeNull(
+                "the vocabulary contract requires actor identity on every admin.farmer_lookup row");
+            newest.ActorUserId!.Value.Value.Should().Be(actorId,
+                "ICurrentUser.UserId must populate the envelope so ix_analytics_events_actor_time is queryable");
             newest.PropsJson.Should().NotBeNull();
             using var doc = JsonDocument.Parse(newest.PropsJson);
             var root = doc.RootElement;
+            root.GetProperty("actorUserId").GetString().Should().Be(actorId.ToString(),
+                "EventVocabulary[\"admin.farmer_lookup\"].RequiredProps lists actorUserId");
             root.GetProperty("scopeOrgId").GetGuid().Should().Be(orgId);
             root.GetProperty("targetFarmId").GetGuid().Should().Be(farmId);
             root.GetProperty("modeName").GetString().Should().Be("ModeA_Drilldown");
@@ -197,11 +205,13 @@ public sealed class AdminFarmerHealthEndpointTests
             var ctx = scope.ServiceProvider.GetRequiredService<AnalyticsDbContext>();
 
             var orgId = Guid.Parse("a0000000-0000-0000-0000-0000000000aa");
+            var actorId = Guid.Parse("c0000000-0000-0000-0000-0000000000aa");
             var adminScope = MakePlatformOwnerScope(orgId);
 
             var clock = new FrozenClock(new DateTime(2026, 5, 3, 13, 0, 0, DateTimeKind.Utc));
             var writer = new AnalyticsWriter(ctx, NullLogger<AnalyticsWriter>.Instance);
-            var emitter = new AdminAuditEmitter(writer, clock);
+            var currentUser = new FakeCurrentUser(actorId.ToString());
+            var emitter = new AdminAuditEmitter(writer, clock, currentUser);
 
             await emitter.EmitFarmerLookupAsync(adminScope, Guid.Empty, "ModeB_Cohort", CancellationToken.None);
 
@@ -211,7 +221,11 @@ public sealed class AdminFarmerHealthEndpointTests
                 .Where(e => e.EventType == "admin.farmer_lookup" && e.OccurredAtUtc == clock.UtcNow)
                 .SingleAsync();
 
+            newest.ActorUserId.Should().NotBeNull(
+                "cohort lookups must still record the actor identity for audit");
+            newest.ActorUserId!.Value.Value.Should().Be(actorId);
             using var doc = JsonDocument.Parse(newest.PropsJson);
+            doc.RootElement.GetProperty("actorUserId").GetString().Should().Be(actorId.ToString());
             doc.RootElement.GetProperty("modeName").GetString().Should().Be("ModeB_Cohort");
             doc.RootElement.GetProperty("targetFarmId").GetGuid().Should().Be(Guid.Empty);
         }
@@ -276,5 +290,15 @@ public sealed class AdminFarmerHealthEndpointTests
     private sealed class FrozenClock(DateTime utcNow) : IClock
     {
         public DateTime UtcNow { get; } = utcNow;
+    }
+
+    /// <summary>
+    /// Test-only ICurrentUser that returns a fixed userId. Mirrors the
+    /// production HttpContext-backed adapter's contract — null on
+    /// anonymous, otherwise the JWT subject value.
+    /// </summary>
+    private sealed class FakeCurrentUser(string? userId) : ICurrentUser
+    {
+        public string? UserId { get; } = userId;
     }
 }
