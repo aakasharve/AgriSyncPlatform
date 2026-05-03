@@ -21,6 +21,16 @@
 import { emitClientError } from './eventEmitters';
 
 type LegacyEventType = 'SYNC_FAILURE' | 'AI_CORRECTION' | 'LOG_CREATED' | 'APP_CRASH';
+type EventType = LegacyEventType;          // T-IGH-04 callers use this name
+
+type TelemetryPayload = Record<string, unknown>;
+
+interface TelemetryEvent {
+    type: EventType;
+    payload: TelemetryPayload;
+    timestamp: number;
+    tenantId?: string;
+}
 
 export class TelemetryService {
     private static instance: TelemetryService;
