@@ -1,14 +1,61 @@
 # AgriSync OTel Collector — Deploy Guide
+Status: **FUTURE_SCOPE** — not a launch blocker before first users.
+Trigger condition: first users live AND tracing operationally needed.
+
+## Two deployment paths
+
+| Path | Status | When to use | Docker required? |
+|---|---|---|---|
+| **EC2-native ADOT** (§EC2) | **RECOMMENDED** (FUTURE_SCOPE) | Current stage — EC2 backend already running | No |
+| **ECS/Fargate/Grafana** (§ECS, this directory) | FUTURE_SCOPE_ECS_PATH | When ECS is active deployment model + Grafana needed | Yes |
+
+For the EC2-native ADOT path, see:
+`_COFOUNDER/Projects/AgriSync/Operations/Pending_Tasks/T-IGH-05-OTEL-EC2-ADOT_2026-05-03.md`
+
+The sections below document the ECS/Fargate/Grafana path.
+
+---
+
+## EC2-native ADOT path (recommended for current stage)
+
+Architecture:
+```
+Backend (EC2 i-024b3537191712c76) → OTLP localhost:4317 → ADOT systemd service → AWS X-Ray
+```
+
+Key facts:
+- No Docker required.
+- Uses existing EC2 instance `shramsafal-api` (t3.small, ap-south-1).
+- Auth via IAM instance profile `shramsafal-api-profile` (add `AWSXRayDaemonWriteAccess`).
+- Zero additional infrastructure cost (ADOT RPM installs directly on EC2).
+- Pre-requisite AWS resources already provisioned: CW Log group `/agrisync/otel-collector/prod`.
+
+Summary steps (full detail in the task doc above):
+1. SSH/SSM into EC2 instance.
+2. Install ADOT RPM.
+3. Write config (OTLP receiver → X-Ray exporter).
+4. Start + enable systemd service.
+5. Set `OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4317` in backend env.
+6. Smoke verify in AWS X-Ray console.
+
+---
+
+## ECS/Fargate/Grafana path (this directory's artifacts)
+
 T-IGH-05-OTEL-PROD | Owner: Kiro (AWS) + Akash (backend config)
 
-## Overview
+### Overview
 
 This directory contains the deployment-ready artifacts for the production
-OpenTelemetry collector in the AgriSync VPC. The backend (AgriSync.Bootstrapper)
-already exports OTLP traces and metrics when `OTEL_EXPORTER_OTLP_ENDPOINT` is set
+OpenTelemetry collector in the AgriSync VPC (ECS/Fargate variant). The backend
+(AgriSync.Bootstrapper) already exports OTLP traces and metrics when
+`OTEL_EXPORTER_OTLP_ENDPOINT` is set
 (see `src/AgriSync.Bootstrapper/Composition/OpenTelemetryConfig.cs`). This
 collector is the missing "last mile" — it receives that OTLP traffic and
 ships it to the chosen observability backend.
+
+Use this path only when ECS/Fargate is already the active deployment model
+and Grafana Cloud Tempo dashboarding is specifically needed.
 
 ## Files
 
