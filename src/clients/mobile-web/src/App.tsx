@@ -18,7 +18,7 @@ import { useAuth } from './app/providers/AuthProvider';
 import { FarmContextProvider } from './core/session/FarmContext';
 import { OfflineBanner } from './features/sync';
 import AppShell from './app/components/AppShell';
-import LoginPage from './pages/LoginPage';
+import LoginPage from './features/auth/LoginPage';
 import JoinFarmLandingPage from './features/onboarding/JoinFarmLandingPage';
 
 const hasJoinDeepLink = (): boolean => {
