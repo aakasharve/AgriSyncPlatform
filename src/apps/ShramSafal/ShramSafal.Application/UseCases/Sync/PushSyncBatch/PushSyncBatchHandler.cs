@@ -85,7 +85,15 @@ public sealed class PushSyncBatchHandler(
     AddCostEntryHandler addCostEntryHandler,
     AllocateGlobalExpenseHandler allocateGlobalExpenseHandler,
     CorrectCostEntryHandler correctCostEntryHandler,
-    SetPriceConfigVersionHandler setPriceConfigVersionHandler,
+    // T-IGH-03-PIPELINE-ROLLOUT (SetPriceConfigVersion): switched from
+    // raw SetPriceConfigVersionHandler to the pipeline-wrapped IHandler.
+    // HandleSetPriceConfigAsync's pre-flight (payload-shape +
+    // GetFarmIdsForUserAsync membership-or-Forbidden) runs BEFORE the
+    // pipeline. The pipeline adds the validator's caller-shape gate
+    // (blank ItemName / non-positive Version / empty CreatedByUserId)
+    // on the sync entry path. No authorizer registered for this command
+    // (gap documented in SetPriceConfigVersionValidator XML).
+    IHandler<SetPriceConfigVersionCommand, PriceConfigDto> setPriceConfigVersionHandler,
     CreateAttachmentHandler createAttachmentHandler,
     RecordTestCollectedHandler recordTestCollectedHandler,
     RecordTestResultHandler recordTestResultHandler,

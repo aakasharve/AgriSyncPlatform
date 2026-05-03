@@ -1,4 +1,5 @@
 using AgriSync.BuildingBlocks.Abstractions;
+using AgriSync.BuildingBlocks.Application;
 using AgriSync.BuildingBlocks.Results;
 using ShramSafal.Application.Contracts.Dtos;
 using ShramSafal.Application.Ports;
@@ -7,10 +8,27 @@ using ShramSafal.Domain.Common;
 
 namespace ShramSafal.Application.UseCases.Finance.SetPriceConfigVersion;
 
+/// <summary>
+/// Records a versioned price-config row for a named market item. This
+/// drives finance valuation and analytics. Caller authentication is
+/// enforced at the endpoint; the handler trusts the supplied
+/// <see cref="SetPriceConfigVersionCommand.CreatedByUserId"/>.
+///
+/// <para>
+/// T-IGH-03-PIPELINE-ROLLOUT (SetPriceConfigVersion): caller-shape
+/// validation lives in <see cref="SetPriceConfigVersionValidator"/>;
+/// no authorizer is registered (see validator XML for rationale —
+/// price-config admin tier is not yet modelled). When this handler
+/// is resolved via the pipeline, validation runs before the body. The
+/// body keeps its inline gates as defense-in-depth for direct callers
+/// (legacy domain tests + sync entry path).
+/// </para>
+/// </summary>
 public sealed class SetPriceConfigVersionHandler(
     IShramSafalRepository repository,
     IIdGenerator idGenerator,
     IClock clock)
+    : IHandler<SetPriceConfigVersionCommand, PriceConfigDto>
 {
     public async Task<Result<PriceConfigDto>> HandleAsync(SetPriceConfigVersionCommand command, CancellationToken ct = default)
     {
