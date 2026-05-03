@@ -53,6 +53,13 @@ export const ModuleKeys = {
   OrgSettings: 'org.settings',
   OrgMembers: 'org.members',
   OrgFarmScope: 'org.farm-scope',
+
+  // DWC v2 §3.6 / §3.7 — Daily Work Closure farmer-health module.
+  // Mode A = per-farmer drilldown; Mode B = cohort patterns. Same
+  // module key gates both endpoints; the redactor matrix differentiates
+  // FarmerHealth-specific column-level policy (PII fields, sync/AI ops
+  // sub-blocks gated by ops:read claim).
+  FarmerHealth: 'farmer.health',
 } as const;
 
 export type ModuleKey = (typeof ModuleKeys)[keyof typeof ModuleKeys];
