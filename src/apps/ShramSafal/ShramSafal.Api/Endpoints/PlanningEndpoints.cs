@@ -1,5 +1,7 @@
 using System.Security.Claims;
+using AgriSync.BuildingBlocks.Application;
 using AgriSync.BuildingBlocks.Results;
+using ShramSafal.Application.Contracts.Dtos;
 using ShramSafal.Application.UseCases.Planning.ComputePlannedVsExecutedDelta;
 using ShramSafal.Application.UseCases.Planning.GeneratePlanFromTemplate;
 using ShramSafal.Application.UseCases.Planning.GetStagePlan;
@@ -11,10 +13,15 @@ public static class PlanningEndpoints
 {
     public static RouteGroupBuilder MapPlanningEndpoints(this RouteGroupBuilder group)
     {
+        // T-IGH-03-PIPELINE-ROLLOUT (GeneratePlanFromTemplate): resolves
+        // the pipeline-wrapped IHandler so the canonical
+        // InvalidCommand → CropCycleNotFound → Forbidden ordering runs
+        // before the body's template construction / planned-activity
+        // expansion / test-due-date materialisation.
         group.MapPost("/plan/generate", async (
             GeneratePlanRequest request,
             ClaimsPrincipal user,
-            GeneratePlanFromTemplateHandler handler,
+            IHandler<GeneratePlanFromTemplateCommand, PlanGenerationResultDto> handler,
             CancellationToken ct) =>
         {
             if (!EndpointActorContext.TryGetUserId(user, out var actorUserId))
