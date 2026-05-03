@@ -34,7 +34,7 @@ jobs:
 
       - uses: actions/setup-java@v4
         with:
-          java-version: '17'
+          java-version: '21'
           distribution: temurin
 
       # Use the pre-installed Android SDK on ubuntu-latest
