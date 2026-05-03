@@ -954,6 +954,48 @@ public static class DependencyInjection
                     sp.GetServices<AgriSync.BuildingBlocks.Application.PipelineBehaviors.IAuthorizationCheck<
                         ShramSafal.Application.UseCases.Planning.PublishScheduleTemplate.PublishScheduleTemplateCommand>>())));
 
+        // T-IGH-03-PIPELINE-ROLLOUT (SetPriceConfigVersion): caller-shape
+        // validation only — no authorizer is registered because the
+        // existing handler has no domain-knowledge authz gate (no
+        // membership / role check in the body). Endpoint
+        // (POST /finance/price-config) relies on the authenticated
+        // principal alone; price-config admin tier is not modelled in
+        // IEntitlementPolicy. Documented gap; pipeline still benefits
+        // from validator-side caller-shape gating.
+        //
+        // PushSync MIGRATED: set_price_config is registered in
+        // mutation-types.json (sinceVersion 0.6.0) and dispatched in
+        // PushSyncBatchHandler.HandleSetPriceConfigAsync. Sync's pre-
+        // flight (payload-shape + GetFarmIdsForUserAsync membership
+        // check) runs BEFORE the pipeline-wrapped handler; the pipeline
+        // adds the validator's caller-shape gate (blank ItemName,
+        // non-positive Version, etc.) on the sync entry path.
+        services.AddScoped<AgriSync.BuildingBlocks.Application.PipelineBehaviors.IValidator<
+            ShramSafal.Application.UseCases.Finance.SetPriceConfigVersion.SetPriceConfigVersionCommand>,
+            ShramSafal.Application.UseCases.Finance.SetPriceConfigVersion.SetPriceConfigVersionValidator>();
+        services.AddScoped<AgriSync.BuildingBlocks.Application.IHandler<
+            ShramSafal.Application.UseCases.Finance.SetPriceConfigVersion.SetPriceConfigVersionCommand,
+            ShramSafal.Application.Contracts.Dtos.PriceConfigDto>>(sp =>
+            AgriSync.BuildingBlocks.Application.HandlerPipeline.Build(
+                sp.GetRequiredService<SetPriceConfigVersionHandler>(),
+                new AgriSync.BuildingBlocks.Application.PipelineBehaviors.LoggingBehavior<
+                    ShramSafal.Application.UseCases.Finance.SetPriceConfigVersion.SetPriceConfigVersionCommand,
+                    ShramSafal.Application.Contracts.Dtos.PriceConfigDto>(
+                    sp.GetRequiredService<Microsoft.Extensions.Logging.ILogger<
+                        AgriSync.BuildingBlocks.Application.PipelineBehaviors.LoggingBehavior<
+                            ShramSafal.Application.UseCases.Finance.SetPriceConfigVersion.SetPriceConfigVersionCommand,
+                            ShramSafal.Application.Contracts.Dtos.PriceConfigDto>>>()),
+                new AgriSync.BuildingBlocks.Application.PipelineBehaviors.ValidationBehavior<
+                    ShramSafal.Application.UseCases.Finance.SetPriceConfigVersion.SetPriceConfigVersionCommand,
+                    ShramSafal.Application.Contracts.Dtos.PriceConfigDto>(
+                    sp.GetServices<AgriSync.BuildingBlocks.Application.PipelineBehaviors.IValidator<
+                        ShramSafal.Application.UseCases.Finance.SetPriceConfigVersion.SetPriceConfigVersionCommand>>()),
+                new AgriSync.BuildingBlocks.Application.PipelineBehaviors.AuthorizationBehavior<
+                    ShramSafal.Application.UseCases.Finance.SetPriceConfigVersion.SetPriceConfigVersionCommand,
+                    ShramSafal.Application.Contracts.Dtos.PriceConfigDto>(
+                    sp.GetServices<AgriSync.BuildingBlocks.Application.PipelineBehaviors.IAuthorizationCheck<
+                        ShramSafal.Application.UseCases.Finance.SetPriceConfigVersion.SetPriceConfigVersionCommand>>())));
+
         return services;
     }
 }

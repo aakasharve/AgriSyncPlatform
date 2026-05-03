@@ -23,7 +23,7 @@ public static class FinanceEndpoints
         group.MapPost("/finance/price-config", async (
             SetPriceConfigRequest request,
             ClaimsPrincipal user,
-            SetPriceConfigVersionHandler handler,
+            IHandler<SetPriceConfigVersionCommand, ShramSafal.Application.Contracts.Dtos.PriceConfigDto> handler,
             CancellationToken ct) =>
         {
             if (!EndpointActorContext.TryGetUserId(user, out var actorUserId))
