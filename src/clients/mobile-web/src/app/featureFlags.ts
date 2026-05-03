@@ -27,3 +27,14 @@ export const isVoiceDoomLoopDetectorEnabled = (): boolean =>
 export const IS_E2E_HARNESS_ENABLED: boolean = import.meta.env.VITE_E2E_HARNESS === '1';
 
 export const isE2EHarnessEnabled = (): boolean => IS_E2E_HARNESS_ENABLED;
+
+// DWC v2 §2.9 — runtime feature flags object. Plan placed this at
+// `shared/feature-flags/flags.ts`, but the existing repo convention is
+// `app/featureFlags.ts`; a second location would split the source of
+// truth. The DwcChip flag is ON in development and OFF in production
+// builds so QA can iterate without exposing the chip to live users
+// before the v2 ramp. Override via VITE_DWC_CHIP=1 if needed in a prod
+// preview build (handled by the runtime env helpers above).
+export const FEATURE_FLAGS = {
+    DwcChip: import.meta.env.MODE === 'development' || isEnabled('VITE_DWC_CHIP'),
+} as const;
