@@ -22,7 +22,9 @@ const DEFAULT_STAGES_CONFIG = [
 ];
 
 interface Step3Props {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- T-IGH-04 ratchet: legacy `any` deferred to T-IGH-04-LINT-RATCHET-V2 follow-up.
     data: any;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- T-IGH-04 ratchet: legacy `any` deferred to T-IGH-04-LINT-RATCHET-V2 follow-up.
     onUpdate: (field: string, value: any) => void;
     isActive: boolean;
     onExpand: () => void;
@@ -47,12 +49,17 @@ const SUGGESTIONS: ResourceItem[] = [
 ];
 
 const DropZone: React.FC<{
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- T-IGH-04 ratchet: legacy `any` deferred to T-IGH-04-LINT-RATCHET-V2 follow-up.
     items: any[],
     type: string,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- T-IGH-04 ratchet: legacy `any` deferred to T-IGH-04-LINT-RATCHET-V2 follow-up.
     suggestions: any[],
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- T-IGH-04 ratchet: legacy `any` deferred to T-IGH-04-LINT-RATCHET-V2 follow-up.
     onDrop: (item: any) => void,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- T-IGH-04 ratchet: legacy `any` deferred to T-IGH-04-LINT-RATCHET-V2 follow-up.
     onUpdateItem: (id: string, field: string, value: any) => void,
     onRemove: (id: string) => void,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- T-IGH-04 ratchet: legacy `any` deferred to T-IGH-04-LINT-RATCHET-V2 follow-up.
     onAddSuggestion: (item: any) => void
 }> = ({ items, type, suggestions, onDrop, onUpdateItem, onRemove, onAddSuggestion }) => {
 
@@ -90,6 +97,7 @@ const DropZone: React.FC<{
                 >
                     {/* Items List */}
                     <div className="p-2 space-y-2 w-full">
+                        {/* eslint-disable @typescript-eslint/no-explicit-any -- T-IGH-04 ratchet: item shape varies by category; revisit in V2. */}
                         {items?.map((item: any) => (
                             <div key={item.id} className="bg-stone-50 p-2 rounded-xl border border-stone-200 shadow-sm relative group/item flex items-center gap-3">
                                 <div className="flex-1 flex flex-col gap-1 min-w-0">
@@ -206,18 +214,25 @@ const DropZone: React.FC<{
 };
 
 const StageCard: React.FC<{
+     
     stage: any,
     index: number,
+     
     onUpdate: (field: string, value: any) => void,
     onRemove: () => void,
+     
     onDropItem: (bucket: string, item: any) => void,
+     
     onUpdateItem: (bucket: string, id: string, field: string, value: any) => void,
     onRemoveItem: (bucket: string, id: string) => void,
     // Day Specific Handlers
     onAddDay: () => void,
     onRemoveDay: (dayId: string) => void,
+     
     onUpdateDay: (dayIndex: number, field: string, value: any) => void,
+     
     onDropDayItem: (dayIndex: number, bucket: string, item: any) => void,
+     
     onUpdateDayItem: (dayIndex: number, bucket: string, id: string, field: string, value: any) => void,
     onRemoveDayItem: (dayIndex: number, bucket: string, id: string) => void,
     // Resources
@@ -365,6 +380,7 @@ const StageCard: React.FC<{
                         ) : (
                             /* DAY-WISE VIEW */
                             <div className="space-y-4">
+                                // eslint-disable-next-line @typescript-eslint/no-explicit-any -- T-IGH-04 ratchet: legacy `any` deferred to T-IGH-04-LINT-RATCHET-V2 follow-up.
                                 {stage.days?.map((day: any, dIdx: number) => {
                                     // Calculate Absolute Day for Display
                                     const absoluteDay = (dayRange?.start || 1) + day.day - 1;
@@ -475,6 +491,7 @@ const Step3_GrowthStages: React.FC<Step3Props> = ({ data, onUpdate, isActive, on
                 ];
             } else {
                 // Even if days exist, inject notes into them if missing?
+                 
                 stage0.days = stage0.days.map((d: any, i: number) => ({
                     ...d,
                     notes: d.notes || (i === 0 ? 'Check line pressure' : i === 1 ? 'Inspect for leaks' : '')
@@ -483,10 +500,12 @@ const Step3_GrowthStages: React.FC<Step3Props> = ({ data, onUpdate, isActive, on
             newStages[0] = stage0;
             onUpdate('stages', newStages);
         }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- T-IGH-04 ratchet: dep array intentionally narrow (mount/farm/init pattern); revisit in V2.
     }, [isActive, stages]); // Re-run when active state or stages change
 
     // --- HANDLERS ---
     const handleCreateResource = (type: string, name: string) => {
+         
         onAddResource({ id: `usr_${idGenerator.generate()}`, text: name, type: type as any, usageCount: 0 });
     };
 
@@ -502,6 +521,7 @@ const Step3_GrowthStages: React.FC<Step3Props> = ({ data, onUpdate, isActive, on
         onUpdate('stages', [...stages, newStage]);
     };
 
+     
     const updateStage = (index: number, field: string, value: any) => {
         const newStages = [...stages];
         newStages[index][field] = value;
@@ -509,10 +529,12 @@ const Step3_GrowthStages: React.FC<Step3Props> = ({ data, onUpdate, isActive, on
     };
 
     const removeStage = (index: number) => {
+         
         const newStages = stages.filter((_: any, i: number) => i !== index);
         onUpdate('stages', newStages);
     };
 
+     
     const updateDay = (sIdx: number, dIdx: number, field: string, val: any) => {
         const newStages = [...stages];
         newStages[sIdx].days[dIdx][field] = val;
@@ -520,6 +542,7 @@ const Step3_GrowthStages: React.FC<Step3Props> = ({ data, onUpdate, isActive, on
     };
 
     // Generic Items
+     
     const handleGenericDrop = (idx: number, type: string, item: any) => {
         const newStages = [...stages];
         if (!newStages[idx].items[type]) newStages[idx].items[type] = [];
@@ -527,8 +550,10 @@ const Step3_GrowthStages: React.FC<Step3Props> = ({ data, onUpdate, isActive, on
         onUpdate('stages', newStages);
     };
 
+     
     const handleGenericUpdate = (idx: number, type: string, itemId: string, field: string, val: any) => {
         const newStages = [...stages];
+         
         const t = newStages[idx].items[type].find((i: any) => i.id === itemId);
         if (t) t[field] = val;
         onUpdate('stages', newStages);
@@ -536,11 +561,13 @@ const Step3_GrowthStages: React.FC<Step3Props> = ({ data, onUpdate, isActive, on
 
     const handleGenericRemove = (idx: number, type: string, itemId: string) => {
         const newStages = [...stages];
+         
         newStages[idx].items[type] = newStages[idx].items[type].filter((i: any) => i.id !== itemId);
         onUpdate('stages', newStages);
     };
 
     // Day Items
+     
     const _handleAddDayToStage = (_idx: number, _type: string, _item: any) => {
         const newStages = [...stages];
         // Note: Add logic here if needed for adding days
@@ -564,10 +591,12 @@ const Step3_GrowthStages: React.FC<Step3Props> = ({ data, onUpdate, isActive, on
 
     const handleRemoveDayFromStage = (sIdx: number, dayId: string) => {
         const newStages = [...stages];
+         
         newStages[sIdx].days = newStages[sIdx].days.filter((d: any) => d.id !== dayId);
         onUpdate('stages', newStages);
     };
 
+     
     const handleDayDrop = (sIdx: number, dIdx: number, type: string, item: any) => {
         const newStages = [...stages];
         if (!newStages[sIdx].days[dIdx].items[type]) newStages[sIdx].days[dIdx].items[type] = [];
@@ -575,8 +604,10 @@ const Step3_GrowthStages: React.FC<Step3Props> = ({ data, onUpdate, isActive, on
         onUpdate('stages', newStages);
     };
 
+     
     const handleDayUpdate = (sIdx: number, dIdx: number, type: string, itemId: string, field: string, val: any) => {
         const newStages = [...stages];
+         
         const t = newStages[sIdx].days[dIdx].items[type].find((i: any) => i.id === itemId);
         if (t) t[field] = val;
         onUpdate('stages', newStages);
@@ -584,6 +615,7 @@ const Step3_GrowthStages: React.FC<Step3Props> = ({ data, onUpdate, isActive, on
 
     const handleDayRemove = (sIdx: number, dIdx: number, type: string, itemId: string) => {
         const newStages = [...stages];
+         
         newStages[sIdx].days[dIdx].items[type] = newStages[sIdx].days[dIdx].items[type].filter((i: any) => i.id !== itemId);
         onUpdate('stages', newStages);
     };
@@ -628,6 +660,7 @@ const Step3_GrowthStages: React.FC<Step3Props> = ({ data, onUpdate, isActive, on
                 <div className="space-y-4">
                     {(() => {
                         let cumulativeDays = 0;
+                         
                         return stages.map((stage: any, index: number) => {
                             // Calculate Display/Internal Ranges
                             const displayStart = cumulativeDays + 1;

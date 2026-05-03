@@ -53,6 +53,7 @@ interface IdentitySectionProps {
     nonExitableFarmIds: Set<string>;
     handleExitMembership: (farmId: string, farmName: string) => Promise<void>;
     isWorkerOnAnyFarm: boolean;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- T-IGH-04 ratchet: legacy `any` deferred to T-IGH-04-LINT-RATCHET-V2 follow-up.
     workerProfile: { reliability: any } | null;
 }
 
@@ -479,6 +480,7 @@ const IdentitySection: React.FC<IdentitySectionProps> = ({
                                                 const newCaps = canLog
                                                     ? (person.capabilities || []).filter(c => c !== OperatorCapability.LOG_DATA)
                                                     : [...(person.capabilities || []), OperatorCapability.LOG_DATA];
+                                                // eslint-disable-next-line @typescript-eslint/no-explicit-any -- T-IGH-04 ratchet: legacy `any` deferred to T-IGH-04-LINT-RATCHET-V2 follow-up.
                                                 const updatedPeople = profile.operators!.map(p => p.id === person.id ? { ...p, capabilities: newCaps } as any : p);
                                                 onUpdateProfile({ ...profile, people: updatedPeople });
                                             }}
@@ -491,6 +493,7 @@ const IdentitySection: React.FC<IdentitySectionProps> = ({
                                         </div>
 
                                         <button
+                                            // eslint-disable-next-line @typescript-eslint/no-unused-expressions -- T-IGH-04 ratchet: intentional side-effect-only expression; revisit in V2.
                                             onClick={(e) => { e.stopPropagation(); onDeletePerson && onDeletePerson(person.id); }}
                                             className="p-2 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-xl transition-colors"
                                         >

@@ -105,6 +105,7 @@ export const ComparePage: React.FC<Props> = ({ plots = [], crops = [], logs = []
             actual,
             delta: actual - plannedEstimate
         };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- T-IGH-04 ratchet: dep array intentionally narrow (mount/farm/init pattern); revisit in V2.
     }, [report, activeCrop?.id, activePlot?.id, logs.length]);
 
     const statusStyles = report ? getStatusStyles(report.status) : null;

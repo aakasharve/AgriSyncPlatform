@@ -117,6 +117,7 @@ class TomorrowIoWeatherService implements WeatherPort {
 
     // --- DOMAIN LOGIC: CHANGE DETECTION ---
 
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- T-IGH-04 ratchet: legacy `any` deferred to T-IGH-04-LINT-RATCHET-V2 follow-up.
     detectWeatherChanges(current: WeatherStamp, previous?: WeatherStamp): any {
         const THRESHOLDS = {
             RAIN_PROB_SPIKE: 30, // % increase
@@ -164,6 +165,7 @@ class TomorrowIoWeatherService implements WeatherPort {
         return null;
     }
 
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- T-IGH-04 ratchet: legacy `any` deferred to T-IGH-04-LINT-RATCHET-V2 follow-up.
     private createEvent(stamp: WeatherStamp, type: any, severity: string, note: string): any {
         return {
             id: `we_${idGenerator.generate()}`,

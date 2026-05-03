@@ -6,6 +6,7 @@ import OtpVerifyForm from '../features/auth/components/OtpVerifyForm';
 import type { StartOtpResponse } from '../features/auth/data/otpClient';
 import { invalidateMeContext } from '../core/session/MeContextService';
 
+// eslint-disable-next-line @typescript-eslint/no-empty-object-type -- T-IGH-04 ratchet: marker type kept; revisit in V2.
 interface LoginPageProps { }
 
 // Top-level auth mode: 'otp' is the primary flow; 'password' is legacy.

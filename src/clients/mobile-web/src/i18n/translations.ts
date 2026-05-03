@@ -786,6 +786,7 @@ export const translations: Record<Language, Translations> = {
  */
 export function t(key: string, lang: Language = 'en'): string {
     const keys = key.split('.');
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- T-IGH-04 ratchet: legacy `any` deferred to T-IGH-04-LINT-RATCHET-V2 follow-up.
     let value: any = translations[lang];
 
     for (const k of keys) {

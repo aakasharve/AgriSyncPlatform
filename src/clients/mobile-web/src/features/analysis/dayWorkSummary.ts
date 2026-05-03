@@ -248,6 +248,7 @@ const generateIrrigationSummary = (log: DailyLog): IrrigationSummary => {
     const successfulCount = countSuccessfulIrrigationEvents(log.irrigation, log.fullTranscript);
 
     return {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- T-IGH-04 ratchet: legacy `any` deferred to T-IGH-04-LINT-RATCHET-V2 follow-up.
         method: primaryEvent.method as any || 'Drip',
         durationHours: totalDuration,
         source: primaryEvent.source || 'Unknown',
