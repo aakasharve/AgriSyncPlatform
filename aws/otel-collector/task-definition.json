@@ -6,16 +6,21 @@
     "USAGE: Fill in <PLACEHOLDERS> and register with:",
     "  aws ecs register-task-definition --cli-input-json file://task-definition.json",
     "",
-    "IMAGE PIN: Update otel/opentelemetry-collector-contrib version in concert with",
-    "  otel-collector-config.yaml comment header. Never use :latest in production.",
+    "IMAGE PIN: Update ECR image tag in concert with otel-collector-config.yaml comment",
+    "  header. Never use :latest in production.",
     "",
     "NETWORKING: This task MUST be deployed in PRIVATE subnets only. The security",
     "  group allows inbound 4317/4318 from the backend task security group ONLY.",
     "  See SECURITY_NOTES.md for the full VPC wiring.",
     "",
-    "SECRETS: GRAFANA_OTLP_ENDPOINT, GRAFANA_INSTANCE_ID, GRAFANA_API_TOKEN are",
-    "  pulled from AWS Secrets Manager — never as plain environment variables.",
-    "  See 'secrets' array below."
+    "SECRETS: GRAFANA_OTLP_ENDPOINT and GRAFANA_BASIC_AUTH_BASE64 are pulled from",
+    "  AWS Secrets Manager — never as plain environment variables.",
+    "  GRAFANA_BASIC_AUTH_BASE64 = base64(instance_id:api_token) — see SECURITY_NOTES.md §Secrets.",
+    "  See 'secrets' array below.",
+    "",
+    "IMAGE: Custom ECR image with config baked in (Risk B fix, 2026-05-03).",
+    "  Build via: cd aws/otel-collector && docker build -t agrisync-otel-collector:0.103.0 .",
+    "  See README.md §1 (Image build) for full push commands."
   ],
   "family": "agrisync-otel-collector",
   "taskRoleArn": "arn:aws:iam::<ACCOUNT_ID>:role/agrisync-otel-collector-task",
@@ -27,17 +32,10 @@
   "containerDefinitions": [
     {
       "name": "otel-collector",
-      "image": "otel/opentelemetry-collector-contrib:0.103.0",
+      "image": "<ACCOUNT_ID>.dkr.ecr.<REGION>.amazonaws.com/agrisync-otel-collector:0.103.0",
       "essential": true,
       "command": [
-        "--config=/etc/otelcol/otel-collector-config.yaml"
-      ],
-      "mountPoints": [
-        {
-          "sourceVolume": "otel-config",
-          "containerPath": "/etc/otelcol",
-          "readOnly": true
-        }
+        "--config=/etc/otelcol-contrib/config.yaml"
       ],
       "portMappings": [
         {
@@ -73,12 +71,8 @@
           "valueFrom": "arn:aws:secretsmanager:<REGION>:<ACCOUNT_ID>:secret:agrisync/prod/grafana-otlp-endpoint"
         },
         {
-          "name": "GRAFANA_INSTANCE_ID",
-          "valueFrom": "arn:aws:secretsmanager:<REGION>:<ACCOUNT_ID>:secret:agrisync/prod/grafana-instance-id"
-        },
-        {
-          "name": "GRAFANA_API_TOKEN",
-          "valueFrom": "arn:aws:secretsmanager:<REGION>:<ACCOUNT_ID>:secret:agrisync/prod/grafana-api-token"
+          "name": "GRAFANA_BASIC_AUTH_BASE64",
+          "valueFrom": "arn:aws:secretsmanager:<REGION>:<ACCOUNT_ID>:secret:agrisync/prod/grafana-basic-auth-base64"
         }
       ],
       "logConfiguration": {
@@ -108,18 +102,6 @@
       "readonlyRootFilesystem": false,
       "privileged": false,
       "user": "nobody"
-    }
-  ],
-  "volumes": [
-    {
-      "name": "otel-config",
-      "_comment": [
-        "The otel-collector-config.yaml must be uploaded to S3 or baked into an ECR image.",
-        "For MVP: use an S3-backed volume via a sidecar init container that copies the config.",
-        "Alternative: build a custom ECR image FROM otel/opentelemetry-collector-contrib:0.103.0",
-        "  that COPYs otel-collector-config.yaml into /etc/otelcol/. This is preferred for",
-        "  deterministic deployments. See README.md §3 (Config delivery options)."
-      ]
     }
   ],
   "tags": [
