@@ -112,7 +112,16 @@ public sealed class PushSyncBatchHandler(
     // path on both sync and HTTP for this command. No pre-check
     // duplication, no masking caveats.
     IHandler<AssignJobCardCommand, AssignJobCardResult> assignJobCardHandler,
-    StartJobCardHandler startJobCardHandler,
+    // T-IGH-03-PIPELINE-ROLLOUT (StartJobCard): switched from raw
+    // StartJobCardHandler to the pipeline-wrapped IHandler. The sync
+    // pre-flight in HandleJobCardStartAsync below is just an empty-id
+    // check on JobCardId — the same gate as the validator, with no
+    // overlapping membership lookup. The pipeline's
+    // InvalidCommand → JobCardNotFound → Forbidden ordering is
+    // therefore the canonical entry path on both sync and HTTP for
+    // this command. The assigned-worker invariant + same-timestamp
+    // idempotency stay in the body.
+    IHandler<StartJobCardCommand, StartJobCardResult> startJobCardHandler,
     // T-IGH-03-PIPELINE-ROLLOUT (CompleteJobCard): switched from raw
     // CompleteJobCardHandler to the pipeline-wrapped IHandler. The sync
     // pre-flight in HandleJobCardCompleteAsync below is just an empty-
