@@ -21,6 +21,7 @@ vi.mock('../ConflictResolutionService', () => ({
         list: vi.fn(),
         retry: vi.fn(),
         discard: vi.fn(),
+        edit: vi.fn(),
     },
 }));
 
@@ -28,6 +29,7 @@ const mockedService = ConflictResolutionService as unknown as {
     list: ReturnType<typeof vi.fn>;
     retry: ReturnType<typeof vi.fn>;
     discard: ReturnType<typeof vi.fn>;
+    edit: ReturnType<typeof vi.fn>;
 };
 
 describe('OfflineConflictPage', () => {
@@ -75,6 +77,35 @@ describe('OfflineConflictPage', () => {
             expect(screen.queryByTestId('conflict-row-m1')).not.toBeInTheDocument();
         });
         expect(screen.getByTestId('conflict-row-m2')).toBeInTheDocument();
+    });
+
+    it('renders the edit button per row and routes through ConflictResolutionService.edit', async () => {
+        mockedService.list.mockResolvedValue([
+            {
+                mutationId: 'edit-me',
+                mutationType: SyncMutationName.AddCostEntry,
+                capturedAt: '2026-04-01T10:00:00Z',
+                reason: 'INVALID_PAYLOAD',
+                hint: 'नोंदीची माहिती तपासा.',
+                payloadPreview: '{"amount":"oops"}',
+            },
+        ]);
+        mockedService.edit.mockResolvedValue(undefined);
+
+        render(<OfflineConflictPage />);
+        const editBtn = await screen.findByTestId('edit-edit-me');
+        // Marathi-first label per the existing UX pattern in this file.
+        expect(editBtn).toHaveTextContent(/बदल करा/);
+        await userEvent.click(editBtn);
+
+        await waitFor(() => {
+            expect(mockedService.edit).toHaveBeenCalledWith('edit-me');
+        });
+        // Row is optimistically removed once edit() resolves — the user is
+        // being routed away to the edit surface.
+        await waitFor(() => {
+            expect(screen.queryByTestId('conflict-row-edit-me')).not.toBeInTheDocument();
+        });
     });
 
     it('discards a row and removes it from the list', async () => {

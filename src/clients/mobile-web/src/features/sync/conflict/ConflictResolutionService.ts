@@ -22,6 +22,7 @@ import { backgroundSyncWorker } from '../../../infrastructure/sync/BackgroundSyn
 import { getRootStore } from '../../../app/state/RootStore';
 import { getDatabase } from '../../../infrastructure/storage/DexieDatabase';
 import { systemClock } from '../../../core/domain/services/Clock';
+import { getEditSurface, escalateToOwner } from './EditSurfaceRegistry';
 
 export interface RejectedMutationView {
     mutationId: string;
@@ -84,6 +85,38 @@ export class ConflictResolutionService {
         } catch {
             // Actor not mounted — ignore.
         }
+    }
+
+    /**
+     * T-IGH-04-CONFLICT-EDIT — load the rejected mutation, look up the
+     * matching edit surface in `EditSurfaceRegistry`, and invoke the
+     * registered handler with the original payload. The handler is
+     * responsible for routing the user to the input surface and seeding
+     * it; once the user submits, the surface is expected to call
+     * `MutationQueue.replacePayload(mutationId, newPayload)` to mutate
+     * the queued row in place (rather than enqueueing a duplicate).
+     *
+     * If no surface is registered we fall back to the `escalateToOwner`
+     * sentinel so the user always gets some affordance.
+     */
+    static async edit(mutationId: string): Promise<void> {
+        const db = getDatabase();
+        const row = await db.mutationQueue
+            .where('[deviceId+clientRequestId]')
+            .equals([mutationQueue.getDeviceId(), mutationId])
+            .first();
+
+        if (!row) {
+            // Row evaporated (e.g., another tab discarded it). Nothing to edit.
+            return;
+        }
+
+        const handler = getEditSurface(row.mutationType) ?? escalateToOwner;
+        handler({
+            mutationId,
+            mutationType: row.mutationType,
+            payload: row.payload,
+        });
     }
 
     static async discard(mutationId: string): Promise<void> {
