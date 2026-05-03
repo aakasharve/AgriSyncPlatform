@@ -1087,6 +1087,33 @@ public static class DependencyInjection
                     sp.GetServices<AgriSync.BuildingBlocks.Application.PipelineBehaviors.IAuthorizationCheck<
                         ShramSafal.Application.UseCases.Attachments.UploadAttachment.UploadAttachmentCommand>>())));
 
+        // T-IGH-03-PIPELINE-ROLLOUT (OverridePlannedActivity): caller-shape
+        // validation (incl. non-blank Reason for the audit trail) +
+        // planned-activity existence + Mukadam-tier authorization. The
+        // endpoint (POST /planned-activities/{id}/override) gets the
+        // canonical InvalidCommand → PlannedActivityNotFound → Forbidden
+        // ordering through the pipeline. PushSyncBatchHandler is NOT
+        // migrated: its dispatch case for "plan.override" still returns
+        // MutationTypeUnimplementedCode (Sub-plan 03 follow-up); there
+        // is no sync integration test for plan.override, so the
+        // "only-with-tests" guardrail keeps this rollout endpoint-only.
+        services.AddScoped<AgriSync.BuildingBlocks.Application.PipelineBehaviors.IValidator<
+            OverridePlannedActivityCommand>,
+            OverridePlannedActivityValidator>();
+        services.AddScoped<AgriSync.BuildingBlocks.Application.PipelineBehaviors.IAuthorizationCheck<
+            OverridePlannedActivityCommand>,
+            OverridePlannedActivityAuthorizer>();
+        services.AddScoped<AgriSync.BuildingBlocks.Application.IHandler<OverridePlannedActivityCommand>>(sp =>
+            AgriSync.BuildingBlocks.Application.HandlerPipeline.Build(
+                sp.GetRequiredService<OverridePlannedActivityHandler>(),
+                new AgriSync.BuildingBlocks.Application.PipelineBehaviors.LoggingBehavior<OverridePlannedActivityCommand>(
+                    sp.GetRequiredService<Microsoft.Extensions.Logging.ILogger<
+                        AgriSync.BuildingBlocks.Application.PipelineBehaviors.LoggingBehavior<OverridePlannedActivityCommand>>>()),
+                new AgriSync.BuildingBlocks.Application.PipelineBehaviors.ValidationBehavior<OverridePlannedActivityCommand>(
+                    sp.GetServices<AgriSync.BuildingBlocks.Application.PipelineBehaviors.IValidator<OverridePlannedActivityCommand>>()),
+                new AgriSync.BuildingBlocks.Application.PipelineBehaviors.AuthorizationBehavior<OverridePlannedActivityCommand>(
+                    sp.GetServices<AgriSync.BuildingBlocks.Application.PipelineBehaviors.IAuthorizationCheck<OverridePlannedActivityCommand>>())));
+
         return services;
     }
 }

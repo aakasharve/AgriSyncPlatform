@@ -1,5 +1,6 @@
 using System.Text.Json;
 using AgriSync.BuildingBlocks.Abstractions;
+using AgriSync.BuildingBlocks.Application;
 using AgriSync.BuildingBlocks.Results;
 using AgriSync.SharedKernel.Contracts.Ids;
 using AgriSync.SharedKernel.Contracts.Roles;
@@ -9,10 +10,38 @@ using ShramSafal.Domain.Common;
 
 namespace ShramSafal.Application.UseCases.Planning.OverridePlannedActivity;
 
+/// <summary>
+/// Overrides a planned activity (date shift / rename / restage) with an
+/// audit trail.
+///
+/// <para>
+/// T-IGH-03-PIPELINE-ROLLOUT (OverridePlannedActivity): wired through the
+/// explicit <see cref="HandlerPipeline"/>. Caller-shape validation lives
+/// in <see cref="OverridePlannedActivityValidator"/>; planned-activity
+/// existence + Mukadam-tier authorization lives in
+/// <see cref="OverridePlannedActivityAuthorizer"/>. When this handler is
+/// resolved via the pipeline (see DI registration), both layers run
+/// before the body executes; when resolved directly (legacy tests + the
+/// PushSyncBatch dispatch — currently unimplemented for plan.override),
+/// the body's defense-in-depth gates continue to enforce the same
+/// invariants verbatim.
+/// </para>
+///
+/// <para>
+/// PushSync decision: <c>plan.override</c> is registered in the sync
+/// mutation catalog but its dispatch case in
+/// <c>PushSyncBatchHandler.ExecuteMutationAsync</c> returns
+/// <c>MutationTypeUnimplementedCode</c> (Sub-plan 03 follow-up). No
+/// sync integration test exercises an end-to-end plan.override; the
+/// "only-with-tests" guardrail therefore keeps this rollout endpoint-
+/// only — there is no <c>PushSyncBatchHandler</c> ctor change.
+/// </para>
+/// </summary>
 public sealed class OverridePlannedActivityHandler(
     IShramSafalRepository repository,
     ISyncMutationStore syncMutationStore,
     IClock clock)
+    : IHandler<OverridePlannedActivityCommand>
 {
     private const string MutationType = "plan.override";
 
