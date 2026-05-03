@@ -169,6 +169,7 @@ _integr_tests.txt
 **/output/**/*.jpg
 src/clients/mobile-web/vite_log.txt
 src/clients/mobile-web/.lighthouseci/
+src/clients/mobile-web/scripts/_*.mjs
 
 # Build / tsc artifact dumps — never commit these
 **/build_log.txt
