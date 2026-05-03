@@ -21,8 +21,7 @@ interface PattiUploadSheetProps {
     session: HarvestSession;
     cropName: string;
     onClose: () => void;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- T-IGH-04 ratchet: legacy `any` deferred to T-IGH-04-LINT-RATCHET-V2 follow-up.
-    onDataExtracted: (data: any) => void;
+    onDataExtracted: (data: Record<string, unknown>) => void;
 }
 
 const PattiUploadSheet: React.FC<PattiUploadSheetProps> = ({ session: _session, cropName, onClose, onDataExtracted }) => {
@@ -59,8 +58,7 @@ const PattiUploadSheet: React.FC<PattiUploadSheetProps> = ({ session: _session, 
                     setTimeout(() => {
                         onDataExtracted(extractedData);
                     }, 1000);
-                // eslint-disable-next-line @typescript-eslint/no-explicit-any -- T-IGH-04 ratchet: legacy `any` deferred to T-IGH-04-LINT-RATCHET-V2 follow-up.
-                } catch (err: any) {
+                } catch (err: unknown) {
                     console.error("Analysis Error", err);
                     setStatus('ERROR');
                     setErrorMsg("Could not read the receipt. Please try again or enter manually.");

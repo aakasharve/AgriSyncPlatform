@@ -33,8 +33,7 @@ const LogWizardContainer: React.FC<LogWizardContainerProps> = ({ isOpen, onClose
 
     // Step 3 Data (Iterating through buckets)
     const [currentBucketIndex, setCurrentBucketIndex] = useState<number>(0);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- T-IGH-04 ratchet: legacy `any` deferred to T-IGH-04-LINT-RATCHET-V2 follow-up.
-    const [collectedData, setCollectedData] = useState<Record<string, any>>({}); // Map bucketId -> data
+    const [collectedData, setCollectedData] = useState<Record<string, Record<string, unknown>>>({}); // Map bucketId -> bucket-form-data
 
     if (!isOpen) return null;
 
@@ -64,8 +63,7 @@ const LogWizardContainer: React.FC<LogWizardContainerProps> = ({ isOpen, onClose
         setPhase(3);
     };
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- T-IGH-04 ratchet: legacy `any` deferred to T-IGH-04-LINT-RATCHET-V2 follow-up.
-    const handleDetailsNext = (data: any) => {
+    const handleDetailsNext = (data: Record<string, unknown>) => {
         const currentBucket = selectedBuckets[currentBucketIndex];
         setCollectedData(prev => ({
             ...prev,
@@ -103,17 +101,17 @@ const LogWizardContainer: React.FC<LogWizardContainerProps> = ({ isOpen, onClose
 
 
     // --- HELPERS to format Summary ---
+    interface SummaryItem { label: string; value: string }
     const getSummaryData = () => {
         return selectedBuckets.map(b => {
             const data = collectedData[b];
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any -- T-IGH-04 ratchet: legacy `any` deferred to T-IGH-04-LINT-RATCHET-V2 follow-up.
-            let items: any[] = [];
+            let items: SummaryItem[] = [];
 
             // MOCKED MAPPING based on Step3 mock
             if (b === 'irrigation') {
                 items = [
                     { label: 'Duration', value: `${data?.durationHours || 0} hrs` },
-                    { label: 'Method', value: data?.method || '-' }
+                    { label: 'Method', value: typeof data?.method === 'string' ? data.method : '-' }
                 ];
             } else if (b === 'labour') {
                 items = [

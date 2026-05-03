@@ -38,8 +38,7 @@ const AddMachineWizard: React.FC<AddMachineWizardProps> = ({ newMachine, onChang
                 <select
                     className="flex-1 p-2.5 border border-slate-200 rounded-xl bg-white text-sm outline-none"
                     value={newMachine.type}
-                    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- T-IGH-04 ratchet: legacy `any` deferred to T-IGH-04-LINT-RATCHET-V2 follow-up.
-                    onChange={e => onChange({ ...newMachine, type: e.target.value as any })}
+                    onChange={e => onChange({ ...newMachine, type: e.target.value as FarmMachinery['type'] })}
                 >
                     <option value="Tractor">Tractor</option>
                     <option value="Sprayer">Sprayer</option>
@@ -49,8 +48,7 @@ const AddMachineWizard: React.FC<AddMachineWizardProps> = ({ newMachine, onChang
                 <select
                     className="w-32 p-2.5 border border-slate-200 rounded-xl bg-white text-sm outline-none"
                     value={newMachine.ownership}
-                    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- T-IGH-04 ratchet: legacy `any` deferred to T-IGH-04-LINT-RATCHET-V2 follow-up.
-                    onChange={e => onChange({ ...newMachine, ownership: e.target.value as any })}
+                    onChange={e => onChange({ ...newMachine, ownership: e.target.value as FarmMachinery['ownership'] })}
                 >
                     <option value="Owned">{t('profile.owned')}</option>
                     <option value="Rented">{t('profile.rented')}</option>
