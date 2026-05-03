@@ -163,6 +163,18 @@ public sealed class AdminMisRepository(AnalyticsDbContext analyticsContext) : IA
     /// Falls back to an empty list if the matview is empty or if the
     /// query throws — same graceful pattern as the other Get* methods.
     /// </para>
+    ///
+    /// <para>
+    /// <b>FM-empty caveat (Path C, accepted 2026-05-03):</b>
+    /// <c>mis.silent_churn_watchlist</c> depends on
+    /// <c>mis.subscription_farms</c>, which joins via
+    /// <c>ssf.farm_memberships</c>. That table is currently empty in
+    /// production — <c>ssf.farm_memberships</c> will be populated
+    /// naturally once DWC v2 Phase E ships the worker-capture flow.
+    /// Until then this method returns <c>[]</c> on prod. No engineering
+    /// action required; see T-BUCKET1-CHURN-FM-EMPTY for the full
+    /// decision record.
+    /// </para>
     /// </summary>
     public async Task<IReadOnlyList<SilentChurnItemDto>> GetSilentChurnAsync(CancellationToken ct = default)
     {
