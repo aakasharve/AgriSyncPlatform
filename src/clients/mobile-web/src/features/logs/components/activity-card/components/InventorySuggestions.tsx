@@ -6,9 +6,16 @@
 import { useState, useEffect } from 'react';
 import { procurementRepository } from '../../../../../features/procurement/procurementRepository';
 
-const InventorySuggestions = ({ query, onSelect }: { query: string, onSelect: (item: { name: string, expenseId: string, itemId: string }) => void }) => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- T-IGH-04 ratchet: legacy `any` deferred to T-IGH-04-LINT-RATCHET-V2 follow-up.
-    const [matches, setMatches] = useState<any[]>([]);
+interface InventoryMatch {
+    name: string;
+    expenseId: string;
+    itemId: string;
+    date: string;
+    vendor?: string;
+}
+
+const InventorySuggestions = ({ query, onSelect }: { query: string, onSelect: (item: InventoryMatch) => void }) => {
+    const [matches, setMatches] = useState<InventoryMatch[]>([]);
 
     useEffect(() => {
         if (!query || query.length < 2) {
@@ -17,8 +24,7 @@ const InventorySuggestions = ({ query, onSelect }: { query: string, onSelect: (i
         }
         const expenses = procurementRepository.getExpenses();
         // Flatten to items
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- T-IGH-04 ratchet: legacy `any` deferred to T-IGH-04-LINT-RATCHET-V2 follow-up.
-        const allItems: any[] = [];
+        const allItems: InventoryMatch[] = [];
         expenses.forEach(exp => {
             exp.lineItems.forEach(li => {
                 if (li.name.toLowerCase().includes(query.toLowerCase())) {

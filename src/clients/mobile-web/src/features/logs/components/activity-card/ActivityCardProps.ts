@@ -21,6 +21,7 @@ import {
     LogVerificationStatus,
 } from '../../../../types';
 import { BucketIssue } from '../../../../domain/types/log.types';
+import type { ActivityDetailData } from './sheets/DetailSheet';
 
 export interface ActivityCardProps {
     activity: CropActivityEvent;
@@ -30,8 +31,9 @@ export interface ActivityCardProps {
         machinery?: MachineryEvent;
     };
     inputs: InputEvent[]; // NEW: Inputs as array
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- T-IGH-04 ratchet: legacy `any` deferred to T-IGH-04-LINT-RATCHET-V2 follow-up.
-    onUpdateDetails: (type: 'labour' | 'irrigation' | 'machinery' | 'input', data: any) => void;
+    // The `data` shape varies by `type` (LabourEvent/IrrigationEvent/MachineryEvent/InputEvent[]);
+    // typed as ActivityDetailData from the shared sheet (see DetailSheet.tsx docstring).
+    onUpdateDetails: (type: 'labour' | 'irrigation' | 'machinery' | 'input', data: ActivityDetailData) => void;
     onUpdateWorkTypes?: (types: string[]) => void;
     onDeleteActivity: () => void;
     defaults: LedgerDefaults;

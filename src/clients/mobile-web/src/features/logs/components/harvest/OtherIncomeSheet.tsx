@@ -78,8 +78,7 @@ const OtherIncomeSheet: React.FC<OtherIncomeSheetProps> = ({ crops, onClose, onS
                             {['RESIDUE', 'BYPRODUCT', 'PLANT_SALE', 'OTHER'].map((s) => (
                                 <button
                                     key={s}
-                                    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- T-IGH-04 ratchet: legacy `any` deferred to T-IGH-04-LINT-RATCHET-V2 follow-up.
-                                    onClick={() => setSource(s as any)}
+                                    onClick={() => setSource(s as OtherIncomeEntry['source'])}
                                     className={`px-3 py-2 rounded-lg text-sm border font-medium ${source === s
                                         ? 'bg-emerald-50 border-emerald-500 text-emerald-700'
                                         : 'bg-white border-slate-200 text-slate-600'
