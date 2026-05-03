@@ -19,6 +19,8 @@ using ShramSafal.Infrastructure.Persistence;
 using ShramSafal.Infrastructure.Persistence.Repositories;
 using ShramSafal.Infrastructure.Storage;
 using ShramSafal.Infrastructure.Reports;
+using ShramSafal.Application.Wtl;
+using ShramSafal.Infrastructure.Wtl;
 
 namespace ShramSafal.Infrastructure;
 
@@ -249,6 +251,12 @@ public static class DependencyInjection
 
         // CEI Phase 3 §4.6 — compliance signal repository.
         services.AddScoped<IComplianceSignalRepository, ComplianceSignalRepository>();
+
+        // DWC v2 §3.3 / ADR 2026-05-04 wtl-v0-entity-shape — Work Trust
+        // Ledger v0. Repository is scoped (DbContext-bound); the regex
+        // extractor is a stateless singleton.
+        services.AddScoped<IWorkerRepository, WorkerRepository>();
+        services.AddSingleton<IWorkerNameExtractor, RegexWorkerNameExtractor>();
 
         services.AddSingleton<AiResponseNormalizer>();
         services.AddSingleton<AiPromptTemplateRegistry>();

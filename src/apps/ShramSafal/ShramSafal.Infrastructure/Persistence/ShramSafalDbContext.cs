@@ -14,6 +14,7 @@ using ShramSafal.Domain.Work;
 using ShramSafal.Domain.Schedules;
 using ShramSafal.Domain.Subscriptions;
 using ShramSafal.Domain.Tests;
+using ShramSafal.Domain.Wtl;
 
 namespace ShramSafal.Infrastructure.Persistence;
 
@@ -54,6 +55,12 @@ public sealed class ShramSafalDbContext(DbContextOptions<ShramSafalDbContext> op
     public DbSet<Organization> Organizations => Set<Organization>();
     public DbSet<OrganizationMembership> OrganizationMemberships => Set<OrganizationMembership>();
     public DbSet<OrganizationFarmScope> OrganizationFarmScopes => Set<OrganizationFarmScope>();
+
+    // DWC v2 §3.3 / ADR 2026-05-04 wtl-v0-entity-shape — passive
+    // server-side worker reuse ledger. NEVER farmer-facing in v0.
+    public DbSet<Worker> Workers => Set<Worker>();
+    public DbSet<WorkerAssignment> WorkerAssignments => Set<WorkerAssignment>();
+
     internal DbSet<SyncMutationRecord> SyncMutations => Set<SyncMutationRecord>();
 
     /// <summary>
