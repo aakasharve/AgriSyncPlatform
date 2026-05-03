@@ -96,7 +96,11 @@ export function EngagementTierBreakdown({ tiers }: EngagementTierBreakdownProps)
         <summary>Show data table</summary>
         <table>
           <thead>
-            <tr><th>Tier</th><th>Farms</th><th>%</th></tr>
+            <tr>
+              <th scope="col">Tier</th>
+              <th scope="col">Farms</th>
+              <th scope="col">%</th>
+            </tr>
           </thead>
           <tbody>
             {data.map(d => (

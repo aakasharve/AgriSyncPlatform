@@ -79,11 +79,13 @@ export function WatchlistTable({ rows, defaultOpen = false }: WatchlistTableProp
               <table className="w-full text-sm" aria-label="Watchlist">
                 <thead>
                   <tr className="border-b border-row-divider text-left text-[11px] font-extrabold uppercase tracking-[0.08em] text-text-muted">
-                    <th className="py-2 pl-4 pr-4">Farmer</th>
-                    <th className="py-2 pr-4 text-right">Score</th>
-                    <th className="py-2 pr-4 text-right">Δ wk</th>
-                    <th className="py-2 pr-4">Last active</th>
-                    <th className="py-2 pr-4" aria-label="Drill into farm" />
+                    <th scope="col" className="py-2 pl-4 pr-4">Farmer</th>
+                    <th scope="col" className="py-2 pr-4 text-right">Score</th>
+                    <th scope="col" className="py-2 pr-4 text-right">Δ wk</th>
+                    <th scope="col" className="py-2 pr-4">Last active</th>
+                    <th scope="col" className="py-2 pr-4">
+                      <span className="sr-only">Drill into farm</span>
+                    </th>
                   </tr>
                 </thead>
                 <tbody>

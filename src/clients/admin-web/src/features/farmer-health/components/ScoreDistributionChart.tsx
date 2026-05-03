@@ -73,8 +73,8 @@ export function ScoreDistributionChart({ bins }: ScoreDistributionChartProps) {
         <table className="mt-2 w-full font-mono text-[11px] tabular-nums">
           <thead>
             <tr className="text-left text-text-muted">
-              <th className="py-1 pr-3">Bucket</th>
-              <th className="py-1 pr-3 text-right">Farms</th>
+              <th scope="col" className="py-1 pr-3">Bucket</th>
+              <th scope="col" className="py-1 pr-3 text-right">Farms</th>
             </tr>
           </thead>
           <tbody>

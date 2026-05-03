@@ -89,7 +89,9 @@ export function InterventionQueueTable({ rows, understatedEmpty }: InterventionQ
             <SortHeader k="score" cur={sortKey} dir={sortDir} onClick={toggleSort} align="right">Score</SortHeader>
             <SortHeader k="weeklyDelta" cur={sortKey} dir={sortDir} onClick={toggleSort} align="right">Δ wk</SortHeader>
             <SortHeader k="lastActiveAt" cur={sortKey} dir={sortDir} onClick={toggleSort}>Last active</SortHeader>
-            <th className="py-2 pr-4" aria-label="Drill into farm" />
+            <th scope="col" className="py-2 pr-4">
+              <span className="sr-only">Drill into farm</span>
+            </th>
           </tr>
         </thead>
         <tbody>
@@ -142,12 +144,15 @@ interface SortHeaderProps {
 function SortHeader({ k, cur, dir, onClick, align = 'left', children }: SortHeaderProps) {
   const Icon = cur !== k ? ArrowUpDown : dir === 'asc' ? ArrowUp : ArrowDown;
   return (
-    <th className={`py-2 pr-4 first:pl-4 ${align === 'right' ? 'text-right' : ''}`}>
+    <th
+      scope="col"
+      aria-sort={cur === k ? (dir === 'asc' ? 'ascending' : 'descending') : 'none'}
+      className={`py-2 pr-4 first:pl-4 ${align === 'right' ? 'text-right' : ''}`}
+    >
       <button
         type="button"
         onClick={() => onClick(k)}
         className={`inline-flex items-center gap-1 rounded-sm px-1 -mx-1 py-0.5 hover:bg-surface-sidebar focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-teal ${align === 'right' ? 'flex-row-reverse' : ''}`}
-        aria-sort={cur === k ? (dir === 'asc' ? 'ascending' : 'descending') : 'none'}
       >
         {children}<Icon size={11} />
       </button>
