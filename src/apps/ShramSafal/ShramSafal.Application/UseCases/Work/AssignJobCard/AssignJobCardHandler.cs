@@ -1,4 +1,5 @@
 using AgriSync.BuildingBlocks.Abstractions;
+using AgriSync.BuildingBlocks.Application;
 using AgriSync.BuildingBlocks.Results;
 using AgriSync.SharedKernel.Contracts.Roles;
 using ShramSafal.Application.Ports;
@@ -11,10 +12,28 @@ namespace ShramSafal.Application.UseCases.Work.AssignJobCard;
 /// CEI Phase 4 §4.8 — Task 2.1.2.
 /// Assigns a JobCard to a farm worker.
 /// Caller must be >= Mukadam. Worker must be an active member of the farm.
+///
+/// <para>
+/// T-IGH-03-PIPELINE-ROLLOUT (AssignJobCard): wired through the
+/// explicit <see cref="HandlerPipeline"/>. Caller-shape validation
+/// (empty IDs) lives in <see cref="AssignJobCardValidator"/>;
+/// job-card-existence + caller-role-tier (Mukadam-or-Owner)
+/// authorization lives in <see cref="AssignJobCardAuthorizer"/>. When
+/// this handler is resolved via the pipeline (see DI registration),
+/// both layers run before the body executes; when resolved directly
+/// (legacy tests), the body's inline guards continue to enforce the
+/// same invariants. The worker-membership check
+/// (<see cref="ShramSafalErrors.JobCardWorkerNotMember"/>) and the
+/// domain state-machine check
+/// (<see cref="ShramSafalErrors.JobCardInvalidState"/>) stay in the
+/// body — they're either I/O against a different actor (the worker)
+/// or aggregate-state invariants.
+/// </para>
 /// </summary>
 public sealed class AssignJobCardHandler(
     IShramSafalRepository repository,
     IClock clock)
+    : IHandler<AssignJobCardCommand, AssignJobCardResult>
 {
     public async Task<Result<AssignJobCardResult>> HandleAsync(
         AssignJobCardCommand command,
