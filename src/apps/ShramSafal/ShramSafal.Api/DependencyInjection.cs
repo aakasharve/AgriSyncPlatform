@@ -742,6 +742,33 @@ public static class DependencyInjection
                 new AgriSync.BuildingBlocks.Application.PipelineBehaviors.AuthorizationBehavior<AddLocalPlannedActivityCommand>(
                     sp.GetServices<AgriSync.BuildingBlocks.Application.PipelineBehaviors.IAuthorizationCheck<AddLocalPlannedActivityCommand>>())));
 
+        // T-IGH-03-PIPELINE-ROLLOUT (RemovePlannedActivity): caller-shape
+        // validation (incl. non-blank Reason for the audit trail) +
+        // planned-activity existence + Mukadam-tier authorization. The
+        // endpoint (POST /planned-activities/{id}/remove) gets the
+        // canonical InvalidCommand → PlannedActivityNotFound → Forbidden
+        // ordering through the pipeline. PushSync is NOT migrated:
+        // "plan.remove" still returns MutationTypeUnimplementedCode in
+        // PushSyncBatchHandler and no sync integration test exercises
+        // end-to-end plan.remove — the "only-with-tests" guardrail
+        // keeps this rollout endpoint-only.
+        services.AddScoped<AgriSync.BuildingBlocks.Application.PipelineBehaviors.IValidator<
+            RemovePlannedActivityCommand>,
+            RemovePlannedActivityValidator>();
+        services.AddScoped<AgriSync.BuildingBlocks.Application.PipelineBehaviors.IAuthorizationCheck<
+            RemovePlannedActivityCommand>,
+            RemovePlannedActivityAuthorizer>();
+        services.AddScoped<AgriSync.BuildingBlocks.Application.IHandler<RemovePlannedActivityCommand>>(sp =>
+            AgriSync.BuildingBlocks.Application.HandlerPipeline.Build(
+                sp.GetRequiredService<RemovePlannedActivityHandler>(),
+                new AgriSync.BuildingBlocks.Application.PipelineBehaviors.LoggingBehavior<RemovePlannedActivityCommand>(
+                    sp.GetRequiredService<Microsoft.Extensions.Logging.ILogger<
+                        AgriSync.BuildingBlocks.Application.PipelineBehaviors.LoggingBehavior<RemovePlannedActivityCommand>>>()),
+                new AgriSync.BuildingBlocks.Application.PipelineBehaviors.ValidationBehavior<RemovePlannedActivityCommand>(
+                    sp.GetServices<AgriSync.BuildingBlocks.Application.PipelineBehaviors.IValidator<RemovePlannedActivityCommand>>()),
+                new AgriSync.BuildingBlocks.Application.PipelineBehaviors.AuthorizationBehavior<RemovePlannedActivityCommand>(
+                    sp.GetServices<AgriSync.BuildingBlocks.Application.PipelineBehaviors.IAuthorizationCheck<RemovePlannedActivityCommand>>())));
+
         return services;
     }
 }

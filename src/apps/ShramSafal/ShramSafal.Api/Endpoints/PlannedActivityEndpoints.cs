@@ -71,11 +71,16 @@ public static class PlannedActivityEndpoints
         })
         .WithName("AddLocalPlannedActivity");
 
+        // T-IGH-03-PIPELINE-ROLLOUT (RemovePlannedActivity): resolves
+        // the pipeline-wrapped IHandler so the canonical
+        // InvalidCommand → PlannedActivityNotFound → Forbidden ordering
+        // runs before the body's idempotency / soft-remove / audit /
+        // save logic.
         group.MapPost("/planned-activities/{id:guid}/remove", async (
             Guid id,
             RemovePlannedActivityRequest request,
             ClaimsPrincipal user,
-            RemovePlannedActivityHandler handler,
+            IHandler<RemovePlannedActivityCommand> handler,
             CancellationToken ct) =>
         {
             if (!EndpointActorContext.TryGetUserId(user, out var actorUserId))

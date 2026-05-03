@@ -1,5 +1,6 @@
 using System.Text.Json;
 using AgriSync.BuildingBlocks.Abstractions;
+using AgriSync.BuildingBlocks.Application;
 using AgriSync.BuildingBlocks.Results;
 using AgriSync.SharedKernel.Contracts.Ids;
 using AgriSync.SharedKernel.Contracts.Roles;
@@ -9,10 +10,38 @@ using ShramSafal.Domain.Common;
 
 namespace ShramSafal.Application.UseCases.Planning.OverridePlannedActivity;
 
+/// <summary>
+/// Soft-removes a planned activity (template-derived OR locally-added)
+/// with an audit trail.
+///
+/// <para>
+/// T-IGH-03-PIPELINE-ROLLOUT (RemovePlannedActivity): wired through the
+/// explicit <see cref="HandlerPipeline"/>. Caller-shape validation lives
+/// in <see cref="RemovePlannedActivityValidator"/>; planned-activity
+/// existence + Mukadam-tier authorization lives in
+/// <see cref="RemovePlannedActivityAuthorizer"/>. When this handler is
+/// resolved via the pipeline (see DI registration), both layers run
+/// before the body executes; when resolved directly (legacy tests + the
+/// PushSyncBatch dispatch — currently unimplemented for plan.remove),
+/// the body's defense-in-depth gates continue to enforce the same
+/// invariants verbatim.
+/// </para>
+///
+/// <para>
+/// PushSync decision: <c>plan.remove</c> is registered in the sync
+/// mutation catalog but its dispatch case in
+/// <c>PushSyncBatchHandler.ExecuteMutationAsync</c> returns
+/// <c>MutationTypeUnimplementedCode</c> (Sub-plan 03 follow-up). No
+/// sync integration test exercises an end-to-end plan.remove; the
+/// "only-with-tests" guardrail therefore keeps this rollout endpoint-
+/// only — there is no <c>PushSyncBatchHandler</c> ctor change.
+/// </para>
+/// </summary>
 public sealed class RemovePlannedActivityHandler(
     IShramSafalRepository repository,
     ISyncMutationStore syncMutationStore,
     IClock clock)
+    : IHandler<RemovePlannedActivityCommand>
 {
     private const string MutationType = "plan.remove";
 
