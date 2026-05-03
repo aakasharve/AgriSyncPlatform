@@ -7,6 +7,8 @@ import React, { useState } from 'react';
 import { PlannedTask, CropProfile, Plot, Person } from '../../../types';
 import { X, Calendar, Check, AlertTriangle, Clock, Tag, User } from 'lucide-react';
 import { getDateKey } from '../../../core/domain/services/DateKeyService';
+import { emitNextActionCreated } from '../../../core/telemetry/eventEmitters';
+import { useFarmContext } from '../../../core/session/FarmContext';
 
 interface TaskCreationSheetProps {
     isOpen: boolean;
@@ -35,6 +37,7 @@ const TaskCreationSheet: React.FC<TaskCreationSheetProps> = ({
     const [priority, setPriority] = useState<Priority>('normal');
     const [dueDate, setDueDate] = useState<string>(defaultDate || 'tomorrow'); // 'today', 'tomorrow', 'next_week', 'no_date'
     const [assigneeId, setAssigneeId] = useState<string>('');
+    const { currentFarmId } = useFarmContext();
 
     if (!isOpen) return null;
 
@@ -76,6 +79,17 @@ const TaskCreationSheet: React.FC<TaskCreationSheetProps> = ({
         };
 
         onSave(newTask);
+
+        // DWC v2 §2.8 #9 — emit next_action.created. Plan §2.8 names
+        // ToDoTasksBlock as the emit site, but the actual creation event
+        // occurs here in TaskCreationSheet.handleSave (ToDoTasksBlock only
+        // mounts the "+ Add Task" entry-point button — it never owns task
+        // creation). Both files live in features/scheduler/components/ so
+        // the file boundary is preserved; only the within-feature placement
+        // moved one component closer to the data write.
+        if (currentFarmId) {
+            emitNextActionCreated({ farmId: currentFarmId, taskId: newTask.id });
+        }
 
         // Reset and close
         setTitle('');

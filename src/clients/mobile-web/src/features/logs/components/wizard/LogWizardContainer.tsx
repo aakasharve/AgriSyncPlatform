@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import Step1_ContextLock from './Step1_ContextLock';
 import Step2_WorkBuckets from './Step2_WorkBuckets';
 import Step3_Details from './Step3_Details';
@@ -11,6 +11,11 @@ import {
     type WizardLogContext,
 } from '../../services/logSubmissionService';
 import { deriveEditableBucketsFromParseResult } from '../../services/bucketDerivation';
+import {
+    emitClosureSubmitted,
+    emitClosureAbandoned,
+} from '../../../../core/telemetry/eventEmitters';
+import { useFarmContext } from '../../../../core/session/FarmContext';
 
 interface LogWizardContainerProps {
     isOpen: boolean;
@@ -34,6 +39,40 @@ const LogWizardContainer: React.FC<LogWizardContainerProps> = ({ isOpen, onClose
     // Step 3 Data (Iterating through buckets)
     const [currentBucketIndex, setCurrentBucketIndex] = useState<number>(0);
     const [collectedData, setCollectedData] = useState<Record<string, any>>({}); // Map bucketId -> data
+
+    // DWC v2 §2.8 — telemetry refs for the wizard's open/submit lifecycle.
+    // openedAtRef captures wizard-open wall clock so durationMs is accurate
+    // for both submit and abandon paths. submittedRef avoids double-emit on
+    // unmount when the wizard closed cleanly via onSubmit.
+    const { currentFarmId } = useFarmContext();
+    const openedAtRef = useRef<number | null>(null);
+    const submittedRef = useRef(false);
+    const phaseRef = useRef(phase);
+    const farmIdRef = useRef<string | null>(currentFarmId);
+    useEffect(() => { phaseRef.current = phase; }, [phase]);
+    useEffect(() => { farmIdRef.current = currentFarmId; }, [currentFarmId]);
+
+    useEffect(() => {
+        if (isOpen && openedAtRef.current === null) {
+            openedAtRef.current = Date.now();
+            submittedRef.current = false;
+        }
+    }, [isOpen]);
+
+    // Emit closure.abandoned when the wizard unmounts before submit fires.
+    useEffect(() => {
+        return () => {
+            if (submittedRef.current) return;
+            const farmId = farmIdRef.current;
+            if (!farmId || openedAtRef.current === null) return;
+            emitClosureAbandoned({
+                farmId,
+                method: 'wizard',
+                durationMs: Math.max(0, Date.now() - openedAtRef.current),
+                lastStep: `phase_${phaseRef.current}`,
+            });
+        };
+    }, []);
 
     if (!isOpen) return null;
 
@@ -95,6 +134,27 @@ const LogWizardContainer: React.FC<LogWizardContainerProps> = ({ isOpen, onClose
             context: contextData,
             activities: collectedData,
         }, crops, profile);
+
+        // DWC v2 §2.8 — emit closure.submitted for the (typically single)
+        // wizard-produced log. Fields_used = number of buckets the user
+        // touched; durationMs is wizard-open wall clock. Multi-log
+        // submissions emit one event each so per-log analytics tracking
+        // matches one-to-one with the saved DailyLog rows.
+        const farmId = farmIdRef.current;
+        const openedAt = openedAtRef.current;
+        if (farmId && openedAt !== null) {
+            const durationMs = Math.max(0, Date.now() - openedAt);
+            for (const log of logs) {
+                emitClosureSubmitted({
+                    farmId,
+                    logId: log.id,
+                    method: 'wizard',
+                    durationMs,
+                    fields_used: selectedBuckets.length,
+                });
+            }
+        }
+        submittedRef.current = true;
 
         await onSubmit(logs);
     };

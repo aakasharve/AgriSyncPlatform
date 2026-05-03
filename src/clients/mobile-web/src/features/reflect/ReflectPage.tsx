@@ -36,6 +36,8 @@ import AccordionBlock from './components/AccordionBlock';
 import CompactCropCard from './components/CompactCropCard';
 import ActivityCalendarSection from './sections/ActivityCalendarSection';
 import LogDetailDrawer from './sections/LogDetailDrawer';
+import { useFarmContext } from '../../core/session/FarmContext';
+import { emitClosureSummaryViewed } from '../../core/telemetry/eventEmitters';
 
 // --- MAIN PAGE ---
 
@@ -69,6 +71,7 @@ const ReflectPage: React.FC<ReflectPageProps> = ({
     // Filter Pending Logs for Inbox
     const pendingLogs = history.filter(log => log.verification?.status === LogVerificationStatus.PENDING);
     const showInbox = onVerifyLog && pendingLogs.length > 0 && currentOperator?.isVerifier;
+    const { currentFarmId } = useFarmContext();
     const [currentDate, setCurrentDate] = useState(new Date());
     const [calendarViewDate, setCalendarViewDate] = useState(new Date());
     const [calendarMode, setCalendarMode] = useState<'week' | 'month'>('week');
@@ -253,6 +256,26 @@ const ReflectPage: React.FC<ReflectPageProps> = ({
             setViewCrops(crops.map(c => c.id));
         }
     }, [crops]);
+
+    // DWC v2 §2.8 #6 — emit closure_summary.viewed on ReflectPage mount.
+    // Source = "reflect_mount" per the eventSchema enum. logsCount counts
+    // the visible logs for the currently-selected date so we have a
+    // first-render proxy for "summary density"; downstream session-replay
+    // can correlate per-date drilldowns against drawer-open events.
+    useEffect(() => {
+        if (!currentFarmId) return;
+        const dateKey = getDateKey(currentDate);
+        const logsCount = history.filter(log => log.date === dateKey).length;
+        emitClosureSummaryViewed({
+            farmId: currentFarmId,
+            dateKey,
+            logsCount,
+            source: 'reflect_mount',
+        });
+        // Intentionally fire only on mount + farmId resolution; date scrubbing
+        // does NOT re-emit (would balloon event volume on calendar swiping).
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [currentFarmId]);
 
     const filteredCrops = crops.filter(c => viewCrops.includes(c.id));
 
