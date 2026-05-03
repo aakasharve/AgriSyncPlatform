@@ -1,0 +1,18 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "OperatorMayDelegateToDeployerRole",
+      "Effect": "Allow",
+      "Principal": {
+        "AWS": "arn:aws:iam::951921970996:user/first_admin"
+      },
+      "Action": "sts:AssumeRole",
+      "Condition": {
+        "StringEquals": {
+          "sts:ExternalId": "agrisync-agent-cutover"
+        }
+      }
+    }
+  ]
+}
