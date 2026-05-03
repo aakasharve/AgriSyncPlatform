@@ -229,8 +229,7 @@ const AddPlotWizard: React.FC<PlotWizardProps> = ({ crop, profile, onSave, onCan
                                     <select
                                         className="w-full p-3 border border-slate-200 rounded-xl bg-white font-bold outline-none"
                                         value={areaUnit}
-                                        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- T-IGH-04 ratchet: legacy `any` deferred to T-IGH-04-LINT-RATCHET-V2 follow-up.
-                                        onChange={e => setAreaUnit(e.target.value as any)}
+                                        onChange={e => setAreaUnit(e.target.value as LandUnit)}
                                     >
                                         <option value="Acre">{t('profile.acre')}</option>
                                         <option value="Guntha">{t('profile.guntha')}</option>

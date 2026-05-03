@@ -9,12 +9,25 @@ import { Save, CheckCircle2, Sprout, Plus, MapPin, ArrowRight, BookOpen } from '
 import { getDaysSinceStart } from '../../../../features/scheduler/planning/ClientPlanEngine';
 import { getDateKey } from '../../../../core/domain/services/DateKeyService';
 
+/** In-progress schedule being built by the maker. Shape mirrors the
+ * draftSchedule useState below; consumers may pass a partial as initialData
+ * when editing an existing schedule. */
+export interface DraftSchedule {
+    cropId: string;
+    plotId: string;
+    plantationDate: string;
+    landPrepDuration: number;
+    prepActivities: unknown[];
+    stages: unknown[];
+    name: string;
+    selectedTemplateId: string;
+    section?: number;
+}
+
 interface ScheduleMakerProps {
     crops: CropProfile[];
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- T-IGH-04 ratchet: legacy `any` deferred to T-IGH-04-LINT-RATCHET-V2 follow-up.
-    initialData?: any;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- T-IGH-04 ratchet: legacy `any` deferred to T-IGH-04-LINT-RATCHET-V2 follow-up.
-    onSave: (schedule: any) => void;
+    initialData?: Partial<DraftSchedule>;
+    onSave: (schedule: DraftSchedule) => void;
     onCancel: () => void;
     userResources: ResourceItem[];
     onAddResource: (r: ResourceItem) => void;
@@ -43,11 +56,10 @@ const ScheduleMaker: React.FC<ScheduleMakerProps> = ({ crops, onSave, onCancel: 
     // Calculate days elapsed for Contextual UI in Step 3
     const daysSincePlantation = getDaysSinceStart(draftSchedule.plantationDate);
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- T-IGH-04 ratchet: legacy `any` deferred to T-IGH-04-LINT-RATCHET-V2 follow-up.
-    const handleUpdate = (field: string, value: any) => {
-        setDraftSchedule(prev => ({ ...prev, [field]: value }));
+    const handleUpdate = (field: string, value: unknown) => {
+        setDraftSchedule(prev => ({ ...prev, [field]: value as DraftSchedule[keyof DraftSchedule] }));
         // If updating section via 'section' field
-        if (field === 'section') {
+        if (field === 'section' && typeof value === 'number') {
             setActiveSection(value);
         }
     };
@@ -327,13 +339,17 @@ const ScheduleMaker: React.FC<ScheduleMakerProps> = ({ crops, onSave, onCancel: 
 };
 
 // Wrapper for Step 1 to match Card Style
-// eslint-disable-next-line @typescript-eslint/no-explicit-any -- T-IGH-04 ratchet: legacy `any` deferred to T-IGH-04-LINT-RATCHET-V2 follow-up.
-const Step1_Wrapper: React.FC<any> = ({ data, isActive, onExpand, onUpdate, crops }) => {
+interface Step1WrapperProps {
+    data: DraftSchedule;
+    isActive: boolean;
+    onExpand: () => void;
+    onUpdate: (field: string, value: unknown) => void;
+    crops: CropProfile[];
+}
+const Step1_Wrapper: React.FC<Step1WrapperProps> = ({ data, isActive, onExpand, onUpdate, crops }) => {
     if (!isActive) {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- T-IGH-04 ratchet: legacy `any` deferred to T-IGH-04-LINT-RATCHET-V2 follow-up.
-        const selectedCrop = crops.find((c: any) => c.id === data.cropId);
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- T-IGH-04 ratchet: legacy `any` deferred to T-IGH-04-LINT-RATCHET-V2 follow-up.
-        const selectedPlot = selectedCrop?.plots.find((p: any) => p.id === data.plotId);
+        const selectedCrop = crops.find((c) => c.id === data.cropId);
+        const selectedPlot = selectedCrop?.plots.find((p) => p.id === data.plotId);
 
         return (
             <div onClick={onExpand} className="bg-white p-6 rounded-3xl border border-stone-100 shadow-sm flex items-center justify-between cursor-pointer hover:border-indigo-100 transition-all group">

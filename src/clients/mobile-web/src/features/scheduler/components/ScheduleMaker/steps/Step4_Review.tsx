@@ -1,9 +1,20 @@
 import React from 'react';
 import { CheckCircle, Calendar, MapPin, Layers } from 'lucide-react';
+import type { StageData } from './Step3_GrowthStages';
+import type { PrepActivity } from './Step2_LandPrep';
+
+interface Step4ReviewData {
+    cropProfile?: { name?: string };
+    cropId?: string;
+    plotId?: string;
+    plantationDate?: string;
+    landPrepDuration?: number;
+    prepActivities?: PrepActivity[];
+    stages?: StageData[];
+}
 
 interface Step4Props {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- T-IGH-04 ratchet: legacy `any` deferred to T-IGH-04-LINT-RATCHET-V2 follow-up.
-    data: any;
+    data: Step4ReviewData;
 }
 
 const Step4_Review: React.FC<Step4Props> = ({ data }) => {
@@ -68,9 +79,7 @@ const Step4_Review: React.FC<Step4Props> = ({ data }) => {
                                 {data.prepActivities?.length || 0} Prep Activities
                             </span>
                             <span className="px-2 py-1 bg-white border border-stone-200 rounded text-[10px] font-bold text-stone-600">
-                                {/* eslint-disable @typescript-eslint/no-explicit-any -- T-IGH-04 ratchet: stage shape varies; revisit in V2. */}
-                                {data.stages?.reduce((acc: any, s: any) => acc + s.items.NUTRITION.length + s.items.SPRAY.length + s.items.ACTIVITY.length, 0)} Stage Activities
-                                {/* eslint-enable @typescript-eslint/no-explicit-any */}
+                                {data.stages?.reduce((acc: number, s) => acc + (s.items?.NUTRITION.length ?? 0) + (s.items?.SPRAY.length ?? 0) + (s.items?.ACTIVITY.length ?? 0), 0)} Stage Activities
                             </span>
                         </div>
                     </div>

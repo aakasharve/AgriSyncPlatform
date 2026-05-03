@@ -9,8 +9,8 @@ interface SoilHealthReportsManagerProps {
 
 export const SoilHealthReportsManager: React.FC<SoilHealthReportsManagerProps> = ({ profile: _profile, onUpdate: _onUpdate }) => {
     const [isUploading, setIsUploading] = useState(false);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- T-IGH-04 ratchet: legacy `any` deferred to T-IGH-04-LINT-RATCHET-V2 follow-up.
-    const [reports, setReports] = useState<any[]>([]);
+    interface ReportEntry { id: string; name: string; date: string; type: string }
+    const [reports, setReports] = useState<ReportEntry[]>([]);
 
     const handleSimulateUpload = () => {
         setIsUploading(true);

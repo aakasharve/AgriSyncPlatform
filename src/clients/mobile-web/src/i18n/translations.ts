@@ -786,12 +786,15 @@ export const translations: Record<Language, Translations> = {
  */
 export function t(key: string, lang: Language = 'en'): string {
     const keys = key.split('.');
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- T-IGH-04 ratchet: legacy `any` deferred to T-IGH-04-LINT-RATCHET-V2 follow-up.
-    let value: any = translations[lang];
+    let value: unknown = translations[lang];
 
     for (const k of keys) {
-        value = value?.[k];
+        if (value && typeof value === 'object') {
+            value = (value as Record<string, unknown>)[k];
+        } else {
+            value = undefined;
+        }
     }
 
-    return value || key;
+    return typeof value === 'string' ? value : key;
 }
