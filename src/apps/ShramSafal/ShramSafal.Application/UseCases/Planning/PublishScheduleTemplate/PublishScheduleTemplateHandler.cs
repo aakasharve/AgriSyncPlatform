@@ -1,5 +1,6 @@
 using System.Text.Json;
 using AgriSync.BuildingBlocks.Abstractions;
+using AgriSync.BuildingBlocks.Application;
 using AgriSync.BuildingBlocks.Results;
 using AgriSync.SharedKernel.Contracts.Ids;
 using ShramSafal.Application.Ports;
@@ -13,6 +14,7 @@ public sealed class PublishScheduleTemplateHandler(
     IShramSafalRepository repository,
     ISyncMutationStore syncMutationStore,
     IClock clock)
+    : IHandler<PublishScheduleTemplateCommand, PublishScheduleTemplateResult>
 {
     private const string MutationType = "schedule.publish";
 

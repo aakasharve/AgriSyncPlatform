@@ -1,4 +1,5 @@
 using AgriSync.BuildingBlocks.Abstractions;
+using AgriSync.BuildingBlocks.Application;
 using AgriSync.BuildingBlocks.Money;
 using AgriSync.BuildingBlocks.Results;
 using AgriSync.SharedKernel.Contracts.Roles;
@@ -18,6 +19,7 @@ public sealed class CreateJobCardHandler(
     IShramSafalRepository repository,
     IIdGenerator idGenerator,
     IClock clock)
+    : IHandler<CreateJobCardCommand, CreateJobCardResult>
 {
     public async Task<Result<CreateJobCardResult>> HandleAsync(
         CreateJobCardCommand command,
