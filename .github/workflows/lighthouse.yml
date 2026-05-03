@@ -1,6 +1,7 @@
 name: lighthouse
 
 # Sub-plan 05 Task 13 — Lighthouse perf + a11y budget for mobile-web.
+# DWC v2 §4.7      — Lighthouse perf + a11y budget for admin-web /farmer-health.
 #
 # Status: PREP_READY. The thresholds below are deliberately loose
 # (performance >= 0.7, accessibility >= 0.9) because the mobile-web
@@ -39,6 +40,42 @@ jobs:
           npm install -g @lhci/cli@0.14.x
           lhci autorun \
             --collect.staticDistDir=dist \
+            --upload.target=temporary-public-storage \
+            --assert.preset=lighthouse:recommended \
+            --assert.assertions.categories:performance.minScore=0.7 \
+            --assert.assertions.categories:accessibility.minScore=0.9
+
+  lhci-admin-web:
+    # DWC v2 §4.7 — Lighthouse budget for admin-web /farmer-health.
+    # Per the plan: perf >= 0.7, a11y >= 0.9. The admin-web SPA is gated
+    # by `RequireAuth` + `RequireScope`, so the unauthenticated /login
+    # route is what LH will actually score from a static dist (no API).
+    # We still target /farmer-health for forward-compatibility — once an
+    # E2E auth fixture lands (T-DWC-D6-ADMINWEB-E2E), the same budget
+    # will apply to the post-login render.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: src/clients/admin-web/package-lock.json
+
+      - name: Build admin-web
+        working-directory: src/clients/admin-web
+        run: |
+          npm ci
+          npm run build
+
+      - name: Run Lighthouse CI
+        working-directory: src/clients/admin-web
+        run: |
+          npm install -g @lhci/cli@0.14.x
+          lhci autorun \
+            --collect.staticDistDir=dist \
+            --collect.url=http://localhost/farmer-health \
             --upload.target=temporary-public-storage \
             --assert.preset=lighthouse:recommended \
             --assert.assertions.categories:performance.minScore=0.7 \
