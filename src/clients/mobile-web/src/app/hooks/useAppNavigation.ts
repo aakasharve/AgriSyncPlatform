@@ -1,5 +1,31 @@
-import { useState, useCallback } from 'react';
-import { AppRoute, PageView } from '../../types';
+/**
+ * T-IGH-04-XSTATE-NAV — thin adapter over `navigationMachine`.
+ *
+ * Pre-task this hook owned `useState` for `currentRoute` / `mainView` and read
+ * `window.location` to seed the initial route. After the migration, all of
+ * that state lives in the XState navigation actor (see
+ * `app/state/machines/navigationMachine.ts`); this hook is the React adapter
+ * the existing component tree consumes via `useAppNavigationState()`.
+ *
+ * Consumers (`AppContent`, `AppRouter`, `AppHeader`, `BottomNavigation`,
+ * `compositionRoot`) keep the same five-field API — `currentRoute`,
+ * `setCurrentRoute`, `mainView`, `setMainView`, `navigateTo` — so the
+ * orchestration change stays invisible to callers and the do-not-regress
+ * testid list (Sub-plan 04) holds.
+ *
+ * Browser back/forward integration: this hook installs a single `popstate`
+ * listener that translates `history.back()` / `history.forward()` into actor
+ * events (`BROWSER_BACK` / `BROWSER_FORWARD`). The actor's history stack drives
+ * the routing snapshot; the listener is the only browser-history bridge.
+ */
+import { useCallback, useEffect } from 'react';
+import { useSelector } from '@xstate/react';
+import { getRootStore } from '../state/RootStore';
+import {
+    selectCurrentRoute,
+    selectMainView,
+} from '../state/machines/navigationMachine';
+import type { AppRoute, PageView } from '../../types';
 
 export interface UseAppNavigationResult {
     currentRoute: AppRoute;
@@ -9,60 +35,43 @@ export interface UseAppNavigationResult {
     navigateTo: (route: AppRoute, view?: PageView) => void;
 }
 
-const KNOWN_ROUTES: readonly AppRoute[] = [
-    'main',
-    'profile',
-    'settings',
-    'voice-journal',
-    'ai-admin',
-    'ops-admin',
-    'schedule',
-    'procurement',
-    'income',
-    'test-e2e',
-    'finance-manager',
-    'finance-ledger',
-    'finance-price-book',
-    'finance-review-inbox',
-    'finance-reports',
-    'finance-settings',
-    'qr-demo',
-];
-
-const readInitialRouteFromUrl = (): AppRoute => {
-    if (typeof window === 'undefined') {
-        return 'main';
-    }
-
-    try {
-        const params = new URLSearchParams(window.location.search);
-        const candidate = params.get('route');
-        if (candidate && (KNOWN_ROUTES as readonly string[]).includes(candidate)) {
-            return candidate as AppRoute;
-        }
-    } catch {
-        // URLSearchParams not supported — fall through
-    }
-
-    return 'main';
-};
-
 export const useAppNavigation = (): UseAppNavigationResult => {
-    const [currentRoute, setCurrentRoute] = useState<AppRoute>(readInitialRouteFromUrl);
-    const [mainView, setMainView] = useState<PageView>('log');
+    const navigation = getRootStore().navigation;
+    const currentRoute = useSelector(navigation, selectCurrentRoute);
+    const mainView = useSelector(navigation, selectMainView);
 
-    const navigateTo = useCallback((route: AppRoute, view?: PageView) => {
-        setCurrentRoute(route);
-        if (view) {
-            setMainView(view);
-        }
-    }, []);
+    const setCurrentRoute = useCallback(
+        (route: AppRoute) => navigation.send({ type: 'NAVIGATE', route }),
+        [navigation],
+    );
+    const setMainView = useCallback(
+        (view: PageView) => navigation.send({ type: 'SET_MAIN_VIEW', view }),
+        [navigation],
+    );
+    const navigateTo = useCallback(
+        (route: AppRoute, view?: PageView) =>
+            navigation.send({ type: 'NAVIGATE', route, view }),
+        [navigation],
+    );
 
-    return {
-        currentRoute,
-        setCurrentRoute,
-        mainView,
-        setMainView,
-        navigateTo
-    };
+    // Bridge browser history to actor events. The popstate handler can't tell
+    // back from forward — we infer by inspecting whether the new state.idx is
+    // lower than the previous one.
+    useEffect(() => {
+        if (typeof window === 'undefined') return undefined;
+        let lastIdx = (window.history.state as { idx?: number } | null)?.idx ?? 0;
+        const onPopState = () => {
+            const nextIdx = (window.history.state as { idx?: number } | null)?.idx ?? 0;
+            if (nextIdx < lastIdx) {
+                navigation.send({ type: 'BROWSER_BACK' });
+            } else {
+                navigation.send({ type: 'BROWSER_FORWARD' });
+            }
+            lastIdx = nextIdx;
+        };
+        window.addEventListener('popstate', onPopState);
+        return () => window.removeEventListener('popstate', onPopState);
+    }, [navigation]);
+
+    return { currentRoute, setCurrentRoute, mainView, setMainView, navigateTo };
 };
