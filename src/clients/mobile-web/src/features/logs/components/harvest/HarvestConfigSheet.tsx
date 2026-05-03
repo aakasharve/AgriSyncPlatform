@@ -18,7 +18,7 @@ import {
     Hash,
     ArrowRight
 } from 'lucide-react';
-import { getSuggestedUnitsForCrop, saveHarvestConfig } from '../../../../services/harvestService';
+import { getSuggestedUnitsForCrop, saveHarvestConfig } from '../../../../features/finance/harvestService';
 import Button from '../../../../shared/components/ui/Button';
 
 interface HarvestConfigSheetProps {

@@ -3,7 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { Package, Search, Camera, Plus } from 'lucide-react';
 import SlidingCropSelector from '../context/components/SlidingCropSelector';
 import { CropProfile, ProcurementExpense } from '../../types';
-import { procurementRepository } from '../../services/procurementRepository';
+import { procurementRepository } from '../../features/procurement/procurementRepository';
 import { ExpenseSummaryCards } from './components/ExpenseSummaryCards';
 import { ExpenseCard } from './components/ExpenseCard';
 import { ReceiptCaptureSheet } from './components/ReceiptCaptureSheet';

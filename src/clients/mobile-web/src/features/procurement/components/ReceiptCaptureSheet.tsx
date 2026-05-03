@@ -4,7 +4,7 @@ import { Camera, X, Check, Loader2, AlertTriangle } from 'lucide-react';
 import { extractReceiptWithSession, VerificationStatus } from '../receipt/receiptExtractionClient';
 import { ReceiptExtractionResponse, ProcurementExpense, ExpenseScope, CropProfile } from '../../../types';
 import { ScopeSelectorRadio } from './ScopeSelectorRadio';
-import { procurementRepository } from '../../../services/procurementRepository';
+import { procurementRepository } from '../../../features/procurement/procurementRepository';
 import { v4 as uuidv4 } from 'uuid';
 import { getDateKey } from '../../../core/domain/services/DateKeyService';
 import { financeCommandService } from '../../finance/financeCommandService';

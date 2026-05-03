@@ -8,8 +8,8 @@ import { backgroundSyncWorker } from '../../infrastructure/sync/BackgroundSyncWo
 import { attachmentUploadWorker } from '../../infrastructure/sync/AttachmentUploadWorker';
 import { generateRollingDemoData, generateDemoHarvestSessions, generateDemoProcurementExpenses, DEMO_SEED_VERSION } from '../../features/demo/DemoDataService';
 import { LocalStorageLogsRepository } from '../../infrastructure/storage/LocalStorageLogsRepository';
-import { seedHarvestSessions } from '../../services/harvestService'; // To be refactored later
-import { procurementRepository } from '../../services/procurementRepository'; // To be refactored later
+import { seedHarvestSessions } from '../../features/finance/harvestService'; // To be refactored later
+import { procurementRepository } from '../../features/procurement/procurementRepository'; // To be refactored later
 import { legacyAuditPort } from '../../infrastructure/audit/LegacyAuditPort';
 import { useAuth } from './AuthProvider';
 import { getDatabase } from '../../infrastructure/storage/DexieDatabase';

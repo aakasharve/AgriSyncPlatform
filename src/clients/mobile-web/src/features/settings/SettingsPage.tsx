@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useAppNavigationState } from '../../app/context/AppFeatureContexts';
 import { BookOpen, FlaskConical, Bot, Trash2, Coins, Leaf, Check, Pencil, ChevronDown, Globe, Shield, MapPin, Mic, Camera, Activity } from 'lucide-react';
 import { LedgerDefaults, LabourShift, CropProfile, HarvestConfig } from '../../types';
-import { getHarvestConfig } from '../../services/harvestService';
+import { getHarvestConfig } from '../../features/finance/harvestService';
 import NotificationTestComponent from '../../shared/components/NotificationTestComponent';
 import HarvestConfigSheet from '../logs/components/harvest/HarvestConfigSheet';
 import { CropSymbol } from '../context/components/CropSelector';

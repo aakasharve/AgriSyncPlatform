@@ -4,7 +4,7 @@
 */
 
 import { useState, useEffect } from 'react';
-import { procurementRepository } from '../../../../../services/procurementRepository';
+import { procurementRepository } from '../../../../../features/procurement/procurementRepository';
 
 const InventorySuggestions = ({ query, onSelect }: { query: string, onSelect: (item: { name: string, expenseId: string, itemId: string }) => void }) => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any -- T-IGH-04 ratchet: legacy `any` deferred to T-IGH-04-LINT-RATCHET-V2 follow-up.
