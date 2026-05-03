@@ -761,6 +761,47 @@ public static class DependencyInjection
                     sp.GetServices<AgriSync.BuildingBlocks.Application.PipelineBehaviors.IAuthorizationCheck<
                         ShramSafal.Application.UseCases.Work.AssignJobCard.AssignJobCardCommand>>())));
 
+        // T-IGH-03-PIPELINE-ROLLOUT (StartJobCard): caller-shape
+        // validation (empty IDs) + job-card-existence + farm-membership
+        // authorization. The strict assigned-worker rule stays inside
+        // JobCard.Start (aggregate-state-dependent). Endpoint
+        // (POST /job-cards/{id}/start) AND sync entry path
+        // (PushSyncBatchHandler.HandleJobCardStartAsync) both resolve
+        // the pipeline-wrapped handler — sync's pre-flight is just an
+        // empty-id check, no overlapping membership lookup, so the
+        // pipeline's InvalidCommand → JobCardNotFound → Forbidden
+        // ordering is canonical on both surfaces. Same-timestamp
+        // idempotency and the assigned-worker invariant stay in the
+        // body.
+        services.AddScoped<AgriSync.BuildingBlocks.Application.PipelineBehaviors.IValidator<
+            ShramSafal.Application.UseCases.Work.StartJobCard.StartJobCardCommand>,
+            ShramSafal.Application.UseCases.Work.StartJobCard.StartJobCardValidator>();
+        services.AddScoped<AgriSync.BuildingBlocks.Application.PipelineBehaviors.IAuthorizationCheck<
+            ShramSafal.Application.UseCases.Work.StartJobCard.StartJobCardCommand>,
+            ShramSafal.Application.UseCases.Work.StartJobCard.StartJobCardAuthorizer>();
+        services.AddScoped<AgriSync.BuildingBlocks.Application.IHandler<
+            ShramSafal.Application.UseCases.Work.StartJobCard.StartJobCardCommand,
+            ShramSafal.Application.UseCases.Work.StartJobCard.StartJobCardResult>>(sp =>
+            AgriSync.BuildingBlocks.Application.HandlerPipeline.Build(
+                sp.GetRequiredService<StartJobCardHandler>(),
+                new AgriSync.BuildingBlocks.Application.PipelineBehaviors.LoggingBehavior<
+                    ShramSafal.Application.UseCases.Work.StartJobCard.StartJobCardCommand,
+                    ShramSafal.Application.UseCases.Work.StartJobCard.StartJobCardResult>(
+                    sp.GetRequiredService<Microsoft.Extensions.Logging.ILogger<
+                        AgriSync.BuildingBlocks.Application.PipelineBehaviors.LoggingBehavior<
+                            ShramSafal.Application.UseCases.Work.StartJobCard.StartJobCardCommand,
+                            ShramSafal.Application.UseCases.Work.StartJobCard.StartJobCardResult>>>()),
+                new AgriSync.BuildingBlocks.Application.PipelineBehaviors.ValidationBehavior<
+                    ShramSafal.Application.UseCases.Work.StartJobCard.StartJobCardCommand,
+                    ShramSafal.Application.UseCases.Work.StartJobCard.StartJobCardResult>(
+                    sp.GetServices<AgriSync.BuildingBlocks.Application.PipelineBehaviors.IValidator<
+                        ShramSafal.Application.UseCases.Work.StartJobCard.StartJobCardCommand>>()),
+                new AgriSync.BuildingBlocks.Application.PipelineBehaviors.AuthorizationBehavior<
+                    ShramSafal.Application.UseCases.Work.StartJobCard.StartJobCardCommand,
+                    ShramSafal.Application.UseCases.Work.StartJobCard.StartJobCardResult>(
+                    sp.GetServices<AgriSync.BuildingBlocks.Application.PipelineBehaviors.IAuthorizationCheck<
+                        ShramSafal.Application.UseCases.Work.StartJobCard.StartJobCardCommand>>())));
+
         return services;
     }
 }
