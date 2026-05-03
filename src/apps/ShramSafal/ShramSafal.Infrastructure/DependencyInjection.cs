@@ -258,6 +258,14 @@ public static class DependencyInjection
         services.AddScoped<IWorkerRepository, WorkerRepository>();
         services.AddSingleton<IWorkerNameExtractor, RegexWorkerNameExtractor>();
 
+        // DWC v2 §3.5 — Mode A drilldown + Mode B cohort patterns.
+        // Both repos read AnalyticsDbContext via raw SQL (same pattern
+        // as AdminMisRepository / AdminOpsRepository); scoped because
+        // the underlying DbContext is. The AdminAuditEmitter
+        // implementation lands in DWC v2 §3.8 (endpoint wiring).
+        services.AddScoped<IAdminFarmerHealthRepository, AdminFarmerHealthRepository>();
+        services.AddScoped<IAdminCohortPatternsRepository, AdminCohortPatternsRepository>();
+
         services.AddSingleton<AiResponseNormalizer>();
         services.AddSingleton<AiPromptTemplateRegistry>();
         services.AddSingleton<AiCircuitBreakerRegistry>();
