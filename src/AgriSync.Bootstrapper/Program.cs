@@ -17,6 +17,7 @@ using Accounts.Api;
 using AgriSync.Bootstrapper;
 using AgriSync.Bootstrapper.Composition;
 using AgriSync.Bootstrapper.Endpoints;
+using Analytics.Application;
 using ShramSafal.Api;
 using User.Api;
 using User.Infrastructure.Persistence;
@@ -132,6 +133,9 @@ try
     builder.Services.AddUserApi(builder.Configuration);
     builder.Services.AddShramSafalApi(builder.Configuration);
     builder.Services.AddAccountsModule(builder.Configuration);
+    // DWC v2 §2.4 — analytics ingest handler + validator. Writer
+    // (IAnalyticsWriter) is registered by AddAnalytics(...) below.
+    builder.Services.AddAnalyticsApplication();
 
     // MeContext composition adapters — the only place in the backend that
     // reads across app DbContexts. Swapped for projection readers later.
@@ -415,6 +419,11 @@ try
     app.MapShramSafalApi();
     app.MapAccountsModuleEndpoints();
     app.MapFirstFarmBootstrapEndpoints();
+
+    // DWC v2 §2.4 — closure-loop telemetry ingest. Mounted at the root
+    // (POST /analytics/ingest) for the mobile-web AnalyticsEventBus to
+    // POST batches; vocabulary-validated against EventVocabulary.
+    app.MapAnalyticsIngest();
     // /user/auth/me/context now lives in User.Api (mapped by MapUserApi above).
 
     // DWC v2 §3.8 — admin Daily Work Closure dashboard. Mapped at the
