@@ -681,6 +681,46 @@ public static class DependencyInjection
                     sp.GetServices<AgriSync.BuildingBlocks.Application.PipelineBehaviors.IAuthorizationCheck<
                         ShramSafal.Application.UseCases.Work.CancelJobCard.CancelJobCardCommand>>())));
 
+        // T-IGH-03-PIPELINE-ROLLOUT (CreateJobCard): caller-shape
+        // validation (empty IDs, empty LineItems) + Owner-tier
+        // authorization (PrimaryOwner / SecondaryOwner / Mukadam).
+        // Endpoint (POST /job-cards) AND sync entry path
+        // (PushSyncBatchHandler.HandleJobCardCreateAsync) both resolve
+        // the pipeline-wrapped handler — sync's pre-flight is just an
+        // empty-ids + non-empty-LineItems shape check, the same gates
+        // as the validator, so the pipeline ordering is canonical on
+        // both surfaces. Domain construction failures (currency, money,
+        // JobCard.CreateDraft argument validation) still surface via
+        // the body's catch blocks as InvalidCommand.
+        services.AddScoped<AgriSync.BuildingBlocks.Application.PipelineBehaviors.IValidator<
+            ShramSafal.Application.UseCases.Work.CreateJobCard.CreateJobCardCommand>,
+            ShramSafal.Application.UseCases.Work.CreateJobCard.CreateJobCardValidator>();
+        services.AddScoped<AgriSync.BuildingBlocks.Application.PipelineBehaviors.IAuthorizationCheck<
+            ShramSafal.Application.UseCases.Work.CreateJobCard.CreateJobCardCommand>,
+            ShramSafal.Application.UseCases.Work.CreateJobCard.CreateJobCardAuthorizer>();
+        services.AddScoped<AgriSync.BuildingBlocks.Application.IHandler<
+            ShramSafal.Application.UseCases.Work.CreateJobCard.CreateJobCardCommand,
+            ShramSafal.Application.UseCases.Work.CreateJobCard.CreateJobCardResult>>(sp =>
+            AgriSync.BuildingBlocks.Application.HandlerPipeline.Build(
+                sp.GetRequiredService<CreateJobCardHandler>(),
+                new AgriSync.BuildingBlocks.Application.PipelineBehaviors.LoggingBehavior<
+                    ShramSafal.Application.UseCases.Work.CreateJobCard.CreateJobCardCommand,
+                    ShramSafal.Application.UseCases.Work.CreateJobCard.CreateJobCardResult>(
+                    sp.GetRequiredService<Microsoft.Extensions.Logging.ILogger<
+                        AgriSync.BuildingBlocks.Application.PipelineBehaviors.LoggingBehavior<
+                            ShramSafal.Application.UseCases.Work.CreateJobCard.CreateJobCardCommand,
+                            ShramSafal.Application.UseCases.Work.CreateJobCard.CreateJobCardResult>>>()),
+                new AgriSync.BuildingBlocks.Application.PipelineBehaviors.ValidationBehavior<
+                    ShramSafal.Application.UseCases.Work.CreateJobCard.CreateJobCardCommand,
+                    ShramSafal.Application.UseCases.Work.CreateJobCard.CreateJobCardResult>(
+                    sp.GetServices<AgriSync.BuildingBlocks.Application.PipelineBehaviors.IValidator<
+                        ShramSafal.Application.UseCases.Work.CreateJobCard.CreateJobCardCommand>>()),
+                new AgriSync.BuildingBlocks.Application.PipelineBehaviors.AuthorizationBehavior<
+                    ShramSafal.Application.UseCases.Work.CreateJobCard.CreateJobCardCommand,
+                    ShramSafal.Application.UseCases.Work.CreateJobCard.CreateJobCardResult>(
+                    sp.GetServices<AgriSync.BuildingBlocks.Application.PipelineBehaviors.IAuthorizationCheck<
+                        ShramSafal.Application.UseCases.Work.CreateJobCard.CreateJobCardCommand>>())));
+
         return services;
     }
 }
