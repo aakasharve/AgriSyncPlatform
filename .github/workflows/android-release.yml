@@ -53,9 +53,9 @@ jobs:
         working-directory: src/clients/mobile-web
         run: npm run build
 
-      - name: Cap copy android
+      - name: Cap sync android
         working-directory: src/clients/mobile-web
-        run: npx cap copy android
+        run: npx cap sync android --no-build
 
       - name: Decode keystore from secret
         run: |
