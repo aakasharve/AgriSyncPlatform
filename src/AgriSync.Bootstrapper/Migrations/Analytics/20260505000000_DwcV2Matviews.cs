@@ -246,8 +246,13 @@ reward AS (
   GROUP BY farm_id, date_trunc('week', occurred_at_utc)::date
 ),
 investment AS (
-  SELECT w.farm_id, SUM(w.assignment_count)::numeric / NULLIF(COUNT(DISTINCT w.""Id""),0) AS reuse_ratio
-  FROM ssf.workers w GROUP BY w.farm_id
+  -- WTL v0 placeholder: returns 0 until IDailyLogTranscriptStore is
+  -- implemented and ssf.workers is populated.  A later migration will
+  -- replace this CTE with the real ssf.workers JOIN.
+  -- See pending task: T-DWC-E-WTL-TRANSCRIPT-STORE.
+  SELECT DISTINCT farm_id, 0.0::numeric AS reuse_ratio
+  FROM analytics.events
+  WHERE farm_id IS NOT NULL
 ),
 repeat_b AS (SELECT farm_id, d7_active::numeric / 7.0 AS d7_ratio FROM mis.repeat_curve_per_farm),
 gaming AS (SELECT farm_id, suspicious, flagged_for_review FROM mis.gaming_signals_per_farm),
