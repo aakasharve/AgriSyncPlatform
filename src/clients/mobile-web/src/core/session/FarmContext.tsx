@@ -80,8 +80,7 @@ export const FarmContextProvider: React.FC<{ children: React.ReactNode }> = ({ c
         SessionStore.setCurrentFarmId(farmId);
     }, []);
 
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- T-IGH-04 ratchet: dep array intentionally narrow (mount/farm/init pattern); revisit in V2.
-    const farms = meContext?.farms ?? [];
+    const farms = useMemo(() => meContext?.farms ?? [], [meContext?.farms]);
     const currentFarm = useMemo(
         () => farms.find(f => f.farmId === currentFarmId) ?? farms[0] ?? null,
         [farms, currentFarmId],

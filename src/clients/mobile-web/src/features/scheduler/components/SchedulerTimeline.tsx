@@ -293,8 +293,7 @@ const SchedulerTimeline: React.FC<SchedulerTimelineProps> = ({ plot, logs, onEdi
         }
         return groups;
 
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- T-IGH-04 ratchet: dep array intentionally narrow (mount/farm/init pattern); revisit in V2.
-    }, [plot.startDate, plot.schedule, logs, plot.id]);
+    }, [plot, logs, instance]);
 
     // Modal State
     const [detailModal, setDetailModal] = useState<DetailModalState | null>(null);

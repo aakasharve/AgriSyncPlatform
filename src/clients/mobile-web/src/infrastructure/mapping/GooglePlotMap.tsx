@@ -71,7 +71,7 @@ const PlotMapWithGoogleMaps: React.FC<PlotMapProps & { mapsApiKey: string }> = (
         } else {
             locateUser(map);
         }
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- T-IGH-04 ratchet: dep array intentionally narrow (mount/farm/init pattern); revisit in V2.
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional: `onLoad` is the GoogleMaps `onLoad` callback — invoked once per map mount; including the non-memoized `locateUser` would re-create the callback on every render and force GoogleMaps to re-bind the load handler unnecessarily.
     }, [existingGeoData]);
 
     const onUnmount = useCallback(() => {

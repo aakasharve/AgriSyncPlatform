@@ -500,7 +500,7 @@ const Step3_GrowthStages: React.FC<Step3Props> = ({ data, onUpdate, isActive, on
             newStages[0] = stage0;
             onUpdate('stages', newStages);
         }
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- T-IGH-04 ratchet: dep array intentionally narrow (mount/farm/init pattern); revisit in V2.
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional: only re-runs when this step becomes active or `stages` change; including `onUpdate` (parent-bound callback re-created each render) would cause an infinite write loop because each call re-derives `stages` upstream.
     }, [isActive, stages]); // Re-run when active state or stages change
 
     // --- HANDLERS ---
