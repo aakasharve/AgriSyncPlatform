@@ -35,11 +35,11 @@ public sealed class AdminCohortPatternsRepository(AnalyticsDbContext analyticsCo
         {
             var distribution = await GetScoreDistributionAsync(conn, scope, ct);
             var intervention = await GetBucketAsync(conn, scope, "intervention", limit: 50, ct);
-            var watchlist    = await GetBucketAsync(conn, scope, "watchlist",    limit: 100, ct);
-            var tiers        = await GetEngagementTierAsync(conn, scope, ct);
-            var heatmap      = await GetPillarHeatmapAsync(conn, scope, ct);
-            var trend        = await GetWeeklyTrendAsync(conn, scope, ct);
-            var suffering    = await GetSufferingTop10Async(conn, scope, ct);
+            var watchlist = await GetBucketAsync(conn, scope, "watchlist", limit: 100, ct);
+            var tiers = await GetEngagementTierAsync(conn, scope, ct);
+            var heatmap = await GetPillarHeatmapAsync(conn, scope, ct);
+            var trend = await GetWeeklyTrendAsync(conn, scope, ct);
+            var suffering = await GetSufferingTop10Async(conn, scope, ct);
 
             return new CohortPatternsDto(
                 ScoreDistribution: distribution,
@@ -78,7 +78,7 @@ public sealed class AdminCohortPatternsRepository(AnalyticsDbContext analyticsCo
     {
         // 10-bin histogram covering 0..100. We always emit all 10 bins
         // (zero-filled) so the chart shape is stable.
-        var bins = new[] { "0-10","11-20","21-30","31-40","41-50","51-60","61-70","71-80","81-90","91-100" };
+        var bins = new[] { "0-10", "11-20", "21-30", "31-40", "41-50", "51-60", "61-70", "71-80", "81-90", "91-100" };
         var counts = new int[10];
 
         try
@@ -181,7 +181,10 @@ public sealed class AdminCohortPatternsRepository(AnalyticsDbContext analyticsCo
         // Always emit all 4 tiers (A/B/C/D) zero-filled.
         var counts = new Dictionary<string, int>(StringComparer.Ordinal)
         {
-            ["A"] = 0, ["B"] = 0, ["C"] = 0, ["D"] = 0
+            ["A"] = 0,
+            ["B"] = 0,
+            ["C"] = 0,
+            ["D"] = 0
         };
         try
         {

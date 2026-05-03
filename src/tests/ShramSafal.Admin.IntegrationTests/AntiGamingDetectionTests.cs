@@ -327,12 +327,12 @@ public sealed class AntiGamingDetectionTests : IAsyncLifetime
         await using var r = await cmd.ExecuteReaderAsync();
         if (!await r.ReadAsync()) return null;
         return new GamingSignalsRow(
-            SignalTimeStatic:    r.GetBoolean(0),
+            SignalTimeStatic: r.GetBoolean(0),
             SignalTooFastVerify: r.GetBoolean(1),
             SignalPerfectRecord: r.GetBoolean(2),
-            SignalGpsStatic:     r.GetBoolean(3),
-            Suspicious:          r.GetBoolean(4),
-            FlaggedForReview:    r.GetBoolean(5));
+            SignalGpsStatic: r.GetBoolean(3),
+            Suspicious: r.GetBoolean(4),
+            FlaggedForReview: r.GetBoolean(5));
     }
 
     private static async Task RefreshGamingSignalsAsync(DbConnection conn)
