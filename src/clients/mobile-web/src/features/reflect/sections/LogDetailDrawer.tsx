@@ -232,8 +232,7 @@ const LogDetailDrawer: React.FC<LogDetailDrawerProps> = ({
                                             grandTotal: 0
                                         }
                                     };
-                                    // eslint-disable-next-line @typescript-eslint/no-unused-expressions -- T-IGH-04 ratchet: intentional side-effect-only expression; revisit in V2.
-                                    onEditLog && onEditLog(newEntryTemplate);
+                                    if (onEditLog) onEditLog(newEntryTemplate);
                                 }}
                                 className="bg-emerald-600 text-white px-6 py-3 rounded-xl font-bold shadow-lg flex items-center gap-2 mt-4 hover:bg-emerald-700 active:scale-95 transition-all"
                             >

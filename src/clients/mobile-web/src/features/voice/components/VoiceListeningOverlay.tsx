@@ -96,8 +96,7 @@ const VoiceListeningOverlay: React.FC<VoiceListeningOverlayProps> = ({
                                             key={idx}
                                             onClick={() => {
                                                 cancelRecording(); // Stop voice if they click
-                                                // eslint-disable-next-line @typescript-eslint/no-unused-expressions -- T-IGH-04 ratchet: intentional side-effect-only expression; revisit in V2.
-                                                onAnswerClarification && onAnswerClarification(option);
+                                                if (onAnswerClarification) onAnswerClarification(option);
                                             }}
                                             className="bg-white border border-amber-200 text-slate-700 font-semibold py-3 px-4 rounded-xl shadow-sm active:scale-95 transition-all hover:bg-amber-50 hover:border-amber-300"
                                         >
