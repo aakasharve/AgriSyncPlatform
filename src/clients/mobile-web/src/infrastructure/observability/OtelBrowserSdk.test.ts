@@ -79,10 +79,15 @@ describe('OtelBrowserSdk', () => {
     vi.resetModules();
   });
 
+  // Zone.js initialisation in the Node environment is heavier than the default
+  // 5 s vitest timeout — each dynamic import after vi.resetModules() triggers
+  // a full Zone.js bootstrap. 30 s is ample for the slowest CI machine.
+  const ZONE_TIMEOUT = 30_000;
+
   it('startBrowserTracing() does not throw on first call', async () => {
     const { startBrowserTracing } = await import('./OtelBrowserSdk');
     expect(() => startBrowserTracing()).not.toThrow();
-  });
+  }, ZONE_TIMEOUT);
 
   it('startBrowserTracing() is idempotent — second call does not throw', async () => {
     const { startBrowserTracing } = await import('./OtelBrowserSdk');
@@ -90,7 +95,7 @@ describe('OtelBrowserSdk', () => {
     // Second call must be a no-op; the `_started` guard should prevent
     // double-registration of processors and instrumentations.
     expect(() => startBrowserTracing()).not.toThrow();
-  });
+  }, ZONE_TIMEOUT);
 
   it('after startBrowserTracing(), trace.getTracerProvider() is not the no-op proxy', async () => {
     // NOTE: This assertion depends on ZoneContextManager bootstrapping
@@ -110,5 +115,5 @@ describe('OtelBrowserSdk', () => {
     // The provider should expose a getTracer method (present on both
     // WebTracerProvider and the default ProxyTracerProvider).
     expect(typeof tp.getTracer).toBe('function');
-  });
+  }, ZONE_TIMEOUT);
 });
