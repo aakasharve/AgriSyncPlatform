@@ -675,42 +675,39 @@ static async Task InitializeApplicationDataAsync(WebApplication app)
         var accountsSchemaCreated = app.Environment.IsDevelopment()
             ? await EnsureContextTablesCreatedAsync(accountsContext, "accounts", "subscriptions")
             : await ApplyStartupMigrationsIfAllowedAsync(app, accountsContext, "AccountsDbContext");
-        // Three-way ordering resolution: ShramSafal is split into two phases to
-        // break a circular dependency between ssf and analytics at migration
-        // time.
-        //   (1) ssf Phase A: apply migrations up to and including
-        //       20260504000000_WtlV0Entities. This covers all SSF tables that
-        //       analytics matviews SELECT from, including ssf.daily_logs,
-        //       ssf.verification_events, ssf.job_cards, and ssf.workers
-        //       (DWC v2 — referenced by 20260505000000_DwcV2Matviews).
-        //   (2) analytics: apply all migrations. Phase4_MisSchemaRollups and
-        //       DwcV2Matviews can now build their matviews over live ssf.* tables.
-        //   (3) ssf Phase B: apply remaining migrations. AddAdminScopeHealthView
-        //       (20260422180547) creates a view over analytics.events, which
-        //       now exists after step 2.
-        // Note: WtlV0Entities (20260504) does NOT reference analytics.events,
-        // so it is safe to include in Phase A even though it was authored after
-        // AddAdminScopeHealthView (20260422).
+        // Four-way ordering resolution: two independent circular dependencies
+        // require splitting both SSF and Analytics into two phases each.
+        //   (1) SSF Phase A: up to AlterCostEntriesAddJobCardId (20260421).
+        //       Creates ssf.daily_logs, ssf.verification_events, ssf.job_cards
+        //       — all tables that Analytics Phase 1 matviews join.
+        //   (2) Analytics Phase 1: up to RestoreBuckets234Matviews (20260502).
+        //       Creates analytics.events and the original production matviews.
+        //       Must complete before SSF Phase B because AddAdminScopeHealthView
+        //       joins analytics.events.
+        //   (3) SSF Phase B: all remaining SSF migrations. Includes:
+        //       - AddAdminScopeHealthView (20260422): joins analytics.events ✓ (exists after step 2)
+        //       - WtlV0Entities (20260504): creates ssf.workers for DWC matviews.
+        //   (4) Analytics Phase 2: DwcV2Matviews (20260505) onward.
+        //       Joins ssf.workers ✓ (exists after step 3).
         // MIS rail — analytics events are append-only.
-        const string ssfPhaseATarget = "20260504000000_WtlV0Entities";
+        const string ssfPhaseATarget = "20260421075311_AlterCostEntriesAddJobCardId";
+        const string analyticsPhase1Target = "20260502020000_RestoreBuckets234Matviews";
         var ssfPhaseACreated = app.Environment.IsDevelopment()
             ? await EnsureContextTablesCreatedAsync(ssfContext, "ssf", "farms")
             : await ApplyStartupMigrationsIfAllowedAsync(app, ssfContext, "ShramSafalDbContext (Phase A)", ssfPhaseATarget);
-        // T-IGH-03-ANALYTICS-MIGRATION-REWRITE (Sub-plan 03 Task 9): the
-        // production cap at AnalyticsInitial was lifted on 2026-05-01.
-        // The 5 broken legacy migrations (Phase4_MisSchemaRollups,
-        // Phase7_BehavioralAnalytics, Phase_OpsObservability,
-        // MIS_MatViewHealthFix, MIS_DropVerificationsCompatView) are now
-        // no-ops; 20260502000000_AnalyticsRewrite is the single canonical
-        // rebuild that bootstraps the mis schema/role and creates the
-        // 10 production-read matviews against the actual ShramSafal
-        // schema. Apply the full chain.
-        var analyticsSchemaCreated = app.Environment.IsDevelopment()
+        // Analytics Phase 1: creates analytics.events + pre-DWC matviews.
+        var analyticsPhase1Created = app.Environment.IsDevelopment()
             ? await EnsureContextTablesCreatedAsync(analyticsContext, "analytics", "events")
-            : await ApplyStartupMigrationsIfAllowedAsync(app, analyticsContext, "AnalyticsDbContext (full)");
+            : await ApplyStartupMigrationsIfAllowedAsync(app, analyticsContext, "AnalyticsDbContext (Phase 1)", analyticsPhase1Target);
+        // SSF Phase B: AddAdminScopeHealthView + WtlV0Entities (ssf.workers).
         var ssfPhaseBCreated = app.Environment.IsDevelopment()
             ? false
             : await ApplyStartupMigrationsIfAllowedAsync(app, ssfContext, "ShramSafalDbContext (Phase B)");
+        // Analytics Phase 2: DwcV2Matviews — references ssf.workers ✓.
+        var analyticsPhase2Created = app.Environment.IsDevelopment()
+            ? false
+            : await ApplyStartupMigrationsIfAllowedAsync(app, analyticsContext, "AnalyticsDbContext (Phase 2)");
+        var analyticsSchemaCreated = analyticsPhase1Created || analyticsPhase2Created;
         var ssfSchemaCreated = ssfPhaseACreated || ssfPhaseBCreated;
 
         var seedBlankTestUser = app.Environment.IsDevelopment() || string.Equals(
