@@ -842,6 +842,118 @@ public static class DependencyInjection
                     sp.GetServices<AgriSync.BuildingBlocks.Application.PipelineBehaviors.IAuthorizationCheck<
                         ShramSafal.Application.UseCases.Work.VerifyJobCardForPayout.VerifyJobCardForPayoutCommand>>())));
 
+        // T-IGH-03-PIPELINE-ROLLOUT (CloneScheduleTemplate): caller-shape
+        // validation (3 IDs + non-blank Reason) + source-template
+        // existence + per-scope role gate. Endpoint
+        // (POST /schedule-templates/{id}/clone) gets canonical
+        // InvalidCommand → ScheduleTemplateNotFound → Forbidden ordering.
+        // PushSync NOT migrated: schedule.clone is registered in
+        // mutation-types.json but its server dispatch in
+        // PushSyncBatchHandler returns MUTATION_TYPE_UNIMPLEMENTED, so
+        // the sync entry path never reaches this handler.
+        services.AddScoped<AgriSync.BuildingBlocks.Application.PipelineBehaviors.IValidator<
+            ShramSafal.Application.UseCases.Planning.CloneScheduleTemplate.CloneScheduleTemplateCommand>,
+            ShramSafal.Application.UseCases.Planning.CloneScheduleTemplate.CloneScheduleTemplateValidator>();
+        services.AddScoped<AgriSync.BuildingBlocks.Application.PipelineBehaviors.IAuthorizationCheck<
+            ShramSafal.Application.UseCases.Planning.CloneScheduleTemplate.CloneScheduleTemplateCommand>,
+            ShramSafal.Application.UseCases.Planning.CloneScheduleTemplate.CloneScheduleTemplateAuthorizer>();
+        services.AddScoped<AgriSync.BuildingBlocks.Application.IHandler<
+            ShramSafal.Application.UseCases.Planning.CloneScheduleTemplate.CloneScheduleTemplateCommand,
+            ShramSafal.Application.UseCases.Planning.CloneScheduleTemplate.CloneScheduleTemplateResult>>(sp =>
+            AgriSync.BuildingBlocks.Application.HandlerPipeline.Build(
+                sp.GetRequiredService<CloneScheduleTemplateHandler>(),
+                new AgriSync.BuildingBlocks.Application.PipelineBehaviors.LoggingBehavior<
+                    ShramSafal.Application.UseCases.Planning.CloneScheduleTemplate.CloneScheduleTemplateCommand,
+                    ShramSafal.Application.UseCases.Planning.CloneScheduleTemplate.CloneScheduleTemplateResult>(
+                    sp.GetRequiredService<Microsoft.Extensions.Logging.ILogger<
+                        AgriSync.BuildingBlocks.Application.PipelineBehaviors.LoggingBehavior<
+                            ShramSafal.Application.UseCases.Planning.CloneScheduleTemplate.CloneScheduleTemplateCommand,
+                            ShramSafal.Application.UseCases.Planning.CloneScheduleTemplate.CloneScheduleTemplateResult>>>()),
+                new AgriSync.BuildingBlocks.Application.PipelineBehaviors.ValidationBehavior<
+                    ShramSafal.Application.UseCases.Planning.CloneScheduleTemplate.CloneScheduleTemplateCommand,
+                    ShramSafal.Application.UseCases.Planning.CloneScheduleTemplate.CloneScheduleTemplateResult>(
+                    sp.GetServices<AgriSync.BuildingBlocks.Application.PipelineBehaviors.IValidator<
+                        ShramSafal.Application.UseCases.Planning.CloneScheduleTemplate.CloneScheduleTemplateCommand>>()),
+                new AgriSync.BuildingBlocks.Application.PipelineBehaviors.AuthorizationBehavior<
+                    ShramSafal.Application.UseCases.Planning.CloneScheduleTemplate.CloneScheduleTemplateCommand,
+                    ShramSafal.Application.UseCases.Planning.CloneScheduleTemplate.CloneScheduleTemplateResult>(
+                    sp.GetServices<AgriSync.BuildingBlocks.Application.PipelineBehaviors.IAuthorizationCheck<
+                        ShramSafal.Application.UseCases.Planning.CloneScheduleTemplate.CloneScheduleTemplateCommand>>())));
+
+        // T-IGH-03-PIPELINE-ROLLOUT (EditScheduleTemplate): caller-shape
+        // validation (3 IDs) + source-template existence + (Private-author
+        // OR per-scope role gate). Endpoint
+        // (POST /schedule-templates/{id}/edit) gets canonical
+        // InvalidCommand → ScheduleTemplateNotFound → Forbidden ordering.
+        // PushSync NOT migrated: schedule.edit dispatch in
+        // PushSyncBatchHandler returns MUTATION_TYPE_UNIMPLEMENTED.
+        services.AddScoped<AgriSync.BuildingBlocks.Application.PipelineBehaviors.IValidator<
+            ShramSafal.Application.UseCases.Planning.EditScheduleTemplate.EditScheduleTemplateCommand>,
+            ShramSafal.Application.UseCases.Planning.EditScheduleTemplate.EditScheduleTemplateValidator>();
+        services.AddScoped<AgriSync.BuildingBlocks.Application.PipelineBehaviors.IAuthorizationCheck<
+            ShramSafal.Application.UseCases.Planning.EditScheduleTemplate.EditScheduleTemplateCommand>,
+            ShramSafal.Application.UseCases.Planning.EditScheduleTemplate.EditScheduleTemplateAuthorizer>();
+        services.AddScoped<AgriSync.BuildingBlocks.Application.IHandler<
+            ShramSafal.Application.UseCases.Planning.EditScheduleTemplate.EditScheduleTemplateCommand,
+            ShramSafal.Application.UseCases.Planning.EditScheduleTemplate.EditScheduleTemplateResult>>(sp =>
+            AgriSync.BuildingBlocks.Application.HandlerPipeline.Build(
+                sp.GetRequiredService<EditScheduleTemplateHandler>(),
+                new AgriSync.BuildingBlocks.Application.PipelineBehaviors.LoggingBehavior<
+                    ShramSafal.Application.UseCases.Planning.EditScheduleTemplate.EditScheduleTemplateCommand,
+                    ShramSafal.Application.UseCases.Planning.EditScheduleTemplate.EditScheduleTemplateResult>(
+                    sp.GetRequiredService<Microsoft.Extensions.Logging.ILogger<
+                        AgriSync.BuildingBlocks.Application.PipelineBehaviors.LoggingBehavior<
+                            ShramSafal.Application.UseCases.Planning.EditScheduleTemplate.EditScheduleTemplateCommand,
+                            ShramSafal.Application.UseCases.Planning.EditScheduleTemplate.EditScheduleTemplateResult>>>()),
+                new AgriSync.BuildingBlocks.Application.PipelineBehaviors.ValidationBehavior<
+                    ShramSafal.Application.UseCases.Planning.EditScheduleTemplate.EditScheduleTemplateCommand,
+                    ShramSafal.Application.UseCases.Planning.EditScheduleTemplate.EditScheduleTemplateResult>(
+                    sp.GetServices<AgriSync.BuildingBlocks.Application.PipelineBehaviors.IValidator<
+                        ShramSafal.Application.UseCases.Planning.EditScheduleTemplate.EditScheduleTemplateCommand>>()),
+                new AgriSync.BuildingBlocks.Application.PipelineBehaviors.AuthorizationBehavior<
+                    ShramSafal.Application.UseCases.Planning.EditScheduleTemplate.EditScheduleTemplateCommand,
+                    ShramSafal.Application.UseCases.Planning.EditScheduleTemplate.EditScheduleTemplateResult>(
+                    sp.GetServices<AgriSync.BuildingBlocks.Application.PipelineBehaviors.IAuthorizationCheck<
+                        ShramSafal.Application.UseCases.Planning.EditScheduleTemplate.EditScheduleTemplateCommand>>())));
+
+        // T-IGH-03-PIPELINE-ROLLOUT (PublishScheduleTemplate): caller-shape
+        // validation (2 IDs) + template existence + author-only +
+        // per-scope role gate. The aggregate-state guard (already-
+        // published) stays in the body because it is a domain invariant
+        // on the loaded aggregate, not a command-shape gate. Endpoint
+        // (POST /schedule-templates/{id}/publish) gets canonical
+        // InvalidCommand → ScheduleTemplateNotFound → Forbidden ordering.
+        // PushSync NOT migrated: schedule.publish dispatch in
+        // PushSyncBatchHandler returns MUTATION_TYPE_UNIMPLEMENTED.
+        services.AddScoped<AgriSync.BuildingBlocks.Application.PipelineBehaviors.IValidator<
+            ShramSafal.Application.UseCases.Planning.PublishScheduleTemplate.PublishScheduleTemplateCommand>,
+            ShramSafal.Application.UseCases.Planning.PublishScheduleTemplate.PublishScheduleTemplateValidator>();
+        services.AddScoped<AgriSync.BuildingBlocks.Application.PipelineBehaviors.IAuthorizationCheck<
+            ShramSafal.Application.UseCases.Planning.PublishScheduleTemplate.PublishScheduleTemplateCommand>,
+            ShramSafal.Application.UseCases.Planning.PublishScheduleTemplate.PublishScheduleTemplateAuthorizer>();
+        services.AddScoped<AgriSync.BuildingBlocks.Application.IHandler<
+            ShramSafal.Application.UseCases.Planning.PublishScheduleTemplate.PublishScheduleTemplateCommand,
+            ShramSafal.Application.UseCases.Planning.PublishScheduleTemplate.PublishScheduleTemplateResult>>(sp =>
+            AgriSync.BuildingBlocks.Application.HandlerPipeline.Build(
+                sp.GetRequiredService<PublishScheduleTemplateHandler>(),
+                new AgriSync.BuildingBlocks.Application.PipelineBehaviors.LoggingBehavior<
+                    ShramSafal.Application.UseCases.Planning.PublishScheduleTemplate.PublishScheduleTemplateCommand,
+                    ShramSafal.Application.UseCases.Planning.PublishScheduleTemplate.PublishScheduleTemplateResult>(
+                    sp.GetRequiredService<Microsoft.Extensions.Logging.ILogger<
+                        AgriSync.BuildingBlocks.Application.PipelineBehaviors.LoggingBehavior<
+                            ShramSafal.Application.UseCases.Planning.PublishScheduleTemplate.PublishScheduleTemplateCommand,
+                            ShramSafal.Application.UseCases.Planning.PublishScheduleTemplate.PublishScheduleTemplateResult>>>()),
+                new AgriSync.BuildingBlocks.Application.PipelineBehaviors.ValidationBehavior<
+                    ShramSafal.Application.UseCases.Planning.PublishScheduleTemplate.PublishScheduleTemplateCommand,
+                    ShramSafal.Application.UseCases.Planning.PublishScheduleTemplate.PublishScheduleTemplateResult>(
+                    sp.GetServices<AgriSync.BuildingBlocks.Application.PipelineBehaviors.IValidator<
+                        ShramSafal.Application.UseCases.Planning.PublishScheduleTemplate.PublishScheduleTemplateCommand>>()),
+                new AgriSync.BuildingBlocks.Application.PipelineBehaviors.AuthorizationBehavior<
+                    ShramSafal.Application.UseCases.Planning.PublishScheduleTemplate.PublishScheduleTemplateCommand,
+                    ShramSafal.Application.UseCases.Planning.PublishScheduleTemplate.PublishScheduleTemplateResult>(
+                    sp.GetServices<AgriSync.BuildingBlocks.Application.PipelineBehaviors.IAuthorizationCheck<
+                        ShramSafal.Application.UseCases.Planning.PublishScheduleTemplate.PublishScheduleTemplateCommand>>())));
+
         return services;
     }
 }

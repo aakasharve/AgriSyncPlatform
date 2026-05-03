@@ -16,7 +16,7 @@ public static class ScheduleTemplateEndpoints
             Guid id,
             CloneScheduleTemplateRequest request,
             ClaimsPrincipal user,
-            CloneScheduleTemplateHandler handler,
+            AgriSync.BuildingBlocks.Application.IHandler<CloneScheduleTemplateCommand, CloneScheduleTemplateResult> handler,
             CancellationToken ct) =>
         {
             if (!EndpointActorContext.TryGetUserId(user, out var actorUserId))
@@ -46,7 +46,7 @@ public static class ScheduleTemplateEndpoints
             Guid id,
             EditScheduleTemplateRequest request,
             ClaimsPrincipal user,
-            EditScheduleTemplateHandler handler,
+            AgriSync.BuildingBlocks.Application.IHandler<EditScheduleTemplateCommand, EditScheduleTemplateResult> handler,
             CancellationToken ct) =>
         {
             if (!EndpointActorContext.TryGetUserId(user, out var actorUserId))
@@ -74,7 +74,7 @@ public static class ScheduleTemplateEndpoints
             Guid id,
             PublishScheduleTemplateRequest request,
             ClaimsPrincipal user,
-            PublishScheduleTemplateHandler handler,
+            AgriSync.BuildingBlocks.Application.IHandler<PublishScheduleTemplateCommand, PublishScheduleTemplateResult> handler,
             CancellationToken ct) =>
         {
             if (!EndpointActorContext.TryGetUserId(user, out var actorUserId))
