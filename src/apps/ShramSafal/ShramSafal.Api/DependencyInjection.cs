@@ -996,6 +996,97 @@ public static class DependencyInjection
                     sp.GetServices<AgriSync.BuildingBlocks.Application.PipelineBehaviors.IAuthorizationCheck<
                         ShramSafal.Application.UseCases.Finance.SetPriceConfigVersion.SetPriceConfigVersionCommand>>())));
 
+        // T-IGH-03-PIPELINE-ROLLOUT (CreateAttachment): caller-shape
+        // validation (IDs + non-blank fileName/mimeType + known
+        // linkedEntityType) + farm-membership authorization. The link-
+        // target existence + cross-farm guard (per-type) stays in the
+        // body — multi-outcome (FarmNotFound / DailyLogNotFound /
+        // CostEntryNotFound / Forbidden) and not a pure command-shape
+        // gate. Endpoint (POST /attachments) gets canonical
+        // InvalidCommand → Forbidden → (body link-target) ordering.
+        //
+        // PushSync MIGRATED: create_attachment is registered in
+        // mutation-types.json (sinceVersion 0.4.0) and dispatched in
+        // PushSyncBatchHandler.HandleCreateAttachmentAsync. Sync's pre-
+        // flight runs payload-shape + IsUserMemberOfFarmAsync BEFORE the
+        // pipeline — the membership pre-check overlaps the authorizer
+        // and masks the canonical Forbidden ordering on sync (same
+        // caveat as AddLogTask / VerifyLog). The HTTP endpoint gets the
+        // canonical ordering. Removing the sync pre-check would require
+        // sync integration tests probing Forbidden via the pipeline;
+        // tracked as a follow-up under PIPELINE-ROLLOUT.
+        services.AddScoped<AgriSync.BuildingBlocks.Application.PipelineBehaviors.IValidator<
+            ShramSafal.Application.UseCases.Attachments.CreateAttachment.CreateAttachmentCommand>,
+            ShramSafal.Application.UseCases.Attachments.CreateAttachment.CreateAttachmentValidator>();
+        services.AddScoped<AgriSync.BuildingBlocks.Application.PipelineBehaviors.IAuthorizationCheck<
+            ShramSafal.Application.UseCases.Attachments.CreateAttachment.CreateAttachmentCommand>,
+            ShramSafal.Application.UseCases.Attachments.CreateAttachment.CreateAttachmentAuthorizer>();
+        services.AddScoped<AgriSync.BuildingBlocks.Application.IHandler<
+            ShramSafal.Application.UseCases.Attachments.CreateAttachment.CreateAttachmentCommand,
+            ShramSafal.Application.Contracts.Dtos.AttachmentDto>>(sp =>
+            AgriSync.BuildingBlocks.Application.HandlerPipeline.Build(
+                sp.GetRequiredService<CreateAttachmentHandler>(),
+                new AgriSync.BuildingBlocks.Application.PipelineBehaviors.LoggingBehavior<
+                    ShramSafal.Application.UseCases.Attachments.CreateAttachment.CreateAttachmentCommand,
+                    ShramSafal.Application.Contracts.Dtos.AttachmentDto>(
+                    sp.GetRequiredService<Microsoft.Extensions.Logging.ILogger<
+                        AgriSync.BuildingBlocks.Application.PipelineBehaviors.LoggingBehavior<
+                            ShramSafal.Application.UseCases.Attachments.CreateAttachment.CreateAttachmentCommand,
+                            ShramSafal.Application.Contracts.Dtos.AttachmentDto>>>()),
+                new AgriSync.BuildingBlocks.Application.PipelineBehaviors.ValidationBehavior<
+                    ShramSafal.Application.UseCases.Attachments.CreateAttachment.CreateAttachmentCommand,
+                    ShramSafal.Application.Contracts.Dtos.AttachmentDto>(
+                    sp.GetServices<AgriSync.BuildingBlocks.Application.PipelineBehaviors.IValidator<
+                        ShramSafal.Application.UseCases.Attachments.CreateAttachment.CreateAttachmentCommand>>()),
+                new AgriSync.BuildingBlocks.Application.PipelineBehaviors.AuthorizationBehavior<
+                    ShramSafal.Application.UseCases.Attachments.CreateAttachment.CreateAttachmentCommand,
+                    ShramSafal.Application.Contracts.Dtos.AttachmentDto>(
+                    sp.GetServices<AgriSync.BuildingBlocks.Application.PipelineBehaviors.IAuthorizationCheck<
+                        ShramSafal.Application.UseCases.Attachments.CreateAttachment.CreateAttachmentCommand>>())));
+
+        // T-IGH-03-PIPELINE-ROLLOUT (UploadAttachment): caller-shape
+        // validation (IDs + FileStream presence — NO stream read) +
+        // attachment-existence + farm-membership authorization. The
+        // aggregate-state guard (AttachmentAlreadyFinalized) and mime-
+        // type matching stay in the body — both depend on the loaded
+        // aggregate, not the command shape. Endpoint
+        // (PUT /attachments/{id}/content) gets canonical
+        // InvalidCommand → AttachmentNotFound → Forbidden → (body)
+        // ordering.
+        //
+        // PushSync NOT migrated: upload_attachment is NOT in
+        // mutation-types.json — binary uploads bypass the sync queue
+        // entirely (the multipart body would not survive JSON
+        // serialization). Endpoint-only.
+        services.AddScoped<AgriSync.BuildingBlocks.Application.PipelineBehaviors.IValidator<
+            ShramSafal.Application.UseCases.Attachments.UploadAttachment.UploadAttachmentCommand>,
+            ShramSafal.Application.UseCases.Attachments.UploadAttachment.UploadAttachmentValidator>();
+        services.AddScoped<AgriSync.BuildingBlocks.Application.PipelineBehaviors.IAuthorizationCheck<
+            ShramSafal.Application.UseCases.Attachments.UploadAttachment.UploadAttachmentCommand>,
+            ShramSafal.Application.UseCases.Attachments.UploadAttachment.UploadAttachmentAuthorizer>();
+        services.AddScoped<AgriSync.BuildingBlocks.Application.IHandler<
+            ShramSafal.Application.UseCases.Attachments.UploadAttachment.UploadAttachmentCommand,
+            ShramSafal.Application.Contracts.Dtos.AttachmentDto>>(sp =>
+            AgriSync.BuildingBlocks.Application.HandlerPipeline.Build(
+                sp.GetRequiredService<UploadAttachmentHandler>(),
+                new AgriSync.BuildingBlocks.Application.PipelineBehaviors.LoggingBehavior<
+                    ShramSafal.Application.UseCases.Attachments.UploadAttachment.UploadAttachmentCommand,
+                    ShramSafal.Application.Contracts.Dtos.AttachmentDto>(
+                    sp.GetRequiredService<Microsoft.Extensions.Logging.ILogger<
+                        AgriSync.BuildingBlocks.Application.PipelineBehaviors.LoggingBehavior<
+                            ShramSafal.Application.UseCases.Attachments.UploadAttachment.UploadAttachmentCommand,
+                            ShramSafal.Application.Contracts.Dtos.AttachmentDto>>>()),
+                new AgriSync.BuildingBlocks.Application.PipelineBehaviors.ValidationBehavior<
+                    ShramSafal.Application.UseCases.Attachments.UploadAttachment.UploadAttachmentCommand,
+                    ShramSafal.Application.Contracts.Dtos.AttachmentDto>(
+                    sp.GetServices<AgriSync.BuildingBlocks.Application.PipelineBehaviors.IValidator<
+                        ShramSafal.Application.UseCases.Attachments.UploadAttachment.UploadAttachmentCommand>>()),
+                new AgriSync.BuildingBlocks.Application.PipelineBehaviors.AuthorizationBehavior<
+                    ShramSafal.Application.UseCases.Attachments.UploadAttachment.UploadAttachmentCommand,
+                    ShramSafal.Application.Contracts.Dtos.AttachmentDto>(
+                    sp.GetServices<AgriSync.BuildingBlocks.Application.PipelineBehaviors.IAuthorizationCheck<
+                        ShramSafal.Application.UseCases.Attachments.UploadAttachment.UploadAttachmentCommand>>())));
+
         return services;
     }
 }
