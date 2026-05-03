@@ -106,7 +106,8 @@ FROM analytics.events
 WHERE event_type = 'closure.submitted'
   AND occurred_at_utc >= NOW() - INTERVAL '7 days'
   AND farm_id IS NOT NULL
-GROUP BY farm_id;
+GROUP BY farm_id
+WITH NO DATA;
 CREATE UNIQUE INDEX ux_mis_action_simplicity ON mis.action_simplicity_p50_per_farm (farm_id);
 
 
@@ -128,7 +129,8 @@ SELECT
   farm_id,
   COUNT(*) FILTER (WHERE d >= CURRENT_DATE - INTERVAL '7 days') AS d7_active,
   COUNT(*) FILTER (WHERE d >= CURRENT_DATE - INTERVAL '1 days') AS d1_active
-FROM daily_active GROUP BY farm_id;
+FROM daily_active GROUP BY farm_id
+WITH NO DATA;
 CREATE UNIQUE INDEX ux_mis_repeat_curve ON mis.repeat_curve_per_farm (farm_id);
 
 
@@ -194,7 +196,8 @@ SELECT
  + (CASE WHEN p.signal_perfect_record THEN 1 ELSE 0 END)) >= 1 AS flagged_for_review
 FROM time_clusters t
 FULL OUTER JOIN quick_verify q USING (farm_id)
-FULL OUTER JOIN perfect_record p USING (farm_id);
+FULL OUTER JOIN perfect_record p USING (farm_id)
+WITH NO DATA;
 CREATE UNIQUE INDEX ux_mis_gaming_signals ON mis.gaming_signals_per_farm (farm_id);
 
 
@@ -288,7 +291,8 @@ SELECT
                - (CASE WHEN suspicious THEN 30 ELSE 0 END)) BETWEEN 41 AND 60 THEN 'watchlist'
     ELSE 'healthy'
   END AS bucket
-FROM combined;
+FROM combined
+WITH NO DATA;
 CREATE UNIQUE INDEX ux_mis_dwc_farm_week ON mis.dwc_score_per_farm_week (farm_id, week_start);
 CREATE        INDEX ix_mis_dwc_bucket    ON mis.dwc_score_per_farm_week (bucket, week_start DESC);
 
