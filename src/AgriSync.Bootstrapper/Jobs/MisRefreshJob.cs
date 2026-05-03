@@ -48,6 +48,14 @@ namespace AgriSync.Bootstrapper.Jobs
         // investigation): schedule_adoption_rate, schedule_abandonment_rate,
         // feature_retention_lift, new_farm_day_snapshot, activity_heatmap,
         // cohort_quality_score, voice_pipeline_health.
+        //
+        // DWC v2 §3.4 (2026-05-05): 4 new matviews land for the Daily Work
+        // Closure scoring spine. ORDER MATTERS — mis.dwc_score_per_farm_week
+        // joins on mis.wvfd_weekly + mis.schedule_compliance_weekly (already
+        // listed above as production-read bases) PLUS the three new
+        // siblings (action_simplicity_p50_per_farm, repeat_curve_per_farm,
+        // gaming_signals_per_farm). The score matview must therefore refresh
+        // LAST so it reads fresh data from all 5 inputs.
         private static readonly string[] ViewsToRefresh = new[]
         {
             // ShramSafal verification + log signals (production-read base)
@@ -90,6 +98,14 @@ namespace AgriSync.Bootstrapper.Jobs
             "mis.alert_r6_flash_churn",
             "mis.alert_r7_correction_rising",
             "mis.alert_r8_referral_quality",
+            // DWC v2 §3.4 — Daily Work Closure scoring spine (4 matviews).
+            // Three sibling-base views first; the score matview that joins
+            // them all (plus mis.wvfd_weekly + mis.schedule_compliance_weekly,
+            // already refreshed earlier in this list) lands last.
+            "mis.action_simplicity_p50_per_farm",
+            "mis.repeat_curve_per_farm",
+            "mis.gaming_signals_per_farm",
+            "mis.dwc_score_per_farm_week",
         };
 
         public MisRefreshJob(IServiceProvider serviceProvider, ILogger<MisRefreshJob> logger)
