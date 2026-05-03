@@ -1,0 +1,109 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "InvokeOnlyTheAgriSyncDeployDocument",
+      "Effect": "Allow",
+      "Action": "ssm:SendCommand",
+      "Resource": [
+        "arn:aws:ec2:ap-south-1:951921970996:instance/i-024b3537191712c76",
+        "arn:aws:ssm:ap-south-1:951921970996:document/agrisync-analytics-migration-deploy"
+      ]
+    },
+    {
+      "Sid": "ReadCommandInvocationsForEvidence",
+      "Effect": "Allow",
+      "Action": [
+        "ssm:GetCommandInvocation",
+        "ssm:ListCommandInvocations",
+        "ssm:ListCommands"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "VerifyTargetInstanceIsOnline",
+      "Effect": "Allow",
+      "Action": [
+        "ssm:DescribeInstanceInformation",
+        "ec2:DescribeInstances"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "ReadOnlyTheProdDbConnectionStringSecret",
+      "Effect": "Allow",
+      "Action": [
+        "secretsmanager:GetSecretValue",
+        "secretsmanager:DescribeSecret"
+      ],
+      "Resource": "arn:aws:secretsmanager:ap-south-1:951921970996:secret:shramsafal/prod/db-connection-string-*"
+    },
+    {
+      "Sid": "ReadOnlyRdsForSnapshotAndHealthChecks",
+      "Effect": "Allow",
+      "Action": [
+        "rds:DescribeDBInstances",
+        "rds:DescribeDBSnapshots",
+        "rds:DescribeDBClusters",
+        "rds:DescribeDBClusterSnapshots"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "DenyAnyDestructiveDbAction",
+      "Effect": "Deny",
+      "Action": [
+        "rds:DeleteDB*",
+        "rds:RestoreDB*",
+        "rds:ModifyDB*",
+        "rds:RebootDBInstance",
+        "rds:CreateDBSnapshot",
+        "rds:CopyDBSnapshot"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "DenyAnySecretMutation",
+      "Effect": "Deny",
+      "Action": [
+        "secretsmanager:PutSecretValue",
+        "secretsmanager:UpdateSecret",
+        "secretsmanager:DeleteSecret",
+        "secretsmanager:RestoreSecret",
+        "secretsmanager:CreateSecret",
+        "secretsmanager:RotateSecret"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "DenyAnyNetworkOrIamMutation",
+      "Effect": "Deny",
+      "Action": [
+        "ec2:AuthorizeSecurityGroup*",
+        "ec2:RevokeSecurityGroup*",
+        "ec2:CreateSecurityGroup",
+        "ec2:DeleteSecurityGroup",
+        "ec2:ModifyInstance*",
+        "ec2:Terminate*",
+        "ec2:Stop*",
+        "ec2:Reboot*",
+        "iam:*"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "DenyAnySsmDocumentTampering",
+      "Effect": "Deny",
+      "Action": [
+        "ssm:CreateDocument",
+        "ssm:UpdateDocument",
+        "ssm:UpdateDocumentDefaultVersion",
+        "ssm:DeleteDocument",
+        "ssm:ModifyDocumentPermission",
+        "ssm:StartSession",
+        "ssm:TerminateSession"
+      ],
+      "Resource": "*"
+    }
+  ]
+}
