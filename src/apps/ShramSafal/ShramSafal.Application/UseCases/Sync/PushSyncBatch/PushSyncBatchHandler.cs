@@ -92,7 +92,16 @@ public sealed class PushSyncBatchHandler(
     ITestInstanceRepository testInstanceRepository,
     AcknowledgeSignalHandler acknowledgeSignalHandler,
     ResolveSignalHandler resolveSignalHandler,
-    CreateJobCardHandler createJobCardHandler,
+    // T-IGH-03-PIPELINE-ROLLOUT (CreateJobCard): switched from raw
+    // CreateJobCardHandler to the pipeline-wrapped IHandler. The sync
+    // pre-flight in HandleJobCardCreateAsync below is empty-ids +
+    // non-empty-LineItems shape — the same gates as the validator,
+    // with no overlapping role lookup. The pipeline's
+    // InvalidCommand → Forbidden → JobCardRoleNotAllowed ordering is
+    // therefore the canonical entry path on both sync and HTTP for
+    // this command. No pre-check duplication on the role-tier check;
+    // no masking caveats.
+    IHandler<CreateJobCardCommand, CreateJobCardResult> createJobCardHandler,
     AssignJobCardHandler assignJobCardHandler,
     StartJobCardHandler startJobCardHandler,
     // T-IGH-03-PIPELINE-ROLLOUT (CompleteJobCard): switched from raw

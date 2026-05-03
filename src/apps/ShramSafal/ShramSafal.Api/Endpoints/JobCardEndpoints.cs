@@ -24,10 +24,14 @@ public static class JobCardEndpoints
     public static RouteGroupBuilder MapJobCardEndpoints(this RouteGroupBuilder group)
     {
         // POST /job-cards → 201 Created
+        // T-IGH-03-PIPELINE-ROLLOUT (CreateJobCard): resolves the
+        // pipeline-wrapped IHandler so the canonical
+        // InvalidCommand → Forbidden → JobCardRoleNotAllowed ordering
+        // runs before the body's domain construction.
         group.MapPost("/job-cards", async (
             CreateJobCardRequest request,
             ClaimsPrincipal user,
-            CreateJobCardHandler handler,
+            IHandler<CreateJobCardCommand, CreateJobCardResult> handler,
             CancellationToken ct) =>
         {
             if (!EndpointActorContext.TryGetUserId(user, out var actorUserId))
