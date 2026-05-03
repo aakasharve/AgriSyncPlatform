@@ -1,6 +1,8 @@
 # AgriSyncPlatform
 
-AgriSync is a farm operations platform for smallholder farmers in India. It enables daily activity logging, crop planning, cost tracking, multi-operator verification workflows, and voice-driven data capture in Marathi and Hindi.
+![CI](https://github.com/agrisync/agrisync/actions/workflows/build.yml/badge.svg) *(CI workflow coming in Week 3)*
+
+AgriSync is a voice-first farm operations platform for smallholder farmers. Farmers speak in Marathi; AI structures the record; farmers own their data. Built for offline-first mobile use, connected when available.
 
 ## Repository Layout
 
@@ -43,7 +45,7 @@ Domain → Application → Infrastructure → Api → Bootstrapper
 - `SharedKernel` has zero dependencies (pure value types and IDs)
 - `BuildingBlocks` provides JWT helpers, EF base types, and `Result<T>`
 - `Api` projects are class libraries — only `AgriSync.Bootstrapper` is an executable
-- Database: PostgreSQL 16 on port 5433, database `agrisync_dev`, schemas `public` (User) and `ssf` (ShramSafal)
+- Database: PostgreSQL 16 on port 5433, database `agrisync`, schemas `public` (User) and `ssf` (ShramSafal)
 
 **Frontend** (`mobile-web`) is an offline-first PWA:
 
@@ -58,17 +60,34 @@ Domain → Application → Infrastructure → Api → Bootstrapper
 |------|---------|
 | .NET SDK | 10.0.x |
 | Node.js | 20+ |
+| pnpm | 9+ |
 | PostgreSQL | 16 |
 
-## Local Setup
+## How to Run Locally
 
-### 1. Database
+See `_COFOUNDER/runbooks/` for full setup instructions (runbook coming in Week 3). Quick start:
 
 ```bash
-psql -U postgres -c "CREATE DATABASE agrisync_dev;"
+# Backend (requires PostgreSQL 16 on port 5433, database `agrisync`)
+cd src
+dotnet run --project AgriSync.Bootstrapper
 ```
 
-### 2. Backend configuration
+```bash
+# Frontend
+cd src/clients/mobile-web
+pnpm install && pnpm dev
+```
+
+The API starts on `https://localhost:7001`. On first run it seeds demo data automatically.
+
+### Database setup
+
+```bash
+psql -U postgres -c "CREATE DATABASE agrisync;"
+```
+
+### Backend configuration
 
 Copy the example config and fill in your local Postgres password:
 
@@ -76,23 +95,6 @@ Copy the example config and fill in your local Postgres password:
 cp src/AgriSync.Bootstrapper/appsettings.Development.example.json \
    src/AgriSync.Bootstrapper/appsettings.Development.json
 # Edit the file and replace CHANGE_ME with your local Postgres password
-```
-
-### 3. Run the backend
-
-```bash
-dotnet restore src/AgriSync.sln
-dotnet run --project src/AgriSync.Bootstrapper
-```
-
-The API starts on `https://localhost:7001`. On first run it seeds demo data automatically.
-
-### 4. Mobile web frontend
-
-```bash
-cd src/clients/mobile-web
-npm install
-npm run dev        # http://localhost:5173
 ```
 
 ## Running Tests
@@ -116,6 +118,14 @@ The bootstrapper seeds a demo farm on first run:
 
 6 plots (Grapes, Pomegranate, Sugarcane, Onion) with 48 logs, 111 tasks, 24 cost entries, and 32 verifications.
 
+## How to Contribute
+
+Read `_COFOUNDER/CLAUDE.md` for agent protocols. All code changes require a spec in `_COFOUNDER/specs/_active/` first. No spec, no PR.
+
 ## CI
 
 GitHub Actions runs on every push and pull request to `main` — see [`.github/workflows/dotnet-ci.yml`](.github/workflows/dotnet-ci.yml).
+
+## License
+
+Proprietary. All rights reserved. Not open source.
