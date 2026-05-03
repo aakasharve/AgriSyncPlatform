@@ -57,6 +57,12 @@ jobs:
         working-directory: src/clients/mobile-web
         run: npx cap copy android
 
+      - name: Decode keystore from secret
+        run: |
+          echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d \
+            > src/clients/mobile-web/android/app/shramsafal-release.keystore
+          echo "Keystore decoded: $(wc -c < src/clients/mobile-web/android/app/shramsafal-release.keystore) bytes"
+
       - name: Grant Gradle execute permission
         working-directory: src/clients/mobile-web/android
         run: chmod +x gradlew
