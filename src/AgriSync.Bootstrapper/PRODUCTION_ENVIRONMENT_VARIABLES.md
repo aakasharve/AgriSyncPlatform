@@ -59,6 +59,20 @@ SEED_PURVESH_DEMO="false"
 CLEAR_PURVESH_DEMO="false"
 ```
 
+## Observability (OTel)
+
+```bash
+# Set this ONLY after the OTLP collector ECS service is running and healthy.
+# Until then, leave unset — traces stay in-process and nothing is shipped.
+# See aws/otel-collector/README.md for the full deploy flow.
+#
+# gRPC endpoint (preferred): uses HTTP/2, lower overhead
+OTEL_EXPORTER_OTLP_ENDPOINT="http://otel-collector.agrisync.internal:4317"
+
+# Optional: per-environment service name for Grafana/Honeycomb filtering
+OTel__ServiceName="agrisync-prod"
+```
+
 ## Notes
 
 - `secrets/local/credentials.json` is a local-development convenience file only. It must not exist on EC2.

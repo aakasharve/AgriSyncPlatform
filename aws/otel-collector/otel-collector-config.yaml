@@ -1,0 +1,132 @@
+# AgriSync OTLP Collector Configuration
+# T-IGH-05-OTEL-PROD — production VPC deployment
+#
+# Image: otel/opentelemetry-collector-contrib:0.103.0
+# (pin to a specific version; update in task-definition.json when bumping)
+#
+# ENVIRONMENT STRATEGY:
+#   All backend/exporter DSN values are injected via ECS task-definition
+#   environment variables or AWS Secrets Manager. This file contains ONLY
+#   structural config — no credentials, no endpoints.
+#
+# RECEIVERS
+#   otlp/grpc  — port 4317 (VPC-internal only; NOT exposed to the internet)
+#   otlp/http  — port 4318 (VPC-internal only)
+#
+# PROCESSORS
+#   memory_limiter — guard against OOM in a Fargate task with a fixed memory cap.
+#   batch          — aggregate spans/metrics before shipping; reduces exporter RPCs.
+#
+# EXPORTERS (choose ONE backend at deploy time; see BACKEND_SELECTOR env-var below)
+#
+#   logging       — always active; useful for first-boot verification and debugging.
+#                   Disable or set verbosity: basic in production.
+#   otlp/grafana  — Grafana Cloud OTLP endpoint (DEFAULT if OTEL_BACKEND is unset).
+#   otlp/honeycomb — Honeycomb alternative; activate by setting OTEL_BACKEND=honeycomb.
+#
+# SELECTOR PATTERN
+#   ECS task-definition passes OTEL_BACKEND=grafana (or honeycomb) as an environment
+#   variable. The collector itself does NOT read env vars inside this YAML — instead,
+#   Kiro selects the service pipeline block to activate at deploy time by setting
+#   the ACTIVE_PIPELINE env-var and using a config-provider substitution.
+#   See task-definition.json "command" block for the --config flag pattern.
+#
+#   Simplest approach for MVP: deploy with the grafana pipeline unconditionally;
+#   swap to honeycomb by re-deploying with the alternative file.
+
+extensions:
+  health_check:
+    endpoint: "0.0.0.0:13133"   # collector health; Fargate health-check uses this
+  pprof:
+    endpoint: "0.0.0.0:1777"    # go pprof; expose only in non-prod or behind bastion
+
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: "0.0.0.0:4317"
+      http:
+        endpoint: "0.0.0.0:4318"
+
+processors:
+  memory_limiter:
+    # Fargate task is defined with 512 MiB. Hard-limit the collector to 400 MiB.
+    # check_interval controls how often memory usage is sampled.
+    check_interval: 5s
+    limit_mib: 400
+    spike_limit_mib: 80
+
+  batch:
+    # Send at most every 5 s OR when a batch of 512 items accumulates.
+    # Lower timeout = lower latency; higher batch = fewer exporter RPCs.
+    send_batch_size: 512
+    timeout: 5s
+
+exporters:
+  # ------------------------------------------------------------------
+  # 1. Logging (always-on, first-boot debugging)
+  # ------------------------------------------------------------------
+  debug:
+    verbosity: basic    # change to detailed for temporary debugging; revert after use
+
+  # ------------------------------------------------------------------
+  # 2. Grafana Cloud OTLP (DEFAULT backend)
+  #    Credentials injected via ECS Secrets; never hardcoded here.
+  #    GRAFANA_OTLP_ENDPOINT  = https://<stack-id>.grafana.net/otlp
+  #    GRAFANA_INSTANCE_ID    = <numeric-instance-id>
+  #    GRAFANA_API_TOKEN      = <token with MetricsPublisher + TracesPublisher>
+  # ------------------------------------------------------------------
+  otlp/grafana:
+    endpoint: "${env:GRAFANA_OTLP_ENDPOINT}"
+    headers:
+      authorization: "Basic ${env:GRAFANA_INSTANCE_ID}:${env:GRAFANA_API_TOKEN}"
+    tls:
+      insecure: false
+    compression: gzip
+    retry_on_failure:
+      enabled: true
+      initial_interval: 5s
+      max_interval: 30s
+      max_elapsed_time: 300s
+
+  # ------------------------------------------------------------------
+  # 3. Honeycomb (alternative backend)
+  #    Activate by changing the pipeline.traces.exporters list below
+  #    from [debug, otlp/grafana] to [debug, otlp/honeycomb].
+  #    HONEYCOMB_API_KEY = <ingest key from Honeycomb console>
+  # ------------------------------------------------------------------
+  otlp/honeycomb:
+    endpoint: "https://api.honeycomb.io:443"
+    headers:
+      x-honeycomb-team: "${env:HONEYCOMB_API_KEY}"
+    tls:
+      insecure: false
+    compression: gzip
+    retry_on_failure:
+      enabled: true
+      initial_interval: 5s
+      max_interval: 30s
+      max_elapsed_time: 300s
+
+service:
+  extensions: [health_check, pprof]
+
+  pipelines:
+    # ----------------------------------------------------------------
+    # TRACES: receives from AgriSync backend OTLP export
+    # ----------------------------------------------------------------
+    traces:
+      receivers: [otlp]
+      processors: [memory_limiter, batch]
+      # DEFAULT: grafana. Swap to otlp/honeycomb if backend choice changes.
+      exporters: [debug, otlp/grafana]
+
+    # ----------------------------------------------------------------
+    # METRICS: receives from AgriSync backend Prometheus-style push
+    # (the backend also has a /metrics pull endpoint; collector is
+    # supplementary for push-based aggregation)
+    # ----------------------------------------------------------------
+    metrics:
+      receivers: [otlp]
+      processors: [memory_limiter, batch]
+      exporters: [debug, otlp/grafana]
