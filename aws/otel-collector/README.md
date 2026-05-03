@@ -16,6 +16,7 @@ ships it to the chosen observability backend.
 |------|---------|
 | `otel-collector-config.yaml` | Collector structural config (receivers, processors, exporters, pipelines) |
 | `task-definition.json` | ECS Fargate task definition template; fill in `<PLACEHOLDERS>` before use |
+| `Dockerfile` | Custom ECR image — bakes otel-collector-config.yaml into the image at build time |
 | `SECURITY_NOTES.md` | VPC wiring, SG rules, IAM roles, Secrets Manager layout |
 | `README.md` | This file |
 
@@ -25,11 +26,12 @@ ships it to the chosen observability backend.
   Default: Grafana Cloud. Decision deadline: 2026-05-15.
 - [ ] Grafana Cloud stack provisioned; OTLP endpoint URL, instance ID, and API
   token obtained from https://grafana.com/profile/api-keys.
-- [ ] Three secrets created in AWS Secrets Manager (ap-south-1):
+- [ ] Two secrets created in AWS Secrets Manager (ap-south-1):
   - `agrisync/prod/grafana-otlp-endpoint`
-  - `agrisync/prod/grafana-instance-id`
-  - `agrisync/prod/grafana-api-token`
-  (See SECURITY_NOTES.md §Secrets Manager layout for exact commands.)
+  - `agrisync/prod/grafana-basic-auth-base64` (= `base64(instance_id:api_token)` — one combined secret)
+  (See SECURITY_NOTES.md §Secrets Manager layout for exact commands and encoding.)
+- [ ] ECR repository `agrisync-otel-collector` created in ap-south-1 and custom image
+  built + pushed (see §1 below).
 - [ ] IAM roles created:
   - `agrisync-otel-collector-execution` (with SecretsManager + ECR + CloudWatch Logs)
   - `agrisync-otel-collector-task` (empty for MVP)
@@ -42,28 +44,36 @@ ships it to the chosen observability backend.
 
 ## Deploy steps
 
-### 1. Build or pull the collector image
+### 1. Build + push image
 
-For MVP, the public image is sufficient:
-```
-otel/opentelemetry-collector-contrib:0.103.0
-```
+**MVP approach: ECR-baked image (DECIDED 2026-05-03).** Config is baked into the image
+at build time via `Dockerfile`. No volume mounts or sidecar init containers needed.
+Requires Docker — run from a machine with Docker (e.g. Kiro deploy box / GitHub Actions).
 
-For deterministic config delivery (recommended):
-```dockerfile
-FROM otel/opentelemetry-collector-contrib:0.103.0
-COPY otel-collector-config.yaml /etc/otelcol/otel-collector-config.yaml
-```
-Push to ECR:
 ```bash
-aws ecr create-repository --repository-name agrisync-otel-collector --region ap-south-1
+# Build (run from aws/otel-collector/)
+cd aws/otel-collector
 docker build -t agrisync-otel-collector:0.103.0 .
-docker tag agrisync-otel-collector:0.103.0 <ACCOUNT_ID>.dkr.ecr.ap-south-1.amazonaws.com/agrisync-otel-collector:0.103.0
-aws ecr get-login-password --region ap-south-1 | docker login --username AWS --password-stdin <ACCOUNT_ID>.dkr.ecr.ap-south-1.amazonaws.com
+
+# Tag for ECR
+docker tag agrisync-otel-collector:0.103.0 \
+  <ACCOUNT_ID>.dkr.ecr.ap-south-1.amazonaws.com/agrisync-otel-collector:0.103.0
+
+# Login to ECR
+aws ecr get-login-password --region ap-south-1 | \
+  docker login --username AWS --password-stdin \
+  <ACCOUNT_ID>.dkr.ecr.ap-south-1.amazonaws.com
+
+# Push
 docker push <ACCOUNT_ID>.dkr.ecr.ap-south-1.amazonaws.com/agrisync-otel-collector:0.103.0
 ```
 
-If using the custom ECR image, update `task-definition.json` `"image"` field to the ECR URI and remove the `volumes` block (config is baked in).
+Create the ECR repository if it does not yet exist:
+```bash
+aws ecr create-repository --repository-name agrisync-otel-collector --region ap-south-1
+```
+
+When the config changes, rebuild the image and push a new tag, then redeploy the ECS service.
 
 ### 2. Fill in task-definition.json placeholders
 
@@ -156,15 +166,17 @@ aws ecs update-service \
   --region ap-south-1
 ```
 
-## Config delivery options (Vol.2)
+## Config delivery options
 
-| Option | Complexity | Best for |
-|--------|-----------|---------|
-| Custom ECR image (COPY config in) | Low | MVP; deterministic; no S3 dependency |
-| S3 sidecar init container | Medium | Dynamic config updates without image rebuild |
-| AWS AppConfig | High | Multi-env config management at scale |
+| Option | Complexity | Status |
+|--------|-----------|--------|
+| **Custom ECR image (COPY config in)** | Low | **DECIDED 2026-05-03 — MVP** |
+| S3 sidecar init container | Medium | Not chosen; adds S3 dependency + init-container complexity |
+| AWS AppConfig | High | Not chosen; over-engineered for current scale |
 
-**Recommendation for MVP**: custom ECR image. Rebuild + push when config changes.
+**Chosen approach**: Custom ECR image (`Dockerfile` in this directory). Config baked in
+at build time. Rebuild + push when `otel-collector-config.yaml` changes, then redeploy
+the ECS service. No volume mounts, no init containers, no S3 dependency.
 
 ## Cost estimate
 
@@ -172,10 +184,10 @@ aws ecs update-service \
 |-----------|-----|--------------------------|
 | Fargate task (0.25 vCPU / 0.5 GB, 24×7) | Fargate pricing | ~$8-10 |
 | Grafana Cloud (free tier up to 50GB traces) | Grafana Cloud Free | $0 for first 6 months (likely) |
-| Secrets Manager (3 secrets) | $0.40/secret/month | ~$1.20 |
+| Secrets Manager (2 secrets) | $0.40/secret/month | ~$0.80 |
 | CloudWatch Logs | $0.50/GB ingested | ~$1-3 depending on verbosity |
 
-Total MVP estimate: **$10-15/month**. Well within the $50/month cap.
+Total MVP estimate: **$10-14/month**. Well within the $50/month cap.
 
 ## References
 

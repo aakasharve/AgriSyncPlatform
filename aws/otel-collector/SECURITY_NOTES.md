@@ -18,7 +18,7 @@ T-IGH-05-OTEL-PROD
 
 3. **Backend task VPC endpoint for OTLP.** The backend ECS task must be able to reach the collector on port 4317. This is satisfied by placing both tasks in the same VPC private subnet and allowing the backend SG to talk to the collector SG on 4317/4318.
 
-4. **No Secrets in config files.** Grafana Cloud credentials (`GRAFANA_OTLP_ENDPOINT`, `GRAFANA_INSTANCE_ID`, `GRAFANA_API_TOKEN`) are referenced in `task-definition.json` via AWS Secrets Manager ARNs. Never place them in `otel-collector-config.yaml`.
+4. **No Secrets in config files.** Grafana Cloud credentials (`GRAFANA_OTLP_ENDPOINT`, `GRAFANA_BASIC_AUTH_BASE64`) are referenced in `task-definition.json` via AWS Secrets Manager ARNs. Never place them in `otel-collector-config.yaml`.
 
 ## Security Group rules (reference)
 
@@ -41,7 +41,7 @@ Add outbound rule:
 
 ### agrisync-otel-collector-execution (ECS execution role)
 Must have:
-- `secretsmanager:GetSecretValue` on `arn:aws:secretsmanager:<REGION>:<ACCOUNT_ID>:secret:agrisync/prod/grafana-*`
+- `secretsmanager:GetSecretValue` on `arn:aws:secretsmanager:<REGION>:<ACCOUNT_ID>:secret:agrisync/prod/grafana-otlp-endpoint` and `agrisync/prod/grafana-basic-auth-base64`
 - `ecr:GetAuthorizationToken`, `ecr:BatchGetImage`, `ecr:GetDownloadUrlForLayer` (if using ECR image)
 - `logs:CreateLogGroup`, `logs:CreateLogStream`, `logs:PutLogEvents` for `/ecs/agrisync-otel-collector`
 
@@ -51,16 +51,33 @@ Minimum permissions for MVP: none beyond default. The collector does not access 
 ## Secrets Manager layout
 
 ```
-agrisync/prod/grafana-otlp-endpoint   → "https://<stack-id>.grafana.net/otlp"
-agrisync/prod/grafana-instance-id     → "<numeric-instance-id>"
-agrisync/prod/grafana-api-token       → "<base64-encoded-token>"
+agrisync/prod/grafana-otlp-endpoint      → "https://<stack-id>.grafana.net/otlp"
+agrisync/prod/grafana-basic-auth-base64  → base64(instance_id:api_token)
+```
+
+The `GRAFANA_BASIC_AUTH_BASE64` secret replaces the former `grafana-instance-id` and
+`grafana-api-token` secrets. Grafana Cloud OTLP requires HTTP Basic authentication
+with the credentials pre-encoded; the OTel collector's `${env:X}` substitution does
+not perform base64 encoding, so the value must be encoded before storing.
+
+Encoding command:
+```bash
+echo -n "$INSTANCE_ID:$API_TOKEN" | base64
 ```
 
 Create with:
 ```bash
+# OTLP endpoint
 aws secretsmanager create-secret \
   --name agrisync/prod/grafana-otlp-endpoint \
   --secret-string "https://<stack-id>.grafana.net/otlp" \
+  --region ap-south-1
+
+# Pre-encoded Basic auth credential (one combined secret)
+ENCODED=$(echo -n "<instance_id>:<api_token>" | base64)
+aws secretsmanager create-secret \
+  --name agrisync/prod/grafana-basic-auth-base64 \
+  --secret-string "$ENCODED" \
   --region ap-south-1
 ```
 
