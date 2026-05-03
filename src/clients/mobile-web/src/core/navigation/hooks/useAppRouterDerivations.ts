@@ -73,10 +73,14 @@ export function useAppRouterDerivations({
         return getDateKey(date);
     }, []);
 
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- T-IGH-04 ratchet: dep array intentionally narrow (mount/farm/init pattern); revisit in V2.
-    const scopeCropIds = selectedCropIds.length > 0 ? [...selectedCropIds] : undefined;
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- T-IGH-04 ratchet: dep array intentionally narrow (mount/farm/init pattern); revisit in V2.
-    const scopePlotIds = selectedPlotIds.length > 0 ? [...selectedPlotIds] : undefined;
+    const scopeCropIds = React.useMemo(
+        () => (selectedCropIds.length > 0 ? [...selectedCropIds] : undefined),
+        [selectedCropIds],
+    );
+    const scopePlotIds = React.useMemo(
+        () => (selectedPlotIds.length > 0 ? [...selectedPlotIds] : undefined),
+        [selectedPlotIds],
+    );
 
     const todayLogs = React.useMemo(
         () => history

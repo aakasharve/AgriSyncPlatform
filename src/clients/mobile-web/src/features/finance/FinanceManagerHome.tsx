@@ -11,7 +11,7 @@ interface FinanceManagerHomeProps {
 }
 
 const FinanceManagerHome: React.FC<FinanceManagerHomeProps> = ({ currentRoute, onNavigate }) => {
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- T-IGH-04 ratchet: dep array intentionally narrow (mount/farm/init pattern); revisit in V2.
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional: `currentRoute` is the recompute trigger (financeSelectors reads from a module-level store); we want this memo to re-derive on route navigation back into Finance, not on the (zero) deps of the pure selector call.
     const buckets = useMemo(() => financeSelectors.getPipelineBuckets(), [currentRoute]);
     const currentFarmId = useMemo(() => financeSelectors.getEffectiveMoneyEvents()[0]?.farmId || 'default', []);
 

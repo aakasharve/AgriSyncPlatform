@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
 */
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { DailyLog } from '../logs/logs.types';
 import { CropProfile, Plot, LedgerDefaults, PlannedTask } from '../../types';
 import {
@@ -192,7 +192,7 @@ const ReflectPage: React.FC<ReflectPageProps> = ({
             setViewCrops(allCrops);
             setViewPlots(allPlots);
         }
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- T-IGH-04 ratchet: dep array intentionally narrow (mount/farm/init pattern); revisit in V2.
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional: init-once selection — only fires when `crops` loads or changes; including `viewCrops.length` would create an infinite loop because the effect itself sets viewCrops, and including the setters is unnecessary (React guarantees stable identities for useState setters).
     }, [crops]);
 
     // Block reordering handlers — persistence is handled inside useUiPref's
@@ -210,7 +210,7 @@ const ReflectPage: React.FC<ReflectPageProps> = ({
     };
     const currentDateStr = getDateKey(currentDate);
 
-    const isLogVisibleInCurrentSelection = (log: DailyLog): boolean => {
+    const isLogVisibleInCurrentSelection = useCallback((log: DailyLog): boolean => {
         const context = log.context.selection[0];
         const cropId = context.cropId;
 
@@ -224,22 +224,20 @@ const ReflectPage: React.FC<ReflectPageProps> = ({
         }
 
         return context.selectedPlotIds?.some(plotId => selectedPlots.includes(plotId)) ?? false;
-    };
+    }, [viewCrops, viewPlots]);
 
     const observationsForDate = useMemo(
         () => history
             .filter(log => log.date === currentDateStr && isLogVisibleInCurrentSelection(log))
             .flatMap(log => log.observations ?? []),
-        // eslint-disable-next-line react-hooks/exhaustive-deps -- T-IGH-04 ratchet: dep array intentionally narrow (mount/farm/init pattern); revisit in V2.
-        [history, currentDateStr, viewCrops, viewPlots]
+        [history, currentDateStr, isLogVisibleInCurrentSelection]
     );
 
     const tasksFromTodaysLogs = useMemo(
         () => history
             .filter(log => log.date === currentDateStr && isLogVisibleInCurrentSelection(log))
             .flatMap(log => log.plannedTasks ?? []),
-        // eslint-disable-next-line react-hooks/exhaustive-deps -- T-IGH-04 ratchet: dep array intentionally narrow (mount/farm/init pattern); revisit in V2.
-        [history, currentDateStr, viewCrops, viewPlots]
+        [history, currentDateStr, isLogVisibleInCurrentSelection]
     );
 
     const mergedVisibleTasks = useMemo(() => {
@@ -254,7 +252,7 @@ const ReflectPage: React.FC<ReflectPageProps> = ({
         if (viewCrops.length === 0 && crops.length > 0) {
             setViewCrops(crops.map(c => c.id));
         }
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- T-IGH-04 ratchet: dep array intentionally narrow (mount/farm/init pattern); revisit in V2.
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional: backfill viewCrops only when `crops` first loads (or its set changes); including `viewCrops.length` would create an infinite loop because the effect itself sets viewCrops.
     }, [crops]);
 
     const filteredCrops = crops.filter(c => viewCrops.includes(c.id));

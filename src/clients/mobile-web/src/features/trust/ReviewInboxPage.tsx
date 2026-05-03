@@ -18,7 +18,7 @@ const ReviewInboxPage: React.FC<ReviewInboxPageProps> = ({ currentRoute, onNavig
     const [refresh, setRefresh] = useState(0);
     const [drawerFilter, setDrawerFilter] = useState<FinanceFilters | null>(null);
 
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- T-IGH-04 ratchet: dep array intentionally narrow (mount/farm/init pattern); revisit in V2.
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional: route/refresh are recompute triggers for the module-level financeSelectors store; the selector call itself takes no value deps.
     const entries = useMemo(() => financeSelectors.getReviewInbox(), [currentRoute, refresh]);
 
     const approveAllLowRisk = () => {

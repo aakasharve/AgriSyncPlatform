@@ -21,7 +21,7 @@ const PriceBookPage: React.FC<PriceBookPageProps> = ({ currentRoute, onNavigate 
     const [effectiveFrom, setEffectiveFrom] = useState(getDateKey());
     const [refresh, setRefresh] = useState(0);
 
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- T-IGH-04 ratchet: dep array intentionally narrow (mount/farm/init pattern); revisit in V2.
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional: `refresh` and `currentRoute` are recompute triggers for the module-level financeService.getPriceBook store; the call itself takes no value deps.
     const items = useMemo(() => financeService.getPriceBook(), [refresh, currentRoute]);
 
     const addItem = () => {

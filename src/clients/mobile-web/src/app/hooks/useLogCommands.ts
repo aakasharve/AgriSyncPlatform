@@ -93,7 +93,7 @@ export const useLogCommands = ({
     }, [dataSource.logs, weatherProvider]);
 
     // --- HELPER: CALCULATE SUMMARY ---
-    const calculateLogSummary = (logs: DailyLog[]) => {
+    const calculateLogSummary = useCallback((logs: DailyLog[]) => {
         const summary: LastSavedLogSummaryItem[] = logs.map(log => {
             const selection = log.context.selection[0];
             const contextCropId = selection?.cropId;
@@ -124,7 +124,7 @@ export const useLogCommands = ({
             };
         });
         setLastSavedLogSummary(summary);
-    };
+    }, [crops, setLastSavedLogSummary]);
 
     const computeClosureDelta = useCallback((beforeLogs: DailyLog[], afterLogs: DailyLog[]) => {
         const beforePercent = computeDayState({
@@ -220,8 +220,7 @@ export const useLogCommands = ({
             setToast({ message: "Failed to auto-save", type: 'error' });
             setError("Failed to auto-save. Please check your connection.");
         }
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- T-IGH-04 ratchet: dep array intentionally narrow (mount/farm/init pattern); revisit in V2.
-    }, [hasActiveLogContext, logScope, crops, farmerProfile, logCommandService, setHistory, setPlannedTasks, setToast, setStatus, setMode, setLastSavedLogSummary, setLastSavedLogIds, setError, computeClosureDelta, history, setLogScope]);
+    }, [hasActiveLogContext, logScope, crops, farmerProfile, logCommandService, setHistory, setPlannedTasks, setToast, setStatus, setMode, setLastSavedLogIds, setError, computeClosureDelta, history, setLogScope, calculateLogSummary, isDemoMode]);
 
     // --- FINAL CONFIRM ---
     const handleFinalConfirm = useCallback(async (editedData: AgriLogResponse | null, draftLog: AgriLogResponse | null) => {
@@ -284,8 +283,7 @@ export const useLogCommands = ({
             logger.error("Final confirm error", e, { correlationId });
             setError("Failed to save logs. Please try again.");
         }
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- T-IGH-04 ratchet: dep array intentionally narrow (mount/farm/init pattern); revisit in V2.
-    }, [hasActiveLogContext, logScope, crops, farmerProfile, logCommandService, setHistory, setPlannedTasks, setDraftLog, setRecordingSegment, setMode, setMainView, setStatus, setError, setLastSavedLogSummary, setLastSavedLogIds, computeClosureDelta, history, setToast]);
+    }, [hasActiveLogContext, logScope, crops, farmerProfile, logCommandService, setHistory, setPlannedTasks, setDraftLog, setRecordingSegment, setMode, setMainView, setStatus, setError, setLastSavedLogIds, computeClosureDelta, history, setToast, calculateLogSummary, isDemoMode]);
 
     // --- MANUAL SUBMIT ---
     const handleManualSubmit = useCallback(async (data: ManualSubmitPayload) => {
@@ -359,8 +357,7 @@ export const useLogCommands = ({
             console.error("Critical error in handleManualSubmit:", e);
             setError("Failed to save logs. Please try again.");
         }
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- T-IGH-04 ratchet: dep array intentionally narrow (mount/farm/init pattern); revisit in V2.
-    }, [hasActiveLogContext, logScope, crops, farmerProfile, logCommandService, setHistory, setPlannedTasks, setStatus, setError, setLastSavedLogSummary, setLastSavedLogIds, computeClosureDelta, history, setToast]);
+    }, [hasActiveLogContext, logScope, crops, farmerProfile, logCommandService, setHistory, setPlannedTasks, setStatus, setError, setLastSavedLogIds, computeClosureDelta, history, setToast, calculateLogSummary, isDemoMode]);
 
     const handleWizardSubmit = useCallback(async (logs: DailyLog[]) => {
         if (logs.length === 0) {
@@ -394,8 +391,7 @@ export const useLogCommands = ({
             console.error('Critical error in handleWizardSubmit:', error);
             setError('Failed to save wizard logs. Please try again.');
         }
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- T-IGH-04 ratchet: dep array intentionally narrow (mount/farm/init pattern); revisit in V2.
-    }, [computeClosureDelta, history, logCommandService, setError, setHistory, setLastSavedLogIds, setLastSavedLogSummary, setPlannedTasks, setStatus, setToast]);
+    }, [computeClosureDelta, history, logCommandService, setError, setHistory, setLastSavedLogIds, setPlannedTasks, setStatus, setToast, calculateLogSummary, isDemoMode]);
 
     // Note Updating - Simplified
     // This should also use Service if possible, but keeping lightweight update logic

@@ -25,7 +25,7 @@ const ActivityExpenseCard: React.FC<ActivityExpenseCardProps> = ({ expense, onUp
                 onUpdate({ ...expense, totalAmount: sum });
             }
         }
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- T-IGH-04 ratchet: dep array intentionally narrow (mount/farm/init pattern); revisit in V2.
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional: only re-sync the totalAmount when items or mode change; including `expense` (parent-rebuilt object) or `onUpdate` (parent-bound callback) would cause an infinite onUpdate loop because each onUpdate call re-creates `expense` upstream.
     }, [expense.items, mode]);
 
     const handleAddItem = () => {

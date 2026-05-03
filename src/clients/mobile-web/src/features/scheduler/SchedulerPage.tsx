@@ -113,7 +113,7 @@ const SchedulerPage: React.FC<SchedulerPageProps> = ({
             cropId: selectedCropId || undefined,
             plotId: selectedPlotIds[0]
         }),
-        // eslint-disable-next-line react-hooks/exhaustive-deps -- T-IGH-04 ratchet: dep array intentionally narrow (mount/farm/init pattern); revisit in V2.
+        // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional: `logs.length` is the recompute trigger for the module-level financeSelectors store; the selector call itself takes its filters as args, not as React deps.
         [todayDateKey, selectedCropId, selectedPlotIds, logs.length]
     );
 
@@ -145,6 +145,7 @@ const SchedulerPage: React.FC<SchedulerPageProps> = ({
     }, [crops]);
 
     // Initial Load / Plot Change Effect
+    const selectedPlotIdsKey = selectedPlotIds.join(',');
     useEffect(() => {
         if (!activeCrop) {
             setActiveTemplate(null);
@@ -178,8 +179,8 @@ const SchedulerPage: React.FC<SchedulerPageProps> = ({
             setDraftInstance(null);
         }
 
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- T-IGH-04 ratchet: dep array intentionally narrow (mount/farm/init pattern); revisit in V2.
-    }, [activeCrop?.id, selectedPlotIds.join(','), editingPlot?.id]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional: gated on identity-stable keys (`activeCrop?.id`, plot id list, `editingPlot?.id`); including the full `activeCrop`/`editingPlot` objects would re-fire on every parent render even when the underlying entity hasn't changed and would clobber the user's draft schedule edits.
+    }, [activeCrop?.id, selectedPlotIdsKey, editingPlot?.id]);
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any -- T-IGH-04 ratchet: legacy `any` deferred to T-IGH-04-LINT-RATCHET-V2 follow-up.
     const handleSave = (scheduleOverride?: any) => {

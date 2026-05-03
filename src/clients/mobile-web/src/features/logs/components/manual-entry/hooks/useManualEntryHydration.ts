@@ -331,6 +331,6 @@ export function useManualEntryHydration(params: HydrationParams): void {
             if (onDataConsumed) onDataConsumed();
         }
 
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- T-IGH-04 ratchet: dep array intentionally narrow (mount/farm/init pattern); revisit in V2.
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional: hydration effect — fires only when source data (`initialData`, `activePlot`, `defaults`, `profile`, `todayLogs`) flips. The setters and the `hasVoiceDataBeenApplied` ref are stable React identities and the `onDataConsumed` parent callback is intentionally fire-and-forget; including any of them would re-hydrate (and clobber user edits) on every parent render.
     }, [initialData, activePlot, defaults, profile, todayLogs]);
 }

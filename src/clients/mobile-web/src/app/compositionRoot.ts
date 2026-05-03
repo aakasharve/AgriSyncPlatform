@@ -165,7 +165,7 @@ export const useAgriLogApp = ({ initialCrops, currentFarmId }: AgriLogAppConfig)
             return () => window.clearTimeout(resetModeHandle);
         }
         return undefined;
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- T-IGH-04 ratchet: dep array intentionally narrow (mount/farm/init pattern); revisit in V2.
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional: reset voice state only on context-flip transitions; depending on the full `voice` object would re-run this effect on every render and clobber in-flight recordings.
     }, [hasActiveLogContext]);
 
     return {

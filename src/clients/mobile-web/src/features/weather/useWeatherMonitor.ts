@@ -135,7 +135,7 @@ export const useWeatherMonitor = ({
             }
         };
         fetchW();
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- T-IGH-04 ratchet: dep array intentionally narrow (mount/farm/init pattern); revisit in V2.
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional: `lastWeatherStamps` is read as a snapshot inside the effect; including it would re-fire this fetch every time the effect itself updates the cache (via setLastWeatherStamps), causing an infinite weather-fetch loop.
     }, [farmerProfile.location, hasActiveLogContext, activePlotId, activeCropId, activeFarmId, crops, provider, farmGeography]); // Expanded deps for safety
 
     const handleWeatherReaction = (reaction: WeatherReaction) => {

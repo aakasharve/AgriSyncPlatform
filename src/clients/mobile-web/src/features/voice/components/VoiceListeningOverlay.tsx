@@ -49,7 +49,7 @@ const VoiceListeningOverlay: React.FC<VoiceListeningOverlayProps> = ({
         } else if (!isOpen) {
             cancelRecording();
         }
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- T-IGH-04 ratchet: dep array intentionally narrow (mount/farm/init pattern); revisit in V2.
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional: `isRecording` is read inside the branch as a snapshot guard, not as a re-fire trigger; including it would cause this effect to re-run mid-recording (when isRecording transitions to true via startRecording above) and call startRecording a second time.
     }, [isOpen, startRecording, cancelRecording, isProcessing, clarificationNeeded]);
 
     if (!isOpen) return null;
