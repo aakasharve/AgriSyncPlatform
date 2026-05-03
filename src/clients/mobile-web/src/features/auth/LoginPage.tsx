@@ -6,9 +6,6 @@ import OtpVerifyForm from './components/OtpVerifyForm';
 import type { StartOtpResponse } from './data/otpClient';
 import { invalidateMeContext } from '../../core/session/MeContextService';
 
-// eslint-disable-next-line @typescript-eslint/no-empty-object-type -- T-IGH-04 ratchet: marker type kept; revisit in V2.
-interface LoginPageProps { }
-
 // Top-level auth mode: 'otp' is the primary flow; 'password' is legacy.
 type TopMode = 'otp' | 'password';
 type AuthMode = 'login' | 'register';
@@ -22,7 +19,7 @@ function normalizeDemoPhone(input: string): string {
     return normalized;
 }
 
-const LoginPage: React.FC<LoginPageProps> = () => {
+const LoginPage: React.FC = () => {
     const { login, register, isLoading, authError, clearAuthError } = useAuth();
     const [topMode, setTopMode] = useState<TopMode>('otp');
     const [mode, setMode] = useState<AuthMode>('login');

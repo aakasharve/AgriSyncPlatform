@@ -492,8 +492,7 @@ const IdentitySection: React.FC<IdentitySectionProps> = ({
                                         </div>
 
                                         <button
-                                            // eslint-disable-next-line @typescript-eslint/no-unused-expressions -- T-IGH-04 ratchet: intentional side-effect-only expression; revisit in V2.
-                                            onClick={(e) => { e.stopPropagation(); onDeletePerson && onDeletePerson(person.id); }}
+                                            onClick={(e) => { e.stopPropagation(); if (onDeletePerson) onDeletePerson(person.id); }}
                                             className="p-2 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-xl transition-colors"
                                         >
                                             <Trash2 size={18} />

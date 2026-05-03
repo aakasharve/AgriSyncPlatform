@@ -119,9 +119,7 @@ const ActivityCalendarSection: React.FC<ActivityCalendarSectionProps> = ({
                 isBlocked = true;
                 disturbanceGroup = l.disturbance.group;
             }
-            // eslint-disable-next-line no-empty -- T-IGH-04 ratchet: intentional empty block; revisit in V2.
-            if (cId === 'FARM_GLOBAL') {
-            } else {
+            if (cId !== 'FARM_GLOBAL') {
                 cropIds.add(cId);
             }
             return true;
