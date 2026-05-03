@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using AgriSync.BuildingBlocks.Application;
 using AgriSync.BuildingBlocks.Results;
 using ShramSafal.Application.UseCases.Planning.OverridePlannedActivity;
 
@@ -8,11 +9,15 @@ public static class PlannedActivityEndpoints
 {
     public static RouteGroupBuilder MapPlannedActivityEndpoints(this RouteGroupBuilder group)
     {
+        // T-IGH-03-PIPELINE-ROLLOUT (OverridePlannedActivity): resolves
+        // the pipeline-wrapped IHandler so the canonical
+        // InvalidCommand → PlannedActivityNotFound → Forbidden ordering
+        // runs before the body's idempotency / audit / save checks.
         group.MapPost("/planned-activities/{id:guid}/override", async (
             Guid id,
             OverridePlannedActivityRequest request,
             ClaimsPrincipal user,
-            OverridePlannedActivityHandler handler,
+            IHandler<OverridePlannedActivityCommand> handler,
             CancellationToken ct) =>
         {
             if (!EndpointActorContext.TryGetUserId(user, out var actorUserId))
