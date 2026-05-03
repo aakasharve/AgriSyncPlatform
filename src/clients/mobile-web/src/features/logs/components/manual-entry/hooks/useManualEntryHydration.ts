@@ -193,8 +193,7 @@ export function useManualEntryHydration(params: HydrationParams): void {
                     const labourEntryId = index === 0 ? globalActivity.id : (aiLabour.id || `ai_labour_${index}`);
                     newLabourMap[labourEntryId] = {
                         id: aiLabour.id || `lab_${Date.now()}_${index}`,
-                        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- T-IGH-04 ratchet: legacy `any` deferred to T-IGH-04-LINT-RATCHET-V2 follow-up.
-                        type: (aiLabour.type as any) || 'HIRED',
+                        type: (aiLabour.type as LabourEvent['type']) || 'HIRED',
                         count: aiLabour.count || 0,
                         maleCount: aiLabour.maleCount,
                         femaleCount: aiLabour.femaleCount,
@@ -231,8 +230,7 @@ export function useManualEntryHydration(params: HydrationParams): void {
             if (initialData.inputs && initialData.inputs.length > 0) {
                 newInputMap[globalActivity.id] = initialData.inputs.map((inp, idx) => ({
                     id: `inp_${Date.now()}_${idx}`,
-                    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- T-IGH-04 ratchet: legacy `any` deferred to T-IGH-04-LINT-RATCHET-V2 follow-up.
-                    type: (inp.type as any) || 'pesticide',
+                    type: (inp.type as InputEvent['type']) || 'pesticide',
                     quantity: inp.quantity || 0,
                     unit: inp.unit || 'unit',
                     linkedActivityId: globalActivity.id,
@@ -262,10 +260,8 @@ export function useManualEntryHydration(params: HydrationParams): void {
                 const aiMach = initialData.machinery[0];
                 newMachineryMap[globalActivity.id] = {
                     id: `mach_${Date.now()}`,
-                    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- T-IGH-04 ratchet: legacy `any` deferred to T-IGH-04-LINT-RATCHET-V2 follow-up.
-                    type: (aiMach.type as any) || 'tractor',
-                    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- T-IGH-04 ratchet: legacy `any` deferred to T-IGH-04-LINT-RATCHET-V2 follow-up.
-                    ownership: (aiMach.ownership as any) || 'owned',
+                    type: (aiMach.type as MachineryEvent['type']) || 'tractor',
+                    ownership: (aiMach.ownership as MachineryEvent['ownership']) || 'owned',
                     hoursUsed: aiMach.hoursUsed || 2,
                     linkedActivityId: globalActivity.id,
                     sourceText: aiMach.sourceText,

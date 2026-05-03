@@ -10,6 +10,16 @@ import { AlertTriangle, User, Users, Droplets, Tractor, X } from 'lucide-react';
 import Button from '../../../../../shared/components/ui/Button';
 import IssueFormSheet from '../../IssueFormSheet';
 
+/**
+ * Loose detail bag for the labour / irrigation / machinery shared sheet. The
+ * concrete shape is one of LabourEvent | IrrigationEvent | MachineryEvent
+ * narrowed by `type`, but the form mutates fields conditionally and reads
+ * them as numbers/strings/BucketIssues across ~400 lines of conditional UI.
+ * Tightening this would force the editor to be split per-type. Loose-by-design.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- loose-by-design: shared sheet covers labour/irrigation/machinery domain types whose fields are read+written via dynamic field keys; a strict union would require splitting the editor (see docstring).
+export type ActivityDetailData = any;
+
 const DetailSheet = ({
     type,
     data,
@@ -21,19 +31,16 @@ const DetailSheet = ({
     cropContractUnit
 }: {
     type: 'labour' | 'irrigation' | 'machinery',
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- T-IGH-04 ratchet: legacy `any` deferred to T-IGH-04-LINT-RATCHET-V2 follow-up.
-    data: any,
+    data: ActivityDetailData,
     defaults: LedgerDefaults,
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- T-IGH-04 ratchet: legacy `any` deferred to T-IGH-04-LINT-RATCHET-V2 follow-up.
-    onSave: (d: any) => void,
+    onSave: (d: ActivityDetailData) => void,
     onClose: () => void,
     profile: FarmerProfile,
     currentPlot?: Plot,
     cropContractUnit?: string
 }) => {
     // SYNCHRONOUS INITIALIZATION (Prevents empty flash)
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- T-IGH-04 ratchet: legacy `any` deferred to T-IGH-04-LINT-RATCHET-V2 follow-up.
-    const [localData, setLocalData] = useState<any>(() => {
+    const [localData, setLocalData] = useState<ActivityDetailData>(() => {
         // If editing existing data, use it
         if (data && Object.keys(data).length > 0) return { ...data };
 
@@ -79,8 +86,7 @@ const DetailSheet = ({
 
     // LABOUR LOGIC
     const handleShiftSelect = (shiftId: string) => {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- T-IGH-04 ratchet: legacy `any` deferred to T-IGH-04-LINT-RATCHET-V2 follow-up.
-        setLocalData((prev: any) => ({ ...prev, shiftId }));
+        setLocalData((prev: ActivityDetailData) => ({ ...prev, shiftId }));
     };
 
     // Auto-calculate total cost whenever counts or shift changes
@@ -93,8 +99,7 @@ const DetailSheet = ({
                 const total = mCost + fCost;
 
                 // Update total cost AND total count
-                // eslint-disable-next-line @typescript-eslint/no-explicit-any -- T-IGH-04 ratchet: legacy `any` deferred to T-IGH-04-LINT-RATCHET-V2 follow-up.
-                setLocalData((prev: any) => ({
+                setLocalData((prev: ActivityDetailData) => ({
                     ...prev,
                     totalCost: total,
                     count: (prev.maleCount || 0) + (prev.femaleCount || 0)
@@ -161,8 +166,7 @@ const DetailSheet = ({
                                     <button
                                         key={t}
                                         onClick={() => {
-                                            // eslint-disable-next-line @typescript-eslint/no-explicit-any -- T-IGH-04 ratchet: legacy `any` deferred to T-IGH-04-LINT-RATCHET-V2 follow-up.
-                                            setLabourTab(t as any);
+                                            setLabourTab(t as 'HIRED' | 'CONTRACT' | 'SELF');
                                             if (t === 'CONTRACT') handleContractUnitInit();
                                             else setLocalData({ ...localData, type: t });
                                         }}

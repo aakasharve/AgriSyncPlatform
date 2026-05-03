@@ -41,8 +41,7 @@ const ActivityExpenseCard: React.FC<ActivityExpenseCardProps> = ({ expense, onUp
         setMode('itemized'); // Force itemized mode
     };
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- T-IGH-04 ratchet: legacy `any` deferred to T-IGH-04-LINT-RATCHET-V2 follow-up.
-    const updateItem = (id: string, field: keyof ExpenseItem, value: any) => {
+    const updateItem = <K extends keyof ExpenseItem>(id: string, field: K, value: ExpenseItem[K]) => {
         const newItems = expense.items.map(item => {
             if (item.id === id) {
                 const updated = { ...item, [field]: value };

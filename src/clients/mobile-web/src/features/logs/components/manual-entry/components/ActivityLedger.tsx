@@ -11,6 +11,7 @@ import {
     ActivityExpenseEvent, ObservationNote, PlannedTask, DailyLog, DisturbanceEvent
 } from '../../../../../types';
 import { BucketIssue } from '../../../../../domain/types/log.types';
+import type { ActivityDetailData } from '../../activity-card/sheets/DetailSheet';
 import { SAFE_DEFAULTS } from '../types';
 
 interface ActivityLedgerProps {
@@ -32,8 +33,8 @@ interface ActivityLedgerProps {
     defaults?: LedgerDefaults;
     setExpenses: React.Dispatch<React.SetStateAction<ActivityExpenseEvent[]>>;
     setObservations: React.Dispatch<React.SetStateAction<ObservationNote[]>>;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- T-IGH-04 ratchet: legacy `any` deferred to T-IGH-04-LINT-RATCHET-V2 follow-up.
-    onUpdateDetails: (activityId: string, type: 'labour' | 'irrigation' | 'machinery' | 'input', data: any) => void;
+    // `data` shape varies by `type` (see ActivityCardProps + DetailSheet docstring).
+    onUpdateDetails: (activityId: string, type: 'labour' | 'irrigation' | 'machinery' | 'input', data: ActivityDetailData) => void;
     onDeleteActivity: (id: string) => void;
     onUpdateWorkTypes: (activityId: string, types: string[]) => void;
     onRefineWorkType: (oldType: string, newType: string, mode: 'manual' | 'voice') => void;
