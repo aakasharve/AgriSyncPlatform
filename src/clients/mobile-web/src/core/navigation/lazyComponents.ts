@@ -5,7 +5,7 @@
 import React from 'react';
 import { IS_E2E_HARNESS_ENABLED } from '../../app/featureFlags';
 
-export const ProfilePage = React.lazy(() => import('../../pages/ProfilePage'));
+export const ProfilePage = React.lazy(() => import('../../features/profile/ProfilePage'));
 export const SettingsPage = React.lazy(() => import('../../features/settings/SettingsPage'));
 export const VoiceJournalPage = React.lazy(() => import('../../features/voiceJournal/pages/VoiceJournalPage'));
 export const SchedulerPage = React.lazy(() => import('../../features/scheduler/SchedulerPage'));
