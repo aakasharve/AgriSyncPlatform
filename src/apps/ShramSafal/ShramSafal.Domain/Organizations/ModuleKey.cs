@@ -45,6 +45,13 @@ public static class ModuleKey
     public const string OrgMembers = "org.members";
     public const string OrgFarmScope = "org.farm-scope";
 
+    // DWC v2 §3.6 / §3.7 — Daily Work Closure farmer-health module.
+    // Mode A = per-farmer drilldown; Mode B = cohort patterns. Same
+    // module key gates both endpoints; the redactor matrix differentiates
+    // FarmerHealth-specific column-level policy (PII fields, sync/AI ops
+    // sub-blocks gated by ops:read claim).
+    public const string FarmerHealth = "farmer.health";
+
     public static readonly IReadOnlySet<string> All = typeof(ModuleKey)
         .GetFields(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static)
         .Where(f => f.IsLiteral && f.FieldType == typeof(string))
