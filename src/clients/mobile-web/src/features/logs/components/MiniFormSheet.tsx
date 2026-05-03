@@ -14,10 +14,12 @@ interface MiniFormSheetProps {
     category: CategoryType | null;
     defaults: LedgerDefaults;
     onClose: () => void;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- T-IGH-04 ratchet: legacy `any` deferred to T-IGH-04-LINT-RATCHET-V2 follow-up.
     onSave: (category: CategoryType, data: any) => void;
 }
 
 const MiniFormSheet: React.FC<MiniFormSheetProps> = ({ category, defaults, onClose, onSave }) => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- T-IGH-04 ratchet: legacy `any` deferred to T-IGH-04-LINT-RATCHET-V2 follow-up.
     const [data, setData] = useState<any>({});
     const [isVisible, setIsVisible] = useState(false);
 
@@ -51,6 +53,7 @@ const MiniFormSheet: React.FC<MiniFormSheetProps> = ({ category, defaults, onClo
         onClose();
     };
 
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- T-IGH-04 ratchet: legacy `any` deferred to T-IGH-04-LINT-RATCHET-V2 follow-up.
     const update = (field: string, val: any) => setData({ ...data, [field]: val });
 
     // Handle smart defaults for machinery costs based on ownership
@@ -202,6 +205,7 @@ const MiniFormSheet: React.FC<MiniFormSheetProps> = ({ category, defaults, onClo
                         <div className="space-y-4">
                             <div className="flex gap-2">
                                 {['owned', 'rented'].map(o => (
+                                    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- T-IGH-04 ratchet: legacy `any` deferred to T-IGH-04-LINT-RATCHET-V2 follow-up.
                                     <button key={o} onClick={() => updateMachineryOwnership(o as any)} className={`flex-1 py-2 rounded-lg border text-sm font-bold capitalize ${data.ownership === o ? 'bg-slate-800 text-white' : 'border-slate-200 text-slate-500'}`}>{o}</button>
                                 ))}
                             </div>

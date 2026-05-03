@@ -52,6 +52,7 @@ const SettingsPage: React.FC<SettingsPageProps> = ({
     const [editingCrop, setEditingCrop] = useState<CropProfile | null>(null);
     const [_configRefreshKey, setConfigRefreshKey] = useState(0);
 
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- T-IGH-04 ratchet: legacy `any` deferred to T-IGH-04-LINT-RATCHET-V2 follow-up.
     const handleDefaultChange = (category: keyof LedgerDefaults, field: string, value: any) => {
         onUpdateDefaults({
             ...defaults,
@@ -73,6 +74,7 @@ const SettingsPage: React.FC<SettingsPageProps> = ({
         handleDefaultChange('labour', 'shifts', newShifts);
     };
 
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- T-IGH-04 ratchet: legacy `any` deferred to T-IGH-04-LINT-RATCHET-V2 follow-up.
     const _updateShift = (id: string, field: keyof LabourShift, value: any) => {
         const newShifts = defaults.labour.shifts.map(s => s.id === id ? { ...s, [field]: value } : s);
         handleDefaultChange('labour', 'shifts', newShifts);

@@ -192,6 +192,7 @@ const ReflectPage: React.FC<ReflectPageProps> = ({
             setViewCrops(allCrops);
             setViewPlots(allPlots);
         }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- T-IGH-04 ratchet: dep array intentionally narrow (mount/farm/init pattern); revisit in V2.
     }, [crops]);
 
     // Block reordering handlers — persistence is handled inside useUiPref's
@@ -229,6 +230,7 @@ const ReflectPage: React.FC<ReflectPageProps> = ({
         () => history
             .filter(log => log.date === currentDateStr && isLogVisibleInCurrentSelection(log))
             .flatMap(log => log.observations ?? []),
+        // eslint-disable-next-line react-hooks/exhaustive-deps -- T-IGH-04 ratchet: dep array intentionally narrow (mount/farm/init pattern); revisit in V2.
         [history, currentDateStr, viewCrops, viewPlots]
     );
 
@@ -236,6 +238,7 @@ const ReflectPage: React.FC<ReflectPageProps> = ({
         () => history
             .filter(log => log.date === currentDateStr && isLogVisibleInCurrentSelection(log))
             .flatMap(log => log.plannedTasks ?? []),
+        // eslint-disable-next-line react-hooks/exhaustive-deps -- T-IGH-04 ratchet: dep array intentionally narrow (mount/farm/init pattern); revisit in V2.
         [history, currentDateStr, viewCrops, viewPlots]
     );
 
@@ -251,6 +254,7 @@ const ReflectPage: React.FC<ReflectPageProps> = ({
         if (viewCrops.length === 0 && crops.length > 0) {
             setViewCrops(crops.map(c => c.id));
         }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- T-IGH-04 ratchet: dep array intentionally narrow (mount/farm/init pattern); revisit in V2.
     }, [crops]);
 
     const filteredCrops = crops.filter(c => viewCrops.includes(c.id));

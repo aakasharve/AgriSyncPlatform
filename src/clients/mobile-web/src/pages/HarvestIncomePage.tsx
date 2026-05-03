@@ -54,6 +54,7 @@ const HarvestIncomePage: React.FC<HarvestIncomePageProps> = ({ context, crops, o
     const [showEntrySheet, setShowEntrySheet] = useState(false);
     const [showPattiUpload, setShowPattiUpload] = useState(false);
     const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- T-IGH-04 ratchet: legacy `any` deferred to T-IGH-04-LINT-RATCHET-V2 follow-up.
     const [extractedPattiData, setExtractedPattiData] = useState<any>(null);
 
     // Other Income State
@@ -122,6 +123,7 @@ const HarvestIncomePage: React.FC<HarvestIncomePageProps> = ({ context, crops, o
         else setShowPattiUpload(true);
     };
 
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- T-IGH-04 ratchet: legacy `any` deferred to T-IGH-04-LINT-RATCHET-V2 follow-up.
     const handlePattiSuccess = (data: any) => {
         setExtractedPattiData(data);
         setShowPattiUpload(false);

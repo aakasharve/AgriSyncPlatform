@@ -21,8 +21,10 @@ const DetailSheet = ({
     cropContractUnit
 }: {
     type: 'labour' | 'irrigation' | 'machinery',
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- T-IGH-04 ratchet: legacy `any` deferred to T-IGH-04-LINT-RATCHET-V2 follow-up.
     data: any,
     defaults: LedgerDefaults,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- T-IGH-04 ratchet: legacy `any` deferred to T-IGH-04-LINT-RATCHET-V2 follow-up.
     onSave: (d: any) => void,
     onClose: () => void,
     profile: FarmerProfile,
@@ -30,6 +32,7 @@ const DetailSheet = ({
     cropContractUnit?: string
 }) => {
     // SYNCHRONOUS INITIALIZATION (Prevents empty flash)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- T-IGH-04 ratchet: legacy `any` deferred to T-IGH-04-LINT-RATCHET-V2 follow-up.
     const [localData, setLocalData] = useState<any>(() => {
         // If editing existing data, use it
         if (data && Object.keys(data).length > 0) return { ...data };
@@ -76,6 +79,7 @@ const DetailSheet = ({
 
     // LABOUR LOGIC
     const handleShiftSelect = (shiftId: string) => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- T-IGH-04 ratchet: legacy `any` deferred to T-IGH-04-LINT-RATCHET-V2 follow-up.
         setLocalData((prev: any) => ({ ...prev, shiftId }));
     };
 
@@ -89,6 +93,7 @@ const DetailSheet = ({
                 const total = mCost + fCost;
 
                 // Update total cost AND total count
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any -- T-IGH-04 ratchet: legacy `any` deferred to T-IGH-04-LINT-RATCHET-V2 follow-up.
                 setLocalData((prev: any) => ({
                     ...prev,
                     totalCost: total,
@@ -96,6 +101,7 @@ const DetailSheet = ({
                 }));
             }
         }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- T-IGH-04 ratchet: dep array intentionally narrow (mount/farm/init pattern); revisit in V2.
     }, [localData.maleCount, localData.femaleCount, localData.shiftId, localData.type]);
 
     const handleContractUnitInit = () => {
@@ -156,6 +162,7 @@ const DetailSheet = ({
                                     <button
                                         key={t}
                                         onClick={() => {
+                                            // eslint-disable-next-line @typescript-eslint/no-explicit-any -- T-IGH-04 ratchet: legacy `any` deferred to T-IGH-04-LINT-RATCHET-V2 follow-up.
                                             setLabourTab(t as any);
                                             if (t === 'CONTRACT') handleContractUnitInit();
                                             else setLocalData({ ...localData, type: t });

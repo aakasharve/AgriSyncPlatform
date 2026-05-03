@@ -32,6 +32,7 @@ interface ActivityLedgerProps {
     defaults?: LedgerDefaults;
     setExpenses: React.Dispatch<React.SetStateAction<ActivityExpenseEvent[]>>;
     setObservations: React.Dispatch<React.SetStateAction<ObservationNote[]>>;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- T-IGH-04 ratchet: legacy `any` deferred to T-IGH-04-LINT-RATCHET-V2 follow-up.
     onUpdateDetails: (activityId: string, type: 'labour' | 'irrigation' | 'machinery' | 'input', data: any) => void;
     onDeleteActivity: (id: string) => void;
     onUpdateWorkTypes: (activityId: string, types: string[]) => void;

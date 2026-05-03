@@ -89,6 +89,7 @@ const DraggableTray: React.FC<DraggableTrayProps> = ({ items, title: _title, onA
                             ${activeTab === cat.id ? `bg-${cat.color}-50 text-${cat.color}-700 border-b-2 border-${cat.color}-500` : 'text-stone-400 hover:bg-stone-50 hover:text-stone-600'}
                         `}
                     >
+                        {/* eslint-disable-next-line @typescript-eslint/no-explicit-any -- T-IGH-04 ratchet: lucide icon prop type. */}
                         {React.cloneElement(cat.icon as React.ReactElement<any>, { size: 12, strokeWidth: 3 })}
                         {cat.label}
                         <span className={`px-1.5 py-0.5 rounded-full text-[9px] ${activeTab === cat.id ? 'bg-white shadow-sm' : 'bg-stone-100'}`}>

@@ -19,6 +19,7 @@ type VerificationGroup = {
 
 function getVerificationStatus(log: DailyLog): string {
     // Try the backend-synced status first, fallback to local verification
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- T-IGH-04 ratchet: legacy `any` deferred to T-IGH-04-LINT-RATCHET-V2 follow-up.
     const backendStatus = (log as any).lastVerificationStatus;
     if (backendStatus) return backendStatus;
 

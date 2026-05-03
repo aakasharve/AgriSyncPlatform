@@ -22,6 +22,7 @@ const WorkDetailSheet = ({
     workTypes: string[],
     onSave: (types: string[], issue?: BucketIssue) => void,
     onClose: () => void,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- T-IGH-04 ratchet: legacy `any` deferred to T-IGH-04-LINT-RATCHET-V2 follow-up.
     availableActivities?: any[], // WorkflowStep[] technically
     sourceText?: string,
     systemInterpretation?: string,

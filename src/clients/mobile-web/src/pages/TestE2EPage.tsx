@@ -55,6 +55,7 @@ const TestE2EPage: React.FC = () => {
 
             setStatus('Please use the main UI to record a log. This page monitors it.');
 
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- T-IGH-04 ratchet: legacy `any` deferred to T-IGH-04-LINT-RATCHET-V2 follow-up.
         } catch (e: any) {
             setStatus(`Error: ${e.message}`);
         }
@@ -72,6 +73,7 @@ const TestE2EPage: React.FC = () => {
         try {
             await handleVerifyLog(latestLog.id, LogVerificationStatus.APPROVED);
             setStatus(`Log ${latestLog.id} Verified! Check Console for Audit Port output.`);
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- T-IGH-04 ratchet: legacy `any` deferred to T-IGH-04-LINT-RATCHET-V2 follow-up.
         } catch (e: any) {
             setStatus(`Verification Failed: ${e.message}`);
         }

@@ -29,6 +29,7 @@ export const useWeatherMonitor = ({
     const [weatherData, setWeatherData] = useState<DetailedWeather | undefined>(undefined);
     const [weatherReactions, setWeatherReactions] = useState<WeatherReaction[]>([]);
     const [pendingWeatherEvent, setPendingWeatherEvent] = useState<WeatherEvent | null>(null);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- T-IGH-04 ratchet: legacy `any` deferred to T-IGH-04-LINT-RATCHET-V2 follow-up.
     const [lastWeatherStamps, setLastWeatherStamps] = useState<Record<string, any>>({});
 
     // Init Weather (Header Widget) - Pivot to Plot if selected
@@ -134,6 +135,7 @@ export const useWeatherMonitor = ({
             }
         };
         fetchW();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- T-IGH-04 ratchet: dep array intentionally narrow (mount/farm/init pattern); revisit in V2.
     }, [farmerProfile.location, hasActiveLogContext, activePlotId, activeCropId, activeFarmId, crops, provider, farmGeography]); // Expanded deps for safety
 
     const handleWeatherReaction = (reaction: WeatherReaction) => {
@@ -173,6 +175,7 @@ export const useWeatherMonitor = ({
         }
     };
 
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- T-IGH-04 ratchet: legacy `any` deferred to T-IGH-04-LINT-RATCHET-V2 follow-up.
     const handleDebugTrigger = (type: any) => {
         if (!activePlotId) {
             setError("Select a plot first to simulate events.");

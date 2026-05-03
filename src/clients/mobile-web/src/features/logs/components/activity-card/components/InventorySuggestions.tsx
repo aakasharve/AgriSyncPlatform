@@ -7,6 +7,7 @@ import { useState, useEffect } from 'react';
 import { procurementRepository } from '../../../../../services/procurementRepository';
 
 const InventorySuggestions = ({ query, onSelect }: { query: string, onSelect: (item: { name: string, expenseId: string, itemId: string }) => void }) => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- T-IGH-04 ratchet: legacy `any` deferred to T-IGH-04-LINT-RATCHET-V2 follow-up.
     const [matches, setMatches] = useState<any[]>([]);
 
     useEffect(() => {
@@ -16,6 +17,7 @@ const InventorySuggestions = ({ query, onSelect }: { query: string, onSelect: (i
         }
         const expenses = procurementRepository.getExpenses();
         // Flatten to items
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- T-IGH-04 ratchet: legacy `any` deferred to T-IGH-04-LINT-RATCHET-V2 follow-up.
         const allItems: any[] = [];
         expenses.forEach(exp => {
             exp.lineItems.forEach(li => {

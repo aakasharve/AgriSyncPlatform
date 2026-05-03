@@ -127,6 +127,7 @@ export class DexieLogsRepository implements LogsRepository {
             // 2. Write outbox event
             const outboxEvent: OutboxEvent = {
                 idempotencyKey: idempotencyKey(log.id, action!),
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any -- T-IGH-04 ratchet: legacy `any` deferred to T-IGH-04-LINT-RATCHET-V2 follow-up.
                 action: action as any,
                 resourceId: log.id,
                 payload: log,

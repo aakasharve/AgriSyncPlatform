@@ -15,6 +15,7 @@ export interface LogContext {
     correlationId?: string;
     action?: string;
     component?: string;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- T-IGH-04 ratchet: legacy `any` deferred to T-IGH-04-LINT-RATCHET-V2 follow-up.
     [key: string]: any;
 }
 

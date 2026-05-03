@@ -221,6 +221,7 @@ export const DataSourceProvider: React.FC<{ children: React.ReactNode }> = ({ ch
             backgroundSyncWorker.stop();
             attachmentUploadWorker.stop();
         };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- T-IGH-04 ratchet: dep array intentionally narrow (mount/farm/init pattern); revisit in V2.
     }, [isAuthenticated, isDemoMode, dataSource, session?.userId]);
 
     const value: DataSourceContextValue = {

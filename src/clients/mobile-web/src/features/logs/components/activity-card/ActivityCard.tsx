@@ -716,12 +716,14 @@ const ActivityCard: React.FC<ActivityCardProps> = ({
             ) : activeSheet && (
 
                 <DetailSheet
+                    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- T-IGH-04 ratchet: legacy `any` deferred to T-IGH-04-LINT-RATCHET-V2 follow-up.
                     type={activeSheet as any}
                     data={linkedData[activeSheet as keyof typeof linkedData]}
                     defaults={defaults}
                     profile={profile}
                     currentPlot={currentPlot}
                     cropContractUnit={cropContractUnit}
+                    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- T-IGH-04 ratchet: legacy `any` deferred to T-IGH-04-LINT-RATCHET-V2 follow-up.
                     onSave={(d) => onUpdateDetails(activeSheet as any, d)}
                     onClose={() => setActiveSheet(null)}
                 />

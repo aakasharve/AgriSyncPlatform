@@ -4,6 +4,7 @@ import SathiReadbackCard from '../../../sathi/components/SathiReadbackCard';
 import Button from '../../../../shared/components/ui/Button';
 
 interface Step4Props {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- T-IGH-04 ratchet: legacy `any` deferred to T-IGH-04-LINT-RATCHET-V2 follow-up.
     summaryData: any[]; // Array of collected data items
     targetLabels: string[];
     onSubmit: () => void;

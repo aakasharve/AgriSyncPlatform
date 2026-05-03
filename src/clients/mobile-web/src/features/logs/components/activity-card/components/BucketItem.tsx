@@ -121,6 +121,7 @@ const BucketItem = ({ icon, label, sublabel, filled, theme = 'slate', onClick, s
                         ${filled ? `${t.iconBg} ${t.iconColor} shadow-sm ring-2 ring-white` : 'bg-slate-100 text-slate-400'}
                     `}
                 >
+                    {/* eslint-disable-next-line @typescript-eslint/no-explicit-any -- T-IGH-04 ratchet: lucide icon prop type. */}
                     {React.cloneElement(icon as React.ReactElement<any>, { size: 24, strokeWidth: filled ? 2.5 : 2 })}
                 </div>
 

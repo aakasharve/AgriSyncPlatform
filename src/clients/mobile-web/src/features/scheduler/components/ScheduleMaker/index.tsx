@@ -11,7 +11,9 @@ import { getDateKey } from '../../../../core/domain/services/DateKeyService';
 
 interface ScheduleMakerProps {
     crops: CropProfile[];
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- T-IGH-04 ratchet: legacy `any` deferred to T-IGH-04-LINT-RATCHET-V2 follow-up.
     initialData?: any;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- T-IGH-04 ratchet: legacy `any` deferred to T-IGH-04-LINT-RATCHET-V2 follow-up.
     onSave: (schedule: any) => void;
     onCancel: () => void;
     userResources: ResourceItem[];
@@ -41,6 +43,7 @@ const ScheduleMaker: React.FC<ScheduleMakerProps> = ({ crops, onSave, onCancel: 
     // Calculate days elapsed for Contextual UI in Step 3
     const daysSincePlantation = getDaysSinceStart(draftSchedule.plantationDate);
 
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- T-IGH-04 ratchet: legacy `any` deferred to T-IGH-04-LINT-RATCHET-V2 follow-up.
     const handleUpdate = (field: string, value: any) => {
         setDraftSchedule(prev => ({ ...prev, [field]: value }));
         // If updating section via 'section' field
@@ -324,9 +327,12 @@ const ScheduleMaker: React.FC<ScheduleMakerProps> = ({ crops, onSave, onCancel: 
 };
 
 // Wrapper for Step 1 to match Card Style
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- T-IGH-04 ratchet: legacy `any` deferred to T-IGH-04-LINT-RATCHET-V2 follow-up.
 const Step1_Wrapper: React.FC<any> = ({ data, isActive, onExpand, onUpdate, crops }) => {
     if (!isActive) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- T-IGH-04 ratchet: legacy `any` deferred to T-IGH-04-LINT-RATCHET-V2 follow-up.
         const selectedCrop = crops.find((c: any) => c.id === data.cropId);
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- T-IGH-04 ratchet: legacy `any` deferred to T-IGH-04-LINT-RATCHET-V2 follow-up.
         const selectedPlot = selectedCrop?.plots.find((p: any) => p.id === data.plotId);
 
         return (

@@ -7,6 +7,7 @@ export const getCropTheme = (colorString?: string) => {
     // Extract base color name from 'bg-{color}-500' string if present
     const baseColor = colorString?.split('-')[1] || 'indigo';
 
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- T-IGH-04 ratchet: legacy `any` deferred to T-IGH-04-LINT-RATCHET-V2 follow-up.
     const themes: Record<string, any> = {
         indigo: {
             border: 'border-indigo-500',

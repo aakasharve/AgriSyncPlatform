@@ -4,7 +4,9 @@ import DraggableTray from '../DraggableTray';
 import { idGenerator } from '../../../../../core/domain/services/IdGenerator';
 
 interface Step2Props {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- T-IGH-04 ratchet: legacy `any` deferred to T-IGH-04-LINT-RATCHET-V2 follow-up.
     data: any;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- T-IGH-04 ratchet: legacy `any` deferred to T-IGH-04-LINT-RATCHET-V2 follow-up.
     onUpdate: (field: string, value: any) => void;
     isActive: boolean;
     onExpand: () => void;
@@ -29,12 +31,14 @@ const Step2_LandPrep: React.FC<Step2Props> = ({ data, onUpdate, isActive, onExpa
         onUpdate('landPrepDuration', newVal);
     };
 
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- T-IGH-04 ratchet: legacy `any` deferred to T-IGH-04-LINT-RATCHET-V2 follow-up.
     const handleAddActivity = (item: any) => {
         const newActivity = { ...item, id: idGenerator.generate(), notes: '' };
         onUpdate('prepActivities', [...activities, newActivity]);
     };
 
     const handleRemoveActivity = (id: string) => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- T-IGH-04 ratchet: legacy `any` deferred to T-IGH-04-LINT-RATCHET-V2 follow-up.
         onUpdate('prepActivities', activities.filter((a: any) => a.id !== id));
     };
 
@@ -99,6 +103,7 @@ const Step2_LandPrep: React.FC<Step2Props> = ({ data, onUpdate, isActive, onExpa
                         </div>
                     )}
 
+                    {/* eslint-disable-next-line @typescript-eslint/no-explicit-any -- T-IGH-04 ratchet: prep activity shape varies. */}
                     {activities.map((act: any, idx: number) => (
                         <div key={act.id} className="relative group">
                             {/* Node Dot */}

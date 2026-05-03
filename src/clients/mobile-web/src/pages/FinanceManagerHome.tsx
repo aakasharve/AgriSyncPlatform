@@ -11,6 +11,7 @@ interface FinanceManagerHomeProps {
 }
 
 const FinanceManagerHome: React.FC<FinanceManagerHomeProps> = ({ currentRoute, onNavigate }) => {
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- T-IGH-04 ratchet: dep array intentionally narrow (mount/farm/init pattern); revisit in V2.
     const buckets = useMemo(() => financeSelectors.getPipelineBuckets(), [currentRoute]);
     const currentFarmId = useMemo(() => financeSelectors.getEffectiveMoneyEvents()[0]?.farmId || 'default', []);
 

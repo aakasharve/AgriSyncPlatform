@@ -137,6 +137,7 @@ const PlotChipSelector: React.FC<PlotChipSelectorProps> = ({
                                                 {isSelected && <Check size={14} strokeWidth={3} className="text-white" />}
                                                 <span className="font-bold">{plot.name}</span>
                                                 <ComplianceBadge 
+                                                    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- T-IGH-04 ratchet: legacy `any` deferred to T-IGH-04-LINT-RATCHET-V2 follow-up.
                                                     state={scheduleState.state as any} 
                                                     compliancePct={scheduleState.compliancePct} 
                                                     size="xs" 

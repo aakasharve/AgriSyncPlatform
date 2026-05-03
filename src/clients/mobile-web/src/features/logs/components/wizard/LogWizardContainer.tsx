@@ -33,6 +33,7 @@ const LogWizardContainer: React.FC<LogWizardContainerProps> = ({ isOpen, onClose
 
     // Step 3 Data (Iterating through buckets)
     const [currentBucketIndex, setCurrentBucketIndex] = useState<number>(0);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- T-IGH-04 ratchet: legacy `any` deferred to T-IGH-04-LINT-RATCHET-V2 follow-up.
     const [collectedData, setCollectedData] = useState<Record<string, any>>({}); // Map bucketId -> data
 
     if (!isOpen) return null;
@@ -63,6 +64,7 @@ const LogWizardContainer: React.FC<LogWizardContainerProps> = ({ isOpen, onClose
         setPhase(3);
     };
 
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- T-IGH-04 ratchet: legacy `any` deferred to T-IGH-04-LINT-RATCHET-V2 follow-up.
     const handleDetailsNext = (data: any) => {
         const currentBucket = selectedBuckets[currentBucketIndex];
         setCollectedData(prev => ({
@@ -104,6 +106,7 @@ const LogWizardContainer: React.FC<LogWizardContainerProps> = ({ isOpen, onClose
     const getSummaryData = () => {
         return selectedBuckets.map(b => {
             const data = collectedData[b];
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any -- T-IGH-04 ratchet: legacy `any` deferred to T-IGH-04-LINT-RATCHET-V2 follow-up.
             let items: any[] = [];
 
             // MOCKED MAPPING based on Step3 mock

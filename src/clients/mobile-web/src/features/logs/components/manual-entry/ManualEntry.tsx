@@ -326,6 +326,7 @@ const ManualEntry: React.FC<ManualEntryProps> = ({ context, crops, defaults, pro
         setCropActivities(cropActivities.map(t => t.id === id ? { ...t, title: newName } : t));
     };
 
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- T-IGH-04 ratchet: legacy `any` deferred to T-IGH-04-LINT-RATCHET-V2 follow-up.
     const updateDetails = (activityId: string, type: 'labour' | 'irrigation' | 'machinery' | 'input', data: any) => {
         if (type === 'labour') setLabourMap({ ...labourMap, [activityId]: { ...data, linkedActivityId: activityId } });
         if (type === 'irrigation') setIrrigationMap({ ...irrigationMap, [activityId]: { ...data, linkedActivityId: activityId } });
@@ -359,6 +360,7 @@ const ManualEntry: React.FC<ManualEntryProps> = ({ context, crops, defaults, pro
         const allCosts = [
             ...finalLabour.map(l => l.totalCost || 0),
             ...finalMachinery.map(m => m.rentalCost || 0),
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any -- T-IGH-04 ratchet: legacy `any` deferred to T-IGH-04-LINT-RATCHET-V2 follow-up.
             ...finalInputs.map(i => (i as any).cost || 0),
             ...expenses.map(e => e.totalAmount || 0)
         ];
@@ -493,9 +495,13 @@ const ManualEntry: React.FC<ManualEntryProps> = ({ context, crops, defaults, pro
                 machinery: acc.machinery + (next.machinery || 0),
                 disturbance: acc.disturbance + (next.disturbance || 0),
                 observations: acc.observations + (next.observations || 0),
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any -- T-IGH-04 ratchet: legacy `any` deferred to T-IGH-04-LINT-RATCHET-V2 follow-up.
                 activityExpenses: (acc as any).activityExpenses + ((next as any).activityExpenses || 0),
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any -- T-IGH-04 ratchet: legacy `any` deferred to T-IGH-04-LINT-RATCHET-V2 follow-up.
                 reminders: (acc as any).reminders + ((next as any).reminders || 0),
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any -- T-IGH-04 ratchet: legacy `any` deferred to T-IGH-04-LINT-RATCHET-V2 follow-up.
                 harvest: (acc as any).harvest + ((next as any).harvest || 0)
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any -- T-IGH-04 ratchet: legacy `any` deferred to T-IGH-04-LINT-RATCHET-V2 follow-up.
             } as any;
         }, {
             cropActivities: 0,
@@ -508,6 +514,7 @@ const ManualEntry: React.FC<ManualEntryProps> = ({ context, crops, defaults, pro
             activityExpenses: 0,
             reminders: 0,
             harvest: 0
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- T-IGH-04 ratchet: legacy `any` deferred to T-IGH-04-LINT-RATCHET-V2 follow-up.
         } as any)
         : {
             cropActivities: 0,
