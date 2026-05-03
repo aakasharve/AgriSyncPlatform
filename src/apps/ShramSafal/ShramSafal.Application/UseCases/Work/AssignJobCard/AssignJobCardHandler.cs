@@ -1,4 +1,5 @@
 using AgriSync.BuildingBlocks.Abstractions;
+using AgriSync.BuildingBlocks.Application;
 using AgriSync.BuildingBlocks.Results;
 using AgriSync.SharedKernel.Contracts.Roles;
 using ShramSafal.Application.Ports;
@@ -15,6 +16,7 @@ namespace ShramSafal.Application.UseCases.Work.AssignJobCard;
 public sealed class AssignJobCardHandler(
     IShramSafalRepository repository,
     IClock clock)
+    : IHandler<AssignJobCardCommand, AssignJobCardResult>
 {
     public async Task<Result<AssignJobCardResult>> HandleAsync(
         AssignJobCardCommand command,

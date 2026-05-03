@@ -1,4 +1,5 @@
 using AgriSync.BuildingBlocks.Abstractions;
+using AgriSync.BuildingBlocks.Application;
 using AgriSync.BuildingBlocks.Results;
 using AgriSync.SharedKernel.Contracts.Ids;
 using ShramSafal.Application.Contracts.Dtos;
@@ -13,6 +14,7 @@ public sealed class GeneratePlanFromTemplateHandler(
     IIdGenerator idGenerator,
     IClock clock,
     ScheduleTestDueDatesHandler? scheduleTestDueDatesHandler = null)
+    : IHandler<GeneratePlanFromTemplateCommand, PlanGenerationResultDto>
 {
     public async Task<Result<PlanGenerationResultDto>> HandleAsync(
         GeneratePlanFromTemplateCommand command,

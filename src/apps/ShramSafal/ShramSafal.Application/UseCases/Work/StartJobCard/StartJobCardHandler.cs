@@ -1,4 +1,5 @@
 using AgriSync.BuildingBlocks.Abstractions;
+using AgriSync.BuildingBlocks.Application;
 using AgriSync.BuildingBlocks.Results;
 using ShramSafal.Application.Ports;
 using ShramSafal.Domain.Audit;
@@ -14,6 +15,7 @@ namespace ShramSafal.Application.UseCases.Work.StartJobCard;
 public sealed class StartJobCardHandler(
     IShramSafalRepository repository,
     IClock clock)
+    : IHandler<StartJobCardCommand, StartJobCardResult>
 {
     public async Task<Result<StartJobCardResult>> HandleAsync(
         StartJobCardCommand command,

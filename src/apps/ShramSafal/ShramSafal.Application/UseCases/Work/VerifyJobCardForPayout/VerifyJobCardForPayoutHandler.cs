@@ -1,4 +1,5 @@
 using AgriSync.BuildingBlocks.Abstractions;
+using AgriSync.BuildingBlocks.Application;
 using AgriSync.BuildingBlocks.Results;
 using AgriSync.SharedKernel.Contracts.Roles;
 using ShramSafal.Application.Ports;
@@ -16,6 +17,7 @@ namespace ShramSafal.Application.UseCases.Work.VerifyJobCardForPayout;
 public sealed class VerifyJobCardForPayoutHandler(
     IShramSafalRepository repository,
     IClock clock)
+    : IHandler<VerifyJobCardForPayoutCommand, VerifyJobCardForPayoutResult>
 {
     public async Task<Result<VerifyJobCardForPayoutResult>> HandleAsync(
         VerifyJobCardForPayoutCommand command,

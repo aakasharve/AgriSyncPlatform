@@ -1,4 +1,5 @@
 using AgriSync.BuildingBlocks.Abstractions;
+using AgriSync.BuildingBlocks.Application;
 using AgriSync.BuildingBlocks.Results;
 using AgriSync.SharedKernel.Contracts.Ids;
 using ShramSafal.Application.Contracts.Dtos;
@@ -12,6 +13,7 @@ public sealed class CreateAttachmentHandler(
     IShramSafalRepository repository,
     IIdGenerator idGenerator,
     IClock clock)
+    : IHandler<CreateAttachmentCommand, AttachmentDto>
 {
     public async Task<Result<AttachmentDto>> HandleAsync(CreateAttachmentCommand command, CancellationToken ct = default)
     {

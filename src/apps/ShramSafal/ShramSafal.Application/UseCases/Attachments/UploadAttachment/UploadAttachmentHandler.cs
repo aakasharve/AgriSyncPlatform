@@ -1,5 +1,6 @@
 using System.Globalization;
 using AgriSync.BuildingBlocks.Abstractions;
+using AgriSync.BuildingBlocks.Application;
 using AgriSync.BuildingBlocks.Results;
 using ShramSafal.Application.Contracts.Dtos;
 using ShramSafal.Application.Ports;
@@ -14,6 +15,7 @@ public sealed class UploadAttachmentHandler(
     IShramSafalRepository repository,
     IAttachmentStorageService storageService,
     IClock clock)
+    : IHandler<UploadAttachmentCommand, AttachmentDto>
 {
     public async Task<Result<AttachmentDto>> HandleAsync(UploadAttachmentCommand command, CancellationToken ct = default)
     {

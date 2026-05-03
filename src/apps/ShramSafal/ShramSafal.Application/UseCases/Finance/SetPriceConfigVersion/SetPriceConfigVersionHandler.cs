@@ -1,4 +1,5 @@
 using AgriSync.BuildingBlocks.Abstractions;
+using AgriSync.BuildingBlocks.Application;
 using AgriSync.BuildingBlocks.Results;
 using ShramSafal.Application.Contracts.Dtos;
 using ShramSafal.Application.Ports;
@@ -11,6 +12,7 @@ public sealed class SetPriceConfigVersionHandler(
     IShramSafalRepository repository,
     IIdGenerator idGenerator,
     IClock clock)
+    : IHandler<SetPriceConfigVersionCommand, PriceConfigDto>
 {
     public async Task<Result<PriceConfigDto>> HandleAsync(SetPriceConfigVersionCommand command, CancellationToken ct = default)
     {
