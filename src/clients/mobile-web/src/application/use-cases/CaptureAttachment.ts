@@ -12,6 +12,7 @@ import {
 } from '../../infrastructure/device/DeviceFilesService';
 import { getDatabase, type AttachmentRecord, type UploadQueueItem } from '../../infrastructure/storage/DexieDatabase';
 import { enqueueCreateAttachmentMutation } from '../../infrastructure/sync/AttachmentMutationQueue';
+import { emitProofAttached } from '../../core/telemetry/eventEmitters';
 
 export type AttachmentCaptureSource = 'camera' | 'gallery' | 'file';
 
@@ -188,6 +189,24 @@ export async function captureAttachment(
     } catch (error) {
         console.warn('[CaptureAttachment] Failed to queue create_attachment mutation; upload worker will retry.', error);
     }
+
+    // DWC v2 §2.8 — emit proof.attached. Plan §2.8 places this inside
+    // features/attachments/<attach handler>; the actual attach handler
+    // lives here (application/use-cases) because there is no thin
+    // hook wrapper in features/attachments. The emit is deferred to the
+    // end of the use case so it only fires after the local Dexie write
+    // succeeded. The Zod schema requires logId to be a UUID; if the
+    // attachment is linked to a non-UUID entity (rare seed/preview path)
+    // safeParse will silently drop the event at the emitter.
+    const photoLikeMime = captured.mimeType.startsWith('image/');
+    const audioLikeMime = captured.mimeType.startsWith('audio/');
+    const proofType = audioLikeMime ? 'voice' : photoLikeMime ? 'photo' : 'gps';
+    emitProofAttached({
+        farmId,
+        logId: linkedEntityId,
+        type: proofType,
+        sizeBytes: captured.sizeBytes,
+    });
 
     return attachmentRecord;
 }

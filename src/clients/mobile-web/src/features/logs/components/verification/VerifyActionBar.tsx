@@ -1,6 +1,19 @@
 import React, { useState } from 'react';
 import { Check, X, AlertTriangle, Clock, RotateCcw } from 'lucide-react';
 import VerificationReasonInput from './VerificationReasonInput';
+import { useFarmContext } from '../../../../core/session/FarmContext';
+import { emitClosureVerified } from '../../../../core/telemetry/eventEmitters';
+
+// DWC v2 §2.8 — map FSM target states to the analytics-vocabulary
+// `closure.verified.status` enum (Confirmed | Verified | Disputed). Other
+// FSM transitions (correction_pending) do NOT emit closure.verified —
+// they are mid-flight states, not closure events.
+function toClosureStatus(target: string): 'Confirmed' | 'Verified' | 'Disputed' | null {
+    if (target === 'verified') return 'Verified';
+    if (target === 'confirmed') return 'Confirmed';
+    if (target === 'disputed') return 'Disputed';
+    return null;
+}
 
 interface AllowedTransition {
     targetStatus: string;
@@ -14,6 +27,10 @@ interface VerifyActionBarProps {
     allowedTransitions?: AllowedTransition[];
     onTransition: (logId: string, targetStatus: string, reason?: string) => void;
     isProcessing?: boolean;
+    // DWC v2 §2.8 #8 — verifier identity for closure.verified event.
+    // Optional so existing consumers don't break; emit only fires when
+    // both farmId (from FarmContext) and verifierId resolve.
+    verifierId?: string;
 }
 
 const TRANSITION_CONFIG: Record<string, { label: string; Icon: React.FC<{ size?: number; strokeWidth?: number }>; bgClass: string; textClass: string }> = {
@@ -51,9 +68,17 @@ const VerifyActionBar: React.FC<VerifyActionBarProps> = ({
     allowedTransitions,
     onTransition,
     isProcessing = false,
+    verifierId,
 }) => {
     const [selectedTransition, setSelectedTransition] = useState<string | null>(null);
     const [reason, setReason] = useState('');
+    const { currentFarmId } = useFarmContext();
+
+    const emitVerifiedIfApplicable = (targetStatus: string) => {
+        const status = toClosureStatus(targetStatus);
+        if (!status || !currentFarmId || !verifierId) return;
+        emitClosureVerified({ farmId: currentFarmId, logId, verifierId, status });
+    };
 
     // Fallback: if no transitions provided, use classic binary approve/reject
     const transitions: AllowedTransition[] = allowedTransitions && allowedTransitions.length > 0
@@ -68,11 +93,13 @@ const VerifyActionBar: React.FC<VerifyActionBarProps> = ({
             setSelectedTransition(targetStatus);
             return;
         }
+        emitVerifiedIfApplicable(targetStatus);
         onTransition(logId, targetStatus);
     };
 
     const handleSubmitWithReason = () => {
         if (!selectedTransition || reason.trim().length === 0) return;
+        emitVerifiedIfApplicable(selectedTransition);
         onTransition(logId, selectedTransition, reason);
         setSelectedTransition(null);
         setReason('');

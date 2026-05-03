@@ -3,6 +3,7 @@ import { useLanguage } from '../../../i18n/LanguageContext';
 import { QuickLogChip } from '../../../shared/components/ui/QuickLogChip';
 import { SchedulePickerModal } from '../../scheduler/components/SchedulePickerModal';
 import { AlertCircle } from 'lucide-react';
+import { emitClosureStarted } from '../../../core/telemetry/eventEmitters';
 
 // --- ICONS (Inline) ---
 const Icons = {
@@ -55,6 +56,17 @@ export const QuickLogSheet: React.FC<QuickLogSheetProps> = ({
     React.useEffect(() => {
         setShowPickerGate(!hasActiveSchedule);
     }, [hasActiveSchedule, isOpen]);
+
+    // DWC v2 §2.8 — emit closure.started when the sheet opens with a known
+    // farmId. The Zod schema requires a UUID farmId, so seed/anonymous
+    // sessions without a real farm context are silently dropped at the
+    // emitter (safeParse fail → console.warn).
+    React.useEffect(() => {
+        if (!isOpen || !farmId) return;
+        // Method is "manual" by default — voice/wizard paths emit their own
+        // closure.submitted with the appropriate method tag.
+        emitClosureStarted({ farmId, method: 'manual', ts: Date.now() });
+    }, [isOpen, farmId]);
 
     const handleClose = () => {
         setIsClosing(true);

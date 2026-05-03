@@ -35,10 +35,19 @@ import UnclearSegmentsList from './components/UnclearSegmentsList';
 import LabourReview from './components/LabourReview';
 import ActivityLedger from './components/ActivityLedger';
 import CostStrip from './components/CostStrip';
+import { emitClosureSubmitted } from '../../../../core/telemetry/eventEmitters';
+import { useFarmContext } from '../../../../core/session/FarmContext';
 
 const ManualEntry: React.FC<ManualEntryProps> = ({ context, crops, defaults, profile, onSubmit, disabled, initialData, provenance, onDataConsumed, todayCountsMap, transcriptEntries = [], todayLogs = [], onLogSelect }) => {
 
-    // --- STATE ---
+    // DWC v2 §2.8 — closure.submitted emit context. The downstream
+    // logCommandService generates the persisted DailyLog.id, so for
+    // new-log saves we synthesize a valid UUID here purely so the analytics
+    // event passes its Zod schema. Edits use the existing selectedLogId.
+    // mountedAtRef is the form-open timestamp used for durationMs.
+    const { currentFarmId } = useFarmContext();
+    const mountedAtRef = React.useRef(Date.now());
+    // Voice-vs-manual is determined by provenance.source at submit time.
     const [cropActivities, setCropActivities] = useState<CropActivityEvent[]>([]);
     const [expenses, setExpenses] = useState<ActivityExpenseEvent[]>([]);
     const [observations, setObservations] = useState<ObservationNote[]>([]); // New Observations State
@@ -414,6 +423,36 @@ const ManualEntry: React.FC<ManualEntryProps> = ({ context, crops, defaults, pro
             });
             void persistAiCorrectionEvents(correctionEvents)
                 .catch(error => console.warn('[AI correction metrics] Failed to persist correction events.', error));
+        }
+
+        // DWC v2 §2.8 — closure.submitted (manual or voice path).
+        // method == 'voice' iff the form was hydrated from a voice draft
+        // (provenance.source === 'ai'); otherwise treated as 'manual'.
+        // fields_used = number of populated buckets at submit time.
+        if (currentFarmId) {
+            const method = provenance?.source === 'ai' ? 'voice' : 'manual';
+            const logIdForEmit = selectedLogId
+                || (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+                    ? crypto.randomUUID()
+                    : null);
+            if (logIdForEmit) {
+                const bucketsTouched =
+                    (cropActivities.length > 0 ? 1 : 0)
+                    + (finalIrrigation.length > 0 ? 1 : 0)
+                    + (finalLabour.length > 0 ? 1 : 0)
+                    + (finalInputs.length > 0 ? 1 : 0)
+                    + (finalMachinery.length > 0 ? 1 : 0)
+                    + (expenses.length > 0 ? 1 : 0)
+                    + (observations.length > 0 ? 1 : 0)
+                    + (plannedTasks.length > 0 ? 1 : 0);
+                emitClosureSubmitted({
+                    farmId: currentFarmId,
+                    logId: logIdForEmit,
+                    method,
+                    durationMs: Math.max(0, Date.now() - mountedAtRef.current),
+                    fields_used: bucketsTouched,
+                });
+            }
         }
 
         onSubmit(userDraft);

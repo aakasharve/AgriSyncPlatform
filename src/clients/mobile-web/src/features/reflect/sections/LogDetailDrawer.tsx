@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
 */
 
-import React from 'react';
+import React, { useEffect } from 'react';
 import {
     Calendar, ChevronRight, ChevronDown, X, Tractor, ArrowRight
 } from 'lucide-react';
@@ -15,6 +15,8 @@ import { generateDayWorkSummary } from '../../analysis/dayWorkSummary';
 import { getDateKey } from '../../../core/domain/services/DateKeyService';
 import { AttachmentList } from '../../attachments';
 import { getPhaseAndDay } from '../../../shared/utils/timelineUtils';
+import { useFarmContext } from '../../../core/session/FarmContext';
+import { emitClosureSummaryViewed } from '../../../core/telemetry/eventEmitters';
 
 interface DetailHeaderInfo {
     cropName: string;
@@ -57,6 +59,22 @@ const LogDetailDrawer: React.FC<LogDetailDrawerProps> = ({
     onClose,
     onEditLog,
 }) => {
+    // DWC v2 §2.8 #7 — emit closure_summary.viewed on drawer open. The
+    // drawer remounts on each open (controlled by parent's selectedLog ||
+    // emptySelection guard), so a mount-time useEffect is the open event.
+    const { currentFarmId } = useFarmContext();
+    useEffect(() => {
+        if (!currentFarmId) return;
+        const dateKey = getDateKey(detailInfo.date);
+        emitClosureSummaryViewed({
+            farmId: currentFarmId,
+            dateKey,
+            logsCount: selectedLog ? 1 : 0,
+            source: 'drawer_open',
+        });
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
+
     return (
         <div className="fixed inset-0 z-50 flex items-end justify-center pb-safe-area sm:items-center">
             {/* Dark background - click to close */}
