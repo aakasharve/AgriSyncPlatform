@@ -27,7 +27,7 @@ public static class AttachmentEndpoints
         group.MapPost("/attachments", async (
             CreateAttachmentRequest request,
             ClaimsPrincipal user,
-            CreateAttachmentHandler handler,
+            AgriSync.BuildingBlocks.Application.IHandler<CreateAttachmentCommand, ShramSafal.Application.Contracts.Dtos.AttachmentDto> handler,
             CancellationToken ct) =>
         {
             if (!EndpointActorContext.TryGetUserId(user, out var actorUserId))
@@ -74,7 +74,7 @@ public static class AttachmentEndpoints
             Guid id,
             IFormFile? file,
             ClaimsPrincipal user,
-            UploadAttachmentHandler handler,
+            AgriSync.BuildingBlocks.Application.IHandler<UploadAttachmentCommand, ShramSafal.Application.Contracts.Dtos.AttachmentDto> handler,
             CancellationToken ct) =>
         {
             if (!EndpointActorContext.TryGetUserId(user, out var actorUserId))

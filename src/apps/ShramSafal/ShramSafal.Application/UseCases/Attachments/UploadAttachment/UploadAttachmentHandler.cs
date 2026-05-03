@@ -1,5 +1,6 @@
 using System.Globalization;
 using AgriSync.BuildingBlocks.Abstractions;
+using AgriSync.BuildingBlocks.Application;
 using AgriSync.BuildingBlocks.Results;
 using ShramSafal.Application.Contracts.Dtos;
 using ShramSafal.Application.Ports;
@@ -10,10 +11,29 @@ using ShramSafal.Domain.Common;
 
 namespace ShramSafal.Application.UseCases.Attachments.UploadAttachment;
 
+/// <summary>
+/// Phase-2 of the attachment two-phase commit. Streams the binary
+/// content into <see cref="IAttachmentStorageService"/>, marks the
+/// reserved row Uploaded, then immediately Finalizes it.
+///
+/// <para>
+/// T-IGH-03-PIPELINE-ROLLOUT (UploadAttachment): caller-shape
+/// validation lives in <see cref="UploadAttachmentValidator"/>;
+/// attachment-existence + farm-membership authorization lives in
+/// <see cref="UploadAttachmentAuthorizer"/>. When this handler is
+/// resolved via the pipeline, both run before the body. The
+/// validator's stream check is presence-only — it does NOT read the
+/// stream (consuming bytes the body needs / blocking on a network
+/// read). The body keeps the AttachmentAlreadyFinalized state guard
+/// and mime-type matching inline because both depend on the loaded
+/// aggregate.
+/// </para>
+/// </summary>
 public sealed class UploadAttachmentHandler(
     IShramSafalRepository repository,
     IAttachmentStorageService storageService,
     IClock clock)
+    : IHandler<UploadAttachmentCommand, AttachmentDto>
 {
     public async Task<Result<AttachmentDto>> HandleAsync(UploadAttachmentCommand command, CancellationToken ct = default)
     {

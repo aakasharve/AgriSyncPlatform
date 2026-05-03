@@ -94,7 +94,17 @@ public sealed class PushSyncBatchHandler(
     // on the sync entry path. No authorizer registered for this command
     // (gap documented in SetPriceConfigVersionValidator XML).
     IHandler<SetPriceConfigVersionCommand, PriceConfigDto> setPriceConfigVersionHandler,
-    CreateAttachmentHandler createAttachmentHandler,
+    // T-IGH-03-PIPELINE-ROLLOUT (CreateAttachment): switched from raw
+    // CreateAttachmentHandler to the pipeline-wrapped IHandler. The
+    // sync pre-flight in HandleCreateAttachmentAsync below runs payload-
+    // shape + IsUserMemberOfFarmAsync BEFORE this pipeline — the
+    // membership pre-check overlaps the authorizer and masks the
+    // canonical Forbidden ordering on sync (same caveat as AddLogTask
+    // / VerifyLog). The HTTP endpoint goes straight through the
+    // pipeline; the validator's caller-shape gate (empty IDs / blank
+    // fileName-mimeType / unknown linkedEntityType) fires there. The
+    // body's link-target existence + cross-farm guard stays inline.
+    IHandler<CreateAttachmentCommand, AttachmentDto> createAttachmentHandler,
     RecordTestCollectedHandler recordTestCollectedHandler,
     RecordTestResultHandler recordTestResultHandler,
     ITestInstanceRepository testInstanceRepository,
