@@ -186,12 +186,12 @@ public sealed class AdminFarmerHealthRepository(AnalyticsDbContext analyticsCont
                     Bucket: r.GetString(3),
                     Flag: r.GetString(2),
                     Pillars: new FarmerHealthPillarsDto(
-                        TriggerFit:       r.IsDBNull(4) ? 0m : r.GetDecimal(4),
+                        TriggerFit: r.IsDBNull(4) ? 0m : r.GetDecimal(4),
                         ActionSimplicity: r.IsDBNull(5) ? 0m : r.GetDecimal(5),
-                        Proof:            r.IsDBNull(6) ? 0m : r.GetDecimal(6),
-                        Reward:           r.IsDBNull(7) ? 0m : r.GetDecimal(7),
-                        Investment:       r.IsDBNull(8) ? 0m : r.GetDecimal(8),
-                        Repeat:           r.IsDBNull(9) ? 0m : r.GetDecimal(9)),
+                        Proof: r.IsDBNull(6) ? 0m : r.GetDecimal(6),
+                        Reward: r.IsDBNull(7) ? 0m : r.GetDecimal(7),
+                        Investment: r.IsDBNull(8) ? 0m : r.GetDecimal(8),
+                        Repeat: r.IsDBNull(9) ? 0m : r.GetDecimal(9)),
                     WeekStart: DateOnly.FromDateTime(r.GetDateTime(0)));
             }
         }
@@ -235,12 +235,12 @@ public sealed class AdminFarmerHealthRepository(AnalyticsDbContext analyticsCont
                     : new FarmerHealthTimelineDto(d, 0, 0, 0, 0, 0, 0);
                 dict[d] = et switch
                 {
-                    "closure.started"          => current with { ClosuresStarted   = current.ClosuresStarted + n },
-                    "closure.submitted"        => current with { ClosuresSubmitted = current.ClosuresSubmitted + n },
-                    "proof.attached"           => current with { ProofAttached     = current.ProofAttached + n },
-                    "closure_summary.viewed"   => current with { SummariesViewed   = current.SummariesViewed + n },
-                    "verification.recorded"    => current with { Verifications     = current.Verifications + n },
-                    "api.error" or "client.error" => current with { Errors          = current.Errors + n },
+                    "closure.started" => current with { ClosuresStarted = current.ClosuresStarted + n },
+                    "closure.submitted" => current with { ClosuresSubmitted = current.ClosuresSubmitted + n },
+                    "proof.attached" => current with { ProofAttached = current.ProofAttached + n },
+                    "closure_summary.viewed" => current with { SummariesViewed = current.SummariesViewed + n },
+                    "verification.recorded" => current with { Verifications = current.Verifications + n },
+                    "api.error" or "client.error" => current with { Errors = current.Errors + n },
                     _ => current
                 };
             }
@@ -283,9 +283,9 @@ public sealed class AdminFarmerHealthRepository(AnalyticsDbContext analyticsCont
             {
                 return new FarmerHealthVerificationCountsDto(
                     Confirmed: (int)r.GetInt64(0),
-                    Verified:  (int)r.GetInt64(1),
-                    Disputed:  (int)r.GetInt64(2),
-                    Pending:   (int)r.GetInt64(3));
+                    Verified: (int)r.GetInt64(1),
+                    Disputed: (int)r.GetInt64(2),
+                    Pending: (int)r.GetInt64(3));
             }
         }
         catch { /* graceful zero-counts */ }
@@ -422,9 +422,9 @@ public sealed class AdminFarmerHealthRepository(AnalyticsDbContext analyticsCont
             if (await r.ReadAsync(ct))
             {
                 return new FarmerHealthAiHealthDto(
-                    VoiceParseSuccessRate14d:   r.IsDBNull(1) ? 1m : r.GetDecimal(1),
+                    VoiceParseSuccessRate14d: r.IsDBNull(1) ? 1m : r.GetDecimal(1),
                     ReceiptParseSuccessRate14d: r.IsDBNull(2) ? 1m : r.GetDecimal(2),
-                    InvocationCount14d:         r.IsDBNull(0) ? 0  : (int)r.GetInt64(0));
+                    InvocationCount14d: r.IsDBNull(0) ? 0 : (int)r.GetInt64(0));
             }
         }
         catch { /* graceful */ }
