@@ -43,6 +43,23 @@ const OfflineConflictPage: React.FC<OfflineConflictPageProps> = ({ onBack }) => 
         }
     };
 
+    const handleEdit = async (mutationId: string) => {
+        setBusyId(mutationId);
+        try {
+            await ConflictResolutionService.edit(mutationId);
+            // Optimistically remove the row — the user is being routed away
+            // to the edit surface; on submit, MutationQueue.replacePayload
+            // resets the row to PENDING and the worker picks it up. If the
+            // user backs out without submitting, refresh() on next mount
+            // restores the row.
+            setItems(prev => prev ? prev.filter(i => i.mutationId !== mutationId) : prev);
+        } catch (err) {
+            setError(err instanceof Error ? err.message : String(err));
+        } finally {
+            setBusyId(null);
+        }
+    };
+
     const handleDiscard = async (mutationId: string) => {
         setBusyId(mutationId);
         try {
@@ -112,7 +129,16 @@ const OfflineConflictPage: React.FC<OfflineConflictPageProps> = ({ onBack }) => 
                     <pre className="mt-2 max-h-24 overflow-hidden text-xs bg-white p-2 rounded">
                         {item.payloadPreview}
                     </pre>
-                    <div className="mt-3 flex gap-2">
+                    <div className="mt-3 flex flex-wrap gap-2">
+                        <button
+                            type="button"
+                            onClick={() => handleEdit(item.mutationId)}
+                            disabled={busyId === item.mutationId}
+                            className="rounded bg-amber-600 px-3 py-1 text-white disabled:opacity-50"
+                            data-testid={`edit-${item.mutationId}`}
+                        >
+                            बदल करा (Edit)
+                        </button>
                         <button
                             type="button"
                             onClick={() => handleRetry(item.mutationId)}

@@ -167,6 +167,56 @@ export class MutationQueue {
     }
 
     /**
+     * T-IGH-04-CONFLICT-EDIT — atomically replace the payload of an existing
+     * mutation queue row (looked up by clientRequestId) and reset its status
+     * to PENDING so the next worker cycle picks it up. Used by the
+     * OfflineConflictPage edit-and-retry flow: the user opens the rejected
+     * mutation in the input surface, edits the data, and re-submits; we
+     * replace the row in-place rather than enqueueing a duplicate.
+     *
+     * Contract:
+     *   - Looks the row up by [deviceId+clientRequestId] using the device's
+     *     current deviceId (matches retry/discard lookup pattern).
+     *   - Validates the new payload via the same PayloadValidator the
+     *     enqueue() path uses; throws if invalid.
+     *   - Resets status to PENDING and clears lastError on success.
+     *   - Returns true if a row was found and updated; false if no row
+     *     matched (caller can treat as a no-op).
+     */
+    async replacePayload(clientRequestId: string, newPayload: unknown): Promise<boolean> {
+        if (!clientRequestId || clientRequestId.trim().length === 0) {
+            throw new Error('clientRequestId is required');
+        }
+
+        const db = getDatabase();
+        const deviceId = getOrCreateDeviceId();
+        const row = await db.mutationQueue
+            .where('[deviceId+clientRequestId]')
+            .equals([deviceId, clientRequestId])
+            .first();
+
+        if (!row || row.id === undefined) {
+            return false;
+        }
+
+        const validation = validatePayload(row.mutationType, newPayload);
+        if (!validation.ok) {
+            throw new Error(
+                `Payload validation failed for ${row.mutationType}: ` +
+                validation.errors.map((e) => `${e.path || '<root>'} ${e.message}`).join('; ')
+            );
+        }
+
+        await db.mutationQueue.update(row.id, {
+            payload: newPayload,
+            status: 'PENDING',
+            updatedAt: systemClock.nowISO(),
+            lastError: undefined,
+        });
+        return true;
+    }
+
+    /**
      * Returns the rows that need user attention (durable rejections).
      * Used by ConflictResolutionService.list().
      */
