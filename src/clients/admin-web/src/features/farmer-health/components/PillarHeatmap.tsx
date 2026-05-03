@@ -79,10 +79,10 @@ export function PillarHeatmap({ rows }: PillarHeatmapProps) {
         <table className="mt-2 w-full font-mono text-[11px] tabular-nums">
           <thead>
             <tr className="text-left text-text-muted">
-              <th className="py-1 pr-3">Pillar</th>
-              <th className="py-1 pr-3 text-right">Avg</th>
-              <th className="py-1 pr-3 text-right">Max</th>
-              <th className="py-1 pr-3 text-right">Failing</th>
+              <th scope="col" className="py-1 pr-3">Pillar</th>
+              <th scope="col" className="py-1 pr-3 text-right">Avg</th>
+              <th scope="col" className="py-1 pr-3 text-right">Max</th>
+              <th scope="col" className="py-1 pr-3 text-right">Failing</th>
             </tr>
           </thead>
           <tbody>

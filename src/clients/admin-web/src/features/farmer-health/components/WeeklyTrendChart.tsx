@@ -93,9 +93,9 @@ export function WeeklyTrendChart({ weeks }: WeeklyTrendChartProps) {
         <table className="mt-2 w-full font-mono text-[11px] tabular-nums">
           <thead>
             <tr className="text-left text-text-muted">
-              <th className="py-1 pr-3">Week</th>
-              <th className="py-1 pr-3 text-right">Avg score</th>
-              <th className="py-1 pr-3 text-right">Farms</th>
+              <th scope="col" className="py-1 pr-3">Week</th>
+              <th scope="col" className="py-1 pr-3 text-right">Avg score</th>
+              <th scope="col" className="py-1 pr-3 text-right">Farms</th>
             </tr>
           </thead>
           <tbody>
