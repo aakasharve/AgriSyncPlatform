@@ -54,11 +54,16 @@ public static class JobCardEndpoints
         .WithName("CreateJobCard");
 
         // POST /job-cards/{id}/assign → 200
+        // T-IGH-03-PIPELINE-ROLLOUT (AssignJobCard): resolves the
+        // pipeline-wrapped IHandler so the canonical
+        // InvalidCommand → JobCardNotFound → Forbidden →
+        // JobCardRoleNotAllowed ordering runs before the body's
+        // worker-membership + state-machine checks.
         group.MapPost("/job-cards/{id:guid}/assign", async (
             Guid id,
             AssignJobCardRequest request,
             ClaimsPrincipal user,
-            AssignJobCardHandler handler,
+            IHandler<AssignJobCardCommand, AssignJobCardResult> handler,
             CancellationToken ct) =>
         {
             if (!EndpointActorContext.TryGetUserId(user, out var actorUserId))
