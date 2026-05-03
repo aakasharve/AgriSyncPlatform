@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+# post-merge — AgriSync Cofounder OS
+
+set -uo pipefail
+
+REPO_ROOT="$(git rev-parse --show-toplevel)"
+SCRIPT="$REPO_ROOT/_COFOUNDER/scripts/touch-shipped.sh"
+
+[ -f "$SCRIPT" ] && bash "$SCRIPT" "$@" 2>/dev/null || true
+exit 0

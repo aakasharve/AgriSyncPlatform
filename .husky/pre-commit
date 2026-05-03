@@ -1,0 +1,47 @@
+#!/usr/bin/env bash
+# pre-commit — AgriSync Cofounder OS
+set -euo pipefail
+
+REPO_ROOT="$(git rev-parse --show-toplevel)"
+
+# 1. Block Class1.cs
+if git diff --cached --name-only | grep -q 'Class1\.cs$'; then
+  echo "[pre-commit] ERROR: Class1.cs placeholder found in staged files. Remove before committing." >&2
+  exit 1
+fi
+
+# 2. dotnet format on staged C# files
+STAGED_CS=$(git diff --cached --name-only --diff-filter=d | grep '\.cs$' || true)
+if [ -n "$STAGED_CS" ]; then
+  echo "[pre-commit] Running dotnet format on staged C# files..."
+  # shellcheck disable=SC2086
+  if ! dotnet format src/AgriSync.sln --verify-no-changes --include $STAGED_CS 2>/dev/null; then
+    echo "[pre-commit] ERROR: dotnet format issues found. Run 'dotnet format src/AgriSync.sln' then re-stage." >&2
+    exit 1
+  fi
+fi
+
+# 3. gitleaks (if installed)
+if command -v gitleaks &>/dev/null; then
+  if ! gitleaks protect --staged --redact -v 2>/dev/null; then
+    echo "[pre-commit] ERROR: gitleaks detected a potential secret. Remove it, rotate, then commit." >&2
+    exit 1
+  fi
+else
+  echo "[pre-commit:warn] gitleaks not installed — skipping secret scan. See https://github.com/gitleaks/gitleaks" >&2
+fi
+
+# 4. ESLint on staged TS files (mobile-web only)
+STAGED_TS=$(git diff --cached --name-only --diff-filter=d | grep -E 'src/clients/mobile-web/.*\.(ts|tsx)$' || true)
+if [ -n "$STAGED_TS" ]; then
+  cd "$REPO_ROOT/src/clients/mobile-web"
+  # shellcheck disable=SC2086
+  if ! npx eslint --max-warnings 0 $STAGED_TS 2>/dev/null; then
+    echo "[pre-commit] ERROR: ESLint errors in staged files. Fix before committing." >&2
+    exit 1
+  fi
+  cd "$REPO_ROOT"
+fi
+
+echo "[pre-commit] All checks passed."
+exit 0

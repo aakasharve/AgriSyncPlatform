@@ -1,0 +1,8 @@
+name: "AgriSync CodeQL Config"
+queries:
+  - uses: security-extended
+  - uses: .github/codeql/queries/leaked-gemini-key.ql
+paths-ignore:
+  - src/tests/**
+  - "**/*.md"
+  - "**/*.json"

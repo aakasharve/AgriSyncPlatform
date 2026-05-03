@@ -1,0 +1,210 @@
+name: cross-verify
+
+on:
+  pull_request:
+    types: [opened, synchronize, ready_for_review]
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: "PR number to cross-verify"
+        required: true
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  # Skip docs-only PRs
+  should-run:
+    name: Check if cross-verify needed
+    runs-on: ubuntu-22.04
+    outputs:
+      run: ${{ steps.check.outputs.run }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: check
+        env:
+          PR_DRAFT: ${{ github.event.pull_request.draft }}
+        run: |
+          if [ "$PR_DRAFT" = "true" ]; then
+            echo "run=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          fi
+
+  claude-verify:
+    name: Claude Verifier
+    needs: should-run
+    if: needs.should-run.outputs.run == 'true'
+    runs-on: ubuntu-22.04
+    outputs:
+      verdict_path: ${{ steps.verify.outputs.verdict_path }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Get PR spec and diff
+        id: pr-context
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          PR_BODY=$(gh pr view "$PR_NUMBER" --json body -q .body 2>/dev/null || echo "")
+          SPEC_ID=$(echo "$PR_BODY" | grep -oE 'spec:\s*[a-z0-9-]+' | sed 's/spec:\s*//' | head -1 || echo "")
+          echo "spec_id=$SPEC_ID" >> "$GITHUB_OUTPUT"
+          gh pr diff "$PR_NUMBER" > /tmp/pr-diff.txt 2>/dev/null || echo "(no diff)" > /tmp/pr-diff.txt
+
+      - name: Run Claude verifier
+        id: verify
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          SPEC_ID: ${{ steps.pr-context.outputs.spec_id }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          SPEC_FILE="_COFOUNDER/specs/_active/$SPEC_ID/spec.md"
+          SCHEMA="_COFOUNDER/agents/verdict.schema.json"
+
+          if [ ! -f "$SPEC_FILE" ]; then
+            echo "::warning::Spec '$SPEC_ID' not found. Using empty spec context."
+            SPEC_CONTENT="(no spec found for $SPEC_ID)"
+          else
+            SPEC_CONTENT=$(cat "$SPEC_FILE")
+          fi
+
+          DIFF_CONTENT=$(cat /tmp/pr-diff.txt)
+
+          # Call Anthropic API with structured output
+          PAYLOAD=$(jq -n \
+            --arg spec "$SPEC_CONTENT" \
+            --arg diff "$DIFF_CONTENT" \
+            --arg schema "$(cat $SCHEMA)" \
+            '{
+              "model": "claude-opus-4-7",
+              "max_tokens": 2048,
+              "system": "You are the AgriSync verifier agent. Review the spec and diff, emit a verdict JSON conforming to the schema. Return ONLY valid JSON.\n\nSchema:\n\($schema)",
+              "messages": [{"role": "user", "content": "Spec:\n\($spec)\n\nDiff:\n\($diff)\n\nEmit verdict JSON:"}]
+            }')
+
+          RESPONSE=$(curl -s https://api.anthropic.com/v1/messages \
+            -H "x-api-key: $ANTHROPIC_API_KEY" \
+            -H "anthropic-version: 2023-06-01" \
+            -H "content-type: application/json" \
+            -d "$PAYLOAD" 2>/dev/null || echo '{"error": "api-call-failed"}')
+
+          VERDICT=$(echo "$RESPONSE" | jq -r '.content[0].text // "{\"verdict\":\"REQUEST_CHANGES\",\"specId\":\"unknown\",\"pr\":0,\"blockers\":[],\"notes\":[\"API call failed or returned unexpected format\"],\"scorecard\":{\"spec_alignment\":5,\"test_independence\":5,\"layering_compliance\":5,\"naming_clarity\":5,\"error_handling\":5,\"total\":25}}"' 2>/dev/null)
+
+          mkdir -p _COFOUNDER/dashboards/cross-verify
+          echo "$VERDICT" > "_COFOUNDER/dashboards/cross-verify/${PR_NUMBER}-claude.json"
+          echo "verdict_path=_COFOUNDER/dashboards/cross-verify/${PR_NUMBER}-claude.json" >> "$GITHUB_OUTPUT"
+
+      - name: Upload Claude verdict
+        uses: actions/upload-artifact@v4
+        with:
+          name: claude-verdict-${{ github.event.pull_request.number }}
+          path: _COFOUNDER/dashboards/cross-verify/${{ github.event.pull_request.number }}-claude.json
+
+  codex-cross-verify:
+    name: Codex Cross-Verifier
+    needs: should-run
+    if: needs.should-run.outputs.run == 'true'
+    runs-on: ubuntu-22.04
+    outputs:
+      verdict_path: ${{ steps.cross-verify.outputs.verdict_path }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Get diff
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          gh pr diff "$PR_NUMBER" > /tmp/pr-diff.txt 2>/dev/null || echo "(no diff)" > /tmp/pr-diff.txt
+
+      - name: Run Codex cross-verifier
+        id: cross-verify
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          PR_BODY=$(gh pr view "$PR_NUMBER" --json body -q .body 2>/dev/null || echo "")
+          SPEC_ID=$(echo "$PR_BODY" | grep -oE 'spec:\s*[a-z0-9-]+' | sed 's/spec:\s*//' | head -1 || echo "")
+          SPEC_FILE="_COFOUNDER/specs/_active/$SPEC_ID/spec.md"
+          SYSTEM_PROMPT=$(cat _COFOUNDER/agents/cross-verifier-codex.system.md 2>/dev/null || echo "You are an independent code reviewer. Review the spec and diff, emit a verdict JSON.")
+          SCHEMA=$(cat _COFOUNDER/agents/verdict.schema.json)
+          SPEC_CONTENT=$(cat "$SPEC_FILE" 2>/dev/null || echo "(no spec)")
+          DIFF_CONTENT=$(cat /tmp/pr-diff.txt)
+
+          RESPONSE=$(curl -s https://api.openai.com/v1/chat/completions \
+            -H "Authorization: Bearer $OPENAI_API_KEY" \
+            -H "content-type: application/json" \
+            -d "$(jq -n \
+              --arg system "$SYSTEM_PROMPT" \
+              --arg spec "$SPEC_CONTENT" \
+              --arg diff "$DIFF_CONTENT" \
+              --arg schema "$SCHEMA" \
+              '{
+                "model": "gpt-4o",
+                "max_tokens": 2048,
+                "response_format": {"type": "json_object"},
+                "messages": [
+                  {"role": "system", "content": $system},
+                  {"role": "user", "content": "Spec:\n\($spec)\n\nDiff:\n\($diff)\n\nSchema:\n\($schema)\n\nEmit verdict JSON:"}
+                ]
+              }')" 2>/dev/null || echo '{"error": "api-call-failed"}')
+
+          VERDICT=$(echo "$RESPONSE" | jq -r '.choices[0].message.content // "{\"verdict\":\"REQUEST_CHANGES\",\"specId\":\"unknown\",\"pr\":0,\"blockers\":[],\"notes\":[\"Codex API failed\"],\"scorecard\":{\"spec_alignment\":5,\"test_independence\":5,\"layering_compliance\":5,\"naming_clarity\":5,\"error_handling\":5,\"total\":25}}"')
+
+          mkdir -p _COFOUNDER/dashboards/cross-verify
+          echo "$VERDICT" > "_COFOUNDER/dashboards/cross-verify/${PR_NUMBER}-codex.json"
+          echo "verdict_path=_COFOUNDER/dashboards/cross-verify/${PR_NUMBER}-codex.json" >> "$GITHUB_OUTPUT"
+
+      - name: Upload Codex verdict
+        uses: actions/upload-artifact@v4
+        with:
+          name: codex-verdict-${{ github.event.pull_request.number }}
+          path: _COFOUNDER/dashboards/cross-verify/${{ github.event.pull_request.number }}-codex.json
+
+  aggregate:
+    name: Aggregate Verdicts
+    needs: [claude-verify, codex-cross-verify]
+    if: always() && needs.should-run.outputs.run == 'true'
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download verdicts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: "*-verdict-${{ github.event.pull_request.number }}"
+          merge-multiple: true
+          path: /tmp/verdicts/
+
+      - name: Aggregate and post decision
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          CLAUDE_FILE="/tmp/verdicts/${PR_NUMBER}-claude.json"
+          CODEX_FILE="/tmp/verdicts/${PR_NUMBER}-codex.json"
+
+          if [ ! -f "$CLAUDE_FILE" ] || [ ! -f "$CODEX_FILE" ]; then
+            echo "::warning::One or both verdicts missing. Skipping aggregate (advisory mode)."
+            exit 0
+          fi
+
+          RESULT=$(bash _COFOUNDER/scripts/cross-verify/aggregate.sh "$PR_NUMBER" "$CLAUDE_FILE" "$CODEX_FILE" "$BASE_REF" 2>/dev/null || echo "BLOCKED")
+
+          DECISION=$(echo "$RESULT" | grep -oE 'decision=\w+' | cut -d= -f2 || echo "UNKNOWN")
+
+          # Post comment
+          gh pr comment "$PR_NUMBER" --body "## Cross-Verify Result
+          **Decision:** $DECISION (Wave 1: advisory — will block in Wave 2 on main)
+          | Verifier | Verdict |
+          |---|---|
+          | Claude | $(jq -r '.verdict // "N/A"' "$CLAUDE_FILE" 2>/dev/null) |
+          | Codex | $(jq -r '.verdict // "N/A"' "$CODEX_FILE" 2>/dev/null) |
+          " 2>/dev/null || true
+
+          echo "Cross-verify decision: $DECISION (advisory mode)"
+          # Wave 1: never fail regardless of decision
+          exit 0

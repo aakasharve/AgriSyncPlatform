@@ -1,0 +1,79 @@
+name: release
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Dry run (true/false)"
+        default: "true"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Create Release
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup .NET 10 SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+
+      - name: Build .NET artifacts
+        run: |
+          dotnet restore src/AgriSync.sln
+          dotnet publish src/AgriSync.Bootstrapper/AgriSync.Bootstrapper.csproj \
+            --configuration Release \
+            --output ./artifacts/dotnet
+
+      - name: Build frontend
+        working-directory: src/clients/mobile-web
+        run: |
+          npm ci
+          npm run build
+
+      - name: Install git-cliff
+        run: |
+          curl -sSfL https://github.com/orhun/git-cliff/releases/download/v2.4.0/git-cliff-v2.4.0-x86_64-unknown-linux-gnu.tar.gz | tar -xz
+          chmod +x git-cliff-*/git-cliff
+          mv git-cliff-*/git-cliff /usr/local/bin/git-cliff
+
+      - name: Generate changelog
+        run: |
+          git-cliff --unreleased --strip all -o RELEASE_NOTES.md 2>/dev/null || \
+          git log --oneline --no-merges $(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || git rev-list --max-parents=0 HEAD)..HEAD > RELEASE_NOTES.md
+
+      - name: Create GitHub Release
+        if: github.event.inputs.dry_run != 'true'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="${GITHUB_REF#refs/tags/}"
+          gh release create "$TAG" \
+            --title "AgriSync $TAG" \
+            --notes-file RELEASE_NOTES.md \
+            --template .github/release-template.md \
+            artifacts/dotnet/*.dll 2>/dev/null || \
+          gh release create "$TAG" \
+            --title "AgriSync $TAG" \
+            --notes-file RELEASE_NOTES.md
+
+      - name: Dry run summary
+        if: github.event.inputs.dry_run == 'true'
+        run: |
+          echo "DRY RUN — would create release with:"
+          cat RELEASE_NOTES.md

@@ -1,0 +1,27 @@
+#!/usr/bin/env bash
+# pre-push — AgriSync Cofounder OS
+
+set -euo pipefail
+
+while read -r LOCAL_REF LOCAL_SHA REMOTE_REF REMOTE_SHA; do
+  BRANCH="${REMOTE_REF#refs/heads/}"
+
+  if [ "$BRANCH" = "main" ]; then
+    # Block force-push to main
+    if [ "$REMOTE_SHA" != "0000000000000000000000000000000000000000" ]; then
+      if ! git merge-base --is-ancestor "$REMOTE_SHA" "$LOCAL_SHA" 2>/dev/null; then
+        if [ -z "${MAIN_PUSH_OK:-}" ]; then
+          echo "[pre-push] ERROR: Force-push to main is blocked." >&2
+          echo "[pre-push] Set MAIN_PUSH_OK=1 with founder approval and log in _COFOUNDER/runbooks/break-glass.md" >&2
+          exit 1
+        else
+          echo "[pre-push:warn] Force-push to main permitted via MAIN_PUSH_OK=1 — log this use." >&2
+          REPO_ROOT="$(git rev-parse --show-toplevel)"
+          echo "| $(date +%Y-%m-%d) | force-push main | $LOCAL_SHA | MAIN_PUSH_OK=1 |" >> "$REPO_ROOT/_COFOUNDER/runbooks/break-glass.md" 2>/dev/null || true
+        fi
+      fi
+    fi
+  fi
+done
+
+exit 0

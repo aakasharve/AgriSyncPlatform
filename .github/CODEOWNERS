@@ -1,0 +1,28 @@
+# AgriSync CODEOWNERS
+# Wave 1: file exists; enforcement (branch protection requiring CODEOWNERS approval) activates in Wave 2.
+
+# Backend bounded contexts
+src/apps/User/**                                     @agrisync-bot
+src/apps/ShramSafal/**                               @agrisync-bot
+
+# Shared platform
+src/BuildingBlocks/**                                @agrisync-bot
+src/SharedKernel/**                                  @agrisync-bot
+src/AgriSync.Bootstrapper/**                         @agrisync-bot
+
+# Frontend
+src/clients/mobile-web/src/infrastructure/ai/**      @agrisync-bot
+src/clients/mobile-web/src/domain/schemas/**         @agrisync-bot
+src/clients/mobile-web/**                            @agrisync-bot
+src/clients/marketing-web/**                         @agrisync-bot
+
+# Infrastructure (ops-engineer + founder)
+.github/**                                           @agrisync-bot
+.claude/**                                           @agrisync-bot
+.husky/**                                            @agrisync-bot
+
+# Governance (architect + founder)
+_COFOUNDER/adr/**                                    @agrisync-bot
+_COFOUNDER/CHARTER.md                                @agrisync-bot
+_COFOUNDER/memory/**                                 @agrisync-bot
+_COFOUNDER/runbooks/**                               @agrisync-bot

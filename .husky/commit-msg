@@ -1,0 +1,50 @@
+#!/usr/bin/env bash
+# commit-msg — AgriSync Cofounder OS
+# Enforces Conventional Commits + project-specific rules.
+
+set -euo pipefail
+
+COMMIT_MSG_FILE="$1"
+COMMIT_MSG=$(cat "$COMMIT_MSG_FILE")
+
+# Skip merge and WIP commits
+echo "$COMMIT_MSG" | grep -qE '^(Merge |Revert )' && exit 0
+echo "$COMMIT_MSG" | grep -q '^\[WIP\]' && exit 0
+
+SUBJECT=$(echo "$COMMIT_MSG" | head -1)
+TYPES="feat|fix|chore|refactor|test|docs|perf|build|ci|style|revert"
+
+# 1. Conventional Commits format
+if ! echo "$SUBJECT" | grep -qE "^($TYPES)(\(.+\))?: .+"; then
+  echo "[commit-msg] ERROR: Must follow Conventional Commits: <type>(<scope>): <subject>" >&2
+  echo "[commit-msg]   Types: $TYPES" >&2
+  echo "[commit-msg]   Got: $SUBJECT" >&2
+  exit 1
+fi
+
+# 2. Subject length (≤72) and no trailing period
+[ "${#SUBJECT}" -gt 72 ] && { echo "[commit-msg] ERROR: Subject line is ${#SUBJECT} chars (max 72)." >&2; exit 1; }
+echo "$SUBJECT" | grep -qE '\.$' && { echo "[commit-msg] ERROR: Subject must not end with a period." >&2; exit 1; }
+
+# 3. Legacy edit marker
+STAGED_LEGACY=$(git diff --cached --name-only 2>/dev/null | grep '_COFOUNDER/legacy/' || true)
+if [ -n "$STAGED_LEGACY" ] && ! echo "$COMMIT_MSG" | grep -q '\[legacy-edit\]'; then
+  echo "[commit-msg] ERROR: Commits touching _COFOUNDER/legacy/ must include [legacy-edit] in body." >&2
+  exit 1
+fi
+
+# 4. Prompt-version marker
+STAGED_PROMPTS=$(git diff --cached --name-only 2>/dev/null | grep 'infrastructure/ai/aiPrompts' || true)
+if [ -n "$STAGED_PROMPTS" ] && ! echo "$COMMIT_MSG" | grep -qE 'prompt-version:\s*[0-9]+\.[0-9]+'; then
+  echo "[commit-msg] ERROR: Commits touching prompt files must include 'prompt-version: X.Y' in body." >&2
+  exit 1
+fi
+
+# 5. Spec ID for src/** (Wave 1: advisory warn)
+STAGED_SRC=$(git diff --cached --name-only 2>/dev/null | grep '^src/' || true)
+if [ -n "$STAGED_SRC" ] && ! echo "$COMMIT_MSG" | grep -qE '(spec:\s*[a-z0-9-]+|\[hotfix\])'; then
+  echo "[commit-msg:warn] src/** modified but no 'spec: <id>' or '[hotfix]' in body. Will block in Wave 2." >&2
+fi
+
+echo "[commit-msg] Validated."
+exit 0

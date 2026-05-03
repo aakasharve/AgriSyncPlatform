@@ -1,0 +1,55 @@
+name: slop-budget
+
+on:
+  schedule:
+    - cron: "30 4 * * *"  # Nightly 04:30 UTC (after ai-eval)
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+  pull-requests: read
+
+jobs:
+  compute-slop-rate:
+    name: Compute Slop Rate
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Compute slop rate
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if [ -f "_COFOUNDER/scripts/slop-rate.sh" ]; then
+            bash _COFOUNDER/scripts/slop-rate.sh
+          else
+            echo "::warning::slop-rate.sh not yet authored. Skipping slop computation."
+            SLOP_RATE=0
+            echo "slop_rate=0" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Check threshold and open issue if breached
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          SLOP_FILE="_COFOUNDER/dashboards/slop-rate.md"
+          if [ -f "$SLOP_FILE" ]; then
+            LATEST_RATE=$(tail -1 "$SLOP_FILE" | grep -oE '[0-9]+%' | head -1 | tr -d '%' || echo "0")
+            THRESHOLD=25  # Wave 1: 25%, Wave 4 target: 15%
+            if [ "${LATEST_RATE:-0}" -gt "$THRESHOLD" ]; then
+              echo "::warning::Slop rate ${LATEST_RATE}% exceeds threshold ${THRESHOLD}%. Opening issue."
+              gh issue create \
+                --title "slop-budget-breach: ${LATEST_RATE}% > ${THRESHOLD}% threshold" \
+                --body "Slop rate is above threshold. See _COFOUNDER/dashboards/slop-rate.md for details." \
+                --label "slop-budget-breach" || true
+            fi
+          fi
+
+      - name: Upload slop dashboard
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: slop-dashboard-${{ github.run_id }}
+          path: _COFOUNDER/dashboards/slop-rate.md
+          if-no-files-found: warn

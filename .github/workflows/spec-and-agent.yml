@@ -1,0 +1,75 @@
+name: spec-and-agent
+
+on:
+  pull_request:
+    branches: [main, akash_edits]
+    types: [opened, synchronize, ready_for_review]
+
+jobs:
+  check-spec-and-agent:
+    name: Spec ID + Agent Label Gate
+    runs-on: ubuntu-22.04
+    # Skip draft PRs
+    if: github.event.pull_request.draft == false
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Extract PR body
+        id: pr-body
+        env:
+          PR_BODY: ${{ github.event.pull_request.body }}
+        run: |
+          echo "body<<EOF" >> "$GITHUB_OUTPUT"
+          echo "$PR_BODY" >> "$GITHUB_OUTPUT"
+          echo "EOF" >> "$GITHUB_OUTPUT"
+
+      - name: Validate spec ID and agent label
+        env:
+          PR_BODY: ${{ github.event.pull_request.body }}
+          PR_LABELS: ${{ toJSON(github.event.pull_request.labels.*.name) }}
+        run: |
+          set -euo pipefail
+          FAILED=false
+
+          # Skip if hotfix-approved label is present (founder approval)
+          if echo "$PR_LABELS" | grep -q "hotfix-approved"; then
+            echo "::notice::hotfix-approved label present — skipping spec/agent gate."
+            exit 0
+          fi
+
+          # Check for [hotfix] in body
+          if echo "$PR_BODY" | grep -q '\[hotfix\]'; then
+            echo "::notice::[hotfix] in PR body — skipping spec/agent gate (Wave 1 advisory)."
+            exit 0
+          fi
+
+          # Check spec ID
+          if ! echo "$PR_BODY" | grep -qE 'spec:\s*[a-z0-9-]+'; then
+            echo "::warning::PR body missing 'spec: <spec-id>'. Add the spec ID or [hotfix] to suppress."
+            # Wave 1: advisory (warn only)
+            FAILED=true
+          else
+            SPEC_ID=$(echo "$PR_BODY" | grep -oE 'spec:\s*[a-z0-9-]+' | sed 's/spec:\s*//' | head -1)
+            echo "::notice::Found spec ID: $SPEC_ID"
+
+            # Cross-check spec exists (Task 04.3.7.2)
+            SPEC_PATH="_COFOUNDER/specs/_active/$SPEC_ID"
+            if [ ! -d "$SPEC_PATH" ]; then
+              echo "::warning::Spec '$SPEC_ID' not found at $SPEC_PATH. Either promote the spec or correct the spec ID."
+              FAILED=true
+            fi
+          fi
+
+          # Check authoring agent
+          if ! echo "$PR_BODY" | grep -qE 'authoring-agent:\s*\w+'; then
+            echo "::warning::PR body missing 'authoring-agent: <agent-name>'."
+            FAILED=true
+          fi
+
+          if [ "$FAILED" = true ]; then
+            echo "::warning::Spec/agent gate: advisory mode (Wave 1). Will block in Wave 2. PR body should contain:"
+            echo "::warning::  spec: <spec-id>"
+            echo "::warning::  authoring-agent: <implementor-backend|implementor-frontend|implementor-ai>"
+          fi
+
+          exit 0  # Wave 1: advisory — never block
