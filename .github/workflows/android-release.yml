@@ -41,6 +41,10 @@ jobs:
       - name: Accept Android SDK licenses
         run: yes | $ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager --licenses || true
 
+      - name: Install sync-contract deps
+        working-directory: sync-contract
+        run: npm ci
+
       - name: Install mobile-web deps
         working-directory: src/clients/mobile-web
         run: npm ci
