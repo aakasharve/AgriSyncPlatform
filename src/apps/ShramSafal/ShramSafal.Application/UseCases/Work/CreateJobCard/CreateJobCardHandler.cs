@@ -1,4 +1,5 @@
 using AgriSync.BuildingBlocks.Abstractions;
+using AgriSync.BuildingBlocks.Application;
 using AgriSync.BuildingBlocks.Money;
 using AgriSync.BuildingBlocks.Results;
 using AgriSync.SharedKernel.Contracts.Roles;
@@ -13,11 +14,28 @@ namespace ShramSafal.Application.UseCases.Work.CreateJobCard;
 /// CEI Phase 4 §4.8 — Task 2.1.1.
 /// Creates a new JobCard in Draft status.
 /// Caller must be PrimaryOwner, SecondaryOwner, or Mukadam on the farm.
+///
+/// <para>
+/// T-IGH-03-PIPELINE-ROLLOUT (CreateJobCard): wired through the
+/// explicit <see cref="HandlerPipeline"/>. Caller-shape validation
+/// (empty IDs, empty LineItems) lives in
+/// <see cref="CreateJobCardValidator"/>; role-tier authorization
+/// (Owner-or-Mukadam on the target farm) lives in
+/// <see cref="CreateJobCardAuthorizer"/>. When this handler is
+/// resolved via the pipeline (see DI registration), both layers run
+/// before the body executes; when resolved directly (legacy tests),
+/// the body's inline guards continue to enforce the same invariants
+/// as defense-in-depth. Domain construction failures (currency code,
+/// money construction, JobCard.CreateDraft argument validation) stay
+/// in the body's catch blocks and surface as
+/// <see cref="ShramSafalErrors.InvalidCommand"/>.
+/// </para>
 /// </summary>
 public sealed class CreateJobCardHandler(
     IShramSafalRepository repository,
     IIdGenerator idGenerator,
     IClock clock)
+    : IHandler<CreateJobCardCommand, CreateJobCardResult>
 {
     public async Task<Result<CreateJobCardResult>> HandleAsync(
         CreateJobCardCommand command,
