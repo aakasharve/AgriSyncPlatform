@@ -337,6 +337,25 @@ public sealed class DwcScoreMatviewTests : IAsyncLifetime
         {
             await ssf.Database.MigrateAsync();
         }
+
+        // analytics.events is partitioned by month. The AnalyticsInitial
+        // migration creates only current + next month partitions. When
+        // tests run in the first few days of a month (e.g. May 1-7), seeds
+        // that look back 7 days land in the previous month where no
+        // partition exists yet. Ensure the previous month partition exists
+        // so cross-month seeding never fails.
+        await using var rawConn = new NpgsqlConnection(conn);
+        await rawConn.OpenAsync();
+        var prev = DateTimeOffset.UtcNow.AddMonths(-1);
+        var curr = new DateTimeOffset(DateTimeOffset.UtcNow.Year, DateTimeOffset.UtcNow.Month, 1, 0, 0, 0, TimeSpan.Zero);
+        await using var ensurePartition = rawConn.CreateCommand();
+        ensurePartition.CommandText = $"""
+            CREATE TABLE IF NOT EXISTS analytics.events_y{prev.Year:D4}m{prev.Month:D2}
+            PARTITION OF analytics.events
+            FOR VALUES FROM ('{prev.Year:D4}-{prev.Month:D2}-01')
+                        TO  ('{curr.Year:D4}-{curr.Month:D2}-01');
+            """;
+        await ensurePartition.ExecuteNonQueryAsync();
     }
 
     private static async Task SeedFarmAsync(NpgsqlConnection db, Guid farmId, Guid ownerUserId, string name)
