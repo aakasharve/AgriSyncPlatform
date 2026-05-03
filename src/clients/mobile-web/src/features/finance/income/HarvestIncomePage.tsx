@@ -23,7 +23,7 @@ import {
     DollarSign, // Kept for safety, though unused in new design
     Pencil
 } from 'lucide-react';
-import { getHarvestSessions, getHarvestConfig, startHarvestSession, getOtherIncomeEntries } from '../../../services/harvestService';
+import { getHarvestSessions, getHarvestConfig, startHarvestSession, getOtherIncomeEntries } from '../../../features/finance/harvestService';
 import SlidingCropSelector from '../../context/components/SlidingCropSelector';
 import HarvestConfigSheet from '../../logs/components/harvest/HarvestConfigSheet';
 import GradeWiseEntrySheet from '../../logs/components/harvest/GradeWiseEntrySheet';

@@ -8,7 +8,7 @@ import {
     HarvestSession,
     HarvestUnit,
     OtherIncomeEntry
-} from '../features/logs/harvest.types';
+} from '../logs/harvest.types';
 import {
     readHarvestConfigRaw,
     readHarvestSessionsRaw,
@@ -16,10 +16,10 @@ import {
     writeHarvestConfigRaw,
     writeHarvestSessionsRaw,
     writeOtherIncomeRaw,
-} from '../infrastructure/storage/HarvestLegacyStore';
-import { idGenerator } from '../core/domain/services/IdGenerator';
-import { systemClock } from '../core/domain/services/Clock';
-import { financeCommandService } from '../features/finance/financeCommandService';
+} from '../../infrastructure/storage/HarvestLegacyStore';
+import { idGenerator } from '../../core/domain/services/IdGenerator';
+import { systemClock } from '../../core/domain/services/Clock';
+import { financeCommandService } from './financeCommandService';
 
 // --- CONSTANTS ---
 

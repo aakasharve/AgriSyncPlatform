@@ -9,7 +9,7 @@ import {
     CropProfile
 } from '../../../../types';
 import { X, Save } from 'lucide-react';
-import { addOtherIncomeEntry } from '../../../../services/harvestService';
+import { addOtherIncomeEntry } from '../../../../features/finance/harvestService';
 import { getDateKey } from '../../../../core/domain/services/DateKeyService';
 
 interface OtherIncomeSheetProps {

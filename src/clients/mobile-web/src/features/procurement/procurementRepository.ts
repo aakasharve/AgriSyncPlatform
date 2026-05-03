@@ -4,11 +4,11 @@ import {
     ExpenseSummaryByScope,
     ExpenseScope,
     ExpenseCategory
-} from '../types';
+} from '../../types';
 import {
     readProcurementExpensesRaw,
     writeProcurementExpensesRaw,
-} from '../infrastructure/storage/ProcurementLegacyStore';
+} from '../../infrastructure/storage/ProcurementLegacyStore';
 
 // --- Helper: Load/Save ---
 const loadExpenses = (): ProcurementExpense[] => {

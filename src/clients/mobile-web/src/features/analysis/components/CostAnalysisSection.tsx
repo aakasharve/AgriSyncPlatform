@@ -3,7 +3,7 @@ import { BarChart3 } from 'lucide-react';
 import { CropProfile, DailyLog } from '../../../types';
 import { getDateKey } from '../../../core/domain/services/DateKeyService';
 import { formatCurrencyINR } from '../../../shared/utils/dayState';
-import { getHarvestSessions, getOtherIncomeEntries } from '../../../services/harvestService';
+import { getHarvestSessions, getOtherIncomeEntries } from '../../../features/finance/harvestService';
 import { CropSymbol } from '../../context/components/CropSelector';
 // Sub-plan 04 Task 9 — chart palette + geometry + date + scope-filter helpers extracted.
 import {

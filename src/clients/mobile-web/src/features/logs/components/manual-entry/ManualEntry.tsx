@@ -6,7 +6,7 @@
 import React, { useState, useEffect } from 'react';
 import { ListPlus } from 'lucide-react';
 import SlidingCropSelector from '../../../context/components/SlidingCropSelector';
-import { startHarvestSession } from '../../../../services/harvestService';
+import { startHarvestSession } from '../../../../features/finance/harvestService';
 import { HarvestConfig } from '../../../../types';
 import ObservationHubSheet from '../ObservationHubSheet';
 import { CropActivityEvent, IrrigationEvent, LabourEvent,

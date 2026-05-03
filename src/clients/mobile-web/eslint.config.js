@@ -127,20 +127,16 @@ export default defineConfig([
       // shims kept only so AppRouter's lazy-import path keeps resolving
       // until the LEGACY-SERVICES sibling task removes them.
       //
-      // Severity is 'warn' for now so existing shim-consumers (the routes
-      // table, the few App.tsx imports) don't break the build. The
-      // LEGACY-SERVICES cleanup task will tighten this to 'error' once
-      // every importer has been flipped to the features/ path.
-      'no-restricted-imports': ['warn', {
+      // T-IGH-04-LEGACY-SERVICES tightened severity to 'error' on 2026-05-03
+      // after deleting all 20 src/pages/<X>.tsx shims. Any future regression
+      // (re-introducing a top-level pages/ folder) hard-fails CI immediately.
+      // Feature-internal `pages/` subfolders (e.g. `features/reports/pages/`)
+      // remain unaffected because the patterns match literal relative-import
+      // strings only.
+      'no-restricted-imports': ['error', {
         patterns: [{
-          // Target only the top-level src/pages/* shims. The patterns match
-          // the literal relative-import strings, not the resolved paths,
-          // so we enumerate the depths used in mobile-web today (importers
-          // sit at depths 0–3 under src/). This keeps the rule from
-          // false-firing on feature-internal `pages/` subfolders such as
-          // `features/reports/pages/` or `features/voiceJournal/pages/`.
           group: ['./pages/*', '../pages/*', '../../pages/*', '../../../pages/*'],
-          message: 'Import from features/<area>/ instead. pages/ shims are deprecated per T-IGH-04-FEATURE-MIGRATION.',
+          message: 'Top-level src/pages/ no longer exists. Import from features/<area>/ instead. Re-creating pages/ shims is forbidden per T-IGH-04-LEGACY-SERVICES.',
         }],
       }],
 
