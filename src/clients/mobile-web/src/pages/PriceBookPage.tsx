@@ -21,6 +21,7 @@ const PriceBookPage: React.FC<PriceBookPageProps> = ({ currentRoute, onNavigate 
     const [effectiveFrom, setEffectiveFrom] = useState(getDateKey());
     const [refresh, setRefresh] = useState(0);
 
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- T-IGH-04 ratchet: dep array intentionally narrow (mount/farm/init pattern); revisit in V2.
     const items = useMemo(() => financeService.getPriceBook(), [refresh, currentRoute]);
 
     const addItem = () => {

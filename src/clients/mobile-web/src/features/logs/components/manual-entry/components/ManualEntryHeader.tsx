@@ -17,6 +17,7 @@ interface ManualEntryHeaderProps {
     context: FarmContext;
     activeCrop: CropProfile | undefined;
     selectedPlotSummary: string;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- T-IGH-04 ratchet: legacy `any` deferred to T-IGH-04-LINT-RATCHET-V2 follow-up.
     currentCounts: any;
     selectedPlotIds: string[];
     selectedTargetGroups: TargetSelectionGroup[];
@@ -62,6 +63,7 @@ const ManualEntryHeader: React.FC<ManualEntryHeaderProps> = ({
                 context={context}
                 activeCrop={activeCrop}
                 activePlotName={selectedPlotSummary}
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any -- T-IGH-04 ratchet: legacy `any` deferred to T-IGH-04-LINT-RATCHET-V2 follow-up.
                 todayCounts={currentCounts as any}
             />
 

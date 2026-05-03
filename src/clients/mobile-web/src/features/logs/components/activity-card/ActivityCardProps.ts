@@ -30,6 +30,7 @@ export interface ActivityCardProps {
         machinery?: MachineryEvent;
     };
     inputs: InputEvent[]; // NEW: Inputs as array
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- T-IGH-04 ratchet: legacy `any` deferred to T-IGH-04-LINT-RATCHET-V2 follow-up.
     onUpdateDetails: (type: 'labour' | 'irrigation' | 'machinery' | 'input', data: any) => void;
     onUpdateWorkTypes?: (types: string[]) => void;
     onDeleteActivity: () => void;

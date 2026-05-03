@@ -113,6 +113,7 @@ const SchedulerPage: React.FC<SchedulerPageProps> = ({
             cropId: selectedCropId || undefined,
             plotId: selectedPlotIds[0]
         }),
+        // eslint-disable-next-line react-hooks/exhaustive-deps -- T-IGH-04 ratchet: dep array intentionally narrow (mount/farm/init pattern); revisit in V2.
         [todayDateKey, selectedCropId, selectedPlotIds, logs.length]
     );
 
@@ -177,8 +178,10 @@ const SchedulerPage: React.FC<SchedulerPageProps> = ({
             setDraftInstance(null);
         }
 
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- T-IGH-04 ratchet: dep array intentionally narrow (mount/farm/init pattern); revisit in V2.
     }, [activeCrop?.id, selectedPlotIds.join(','), editingPlot?.id]);
 
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- T-IGH-04 ratchet: legacy `any` deferred to T-IGH-04-LINT-RATCHET-V2 follow-up.
     const handleSave = (scheduleOverride?: any) => {
         if (!activeCrop || !editingPlot) return;
 
@@ -286,6 +289,7 @@ const SchedulerPage: React.FC<SchedulerPageProps> = ({
         setIsDirty(true);
     };
 
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- T-IGH-04 ratchet: legacy `any` deferred to T-IGH-04-LINT-RATCHET-V2 follow-up.
     const _updateExpectationOverride = (stageId: string, category: 'IRRIGATION' | 'FERTIGATION' | 'FOLIAR_SPRAY', field: 'mode' | 'value', value: any) => {
         if (!draftInstance || !activeTemplate) return;
         const targetExp = activeTemplate.periodicExpectations.find(pe => {

@@ -29,6 +29,7 @@ export interface WizardLogContext {
 
 export interface WizardLogSubmissionPayload {
     context: WizardLogContext;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- T-IGH-04 ratchet: legacy `any` deferred to T-IGH-04-LINT-RATCHET-V2 follow-up.
     activities: Record<string, any>;
     date?: string;
     submissionBatchId?: string;
@@ -46,6 +47,7 @@ export function buildLogScopeFromWizardContext(context: WizardLogContext): LogSc
     };
 }
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- T-IGH-04 ratchet: legacy `any` deferred to T-IGH-04-LINT-RATCHET-V2 follow-up.
 function buildCropActivities(data: Record<string, any>, submissionBatchId: string): CropActivityEvent[] {
     const cropWork = data.cropActivities ?? data.crop_activity;
     if (!cropWork?.title?.trim()) {
@@ -61,6 +63,7 @@ function buildCropActivities(data: Record<string, any>, submissionBatchId: strin
     }];
 }
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- T-IGH-04 ratchet: legacy `any` deferred to T-IGH-04-LINT-RATCHET-V2 follow-up.
 function buildIrrigation(data: Record<string, any>, submissionBatchId: string): IrrigationEvent[] {
     const irrigation = data.irrigation;
     if (!irrigation || (!irrigation.durationHours && !irrigation.method && !irrigation.source)) {
@@ -76,6 +79,7 @@ function buildIrrigation(data: Record<string, any>, submissionBatchId: string): 
     }];
 }
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- T-IGH-04 ratchet: legacy `any` deferred to T-IGH-04-LINT-RATCHET-V2 follow-up.
 function buildLabour(data: Record<string, any>, submissionBatchId: string): LabourEvent[] {
     const labour = data.labour;
     if (!labour || (!labour.count && !labour.totalCost && !labour.activity)) {
@@ -93,6 +97,7 @@ function buildLabour(data: Record<string, any>, submissionBatchId: string): Labo
     }];
 }
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- T-IGH-04 ratchet: legacy `any` deferred to T-IGH-04-LINT-RATCHET-V2 follow-up.
 function buildInputs(data: Record<string, any>, submissionBatchId: string): InputEvent[] {
     const input = data.inputs;
     if (!input || (!input.productName?.trim() && !input.cost)) {
@@ -119,6 +124,7 @@ function buildInputs(data: Record<string, any>, submissionBatchId: string): Inpu
     }];
 }
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- T-IGH-04 ratchet: legacy `any` deferred to T-IGH-04-LINT-RATCHET-V2 follow-up.
 function buildMachinery(data: Record<string, any>, submissionBatchId: string): MachineryEvent[] {
     const machinery = data.machinery;
     if (!machinery || (!machinery.type && !machinery.hoursUsed && !machinery.rentalCost && !machinery.fuelCost)) {

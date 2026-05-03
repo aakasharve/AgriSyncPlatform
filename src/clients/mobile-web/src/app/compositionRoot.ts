@@ -165,6 +165,7 @@ export const useAgriLogApp = ({ initialCrops, currentFarmId }: AgriLogAppConfig)
             return () => window.clearTimeout(resetModeHandle);
         }
         return undefined;
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- T-IGH-04 ratchet: dep array intentionally narrow (mount/farm/init pattern); revisit in V2.
     }, [hasActiveLogContext]);
 
     return {

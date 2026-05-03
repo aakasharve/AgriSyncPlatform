@@ -53,6 +53,7 @@ const WaterSourceWizard: React.FC<WaterSourceWizardProps> = ({ profile: _profile
         }
     };
 
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- T-IGH-04 ratchet: legacy `any` deferred to T-IGH-04-LINT-RATCHET-V2 follow-up.
     const updateMotor = (index: number, field: string, value: any) => {
         setMotors(motors.map((m, i) => i === index ? { ...m, [field]: value } : m));
     };

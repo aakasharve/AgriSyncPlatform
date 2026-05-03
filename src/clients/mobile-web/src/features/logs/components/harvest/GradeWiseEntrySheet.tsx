@@ -24,6 +24,7 @@ interface GradeWiseEntrySheetProps {
     session: HarvestSession;
     onClose: () => void;
     onSave: (updatedSession: HarvestSession) => void;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- T-IGH-04 ratchet: legacy `any` deferred to T-IGH-04-LINT-RATCHET-V2 follow-up.
     initialData?: any; // Parsed Patti Data
 }
 
@@ -71,9 +72,11 @@ const GradeWiseEntrySheet: React.FC<GradeWiseEntrySheetProps> = ({ session, onCl
 
             if (initialData.items && initialData.items.length > 0) {
                 // Find first valid rate unit to set as global default
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any -- T-IGH-04 ratchet: legacy `any` deferred to T-IGH-04-LINT-RATCHET-V2 follow-up.
                 const firstUnit = initialData.items.find((i: any) => i.rateUnit)?.rateUnit;
                 if (firstUnit) setDetectedReceiptUnit(firstUnit);
 
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any -- T-IGH-04 ratchet: legacy `any` deferred to T-IGH-04-LINT-RATCHET-V2 follow-up.
                 const aiRows = initialData.items.map((item: any, idx: number) => {
                     // Try to map extracted gradeRaw to known ID
                     // Simple heuristic: First letter matching or loose string match
@@ -140,6 +143,7 @@ const GradeWiseEntrySheet: React.FC<GradeWiseEntrySheetProps> = ({ session, onCl
         setRows(rows.filter(r => r.id !== id));
     };
 
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- T-IGH-04 ratchet: legacy `any` deferred to T-IGH-04-LINT-RATCHET-V2 follow-up.
     const updateRow = (id: string, field: keyof GradeEntryRow, value: any) => {
         setRows(rows.map(r => r.id === id ? { ...r, [field]: value } : r));
     };

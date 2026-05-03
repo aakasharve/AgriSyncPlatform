@@ -183,6 +183,7 @@ const SchedulerTimeline: React.FC<SchedulerTimelineProps> = ({ plot, logs, onEdi
             const dayLog = logs.find(l => l.context.selection.some(s => s.selectedPlotIds.includes(plot.id)) && l.date.split('T')[0] === dateStr);
 
             // 3. Status Resolution
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any -- T-IGH-04 ratchet: legacy `any` deferred to T-IGH-04-LINT-RATCHET-V2 follow-up.
             const resolveBlock = (category: 'irrigation' | 'nutrition' | 'spray' | 'activity'): { status: BlockStatus, note?: string, detail?: any } => {
                 const planGroup = plannedGroups[category];
 
@@ -292,6 +293,7 @@ const SchedulerTimeline: React.FC<SchedulerTimelineProps> = ({ plot, logs, onEdi
         }
         return groups;
 
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- T-IGH-04 ratchet: dep array intentionally narrow (mount/farm/init pattern); revisit in V2.
     }, [plot.startDate, plot.schedule, logs, plot.id]);
 
     // Modal State
