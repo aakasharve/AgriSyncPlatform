@@ -40,6 +40,8 @@
     <ProjectReference Include="..\apps\Accounts\Accounts.Application\Accounts.Application.csproj" />
     <ProjectReference Include="..\apps\Accounts\Accounts.Infrastructure\Accounts.Infrastructure.csproj" />
     <ProjectReference Include="..\apps\Accounts\Accounts.Domain\Accounts.Domain.csproj" />
+    <ProjectReference Include="..\apps\Analytics\Analytics.Application\Analytics.Application.csproj" />
+    <ProjectReference Include="..\apps\Analytics\Analytics.Domain\Analytics.Domain.csproj" />
   </ItemGroup>
 
 </Project>
