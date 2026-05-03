@@ -789,11 +789,7 @@ export function t(key: string, lang: Language = 'en'): string {
     let value: unknown = translations[lang];
 
     for (const k of keys) {
-        if (value && typeof value === 'object') {
-            value = (value as Record<string, unknown>)[k];
-        } else {
-            value = undefined;
-        }
+        value = (value && typeof value === 'object') ? (value as Record<string, unknown>)[k] : undefined;
     }
 
     return typeof value === 'string' ? value : key;
