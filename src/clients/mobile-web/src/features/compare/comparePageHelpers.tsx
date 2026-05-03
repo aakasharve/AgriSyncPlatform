@@ -1,7 +1,7 @@
 import React from 'react';
-import { DailyLog, PlannedItem, ExecutedItem, Plot, PlotComparisonSummary } from '../types';
-import { BlockStatus } from '../features/scheduler/components/DayCard';
-import { parseDateKey } from '../core/domain/services/DateKeyService';
+import { DailyLog, PlannedItem, ExecutedItem, Plot, PlotComparisonSummary } from '../../types';
+import { BlockStatus } from '../scheduler/components/DayCard';
+import { parseDateKey } from '../../core/domain/services/DateKeyService';
 import { Droplets, Sprout, SprayCan, Hammer } from 'lucide-react';
 
 export type CompareCategory = 'ACTIVITY' | 'NUTRITION' | 'SPRAY' | 'IRRIGATION';
