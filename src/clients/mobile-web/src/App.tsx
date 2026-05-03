@@ -19,7 +19,7 @@ import { FarmContextProvider } from './core/session/FarmContext';
 import { OfflineBanner } from './features/sync';
 import AppShell from './app/components/AppShell';
 import LoginPage from './pages/LoginPage';
-import JoinFarmLandingPage from './pages/JoinFarmLandingPage';
+import JoinFarmLandingPage from './features/onboarding/JoinFarmLandingPage';
 
 const hasJoinDeepLink = (): boolean => {
     if (typeof window === 'undefined') return false;
