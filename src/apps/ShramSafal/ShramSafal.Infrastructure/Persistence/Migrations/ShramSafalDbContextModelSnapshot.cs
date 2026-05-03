@@ -2249,6 +2249,62 @@ namespace ShramSafal.Infrastructure.Persistence.Migrations
                     b.ToTable("job_cards", "ssf");
                 });
 
+            modelBuilder.Entity("ShramSafal.Domain.Wtl.Worker", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("AssignmentCount")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0)
+                        .HasColumnName("assignment_count");
+
+                    b.Property<Guid>("FarmId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("farm_id");
+
+                    b.Property<DateTimeOffset>("FirstSeenUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("first_seen_utc");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("workers", "ssf");
+                });
+
+            modelBuilder.Entity("ShramSafal.Domain.Wtl.WorkerAssignment", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid");
+
+                    b.Property<decimal>("Confidence")
+                        .HasColumnType("numeric(3,2)")
+                        .HasColumnName("confidence");
+
+                    b.Property<Guid>("DailyLogId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("daily_log_id");
+
+                    b.Property<DateTimeOffset>("OccurredAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("occurred_at_utc");
+
+                    b.Property<Guid>("WorkerId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("worker_id");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("DailyLogId")
+                        .HasDatabaseName("ix_worker_assignments_log");
+
+                    b.HasIndex("WorkerId")
+                        .HasDatabaseName("ix_worker_assignments_worker");
+
+                    b.ToTable("worker_assignments", "ssf");
+                });
+
             modelBuilder.Entity("ShramSafal.Infrastructure.Persistence.SyncMutationRecord", b =>
                 {
                     b.Property<Guid>("Id")
@@ -2585,6 +2641,46 @@ namespace ShramSafal.Infrastructure.Persistence.Migrations
                     b.HasOne("ShramSafal.Domain.Tests.TestInstance", null)
                         .WithMany()
                         .HasForeignKey("TestInstanceId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("ShramSafal.Domain.Wtl.Worker", b =>
+                {
+                    b.OwnsOne("ShramSafal.Domain.Wtl.WorkerName", "Name", b1 =>
+                        {
+                            b1.Property<Guid>("WorkerId")
+                                .HasColumnType("uuid");
+
+                            b1.Property<string>("Normalized")
+                                .IsRequired()
+                                .HasMaxLength(200)
+                                .HasColumnType("character varying(200)")
+                                .HasColumnName("name_normalized");
+
+                            b1.Property<string>("Raw")
+                                .IsRequired()
+                                .HasMaxLength(200)
+                                .HasColumnType("character varying(200)")
+                                .HasColumnName("name_raw");
+
+                            b1.HasKey("WorkerId");
+
+                            b1.ToTable("workers", "ssf");
+
+                            b1.WithOwner()
+                                .HasForeignKey("WorkerId");
+                        });
+
+                    b.Navigation("Name")
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("ShramSafal.Domain.Wtl.WorkerAssignment", b =>
+                {
+                    b.HasOne("ShramSafal.Domain.Wtl.Worker", null)
+                        .WithMany()
+                        .HasForeignKey("WorkerId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
                 });
