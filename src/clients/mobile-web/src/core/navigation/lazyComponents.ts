@@ -6,25 +6,25 @@ import React from 'react';
 import { IS_E2E_HARNESS_ENABLED } from '../../app/featureFlags';
 
 export const ProfilePage = React.lazy(() => import('../../pages/ProfilePage'));
-export const SettingsPage = React.lazy(() => import('../../pages/SettingsPage'));
+export const SettingsPage = React.lazy(() => import('../../features/settings/SettingsPage'));
 export const VoiceJournalPage = React.lazy(() => import('../../features/voiceJournal/pages/VoiceJournalPage'));
 export const SchedulerPage = React.lazy(() => import('../../features/scheduler/SchedulerPage'));
 export const ProcurementPage = React.lazy(() => import('../../features/procurement/ProcurementPage'));
 export const HarvestIncomePage = React.lazy(() => import('../../features/finance/income/HarvestIncomePage'));
 export const ReflectPage = React.lazy(() => import('../../features/reflect/ReflectPage'));
 export const TestE2EPage = IS_E2E_HARNESS_ENABLED
-    ? React.lazy(() => import('../../pages/TestE2EPage'))
+    ? React.lazy(() => import('../../features/__e2e__/TestE2EPage'))
     : null;
 export const ComparePage = React.lazy(() => import('../../features/compare/ComparePage').then(module => ({ default: module.ComparePage })));
 export const FinanceManagerHome = React.lazy(() => import('../../features/finance/FinanceManagerHome'));
 export const LedgerPage = React.lazy(() => import('../../features/finance/LedgerPage'));
 export const PriceBookPage = React.lazy(() => import('../../features/finance/PriceBookPage'));
-export const ReviewInboxPage = React.lazy(() => import('../../pages/ReviewInboxPage'));
+export const ReviewInboxPage = React.lazy(() => import('../../features/trust/ReviewInboxPage'));
 export const ReportsPage = React.lazy(() => import('../../features/reports/pages/ReportsPage'));
 export const FinanceSettingsPage = React.lazy(() => import('../../features/finance/FinanceSettingsPage'));
 export const AdminAiOpsPage = React.lazy(() => import('../../features/admin/ai/AdminAiOpsPage').then(module => ({ default: module.AdminAiOpsPage })));
 export const AdminOpsPage = React.lazy(() => import('../../features/admin/ops/AdminOpsPage').then(module => ({ default: module.AdminOpsPage })));
-export const ReferralsPage = React.lazy(() => import('../../pages/ReferralsPage'));
+export const ReferralsPage = React.lazy(() => import('../../features/growth/ReferralsPage'));
 export const TaskCreationSheet = React.lazy(() => import('../../features/scheduler/components/TaskCreationSheet'));
 export const ReviewInboxSheet = React.lazy(() => import('../../features/logs/components/ReviewInboxSheet'));
 export const QuickLogSheet = React.lazy(() => import('../../features/logs/components/QuickLogSheet').then(module => ({ default: module.QuickLogSheet })));
