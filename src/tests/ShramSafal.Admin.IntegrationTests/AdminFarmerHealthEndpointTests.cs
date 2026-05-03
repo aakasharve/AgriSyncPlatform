@@ -1,4 +1,5 @@
 using System.Text.Json;
+using AgriSync.Bootstrapper;
 using AgriSync.BuildingBlocks.Abstractions;
 using AgriSync.BuildingBlocks.Analytics;
 using FluentAssertions;
@@ -232,8 +233,12 @@ public sealed class AdminFarmerHealthEndpointTests
         services.AddLogging();
         services.AddRouting();
         services.AddAuthorization();
-        // Stub registrations so endpoint construction succeeds — the delegate
-        // bodies are never invoked in these tests, only the metadata graph.
+        // Stub registrations so endpoint metadata inference succeeds — the
+        // delegate bodies are never invoked in these tests, only the
+        // resulting metadata graph. The minimal-API request-delegate
+        // factory walks ctor parameters at registration time and demands
+        // that injected services exist in DI; we register null stubs.
+        services.AddScoped<ShramSafal.Application.Admin.Ports.IEntitlementResolver>(_ => null!);
         services.AddScoped<ShramSafal.Application.UseCases.Admin.GetFarmerHealth.GetFarmerHealthHandler>(
             _ => null!);
         services.AddScoped<ShramSafal.Application.UseCases.Admin.GetCohortPatterns.GetCohortPatternsHandler>(

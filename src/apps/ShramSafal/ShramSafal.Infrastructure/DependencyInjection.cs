@@ -261,10 +261,17 @@ public static class DependencyInjection
         // DWC v2 §3.5 — Mode A drilldown + Mode B cohort patterns.
         // Both repos read AnalyticsDbContext via raw SQL (same pattern
         // as AdminMisRepository / AdminOpsRepository); scoped because
-        // the underlying DbContext is. The AdminAuditEmitter
-        // implementation lands in DWC v2 §3.8 (endpoint wiring).
+        // the underlying DbContext is.
         services.AddScoped<IAdminFarmerHealthRepository, AdminFarmerHealthRepository>();
         services.AddScoped<IAdminCohortPatternsRepository, AdminCohortPatternsRepository>();
+
+        // DWC v2 §3.8 — admin audit emitter. Routes admin.farmer_lookup
+        // events through the existing IAnalyticsWriter (registered by
+        // AddAnalytics in the Bootstrapper); the dedicated
+        // IAnalyticsEventRepository the plan sketches lands in Phase
+        // C.4 and is a one-line constructor swap from there.
+        services.AddScoped<ShramSafal.Application.Admin.IAdminAuditEmitter,
+            ShramSafal.Infrastructure.Admin.AdminAuditEmitter>();
 
         services.AddSingleton<AiResponseNormalizer>();
         services.AddSingleton<AiPromptTemplateRegistry>();
