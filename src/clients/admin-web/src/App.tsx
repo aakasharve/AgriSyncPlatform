@@ -27,6 +27,10 @@ const ScheduleTemplatesPage   = lazy(() => import('@/pages/schedules/ScheduleTem
 const UsersPage               = lazy(() => import('@/pages/users/UsersPage'));
 const SettingsAdminsPage      = lazy(() => import('@/pages/settings/SettingsAdminsPage'));
 
+// DWC v2 §4.3 — Farmer Health (Mode B landing + Mode A drilldown).
+const FarmerHealthPage        = lazy(() => import('@/features/farmer-health/FarmerHealthPage'));
+const FarmerHealthDrilldown   = lazy(() => import('@/features/farmer-health/FarmerHealthDrilldown'));
+
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
@@ -142,6 +146,12 @@ export default function App() {
                     } />
                     <Route path="/farms/suffering" element={
                       <EntitlementGuard module={ModuleKeys.FarmsSuffering}><SufferingPage /></EntitlementGuard>
+                    } />
+                    <Route path="/farmer-health" element={
+                      <EntitlementGuard module={ModuleKeys.FarmerHealth}><FarmerHealthPage /></EntitlementGuard>
+                    } />
+                    <Route path="/farmer-health/:farmId" element={
+                      <EntitlementGuard module={ModuleKeys.FarmerHealth}><FarmerHealthDrilldown /></EntitlementGuard>
                     } />
                     <Route path="/users" element={
                       <EntitlementGuard module={ModuleKeys.AdminUsers}><UsersPage /></EntitlementGuard>
