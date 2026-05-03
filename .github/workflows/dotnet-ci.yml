@@ -163,6 +163,14 @@ jobs:
         run: npm ci
         working-directory: src/clients/mobile-web
 
+      # DWC v2 §2.7 — fail the build if the C# EventVocabulary registry
+      # and the mobile-web Zod EventSchemas registry drift apart. The
+      # script is dependency-free node, so it runs before the more
+      # expensive tsc / build steps. Lives at .github/scripts/ because
+      # the repo's /scripts/ is gitignored for personal scratch use.
+      - name: Event vocabulary parity (C# <-> TS)
+        run: node .github/scripts/check-event-vocabulary-parity.mjs
+
       - name: TypeScript check
         run: npx tsc --noEmit
         working-directory: src/clients/mobile-web
