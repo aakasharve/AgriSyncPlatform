@@ -33,6 +33,7 @@ import { applyV11 } from './dexie/versions/v11';
 import { applyV12 } from './dexie/versions/v12';
 import { applyV13 } from './dexie/versions/v13';
 import { applyV14 } from './dexie/versions/v14';
+import { applyV15 } from './dexie/versions/v15';
 
 // =============================================================================
 // OUTBOX (Pending sync events)
@@ -569,11 +570,31 @@ export interface UiPrefRow {
 }
 
 // =============================================================================
+// ANALYTICS OUTBOX (DWC v2 §2.6 — closure-loop telemetry)
+// =============================================================================
+
+/**
+ * One queued analytics event awaiting POST to `/analytics/ingest`.
+ * Drained by `AnalyticsEventBus` per `ADR-2026-05-02_telemetry-batching.md`:
+ * 50-row batches, 5-attempt cap, all-or-nothing batch policy.
+ */
+export interface AnalyticsOutboxRow {
+    /** Auto-incremented by Dexie. */
+    id?: number;
+    /** Serialized {eventType, props} — round-tripped through JSON.parse on drain. */
+    payloadJson: string;
+    /** Epoch ms; secondary index used for FIFO drain ordering. */
+    createdAtUtc: number;
+    /** Monotonic per-row send attempts; row drops at MAX_ATTEMPTS (5). */
+    attempts: number;
+}
+
+// =============================================================================
 // SCHEMA VERSION CONSTANTS
 // =============================================================================
 
 /** Current Dexie schema version — bump this when adding version(N).stores(). */
-export const DATABASE_VERSION = 14; // Sub-plan 04 Task 2 frontend storage unification.
+export const DATABASE_VERSION = 15; // DWC v2 §2.6 analytics outbox.
 /** CEI Phase 1 schema version (now active — applied by Task 5.1.1). */
 export const CEI_PHASE1_SCHEMA_VERSION = 7;
 /** CEI Phase 2 schema version — adds test stack (protocols/instances/recs). */
@@ -590,6 +611,8 @@ export const AI_VOICE_JOURNAL_SCHEMA_VERSION = 12;
 export const AI_CORRECTION_EVENTS_SCHEMA_VERSION = 13;
 /** Sub-plan 04 Task 2 — crops + farmerProfile + uiPrefs unification (away from localStorage). */
 export const SUBPLAN_04_FRONTEND_STORAGE_SCHEMA_VERSION = 14;
+/** DWC v2 §2.6 — analytics outbox store for closure-loop telemetry. */
+export const DWC_TELEMETRY_OUTBOX_SCHEMA_VERSION = 15;
 
 // =============================================================================
 // DATABASE CLASS
@@ -642,6 +665,9 @@ export class AgriLogDatabase extends Dexie {
     /** Sub-plan 04 Task 2 — misc UI preferences key-value store. */
     uiPrefs!: Table<UiPrefRow, string>;
 
+    /** DWC v2 §2.6 — analytics outbox; drained by `AnalyticsEventBus`. */
+    analyticsOutbox!: Table<AnalyticsOutboxRow, number>;
+
     constructor() {
         super('AgriLogDB');
 
@@ -662,6 +688,7 @@ export class AgriLogDatabase extends Dexie {
         applyV12(this);
         applyV13(this);
         applyV14(this);
+        applyV15(this);
     }
 }
 
