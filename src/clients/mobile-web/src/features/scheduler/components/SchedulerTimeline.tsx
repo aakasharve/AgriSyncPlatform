@@ -183,8 +183,7 @@ const SchedulerTimeline: React.FC<SchedulerTimelineProps> = ({ plot, logs, onEdi
             const dayLog = logs.find(l => l.context.selection.some(s => s.selectedPlotIds.includes(plot.id)) && l.date.split('T')[0] === dateStr);
 
             // 3. Status Resolution
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any -- T-IGH-04 ratchet: legacy `any` deferred to T-IGH-04-LINT-RATCHET-V2 follow-up.
-            const resolveBlock = (category: 'irrigation' | 'nutrition' | 'spray' | 'activity'): { status: BlockStatus, note?: string, detail?: any } => {
+            const resolveBlock = (category: 'irrigation' | 'nutrition' | 'spray' | 'activity'): { status: BlockStatus, note?: string, detail?: TimelineDetail } => {
                 const planGroup = plannedGroups[category];
 
                 let isDone = false;
@@ -270,10 +269,10 @@ const SchedulerTimeline: React.FC<SchedulerTimelineProps> = ({ plot, logs, onEdi
                     general: ''
                 },
                 details: {
-                    irrigation: irrig.detail,
-                    nutrition: fert.detail,
-                    spray: spray.detail,
-                    activity: activ.detail
+                    irrigation: irrig.detail ?? null,
+                    nutrition: fert.detail ?? null,
+                    spray: spray.detail ?? null,
+                    activity: activ.detail ?? null
                 },
                 dayLog,
                 weatherContext

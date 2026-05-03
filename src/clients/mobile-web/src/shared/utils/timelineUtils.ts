@@ -131,8 +131,7 @@ export const calculateEffectiveDay = (plot: Plot, targetDate: Date | string = ne
 };
 
 // Stub for getTimelineBlocks (under development)
-// eslint-disable-next-line @typescript-eslint/no-explicit-any -- T-IGH-04 ratchet: legacy `any` deferred to T-IGH-04-LINT-RATCHET-V2 follow-up.
-export const getTimelineBlocks = (_plot: Plot, _logs: any[]): any[] => {
+export const getTimelineBlocks = (_plot: Plot, _logs: unknown[]): unknown[] => {
     // TODO: Implement timeline block generation from plot schedule and logs
     console.warn('getTimelineBlocks is not yet implemented');
     return [];

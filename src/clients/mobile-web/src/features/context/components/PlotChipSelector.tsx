@@ -7,7 +7,7 @@ import React from 'react';
 import { CropProfile } from '../../../types';
 import { Check } from 'lucide-react';
 import { CropSymbol } from './CropSelector';
-import { ComplianceBadge } from '../../scheduler/components/ComplianceBadge';
+import { ComplianceBadge, type ComplianceBadgeProps } from '../../scheduler/components/ComplianceBadge';
 
 interface PlotChipSelectorProps {
     crops: CropProfile[];
@@ -136,11 +136,10 @@ const PlotChipSelector: React.FC<PlotChipSelectorProps> = ({
                                             <div className="flex items-center gap-2">
                                                 {isSelected && <Check size={14} strokeWidth={3} className="text-white" />}
                                                 <span className="font-bold">{plot.name}</span>
-                                                <ComplianceBadge 
-                                                    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- T-IGH-04 ratchet: legacy `any` deferred to T-IGH-04-LINT-RATCHET-V2 follow-up.
-                                                    state={scheduleState.state as any} 
-                                                    compliancePct={scheduleState.compliancePct} 
-                                                    size="xs" 
+                                                <ComplianceBadge
+                                                    state={scheduleState.state as ComplianceBadgeProps['state']}
+                                                    compliancePct={scheduleState.compliancePct}
+                                                    size="xs"
                                                 />
                                             </div>
                                             <span className={`text-xs font-bold ${isSelected ? 'text-white/70' : 'text-slate-400'}`}>

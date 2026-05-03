@@ -22,6 +22,7 @@ import EntitlementBanner, { type SubscriptionSnapshotView } from '../../admin/bi
 import MembershipsList from '../../people/components/MembershipsList';
 import type { MyFarmDto, FarmDetailsDto } from '../../onboarding/qr/inviteApi';
 import ReliabilityScoreCard from '../../work/components/ReliabilityScoreCard';
+import type { WorkerProfileData } from '../../../domain/work/ReliabilityScore';
 import { useLanguage } from '../../../i18n/LanguageContext';
 
 // Identity verification status for farmer ID
@@ -53,8 +54,7 @@ interface IdentitySectionProps {
     nonExitableFarmIds: Set<string>;
     handleExitMembership: (farmId: string, farmName: string) => Promise<void>;
     isWorkerOnAnyFarm: boolean;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- T-IGH-04 ratchet: legacy `any` deferred to T-IGH-04-LINT-RATCHET-V2 follow-up.
-    workerProfile: { reliability: any } | null;
+    workerProfile: WorkerProfileData | null;
 }
 
 const IdentitySection: React.FC<IdentitySectionProps> = ({
@@ -480,9 +480,8 @@ const IdentitySection: React.FC<IdentitySectionProps> = ({
                                                 const newCaps = canLog
                                                     ? (person.capabilities || []).filter(c => c !== OperatorCapability.LOG_DATA)
                                                     : [...(person.capabilities || []), OperatorCapability.LOG_DATA];
-                                                // eslint-disable-next-line @typescript-eslint/no-explicit-any -- T-IGH-04 ratchet: legacy `any` deferred to T-IGH-04-LINT-RATCHET-V2 follow-up.
-                                                const updatedPeople = profile.operators!.map(p => p.id === person.id ? { ...p, capabilities: newCaps } as any : p);
-                                                onUpdateProfile({ ...profile, people: updatedPeople });
+                                                const updatedOperators = profile.operators!.map(p => p.id === person.id ? { ...p, capabilities: newCaps } : p);
+                                                onUpdateProfile({ ...profile, operators: updatedOperators });
                                             }}
                                             className={`cursor-pointer flex items-center gap-2 px-3 py-2 rounded-xl border transition-all select-none ${canLog ? 'bg-emerald-50 border-emerald-200' : 'bg-slate-50 border-slate-200 hover:bg-slate-100'}`}
                                         >

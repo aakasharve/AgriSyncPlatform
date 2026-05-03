@@ -3,12 +3,25 @@
  * Maps raw color strings (e.g. 'bg-indigo-500') to a full theme object.
  * This prevents Tailwind class purging by using full static strings.
  */
-export const getCropTheme = (colorString?: string) => {
+export interface CropTheme {
+    border: string;
+    bg: string;
+    text: string;
+    shadow: string;
+    iconBg: string;
+    iconText: string;
+    indicator: string;
+    slideBorder: string;
+    slideShadow: string;
+    slideText: string;
+    slideBgSelected: string;
+}
+
+export const getCropTheme = (colorString?: string): CropTheme => {
     // Extract base color name from 'bg-{color}-500' string if present
     const baseColor = colorString?.split('-')[1] || 'indigo';
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- T-IGH-04 ratchet: legacy `any` deferred to T-IGH-04-LINT-RATCHET-V2 follow-up.
-    const themes: Record<string, any> = {
+    const themes: Record<string, CropTheme> = {
         indigo: {
             border: 'border-indigo-500',
             bg: 'bg-indigo-50/50',

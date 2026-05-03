@@ -27,12 +27,39 @@ export interface WizardLogContext {
     selections: WizardLogSelection[];
 }
 
+/**
+ * Open-shape map of bucket-keyed wizard form data. Each bucket builder narrows
+ * the corresponding entry at use site (defensive — wizard forms are loosely
+ * typed today and may change shape per template / locale).
+ */
+export type WizardActivityBag = Record<string, unknown>;
+
 export interface WizardLogSubmissionPayload {
     context: WizardLogContext;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- T-IGH-04 ratchet: legacy `any` deferred to T-IGH-04-LINT-RATCHET-V2 follow-up.
-    activities: Record<string, any>;
+    activities: WizardActivityBag;
     date?: string;
     submissionBatchId?: string;
+}
+
+/**
+ * Field-by-field narrowing helpers for the wizard activity bag.
+ * Each builder reads a specific bucket key and tolerates undefined / partial
+ * shapes by returning [].
+ */
+function getRecord(bag: WizardActivityBag, key: string): Record<string, unknown> | undefined {
+    const v = bag[key];
+    return v && typeof v === 'object' && !Array.isArray(v) ? (v as Record<string, unknown>) : undefined;
+}
+function asString(v: unknown): string | undefined {
+    return typeof v === 'string' ? v : undefined;
+}
+function asNumber(v: unknown): number | undefined {
+    if (typeof v === 'number' && !Number.isNaN(v)) return v;
+    if (typeof v === 'string' && v.trim() !== '' && !Number.isNaN(Number(v))) return Number(v);
+    return undefined;
+}
+function asStringArray(v: unknown): string[] | undefined {
+    return Array.isArray(v) && v.every(item => typeof item === 'string') ? (v as string[]) : undefined;
 }
 
 export function buildLogScopeFromWizardContext(context: WizardLogContext): LogScope {
@@ -47,98 +74,108 @@ export function buildLogScopeFromWizardContext(context: WizardLogContext): LogSc
     };
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any -- T-IGH-04 ratchet: legacy `any` deferred to T-IGH-04-LINT-RATCHET-V2 follow-up.
-function buildCropActivities(data: Record<string, any>, submissionBatchId: string): CropActivityEvent[] {
-    const cropWork = data.cropActivities ?? data.crop_activity;
-    if (!cropWork?.title?.trim()) {
+function buildCropActivities(data: WizardActivityBag, submissionBatchId: string): CropActivityEvent[] {
+    const cropWork = getRecord(data, 'cropActivities') ?? getRecord(data, 'crop_activity');
+    const title = asString(cropWork?.title)?.trim();
+    if (!cropWork || !title) {
         return [];
     }
+    const workTypes = asStringArray(cropWork.workTypes);
 
     return [{
         id: `${submissionBatchId}-crop-activity`,
-        title: cropWork.title.trim(),
-        workTypes: cropWork.workTypes?.length ? cropWork.workTypes : [cropWork.title.trim()],
-        notes: cropWork.notes?.trim() || undefined,
+        title,
+        workTypes: workTypes && workTypes.length > 0 ? workTypes : [title],
+        notes: asString(cropWork.notes)?.trim() || undefined,
         status: 'completed',
     }];
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any -- T-IGH-04 ratchet: legacy `any` deferred to T-IGH-04-LINT-RATCHET-V2 follow-up.
-function buildIrrigation(data: Record<string, any>, submissionBatchId: string): IrrigationEvent[] {
-    const irrigation = data.irrigation;
-    if (!irrigation || (!irrigation.durationHours && !irrigation.method && !irrigation.source)) {
+function buildIrrigation(data: WizardActivityBag, submissionBatchId: string): IrrigationEvent[] {
+    const irrigation = getRecord(data, 'irrigation');
+    const method = asString(irrigation?.method);
+    const source = asString(irrigation?.source);
+    const durationHours = asNumber(irrigation?.durationHours);
+    if (!irrigation || (!durationHours && !method && !source)) {
         return [];
     }
 
     return [{
         id: `${submissionBatchId}-irrigation`,
-        method: irrigation.method || 'Drip',
-        source: irrigation.source || 'Shared Source',
-        durationHours: irrigation.durationHours ? Number(irrigation.durationHours) : undefined,
-        notes: irrigation.notes?.trim() || undefined,
+        method: (method as IrrigationEvent['method']) || 'Drip',
+        source: source || 'Shared Source',
+        durationHours,
+        notes: asString(irrigation.notes)?.trim() || undefined,
     }];
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any -- T-IGH-04 ratchet: legacy `any` deferred to T-IGH-04-LINT-RATCHET-V2 follow-up.
-function buildLabour(data: Record<string, any>, submissionBatchId: string): LabourEvent[] {
-    const labour = data.labour;
-    if (!labour || (!labour.count && !labour.totalCost && !labour.activity)) {
+function buildLabour(data: WizardActivityBag, submissionBatchId: string): LabourEvent[] {
+    const labour = getRecord(data, 'labour');
+    const count = asNumber(labour?.count);
+    const totalCost = asNumber(labour?.totalCost);
+    const activity = asString(labour?.activity)?.trim();
+    if (!labour || (!count && !totalCost && !activity)) {
         return [];
     }
 
     return [{
         id: `${submissionBatchId}-labour`,
-        type: labour.type || 'HIRED',
-        count: labour.count ? Number(labour.count) : undefined,
-        totalCost: labour.totalCost ? Number(labour.totalCost) : undefined,
-        wagePerPerson: labour.wagePerPerson ? Number(labour.wagePerPerson) : undefined,
-        activity: labour.activity?.trim() || 'Shared farm work',
-        notes: labour.notes?.trim() || undefined,
+        type: (asString(labour.type) as LabourEvent['type']) || 'HIRED',
+        count,
+        totalCost,
+        wagePerPerson: asNumber(labour.wagePerPerson),
+        activity: activity || 'Shared farm work',
+        notes: asString(labour.notes)?.trim() || undefined,
     }];
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any -- T-IGH-04 ratchet: legacy `any` deferred to T-IGH-04-LINT-RATCHET-V2 follow-up.
-function buildInputs(data: Record<string, any>, submissionBatchId: string): InputEvent[] {
-    const input = data.inputs;
-    if (!input || (!input.productName?.trim() && !input.cost)) {
+function buildInputs(data: WizardActivityBag, submissionBatchId: string): InputEvent[] {
+    const input = getRecord(data, 'inputs');
+    const productName = asString(input?.productName)?.trim();
+    const cost = asNumber(input?.cost);
+    if (!input || (!productName && !cost)) {
         return [];
     }
 
-    const quantity = input.quantity ? Number(input.quantity) : undefined;
+    const quantity = asNumber(input.quantity);
+    const unit = asString(input.unit) || 'unit';
     const mixItem: InputMixItem = {
         id: `${submissionBatchId}-input-mix`,
-        productName: input.productName?.trim() || 'Unnamed Input',
+        productName: productName || 'Unnamed Input',
         dose: quantity,
-        unit: input.unit || 'unit',
+        unit,
     };
 
     return [{
         id: `${submissionBatchId}-input`,
-        method: input.method || 'manual',
+        method: (asString(input.method) as InputEvent['method']) || 'manual',
         mix: [mixItem],
-        cost: input.cost ? Number(input.cost) : undefined,
-        notes: input.notes?.trim() || undefined,
+        cost,
+        notes: asString(input.notes)?.trim() || undefined,
         productName: mixItem.productName,
         quantity,
         unit: mixItem.unit,
     }];
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any -- T-IGH-04 ratchet: legacy `any` deferred to T-IGH-04-LINT-RATCHET-V2 follow-up.
-function buildMachinery(data: Record<string, any>, submissionBatchId: string): MachineryEvent[] {
-    const machinery = data.machinery;
-    if (!machinery || (!machinery.type && !machinery.hoursUsed && !machinery.rentalCost && !machinery.fuelCost)) {
+function buildMachinery(data: WizardActivityBag, submissionBatchId: string): MachineryEvent[] {
+    const machinery = getRecord(data, 'machinery');
+    const type = asString(machinery?.type);
+    const hoursUsed = asNumber(machinery?.hoursUsed);
+    const rentalCost = asNumber(machinery?.rentalCost);
+    const fuelCost = asNumber(machinery?.fuelCost);
+    if (!machinery || (!type && !hoursUsed && !rentalCost && !fuelCost)) {
         return [];
     }
 
     return [{
         id: `${submissionBatchId}-machinery`,
-        type: machinery.type || 'tractor',
-        ownership: machinery.ownership || 'owned',
-        hoursUsed: machinery.hoursUsed ? Number(machinery.hoursUsed) : undefined,
-        rentalCost: machinery.rentalCost ? Number(machinery.rentalCost) : undefined,
-        fuelCost: machinery.fuelCost ? Number(machinery.fuelCost) : undefined,
-        notes: machinery.notes?.trim() || undefined,
+        type: (type as MachineryEvent['type']) || 'tractor',
+        ownership: (asString(machinery.ownership) as MachineryEvent['ownership']) || 'owned',
+        hoursUsed,
+        rentalCost,
+        fuelCost,
+        notes: asString(machinery.notes)?.trim() || undefined,
     }];
 }
 

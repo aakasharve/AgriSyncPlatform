@@ -247,9 +247,12 @@ const generateIrrigationSummary = (log: DailyLog): IrrigationSummary => {
 
     const successfulCount = countSuccessfulIrrigationEvents(log.irrigation, log.fullTranscript);
 
+    const validMethods: ReadonlyArray<IrrigationSummary['method']> = ['Drip', 'Flood', 'Sprinkler', 'None'];
+    const inferredMethod: IrrigationSummary['method'] = (primaryEvent.method && validMethods.includes(primaryEvent.method as IrrigationSummary['method']))
+        ? (primaryEvent.method as IrrigationSummary['method'])
+        : 'Drip';
     return {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- T-IGH-04 ratchet: legacy `any` deferred to T-IGH-04-LINT-RATCHET-V2 follow-up.
-        method: primaryEvent.method as any || 'Drip',
+        method: inferredMethod,
         durationHours: totalDuration,
         source: primaryEvent.source || 'Unknown',
         cost: 0, // Usually free (electricity cost tracked separately)

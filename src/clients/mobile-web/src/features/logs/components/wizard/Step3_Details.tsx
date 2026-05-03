@@ -7,21 +7,21 @@ import Button from '../../../../shared/components/ui/Button';
 // In a real implementation, we might import specific sub-forms (IrrigationForm, LabourForm) 
 // or build them inline here for the "Lite" version.
 
+/** Open-shape bag of bucket form values keyed by field name. */
+type BucketFormData = Record<string, unknown>;
+
 interface Step3Props {
     bucket: string; // 'irrigation' | 'labour' | 'inputs' | ...
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- T-IGH-04 ratchet: legacy `any` deferred to T-IGH-04-LINT-RATCHET-V2 follow-up.
-    onNext: (data: any) => void;
+    onNext: (data: BucketFormData) => void;
     onBack: () => void;
     // We would pass specific data/defaults here
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- T-IGH-04 ratchet: legacy `any` deferred to T-IGH-04-LINT-RATCHET-V2 follow-up.
-    defaults?: any;
+    defaults?: BucketFormData;
 }
 
 const Step3_Details: React.FC<Step3Props> = ({ bucket, onNext, onBack }) => {
     // Local state for the specific bucket's data
     // This is a placeholder for the actual form fields
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- T-IGH-04 ratchet: legacy `any` deferred to T-IGH-04-LINT-RATCHET-V2 follow-up.
-    const [formData, setFormData] = useState<any>({});
+    const [formData, setFormData] = useState<BucketFormData>({});
 
     const getTitle = () => {
         switch (bucket) {

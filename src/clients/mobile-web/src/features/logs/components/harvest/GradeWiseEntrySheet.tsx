@@ -20,12 +20,35 @@ import {
 import Button from '../../../../shared/components/ui/Button';
 import { getDateKey } from '../../../../core/domain/services/DateKeyService';
 
+/** Shape of AI-extracted patti receipt data passed in from the upload sheet. */
+export interface PattiExtractedItem {
+    gradeRaw?: string;
+    quantity?: number;
+    rate?: number;
+    rateUnit?: string;
+}
+export interface PattiExtractedDeductions {
+    commission?: number;
+    transport?: number;
+    hamali?: number;
+    bharai?: number;
+    tolai?: number;
+    motorFee?: number;
+    other?: number;
+}
+export interface PattiExtractedData {
+    date?: string;
+    pattiNumber?: string;
+    deductions?: PattiExtractedDeductions;
+    items?: PattiExtractedItem[];
+    [key: string]: unknown;
+}
+
 interface GradeWiseEntrySheetProps {
     session: HarvestSession;
     onClose: () => void;
     onSave: (updatedSession: HarvestSession) => void;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- T-IGH-04 ratchet: legacy `any` deferred to T-IGH-04-LINT-RATCHET-V2 follow-up.
-    initialData?: any; // Parsed Patti Data
+    initialData?: PattiExtractedData | null; // Parsed Patti Data
 }
 
 interface GradeEntryRow {
@@ -72,18 +95,17 @@ const GradeWiseEntrySheet: React.FC<GradeWiseEntrySheetProps> = ({ session, onCl
 
             if (initialData.items && initialData.items.length > 0) {
                 // Find first valid rate unit to set as global default
-                // eslint-disable-next-line @typescript-eslint/no-explicit-any -- T-IGH-04 ratchet: legacy `any` deferred to T-IGH-04-LINT-RATCHET-V2 follow-up.
-                const firstUnit = initialData.items.find((i: any) => i.rateUnit)?.rateUnit;
+                const firstUnit = initialData.items.find((i) => i.rateUnit)?.rateUnit;
                 if (firstUnit) setDetectedReceiptUnit(firstUnit);
 
-                // eslint-disable-next-line @typescript-eslint/no-explicit-any -- T-IGH-04 ratchet: legacy `any` deferred to T-IGH-04-LINT-RATCHET-V2 follow-up.
-                const aiRows = initialData.items.map((item: any, idx: number) => {
+                const aiRows = initialData.items.map((item, idx: number) => {
                     // Try to map extracted gradeRaw to known ID
                     // Simple heuristic: First letter matching or loose string match
                     // This logic can be improved later
+                    const gradeRawLower = item.gradeRaw?.toLowerCase() ?? '';
                     const matchedGrade = DEFAULT_PRODUCE_GRADES.find(g =>
-                        g.name.toLowerCase().includes(item.gradeRaw?.toLowerCase()) ||
-                        item.gradeRaw?.toLowerCase().includes(g.name.toLowerCase())
+                        g.name.toLowerCase().includes(gradeRawLower) ||
+                        gradeRawLower.includes(g.name.toLowerCase())
                     );
 
                     // Parse Rate Unit from AI
@@ -143,8 +165,7 @@ const GradeWiseEntrySheet: React.FC<GradeWiseEntrySheetProps> = ({ session, onCl
         setRows(rows.filter(r => r.id !== id));
     };
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- T-IGH-04 ratchet: legacy `any` deferred to T-IGH-04-LINT-RATCHET-V2 follow-up.
-    const updateRow = (id: string, field: keyof GradeEntryRow, value: any) => {
+    const updateRow = (id: string, field: keyof GradeEntryRow, value: string | number | undefined) => {
         setRows(rows.map(r => r.id === id ? { ...r, [field]: value } : r));
     };
 

@@ -3,11 +3,22 @@ import { ChevronUp, ChevronDown, Trash2, Clock, CheckCircle2 } from 'lucide-reac
 import DraggableTray from '../DraggableTray';
 import { idGenerator } from '../../../../../core/domain/services/IdGenerator';
 
+/** Single prep activity dropped onto the land-prep timeline. */
+export interface PrepActivity {
+    id: string;
+    text: string;
+    type: string;
+    notes?: string;
+}
+
+interface Step2Data {
+    prepActivities?: PrepActivity[];
+    landPrepDuration?: number;
+}
+
 interface Step2Props {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- T-IGH-04 ratchet: legacy `any` deferred to T-IGH-04-LINT-RATCHET-V2 follow-up.
-    data: any;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- T-IGH-04 ratchet: legacy `any` deferred to T-IGH-04-LINT-RATCHET-V2 follow-up.
-    onUpdate: (field: string, value: any) => void;
+    data: Step2Data;
+    onUpdate: (field: 'prepActivities' | 'landPrepDuration', value: PrepActivity[] | number) => void;
     isActive: boolean;
     onExpand: () => void;
 }
@@ -31,15 +42,13 @@ const Step2_LandPrep: React.FC<Step2Props> = ({ data, onUpdate, isActive, onExpa
         onUpdate('landPrepDuration', newVal);
     };
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- T-IGH-04 ratchet: legacy `any` deferred to T-IGH-04-LINT-RATCHET-V2 follow-up.
-    const handleAddActivity = (item: any) => {
-        const newActivity = { ...item, id: idGenerator.generate(), notes: '' };
+    const handleAddActivity = (item: { text: string; type: string }) => {
+        const newActivity: PrepActivity = { ...item, id: idGenerator.generate(), notes: '' };
         onUpdate('prepActivities', [...activities, newActivity]);
     };
 
     const handleRemoveActivity = (id: string) => {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- T-IGH-04 ratchet: legacy `any` deferred to T-IGH-04-LINT-RATCHET-V2 follow-up.
-        onUpdate('prepActivities', activities.filter((a: any) => a.id !== id));
+        onUpdate('prepActivities', activities.filter((a) => a.id !== id));
     };
 
     // Minimized View
@@ -103,8 +112,7 @@ const Step2_LandPrep: React.FC<Step2Props> = ({ data, onUpdate, isActive, onExpa
                         </div>
                     )}
 
-                    {/* eslint-disable-next-line @typescript-eslint/no-explicit-any -- T-IGH-04 ratchet: prep activity shape varies. */}
-                    {activities.map((act: any, idx: number) => (
+                    {activities.map((act, idx: number) => (
                         <div key={act.id} className="relative group">
                             {/* Node Dot */}
                             <div className="absolute -left-[41px] top-1/2 -translate-y-1/2 w-5 h-5 rounded-full bg-white border-4 border-stone-200 group-hover:border-indigo-400 transition-colors" />

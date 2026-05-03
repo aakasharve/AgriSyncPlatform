@@ -53,8 +53,8 @@ const WaterSourceWizard: React.FC<WaterSourceWizardProps> = ({ profile: _profile
         }
     };
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- T-IGH-04 ratchet: legacy `any` deferred to T-IGH-04-LINT-RATCHET-V2 follow-up.
-    const updateMotor = (index: number, field: string, value: any) => {
+    type MotorSpec = (typeof motors)[number];
+    const updateMotor = <K extends keyof MotorSpec>(index: number, field: K, value: MotorSpec[K]) => {
         setMotors(motors.map((m, i) => i === index ? { ...m, [field]: value } : m));
     };
 
@@ -205,7 +205,7 @@ const WaterSourceWizard: React.FC<WaterSourceWizardProps> = ({ profile: _profile
                                                     <select
                                                         className="w-full mt-1 p-2 border border-slate-200 rounded-lg text-sm bg-white"
                                                         value={motor.phase}
-                                                        onChange={e => updateMotor(index, 'phase', e.target.value)}
+                                                        onChange={e => updateMotor(index, 'phase', e.target.value as '1' | '3')}
                                                     >
                                                         <option value="1">1 Phase</option>
                                                         <option value="3">3 Phase</option>
@@ -216,7 +216,7 @@ const WaterSourceWizard: React.FC<WaterSourceWizardProps> = ({ profile: _profile
                                                     <select
                                                         className="w-full mt-1 p-2 border border-slate-200 rounded-lg text-sm bg-white"
                                                         value={motor.powerSourceType}
-                                                        onChange={e => updateMotor(index, 'powerSourceType', e.target.value)}
+                                                        onChange={e => updateMotor(index, 'powerSourceType', e.target.value as 'MSEB' | 'Solar' | 'Generator')}
                                                     >
                                                         <option value="MSEB">Electric</option>
                                                         <option value="Solar">Solar</option>

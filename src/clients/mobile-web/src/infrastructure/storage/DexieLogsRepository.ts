@@ -15,7 +15,7 @@
 
 import type { DailyLog, LogVerificationStatus } from '../../types';
 import type { LogsRepository, StorageEvent, StorageEventListener } from '../../application/ports';
-import { getDatabase, type DexieLogRecord, type OutboxEvent } from './DexieDatabase';
+import { getDatabase, type DexieLogRecord, type OutboxEvent, type OutboxAction } from './DexieDatabase';
 import { type AuditEvent, type AuditAction } from './AuditLogRepository';
 import { VersionRegistry } from '../../core/contracts/VersionRegistry';
 import { idGenerator } from '../../core/domain/services/IdGenerator';
@@ -127,8 +127,7 @@ export class DexieLogsRepository implements LogsRepository {
             // 2. Write outbox event
             const outboxEvent: OutboxEvent = {
                 idempotencyKey: idempotencyKey(log.id, action!),
-                // eslint-disable-next-line @typescript-eslint/no-explicit-any -- T-IGH-04 ratchet: legacy `any` deferred to T-IGH-04-LINT-RATCHET-V2 follow-up.
-                action: action as any,
+                action: action as OutboxAction,
                 resourceId: log.id,
                 payload: log,
                 status: 'PENDING',

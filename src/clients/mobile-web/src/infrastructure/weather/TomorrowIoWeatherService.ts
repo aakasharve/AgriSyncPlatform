@@ -1,6 +1,6 @@
 
 import { WeatherPort } from '../../application/ports/WeatherPort';
-import { PlotGeo } from '../../domain/types';
+import { PlotGeo, WeatherEvent, WeatherEventType } from '../../domain/types';
 import { WeatherStamp, DailyForecast } from '../../features/weather/weather.types';
 import { getDateKey } from '../../core/domain/services/DateKeyService';
 import { idGenerator } from '../../core/domain/services/IdGenerator';
@@ -117,8 +117,7 @@ class TomorrowIoWeatherService implements WeatherPort {
 
     // --- DOMAIN LOGIC: CHANGE DETECTION ---
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- T-IGH-04 ratchet: legacy `any` deferred to T-IGH-04-LINT-RATCHET-V2 follow-up.
-    detectWeatherChanges(current: WeatherStamp, previous?: WeatherStamp): any {
+    detectWeatherChanges(current: WeatherStamp, previous?: WeatherStamp): WeatherEvent | null {
         const THRESHOLDS = {
             RAIN_PROB_SPIKE: 30, // % increase
             WIND_GUST_HIGH: 45, // kph
@@ -165,8 +164,7 @@ class TomorrowIoWeatherService implements WeatherPort {
         return null;
     }
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- T-IGH-04 ratchet: legacy `any` deferred to T-IGH-04-LINT-RATCHET-V2 follow-up.
-    private createEvent(stamp: WeatherStamp, type: any, severity: string, note: string): any {
+    private createEvent(stamp: WeatherStamp, type: WeatherEventType, severity: WeatherEvent['severity'], note: string): WeatherEvent {
         return {
             id: `we_${idGenerator.generate()}`,
             plotId: stamp.plotId,

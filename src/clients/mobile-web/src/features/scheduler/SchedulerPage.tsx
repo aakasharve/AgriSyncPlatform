@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Settings, Calendar, CalendarRange, Droplets, SprayCan, Sprout, Info, Layers, MapPin, Clock, User, Building2, Shield, Sparkles, CheckCircle2 } from 'lucide-react';
-import { CropProfile, PlotScheduleInstance, CropScheduleTemplate, StageTemplate, StageOverride, ExpectationOverride, DailyLog, ResourceItem, PlannedTask } from '../../types';
+import { CropProfile, PlotScheduleInstance, CropScheduleTemplate, StageTemplate, StageOverride, ExpectationOverride, FrequencyMode, DailyLog, ResourceItem, PlannedTask } from '../../types';
 import { getTemplateForCrop, calculateDayNumber, getCurrentStage, createInitialScheduleInstance, derivePlannedItemsForDay, getScheduleById } from './planning/ClientPlanEngine';
 import { getAllTemplates } from '../../infrastructure/reference/TemplateCatalog';
 import { getEffectivePhaseAndDay } from '../../shared/utils/timelineUtils';
@@ -182,11 +182,14 @@ const SchedulerPage: React.FC<SchedulerPageProps> = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional: gated on identity-stable keys (`activeCrop?.id`, plot id list, `editingPlot?.id`); including the full `activeCrop`/`editingPlot` objects would re-fire on every parent render even when the underlying entity hasn't changed and would clobber the user's draft schedule edits.
     }, [activeCrop?.id, selectedPlotIdsKey, editingPlot?.id]);
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- T-IGH-04 ratchet: legacy `any` deferred to T-IGH-04-LINT-RATCHET-V2 follow-up.
-    const handleSave = (scheduleOverride?: any) => {
+    // The schedule maker emits its own DraftSchedule shape (not the canonical
+    // PlotScheduleInstance) — we coerce it here at the boundary because the
+    // wizard tree is structurally compatible enough for the plot.schedule slot
+    // and downstream consumers tolerate the loose shape.
+    const handleSave = (scheduleOverride?: unknown) => {
         if (!activeCrop || !editingPlot) return;
 
-        const instancesToSave = scheduleOverride || draftInstance;
+        const instancesToSave = (scheduleOverride as PlotScheduleInstance | undefined) || draftInstance;
         if (!instancesToSave) return;
 
         const updatedPlots = activeCrop.plots.map(p => {
@@ -207,7 +210,7 @@ const SchedulerPage: React.FC<SchedulerPageProps> = ({
         setIsDirty(false);
         // If we saved an override, update draft too to match
         if (scheduleOverride) {
-            setDraftInstance(scheduleOverride);
+            setDraftInstance(scheduleOverride as PlotScheduleInstance);
         }
         setViewMode('TIMELINE'); // Return to timeline after save
     };
@@ -290,8 +293,12 @@ const SchedulerPage: React.FC<SchedulerPageProps> = ({
         setIsDirty(true);
     };
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- T-IGH-04 ratchet: legacy `any` deferred to T-IGH-04-LINT-RATCHET-V2 follow-up.
-    const _updateExpectationOverride = (stageId: string, category: 'IRRIGATION' | 'FERTIGATION' | 'FOLIAR_SPRAY', field: 'mode' | 'value', value: any) => {
+    const _updateExpectationOverride = (
+        stageId: string,
+        category: 'IRRIGATION' | 'FERTIGATION' | 'FOLIAR_SPRAY',
+        field: 'mode' | 'value',
+        value: FrequencyMode | number,
+    ) => {
         if (!draftInstance || !activeTemplate) return;
         const targetExp = activeTemplate.periodicExpectations.find(pe => {
             if (pe.stageId !== stageId) return false;
@@ -304,8 +311,8 @@ const SchedulerPage: React.FC<SchedulerPageProps> = ({
         const overrides = [...draftInstance.expectationOverrides];
         const existingIdx = overrides.findIndex(o => o.expectationId === targetExp.id);
         const newOverride: ExpectationOverride = existingIdx >= 0 ? { ...overrides[existingIdx] } : { expectationId: targetExp.id };
-        if (field === 'mode') newOverride.customFrequencyMode = value;
-        if (field === 'value') newOverride.customFrequencyValue = value;
+        if (field === 'mode') newOverride.customFrequencyMode = value as FrequencyMode;
+        if (field === 'value') newOverride.customFrequencyValue = value as number;
         if (existingIdx >= 0) overrides[existingIdx] = newOverride;
         else overrides.push(newOverride);
         setDraftInstance({ ...draftInstance, expectationOverrides: overrides });
