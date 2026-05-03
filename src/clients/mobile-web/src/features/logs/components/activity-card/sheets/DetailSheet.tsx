@@ -101,8 +101,7 @@ const DetailSheet = ({
                 }));
             }
         }
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- T-IGH-04 ratchet: dep array intentionally narrow (mount/farm/init pattern); revisit in V2.
-    }, [localData.maleCount, localData.femaleCount, localData.shiftId, localData.type]);
+    }, [localData.maleCount, localData.femaleCount, localData.shiftId, localData.type, defaults.labour.shifts, type]);
 
     const handleContractUnitInit = () => {
         if (!localData.contractUnit) {

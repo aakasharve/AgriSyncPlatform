@@ -26,7 +26,7 @@ const LedgerPage: React.FC<LedgerPageProps> = ({ currentRoute, onNavigate }) => 
     const [isDetailView, setIsDetailView] = useState(false);
     const { retryUpload: _retryUpload } = useAttachmentRetry();
 
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- T-IGH-04 ratchet: dep array intentionally narrow (mount/farm/init pattern); revisit in V2.
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional: route/drawer/refreshKey are recompute triggers for the module-level financeSelectors store; the selector itself is pure-of-deps.
     const events = useMemo(() => financeSelectors.getEffectiveMoneyEvents(), [currentRoute, drawerFilter, refreshKey]);
 
     const totalIncome = events.filter(e => e.type === 'Income').reduce((sum, e) => sum + e.effectiveAmount, 0);

@@ -221,7 +221,7 @@ export const DataSourceProvider: React.FC<{ children: React.ReactNode }> = ({ ch
             backgroundSyncWorker.stop();
             attachmentUploadWorker.stop();
         };
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- T-IGH-04 ratchet: dep array intentionally narrow (mount/farm/init pattern); revisit in V2.
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional: `seedDemoDataIfNeeded` is a closure over `dataSource` (already in deps) and is only meant to fire on auth/demo-mode/userId transitions; including it would force a useCallback wrap with the same dep set and re-invoke the worker lifecycle on every render.
     }, [isAuthenticated, isDemoMode, dataSource, session?.userId]);
 
     const value: DataSourceContextValue = {
