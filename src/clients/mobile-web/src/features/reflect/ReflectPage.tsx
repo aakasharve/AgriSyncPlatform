@@ -19,7 +19,7 @@ import '../analysis/components/DailyWorkSummary.css';
 import { getPhaseAndDay } from '../../shared/utils/timelineUtils';
 import { getDateKey } from '../../core/domain/services/DateKeyService';
 import ReviewInbox from '../analysis/components/ReviewInbox';
-import { getHarvestSessions, getOtherIncomeEntries } from '../../services/harvestService';
+import { getHarvestSessions, getOtherIncomeEntries } from '../../features/finance/harvestService';
 import { LogVerificationStatus } from '../../types';
 import CostAnalysisSection from '../analysis/components/CostAnalysisSection';
 import { MoneyLensDrawer } from '../finance/components/MoneyLensDrawer';
