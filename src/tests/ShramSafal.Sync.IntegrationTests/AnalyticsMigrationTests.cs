@@ -109,12 +109,22 @@ public sealed class AnalyticsMigrationTests : IAsyncLifetime
         // The same target string lives in
         // AgriSync.Bootstrapper/Program.cs as ssfPhaseATarget.
         //
-        // DWC v2 (2026-05-03): bumped from AlterCostEntriesAddJobCardId to
-        // WtlV0Entities because the DWC analytics matviews
-        // (20260505000000_DwcV2Matviews) reference ssf.workers which is
-        // created by WtlV0Entities. WtlV0Entities does NOT reference
-        // analytics.events so it is safe to include in Phase A.
-        const string ssfPhaseATarget = "20260504000000_WtlV0Entities";
+        // DWC v2 (2026-05-03): 4-phase ordering to handle two independent
+        // circular dependencies:
+        //   (A) SSF Phase A: original pre-admin tables.
+        //   (B) Analytics Phase 1: up to RestoreBuckets234 — creates
+        //       analytics.events so Phase B SSF can reference it.
+        //   (C) SSF Phase B: all remaining SSF including
+        //       AddAdminScopeHealthView (needs analytics.events from B)
+        //       AND WtlV0Entities (creates ssf.workers).
+        //   (D) Analytics Phase 2: DwcV2Matviews — needs ssf.workers
+        //       from C. Cannot run before C.
+        // Note: ssfPhaseATarget reverted to the original AlterCostEntriesAddJobCardId.
+        // The WtlV0Entities bump was a wrong approach that pulled
+        // AddAdminScopeHealthView into Phase A, which references analytics.events
+        // that doesn't exist yet.
+        const string ssfPhaseATarget = "20260421075311_AlterCostEntriesAddJobCardId";
+        const string analyticsPhase1Target = "20260502020000_RestoreBuckets234Matviews";
         var ssfOpts = new DbContextOptionsBuilder<ShramSafalDbContext>()
             .UseNpgsql(conn)
             .Options;
@@ -124,19 +134,12 @@ public sealed class AnalyticsMigrationTests : IAsyncLifetime
             await migrator.MigrateAsync(ssfPhaseATarget);
         }
 
-        // Apply analytics chain — including the new AnalyticsRewrite.
-        // Before Task 9, the legacy Phase4 migration would fail here
-        // with `relation "ssf.verifications" does not exist` (or one
-        // of a dozen other column-mismatch errors).
-        //
         // The analytics migrations live in `AgriSync.Bootstrapper` (so
         // BuildingBlocks stays provider-neutral) while the
         // `AnalyticsDbContext` lives in BuildingBlocks. Without the
         // explicit `MigrationsAssembly` pointer, EF Core scans the
         // DbContext's own assembly, finds no migrations, and silently
-        // applies zero — leaving `analytics.events` uncreated and
-        // breaking the SSF Phase B migrations that join it.
-        // Mirror production's wiring (`Program.cs` AnalyticsDb registration).
+        // applies zero. Mirror production's wiring.
         var analyticsOpts = new DbContextOptionsBuilder<AnalyticsDbContext>()
             .UseNpgsql(conn, npgsql =>
             {
@@ -146,17 +149,25 @@ public sealed class AnalyticsMigrationTests : IAsyncLifetime
                     schema: AnalyticsDbContext.SchemaName);
             })
             .Options;
+
+        // Analytics Phase 1: create analytics.events + pre-DWC matviews.
         await using (var analytics = new AnalyticsDbContext(analyticsOpts))
         {
-            await analytics.Database.MigrateAsync();
+            var migrator = analytics.Database.GetService<IMigrator>();
+            await migrator.MigrateAsync(analyticsPhase1Target);
         }
 
-        // Apply SSF Phase B — the rest of the SSF chain. AddAdminScopeHealthView
-        // and any other late migrations that join analytics.events now
-        // succeed because the Analytics chain above created the table.
+        // SSF Phase B: AddAdminScopeHealthView (needs analytics.events ✓)
+        // + WtlV0Entities (creates ssf.workers for DWC matviews in phase D).
         await using (var ssf = new ShramSafalDbContext(ssfOpts))
         {
             await ssf.Database.MigrateAsync();
+        }
+
+        // Analytics Phase 2: DwcV2Matviews — now references ssf.workers ✓.
+        await using (var analytics = new AnalyticsDbContext(analyticsOpts))
+        {
+            await analytics.Database.MigrateAsync();
         }
 
         // Assert: every matview the production code reads exists
