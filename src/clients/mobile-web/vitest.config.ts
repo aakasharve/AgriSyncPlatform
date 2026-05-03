@@ -14,6 +14,9 @@ export default defineConfig({
       'src/**/__tests__/**/*.test.tsx',
       'src/**/*.test.ts',
       'src/**/*.test.tsx',
+      // DWC v2 §2.5/§2.6 — telemetry specs live under tests/unit per plan boundary.
+      'tests/unit/**/*.spec.ts',
+      'tests/unit/**/*.spec.tsx',
     ],
     exclude: [
       'node_modules/**',
