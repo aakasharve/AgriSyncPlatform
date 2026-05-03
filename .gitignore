@@ -76,8 +76,7 @@ src/AgriSync.Bootstrapper/appsettings.Development.json
 node_modules/
 **/dist/
 
-# Capacitor native (built locally per-device)
-src/clients/mobile-web/android/
+# Capacitor native — ios stays ignored; android is tracked (granular exclusions in mobile-web/.gitignore)
 src/clients/mobile-web/ios/
 
 # Astro generated types (rebuilt on `astro dev`)

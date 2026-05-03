@@ -8,8 +8,11 @@ node_modules/
 .env.local
 .env.production.local
 
-# Capacitor build artifacts
-android/
+# Capacitor — track the project, ignore generated outputs only
+android/.gradle/
+android/**/build/
+android/app/src/main/assets/public/
+android/local.properties
 ios/
 
 # IDE
