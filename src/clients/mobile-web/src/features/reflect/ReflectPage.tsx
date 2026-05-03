@@ -38,6 +38,7 @@ import ActivityCalendarSection from './sections/ActivityCalendarSection';
 import LogDetailDrawer from './sections/LogDetailDrawer';
 import { useFarmContext } from '../../core/session/FarmContext';
 import { emitClosureSummaryViewed } from '../../core/telemetry/eventEmitters';
+import DwcReminderChip from './components/DwcReminderChip';
 
 // --- MAIN PAGE ---
 
@@ -412,6 +413,15 @@ const ReflectPage: React.FC<ReflectPageProps> = ({
                 </div>
             </div>
 
+            {/* DWC v2 §2.9 — DwcReminderChip mounted next to DateControlBar.
+                Reads from local Dexie state via the `history` prop already
+                held by ReflectPage; renders nothing if FEATURE_FLAGS.DwcChip
+                is OFF (default in prod). */}
+            {currentFarmId && (
+                <div className="px-1 mb-2">
+                    <DwcReminderChip farmId={currentFarmId} history={history} />
+                </div>
+            )}
             <DateControlBar selectedDate={currentDate} onDateChange={(d) => { setCurrentDate(d); setCalendarViewDate(d); }} />
 
             <div className="grid grid-cols-2 gap-3">
