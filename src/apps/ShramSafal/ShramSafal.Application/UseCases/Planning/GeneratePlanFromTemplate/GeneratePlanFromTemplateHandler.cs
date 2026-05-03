@@ -1,4 +1,5 @@
 using AgriSync.BuildingBlocks.Abstractions;
+using AgriSync.BuildingBlocks.Application;
 using AgriSync.BuildingBlocks.Results;
 using AgriSync.SharedKernel.Contracts.Ids;
 using ShramSafal.Application.Contracts.Dtos;
@@ -8,11 +9,40 @@ using ShramSafal.Domain.Common;
 
 namespace ShramSafal.Application.UseCases.Planning.GeneratePlanFromTemplate;
 
+/// <summary>
+/// Generates a <see cref="ShramSafal.Domain.Planning.ScheduleTemplate"/>
+/// + N <see cref="ShramSafal.Domain.Planning.PlannedActivity"/> rows
+/// from a caller-supplied template+stage definition, and (best-effort)
+/// schedules the matching test due dates.
+///
+/// <para>
+/// T-IGH-03-PIPELINE-ROLLOUT (GeneratePlanFromTemplate): wired through
+/// the explicit <see cref="HandlerPipeline"/>. Caller-shape validation
+/// (incl. per-activity blank-name guard) lives in
+/// <see cref="GeneratePlanFromTemplateValidator"/>; crop-cycle existence
+/// + farm-membership authorization lives in
+/// <see cref="GeneratePlanFromTemplateAuthorizer"/>. When this handler
+/// is resolved via the pipeline (see DI registration), both layers run
+/// before the body executes; when resolved directly (legacy tests), the
+/// body's defense-in-depth gates continue to enforce the same
+/// invariants verbatim.
+/// </para>
+///
+/// <para>
+/// PushSync decision: there is no <c>plan.generate_from_template</c>
+/// mutation in the sync catalog (verified against
+/// <c>sync-contract/schemas/mutation-types.json</c>) — plan generation
+/// is HTTP-only. The "only-with-tests" guardrail therefore makes this
+/// rollout endpoint-only by definition; there is no
+/// <c>PushSyncBatchHandler</c> ctor change.
+/// </para>
+/// </summary>
 public sealed class GeneratePlanFromTemplateHandler(
     IShramSafalRepository repository,
     IIdGenerator idGenerator,
     IClock clock,
     ScheduleTestDueDatesHandler? scheduleTestDueDatesHandler = null)
+    : IHandler<GeneratePlanFromTemplateCommand, PlanGenerationResultDto>
 {
     public async Task<Result<PlanGenerationResultDto>> HandleAsync(
         GeneratePlanFromTemplateCommand command,

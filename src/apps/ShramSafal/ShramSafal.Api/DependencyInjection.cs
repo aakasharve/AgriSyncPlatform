@@ -1114,6 +1114,44 @@ public static class DependencyInjection
                 new AgriSync.BuildingBlocks.Application.PipelineBehaviors.AuthorizationBehavior<OverridePlannedActivityCommand>(
                     sp.GetServices<AgriSync.BuildingBlocks.Application.PipelineBehaviors.IAuthorizationCheck<OverridePlannedActivityCommand>>())));
 
+        // T-IGH-03-PIPELINE-ROLLOUT (GeneratePlanFromTemplate): caller-shape
+        // validation (incl. non-empty Activities + per-activity blank-
+        // name guard) + crop-cycle existence + farm-membership
+        // authorization. The endpoint (POST /plan/generate) gets the
+        // canonical InvalidCommand → CropCycleNotFound → Forbidden
+        // ordering through the pipeline. There is NO sync mutation type
+        // for plan.generate_from_template (HTTP-only flow), so
+        // PushSyncBatchHandler is not affected by this rollout — the
+        // "only-with-tests" guardrail is satisfied vacuously.
+        services.AddScoped<AgriSync.BuildingBlocks.Application.PipelineBehaviors.IValidator<
+            GeneratePlanFromTemplateCommand>,
+            GeneratePlanFromTemplateValidator>();
+        services.AddScoped<AgriSync.BuildingBlocks.Application.PipelineBehaviors.IAuthorizationCheck<
+            GeneratePlanFromTemplateCommand>,
+            GeneratePlanFromTemplateAuthorizer>();
+        services.AddScoped<AgriSync.BuildingBlocks.Application.IHandler<
+            GeneratePlanFromTemplateCommand,
+            ShramSafal.Application.Contracts.Dtos.PlanGenerationResultDto>>(sp =>
+            AgriSync.BuildingBlocks.Application.HandlerPipeline.Build(
+                sp.GetRequiredService<GeneratePlanFromTemplateHandler>(),
+                new AgriSync.BuildingBlocks.Application.PipelineBehaviors.LoggingBehavior<
+                    GeneratePlanFromTemplateCommand,
+                    ShramSafal.Application.Contracts.Dtos.PlanGenerationResultDto>(
+                    sp.GetRequiredService<Microsoft.Extensions.Logging.ILogger<
+                        AgriSync.BuildingBlocks.Application.PipelineBehaviors.LoggingBehavior<
+                            GeneratePlanFromTemplateCommand,
+                            ShramSafal.Application.Contracts.Dtos.PlanGenerationResultDto>>>()),
+                new AgriSync.BuildingBlocks.Application.PipelineBehaviors.ValidationBehavior<
+                    GeneratePlanFromTemplateCommand,
+                    ShramSafal.Application.Contracts.Dtos.PlanGenerationResultDto>(
+                    sp.GetServices<AgriSync.BuildingBlocks.Application.PipelineBehaviors.IValidator<
+                        GeneratePlanFromTemplateCommand>>()),
+                new AgriSync.BuildingBlocks.Application.PipelineBehaviors.AuthorizationBehavior<
+                    GeneratePlanFromTemplateCommand,
+                    ShramSafal.Application.Contracts.Dtos.PlanGenerationResultDto>(
+                    sp.GetServices<AgriSync.BuildingBlocks.Application.PipelineBehaviors.IAuthorizationCheck<
+                        GeneratePlanFromTemplateCommand>>())));
+
         return services;
     }
 }
