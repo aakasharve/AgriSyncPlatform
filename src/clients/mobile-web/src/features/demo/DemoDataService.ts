@@ -55,7 +55,7 @@ export const DEMO_SEED_VERSION = "v4.0.0-90days"; // Full quarter data with comp
 const TODAY = new Date();
 
 // --- OPERATORS (matches FarmerProfile in useAppData) ---
-// eslint-disable-next-line @typescript-eslint/no-unused-vars -- T-IGH-04 ratchet: unused symbol kept for explicit-API reasons; revisit in V2.
+// eslint-disable-next-line @typescript-eslint/no-unused-vars -- the value half is unused at runtime — this `const` exists purely as the source-of-truth for the `keyof typeof DEMO_OPERATORS` union used below (operator IDs / overrides). Renaming to `_DEMO_OPERATORS` would break those typeof references; deleting the value half would force a hand-maintained string union duplicate.
 const DEMO_OPERATORS = {
     owner: { id: 'owner', name: 'Ramu (Owner)', role: 'PRIMARY_OWNER' },
     manager1: { id: 'manager1', name: 'Suresh (Manager)', role: 'SECONDARY_OWNER' },
