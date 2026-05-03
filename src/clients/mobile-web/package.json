@@ -43,6 +43,7 @@
     "@opentelemetry/instrumentation-xml-http-request": "0.216.0",
     "@opentelemetry/sdk-trace-web": "2.7.1",
     "@react-google-maps/api": "^2.20.8",
+    "@sentry/react": "^10.51.0",
     "@types/qrcode": "^1.5.6",
     "@types/react-router-dom": "^5.3.3",
     "@types/uuid": "^10.0.0",

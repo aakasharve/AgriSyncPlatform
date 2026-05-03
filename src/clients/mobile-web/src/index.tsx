@@ -21,6 +21,12 @@ import { TenantProvider } from './core/tenant/TenantContext'; // Correct path
 import { NotificationService } from './shared/services/NotificationService';
 import { eventBus } from './core/telemetry/AnalyticsEventBus';
 import { emitClientError } from './core/telemetry/eventEmitters';
+import { initSentry } from './lib/sentry';
+
+// Sentry must be initialised before the React root renders so that
+// the error boundary and unhandled-rejection capture are active for
+// the full app lifecycle. No-op when VITE_SENTRY_DSN is not set.
+initSentry();
 
 // Register Service Worker for Push Notifications
 NotificationService.registerSW();

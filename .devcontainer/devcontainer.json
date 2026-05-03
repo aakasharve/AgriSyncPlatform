@@ -1,0 +1,39 @@
+{
+  "name": "AgriSync Dev",
+  "image": "mcr.microsoft.com/devcontainers/dotnet:10.0",
+  "features": {
+    "ghcr.io/devcontainers/features/node:1": { "version": "20" },
+    "ghcr.io/devcontainers/features/github-cli:1": {},
+    "ghcr.io/devcontainers/features/docker-in-docker:2": {}
+  },
+  "postCreateCommand": "npm install -g @anthropic-ai/claude-code && make boot",
+  "postStartCommand": "bash .devcontainer/firewall.sh 2>/dev/null || true",
+  "mounts": [
+    "source=${localWorkspaceFolder}/.claude,target=/workspaces/agrisync/.claude,type=bind"
+  ],
+  "customizations": {
+    "vscode": {
+      "settings": {
+        "editor.formatOnSave": true,
+        "dotnet-interactive.defaultKernelName": "csharp",
+        "eslint.enable": true,
+        "eslint.format.enable": true,
+        "git.defaultBranchName": "akash_edits"
+      },
+      "extensions": [
+        "ms-dotnettools.csharp",
+        "ms-dotnettools.csdevkit",
+        "dbaeumer.vscode-eslint",
+        "esbenp.prettier-vscode",
+        "bradlc.vscode-tailwindcss",
+        "humao.rest-client",
+        "GitHub.copilot"
+      ]
+    }
+  },
+  "remoteEnv": {
+    "AGRISYNC_AGENT": "coordinator",
+    "AGRISYNC_DIRTY": "1"
+  },
+  "forwardPorts": [5000, 5001, 5173, 5433]
+}
