@@ -19,10 +19,23 @@ import './index.css';
 import App from './App';
 import { TenantProvider } from './core/tenant/TenantContext'; // Correct path
 import { NotificationService } from './shared/services/NotificationService';
+import { eventBus } from './core/telemetry/AnalyticsEventBus';
+import { emitClientError } from './core/telemetry/eventEmitters';
 
 // Register Service Worker for Push Notifications
 NotificationService.registerSW();
 NotificationService.scheduleDisciplineNudges();
+
+// DWC v2 §2.6 — boot the analytics event bus and wire the global
+// error/unhandledrejection sinks into `client.error`. The bus is
+// idempotent; safe under React StrictMode double-invoke in development.
+eventBus.start();
+window.addEventListener('error', (e) => {
+    emitClientError({ message: e.message, stack: e.error?.stack });
+});
+window.addEventListener('unhandledrejection', (e) => {
+    emitClientError({ message: String(e.reason) });
+});
 
 const rootElement = document.getElementById('root');
 if (!rootElement) {
