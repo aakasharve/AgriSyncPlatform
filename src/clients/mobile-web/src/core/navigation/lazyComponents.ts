@@ -8,7 +8,7 @@ import { IS_E2E_HARNESS_ENABLED } from '../../app/featureFlags';
 export const ProfilePage = React.lazy(() => import('../../pages/ProfilePage'));
 export const SettingsPage = React.lazy(() => import('../../pages/SettingsPage'));
 export const VoiceJournalPage = React.lazy(() => import('../../features/voiceJournal/pages/VoiceJournalPage'));
-export const SchedulerPage = React.lazy(() => import('../../pages/SchedulerPage'));
+export const SchedulerPage = React.lazy(() => import('../../features/scheduler/SchedulerPage'));
 export const ProcurementPage = React.lazy(() => import('../../features/procurement/ProcurementPage'));
 export const HarvestIncomePage = React.lazy(() => import('../../features/finance/income/HarvestIncomePage'));
 export const ReflectPage = React.lazy(() => import('../../features/reflect/ReflectPage'));
