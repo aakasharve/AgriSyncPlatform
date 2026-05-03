@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Security.Claims;
 using System.Text;
 using System.Threading.RateLimiting;
+using AgriSync.Bootstrapper.Configuration;
 using AgriSync.Bootstrapper.Middleware;
 using AgriSync.BuildingBlocks;
 using AgriSync.BuildingBlocks.Analytics;
@@ -30,7 +31,12 @@ try
     var builder = WebApplication.CreateBuilder(args);
     builder.Configuration
         .AddJsonFile("secrets/local/credentials.json", optional: true, reloadOnChange: true)
-        .AddEnvironmentVariables();
+        .AddEnvironmentVariables()
+        // Secrets Manager registers LAST so its values win when
+        // USE_SECRETS_MANAGER=true. Default off — laptop-dev path
+        // (env vars + appsettings) keeps working unchanged. See
+        // AgriSync.Bootstrapper/Configuration/SecretsManagerConfigurationExtensions.cs.
+        .AddAgriSyncSecretsManager();
     builder.WebHost.ConfigureKestrel(options =>
     {
         options.Limits.MaxRequestBodySize = 50L * 1024L * 1024L;
