@@ -802,6 +802,46 @@ public static class DependencyInjection
                     sp.GetServices<AgriSync.BuildingBlocks.Application.PipelineBehaviors.IAuthorizationCheck<
                         ShramSafal.Application.UseCases.Work.StartJobCard.StartJobCardCommand>>())));
 
+        // T-IGH-03-PIPELINE-ROLLOUT (VerifyJobCardForPayout):
+        // caller-shape validation (empty IDs) + job-card-existence +
+        // role-tier authorization (PrimaryOwner / SecondaryOwner /
+        // Agronomist / FpcTechnicalManager). The aggregate-state
+        // checks stay in the body. Endpoint
+        // (POST /job-cards/{id}/verify-for-payout) resolves the
+        // pipeline-wrapped handler. NOTE: there is no PushSync entry
+        // path for this command — verify-for-payout is NOT in the
+        // SyncMutationCatalog (only create/assign/start/complete/
+        // settle/cancel are), so this is endpoint-only. The
+        // PushSyncBatchHandler ctor is intentionally NOT modified.
+        services.AddScoped<AgriSync.BuildingBlocks.Application.PipelineBehaviors.IValidator<
+            ShramSafal.Application.UseCases.Work.VerifyJobCardForPayout.VerifyJobCardForPayoutCommand>,
+            ShramSafal.Application.UseCases.Work.VerifyJobCardForPayout.VerifyJobCardForPayoutValidator>();
+        services.AddScoped<AgriSync.BuildingBlocks.Application.PipelineBehaviors.IAuthorizationCheck<
+            ShramSafal.Application.UseCases.Work.VerifyJobCardForPayout.VerifyJobCardForPayoutCommand>,
+            ShramSafal.Application.UseCases.Work.VerifyJobCardForPayout.VerifyJobCardForPayoutAuthorizer>();
+        services.AddScoped<AgriSync.BuildingBlocks.Application.IHandler<
+            ShramSafal.Application.UseCases.Work.VerifyJobCardForPayout.VerifyJobCardForPayoutCommand,
+            ShramSafal.Application.UseCases.Work.VerifyJobCardForPayout.VerifyJobCardForPayoutResult>>(sp =>
+            AgriSync.BuildingBlocks.Application.HandlerPipeline.Build(
+                sp.GetRequiredService<VerifyJobCardForPayoutHandler>(),
+                new AgriSync.BuildingBlocks.Application.PipelineBehaviors.LoggingBehavior<
+                    ShramSafal.Application.UseCases.Work.VerifyJobCardForPayout.VerifyJobCardForPayoutCommand,
+                    ShramSafal.Application.UseCases.Work.VerifyJobCardForPayout.VerifyJobCardForPayoutResult>(
+                    sp.GetRequiredService<Microsoft.Extensions.Logging.ILogger<
+                        AgriSync.BuildingBlocks.Application.PipelineBehaviors.LoggingBehavior<
+                            ShramSafal.Application.UseCases.Work.VerifyJobCardForPayout.VerifyJobCardForPayoutCommand,
+                            ShramSafal.Application.UseCases.Work.VerifyJobCardForPayout.VerifyJobCardForPayoutResult>>>()),
+                new AgriSync.BuildingBlocks.Application.PipelineBehaviors.ValidationBehavior<
+                    ShramSafal.Application.UseCases.Work.VerifyJobCardForPayout.VerifyJobCardForPayoutCommand,
+                    ShramSafal.Application.UseCases.Work.VerifyJobCardForPayout.VerifyJobCardForPayoutResult>(
+                    sp.GetServices<AgriSync.BuildingBlocks.Application.PipelineBehaviors.IValidator<
+                        ShramSafal.Application.UseCases.Work.VerifyJobCardForPayout.VerifyJobCardForPayoutCommand>>()),
+                new AgriSync.BuildingBlocks.Application.PipelineBehaviors.AuthorizationBehavior<
+                    ShramSafal.Application.UseCases.Work.VerifyJobCardForPayout.VerifyJobCardForPayoutCommand,
+                    ShramSafal.Application.UseCases.Work.VerifyJobCardForPayout.VerifyJobCardForPayoutResult>(
+                    sp.GetServices<AgriSync.BuildingBlocks.Application.PipelineBehaviors.IAuthorizationCheck<
+                        ShramSafal.Application.UseCases.Work.VerifyJobCardForPayout.VerifyJobCardForPayoutCommand>>())));
+
         return services;
     }
 }
