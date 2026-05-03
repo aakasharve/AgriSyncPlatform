@@ -28,8 +28,8 @@ export const ReferralsPage = React.lazy(() => import('../../pages/ReferralsPage'
 export const TaskCreationSheet = React.lazy(() => import('../../features/scheduler/components/TaskCreationSheet'));
 export const ReviewInboxSheet = React.lazy(() => import('../../features/logs/components/ReviewInboxSheet'));
 export const QuickLogSheet = React.lazy(() => import('../../features/logs/components/QuickLogSheet').then(module => ({ default: module.QuickLogSheet })));
-export const OnboardingPermissionsPage = React.lazy(() => import('../../pages/OnboardingPermissionsPage'));
-export const QrDemoPage = React.lazy(() => import('../../pages/QrDemoPage'));
+export const OnboardingPermissionsPage = React.lazy(() => import('../../features/onboarding/OnboardingPermissionsPage'));
+export const QrDemoPage = React.lazy(() => import('../../features/onboarding/QrDemoPage'));
 export const AttentionPage = React.lazy(() => import('../../features/attention/pages/AttentionPage'));
 export const TestQueuePage = React.lazy(() => import('../../features/tests/pages/TestQueuePage'));
 export const TestDetailPage = React.lazy(() => import('../../features/tests/pages/TestDetailPage'));
