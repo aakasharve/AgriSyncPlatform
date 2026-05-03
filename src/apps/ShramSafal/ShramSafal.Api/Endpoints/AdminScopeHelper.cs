@@ -20,7 +20,7 @@ namespace ShramSafal.Api.Endpoints;
 /// No claim inspection for authorization — that's the whole point of the pivot.
 /// Only <c>sub</c> claim is read, for identity.
 /// </summary>
-internal static class AdminScopeHelper
+public static class AdminScopeHelper
 {
     private const string ActiveOrgHeader = "X-Active-Org-Id";
 

@@ -504,6 +504,12 @@ public static class DependencyInjection
         services.AddScoped<ShramSafal.Application.Ports.IAdminMisRepository,
             ShramSafal.Infrastructure.Persistence.Repositories.AdminMisRepository>();
 
+        // DWC v2 §3.6 — Daily Work Closure farmer-health (Mode A drilldown +
+        // Mode B cohort). Endpoints in AgriSync.Bootstrapper.AdminFarmerHealthEndpoints
+        // resolve these directly; ports + emitter wired via AddShramSafalInfrastructure.
+        services.AddScoped<ShramSafal.Application.UseCases.Admin.GetFarmerHealth.GetFarmerHealthHandler>();
+        services.AddScoped<ShramSafal.Application.UseCases.Admin.GetCohortPatterns.GetCohortPatternsHandler>();
+
         // Phase 3 MIS — schedule compliance evaluator
         services.AddScoped<IScheduleComplianceService, ScheduleComplianceService>();
         services.AddScoped<AdoptScheduleHandler>();

@@ -63,4 +63,11 @@ public static class AnalyticsEventType
     public const string AdminScopeForbidden = "admin.scope.forbidden";
     public const string AdminActiveOrgSwitched = "admin.active_org.switched";
     public const string AdminScopeDriftDetected = "admin.scope.drift_detected";
+
+    // DWC v2 §3.8 — admin drilldown / cohort audit. Emitted by
+    // AdminAuditEmitter for every Mode A drilldown
+    // (GET /admin/farmer-health/{farmId}) and Mode B cohort fetch
+    // (GET /admin/farmer-health/cohort) so audit reviewers can answer
+    // "who looked at which farmer when?" via analytics.events.
+    public const string AdminFarmerLookup = "admin.farmer_lookup";
 }

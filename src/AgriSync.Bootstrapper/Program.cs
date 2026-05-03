@@ -14,6 +14,7 @@ using Microsoft.EntityFrameworkCore.Storage;
 using Serilog;
 using Serilog.Context;
 using Accounts.Api;
+using AgriSync.Bootstrapper;
 using AgriSync.Bootstrapper.Composition;
 using AgriSync.Bootstrapper.Endpoints;
 using ShramSafal.Api;
@@ -415,6 +416,11 @@ try
     app.MapAccountsModuleEndpoints();
     app.MapFirstFarmBootstrapEndpoints();
     // /user/auth/me/context now lives in User.Api (mapped by MapUserApi above).
+
+    // DWC v2 §3.8 — admin Daily Work Closure dashboard. Mapped at the
+    // root (not under /shramsafal) per the plan's external route
+    // contract; the admin-web client targets /admin/farmer-health/*.
+    app.MapAdminFarmerHealth();
 
     // Sub-plan 05 Task 2: maps /__e2e/* only if ALLOW_E2E_SEED=true.
     app.MapE2eEndpoints();
