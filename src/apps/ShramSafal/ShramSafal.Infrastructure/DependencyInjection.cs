@@ -20,6 +20,7 @@ using ShramSafal.Infrastructure.Persistence.Repositories;
 using ShramSafal.Infrastructure.Storage;
 using ShramSafal.Infrastructure.Reports;
 using ShramSafal.Application.Wtl;
+using ShramSafal.Domain.Events;
 using ShramSafal.Infrastructure.Wtl;
 
 namespace ShramSafal.Infrastructure;
@@ -257,6 +258,20 @@ public static class DependencyInjection
         // extractor is a stateless singleton.
         services.AddScoped<IWorkerRepository, WorkerRepository>();
         services.AddSingleton<IWorkerNameExtractor, RegexWorkerNameExtractor>();
+
+        // DWC v2 §2.10 — Work Trust Ledger projector. Subscribes to
+        // DailyLogCreatedEvent via the outbox dispatcher and passively
+        // captures worker names from voice transcripts. The default
+        // transcript store returns null (transcripts are not yet
+        // persisted on the DailyLog aggregate); the projector treats
+        // null as "no work" and no-ops, so registering the subscriber
+        // is safe in production today and activates automatically once
+        // a real IDailyLogTranscriptStore implementation lands.
+        services.AddScoped<IDailyLogTranscriptStore, NullDailyLogTranscriptStore>();
+        services.AddScoped<WorkerNameProjector>();
+        services.AddScoped<IWorkerNameProjector>(sp => sp.GetRequiredService<WorkerNameProjector>());
+        services.AddScoped<IDomainEventHandler<DailyLogCreatedEvent>>(
+            sp => sp.GetRequiredService<WorkerNameProjector>());
 
         // DWC v2 §3.5 — Mode A drilldown + Mode B cohort patterns.
         // Both repos read AnalyticsDbContext via raw SQL (same pattern
