@@ -1,5 +1,6 @@
 using System.Text.Json;
 using AgriSync.BuildingBlocks.Abstractions;
+using AgriSync.BuildingBlocks.Application;
 using AgriSync.BuildingBlocks.Results;
 using AgriSync.SharedKernel.Contracts.Ids;
 using AgriSync.SharedKernel.Contracts.Roles;
@@ -10,10 +11,37 @@ using ShramSafal.Domain.Planning;
 
 namespace ShramSafal.Application.UseCases.Planning.OverridePlannedActivity;
 
+/// <summary>
+/// Adds a locally-created planned activity (not derived from a template)
+/// to a crop cycle, with an audit trail.
+///
+/// <para>
+/// T-IGH-03-PIPELINE-ROLLOUT (AddLocalPlannedActivity): wired through
+/// the explicit <see cref="HandlerPipeline"/>. Caller-shape validation
+/// lives in <see cref="AddLocalPlannedActivityValidator"/>; Mukadam-tier
+/// authorization lives in <see cref="AddLocalPlannedActivityAuthorizer"/>.
+/// When this handler is resolved via the pipeline (see DI registration),
+/// both layers run before the body executes; when resolved directly
+/// (legacy tests + the PushSyncBatch dispatch — currently unimplemented
+/// for plan.add), the body's defense-in-depth gates continue to enforce
+/// the same invariants verbatim.
+/// </para>
+///
+/// <para>
+/// PushSync decision: <c>plan.add</c> is registered in the sync
+/// mutation catalog but its dispatch case in
+/// <c>PushSyncBatchHandler.ExecuteMutationAsync</c> returns
+/// <c>MutationTypeUnimplementedCode</c> (Sub-plan 03 follow-up). No
+/// sync integration test exercises an end-to-end plan.add; the
+/// "only-with-tests" guardrail therefore keeps this rollout endpoint-
+/// only — there is no <c>PushSyncBatchHandler</c> ctor change.
+/// </para>
+/// </summary>
 public sealed class AddLocalPlannedActivityHandler(
     IShramSafalRepository repository,
     ISyncMutationStore syncMutationStore,
     IClock clock)
+    : IHandler<AddLocalPlannedActivityCommand>
 {
     private const string MutationType = "plan.add";
 

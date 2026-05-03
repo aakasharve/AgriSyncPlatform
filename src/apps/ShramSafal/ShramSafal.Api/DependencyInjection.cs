@@ -714,6 +714,34 @@ public static class DependencyInjection
                 new AgriSync.BuildingBlocks.Application.PipelineBehaviors.AuthorizationBehavior<OverridePlannedActivityCommand>(
                     sp.GetServices<AgriSync.BuildingBlocks.Application.PipelineBehaviors.IAuthorizationCheck<OverridePlannedActivityCommand>>())));
 
+        // T-IGH-03-PIPELINE-ROLLOUT (AddLocalPlannedActivity): caller-shape
+        // validation (incl. non-blank ActivityName / Stage / Reason as a
+        // pre-image of the domain factory's ArgumentException) +
+        // Mukadam-tier authorization. The endpoint
+        // (POST /planned-activities) gets the canonical
+        // InvalidCommand → Forbidden ordering through the pipeline (no
+        // NotFound stage — this command CREATES the aggregate). PushSync
+        // is NOT migrated: "plan.add" still returns
+        // MutationTypeUnimplementedCode in PushSyncBatchHandler and no
+        // sync integration test exercises end-to-end plan.add — the
+        // "only-with-tests" guardrail keeps this rollout endpoint-only.
+        services.AddScoped<AgriSync.BuildingBlocks.Application.PipelineBehaviors.IValidator<
+            AddLocalPlannedActivityCommand>,
+            AddLocalPlannedActivityValidator>();
+        services.AddScoped<AgriSync.BuildingBlocks.Application.PipelineBehaviors.IAuthorizationCheck<
+            AddLocalPlannedActivityCommand>,
+            AddLocalPlannedActivityAuthorizer>();
+        services.AddScoped<AgriSync.BuildingBlocks.Application.IHandler<AddLocalPlannedActivityCommand>>(sp =>
+            AgriSync.BuildingBlocks.Application.HandlerPipeline.Build(
+                sp.GetRequiredService<AddLocalPlannedActivityHandler>(),
+                new AgriSync.BuildingBlocks.Application.PipelineBehaviors.LoggingBehavior<AddLocalPlannedActivityCommand>(
+                    sp.GetRequiredService<Microsoft.Extensions.Logging.ILogger<
+                        AgriSync.BuildingBlocks.Application.PipelineBehaviors.LoggingBehavior<AddLocalPlannedActivityCommand>>>()),
+                new AgriSync.BuildingBlocks.Application.PipelineBehaviors.ValidationBehavior<AddLocalPlannedActivityCommand>(
+                    sp.GetServices<AgriSync.BuildingBlocks.Application.PipelineBehaviors.IValidator<AddLocalPlannedActivityCommand>>()),
+                new AgriSync.BuildingBlocks.Application.PipelineBehaviors.AuthorizationBehavior<AddLocalPlannedActivityCommand>(
+                    sp.GetServices<AgriSync.BuildingBlocks.Application.PipelineBehaviors.IAuthorizationCheck<AddLocalPlannedActivityCommand>>())));
+
         return services;
     }
 }

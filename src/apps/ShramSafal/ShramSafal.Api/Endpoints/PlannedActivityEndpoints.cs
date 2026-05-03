@@ -40,10 +40,14 @@ public static class PlannedActivityEndpoints
         })
         .WithName("OverridePlannedActivity");
 
+        // T-IGH-03-PIPELINE-ROLLOUT (AddLocalPlannedActivity): resolves
+        // the pipeline-wrapped IHandler so the canonical
+        // InvalidCommand → Forbidden ordering runs before the body's
+        // idempotency / persist / audit / save logic.
         group.MapPost("/planned-activities", async (
             AddLocalPlannedActivityRequest request,
             ClaimsPrincipal user,
-            AddLocalPlannedActivityHandler handler,
+            IHandler<AddLocalPlannedActivityCommand> handler,
             CancellationToken ct) =>
         {
             if (!EndpointActorContext.TryGetUserId(user, out var actorUserId))
