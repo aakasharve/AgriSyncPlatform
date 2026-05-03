@@ -9,6 +9,7 @@ import { AlertTriangle, Check, ListPlus, X, Zap } from 'lucide-react';
 import Button from '../../../../../shared/components/ui/Button';
 import IssueFormSheet from '../../IssueFormSheet';
 import { BucketIssue } from '../../../../../domain/types/log.types';
+import type { WorkflowStep } from '../../../../../types';
 
 const WorkDetailSheet = ({
     workTypes,
@@ -22,8 +23,7 @@ const WorkDetailSheet = ({
     workTypes: string[],
     onSave: (types: string[], issue?: BucketIssue) => void,
     onClose: () => void,
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- T-IGH-04 ratchet: legacy `any` deferred to T-IGH-04-LINT-RATCHET-V2 follow-up.
-    availableActivities?: any[], // WorkflowStep[] technically
+    availableActivities?: WorkflowStep[],
     sourceText?: string,
     systemInterpretation?: string,
     initialIssue?: BucketIssue

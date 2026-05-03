@@ -10,10 +10,11 @@ import { startHarvestSession } from '../../../../features/finance/harvestService
 import { HarvestConfig } from '../../../../types';
 import ObservationHubSheet from '../ObservationHubSheet';
 import { CropActivityEvent, IrrigationEvent, LabourEvent,
-    MachineryEvent, CropProfile,
+    MachineryEvent, CropProfile, TodayCounts,
     WorkflowStep, InputEvent, Plot, AgriLogResponse, ActivityExpenseEvent, ObservationNote, PlannedTask, UnclearReason, DisturbanceEvent
 } from '../../../../types';
 import { BucketIssue } from '../../../../domain/types/log.types';
+import type { ActivityDetailData } from '../activity-card/sheets/DetailSheet';
 import { UnclearSegment } from '../../../logs/logs.types';
 import { loadVocabDB, addApprovedMapping } from '../../../voice/vocab/vocabStore';
 import { getDateKey } from '../../../../core/domain/services/DateKeyService';
@@ -326,12 +327,13 @@ const ManualEntry: React.FC<ManualEntryProps> = ({ context, crops, defaults, pro
         setCropActivities(cropActivities.map(t => t.id === id ? { ...t, title: newName } : t));
     };
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- T-IGH-04 ratchet: legacy `any` deferred to T-IGH-04-LINT-RATCHET-V2 follow-up.
-    const updateDetails = (activityId: string, type: 'labour' | 'irrigation' | 'machinery' | 'input', data: any) => {
-        if (type === 'labour') setLabourMap({ ...labourMap, [activityId]: { ...data, linkedActivityId: activityId } });
-        if (type === 'irrigation') setIrrigationMap({ ...irrigationMap, [activityId]: { ...data, linkedActivityId: activityId } });
-        if (type === 'machinery') setMachineryMap({ ...machineryMap, [activityId]: { ...data, linkedActivityId: activityId } });
-        if (type === 'input') setInputMap({ ...inputMap, [activityId]: data }); // Data is InputEvent[]
+    // `data` is one of LabourEvent | IrrigationEvent | MachineryEvent | InputEvent[] —
+    // narrowed by `type`; see DetailSheet/ActivityCardProps docstrings.
+    const updateDetails = (activityId: string, type: 'labour' | 'irrigation' | 'machinery' | 'input', data: ActivityDetailData) => {
+        if (type === 'labour') setLabourMap({ ...labourMap, [activityId]: { ...(data as LabourEvent), linkedActivityId: activityId } });
+        if (type === 'irrigation') setIrrigationMap({ ...irrigationMap, [activityId]: { ...(data as IrrigationEvent), linkedActivityId: activityId } });
+        if (type === 'machinery') setMachineryMap({ ...machineryMap, [activityId]: { ...(data as MachineryEvent), linkedActivityId: activityId } });
+        if (type === 'input') setInputMap({ ...inputMap, [activityId]: data as InputEvent[] }); // Data is InputEvent[]
     };
 
     const updateWorkTypes = (activityId: string, types: string[]) => {
@@ -360,8 +362,7 @@ const ManualEntry: React.FC<ManualEntryProps> = ({ context, crops, defaults, pro
         const allCosts = [
             ...finalLabour.map(l => l.totalCost || 0),
             ...finalMachinery.map(m => m.rentalCost || 0),
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any -- T-IGH-04 ratchet: legacy `any` deferred to T-IGH-04-LINT-RATCHET-V2 follow-up.
-            ...finalInputs.map(i => (i as any).cost || 0),
+            ...finalInputs.map(i => i.cost || 0),
             ...expenses.map(e => e.totalAmount || 0)
         ];
 
@@ -482,8 +483,8 @@ const ManualEntry: React.FC<ManualEntryProps> = ({ context, crops, defaults, pro
 
     // Default counts if map not provided or plot not found
     const selectedPlotIds = context?.selection.flatMap(selection => selection.selectedPlotIds) || [];
-    const currentCounts = selectedPlotIds.length > 0 && todayCountsMap
-        ? selectedPlotIds.reduce((acc, plotId) => {
+    const currentCounts: TodayCounts = selectedPlotIds.length > 0 && todayCountsMap
+        ? selectedPlotIds.reduce<TodayCounts>((acc, plotId) => {
             const next = todayCountsMap[plotId];
             if (!next) return acc;
 
@@ -495,14 +496,10 @@ const ManualEntry: React.FC<ManualEntryProps> = ({ context, crops, defaults, pro
                 machinery: acc.machinery + (next.machinery || 0),
                 disturbance: acc.disturbance + (next.disturbance || 0),
                 observations: acc.observations + (next.observations || 0),
-                // eslint-disable-next-line @typescript-eslint/no-explicit-any -- T-IGH-04 ratchet: legacy `any` deferred to T-IGH-04-LINT-RATCHET-V2 follow-up.
-                activityExpenses: (acc as any).activityExpenses + ((next as any).activityExpenses || 0),
-                // eslint-disable-next-line @typescript-eslint/no-explicit-any -- T-IGH-04 ratchet: legacy `any` deferred to T-IGH-04-LINT-RATCHET-V2 follow-up.
-                reminders: (acc as any).reminders + ((next as any).reminders || 0),
-                // eslint-disable-next-line @typescript-eslint/no-explicit-any -- T-IGH-04 ratchet: legacy `any` deferred to T-IGH-04-LINT-RATCHET-V2 follow-up.
-                harvest: (acc as any).harvest + ((next as any).harvest || 0)
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any -- T-IGH-04 ratchet: legacy `any` deferred to T-IGH-04-LINT-RATCHET-V2 follow-up.
-            } as any;
+                activityExpenses: acc.activityExpenses + (next.activityExpenses || 0),
+                reminders: acc.reminders + (next.reminders || 0),
+                harvest: acc.harvest + (next.harvest || 0)
+            };
         }, {
             cropActivities: 0,
             irrigation: 0,
@@ -514,8 +511,7 @@ const ManualEntry: React.FC<ManualEntryProps> = ({ context, crops, defaults, pro
             activityExpenses: 0,
             reminders: 0,
             harvest: 0
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- T-IGH-04 ratchet: legacy `any` deferred to T-IGH-04-LINT-RATCHET-V2 follow-up.
-        } as any)
+        })
         : {
             cropActivities: 0,
             irrigation: 0,

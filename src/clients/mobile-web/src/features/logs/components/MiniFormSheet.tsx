@@ -10,17 +10,23 @@ import { LedgerDefaults } from '../../../types';
 
 type CategoryType = 'task' | 'irrigation' | 'labour' | 'input' | 'machinery';
 
+/**
+ * Loose form bag — fields vary by `category`. The internal editor reads
+ * back fields as numbers/strings throughout the form; tightening this would
+ * force the form to be split per-category. Loose-by-design.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- loose-by-design: shared mini form across irrigation/labour/input/machinery/task — fields read+written via dynamic keys; see docstring.
+type MiniFormData = any;
+
 interface MiniFormSheetProps {
     category: CategoryType | null;
     defaults: LedgerDefaults;
     onClose: () => void;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- T-IGH-04 ratchet: legacy `any` deferred to T-IGH-04-LINT-RATCHET-V2 follow-up.
-    onSave: (category: CategoryType, data: any) => void;
+    onSave: (category: CategoryType, data: MiniFormData) => void;
 }
 
 const MiniFormSheet: React.FC<MiniFormSheetProps> = ({ category, defaults, onClose, onSave }) => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- T-IGH-04 ratchet: legacy `any` deferred to T-IGH-04-LINT-RATCHET-V2 follow-up.
-    const [data, setData] = useState<any>({});
+    const [data, setData] = useState<MiniFormData>({});
     const [isVisible, setIsVisible] = useState(false);
 
     useEffect(() => {
@@ -53,8 +59,7 @@ const MiniFormSheet: React.FC<MiniFormSheetProps> = ({ category, defaults, onClo
         onClose();
     };
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- T-IGH-04 ratchet: legacy `any` deferred to T-IGH-04-LINT-RATCHET-V2 follow-up.
-    const update = (field: string, val: any) => setData({ ...data, [field]: val });
+    const update = (field: string, val: unknown) => setData({ ...(data as Record<string, unknown>), [field]: val });
 
     // Handle smart defaults for machinery costs based on ownership
     const updateMachineryOwnership = (ownership: 'owned' | 'rented') => {
@@ -204,9 +209,8 @@ const MiniFormSheet: React.FC<MiniFormSheetProps> = ({ category, defaults, onClo
                     {category === 'machinery' && (
                         <div className="space-y-4">
                             <div className="flex gap-2">
-                                {['owned', 'rented'].map(o => (
-                                    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- T-IGH-04 ratchet: legacy `any` deferred to T-IGH-04-LINT-RATCHET-V2 follow-up.
-                                    <button key={o} onClick={() => updateMachineryOwnership(o as any)} className={`flex-1 py-2 rounded-lg border text-sm font-bold capitalize ${data.ownership === o ? 'bg-slate-800 text-white' : 'border-slate-200 text-slate-500'}`}>{o}</button>
+                                {(['owned', 'rented'] as const).map(o => (
+                                    <button key={o} onClick={() => updateMachineryOwnership(o)} className={`flex-1 py-2 rounded-lg border text-sm font-bold capitalize ${data.ownership === o ? 'bg-slate-800 text-white' : 'border-slate-200 text-slate-500'}`}>{o}</button>
                                 ))}
                             </div>
                             <select value={data.type} onChange={e => update('type', e.target.value)} className="w-full p-3 border border-slate-200 rounded-xl bg-white outline-none focus:border-slate-500">

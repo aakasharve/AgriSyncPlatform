@@ -28,8 +28,8 @@ const InputDetailSheet = ({
     // We treat the "editing" state as a single object for the UI, but it might result in multiple InputEvents (e.g. Both)
     // For simplicity, we edit one "Main" application logic. If multiple exist, we take the first.
     const [method, setMethod] = useState<InputMethod | 'Both'>(inputs[0]?.method || 'Spray');
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- T-IGH-04 ratchet: legacy `any` deferred to T-IGH-04-LINT-RATCHET-V2 follow-up.
-    const [carrierType, setCarrierType] = useState<'Blower' | 'Tank' | 'Hours' | 'Pati'>(inputs[0]?.carrierType as any || 'Blower');
+    type CarrierType = 'Blower' | 'Tank' | 'Hours' | 'Pati';
+    const [carrierType, setCarrierType] = useState<CarrierType>((inputs[0]?.carrierType as CarrierType) || 'Blower');
     const [carrierCount, setCarrierCount] = useState<number>(inputs[0]?.carrierCount || 0);
     const [mix, setMix] = useState<InputMixItem[]>(inputs[0]?.mix || []);
     const [reason, setReason] = useState<InputReason | undefined>(inputs[0]?.reason);
@@ -66,8 +66,7 @@ const InputDetailSheet = ({
         setMix([...mix, { id: Date.now().toString(), productName: '', dose: 0, unit: 'ml/L' }]);
     };
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- T-IGH-04 ratchet: legacy `any` deferred to T-IGH-04-LINT-RATCHET-V2 follow-up.
-    const updateMixItem = (id: string, field: keyof InputMixItem, value: any) => {
+    const updateMixItem = <K extends keyof InputMixItem>(id: string, field: K, value: InputMixItem[K]) => {
         setMix(mix.map(item => item.id === id ? { ...item, [field]: value } : item));
     };
 
@@ -121,8 +120,7 @@ const InputDetailSheet = ({
             newEvents.push({
                 ...baseEvent,
                 method: method as InputMethod,
-                // eslint-disable-next-line @typescript-eslint/no-explicit-any -- T-IGH-04 ratchet: legacy `any` deferred to T-IGH-04-LINT-RATCHET-V2 follow-up.
-                carrierType: carrierType as any,
+                carrierType: carrierType as InputEvent['carrierType'],
                 carrierCount,
                 computedWaterVolume: calculatedVolume > 0 ? calculatedVolume : undefined
             });
@@ -172,8 +170,7 @@ const InputDetailSheet = ({
                                 return (
                                     <button
                                         key={m}
-                                        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- T-IGH-04 ratchet: legacy `any` deferred to T-IGH-04-LINT-RATCHET-V2 follow-up.
-                                        onClick={() => setMethod(m as any)}
+                                        onClick={() => setMethod(m as InputMethod | 'Both')}
                                         className={`px-4 py-2.5 rounded-xl text-sm font-bold border transition-all whitespace-nowrap ${method === m ? activeClass : 'bg-white border-slate-200 text-slate-500'}`}
                                     >
                                         {m}
@@ -237,8 +234,7 @@ const InputDetailSheet = ({
                                     <select
                                         className="w-full p-3 rounded-xl border border-slate-200 text-sm font-bold outline-none bg-white"
                                         value={carrierType}
-                                        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- T-IGH-04 ratchet: legacy `any` deferred to T-IGH-04-LINT-RATCHET-V2 follow-up.
-                                        onChange={e => setCarrierType(e.target.value as any)}
+                                        onChange={e => setCarrierType(e.target.value as CarrierType)}
                                     >
                                         <option value="Pati">Pati</option>
                                         <option value="Bag">Bag</option>
