@@ -1,4 +1,5 @@
 using AgriSync.BuildingBlocks.Abstractions;
+using AgriSync.BuildingBlocks.Application;
 using AgriSync.BuildingBlocks.Results;
 using AgriSync.SharedKernel.Contracts.Ids;
 using ShramSafal.Application.Contracts.Dtos;
@@ -8,10 +9,27 @@ using ShramSafal.Domain.Common;
 
 namespace ShramSafal.Application.UseCases.Attachments.CreateAttachment;
 
+/// <summary>
+/// Phase-1 of the attachment two-phase commit. Reserves a row with
+/// <c>Status = Reserved</c>; the binary content arrives later via
+/// <see cref="UploadAttachment.UploadAttachmentHandler"/>.
+///
+/// <para>
+/// T-IGH-03-PIPELINE-ROLLOUT (CreateAttachment): caller-shape
+/// validation lives in <see cref="CreateAttachmentValidator"/>; farm-
+/// membership authorization lives in
+/// <see cref="CreateAttachmentAuthorizer"/>. When this handler is
+/// resolved via the pipeline, both run before the body. The body keeps
+/// its inline gates as defense-in-depth for direct callers; the link-
+/// target existence + cross-farm guard (per-type) stays inline because
+/// it is multi-outcome and not a pure command-shape gate.
+/// </para>
+/// </summary>
 public sealed class CreateAttachmentHandler(
     IShramSafalRepository repository,
     IIdGenerator idGenerator,
     IClock clock)
+    : IHandler<CreateAttachmentCommand, AttachmentDto>
 {
     public async Task<Result<AttachmentDto>> HandleAsync(CreateAttachmentCommand command, CancellationToken ct = default)
     {
