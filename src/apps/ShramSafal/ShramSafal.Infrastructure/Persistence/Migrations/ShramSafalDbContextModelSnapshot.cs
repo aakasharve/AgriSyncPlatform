@@ -2701,6 +2701,56 @@ namespace ShramSafal.Infrastructure.Persistence.Migrations
                 {
                     b.Navigation("Activities");
                 });
+
+            // spec: correctionevent-server-persistence
+            modelBuilder.Entity("ShramSafal.Domain.Corrections.CorrectionEvent", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("CapturedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("CorrectedParse")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.Property<string>("Locale")
+                        .IsRequired()
+                        .HasMaxLength(10)
+                        .HasColumnType("character varying(10)");
+
+                    b.Property<Guid>("OriginalParseId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("OriginalParseRaw")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.Property<string>("PromptVersion")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<string>("Trigger")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CapturedAtUtc");
+
+                    b.HasIndex("PromptVersion");
+
+                    b.HasIndex("UserId");
+
+                    b.ToTable("correction_events", "ssf");
+                });
+
 #pragma warning restore 612, 618
         }
     }

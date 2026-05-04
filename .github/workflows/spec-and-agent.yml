@@ -72,4 +72,12 @@ jobs:
             echo "::warning::  authoring-agent: <implementor-backend|implementor-frontend|implementor-ai>"
           fi
 
-          exit 0  # Wave 1: advisory — never block
+          # Wave 2: block on main, advisory on akash_edits
+          if [ "$FAILED" = true ]; then
+            if [ "${{ github.base_ref }}" = "main" ]; then
+              echo "::error::Spec/agent gate BLOCKED — PR targeting main must have spec: <id> and authoring-agent: <name>"
+              exit 1
+            fi
+          fi
+
+          exit 0

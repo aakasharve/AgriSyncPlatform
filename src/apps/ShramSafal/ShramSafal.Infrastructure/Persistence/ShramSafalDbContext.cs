@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using ShramSafal.Domain.AI;
 using ShramSafal.Domain.Audit;
 using ShramSafal.Domain.Attachments;
+using ShramSafal.Domain.Corrections;
 using ShramSafal.Domain.Compliance;
 using ShramSafal.Domain.Crops;
 using ShramSafal.Domain.Farms;
@@ -55,6 +56,9 @@ public sealed class ShramSafalDbContext(DbContextOptions<ShramSafalDbContext> op
     public DbSet<Organization> Organizations => Set<Organization>();
     public DbSet<OrganizationMembership> OrganizationMemberships => Set<OrganizationMembership>();
     public DbSet<OrganizationFarmScope> OrganizationFarmScopes => Set<OrganizationFarmScope>();
+
+    // spec: correctionevent-server-persistence
+    public DbSet<CorrectionEvent> CorrectionEvents => Set<CorrectionEvent>();
 
     // DWC v2 §3.3 / ADR 2026-05-04 wtl-v0-entity-shape — passive
     // server-side worker reuse ledger. NEVER farmer-facing in v0.

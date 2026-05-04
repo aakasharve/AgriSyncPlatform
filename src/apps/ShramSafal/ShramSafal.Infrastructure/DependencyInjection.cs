@@ -11,6 +11,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 using ShramSafal.Application.Ports;
 using ShramSafal.Application.Ports.External;
+using ShramSafal.Application.UseCases.Corrections;
 using ShramSafal.Infrastructure.AI;
 using ShramSafal.Infrastructure.Auth;
 using ShramSafal.Infrastructure.Integrations.Gemini;
@@ -224,6 +225,10 @@ public static class DependencyInjection
                 options.ApiKey = key.Trim();
             }
         });
+
+        // spec: correctionevent-server-persistence
+        services.AddScoped<ICorrectionEventRepository, CorrectionEventRepository>();
+        services.AddScoped<IRecordCorrectionEventHandler, RecordCorrectionEventHandler>();
 
         services.AddScoped<IShramSafalRepository, ShramSafalRepository>();
         services.AddScoped<IUserDirectory, UserDirectoryService>();

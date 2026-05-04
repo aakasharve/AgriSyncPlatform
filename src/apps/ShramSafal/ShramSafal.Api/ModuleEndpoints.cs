@@ -39,6 +39,7 @@ public static class ModuleEndpoints
         group.MapComplianceEndpoints();
         group.MapJobCardEndpoints();
         group.MapWorkerProfileEndpoints();
+        group.MapCorrectionsEndpoints();
         endpoints.MapSyncEndpoints();
 
         return endpoints;

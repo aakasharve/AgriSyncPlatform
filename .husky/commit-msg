@@ -40,10 +40,12 @@ if [ -n "$STAGED_PROMPTS" ] && ! echo "$COMMIT_MSG" | grep -qE 'prompt-version:\
   exit 1
 fi
 
-# 5. Spec ID for src/** (Wave 1: advisory warn)
+# 5. Spec ID for src/** (Wave 2: BLOCKING)
 STAGED_SRC=$(git diff --cached --name-only 2>/dev/null | grep '^src/' || true)
 if [ -n "$STAGED_SRC" ] && ! echo "$COMMIT_MSG" | grep -qE '(spec:\s*[a-z0-9-]+|\[hotfix\])'; then
-  echo "[commit-msg:warn] src/** modified but no 'spec: <id>' or '[hotfix]' in body. Will block in Wave 2." >&2
+  echo "[commit-msg] ERROR: Commits touching src/** must include 'spec: <spec-id>' or '[hotfix]' in body." >&2
+  echo "[commit-msg] Example: spec: correctionevent-server-persistence" >&2
+  exit 1
 fi
 
 echo "[commit-msg] Validated."
