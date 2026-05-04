@@ -410,7 +410,7 @@ const HarvestIncomePage: React.FC<HarvestIncomePageProps> = ({ context, crops, o
                     session={sessions.find(s => s.id === selectedSessionId)!}
                     onClose={() => setShowEntrySheet(false)}
                     onSave={handleEntrySaved}
-                    initialData={extractedPattiData}
+                    initialData={extractedPattiData ?? undefined}
                 />
             )}
 

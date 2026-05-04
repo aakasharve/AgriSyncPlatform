@@ -23,11 +23,33 @@ import {
 import Button from '../../../../shared/components/ui/Button';
 import { getDateKey } from '../../../../core/domain/services/DateKeyService';
 
+/** Shape of AI-parsed Patti data passed from the OCR flow into the entry sheet. */
+export interface PattiExtractedData {
+    date?: string;
+    pattiNumber?: string;
+    deductions?: {
+        commission?: number;
+        transport?: number;
+        hamali?: number;
+        bharai?: number;
+        tolai?: number;
+        motorFee?: number;
+        other?: number;
+    };
+    items?: Array<{
+        gradeId?: string;
+        quantity?: number;
+        ratePerUnit?: number;
+        rateUnit?: string;
+        [key: string]: unknown;
+    }>;
+}
+
 interface GradeWiseEntrySheetProps {
     session: HarvestSession;
     onClose: () => void;
     onSave: (updatedSession: HarvestSession) => void;
-    initialData?: any; // Parsed Patti Data
+    initialData?: PattiExtractedData;
 }
 
 interface GradeEntryRow {

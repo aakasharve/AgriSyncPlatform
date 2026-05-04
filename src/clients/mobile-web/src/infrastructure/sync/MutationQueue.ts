@@ -167,6 +167,53 @@ export class MutationQueue {
     }
 
     /**
+     * T-IGH-04-CONFLICT-EDIT: replace a rejected row's payload and reset it
+     * to PENDING so the next sync cycle retries it with the corrected data.
+     *
+     * Validates via the same PayloadValidator used by enqueue() so the
+     * corrected payload must satisfy the mutation's schema before the row
+     * is updated. The row is not duplicated — only its payload, status, and
+     * lastError are changed in-place.
+     *
+     * @returns true if the row was found and updated, false if not found.
+     * @throws if clientRequestId is empty or payload validation fails.
+     */
+    async replacePayload(clientRequestId: string, newPayload: unknown): Promise<boolean> {
+        if (!clientRequestId || clientRequestId.trim().length === 0) {
+            throw new Error('clientRequestId is required');
+        }
+
+        const db = getDatabase();
+        const deviceId = getOrCreateDeviceId();
+
+        const row = await db.mutationQueue
+            .where('[deviceId+clientRequestId]')
+            .equals([deviceId, clientRequestId])
+            .first();
+
+        if (!row || row.id === undefined) {
+            return false;
+        }
+
+        const validation = validatePayload(row.mutationType, newPayload);
+        if (!validation.ok) {
+            throw new Error(
+                `Payload validation failed for ${row.mutationType}: ` +
+                validation.errors.map((e) => `${e.path || '<root>'} ${e.message}`).join('; ')
+            );
+        }
+
+        await db.mutationQueue.update(row.id, {
+            payload: newPayload,
+            status: 'PENDING',
+            lastError: undefined,
+            updatedAt: systemClock.nowISO(),
+        });
+
+        return true;
+    }
+
+    /**
      * Returns the rows that need user attention (durable rejections).
      * Used by ConflictResolutionService.list().
      */

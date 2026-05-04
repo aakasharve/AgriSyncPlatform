@@ -22,6 +22,7 @@ import { backgroundSyncWorker } from '../../../infrastructure/sync/BackgroundSyn
 import { getRootStore } from '../../../app/state/RootStore';
 import { getDatabase } from '../../../infrastructure/storage/DexieDatabase';
 import { systemClock } from '../../../core/domain/services/Clock';
+import { getEditSurface } from './EditSurfaceRegistry';
 
 export interface RejectedMutationView {
     mutationId: string;
@@ -84,6 +85,36 @@ export class ConflictResolutionService {
         } catch {
             // Actor not mounted — ignore.
         }
+    }
+
+    /**
+     * T-IGH-04-CONFLICT-EDIT: route a rejected mutation to its registered
+     * edit surface so the user can correct the payload and retry.
+     *
+     * Looks up the row by mutationId (= clientRequestId), then looks up the
+     * EditSurfaceRegistry for that mutationType and invokes the handler with
+     * the current payload. Types without a registered surface fall through to
+     * the `escalateToOwner` sentinel (Marathi dialog + escalate event).
+     *
+     * No-op if the row does not exist.
+     */
+    static async edit(mutationId: string): Promise<void> {
+        const db = getDatabase();
+        const row = await db.mutationQueue
+            .where('[deviceId+clientRequestId]')
+            .equals([mutationQueue.getDeviceId(), mutationId])
+            .first();
+
+        if (!row) return;
+
+        const handler = getEditSurface(row.mutationType);
+        if (!handler) return;
+
+        handler({
+            mutationId,
+            mutationType: row.mutationType,
+            payload: row.payload,
+        });
     }
 
     static async discard(mutationId: string): Promise<void> {
