@@ -20,7 +20,6 @@ export async function initScrollAnimations(): Promise<void> {
 
   gsap.registerPlugin(ScrollTrigger);
 
-  initSceneVisibility(ScrollTrigger);
   initSplitHeadlines(gsap, ScrollTrigger);
   initBasicReveals(gsap, ScrollTrigger);
   initThreeDRevealGroups(gsap, ScrollTrigger);
@@ -28,27 +27,13 @@ export async function initScrollAnimations(): Promise<void> {
   initPathDraw(gsap, ScrollTrigger);
   initCounters(gsap, ScrollTrigger);
   initZoomSections(gsap, ScrollTrigger);
-  initHeroPin(gsap, ScrollTrigger);
   initScrollProgressBar(ScrollTrigger);
   initCursorGlow(gsap);
   initMagneticButtons(gsap);
+  initSectionHandoff(gsap, ScrollTrigger);
 
   requestAnimationFrame(() => ScrollTrigger.refresh());
   window.addEventListener('load', () => ScrollTrigger.refresh(), { once: true });
-}
-
-function initSceneVisibility(ScrollTrigger: ST): void {
-  document.querySelectorAll<HTMLElement>('[data-scene]').forEach((section) => {
-    ScrollTrigger.create({
-      trigger: section,
-      start: 'top 82%',
-      once: true,
-      onEnter: () => {
-        section.classList.add('scene-visible');
-        section.classList.remove('scene-hidden');
-      },
-    });
-  });
 }
 
 function initBasicReveals(gsap: GSAP, ScrollTrigger: ST): void {
@@ -224,7 +209,7 @@ function initParallax(gsap: GSAP, ScrollTrigger: ST): void {
         trigger,
         start: 'top bottom',
         end: 'bottom top',
-        scrub: true,
+        scrub: 0.8,
       },
     });
   });
@@ -332,7 +317,7 @@ function initZoomSections(gsap: GSAP, ScrollTrigger: ST): void {
           trigger,
           start: node.dataset.zoomStart ?? 'top 78%',
           end: node.dataset.zoomEnd ?? 'bottom 52%',
-          scrub: true,
+          scrub: 0.8,
         },
       });
       return;
@@ -353,72 +338,6 @@ function initZoomSections(gsap: GSAP, ScrollTrigger: ST): void {
         });
       },
     });
-  });
-}
-
-function initHeroPin(gsap: GSAP, ScrollTrigger: ST): void {
-  document.querySelectorAll<HTMLElement>('[data-hero-pin]').forEach((section) => {
-    const content = section.querySelector<HTMLElement>('[data-hero-content]');
-    const phone = section.querySelector<HTMLElement>('[data-hero-phone]');
-    const whiteCard = section.querySelector<HTMLElement>('[data-hero-white-card]');
-    const scrollHint = section.querySelector<HTMLElement>('[data-hero-scrollhint]');
-    const rim = section.querySelector<HTMLElement>('[data-hero-rim]');
-
-    const timeline = gsap.timeline({
-      scrollTrigger: {
-        trigger: section,
-        start: 'top top',
-        end: '+=130%',
-        pin: true,
-        scrub: 1,
-        anticipatePin: 1,
-      },
-    });
-
-    if (content) {
-      timeline.to(content, {
-        y: -64,
-        opacity: 0.34,
-        ease: 'none',
-      }, 0);
-    }
-
-    if (phone) {
-      timeline.to(phone, {
-        x: -18,
-        y: -96,
-        scale: 1.08,
-        rotateY: -4,
-        rotateX: 1,
-        ease: 'none',
-      }, 0);
-    }
-
-    if (whiteCard) {
-      timeline.to(whiteCard, {
-        x: -24,
-        y: -72,
-        scale: 1.05,
-        rotation: -3,
-        ease: 'none',
-      }, 0.05);
-    }
-
-    if (rim) {
-      timeline.to(rim, {
-        opacity: 0.46,
-        scale: 1.12,
-        ease: 'none',
-      }, 0);
-    }
-
-    if (scrollHint) {
-      timeline.to(scrollHint, {
-        opacity: 0,
-        y: -12,
-        ease: 'none',
-      }, 0);
-    }
   });
 }
 
@@ -487,6 +406,36 @@ function initMagneticButtons(gsap: GSAP): void {
         duration: 0.45,
         ease: 'elastic.out(1, 0.45)',
       });
+    });
+  });
+}
+
+function initSectionHandoff(gsap: GSAP, ScrollTrigger: ST): void {
+  const sections = Array.from(document.querySelectorAll<HTMLElement>('[data-scene]'));
+
+  sections.forEach((section) => {
+    // Sections already in viewport at init time are immediately visible — skip animation
+    const rect = section.getBoundingClientRect();
+    if (rect.top < window.innerHeight * 0.75) {
+      section.classList.add('scene-visible');
+      return;
+    }
+
+    gsap.set(section, { scale: 0.985, opacity: 0 });
+
+    ScrollTrigger.create({
+      trigger: section,
+      start: 'top 75%',
+      onEnter: () => {
+        section.classList.add('scene-visible');
+        section.classList.remove('scene-hidden');
+        gsap.to(section, { scale: 1, opacity: 1, duration: 0.7, ease: 'expo.out' });
+      },
+      onLeaveBack: () => {
+        section.classList.remove('scene-visible');
+        section.classList.add('scene-hidden');
+        gsap.set(section, { scale: 0.985, opacity: 0 });
+      },
     });
   });
 }
