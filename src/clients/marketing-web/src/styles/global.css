@@ -77,6 +77,10 @@ section {
   height: 2px;
 }
 
+.soil-stratum::before { background: var(--stratum-top);  }
+.soil-stratum > span  { background: var(--stratum-mid);  }
+.soil-stratum::after  { background: var(--stratum-deep); }
+
 /* ── Text utilities (for explicit white-on-dark contexts like phone screen) ── */
 .text-white-70  { color: var(--white-70); }
 .text-white-55  { color: var(--white-55); }
@@ -120,18 +124,6 @@ section {
     font-family: var(--font-sans);
     line-height: var(--body-line-height);
   }
-}
-
-/* Scene reveal animations */
-.scene-hidden {
-  opacity: 0;
-  transform: translateY(40px);
-}
-
-.scene-visible {
-  opacity: 1;
-  transform: translateY(0);
-  transition: opacity 0.8s var(--ease-out-expo), transform 0.8s var(--ease-out-expo);
 }
 
 /* Fragment drift animation */
@@ -190,15 +182,15 @@ section {
 
 /* Green glow effect */
 .glow-green {
-  background: radial-gradient(ellipse at center, rgba(5, 150, 105, 0.15) 0%, rgba(5, 150, 105, 0.05) 40%, transparent 70%);
+  background: radial-gradient(ellipse at center, rgba(22,163,74,0.15) 0%, rgba(22,163,74,0.05) 40%, transparent 70%);
 }
 
 /* 3D Mic button — green gradient with depth */
 .mic-3d {
-  background: linear-gradient(145deg, #10B981 0%, #059669 50%, #047857 100%);
+  background: linear-gradient(145deg, var(--brand-fresh) 0%, var(--brand) 50%, #0F3D22 100%);
   box-shadow:
-    0 4px 6px rgba(5, 150, 105, 0.35),
-    0 8px 20px rgba(5, 150, 105, 0.25),
+    0 4px 6px rgba(22,163,74,0.35),
+    0 8px 20px rgba(22,163,74,0.25),
     0 2px 4px rgba(0, 0, 0, 0.12),
     inset 0 2px 0 rgba(255, 255, 255, 0.25),
     inset 0 -2px 4px rgba(0, 0, 0, 0.1);
@@ -209,8 +201,8 @@ section {
 .mic-3d:hover {
   transform: translateY(-1px);
   box-shadow:
-    0 6px 10px rgba(5, 150, 105, 0.4),
-    0 12px 28px rgba(5, 150, 105, 0.3),
+    0 6px 10px rgba(22,163,74,0.4),
+    0 12px 28px rgba(22,163,74,0.3),
     0 3px 6px rgba(0, 0, 0, 0.15),
     inset 0 2px 0 rgba(255, 255, 255, 0.25),
     inset 0 -2px 4px rgba(0, 0, 0, 0.1);
@@ -308,8 +300,8 @@ section {
 }
 
 .green-particle {
-  background: rgba(5, 150, 105, 0.35);
-  box-shadow: 0 0 6px rgba(5, 150, 105, 0.2);
+  background: rgba(22,163,74,0.35);
+  box-shadow: 0 0 6px rgba(22,163,74,0.2);
 }
 
 /* ───────────────────────────────────────────
@@ -345,7 +337,7 @@ section {
   transition: box-shadow 0.3s ease;
 }
 .card-hover-glow:hover {
-  box-shadow: 0 0 20px rgba(5, 150, 105, 0.12), 0 4px 12px rgba(0, 0, 0, 0.06);
+  box-shadow: 0 0 20px var(--brand-fresh-10), 0 4px 12px rgba(0, 0, 0, 0.06);
 }
 
 /* ───────────────────────────────────────────
@@ -397,29 +389,6 @@ section {
   100% { background-position: 300% 50%; }
 }
 
-/* ── Bento card grid ── */
-.bento-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-  gap: 1.5rem;
-}
-
-.bento-card {
-  background: rgba(255, 255, 255, 0.85);
-  border: 1px solid rgba(5, 150, 105, 0.12);
-  border-radius: 20px;
-  padding: 1.75rem;
-  backdrop-filter: blur(8px);
-  box-shadow: 0 2px 12px rgba(0,0,0,0.06), inset 0 1px 0 rgba(255,255,255,0.8);
-  transition: transform 0.3s var(--ease-out-expo), box-shadow 0.3s ease;
-  will-change: transform;
-}
-
-.bento-card:hover {
-  transform: translateY(-4px);
-  box-shadow: 0 8px 32px rgba(5,150,105,0.1), 0 2px 8px rgba(0,0,0,0.08), inset 0 1px 0 rgba(255,255,255,0.8);
-}
-
 /* ── Shimmer effect (for loading/highlight) ── */
 @keyframes shimmer {
   0% { background-position: -200% center; }
@@ -427,7 +396,7 @@ section {
 }
 
 .shimmer {
-  background: linear-gradient(90deg, transparent 0%, rgba(5,150,105,0.08) 50%, transparent 100%);
+  background: linear-gradient(90deg, transparent 0%, rgba(22,163,74,0.08) 50%, transparent 100%);
   background-size: 200% 100%;
   animation: shimmer 2.5s ease-in-out infinite;
 }
@@ -449,7 +418,7 @@ section {
   width: 320px;
   height: 320px;
   border-radius: 50%;
-  background: radial-gradient(ellipse at center, rgba(5,150,105,0.06) 0%, transparent 70%);
+  background: radial-gradient(ellipse at center, rgba(22,163,74,0.06) 0%, transparent 70%);
   pointer-events: none;
   z-index: 0;
   transform: translate(-50%, -50%);
@@ -711,7 +680,7 @@ section {
 .crop-bar {
   width: 0%;
   height: 100%;
-  background: linear-gradient(180deg, #10B981 0%, #059669 60%, #064E3B 100%);
+  background: linear-gradient(180deg, var(--brand-fresh) 0%, var(--brand) 60%, #0F3D22 100%);
   border-radius: 4px 4px 0 0;
   transition: width 1.4s cubic-bezier(0.16, 1, 0.3, 1);
   position: relative;
@@ -724,7 +693,7 @@ section {
   transform: translateX(-50%);
   width: 12px;
   height: 12px;
-  background: #10B981;
+  background: var(--brand-fresh);
   border-radius: 50%;
   opacity: 0;
   transition: opacity 0.3s 0.8s;
@@ -751,7 +720,7 @@ section {
 /* CTA input glow */
 .input-glow:focus {
   outline: none;
-  box-shadow: 0 0 0 3px rgba(16,185,129,0.25), 0 0 20px rgba(16,185,129,0.15);
+  box-shadow: 0 0 0 3px var(--brand-fresh-15), 0 0 20px var(--brand-fresh-10);
 }
 
 /* Marquee trust strip */
@@ -872,29 +841,6 @@ section {
   mix-blend-mode: multiply;
   opacity: 0;
   transition: background 0.5s ease, opacity 0.5s ease;
-}
-
-/* ── Bullock cart wheel (top-right corner) ── */
-#bullock-wheel {
-  position: fixed;
-  top: 0;
-  right: 0;
-  width: 120px;
-  height: 120px;
-  transform: translate(40%, -40%);
-  z-index: 3;
-  pointer-events: none;
-  opacity: 0.6;
-  display: none;
-}
-
-@media (min-width: 1024px) {
-  #bullock-wheel { display: block; }
-}
-
-#bullock-wheel img {
-  width: 100%;
-  height: 100%;
 }
 
 /* ── CSS Wind leaf sprites (fallback when canvas disabled) ── */
@@ -1105,69 +1051,6 @@ section {
 /* Grass color by section time */
 [data-scene="hero"] .grass-blade { background: linear-gradient(to top, #15803d, #4ade80); }
 
-/* ── Festive overrides ── */
-body[data-festival="diwali"] .sky-dawn { --particle-color: #F59E0B; }
-body[data-festival="holi"] .sky-dawn { opacity: 0.8; }
-body[data-festival="gudi-padwa"] #hills-layer { filter: hue-rotate(20deg); }
-
-/* ── Almanac page-turn transitions (desktop) ── */
-@media (min-width: 1024px) {
-  .section-page {
-    position: relative;
-    transform-style: preserve-3d;
-    perspective: 1200px;
-  }
-
-  .section-page-edge {
-    position: absolute;
-    right: -2px;
-    top: 0;
-    width: 40px;
-    height: 100%;
-    background: linear-gradient(to right, transparent, rgba(254,249,230,0.6));
-    border-right: 1px solid rgba(180,150,80,0.2);
-    pointer-events: none;
-  }
-}
-
-/* ── Audio toggle (conch shell opt-in) ── */
-#audio-toggle {
-  position: fixed;
-  bottom: 20px;
-  right: 20px;
-  z-index: 50;
-  width: 44px;
-  height: 44px;
-  border-radius: 50%;
-  background: rgba(255, 255, 255, 0.88);
-  backdrop-filter: blur(10px);
-  border: 1px solid rgba(5, 150, 105, 0.2);
-  color: #059669;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
-  transition: transform 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
-  padding: 0;
-}
-
-#audio-toggle:hover {
-  transform: scale(1.1);
-  box-shadow: 0 4px 20px rgba(5, 150, 105, 0.2);
-}
-
-#audio-toggle[aria-pressed="true"] {
-  background: #059669;
-  color: white;
-  border-color: transparent;
-  box-shadow: 0 4px 16px rgba(5, 150, 105, 0.35);
-}
-
-@media (max-width: 1023px) {
-  #audio-toggle { display: none; }
-}
-
 /* ── Water channel (right margin) ── */
 #water-channel {
   position: fixed;
@@ -1270,6 +1153,6 @@ body[data-festival="gudi-padwa"] #hills-layer { filter: hue-rotate(20deg); }
   .wind-leaf, .grass-blade, .mandi-ticker-inner, .water-channel-fill, .channel-float {
     animation: none;
   }
-  #sky-layer, #hills-layer, #ambient-tint, #bullock-wheel, #wind-leaves,
-  #water-channel, #audio-toggle { display: none; }
+  #sky-layer, #hills-layer, #ambient-tint, #wind-leaves,
+  #water-channel { display: none; }
 }
