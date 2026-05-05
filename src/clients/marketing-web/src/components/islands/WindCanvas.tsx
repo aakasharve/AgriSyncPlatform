@@ -185,10 +185,21 @@ export default function WindCanvas() {
 
     rafId = requestAnimationFrame(frame);
 
+    const onVisibilityChange = () => {
+      if (document.hidden) {
+        cancelAnimationFrame(rafId);
+      } else if (!killed) {
+        lastT = performance.now();
+        rafId = requestAnimationFrame(frame);
+      }
+    };
+    document.addEventListener('visibilitychange', onVisibilityChange);
+
     return () => {
       cancelAnimationFrame(rafId);
       window.removeEventListener('resize', onResize);
       window.removeEventListener('scroll', onScroll);
+      document.removeEventListener('visibilitychange', onVisibilityChange);
     };
   }, []);
 
