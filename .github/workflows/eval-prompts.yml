@@ -1,0 +1,78 @@
+name: AI Prompt Eval
+
+on:
+  pull_request:
+    paths:
+      - 'src/apps/ShramSafal/ShramSafal.Infrastructure/AI/**'
+      - 'src/clients/mobile-web/src/infrastructure/ai/**'
+      - 'src/tests/ai-eval/**'
+      - '.github/workflows/eval-prompts.yml'
+
+jobs:
+  eval:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: agrisync
+          POSTGRES_PASSWORD: agrisync
+          POSTGRES_DB: agrisync_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install eval runner deps
+        working-directory: src/tests/ai-eval
+        run: npm ci
+
+      - name: Install mobile-web deps
+        working-directory: src/clients/mobile-web
+        run: npm ci
+
+      - name: Build backend
+        run: dotnet build src/AgriSync.sln
+
+      - name: Start backend (background)
+        env:
+          ASPNETCORE_ENVIRONMENT: Development
+          ALLOW_EVAL_PARSE: 'true'
+          ASPNETCORE_URLS: 'http://localhost:5048'
+          ConnectionStrings__Postgres: 'Host=localhost;Port=5432;Database=agrisync_test;Username=agrisync;Password=agrisync'
+        run: |
+          dotnet run --project src/AgriSync.Bootstrapper/ &
+          for i in 1 2 3 4 5 6 7 8 9 10; do
+            curl -fs http://localhost:5048/health && exit 0 || sleep 3
+          done
+          echo "backend never came up on :5048"
+          exit 1
+
+      - name: Run prompt eval
+        working-directory: src/clients/mobile-web
+        env:
+          AI_EVAL_BACKEND_URL: 'http://localhost:5048'
+        run: npm run eval -- --bucket=all --source=live --mode=mock --report=json --fail-on-regression > /tmp/eval-report.json
+
+      - name: Upload eval report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: eval-report
+          path: /tmp/eval-report.json
