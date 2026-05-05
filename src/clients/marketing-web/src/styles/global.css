@@ -553,10 +553,6 @@ section {
   .drift, .drift-slow, .drift-reverse {
     animation: none;
   }
-  .scene-hidden {
-    opacity: 1;
-    transform: none;
-  }
   .ambient-particle {
     display: none;
   }
