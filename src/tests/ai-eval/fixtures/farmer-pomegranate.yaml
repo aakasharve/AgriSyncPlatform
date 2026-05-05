@@ -1,0 +1,20 @@
+profile:
+  motors:
+    - { id: motor-1, name: "Borewell Pump", hp: 5, linkedWaterSourceId: water-1 }
+  waterResources:
+    - { id: water-1, name: "Borewell" }
+  machineries:
+    - { name: "Spray Pump", type: "sprayer" }
+  ledgerDefaults:
+    irrigation: { method: "drip", defaultDuration: 60 }
+    labour: { defaultWage: 350 }
+availableCrops:
+  - id: crop-pomegranate
+    name: "Pomegranate"
+    plots:
+      - id: plot-1
+        name: "Main Plot"
+        infrastructure:
+          irrigationMethod: "drip"
+          linkedMotorId: motor-1
+          dripDetails: { flowRatePerHour: 2.5 }

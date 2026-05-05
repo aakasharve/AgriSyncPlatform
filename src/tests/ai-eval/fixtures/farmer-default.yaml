@@ -1,0 +1,13 @@
+# Default farmer fixture for scenarios that don't specialize.
+# Shape mirrors VoiceParseContext (ShramSafal.Application.Ports.External).
+profile:
+  motors:
+    - { id: motor-1, name: "Default Motor", hp: 5, linkedWaterSourceId: water-1 }
+  waterResources:
+    - { id: water-1, name: "Borewell" }
+  machineries:
+    - { name: "Default Tractor", type: "tractor" }
+  ledgerDefaults:
+    irrigation: { method: "drip", defaultDuration: 60 }
+    labour: { defaultWage: 350 }
+availableCrops: []

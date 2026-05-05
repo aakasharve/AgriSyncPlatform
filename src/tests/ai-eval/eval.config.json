@@ -1,0 +1,16 @@
+{
+  "thresholds": {
+    "workDone": 0.80,
+    "irrigation": 0.80,
+    "inputs": 0.80,
+    "labour": 0.80,
+    "machinery": 0.80,
+    "expenses": 0.80,
+    "tasks": 0.80,
+    "observations": 0.80
+  },
+  "global": {
+    "failOnRegression": true,
+    "minScenariosPerBucket": 3
+  }
+}

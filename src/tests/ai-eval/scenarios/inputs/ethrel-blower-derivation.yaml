@@ -1,0 +1,32 @@
+id: ethrel-blower-derivation
+bucket: inputs
+description: |
+  Farmer says "इथरेल ४ मिली ने मारल". AI must derive:
+  - dosePerLitre = 4 ml/L (explicit)
+  - blower implicit from "मारल" (sprayed/struck)
+  - tractor implicit from blower deployment
+  - totalMl = 4 × 600 = 2400 (from farmer's Aspee Blower 600 capacity)
+
+input:
+  transcript: "इथरेल ४ मिली ने मारल"
+
+context:
+  fixture: farmer-grape-grower
+
+expected:
+  inputs:
+    - productName: "Ethrel"
+      dosePerLitre: 4
+      doseUnit: "ml/L"
+      totalMl: 2400
+  machinery:
+    - { type: "blower", name: "Aspee Blower 600" }
+    - { type: "tractor" }
+
+tolerances:
+  "inputs[0].productName": { fuzzy: 0.7 }
+  "inputs[0].dosePerLitre": { exact: true }
+  "inputs[0].totalMl": { "±%": 1 }
+  "machinery": { set_match: true }
+
+ignore_fields: [summary, dayOutcome]

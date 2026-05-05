@@ -1,0 +1,38 @@
+{
+  "parsed": {
+    "summary": "4 मिली इथरेलचा वापर करण्यात आला.",
+    "dayOutcome": "WORK_RECORDED",
+    "inputs": [
+      {
+        "productName": "इथरेल",
+        "quantity": 4,
+        "unit": "ml",
+        "type": "pesticide",
+        "method": "Spray",
+        "sourceText": "इथरेल ४ मिली ने मारल"
+      }
+    ],
+    "confidence": 0.95,
+    "fullTranscript": "इथरेल ४ मिली ने मारल",
+    "cropActivities": [],
+    "irrigation": [],
+    "labour": [],
+    "machinery": [],
+    "activityExpenses": [],
+    "observations": [],
+    "plannedTasks": [],
+    "missingSegments": [],
+    "unclearSegments": [],
+    "questionsForUser": [],
+    "fieldConfidences": {},
+    "_meta": {
+      "schemaVersion": "1.0.0",
+      "pipelineVersion": "gemini-server-v1",
+      "promptVersion": "legacy-2026-02-22;hash:78fcdbcf6f46a65f"
+    }
+  },
+  "promptVersion": "legacy-2026-02-22;hash:78fcdbcf6f46a65f",
+  "modelMs": 4051,
+  "success": true,
+  "error": null
+}

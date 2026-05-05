@@ -22,7 +22,9 @@
     "e2e": "playwright test --config e2e/playwright.config.ts",
     "e2e:ui": "playwright test --config e2e/playwright.config.ts --ui",
     "e2e:install": "playwright install --with-deps",
-    "audit:ai-calls": "node scripts/ai-call-audit.mjs"
+    "audit:ai-calls": "node scripts/ai-call-audit.mjs",
+    "eval": "tsx ../../tests/ai-eval/runner/index.ts",
+    "eval:all": "tsx ../../tests/ai-eval/runner/index.ts --bucket=all"
   },
   "dependencies": {
     "@capacitor/android": "^8.2.0",
@@ -67,6 +69,7 @@
     "@testing-library/react": "^16.3.2",
     "@testing-library/user-event": "^14.6.1",
     "@types/google.maps": "^3.58.1",
+    "@types/js-yaml": "^4.0.9",
     "@types/node": "^22.14.0",
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^5.0.0",
@@ -77,6 +80,7 @@
     "eslint-plugin-react-hooks": "^7.1.1",
     "fake-indexeddb": "^6.2.5",
     "globals": "^17.5.0",
+    "js-yaml": "^4.1.1",
     "jsdom": "^29.1.1",
     "postcss": "^8.5.8",
     "rimraf": "^6.0.1",

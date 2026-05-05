@@ -1,0 +1,5 @@
+# agrisync-prompt-ops Phase 1 — local-only artifacts
+node_modules/
+
+# Recordings ARE committed: they let CI run --mode=mock without an API key.
+# (If a recording goes stale, --rerecord forces a fresh live call.)

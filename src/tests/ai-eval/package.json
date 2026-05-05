@@ -1,0 +1,13 @@
+{
+  "name": "@agrisync/ai-eval-runner",
+  "private": true,
+  "version": "0.1.0",
+  "description": "agrisync-prompt-ops Phase 1 — node-side test harness for evaluating AI parsing scenarios against the env-gated /api/ai/eval-parse endpoint. Run via the parent mobile-web's `npm run eval` script (which delegates here via tsx).",
+  "type": "module",
+  "dependencies": {
+    "js-yaml": "^4.1.1"
+  },
+  "devDependencies": {
+    "@types/js-yaml": "^4.0.9"
+  }
+}

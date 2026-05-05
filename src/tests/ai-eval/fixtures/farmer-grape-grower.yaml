@@ -1,0 +1,22 @@
+# Grape farmer with blower; used by ethrel-blower-derivation scenario.
+profile:
+  motors:
+    - { id: motor-1, name: "Borewell Pump", hp: 7.5, linkedWaterSourceId: water-1 }
+  waterResources:
+    - { id: water-1, name: "Borewell" }
+  machineries:
+    - { name: "Aspee Blower 600", type: "blower", capacity: "600L" }
+    - { name: "Mahindra Tractor", type: "tractor" }
+  ledgerDefaults:
+    irrigation: { method: "drip", defaultDuration: 90 }
+    labour: { defaultWage: 400 }
+availableCrops:
+  - id: crop-grape
+    name: "Grape"
+    plots:
+      - id: plot-1
+        name: "North Plot"
+        infrastructure:
+          irrigationMethod: "drip"
+          linkedMotorId: motor-1
+          dripDetails: { flowRatePerHour: 4.0 }
