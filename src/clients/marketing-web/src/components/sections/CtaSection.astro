@@ -37,7 +37,7 @@ const t = getTranslations(lang);
     <div class="grid grid-cols-1 xl:grid-cols-[1.1fr_0.9fr] gap-8 items-start">
       <div class="pt-4">
         <span class="chapter-mark" data-chapter>
-          {lang === 'mr' ? 'Chapter 12 · सुरुवात' : 'Chapter 12 · Begin'}
+          {lang === 'mr' ? 'Chapter 09 · सुरुवात' : 'Chapter 09 · Begin'}
         </span>
 
         <h2 class="font-serif text-[clamp(2.3rem,5.4vw,4.6rem)] font-bold tracking-tight leading-[1.04]" style="color:var(--text-inverse);" data-split-headline>
@@ -58,7 +58,7 @@ const t = getTranslations(lang);
               class="card-dark rounded-2xl p-5 md:p-6 border border-white/8 relative overflow-hidden"
               data-reveal-3d-item
             >
-              <div class="absolute inset-x-0 top-0 h-px" style={`background:${index % 2 === 0 ? 'linear-gradient(90deg, rgba(16,185,129,0.65), transparent)' : 'linear-gradient(90deg, rgba(245,158,11,0.65), transparent)'}`}></div>
+              <div class="absolute inset-x-0 top-0 h-px" style={`background:${index % 2 === 0 ? 'linear-gradient(90deg, rgba(22,163,74,0.65), transparent)' : 'linear-gradient(90deg, rgba(245,158,11,0.65), transparent)'}`}></div>
               <div class="text-[0.68rem] font-extrabold uppercase tracking-[0.28em] mb-3" style="color:var(--gold);">
                 {lang === 'mr' ? `टप्पा 0${index + 1}` : `Stage 0${index + 1}`}
               </div>
@@ -66,10 +66,31 @@ const t = getTranslations(lang);
             </div>
           ))}
         </div>
+
+        <!-- FAQ mini-accordion (4 essential questions from FAQSection) -->
+        <div class="cta-faq mt-8">
+          {([0, 1, 2, 3] as const).map((i) => (
+            <details class="cta-faq__item">
+              <summary class="cta-faq__q">
+                <span class="cta-faq__num">{String(i + 1).padStart(2, '0')}</span>
+                <span class="cta-faq__question">{t.guided.questions[i]}</span>
+                <svg class="cta-faq__chevron" width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5" aria-hidden="true">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
+                </svg>
+              </summary>
+              <p class="cta-faq__a">
+                {i === 0 ? (t.qa1 as any).body
+                  : i === 1 ? (t.qa2 as any).body
+                  : i === 2 ? (t.qa3 as any).body
+                  :           (t.qa4 as any).body}
+              </p>
+            </details>
+          ))}
+        </div>
       </div>
 
       <div class="relative xl:pt-8" data-zoom-section data-zoom-from-scale="0.92" data-zoom-from-y="40">
-        <div class="absolute -inset-4 rounded-[2rem] pointer-events-none" style="background:radial-gradient(ellipse at center, rgba(16,185,129,0.16) 0%, transparent 68%);filter:blur(24px);" aria-hidden="true"></div>
+        <div class="absolute -inset-4 rounded-[2rem] pointer-events-none" style="background:radial-gradient(ellipse at center, rgba(22,163,74,0.16) 0%, transparent 68%);filter:blur(24px);" aria-hidden="true"></div>
         <div class="relative rounded-[2rem] border border-white/10 bg-[linear-gradient(180deg,rgba(255,255,255,0.08),rgba(255,255,255,0.03))] backdrop-blur-xl p-5 md:p-6 shadow-[0_28px_80px_rgba(0,0,0,0.35)]">
           <div class="flex items-start justify-between gap-4 mb-6">
             <div>
@@ -119,7 +140,105 @@ const t = getTranslations(lang);
             </a>
           </div>
         </div>
+
+        <div class="mt-4 text-center">
+          <a
+            href="/download/shramsafal-latest.apk"
+            download="ShramSafal.apk"
+            class="inline-flex items-center gap-1.5 text-sm transition-colors hover:text-white"
+            style="color:var(--text-inverse-58);"
+          >
+            <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5" aria-hidden="true">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" />
+            </svg>
+            {lang === 'mr' ? 'Android APK डाउनलोड करा' : 'Download Android APK'}
+          </a>
+        </div>
       </div>
     </div>
   </div>
 </section>
+
+<style>
+  /* ── CTA mini-FAQ accordion ─────────────────────────────────────────── */
+  .cta-faq {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+
+  .cta-faq__item {
+    border: 1px solid rgba(255,255,255,0.10);
+    border-radius: 0.75rem;
+    overflow: hidden;
+    background: rgba(255,255,255,0.04);
+    transition: border-color 0.2s ease;
+  }
+
+  .cta-faq__item[open] {
+    border-color: rgba(255,255,255,0.18);
+  }
+
+  .cta-faq__q {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.85rem 1rem;
+    cursor: pointer;
+    list-style: none;
+    user-select: none;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .cta-faq__q::-webkit-details-marker { display: none; }
+
+  .cta-faq__num {
+    flex-shrink: 0;
+    width: 1.6rem;
+    height: 1.6rem;
+    border-radius: 50%;
+    background: rgba(22,163,74,0.22);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: var(--font-sans);
+    font-size: 0.6rem;
+    font-weight: 900;
+    color: var(--brand-fresh);
+    letter-spacing: 0.02em;
+  }
+
+  .cta-faq__question {
+    flex: 1;
+    font-family: var(--font-sans);
+    font-size: clamp(0.84rem, 1.4vw, 0.94rem);
+    font-weight: 700;
+    color: var(--text-inverse-78);
+    line-height: 1.4;
+  }
+
+  .cta-faq__chevron {
+    flex-shrink: 0;
+    color: var(--text-inverse-58);
+    transition: transform 0.25s ease;
+  }
+
+  .cta-faq__item[open] .cta-faq__chevron {
+    transform: rotate(180deg);
+  }
+
+  .cta-faq__a {
+    padding: 0.75rem 1rem 1rem;
+    border-top: 1px solid rgba(255,255,255,0.08);
+    font-family: var(--font-sans);
+    font-size: clamp(0.84rem, 1.3vw, 0.94rem);
+    line-height: 1.72;
+    color: var(--text-inverse-58);
+    margin: 0;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .cta-faq__item,
+    .cta-faq__chevron { transition: none; }
+  }
+</style>
