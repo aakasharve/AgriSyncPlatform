@@ -30,9 +30,31 @@ internal sealed class AiPromptTemplateRegistry
     {
         _systemBase = LoadModule("core/systemBase.md", "v1");
         _outputContract = LoadModule("core/outputContract.md", "v1");
+
+        var assembly = typeof(AiPromptTemplateRegistry).Assembly;
+        var resourceNames = assembly.GetManifestResourceNames();
+
+        // Resource names are like "ShramSafal.Infrastructure.AI.Prompts.buckets.inputs.v1.md".
+        // We need them in "buckets/<id>.v<N>.md" form for the picker.
+        var relativePaths = resourceNames
+            .Where(n => n.Contains($"{ResourceRoot}.buckets."))
+            .Select(n =>
+            {
+                var rootIdx = n.IndexOf($"{ResourceRoot}.buckets.", StringComparison.Ordinal);
+                var tail = n[(rootIdx + ResourceRoot.Length + 1)..];
+                // tail = "buckets.inputs.v1.md" -> "buckets/inputs.v1.md"
+                var firstDot = tail.IndexOf('.');
+                return tail[..firstDot] + "/" + tail[(firstDot + 1)..];
+            })
+            .ToList();
+
         _bucketModules = RequiredBucketIds.ToDictionary(
             bucketId => bucketId,
-            bucketId => LoadModule($"buckets/{bucketId}.v1.md", "v1"),
+            bucketId =>
+            {
+                var pick = PickHighestBucketVersion(bucketId, relativePaths);
+                return LoadModule(pick.RelativePath, pick.Version);
+            },
             StringComparer.Ordinal);
         _disturbance = LoadModule("inner/disturbance.v1.md", "v1");
 
@@ -130,6 +152,34 @@ internal sealed class AiPromptTemplateRegistry
         var fileName = Path.GetFileName(relativePath);
         var parts = fileName.Split('.', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
         return parts.Length >= 3 && parts[^2].StartsWith('v') ? parts[^2] : fallbackVersion;
+    }
+
+    internal sealed record BucketVersionPick(string Version, string RelativePath);
+
+    internal static BucketVersionPick PickHighestBucketVersion(
+        string bucketId,
+        IEnumerable<string> resourceRelativePaths)
+    {
+        var pattern = new System.Text.RegularExpressions.Regex(
+            $@"^buckets/{System.Text.RegularExpressions.Regex.Escape(bucketId)}\.v(\d+)\.md$",
+            System.Text.RegularExpressions.RegexOptions.Compiled);
+
+        var best = -1;
+        foreach (var path in resourceRelativePaths)
+        {
+            var m = pattern.Match(path);
+            if (m.Success && int.TryParse(m.Groups[1].Value, out var n) && n > best)
+            {
+                best = n;
+            }
+        }
+
+        if (best < 0)
+        {
+            return new BucketVersionPick("v1", $"buckets/{bucketId}.v1.md");
+        }
+
+        return new BucketVersionPick($"v{best}", $"buckets/{bucketId}.v{best}.md");
     }
 
     private sealed record PromptModule(string RelativePath, string Version, string Content);
