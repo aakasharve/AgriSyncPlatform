@@ -66,6 +66,20 @@ const App: React.FC = () => {
     // Ops Phase 3 — catch unhandled JS rejections and report to telemetry
     useEffect(() => { installGlobalErrorHandlers(); }, []);
 
+    // agrisync-prompt-ops Phase 4 — `?aiTest=1` toggles the AI test-mode flag
+    // (banner appears via AiTestModeBanner). `?aiTest=0` clears all 3 keys.
+    useEffect(() => {
+        if (typeof window === 'undefined') return;
+        const params = new URLSearchParams(window.location.search);
+        if (params.get('aiTest') === '1') {
+            localStorage.setItem('agrisync_ai_test_mode', 'true');
+        } else if (params.get('aiTest') === '0') {
+            localStorage.removeItem('agrisync_ai_test_mode');
+            localStorage.removeItem('agrisync_ai_test_bucket');
+            localStorage.removeItem('agrisync_ai_test_capture_count');
+        }
+    }, []);
+
     // Native shell bars are configured after hooks are declared so preview mode
     // does not change hook ordering.
     useEffect(() => {

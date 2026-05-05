@@ -16,6 +16,7 @@ import ActionToast from './shared/components/ui/ActionToast';
 import WeatherReactionPrompt from './features/weather/components/WeatherReactionPrompt';
 import VoiceListeningOverlay from './features/voice/components/VoiceListeningOverlay';
 import FirstFarmWizard from './features/onboarding/components/FirstFarmWizard';
+import { AiTestModeBanner } from './shared/components/AiTestModeBanner';
 
 import { CropProfile } from './types';
 import { useAgriLogApp } from './app/compositionRoot';
@@ -55,8 +56,8 @@ const AppContent: React.FC<AppContentProps> = ({ crops: initialCrops, setCrops }
     useTemplateCatalogSync();
 
     const {
-        navigation, context, data, voice, weather, commands, trust,
-        toast, setToast, handleReset, lastSavedLogSummary, lastSavedLogIds,
+        navigation, context, data, voice, weather, commands: _commands, trust: _trust,
+        toast, setToast, handleReset: _handleReset, lastSavedLogSummary: _lastSavedLogSummary, lastSavedLogIds: _lastSavedLogIds,
     } = app;
 
     useEffect(() => {
@@ -73,6 +74,7 @@ const AppContent: React.FC<AppContentProps> = ({ crops: initialCrops, setCrops }
 
     return (
         <div className="relative flex h-full flex-col bg-transparent text-stone-800 font-sans selection:bg-emerald-200">
+            <AiTestModeBanner />
             <AppHeader
                 currentRoute={navigation.currentRoute}
                 currentView={navigation.mainView}
