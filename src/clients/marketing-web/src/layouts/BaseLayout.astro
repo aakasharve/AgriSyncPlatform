@@ -4,6 +4,7 @@ import '../styles/tokens.css';
 import '../styles/global.css';
 import PloughNav from '../components/islands/PloughNav';
 import WindCanvas from '../components/islands/WindCanvas';
+import StickyCta from '../components/islands/StickyCta';
 
 interface Props {
   title: string;
@@ -42,7 +43,7 @@ const canonicalUrl = new URL(Astro.url.pathname, 'https://shramsafal.com');
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
-      href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=DM+Sans:wght@400;500;700&family=DM+Serif+Display&family=Noto+Sans+Devanagari:wght@400;500;700&family=Noto+Serif+Devanagari:wght@400;700&display=swap"
+      href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=DM+Sans:wght@400;500;700&family=Noto+Sans+Devanagari:wght@400;500;700&family=Noto+Serif+Devanagari:wght@400;700&display=swap"
       rel="stylesheet"
     />
 
@@ -61,5 +62,6 @@ const canonicalUrl = new URL(Astro.url.pathname, 'https://shramsafal.com');
     <div id="scroll-progress" aria-hidden="true"></div>
 
     <slot />
+    <StickyCta client:idle />
   </body>
 </html>
