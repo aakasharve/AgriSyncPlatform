@@ -11,6 +11,10 @@
   --brand-fresh:     #16A34A;   /* field green    */
   --brand-hover:     #0F3D22;   /* deep canopy    */
 
+  /* ── Brand green opacity scale (for subtle bg/border tints) ── */
+  --brand-fresh-10: rgba(22, 163, 74, 0.10);
+  --brand-fresh-15: rgba(22, 163, 74, 0.15);
+
   /* ── Earth accent (terracotta + ochre) ── */
   --gold:            #92400E;   /* dark terracotta — chapter marks, accents */
   --gold-warm:       #D97706;   /* ochre yellow   — highlights */
