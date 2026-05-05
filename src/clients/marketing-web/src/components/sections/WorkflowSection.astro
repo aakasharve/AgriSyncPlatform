@@ -500,28 +500,15 @@ const outputTags = isMr
     border-radius: 1.2rem;
     overflow: hidden;
     margin: 0.75rem 0 1rem;
-    /* Contain the phone in a reasonable height — shows top portion of screen */
-    max-height: 320px;
     position: relative;
-  }
-
-  /* Bottom fade so the image doesn't hard-cut */
-  .wf-phone-frame::after {
-    content: '';
-    position: absolute;
-    inset-x: 0;
-    bottom: 0;
-    height: 5rem;
-    background: linear-gradient(to bottom, transparent, rgba(255,255,255,0.96));
-    pointer-events: none;
+    background: rgba(0, 0, 0, 0.04);
   }
 
   .wf-phone-img {
     display: block;
     width: 100%;
     height: auto;
-    object-fit: cover;
-    object-position: center top;
+    object-fit: contain;
     border-radius: inherit;
   }
 
