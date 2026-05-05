@@ -162,6 +162,15 @@ const outputTags = isMr
         </p>
       </div>
     </div>
+
+    <!-- Clarity bridge pull-quote (was Ch.05 · ClaritySection) -->
+    <div class="wf-clarity-bridge" data-reveal data-reveal-delay="0.1">
+      <p>
+        {isMr
+          ? '"एकच बोलणे — दोन प्रकारचे दृश्य. काय झाले, काय खर्च झाले, पुढे काय."'
+          : '"One conversation — two views. What was done, what was spent, what comes next."'}
+      </p>
+    </div>
   </div>
 </section>
 
@@ -525,6 +534,26 @@ const outputTags = isMr
     color: var(--text-muted);
     font-style: italic;
     padding: 0.75rem 1rem 0;
+  }
+
+  /* ── Clarity bridge pull-quote ─────────────────────────────────────────── */
+  .wf-clarity-bridge {
+    margin-top: 2.5rem;
+    padding: 1.5rem 2rem;
+    border-left: 3px solid var(--brand-fresh);
+    background: rgba(22,163,74,0.04);
+    border-radius: 0 1rem 1rem 0;
+    max-width: 36rem;
+    margin-inline: auto;
+  }
+
+  .wf-clarity-bridge p {
+    font-family: var(--font-serif);
+    font-size: clamp(1.05rem, 1.8vw, 1.3rem);
+    font-style: italic;
+    color: var(--text-secondary);
+    line-height: 1.65;
+    text-align: center;
   }
 
   /* ── Reduced motion ─────────────────────────────────────────────────── */
