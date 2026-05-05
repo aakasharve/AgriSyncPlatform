@@ -35,4 +35,23 @@ public interface IAiOrchestrator
         string systemPrompt,
         string idempotencyKey,
         CancellationToken ct = default);
+
+    // agrisync-prompt-ops Phase 1 — Test/eval-only path. Skips AiJob persistence,
+    // idempotency, and circuit-breaker bookkeeping. Builds the voice parsing prompt
+    // (or accepts a staged override), pipes a text/plain transcript to the configured
+    // primary AiProvider, and returns the raw normalized JSON. Endpoint that exposes
+    // this is env-gated (see ShramSafal.Api.Endpoints.AiEvalEndpoints).
+    Task<EvalParseResult> ParseVoiceWithOverrideAsync(
+        string transcript,
+        VoiceParseContext context,
+        string? promptOverride,
+        string? scenarioId,
+        CancellationToken ct = default);
 }
+
+public sealed record EvalParseResult(
+    string ParsedJson,
+    string PromptVersion,
+    long ModelMs,
+    bool Success,
+    string? Error);

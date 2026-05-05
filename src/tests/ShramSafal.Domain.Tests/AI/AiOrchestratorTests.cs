@@ -258,6 +258,7 @@ public sealed class AiOrchestratorTests
             new AiCircuitBreakerRegistry(),
             new AiFailureClassifier(),
             new AiAttemptCostEstimator(),
+            new AiPromptBuilder(),
             NullLogger<AiOrchestrator>.Instance);
 
         return new OrchestratorTestHarness(

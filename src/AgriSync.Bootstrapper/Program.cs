@@ -20,6 +20,7 @@ using AgriSync.Bootstrapper.Composition;
 using AgriSync.Bootstrapper.Endpoints;
 using Analytics.Application;
 using ShramSafal.Api;
+using ShramSafal.Api.Endpoints;
 using User.Api;
 using User.Infrastructure.Persistence;
 
@@ -425,6 +426,11 @@ try
     app.MapShramSafalApi();
     app.MapAccountsModuleEndpoints();
     app.MapFirstFarmBootstrapEndpoints();
+
+    // agrisync-prompt-ops Phase 1 — env-gated test/staging endpoint
+    // (POST /api/ai/eval-parse). Internally returns early in Production
+    // and when ALLOW_EVAL_PARSE != "true" — see AiEvalEndpoints.
+    app.MapAiEvalEndpoints(app.Environment, app.Configuration);
 
     // DWC v2 §2.4 — closure-loop telemetry ingest. Mounted at the root
     // (POST /analytics/ingest) for the mobile-web AnalyticsEventBus to

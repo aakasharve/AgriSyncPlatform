@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Text;
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using ShramSafal.Application.Ports.External;
@@ -12,6 +13,7 @@ internal sealed class AiOrchestrator(
     AiCircuitBreakerRegistry breakerRegistry,
     AiFailureClassifier failureClassifier,
     AiAttemptCostEstimator attemptCostEstimator,
+    IAiPromptBuilder promptBuilder,
     ILogger<AiOrchestrator> logger) : IAiOrchestrator
 {
     private const int MinProviderAttempts = 1;
@@ -132,6 +134,85 @@ internal sealed class AiOrchestrator(
         job.MarkFailed();
         await aiJobRepository.SaveChangesAsync(ct);
         return (fallbackExecution.Result, job.Id, fallbackExecution.ProviderUsed, true);
+    }
+
+    // agrisync-prompt-ops Phase 1 — Lean staging path. No AiJob writes, no
+    // idempotency cache, no circuit breaker. Builds the prompt (or uses an
+    // override from PromptStaging), pipes the transcript as text/plain to the
+    // primary provider, and returns the raw normalized JSON. The endpoint that
+    // exposes this is registered only when ASPNETCORE_ENVIRONMENT != Production
+    // and ALLOW_EVAL_PARSE=true (see AiEvalEndpoints).
+    public async Task<EvalParseResult> ParseVoiceWithOverrideAsync(
+        string transcript,
+        VoiceParseContext context,
+        string? promptOverride,
+        string? scenarioId,
+        CancellationToken ct = default)
+    {
+        var prompt = string.IsNullOrEmpty(promptOverride)
+            ? promptBuilder.BuildVoiceParsingPrompt(context)
+            : promptOverride;
+
+        var promptVersion = AiPromptLineage.ResolvePromptVersion(prompt);
+        var config = await aiJobRepository.GetProviderConfigAsync(ct);
+        var provider = ResolveProvider(
+            config.GetProviderForOperation(AiOperationType.VoiceToStructuredLog),
+            AiOperationType.VoiceToStructuredLog);
+
+        if (provider is null)
+        {
+            return new EvalParseResult(
+                ParsedJson: "{}",
+                PromptVersion: promptVersion,
+                ModelMs: 0,
+                Success: false,
+                Error: "No AI provider is configured for voice parsing.");
+        }
+
+        var transcriptBytes = Encoding.UTF8.GetBytes(transcript ?? string.Empty);
+        await using var transcriptStream = new MemoryStream(transcriptBytes, writable: false);
+
+        var sw = Stopwatch.StartNew();
+        try
+        {
+            var result = await provider.ParseVoiceAsync(
+                transcriptStream,
+                mimeType: "text/plain",
+                languageHint: "mr-IN",
+                systemPrompt: prompt,
+                ct);
+            sw.Stop();
+
+            logger.LogInformation(
+                "[eval-parse] scenario={ScenarioId} provider={Provider} version={PromptVersion} success={Success} ms={Ms}",
+                scenarioId ?? "<unspecified>",
+                provider.ProviderType,
+                promptVersion,
+                result.Success,
+                sw.ElapsedMilliseconds);
+
+            return new EvalParseResult(
+                ParsedJson: result.NormalizedJson ?? "{}",
+                PromptVersion: result.PromptVersion ?? promptVersion,
+                ModelMs: sw.ElapsedMilliseconds,
+                Success: result.Success,
+                Error: result.Error);
+        }
+        catch (Exception ex)
+        {
+            sw.Stop();
+            logger.LogWarning(
+                ex,
+                "[eval-parse] scenario={ScenarioId} provider threw after {Ms}ms",
+                scenarioId ?? "<unspecified>",
+                sw.ElapsedMilliseconds);
+            return new EvalParseResult(
+                ParsedJson: "{}",
+                PromptVersion: promptVersion,
+                ModelMs: sw.ElapsedMilliseconds,
+                Success: false,
+                Error: ex.Message);
+        }
     }
 
     public async Task<(ReceiptExtractCanonicalResult Result, Guid JobId, AiProviderType ProviderUsed, bool FallbackUsed)> ExtractReceiptWithFallbackAsync(
