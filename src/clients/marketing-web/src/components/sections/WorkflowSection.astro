@@ -139,19 +139,16 @@ const outputTags = isMr
             {isMr ? 'क्रॉप अ‍ॅक्टिव्हिटी — नोंद झाली' : 'Crop Activity — Logged'}
           </p>
 
-          <!-- Centered phone device with bezel + notch -->
-          <div class="wf-phone-device">
-            <div class="wf-phone-bezel">
-              <span class="wf-phone-notch" aria-hidden="true"></span>
-              <div class="wf-phone-screen">
-                <img
-                  src="/images/app-screens/screen-crop-activity.png"
-                  alt={isMr ? 'क्रॉप अ‍ॅक्टिव्हिटी स्क्रीन' : 'Crop Activity screen'}
-                  class="wf-phone-img"
-                  loading="lazy"
-                  decoding="async"
-                />
-              </div>
+          <!-- Centered app screenshot frame -->
+          <div class="wf-screen-device">
+            <div class="wf-screen-frame">
+              <img
+                src="/images/app-screens/screen-crop-activity.png"
+                alt={isMr ? 'क्रॉप अ‍ॅक्टिव्हिटी स्क्रीन' : 'Crop Activity screen'}
+                class="wf-screen-img"
+                loading="lazy"
+                decoding="async"
+              />
             </div>
           </div>
 
@@ -523,53 +520,29 @@ const outputTags = isMr
     margin: 0 0 1.25rem;
   }
 
-  /* ── Phone device with bezel + notch (centered) ────────────────────── */
-  .wf-phone-device {
+  /* ── App screenshot frame (centered, lightweight) ──────────────────── */
+  .wf-screen-device {
     display: flex;
     justify-content: center;
     margin: 0.25rem 0 1.25rem;
   }
 
-  .wf-phone-bezel {
-    position: relative;
-    background: linear-gradient(160deg, #1F1F25 0%, #0E0E12 100%);
-    border-radius: 2.2rem;
-    padding: 0.6rem 0.55rem;
+  .wf-screen-frame {
     width: 280px;
     max-width: 100%;
-    box-shadow:
-      0 28px 56px rgba(15, 18, 12, 0.22),
-      0 4px 10px rgba(15, 18, 12, 0.10),
-      inset 0 1px 0 rgba(255,255,255,0.06),
-      inset 0 -1px 0 rgba(0,0,0,0.45);
-  }
-
-  .wf-phone-notch {
-    position: absolute;
-    top: 0.95rem;
-    left: 50%;
-    transform: translateX(-50%);
-    width: 84px;
-    height: 18px;
-    background: #08080B;
-    border-radius: 999px;
-    z-index: 2;
-  }
-
-  .wf-phone-screen {
-    position: relative;
-    border-radius: 1.6rem;
+    border-radius: 1.4rem;
     overflow: hidden;
     background: #fff;
-    aspect-ratio: 9 / 19;
+    border: 1px solid rgba(20, 83, 45, 0.10);
+    box-shadow:
+      0 24px 48px rgba(15, 18, 12, 0.16),
+      0 4px 10px rgba(15, 18, 12, 0.08);
   }
 
-  .wf-phone-img {
+  .wf-screen-img {
     display: block;
     width: 100%;
-    height: 100%;
-    object-fit: cover;
-    object-position: center top;
+    height: auto;
     border-radius: inherit;
   }
 
