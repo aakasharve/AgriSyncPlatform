@@ -7,11 +7,8 @@ import HeroSection from '../../components/sections/HeroSection.astro';
 import ProblemHitSection from '../../components/sections/ProblemHitSection.astro';
 import BeforeAfterSection from '../../components/sections/BeforeAfterSection.astro';
 import WorkflowSection from '../../components/sections/WorkflowSection.astro';
-import ClaritySection from '../../components/sections/ClaritySection.astro';
 import ValueLadderSection from '../../components/sections/ValueLadderSection.astro';
-import FAQSection from '../../components/sections/FAQSection.astro';
 import TrustSection from '../../components/sections/TrustSection.astro';
-import IdentityShiftSection from '../../components/sections/IdentityShiftSection.astro';
 import LegacySection from '../../components/sections/LegacySection.astro';
 import ParticipationSection from '../../components/sections/ParticipationSection.astro';
 import CtaSection from '../../components/sections/CtaSection.astro';
@@ -32,55 +29,42 @@ const t = getTranslations(lang);
     <CinematicScrollHero client:load lang="en" />
     <HeroSection />
 
+    <div class="soil-stratum" aria-hidden="true"><span></span></div>
+
     <!-- Ch.02 · The Pain -->
-    <div class="section-divider" aria-hidden="true">
-      <img src="/dividers/bag-torn-chaos.svg" alt="" width="320" height="80" loading="lazy" />
-    </div>
     <ProblemHitSection />
 
     <!-- Ch.03 · The Shift -->
     <BeforeAfterSection />
 
-    <!-- Ch.04 · Speak and We Sort -->
-    <div class="section-divider" aria-hidden="true">
-      <img src="/dividers/bag-stacked-solution.svg" alt="" width="320" height="80" loading="lazy" />
-    </div>
+    <div class="soil-stratum" aria-hidden="true"><span></span></div>
+
+    <!-- Ch.04 · Speak and We Sort (+ Clarity pull-quote inside) -->
     <WorkflowSection />
 
-    <!-- Ch.05 · What You Will See -->
-    <ClaritySection />
+    <div class="soil-stratum" aria-hidden="true"><span></span></div>
 
-    <!-- Ch.06 · The 90-Day Return -->
-    <div class="section-divider" aria-hidden="true">
-      <img src="/dividers/bag-open-pouring.svg" alt="" width="320" height="80" loading="lazy" />
-    </div>
+    <!-- Ch.05 · The 90-Day Return -->
     <ValueLadderSection />
 
-    <!-- Ch.07 · Your Questions (consolidated accordion — replaces 5 QASections) -->
-    <FAQSection />
+    <div class="soil-stratum" aria-hidden="true"><span></span></div>
 
-    <!-- Ch.08 · Trust -->
-    <div class="section-divider" aria-hidden="true">
-      <img src="/dividers/bag-rupee-stamp.svg" alt="" width="320" height="80" loading="lazy" />
-    </div>
+    <!-- Ch.06 · Trust -->
     <TrustSection />
 
-    <!-- Ch.09 · Who You Become -->
-    <IdentityShiftSection />
+    <div class="soil-stratum" aria-hidden="true"><span></span></div>
 
-    <!-- Ch.10 · Legacy -->
+    <!-- Ch.07 · Legacy (+ IdentityShift pull-quote inside) -->
     <LegacySection />
 
-    <!-- Ch.11 · Your Part -->
-    <div class="section-divider" aria-hidden="true">
-      <img src="/dividers/bag-certified.svg" alt="" width="320" height="80" loading="lazy" />
-    </div>
+    <div class="soil-stratum" aria-hidden="true"><span></span></div>
+
+    <!-- Ch.08 · Your Part -->
     <ParticipationSection />
 
-    <!-- Ch.12 · Begin -->
-    <div class="section-divider" aria-hidden="true">
-      <img src="/dividers/bag-folded-empty.svg" alt="" width="320" height="80" loading="lazy" />
-    </div>
+    <div class="soil-stratum" aria-hidden="true"><span></span></div>
+
+    <!-- Ch.09 · Begin (+ 4-item FAQ accordion inside) -->
     <CtaSection />
   </main>
 

@@ -7,11 +7,8 @@ import HeroSection from '../../components/sections/HeroSection.astro';
 import ProblemHitSection from '../../components/sections/ProblemHitSection.astro';
 import BeforeAfterSection from '../../components/sections/BeforeAfterSection.astro';
 import WorkflowSection from '../../components/sections/WorkflowSection.astro';
-import ClaritySection from '../../components/sections/ClaritySection.astro';
 import ValueLadderSection from '../../components/sections/ValueLadderSection.astro';
-import FAQSection from '../../components/sections/FAQSection.astro';
 import TrustSection from '../../components/sections/TrustSection.astro';
-import IdentityShiftSection from '../../components/sections/IdentityShiftSection.astro';
 import LegacySection from '../../components/sections/LegacySection.astro';
 import ParticipationSection from '../../components/sections/ParticipationSection.astro';
 import CtaSection from '../../components/sections/CtaSection.astro';
@@ -32,55 +29,42 @@ const t = getTranslations(lang);
     <CinematicScrollHero client:load lang="mr" />
     <HeroSection />
 
+    <div class="soil-stratum" aria-hidden="true"><span></span></div>
+
     <!-- Ch.02 · वेदना -->
-    <div class="section-divider" aria-hidden="true">
-      <img src="/dividers/bag-torn-chaos.svg" alt="" width="320" height="80" loading="lazy" />
-    </div>
     <ProblemHitSection />
 
     <!-- Ch.03 · बदल -->
     <BeforeAfterSection />
 
-    <!-- Ch.04 · बोला आणि नोंद -->
-    <div class="section-divider" aria-hidden="true">
-      <img src="/dividers/bag-stacked-solution.svg" alt="" width="320" height="80" loading="lazy" />
-    </div>
+    <div class="soil-stratum" aria-hidden="true"><span></span></div>
+
+    <!-- Ch.04 · बोला आणि नोंद (+ Clarity pull-quote आत) -->
     <WorkflowSection />
 
-    <!-- Ch.05 · तुम्हाला काय दिसेल -->
-    <ClaritySection />
+    <div class="soil-stratum" aria-hidden="true"><span></span></div>
 
-    <!-- Ch.06 · ९० दिवसाचे फळ -->
-    <div class="section-divider" aria-hidden="true">
-      <img src="/dividers/bag-open-pouring.svg" alt="" width="320" height="80" loading="lazy" />
-    </div>
+    <!-- Ch.05 · ९० दिवसाचे फळ -->
     <ValueLadderSection />
 
-    <!-- Ch.07 · तुमचे प्रश्न (consolidated accordion) -->
-    <FAQSection />
+    <div class="soil-stratum" aria-hidden="true"><span></span></div>
 
-    <!-- Ch.08 · विश्वास -->
-    <div class="section-divider" aria-hidden="true">
-      <img src="/dividers/bag-rupee-stamp.svg" alt="" width="320" height="80" loading="lazy" />
-    </div>
+    <!-- Ch.06 · विश्वास -->
     <TrustSection />
 
-    <!-- Ch.09 · कोण बनतो -->
-    <IdentityShiftSection />
+    <div class="soil-stratum" aria-hidden="true"><span></span></div>
 
-    <!-- Ch.10 · वारसा -->
+    <!-- Ch.07 · वारसा (+ IdentityShift pull-quote आत) -->
     <LegacySection />
 
-    <!-- Ch.11 · तुमचा भाग -->
-    <div class="section-divider" aria-hidden="true">
-      <img src="/dividers/bag-certified.svg" alt="" width="320" height="80" loading="lazy" />
-    </div>
+    <div class="soil-stratum" aria-hidden="true"><span></span></div>
+
+    <!-- Ch.08 · तुमचा भाग -->
     <ParticipationSection />
 
-    <!-- Ch.12 · सुरुवात -->
-    <div class="section-divider" aria-hidden="true">
-      <img src="/dividers/bag-folded-empty.svg" alt="" width="320" height="80" loading="lazy" />
-    </div>
+    <div class="soil-stratum" aria-hidden="true"><span></span></div>
+
+    <!-- Ch.09 · सुरुवात (+ 4-item FAQ accordion आत) -->
     <CtaSection />
   </main>
 
