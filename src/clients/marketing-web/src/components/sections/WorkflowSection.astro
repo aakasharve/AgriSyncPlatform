@@ -125,29 +125,41 @@ const outputTags = isMr
 
         <!-- 2 · Structured result card with real app screenshot -->
         <div class="wf-card wf-card--result">
-          <div class="wf-card__header">
-            <span class="wf-live-badge">{isMr ? 'लाइव्ह' : 'Live'}</span>
-            <p class="wf-card__label wf-card__label--result">
-              {isMr ? 'क्रॉप अ‍ॅक्टिव्हिटी — नोंद झाली' : 'Crop Activity — Logged'}
-            </p>
+
+          <!-- Centered eyebrow: Live pill -->
+          <div class="wf-result-eyebrow">
+            <span class="wf-live-pill">
+              <span class="wf-live-pill__dot" aria-hidden="true"></span>
+              {isMr ? 'लाइव्ह' : 'Live'}
+            </span>
           </div>
 
-          <!-- Actual phone screenshot -->
-          <div class="wf-phone-frame">
-            <img
-              src="/images/app-screens/screen-crop-activity.png"
-              alt={isMr ? 'क्रॉप अ‍ॅक्टिव्हिटी स्क्रीन' : 'Crop Activity screen'}
-              class="wf-phone-img"
-              loading="lazy"
-              decoding="async"
-            />
+          <!-- Centered serif title -->
+          <p class="wf-result-title">
+            {isMr ? 'क्रॉप अ‍ॅक्टिव्हिटी — नोंद झाली' : 'Crop Activity — Logged'}
+          </p>
+
+          <!-- Centered phone device with bezel + notch -->
+          <div class="wf-phone-device">
+            <div class="wf-phone-bezel">
+              <span class="wf-phone-notch" aria-hidden="true"></span>
+              <div class="wf-phone-screen">
+                <img
+                  src="/images/app-screens/screen-crop-activity.png"
+                  alt={isMr ? 'क्रॉप अ‍ॅक्टिव्हिटी स्क्रीन' : 'Crop Activity screen'}
+                  class="wf-phone-img"
+                  loading="lazy"
+                  decoding="async"
+                />
+              </div>
+            </div>
           </div>
 
-          <!-- Output tags (what got structured) -->
-          <div class="wf-tags wf-tags--output">
+          <!-- Centered output tags row -->
+          <div class="wf-output-tags">
             {outputTags.map(tag => (
-              <span class="wf-tag wf-tag--output">
-                <span class="wf-check" aria-hidden="true"></span>
+              <span class="wf-output-tag">
+                <span class="wf-output-tag__check" aria-hidden="true"></span>
                 {tag}
               </span>
             ))}
@@ -240,10 +252,6 @@ const outputTags = isMr
     text-transform: uppercase;
     letter-spacing: 0.14em;
     color: var(--text-muted);
-  }
-
-  .wf-card__label--result {
-    color: var(--brand);
   }
 
   /* ── Mic pulse animation ────────────────────────────────────────────── */
@@ -463,58 +471,150 @@ const outputTags = isMr
     opacity: 0.72;
   }
 
-  /* ── Live badge ──────────────────────────────────────────────────────── */
-  .wf-live-badge {
+  /* ── Result card centered redesign ─────────────────────────────────── */
+  .wf-card--result {
+    text-align: center;
+    padding: 1.5rem 1.25rem 1.4rem;
+  }
+
+  .wf-result-eyebrow {
+    display: flex;
+    justify-content: center;
+    margin-bottom: 0.65rem;
+  }
+
+  .wf-live-pill {
     display: inline-flex;
     align-items: center;
-    gap: 0.35rem;
-    padding: 0.2rem 0.65rem;
+    gap: 0.4rem;
+    padding: 0.32rem 0.78rem;
     border-radius: 999px;
-    background: rgba(20,83,45,0.90);
-    color: #fff;
+    background: rgba(20,83,45,0.08);
+    border: 1px solid rgba(20,83,45,0.20);
     font-family: var(--font-sans);
-    font-size: 0.6rem;
+    font-size: 0.66rem;
     font-weight: 900;
     text-transform: uppercase;
     letter-spacing: 0.18em;
-    flex-shrink: 0;
+    color: var(--brand);
   }
 
-  .wf-live-badge::before {
-    content: '';
+  .wf-live-pill__dot {
     display: block;
-    width: 5px;
-    height: 5px;
+    width: 0.42rem;
+    height: 0.42rem;
     border-radius: 50%;
-    background: #6EE7A0;
+    background: #22C55E;
+    box-shadow: 0 0 0 3px rgba(34,197,94,0.18);
     animation: live-blink 1.4s ease-in-out infinite;
   }
 
   @keyframes live-blink {
     0%, 100% { opacity: 1; }
-    50%       { opacity: 0.3; }
+    50%       { opacity: 0.4; }
   }
 
-  /* ── Phone frame ────────────────────────────────────────────────────── */
-  .wf-phone-frame {
-    border-radius: 1.2rem;
-    overflow: hidden;
-    margin: 0.75rem 0 1rem;
-    position: relative;
-    background: rgba(0, 0, 0, 0.04);
-    max-height: 480px;
+  .wf-result-title {
+    font-family: var(--font-serif);
+    font-size: clamp(1.05rem, 1.6vw, 1.3rem);
+    font-weight: 600;
+    color: var(--text-primary);
+    line-height: 1.35;
+    margin: 0 0 1.25rem;
+  }
+
+  /* ── Phone device with bezel + notch (centered) ────────────────────── */
+  .wf-phone-device {
     display: flex;
     justify-content: center;
+    margin: 0.25rem 0 1.25rem;
+  }
+
+  .wf-phone-bezel {
+    position: relative;
+    background: linear-gradient(160deg, #1F1F25 0%, #0E0E12 100%);
+    border-radius: 2.2rem;
+    padding: 0.6rem 0.55rem;
+    width: 280px;
+    max-width: 100%;
+    box-shadow:
+      0 28px 56px rgba(15, 18, 12, 0.22),
+      0 4px 10px rgba(15, 18, 12, 0.10),
+      inset 0 1px 0 rgba(255,255,255,0.06),
+      inset 0 -1px 0 rgba(0,0,0,0.45);
+  }
+
+  .wf-phone-notch {
+    position: absolute;
+    top: 0.95rem;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 84px;
+    height: 18px;
+    background: #08080B;
+    border-radius: 999px;
+    z-index: 2;
+  }
+
+  .wf-phone-screen {
+    position: relative;
+    border-radius: 1.6rem;
+    overflow: hidden;
+    background: #fff;
+    aspect-ratio: 9 / 19;
   }
 
   .wf-phone-img {
     display: block;
-    width: auto;
-    max-width: 100%;
-    max-height: 100%;
-    height: auto;
-    object-fit: contain;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    object-position: center top;
     border-radius: inherit;
+  }
+
+  /* ── Centered output tags row ─────────────────────────────────────── */
+  .wf-output-tags {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 0.5rem 0.6rem;
+    margin-top: 0.25rem;
+  }
+
+  .wf-output-tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.42rem;
+    padding: 0.42rem 0.85rem;
+    border-radius: 999px;
+    background: rgba(20,83,45,0.06);
+    border: 1px solid rgba(20,83,45,0.18);
+    font-family: var(--font-sans);
+    font-size: 0.78rem;
+    font-weight: 700;
+    color: var(--brand);
+  }
+
+  .wf-output-tag__check {
+    position: relative;
+    width: 0.95rem;
+    height: 0.95rem;
+    border-radius: 50%;
+    background: rgba(34,197,94,0.18);
+    flex-shrink: 0;
+  }
+
+  .wf-output-tag__check::after {
+    content: '';
+    position: absolute;
+    top: 0.26rem;
+    left: 0.27rem;
+    width: 0.4rem;
+    height: 0.22rem;
+    border-left: 1.6px solid var(--brand);
+    border-bottom: 1.6px solid var(--brand);
+    transform: rotate(-45deg);
   }
 
   /* ── Caption ────────────────────────────────────────────────────────── */
@@ -550,8 +650,8 @@ const outputTags = isMr
 
   /* ── Reduced motion ─────────────────────────────────────────────────── */
   @media (prefers-reduced-motion: reduce) {
-    .wf-bar           { animation: none; }
-    .wf-mic-pulse--ring { animation: none; }
-    .wf-live-badge::before { animation: none; }
+    .wf-bar              { animation: none; }
+    .wf-mic-pulse--ring  { animation: none; }
+    .wf-live-pill__dot   { animation: none; }
   }
 </style>
