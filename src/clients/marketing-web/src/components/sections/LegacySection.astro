@@ -39,6 +39,12 @@ const t = getTranslations(lang);
       <p class="scene-stagger text-body-lg max-w-prose mx-auto mb-10" style="color:var(--text-secondary);">
         {t.legacy.body}
       </p>
+      <!-- IdentityShift bridge pull-quote (was Ch.09 · IdentityShiftSection) -->
+      <div class="legacy-identity-bridge" data-reveal data-reveal-delay="0.1">
+        <p class="font-serif" set:html={t.identity_shift.headline.replace(/\n/g, '<br />')} />
+        <p>{t.identity_shift.body}</p>
+      </div>
+
       <div class="space-y-3 max-w-lg mx-auto">
         {t.legacy.lines.map((line: string) => (
           <div class="legacy-line card-white flex items-start gap-3 text-left px-5 py-3">
@@ -126,5 +132,31 @@ const t = getTranslations(lang);
     0%, 100% { transform: translate(0, 0) rotate(-8deg) scale(1); }
     35% { transform: translate(-46px, -18px) rotate(12deg) scale(1.02); }
     75% { transform: translate(-72px, -32px) rotate(-6deg) scale(0.97); }
+  }
+
+  .legacy-identity-bridge {
+    margin-bottom: 2.5rem;
+    padding: 1.4rem 1.8rem;
+    border-left: 3px solid var(--gold-warm);
+    background: rgba(217,119,6,0.06);
+    border-radius: 0 1rem 1rem 0;
+    text-align: left;
+    max-width: 36rem;
+    margin-inline: auto;
+  }
+
+  .legacy-identity-bridge p:first-child {
+    font-family: var(--font-serif);
+    font-size: clamp(1.1rem, 2vw, 1.45rem);
+    color: var(--text-primary);
+    line-height: 1.25;
+    margin-bottom: 0.6rem;
+  }
+
+  .legacy-identity-bridge p:last-child {
+    font-family: var(--font-sans);
+    font-size: clamp(0.9rem, 1.4vw, 1rem);
+    color: var(--text-secondary);
+    line-height: 1.72;
   }
 </style>
