@@ -5,12 +5,11 @@ const SECTIONS = [
   { id: 'problem-hit', en: 'Problem', mr: 'समस्या', short: '02' },
   { id: 'before-after', en: 'Compare', mr: 'तफावत', short: '03' },
   { id: 'workflow', en: 'Voice to Record', mr: 'आवाज ते नोंद', short: '04' },
-  { id: 'clarity', en: 'Clarity', mr: 'स्पष्टता', short: '05' },
-  { id: 'value-ladder', en: 'Value', mr: 'मूल्य', short: '06' },
-  { id: 'participation', en: 'Your Part', mr: 'तुमचा भाग', short: '07' },
-  { id: 'trust', en: 'Trust', mr: 'विश्वास', short: '08' },
-  { id: 'legacy', en: 'Legacy', mr: 'वारसा', short: '09' },
-  { id: 'cta', en: 'Join', mr: 'सुरू करा', short: '10' },
+  { id: 'value-ladder', en: 'Value', mr: 'मूल्य', short: '05' },
+  { id: 'trust', en: 'Trust', mr: 'विश्वास', short: '06' },
+  { id: 'legacy', en: 'Legacy', mr: 'वारसा', short: '07' },
+  { id: 'participation', en: 'Your Part', mr: 'तुमचा भाग', short: '08' },
+  { id: 'cta', en: 'Join', mr: 'सुरू करा', short: '09' },
 ] as const;
 
 export default function PloughNav() {
@@ -110,7 +109,7 @@ export default function PloughNav() {
 
         .story-rail__button:hover {
           transform: translateX(2px);
-          background: rgba(16,185,129,0.06);
+          background: rgba(22,163,74,0.06);
         }
 
         .story-rail__dot {
@@ -131,9 +130,9 @@ export default function PloughNav() {
 
         .story-rail__button[data-active='true'] .story-rail__dot {
           color: white;
-          border-color: rgba(16,185,129,0.2);
-          background: linear-gradient(135deg, #10b981, #0f7b58);
-          box-shadow: 0 0 0 4px rgba(16,185,129,0.12);
+          border-color: rgba(22,163,74,0.2);
+          background: linear-gradient(135deg, #16A34A, #14532D);
+          box-shadow: 0 0 0 4px rgba(22,163,74,0.12);
         }
 
         .story-rail__line {
@@ -143,7 +142,7 @@ export default function PloughNav() {
           width: 1px;
           height: 0.9rem;
           transform: translateX(-50%);
-          background: linear-gradient(180deg, rgba(16,185,129,0.2), rgba(19,50,36,0.08));
+          background: linear-gradient(180deg, rgba(22,163,74,0.2), rgba(19,50,36,0.08));
         }
 
         .story-rail__label {
