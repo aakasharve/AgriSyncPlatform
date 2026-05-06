@@ -12,12 +12,31 @@ public sealed class AiPromptBuilderTests
     [Fact]
     public void VoicePrompt_ContainsCriticalContractSections()
     {
+        // Default path is modular (AiPromptOptions.UseModularPrompt defaults to true
+        // since 2026-05-06). Section labels reflect the modular composition.
         var prompt = _builder.BuildVoiceParsingPrompt(CreateContext());
 
-        Assert.Contains("IMPORTANT SECURITY OVERRIDE & OUTPUT RULES", prompt, StringComparison.Ordinal);
+        Assert.Contains("AGRISYNC_PROMPT_VERSION", prompt, StringComparison.Ordinal);
         Assert.Contains("MARATHI VOCABULARY MAPPINGS", prompt, StringComparison.Ordinal);
-        Assert.Contains("OUTPUT SHAPE (JSON)", prompt, StringComparison.Ordinal);
+        Assert.Contains("OUTPUT CONTRACT", prompt, StringComparison.Ordinal);
         Assert.Contains("FEW SHOT EXAMPLES", prompt, StringComparison.Ordinal);
+        Assert.Contains("BUCKET RULES", prompt, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void LegacyVoicePrompt_StillContainsLegacyContractSections()
+    {
+        // Legacy path is preserved for emergency rollback.
+        // See _COFOUNDER/Projects/AgriSync/Documentation/LEGACY_AI_VOICE_PROMPT_2026-04-25.md
+        // for archived legacy template body.
+        var legacyBuilder = new AiPromptBuilder(
+            new AiPromptTemplateRegistry(),
+            Options.Create(new AiPromptOptions { UseModularPrompt = false }));
+
+        var prompt = legacyBuilder.BuildVoiceParsingPrompt(CreateContext());
+
+        Assert.Contains("IMPORTANT SECURITY OVERRIDE & OUTPUT RULES", prompt, StringComparison.Ordinal);
+        Assert.Contains("OUTPUT SHAPE (JSON)", prompt, StringComparison.Ordinal);
     }
 
     [Fact]
