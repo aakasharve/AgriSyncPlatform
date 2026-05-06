@@ -5,11 +5,14 @@
 
 import React from 'react';
 import {
-    AgriLogResponse, DailyLog, LogSegment, LogVerificationStatus
+    AgriLogResponse, DailyLog
 } from '../../types';
+import type { TodayCounts } from '../../domain/types/farm.types';
 import CropSelector, { CropSymbol } from '../../features/context/components/CropSelector';
 import InputMethodToggle from '../../shared/components/ui/InputMethodToggle';
 import AudioRecorder from '../../features/voice/components/AudioRecorder';
+import AudioRecorderStreaming from '../../features/voice/components/AudioRecorderStreaming';
+import { DEFAULT_VOICE_CONFIG } from '../../infrastructure/voice/types';
 import ManualEntry from '../../features/logs/components/ManualEntry';
 import DailyLogCard from '../../features/logs/components/DailyLogCard';
 import { Leaf, Droplets, Users, Package, Tractor, Sprout } from 'lucide-react';
@@ -321,22 +324,41 @@ export const renderLogView = (ctx: AppRouterContext): React.ReactNode => {
                         <div className={`transition-all duration-500 ${!isContextReady ? 'opacity-90' : ''}`}>
                             {mode === 'voice' ? (
                                 <>
-                                    <AudioRecorder
-                                        onAudioCaptured={handleAudioReady}
-                                        onTextCaptured={handleTextReady}
-                                        disabled={!isContextReady}
-                                        externalError={error}
-                                        transcript={errorTranscript}
-                                        suggestInteraction={isContextReady}
-                                        onRequestContextSelection={() => {
-                                            const el = document.getElementById('crop-selector-container');
-                                            if (el) {
-                                                el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                                                el.classList.add('ring-4', 'ring-emerald-200', 'rounded-xl');
-                                                setTimeout(() => el.classList.remove('ring-4', 'ring-emerald-200', 'rounded-xl'), 1500);
-                                            }
-                                        }}
-                                    />
+                                    {DEFAULT_VOICE_CONFIG.streamingPcm.enabled ? (
+                                        <AudioRecorderStreaming
+                                            onAudioCaptured={handleAudioReady}
+                                            onTextCaptured={handleTextReady}
+                                            disabled={!isContextReady}
+                                            externalError={error}
+                                            transcript={errorTranscript}
+                                            suggestInteraction={isContextReady}
+                                            onRequestContextSelection={() => {
+                                                const el = document.getElementById('crop-selector-container');
+                                                if (el) {
+                                                    el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                                                    el.classList.add('ring-4', 'ring-emerald-200', 'rounded-xl');
+                                                    setTimeout(() => el.classList.remove('ring-4', 'ring-emerald-200', 'rounded-xl'), 1500);
+                                                }
+                                            }}
+                                        />
+                                    ) : (
+                                        <AudioRecorder
+                                            onAudioCaptured={handleAudioReady}
+                                            onTextCaptured={handleTextReady}
+                                            disabled={!isContextReady}
+                                            externalError={error}
+                                            transcript={errorTranscript}
+                                            suggestInteraction={isContextReady}
+                                            onRequestContextSelection={() => {
+                                                const el = document.getElementById('crop-selector-container');
+                                                if (el) {
+                                                    el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                                                    el.classList.add('ring-4', 'ring-emerald-200', 'rounded-xl');
+                                                    setTimeout(() => el.classList.remove('ring-4', 'ring-emerald-200', 'rounded-xl'), 1500);
+                                                }
+                                            }}
+                                        />
+                                    )}
                                 </>
                             ) : (
                                 hasActiveLogContext ? (
@@ -351,7 +373,7 @@ export const renderLogView = (ctx: AppRouterContext): React.ReactNode => {
                                         provenance={provenance}
                                         onDataConsumed={() => setDraftLog(null)}
                                         todayCountsMap={(() => {
-                                            const map: Record<string, any> = {};
+                                            const map: Record<string, TodayCounts> = {};
                                             if (currentLogContext) {
                                                 const todayStr = getDateKey();
                                                 const pids = new Set<string>();
@@ -370,7 +392,7 @@ export const renderLogView = (ctx: AppRouterContext): React.ReactNode => {
 
                                             const todayLogsLocal = history.filter(log =>
                                                 log.date === todayStr &&
-                                                log.context?.selection?.some((sel: any) =>
+                                                log.context?.selection?.some((sel: { selectedPlotIds?: readonly string[] }) =>
                                                     sel.selectedPlotIds?.some((pid: string) => contextPlotIds.has(pid))
                                                 )
                                             );
@@ -384,7 +406,7 @@ export const renderLogView = (ctx: AppRouterContext): React.ReactNode => {
 
                                             return history.filter(log =>
                                                 log.date === todayStr &&
-                                                log.context?.selection?.some((sel: any) =>
+                                                log.context?.selection?.some((sel: { selectedPlotIds?: readonly string[] }) =>
                                                     sel.selectedPlotIds?.some((pid: string) => contextPlotIds.has(pid))
                                                 )
                                             );

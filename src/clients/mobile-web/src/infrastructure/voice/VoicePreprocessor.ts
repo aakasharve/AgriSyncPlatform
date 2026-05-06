@@ -21,6 +21,9 @@ import { SilenceTrimmer } from './SilenceTrimmer';
 import { IntentChunker } from './IntentChunker';
 import { SegmentCompressor } from './SegmentCompressor';
 import { ContentHasher } from './ContentHasher';
+import { StreamingPcmRecording } from './StreamingPcmRecorder';
+import { StreamingSilenceTrimmer } from './StreamingSilenceTrimmer';
+import { StreamingHasher } from './StreamingHasher';
 
 type AudioContextCtor = { new(options?: AudioContextOptions): AudioContext };
 
@@ -206,6 +209,69 @@ export class VoicePreprocessor {
         }
 
         const contentHash = await ContentHasher.hashBlob(audioBlob);
+        const metadata: VoiceSessionMetadata = {
+            sessionId,
+            farmId,
+            totalSegments: 1,
+            totalSpeechDurationMs: speechDurationMs,
+            totalRawDurationMs: rawDurationMs,
+            totalSilenceRemovedMs: effectiveSilenceRemovedMs,
+            compressionRatio,
+            deviceTimestamp: new Date().toISOString(),
+            clientTimezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+        };
+
+        return { audioBlob, mimeType, metadata, contentHash };
+    }
+
+    /**
+     * VOICE_LATENCY_PIPELINE_V2 Phase 2 — consume a streaming PCM recording
+     * + the streaming trimmer/hasher that ran during recording. No decode
+     * step (PCM came directly from the AudioWorklet); single Opus encode.
+     *
+     * Saves ~300-500ms post-stop CPU vs processBlobAsSingleBlob, which has
+     * to first decode the MediaRecorder Blob to PCM, then trim, then re-encode.
+     */
+    async processStreamingResult(params: {
+        recording: StreamingPcmRecording;
+        trimmer: StreamingSilenceTrimmer;
+        hasher: StreamingHasher;
+        sessionId: string;
+        farmId: string;
+    }): Promise<{
+        audioBlob: Blob;
+        mimeType: string;
+        metadata: VoiceSessionMetadata;
+        contentHash: string;
+    }> {
+        const { recording, trimmer, hasher, sessionId, farmId } = params;
+        const { pcm, sampleRate, durationMs: rawDurationMs } = recording;
+
+        // Trimmer was fed during recording; finalize() returns the accumulated trimmed buffer.
+        const { trimmedData, totalSilenceRemovedMs } = trimmer.finalize(sampleRate);
+        const effectiveData = trimmedData.length > 0 ? trimmedData : pcm;
+        const effectiveSilenceRemovedMs = trimmedData.length > 0 ? totalSilenceRemovedMs : 0;
+        const speechDurationMs = (effectiveData.length / sampleRate) * 1000;
+
+        // Encode once (no decode-then-recompress roundtrip).
+        let audioBlob: Blob;
+        let mimeType: string;
+        let compressionRatio = 1;
+
+        try {
+            const compressed = await this.compressChunk(effectiveData, sampleRate);
+            audioBlob = compressed.audioBlob;
+            mimeType = compressed.mimeType;
+            compressionRatio = compressed.compressionRatio;
+        } catch {
+            audioBlob = SegmentCompressor.createWavBlob(effectiveData, sampleRate);
+            mimeType = 'audio/wav';
+        }
+
+        // Hasher was also fed during recording; finalize is a single-pass digest
+        // over the concatenated PCM buffer.
+        const contentHash = await hasher.finalize();
+
         const metadata: VoiceSessionMetadata = {
             sessionId,
             farmId,
