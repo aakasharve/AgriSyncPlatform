@@ -15,7 +15,7 @@ export const ReflectPage = React.lazy(() => import('../../pages/ReflectPage'));
 export const TestE2EPage = IS_E2E_HARNESS_ENABLED
     ? React.lazy(() => import('../../pages/TestE2EPage'))
     : null;
-export const ComparePage = React.lazy(() => import('../../pages/ComparePage').then(module => ({ default: module.ComparePage })));
+export const ComparePage = React.lazy(() => import('../../features/compare/ComparePage').then(module => ({ default: module.ComparePage })));
 export const FinanceManagerHome = React.lazy(() => import('../../pages/FinanceManagerHome'));
 export const LedgerPage = React.lazy(() => import('../../pages/LedgerPage'));
 export const PriceBookPage = React.lazy(() => import('../../pages/PriceBookPage'));
