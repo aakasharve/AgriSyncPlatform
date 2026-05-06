@@ -6,7 +6,7 @@
  *  - context-display JSX helpers (helpers/appContentContextDisplay)
  */
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect } from 'react';
 
 import BottomNavigation from './features/context/components/BottomNavigation';
 import AppHeader from './features/context/components/AppHeader';
@@ -14,7 +14,6 @@ import MeAlertRail from './features/context/components/MeAlertRail';
 import AppRouter from './core/navigation/AppRouter';
 import ActionToast from './shared/components/ui/ActionToast';
 import WeatherReactionPrompt from './features/weather/components/WeatherReactionPrompt';
-import VoiceListeningOverlay from './features/voice/components/VoiceListeningOverlay';
 import FirstFarmWizard from './features/onboarding/components/FirstFarmWizard';
 import { AiTestModeBanner } from './shared/components/AiTestModeBanner';
 
@@ -39,7 +38,6 @@ interface AppContentProps {
 }
 
 const AppContent: React.FC<AppContentProps> = ({ crops: initialCrops, setCrops }) => {
-    const [isGlobalListening, setIsGlobalListening] = useState(false);
     const isKeyboardOpen = useCapacitorKeyboard();
 
     const {
@@ -82,10 +80,6 @@ const AppContent: React.FC<AppContentProps> = ({ crops: initialCrops, setCrops }
                 onViewChange={navigation.setMainView}
                 disabled={voice.status === 'processing' || voice.status === 'recording'}
                 activeOperator={data.farmerProfile.operators.find(op => op.id === data.farmerProfile.activeOperatorId)}
-                onVoiceTrigger={() => {
-                    if (typeof navigator !== 'undefined' && navigator.vibrate) navigator.vibrate(40);
-                    setIsGlobalListening(true);
-                }}
                 farmContext={myFarms ? {
                     farms: myFarms,
                     currentFarmId,
@@ -124,16 +118,6 @@ const AppContent: React.FC<AppContentProps> = ({ crops: initialCrops, setCrops }
                     onDismiss={() => weather.setPendingWeatherEvent(null)}
                 />
             )}
-
-            <VoiceListeningOverlay
-                isOpen={isGlobalListening}
-                onClose={() => setIsGlobalListening(false)}
-                onAudioCaptured={(audioData) => { voice.handleAudioReady(audioData); }}
-                isProcessing={voice.status === 'processing'}
-                transcript={voice.errorTranscript || ''}
-                clarificationNeeded={voice.clarificationNeeded}
-                onAnswerClarification={(text) => voice.handleTextReady(text)}
-            />
 
             <BottomNavigation
                 currentRoute={navigation.currentRoute}
