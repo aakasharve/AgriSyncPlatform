@@ -35,6 +35,21 @@ export interface VoicePreprocessorConfig {
     chunking: ChunkingConfig;
     compression: CompressionConfig;
     limits: LimitsConfig;
+    streamingPcm: StreamingPcmConfig;
+}
+
+export interface StreamingPcmConfig {
+    /**
+     * VOICE_LATENCY_PIPELINE_V2 Phase 2 — concurrent recording pipeline.
+     * When true, useVoiceRecorder uses an AudioWorklet-backed PCM streaming
+     * recorder and runs silence-trim + hashing during recording instead of
+     * after stop. Defaults to false in v0.1; founder enables for testing.
+     */
+    enabled: boolean;
+    /** PCM samples per worklet frame. AudioWorkletProcessor.process always emits 128. */
+    frameSize: number;
+    /** Max accumulated samples in the main-thread ring buffer before backpressure (currently unused; reserved for v0.2). */
+    workletBufferSize: number;
 }
 
 export interface SilenceConfig {
@@ -94,6 +109,13 @@ export const DEFAULT_VOICE_CONFIG: VoicePreprocessorConfig = {
         targetBitrate: 24000,
         codec: 'opus',
         mimeType: 'audio/webm;codecs=opus',
+    },
+    streamingPcm: {
+        // VOICE_LATENCY_PIPELINE_V2 Phase 2 — default OFF; founder enables for testing
+        // before promoting to default-on after parity validation against batch path.
+        enabled: false,
+        frameSize: 128,
+        workletBufferSize: 16384,
     },
     limits: {
         softSegmentLimit: 20,
