@@ -4,6 +4,6 @@ public sealed class AiPromptOptions
 {
     public const string SectionName = "Ai";
 
-    public bool UseModularPrompt { get; set; } = true;
+    public bool UseModularPrompt { get; set; }
 }
 
