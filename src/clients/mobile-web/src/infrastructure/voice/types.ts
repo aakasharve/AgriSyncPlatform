@@ -71,12 +71,15 @@ export interface LimitsConfig {
 
 export const DEFAULT_VOICE_CONFIG: VoicePreprocessorConfig = {
     silence: {
-        rmsThreshold: 0.01,
-        minSilenceDurationMs: 500,
-        paddingBeforeMs: 150,
-        paddingAfterMs: 150,
-        leadingSilenceMaxMs: 150,
-        trailingSilenceMaxMs: 300,
+        // Tuned 2026-05-06 (VOICE_LATENCY_PIPELINE_V2 Phase 1):
+        // more aggressive trim + smaller padding + larger trailing-silence cap
+        // to drop dead air at end of speech.
+        rmsThreshold: 0.015,
+        minSilenceDurationMs: 350,
+        paddingBeforeMs: 100,
+        paddingAfterMs: 100,
+        leadingSilenceMaxMs: 100,
+        trailingSilenceMaxMs: 500,
     },
     chunking: {
         pauseGapMs: 1500,
@@ -86,7 +89,9 @@ export const DEFAULT_VOICE_CONFIG: VoicePreprocessorConfig = {
     },
     compression: {
         targetSampleRate: 16000,
-        targetBitrate: 32000,
+        // Tuned 2026-05-06: 32k -> 24k Opus is highly intelligible for speech
+        // and shrinks upload ~25%.
+        targetBitrate: 24000,
         codec: 'opus',
         mimeType: 'audio/webm;codecs=opus',
     },
