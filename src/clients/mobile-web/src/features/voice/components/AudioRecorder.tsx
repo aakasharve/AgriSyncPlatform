@@ -5,7 +5,6 @@
 
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { Mic, Square, AlertCircle, ArrowUp, X } from 'lucide-react';
-import Button from '../../../shared/components/ui/Button';
 import { AudioData } from '../../../types';
 import { useLanguage } from '../../../i18n/LanguageContext';
 import { hapticFeedback } from '../../../shared/utils/haptics';
@@ -51,6 +50,8 @@ const AudioRecorder: React.FC<AudioRecorderProps> = ({ onAudioCaptured, onTextCa
       };
 
       mediaRecorder.onstop = () => {
+        // VOICE_LATENCY_PIPELINE_V2 perf instrumentation (Step 4) — batch path.
+        try { performance.mark('voice:processing-start'); } catch { /* observability-only */ }
         if (chunksRef.current.length > 0) {
           const blob = new Blob(chunksRef.current, { type: 'audio/webm' });
           const reader = new FileReader();
@@ -58,6 +59,10 @@ const AudioRecorder: React.FC<AudioRecorderProps> = ({ onAudioCaptured, onTextCa
           reader.onloadend = () => {
             const base64String = reader.result as string;
             const base64 = base64String.split(',')[1];
+
+            try { performance.mark('voice:processing-done'); } catch { /* observability-only */ }
+            try { performance.measure('voice:batch-pipeline', 'voice:processing-start', 'voice:processing-done'); } catch { /* duplicate-name in same session */ }
+            try { performance.measure('voice:batch-total', 'voice:stop', 'voice:processing-done'); } catch { /* duplicate-name in same session */ }
 
             onAudioCaptured({
               blob,
@@ -103,6 +108,8 @@ const AudioRecorder: React.FC<AudioRecorderProps> = ({ onAudioCaptured, onTextCa
 
   const stopRecording = useCallback(() => {
     if (mediaRecorderRef.current && isRecording) {
+      // VOICE_LATENCY_PIPELINE_V2 perf instrumentation (Step 4) — batch path entry mark.
+      try { performance.mark('voice:stop'); } catch { /* observability-only */ }
       mediaRecorderRef.current.stop();
       setIsRecording(false);
       if (timerRef.current) {

@@ -247,8 +247,14 @@ export class VoicePreprocessor {
         const { recording, trimmer, hasher, sessionId, farmId } = params;
         const { pcm, sampleRate, durationMs: rawDurationMs } = recording;
 
+        // VOICE_LATENCY_PIPELINE_V2 perf instrumentation (Step 4) — streaming-path internal spans.
+        try { performance.mark('voice:streaming-process-start'); } catch { /* observability-only */ }
+
         // Trimmer was fed during recording; finalize() returns the accumulated trimmed buffer.
         const { trimmedData, totalSilenceRemovedMs } = trimmer.finalize(sampleRate);
+        try { performance.mark('voice:trim-finalize-done'); } catch { /* observability-only */ }
+        try { performance.measure('voice:streaming-trim-finalize', 'voice:streaming-process-start', 'voice:trim-finalize-done'); } catch { /* duplicate-name in same session */ }
+
         const effectiveData = trimmedData.length > 0 ? trimmedData : pcm;
         const effectiveSilenceRemovedMs = trimmedData.length > 0 ? totalSilenceRemovedMs : 0;
         const speechDurationMs = (effectiveData.length / sampleRate) * 1000;
@@ -267,10 +273,16 @@ export class VoicePreprocessor {
             audioBlob = SegmentCompressor.createWavBlob(effectiveData, sampleRate);
             mimeType = 'audio/wav';
         }
+        try { performance.mark('voice:encode-done'); } catch { /* observability-only */ }
+        try { performance.measure('voice:streaming-encode', 'voice:trim-finalize-done', 'voice:encode-done'); } catch { /* duplicate-name in same session */ }
 
         // Hasher was also fed during recording; finalize is a single-pass digest
-        // over the concatenated PCM buffer.
+        // over the concatenated PCM buffer. Note: today encode + hash are sequential;
+        // the perf marks will reveal this in DevTools and motivate parallelization
+        // via Promise.all in a follow-up commit if the timing data justifies it.
         const contentHash = await hasher.finalize();
+        try { performance.mark('voice:hash-done'); } catch { /* observability-only */ }
+        try { performance.measure('voice:streaming-hash', 'voice:trim-finalize-done', 'voice:hash-done'); } catch { /* duplicate-name in same session */ }
 
         const metadata: VoiceSessionMetadata = {
             sessionId,

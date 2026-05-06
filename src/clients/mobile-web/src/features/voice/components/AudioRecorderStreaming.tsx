@@ -122,6 +122,9 @@ const AudioRecorderStreaming: React.FC<AudioRecorderStreamingProps> = ({
   const stopRecording = useCallback(async () => {
     if (!recorderRef.current || !isRecording) return;
 
+    // VOICE_LATENCY_PIPELINE_V2 perf instrumentation (Step 4) — streaming path entry mark.
+    try { performance.mark('voice:stop'); } catch { /* observability-only */ }
+
     setIsRecording(false);
     if (timerRef.current) {
       clearInterval(timerRef.current);
@@ -148,6 +151,8 @@ const AudioRecorderStreaming: React.FC<AudioRecorderStreamingProps> = ({
 
       const sessionId = VoiceIdempotency.createSessionId();
       const farmId = 'unknown-farm'; // useVoiceRecorder downstream resolves the real farmId
+      // processStreamingResult emits its own internal marks (voice:trim-finalize-done,
+      // voice:encode-done, voice:hash-done) and matching span measures.
       const result = await ensurePreprocessor().processStreamingResult({
         recording,
         trimmer,
@@ -157,6 +162,10 @@ const AudioRecorderStreaming: React.FC<AudioRecorderStreamingProps> = ({
       });
 
       const base64 = await blobToBase64NoPrefix(result.audioBlob);
+
+      try { performance.mark('voice:emit'); } catch { /* observability-only */ }
+      try { performance.measure('voice:streaming-emit', 'voice:hash-done', 'voice:emit'); } catch { /* duplicate-name in same session */ }
+      try { performance.measure('voice:streaming-total', 'voice:stop', 'voice:emit'); } catch { /* duplicate-name in same session */ }
 
       // Match AudioRecorder.tsx's onAudioCaptured shape byte-for-byte:
       // { blob, base64, mimeType } where mimeType is 'audio/webm' (no codec suffix).
