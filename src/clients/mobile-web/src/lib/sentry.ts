@@ -9,15 +9,31 @@
 
 import * as Sentry from "@sentry/react";
 
-// Import PromptVersion for tagging — adjust path if needed
+// Import PromptVersion for tagging.
+// Default while the dynamic import is in flight; module-scope `await import`
+// requires top-level await (ES2022) which Vite's es2020 target rejects.
+// We fire-and-forget the import: the assignment to PROMPT_VERSION below
+// updates the module-scope variable so initSentry() picks up the correct
+// value if it runs after the import resolves. If Sentry was already init'd
+// when the import resolves, Sentry.setTag updates the live tag instead.
+// Order matters: assign PROMPT_VERSION first, then setTag — so the worst
+// case is "setTag dropped silently because Sentry not yet init'd, but
+// initSentry() reads the correct PROMPT_VERSION when it runs".
 let PROMPT_VERSION = "v1.0";
-try {
-  // Dynamic import to avoid breaking if file doesn't exist yet
-  const pv = await import("../domain/ai/contracts/PromptVersion").catch(() => null);
-  if (pv?.CURRENT_PROMPT_VERSION) PROMPT_VERSION = pv.CURRENT_PROMPT_VERSION;
-} catch {
-  // ignore
-}
+import("../domain/ai/contracts/PromptVersion")
+  .then((pv) => {
+    if (pv?.CURRENT_PROMPT_VERSION) {
+      PROMPT_VERSION = pv.CURRENT_PROMPT_VERSION;
+      try {
+        Sentry.setTag("prompt.version", PROMPT_VERSION);
+      } catch {
+        // Sentry not yet initialized — initSentry() will read the updated PROMPT_VERSION
+      }
+    }
+  })
+  .catch(() => {
+    // ignore — keep the "v1.0" default
+  });
 
 export function initSentry(): void {
   const dsn = import.meta.env.VITE_SENTRY_DSN;
