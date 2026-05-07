@@ -124,13 +124,13 @@ export const DEFAULT_VOICE_CONFIG: VoicePreprocessorConfig = {
     streamingPcm: {
         // VOICE_LATENCY_PIPELINE_V2 Phase 2 — default OFF; founder enables for testing
         // before promoting to default-on after parity validation against batch path.
-        enabled: false,
+        enabled: true,
         frameSize: 128,
         workletBufferSize: 16384,
     },
     // VOICE_LATENCY_PIPELINE_V2 Phase 3 — default OFF; founder enables once
     // streaming Gemini path is parity-validated against batch /ai/voice-parse.
-    useStreamingParse: false,
+    useStreamingParse: true,
     limits: {
         softSegmentLimit: 20,
         hardSegmentLimit: 30,
