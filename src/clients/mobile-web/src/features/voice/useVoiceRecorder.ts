@@ -1,12 +1,13 @@
 import { useRef, useState } from 'react';
 import { AppStatus, LogSegment, AudioData, FarmContext, CropProfile, FarmerProfile, InputMode, AgriLogResponse, QuestionForUser } from '../../types';
 import { LogProvenance } from '../../domain/ai/LogProvenance';
-import { VoiceParserPort } from '../../application/ports';
+import { VoiceParserPort, VoiceParseResult } from '../../application/ports';
 import { parseVoiceToDraft } from '../../application/usecases/ParseVoiceToDraft';
+import { parseVoiceToDraftStream } from '../../application/usecases/ParseVoiceToDraftStream';
 import { LogScope } from '../../domain/types/log.types';
 import { VoicePreprocessor } from '../../infrastructure/voice/VoicePreprocessor';
 import { VoiceIdempotency } from '../../infrastructure/voice/VoiceIdempotency';
-import { VoiceSessionMetadata } from '../../infrastructure/voice/types';
+import { DEFAULT_VOICE_CONFIG, VoiceSessionMetadata } from '../../infrastructure/voice/types';
 import { normalizeLegacyLogSegmentId } from '../../domain/ai/BucketId';
 
 const hasSuccessfulIrrigation = (events: Array<{ durationHours?: number; waterVolumeLitres?: number; method?: string; source?: string }>): boolean => {
@@ -47,6 +48,13 @@ export const useVoiceRecorder = ({
     const [recordingSegment, setRecordingSegment] = useState<LogSegment | null>(null);
     const [clarificationNeeded, setClarificationNeeded] = useState<QuestionForUser | null>(null);
     const [pendingTranscript, setPendingTranscript] = useState<string | null>(null);
+    // VOICE_LATENCY_PIPELINE_V2 Phase 3 (§7 Task 3.12) — streaming UX state.
+    // streamingPhase tracks the SSE lifecycle when DEFAULT_VOICE_CONFIG.useStreamingParse
+    // is on; fieldsArrived collects the top-level field names from `field_complete`
+    // events so consumers (the wizard) can render an arrival indicator before the
+    // terminal `complete` event lands. Both stay at idle/empty on the batch path.
+    const [voiceStreamingPhase, setVoiceStreamingPhase] = useState<'idle' | 'streaming' | 'complete' | 'error'>('idle');
+    const [voiceStreamingFieldsArrived, setVoiceStreamingFieldsArrived] = useState<ReadonlySet<string>>(() => new Set());
     const lastVoiceSessionMetadataRef = useRef<VoiceSessionMetadata | null>(null);
     const lastVoiceIdempotencySeedRef = useRef<string | null>(null);
 
@@ -141,6 +149,77 @@ export const useVoiceRecorder = ({
         }
     };
 
+    // VOICE_LATENCY_PIPELINE_V2 Phase 3 (§7 Task 3.12) — drive the SSE consumer
+    // and synthesize a VoiceParseResult so downstream code stays path-agnostic.
+    // Field arrivals stream into voiceStreamingFieldsArrived for live UX; the
+    // payload only commits on the terminal `complete` event (per backend contract,
+    // field_complete events carry null fieldValue today). Errors fall through as
+    // a normal failure VoiceParseResult — the existing setError path handles them.
+    const runStreamingParse = async (
+        payload: { type: 'audio' | 'text' } & Record<string, unknown>,
+    ): Promise<VoiceParseResult> => {
+        setVoiceStreamingPhase('streaming');
+        const fieldsArrived = new Set<string>();
+        setVoiceStreamingFieldsArrived(fieldsArrived);
+
+        let streamPayload: AgriLogResponse | null = null;
+        let streamError: string | null = null;
+        let streamPromptVersion: string | undefined;
+        let streamModelMs: number | undefined;
+
+        try {
+            const stream = parser.parseInputStream!(
+                payload as unknown as Parameters<NonNullable<VoiceParserPort['parseInputStream']>>[0],
+                logScope,
+                crops,
+                farmerProfile,
+                { focusCategory: undefined },
+            );
+            await parseVoiceToDraftStream(stream, {
+                onFieldComplete: (fieldPath) => {
+                    fieldsArrived.add(fieldPath);
+                    // Replace the Set reference so React picks up the change.
+                    setVoiceStreamingFieldsArrived(new Set(fieldsArrived));
+                },
+                onComplete: (completePayload, meta) => {
+                    streamPayload = completePayload;
+                    streamPromptVersion = meta.promptVersion;
+                    streamModelMs = meta.modelMs;
+                },
+                onError: (errMsg, meta) => {
+                    streamError = errMsg;
+                    streamPromptVersion = meta.promptVersion;
+                    streamModelMs = meta.modelMs;
+                },
+            });
+        } catch (streamException) {
+            streamError = streamException instanceof Error
+                ? streamException.message
+                : 'Voice stream failed.';
+        }
+
+        if (streamPayload) {
+            setVoiceStreamingPhase('complete');
+            const provenance: LogProvenance = {
+                source: 'ai',
+                timestamp: new Date().toISOString(),
+                promptVersion: streamPromptVersion,
+                processingTimeMs: streamModelMs,
+            };
+            return {
+                success: true,
+                data: streamPayload,
+                provenance,
+            };
+        }
+
+        setVoiceStreamingPhase('error');
+        return {
+            success: false,
+            error: streamError ?? 'Voice stream returned no payload.',
+        };
+    };
+
     const handleAudioReady = async (audioData: AudioData) => {
         setStatus('processing');
         setError(null);
@@ -215,14 +294,30 @@ export const useVoiceRecorder = ({
                 }
                 : { type: 'text' as const, content: payloadInput.data };
 
-            const result = await parseVoiceToDraft(
-                payload,
-                logScope,
-                crops,
-                farmerProfile,
-                parser,
-                { focusCategory: focusCategory || undefined }
-            );
+            // VOICE_LATENCY_PIPELINE_V2 Phase 3 (§7 Task 3.12) — streaming routing.
+            // Conditions for the SSE path: flag on AND adapter implements
+            // parseInputStream AND input is text. Audio always uses the batch
+            // path (the streaming endpoint accepts only transcripts today;
+            // STT-then-stream is a future phase). On any precondition miss
+            // the existing batch path runs unchanged.
+            const canStream =
+                DEFAULT_VOICE_CONFIG.useStreamingParse &&
+                typeof parser.parseInputStream === 'function' &&
+                payload.type === 'text';
+
+            let result: VoiceParseResult;
+            if (canStream) {
+                result = await runStreamingParse(payload);
+            } else {
+                result = await parseVoiceToDraft(
+                    payload,
+                    logScope,
+                    crops,
+                    farmerProfile,
+                    parser,
+                    { focusCategory: focusCategory || undefined }
+                );
+            }
 
             if (!result.success || !result.data) {
                 setStatus('idle');
@@ -356,6 +451,8 @@ export const useVoiceRecorder = ({
         setStatus('idle');
         setError(null);
         setErrorTranscript(undefined);
+        setVoiceStreamingPhase('idle');
+        setVoiceStreamingFieldsArrived(new Set());
     };
 
     return {
@@ -369,6 +466,12 @@ export const useVoiceRecorder = ({
         handleTextReady,
         handleReRecordSegment,
         handleResetVoice,
-        clarificationNeeded // EXPOSE FOR UI
+        clarificationNeeded, // EXPOSE FOR UI
+        // VOICE_LATENCY_PIPELINE_V2 Phase 3 (§7 Task 3.12) — streaming UX state.
+        // Consumers (LogWizardContainer wrapper) may render an "AI is reading…"
+        // indicator while voiceStreamingPhase === 'streaming'. Both stay
+        // idle/empty whenever the batch path runs.
+        voiceStreamingPhase,
+        voiceStreamingFieldsArrived,
     };
 };
