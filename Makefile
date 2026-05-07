@@ -58,8 +58,24 @@ eval-smoke:
 		echo "[make eval-smoke:warn] eval/run.ts not yet authored. Skipping."; \
 	fi
 
-## ship: Pre-merge checklist (format + build + test + lint + eval-smoke + branch check)
+## ship: Pre-merge checklist runner (requires fresh PROD_SNAPSHOT ≤24h)
+# Pre-flight gate (Mitigation — _COFOUNDER/runbooks/prod-state-snapshot.md):
+# A merge cannot ship without a recent prod-state snapshot on disk so we
+# never reason about staged changes against a stale view of production.
+# Refresh with: bash _COFOUNDER/scripts/prod-state-snapshot.sh
 ship:
+	@echo "[make ship] Pre-flight: checking prod snapshot freshness..."
+	@SNAP=$$(ls -t _COFOUNDER/OS/State/PROD_SNAPSHOT_*.md 2>/dev/null | head -1); \
+	if [ -z "$$SNAP" ]; then \
+		echo "[make ship] ERROR: no PROD_SNAPSHOT found. Run: bash _COFOUNDER/scripts/prod-state-snapshot.sh"; \
+		exit 1; \
+	fi; \
+	AGE=$$(($$(date +%s) - $$(stat -c %Y "$$SNAP" 2>/dev/null || stat -f %m "$$SNAP" 2>/dev/null || echo 0))); \
+	if [ "$$AGE" -gt 86400 ]; then \
+		echo "[make ship] ERROR: PROD_SNAPSHOT is $$((AGE / 3600))h old (>24h). Refresh first."; \
+		exit 1; \
+	fi; \
+	echo "[make ship] OK — snapshot is $$((AGE / 60))min old"
 	@echo "[make ship] Running pre-merge checklist..."
 	@FAILED=0; \
 	echo "1/6 dotnet format..."; dotnet format $(DOTNET_PROJECT) --verify-no-changes || FAILED=1; \

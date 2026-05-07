@@ -47,5 +47,20 @@ if [ -n "$STAGED_TS" ]; then
   cd "$REPO_ROOT"
 fi
 
+# 5. Test-scope mapper (Mitigation #4 — _COFOUNDER/runbooks/test-scope-mapping.md)
+#    Maps staged files -> required test scopes and verifies coverage so a
+#    commit can never sneak past the relevant test suite. The checker is
+#    optional: if the script is missing or non-executable we skip silently
+#    so fresh clones without _COFOUNDER still commit.
+#    Override (audited): AGRISYNC_SKIP_TESTS=1 git commit ...
+TEST_SCOPE_CHECK="$REPO_ROOT/_COFOUNDER/scripts/test-scope/check-test-scope.sh"
+if [ -x "$TEST_SCOPE_CHECK" ]; then
+  if ! bash "$TEST_SCOPE_CHECK" pre-commit; then
+    echo "[pre-commit] ERROR: test-scope gate failed. See output above." >&2
+    echo "[pre-commit] Override (logged): AGRISYNC_SKIP_TESTS=1 git commit ..." >&2
+    exit 1
+  fi
+fi
+
 echo "[pre-commit] All checks passed."
 exit 0
