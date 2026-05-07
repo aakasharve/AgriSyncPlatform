@@ -21,7 +21,7 @@
  *     should treat it as a "field arrived" signal and re-derive values from the
  *     latest `text` chunks or wait for the `complete` event's `payload`.
  *
- * Layer: Domain (pure types, no imports from UI/infrastructure).
+ * Layer: Domain (pure types — no UI or infrastructure imports allowed).
  */
 
 import type { AgriLogResponse } from '../../../types';
