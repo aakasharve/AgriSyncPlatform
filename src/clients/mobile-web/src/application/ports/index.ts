@@ -129,6 +129,23 @@ export interface VoiceParserPort {
      * Parse voice/text input into structured log data.
      */
     parseInput(input: VoiceInput, context: LogScope, crops: CropProfile[], profile: FarmerProfile, options?: { focusCategory?: string }): Promise<VoiceParseResult>;
+
+    /**
+     * VOICE_LATENCY_PIPELINE_V2 Phase 3 (§7 Task 3.10) — optional streaming variant.
+     * Adapters that support SSE streaming (BackendAiClient) implement this; adapters
+     * that don't (GeminiClient browser-direct) leave it undefined. useVoiceRecorder
+     * checks for presence + the DEFAULT_VOICE_CONFIG.useStreamingParse flag before
+     * routing through this method; otherwise falls back to parseInput.
+     * Honors the silent-fallback contract (plan §7 acceptance criterion 7) — yields
+     * a synthesized terminal `complete` event from the batch path on streaming failure.
+     */
+    parseInputStream?(
+        input: VoiceInput,
+        context: LogScope,
+        crops: CropProfile[],
+        profile: FarmerProfile,
+        options?: { focusCategory?: string; scenarioId?: string },
+    ): AsyncIterable<import('../../domain/ai/contracts/ParseStreamEvent').ParseStreamEvent>;
 }
 
 // ============================================

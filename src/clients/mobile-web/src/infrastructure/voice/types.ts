@@ -36,6 +36,17 @@ export interface VoicePreprocessorConfig {
     compression: CompressionConfig;
     limits: LimitsConfig;
     streamingPcm: StreamingPcmConfig;
+    /**
+     * VOICE_LATENCY_PIPELINE_V2 Phase 3 (§7 Task 3.13) — SSE streaming parse path.
+     * When true, useVoiceRecorder routes text input through
+     * BackendAiClient.parseInputStream → wizard sees field-arrival events live;
+     * draftLog still commits only on the terminal `complete` event.
+     * Defaults to false in v0.1 (per plan acceptance criterion 6); founder
+     * flips after staging validation against the existing batch path.
+     * Note: this is a SEPARATE flag from streamingPcm.enabled (Phase 2 recording
+     * pipeline) — they may be flipped independently.
+     */
+    useStreamingParse: boolean;
 }
 
 export interface StreamingPcmConfig {
@@ -117,6 +128,9 @@ export const DEFAULT_VOICE_CONFIG: VoicePreprocessorConfig = {
         frameSize: 128,
         workletBufferSize: 16384,
     },
+    // VOICE_LATENCY_PIPELINE_V2 Phase 3 — default OFF; founder enables once
+    // streaming Gemini path is parity-validated against batch /ai/voice-parse.
+    useStreamingParse: false,
     limits: {
         softSegmentLimit: 20,
         hardSegmentLimit: 30,
