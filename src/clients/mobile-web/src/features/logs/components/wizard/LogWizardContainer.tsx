@@ -24,9 +24,24 @@ interface LogWizardContainerProps {
     crops: CropProfile[];
     voiceParseResult?: AgriLogResponse;
     onSubmit: (logs: DailyLog[]) => Promise<void> | void;
+    /**
+     * VOICE_LATENCY_PIPELINE_V2 Phase 3 (§7 Task 3.11) — optional streaming
+     * lifecycle from `useVoiceRecorder`. When `voiceStreamingPhase === 'streaming'`
+     * AND `voiceParseResult` is still null, the header renders an
+     * "AI is reading…" indicator with the count of top-level fields seen so far.
+     * Both props stay falsy/empty on the batch (default) path; the indicator
+     * stays hidden and the wizard renders unchanged.
+     *
+     * Mount-gated by `DEFAULT_VOICE_CONFIG.useStreamingParse` upstream
+     * (default false). The conditional render path below is unreachable in
+     * any production code path until the flag flips. L5b becomes mandatory
+     * at flag-flip time per plan §9.6.
+     */
+    voiceStreamingPhase?: 'idle' | 'streaming' | 'complete' | 'error';
+    voiceStreamingFieldsArrived?: ReadonlySet<string>;
 }
 
-const LogWizardContainer: React.FC<LogWizardContainerProps> = ({ isOpen, onClose, profile, crops, voiceParseResult, onSubmit }) => {
+const LogWizardContainer: React.FC<LogWizardContainerProps> = ({ isOpen, onClose, profile, crops, voiceParseResult, onSubmit, voiceStreamingPhase, voiceStreamingFieldsArrived }) => {
     // --- STATE ---
     const [phase, setPhase] = useState<number>(1); // 1: Context, 2: Buckets, 3: Details, 4: Review
 
@@ -38,6 +53,7 @@ const LogWizardContainer: React.FC<LogWizardContainerProps> = ({ isOpen, onClose
 
     // Step 3 Data (Iterating through buckets)
     const [currentBucketIndex, setCurrentBucketIndex] = useState<number>(0);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- pre-existing; tightened in T-VOICE-LATENCY-V2-RUN-STREAMING-PARSE-REFACTOR follow-up
     const [collectedData, setCollectedData] = useState<Record<string, any>>({}); // Map bucketId -> data
 
     // DWC v2 §2.8 — telemetry refs for the wizard's open/submit lifecycle.
@@ -102,6 +118,7 @@ const LogWizardContainer: React.FC<LogWizardContainerProps> = ({ isOpen, onClose
         setPhase(3);
     };
 
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- pre-existing; data shape varies per Step3_Details bucket variant
     const handleDetailsNext = (data: any) => {
         const currentBucket = selectedBuckets[currentBucketIndex];
         setCollectedData(prev => ({
@@ -164,6 +181,7 @@ const LogWizardContainer: React.FC<LogWizardContainerProps> = ({ isOpen, onClose
     const getSummaryData = () => {
         return selectedBuckets.map(b => {
             const data = collectedData[b];
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any -- pre-existing; mocked summary mapping
             let items: any[] = [];
 
             // MOCKED MAPPING based on Step3 mock
@@ -209,6 +227,26 @@ const LogWizardContainer: React.FC<LogWizardContainerProps> = ({ isOpen, onClose
                     currentStep={getCurrentStepForStepper()}
                     totalSteps={totalSteps || 4}
                 />
+                {/* VOICE_LATENCY_PIPELINE_V2 Phase 3 (§7 Task 3.11) — streaming indicator.
+                    Shown only while the SSE parse is in flight AND no terminal payload
+                    has landed. Mount-gated upstream by DEFAULT_VOICE_CONFIG.useStreamingParse
+                    (default false) — unreachable in production until founder flips the flag
+                    (plan §9.6 L5b precondition applies at flip time). */}
+                {voiceStreamingPhase === 'streaming' && !voiceParseResult && (
+                    <div
+                        className="flex items-center gap-2 px-2 py-1 mx-2 bg-amber-50 border border-amber-200 rounded-md text-xs text-amber-900"
+                        style={{ fontFamily: "'Noto Sans Devanagari', sans-serif" }}
+                        aria-live="polite"
+                    >
+                        <span className="inline-block w-2 h-2 bg-amber-500 rounded-full animate-pulse" aria-hidden />
+                        <span>AI वाचत आहे…</span>
+                        {voiceStreamingFieldsArrived && voiceStreamingFieldsArrived.size > 0 && (
+                            <span className="font-semibold" style={{ fontFamily: "'DM Sans', sans-serif" }}>
+                                ({voiceStreamingFieldsArrived.size})
+                            </span>
+                        )}
+                    </div>
+                )}
                 <button onClick={onClose} className="p-2 ml-4 -mt-6 rounded-full bg-stone-100 hover:bg-stone-200 text-stone-500">
                     <X size={20} />
                 </button>
