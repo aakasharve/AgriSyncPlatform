@@ -1,3 +1,4 @@
+using ShramSafal.Application.Contracts.Dtos;
 using ShramSafal.Domain.AI;
 
 namespace ShramSafal.Application.Ports.External;
@@ -34,6 +35,19 @@ public interface IAiOrchestrator
         string mimeType,
         string systemPrompt,
         string idempotencyKey,
+        CancellationToken ct = default);
+
+    // Phase 3 (VOICE_LATENCY_PIPELINE_V2 §7 Task 3.4) — streaming voice parse.
+    // Mirrors the lean ParseVoiceWithOverrideAsync path (no AiJob, no idempotency,
+    // no breaker bookkeeping) and yields ParseStreamEvent values as Gemini emits
+    // partial JSON. Text events fire per provider chunk; field_complete and
+    // complete events fire as the underlying PartialJsonParser balances tokens.
+    // Provider exceptions are surfaced as a terminal error event and the
+    // enumeration ends — callers do not need to wrap in try/catch.
+    IAsyncEnumerable<ParseStreamEvent> ParseVoiceStreamAsync(
+        string transcript,
+        VoiceParseContext context,
+        string? scenarioId,
         CancellationToken ct = default);
 
     // agrisync-prompt-ops Phase 1 — Test/eval-only path. Skips AiJob persistence,

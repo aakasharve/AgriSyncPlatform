@@ -1,7 +1,9 @@
 using System.Diagnostics;
+using System.Runtime.CompilerServices;
 using System.Text;
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
+using ShramSafal.Application.Contracts.Dtos;
 using ShramSafal.Application.Ports.External;
 using ShramSafal.Domain.AI;
 
@@ -134,6 +136,170 @@ internal sealed class AiOrchestrator(
         job.MarkFailed();
         await aiJobRepository.SaveChangesAsync(ct);
         return (fallbackExecution.Result, job.Id, fallbackExecution.ProviderUsed, true);
+    }
+
+    // Phase 3 (VOICE_LATENCY_PIPELINE_V2 §7 Task 3.4) — streaming voice parse.
+    // Mirrors the lean override path: no AiJob persistence, no idempotency,
+    // no breaker bookkeeping. Pipes provider text chunks through
+    // PartialJsonParser; relays text/field_complete/complete/error events to
+    // the SSE endpoint.
+    public async IAsyncEnumerable<ParseStreamEvent> ParseVoiceStreamAsync(
+        string transcript,
+        VoiceParseContext context,
+        string? scenarioId,
+        [EnumeratorCancellation] CancellationToken ct = default)
+    {
+        var prompt = promptBuilder.BuildVoiceParsingPrompt(context);
+        var promptVersion = AiPromptLineage.ResolvePromptVersion(prompt);
+        var config = await aiJobRepository.GetProviderConfigAsync(ct);
+
+        if (config.IsAiProcessingDisabled)
+        {
+            yield return new ParseStreamEvent(
+                Type: "error",
+                Error: "AI processing is currently disabled.",
+                PromptVersion: promptVersion);
+            yield break;
+        }
+
+        var provider = ResolveProvider(
+            config.GetProviderForOperation(AiOperationType.VoiceToStructuredLog),
+            AiOperationType.VoiceToStructuredLog);
+
+        if (provider is null)
+        {
+            yield return new ParseStreamEvent(
+                Type: "error",
+                Error: "No AI provider is configured for voice parsing.",
+                PromptVersion: promptVersion);
+            yield break;
+        }
+
+        var parser = new PartialJsonParser();
+        var pendingEvents = new Queue<ParseStreamEvent>();
+        parser.OnEvent += evt =>
+        {
+            switch (evt.Type)
+            {
+                case PartialJsonEventType.FieldComplete:
+                    pendingEvents.Enqueue(new ParseStreamEvent(
+                        Type: "field_complete",
+                        FieldPath: evt.FieldPath,
+                        PromptVersion: promptVersion));
+                    break;
+                case PartialJsonEventType.Complete:
+                    pendingEvents.Enqueue(new ParseStreamEvent(
+                        Type: "complete",
+                        Payload: evt.Value.HasValue ? (object)evt.Value.Value : null,
+                        PromptVersion: promptVersion));
+                    break;
+            }
+        };
+
+        var sw = Stopwatch.StartNew();
+        IAsyncEnumerator<string>? enumerator = null;
+        ParseStreamEvent? initError = null;
+        try
+        {
+            enumerator = provider.ParseVoiceStreamAsync(transcript ?? string.Empty, prompt, ct).GetAsyncEnumerator(ct);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            sw.Stop();
+            logger.LogWarning(
+                ex,
+                "[parse-voice-stream] provider initialization failed scenario={ScenarioId} provider={Provider}",
+                scenarioId ?? "<none>",
+                provider.ProviderType);
+            initError = new ParseStreamEvent(
+                Type: "error",
+                Error: ex.Message,
+                PromptVersion: promptVersion,
+                ModelMs: sw.ElapsedMilliseconds);
+        }
+
+        if (initError is not null)
+        {
+            yield return initError;
+            yield break;
+        }
+
+        try
+        {
+            while (true)
+            {
+                bool hasNext;
+                string? chunk = null;
+                ParseStreamEvent? chunkError = null;
+                try
+                {
+                    hasNext = await enumerator!.MoveNextAsync();
+                    if (hasNext)
+                    {
+                        chunk = enumerator.Current;
+                    }
+                }
+                catch (Exception ex) when (ex is not OperationCanceledException)
+                {
+                    sw.Stop();
+                    logger.LogWarning(
+                        ex,
+                        "[parse-voice-stream] provider stream errored scenario={ScenarioId} provider={Provider} ms={Ms}",
+                        scenarioId ?? "<none>",
+                        provider.ProviderType,
+                        sw.ElapsedMilliseconds);
+                    chunkError = new ParseStreamEvent(
+                        Type: "error",
+                        Error: ex.Message,
+                        PromptVersion: promptVersion,
+                        ModelMs: sw.ElapsedMilliseconds);
+                    hasNext = false;
+                }
+
+                if (chunkError is not null)
+                {
+                    yield return chunkError;
+                    yield break;
+                }
+
+                if (!hasNext)
+                {
+                    break;
+                }
+
+                if (string.IsNullOrEmpty(chunk))
+                {
+                    continue;
+                }
+
+                yield return new ParseStreamEvent(
+                    Type: "text",
+                    Content: chunk,
+                    PromptVersion: promptVersion);
+
+                parser.Feed(chunk);
+
+                while (pendingEvents.Count > 0)
+                {
+                    yield return pendingEvents.Dequeue();
+                }
+            }
+
+            sw.Stop();
+            logger.LogInformation(
+                "[parse-voice-stream] scenario={ScenarioId} provider={Provider} version={PromptVersion} ms={Ms}",
+                scenarioId ?? "<none>",
+                provider.ProviderType,
+                promptVersion,
+                sw.ElapsedMilliseconds);
+        }
+        finally
+        {
+            if (enumerator is not null)
+            {
+                await enumerator.DisposeAsync();
+            }
+        }
     }
 
     // agrisync-prompt-ops Phase 1 — Lean staging path. No AiJob writes, no

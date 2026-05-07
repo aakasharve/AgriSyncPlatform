@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Net.Http.Json;
+using System.Runtime.CompilerServices;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using Microsoft.Extensions.Logging;
@@ -258,6 +259,142 @@ internal sealed class GeminiAiProvider(
                 Error = ex.Message
             };
         }
+    }
+
+    // Phase 3 (VOICE_LATENCY_PIPELINE_V2 §7 Task 3.3) — streaming variant of
+    // ParseVoice for text transcripts. Calls Gemini's :streamGenerateContent
+    // SSE endpoint and yields the raw text chunks as they arrive. The caller
+    // (AiOrchestrator.ParseVoiceStreamAsync) is responsible for piping these
+    // chunks through PartialJsonParser to surface field-complete events.
+    public async IAsyncEnumerable<string> ParseVoiceStreamAsync(
+        string transcript,
+        string systemPrompt,
+        [EnumeratorCancellation] CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(_options.ApiKey))
+        {
+            throw new InvalidOperationException("Gemini API key is not configured.");
+        }
+
+        using var timeout = CreateTimeoutToken(ct);
+        var client = httpClientFactory.CreateClient("GeminiAiProvider");
+
+        var generationConfig = new JsonObject
+        {
+            ["responseMimeType"] = "application/json",
+            ["temperature"] = JsonValue.Create(_options.Temperature),
+            ["maxOutputTokens"] = _options.MaxTokens
+        };
+
+        var requestBody = new JsonObject
+        {
+            ["systemInstruction"] = JsonSerializer.SerializeToNode(new
+            {
+                parts = new[] { new { text = systemPrompt } }
+            }),
+            ["contents"] = JsonSerializer.SerializeToNode(new[]
+            {
+                new
+                {
+                    role = "user",
+                    parts = new[] { new { text = transcript ?? string.Empty } }
+                }
+            }),
+            ["generationConfig"] = generationConfig
+        };
+
+        using var request = new HttpRequestMessage(HttpMethod.Post, BuildStreamGenerateContentUrl())
+        {
+            Content = JsonContent.Create(requestBody)
+        };
+
+        using var response = await client.SendAsync(
+            request,
+            HttpCompletionOption.ResponseHeadersRead,
+            timeout.Token);
+
+        if (!response.IsSuccessStatusCode)
+        {
+            var errorBody = await response.Content.ReadAsStringAsync(timeout.Token);
+            var message = TryExtractProviderError(errorBody)
+                          ?? $"Gemini stream call failed with status {(int)response.StatusCode}.";
+            throw new HttpRequestException(message);
+        }
+
+        await using var stream = await response.Content.ReadAsStreamAsync(timeout.Token);
+        using var reader = new StreamReader(stream);
+
+        while (await reader.ReadLineAsync(timeout.Token) is { } line)
+        {
+            timeout.Token.ThrowIfCancellationRequested();
+
+            if (line.Length == 0 || !line.StartsWith("data: ", StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            var payload = line["data: ".Length..];
+            if (string.Equals(payload, "[DONE]", StringComparison.Ordinal))
+            {
+                yield break;
+            }
+
+            var text = TryExtractStreamChunkText(payload);
+            if (!string.IsNullOrEmpty(text))
+            {
+                yield return text;
+            }
+        }
+    }
+
+    private static string? TryExtractStreamChunkText(string payload)
+    {
+        try
+        {
+            using var document = JsonDocument.Parse(payload);
+            if (!document.RootElement.TryGetProperty("candidates", out var candidates) ||
+                candidates.ValueKind != JsonValueKind.Array)
+            {
+                return null;
+            }
+
+            foreach (var candidate in candidates.EnumerateArray())
+            {
+                if (!candidate.TryGetProperty("content", out var content) ||
+                    content.ValueKind != JsonValueKind.Object ||
+                    !content.TryGetProperty("parts", out var parts) ||
+                    parts.ValueKind != JsonValueKind.Array)
+                {
+                    continue;
+                }
+
+                foreach (var part in parts.EnumerateArray())
+                {
+                    if (part.ValueKind == JsonValueKind.Object &&
+                        part.TryGetProperty("text", out var textNode) &&
+                        textNode.ValueKind == JsonValueKind.String)
+                    {
+                        return textNode.GetString();
+                    }
+                }
+            }
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
+
+        return null;
+    }
+
+    private string BuildStreamGenerateContentUrl()
+    {
+        var model = ResolveModelId();
+        var baseUrl = string.IsNullOrWhiteSpace(_options.BaseUrl)
+            ? "https://generativelanguage.googleapis.com/v1beta"
+            : _options.BaseUrl.Trim().TrimEnd('/');
+
+        return $"{baseUrl}/models/{Uri.EscapeDataString(model)}:streamGenerateContent?alt=sse&key={Uri.EscapeDataString(_options.ApiKey)}";
     }
 
     private async Task<(bool Success, string? Content, string? Error)> GenerateContentAsync(
