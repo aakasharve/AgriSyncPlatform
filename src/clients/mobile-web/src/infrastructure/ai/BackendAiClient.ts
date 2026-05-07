@@ -7,6 +7,9 @@ import { getDatabase, type PendingAiJobContext, type VoiceClipStatus } from '../
 import { IdempotencyKeyFactory } from './IdempotencyKeyFactory';
 import { annotateFieldConfidencesWithBuckets } from '../../domain/ai/contracts/FieldConfidence';
 import { computeProcessingVoiceClipExpiry, purgeExpiredProcessingVoiceClips } from '../voice/VoiceClipRetention';
+import { resolveApiBaseUrl } from '../api/transport';
+import { parseStreamConsumer } from './ParseStreamConsumer';
+import type { ParseStreamEvent } from '../../domain/ai/contracts/ParseStreamEvent';
 
 type VoiceUploadMaterial = {
     audioBlob: Blob;
@@ -230,6 +233,144 @@ export class BackendAiClient implements VoiceParserPort {
                     : 'Failed to parse voice input.',
             };
         }
+    }
+
+    /**
+     * VOICE_LATENCY_PIPELINE_V2 Phase 3 — streaming parse path.
+     *
+     * Calls `POST /shramsafal/ai/parse-voice-stream` and yields typed
+     * events as they arrive. Honors the silent-fallback contract
+     * (handoff §100-110, plan §7 acceptance criterion 7): on any error
+     * before the first event arrives — offline, non-2xx, missing farm,
+     * non-text/event-stream response, network throw — transparently
+     * delegates to the non-streaming `parseInput` path and synthesizes
+     * a single terminal `complete` (or `error`) event so the consumer
+     * sees a unified contract regardless of which path executed.
+     *
+     * Audio inputs always silent-fallback today: the streaming endpoint
+     * accepts only `transcript`. STT-then-stream is a future phase.
+     */
+    parseInputStream(
+        input: VoiceInput,
+        scope: LogScope,
+        crops: CropProfile[],
+        profile: FarmerProfile,
+        options?: { focusCategory?: string; scenarioId?: string },
+    ): AsyncIterable<ParseStreamEvent> {
+        return this.streamOrFallback(input, scope, crops, profile, options);
+    }
+
+    private async *streamOrFallback(
+        input: VoiceInput,
+        scope: LogScope,
+        crops: CropProfile[],
+        profile: FarmerProfile,
+        options?: { focusCategory?: string; scenarioId?: string },
+    ): AsyncIterable<ParseStreamEvent> {
+        const fallback = (): AsyncIterable<ParseStreamEvent> =>
+            this.fallbackToBatch(input, scope, crops, profile, options);
+
+        if (input.type !== 'text' || !navigator.onLine) {
+            yield* fallback();
+            return;
+        }
+
+        const transcript = input.content.trim();
+        if (!transcript) {
+            yield* fallback();
+            return;
+        }
+
+        let response: Response;
+        try {
+            response = await this.fetchParseVoiceStream(transcript, scope, crops, profile, options);
+        } catch {
+            yield* fallback();
+            return;
+        }
+
+        const contentType = response.headers.get('content-type') ?? '';
+        if (!response.ok || !contentType.toLowerCase().includes('text/event-stream') || !response.body) {
+            // Drain and discard so the connection releases promptly.
+            await response.body?.cancel().catch(() => undefined);
+            yield* fallback();
+            return;
+        }
+
+        let firstEventSeen = false;
+        try {
+            for await (const event of parseStreamConsumer(response)) {
+                firstEventSeen = true;
+                yield event;
+            }
+        } catch (streamError) {
+            if (!firstEventSeen) {
+                yield* fallback();
+                return;
+            }
+            // Stream broke mid-flight — surface as a synthetic terminal error
+            // so the consumer's switch hits the `error` branch rather than
+            // a silently truncated stream.
+            yield {
+                type: 'error',
+                error: streamError instanceof Error && streamError.message
+                    ? streamError.message
+                    : 'Voice stream failed mid-flight.',
+            };
+        }
+    }
+
+    private async fetchParseVoiceStream(
+        transcript: string,
+        scope: LogScope,
+        crops: CropProfile[],
+        profile: FarmerProfile,
+        options?: { focusCategory?: string; scenarioId?: string },
+    ): Promise<Response> {
+        const baseUrl = resolveApiBaseUrl();
+        const session = getAuthSession();
+        const headers: Record<string, string> = {
+            'Content-Type': 'application/json',
+            Accept: 'text/event-stream',
+        };
+        if (session?.accessToken) {
+            headers.Authorization = `Bearer ${session.accessToken}`;
+        }
+
+        const body = JSON.stringify({
+            transcript,
+            context: this.buildContext(scope, crops, profile, options),
+            scenarioId: options?.scenarioId,
+        });
+
+        return fetch(`${baseUrl}/shramsafal/ai/parse-voice-stream`, {
+            method: 'POST',
+            headers,
+            body,
+        });
+    }
+
+    private async *fallbackToBatch(
+        input: VoiceInput,
+        scope: LogScope,
+        crops: CropProfile[],
+        profile: FarmerProfile,
+        options?: { focusCategory?: string },
+    ): AsyncIterable<ParseStreamEvent> {
+        const result = await this.parseInput(input, scope, crops, profile, options);
+        if (result.success && result.data) {
+            yield {
+                type: 'complete',
+                payload: result.data,
+                promptVersion: result.provenance?.promptVersion,
+                modelMs: result.provenance?.processingTimeMs,
+            };
+            return;
+        }
+        yield {
+            type: 'error',
+            error: result.error ?? 'Voice parse failed.',
+        };
     }
 
     private async submitVoiceAudioInput(

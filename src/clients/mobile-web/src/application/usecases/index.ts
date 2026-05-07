@@ -43,6 +43,11 @@ export {
     parseVoiceToDraft
 } from './ParseVoiceToDraft';
 
+export {
+    parseVoiceToDraftStream,
+    type ParseVoiceToDraftStreamCallbacks,
+} from './ParseVoiceToDraftStream';
+
 // Log Mutation
 export {
     updateLog
