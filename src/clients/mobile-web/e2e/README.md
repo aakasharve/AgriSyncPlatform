@@ -39,3 +39,44 @@ Per the user's `READY_WITH_CAVEATS` note on Sub-plan 04 / `PREP_READY` on Sub-pl
 > Not allowed yet: claiming 05 green, final E2E assertions against screens not yet restructured in 04.
 
 When Sub-plan 04 lands stable selectors, Tasks 3–7 of Sub-plan 05 can be unblocked.
+
+## Persona-tag convention (ADR 0018)
+
+When `_COFOUNDER` ADR 0018 went into effect (2026-05-08), high-trust specs (`trust_tier: high`) gained a persona-coverage requirement: every persona declared in the spec's `personas_covered` field must be exercised by at least one Playwright spec.
+
+Tag every relevant `test()` or `test.describe()` block with the persona it walks through. Allowed values mirror the spec template:
+
+- `@persona:Farmer`   — low-literacy primary user (Ramu Patil profile)
+- `@persona:Mukadam`  — labour overseer / supervisor profile
+- `@persona:Worker`   — voice-only worker profile
+- `@persona:Owner`    — review / approval profile
+
+### How to tag
+
+Append the tag(s) directly to the test title — Playwright matches them via `--grep`:
+
+```ts
+test('Farmer records offline wage advance and syncs next day  @persona:Farmer', async ({ page }) => {
+  // walkthrough mirrors the spec's `walkthrough` section
+});
+
+test.describe('Mukadam reviews pending advances  @persona:Mukadam', () => {
+  // ...
+});
+```
+
+A test may carry more than one persona tag if the same flow is observed by multiple roles in a single walkthrough.
+
+### How to run by persona
+
+```bash
+# Just the Farmer walkthroughs:
+npx playwright test --grep '@persona:Farmer'
+
+# Anything tagged with any persona (smoke for high-trust coverage):
+npx playwright test --grep '@persona:'
+```
+
+### Coverage rule (informative; CI enforcement is a follow-up)
+
+For any spec with `trust_tier: high` and `personas_covered: [A, B]`, the e2e suite should contain at least one passing test tagged with each of `@persona:A` and `@persona:B`. CI enforcement on this rule is intentionally deferred until the first one or two real high-trust specs flow through the new template, so the rule can be tuned against actual walkthroughs rather than hypothetical ones. Until then, missing persona coverage is a verifier-flagged review note, not a CI blocker.
