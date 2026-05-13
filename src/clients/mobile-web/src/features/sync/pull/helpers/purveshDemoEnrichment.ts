@@ -22,7 +22,10 @@ export function isPurveshDemoOwner(name: string): boolean {
 export function buildPurveshDemoProfileDefaults(receivedAtUtc: string): Partial<FarmerProfile> {
     return {
         village: 'Khardi, Nashik',
-        phone: '9800000001',
+        // purvesh-demo-v2 (2026-05-13): owner phone updated to match
+        // PurveshDemoSeeder.UserSeeds[0].Phone. Worker phones below stay
+        // on the original 980000000x block per founder spec ("keep workers").
+        phone: '8888888888',
         language: 'mr',
         verificationStatus: VerificationStatus.PhoneVerified,
         landHoldings: {

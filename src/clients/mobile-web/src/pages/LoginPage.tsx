@@ -6,22 +6,16 @@ import OtpVerifyForm from '../features/auth/components/OtpVerifyForm';
 import type { StartOtpResponse } from '../features/auth/data/otpClient';
 import { invalidateMeContext } from '../core/session/MeContextService';
 
-interface LoginPageProps { }
-
 // Top-level auth mode: 'otp' is the primary flow; 'password' is legacy.
 type TopMode = 'otp' | 'password';
 type AuthMode = 'login' | 'register';
 
-function normalizeDemoPhone(input: string): string {
-    const normalized = input.trim();
-    if (normalized === 'purvesh') {
-        return '9800000001';
-    }
-
-    return normalized;
-}
-
-const LoginPage: React.FC<LoginPageProps> = () => {
+// 2026-05-13 (purvesh-demo-v2 Halt Point 3): the "purvesh" demo phone shortcut
+// was removed entirely (supervisor-flagged + founder-authorized). Reason: the
+// design-mode brief was "production-ready look"; a stealth back-door that
+// routes real users typing "purvesh" into the demo account is incongruent.
+// Demo testers type the literal phone 8888888888 (8 eights, memorable).
+const LoginPage: React.FC = () => {
     const { login, register, isLoading, authError, clearAuthError } = useAuth();
     const [topMode, setTopMode] = useState<TopMode>('otp');
     const [mode, setMode] = useState<AuthMode>('login');
@@ -42,7 +36,7 @@ const LoginPage: React.FC<LoginPageProps> = () => {
 
     const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
         event.preventDefault();
-        const normalizedPhone = isRegisterMode ? phone.trim() : normalizeDemoPhone(phone);
+        const normalizedPhone = phone.trim();
         const normalizedPassword = password.trim();
         const normalizedDisplayName = displayName.trim();
 
@@ -166,28 +160,9 @@ const LoginPage: React.FC<LoginPageProps> = () => {
                     </button>
                 </div>
 
-                <div className="rounded-xl border border-stone-100 bg-stone-50 divide-y divide-stone-100 text-[11px]">
-                    <div className="flex items-center justify-between px-3 py-2">
-                        <span className="font-bold text-emerald-700 uppercase tracking-wider">Demo · Ramu</span>
-                        <span className="text-stone-600">
-                            phone: <span className="font-mono font-bold text-stone-800">9999999999</span>
-                            &nbsp;&nbsp;pass: <span className="font-mono font-bold text-stone-800">ramu123</span>
-                        </span>
-                    </div>
-                    <div className="flex items-center justify-between px-3 py-2">
-                        <span className="font-bold text-emerald-700 uppercase tracking-wider">Demo · Purvesh</span>
-                        <span className="text-stone-600">
-                            phone: <span className="font-mono font-bold text-stone-800">9800000001</span>
-                            &nbsp;&nbsp;pass: <span className="font-mono font-bold text-stone-800">purvesh123</span>
-                        </span>
-                    </div>
-                    <div className="flex items-center justify-between px-3 py-2">
-                        <span className="font-bold text-blue-700 uppercase tracking-wider">Fresh account</span>
-                        <span className="text-stone-600">
-                            Use the <span className="font-semibold text-stone-800">New Farmer</span> tab to create an empty account.
-                        </span>
-                    </div>
-                </div>
+                {/* 2026-05-13 (purvesh-demo-v2): demo-credentials hint panel removed
+                    per founder spec for a production-ready look. The "New Farmer"
+                    tab still provides the fresh-account onboarding path. */}
 
                 <form className="space-y-4" onSubmit={handleSubmit}>
                     {isRegisterMode && (
@@ -267,7 +242,7 @@ const LoginPage: React.FC<LoginPageProps> = () => {
 
                     {isRegisterMode && (
                         <p className="text-[11px] leading-5 text-stone-500">
-                            This creates a real empty account with no farm, no plots, and no seeded workflow data so you can test the first-time UX safely. Purvesh remains available for full-feature smoke checks.
+                            This creates a real empty account with no farm, no plots, and no seeded workflow data so you can test the first-time UX safely.
                         </p>
                     )}
                 </form>

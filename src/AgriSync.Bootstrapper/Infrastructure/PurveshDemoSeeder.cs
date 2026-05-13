@@ -1,5 +1,9 @@
 ﻿using System.Security.Cryptography;
 using System.Text;
+using Accounts.Domain.Affiliation;
+using Accounts.Domain.OwnerAccounts;
+using Accounts.Domain.Subscriptions;
+using Accounts.Infrastructure.Persistence;
 using AgriSync.SharedKernel.Contracts.Ids;
 using Microsoft.EntityFrameworkCore;
 using ShramSafal.Domain.Attachments;
@@ -20,26 +24,73 @@ namespace AgriSync.Bootstrapper.Infrastructure;
 public sealed class PurveshDemoSeeder
 {
     private const string AppId = "shramsafal";
-    private const string SeedVersion = "purvesh-demo-v1";
+    // v2 (2026-05-13): single-test-user redesign per founder spec.
+    // Changes from v1: Purvesh phone 9800000001 -> 8888888888, password
+    // purvesh123 -> Testuser@123, full name now includes middle (literal
+    // spelling "Chandrashkehar" per founder confirmation), plots reduced
+    // to 4 (Grapes×2 + Sugarcane×2 only), farm attached to a deterministic
+    // OwnerAccountId so the SQL cleanup script can pre-seed a matching
+    // Trialing subscription row in accounts.subscriptions.
+    private const string SeedVersion = "purvesh-demo-v2";
     private const string PurveshFarmName = "पुरुषोत्तमशेत, खार्डी";
+
+    // Deterministic OwnerAccountId for Purvesh's farm. v2 (2026-05-13):
+    // seeder now creates the matching accounts.owner_accounts row itself
+    // via OwnerAccount.Create(...) in EnsurePurveshOwnerAccountAsync, so
+    // the Farm's OwnerAccountId is no longer a dangling reference.
+    // (Pre-v2: Ramu still has this orphan bug — tracked in
+    // T-RAMU-OWNER-ACCOUNT-ORPHAN-FIX-2026-05-13.md.)
+    private static readonly OwnerAccountId PurveshOwnerAccountId =
+        new(Guid.Parse("00000000-0000-0000-0000-0000000000c2"));
+
+    // Synthetic "referred" OwnerAccountId used by the demo affiliation chain.
+    // Must NOT equal PurveshOwnerAccountId (Invariant I13 — no self-referral).
+    // Deterministic via SeedVersion so re-runs produce the same row.
+    private static readonly OwnerAccountId PurveshSyntheticReferredAccountId =
+        new(CreateDeterministicGuid("purvesh-demo-v2:affiliation:referred-synthetic"));
+
+    // 8-char Crockford Base32 referral code for Purvesh. Crockford forbids
+    // I, L, O, U (visually ambiguous with 1, 0, V). "PRVSHARV" drops vowels
+    // from "Purvesh Arve" while staying alphabet-compliant. Future-proofs
+    // against a hypothetical CHECK constraint on the code column.
+    private const string PurveshReferralCode = "PRVSHARV";
+
+    // Belt-and-suspenders compile-visible assertion of Invariant I13 (no
+    // self-referral). The deterministic SHA-256 derivation makes a collision
+    // with PurveshOwnerAccountId (...c2) cryptographically impossible today,
+    // and ReferralRelationship's ctor would throw at runtime if it ever did.
+    // This static-ctor guard documents the invariant where it's most visible
+    // and catches future refactors that change the seed string.
+    static PurveshDemoSeeder()
+    {
+        if (PurveshOwnerAccountId == PurveshSyntheticReferredAccountId)
+        {
+            throw new InvalidOperationException(
+                "Purvesh demo: synthetic referred owner account collides with " +
+                "Purvesh's own (Invariant I13 — no self-referral).");
+        }
+    }
 
     private static readonly UserSeed[] UserSeeds =
     [
-        new("purvesh", "Purvesh Arve", "9800000001", "purvesh123", UserAppRole.PrimaryOwner),
+        new("purvesh", "Purvesh Chandrashkehar Arve", "8888888888", "Testuser@123", UserAppRole.PrimaryOwner),
         new("shankar", "Shankar Jadhav", "9800000002", "shankar123", UserAppRole.Mukadam),
         new("raju", "Raju Bhosale", "9800000003", "raju123", UserAppRole.Worker),
         new("santosh", "Santosh Kamble", "9800000004", "santosh123", UserAppRole.Worker)
     ];
 
+    // v2: 4 plots / 2 crops (Grapes×2 + Sugarcane×2) per founder Q5 Interp A.
+    // Pomegranate / Turmeric / Bajra entries removed from PlotSeeds and from
+    // all downstream config (TemplateSeeds, PlannedSeedsByPlotKey,
+    // OperatorRoutingByPlotKey, TaskPatternsByCropName, AllocationPlotKeys,
+    // AttachmentSeeds) and from per-plot helpers (Build*Pattern methods,
+    // IsRestDay modulos, ApplyVerificationPattern switch, resource resolvers).
     private static readonly PlotSeed[] PlotSeeds =
     [
         new("grape_g1", "द्राक्ष G1", 1.5m, "Grapes", "Pruning", -85),
         new("grape_g2", "द्राक्ष G2", 1.0m, "Grapes", "Pruning", -75),
         new("sugarcane_s1", "ऊस S1", 1.0m, "Sugarcane", "Planting", -90),
-        new("sugarcane_s2", "ऊस S2", 0.5m, "Sugarcane", "Tillering", -60),
-        new("pomegranate_p1", "डाळिंब P1", 1.0m, "Pomegranate", "Bahar Treatment", -80),
-        new("turmeric_t1", "हळद T1", 1.0m, "Turmeric", "Planting", -70),
-        new("bajra_b1", "बाजरी B1", 1.0m, "Bajra", "Sowing", -45)
+        new("sugarcane_s2", "ऊस S2", 0.5m, "Sugarcane", "Tillering", -60)
     ];
 
     private static readonly TemplateSeed[] TemplateSeeds =
@@ -93,77 +144,6 @@ public sealed class PurveshDemoSeeder
             [
                 new TemplateActivitySeed("Stem Borer Spray", 0, FrequencyMode.EveryNDays, 30),
                 new TemplateActivitySeed("Top Shoot Inspection", 0, FrequencyMode.EveryNDays, 15)
-            ]),
-        new(
-            "pomegranate_bahar_treatment",
-            "Pomegranate - Bahar Treatment",
-            "Bahar Treatment",
-            [
-                new TemplateActivitySeed("Water Stress Start", 0, FrequencyMode.OneTime, 1),
-                new TemplateActivitySeed("Defoliation", 14, FrequencyMode.OneTime, 1),
-                new TemplateActivitySeed("Resume Drip", 21, FrequencyMode.OneTime, 1)
-            ]),
-        new(
-            "pomegranate_drip_irrigation",
-            "Pomegranate - Drip Irrigation",
-            "Bahar Treatment",
-            [
-                new TemplateActivitySeed("Drip Irrigation", 0, FrequencyMode.EveryNDays, 2)
-            ]),
-        new(
-            "pomegranate_disease_spray",
-            "Pomegranate - Disease Spray",
-            "Bahar Treatment",
-            [
-                new TemplateActivitySeed("Bacterial Blight Spray", 0, FrequencyMode.EveryNDays, 14),
-                new TemplateActivitySeed("Cercospora Spray", 7, FrequencyMode.EveryNDays, 14),
-                new TemplateActivitySeed("Fruit Borer Spray", 10, FrequencyMode.EveryNDays, 21)
-            ]),
-        new(
-            "turmeric_irrigation",
-            "Turmeric - Irrigation",
-            "Planting",
-            [
-                new TemplateActivitySeed("Sprinkler Irrigation", 0, FrequencyMode.EveryNDays, 7)
-            ]),
-        new(
-            "turmeric_fertilizer",
-            "Turmeric - Fertilizer",
-            "Planting",
-            [
-                new TemplateActivitySeed("FYM Basal Application", 0, FrequencyMode.OneTime, 1),
-                new TemplateActivitySeed("Urea Split 1", 30, FrequencyMode.OneTime, 1),
-                new TemplateActivitySeed("Urea Split 2 (delayed)", 60, FrequencyMode.OneTime, 1)
-            ]),
-        new(
-            "turmeric_earthing_up",
-            "Turmeric - Earthing Up",
-            "Planting",
-            [
-                new TemplateActivitySeed("Earthing Up Round 1", 45, FrequencyMode.OneTime, 1),
-                new TemplateActivitySeed("Earthing Up Round 2", 75, FrequencyMode.OneTime, 1)
-            ]),
-        new(
-            "bajra_irrigation",
-            "Bajra - Irrigation",
-            "Sowing",
-            [
-                new TemplateActivitySeed("Light Irrigation", 0, FrequencyMode.EveryNDays, 10)
-            ]),
-        new(
-            "bajra_fertilizer",
-            "Bajra - Fertilizer",
-            "Sowing",
-            [
-                new TemplateActivitySeed("Urea Top-Dress", 25, FrequencyMode.OneTime, 1)
-            ]),
-        new(
-            "bajra_weed_management",
-            "Bajra - Weed Management",
-            "Sowing",
-            [
-                new TemplateActivitySeed("Herbicide Spray", 15, FrequencyMode.OneTime, 1),
-                new TemplateActivitySeed("Manual Weeding", 20, FrequencyMode.OneTime, 1)
             ])
     ];
 
@@ -211,34 +191,6 @@ public sealed class PurveshDemoSeeder
             [
                 new PlannedActivitySeed(1, "Tillering", "Flood Irrigation"),
                 new PlannedActivitySeed(8, "Tillering", "Flood Irrigation")
-            ],
-            ["pomegranate_p1"] =
-            [
-                new PlannedActivitySeed(1, "Bahar Treatment", "Water Stress Start"),
-                new PlannedActivitySeed(14, "Bahar Treatment", "Defoliation"),
-                new PlannedActivitySeed(21, "Bahar Treatment", "Resume Drip"),
-                new PlannedActivitySeed(24, "Bahar Treatment", "Drip Irrigation"),
-                new PlannedActivitySeed(30, "Bahar Treatment", "Bacterial Blight Spray"),
-                new PlannedActivitySeed(37, "Bahar Treatment", "Cercospora Spray"),
-                new PlannedActivitySeed(45, "Bahar Treatment", "Fruit Borer Spray"),
-                new PlannedActivitySeed(60, "Bahar Treatment", "Drip Irrigation"),
-                new PlannedActivitySeed(74, "Bahar Treatment", "Bacterial Blight Spray")
-            ],
-            ["turmeric_t1"] =
-            [
-                new PlannedActivitySeed(1, "Planting", "FYM Basal Application"),
-                new PlannedActivitySeed(7, "Planting", "Sprinkler Irrigation"),
-                new PlannedActivitySeed(30, "Planting", "Urea Split 1"),
-                new PlannedActivitySeed(45, "Planting", "Earthing Up Round 1"),
-                new PlannedActivitySeed(60, "Planting", "Urea Split 2 (delayed)"),
-                new PlannedActivitySeed(75, "Planting", "Earthing Up Round 2")
-            ],
-            ["bajra_b1"] =
-            [
-                new PlannedActivitySeed(1, "Sowing", "Light Irrigation"),
-                new PlannedActivitySeed(15, "Sowing", "Herbicide Spray"),
-                new PlannedActivitySeed(20, "Sowing", "Manual Weeding"),
-                new PlannedActivitySeed(25, "Sowing", "Urea Top-Dress")
             ]
         };
 
@@ -248,11 +200,154 @@ public sealed class PurveshDemoSeeder
             ["grape_g1"] = new OperatorRoutingSeed("shankar", "raju", 5, "purvesh"),
             ["grape_g2"] = new OperatorRoutingSeed("raju", "santosh", 2, "purvesh"),
             ["sugarcane_s1"] = new OperatorRoutingSeed("shankar", "santosh", 4, "purvesh"),
-            ["sugarcane_s2"] = new OperatorRoutingSeed("raju", null, 0, null),
-            ["pomegranate_p1"] = new OperatorRoutingSeed("shankar", "purvesh", 5, "purvesh"),
-            ["turmeric_t1"] = new OperatorRoutingSeed("santosh", null, 0, "purvesh"),
-            ["bajra_b1"] = new OperatorRoutingSeed("raju", null, 0, null)
+            ["sugarcane_s2"] = new OperatorRoutingSeed("raju", null, 0, null)
         };
+
+    // 90-day log schedule constants (v2): drives BuildLogSchedule().
+    // Negative offsets are days-before-today. The schedule produces a
+    // hand-tuned dense window (last 8 days) and rule-based sparse window
+    // (days -8..-90) so the demo data set surfaces all the patterns the
+    // founder spec'd: distraction days (work disrupted, only sugarcane
+    // logged), multi-crop days (all 4 plots active on one day), and
+    // same-crop-different-work days (the two grape plots do contrasting
+    // activities — Pruning on g1 vs Spraying on g2 — to demo "two plots
+    // of the same crop don't always do the same thing").
+    private static readonly HashSet<int> DistractionDayOffsets = new() { -14, -28, -42, -55, -67, -78 };
+    private static readonly HashSet<int> MultiCropDayOffsets = new() { -11, -22, -33, -44, -66, -77, -88 };
+    private static readonly HashSet<int> SameCropDifferentWorkOffsets = new() { -21, -35, -49, -63 };
+
+    // Dense-window rotation: index 0 = today, index 7 = 7 days ago.
+    // Per-day plot list is hand-curated for variety (2-3 plots/day, all 4 on day -3).
+    private static readonly string[][] DenseWindowRotation =
+    [
+        ["grape_g1", "grape_g2", "sugarcane_s1"],
+        ["grape_g1", "sugarcane_s1", "sugarcane_s2"],
+        ["grape_g2", "sugarcane_s2"],
+        ["grape_g1", "grape_g2", "sugarcane_s1", "sugarcane_s2"],
+        ["grape_g1", "sugarcane_s1"],
+        ["grape_g2", "sugarcane_s2", "grape_g1"],
+        ["grape_g2", "sugarcane_s1"],
+        ["grape_g1", "sugarcane_s2", "grape_g2"]
+    ];
+
+    // Sparse-window default rotation. The 4-cycle (g1 → s1 → g2 → s2)
+    // produces a balanced presence across the 90-day window. When the
+    // rotation-selected plot didn't exist yet (offset < its StartOffsetDays),
+    // the fallback walks the rotation forward until an existing plot is
+    // found — this prevents empty days in [-71, -90] where g2/s2 hadn't
+    // started yet.
+    private static readonly string[] SparseRotationOrder =
+    [
+        "grape_g1", "sugarcane_s1", "grape_g2", "sugarcane_s2"
+    ];
+
+    private static readonly IReadOnlyDictionary<string, int[]> LogSchedule = BuildLogSchedule();
+
+    private static IReadOnlyDictionary<string, int[]> BuildLogSchedule()
+    {
+        var schedule = PlotSeeds.ToDictionary(s => s.Key, _ => new List<int>(), StringComparer.Ordinal);
+        var startOffsetByKey = PlotSeeds.ToDictionary(s => s.Key, s => s.StartOffsetDays, StringComparer.Ordinal);
+
+        bool PlotExists(string plotKey, int dayOffset) =>
+            startOffsetByKey.TryGetValue(plotKey, out var start) && dayOffset >= start;
+
+        // Dense window: 8 days, hand-tuned rotation
+        for (var day = 0; day < DenseWindowRotation.Length; day++)
+        {
+            var offset = -day;
+            foreach (var plotKey in DenseWindowRotation[day])
+            {
+                if (PlotExists(plotKey, offset) && schedule.ContainsKey(plotKey))
+                {
+                    schedule[plotKey].Add(offset);
+                }
+            }
+        }
+
+        // Sparse window: offsets -8 to -90
+        for (var offset = -8; offset >= -90; offset--)
+        {
+            if (DistractionDayOffsets.Contains(offset))
+            {
+                // Work disrupted: only sugarcane plots log (grapes "skipped" today)
+                if (PlotExists("sugarcane_s1", offset)) schedule["sugarcane_s1"].Add(offset);
+                if (PlotExists("sugarcane_s2", offset)) schedule["sugarcane_s2"].Add(offset);
+            }
+            else if (MultiCropDayOffsets.Contains(offset))
+            {
+                // All 4 plots active on the same day
+                foreach (var plotKey in SparseRotationOrder)
+                {
+                    if (PlotExists(plotKey, offset) && schedule.ContainsKey(plotKey))
+                    {
+                        schedule[plotKey].Add(offset);
+                    }
+                }
+            }
+            else if (SameCropDifferentWorkOffsets.Contains(offset))
+            {
+                // Both grape plots log; activities overridden in ResolveTaskPattern
+                // (g1=Pruning, g2=Spraying). One sugarcane plot also logs via
+                // the default-rotation slot so the day isn't grape-only.
+                if (PlotExists("grape_g1", offset)) schedule["grape_g1"].Add(offset);
+                if (PlotExists("grape_g2", offset)) schedule["grape_g2"].Add(offset);
+
+                var rotIdx = Math.Abs(offset) % SparseRotationOrder.Length;
+                for (var step = 0; step < SparseRotationOrder.Length; step++)
+                {
+                    var candidate = SparseRotationOrder[(rotIdx + step) % SparseRotationOrder.Length];
+                    if ((candidate == "sugarcane_s1" || candidate == "sugarcane_s2") &&
+                        PlotExists(candidate, offset))
+                    {
+                        schedule[candidate].Add(offset);
+                        break;
+                    }
+                }
+            }
+            else
+            {
+                // Default sparse: 1 plot per day via 4-cycle rotation.
+                // Fallback walks the rotation forward when the picked plot
+                // didn't exist yet at this offset.
+                var rotIdx = Math.Abs(offset) % SparseRotationOrder.Length;
+                string? primary = null;
+                for (var step = 0; step < SparseRotationOrder.Length; step++)
+                {
+                    var candidate = SparseRotationOrder[(rotIdx + step) % SparseRotationOrder.Length];
+                    if (PlotExists(candidate, offset))
+                    {
+                        primary = candidate;
+                        break;
+                    }
+                }
+
+                if (primary is not null)
+                {
+                    schedule[primary].Add(offset);
+
+                    // Every 7th day, add a second log from the next rotation slot
+                    if (Math.Abs(offset) % 7 == 0)
+                    {
+                        var primaryIdx = Array.IndexOf(SparseRotationOrder, primary);
+                        for (var step = 1; step <= SparseRotationOrder.Length; step++)
+                        {
+                            var candidate = SparseRotationOrder[(primaryIdx + step) % SparseRotationOrder.Length];
+                            if (candidate != primary && PlotExists(candidate, offset))
+                            {
+                                schedule[candidate].Add(offset);
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        return schedule.ToDictionary(
+            kvp => kvp.Key,
+            kvp => kvp.Value.OrderByDescending(o => o).ToArray(),
+            StringComparer.Ordinal);
+    }
 
     private static readonly IReadOnlyDictionary<string, string[][]> TaskPatternsByCropName =
         new Dictionary<string, string[][]>(StringComparer.OrdinalIgnoreCase)
@@ -268,22 +363,6 @@ public sealed class PurveshDemoSeeder
                 ["Irrigation", "Fertilizer application", "Observation"],
                 ["Weeding", "Irrigation"],
                 ["Fertilizer application", "Observation"]
-            ],
-            ["Pomegranate"] =
-            [
-                ["Bahar Treatment", "Observation"],
-                ["Spraying", "Irrigation", "Observation"],
-                ["Spraying", "Bahar Treatment"]
-            ],
-            ["Turmeric"] =
-            [
-                ["Irrigation", "Fertilizer application", "Observation"],
-                ["Irrigation", "Observation"]
-            ],
-            ["Bajra"] =
-            [
-                ["Sowing", "Irrigation", "Observation"],
-                ["Weeding", "Observation"]
             ]
         };
 
@@ -347,17 +426,6 @@ public sealed class PurveshDemoSeeder
                 "पॉवर स्प्रेयर आणि लाईन तपासणी केली. उद्याच्या कामासाठी यंत्र तयार ठेवले.",
                 "ट्रॅक्टर/इम्प्लिमेंट तपासले. बेल्ट आणि ग्रीसिंग पूर्ण.",
                 "मोटर, फिल्टर आणि व्हॉल्व्ह तपासून पुन्हा लाईन सुरू केली."
-            ],
-            ["Bahar Treatment"] =
-            [
-                "पाणी बंद केले. बहार उपचार सुरूवात.",
-                "पाने काढली. बहार पूर्ण.",
-                "ड्रिप पुन्हा सुरू केले."
-            ],
-            ["Sowing"] =
-            [
-                "बाजरी पेरणी केली.",
-                "हलके पाणी दिले."
             ]
         };
 
@@ -378,36 +446,39 @@ public sealed class PurveshDemoSeeder
     [
         "grape_g1",
         "grape_g2",
-        "pomegranate_p1",
-        "turmeric_t1",
-        "sugarcane_s1"
+        "sugarcane_s1",
+        "sugarcane_s2"
     ];
 
     private const string G2DisputeReason = "गव्हाण वेळेत भरले नाही";
 
     private static readonly AttachmentSeed[] AttachmentSeeds =
     [
-        new("grapes-g1-pruning", "grapes-g1-pruning.jpg", "DailyLog", "grape_g1", -85, "shankar", 186_420),
+        // grape_g1 starts at offset -85 but the v2 90-day schedule's earliest
+        // g1 log is at -84 (rotation primary at -85 is sugarcane_s1). The
+        // attachment must link to an existing daily-log GUID, so we anchor
+        // to -84 — the first day g1 logs (narrative "pruning happened on
+        // day 1 of the new cycle" still holds).
+        new("grapes-g1-pruning", "grapes-g1-pruning.jpg", "DailyLog", "grape_g1", -84, "shankar", 186_420),
         new("grapes-g2-growth", "grapes-g2-growth.jpg", "DailyLog", "grape_g2", -38, "shankar", 192_300),
         new("sugarcane-s1-planting", "sugarcane-s1-planting.jpg", "DailyLog", "sugarcane_s1", -90, "shankar", 178_650),
-        new("pomegranate-p1-bahar", "pomegranate-p1-bahar.jpg", "DailyLog", "pomegranate_p1", -80, "shankar", 183_110),
-        new("pomegranate-disease", "pomegranate-disease.jpg", "DailyLog", "pomegranate_p1", -38, "shankar", 167_980),
-        new("turmeric-t1-field", "turmeric-t1-field.jpg", "DailyLog", "turmeric_t1", -70, "shankar", 174_240),
-        new("bajra-b1-sowing", "bajra-b1-sowing.jpg", "DailyLog", "bajra_b1", -45, "shankar", 169_770),
         new("farm-overview", "farm-overview.jpg", "Farm", null, null, "shankar", 210_510)
     ];
 
     private readonly ShramSafalDbContext _ssfContext;
     private readonly UserDbContext _userContext;
+    private readonly AccountsDbContext _accountsContext;
     private readonly IPasswordHasher _passwordHasher;
 
     public PurveshDemoSeeder(
         ShramSafalDbContext ssfContext,
         UserDbContext userContext,
+        AccountsDbContext accountsContext,
         IPasswordHasher passwordHasher)
     {
         _ssfContext = ssfContext;
         _userContext = userContext;
+        _accountsContext = accountsContext;
         _passwordHasher = passwordHasher;
     }
 
@@ -424,6 +495,14 @@ public sealed class PurveshDemoSeeder
         }
 
         var purvesh = usersByKey["purvesh"];
+
+        // v2: Accounts-context aggregates (owner account + subscription) MUST
+        // precede the Farm so the Farm's OwnerAccountId references a real row.
+        // OwnerAccount.Create(...) internally seeds the PrimaryOwner membership.
+        var ownerAccountAdded = await EnsurePurveshOwnerAccountAsync(purvesh.Id, nowUtc, cancellationToken);
+        var subscriptionAdded = await EnsurePurveshSubscriptionAsync(nowUtc, cancellationToken);
+        await _accountsContext.SaveChangesAsync(cancellationToken);
+
         var farm = await EnsureFarmAsync(purvesh.Id, nowUtc, cancellationToken);
         var plotContexts = await EnsurePlotsAndCropCyclesAsync(farm.Id, nowUtc, cancellationToken);
         var phase3Stats = await EnsureScheduleTemplatesAndPlannedActivitiesAsync(plotContexts, purvesh.Id, nowUtc, cancellationToken);
@@ -446,7 +525,15 @@ public sealed class PurveshDemoSeeder
             nowUtc,
             cancellationToken);
 
+        // v2 Phase 6: multi-tenant aggregates (Accounts + ShramSafal-farms-tenant)
+        var phase6Stats = await EnsureMultiTenantDataAsync(
+            farm,
+            purvesh.Id,
+            nowUtc,
+            cancellationToken);
+
         await _ssfContext.SaveChangesAsync(cancellationToken);
+        await _accountsContext.SaveChangesAsync(cancellationToken);
 
         var totals = new PhaseTotals(
             UserCount: usersByKey.Count,
@@ -463,10 +550,15 @@ public sealed class PurveshDemoSeeder
             FinanceCorrectionsAdded: phase4FinanceStats.CorrectionsAdded,
             DayLedgersAdded: phase4FinanceStats.DayLedgersAdded,
             PriceConfigsAdded: phase4FinanceStats.PriceConfigsAdded,
-            AttachmentsAdded: phase5AttachmentStats.AttachmentsAdded);
+            AttachmentsAdded: phase5AttachmentStats.AttachmentsAdded,
+            OwnerAccountsAdded: ownerAccountAdded,
+            SubscriptionsAdded: subscriptionAdded,
+            FarmInvitationsAdded: phase6Stats.FarmInvitationsAdded,
+            FarmJoinTokensAdded: phase6Stats.FarmJoinTokensAdded,
+            AffiliationRowsAdded: phase6Stats.AffiliationRowsAdded);
 
         return $"Refreshed {SeedVersion}. {refreshResult} | " +
-               $"Phase 2+3+4+5 seeded. " +
+               $"Phase 2+3+4+5+6 seeded. " +
                $"users={totals.UserCount}, farms={totals.FarmCount}, plots={totals.PlotCount}, " +
                $"cropCycles={totals.CropCycleCount}, templates={totals.ScheduleTemplateCount}, " +
                $"templateActivitiesAdded={totals.TemplateActivitiesAdded}, plannedActivitiesAdded={totals.PlannedActivitiesAdded}, " +
@@ -474,6 +566,9 @@ public sealed class PurveshDemoSeeder
                $"verificationsAdded={totals.VerificationEventsAdded}, costEntriesAdded={totals.CostEntriesAdded}, " +
                $"correctionsAdded={totals.FinanceCorrectionsAdded}, dayLedgersAdded={totals.DayLedgersAdded}, " +
                $"priceConfigsAdded={totals.PriceConfigsAdded}, attachmentsAdded={totals.AttachmentsAdded}, " +
+               $"ownerAccountsAdded={totals.OwnerAccountsAdded}, subscriptionsAdded={totals.SubscriptionsAdded}, " +
+               $"farmInvitationsAdded={totals.FarmInvitationsAdded}, farmJoinTokensAdded={totals.FarmJoinTokensAdded}, " +
+               $"affiliationRowsAdded={totals.AffiliationRowsAdded}, " +
                $"anchorUtc={nowUtc:O}.";
     }
 
@@ -599,6 +694,34 @@ public sealed class PurveshDemoSeeder
             _ssfContext.Plots.RemoveRange(plots);
         }
 
+        // v2 Phase 6 cleanup — FarmJoinTokens BEFORE FarmInvitations
+        // (token.InvitationId FK referential discipline).
+        var joinTokenIds = new[]
+        {
+            new FarmJoinTokenId(CreateDeterministicGuid($"{SeedVersion}:joinToken:active"))
+        }.ToHashSet();
+        var joinTokens = await _ssfContext.FarmJoinTokens
+            .Where(t => joinTokenIds.Contains(t.Id))
+            .ToListAsync(cancellationToken);
+        var deletedFarmJoinTokensCount = joinTokens.Count;
+        if (joinTokens.Count > 0)
+        {
+            _ssfContext.FarmJoinTokens.RemoveRange(joinTokens);
+        }
+
+        var invitationIds = new[]
+        {
+            new FarmInvitationId(CreateDeterministicGuid($"{SeedVersion}:invitation:worker-anchor"))
+        }.ToHashSet();
+        var invitations = await _ssfContext.FarmInvitations
+            .Where(i => invitationIds.Contains(i.Id))
+            .ToListAsync(cancellationToken);
+        var deletedFarmInvitationsCount = invitations.Count;
+        if (invitations.Count > 0)
+        {
+            _ssfContext.FarmInvitations.RemoveRange(invitations);
+        }
+
         var farm = await _ssfContext.Farms.FirstOrDefaultAsync(f => f.Id == farmId, cancellationToken);
         var deletedFarmCount = 0;
         if (farm is not null)
@@ -608,6 +731,88 @@ public sealed class PurveshDemoSeeder
         }
 
         await _ssfContext.SaveChangesAsync(cancellationToken);
+
+        // v2 Phase 6 cleanup — Accounts context. Reverse dependency order:
+        //   BenefitLedgerEntries -> GrowthEvents -> ReferralRelationships
+        //   -> ReferralCodes -> Subscriptions -> OwnerAccountMemberships
+        //   -> OwnerAccounts
+        var benefitEntryIds = new[]
+        {
+            new BenefitLedgerEntryId(CreateDeterministicGuid($"{SeedVersion}:affiliation:benefit-ledger-entry"))
+        }.ToHashSet();
+        var benefitEntries = await _accountsContext.BenefitLedgerEntries
+            .Where(b => benefitEntryIds.Contains(b.Id))
+            .ToListAsync(cancellationToken);
+        var deletedBenefitEntriesCount = benefitEntries.Count;
+        if (benefitEntries.Count > 0)
+        {
+            _accountsContext.BenefitLedgerEntries.RemoveRange(benefitEntries);
+        }
+
+        var growthEventIds = new[]
+        {
+            new GrowthEventId(CreateDeterministicGuid($"{SeedVersion}:affiliation:growth-event"))
+        }.ToHashSet();
+        var growthEvents = await _accountsContext.GrowthEvents
+            .Where(g => growthEventIds.Contains(g.Id))
+            .ToListAsync(cancellationToken);
+        var deletedGrowthEventsCount = growthEvents.Count;
+        if (growthEvents.Count > 0)
+        {
+            _accountsContext.GrowthEvents.RemoveRange(growthEvents);
+        }
+
+        var relationshipIds = new[]
+        {
+            new ReferralRelationshipId(CreateDeterministicGuid($"{SeedVersion}:affiliation:referral-relationship"))
+        }.ToHashSet();
+        var relationships = await _accountsContext.ReferralRelationships
+            .Where(r => relationshipIds.Contains(r.Id))
+            .ToListAsync(cancellationToken);
+        var deletedRelationshipsCount = relationships.Count;
+        if (relationships.Count > 0)
+        {
+            _accountsContext.ReferralRelationships.RemoveRange(relationships);
+        }
+
+        var codeIds = new[]
+        {
+            new ReferralCodeId(CreateDeterministicGuid($"{SeedVersion}:affiliation:referral-code"))
+        }.ToHashSet();
+        var codes = await _accountsContext.ReferralCodes
+            .Where(c => codeIds.Contains(c.Id))
+            .ToListAsync(cancellationToken);
+        var deletedReferralCodesCount = codes.Count;
+        if (codes.Count > 0)
+        {
+            _accountsContext.ReferralCodes.RemoveRange(codes);
+        }
+
+        var subscriptions = await _accountsContext.Subscriptions
+            .Where(s => s.OwnerAccountId == PurveshOwnerAccountId)
+            .ToListAsync(cancellationToken);
+        var deletedSubscriptionsCount = subscriptions.Count;
+        if (subscriptions.Count > 0)
+        {
+            _accountsContext.Subscriptions.RemoveRange(subscriptions);
+        }
+
+        // OwnerAccountMemberships cascade from OwnerAccount via EF cascade
+        // delete (configured in OwnerAccountConfiguration). Explicit removal
+        // keeps the cleanup deterministic across configurations.
+        var ownerAccount = await _accountsContext.OwnerAccounts
+            .Include(o => o.Memberships)
+            .FirstOrDefaultAsync(o => o.Id == PurveshOwnerAccountId, cancellationToken);
+        var deletedOwnerAccountCount = 0;
+        var deletedOwnerMembershipsCount = 0;
+        if (ownerAccount is not null)
+        {
+            deletedOwnerMembershipsCount = ownerAccount.Memberships.Count;
+            _accountsContext.OwnerAccounts.Remove(ownerAccount);
+            deletedOwnerAccountCount = 1;
+        }
+
+        await _accountsContext.SaveChangesAsync(cancellationToken);
 
         var users = await _userContext.Users
             .Where(u => userPhones.Contains(u.Phone.Value))
@@ -636,7 +841,12 @@ public sealed class PurveshDemoSeeder
                $"cropCycles={deletedCycleCount}, templates={deletedTemplateCount}, templateActivities={deletedTemplateActivityCount}, " +
                $"plannedActivities={deletedPlannedCount}, dailyLogs={deletedDailyLogsCount}, dayLedgers={deletedDayLedgersCount}, " +
                $"costEntries={deletedCostEntriesCount}, corrections={deletedCorrectionsCount}, attachments={deletedAttachmentsCount}, " +
-               $"priceConfigs={deletedPriceConfigsCount}, memberships={deletedMembershipCount}.";
+               $"priceConfigs={deletedPriceConfigsCount}, memberships={deletedMembershipCount}, " +
+               $"farmInvitations={deletedFarmInvitationsCount}, farmJoinTokens={deletedFarmJoinTokensCount}, " +
+               $"ownerAccounts={deletedOwnerAccountCount}, ownerMemberships={deletedOwnerMembershipsCount}, " +
+               $"subscriptions={deletedSubscriptionsCount}, referralCodes={deletedReferralCodesCount}, " +
+               $"referralRelationships={deletedRelationshipsCount}, growthEvents={deletedGrowthEventsCount}, " +
+               $"benefitLedgerEntries={deletedBenefitEntriesCount}.";
     }
 
     private async Task<User.Domain.Identity.User> EnsureUserAsync(
@@ -717,6 +927,13 @@ public sealed class PurveshDemoSeeder
         }
 
         var farm = Farm.Create(farmId, PurveshFarmName, ownerUserId, nowUtc);
+        // v2: attach the deterministic Purvesh OwnerAccountId so the
+        // EntitlementGate's subscription lookup (accounts.subscriptions
+        // WHERE owner_account_id = ...c2) resolves to the Trialing row
+        // pre-seeded by purvesh-cleanup.sql. Without this, the
+        // ParseVoiceInputHandler entitlement check returns
+        // SubscriptionMissing (the exact 403 reproduced on 2026-05-13).
+        farm.AttachToOwnerAccount(PurveshOwnerAccountId, nowUtc);
         _ssfContext.Farms.Add(farm);
         return farm;
     }
@@ -933,7 +1150,13 @@ public sealed class PurveshDemoSeeder
                 continue;
             }
 
-            var offsets = BuildRollingLogDayOffsets(context.Seed);
+            // v2: schedule is driven by BuildLogSchedule() per the 90-day pattern
+            // (dense + sparse + distraction/multi-crop/same-crop-DW markers).
+            // Returns an empty array if the plot key isn't in the schedule
+            // (defensive — should not happen for plots in PlotSeeds).
+            var offsets = LogSchedule.TryGetValue(plotKey, out var scheduled)
+                ? scheduled
+                : Array.Empty<int>();
 
             for (var index = 0; index < offsets.Length; index++)
             {
@@ -1089,39 +1312,24 @@ public sealed class PurveshDemoSeeder
                 }
                 break;
 
-            case "pomegranate_p1":
+            case "sugarcane_s2":
+                // v2: s2 was previously missing from the verification switch,
+                // leaving all s2 logs at Reported (founder note: that read
+                // as a glitch, not as "less-tracked plot"). Mirrors the s1
+                // pattern but with ~50/50 split (newer plot, similar cadence
+                // to s1 but no Disputed signal — s2's operator "raju" has no
+                // dispute history in the seed narrative).
                 added += EnsureVerificationTransition(
                     log,
                     plotKey,
                     dayOffset,
                     VerificationStatus.Confirmed,
                     null,
-                    "shankar",
-                    confirmedAtUtc,
-                    usersByKey);
-                added += EnsureVerificationTransition(
-                    log,
-                    plotKey,
-                    dayOffset,
-                    VerificationStatus.Verified,
-                    null,
-                    "purvesh",
-                    confirmedAtUtc.AddHours(24),
-                    usersByKey);
-                break;
-
-            case "turmeric_t1":
-                added += EnsureVerificationTransition(
-                    log,
-                    plotKey,
-                    dayOffset,
-                    VerificationStatus.Confirmed,
-                    null,
-                    "santosh",
+                    "raju",
                     confirmedAtUtc,
                     usersByKey);
 
-                if (index < (int)Math.Ceiling(totalLogs * 0.30m))
+                if (index < (int)Math.Ceiling(totalLogs * 0.50m))
                 {
                     added += EnsureVerificationTransition(
                         log,
@@ -1234,10 +1442,22 @@ public sealed class PurveshDemoSeeder
             costsAdded++;
         }
 
+        // v2 (post-supervisor Option C): re-anchored from p1_pesticide_03/06
+        // (pomegranate cost entries removed) to higher-value cost entries on
+        // two different plots + two different categories, preserving the
+        // FinanceCorrection demo signal amplitude (~₹480 total upward
+        // adjustment vs the v1 ₹450 baseline).
+        //   s1_fertilizer_01 (₹1900 DAP basal) × 1.15 → ₹2185 (+₹285)
+        //   s2_labour_05     (₹1300 labour)    × 1.15 → ₹1495 (+₹195)
+        // The Spraying / Pesticide cost entries for grape plots stay at their
+        // original amounts so the cost ledger reads consistently; corrections
+        // appear only against fertilizer + labour, which matches typical
+        // smallholder reconciliation patterns (invoice mismatches on bulk
+        // chemical purchases and shift-end labour payouts).
         var correctionSeeds = new[]
         {
-            new CorrectionSeed("p1_pesticide_03", 1.10m, "Invoice reconciliation (upward adjustment)", "purvesh"),
-            new CorrectionSeed("p1_pesticide_06", 1.10m, "Invoice reconciliation (upward adjustment)", "purvesh")
+            new CorrectionSeed("s1_fertilizer_01", 1.15m, "DAP basal invoice reconciled upward after vendor receipt", "purvesh"),
+            new CorrectionSeed("s2_labour_05", 1.15m, "S2 labour payout adjusted for extra-hours claim", "purvesh")
         };
 
         var correctionIds = correctionSeeds
@@ -1435,6 +1655,311 @@ public sealed class PurveshDemoSeeder
         return new Phase5AttachmentStats(added);
     }
 
+    /// <summary>
+    /// v2 — creates the Accounts.OwnerAccount aggregate for Purvesh. The
+    /// factory <see cref="OwnerAccount.Create"/> internally seeds the
+    /// PrimaryOwner OwnerAccountMembership (lines 73-80 of OwnerAccount.cs),
+    /// so EF cascade-inserts the membership row when SaveChanges runs.
+    /// Idempotent: skips insertion if the OwnerAccountId already exists.
+    /// </summary>
+    private async Task<int> EnsurePurveshOwnerAccountAsync(
+        UserId purveshUserId,
+        DateTime nowUtc,
+        CancellationToken cancellationToken)
+    {
+        var exists = await _accountsContext.OwnerAccounts
+            .AnyAsync(x => x.Id == PurveshOwnerAccountId, cancellationToken);
+        if (exists)
+        {
+            return 0;
+        }
+
+        var account = OwnerAccount.Create(
+            PurveshOwnerAccountId,
+            "Purvesh Chandrashkehar Arve Farm",
+            purveshUserId,
+            OwnerAccountType.Individual,
+            nowUtc);
+
+        _accountsContext.OwnerAccounts.Add(account);
+        return 1;
+    }
+
+    /// <summary>
+    /// v2 — creates the Trialing Subscription row for Purvesh's OwnerAccount.
+    /// Replaces the prior pattern where this INSERT lived in
+    /// .deploy-tmp/purvesh-cleanup.sql; ownership moved into the seeder so the
+    /// data-creation story is centralized. Subscription.StartTrial sets both
+    /// ValidUntilUtc and TrialEndsAtUtc to the same date — chosen as
+    /// 2099-12-31 per founder's "unlimited trial" spec.
+    /// Idempotent: the partial unique index ux_subscriptions_owner_account_active
+    /// guarantees at most one Trialing/Active row per OwnerAccount; this method
+    /// short-circuits if one already exists.
+    /// </summary>
+    private async Task<int> EnsurePurveshSubscriptionAsync(
+        DateTime nowUtc,
+        CancellationToken cancellationToken)
+    {
+        var hasActive = await _accountsContext.Subscriptions
+            .AnyAsync(
+                x => x.OwnerAccountId == PurveshOwnerAccountId &&
+                     (x.Status == SubscriptionStatus.Trialing || x.Status == SubscriptionStatus.Active),
+                cancellationToken);
+        if (hasActive)
+        {
+            return 0;
+        }
+
+        var subscriptionId = new SubscriptionId(
+            CreateDeterministicGuid($"{SeedVersion}:subscription:trial"));
+        var trialEndsAtUtc = new DateTime(2099, 12, 31, 23, 59, 59, DateTimeKind.Utc);
+
+        var subscription = Subscription.StartTrial(
+            subscriptionId,
+            PurveshOwnerAccountId,
+            "shramsafal_pro",
+            nowUtc,
+            trialEndsAtUtc);
+
+        _accountsContext.Subscriptions.Add(subscription);
+        return 1;
+    }
+
+    /// <summary>
+    /// v2 — seeds the multi-tenant "demo content" rows: 1 FarmInvitation
+    /// (created -3d, active, anchors the join-token), 1 FarmJoinToken (active
+    /// QR for new-worker scan flow), and the 4-row affiliation chain
+    /// (ReferralCode -> ReferralRelationship -> GrowthEvent -> BenefitLedgerEntry).
+    ///
+    /// Domain note: the as-shipped FarmInvitation entity is simpler than the
+    /// plan documented — no phone/role/expiry/maxUses fields, AND the DB
+    /// enforces ONE Active invitation per farm via partial unique index
+    /// `ux_farm_invitations_active_per_farm`. Halt Point 4 (2026-05-13)
+    /// caught a seeder bug where this orchestrator's child method tried to
+    /// seed 2 invitations and SaveChanges blew up on SqlState 23505. Fixed
+    /// to 1. The richer model (multiple targeted invitations) is tracked at:
+    ///   _COFOUNDER/Projects/AgriSync/Operations/Plans/
+    ///   PENDING_FARM_INVITATION_RICHER_MODEL_IMPL_2026-05-13.md
+    ///
+    /// Similarly, the AffiliationProfile entity (plan §2.1.3 5th row) never
+    /// shipped — chain is 4 entities not 5. Tracked at:
+    ///   _COFOUNDER/Projects/AgriSync/Operations/Plans/
+    ///   PENDING_AFFILIATION_PROFILE_IMPL_2026-05-13.md
+    /// </summary>
+    private async Task<Phase6MultiTenantStats> EnsureMultiTenantDataAsync(
+        Farm farm,
+        UserId purveshUserId,
+        DateTime nowUtc,
+        CancellationToken cancellationToken)
+    {
+        var farmInvitationsAdded = await EnsurePurveshFarmInvitationsAsync(
+            farm.Id, purveshUserId, nowUtc, cancellationToken);
+        var farmJoinTokensAdded = await EnsurePurveshFarmJoinTokenAsync(
+            farm.Id, nowUtc, cancellationToken);
+        var affiliationRowsAdded = await EnsurePurveshAffiliationAsync(
+            nowUtc, cancellationToken);
+
+        return new Phase6MultiTenantStats(
+            farmInvitationsAdded,
+            farmJoinTokensAdded,
+            affiliationRowsAdded);
+    }
+
+    private async Task<int> EnsurePurveshFarmInvitationsAsync(
+        FarmId farmId,
+        UserId purveshUserId,
+        DateTime nowUtc,
+        CancellationToken cancellationToken)
+    {
+        // As-shipped FarmInvitation invariant: exactly ONE Active invitation
+        // per farm. Enforced by partial unique index
+        // `ux_farm_invitations_active_per_farm` on `(farm_id) WHERE status=1`
+        // (Active) — see
+        //   src/apps/ShramSafal/ShramSafal.Infrastructure/Persistence/
+        //   Configurations/FarmInvitationConfiguration.cs:38-42
+        // and the domain comment at `FarmInvitation.cs:7-12` ("One persistent
+        // 'join my farm' invitation per farm").
+        //
+        // Halt Point 4 (2026-05-13) caught a seeder bug where this method
+        // attempted to seed two Active invitations; the second SaveChanges
+        // hit `SqlState 23505` on the partial unique index. The richer
+        // model (multiple targeted invitations, one per (phone, role)
+        // pair) is tracked at:
+        //   _COFOUNDER/Projects/AgriSync/Operations/Plans/
+        //   PENDING_FARM_INVITATION_RICHER_MODEL_IMPL_2026-05-13.md
+        // When that ships, this method becomes a multi-row seeder again.
+        var invitationId = new FarmInvitationId(
+            CreateDeterministicGuid($"{SeedVersion}:invitation:worker-anchor"));
+        var exists = await _ssfContext.FarmInvitations
+            .AnyAsync(x => x.Id == invitationId, cancellationToken);
+        if (exists)
+        {
+            return 0;
+        }
+
+        var invitation = FarmInvitation.Issue(
+            invitationId,
+            farmId,
+            purveshUserId,
+            nowUtc.AddDays(-3));
+
+        _ssfContext.FarmInvitations.Add(invitation);
+        return 1;
+    }
+
+    private async Task<int> EnsurePurveshFarmJoinTokenAsync(
+        FarmId farmId,
+        DateTime nowUtc,
+        CancellationToken cancellationToken)
+    {
+        // Token must link to an existing FarmInvitation. Anchors on the
+        // single Active invitation seeded by
+        // EnsurePurveshFarmInvitationsAsync (worker-anchor — see the
+        // 1-per-farm partial unique index rationale there).
+        var anchorInvitationId = new FarmInvitationId(
+            CreateDeterministicGuid($"{SeedVersion}:invitation:worker-anchor"));
+
+        var tokenId = new FarmJoinTokenId(
+            CreateDeterministicGuid($"{SeedVersion}:joinToken:active"));
+        var exists = await _ssfContext.FarmJoinTokens
+            .AnyAsync(x => x.Id == tokenId, cancellationToken);
+        if (exists)
+        {
+            return 0;
+        }
+
+        // Deterministic raw-token string so re-runs produce the same QR
+        // payload. In real onboarding the rawToken is randomly generated;
+        // deterministic-for-seed is acceptable since the demo's QR is
+        // bearer-style anyway (per FarmInvitation.cs:9-13 design note).
+        const string rawToken = "purvesh-demo-v2-qr-token-active";
+        var tokenHash = ComputeSha256Hex(rawToken);
+
+        var createdAtUtc = nowUtc.AddDays(-2);
+        var token = FarmJoinToken.Issue(
+            tokenId,
+            anchorInvitationId,
+            farmId,
+            rawToken,
+            tokenHash,
+            createdAtUtc);
+
+        _ssfContext.FarmJoinTokens.Add(token);
+        return 1;
+    }
+
+    /// <summary>
+    /// v2 — seeds the 4-row affiliation chain (per plan §2.1.3 minus
+    /// AffiliationProfile which never shipped). Order matters: GrowthEvent
+    /// must be inserted before BenefitLedgerEntry because the ledger entry
+    /// references the growth event's Id.
+    ///
+    /// Invariants honored:
+    ///   I13 — Referrer != Referred. PurveshSyntheticReferredAccountId is
+    ///         derived from a distinct seed string so it cannot collide
+    ///         with PurveshOwnerAccountId.
+    ///   I10 — At most one non-cancelled ReferralRelationship per referred
+    ///         account. Deterministic id + idempotent check.
+    ///   I11 — GrowthEvent table is append-only at DB level; idempotent
+    ///         INSERT via existence check.
+    /// </summary>
+    private async Task<int> EnsurePurveshAffiliationAsync(
+        DateTime nowUtc,
+        CancellationToken cancellationToken)
+    {
+        var added = 0;
+
+        // 1) ReferralCode
+        var referralCodeId = new ReferralCodeId(
+            CreateDeterministicGuid($"{SeedVersion}:affiliation:referral-code"));
+        var hasCode = await _accountsContext.ReferralCodes
+            .AnyAsync(x => x.Id == referralCodeId, cancellationToken);
+        if (!hasCode)
+        {
+            var code = new ReferralCode(
+                referralCodeId,
+                PurveshOwnerAccountId,
+                PurveshReferralCode,
+                nowUtc.AddDays(-30));
+            _accountsContext.ReferralCodes.Add(code);
+            added++;
+        }
+
+        // 2) ReferralRelationship (Pending -> later MarkQualified)
+        var relationshipId = new ReferralRelationshipId(
+            CreateDeterministicGuid($"{SeedVersion}:affiliation:referral-relationship"));
+        var hasRel = await _accountsContext.ReferralRelationships
+            .AnyAsync(x => x.Id == relationshipId, cancellationToken);
+        if (!hasRel)
+        {
+            var relationship = new ReferralRelationship(
+                relationshipId,
+                referrerOwnerAccountId: PurveshOwnerAccountId,
+                referredOwnerAccountId: PurveshSyntheticReferredAccountId,
+                referralCodeId: referralCodeId,
+                createdAtUtc: nowUtc.AddDays(-20));
+            relationship.MarkQualified(nowUtc.AddDays(-10));
+            _accountsContext.ReferralRelationships.Add(relationship);
+            added++;
+        }
+
+        // 3) GrowthEvent (append-only at DB level; idempotent via existence)
+        var growthEventId = new GrowthEventId(
+            CreateDeterministicGuid($"{SeedVersion}:affiliation:growth-event"));
+        var hasEvent = await _accountsContext.GrowthEvents
+            .AnyAsync(x => x.Id == growthEventId, cancellationToken);
+        if (!hasEvent)
+        {
+            var growthEvent = new GrowthEvent(
+                growthEventId,
+                ownerAccountId: PurveshOwnerAccountId,
+                eventType: GrowthEventType.ReferralQualified,
+                referenceId: (Guid)relationshipId,
+                metadata: null,
+                occurredAtUtc: nowUtc.AddDays(-10));
+            _accountsContext.GrowthEvents.Add(growthEvent);
+            added++;
+        }
+
+        // 4) BenefitLedgerEntry (EarnedLocked badge tied to the growth event)
+        // Plan §7.2.3 V1 rule: badge-only, quantity=1, unit="count".
+        // Redemption path pending — see:
+        //   _COFOUNDER/Projects/AgriSync/Operations/Plans/
+        //   PENDING_BENEFIT_REDEMPTIONS_IMPL_2026-05-13.md
+        var benefitEntryId = new BenefitLedgerEntryId(
+            CreateDeterministicGuid($"{SeedVersion}:affiliation:benefit-ledger-entry"));
+        var hasEntry = await _accountsContext.BenefitLedgerEntries
+            .AnyAsync(x => x.Id == benefitEntryId, cancellationToken);
+        if (!hasEntry)
+        {
+            var entry = new BenefitLedgerEntry(
+                benefitEntryId,
+                ownerAccountId: PurveshOwnerAccountId,
+                sourceGrowthEventId: growthEventId,
+                status: BenefitStatus.EarnedLocked,
+                benefitType: "Badge",
+                quantity: 1,
+                unit: "count",
+                createdAtUtc: nowUtc.AddDays(-10));
+            _accountsContext.BenefitLedgerEntries.Add(entry);
+            added++;
+        }
+
+        return added;
+    }
+
+    private static string ComputeSha256Hex(string input)
+    {
+        var bytes = Encoding.UTF8.GetBytes(input);
+        var hash = SHA256.HashData(bytes);
+        var sb = new StringBuilder(hash.Length * 2);
+        foreach (var b in hash)
+        {
+            sb.Append(b.ToString("x2"));
+        }
+        return sb.ToString();
+    }
+
     private static Guid ResolveAttachmentLinkedEntityId(AttachmentSeed seed, FarmId farmId)
     {
         if (seed.LinkedEntityType.Equals("Farm", StringComparison.OrdinalIgnoreCase))
@@ -1476,13 +2001,21 @@ public sealed class PurveshDemoSeeder
         return routing.PrimaryUserKey;
     }
 
-    private static int[] BuildRollingLogDayOffsets(PlotSeed seed)
-    {
-        return Enumerable.Range(seed.StartOffsetDays, Math.Abs(seed.StartOffsetDays) + 1).ToArray();
-    }
-
     private static string[] ResolveTaskPattern(string plotKey, string cropName, int dayOffset, int index)
     {
+        // Same-crop-different-work override (v2 90-day pattern). On these
+        // offsets the two grape plots do contrasting work: Pruning on g1
+        // (the Marathi note covers "Bordeaux paste on wounds" — i.e. bud
+        // paste post-pruning) and Spraying on g2 (preventive fungicide).
+        // This contrast is the demo signal for the same-crop-DW criterion.
+        // Override fires BEFORE the rest-day check; same-crop-DW offsets
+        // {-21,-35,-49,-63} don't collide with rest-day moduli (g1=13, g2=11).
+        if (SameCropDifferentWorkOffsets.Contains(dayOffset))
+        {
+            if (plotKey == "grape_g1") return ["Pruning", "Observation"];
+            if (plotKey == "grape_g2") return ["Spraying", "Observation"];
+        }
+
         if (IsRestDay(plotKey, dayOffset))
         {
             return ["Observation"];
@@ -1492,9 +2025,6 @@ public sealed class PurveshDemoSeeder
         {
             "grape_g1" or "grape_g2" => BuildGrapePattern(dayOffset, index),
             "sugarcane_s1" or "sugarcane_s2" => BuildSugarcanePattern(dayOffset, index),
-            "pomegranate_p1" => BuildPomegranatePattern(dayOffset, index),
-            "turmeric_t1" => BuildTurmericPattern(dayOffset, index),
-            "bajra_b1" => BuildBajraPattern(dayOffset, index),
             _ => BuildFallbackPattern(cropName, index)
         };
     }
@@ -1543,62 +2073,6 @@ public sealed class PurveshDemoSeeder
             : ["Observation", "Irrigation"];
     }
 
-    private static string[] BuildPomegranatePattern(int dayOffset, int index)
-    {
-        if (dayOffset <= -50 && Math.Abs(dayOffset) % 7 == 0)
-        {
-            return ["Bahar Treatment", "Observation"];
-        }
-
-        if (Math.Abs(dayOffset) % 10 == 0)
-        {
-            return ["Spraying", "Irrigation", "Observation"];
-        }
-
-        if (Math.Abs(dayOffset) % 6 == 0)
-        {
-            return ["Machinery", "Irrigation", "Observation"];
-        }
-
-        return index % 2 == 0
-            ? ["Irrigation", "Observation"]
-            : ["Observation", "Irrigation"];
-    }
-
-    private static string[] BuildTurmericPattern(int dayOffset, int index)
-    {
-        if (Math.Abs(dayOffset) % 16 == 0)
-        {
-            return ["Fertilizer application", "Observation"];
-        }
-
-        if (Math.Abs(dayOffset) % 12 == 0)
-        {
-            return ["Machinery", "Irrigation", "Observation"];
-        }
-
-        return index % 3 == 0
-            ? ["Irrigation", "Observation"]
-            : ["Irrigation", "Fertilizer application", "Observation"];
-    }
-
-    private static string[] BuildBajraPattern(int dayOffset, int index)
-    {
-        if (dayOffset <= -35 && Math.Abs(dayOffset) % 9 == 0)
-        {
-            return ["Sowing", "Irrigation", "Observation"];
-        }
-
-        if (Math.Abs(dayOffset) % 7 == 0)
-        {
-            return ["Weeding", "Observation"];
-        }
-
-        return index % 2 == 0
-            ? ["Irrigation", "Observation"]
-            : ["Observation", "Irrigation"];
-    }
-
     private static string[] BuildFallbackPattern(string cropName, int index)
     {
         if (TaskPatternsByCropName.TryGetValue(cropName, out var patterns) && patterns.Length > 0)
@@ -1617,9 +2091,6 @@ public sealed class PurveshDemoSeeder
             "grape_g2" => 11,
             "sugarcane_s1" => 10,
             "sugarcane_s2" => 8,
-            "pomegranate_p1" => 9,
-            "turmeric_t1" => 10,
-            "bajra_b1" => 7,
             _ => 12
         };
 
@@ -1633,28 +2104,12 @@ public sealed class PurveshDemoSeeder
         int logIndex,
         int taskIndex)
     {
-        if (plotKey == "sugarcane_s1" &&
-            dayOffset == -35 &&
-            (activityType.Equals("Weeding", StringComparison.OrdinalIgnoreCase)
-             || activityType.Equals("Observation", StringComparison.OrdinalIgnoreCase)))
-        {
-            return "रजू आला नाही आज. काम अर्धे राहिले.";
-        }
-
-        if (plotKey == "pomegranate_p1" &&
-            dayOffset == -35 &&
-            activityType.Equals("Spraying", StringComparison.OrdinalIgnoreCase))
-        {
-            return "बुरशीनाशक फवारणी. Rs 4500 चे औषध आणले.";
-        }
-
-        if (plotKey == "turmeric_t1" &&
-            dayOffset == -56 &&
-            activityType.Equals("Fertilizer application", StringComparison.OrdinalIgnoreCase))
-        {
-            return "युरिया पहिला हप्ता. उशीर झाला 14 दिवस.";
-        }
-
+        // v2: sugarcane_s1 no longer logs at -35 (-35 is a same-crop-DW day —
+        // grape-only); pomegranate/turmeric plots removed entirely. The
+        // historical "labour no-show" + "fungicide cost" + "delayed urea"
+        // demo signals previously anchored on these offsets are dropped from
+        // the v2 dataset; if needed, re-anchor them on existing grape/
+        // sugarcane log days in a follow-up.
         if (activityType.Equals("Observation", StringComparison.OrdinalIgnoreCase) && IsRestDay(plotKey, dayOffset))
         {
             return "प्लॉट रेस्टिंग आहे. आज कोणते काम केले नाही.";
@@ -1768,7 +2223,7 @@ public sealed class PurveshDemoSeeder
 
     private static List<CostEntrySeed> BuildCostEntrySeeds()
     {
-        var seeds = new List<CostEntrySeed>(82);
+        var seeds = new List<CostEntrySeed>(59);
 
         void Add(string key, string? plotKey, string category, decimal amount, int dayOffset, string description, string createdByUserKey)
         {
@@ -1822,28 +2277,6 @@ public sealed class PurveshDemoSeeder
         Add("s2_labour_04", "sugarcane_s2", "Labour", 1250m, -15, "S2 labour payout", "raju");
         Add("s2_labour_05", "sugarcane_s2", "Labour", 1300m, 0, "S2 labour payout", "raju");
 
-        Add("p1_pesticide_01", "pomegranate_p1", "Pesticide", 820m, -74, "Bacterial blight spray - P1", "shankar");
-        Add("p1_pesticide_02", "pomegranate_p1", "Pesticide", 780m, -60, "Cercospora spray - P1", "shankar");
-        Add("p1_pesticide_03", "pomegranate_p1", "Pesticide", 860m, -47, "Fruit borer spray - P1", "shankar");
-        Add("p1_pesticide_04", "pomegranate_p1", "Pesticide", 4500m, -35, "आपत्कालीन बुरशीनाशक + बॅक्टेरियाविरोधी - डाळिंब P1", "shankar");
-        Add("p1_pesticide_05", "pomegranate_p1", "Pesticide", 840m, -22, "Follow-up disease spray - P1", "shankar");
-        Add("p1_pesticide_06", "pomegranate_p1", "Pesticide", 790m, -10, "Thrips control spray - P1", "shankar");
-        Add("p1_pesticide_07", "pomegranate_p1", "Pesticide", 870m, 0, "Protective spray - P1", "shankar");
-        Add("p1_labour_01", "pomegranate_p1", "Labour", 1300m, -68, "P1 labour payout", "purvesh");
-        Add("p1_labour_02", "pomegranate_p1", "Labour", 1400m, -42, "P1 labour payout", "purvesh");
-        Add("p1_labour_03", "pomegranate_p1", "Labour", 1500m, -14, "P1 labour payout", "purvesh");
-
-        Add("t1_fertilizer_01", "turmeric_t1", "Fertilizer", 1850m, -69, "FYM basal - T1", "santosh");
-        Add("t1_fertilizer_02", "turmeric_t1", "Fertilizer", 820m, -39, "Urea split 1 - T1", "santosh");
-        Add("t1_fertilizer_03", "turmeric_t1", "Fertilizer", 860m, -9, "Urea split 2 - T1", "santosh");
-        Add("t1_labour_01", "turmeric_t1", "Labour", 1100m, -63, "T1 labour payout", "santosh");
-        Add("t1_labour_02", "turmeric_t1", "Labour", 1200m, -33, "T1 labour payout", "santosh");
-        Add("t1_labour_03", "turmeric_t1", "Labour", 1300m, -3, "T1 labour payout", "santosh");
-
-        Add("b1_seeds_01", "bajra_b1", "Seeds", 460m, -45, "Bajra seed purchase (5kg)", "raju");
-        Add("b1_labour_01", "bajra_b1", "Labour", 900m, -31, "B1 labour payout", "raju");
-        Add("b1_labour_02", "bajra_b1", "Labour", 950m, -7, "B1 labour payout", "raju");
-
         Add("farmwide_01", null, "Fuel", 480m, -88, "Diesel for irrigation pump", "purvesh");
         Add("farmwide_02", null, "Equipment", 2100m, -72, "Shared implement repair", "purvesh");
         Add("farmwide_03", null, "Fuel", 520m, -57, "Diesel for transport", "purvesh");
@@ -1861,16 +2294,15 @@ public sealed class PurveshDemoSeeder
 
         Add("g1_equipment_01", "grape_g1", "Equipment", 1650m, -16, "Blower and pruning kit service - G1", "shankar");
         Add("g2_equipment_01", "grape_g2", "Equipment", 980m, -5, "Drip venturi replacement - G2", "raju");
-        Add("p1_equipment_01", "pomegranate_p1", "Equipment", 1220m, -8, "Bahar plot spray gun repair - P1", "purvesh");
-        Add("t1_equipment_01", "turmeric_t1", "Equipment", 1480m, -4, "Mini tiller hire - T1", "santosh");
         Add("s1_fuel_01", "sugarcane_s1", "Fuel", 390m, -12, "Field bund levelling diesel - S1", "shankar");
         Add("s2_equipment_01", "sugarcane_s2", "Equipment", 760m, -3, "Water gate and pipe coupling - S2", "raju");
-        Add("b1_equipment_01", "bajra_b1", "Equipment", 910m, -14, "Seed drill and line marker hire - B1", "raju");
-        Add("p1_fuel_01", "pomegranate_p1", "Fuel", 350m, -1, "Farm pond pump diesel - P1", "purvesh");
 
-        if (seeds.Count != 82)
+        // v2: expected seed count = 59 after pomegranate/turmeric/bajra removal
+        // (82 original − 10 p1 − 6 t1 − 3 b1 − 1 p1_equipment − 1 t1_equipment
+        //  − 1 b1_equipment − 1 p1_fuel = 59).
+        if (seeds.Count != 59)
         {
-            throw new InvalidOperationException($"Phase 4 cost seed count drifted. Expected 82, found {seeds.Count}.");
+            throw new InvalidOperationException($"Phase 4 cost seed count drifted. Expected 59, found {seeds.Count}.");
         }
 
         return seeds;
@@ -1883,9 +2315,6 @@ public sealed class PurveshDemoSeeder
             "grape_g1" or "grape_g2" => "मेन विहीर",
             "sugarcane_s1" => "कालवा फीड लाईन",
             "sugarcane_s2" => "पूर्व बोअरवेल",
-            "pomegranate_p1" => "शेततळे लाईन",
-            "turmeric_t1" => "पूर्व बोअरवेल",
-            "bajra_b1" => "तळ्याची पूरक लाईन",
             _ => "शेतीतील स्रोत"
         };
     }
@@ -1898,9 +2327,6 @@ public sealed class PurveshDemoSeeder
             "grape_g2" => "CRI 5 HP मोटर",
             "sugarcane_s1" => "कालवा पंप सेट",
             "sugarcane_s2" => "शक्ती 5 HP मोटर",
-            "pomegranate_p1" => "सोलर 10 HP पंप",
-            "turmeric_t1" => "बोअरवेल 5 HP मोटर",
-            "bajra_b1" => "मोबाइल डिझेल पंप",
             _ => "मोटर"
         };
     }
@@ -1911,9 +2337,6 @@ public sealed class PurveshDemoSeeder
         {
             "grape_g1" or "grape_g2" => "पॉवर स्प्रेयर",
             "sugarcane_s1" or "sugarcane_s2" => "ट्रॅक्टर आणि इम्प्लिमेंट",
-            "pomegranate_p1" => "ब्लोअर स्प्रेयर",
-            "turmeric_t1" => "मिनी टिलर",
-            "bajra_b1" => "सीड ड्रिल",
             _ => "यंत्रसामग्री"
         };
     }
@@ -2011,6 +2434,11 @@ public sealed class PurveshDemoSeeder
 
     private sealed record Phase5AttachmentStats(int AttachmentsAdded);
 
+    private sealed record Phase6MultiTenantStats(
+        int FarmInvitationsAdded,
+        int FarmJoinTokensAdded,
+        int AffiliationRowsAdded);
+
     private sealed record PhaseTotals(
         int UserCount,
         int FarmCount,
@@ -2026,5 +2454,10 @@ public sealed class PurveshDemoSeeder
         int FinanceCorrectionsAdded,
         int DayLedgersAdded,
         int PriceConfigsAdded,
-        int AttachmentsAdded);
+        int AttachmentsAdded,
+        int OwnerAccountsAdded,
+        int SubscriptionsAdded,
+        int FarmInvitationsAdded,
+        int FarmJoinTokensAdded,
+        int AffiliationRowsAdded);
 }

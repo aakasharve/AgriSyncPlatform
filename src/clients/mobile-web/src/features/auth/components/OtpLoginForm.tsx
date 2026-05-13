@@ -13,12 +13,10 @@ interface OtpLoginFormProps {
     onOtpSent: (phone: string, response: StartOtpResponse) => void;
 }
 
-function normalizeDemoPhone(input: string): string {
-    const v = input.trim();
-    if (v === 'purvesh') return '9800000001';
-    return v;
-}
-
+// 2026-05-13 (purvesh-demo-v2 Halt Point 3): the "purvesh" demo phone shortcut
+// was removed entirely. See LoginPage.tsx for full rationale (production-look
+// design-mode brief; stealth back-door removed). Demo testers type the literal
+// phone 8888888888.
 const OtpLoginForm: React.FC<OtpLoginFormProps> = ({ onOtpSent }) => {
     const [phone, setPhone] = useState('');
     const [isLoading, setIsLoading] = useState(false);
@@ -26,7 +24,7 @@ const OtpLoginForm: React.FC<OtpLoginFormProps> = ({ onOtpSent }) => {
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        const normalized = normalizeDemoPhone(phone);
+        const normalized = phone.trim();
         if (!normalized) return;
         setIsLoading(true);
         setError(null);
