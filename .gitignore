@@ -244,3 +244,16 @@ coverage/
 # ============================================
 **/dist-ssr/
 **/.turbo/
+
+# ============================================
+# §13  Deploy scratch and local publish output
+#      Added 2026-05-14 after Purvesh-v2 deploy
+#      surfaced these as accumulating un-tracked.
+# ============================================
+
+# dotnet publish output (local builds for prod deploy artifacts)
+/artifacts/
+
+# Per-deploy scratch (runners, SQL bundles, research probes, SSM outputs)
+# Each deploy session writes scripts + outputs here. Forensic value local-only.
+/.deploy-tmp/
