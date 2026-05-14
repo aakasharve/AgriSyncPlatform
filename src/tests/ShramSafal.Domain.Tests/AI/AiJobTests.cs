@@ -90,6 +90,6 @@ public sealed class AiJobTests
             Guid.NewGuid(),
             Guid.NewGuid(),
             inputContentHash: null,
-            inputStoragePath: null);
+            rawInputRef: null);
     }
 }

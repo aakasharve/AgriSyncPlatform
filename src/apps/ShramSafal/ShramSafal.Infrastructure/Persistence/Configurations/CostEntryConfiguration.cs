@@ -110,6 +110,12 @@ internal sealed class CostEntryConfiguration : IEntityTypeConfiguration<CostEntr
             .HasColumnName("flag_reason")
             .HasMaxLength(300);
 
+        builder.OwnsOne(x => x.Provenance, p => p.ConfigureProvenance());
+        builder.Navigation(x => x.Provenance).IsRequired();
+
+        builder.Property(x => x.SourceAiJobId)
+            .HasColumnName("source_ai_job_id");
+
         builder.HasIndex(x => x.FarmId);
         builder.HasIndex(x => x.PlotId);
         builder.HasIndex(x => x.CropCycleId);

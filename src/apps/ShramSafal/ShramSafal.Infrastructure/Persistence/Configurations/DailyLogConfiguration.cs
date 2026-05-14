@@ -80,6 +80,12 @@ internal sealed class DailyLogConfiguration : IEntityTypeConfiguration<DailyLog>
         });
         builder.Navigation(x => x.Location).IsRequired(false);
 
+        builder.OwnsOne(x => x.Provenance, p => p.ConfigureProvenance());
+        builder.Navigation(x => x.Provenance).IsRequired();
+
+        builder.Property(x => x.SourceAiJobId)
+            .HasColumnName("source_ai_job_id");
+
         builder.HasIndex(x => x.IdempotencyKey)
             .IsUnique()
             .HasFilter("idempotency_key IS NOT NULL");

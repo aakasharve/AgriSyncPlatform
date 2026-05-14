@@ -1,5 +1,6 @@
 using AgriSync.BuildingBlocks.Domain;
 using AgriSync.SharedKernel.Contracts.Ids;
+using ShramSafal.Domain.Common;
 using ShramSafal.Domain.Events;
 using ShramSafal.Domain.Location;
 
@@ -21,7 +22,9 @@ public sealed class CostEntry : Entity<Guid>
         DateOnly entryDate,
         UserId createdByUserId,
         LocationSnapshot? location,
-        DateTime createdAtUtc)
+        DateTime createdAtUtc,
+        Provenance provenance,
+        Guid? sourceAiJobId)
         : base(id)
     {
         FarmId = farmId;
@@ -36,6 +39,8 @@ public sealed class CostEntry : Entity<Guid>
         Location = location;
         CreatedAtUtc = createdAtUtc;
         ModifiedAtUtc = createdAtUtc;
+        Provenance = provenance;
+        SourceAiJobId = sourceAiJobId;
     }
 
     public FarmId FarmId { get; private set; }
@@ -54,6 +59,8 @@ public sealed class CostEntry : Entity<Guid>
     public bool IsCorrected { get; private set; }
     public bool IsFlagged { get; private set; }
     public string? FlagReason { get; private set; }
+    public Provenance Provenance { get; private set; } = null!;
+    public Guid? SourceAiJobId { get; private set; }
 
     public static CostEntry Create(
         Guid id,
@@ -67,7 +74,9 @@ public sealed class CostEntry : Entity<Guid>
         DateOnly entryDate,
         UserId createdByUserId,
         LocationSnapshot? location,
-        DateTime createdAtUtc)
+        DateTime createdAtUtc,
+        Provenance? provenance = null,
+        Guid? sourceAiJobId = null)
     {
         if (string.IsNullOrWhiteSpace(category))
         {
@@ -89,6 +98,8 @@ public sealed class CostEntry : Entity<Guid>
             throw new ArgumentException("Currency code is required.", nameof(currencyCode));
         }
 
+        var effectiveProvenance = provenance ?? Provenance.Manual("unknown");
+
         var entry = new CostEntry(
             id,
             farmId,
@@ -101,7 +112,9 @@ public sealed class CostEntry : Entity<Guid>
             entryDate,
             createdByUserId,
             location,
-            createdAtUtc);
+            createdAtUtc,
+            effectiveProvenance,
+            sourceAiJobId);
 
         entry.Raise(new CostEntryCreatedEvent(
             Guid.NewGuid(),
@@ -123,7 +136,9 @@ public sealed class CostEntry : Entity<Guid>
         string currencyCode,
         DateOnly entryDate,
         UserId createdByUserId,
-        DateTime createdAtUtc)
+        DateTime createdAtUtc,
+        Provenance? provenance = null,
+        Guid? sourceAiJobId = null)
     {
         if (amount <= 0)
         {
@@ -134,6 +149,8 @@ public sealed class CostEntry : Entity<Guid>
         {
             throw new ArgumentException("Currency code is required.", nameof(currencyCode));
         }
+
+        var effectiveProvenance = provenance ?? Provenance.Manual("unknown");
 
         var entry = new CostEntry(
             id,
@@ -147,7 +164,9 @@ public sealed class CostEntry : Entity<Guid>
             entryDate,
             createdByUserId,
             location: null,
-            createdAtUtc);
+            createdAtUtc,
+            effectiveProvenance,
+            sourceAiJobId);
 
         entry.JobCardId = jobCardId;
 

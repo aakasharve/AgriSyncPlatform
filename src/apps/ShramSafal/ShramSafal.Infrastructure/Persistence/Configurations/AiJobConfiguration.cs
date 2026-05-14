@@ -45,8 +45,8 @@ internal sealed class AiJobConfiguration : IEntityTypeConfiguration<AiJob>
             .HasColumnName("input_content_hash")
             .HasMaxLength(128);
 
-        builder.Property(x => x.InputStoragePath)
-            .HasColumnName("input_storage_path")
+        builder.Property(x => x.RawInputRef)
+            .HasColumnName("raw_input_ref")
             .HasMaxLength(1024);
 
         builder.Property(x => x.InputSessionMetadataJson)
@@ -82,6 +82,9 @@ internal sealed class AiJobConfiguration : IEntityTypeConfiguration<AiJob>
         builder.Property(x => x.ModifiedAtUtc)
             .HasColumnName("modified_at_utc")
             .IsRequired();
+
+        builder.OwnsOne(x => x.Provenance, p => p.ConfigureProvenance());
+        builder.Navigation(x => x.Provenance).IsRequired();
 
         builder.HasMany(x => x.Attempts)
             .WithOne()

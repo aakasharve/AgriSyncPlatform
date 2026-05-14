@@ -1,3 +1,5 @@
+using ShramSafal.Domain.Common;
+
 namespace ShramSafal.Domain.AI;
 
 public sealed class AiJobAttempt
@@ -10,7 +12,8 @@ public sealed class AiJobAttempt
         int attemptNumber,
         AiProviderType provider,
         string? requestPayloadHash,
-        DateTime attemptedAtUtc)
+        DateTime attemptedAtUtc,
+        Provenance provenance)
     {
         Id = id;
         AiJobId = aiJobId;
@@ -19,6 +22,7 @@ public sealed class AiJobAttempt
         RequestPayloadHash = NormalizeRequestPayloadHash(requestPayloadHash);
         AttemptedAtUtc = attemptedAtUtc;
         FailureClass = AiFailureClass.None;
+        Provenance = provenance;
     }
 
     public Guid Id { get; private set; }
@@ -35,13 +39,15 @@ public sealed class AiJobAttempt
     public decimal? EstimatedCostUnits { get; private set; }
     public string? RequestPayloadHash { get; private set; }
     public DateTime AttemptedAtUtc { get; private set; }
+    public Provenance Provenance { get; private set; } = null!;
 
     public static AiJobAttempt Create(
         Guid id,
         Guid aiJobId,
         int attemptNumber,
         AiProviderType provider,
-        string? requestPayloadHash = null)
+        string? requestPayloadHash = null,
+        Provenance? provenance = null)
     {
         if (aiJobId == Guid.Empty)
         {
@@ -53,7 +59,9 @@ public sealed class AiJobAttempt
             throw new ArgumentOutOfRangeException(nameof(attemptNumber), "Attempt number must be >= 1.");
         }
 
-        return new AiJobAttempt(id, aiJobId, attemptNumber, provider, requestPayloadHash, DateTime.UtcNow);
+        var effectiveProvenance = provenance ?? Provenance.Manual("unknown");
+
+        return new AiJobAttempt(id, aiJobId, attemptNumber, provider, requestPayloadHash, DateTime.UtcNow, effectiveProvenance);
     }
 
     public void RecordSuccess(string rawResponse, int latencyMs, int? tokens, decimal? confidence)

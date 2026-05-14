@@ -1,6 +1,7 @@
 using AgriSync.BuildingBlocks.Domain;
 using AgriSync.SharedKernel.Contracts.Ids;
 using AgriSync.SharedKernel.Contracts.Roles;
+using ShramSafal.Domain.Common;
 using ShramSafal.Domain.Events;
 using ShramSafal.Domain.Location;
 
@@ -22,7 +23,9 @@ public sealed class DailyLog : Entity<Guid>
         DateOnly logDate,
         string? idempotencyKey,
         LocationSnapshot? location,
-        DateTime createdAtUtc)
+        DateTime createdAtUtc,
+        Provenance provenance,
+        Guid? sourceAiJobId)
         : base(id)
     {
         FarmId = farmId;
@@ -34,6 +37,8 @@ public sealed class DailyLog : Entity<Guid>
         CreatedAtUtc = createdAtUtc;
         ModifiedAtUtc = createdAtUtc;
         Location = location;
+        Provenance = provenance;
+        SourceAiJobId = sourceAiJobId;
     }
 
     public FarmId FarmId { get; private set; }
@@ -46,6 +51,8 @@ public sealed class DailyLog : Entity<Guid>
     public DateTime CreatedAtUtc { get; private set; }
     public DateTime ModifiedAtUtc { get; private set; }
     public LocationSnapshot? Location { get; private set; }
+    public Provenance Provenance { get; private set; } = null!;
+    public Guid? SourceAiJobId { get; private set; }
     public IReadOnlyCollection<LogTask> Tasks => _tasks.AsReadOnly();
     public IReadOnlyCollection<VerificationEvent> VerificationEvents => _verificationEvents.AsReadOnly();
 
@@ -67,8 +74,12 @@ public sealed class DailyLog : Entity<Guid>
         DateOnly logDate,
         string? idempotencyKey,
         LocationSnapshot? location,
-        DateTime createdAtUtc)
+        DateTime createdAtUtc,
+        Provenance? provenance = null,
+        Guid? sourceAiJobId = null)
     {
+        var effectiveProvenance = provenance ?? Provenance.Manual("unknown");
+
         var log = new DailyLog(
             id,
             farmId,
@@ -78,7 +89,9 @@ public sealed class DailyLog : Entity<Guid>
             logDate,
             idempotencyKey,
             location,
-            createdAtUtc);
+            createdAtUtc,
+            effectiveProvenance,
+            sourceAiJobId);
 
         log.Raise(new DailyLogCreatedEvent(
             Guid.NewGuid(),

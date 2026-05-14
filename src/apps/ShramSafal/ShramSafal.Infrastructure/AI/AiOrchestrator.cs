@@ -58,7 +58,7 @@ internal sealed class AiOrchestrator(
             userId,
             farmId,
             inputContentHash: requestPayloadHash,
-            inputStoragePath: null,
+            rawInputRef: null,
             inputSessionMetadataJson: segmentMetadataJson);
 
         job.SetInputDurations(inputSpeechDurationMs, inputRawDurationMs);

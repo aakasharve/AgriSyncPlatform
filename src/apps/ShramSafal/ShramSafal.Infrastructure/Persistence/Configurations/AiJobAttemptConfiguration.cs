@@ -71,6 +71,9 @@ internal sealed class AiJobAttemptConfiguration : IEntityTypeConfiguration<AiJob
             .HasColumnName("attempted_at_utc")
             .IsRequired();
 
+        builder.OwnsOne(x => x.Provenance, p => p.ConfigureProvenance());
+        builder.Navigation(x => x.Provenance).IsRequired();
+
         builder.HasIndex(x => x.AiJobId);
         builder.HasIndex(x => x.Provider);
         builder.HasIndex(x => x.AttemptedAtUtc);

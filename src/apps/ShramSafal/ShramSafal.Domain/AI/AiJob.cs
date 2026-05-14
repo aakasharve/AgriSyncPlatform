@@ -1,3 +1,5 @@
+using ShramSafal.Domain.Common;
+
 namespace ShramSafal.Domain.AI;
 
 public sealed class AiJob
@@ -13,9 +15,10 @@ public sealed class AiJob
         Guid userId,
         Guid farmId,
         string? inputContentHash,
-        string? inputStoragePath,
+        string? rawInputRef,
         string? inputSessionMetadataJson,
-        DateTime createdAtUtc)
+        DateTime createdAtUtc,
+        Provenance provenance)
     {
         Id = id;
         IdempotencyKey = idempotencyKey;
@@ -24,10 +27,11 @@ public sealed class AiJob
         FarmId = farmId;
         Status = AiJobStatus.Queued;
         InputContentHash = inputContentHash;
-        InputStoragePath = inputStoragePath;
+        RawInputRef = rawInputRef;
         InputSessionMetadataJson = inputSessionMetadataJson;
         CreatedAtUtc = createdAtUtc;
         ModifiedAtUtc = createdAtUtc;
+        Provenance = provenance;
     }
 
     public Guid Id { get; private set; }
@@ -37,8 +41,9 @@ public sealed class AiJob
     public Guid FarmId { get; private set; }
     public AiJobStatus Status { get; private set; }
     public string? InputContentHash { get; private set; }
-    public string? InputStoragePath { get; private set; }
+    public string? RawInputRef { get; private set; }
     public string? InputSessionMetadataJson { get; private set; }
+    public Provenance Provenance { get; private set; } = null!;
     public string? NormalizedResultJson { get; private set; }
     public int? InputSpeechDurationMs { get; private set; }
     public int? InputRawDurationMs { get; private set; }
@@ -57,8 +62,9 @@ public sealed class AiJob
         Guid userId,
         Guid farmId,
         string? inputContentHash,
-        string? inputStoragePath,
-        string? inputSessionMetadataJson = null)
+        string? rawInputRef,
+        string? inputSessionMetadataJson = null,
+        Provenance? provenance = null)
     {
         if (id == Guid.Empty)
         {
@@ -80,6 +86,8 @@ public sealed class AiJob
             throw new ArgumentException("Farm id is required.", nameof(farmId));
         }
 
+        var effectiveProvenance = provenance ?? Provenance.Manual("unknown");
+
         return new AiJob(
             id,
             idempotencyKey.Trim(),
@@ -87,9 +95,10 @@ public sealed class AiJob
             userId,
             farmId,
             string.IsNullOrWhiteSpace(inputContentHash) ? null : inputContentHash.Trim(),
-            string.IsNullOrWhiteSpace(inputStoragePath) ? null : inputStoragePath.Trim(),
+            string.IsNullOrWhiteSpace(rawInputRef) ? null : rawInputRef.Trim(),
             string.IsNullOrWhiteSpace(inputSessionMetadataJson) ? null : inputSessionMetadataJson.Trim(),
-            DateTime.UtcNow);
+            DateTime.UtcNow,
+            effectiveProvenance);
     }
 
     public AiJobAttempt AddAttempt(AiProviderType provider, string? requestPayloadHash = null)
