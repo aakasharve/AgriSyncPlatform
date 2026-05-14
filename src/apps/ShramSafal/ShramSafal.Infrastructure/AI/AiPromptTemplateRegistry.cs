@@ -25,6 +25,7 @@ internal sealed class AiPromptTemplateRegistry
     private readonly IReadOnlyDictionary<string, PromptModule> _bucketModules;
     private readonly PromptModule _disturbance;
     private readonly string _contentHash;
+    private readonly string _fullContentHash;
 
     public AiPromptTemplateRegistry()
     {
@@ -58,19 +59,25 @@ internal sealed class AiPromptTemplateRegistry
             StringComparer.Ordinal);
         _disturbance = LoadModule("inner/disturbance.v1.md", "v1");
 
-        _contentHash = AiPromptLineage.ComputeContentHash(
-            string.Join(
-                "\n---\n",
-                new[]
-                {
-                    _systemBase.Content,
-                    _outputContract.Content,
-                    string.Join("\n---\n", _bucketModules.Values.Select(x => x.Content)),
-                    _disturbance.Content
-                }));
+        var concatenated = string.Join(
+            "\n---\n",
+            new[]
+            {
+                _systemBase.Content,
+                _outputContract.Content,
+                string.Join("\n---\n", _bucketModules.Values.Select(x => x.Content)),
+                _disturbance.Content
+            });
+        _contentHash = AiPromptLineage.ComputeContentHash(concatenated);
+        _fullContentHash = AiPromptLineage.ComputeFullContentHash(concatenated);
     }
 
     public string CurrentVoicePromptVersion => BuildVersionString();
+
+    // Full 64-char SHA-256 of the assembled voice-parsing prompt content.
+    // Stamped on every AI-derived row as Provenance.PromptContentHash per
+    // DATA_PRINCIPLE_SPINE Phase 01 sub-phase 01.2.
+    public string CurrentVoicePromptContentHash => _fullContentHash;
 
     public string BuildVoiceParsingPrompt(
         VoiceParseContext context,
@@ -206,10 +213,21 @@ internal static class AiPromptLineage
         return $"{LegacyPromptVersion};hash:{ComputeContentHash(systemPrompt)}";
     }
 
+    // 16-char truncated SHA-256 used in version-string display.
+    // Kept for backwards compatibility with existing audit lineage.
     public static string ComputeContentHash(string content)
     {
         var bytes = SHA256.HashData(Encoding.UTF8.GetBytes(content));
         return Convert.ToHexString(bytes).ToLowerInvariant()[..16];
+    }
+
+    // Full 64-char SHA-256 used by Phase 01 Provenance.PromptContentHash
+    // for forensic uniqueness. 256-bit collision space vs the 64-bit
+    // truncated form. Defined by DATA_PRINCIPLE_SPINE 01.2.
+    public static string ComputeFullContentHash(string content)
+    {
+        var bytes = SHA256.HashData(Encoding.UTF8.GetBytes(content));
+        return Convert.ToHexString(bytes).ToLowerInvariant();
     }
 }
 

@@ -20,6 +20,8 @@ internal sealed class AiPromptBuilder : IAiPromptBuilder
         _options = optionsAccessor.Value;
     }
 
+    public string CurrentVoicePromptContentHash => _templateRegistry.CurrentVoicePromptContentHash;
+
     public string BuildVoiceParsingPrompt(VoiceParseContext context)
     {
         var farmKnowledge = BuildFarmKnowledge(context);

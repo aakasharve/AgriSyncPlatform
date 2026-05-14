@@ -5,6 +5,11 @@ public interface IAiPromptBuilder
     string BuildVoiceParsingPrompt(VoiceParseContext context);
     string BuildReceiptExtractionPrompt();
     string BuildPattiExtractionPrompt(string cropName);
+
+    // Full 64-char SHA-256 of the assembled voice-parsing prompt modules.
+    // Threaded into Provenance.PromptContentHash on every AI-derived row.
+    // Defined by DATA_PRINCIPLE_SPINE Phase 01 sub-phase 01.2.
+    string CurrentVoicePromptContentHash { get; }
 }
 
 public sealed record VoiceParseContext(

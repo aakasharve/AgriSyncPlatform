@@ -25,4 +25,9 @@ public sealed record VoiceParseResult(
     string ProviderUsed,
     bool FallbackUsed,
     int LatencyMs,
-    string ValidationOutcome);
+    string ValidationOutcome,
+    // Full 64-char SHA-256 of the assembled voice-parsing prompt content.
+    // Stamped on the resulting Provenance per DATA_PRINCIPLE_SPINE
+    // Phase 01 sub-phase 01.2. Nullable for the legacy non-modular path
+    // and pre-spine callers; sub-phase 01.4 wires the orchestrator.
+    string? PromptContentHash = null);
