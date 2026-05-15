@@ -12,6 +12,7 @@ using System.Text.Encodings.Web;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
+using FluentAssertions;
 using AgriSync.BuildingBlocks;
 using AgriSync.BuildingBlocks.Analytics;
 using Microsoft.AspNetCore.Authentication;
@@ -66,6 +67,57 @@ public sealed class AiEndpointsTests
         Assert.Equal("Succeeded", statusDoc.RootElement.GetProperty("status").GetString());
         Assert.Single(statusDoc.RootElement.GetProperty("attempts").EnumerateArray());
         Assert.Equal(JsonValueKind.Object, statusDoc.RootElement.GetProperty("result").ValueKind);
+    }
+
+    // DATA_PRINCIPLE_SPINE sub-phase 01.5: voice-parse response must surface a
+    // provenance envelope so downstream consumers (analytics, replay tooling)
+    // can correlate the response back to (a) the originating AI job, (b) the
+    // exact prompt template version via content hash, (c) the calling app
+    // build, and (d) the raw input artifact reference (populated in Phase 02).
+    [Fact]
+    public async Task VoiceParse_response_carries_provenance_envelope()
+    {
+        await using var harness = await TestHarness.CreateAsync(FakeAiProviderMode.Success);
+        var farmId = Guid.NewGuid();
+        await PushCreateFarmAsync(harness.Client, "device-ai-provenance-1", "req-farm-ai-provenance-1", farmId, "AI Provenance Farm");
+
+        using var request = new HttpRequestMessage(HttpMethod.Post, "/shramsafal/ai/voice-parse")
+        {
+            Content = JsonContent.Create(new
+            {
+                farmId,
+                textTranscript = "आज पाणी दिलं.",
+                idempotencyKey = "voice-parse-provenance-1"
+            })
+        };
+        request.Headers.Add("X-App-Version", "test-1.0.0");
+
+        var response = await harness.Client.SendAsync(request);
+        var responseBody = await response.Content.ReadAsStringAsync();
+        Assert.True(response.IsSuccessStatusCode, responseBody);
+
+        using var doc = JsonDocument.Parse(responseBody);
+        var root = doc.RootElement;
+
+        // sourceAiJobId — Guid, non-empty, and equals the existing jobId field.
+        var jobId = root.GetProperty("jobId").GetGuid();
+        var sourceAiJobId = root.GetProperty("sourceAiJobId").GetGuid();
+        Assert.NotEqual(Guid.Empty, sourceAiJobId);
+        Assert.Equal(jobId, sourceAiJobId);
+
+        // promptContentHash — 64-char lowercase hex.
+        var promptContentHash = root.GetProperty("promptContentHash").GetString();
+        promptContentHash.Should().MatchRegex("^[0-9a-f]{64}$");
+
+        // appVersion — round-tripped from the X-App-Version request header.
+        Assert.Equal("test-1.0.0", root.GetProperty("appVersion").GetString());
+
+        // rawInputRef — NULL-tolerant: either absent or JsonValueKind.Null.
+        // Phase 01 returns null; Phase 02 (storage tiering) will populate it.
+        if (root.TryGetProperty("rawInputRef", out var rawInputRef))
+        {
+            Assert.Equal(JsonValueKind.Null, rawInputRef.ValueKind);
+        }
     }
 
     [Fact]

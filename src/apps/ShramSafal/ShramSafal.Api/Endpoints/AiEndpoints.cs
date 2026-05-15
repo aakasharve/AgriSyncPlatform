@@ -483,6 +483,10 @@ public static class AiEndpoints
         }
 
         var job = await aiJobRepository.GetByIdempotencyKeyAsync(effectiveIdempotencyKey, ct);
+        // jobId (legacy) and sourceAiJobId (spine) both emitted from the same
+        // AiJob.Id. Phase 01.5 forward-declares sourceAiJobId for downstream
+        // spine consumers (CreateDailyLog at user-Confirm); jobId stays for
+        // existing API consumers.
         return Results.Ok(new
         {
             success = true,
@@ -496,7 +500,13 @@ public static class AiEndpoints
             fallbackUsed = parseResult.FallbackUsed,
             latencyMs = parseResult.LatencyMs,
             validationOutcome = parseResult.ValidationOutcome,
-            jobId = job?.Id
+            jobId = job?.Id,
+
+            // === DATA_PRINCIPLE_SPINE sub-phase 01.5 additions ===
+            sourceAiJobId = job?.Id,                              // alias of jobId for spine consumers
+            promptContentHash = parseResult.PromptContentHash,    // 64-char SHA-256 from 01.2
+            appVersion = clientAppVersion,                        // from X-App-Version header (captured above)
+            rawInputRef = job?.RawInputRef                        // null in Phase 01; Phase 02 populates
         });
     }
 
