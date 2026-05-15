@@ -34,6 +34,7 @@ import { applyV12 } from './dexie/versions/v12';
 import { applyV13 } from './dexie/versions/v13';
 import { applyV14 } from './dexie/versions/v14';
 import { applyV15 } from './dexie/versions/v15';
+import { applyV16 } from './dexie/versions/v16';
 
 // =============================================================================
 // OUTBOX (Pending sync events)
@@ -594,7 +595,7 @@ export interface AnalyticsOutboxRow {
 // =============================================================================
 
 /** Current Dexie schema version — bump this when adding version(N).stores(). */
-export const DATABASE_VERSION = 15; // DWC v2 §2.6 analytics outbox.
+export const DATABASE_VERSION = 16; // DATA_PRINCIPLE_SPINE sub-phase 01.6 — pre_spine provenance backfill.
 /** CEI Phase 1 schema version (now active — applied by Task 5.1.1). */
 export const CEI_PHASE1_SCHEMA_VERSION = 7;
 /** CEI Phase 2 schema version — adds test stack (protocols/instances/recs). */
@@ -613,6 +614,8 @@ export const AI_CORRECTION_EVENTS_SCHEMA_VERSION = 13;
 export const SUBPLAN_04_FRONTEND_STORAGE_SCHEMA_VERSION = 14;
 /** DWC v2 §2.6 — analytics outbox store for closure-loop telemetry. */
 export const DWC_TELEMETRY_OUTBOX_SCHEMA_VERSION = 15;
+/** DATA_PRINCIPLE_SPINE sub-phase 01.6 — pre_spine provenance backfill on existing logs. */
+export const DATA_PRINCIPLE_SPINE_PROVENANCE_SCHEMA_VERSION = 16;
 
 // =============================================================================
 // DATABASE CLASS
@@ -689,6 +692,7 @@ export class AgriLogDatabase extends Dexie {
         applyV13(this);
         applyV14(this);
         applyV15(this);
+        applyV16(this);
     }
 }
 

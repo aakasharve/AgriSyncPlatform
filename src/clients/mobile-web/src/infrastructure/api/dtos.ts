@@ -285,6 +285,12 @@ export interface AiParseResponse {
     latencyMs?: number;
     validationOutcome?: string;
     jobId?: string;
+    // DATA_PRINCIPLE_SPINE sub-phase 01.5 — provenance fields surfaced in the
+    // voice-parse response envelope. Mirror the backend Provenance VO.
+    sourceAiJobId?: string;
+    promptContentHash?: string;
+    appVersion?: string;
+    rawInputRef?: string | null;
 }
 
 export interface AiJobStatusResponse {

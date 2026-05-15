@@ -211,7 +211,14 @@ export class BackendAiClient implements VoiceParserPort {
                 provenance: {
                     source: 'ai',
                     model: apiResult.modelUsed,
+                    // DATA_PRINCIPLE_SPINE sub-phase 01.6 — spine-honest alias.
+                    // Kept alongside `model` for back-compat with pre-spine readers.
+                    modelVersion: apiResult.modelUsed,
                     promptVersion: apiResult.promptVersion,
+                    promptContentHash: apiResult.promptContentHash ?? undefined,
+                    appVersion: apiResult.appVersion ?? undefined,
+                    sourceAiJobId: apiResult.sourceAiJobId ?? undefined,
+                    rawInputRef: apiResult.rawInputRef ?? null,
                     providerUsed: apiResult.providerUsed,
                     fallbackUsed: apiResult.fallbackUsed,
                     timestamp: new Date().toISOString(),
