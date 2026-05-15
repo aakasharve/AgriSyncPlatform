@@ -6,6 +6,7 @@ using Microsoft.Extensions.Logging;
 using ShramSafal.Application.Contracts.Dtos;
 using ShramSafal.Application.Ports.External;
 using ShramSafal.Domain.AI;
+using ShramSafal.Domain.Common;
 
 namespace ShramSafal.Infrastructure.AI;
 
@@ -39,17 +40,41 @@ internal sealed class AiOrchestrator(
         int? inputRawDurationMs = null,
         string? segmentMetadataJson = null,
         string? requestPayloadHash = null,
+        string clientAppVersion = "unknown",
         CancellationToken ct = default)
     {
         var key = string.IsNullOrWhiteSpace(idempotencyKey) ? Guid.NewGuid().ToString("N") : idempotencyKey.Trim();
         var existing = await aiJobRepository.GetByIdempotencyKeyAsync(key, ct);
-        if (TryReturnCachedVoiceResult(existing, out var cached))
+
+        // DATA_PRINCIPLE_SPINE sub-phase 01.4 — surface the assembled prompt's
+        // content hash on every canonical result so handlers can stamp
+        // downstream Provenance on the manual-log / cost-entry created from
+        // this parse without a second prompt-builder call. Lower-case 64-hex
+        // per the registry's contract.
+        var promptContentHash = promptBuilder.CurrentVoicePromptContentHash;
+
+        if (TryReturnCachedVoiceResult(existing, out var cached, promptContentHash))
         {
             return cached;
         }
 
         var config = await aiJobRepository.GetProviderConfigAsync(ct);
         var payload = await ReadPayloadAsync(audioStream, ct);
+
+        // DATA_PRINCIPLE_SPINE sub-phase 01.4 — stamp the AiJob with real voice
+        // provenance instead of the Manual("unknown") default. PromptVersion is
+        // resolved from the assembled prompt; ModelVersion is filled in after
+        // the provider attempt picks one (defaults to "unknown" pre-attempt).
+        // PromptVersion is truncated to fit the 32-char column constraint
+        // (AiPromptLineage returns multi-segment strings like
+        // "base:v1;output:v1;buckets:...;hash:<16>" that exceed 32 chars);
+        // the full hash lives in PromptContentHash for exact A/B lookup.
+        var voiceProvenance = new Provenance(
+            source: Source.Voice,
+            modelVersion: "unknown",
+            promptVersion: TruncatePromptVersion(AiPromptLineage.ResolvePromptVersion(systemPrompt)),
+            promptContentHash: promptContentHash,
+            appVersion: string.IsNullOrWhiteSpace(clientAppVersion) ? "unknown" : clientAppVersion);
 
         var job = existing ?? AiJob.Create(
             Guid.NewGuid(),
@@ -59,7 +84,8 @@ internal sealed class AiOrchestrator(
             farmId,
             inputContentHash: requestPayloadHash,
             rawInputRef: null,
-            inputSessionMetadataJson: segmentMetadataJson);
+            inputSessionMetadataJson: segmentMetadataJson,
+            provenance: voiceProvenance);
 
         job.SetInputDurations(inputSpeechDurationMs, inputRawDurationMs);
         job.SetInputSessionMetadataJson(segmentMetadataJson);
@@ -78,7 +104,8 @@ internal sealed class AiOrchestrator(
                 new VoiceParseCanonicalResult
                 {
                     Success = false,
-                    Error = "AI processing is currently disabled."
+                    Error = "AI processing is currently disabled.",
+                    PromptContentHash = promptContentHash
                 },
                 job.Id,
                 config.GetProviderForOperation(AiOperationType.VoiceToStructuredLog),
@@ -101,9 +128,12 @@ internal sealed class AiOrchestrator(
 
         if (primaryExecution.IsSuccess)
         {
-            job.MarkSucceeded(primaryExecution.Result.NormalizedJson ?? "{}", primaryExecution.Attempt!);
+            // DATA_PRINCIPLE_SPINE sub-phase 01.4 — stamp the prompt content
+            // hash on the canonical result returned to handlers.
+            var resultWithHash = primaryExecution.Result with { PromptContentHash = promptContentHash };
+            job.MarkSucceeded(resultWithHash.NormalizedJson ?? "{}", primaryExecution.Attempt!);
             await aiJobRepository.SaveChangesAsync(ct);
-            return (primaryExecution.Result, job.Id, primaryExecution.ProviderUsed, false);
+            return (resultWithHash, job.Id, primaryExecution.ProviderUsed, false);
         }
 
         if (!config.FallbackEnabled ||
@@ -112,7 +142,7 @@ internal sealed class AiOrchestrator(
         {
             job.MarkFailed();
             await aiJobRepository.SaveChangesAsync(ct);
-            return (primaryExecution.Result, job.Id, primaryExecution.ProviderUsed, false);
+            return (primaryExecution.Result with { PromptContentHash = promptContentHash }, job.Id, primaryExecution.ProviderUsed, false);
         }
 
         var fallbackExecution = await ExecuteVoiceAttemptWithRetriesAsync(
@@ -128,14 +158,15 @@ internal sealed class AiOrchestrator(
 
         if (fallbackExecution.IsSuccess)
         {
-            job.MarkFallbackSucceeded(fallbackExecution.Result.NormalizedJson ?? "{}", fallbackExecution.Attempt!);
+            var resultWithHash = fallbackExecution.Result with { PromptContentHash = promptContentHash };
+            job.MarkFallbackSucceeded(resultWithHash.NormalizedJson ?? "{}", fallbackExecution.Attempt!);
             await aiJobRepository.SaveChangesAsync(ct);
-            return (fallbackExecution.Result, job.Id, fallbackExecution.ProviderUsed, true);
+            return (resultWithHash, job.Id, fallbackExecution.ProviderUsed, true);
         }
 
         job.MarkFailed();
         await aiJobRepository.SaveChangesAsync(ct);
-        return (fallbackExecution.Result, job.Id, fallbackExecution.ProviderUsed, true);
+        return (fallbackExecution.Result with { PromptContentHash = promptContentHash }, job.Id, fallbackExecution.ProviderUsed, true);
     }
 
     // Phase 3 (VOICE_LATENCY_PIPELINE_V2 §7 Task 3.4) — streaming voice parse.
@@ -932,7 +963,8 @@ internal sealed class AiOrchestrator(
 
     private static bool TryReturnCachedVoiceResult(
         AiJob? job,
-        out (VoiceParseCanonicalResult Result, Guid JobId, AiProviderType ProviderUsed, bool FallbackUsed) cached)
+        out (VoiceParseCanonicalResult Result, Guid JobId, AiProviderType ProviderUsed, bool FallbackUsed) cached,
+        string? promptContentHash = null)
     {
         cached = default;
 
@@ -943,13 +975,21 @@ internal sealed class AiOrchestrator(
             return false;
         }
 
+        // DATA_PRINCIPLE_SPINE sub-phase 01.4 — preserve the cached job's
+        // original prompt content hash when present (it lives on the AiJob's
+        // Provenance), otherwise fall back to the current builder hash passed
+        // in by the caller. The cached path returns immediately so the
+        // downstream handler still gets a non-null hash to stamp.
+        var cachedHash = job.Provenance?.PromptContentHash ?? promptContentHash;
+
         cached = (
             new VoiceParseCanonicalResult
             {
                 Success = true,
                 NormalizedJson = job.NormalizedResultJson,
                 RawTranscript = TryReadJsonString(job.NormalizedResultJson, "fullTranscript"),
-                OverallConfidence = TryReadJsonDecimal(job.NormalizedResultJson, "confidence") ?? 0.75m
+                OverallConfidence = TryReadJsonDecimal(job.NormalizedResultJson, "confidence") ?? 0.75m,
+                PromptContentHash = cachedHash
             },
             job.Id,
             job.Attempts.LastOrDefault(x => x.IsSuccess)?.Provider ?? AiProviderType.Gemini,
@@ -1000,6 +1040,26 @@ internal sealed class AiOrchestrator(
         {
             return null;
         }
+    }
+
+    // DATA_PRINCIPLE_SPINE sub-phase 01.4 — Provenance.PromptVersion column is
+    // varchar(32). AiPromptLineage's modular path returns a much longer
+    // multi-segment string for traceability; the full content lives in the
+    // separate PromptContentHash column. Truncation here keeps the row
+    // writeable; downstream queries that need full lineage join on
+    // prompt_content_hash.
+    private const int MaxPromptVersionLength = 32;
+    private static string TruncatePromptVersion(string? promptVersion)
+    {
+        if (string.IsNullOrWhiteSpace(promptVersion))
+        {
+            return "unknown";
+        }
+
+        var trimmed = promptVersion.Trim();
+        return trimmed.Length <= MaxPromptVersionLength
+            ? trimmed
+            : trimmed.Substring(0, MaxPromptVersionLength);
     }
 
     private static bool IsEmptyJsonObject(string json)

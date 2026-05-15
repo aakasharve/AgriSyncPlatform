@@ -83,7 +83,14 @@ internal sealed class AiJobConfiguration : IEntityTypeConfiguration<AiJob>
             .HasColumnName("modified_at_utc")
             .IsRequired();
 
-        builder.OwnsOne(x => x.Provenance, p => p.ConfigureProvenance());
+        builder.OwnsOne(x => x.Provenance, p =>
+        {
+            p.ConfigureProvenance();
+            // DATA_PRINCIPLE_SPINE sub-phase 01.4 (F1 snapshot drift fix) —
+            // mirror the migration's (prompt_version, model_version) index.
+            p.HasIndex(x => new { x.PromptVersion, x.ModelVersion })
+                .HasDatabaseName("ix_ai_jobs_prompt_model");
+        });
         builder.Navigation(x => x.Provenance).IsRequired();
 
         builder.HasMany(x => x.Attempts)
@@ -98,5 +105,11 @@ internal sealed class AiJobConfiguration : IEntityTypeConfiguration<AiJob>
         builder.HasIndex(x => x.FarmId);
         builder.HasIndex(x => x.Status);
         builder.HasIndex(x => x.CreatedAtUtc);
+        // DATA_PRINCIPLE_SPINE sub-phase 01.4 (F1 snapshot drift fix) —
+        // partial index on raw_input_ref where not null. Matches the
+        // migration's filtered index used for fast S3-path lookups.
+        builder.HasIndex(x => x.RawInputRef)
+            .HasDatabaseName("ix_ai_jobs_raw_input_ref")
+            .HasFilter("\"raw_input_ref\" IS NOT NULL");
     }
 }

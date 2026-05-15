@@ -166,6 +166,7 @@ public sealed class AiStreamingEndpointTests
                 int? inputRawDurationMs = null,
                 string? segmentMetadataJson = null,
                 string? requestPayloadHash = null,
+                string clientAppVersion = "unknown",
                 CancellationToken ct = default)
             => throw new NotImplementedException();
 

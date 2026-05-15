@@ -313,7 +313,8 @@ public sealed class AddCostEntryPipelineTests
             new AddCostEntryFixedIdGenerator(Guid.Parse("88888888-8888-8888-8888-888888888888")),
             clock,
             new AllowAllEntitlementPolicy(),
-            analytics);
+            analytics,
+            new Common.NullAiJobRepository());
 
         var validator = new AddCostEntryValidator();
         var authorizer = new AddCostEntryAuthorizer(repo);

@@ -13,7 +13,17 @@ public sealed record CreateDailyLogCommand(
     string? DeviceId,
     string? ClientRequestId,
     Guid? DailyLogId = null,
-    string? ActorRole = null)
+    string? ActorRole = null,
+    // DATA_PRINCIPLE_SPINE sub-phase 01.4 — when the farmer Confirms a voice
+    // draft, the frontend passes back the AiJob.Id of the original parse so
+    // the resulting DailyLog can stamp Provenance(Source.Voice, ...) lifted
+    // from that job. Null means a true manual log; the handler falls back to
+    // Provenance.Manual(ClientAppVersion).
+    Guid? SourceAiJobId = null,
+    // DATA_PRINCIPLE_SPINE sub-phase 01.4 — client app version sourced from
+    // the X-App-Version header at the endpoint (fallback "unknown"). Always
+    // stamped onto the resulting Provenance.AppVersion.
+    string ClientAppVersion = "unknown")
 {
     public string? IdempotencyKey
     {

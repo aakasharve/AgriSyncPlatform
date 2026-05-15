@@ -61,7 +61,13 @@ public sealed class SettleJobCardPayoutHandler(
             return Result.Failure<SettleJobCardPayoutResult>(ShramSafalErrors.JobCardRoleNotAllowed);
 
         // 4. Create the CostEntry for the labour payout.
+        // DATA_PRINCIPLE_SPINE sub-phase 01.4 — labour payouts are manual by
+        // definition (owner-initiated settlement of a verified job card); stamp
+        // Provenance.Manual with the client app version from the command.
         CostEntry costEntry;
+        var settlementAppVersion = string.IsNullOrWhiteSpace(command.ClientAppVersion)
+            ? "unknown"
+            : command.ClientAppVersion.Trim();
         try
         {
             costEntry = CostEntry.CreateLabourPayout(
@@ -74,7 +80,8 @@ public sealed class SettleJobCardPayoutHandler(
                 currencyCode: command.ActualPayoutCurrencyCode,
                 entryDate: DateOnly.FromDateTime(clock.UtcNow),
                 createdByUserId: command.CallerUserId,
-                createdAtUtc: clock.UtcNow);
+                createdAtUtc: clock.UtcNow,
+                provenance: Provenance.Manual(settlementAppVersion));
         }
         catch (Exception ex) when (ex is ArgumentException or InvalidOperationException)
         {

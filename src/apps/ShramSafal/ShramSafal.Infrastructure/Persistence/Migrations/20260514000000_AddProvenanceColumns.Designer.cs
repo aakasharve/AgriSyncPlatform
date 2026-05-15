@@ -160,6 +160,10 @@ namespace ShramSafal.Infrastructure.Persistence.Migrations
                     b.HasIndex("IdempotencyKey")
                         .IsUnique();
 
+                    b.HasIndex("RawInputRef")
+                        .HasDatabaseName("ix_ai_jobs_raw_input_ref")
+                        .HasFilter("\"raw_input_ref\" IS NOT NULL");
+
                     b.HasIndex("Status");
 
                     b.HasIndex("UserId");
@@ -1197,6 +1201,9 @@ namespace ShramSafal.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("PlotId");
 
+                    b.HasIndex("SourceAiJobId")
+                        .HasDatabaseName("ix_cost_entries_source_ai_job_id");
+
                     b.HasIndex("FarmId", "EntryDate");
 
                     b.ToTable("cost_entries", "ssf");
@@ -1408,6 +1415,9 @@ namespace ShramSafal.Infrastructure.Persistence.Migrations
                     b.HasIndex("ModifiedAtUtc");
 
                     b.HasIndex("OperatorUserId");
+
+                    b.HasIndex("SourceAiJobId")
+                        .HasDatabaseName("ix_daily_logs_source_ai_job_id");
 
                     b.HasIndex("FarmId", "LogDate");
 
@@ -2442,6 +2452,9 @@ namespace ShramSafal.Infrastructure.Persistence.Migrations
 
                             b1.HasKey("AiJobId");
 
+                            b1.HasIndex("PromptVersion", "ModelVersion")
+                                .HasDatabaseName("ix_ai_jobs_prompt_model");
+
                             b1.ToTable("ai_jobs", "ssf");
 
                             b1.WithOwner()
@@ -2600,6 +2613,9 @@ namespace ShramSafal.Infrastructure.Persistence.Migrations
 
                             b1.HasKey("CostEntryId");
 
+                            b1.HasIndex("PromptVersion", "ModelVersion")
+                                .HasDatabaseName("ix_cost_entries_prompt_model");
+
                             b1.ToTable("cost_entries", "ssf");
 
                             b1.WithOwner()
@@ -2744,6 +2760,9 @@ namespace ShramSafal.Infrastructure.Persistence.Migrations
                                 .HasColumnName("source");
 
                             b1.HasKey("DailyLogId");
+
+                            b1.HasIndex("PromptVersion", "ModelVersion")
+                                .HasDatabaseName("ix_daily_logs_prompt_model");
 
                             b1.ToTable("daily_logs", "ssf");
 

@@ -59,7 +59,8 @@ public sealed class LogHandlerAnalyticsTests
             new FixedIdGenerator(Guid.NewGuid()),
             new FixedClock(now),
             new AllowAllEntitlementPolicy(),
-            analytics);
+            analytics,
+            new Common.NullAiJobRepository());
 
         var command = new CreateDailyLogCommand(
             FarmId: farmGuid,

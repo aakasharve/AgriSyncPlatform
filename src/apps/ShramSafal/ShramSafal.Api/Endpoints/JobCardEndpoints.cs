@@ -148,6 +148,7 @@ public static class JobCardEndpoints
         group.MapPost("/job-cards/{id:guid}/settle", async (
             Guid id,
             SettleJobCardPayoutRequest request,
+            HttpContext httpContext,
             ClaimsPrincipal user,
             IHandler<SettleJobCardPayoutCommand, SettleJobCardPayoutResult> handler,
             CancellationToken ct) =>
@@ -155,13 +156,22 @@ public static class JobCardEndpoints
             if (!EndpointActorContext.TryGetUserId(user, out var actorUserId))
                 return Results.Unauthorized();
 
+            // DATA_PRINCIPLE_SPINE sub-phase 01.4 — capture X-App-Version
+            // (fallback "unknown") so the labour-payout CostEntry's
+            // Provenance.AppVersion records the real client version.
+            var headerAppVersion = httpContext.Request.Headers["X-App-Version"].FirstOrDefault();
+            var clientAppVersion = string.IsNullOrWhiteSpace(headerAppVersion)
+                ? "unknown"
+                : headerAppVersion!.Trim();
+
             var command = new SettleJobCardPayoutCommand(
                 JobCardId: id,
                 ActualPayoutAmount: request.ActualPayoutAmount,
                 ActualPayoutCurrencyCode: request.ActualPayoutCurrencyCode,
                 SettlementNote: request.SettlementNote,
                 CallerUserId: new UserId(actorUserId),
-                ClientCommandId: request.ClientCommandId);
+                ClientCommandId: request.ClientCommandId,
+                ClientAppVersion: clientAppVersion);
 
             var result = await handler.HandleAsync(command, ct);
             return result.IsSuccess ? Results.Ok(result.Value) : ToErrorResult(result.Error);

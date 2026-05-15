@@ -443,6 +443,17 @@ public static class AiEndpoints
             ? BuildDeterministicFallbackIdempotencyKey(userId, parsed)
             : parsed.IdempotencyKey;
 
+        // DATA_PRINCIPLE_SPINE sub-phase 01.4 — capture the client app version
+        // from the X-App-Version header (fallback "unknown") and thread it
+        // into the voice parse command so the AiJob's Provenance carries the
+        // real client version that emitted this parse. Sub-phase 01.5 will
+        // surface jobId + prompt metadata on the response so the frontend can
+        // pass them back at Confirm-time; here we only capture the input side.
+        var headerAppVersion = httpRequest.Headers["X-App-Version"].FirstOrDefault();
+        var clientAppVersion = string.IsNullOrWhiteSpace(headerAppVersion)
+            ? "unknown"
+            : headerAppVersion!.Trim();
+
         var command = new ParseVoiceInputCommand(
             userId,
             parsed.FarmId,
@@ -456,7 +467,8 @@ public static class AiEndpoints
             parsed.InputSpeechDurationMs,
             parsed.InputRawDurationMs,
             parsed.SegmentMetadataJson,
-            parsed.RequestPayloadHash);
+            parsed.RequestPayloadHash,
+            clientAppVersion);
 
         var result = await handler.HandleAsync(command, ct);
         if (!result.IsSuccess)

@@ -80,11 +80,23 @@ internal sealed class DailyLogConfiguration : IEntityTypeConfiguration<DailyLog>
         });
         builder.Navigation(x => x.Location).IsRequired(false);
 
-        builder.OwnsOne(x => x.Provenance, p => p.ConfigureProvenance());
+        builder.OwnsOne(x => x.Provenance, p =>
+        {
+            p.ConfigureProvenance();
+            // DATA_PRINCIPLE_SPINE sub-phase 01.4 (F1 snapshot drift fix) —
+            // surface the migration's (prompt_version, model_version) compound
+            // index on the EF model so the snapshot matches the database.
+            p.HasIndex(x => new { x.PromptVersion, x.ModelVersion })
+                .HasDatabaseName("ix_daily_logs_prompt_model");
+        });
         builder.Navigation(x => x.Provenance).IsRequired();
 
         builder.Property(x => x.SourceAiJobId)
             .HasColumnName("source_ai_job_id");
+        // DATA_PRINCIPLE_SPINE sub-phase 01.4 (F1 snapshot drift fix) —
+        // mirror the migration's source_ai_job_id index on the EF model.
+        builder.HasIndex(x => x.SourceAiJobId)
+            .HasDatabaseName("ix_daily_logs_source_ai_job_id");
 
         builder.HasIndex(x => x.IdempotencyKey)
             .IsUnique()

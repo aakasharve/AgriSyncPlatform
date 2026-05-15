@@ -381,7 +381,7 @@ public sealed class PushSyncBatchHandler(
             case "create_crop_cycle":
                 return await HandleCreateCropCycleAsync(clientRequestId, payload, actorUserId, actorRole, ct);
             case "create_daily_log":
-                return await HandleCreateDailyLogAsync(deviceId, clientRequestId, payload, actorUserId, actorRole, ct);
+                return await HandleCreateDailyLogAsync(deviceId, clientRequestId, payload, actorUserId, actorRole, appVersion, ct);
             case "add_log_task":
                 return await HandleAddLogTaskAsync(clientRequestId, payload, actorUserId, actorRole, ct);
             case "verify_log":
@@ -393,7 +393,7 @@ public sealed class PushSyncBatchHandler(
                     MutationTypeUnimplementedCode,
                     "verify_log_v2 handler is not yet wired. Falls back to verify_log on the client. Tracked in Sub-plan 03.");
             case "add_cost_entry":
-                return await HandleAddCostEntryAsync(clientRequestId, payload, actorUserId, actorRole, ct);
+                return await HandleAddCostEntryAsync(clientRequestId, payload, actorUserId, actorRole, appVersion, ct);
             case "allocate_global_expense":
                 return await HandleAllocateGlobalExpenseAsync(clientRequestId, payload, actorUserId, actorRole, ct);
             case "correct_cost_entry":
@@ -420,7 +420,7 @@ public sealed class PushSyncBatchHandler(
             case "jobcard.complete":
                 return await HandleJobCardCompleteAsync(clientRequestId, payload, actorUserId, actorRole, ct);
             case "jobcard.settle":
-                return await HandleJobCardSettleAsync(clientRequestId, payload, actorUserId, actorRole, ct);
+                return await HandleJobCardSettleAsync(clientRequestId, payload, actorUserId, actorRole, appVersion, ct);
             case "jobcard.cancel":
                 return await HandleJobCardCancelAsync(clientRequestId, payload, actorUserId, actorRole, ct);
             case "add_location":
@@ -574,6 +574,7 @@ public sealed class PushSyncBatchHandler(
         JsonElement payload,
         Guid actorUserId,
         string actorRole,
+        string? appVersion,
         CancellationToken ct)
     {
         if (!PayloadHasOnly(payload, "dailyLogId", "farmId", "plotId", "cropCycleId", "operatorUserId", "logDate", "location"))
@@ -595,6 +596,10 @@ public sealed class PushSyncBatchHandler(
             return MutationExecutionOutcome.Failure("ShramSafal.Forbidden", "User is not a member of the target farm.");
         }
 
+        // DATA_PRINCIPLE_SPINE sub-phase 01.4 — propagate batch-level
+        // PushSyncBatchCommand.AppVersion onto the replayed CreateDailyLogCommand
+        // so Provenance.AppVersion is stamped consistently with the HTTP
+        // endpoint path. No schema change to mutation payload shape.
         var result = await createDailyLogHandler.HandleAsync(
             new CreateDailyLogCommand(
                 FarmId: request.FarmId,
@@ -607,7 +612,9 @@ public sealed class PushSyncBatchHandler(
                 DeviceId: deviceId,
                 ClientRequestId: clientRequestId,
                 DailyLogId: request.DailyLogId,
-                ActorRole: actorRole),
+                ActorRole: actorRole,
+                SourceAiJobId: null,
+                ClientAppVersion: string.IsNullOrWhiteSpace(appVersion) ? "unknown" : appVersion),
             ct);
 
         return ToOutcome(result);
@@ -718,6 +725,7 @@ public sealed class PushSyncBatchHandler(
         JsonElement payload,
         Guid actorUserId,
         string actorRole,
+        string? appVersion,
         CancellationToken ct)
     {
         if (!PayloadHasOnly(payload, "costEntryId", "farmId", "plotId", "cropCycleId", "category", "description", "amount", "currencyCode", "entryDate", "createdByUserId", "location"))
@@ -739,6 +747,9 @@ public sealed class PushSyncBatchHandler(
             return MutationExecutionOutcome.Failure("ShramSafal.Forbidden", "User is not a member of the target farm.");
         }
 
+        // DATA_PRINCIPLE_SPINE sub-phase 01.4 — propagate batch-level AppVersion
+        // onto the replayed AddCostEntryCommand. Same rationale as
+        // HandleCreateDailyLogAsync above.
         var result = await addCostEntryHandler.HandleAsync(
             new AddCostEntryCommand(
                 FarmId: request.FarmId,
@@ -753,7 +764,9 @@ public sealed class PushSyncBatchHandler(
                 Location: ToLocationSnapshot(request.Location),
                 CostEntryId: request.CostEntryId,
                 ActorRole: actorRole,
-                ClientCommandId: clientRequestId),
+                ClientCommandId: clientRequestId,
+                SourceAiJobId: null,
+                ClientAppVersion: string.IsNullOrWhiteSpace(appVersion) ? "unknown" : appVersion),
             ct);
 
         return ToOutcome(result);
@@ -1367,7 +1380,7 @@ public sealed class PushSyncBatchHandler(
     }
 
     private async Task<MutationExecutionOutcome> HandleJobCardSettleAsync(
-        string clientRequestId, JsonElement payload, Guid actorUserId, string actorRole, CancellationToken ct)
+        string clientRequestId, JsonElement payload, Guid actorUserId, string actorRole, string? appVersion, CancellationToken ct)
     {
         var request = DeserializePayload<JobCardSettleMutationPayload>(payload);
         if (request is null || request.JobCardId == Guid.Empty || request.ActualPayoutAmount <= 0 ||
@@ -1376,6 +1389,10 @@ public sealed class PushSyncBatchHandler(
             return MutationExecutionOutcome.Failure("ShramSafal.SyncInvalidPayload", "Invalid payload for jobcard.settle.");
         }
 
+        // DATA_PRINCIPLE_SPINE sub-phase 01.4 — propagate batch-level AppVersion
+        // onto the replayed SettleJobCardPayoutCommand so the labour-payout
+        // CostEntry's Provenance.AppVersion records the actual client version
+        // even when the settlement was queued offline and replayed via sync.
         var result = await settleJobCardPayoutHandler.HandleAsync(
             new SettleJobCardPayoutCommand(
                 JobCardId: request.JobCardId,
@@ -1383,7 +1400,8 @@ public sealed class PushSyncBatchHandler(
                 ActualPayoutCurrencyCode: request.ActualPayoutCurrencyCode,
                 SettlementNote: request.SettlementNote,
                 CallerUserId: new UserId(actorUserId),
-                ClientCommandId: clientRequestId),
+                ClientCommandId: clientRequestId,
+                ClientAppVersion: string.IsNullOrWhiteSpace(appVersion) ? "unknown" : appVersion),
             ct);
         return ToOutcome(result);
     }

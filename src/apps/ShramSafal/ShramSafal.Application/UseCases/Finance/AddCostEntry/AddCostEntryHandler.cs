@@ -5,6 +5,7 @@ using AgriSync.BuildingBlocks.Results;
 using AgriSync.SharedKernel.Contracts.Ids;
 using ShramSafal.Application.Contracts.Dtos;
 using ShramSafal.Application.Ports;
+using ShramSafal.Application.Ports.External;
 using ShramSafal.Domain.Audit;
 using ShramSafal.Domain.Common;
 
@@ -39,7 +40,8 @@ public sealed class AddCostEntryHandler(
     IIdGenerator idGenerator,
     IClock clock,
     IEntitlementPolicy entitlementPolicy,
-    IAnalyticsWriter analytics)
+    IAnalyticsWriter analytics,
+    IAiJobRepository aiJobRepository)
     : IHandler<AddCostEntryCommand, AddCostEntryResultDto>
 {
     private const int DuplicateWindowMinutes = 120;
@@ -97,6 +99,37 @@ public sealed class AddCostEntryHandler(
         }
 
         var candidateId = command.CostEntryId ?? idGenerator.New();
+
+        // DATA_PRINCIPLE_SPINE sub-phase 01.4 — voice-from-Confirm vs. true-manual,
+        // mirroring CreateDailyLogHandler. SourceAiJobId is the AiJob.Id from the
+        // original parse (frontend passes it back at Confirm). When present we
+        // lift the job's Voice provenance and re-stamp the client app version;
+        // when null we stamp Provenance.Manual(ClientAppVersion).
+        var stampedAppVersion = string.IsNullOrWhiteSpace(command.ClientAppVersion)
+            ? "unknown"
+            : command.ClientAppVersion.Trim();
+
+        Provenance provenance;
+        if (command.SourceAiJobId is { } sourceJobId && sourceJobId != Guid.Empty)
+        {
+            var sourceJob = await aiJobRepository.GetByIdAsync(sourceJobId, ct);
+            if (sourceJob is null)
+            {
+                return Result.Failure<AddCostEntryResultDto>(ShramSafalErrors.AiParsingFailed);
+            }
+
+            provenance = new Provenance(
+                source: Source.Voice,
+                modelVersion: sourceJob.Provenance.ModelVersion,
+                promptVersion: sourceJob.Provenance.PromptVersion,
+                promptContentHash: sourceJob.Provenance.PromptContentHash,
+                appVersion: stampedAppVersion);
+        }
+        else
+        {
+            provenance = Provenance.Manual(stampedAppVersion);
+        }
+
         var entry = Domain.Finance.CostEntry.Create(
             candidateId,
             command.FarmId,
@@ -109,7 +142,9 @@ public sealed class AddCostEntryHandler(
             command.EntryDate,
             command.CreatedByUserId,
             command.Location,
-            clock.UtcNow);
+            clock.UtcNow,
+            provenance: provenance,
+            sourceAiJobId: command.SourceAiJobId);
 
         var duplicateCandidates = await repository.GetCostEntriesForDuplicateCheck(
             farmId,

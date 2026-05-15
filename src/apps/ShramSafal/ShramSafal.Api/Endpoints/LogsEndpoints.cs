@@ -26,6 +26,7 @@ public static class LogsEndpoints
         // rollout pass (per the "only-with-tests" guardrail).
         group.MapPost("/logs", async (
             CreateDailyLogRequest request,
+            HttpContext httpContext,
             ClaimsPrincipal user,
             IHandler<CreateDailyLogCommand, DailyLogDto> handler,
             CancellationToken ct) =>
@@ -34,6 +35,17 @@ public static class LogsEndpoints
             {
                 return Results.Unauthorized();
             }
+
+            // DATA_PRINCIPLE_SPINE sub-phase 01.4 — capture X-App-Version
+            // (fallback "unknown") so Provenance.AppVersion gets the real
+            // client version. SourceAiJobId rides on the request body — when
+            // the farmer Confirms a voice draft the frontend passes back the
+            // original parse's AiJob.Id and the handler lifts Voice provenance
+            // from it; when null the handler stamps Provenance.Manual().
+            var headerAppVersion = httpContext.Request.Headers["X-App-Version"].FirstOrDefault();
+            var clientAppVersion = string.IsNullOrWhiteSpace(headerAppVersion)
+                ? "unknown"
+                : headerAppVersion!.Trim();
 
             var command = new CreateDailyLogCommand(
                 request.FarmId,
@@ -46,7 +58,9 @@ public static class LogsEndpoints
                 request.DeviceId,
                 request.ClientRequestId,
                 DailyLogId: null,
-                ActorRole: EndpointActorContext.GetActorRole(user));
+                ActorRole: EndpointActorContext.GetActorRole(user),
+                SourceAiJobId: request.SourceAiJobId,
+                ClientAppVersion: clientAppVersion);
 
             var result = await handler.HandleAsync(command, ct);
             return result.IsSuccess ? Results.Ok(result.Value) : ToErrorResult(result.Error);
@@ -198,7 +212,12 @@ public sealed record CreateDailyLogRequest(
     DateOnly LogDate,
     LocationRequest? Location,
     string? DeviceId,
-    string? ClientRequestId);
+    string? ClientRequestId,
+    // DATA_PRINCIPLE_SPINE sub-phase 01.4 — present only when the farmer
+    // Confirmed a voice draft; carries the AiJob.Id from the original parse.
+    // Sub-phase 01.6 wires the frontend to send it; until then this stays
+    // null and the handler stamps Provenance.Manual().
+    Guid? SourceAiJobId = null);
 
 public sealed record AddLogTaskRequest(
     string ActivityType,

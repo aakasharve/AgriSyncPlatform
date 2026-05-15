@@ -51,7 +51,8 @@ public sealed class FinanceAnalyticsEmissionTests
             new SequentialIdGenerator(),
             new FixedClock(FixedUtcNow),
             new AllowAllEntitlementPolicy(),
-            analytics);
+            analytics,
+            new Common.NullAiJobRepository());
 
         var command = new AddCostEntryCommand(
             FarmId: farmId.Value,

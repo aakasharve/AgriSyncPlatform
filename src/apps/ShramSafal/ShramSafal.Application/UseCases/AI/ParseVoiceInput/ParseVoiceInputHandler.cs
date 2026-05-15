@@ -143,6 +143,9 @@ public sealed class ParseVoiceInputHandler(
                 inputRawDurationMs: command.InputRawDurationMs,
                 segmentMetadataJson: command.SegmentMetadataJson,
                 requestPayloadHash: command.RequestPayloadHash,
+                clientAppVersion: string.IsNullOrWhiteSpace(command.ClientAppVersion)
+                    ? "unknown"
+                    : command.ClientAppVersion,
                 ct: ct);
             stopwatch.Stop();
 
@@ -196,7 +199,13 @@ public sealed class ParseVoiceInputHandler(
                 providerUsed,
                 orchestration.FallbackUsed,
                 0,
-                "pass");
+                "pass",
+                // DATA_PRINCIPLE_SPINE sub-phase 01.4 — surface the orchestrator's
+                // prompt content hash so the frontend can pass it back on Confirm
+                // and CreateDailyLogHandler can stamp the same hash on the
+                // resulting DailyLog's Provenance (sub-phase 01.5 wires the
+                // response shape; 01.6 wires the frontend).
+                PromptContentHash: canonicalResult.PromptContentHash);
 
             await EmitAiInvocationAsync(
                 command,

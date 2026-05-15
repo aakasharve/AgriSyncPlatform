@@ -279,7 +279,8 @@ public sealed class CreateDailyLogPipelineTests
             new CreateDailyLogFixedIdGenerator(LogGuid),
             clock,
             new AllowAllEntitlementPolicy(),
-            analytics);
+            analytics,
+            new Common.NullAiJobRepository());
 
         var validator = new CreateDailyLogValidator();
         var authorizer = new CreateDailyLogAuthorizer(repo);

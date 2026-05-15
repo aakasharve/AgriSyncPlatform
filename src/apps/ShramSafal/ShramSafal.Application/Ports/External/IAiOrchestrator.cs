@@ -17,6 +17,10 @@ public interface IAiOrchestrator
         int? inputRawDurationMs = null,
         string? segmentMetadataJson = null,
         string? requestPayloadHash = null,
+        // DATA_PRINCIPLE_SPINE sub-phase 01.4 — threaded into the AiJob's
+        // Provenance.AppVersion stamp. Defaults to "unknown" when callers
+        // (legacy tests or pre-spine entry points) don't supply one.
+        string clientAppVersion = "unknown",
         CancellationToken ct = default);
 
     Task<(ReceiptExtractCanonicalResult Result, Guid JobId, AiProviderType ProviderUsed, bool FallbackUsed)> ExtractReceiptWithFallbackAsync(

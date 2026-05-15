@@ -5,6 +5,7 @@ using AgriSync.BuildingBlocks.Results;
 using AgriSync.SharedKernel.Contracts.Ids;
 using ShramSafal.Application.Contracts.Dtos;
 using ShramSafal.Application.Ports;
+using ShramSafal.Application.Ports.External;
 using ShramSafal.Domain.Audit;
 using ShramSafal.Domain.Common;
 
@@ -39,7 +40,8 @@ public sealed class CreateDailyLogHandler(
     IIdGenerator idGenerator,
     IClock clock,
     IEntitlementPolicy entitlementPolicy,
-    IAnalyticsWriter analytics)
+    IAnalyticsWriter analytics,
+    IAiJobRepository aiJobRepository)
     : IHandler<CreateDailyLogCommand, DailyLogDto>
 {
     public async Task<Result<DailyLogDto>> HandleAsync(CreateDailyLogCommand command, CancellationToken ct = default)
@@ -96,6 +98,37 @@ public sealed class CreateDailyLogHandler(
             }
         }
 
+        // DATA_PRINCIPLE_SPINE sub-phase 01.4 — voice-from-Confirm vs. true-manual.
+        // If the client passed SourceAiJobId (the AiJob id from the original voice
+        // parse), lift Voice provenance from that job and stamp the client app
+        // version onto it. Otherwise stamp a Manual provenance with the same
+        // client app version. The job's lookup goes through IAiJobRepository
+        // (existing read port) — no Domain -> Infrastructure leak.
+        var stampedAppVersion = string.IsNullOrWhiteSpace(command.ClientAppVersion)
+            ? "unknown"
+            : command.ClientAppVersion.Trim();
+
+        Provenance provenance;
+        if (command.SourceAiJobId is { } sourceJobId && sourceJobId != Guid.Empty)
+        {
+            var sourceJob = await aiJobRepository.GetByIdAsync(sourceJobId, ct);
+            if (sourceJob is null)
+            {
+                return Result.Failure<DailyLogDto>(ShramSafalErrors.AiParsingFailed);
+            }
+
+            provenance = new Provenance(
+                source: Source.Voice,
+                modelVersion: sourceJob.Provenance.ModelVersion,
+                promptVersion: sourceJob.Provenance.PromptVersion,
+                promptContentHash: sourceJob.Provenance.PromptContentHash,
+                appVersion: stampedAppVersion);
+        }
+        else
+        {
+            provenance = Provenance.Manual(stampedAppVersion);
+        }
+
         var log = Domain.Logs.DailyLog.Create(
             command.DailyLogId ?? idGenerator.New(),
             command.FarmId,
@@ -105,7 +138,9 @@ public sealed class CreateDailyLogHandler(
             command.LogDate,
             command.IdempotencyKey,
             command.Location,
-            clock.UtcNow);
+            clock.UtcNow,
+            provenance: provenance,
+            sourceAiJobId: command.SourceAiJobId);
 
         await repository.AddDailyLogAsync(log, ct);
         await repository.AddAuditEventAsync(

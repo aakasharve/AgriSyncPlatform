@@ -12,6 +12,7 @@ using ShramSafal.Application.UseCases.Finance.CorrectCostEntry;
 using ShramSafal.Application.UseCases.Finance.GetFinanceSummary;
 using ShramSafal.Application.UseCases.Finance.GetPlotFinanceSummary;
 using ShramSafal.Application.UseCases.Finance.SetPriceConfigVersion;
+using ShramSafal.Domain.Common;
 using ShramSafal.Domain.Finance;
 
 namespace ShramSafal.Api.Endpoints;
@@ -58,6 +59,7 @@ public static class FinanceEndpoints
         // guardrail).
         group.MapPost("/finance/cost-entry", async (
             AddCostEntryRequest request,
+            HttpContext httpContext,
             ClaimsPrincipal user,
             IHandler<AddCostEntryCommand, AddCostEntryResultDto> handler,
             CancellationToken ct) =>
@@ -66,6 +68,15 @@ public static class FinanceEndpoints
             {
                 return Results.Unauthorized();
             }
+
+            // DATA_PRINCIPLE_SPINE sub-phase 01.4 — X-App-Version (fallback
+            // "unknown"). SourceAiJobId arrives in the request body when the
+            // farmer Confirms a voice draft that produced a cost entry; the
+            // handler lifts Voice provenance from that AiJob.
+            var headerAppVersion = httpContext.Request.Headers["X-App-Version"].FirstOrDefault();
+            var clientAppVersion = string.IsNullOrWhiteSpace(headerAppVersion)
+                ? "unknown"
+                : headerAppVersion!.Trim();
 
             var command = new AddCostEntryCommand(
                 request.FarmId,
@@ -79,7 +90,10 @@ public static class FinanceEndpoints
                 actorUserId,
                 request.Location?.ToDomain(),
                 CostEntryId: null,
-                ActorRole: EndpointActorContext.GetActorRole(user));
+                ActorRole: EndpointActorContext.GetActorRole(user),
+                ClientCommandId: null,
+                SourceAiJobId: request.SourceAiJobId,
+                ClientAppVersion: clientAppVersion);
 
             var result = await handler.HandleAsync(command, ct);
             return result.IsSuccess ? Results.Ok(result.Value) : ToErrorResult(result.Error);
@@ -183,6 +197,7 @@ public static class FinanceEndpoints
 
         group.MapPost("/finance/duplicate-check", async (
             DuplicateCheckRequest request,
+            HttpContext httpContext,
             ClaimsPrincipal user,
             IShramSafalRepository repository,
             IClock clock,
@@ -210,6 +225,16 @@ public static class FinanceEndpoints
                 return Results.Forbid();
             }
 
+            // DATA_PRINCIPLE_SPINE sub-phase 01.4 — the candidate CostEntry built
+            // here is a transient duplicate-check probe (never persisted), so it
+            // stamps Provenance.Manual(appVersion) from the same X-App-Version
+            // header that /finance/cost-entry reads. CostEntry.Create requires a
+            // valid provenance object — the construct fails otherwise.
+            var headerAppVersion = httpContext.Request.Headers["X-App-Version"].FirstOrDefault();
+            var clientAppVersion = string.IsNullOrWhiteSpace(headerAppVersion)
+                ? "unknown"
+                : headerAppVersion!.Trim();
+
             var windowMinutes = request.WindowMinutes <= 0 ? 120 : request.WindowMinutes;
             var candidate = CostEntry.Create(
                 Guid.NewGuid(),
@@ -223,7 +248,8 @@ public static class FinanceEndpoints
                 request.EntryDate,
                 actorUserId,
                 null,
-                clock.UtcNow);
+                clock.UtcNow,
+                provenance: Provenance.Manual(clientAppVersion));
 
             var existing = await repository.GetCostEntriesForDuplicateCheck(
                 new FarmId(request.FarmId),
@@ -276,7 +302,12 @@ public sealed record AddCostEntryRequest(
     decimal Amount,
     string CurrencyCode,
     DateOnly EntryDate,
-    LocationRequest? Location);
+    LocationRequest? Location,
+    // DATA_PRINCIPLE_SPINE sub-phase 01.4 — present only when the farmer
+    // Confirmed a voice draft that produced a cost entry. Sub-phase 01.6
+    // wires the frontend to send it; until then this stays null and the
+    // handler stamps Provenance.Manual().
+    Guid? SourceAiJobId = null);
 
 public sealed record AllocateGlobalExpenseRequest(
     Guid CostEntryId,

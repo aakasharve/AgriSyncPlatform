@@ -110,11 +110,21 @@ internal sealed class CostEntryConfiguration : IEntityTypeConfiguration<CostEntr
             .HasColumnName("flag_reason")
             .HasMaxLength(300);
 
-        builder.OwnsOne(x => x.Provenance, p => p.ConfigureProvenance());
+        builder.OwnsOne(x => x.Provenance, p =>
+        {
+            p.ConfigureProvenance();
+            // DATA_PRINCIPLE_SPINE sub-phase 01.4 (F1 snapshot drift fix) —
+            // mirror the migration's (prompt_version, model_version) index.
+            p.HasIndex(x => new { x.PromptVersion, x.ModelVersion })
+                .HasDatabaseName("ix_cost_entries_prompt_model");
+        });
         builder.Navigation(x => x.Provenance).IsRequired();
 
         builder.Property(x => x.SourceAiJobId)
             .HasColumnName("source_ai_job_id");
+        // DATA_PRINCIPLE_SPINE sub-phase 01.4 (F1 snapshot drift fix).
+        builder.HasIndex(x => x.SourceAiJobId)
+            .HasDatabaseName("ix_cost_entries_source_ai_job_id");
 
         builder.HasIndex(x => x.FarmId);
         builder.HasIndex(x => x.PlotId);
