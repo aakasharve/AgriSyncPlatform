@@ -24,7 +24,11 @@ public sealed class AiJobProvenanceTests
     private static readonly Guid AnyJobId = Guid.Parse("11111111-1111-1111-1111-111111111111");
     private static readonly Guid AnyUserId = Guid.Parse("22222222-2222-2222-2222-222222222222");
     private static readonly Guid AnyFarmId = Guid.Parse("33333333-3333-3333-3333-333333333333");
-    private const string AnyIdempotencyKey = "idemp-abc-123";
+    // gitleaks:allow — test constant, not a real secret. The 8df0e3 commit
+    // tripped the generic-api-key rule on this literal because "Key" + dash-
+    // separated alphanumeric matched the rule heuristic. The string is a
+    // synthetic test idempotency token, never sent to a real provider.
+    private const string AnyIdempotencyKey = "test-key-xxxxxx"; // gitleaks:allow
 
     [Fact]
     public void AiJob_exposes_RawInputRef_property()

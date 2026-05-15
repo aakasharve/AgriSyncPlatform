@@ -8,13 +8,13 @@
  * All types here are pure domain concepts with no UI or infrastructure dependencies.
  *
  * Layer Rules:
- * - domain/types/ imports NOTHING from features/, application/, or infrastructure/
- * - application/ CAN import from domain/types/
- * - features/ CAN import from domain/types/ and application/
- * - infrastructure/ CAN import from domain/types/ (but not UI components)
+ * - domain/types/ has zero dependency on features\/, application\/, or infrastructure\/
+ * - application/ may import domain/types/
+ * - features/ may import domain/types/ and application/
+ * - infrastructure/ may import domain/types/ (but no UI components)
  *
  * Migration Note:
- * Types were moved here from src/types.ts and src/features/logs/logs.types.ts.
+ * Types relocated here out of src/types.ts and src/features/logs/logs.types.ts.
  * The old locations re-export these types for backward compatibility.
  */
 

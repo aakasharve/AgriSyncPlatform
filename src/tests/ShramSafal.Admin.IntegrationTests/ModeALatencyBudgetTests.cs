@@ -270,9 +270,14 @@ public sealed class ModeALatencyBudgetTests : IAsyncLifetime
         NpgsqlConnection db, Guid logId, Guid farmId, Guid operatorId, DateTime createdAtUtc)
     {
         await using var cmd = db.CreateCommand();
+        // DATA_PRINCIPLE_SPINE 01.3 added source/model_version/prompt_version
+        // NOT NULL on ssf.daily_logs. Raw-SQL test fixtures stamp pre_spine
+        // per the migration's backfill honesty rule.
         cmd.CommandText = """
-            INSERT INTO ssf.daily_logs ("Id", farm_id, plot_id, crop_cycle_id, operator_user_id, log_date, created_at_utc)
-            VALUES (@id, @fid, @plot, @cycle, @op, @date, @created);
+            INSERT INTO ssf.daily_logs ("Id", farm_id, plot_id, crop_cycle_id, operator_user_id, log_date, created_at_utc,
+                                         source, model_version, prompt_version)
+            VALUES (@id, @fid, @plot, @cycle, @op, @date, @created,
+                    'pre_spine', 'unknown', 'unknown');
             """;
         cmd.Parameters.AddWithValue("id", logId);
         cmd.Parameters.AddWithValue("fid", farmId);

@@ -4,7 +4,7 @@
  * Per-field confidence scoring for AI-parsed log data.
  * Drives the auto-save gate: high-confidence → auto-confirm, low → manual review.
  *
- * Layer: Domain (pure types, no imports from UI/infrastructure)
+ * Layer: Domain (pure types — UI / infra imports are forbidden here)
  */
 
 import type { VisibleBucketId } from '../BucketId';

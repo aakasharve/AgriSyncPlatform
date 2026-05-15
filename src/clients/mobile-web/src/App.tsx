@@ -17,6 +17,7 @@ import { AuthProvider } from './app/providers/AuthProvider';
 import { useAuth } from './app/providers/AuthProvider';
 import { FarmContextProvider } from './core/session/FarmContext';
 import { OfflineBanner } from './features/sync';
+import { setAiTestModeEnabled, clearAiTestMode } from './infrastructure/storage/AiTestModeStore';
 import AppShell from './app/components/AppShell';
 import LoginPage from './pages/LoginPage';
 import JoinFarmLandingPage from './pages/JoinFarmLandingPage';
@@ -68,15 +69,15 @@ const App: React.FC = () => {
 
     // agrisync-prompt-ops Phase 4 — `?aiTest=1` toggles the AI test-mode flag
     // (banner appears via AiTestModeBanner). `?aiTest=0` clears all 3 keys.
+    // Routed through infrastructure/storage/AiTestModeStore per the
+    // localStorage-discipline gate (Sub-plan 04 Task 3).
     useEffect(() => {
         if (typeof window === 'undefined') return;
         const params = new URLSearchParams(window.location.search);
         if (params.get('aiTest') === '1') {
-            localStorage.setItem('agrisync_ai_test_mode', 'true');
+            setAiTestModeEnabled(true);
         } else if (params.get('aiTest') === '0') {
-            localStorage.removeItem('agrisync_ai_test_mode');
-            localStorage.removeItem('agrisync_ai_test_bucket');
-            localStorage.removeItem('agrisync_ai_test_capture_count');
+            clearAiTestMode();
         }
     }, []);
 

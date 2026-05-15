@@ -390,9 +390,14 @@ public sealed class DwcScoreMatviewTests : IAsyncLifetime
         // application-layer code). Random Guids are sufficient for the
         // matview SQL — none of the 4 new matviews join plot_id.
         await using var cmd = db.CreateCommand();
+        // DATA_PRINCIPLE_SPINE 01.3 added source/model_version/prompt_version
+        // NOT NULL on ssf.daily_logs. The DwcScore matview test seeds via
+        // raw SQL; stamp pre_spine per the migration's backfill honesty rule.
         cmd.CommandText = """
-            INSERT INTO ssf.daily_logs ("Id", farm_id, plot_id, crop_cycle_id, operator_user_id, log_date, created_at_utc)
-            VALUES (@id, @fid, @plot, @cycle, @op, @date, @created);
+            INSERT INTO ssf.daily_logs ("Id", farm_id, plot_id, crop_cycle_id, operator_user_id, log_date, created_at_utc,
+                                         source, model_version, prompt_version)
+            VALUES (@id, @fid, @plot, @cycle, @op, @date, @created,
+                    'pre_spine', 'unknown', 'unknown');
             """;
         cmd.Parameters.AddWithValue("id", logId);
         cmd.Parameters.AddWithValue("fid", farmId);

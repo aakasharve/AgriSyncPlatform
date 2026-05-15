@@ -18,7 +18,7 @@ import type {
     ScheduleShiftEvent,
     PlotIrrigationConfig,
     IrrigationPlan,
-} from '../../features/scheduler/scheduler.types';
+} from './scheduler.types';
 
 // =============================================================================
 // UNITS & MEASUREMENTS

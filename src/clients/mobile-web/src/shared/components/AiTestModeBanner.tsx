@@ -1,16 +1,11 @@
 import React, { useEffect, useState } from 'react';
+import { readAiTestModeSnapshot } from '../../infrastructure/storage/AiTestModeStore';
 
-const FLAG_KEY = 'agrisync_ai_test_mode';
-const BUCKET_KEY = 'agrisync_ai_test_bucket';
-const COUNT_KEY = 'agrisync_ai_test_capture_count';
-
+// Routed through infrastructure/storage/AiTestModeStore per the
+// localStorage-discipline gate (Sub-plan 04 Task 3). The store hides the
+// three raw keys (flag, bucket, count) behind a typed API.
 function readState() {
-  if (typeof window === 'undefined') return null;
-  if (window.localStorage.getItem(FLAG_KEY) !== 'true') return null;
-  return {
-    bucket: window.localStorage.getItem(BUCKET_KEY) ?? '—',
-    count: window.localStorage.getItem(COUNT_KEY) ?? '0',
-  };
+  return readAiTestModeSnapshot();
 }
 
 export const AiTestModeBanner: React.FC = () => {

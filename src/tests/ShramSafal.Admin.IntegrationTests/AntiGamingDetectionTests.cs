@@ -364,9 +364,16 @@ public sealed class AntiGamingDetectionTests : IAsyncLifetime
         DbConnection db, Guid logId, Guid farmId, Guid operatorId, DateTime createdAtUtc)
     {
         await using var cmd = db.CreateCommand();
+        // DATA_PRINCIPLE_SPINE sub-phase 01.3 added NOT NULL columns
+        // source / model_version / prompt_version on ssf.daily_logs. Raw-SQL
+        // test seeds must populate them or the insert violates 23502. Anti-
+        // gaming fixtures are synthetic test rows, so stamp `pre_spine` per
+        // the migration's backfill honesty rule.
         cmd.CommandText = """
-            INSERT INTO ssf.daily_logs ("Id", farm_id, plot_id, crop_cycle_id, operator_user_id, log_date, created_at_utc)
-            VALUES (@id, @fid, @plot, @cycle, @op, @date, @created);
+            INSERT INTO ssf.daily_logs ("Id", farm_id, plot_id, crop_cycle_id, operator_user_id, log_date, created_at_utc,
+                                         source, model_version, prompt_version)
+            VALUES (@id, @fid, @plot, @cycle, @op, @date, @created,
+                    'pre_spine', 'unknown', 'unknown');
             """;
         AddParam(cmd, "id", logId);
         AddParam(cmd, "fid", farmId);

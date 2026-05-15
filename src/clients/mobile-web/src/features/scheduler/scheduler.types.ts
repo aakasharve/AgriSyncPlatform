@@ -1,7 +1,33 @@
 // --- GENERIC SCHEDULER SCHEMA ---
+//
+// Layering note (2026-05-15): the 10 types that `domain/types/farm.types.ts`
+// transitively needs were moved to `domain/types/scheduler.types.ts` to
+// keep the Frontend Layer Tests gate green (no imports from features/ in
+// domain/). This file re-exports them so existing scheduler-feature
+// consumers keep working unchanged. The remaining types in this file
+// (StageTemplate, OperationType, expectations, CropScheduleTemplate)
+// are feature-internal and stay here.
 
-// Layer 1: Core Concepts
-export type ScheduleReferenceType = 'PLANTING' | 'SOWING' | 'TRANSPLANTING' | 'PRUNING';
+import type {
+    ScheduleReferenceType,
+    FrequencyMode,
+} from '../../domain/types/scheduler.types';
+
+export type {
+    ScheduleReferenceType,
+    FrequencyMode,
+    IrrigationFrequency,
+    IrrigationTimeWindow,
+    StageOverride,
+    ExpectationOverride,
+    PlotScheduleInstance,
+    ScheduleShiftEvent,
+    IrrigationPlan,
+    PlotIrrigationConfig,
+} from '../../domain/types/scheduler.types';
+
+// (ScheduleReferenceType re-exported from domain/types/scheduler.types
+// per the 2026-05-15 Frontend Layer Tests fix.)
 
 // Schedule Ownership
 export type ScheduleOwnerType = 'EXPERT' | 'INSTITUTION' | 'USER' | 'SYSTEM_DEFAULT';
@@ -28,6 +54,9 @@ export interface StageTemplate {
     notes?: string; // Stage-level fixed guidance note (required in library-facing templates)
 }
 
+// (FrequencyMode re-exported from domain/types/scheduler.types — moved
+// for the layer gate.)
+
 // Layer 3: Operation Types
 export type OperationCategory =
     | 'IRRIGATION'
@@ -46,7 +75,7 @@ export interface OperationType {
 }
 
 // Layer 4: Stage Expectations
-export type FrequencyMode = 'PER_WEEK' | 'EVERY_N_DAYS';
+// (FrequencyMode moved to domain/types/scheduler.types; re-exported above.)
 
 export interface PeriodicExpectation {
     id: string;
@@ -88,65 +117,9 @@ export interface CropScheduleTemplate {
     publishedAt?: string;           // ISO date, used for "Newest" sort in library
 }
 
-// Overrides allow per-plot customization without breaking the link to template
-export interface StageOverride {
-    stageId: string; // FK to StageTemplate.id
-    customDayStart?: number;
-    customDayEnd?: number;
-}
-
-export interface ExpectationOverride {
-    expectationId: string; // FK to PeriodicExpectation.id
-    customFrequencyMode?: FrequencyMode;
-    customFrequencyValue?: number;
-}
-
-export interface PlotScheduleInstance {
-    id: string;
-    plotId: string;
-    templateId: string; // The template this is based on
-    referenceType: ScheduleReferenceType;
-    referenceDate: string; // ISO Date
-
-    // Customizations
-    stageOverrides: StageOverride[];
-    expectationOverrides: ExpectationOverride[];
-
-    // Legacy/UI compatibility — inline stages (to be deprecated in favor of template lookup)
-    stages?: any[];
-}
-
-export interface ScheduleShiftEvent {
-    id: string;
-    plotId: string;
-    date: string; // The date the shift was decided/occurred
-    shiftDays: number; // e.g. +1, +2
-    reason: 'WEATHER' | 'LABOUR' | 'WATER' | 'MARKET' | 'OTHER';
-    evidenceWeatherEventIds?: string[]; // Link to WeatherEvent
-    note?: string;
-}
-
-// -----------------------------------------------------------
-
-// Legacy Irrigation Schedule/Plan (To be deprecated)
-export type IrrigationFrequency = 'Daily' | 'Alternate' | 'Every 3 Days' | 'Weekly' | 'Variable';
-export type IrrigationTimeWindow = 'Morning' | 'Afternoon' | 'Evening' | 'Night';
-
-export interface IrrigationPlan {
-    // Deprecated in favor of PlotSchedule
-    frequency: IrrigationFrequency;
-    durationMinutes: number;
-    preferredTime: IrrigationTimeWindow;
-    planStartDate: string;
-    seasonalAdjustment?: 'Summer' | 'Winter' | 'Monsoon' | 'None';
-    method?: string;
-    motorId?: string;
-    dripFlowRatePerHour?: number;
-}
-
-export interface PlotIrrigationConfig {
-    // Deprecated
-    defaultMethod: string;
-    defaultMotorId?: string;
-    frequencyHint?: 'Daily' | 'Alternate' | 'Weekly' | 'Variable';
-}
+// Overrides allow per-plot customization — definitions moved to
+// domain/types/scheduler.types; re-exported above for back-compat.
+// PlotScheduleInstance, ScheduleShiftEvent, IrrigationPlan,
+// PlotIrrigationConfig, IrrigationFrequency, IrrigationTimeWindow,
+// StageOverride, ExpectationOverride — all live in
+// `../../domain/types/scheduler.types` now.
