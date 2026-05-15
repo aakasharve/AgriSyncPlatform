@@ -58,7 +58,7 @@ public sealed class CeiPhase4InvariantTests
             new AgriSync.SharedKernel.Contracts.Ids.FarmId(Guid.NewGuid()),
             plotId: null,
             cropCycleId: null,
-            category: "labour_payout",
+            categoryId: "labour_payout",
             description: "direct payout attempt",
             amount: 100m,
             currencyCode: "INR",
@@ -70,6 +70,25 @@ public sealed class CeiPhase4InvariantTests
         act.Should().Throw<InvalidOperationException>(
             "CEI-I8: CostEntry.Create must block the 'labour_payout' category — use CreateLabourPayout instead");
     }
+
+    // DATA_PRINCIPLE_SPINE sub-phase 02.5 (Conflict-Resolver R0):
+    // CostEntry rows whose category_id='labour_payout' must always carry a
+    // non-null JobCardId — the structural invariant is enforced upstream by
+    // CostEntry.CreateLabourPayout (the only authorised constructor for
+    // `labour_payout`; it requires `jobCardId` and hard-codes the code) AND
+    // CostEntry.Create (which throws InvalidOperationException for the
+    // `labour_payout` value). A live-DB row-level assertion was deferred per
+    // the dispatch note: the AgriSync.ArchitectureTests project is reflection-
+    // only and does not have DB-access patterns. The closest structural
+    // equivalent is the JobCardId private-setter test above (CEI-I8) plus the
+    // Create-throws-for-labour_payout test below. A row-level invariant test
+    // belongs in ShramSafal.Sync.IntegrationTests once the integration
+    // harness exposes the live DbContext to additive fixtures.
+    //
+    // TODO(sub-phase 02.5 follow-up): add a row-level test
+    // `CostEntry_LabourPayoutCategory_RequiresJobCardId_DataInvariant`
+    // against the integration harness DbContext (see CEIPhase4EndToEnd
+    // for the in-memory pattern).
 
     // CEI-I9: MarkVerifiedForPayout exists and requires VerificationStatus parameter —
     // architecture-level meta-test that the domain enforces the constraint via signature.

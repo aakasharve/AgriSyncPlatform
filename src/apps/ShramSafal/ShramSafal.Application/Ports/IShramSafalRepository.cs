@@ -205,6 +205,18 @@ public interface IShramSafalRepository
     Task<WorkerMetricsDto> GetWorkerMetricsAsync(UserId workerUserId, Guid? scopedFarmId, DateTime since30d, CancellationToken ct = default)
         => Task.FromResult(new WorkerMetricsDto(0, 0, 0, 0, 0, 0, 0));
 
+    // --- DATA_PRINCIPLE_SPINE sub-phase 02.5 (cost-category lookup) -------
+    /// <summary>
+    /// Returns all active rows from <c>ssf.cost_categories</c> — the
+    /// canonical 13-code cost-category lookup owned by the server. The
+    /// pull-sync handler projects these into <see cref="CostCategoryRefDto"/>
+    /// so the mobile client can render Marathi / Hindi / English without
+    /// a second round-trip. Default impl returns an empty list so legacy
+    /// test doubles compile; production overrides hit the DB.
+    /// </summary>
+    Task<List<CostCategory>> GetCostCategoriesAsync(CancellationToken ct = default)
+        => Task.FromResult(new List<CostCategory>());
+
     // --- DATA_PRINCIPLE_SPINE sub-phase 02.3 (warm-tier transcripts) ------
     /// <summary>
     /// Persists a warm-tier <see cref="Transcript"/> projection for the

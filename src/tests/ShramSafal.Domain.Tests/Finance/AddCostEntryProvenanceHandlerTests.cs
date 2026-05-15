@@ -136,7 +136,7 @@ public sealed class AddCostEntryProvenanceHandlerTests
             FarmId: FarmGuid,
             PlotId: null,
             CropCycleId: null,
-            Category: "input",
+            CategoryId: "other",
             Description: "Urea purchase",
             Amount: 1234.56m,
             CurrencyCode: "INR",

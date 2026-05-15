@@ -82,7 +82,7 @@ public static class FinanceEndpoints
                 request.FarmId,
                 request.PlotId,
                 request.CropCycleId,
-                request.Category,
+                request.CategoryId,
                 request.Description,
                 request.Amount,
                 request.CurrencyCode,
@@ -209,7 +209,7 @@ public static class FinanceEndpoints
             }
 
             if (request.FarmId == Guid.Empty ||
-                string.IsNullOrWhiteSpace(request.Category) ||
+                string.IsNullOrWhiteSpace(request.CategoryId) ||
                 request.Amount <= 0)
             {
                 return Results.BadRequest(new
@@ -241,7 +241,7 @@ public static class FinanceEndpoints
                 request.FarmId,
                 request.PlotId,
                 request.CropCycleId,
-                request.Category,
+                request.CategoryId,
                 request.Description ?? string.Empty,
                 request.Amount,
                 request.CurrencyCode,
@@ -254,13 +254,15 @@ public static class FinanceEndpoints
             var existing = await repository.GetCostEntriesForDuplicateCheck(
                 new FarmId(request.FarmId),
                 request.PlotId,
-                request.Category,
+                request.CategoryId,
                 clock.UtcNow.AddMinutes(-windowMinutes),
                 ct);
 
             var isDuplicate = DuplicateDetector.IsPotentialDuplicate(existing, candidate, windowMinutes);
+            // DATA_PRINCIPLE_SPINE sub-phase 02.5 — codes are exact, so the
+            // matched-entry lookup matches the DuplicateDetector body (plain ==).
             var matchedEntryId = existing.FirstOrDefault(entry =>
-                string.Equals(entry.Category.Trim(), candidate.Category.Trim(), StringComparison.OrdinalIgnoreCase) &&
+                entry.CategoryId == candidate.CategoryId &&
                 entry.PlotId == candidate.PlotId &&
                 decimal.Round(entry.Amount, 2, MidpointRounding.AwayFromZero) == decimal.Round(candidate.Amount, 2, MidpointRounding.AwayFromZero) &&
                 Math.Abs((entry.CreatedAtUtc - candidate.CreatedAtUtc).TotalMinutes) <= windowMinutes)?.Id;
@@ -297,7 +299,9 @@ public sealed record AddCostEntryRequest(
     Guid FarmId,
     Guid? PlotId,
     Guid? CropCycleId,
-    string Category,
+    // DATA_PRINCIPLE_SPINE sub-phase 02.5 — renamed from `Category`;
+    // must be one of the 13 canonical codes in `ssf.cost_categories`.
+    string CategoryId,
     string Description,
     decimal Amount,
     string CurrencyCode,
@@ -319,7 +323,7 @@ public sealed record DuplicateCheckRequest(
     Guid FarmId,
     Guid? PlotId,
     Guid? CropCycleId,
-    string Category,
+    string CategoryId,
     string? Description,
     decimal Amount,
     string CurrencyCode,

@@ -2234,68 +2234,68 @@ public sealed class PurveshDemoSeeder
         var g1PesticideAmounts = new[] { 620m, 610m, 590m, 605m, 615m, 625m, 600m, 630m };
         for (var i = 0; i < g1PesticideOffsets.Length; i++)
         {
-            Add($"g1_pesticide_{i + 1:00}", "grape_g1", "Pesticide", g1PesticideAmounts[i], g1PesticideOffsets[i], "Torus + Mancozeb spray - G1", "shankar");
+            Add($"g1_pesticide_{i + 1:00}", "grape_g1", "pesticide", g1PesticideAmounts[i], g1PesticideOffsets[i], "Torus + Mancozeb spray - G1", "shankar");
         }
 
         var g1FertilizerOffsets = new[] { -80, -68, -56, -44, -32, -20, -8, 0 };
         var g1FertilizerAmounts = new[] { 450m, 470m, 460m, 820m, 840m, 430m, 780m, 860m };
         for (var i = 0; i < g1FertilizerOffsets.Length; i++)
         {
-            Add($"g1_fertilizer_{i + 1:00}", "grape_g1", "Fertilizer", g1FertilizerAmounts[i], g1FertilizerOffsets[i], "Fertigation input - G1", "shankar");
+            Add($"g1_fertilizer_{i + 1:00}", "grape_g1", "fertilizer", g1FertilizerAmounts[i], g1FertilizerOffsets[i], "Fertigation input - G1", "shankar");
         }
 
         var g2PesticideOffsets = new[] { -70, -55, -40, -15 };
         var g2PesticideAmounts = new[] { 600m, 620m, 590m, 610m };
         for (var i = 0; i < g2PesticideOffsets.Length; i++)
         {
-            Add($"g2_pesticide_{i + 1:00}", "grape_g2", "Pesticide", g2PesticideAmounts[i], g2PesticideOffsets[i], "Spray cycle - G2", "raju");
+            Add($"g2_pesticide_{i + 1:00}", "grape_g2", "pesticide", g2PesticideAmounts[i], g2PesticideOffsets[i], "Spray cycle - G2", "raju");
         }
 
         var g2FertilizerOffsets = new[] { -66, -50, -34, -10 };
         var g2FertilizerAmounts = new[] { 440m, 460m, 790m, 830m };
         for (var i = 0; i < g2FertilizerOffsets.Length; i++)
         {
-            Add($"g2_fertilizer_{i + 1:00}", "grape_g2", "Fertilizer", g2FertilizerAmounts[i], g2FertilizerOffsets[i], "Fertigation input - G2", "raju");
+            Add($"g2_fertilizer_{i + 1:00}", "grape_g2", "fertilizer", g2FertilizerAmounts[i], g2FertilizerOffsets[i], "Fertigation input - G2", "raju");
         }
 
         var s1LabourOffsets = new[] { -90, -75, -60, -45, -30, -15, 0 };
         var s1LabourAmounts = new[] { 1800m, 2100m, 2100m, 2400m, 2400m, 2700m, 2700m };
         for (var i = 0; i < s1LabourOffsets.Length; i++)
         {
-            Add($"s1_labour_{i + 1:00}", "sugarcane_s1", "Labour", s1LabourAmounts[i], s1LabourOffsets[i], "S1 labour payout", "shankar");
+            Add($"s1_labour_{i + 1:00}", "sugarcane_s1", "labour_misc", s1LabourAmounts[i], s1LabourOffsets[i], "S1 labour payout", "shankar");
         }
 
-        Add("s1_fertilizer_01", "sugarcane_s1", "Fertilizer", 1900m, -85, "DAP basal application - S1", "shankar");
-        Add("s1_fertilizer_02", "sugarcane_s1", "Fertilizer", 820m, -58, "Urea dose 1 - S1", "shankar");
-        Add("s1_fertilizer_03", "sugarcane_s1", "Fertilizer", 860m, -28, "Urea dose 2 - S1", "shankar");
-        Add("s1_equipment_01", "sugarcane_s1", "Equipment", 2200m, -90, "Tractor hire - S1 planting", "shankar");
-        Add("s1_equipment_02", "sugarcane_s1", "Equipment", 1950m, -44, "Inter-cultivation implement hire - S1", "shankar");
+        Add("s1_fertilizer_01", "sugarcane_s1", "fertilizer", 1900m, -85, "DAP basal application - S1", "shankar");
+        Add("s1_fertilizer_02", "sugarcane_s1", "fertilizer", 820m, -58, "Urea dose 1 - S1", "shankar");
+        Add("s1_fertilizer_03", "sugarcane_s1", "fertilizer", 860m, -28, "Urea dose 2 - S1", "shankar");
+        Add("s1_equipment_01", "sugarcane_s1", "equipment", 2200m, -90, "Tractor hire - S1 planting", "shankar");
+        Add("s1_equipment_02", "sugarcane_s1", "equipment", 1950m, -44, "Inter-cultivation implement hire - S1", "shankar");
 
-        Add("s2_labour_01", "sugarcane_s2", "Labour", 1100m, -60, "S2 labour payout", "raju");
-        Add("s2_labour_02", "sugarcane_s2", "Labour", 1200m, -46, "S2 labour payout", "raju");
-        Add("s2_labour_03", "sugarcane_s2", "Labour", 1150m, -30, "S2 labour payout", "raju");
-        Add("s2_labour_04", "sugarcane_s2", "Labour", 1250m, -15, "S2 labour payout", "raju");
-        Add("s2_labour_05", "sugarcane_s2", "Labour", 1300m, 0, "S2 labour payout", "raju");
+        Add("s2_labour_01", "sugarcane_s2", "labour_misc", 1100m, -60, "S2 labour payout", "raju");
+        Add("s2_labour_02", "sugarcane_s2", "labour_misc", 1200m, -46, "S2 labour payout", "raju");
+        Add("s2_labour_03", "sugarcane_s2", "labour_misc", 1150m, -30, "S2 labour payout", "raju");
+        Add("s2_labour_04", "sugarcane_s2", "labour_misc", 1250m, -15, "S2 labour payout", "raju");
+        Add("s2_labour_05", "sugarcane_s2", "labour_misc", 1300m, 0, "S2 labour payout", "raju");
 
-        Add("farmwide_01", null, "Fuel", 480m, -88, "Diesel for irrigation pump", "purvesh");
-        Add("farmwide_02", null, "Equipment", 2100m, -72, "Shared implement repair", "purvesh");
-        Add("farmwide_03", null, "Fuel", 520m, -57, "Diesel for transport", "purvesh");
-        Add("farmwide_04", null, "Equipment", 1950m, -43, "Water motor maintenance", "purvesh");
-        Add("farmwide_05", null, "Fuel", 430m, -29, "Generator diesel refill", "purvesh");
-        Add("farmwide_06", null, "Equipment", 2300m, -21, "Shared tractor support", "purvesh");
-        Add("farmwide_07", null, "Fuel", 500m, -13, "Field transport diesel", "purvesh");
-        Add("farmwide_08", null, "Equipment", 2050m, -9, "Sprayer service and parts", "purvesh");
-        Add("farmwide_09", null, "Fuel", 460m, -4, "Diesel refill", "purvesh");
-        Add("farmwide_10", null, "Equipment", 1800m, 0, "Pump and line repair", "purvesh");
-        Add("farmwide_11", null, "Fuel", 520m, -18, "Generator diesel for late-night irrigation", "purvesh");
-        Add("farmwide_12", null, "Equipment", 1450m, -11, "Disc filter cartridge replacement", "purvesh");
-        Add("farmwide_13", null, "Equipment", 2600m, -6, "Kirloskar motor rewinding advance", "purvesh");
-        Add("farmwide_14", null, "Fuel", 410m, -2, "Sprayer petrol refill", "purvesh");
+        Add("farmwide_01", null, "fuel", 480m, -88, "Diesel for irrigation pump", "purvesh");
+        Add("farmwide_02", null, "equipment", 2100m, -72, "Shared implement repair", "purvesh");
+        Add("farmwide_03", null, "fuel", 520m, -57, "Diesel for transport", "purvesh");
+        Add("farmwide_04", null, "equipment", 1950m, -43, "Water motor maintenance", "purvesh");
+        Add("farmwide_05", null, "fuel", 430m, -29, "Generator diesel refill", "purvesh");
+        Add("farmwide_06", null, "equipment", 2300m, -21, "Shared tractor support", "purvesh");
+        Add("farmwide_07", null, "fuel", 500m, -13, "Field transport diesel", "purvesh");
+        Add("farmwide_08", null, "equipment", 2050m, -9, "Sprayer service and parts", "purvesh");
+        Add("farmwide_09", null, "fuel", 460m, -4, "Diesel refill", "purvesh");
+        Add("farmwide_10", null, "equipment", 1800m, 0, "Pump and line repair", "purvesh");
+        Add("farmwide_11", null, "fuel", 520m, -18, "Generator diesel for late-night irrigation", "purvesh");
+        Add("farmwide_12", null, "equipment", 1450m, -11, "Disc filter cartridge replacement", "purvesh");
+        Add("farmwide_13", null, "equipment", 2600m, -6, "Kirloskar motor rewinding advance", "purvesh");
+        Add("farmwide_14", null, "fuel", 410m, -2, "Sprayer petrol refill", "purvesh");
 
-        Add("g1_equipment_01", "grape_g1", "Equipment", 1650m, -16, "Blower and pruning kit service - G1", "shankar");
-        Add("g2_equipment_01", "grape_g2", "Equipment", 980m, -5, "Drip venturi replacement - G2", "raju");
-        Add("s1_fuel_01", "sugarcane_s1", "Fuel", 390m, -12, "Field bund levelling diesel - S1", "shankar");
-        Add("s2_equipment_01", "sugarcane_s2", "Equipment", 760m, -3, "Water gate and pipe coupling - S2", "raju");
+        Add("g1_equipment_01", "grape_g1", "equipment", 1650m, -16, "Blower and pruning kit service - G1", "shankar");
+        Add("g2_equipment_01", "grape_g2", "equipment", 980m, -5, "Drip venturi replacement - G2", "raju");
+        Add("s1_fuel_01", "sugarcane_s1", "fuel", 390m, -12, "Field bund levelling diesel - S1", "shankar");
+        Add("s2_equipment_01", "sugarcane_s2", "equipment", 760m, -3, "Water gate and pipe coupling - S2", "raju");
 
         // v2: expected seed count = 59 after pomegranate/turmeric/bajra removal
         // (82 original − 10 p1 − 6 t1 − 3 b1 − 1 p1_equipment − 1 t1_equipment

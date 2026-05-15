@@ -293,6 +293,19 @@ public sealed class PullSyncChangesHandler(
             nextCursorUtc = sinceUtc;
         }
 
+        // DATA_PRINCIPLE_SPINE sub-phase 02.5 — project the canonical
+        // cost-category lookup from `ssf.cost_categories` (server-owned
+        // single source of truth). If the DB returns nothing (e.g. the
+        // seeded migration has not yet replayed in a test harness), fall
+        // back to the in-memory ReferenceDataCatalog constant so the
+        // pull pipeline never returns an empty list.
+        var dbCostCategories = await repository.GetCostCategoriesAsync(ct);
+        IReadOnlyList<CostCategoryRefDto> costCategoryDtos = dbCostCategories.Count > 0
+            ? dbCostCategories
+                .Select(c => new CostCategoryRefDto(c.Id, c.DisplayEn, c.DisplayMr, c.DisplayHi))
+                .ToList()
+            : ReferenceDataCatalog.CostCategories;
+
         var response = new SyncPullResponseDto(
             serverNowUtc,
             nextCursorUtc,
@@ -311,7 +324,7 @@ public sealed class PullSyncChangesHandler(
             scheduleTemplates,
             cropTypes,
             ReferenceDataCatalog.ActivityCategories,
-            ReferenceDataCatalog.CostCategories,
+            costCategoryDtos,
             referenceDataVersionHash,
             attentionBoard,
             testInstanceDtos,

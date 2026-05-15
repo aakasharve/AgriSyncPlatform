@@ -63,13 +63,13 @@ public sealed class AddCostEntryPipelineTests
     public void Validator_yields_InvalidCommand_when_Category_is_blank(string? category)
     {
         var v = new AddCostEntryValidator();
-        // Build the command directly to bypass MakeCommand's `?? "seed"`
-        // fallback, which would otherwise hide a null Category.
+        // Build the command directly to bypass MakeCommand's `?? "seeds"`
+        // fallback, which would otherwise hide a null CategoryId.
         var cmd = new AddCostEntryCommand(
             FarmId: FarmGuid,
             PlotId: null,
             CropCycleId: null,
-            Category: category!,
+            CategoryId: category!,
             Description: "test",
             Amount: 100m,
             CurrencyCode: "INR",
@@ -269,7 +269,7 @@ public sealed class AddCostEntryPipelineTests
             FarmId: farmId ?? FarmGuid,
             PlotId: null,
             CropCycleId: null,
-            Category: category ?? "seed",
+            CategoryId: category ?? "seeds",
             Description: "test",
             Amount: amount ?? 100m,
             CurrencyCode: "INR",

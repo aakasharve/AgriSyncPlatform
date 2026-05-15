@@ -99,7 +99,7 @@ internal static class DtoMappingExtensions
             entry.FarmId,
             entry.PlotId,
             entry.CropCycleId,
-            entry.Category,
+            entry.CategoryId,
             entry.Description,
             entry.Amount,
             entry.CurrencyCode,

@@ -339,7 +339,7 @@ public sealed class SettleJobCardPayoutPipelineTests
         Assert.Equal(JobCardStatus.PaidOut, result.Value!.JobCardStatus);
         Assert.Equal(JobCardStatus.PaidOut, job.Status);
         Assert.Single(repo.AddedCostEntries);
-        Assert.Equal("labour_payout", repo.AddedCostEntries[0].Category);
+        Assert.Equal("labour_payout", repo.AddedCostEntries[0].CategoryId);
         Assert.Equal(250m, repo.AddedCostEntries[0].Amount);
         Assert.Single(repo.AuditEvents);
         Assert.Equal("jobcard.paid-out", repo.AuditEvents[0].Action);

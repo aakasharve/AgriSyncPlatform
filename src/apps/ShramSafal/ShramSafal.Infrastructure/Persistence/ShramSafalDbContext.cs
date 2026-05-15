@@ -34,6 +34,13 @@ public sealed class ShramSafalDbContext(DbContextOptions<ShramSafalDbContext> op
     public DbSet<LogTask> LogTasks => Set<LogTask>();
     public DbSet<VerificationEvent> VerificationEvents => Set<VerificationEvent>();
     public DbSet<CostEntry> CostEntries => Set<CostEntry>();
+
+    /// <summary>
+    /// DATA_PRINCIPLE_SPINE sub-phase 02.5 — canonical 13-code cost-category
+    /// lookup. Every <see cref="CostEntry.CategoryId"/> is an FK into this set.
+    /// Mapped to <c>ssf.cost_categories</c>.
+    /// </summary>
+    public DbSet<CostCategory> CostCategories => Set<CostCategory>();
     public DbSet<FinanceCorrection> FinanceCorrections => Set<FinanceCorrection>();
     public DbSet<DayLedger> DayLedgers => Set<DayLedger>();
     public DbSet<Attachment> Attachments => Set<Attachment>();

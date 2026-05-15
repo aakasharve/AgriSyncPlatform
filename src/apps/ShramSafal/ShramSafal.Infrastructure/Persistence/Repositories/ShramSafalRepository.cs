@@ -187,6 +187,18 @@ internal sealed class ShramSafalRepository(ShramSafalDbContext db) : IShramSafal
             .ToListAsync(ct);
     }
 
+    /// <summary>
+    /// DATA_PRINCIPLE_SPINE sub-phase 02.5 — returns active rows from
+    /// <c>ssf.cost_categories</c> for the pull-sync reference projection.
+    /// </summary>
+    public async Task<List<CostCategory>> GetCostCategoriesAsync(CancellationToken ct = default)
+    {
+        return await db.CostCategories
+            .AsNoTracking()
+            .Where(c => c.IsActive)
+            .ToListAsync(ct);
+    }
+
     public async Task AddFinanceCorrectionAsync(FinanceCorrection correction, CancellationToken ct = default)
     {
         await db.FinanceCorrections.AddAsync(correction, ct);

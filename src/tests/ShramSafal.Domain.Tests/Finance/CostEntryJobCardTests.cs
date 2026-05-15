@@ -27,7 +27,7 @@ public sealed class CostEntryJobCardTests
             createdByUserId: UserId.New(),
             createdAtUtc: DateTime.UtcNow);
 
-        entry.Category.Should().Be("labour_payout");
+        entry.CategoryId.Should().Be("labour_payout");
         entry.JobCardId.Should().Be(jobCardId);
     }
 
@@ -39,7 +39,7 @@ public sealed class CostEntryJobCardTests
             TestFarmId,
             plotId: null,
             cropCycleId: null,
-            category: "labour_payout",
+            categoryId: "labour_payout",
             description: "test",
             amount: 200m,
             currencyCode: "INR",

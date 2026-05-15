@@ -29,10 +29,22 @@ internal sealed class CostEntryConfiguration : IEntityTypeConfiguration<CostEntr
         builder.Property(x => x.JobCardId)
             .HasColumnName("job_card_id");
 
-        builder.Property(x => x.Category)
-            .HasColumnName("category")
-            .HasMaxLength(80)
+        // DATA_PRINCIPLE_SPINE sub-phase 02.5 — `category` text column
+        // replaced by `category_id` FK to `ssf.cost_categories(id)`. The
+        // FK + index live in migration `20260515130000_AddCostCategoriesLookup`
+        // (the migration drops the legacy text column after backfill).
+        builder.Property(x => x.CategoryId)
+            .HasColumnName("category_id")
+            .HasMaxLength(48)
             .IsRequired();
+
+        builder.HasOne<CostCategory>()
+            .WithMany()
+            .HasForeignKey(x => x.CategoryId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        builder.HasIndex(x => x.CategoryId)
+            .HasDatabaseName("ix_cost_entries_category_id");
 
         builder.Property(x => x.Description)
             .HasColumnName("description")

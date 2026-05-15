@@ -15,7 +15,7 @@ public sealed class CostEntry : Entity<Guid>
         FarmId farmId,
         Guid? plotId,
         Guid? cropCycleId,
-        string category,
+        string categoryId,
         string description,
         decimal amount,
         string currencyCode,
@@ -30,7 +30,7 @@ public sealed class CostEntry : Entity<Guid>
         FarmId = farmId;
         PlotId = plotId;
         CropCycleId = cropCycleId;
-        Category = category;
+        CategoryId = categoryId;
         Description = description;
         Amount = amount;
         CurrencyCode = currencyCode;
@@ -47,7 +47,11 @@ public sealed class CostEntry : Entity<Guid>
     public Guid? PlotId { get; private set; }
     public Guid? CropCycleId { get; private set; }
     public Guid? JobCardId { get; private set; }
-    public string Category { get; private set; } = string.Empty;
+    // DATA_PRINCIPLE_SPINE sub-phase 02.5 — `Category` renamed to
+    // `CategoryId`: this string is now an FK to `ssf.cost_categories(id)`
+    // (canonical 13-code lookup). The CEI-I8 guard in `Create` continues
+    // to reject `labour_payout` byte-equivalent.
+    public string CategoryId { get; private set; } = string.Empty;
     public string Description { get; private set; } = string.Empty;
     public decimal Amount { get; private set; }
     public string CurrencyCode { get; private set; } = "INR";
@@ -67,7 +71,7 @@ public sealed class CostEntry : Entity<Guid>
         FarmId farmId,
         Guid? plotId,
         Guid? cropCycleId,
-        string category,
+        string categoryId,
         string description,
         decimal amount,
         string currencyCode,
@@ -78,12 +82,12 @@ public sealed class CostEntry : Entity<Guid>
         Provenance? provenance = null,
         Guid? sourceAiJobId = null)
     {
-        if (string.IsNullOrWhiteSpace(category))
+        if (string.IsNullOrWhiteSpace(categoryId))
         {
-            throw new ArgumentException("Category is required.", nameof(category));
+            throw new ArgumentException("Category is required.", nameof(categoryId));
         }
 
-        if (category.Trim().Equals("labour_payout", StringComparison.OrdinalIgnoreCase))
+        if (categoryId.Trim().Equals("labour_payout", StringComparison.OrdinalIgnoreCase))
         {
             throw new InvalidOperationException("Use CreateLabourPayout for labour_payout category.");
         }
@@ -105,7 +109,7 @@ public sealed class CostEntry : Entity<Guid>
             farmId,
             plotId,
             cropCycleId,
-            category.Trim(),
+            categoryId.Trim(),
             description.Trim(),
             decimal.Round(amount, 2, MidpointRounding.AwayFromZero),
             currencyCode.Trim().ToUpperInvariant(),
@@ -157,7 +161,7 @@ public sealed class CostEntry : Entity<Guid>
             farmId,
             plotId,
             cropCycleId,
-            category: "labour_payout",
+            categoryId: "labour_payout",
             description: string.Empty,
             decimal.Round(amount, 2, MidpointRounding.AwayFromZero),
             currencyCode.Trim().ToUpperInvariant(),

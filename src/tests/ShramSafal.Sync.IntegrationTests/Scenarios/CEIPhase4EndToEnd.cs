@@ -540,7 +540,7 @@ public sealed class CEIPhase4EndToEnd
                 .FirstOrDefaultAsync(c => c.Id == costEntryId);
 
             entry.Should().NotBeNull("the labour_payout CostEntry must exist in the DB");
-            entry!.Category.Should().Be("labour_payout",
+            entry!.CategoryId.Should().Be("labour_payout",
                 "CEI-I8: SettleJobCardPayout must create a CostEntry with category='labour_payout'");
             entry.JobCardId.Should().Be(jobCardId,
                 "CEI-I8: the CostEntry must be linked to the JobCard via JobCardId");

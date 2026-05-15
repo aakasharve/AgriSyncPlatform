@@ -378,7 +378,7 @@ public sealed class SyncEndpointsTests
                     {
                         costEntryId,
                         farmId,
-                        category = "SharedLabour",
+                        categoryId = "labour_misc",
                         description = "Shared wages",
                         amount = 1200m,
                         currencyCode = "INR",
@@ -504,7 +504,7 @@ public sealed class SyncEndpointsTests
                     {
                         costEntryId,
                         farmId,
-                        category = "Labour",
+                        categoryId = "labour_misc",
                         description = "Spoofed createdBy attempt",
                         amount = 500m,
                         currencyCode = "INR",
@@ -623,7 +623,7 @@ public sealed class SyncEndpointsTests
                     {
                         costEntryId,
                         farmId,
-                        category = "Input",
+                        categoryId = "fertilizer",
                         description = "Fertilizer",
                         amount = 1000m,
                         currencyCode = "INR",

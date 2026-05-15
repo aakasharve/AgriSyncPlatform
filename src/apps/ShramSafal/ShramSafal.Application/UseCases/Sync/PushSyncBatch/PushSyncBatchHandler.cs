@@ -728,7 +728,7 @@ public sealed class PushSyncBatchHandler(
         string? appVersion,
         CancellationToken ct)
     {
-        if (!PayloadHasOnly(payload, "costEntryId", "farmId", "plotId", "cropCycleId", "category", "description", "amount", "currencyCode", "entryDate", "createdByUserId", "location"))
+        if (!PayloadHasOnly(payload, "costEntryId", "farmId", "plotId", "cropCycleId", "categoryId", "description", "amount", "currencyCode", "entryDate", "createdByUserId", "location"))
         {
             return MutationExecutionOutcome.Failure(
                 "ShramSafal.SyncInvalidPayload",
@@ -755,7 +755,7 @@ public sealed class PushSyncBatchHandler(
                 FarmId: request.FarmId,
                 PlotId: request.PlotId,
                 CropCycleId: request.CropCycleId,
-                Category: request.Category,
+                CategoryId: request.CategoryId,
                 Description: request.Description,
                 Amount: request.Amount,
                 CurrencyCode: request.CurrencyCode,
@@ -1490,7 +1490,9 @@ public sealed class PushSyncBatchHandler(
         Guid FarmId,
         Guid? PlotId,
         Guid? CropCycleId,
-        string Category,
+        // DATA_PRINCIPLE_SPINE sub-phase 02.5 — renamed from `Category`;
+        // wire-format key is `categoryId` (allow-list updated below).
+        string CategoryId,
         string Description,
         decimal Amount,
         string CurrencyCode,

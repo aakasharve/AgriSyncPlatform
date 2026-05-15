@@ -17,10 +17,12 @@ public static class DuplicateDetector
 
         foreach (var entry in existing)
         {
-            var sameCategory = string.Equals(
-                entry.Category.Trim(),
-                candidate.Category.Trim(),
-                StringComparison.OrdinalIgnoreCase);
+            // DATA_PRINCIPLE_SPINE sub-phase 02.5 — CategoryId is a
+            // canonical code from `ssf.cost_categories(id)`. Codes are
+            // exact (no whitespace or case variants reach this point
+            // because the entity normalises on Create), so plain `==`
+            // replaces the legacy Trim()/OrdinalIgnoreCase compare.
+            var sameCategory = entry.CategoryId == candidate.CategoryId;
 
             var samePlot = entry.PlotId == candidate.PlotId;
             var sameAmount = decimal.Round(entry.Amount, 2, MidpointRounding.AwayFromZero) ==

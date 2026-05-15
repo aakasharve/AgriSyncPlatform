@@ -23,7 +23,11 @@ public sealed class CostEntryProvenanceTests
     private static readonly UserId AnyCreatedByUserId = new(Guid.Parse("22222222-2222-2222-2222-222222222222"));
     private static readonly DateOnly AnyEntryDate = new(2026, 5, 14);
     private static readonly DateTime AnyCreatedAtUtc = new(2026, 5, 14, 12, 0, 0, DateTimeKind.Utc);
-    private const string AnyCategory = "input";
+    // DATA_PRINCIPLE_SPINE sub-phase 02.5 — the free-text legacy fixture
+    // `"input"` is no longer valid; the canonical code list is the only
+    // source of truth. `seeds` is a generic non-payout choice that
+    // satisfies CostEntry.Create's CEI-I8 guard.
+    private const string AnyCategory = "seeds";
     private const string AnyDescription = "Urea purchase";
     private const decimal AnyAmount = 1234.56m;
     private const string AnyCurrency = "INR";
@@ -44,7 +48,7 @@ public sealed class CostEntryProvenanceTests
             farmId: AnyFarmId,
             plotId: null,
             cropCycleId: null,
-            category: AnyCategory,
+            categoryId: AnyCategory,
             description: AnyDescription,
             amount: AnyAmount,
             currencyCode: AnyCurrency,
@@ -70,7 +74,7 @@ public sealed class CostEntryProvenanceTests
             farmId: AnyFarmId,
             plotId: null,
             cropCycleId: null,
-            category: AnyCategory,
+            categoryId: AnyCategory,
             description: AnyDescription,
             amount: AnyAmount,
             currencyCode: AnyCurrency,
@@ -148,7 +152,7 @@ public sealed class CostEntryProvenanceTests
             farmId: AnyFarmId,
             plotId: null,
             cropCycleId: null,
-            category: AnyCategory,
+            categoryId: AnyCategory,
             description: AnyDescription,
             amount: AnyAmount,
             currencyCode: AnyCurrency,

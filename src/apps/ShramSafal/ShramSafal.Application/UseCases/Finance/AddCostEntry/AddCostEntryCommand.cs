@@ -6,7 +6,10 @@ public sealed record AddCostEntryCommand(
     Guid FarmId,
     Guid? PlotId,
     Guid? CropCycleId,
-    string Category,
+    // DATA_PRINCIPLE_SPINE sub-phase 02.5 — `Category` renamed to
+    // `CategoryId`. Value must be one of the canonical 13 codes
+    // in `ssf.cost_categories(id)`.
+    string CategoryId,
     string Description,
     decimal Amount,
     string CurrencyCode,

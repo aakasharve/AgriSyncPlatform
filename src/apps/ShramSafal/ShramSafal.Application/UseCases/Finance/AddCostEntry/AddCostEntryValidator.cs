@@ -16,11 +16,11 @@ namespace ShramSafal.Application.UseCases.Finance.AddCostEntry;
 /// <item><see cref="ShramSafalErrors.InvalidCommand"/> when any of
 /// <see cref="AddCostEntryCommand.FarmId"/> /
 /// <see cref="AddCostEntryCommand.CreatedByUserId"/> is empty,
-/// <see cref="AddCostEntryCommand.Category"/> is missing or
+/// <see cref="AddCostEntryCommand.CategoryId"/> is missing or
 /// whitespace, or <see cref="AddCostEntryCommand.Amount"/> is
 /// non-positive.</item>
 /// <item><see cref="ShramSafalErrors.UseSettleJobCardForLabourPayout"/>
-/// when Category is the reserved <c>labour_payout</c> value — those
+/// when CategoryId is the reserved <c>labour_payout</c> code — those
 /// belong on <c>SettleJobCardPayoutHandler</c>, not this generic
 /// finance endpoint.</item>
 /// <item><see cref="ShramSafalErrors.InvalidCommand"/> when an
@@ -43,7 +43,7 @@ public sealed class AddCostEntryValidator : IValidator<AddCostEntryCommand>
     {
         if (command.FarmId == Guid.Empty
             || command.CreatedByUserId == Guid.Empty
-            || string.IsNullOrWhiteSpace(command.Category)
+            || string.IsNullOrWhiteSpace(command.CategoryId)
             || command.Amount <= 0)
         {
             yield return ShramSafalErrors.InvalidCommand;
@@ -54,7 +54,7 @@ public sealed class AddCostEntryValidator : IValidator<AddCostEntryCommand>
         // SettleJobCardPayoutHandler, which links the payout to the
         // verified-for-payout JobCard. Plain AddCostEntry would create
         // a finance row without that linkage; reject loudly.
-        if (command.Category.Trim().Equals("labour_payout", StringComparison.OrdinalIgnoreCase))
+        if (command.CategoryId.Trim().Equals("labour_payout", StringComparison.OrdinalIgnoreCase))
         {
             yield return ShramSafalErrors.UseSettleJobCardForLabourPayout;
             yield break;

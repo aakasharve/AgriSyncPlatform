@@ -23,7 +23,7 @@ public sealed class AppendOnlyTests
     public void CostEntry_CoreFields_DoNotHavePublicSetters()
     {
         AssertNoPublicSetter(typeof(CostEntry), nameof(CostEntry.Amount));
-        AssertNoPublicSetter(typeof(CostEntry), nameof(CostEntry.Category));
+        AssertNoPublicSetter(typeof(CostEntry), nameof(CostEntry.CategoryId));
         AssertNoPublicSetter(typeof(CostEntry), nameof(CostEntry.PlotId));
         AssertNoPublicSetter(typeof(CostEntry), nameof(CostEntry.CreatedByUserId));
         AssertNoPublicSetter(typeof(CostEntry), nameof(CostEntry.CreatedAtUtc));
@@ -72,7 +72,7 @@ public sealed class AppendOnlyTests
             Guid.NewGuid(),
             Guid.NewGuid(),
             Guid.NewGuid(),
-            "Labour",
+            "labour_misc",
             "Pruning wages",
             1400m,
             "INR",

@@ -850,14 +850,18 @@ public class DatabaseSeeder
 
     private static List<CostSeed> BuildCostSpecs()
     {
+        // DATA_PRINCIPLE_SPINE sub-phase 02.5 — categoryTemplates carry
+        // the canonical 13-code values from `ssf.cost_categories(id)`.
+        // Labour seeds here have NO JobCardId, so the non-payout
+        // `labour_misc` code is correct (per the corrected backfill SQL).
         var categoryTemplates = new[]
         {
-            new { Category = "Labour", Description = "Field labour payment", BaseAmount = 900m },
-            new { Category = "Seeds", Description = "Seed and nursery material", BaseAmount = 780m },
-            new { Category = "Fertilizer", Description = "Nutrient input purchase", BaseAmount = 1450m },
-            new { Category = "Pesticide", Description = "Crop protection spray", BaseAmount = 1180m },
-            new { Category = "Equipment", Description = "Equipment repair and rentals", BaseAmount = 1600m },
-            new { Category = "Fuel", Description = "Diesel and transport fuel", BaseAmount = 1020m }
+            new { Category = "labour_misc", Description = "Field labour payment", BaseAmount = 900m },
+            new { Category = "seeds", Description = "Seed and nursery material", BaseAmount = 780m },
+            new { Category = "fertilizer", Description = "Nutrient input purchase", BaseAmount = 1450m },
+            new { Category = "pesticide", Description = "Crop protection spray", BaseAmount = 1180m },
+            new { Category = "equipment", Description = "Equipment repair and rentals", BaseAmount = 1600m },
+            new { Category = "fuel", Description = "Diesel and transport fuel", BaseAmount = 1020m }
         };
 
         var costs = new List<CostSeed>(24);

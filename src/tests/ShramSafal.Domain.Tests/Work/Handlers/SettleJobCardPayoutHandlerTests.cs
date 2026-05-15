@@ -106,7 +106,7 @@ public sealed class SettleJobCardPayoutHandlerTests
         result.Value.CostEntryId.Should().NotBeEmpty();
         job.Status.Should().Be(JobCardStatus.PaidOut);
         job.PayoutCostEntryId.Should().Be(result.Value.CostEntryId);
-        repo.AddedCostEntries.Should().ContainSingle(c => c.Category == "labour_payout" && c.Amount == 250m);
+        repo.AddedCostEntries.Should().ContainSingle(c => c.CategoryId == "labour_payout" && c.Amount == 250m);
         repo.AuditEvents.Should().ContainSingle(a => a.Action == "jobcard.paid-out");
     }
 

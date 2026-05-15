@@ -135,7 +135,7 @@ public sealed class AddCostEntryHandler(
             command.FarmId,
             command.PlotId,
             command.CropCycleId,
-            command.Category,
+            command.CategoryId,
             command.Description,
             command.Amount,
             command.CurrencyCode,
@@ -149,7 +149,7 @@ public sealed class AddCostEntryHandler(
         var duplicateCandidates = await repository.GetCostEntriesForDuplicateCheck(
             farmId,
             command.PlotId,
-            command.Category,
+            command.CategoryId,
             clock.UtcNow.AddMinutes(-DuplicateWindowMinutes),
             ct);
 
@@ -172,13 +172,17 @@ public sealed class AddCostEntryHandler(
                 "Created",
                 command.CreatedByUserId,
                 command.ActorRole ?? "unknown",
+                // DATA_PRINCIPLE_SPINE sub-phase 02.5 (R3 verdict): audit
+                // JSON key stays `category` byte-equivalent (do not break
+                // existing log readers); the stored value is now the
+                // canonical code (e.g. `fertilizer`, `labour_misc`).
                 new
                 {
                     entry.Id,
                     command.FarmId,
                     command.PlotId,
                     command.CropCycleId,
-                    command.Category,
+                    category = command.CategoryId,
                     command.Amount,
                     command.CurrencyCode,
                     command.EntryDate,
@@ -210,7 +214,7 @@ public sealed class AddCostEntryHandler(
                 cropCycleId = command.CropCycleId,
                 amount = entry.Amount,
                 currencyCode = entry.CurrencyCode,
-                category = entry.Category,
+                category = entry.CategoryId,
                 dateIncurred = entry.EntryDate,
                 hasReceipt = false
             })), ct);

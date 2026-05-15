@@ -338,17 +338,29 @@ public static class ReferenceDataCatalog
         "Monitoring"
     ];
 
-    public static readonly IReadOnlyList<string> CostCategories =
+    /// <summary>
+    /// DATA_PRINCIPLE_SPINE sub-phase 02.5 — Conflict-Resolver R0 verdict.
+    /// The canonical 13-code lookup is owned by <c>ssf.cost_categories</c>
+    /// and projected via <see cref="IShramSafalRepository.GetCostCategoriesAsync"/>.
+    /// This constant remains as a wire-compatible fallback (e.g. when the
+    /// DB seed has not yet replayed) so the pull pipeline never returns
+    /// an empty list. The labels match the seed.
+    /// </summary>
+    public static readonly IReadOnlyList<CostCategoryRefDto> CostCategories =
     [
-        "Labour",
-        "Seeds",
-        "Fertilizer",
-        "Pesticide",
-        "Equipment",
-        "Fuel",
-        "Water",
-        "Transport",
-        "Miscellaneous"
+        new("labour_payout",  "Labour payout",       "मजुरी (कामगार पेमेंट)",   "मज़दूरी (कामगार पेमेंट)"),
+        new("labour_misc",    "Labour (misc)",       "इतर मजुरी",                "अन्य मज़दूरी"),
+        new("seeds",          "Seeds",               "बियाणे",                   "बीज"),
+        new("fertilizer",     "Fertilizer",          "खत",                       "उर्वरक"),
+        new("pesticide",      "Pesticide",           "कीटकनाशक",                 "कीटनाशक"),
+        new("irrigation",     "Irrigation",          "सिंचन",                    "सिंचाई"),
+        new("machinery_rent", "Machinery rent",      "मशीन भाडे",                "मशीनरी किराया"),
+        new("equipment",      "Equipment & repair",  "उपकरण व दुरुस्ती",         "उपकरण व मरम्मत"),
+        new("fuel",           "Fuel (diesel/petrol)", "इंधन (डिझेल/पेट्रोल)",     "ईंधन (डीज़ल/पेट्रोल)"),
+        new("transport",      "Transport",           "वाहतूक",                   "परिवहन"),
+        new("electricity",    "Electricity",         "वीज",                      "बिजली"),
+        new("packaging",      "Packaging",           "पॅकिंग",                   "पैकेजिंग"),
+        new("other",          "Other",               "इतर",                      "अन्य"),
     ];
 
     private static string ComputeVersionHash(IReadOnlyList<TemplateSeed> templates)

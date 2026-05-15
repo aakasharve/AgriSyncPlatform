@@ -45,14 +45,14 @@ public sealed class DuplicateDetectorTests
         Assert.False(isDuplicate);
     }
 
-    private static CostEntry CreateEntry(string category, Guid? plotId, decimal amount, DateTime createdAtUtc)
+    private static CostEntry CreateEntry(string categoryId, Guid? plotId, decimal amount, DateTime createdAtUtc)
     {
         return CostEntry.Create(
             Guid.NewGuid(),
             Guid.NewGuid(),
             plotId,
             Guid.NewGuid(),
-            category,
+            categoryId,
             "test",
             amount,
             "INR",

@@ -37,7 +37,10 @@ public sealed record SyncPullResponseDto(
     IReadOnlyList<ScheduleTemplateDto> ScheduleTemplates,
     IReadOnlyList<CropTypeDto> CropTypes,
     IReadOnlyList<string> ActivityCategories,
-    IReadOnlyList<string> CostCategories,
+    // DATA_PRINCIPLE_SPINE sub-phase 02.5 — was IReadOnlyList<string>;
+    // now ships canonical codes + per-language display labels so the
+    // mobile-web client renders mr / hi / en without an extra round-trip.
+    IReadOnlyList<CostCategoryRefDto> CostCategories,
     string ReferenceDataVersionHash,
     AttentionBoardDto? AttentionBoard,   // null = no cards; pull still succeeds
                                          // CEI Phase 2 §4.5 — test stack

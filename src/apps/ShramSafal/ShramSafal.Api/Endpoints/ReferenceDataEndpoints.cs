@@ -1,4 +1,6 @@
 using AgriSync.BuildingBlocks.Results;
+using ShramSafal.Application.Contracts.Dtos;
+using ShramSafal.Application.Ports;
 using ShramSafal.Application.UseCases.ReferenceData.GetCropTypes;
 using ShramSafal.Application.UseCases.ReferenceData.GetDeviationReasonCodes;
 using ShramSafal.Application.UseCases.ReferenceData.GetScheduleTemplates;
@@ -60,7 +62,22 @@ public static class ReferenceDataEndpoints
         referenceGroup.MapGet("/activity-categories", () => Results.Ok(ReferenceDataCatalog.ActivityCategories))
             .WithName("GetActivityCategories");
 
-        referenceGroup.MapGet("/cost-categories", () => Results.Ok(ReferenceDataCatalog.CostCategories))
+        // DATA_PRINCIPLE_SPINE sub-phase 02.5 — projects from
+        // `ssf.cost_categories` (server-owned canonical lookup). Falls
+        // back to the in-memory ReferenceDataCatalog list when the DB
+        // is empty (test harness without seed replay).
+        referenceGroup.MapGet("/cost-categories", async (
+            IShramSafalRepository repository,
+            CancellationToken ct) =>
+        {
+            var rows = await repository.GetCostCategoriesAsync(ct);
+            IReadOnlyList<CostCategoryRefDto> payload = rows.Count > 0
+                ? rows
+                    .Select(c => new CostCategoryRefDto(c.Id, c.DisplayEn, c.DisplayMr, c.DisplayHi))
+                    .ToList()
+                : ReferenceDataCatalog.CostCategories;
+            return Results.Ok(payload);
+        })
             .WithName("GetCostCategories");
 
         return group;
