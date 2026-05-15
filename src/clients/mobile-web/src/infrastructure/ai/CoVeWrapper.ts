@@ -40,47 +40,21 @@ export async function runCoVe(
     return { lowConfidence: false, verificationScore: 1.0 };
   }
 
+  // Phase 01 sub-phase 01.W0 (Y.md §7): the browser-direct Gemini call
+  // path was removed on 2026-05-15. Re-querying for verification must go
+  // through a backend route. Until Phase 05 (Privacy Edge) lands the
+  // /api/ai/cove-reverify endpoint, CoVe verification is a no-op
+  // (fail-open). Re-enabling here is intentionally blocked at compile
+  // time by the vite.config.ts guard against VITE_GEMINI_API_KEY.
+  //
+  // The local-only structural pieces below (questions + prompt + scorer)
+  // stay so the backend route, when wired, can reuse them client-side
+  // for telemetry without re-implementing the scoring heuristic.
   try {
     const questions = buildVerificationQuestions(structuredParse);
-    const verificationPrompt = buildVerificationPrompt(originalInput, questions);
-
-    // Re-query the model with verification questions
-    const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
-    if (!apiKey) {
-      return { lowConfidence: false, verificationScore: 1.0 };
-    }
-
-    const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent?key=${apiKey}`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          contents: [{ parts: [{ text: verificationPrompt }] }],
-          generationConfig: { temperature: 0, maxOutputTokens: 512 },
-        }),
-      }
-    );
-
-    if (!response.ok) {
-      return { lowConfidence: false, verificationScore: 1.0 };
-    }
-
-    const data = await response.json();
-    const verificationText =
-      data?.candidates?.[0]?.content?.parts?.[0]?.text ?? "";
-
-    const score = scoreVerification(verificationText, structuredParse, questions);
-
-    if (score < 0.67) {
-      return {
-        lowConfidence: true,
-        verificationScore: score,
-        demotionReason: `CoVe v${COVE_PROMPT_VERSION}: ${(score * 100).toFixed(0)}% of verification questions consistent`,
-      };
-    }
-
-    return { lowConfidence: false, verificationScore: score };
+    void buildVerificationPrompt(originalInput, questions);
+    void scoreVerification;
+    return { lowConfidence: false, verificationScore: 1.0 };
   } catch {
     // CoVe failure should never block the parse — fail open
     return { lowConfidence: false, verificationScore: 1.0 };

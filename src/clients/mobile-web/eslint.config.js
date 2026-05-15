@@ -57,6 +57,21 @@ const reactHooksRules = Object.fromEntries(
 
 export default defineConfig([
   globalIgnores(['dist', 'node_modules', '**/*.cjs', 'scripts']),
+  // Build-config files run under Node, not the React app. Apply
+  // minimal-strict rules so the pre-commit hook (which lints staged
+  // .ts files with --max-warnings 0) doesn't trip on either a
+  // "no-matching-config" or "file-ignored" warning. DATA_PRINCIPLE_SPINE
+  // sub-phase 01.W0 (Y.md §7) added the vite.config.ts privacy guard.
+  {
+    files: ['vite.config.ts'],
+    extends: [tseslint.configs.recommended],
+    languageOptions: {
+      ecmaVersion: 2022,
+      sourceType: 'module',
+      globals: { ...globals.node },
+    },
+    rules: {},
+  },
   {
     files: ['src/**/*.{ts,tsx}'],
     extends: [
