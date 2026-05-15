@@ -102,4 +102,54 @@ public sealed class AiJobProvenanceTests
 
         job.RawInputRef.Should().Be(rawInputRef);
     }
+
+    [Fact]
+    public void UpdateProvenance_replaces_model_version_only_and_stamps_ModifiedAtUtc()
+    {
+        var aiJob = AiJob.Create(
+            id: AnyJobId,
+            idempotencyKey: "test-key",
+            operationType: AiOperationType.VoiceToStructuredLog,
+            userId: AnyUserId,
+            farmId: AnyFarmId,
+            inputContentHash: "abc",
+            rawInputRef: null,
+            inputSessionMetadataJson: null,
+            provenance: new Provenance(
+                source: Source.Voice,
+                modelVersion: "unknown",
+                promptVersion: "v1",
+                promptContentHash: "deadbeef".PadRight(64, '0'),
+                appVersion: "1.2.3"));
+
+        var before = aiJob.ModifiedAtUtc;
+        System.Threading.Thread.Sleep(2);   // ensure ModifiedAtUtc advances
+
+        aiJob.UpdateProvenance("gemini-2.0-flash");
+
+        aiJob.Provenance.ModelVersion.Should().Be("gemini-2.0-flash");
+        aiJob.Provenance.Source.Should().Be(Source.Voice);
+        aiJob.Provenance.PromptVersion.Should().Be("v1");
+        aiJob.Provenance.PromptContentHash.Should().Be("deadbeef".PadRight(64, '0'));
+        aiJob.Provenance.AppVersion.Should().Be("1.2.3");
+        aiJob.ModifiedAtUtc.Should().BeAfter(before);
+    }
+
+    [Fact]
+    public void UpdateProvenance_rejects_empty_modelVersion()
+    {
+        var aiJob = AiJob.Create(
+            id: AnyJobId,
+            idempotencyKey: "test-key-2",
+            operationType: AiOperationType.VoiceToStructuredLog,
+            userId: AnyUserId,
+            farmId: AnyFarmId,
+            inputContentHash: "abc",
+            rawInputRef: null,
+            inputSessionMetadataJson: null,
+            provenance: Provenance.Manual("1.0.0"));
+
+        var act = () => aiJob.UpdateProvenance("   ");
+        act.Should().Throw<ArgumentException>().WithMessage("*modelVersion*");
+    }
 }

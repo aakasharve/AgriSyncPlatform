@@ -121,6 +121,23 @@ public sealed class AiJob
         ModifiedAtUtc = CompletedAtUtc.Value;
     }
 
+    public void UpdateProvenance(string modelVersion)
+    {
+        if (string.IsNullOrWhiteSpace(modelVersion))
+        {
+            throw new ArgumentException("modelVersion is required", nameof(modelVersion));
+        }
+
+        Provenance = new Provenance(
+            source: Provenance.Source,
+            modelVersion: modelVersion,
+            promptVersion: Provenance.PromptVersion,
+            promptContentHash: Provenance.PromptContentHash,
+            appVersion: Provenance.AppVersion);
+
+        ModifiedAtUtc = DateTime.UtcNow;
+    }
+
     public void MarkFailed()
     {
         Status = AiJobStatus.Failed;

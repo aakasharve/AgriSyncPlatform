@@ -62,17 +62,15 @@ internal sealed class AiOrchestrator(
         var payload = await ReadPayloadAsync(audioStream, ct);
 
         // DATA_PRINCIPLE_SPINE sub-phase 01.4 — stamp the AiJob with real voice
-        // provenance instead of the Manual("unknown") default. PromptVersion is
-        // resolved from the assembled prompt; ModelVersion is filled in after
-        // the provider attempt picks one (defaults to "unknown" pre-attempt).
-        // PromptVersion is truncated to fit the 32-char column constraint
-        // (AiPromptLineage returns multi-segment strings like
-        // "base:v1;output:v1;buckets:...;hash:<16>" that exceed 32 chars);
-        // the full hash lives in PromptContentHash for exact A/B lookup.
+        // provenance instead of the Manual("unknown") default.
+        // PromptVersion carries the stable semver label "v1"; the 64-char
+        // content hash lives in PromptContentHash for forensic identity
+        // (Y.md §7 Option C). ModelVersion is stamped as "unknown" here and
+        // replaced post-attempt via AiJob.UpdateProvenance (F3).
         var voiceProvenance = new Provenance(
             source: Source.Voice,
             modelVersion: "unknown",
-            promptVersion: TruncatePromptVersion(AiPromptLineage.ResolvePromptVersion(systemPrompt)),
+            promptVersion: "v1", // Y.md §7 Option C — stable label; hash lives in PromptContentHash.
             promptContentHash: promptContentHash,
             appVersion: string.IsNullOrWhiteSpace(clientAppVersion) ? "unknown" : clientAppVersion);
 
@@ -131,6 +129,7 @@ internal sealed class AiOrchestrator(
             // DATA_PRINCIPLE_SPINE sub-phase 01.4 — stamp the prompt content
             // hash on the canonical result returned to handlers.
             var resultWithHash = primaryExecution.Result with { PromptContentHash = promptContentHash };
+            job.UpdateProvenance(primaryExecution.Result.ModelUsed ?? "unknown");
             job.MarkSucceeded(resultWithHash.NormalizedJson ?? "{}", primaryExecution.Attempt!);
             await aiJobRepository.SaveChangesAsync(ct);
             return (resultWithHash, job.Id, primaryExecution.ProviderUsed, false);
@@ -159,6 +158,7 @@ internal sealed class AiOrchestrator(
         if (fallbackExecution.IsSuccess)
         {
             var resultWithHash = fallbackExecution.Result with { PromptContentHash = promptContentHash };
+            job.UpdateProvenance(fallbackExecution.Result.ModelUsed ?? "unknown");
             job.MarkFallbackSucceeded(resultWithHash.NormalizedJson ?? "{}", fallbackExecution.Attempt!);
             await aiJobRepository.SaveChangesAsync(ct);
             return (resultWithHash, job.Id, fallbackExecution.ProviderUsed, true);
@@ -1040,26 +1040,6 @@ internal sealed class AiOrchestrator(
         {
             return null;
         }
-    }
-
-    // DATA_PRINCIPLE_SPINE sub-phase 01.4 — Provenance.PromptVersion column is
-    // varchar(32). AiPromptLineage's modular path returns a much longer
-    // multi-segment string for traceability; the full content lives in the
-    // separate PromptContentHash column. Truncation here keeps the row
-    // writeable; downstream queries that need full lineage join on
-    // prompt_content_hash.
-    private const int MaxPromptVersionLength = 32;
-    private static string TruncatePromptVersion(string? promptVersion)
-    {
-        if (string.IsNullOrWhiteSpace(promptVersion))
-        {
-            return "unknown";
-        }
-
-        var trimmed = promptVersion.Trim();
-        return trimmed.Length <= MaxPromptVersionLength
-            ? trimmed
-            : trimmed.Substring(0, MaxPromptVersionLength);
     }
 
     private static bool IsEmptyJsonObject(string json)
