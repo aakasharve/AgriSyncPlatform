@@ -18,10 +18,43 @@ import { VerifyLogCommand } from '../../application/usecases/sync/VerifyLogComma
 import { financeService } from './financeService';
 import {
     MoneyAdjustment,
+    MoneyCategory,
     MoneyEvent,
     MoneySourcePayload,
     PriceBookItem,
 } from './finance.types';
+import type { CostCategoryId } from '../../domain/finance/CostCategory';
+
+// DATA_PRINCIPLE_SPINE 02.5 — boundary mapping from the in-memory
+// `MoneyCategory` model (coarse, UI-friendly) to the canonical 13-code
+// `CostCategoryId` enforced on the wire. Lossy on purpose: when a
+// granular code is available at the source (Procurement /
+// ReceiptCapture / voice parse), call sites should call
+// `enqueueCostEntry` directly with a `CostCategoryId` instead of
+// going through `createMoneyEventFromSource(category: MoneyCategory)`.
+//
+// CEI-I8 preservation: generic `Labour` from the UI maps to
+// `labour_misc`, never `labour_payout`. The payout bucket is reserved
+// for the JobCard settlement path (backend `CreateLabourPayout`) and
+// must not be reachable from this converter.
+function moneyCategoryToCostCategoryId(category: MoneyCategory): CostCategoryId {
+    switch (category) {
+        case 'Labour': return 'labour_misc';
+        case 'Machinery': return 'machinery_rent';
+        case 'Transport': return 'transport';
+        case 'Repair': return 'equipment';
+        case 'Fuel': return 'fuel';
+        case 'Electricity': return 'electricity';
+        case 'Input': return 'other';
+        case 'Other': return 'other';
+        default: {
+            // exhaustiveness guard — TypeScript will flag a missing case
+            const _exhaustive: never = category;
+            void _exhaustive;
+            return 'other';
+        }
+    }
+}
 
 function toDateKey(value?: string): string {
     if (!value) return systemClock.nowISO().split('T')[0];
@@ -74,7 +107,7 @@ export const financeCommandService = {
             farmId: event.farmId,
             plotId: event.plotId,
             cropCycleId: event.cropId,
-            category: event.category,
+            categoryId: moneyCategoryToCostCategoryId(event.category),
             description: event.notes || event.sourceId || '',
             amount: event.amount,
             currencyCode: 'INR',
@@ -87,7 +120,6 @@ export const financeCommandService = {
     },
 
     createPriceBookItem(input: Omit<PriceBookItem, 'id'>): PriceBookItem {
-        const createdByUserId = getCurrentUserId();
         const item: PriceBookItem = { ...input, id: `pb_${idGenerator.generate()}` };
 
         financeService._addPriceBookItem(item);

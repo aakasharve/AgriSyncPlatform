@@ -35,6 +35,7 @@ import { applyV13 } from './dexie/versions/v13';
 import { applyV14 } from './dexie/versions/v14';
 import { applyV15 } from './dexie/versions/v15';
 import { applyV16 } from './dexie/versions/v16';
+import { applyV17 } from './dexie/versions/v17';
 
 // =============================================================================
 // OUTBOX (Pending sync events)
@@ -595,7 +596,7 @@ export interface AnalyticsOutboxRow {
 // =============================================================================
 
 /** Current Dexie schema version — bump this when adding version(N).stores(). */
-export const DATABASE_VERSION = 16; // DATA_PRINCIPLE_SPINE sub-phase 01.6 — pre_spine provenance backfill.
+export const DATABASE_VERSION = 17; // DATA_PRINCIPLE_SPINE sub-phase 02.7 — cost-entry category → canonical categoryId migration.
 /** CEI Phase 1 schema version (now active — applied by Task 5.1.1). */
 export const CEI_PHASE1_SCHEMA_VERSION = 7;
 /** CEI Phase 2 schema version — adds test stack (protocols/instances/recs). */
@@ -616,6 +617,8 @@ export const SUBPLAN_04_FRONTEND_STORAGE_SCHEMA_VERSION = 14;
 export const DWC_TELEMETRY_OUTBOX_SCHEMA_VERSION = 15;
 /** DATA_PRINCIPLE_SPINE sub-phase 01.6 — pre_spine provenance backfill on existing logs. */
 export const DATA_PRINCIPLE_SPINE_PROVENANCE_SCHEMA_VERSION = 16;
+/** DATA_PRINCIPLE_SPINE sub-phase 02.7 — offline cost-entry rows migrate `category` → canonical `categoryId`. */
+export const DATA_PRINCIPLE_SPINE_COST_CATEGORY_SCHEMA_VERSION = 17;
 
 // =============================================================================
 // DATABASE CLASS
@@ -693,6 +696,7 @@ export class AgriLogDatabase extends Dexie {
         applyV14(this);
         applyV15(this);
         applyV16(this);
+        applyV17(this);
     }
 }
 

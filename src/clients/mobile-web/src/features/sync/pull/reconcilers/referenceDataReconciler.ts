@@ -16,6 +16,7 @@
 
 import type { SyncPullResponse } from '../../../../infrastructure/api/AgriSyncClient';
 import type { AgriLogDatabase } from '../../../../infrastructure/storage/DexieDatabase';
+import type { CostCategoryRef } from '../../../../domain/finance/CostCategory';
 
 export const REFERENCE_DATA_VERSION_META_KEY =
     'shramsafal_reference_data_version_hash_v1';
@@ -24,7 +25,9 @@ type ReferencePayload = SyncPullResponse & {
     scheduleTemplates?: unknown[];
     cropTypes?: unknown[];
     activityCategories?: string[];
-    costCategories?: string[];
+    // DATA_PRINCIPLE_SPINE 02.5 — wire-shape change: server now emits
+    // CostCategoryRef[] (id + mr/hi/en) instead of a flat string array.
+    costCategories?: CostCategoryRef[];
     referenceDataVersionHash?: string;
 };
 

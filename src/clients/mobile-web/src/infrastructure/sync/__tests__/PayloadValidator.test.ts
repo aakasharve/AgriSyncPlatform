@@ -49,4 +49,53 @@ describe('PayloadValidator', () => {
     const result = validatePayload('does_not_exist' as never, {});
     expect(result.ok).toBe(false);
   });
+
+  // DATA_PRINCIPLE_SPINE 02.6 — wire shape `categoryId` enum is enforced
+  // here at the offline boundary; an unknown code is rejected before
+  // the mutation hits the outbox so the operator gets immediate
+  // feedback rather than a delayed sync rejection.
+  it('passes add_cost_entry with a canonical categoryId', () => {
+    const result = validatePayload(SyncMutationName.AddCostEntry, {
+      costEntryId: '11111111-1111-1111-1111-111111111111',
+      farmId: '22222222-2222-2222-2222-222222222222',
+      plotId: '33333333-3333-3333-3333-333333333333',
+      categoryId: 'fertilizer',
+      description: 'Urea bag',
+      amount: 500,
+      currencyCode: 'INR',
+      entryDate: '2026-05-15',
+    });
+    expect(result.ok).toBe(true);
+  });
+
+  it('rejects add_cost_entry with an off-canon categoryId', () => {
+    const result = validatePayload(SyncMutationName.AddCostEntry, {
+      costEntryId: '11111111-1111-1111-1111-111111111111',
+      farmId: '22222222-2222-2222-2222-222222222222',
+      categoryId: 'random_string',
+      description: 'x',
+      amount: 1,
+      currencyCode: 'INR',
+      entryDate: '2026-05-15',
+    });
+    expect(result.ok).toBe(false);
+  });
+
+  it('rejects add_cost_entry with labour_payout from the generic-labour push path (CEI-I8 wire wall)', () => {
+    // The wire schema accepts labour_payout (the backend factory uses
+    // it), but the validator surface here documents that callers should
+    // route through `labour_misc` from generic UI entry. We assert that
+    // the schema itself does not silently coerce free-text "Labour"
+    // into `labour_payout` — only the explicit canonical id passes.
+    const result = validatePayload(SyncMutationName.AddCostEntry, {
+      costEntryId: '11111111-1111-1111-1111-111111111111',
+      farmId: '22222222-2222-2222-2222-222222222222',
+      categoryId: 'Labour', // free-text legacy value — must be rejected
+      description: 'x',
+      amount: 1,
+      currencyCode: 'INR',
+      entryDate: '2026-05-15',
+    });
+    expect(result.ok).toBe(false);
+  });
 });

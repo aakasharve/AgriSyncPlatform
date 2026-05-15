@@ -32,6 +32,13 @@ type ServerCostEntry = {
     farmId?: string;
     plotId?: string;
     cropCycleId?: string;
+    // DATA_PRINCIPLE_SPINE 02.5 — wire-shape rename: server now emits
+    // `categoryId` (canonical 13-code). Older Dexie rows that pre-date
+    // the migration may still carry `category` (free-text); we read
+    // both and let `mapCategory` collapse legacy values into a
+    // MoneyCategory bucket.
+    categoryId?: string;
+    /** @deprecated DATA_PRINCIPLE_SPINE 02.5 — retained only for backwards-compat with offline Dexie rows captured before the migration. */
     category?: string;
     description?: string;
     amount?: number;
@@ -94,6 +101,31 @@ function toDateKey(value?: string): string {
 
 function mapCategory(category?: string): MoneyCategory {
     const normalized = (category || '').toLowerCase();
+    // DATA_PRINCIPLE_SPINE 02.5 — exact-match canonical CostCategoryId
+    // codes first (server's new wire shape), then fall back to the
+    // legacy free-text substring heuristics for older offline rows.
+    switch (normalized) {
+        case 'labour_payout':
+        case 'labour_misc':
+            return 'Labour';
+        case 'seeds':
+        case 'fertilizer':
+        case 'pesticide':
+        case 'irrigation':
+            return 'Input';
+        case 'machinery_rent':
+        case 'equipment':
+            return 'Machinery';
+        case 'transport':
+            return 'Transport';
+        case 'fuel':
+            return 'Fuel';
+        case 'electricity':
+            return 'Electricity';
+        case 'packaging':
+        case 'other':
+            return 'Other';
+    }
     if (normalized.includes('labour')) return 'Labour';
     if (normalized.includes('fert') || normalized.includes('pesticide') || normalized.includes('seed') || normalized.includes('input')) return 'Input';
     if (normalized.includes('machinery') || normalized.includes('equipment')) return 'Machinery';
@@ -116,7 +148,9 @@ function mapCostEntryToMoneyEvent(entry: ServerCostEntry): MoneyEvent {
         cropId: entry.cropCycleId,
         dateTime: entry.entryDate ? `${toDateKey(entry.entryDate)}T00:00:00Z` : createdAt,
         type: 'Expense',
-        category: mapCategory(entry.category),
+        // DATA_PRINCIPLE_SPINE 02.5 — prefer `categoryId` (new wire) and
+        // fall back to legacy `category` for Dexie rows captured pre-migration.
+        category: mapCategory(entry.categoryId ?? entry.category),
         amount,
         sourceType: 'Manual',
         sourceId: id,

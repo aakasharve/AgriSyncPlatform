@@ -10,18 +10,27 @@ using System.Collections.Generic;
 
 namespace ShramSafal.Application.Contracts.Sync.Payloads;
 
-public sealed record AmountItem(
-    int AmountMinor,
-    // generator: unhandled zod typeName ZodLiteral — emitted as object
-    object Currency
+public sealed record LocationItem(
+    decimal Latitude,
+    decimal Longitude,
+    decimal AccuracyMeters,
+    DateTime CapturedAtUtc,
+    string Provider,
+    string PermissionState,
+    decimal? Altitude = null
 );
 
 public sealed record AddCostEntryPayload(
     Guid CostEntryId,
     Guid FarmId,
-    IReadOnlyList<Guid> PlotIds,
-    string Category,
-    AmountItem Amount,
-    DateTime OccurredAt,
-    string? Notes = null
+    /// <summary>Allowed values: "labour_payout", "labour_misc", "seeds", "fertilizer", "pesticide", "irrigation", "machinery_rent", "equipment", "fuel", "transport", "electricity", "packaging", "other".</summary>
+    string CategoryId,
+    string Description,
+    decimal Amount,
+    string CurrencyCode,
+    DateOnly EntryDate,
+    Guid? PlotId = null,
+    Guid? CropCycleId = null,
+    Guid? CreatedByUserId = null,
+    LocationItem? Location = null
 );

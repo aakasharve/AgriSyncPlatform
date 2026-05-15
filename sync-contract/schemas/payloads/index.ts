@@ -17,7 +17,7 @@ export { CreateDailyLogPayload } from './create_daily_log.zod';
 export { AddLogTaskPayload } from './add_log_task.zod';
 export { VerifyLogPayload } from './verify_log.zod';
 export { VerifyLogV2Payload } from './verify_log_v2.zod';
-export { AddCostEntryPayload } from './add_cost_entry.zod';
+export { AddCostEntryPayload, CostCategoryIdEnum } from './add_cost_entry.zod';
 export { CorrectCostEntryPayload } from './correct_cost_entry.zod';
 export { AllocateGlobalExpensePayload } from './allocate_global_expense.zod';
 export { SetPriceConfigPayload } from './set_price_config.zod';

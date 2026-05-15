@@ -69,5 +69,47 @@
                 }
             ]
         }
+    },
+    {
+        "id": "gold_006_categoryid_fertilizer",
+        "transcript": "Aaj 2 bag urea kharch zala, 1200 rupaye.",
+        "expected": {
+            "activityExpenses": [
+                {
+                    "reason": "Urea bag purchase",
+                    "categoryId": "fertilizer",
+                    "totalAmount": 1200
+                }
+            ]
+        },
+        "notes": "DATA_PRINCIPLE_SPINE 02.6 — exercises categoryId emission. Marathi 'urea' / 'khat' must map to 'fertilizer' code. Captured against prompt v3.1."
+    },
+    {
+        "id": "gold_007_categoryid_labour_misc",
+        "transcript": "Aaj 500 rupaye majurila dile, kapni karayla.",
+        "expected": {
+            "activityExpenses": [
+                {
+                    "reason": "Labour payment, harvest",
+                    "categoryId": "labour_misc",
+                    "totalAmount": 500
+                }
+            ]
+        },
+        "notes": "DATA_PRINCIPLE_SPINE 02.6 + CEI-I8 — generic-labour expense routes to 'labour_misc'. 'labour_payout' is reserved for the JobCard settlement factory and must NOT be emitted here. Captured against prompt v3.1."
+    },
+    {
+        "id": "gold_008_categoryid_fuel",
+        "transcript": "Tractor sathi 800 rupayanche diesel ghetla.",
+        "expected": {
+            "activityExpenses": [
+                {
+                    "reason": "Diesel for tractor",
+                    "categoryId": "fuel",
+                    "totalAmount": 800
+                }
+            ]
+        },
+        "notes": "DATA_PRINCIPLE_SPINE 02.6 — 'diesel' / 'petrol' / 'इंधन' must map to 'fuel', NOT 'machinery_rent' (rent is for hourly tractor hire). Captured against prompt v3.1."
     }
 ]

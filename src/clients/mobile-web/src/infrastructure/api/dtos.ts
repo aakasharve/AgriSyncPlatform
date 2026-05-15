@@ -5,6 +5,7 @@
 // without any changes at call sites.
 
 import type { VisibleBucketId } from '../../domain/ai/BucketId';
+import type { CostCategoryId, CostCategoryRef } from '../../domain/finance/CostCategory';
 
 export type VerificationStatus =
     | 'draft'
@@ -130,7 +131,10 @@ export interface CostEntryDto {
     farmId: string;
     plotId?: string;
     cropCycleId?: string;
-    category: string;
+    // DATA_PRINCIPLE_SPINE 02.5 — wire-shape rename: free-text `category`
+    // becomes a FK to ssf.cost_categories. Backend commit e2d5bcf renamed
+    // the DTO field; mobile-web follows in the same bundle.
+    categoryId: CostCategoryId;
     description: string;
     amount: number;
     currencyCode: string;
@@ -267,7 +271,11 @@ export interface SyncPullResponse {
     scheduleSubscriptions?: ScheduleSubscriptionDto[];
     cropTypes?: unknown[];
     activityCategories?: string[];
-    costCategories?: string[];
+    // DATA_PRINCIPLE_SPINE 02.5 — server now emits the full
+    // CostCategoryRefDto rows (id + mr/hi/en labels) rather than a flat
+    // string array, so the client can render Marathi-first labels
+    // straight from the reference-data table without a fallback map.
+    costCategories?: CostCategoryRef[];
     referenceDataVersionHash?: string;
     attentionBoard?: AttentionBoardDto | null;
 }

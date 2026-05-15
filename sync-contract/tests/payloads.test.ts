@@ -200,22 +200,70 @@ describe('ComplianceResolvePayload', () => {
 // ──────────────────────────────────────────────────────────────────────
 
 describe('AddCostEntryPayload', () => {
-    it('accepts a valid payload (sub-plan 02 strict baseline)', () => {
+    it('accepts a valid payload with canonical categoryId (DATA_PRINCIPLE_SPINE 02.6)', () => {
         const r = payloads.AddCostEntryPayload.safeParse({
             costEntryId: VALID_GUID_A,
             farmId: VALID_GUID_B,
-            category: 'fertilizer',
+            plotId: VALID_GUID_C,
+            categoryId: 'fertilizer',
             description: 'Urea',
-            amount: { amountMinor: 50000, currency: 'INR' },
+            amount: 500,
+            currencyCode: 'INR',
             entryDate: VALID_LOG_DATE,
         });
-        // Pre-existing schema from Sub-plan 02 Task 8; we only smoke-test
-        // that it still parses an object payload.
-        expect(typeof r.success).toBe('boolean');
+        expect(r.success).toBe(true);
+    });
+    it('accepts labour_misc as a canonical id (CEI-I8 generic-labour path)', () => {
+        const r = payloads.AddCostEntryPayload.safeParse({
+            costEntryId: VALID_GUID_A,
+            farmId: VALID_GUID_B,
+            categoryId: 'labour_misc',
+            description: 'Pruning helper, half day',
+            amount: 150,
+            currencyCode: 'INR',
+            entryDate: VALID_LOG_DATE,
+        });
+        expect(r.success).toBe(true);
+    });
+    it('rejects an unknown categoryId (off-canon string)', () => {
+        const r = payloads.AddCostEntryPayload.safeParse({
+            costEntryId: VALID_GUID_A,
+            farmId: VALID_GUID_B,
+            categoryId: 'random',
+            description: 'x',
+            amount: 1,
+            currencyCode: 'INR',
+            entryDate: VALID_LOG_DATE,
+        });
+        expect(r.success).toBe(false);
+    });
+    it('rejects a malformed entryDate', () => {
+        const r = payloads.AddCostEntryPayload.safeParse({
+            costEntryId: VALID_GUID_A,
+            farmId: VALID_GUID_B,
+            categoryId: 'fuel',
+            description: 'Diesel',
+            amount: 1200,
+            currencyCode: 'INR',
+            entryDate: '2026/05/15',
+        });
+        expect(r.success).toBe(false);
     });
     it('rejects a primitive', () => {
         const r = payloads.AddCostEntryPayload.safeParse(null);
         expect(r.success).toBe(false);
+    });
+});
+
+describe('CostCategoryIdEnum (13-code canonical list)', () => {
+    it('contains exactly 13 codes locked by the R0 verdict', () => {
+        const opts = payloads.CostCategoryIdEnum.options;
+        expect(opts.length).toBe(13);
+        expect(opts).toEqual([
+            'labour_payout', 'labour_misc', 'seeds', 'fertilizer', 'pesticide',
+            'irrigation', 'machinery_rent', 'equipment', 'fuel', 'transport',
+            'electricity', 'packaging', 'other',
+        ]);
     });
 });
 

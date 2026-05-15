@@ -1,6 +1,10 @@
 import { liveQuery } from 'dexie';
 import { useEffect, useState } from 'react';
 import { getDatabase, type ReferenceDataKey } from '../../infrastructure/storage/DexieDatabase';
+import {
+    DEFAULT_COST_CATEGORIES,
+    type CostCategoryRef,
+} from '../../domain/finance/CostCategory';
 
 export interface StageDefinitionDto {
     name: string;
@@ -79,6 +83,19 @@ export function useActivityCategories(): string[] | null {
     return useReferenceDataValue<string[]>('activityCategories');
 }
 
-export function useCostCategories(): string[] | null {
-    return useReferenceDataValue<string[]>('costCategories');
+/**
+ * Returns the canonical `CostCategoryRef[]` from Dexie's
+ * `referenceData/costCategories` row. Before the first Sync-Pull
+ * (or while the row is being rewritten) we surface the 13-entry
+ * `DEFAULT_COST_CATEGORIES` fallback so dropdowns / labels render
+ * Marathi-first labels immediately on a cold start.
+ *
+ * DATA_PRINCIPLE_SPINE 02.5 — wire-shape change: server now emits
+ * `CostCategoryRef[]` (id + mr/hi/en) instead of `string[]`.
+ */
+export function useCostCategories(): CostCategoryRef[] {
+    const value = useReferenceDataValue<CostCategoryRef[]>('costCategories');
+    return value && value.length > 0
+        ? value
+        : (DEFAULT_COST_CATEGORIES as CostCategoryRef[]);
 }
