@@ -13,6 +13,7 @@ using ShramSafal.Domain.Organizations;
 using ShramSafal.Domain.Planning;
 using ShramSafal.Domain.Work;
 using ShramSafal.Domain.Schedules;
+using ShramSafal.Domain.Storage;
 using ShramSafal.Domain.Subscriptions;
 using ShramSafal.Domain.Tests;
 using ShramSafal.Domain.Wtl;
@@ -66,6 +67,13 @@ public sealed class ShramSafalDbContext(DbContextOptions<ShramSafalDbContext> op
     public DbSet<WorkerAssignment> WorkerAssignments => Set<WorkerAssignment>();
 
     internal DbSet<SyncMutationRecord> SyncMutations => Set<SyncMutationRecord>();
+
+    /// <summary>
+    /// DATA_PRINCIPLE_SPINE_2026-05-05 Phase 02 sub-phase 02.2: persisted
+    /// ref-count index for content-addressed raw blobs parked in the cold tier
+    /// (S3). Mapped to <c>ssf.raw_blob_index</c>.
+    /// </summary>
+    public DbSet<RawBlobIndexEntry> RawBlobIndices => Set<RawBlobIndexEntry>();
 
     /// <summary>
     /// T-IGH-03-OUTBOX-WIRING: outbox queue. Domain events raised on
