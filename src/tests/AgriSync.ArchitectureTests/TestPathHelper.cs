@@ -21,7 +21,7 @@ internal static class TestPathHelper
         return appsRoot;
     }
 
-    private static string GetSolutionRoot()
+    internal static string GetSolutionRoot()
     {
         var current = new DirectoryInfo(AppContext.BaseDirectory);
         while (current is not null)
