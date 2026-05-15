@@ -40,7 +40,16 @@ namespace ShramSafal.Infrastructure.Persistence.Migrations
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
+            // CI runs this migration against a Testcontainers Postgres image
+            // whose superuser is NOT named "postgres" (it's typically "test"
+            // or whatever the image default is). Hardcoding `FOR ROLE postgres`
+            // breaks with `42704 role "postgres" does not exist`. Parameterize
+            // via current_user inside a DO block + EXECUTE format so the
+            // migration applies under whichever superuser ran it. Same fix
+            // applies to Down()'s REASSIGN OWNED BY ... TO <runner>.
             migrationBuilder.Sql(@"DO $$
+DECLARE
+  v_runner text := current_user;
 BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname='agrisync_owner') THEN
     CREATE ROLE agrisync_owner NOLOGIN;
@@ -51,29 +60,40 @@ BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname='agrisync_readonly') THEN
     CREATE ROLE agrisync_readonly LOGIN PASSWORD 'dev_ro_change_me';
   END IF;
-END$$;
 
-ALTER SCHEMA ssf OWNER TO agrisync_owner;
-GRANT USAGE ON SCHEMA ssf TO agrisync_app, agrisync_readonly;
-GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA ssf TO agrisync_app;
-GRANT SELECT ON ALL TABLES IN SCHEMA ssf TO agrisync_readonly;
-GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA ssf TO agrisync_app;
-ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA ssf
-  GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO agrisync_app;
-ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA ssf
-  GRANT SELECT ON TABLES TO agrisync_readonly;
-ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA ssf
-  GRANT USAGE, SELECT ON SEQUENCES TO agrisync_app;
+  EXECUTE 'ALTER SCHEMA ssf OWNER TO agrisync_owner';
+  EXECUTE 'GRANT USAGE ON SCHEMA ssf TO agrisync_app, agrisync_readonly';
+  EXECUTE 'GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA ssf TO agrisync_app';
+  EXECUTE 'GRANT SELECT ON ALL TABLES IN SCHEMA ssf TO agrisync_readonly';
+  EXECUTE 'GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA ssf TO agrisync_app';
+
+  EXECUTE format(
+    'ALTER DEFAULT PRIVILEGES FOR ROLE %I IN SCHEMA ssf GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO agrisync_app',
+    v_runner);
+  EXECUTE format(
+    'ALTER DEFAULT PRIVILEGES FOR ROLE %I IN SCHEMA ssf GRANT SELECT ON TABLES TO agrisync_readonly',
+    v_runner);
+  EXECUTE format(
+    'ALTER DEFAULT PRIVILEGES FOR ROLE %I IN SCHEMA ssf GRANT USAGE, SELECT ON SEQUENCES TO agrisync_app',
+    v_runner);
+END$$;
 ");
         }
 
         /// <inheritdoc />
         protected override void Down(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.Sql(@"REASSIGN OWNED BY agrisync_owner TO postgres;
-DROP OWNED BY agrisync_app;
-DROP OWNED BY agrisync_readonly;
-ALTER SCHEMA ssf OWNER TO postgres;
+            // Down() also parameterizes via current_user — see Up() comment.
+            migrationBuilder.Sql(@"DO $$
+DECLARE
+  v_runner text := current_user;
+BEGIN
+  EXECUTE format('REASSIGN OWNED BY agrisync_owner TO %I', v_runner);
+  EXECUTE 'DROP OWNED BY agrisync_app';
+  EXECUTE 'DROP OWNED BY agrisync_readonly';
+  EXECUTE format('ALTER SCHEMA ssf OWNER TO %I', v_runner);
+END$$;
+
 DROP ROLE IF EXISTS agrisync_app;
 DROP ROLE IF EXISTS agrisync_readonly;
 DROP ROLE IF EXISTS agrisync_owner;
