@@ -10,15 +10,9 @@ using System.Collections.Generic;
 
 namespace ShramSafal.Application.Contracts.Sync.Payloads;
 
-public sealed record LocationItem(
-    decimal Latitude,
-    decimal Longitude,
-    decimal AccuracyMeters,
-    DateTime CapturedAtUtc,
-    string Provider,
-    string PermissionState,
-    decimal? Altitude = null
-);
+// LocationItem is declared in CreateDailyLogPayload.cs (same shared shape via
+// ZLocation); generator emits per-file but both share the namespace so the
+// duplicate is removed by hand. Regenerate sync-contract → re-apply this delta.
 
 public sealed record AddCostEntryPayload(
     Guid CostEntryId,
