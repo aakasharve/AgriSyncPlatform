@@ -152,4 +152,73 @@ public sealed class AiJobProvenanceTests
         var act = () => aiJob.UpdateProvenance("   ");
         act.Should().Throw<ArgumentException>().WithMessage("*modelVersion*");
     }
+
+    // ─────────────────────────────────────────────────────────────────────
+    // Codex cross-verification 2026-05-15 MAJOR-1 lock.
+    // AiJob.AddAttempt(...) must hand the parent's Provenance down to
+    // AiJobAttempt.Create so attempts don't silently fall back to
+    // Provenance.Manual("unknown"). Each attempt's provenance is read
+    // by audit reconstruction (Phase 04) and by the corpus writer
+    // (Phase 09) — a Manual fallback there would lie about the source
+    // of every retry.
+    // ─────────────────────────────────────────────────────────────────────
+
+    [Fact]
+    public void AddAttempt_inherits_parent_voice_provenance_not_Manual_fallback()
+    {
+        var voiceProvenance = new Provenance(
+            source: Source.Voice,
+            modelVersion: "gemini-2.0-flash",
+            promptVersion: "v1",
+            promptContentHash: "feedface".PadRight(64, '0'),
+            appVersion: "1.2.3");
+
+        var aiJob = AiJob.Create(
+            id: AnyJobId,
+            idempotencyKey: "idem-addattempt-voice",
+            operationType: AiOperationType.VoiceToStructuredLog,
+            userId: AnyUserId,
+            farmId: AnyFarmId,
+            inputContentHash: "abc",
+            rawInputRef: null,
+            inputSessionMetadataJson: null,
+            provenance: voiceProvenance);
+
+        var attempt = aiJob.AddAttempt(AiProviderType.Gemini, requestPayloadHash: "req-hash-1");
+
+        attempt.Provenance.Source.Should().Be(Source.Voice,
+            "AiJobAttempt must inherit the parent's Source, not the Manual fallback");
+        attempt.Provenance.ModelVersion.Should().Be("gemini-2.0-flash");
+        attempt.Provenance.PromptVersion.Should().Be("v1");
+        attempt.Provenance.PromptContentHash.Should().Be("feedface".PadRight(64, '0'));
+        attempt.Provenance.AppVersion.Should().Be("1.2.3");
+    }
+
+    [Fact]
+    public void AddAttempt_inherits_parent_receipt_provenance()
+    {
+        var receiptProvenance = new Provenance(
+            source: Source.ReceiptOcr,
+            modelVersion: "unknown",
+            promptVersion: "v1",
+            promptContentHash: null,
+            appVersion: "1.2.3");
+
+        var aiJob = AiJob.Create(
+            id: AnyJobId,
+            idempotencyKey: "idem-addattempt-receipt",
+            operationType: AiOperationType.ReceiptToExpenseItems,
+            userId: AnyUserId,
+            farmId: AnyFarmId,
+            inputContentHash: null,
+            rawInputRef: null,
+            inputSessionMetadataJson: null,
+            provenance: receiptProvenance);
+
+        var attempt = aiJob.AddAttempt(AiProviderType.Gemini);
+
+        attempt.Provenance.Source.Should().Be(Source.ReceiptOcr,
+            "AiJobAttempt must inherit Source.ReceiptOcr from the parent receipt job");
+        attempt.Provenance.AppVersion.Should().Be("1.2.3");
+    }
 }

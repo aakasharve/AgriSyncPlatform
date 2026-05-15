@@ -30,6 +30,10 @@ public interface IAiOrchestrator
         string mimeType,
         string systemPrompt,
         string idempotencyKey,
+        // Codex cross-verification 2026-05-15 MAJOR-2: threaded into the
+        // receipt AiJob's Provenance.AppVersion stamp. Defaults to
+        // "unknown" so legacy callers keep compiling.
+        string clientAppVersion = "unknown",
         CancellationToken ct = default);
 
     Task<(ReceiptExtractCanonicalResult Result, Guid JobId, AiProviderType ProviderUsed, bool FallbackUsed)> ExtractPattiWithFallbackAsync(
@@ -39,6 +43,8 @@ public interface IAiOrchestrator
         string mimeType,
         string systemPrompt,
         string idempotencyKey,
+        // Codex cross-verification 2026-05-15 MAJOR-2: see ExtractReceipt above.
+        string clientAppVersion = "unknown",
         CancellationToken ct = default);
 
     // Phase 3 (VOICE_LATENCY_PIPELINE_V2 §7 Task 3.4) — streaming voice parse.

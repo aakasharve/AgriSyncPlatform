@@ -61,7 +61,7 @@ public sealed class ExtractPattiImageHandler(
             command.MimeType,
             prompt,
             idempotencyKey,
-            ct);
+            ct: ct);
         stopwatch.Stop();
 
         await EmitAiInvocationAsync(command, orchestration, stopwatch.ElapsedMilliseconds, ct);

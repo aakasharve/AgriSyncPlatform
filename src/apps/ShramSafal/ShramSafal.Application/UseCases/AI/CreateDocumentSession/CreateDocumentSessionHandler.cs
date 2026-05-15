@@ -98,7 +98,7 @@ public sealed class CreateDocumentSessionHandler(
                 command.MimeType,
                 promptBuilder.BuildReceiptExtractionPrompt(),
                 idempotencyKey,
-                ct)
+                ct: ct)
             : await aiOrchestrator.ExtractPattiWithFallbackAsync(
                 command.UserId,
                 command.FarmId,
@@ -106,7 +106,7 @@ public sealed class CreateDocumentSessionHandler(
                 command.MimeType,
                 promptBuilder.BuildPattiExtractionPrompt(command.CropName!),
                 idempotencyKey,
-                ct);
+                ct: ct);
 
         if (!orchestration.Result.Success)
         {

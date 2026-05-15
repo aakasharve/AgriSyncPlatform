@@ -419,6 +419,7 @@ internal sealed class AiOrchestrator(
         string mimeType,
         string systemPrompt,
         string idempotencyKey,
+        string clientAppVersion = "unknown",
         CancellationToken ct = default)
     {
         return await ExecuteReceiptLikeAsync(
@@ -431,6 +432,7 @@ internal sealed class AiOrchestrator(
             idempotencyKey,
             providerCall: static (provider, stream, streamMimeType, prompt, token) =>
                 provider.ExtractReceiptAsync(stream, streamMimeType, prompt, token),
+            clientAppVersion,
             ct);
     }
 
@@ -441,6 +443,7 @@ internal sealed class AiOrchestrator(
         string mimeType,
         string systemPrompt,
         string idempotencyKey,
+        string clientAppVersion = "unknown",
         CancellationToken ct = default)
     {
         return await ExecuteReceiptLikeAsync(
@@ -453,6 +456,7 @@ internal sealed class AiOrchestrator(
             idempotencyKey,
             providerCall: static (provider, stream, streamMimeType, prompt, token) =>
                 provider.ExtractPattiAsync(stream, streamMimeType, prompt, token),
+            clientAppVersion,
             ct);
     }
 
@@ -465,6 +469,7 @@ internal sealed class AiOrchestrator(
         string systemPrompt,
         string idempotencyKey,
         Func<IAiProvider, Stream, string, string, CancellationToken, Task<ReceiptExtractCanonicalResult>> providerCall,
+        string clientAppVersion,
         CancellationToken ct)
     {
         var key = string.IsNullOrWhiteSpace(idempotencyKey) ? Guid.NewGuid().ToString("N") : idempotencyKey.Trim();
@@ -493,7 +498,31 @@ internal sealed class AiOrchestrator(
 
         var config = await aiJobRepository.GetProviderConfigAsync(ct);
         var payload = await ReadPayloadAsync(payloadStream, ct);
-        var job = existing ?? AiJob.Create(Guid.NewGuid(), key, operation, userId, farmId, null, null);
+
+        // Codex cross-verification 2026-05-15 MAJOR-2: stamp real provenance
+        // on the receipt/patti AiJob at creation. Was: null (falls back to
+        // Provenance.Manual("unknown")). Source maps from operation.
+        // ModelVersion stays "unknown" pre-attempt and is replaced post-
+        // attempt via UpdateProvenance (same F3 pattern as the voice path).
+        var receiptProvenance = new Provenance(
+            source: operation == AiOperationType.PattiImageToSaleData
+                ? Source.PattiOcr
+                : Source.ReceiptOcr,
+            modelVersion: "unknown",
+            promptVersion: "v1",
+            promptContentHash: null,
+            appVersion: string.IsNullOrWhiteSpace(clientAppVersion) ? "unknown" : clientAppVersion);
+
+        var job = existing ?? AiJob.Create(
+            Guid.NewGuid(),
+            key,
+            operation,
+            userId,
+            farmId,
+            inputContentHash: null,
+            rawInputRef: null,
+            inputSessionMetadataJson: null,
+            provenance: receiptProvenance);
 
         if (existing is null)
         {
@@ -533,6 +562,10 @@ internal sealed class AiOrchestrator(
 
         if (primaryExecution.IsSuccess)
         {
+            // F3 parity for receipt/patti: stamp the real provider model
+            // before MarkSucceeded so Provenance.ModelVersion stops being
+            // "unknown" on the AiJob row. Codex 2026-05-15 MAJOR-2 follow-up.
+            job.UpdateProvenance(primaryExecution.Result.ModelUsed ?? "unknown");
             job.MarkSucceeded(primaryExecution.Result.NormalizedJson ?? "{}", primaryExecution.Attempt!);
             await aiJobRepository.SaveChangesAsync(ct);
             return (primaryExecution.Result, job.Id, primaryExecution.ProviderUsed, false);
@@ -561,6 +594,8 @@ internal sealed class AiOrchestrator(
 
         if (fallbackExecution.IsSuccess)
         {
+            // F3 parity (fallback path): see primary-path comment above.
+            job.UpdateProvenance(fallbackExecution.Result.ModelUsed ?? "unknown");
             job.MarkFallbackSucceeded(fallbackExecution.Result.NormalizedJson ?? "{}", fallbackExecution.Attempt!);
             await aiJobRepository.SaveChangesAsync(ct);
             return (fallbackExecution.Result, job.Id, fallbackExecution.ProviderUsed, true);

@@ -103,7 +103,19 @@ public sealed class AiJob
 
     public AiJobAttempt AddAttempt(AiProviderType provider, string? requestPayloadHash = null)
     {
-        var attempt = AiJobAttempt.Create(Guid.NewGuid(), Id, TotalAttempts + 1, provider, requestPayloadHash);
+        // Codex cross-verification 2026-05-15 MAJOR-1: attempts must inherit
+        // the parent AiJob's Provenance, not silently fall back to
+        // Provenance.Manual("unknown"). The post-attempt UpdateProvenance
+        // flow (F3) updates the parent's ModelVersion once known; that
+        // refresh applies to subsequent attempts but each attempt's
+        // recorded provenance must at minimum carry the correct Source.
+        var attempt = AiJobAttempt.Create(
+            Guid.NewGuid(),
+            Id,
+            TotalAttempts + 1,
+            provider,
+            requestPayloadHash,
+            Provenance);
         _attempts.Add(attempt);
         TotalAttempts++;
         Status = AiJobStatus.Running;

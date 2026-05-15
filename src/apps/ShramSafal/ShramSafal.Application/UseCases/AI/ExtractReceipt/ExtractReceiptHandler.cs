@@ -60,7 +60,7 @@ public sealed class ExtractReceiptHandler(
             command.MimeType,
             prompt,
             idempotencyKey,
-            ct);
+            ct: ct);
         stopwatch.Stop();
 
         await EmitAiInvocationAsync(

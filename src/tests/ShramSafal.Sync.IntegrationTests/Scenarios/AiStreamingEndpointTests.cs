@@ -178,6 +178,7 @@ public sealed class AiStreamingEndpointTests
                 string mimeType,
                 string systemPrompt,
                 string idempotencyKey,
+                string clientAppVersion = "unknown",
                 CancellationToken ct = default)
             => throw new NotImplementedException();
 
@@ -189,6 +190,7 @@ public sealed class AiStreamingEndpointTests
                 string mimeType,
                 string systemPrompt,
                 string idempotencyKey,
+                string clientAppVersion = "unknown",
                 CancellationToken ct = default)
             => throw new NotImplementedException();
 
