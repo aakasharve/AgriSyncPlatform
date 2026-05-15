@@ -100,4 +100,8 @@ internal abstract class StubShramSafalRepository : IShramSafalRepository
     // Sub-plan 03 Task 5 (T-IGH-03-PORT-COMPLETE-MIGRATION):
     // required interface members; no-op in this test stub.
     public Task AddFarmBoundaryAsync(ShramSafal.Domain.Farms.FarmBoundary boundary, CancellationToken ct = default) => Task.CompletedTask;
+
+    // DATA_PRINCIPLE_SPINE sub-phase 02.3 — warm-tier transcript persistence;
+    // not exercised by JobCard pipeline tests so a virtual no-op is sufficient.
+    public virtual Task AddTranscriptAsync(ShramSafal.Domain.AI.Transcript transcript, CancellationToken ct = default) => Task.CompletedTask;
 }

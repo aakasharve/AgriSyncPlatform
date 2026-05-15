@@ -19,6 +19,7 @@ namespace ShramSafal.Application.UseCases.AI.ParseVoiceInput;
 public sealed class ParseVoiceInputHandler(
     IShramSafalRepository repository,
     IAiOrchestrator aiOrchestrator,
+    IAiJobRepository aiJobRepository,
     IAiPromptBuilder promptBuilder,
     IEntitlementPolicy entitlementPolicy,
     IAnalyticsWriter analytics,
@@ -206,6 +207,33 @@ public sealed class ParseVoiceInputHandler(
                 // resulting DailyLog's Provenance (sub-phase 01.5 wires the
                 // response shape; 01.6 wires the frontend).
                 PromptContentHash: canonicalResult.PromptContentHash);
+
+            // DATA_PRINCIPLE_SPINE sub-phase 02.3 — persist the warm-tier
+            // Transcript projection for the winning AiJobAttempt. Supervisor
+            // amendment option B: query the AiJob for its winning attempt id
+            // here rather than threading WinningAttemptId through the
+            // orchestrator return tuple. One extra DB read is acceptable for
+            // warm-tier persistence; keeps IAiOrchestrator's signature stable.
+            //
+            // TODO(Phase 03 detected-language source): currently the inbound
+            // hint ("mr-IN" today, hardcoded one layer up at the orchestrator
+            // call site). Swap to canonicalResult.DetectedLanguage once a
+            // provider surfaces it.
+            // TODO(Phase 03 token-scorer): per-token confidence is stamped
+            // as an empty JSON array ("[]") until the scorer lands.
+            var aiJob = await aiJobRepository.GetByIdAsync(orchestration.JobId, ct);
+            var winningAttemptId = aiJob?.Attempts
+                .LastOrDefault(a => a.IsSuccess)?.Id ?? Guid.Empty;
+            if (winningAttemptId != Guid.Empty)
+            {
+                var transcriptRow = Transcript.Create(
+                    aiJobId: orchestration.JobId,
+                    aiJobAttemptId: winningAttemptId,
+                    text: canonicalResult.RawTranscript,
+                    languageTag: "mr-IN",
+                    perTokenConfidenceJson: "[]");
+                await repository.AddTranscriptAsync(transcriptRow, ct);
+            }
 
             await EmitAiInvocationAsync(
                 command,

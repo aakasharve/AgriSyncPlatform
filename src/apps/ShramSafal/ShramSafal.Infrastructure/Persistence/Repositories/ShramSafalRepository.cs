@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using AgriSync.SharedKernel.Contracts.Ids;
 using AgriSync.SharedKernel.Contracts.Roles;
 using ShramSafal.Application.Contracts.Dtos;
+using ShramSafal.Domain.AI;
 using ShramSafal.Domain.Audit;
 using ShramSafal.Domain.Work;
 using ShramSafal.Domain.Attachments;
@@ -808,6 +809,13 @@ internal sealed class ShramSafalRepository(ShramSafalDbContext db) : IShramSafal
         // For now return zeroed metrics — ReliabilityScore computation from DB queries
         // is deferred to a dedicated read-model in a future phase.
         return Task.FromResult(new WorkerMetricsDto(0, 0, 0, 0, 0, 0, 0));
+    }
+
+    // --- DATA_PRINCIPLE_SPINE sub-phase 02.3 (warm-tier transcripts) ------
+    public Task AddTranscriptAsync(Transcript transcript, CancellationToken ct = default)
+    {
+        db.Transcripts.Add(transcript);
+        return Task.CompletedTask;
     }
 
     private sealed class OperatorDirectoryRow

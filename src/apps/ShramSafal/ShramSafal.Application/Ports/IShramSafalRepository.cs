@@ -1,3 +1,4 @@
+using ShramSafal.Domain.AI;
 using ShramSafal.Domain.Crops;
 using ShramSafal.Domain.Audit;
 using ShramSafal.Domain.Attachments;
@@ -203,4 +204,16 @@ public interface IShramSafalRepository
     /// </summary>
     Task<WorkerMetricsDto> GetWorkerMetricsAsync(UserId workerUserId, Guid? scopedFarmId, DateTime since30d, CancellationToken ct = default)
         => Task.FromResult(new WorkerMetricsDto(0, 0, 0, 0, 0, 0, 0));
+
+    // --- DATA_PRINCIPLE_SPINE sub-phase 02.3 (warm-tier transcripts) ------
+    /// <summary>
+    /// Persists a warm-tier <see cref="Transcript"/> projection for the
+    /// winning AI job attempt. One row per attempt; the <c>ssf.transcripts</c>
+    /// unique index on <c>ai_job_attempt_id</c> enforces the invariant.
+    /// Required member (no default impl) — every test double must explicitly
+    /// override to avoid a runtime landmine if a future codepath routes
+    /// through this method, per the sub-plan 03 Task 5 convention surfaced
+    /// on <see cref="AddFarmBoundaryAsync"/>.
+    /// </summary>
+    Task AddTranscriptAsync(Transcript transcript, CancellationToken ct = default);
 }

@@ -141,4 +141,8 @@ internal sealed class FakeAuthorizationRepository : IShramSafalRepository
     // required interface members; no-op in this test stub.
     public Task AddFarmBoundaryAsync(ShramSafal.Domain.Farms.FarmBoundary boundary, CancellationToken ct = default) => Task.CompletedTask;
     public Task AddJobCardAsync(ShramSafal.Domain.Work.JobCard jobCard, CancellationToken ct = default) => Task.CompletedTask;
+
+    // DATA_PRINCIPLE_SPINE sub-phase 02.3 — warm-tier transcript persistence;
+    // not exercised by authorization tests so a no-op is sufficient.
+    public Task AddTranscriptAsync(ShramSafal.Domain.AI.Transcript transcript, CancellationToken ct = default) => Task.CompletedTask;
 }

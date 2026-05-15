@@ -76,6 +76,13 @@ public sealed class ShramSafalDbContext(DbContextOptions<ShramSafalDbContext> op
     public DbSet<RawBlobIndexEntry> RawBlobIndices => Set<RawBlobIndexEntry>();
 
     /// <summary>
+    /// DATA_PRINCIPLE_SPINE_2026-05-05 Phase 02 sub-phase 02.3: warm-tier
+    /// transcript projection for AI job attempts. One row per
+    /// <see cref="AiJobAttempt"/>. Mapped to <c>ssf.transcripts</c>.
+    /// </summary>
+    public DbSet<Transcript> Transcripts => Set<Transcript>();
+
+    /// <summary>
     /// T-IGH-03-OUTBOX-WIRING: outbox queue. Domain events raised on
     /// any tracked aggregate are flushed into this DbSet by
     /// <see cref="DomainEventToOutboxInterceptor"/> in the same

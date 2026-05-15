@@ -292,6 +292,7 @@ public sealed class AddCostEntryProvenanceHandlerTests
         public Task<int> GetDisputedLogCountForPlotAsync(Guid plotId, CancellationToken ct = default) => throw new NotSupportedException();
         public Task AddFarmBoundaryAsync(FarmBoundary boundary, CancellationToken ct = default) => Task.CompletedTask;
         public Task AddJobCardAsync(ShramSafal.Domain.Work.JobCard jobCard, CancellationToken ct = default) => Task.CompletedTask;
+        public Task AddTranscriptAsync(ShramSafal.Domain.AI.Transcript transcript, CancellationToken ct = default) => Task.CompletedTask;
     }
 
     private sealed class SeededAiJobRepository : IAiJobRepository

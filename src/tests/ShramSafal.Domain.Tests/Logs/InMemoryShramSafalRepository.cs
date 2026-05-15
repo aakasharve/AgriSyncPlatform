@@ -153,4 +153,8 @@ internal sealed class InMemoryShramSafalRepository : IShramSafalRepository
     // required interface members; no-op in this test stub.
     public Task AddFarmBoundaryAsync(FarmBoundary boundary, CancellationToken ct = default) => Task.CompletedTask;
     public Task AddJobCardAsync(ShramSafal.Domain.Work.JobCard jobCard, CancellationToken ct = default) => Task.CompletedTask;
+
+    // DATA_PRINCIPLE_SPINE sub-phase 02.3 — warm-tier transcript persistence;
+    // not exercised by log handler tests so a no-op is sufficient.
+    public Task AddTranscriptAsync(ShramSafal.Domain.AI.Transcript transcript, CancellationToken ct = default) => Task.CompletedTask;
 }
