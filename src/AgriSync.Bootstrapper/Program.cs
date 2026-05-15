@@ -6,12 +6,15 @@ using AgriSync.Bootstrapper.Configuration;
 using AgriSync.Bootstrapper.Middleware;
 using AgriSync.BuildingBlocks;
 using AgriSync.BuildingBlocks.Analytics;
+using Amazon;
+using Amazon.S3;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage;
+using Microsoft.Extensions.Options;
 using Serilog;
 using Serilog.Context;
 using Accounts.Api;
@@ -21,6 +24,8 @@ using AgriSync.Bootstrapper.Endpoints;
 using Analytics.Application;
 using ShramSafal.Api;
 using ShramSafal.Api.Endpoints;
+using ShramSafal.Application.Storage;
+using ShramSafal.Infrastructure.Storage;
 using User.Api;
 using User.Infrastructure.Persistence;
 
@@ -143,6 +148,25 @@ try
     // DWC v2 §2.4 — analytics ingest handler + validator. Writer
     // (IAnalyticsWriter) is registered by AddAnalytics(...) below.
     builder.Services.AddAnalyticsApplication();
+
+    // spine-02.1 Delta 1: IAmazonS3 hoisted from ShramSafal.Infrastructure.DependencyInjection
+    // to an unconditional top-level registration so the cold-tier S3RawBlobStore
+    // (new in sub-phase 02.1) and the existing S3AttachmentStorageService share
+    // ONE IAmazonS3 instance. Region is read from ShramSafal:Storage:Region —
+    // the single-region invariant (ap-south-1) covers both adapters in Phase 02.
+    builder.Services.AddSingleton<IAmazonS3>(sp =>
+    {
+        var storageOptions = sp.GetRequiredService<IOptions<ShramSafal.Infrastructure.Storage.StorageOptions>>().Value;
+        var regionName = string.IsNullOrWhiteSpace(storageOptions.Region) ? "ap-south-1" : storageOptions.Region.Trim();
+        return new AmazonS3Client(new AmazonS3Config
+        {
+            RegionEndpoint = RegionEndpoint.GetBySystemName(regionName)
+        });
+    });
+    // spine-02.1: cold-tier raw-blob store (content-addressed S3 keys).
+    builder.Services.AddOptions<RawBlobStoreOptions>()
+        .Bind(builder.Configuration.GetSection("RawBlobStore"));
+    builder.Services.AddScoped<IRawBlobStore, S3RawBlobStore>();
 
     // MeContext composition adapters — the only place in the backend that
     // reads across app DbContexts. Swapped for projection readers later.

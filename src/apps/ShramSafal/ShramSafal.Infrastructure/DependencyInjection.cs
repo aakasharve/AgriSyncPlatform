@@ -1,6 +1,4 @@
 using System.Globalization;
-using Amazon;
-using Amazon.S3;
 using AgriSync.BuildingBlocks.Abstractions;
 using AgriSync.BuildingBlocks.Auth;
 using AgriSync.BuildingBlocks.Persistence.Outbox;
@@ -354,15 +352,9 @@ public static class DependencyInjection
         var storageProvider = configuration.GetSection("ShramSafal:Storage:Provider").Value ?? "Local";
         if (storageProvider.Equals("S3", StringComparison.OrdinalIgnoreCase))
         {
-            services.AddSingleton<IAmazonS3>(sp =>
-            {
-                var storageOptions = sp.GetRequiredService<IOptions<StorageOptions>>().Value;
-                var regionName = string.IsNullOrWhiteSpace(storageOptions.Region) ? "ap-south-1" : storageOptions.Region.Trim();
-                return new AmazonS3Client(new AmazonS3Config
-                {
-                    RegionEndpoint = RegionEndpoint.GetBySystemName(regionName)
-                });
-            });
+            // spine-02.1 Delta 1: IAmazonS3 registration hoisted to Program.cs as an
+            // unconditional top-level registration so S3AttachmentStorageService (here)
+            // and S3RawBlobStore (cold tier) share one client instance.
             services.AddSingleton<IAttachmentStorageService, S3AttachmentStorageService>();
         }
         else
