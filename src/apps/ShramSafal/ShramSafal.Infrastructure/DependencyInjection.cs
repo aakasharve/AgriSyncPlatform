@@ -1,6 +1,7 @@
 using System.Globalization;
 using AgriSync.BuildingBlocks.Abstractions;
 using AgriSync.BuildingBlocks.Auth;
+using AgriSync.BuildingBlocks.Persistence;
 using AgriSync.BuildingBlocks.Persistence.Outbox;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection.Extensions;
@@ -54,6 +55,32 @@ public static class DependencyInjection
         // Program.cs already registered them; idempotent.
         services.TryAddScoped<AgriSync.BuildingBlocks.Persistence.TenantContext>();
         services.TryAddScoped<AgriSync.BuildingBlocks.Persistence.TenantConnectionInterceptor>();
+
+        // DATA_PRINCIPLE_SPINE 03.6 — register the writing-context
+        // registry singleton (or reuse the existing one) and append
+        // ShramSafalDbContext as a writing context the
+        // TenantTransactionMiddleware must open a tx on. AddUserInfrastructure
+        // performs the symmetric registration for UserDbContext. Order:
+        // ShramSafal first, User second (matches historical 03.2 default).
+        var ssfWritingContexts = services
+            .EnsureTenantScopedRegistry();
+        ssfWritingContexts.Register<ShramSafalDbContext>();
+
+        // DATA_PRINCIPLE_SPINE 03.5 — admin cross-tenant escape hatch.
+        // Returns a fresh ShramSafalDbContext whose options chain has
+        // NO TenantConnectionInterceptor attached (so commands leave
+        // without the set_config(...) prelude that would otherwise
+        // fail-closed). Every CreateAsync call writes an
+        // AuditEvent("admin_cross_tenant","open") row BEFORE returning
+        // the primary context. Scoped so it can resolve IConfiguration
+        // without dragging in a Singleton constraint on appsettings
+        // reload semantics. The 4 existing ElevateToAdminCrossTenant()
+        // call sites (ComplianceEvaluatorSweeper, TestOverdueSweeper,
+        // WorkerRetentionJob, BackfillFarmOwnerAccounts) migrate to
+        // this factory in sub-phase 03.5b — explicitly out of scope here.
+        services.AddScoped<
+            AgriSync.BuildingBlocks.Persistence.IAdminDbContextFactory<ShramSafalDbContext>,
+            ShramSafalAdminDbContextFactory>();
 
         services.AddDbContext<ShramSafalDbContext>((sp, options) =>
             options.UseNpgsql(

@@ -1,4 +1,5 @@
 // spec: data-principle-spine-2026-05-05/03.2
+// spec: data-principle-spine-2026-05-05/03.6 — third GUC `agrisync.user_id` added for UserDb RLS.
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using System.Data.Common;
 
@@ -38,9 +39,20 @@ namespace AgriSync.BuildingBlocks.Persistence;
 /// </summary>
 public sealed class TenantConnectionInterceptor(TenantContext tenantContext) : DbCommandInterceptor
 {
+    // DATA_PRINCIPLE_SPINE 03.6 — third GUC `agrisync.user_id` lands
+    // alongside farm_id + owner_account_id so UserDbContext commands
+    // can RLS-key on the per-request user identity (e.g. public.memberships
+    // policy `user_id = current_setting('agrisync.user_id', true)::uuid`).
+    // Always emitted (even when the request is anonymous) — the bound
+    // value falls back to the empty string when TenantContext.UserId is
+    // null, and the Postgres cast `''::uuid` would throw, so the
+    // policy expression uses the `true` (missing_ok) flag pair with a
+    // NULL-tolerant CAST in the policy body. See migration
+    // 20260516150000_EnableUserDbRowLevelSecurity for the policy SQL.
     private const string SetConfigSql =
         "SELECT set_config('agrisync.farm_id', @__tenant_farm_id, true); " +
-        "SELECT set_config('agrisync.owner_account_id', @__tenant_owner_account_id, true); ";
+        "SELECT set_config('agrisync.owner_account_id', @__tenant_owner_account_id, true); " +
+        "SELECT set_config('agrisync.user_id', @__tenant_user_id, true); ";
 
     public override InterceptionResult<DbDataReader> ReaderExecuting(
         DbCommand command, CommandEventData eventData, InterceptionResult<DbDataReader> result)
@@ -103,6 +115,22 @@ public sealed class TenantConnectionInterceptor(TenantContext tenantContext) : D
         ownerParam.ParameterName = "@__tenant_owner_account_id";
         ownerParam.Value = tenantContext.OwnerAccountId.Value.ToString();
         command.Parameters.Add(ownerParam);
+
+        // DATA_PRINCIPLE_SPINE 03.6 — bind agrisync.user_id even when
+        // the request did not capture a UserId (workers, hosted tasks).
+        // Empty string is the conventional "no claim" sentinel — the
+        // UserDb policy uses `current_setting('agrisync.user_id', true)::uuid`
+        // which would throw on an empty string, but Postgres' cast of
+        // an empty text to uuid is intercepted by the `, true`
+        // (missing_ok) flag combined with the policy body wrapping the
+        // cast in NULLIF(...). Documented in migration
+        // 20260516150000_EnableUserDbRowLevelSecurity.
+        var userParam = command.CreateParameter();
+        userParam.ParameterName = "@__tenant_user_id";
+        userParam.Value = tenantContext.UserId is { } uid
+            ? uid.ToString()
+            : string.Empty;
+        command.Parameters.Add(userParam);
 
         command.CommandText = SetConfigSql + command.CommandText;
     }

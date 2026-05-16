@@ -1,3 +1,4 @@
+using AgriSync.BuildingBlocks.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -25,6 +26,41 @@ public static class DependencyInjection
             new AgriSync.BuildingBlocks.Persistence.Outbox.OutboxTransactionInterceptor(
                 sp.GetRequiredService<AgriSync.BuildingBlocks.Persistence.Outbox.DomainEventToOutboxInterceptor>()));
 
+        // DATA_PRINCIPLE_SPINE 03.6 — register TenantContext +
+        // TenantConnectionInterceptor here as well as in
+        // AddShramSafalInfrastructure so the Sync Integration test
+        // harness and any standalone User-only host pick them up.
+        // TryAddScoped is idempotent — if Program.cs (or
+        // AddShramSafalInfrastructure) already registered them this is
+        // a no-op.
+        services.TryAddScoped<AgriSync.BuildingBlocks.Persistence.TenantContext>();
+        services.TryAddScoped<AgriSync.BuildingBlocks.Persistence.TenantConnectionInterceptor>();
+
+        // DATA_PRINCIPLE_SPINE 03.6 — append UserDbContext to the
+        // tenant-scoped writing-context registry so
+        // TenantTransactionMiddleware opens an explicit tx on it per
+        // request. Without this the interceptor's
+        // `set_config('agrisync.user_id', ..., true)` GUC would
+        // evaporate after the per-command auto-commit transaction and
+        // the UserDb RLS policy (memberships.user_id) would see NULL
+        // → return 0 rows silently.
+        var userWritingContexts = services
+            .EnsureTenantScopedRegistry();
+        userWritingContexts.Register<UserDbContext>();
+
+        // DATA_PRINCIPLE_SPINE 03.6 — UserDbContext now uses
+        // AddDbContext with the (sp, options) overload so the scoped
+        // TenantConnectionInterceptor can be resolved per-request and
+        // attached to the options chain. This keeps the third
+        // `agrisync.user_id` GUC the interceptor emits (added in 03.6)
+        // visible to the UserDb RLS policies installed by migration
+        // 20260516150000_EnableUserDbRowLevelSecurity.
+        //
+        // Do NOT switch to AddDbContextPool — pooled contexts share
+        // interceptors across scopes and would smear tenant claims
+        // between requests. The same ban applies to
+        // ShramSafalDbContext; see its registration's XML doc for
+        // rationale.
         services.AddDbContext<UserDbContext>((sp, options) =>
             options.UseNpgsql(
                 configuration.GetConnectionString("UserDb"),
@@ -38,7 +74,8 @@ public static class DependencyInjection
                 })
                 .AddInterceptors(
                     sp.GetRequiredService<AgriSync.BuildingBlocks.Persistence.Outbox.DomainEventToOutboxInterceptor>(),
-                    sp.GetRequiredService<AgriSync.BuildingBlocks.Persistence.Outbox.OutboxTransactionInterceptor>()));
+                    sp.GetRequiredService<AgriSync.BuildingBlocks.Persistence.Outbox.OutboxTransactionInterceptor>(),
+                    sp.GetRequiredService<AgriSync.BuildingBlocks.Persistence.TenantConnectionInterceptor>()));
 
         services.AddScoped<IUserRepository, UserRepository>();
         services.AddScoped<IRefreshTokenRepository, RefreshTokenRepository>();

@@ -1,12 +1,22 @@
 // spec: data-principle-spine-2026-05-05/03.2
+// spec: data-principle-spine-2026-05-05/03.6 — middleware now opens a
+// transaction on EVERY writing DbContext registered in
+// ITenantScopedDbContextRegistry so the third GUC `agrisync.user_id`
+// (added to TenantConnectionInterceptor in 03.6) propagates across
+// UserDbContext commands too. Single-context behaviour (just
+// ShramSafalDbContext) silently failed-closed under UserDb RLS because
+// auto-commit transactions expire the `set_config(..., true)` GUC
+// before the policy sees it.
 using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Storage;
 
 namespace AgriSync.BuildingBlocks.Persistence;
 
 /// <summary>
-/// DATA_PRINCIPLE_SPINE Phase 03 sub-phase 03.2 — wraps every business
-/// request in an explicit DbContext transaction so the
+/// DATA_PRINCIPLE_SPINE Phase 03 sub-phases 03.2 + 03.6 — wraps every
+/// business request in explicit DbContext transactions (one per
+/// writing context registered) so the
 /// <see cref="TenantConnectionInterceptor"/>'s
 /// <c>set_config(..., true)</c> GUC writes propagate across every
 /// command in the request. Postgres scopes <c>SET LOCAL</c>-style GUCs
@@ -15,14 +25,27 @@ namespace AgriSync.BuildingBlocks.Persistence;
 /// the GUC would expire before the next statement.
 ///
 /// <para>
-/// <b>DbContext injected as the base <see cref="DbContext"/> type</b>
-/// rather than <c>ShramSafalDbContext</c> to keep
-/// <c>AgriSync.BuildingBlocks</c> within its allowed layer (root
-/// <c>CLAUDE.md</c>: "BuildingBlocks may use SharedKernel only"). The
-/// ShramSafal Infrastructure DI registration includes
-/// <c>services.AddScoped&lt;DbContext&gt;(sp =&gt; sp.GetRequiredService&lt;ShramSafalDbContext&gt;())</c>
-/// so the per-scope <see cref="DbContext"/> resolves to the same
-/// <c>ShramSafalDbContext</c> instance the spec named verbatim.
+/// <b>03.6 critical change.</b> The original 03.2 middleware took a
+/// single <see cref="DbContext"/> dependency that resolved (via DI
+/// alias) to <c>ShramSafalDbContext</c>. When UserDbContext gained the
+/// interceptor in 03.6, its commands continued to run on auto-commit
+/// transactions; <c>set_config(..., true)</c> no-opped and the User
+/// RLS policy saw NULL → returned 0 rows silently. The fix: resolve a
+/// registry of every tenant-scoped DbContext type and open a tx on
+/// each before the pipeline runs. Commit all on success, rollback all
+/// on failure.
+/// </para>
+///
+/// <para>
+/// <b>Layering.</b> The middleware lives in
+/// <c>AgriSync.BuildingBlocks</c>, which "may use SharedKernel only"
+/// (root <c>CLAUDE.md</c>). It therefore CANNOT name
+/// <c>ShramSafalDbContext</c> or <c>UserDbContext</c> directly. The
+/// app composition root (<c>AddShramSafalInfrastructure</c>,
+/// <c>AddUserInfrastructure</c>) registers each tenant-scoped context
+/// into <see cref="ITenantScopedDbContextRegistry"/>; the middleware
+/// asks the registry for the per-scope instances and opens a tx on
+/// each.
 /// </para>
 ///
 /// <para>
@@ -50,7 +73,7 @@ public sealed class TenantTransactionMiddleware
     private readonly RequestDelegate _next;
     public TenantTransactionMiddleware(RequestDelegate next) => _next = next;
 
-    public async Task InvokeAsync(HttpContext context, DbContext db)
+    public async Task InvokeAsync(HttpContext context, ITenantScopedDbContextRegistry registry)
     {
         var path = context.Request.Path.Value ?? string.Empty;
         foreach (var prefix in SkipPathPrefixes)
@@ -62,16 +85,50 @@ public sealed class TenantTransactionMiddleware
             }
         }
 
-        await using var tx = await db.Database.BeginTransactionAsync(context.RequestAborted);
+        // Open one transaction PER writing context so each commands
+        // chain sees its own `set_config(..., true)` GUC. Postgres
+        // scopes those GUCs to the connection's current transaction.
+        var contexts = registry.GetWritingContexts(context.RequestServices);
+        var transactions = new List<IDbContextTransaction>(contexts.Count);
         try
         {
+            foreach (var db in contexts)
+            {
+                var tx = await db.Database.BeginTransactionAsync(context.RequestAborted);
+                transactions.Add(tx);
+            }
+
             await _next(context);
-            await tx.CommitAsync(context.RequestAborted);
+
+            foreach (var tx in transactions)
+            {
+                await tx.CommitAsync(context.RequestAborted);
+            }
         }
         catch
         {
-            await tx.RollbackAsync(CancellationToken.None);
+            // Rollback every opened tx in reverse order; swallow per-tx
+            // failures so the original exception surfaces unchanged.
+            for (var i = transactions.Count - 1; i >= 0; i--)
+            {
+                try
+                {
+                    await transactions[i].RollbackAsync(CancellationToken.None);
+                }
+                catch
+                {
+                    // Suppress secondary failures — the original
+                    // exception is what callers need to see.
+                }
+            }
             throw;
+        }
+        finally
+        {
+            foreach (var tx in transactions)
+            {
+                await tx.DisposeAsync();
+            }
         }
     }
 }

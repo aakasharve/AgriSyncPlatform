@@ -74,6 +74,12 @@ public static class E2eTestEndpoints
             failPushes.Reason = null;
 
             using var scope = scopes.CreateScope();
+            // DATA_PRINCIPLE_SPINE 03.2 — elevate before DbContext resolution
+            // so TenantConnectionInterceptor skips the fail-closed path.
+            // Truncate is a cross-tenant administrative operation by definition.
+            scope.ServiceProvider
+                .GetRequiredService<AgriSync.BuildingBlocks.Persistence.TenantContext>()
+                .ElevateToAdminCrossTenant();
             var ssf = scope.ServiceProvider.GetRequiredService<ShramSafalDbContext>();
 
             foreach (var table in TruncateTables)
@@ -113,6 +119,10 @@ public static class E2eTestEndpoints
             var fixture = (body.Fixture ?? "ramu").Trim().ToLowerInvariant();
 
             using var scope = scopes.CreateScope();
+            // DATA_PRINCIPLE_SPINE 03.2 — seeders span every tenant by design.
+            scope.ServiceProvider
+                .GetRequiredService<AgriSync.BuildingBlocks.Persistence.TenantContext>()
+                .ElevateToAdminCrossTenant();
 
             switch (fixture)
             {
