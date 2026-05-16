@@ -67,10 +67,12 @@ public static class DependencyInjection
                 npgsql =>
                 {
                     npgsql.MigrationsHistoryTable("__ef_migrations", "public");
-                    npgsql.EnableRetryOnFailure(
-                        maxRetryCount: 5,
-                        maxRetryDelay: TimeSpan.FromSeconds(10),
-                        errorCodesToAdd: null);
+                    // DATA_PRINCIPLE_SPINE 03.6 — EnableRetryOnFailure removed
+                    // because UserDbContext is now wrapped by
+                    // TenantTransactionMiddleware (per-request explicit
+                    // transaction so set_config GUCs propagate). EF Core's
+                    // retry strategy is incompatible with user-initiated
+                    // transactions. Same call as ShramSafalDbContext registration.
                 })
                 .AddInterceptors(
                     sp.GetRequiredService<AgriSync.BuildingBlocks.Persistence.Outbox.DomainEventToOutboxInterceptor>(),
