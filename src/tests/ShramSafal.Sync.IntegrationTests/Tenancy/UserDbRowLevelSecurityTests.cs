@@ -7,6 +7,7 @@ using Accounts.Infrastructure.Persistence;
 using AgriSync.BuildingBlocks.Persistence;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Npgsql;
@@ -153,7 +154,7 @@ public sealed class UserDbRowLevelSecurityTests : IAsyncLifetime
             ownerAccountId: Guid.NewGuid(),
             userId: _userA);
 
-        await using var tx = await ctx.Database.BeginTransactionAsync();
+        await using var tx = await BeginTxAsync(ctx);
         // Project to UserId only — avoids the obsolete AppMembership
         // type at the test boundary while still exercising the RLS gate.
         var rows = await ctx.Memberships
@@ -183,7 +184,7 @@ public sealed class UserDbRowLevelSecurityTests : IAsyncLifetime
             ownerAccountId: Guid.NewGuid(),
             userId: _userA);
 
-        await using var tx = await ctx.Database.BeginTransactionAsync();
+        await using var tx = await BeginTxAsync(ctx);
         var count = await ctx.Memberships.AsNoTracking().CountAsync();
 
         count.Should().Be(2,
@@ -200,7 +201,7 @@ public sealed class UserDbRowLevelSecurityTests : IAsyncLifetime
         var ctx = scope.ServiceProvider.GetRequiredService<UserDbContext>();
         // DO NOT call SetTenant.
 
-        await using var tx = await ctx.Database.BeginTransactionAsync();
+        await using var tx = await BeginTxAsync(ctx);
         Func<Task> act = async () => await ctx.Memberships.AsNoTracking().CountAsync();
 
         await act.Should().ThrowAsync<InvalidOperationException>(
@@ -212,8 +213,33 @@ public sealed class UserDbRowLevelSecurityTests : IAsyncLifetime
     // Migration + seeding helpers.
     // ────────────────────────────────────────────────────────────────────
 
+    // Transaction helper — wraps BeginTransactionAsync in an ExecutionStrategy
+    // because AddShramSafalInfrastructure enables EnableRetryOnFailure on the
+    // shared TenantConnectionInterceptor's host context. The strategy is a
+    // no-op for non-retry contexts (e.g. UserDbContext today).
+    private static async Task<Microsoft.EntityFrameworkCore.Storage.IDbContextTransaction> BeginTxAsync(
+        Microsoft.EntityFrameworkCore.DbContext ctx,
+        System.Threading.CancellationToken ct = default)
+    {
+        var strategy = ctx.Database.CreateExecutionStrategy();
+        Microsoft.EntityFrameworkCore.Storage.IDbContextTransaction? opened = null;
+        await strategy.ExecuteAsync(async () =>
+        {
+            opened = await ctx.Database.BeginTransactionAsync(ct);
+        });
+        return opened!;
+    }
+
     private static async Task ApplyMigrationsAsync(string conn)
     {
+        // Mirrors RowLevelSecurityTests.ApplyFullMigrationChainAsync (which
+        // mirrors DwcScoreMatviewTests). The SSF migration
+        // 20260422180547_AddAdminScopeHealthView references analytics.events,
+        // so the chain MUST be:
+        //   User → Accounts → SSF Phase-A (fence) → Analytics → SSF Phase-B
+        // Without the Analytics interleave SSF Phase-B fails with
+        // "relation analytics.events does not exist".
+
         var userOpts = new DbContextOptionsBuilder<UserDbContext>().UseNpgsql(conn).Options;
         await using (var user = new UserDbContext(userOpts))
         {
@@ -226,15 +252,48 @@ public sealed class UserDbRowLevelSecurityTests : IAsyncLifetime
             await accounts.Database.MigrateAsync();
         }
 
-        // ShramSafal chain is applied too so the registry registration
-        // in AddShramSafalInfrastructure resolves cleanly (it asks the
-        // DI graph for ShramSafalDbContext; the underlying tables must
-        // exist or the resolution path's connection probe would fail).
+        const string ssfPhaseATarget = "20260421075311_AlterCostEntriesAddJobCardId";
         var ssfOpts = new DbContextOptionsBuilder<ShramSafalDbContext>().UseNpgsql(conn).Options;
+        await using (var ssf = new ShramSafalDbContext(ssfOpts))
+        {
+            var migrator = ssf.Database.GetService<Microsoft.EntityFrameworkCore.Migrations.IMigrator>();
+            await migrator.MigrateAsync(ssfPhaseATarget);
+        }
+
+        var analyticsOpts = new DbContextOptionsBuilder<AgriSync.BuildingBlocks.Analytics.AnalyticsDbContext>()
+            .UseNpgsql(conn, npgsql =>
+            {
+                npgsql.MigrationsAssembly(
+                    typeof(AgriSync.Bootstrapper.Migrations.Analytics.AnalyticsRewrite).Assembly.FullName);
+                npgsql.MigrationsHistoryTable(
+                    tableName: "__analytics_migrations_history",
+                    schema: AgriSync.BuildingBlocks.Analytics.AnalyticsDbContext.SchemaName);
+            })
+            .Options;
+        await using (var analytics = new AgriSync.BuildingBlocks.Analytics.AnalyticsDbContext(analyticsOpts))
+        {
+            await analytics.Database.MigrateAsync();
+        }
+
+        // SSF Phase B — resume to head, now that analytics.events exists.
         await using (var ssf = new ShramSafalDbContext(ssfOpts))
         {
             await ssf.Database.MigrateAsync();
         }
+
+        // Previous-month analytics partition (defensive, matches sibling fixture).
+        await using var rawConn = new NpgsqlConnection(conn);
+        await rawConn.OpenAsync();
+        var prev = DateTimeOffset.UtcNow.AddMonths(-1);
+        var curr = new DateTimeOffset(DateTimeOffset.UtcNow.Year, DateTimeOffset.UtcNow.Month, 1, 0, 0, 0, TimeSpan.Zero);
+        await using var ensurePartition = rawConn.CreateCommand();
+        ensurePartition.CommandText = $"""
+            CREATE TABLE IF NOT EXISTS analytics.events_y{prev.Year:D4}m{prev.Month:D2}
+            PARTITION OF analytics.events
+            FOR VALUES FROM ('{prev.Year:D4}-{prev.Month:D2}-01')
+                        TO  ('{curr.Year:D4}-{curr.Month:D2}-01');
+            """;
+        await ensurePartition.ExecuteNonQueryAsync();
     }
 
     private static async Task SeedUserAsync(NpgsqlConnection db, Guid userId, string phone, string displayName)

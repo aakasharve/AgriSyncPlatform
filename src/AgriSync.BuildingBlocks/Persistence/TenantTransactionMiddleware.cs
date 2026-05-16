@@ -88,14 +88,30 @@ public sealed class TenantTransactionMiddleware
         // Open one transaction PER writing context so each commands
         // chain sees its own `set_config(..., true)` GUC. Postgres
         // scopes those GUCs to the connection's current transaction.
+        //
+        // EnableRetryOnFailure on ShramSafalDbContext requires that
+        // user-initiated transactions go through ExecutionStrategy.
+        // BeginTransactionAsync directly throws "execution strategy
+        // does not support user-initiated transactions". Route every
+        // tx-begin through CreateExecutionStrategy().ExecuteAsync so
+        // both retry-enabled and non-retry contexts work uniformly —
+        // for non-retry contexts the strategy is a single-shot no-op
+        // wrapper. The retry layer can't meaningfully replay an
+        // arbitrary HTTP pipeline, but BeginTransaction itself is
+        // a safe operation to retry under transient connection loss.
         var contexts = registry.GetWritingContexts(context.RequestServices);
         var transactions = new List<IDbContextTransaction>(contexts.Count);
         try
         {
             foreach (var db in contexts)
             {
-                var tx = await db.Database.BeginTransactionAsync(context.RequestAborted);
-                transactions.Add(tx);
+                var strategy = db.Database.CreateExecutionStrategy();
+                IDbContextTransaction? opened = null;
+                await strategy.ExecuteAsync(async () =>
+                {
+                    opened = await db.Database.BeginTransactionAsync(context.RequestAborted);
+                });
+                transactions.Add(opened!);
             }
 
             await _next(context);
