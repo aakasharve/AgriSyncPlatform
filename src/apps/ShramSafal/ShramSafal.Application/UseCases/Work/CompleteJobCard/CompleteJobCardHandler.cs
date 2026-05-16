@@ -69,17 +69,27 @@ public sealed class CompleteJobCardHandler(
         }
 
         // 6. Emit audit event.
+        // DATA_PRINCIPLE_SPINE sub-phase 04.3b — migrate from AuditEvent.Create
+        // (sentinel provenance) to AuditEventFactory.Create with the real
+        // X-Device-Id / IP hash / X-App-Version sourced from the endpoint's
+        // AuditContextAccessor. Worker-initiated state transition; no AI job
+        // correlation.
         await repository.AddAuditEventAsync(
-            AuditEvent.Create(
-                farmId: jobCard.FarmId.Value,
+            AuditEventFactory.Create(
                 entityType: "JobCard",
                 entityId: jobCard.Id,
                 action: "jobcard.completed",
                 actorUserId: command.CallerUserId.Value,
                 actorRole: "Worker",
                 payload: new { jobCard.Id, DailyLogId = command.DailyLogId, CompletedAtUtc = jobCard.CompletedAtUtc },
+                farmId: jobCard.FarmId.Value,
                 clientCommandId: command.ClientCommandId,
-                occurredAtUtc: clock.UtcNow),
+                appVersion: string.IsNullOrWhiteSpace(command.ClientAppVersion)
+                    ? AgriSync.BuildingBlocks.Persistence.AppVersionProvider.Current
+                    : command.ClientAppVersion,
+                deviceId: command.AuditDeviceId,
+                ipHash: command.AuditIpHash,
+                sourceAiJobId: null),
             ct);
 
         await repository.SaveChangesAsync(ct);

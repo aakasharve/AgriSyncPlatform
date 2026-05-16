@@ -1,5 +1,6 @@
 using System.Security.Claims;
 using AgriSync.BuildingBlocks.Application;
+using AgriSync.BuildingBlocks.Audit;
 using AgriSync.BuildingBlocks.Results;
 using AgriSync.SharedKernel.Contracts.Ids;
 using ShramSafal.Application.UseCases.Work.AssignJobCard;
@@ -26,12 +27,18 @@ public static class JobCardEndpoints
         // POST /job-cards → 201 Created
         group.MapPost("/job-cards", async (
             CreateJobCardRequest request,
+            HttpContext httpContext,
             ClaimsPrincipal user,
             CreateJobCardHandler handler,
             CancellationToken ct) =>
         {
             if (!EndpointActorContext.TryGetUserId(user, out var actorUserId))
                 return Results.Unauthorized();
+
+            // DATA_PRINCIPLE_SPINE sub-phase 04.3b — extract forensic
+            // provenance for the AuditEvent row.
+            var (auditDeviceId, auditIpHash) = httpContext.AuditClaims();
+            var clientAppVersion = ResolveClientAppVersion(httpContext);
 
             var command = new CreateJobCardCommand(
                 FarmId: new FarmId(request.FarmId),
@@ -40,7 +47,10 @@ public static class JobCardEndpoints
                 PlannedDate: request.PlannedDate,
                 LineItems: request.LineItems,
                 CallerUserId: new UserId(actorUserId),
-                ClientCommandId: request.ClientCommandId);
+                ClientCommandId: request.ClientCommandId,
+                ClientAppVersion: clientAppVersion,
+                AuditDeviceId: auditDeviceId,
+                AuditIpHash: auditIpHash);
 
             var result = await handler.HandleAsync(command, ct);
             return result.IsSuccess
@@ -53,6 +63,7 @@ public static class JobCardEndpoints
         group.MapPost("/job-cards/{id:guid}/assign", async (
             Guid id,
             AssignJobCardRequest request,
+            HttpContext httpContext,
             ClaimsPrincipal user,
             AssignJobCardHandler handler,
             CancellationToken ct) =>
@@ -60,11 +71,19 @@ public static class JobCardEndpoints
             if (!EndpointActorContext.TryGetUserId(user, out var actorUserId))
                 return Results.Unauthorized();
 
+            // DATA_PRINCIPLE_SPINE sub-phase 04.3b — extract forensic
+            // provenance for the AuditEvent row.
+            var (auditDeviceId, auditIpHash) = httpContext.AuditClaims();
+            var clientAppVersion = ResolveClientAppVersion(httpContext);
+
             var command = new AssignJobCardCommand(
                 JobCardId: id,
                 WorkerUserId: new UserId(request.WorkerUserId),
                 CallerUserId: new UserId(actorUserId),
-                ClientCommandId: request.ClientCommandId);
+                ClientCommandId: request.ClientCommandId,
+                ClientAppVersion: clientAppVersion,
+                AuditDeviceId: auditDeviceId,
+                AuditIpHash: auditIpHash);
 
             var result = await handler.HandleAsync(command, ct);
             return result.IsSuccess ? Results.Ok(result.Value) : ToErrorResult(result.Error);
@@ -75,6 +94,7 @@ public static class JobCardEndpoints
         group.MapPost("/job-cards/{id:guid}/start", async (
             Guid id,
             StartJobCardRequest request,
+            HttpContext httpContext,
             ClaimsPrincipal user,
             StartJobCardHandler handler,
             CancellationToken ct) =>
@@ -82,10 +102,18 @@ public static class JobCardEndpoints
             if (!EndpointActorContext.TryGetUserId(user, out var actorUserId))
                 return Results.Unauthorized();
 
+            // DATA_PRINCIPLE_SPINE sub-phase 04.3b — extract forensic
+            // provenance for the AuditEvent row.
+            var (auditDeviceId, auditIpHash) = httpContext.AuditClaims();
+            var clientAppVersion = ResolveClientAppVersion(httpContext);
+
             var command = new StartJobCardCommand(
                 JobCardId: id,
                 CallerUserId: new UserId(actorUserId),
-                ClientCommandId: request.ClientCommandId);
+                ClientCommandId: request.ClientCommandId,
+                ClientAppVersion: clientAppVersion,
+                AuditDeviceId: auditDeviceId,
+                AuditIpHash: auditIpHash);
 
             var result = await handler.HandleAsync(command, ct);
             return result.IsSuccess ? Results.Ok(result.Value) : ToErrorResult(result.Error);
@@ -100,6 +128,7 @@ public static class JobCardEndpoints
         group.MapPost("/job-cards/{id:guid}/complete", async (
             Guid id,
             CompleteJobCardRequest request,
+            HttpContext httpContext,
             ClaimsPrincipal user,
             IHandler<CompleteJobCardCommand, CompleteJobCardResult> handler,
             CancellationToken ct) =>
@@ -107,11 +136,19 @@ public static class JobCardEndpoints
             if (!EndpointActorContext.TryGetUserId(user, out var actorUserId))
                 return Results.Unauthorized();
 
+            // DATA_PRINCIPLE_SPINE sub-phase 04.3b — extract forensic
+            // provenance for the AuditEvent row.
+            var (auditDeviceId, auditIpHash) = httpContext.AuditClaims();
+            var clientAppVersion = ResolveClientAppVersion(httpContext);
+
             var command = new CompleteJobCardCommand(
                 JobCardId: id,
                 DailyLogId: request.DailyLogId,
                 CallerUserId: new UserId(actorUserId),
-                ClientCommandId: request.ClientCommandId);
+                ClientCommandId: request.ClientCommandId,
+                ClientAppVersion: clientAppVersion,
+                AuditDeviceId: auditDeviceId,
+                AuditIpHash: auditIpHash);
 
             var result = await handler.HandleAsync(command, ct);
             return result.IsSuccess ? Results.Ok(result.Value) : ToErrorResult(result.Error);
@@ -122,6 +159,7 @@ public static class JobCardEndpoints
         group.MapPost("/job-cards/{id:guid}/verify-for-payout", async (
             Guid id,
             VerifyJobCardForPayoutRequest request,
+            HttpContext httpContext,
             ClaimsPrincipal user,
             VerifyJobCardForPayoutHandler handler,
             CancellationToken ct) =>
@@ -129,10 +167,18 @@ public static class JobCardEndpoints
             if (!EndpointActorContext.TryGetUserId(user, out var actorUserId))
                 return Results.Unauthorized();
 
+            // DATA_PRINCIPLE_SPINE sub-phase 04.3b — extract forensic
+            // provenance for the AuditEvent row.
+            var (auditDeviceId, auditIpHash) = httpContext.AuditClaims();
+            var clientAppVersion = ResolveClientAppVersion(httpContext);
+
             var command = new VerifyJobCardForPayoutCommand(
                 JobCardId: id,
                 CallerUserId: new UserId(actorUserId),
-                ClientCommandId: request.ClientCommandId);
+                ClientCommandId: request.ClientCommandId,
+                ClientAppVersion: clientAppVersion,
+                AuditDeviceId: auditDeviceId,
+                AuditIpHash: auditIpHash);
 
             var result = await handler.HandleAsync(command, ct);
             return result.IsSuccess ? Results.Ok(result.Value) : ToErrorResult(result.Error);
@@ -159,10 +205,11 @@ public static class JobCardEndpoints
             // DATA_PRINCIPLE_SPINE sub-phase 01.4 — capture X-App-Version
             // (fallback "unknown") so the labour-payout CostEntry's
             // Provenance.AppVersion records the real client version.
-            var headerAppVersion = httpContext.Request.Headers["X-App-Version"].FirstOrDefault();
-            var clientAppVersion = string.IsNullOrWhiteSpace(headerAppVersion)
-                ? "unknown"
-                : headerAppVersion!.Trim();
+            var clientAppVersion = ResolveClientAppVersion(httpContext);
+
+            // DATA_PRINCIPLE_SPINE sub-phase 04.3b — extract forensic
+            // provenance for the AuditEvent row.
+            var (auditDeviceId, auditIpHash) = httpContext.AuditClaims();
 
             var command = new SettleJobCardPayoutCommand(
                 JobCardId: id,
@@ -171,7 +218,9 @@ public static class JobCardEndpoints
                 SettlementNote: request.SettlementNote,
                 CallerUserId: new UserId(actorUserId),
                 ClientCommandId: request.ClientCommandId,
-                ClientAppVersion: clientAppVersion);
+                ClientAppVersion: clientAppVersion,
+                AuditDeviceId: auditDeviceId,
+                AuditIpHash: auditIpHash);
 
             var result = await handler.HandleAsync(command, ct);
             return result.IsSuccess ? Results.Ok(result.Value) : ToErrorResult(result.Error);
@@ -186,6 +235,7 @@ public static class JobCardEndpoints
         group.MapPost("/job-cards/{id:guid}/cancel", async (
             Guid id,
             CancelJobCardRequest request,
+            HttpContext httpContext,
             ClaimsPrincipal user,
             IHandler<CancelJobCardCommand, CancelJobCardResult> handler,
             CancellationToken ct) =>
@@ -193,11 +243,19 @@ public static class JobCardEndpoints
             if (!EndpointActorContext.TryGetUserId(user, out var actorUserId))
                 return Results.Unauthorized();
 
+            // DATA_PRINCIPLE_SPINE sub-phase 04.3b — extract forensic
+            // provenance for the AuditEvent row.
+            var (auditDeviceId, auditIpHash) = httpContext.AuditClaims();
+            var clientAppVersion = ResolveClientAppVersion(httpContext);
+
             var command = new CancelJobCardCommand(
                 JobCardId: id,
                 Reason: request.Reason ?? string.Empty,
                 CallerUserId: new UserId(actorUserId),
-                ClientCommandId: request.ClientCommandId);
+                ClientCommandId: request.ClientCommandId,
+                ClientAppVersion: clientAppVersion,
+                AuditDeviceId: auditDeviceId,
+                AuditIpHash: auditIpHash);
 
             var result = await handler.HandleAsync(command, ct);
             return result.IsSuccess ? Results.Ok(result.Value) : ToErrorResult(result.Error);
@@ -265,6 +323,16 @@ public static class JobCardEndpoints
         return error.Code.EndsWith("NotFound", StringComparison.Ordinal)
             ? Results.NotFound(new { error = error.Code, message = error.Description })
             : Results.BadRequest(new { error = error.Code, message = error.Description });
+    }
+
+    // DATA_PRINCIPLE_SPINE sub-phase 04.3b — single source for resolving the
+    // X-App-Version header into the AuditEvent.AppVersion column, mirroring
+    // the sub-phase 01.4 fallback used by the SettleJobCardPayout endpoint
+    // above (and the Logs / Attachments / Memberships endpoints in Sub-commit A).
+    private static string ResolveClientAppVersion(HttpContext httpContext)
+    {
+        var header = httpContext.Request.Headers["X-App-Version"].FirstOrDefault();
+        return string.IsNullOrWhiteSpace(header) ? "unknown" : header!.Trim();
     }
 }
 

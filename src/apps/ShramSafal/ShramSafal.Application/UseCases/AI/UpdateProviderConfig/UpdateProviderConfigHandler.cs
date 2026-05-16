@@ -41,7 +41,12 @@ public sealed class UpdateProviderConfigHandler(
         await aiJobRepository.SaveChangesAsync(ct);
 
         var after = ToDto(config);
-        var auditEvent = AuditEvent.Create(
+        // DATA_PRINCIPLE_SPINE sub-phase 04.3b — migrate from AuditEvent.Create
+        // (sentinel provenance) to AuditEventFactory.Create with the real
+        // X-Device-Id / IP hash / X-App-Version sourced from the endpoint's
+        // AuditContextAccessor. Provider config is a global (cross-tenant)
+        // admin operation: farmId stays null. No SourceAiJobId.
+        var auditEvent = AuditEventFactory.Create(
             entityType: "AiProviderConfig",
             entityId: config.Id,
             action: "SettingsChanged",
@@ -51,7 +56,15 @@ public sealed class UpdateProviderConfigHandler(
             {
                 before,
                 after
-            });
+            },
+            farmId: null,
+            clientCommandId: null,
+            appVersion: string.IsNullOrWhiteSpace(command.ClientAppVersion)
+                ? AgriSync.BuildingBlocks.Persistence.AppVersionProvider.Current
+                : command.ClientAppVersion,
+            deviceId: command.AuditDeviceId,
+            ipHash: command.AuditIpHash,
+            sourceAiJobId: null);
 
         await repository.AddAuditEventAsync(auditEvent, ct);
         await repository.SaveChangesAsync(ct);

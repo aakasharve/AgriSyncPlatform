@@ -72,15 +72,19 @@ public sealed class CorrectCostEntryHandler(
         // Repository add methods only stage entities; the single SaveChangesAsync call below is
         // the atomic EF Core commit point for both the correction and its audit event.
         await repository.AddFinanceCorrectionAsync(correction, ct);
+        // DATA_PRINCIPLE_SPINE sub-phase 04.3b — migrate from AuditEvent.Create
+        // (sentinel provenance) to AuditEventFactory.Create with the real
+        // X-Device-Id / IP hash / X-App-Version sourced from the endpoint's
+        // AuditContextAccessor. Corrections are owner-initiated (manual) — no
+        // SourceAiJobId.
         await repository.AddAuditEventAsync(
-            AuditEvent.Create(
-                entry.FarmId,
-                "CostEntry",
-                entry.Id,
-                "Corrected",
-                command.CorrectedByUserId,
-                resolvedActorRole.ToString(),
-                new
+            AuditEventFactory.Create(
+                entityType: "CostEntry",
+                entityId: entry.Id,
+                action: "Corrected",
+                actorUserId: command.CorrectedByUserId,
+                actorRole: resolvedActorRole.ToString(),
+                payload: new
                 {
                     costEntryId = entry.Id,
                     financeCorrectionId = correction.Id,
@@ -89,8 +93,14 @@ public sealed class CorrectCostEntryHandler(
                     correction.CurrencyCode,
                     correction.Reason
                 },
-                command.ClientCommandId,
-                clock.UtcNow),
+                farmId: entry.FarmId,
+                clientCommandId: command.ClientCommandId,
+                appVersion: string.IsNullOrWhiteSpace(command.ClientAppVersion)
+                    ? AgriSync.BuildingBlocks.Persistence.AppVersionProvider.Current
+                    : command.ClientAppVersion,
+                deviceId: command.AuditDeviceId,
+                ipHash: command.AuditIpHash,
+                sourceAiJobId: null),
             ct);
         await repository.SaveChangesAsync(ct);
 

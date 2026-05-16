@@ -1,6 +1,7 @@
 using System.Security.Claims;
 using AgriSync.BuildingBlocks.Abstractions;
 using AgriSync.BuildingBlocks.Application;
+using AgriSync.BuildingBlocks.Audit;
 using AgriSync.BuildingBlocks.Results;
 using AgriSync.SharedKernel.Contracts.Ids;
 using Microsoft.AspNetCore.Mvc;
@@ -23,6 +24,7 @@ public static class FinanceEndpoints
     {
         group.MapPost("/finance/price-config", async (
             SetPriceConfigRequest request,
+            HttpContext httpContext,
             ClaimsPrincipal user,
             SetPriceConfigVersionHandler handler,
             CancellationToken ct) =>
@@ -32,6 +34,11 @@ public static class FinanceEndpoints
                 return Results.Unauthorized();
             }
 
+            // DATA_PRINCIPLE_SPINE sub-phase 04.3b — extract forensic
+            // provenance for the AuditEvent row.
+            var (auditDeviceId, auditIpHash) = httpContext.AuditClaims();
+            var clientAppVersion = ResolveClientAppVersion(httpContext);
+
             var command = new SetPriceConfigVersionCommand(
                 request.ItemName,
                 request.UnitPrice,
@@ -40,7 +47,11 @@ public static class FinanceEndpoints
                 request.Version,
                 actorUserId,
                 PriceConfigId: null,
-                ActorRole: EndpointActorContext.GetActorRole(user));
+                ActorRole: EndpointActorContext.GetActorRole(user),
+                ClientCommandId: null,
+                ClientAppVersion: clientAppVersion,
+                AuditDeviceId: auditDeviceId,
+                AuditIpHash: auditIpHash);
 
             var result = await handler.HandleAsync(command, ct);
             return result.IsSuccess ? Results.Ok(result.Value) : ToErrorResult(result.Error);
@@ -73,10 +84,11 @@ public static class FinanceEndpoints
             // "unknown"). SourceAiJobId arrives in the request body when the
             // farmer Confirms a voice draft that produced a cost entry; the
             // handler lifts Voice provenance from that AiJob.
-            var headerAppVersion = httpContext.Request.Headers["X-App-Version"].FirstOrDefault();
-            var clientAppVersion = string.IsNullOrWhiteSpace(headerAppVersion)
-                ? "unknown"
-                : headerAppVersion!.Trim();
+            var clientAppVersion = ResolveClientAppVersion(httpContext);
+
+            // DATA_PRINCIPLE_SPINE sub-phase 04.3b — extract forensic
+            // provenance for the AuditEvent row.
+            var (auditDeviceId, auditIpHash) = httpContext.AuditClaims();
 
             var command = new AddCostEntryCommand(
                 request.FarmId,
@@ -93,7 +105,9 @@ public static class FinanceEndpoints
                 ActorRole: EndpointActorContext.GetActorRole(user),
                 ClientCommandId: null,
                 SourceAiJobId: request.SourceAiJobId,
-                ClientAppVersion: clientAppVersion);
+                ClientAppVersion: clientAppVersion,
+                AuditDeviceId: auditDeviceId,
+                AuditIpHash: auditIpHash);
 
             var result = await handler.HandleAsync(command, ct);
             return result.IsSuccess ? Results.Ok(result.Value) : ToErrorResult(result.Error);
@@ -103,6 +117,7 @@ public static class FinanceEndpoints
 
         group.MapPost("/finance/allocate", async (
             AllocateGlobalExpenseRequest request,
+            HttpContext httpContext,
             ClaimsPrincipal user,
             AllocateGlobalExpenseHandler handler,
             CancellationToken ct) =>
@@ -112,6 +127,11 @@ public static class FinanceEndpoints
                 return Results.Unauthorized();
             }
 
+            // DATA_PRINCIPLE_SPINE sub-phase 04.3b — extract forensic
+            // provenance for the AuditEvent row.
+            var (auditDeviceId, auditIpHash) = httpContext.AuditClaims();
+            var clientAppVersion = ResolveClientAppVersion(httpContext);
+
             var command = new AllocateGlobalExpenseCommand(
                 request.CostEntryId,
                 request.AllocationBasis,
@@ -120,7 +140,11 @@ public static class FinanceEndpoints
                     .ToList(),
                 actorUserId,
                 request.DayLedgerId,
-                EndpointActorContext.GetActorRole(user));
+                EndpointActorContext.GetActorRole(user),
+                ClientCommandId: null,
+                ClientAppVersion: clientAppVersion,
+                AuditDeviceId: auditDeviceId,
+                AuditIpHash: auditIpHash);
 
             var result = await handler.HandleAsync(command, ct);
             return result.IsSuccess ? Results.Ok(result.Value) : ToErrorResult(result.Error);
@@ -131,6 +155,7 @@ public static class FinanceEndpoints
         group.MapPost("/finance/cost-entry/{id:guid}/correct", async (
             Guid id,
             CorrectCostEntryRequest request,
+            HttpContext httpContext,
             ClaimsPrincipal user,
             CorrectCostEntryHandler handler,
             CancellationToken ct) =>
@@ -140,6 +165,11 @@ public static class FinanceEndpoints
                 return Results.Unauthorized();
             }
 
+            // DATA_PRINCIPLE_SPINE sub-phase 04.3b — extract forensic
+            // provenance for the AuditEvent row.
+            var (auditDeviceId, auditIpHash) = httpContext.AuditClaims();
+            var clientAppVersion = ResolveClientAppVersion(httpContext);
+
             var command = new CorrectCostEntryCommand(
                 id,
                 request.CorrectedAmount,
@@ -147,7 +177,11 @@ public static class FinanceEndpoints
                 request.Reason,
                 actorUserId,
                 FinanceCorrectionId: null,
-                ActorRole: EndpointActorContext.GetActorRole(user));
+                ActorRole: EndpointActorContext.GetActorRole(user),
+                ClientCommandId: null,
+                ClientAppVersion: clientAppVersion,
+                AuditDeviceId: auditDeviceId,
+                AuditIpHash: auditIpHash);
 
             var result = await handler.HandleAsync(command, ct);
             return result.IsSuccess ? Results.Ok(result.Value) : ToErrorResult(result.Error);
@@ -284,6 +318,15 @@ public static class FinanceEndpoints
         return error.Code.EndsWith("NotFound", StringComparison.Ordinal)
             ? Results.NotFound(new { error = error.Code, message = error.Description })
             : Results.BadRequest(new { error = error.Code, message = error.Description });
+    }
+
+    // DATA_PRINCIPLE_SPINE sub-phase 04.3b — single source for resolving the
+    // X-App-Version header into the AuditEvent.AppVersion column, mirroring the
+    // sub-phase 01.4 fallback used by the AddCostEntry endpoint above.
+    private static string ResolveClientAppVersion(HttpContext httpContext)
+    {
+        var header = httpContext.Request.Headers["X-App-Version"].FirstOrDefault();
+        return string.IsNullOrWhiteSpace(header) ? "unknown" : header!.Trim();
     }
 
 }

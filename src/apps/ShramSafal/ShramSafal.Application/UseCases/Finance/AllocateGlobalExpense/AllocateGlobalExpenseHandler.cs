@@ -101,15 +101,19 @@ public sealed class AllocateGlobalExpenseHandler(
         // Repository add methods only stage entities; the single SaveChangesAsync call below is
         // the atomic EF Core commit point for both the ledger and its audit event.
         await repository.AddDayLedgerAsync(dayLedger, ct);
+        // DATA_PRINCIPLE_SPINE sub-phase 04.3b — migrate from AuditEvent.Create
+        // (sentinel provenance) to AuditEventFactory.Create with the real
+        // X-Device-Id / IP hash / X-App-Version sourced from the endpoint's
+        // AuditContextAccessor. Allocation is owner-initiated (manual) — no
+        // SourceAiJobId.
         await repository.AddAuditEventAsync(
-            AuditEvent.Create(
-                costEntry.FarmId,
-                "DayLedger",
-                dayLedger.Id,
-                "Allocated",
-                command.CreatedByUserId,
-                command.ActorRole ?? "unknown",
-                new
+            AuditEventFactory.Create(
+                entityType: "DayLedger",
+                entityId: dayLedger.Id,
+                action: "Allocated",
+                actorUserId: command.CreatedByUserId,
+                actorRole: command.ActorRole ?? "unknown",
+                payload: new
                 {
                     dayLedger.Id,
                     dayLedger.FarmId,
@@ -126,8 +130,14 @@ public sealed class AllocateGlobalExpenseHandler(
                         a.CurrencyCode
                     }).ToList()
                 },
-                command.ClientCommandId,
-                nowUtc),
+                farmId: costEntry.FarmId,
+                clientCommandId: command.ClientCommandId,
+                appVersion: string.IsNullOrWhiteSpace(command.ClientAppVersion)
+                    ? AgriSync.BuildingBlocks.Persistence.AppVersionProvider.Current
+                    : command.ClientAppVersion,
+                deviceId: command.AuditDeviceId,
+                ipHash: command.AuditIpHash,
+                sourceAiJobId: null),
             ct);
 
         await repository.SaveChangesAsync(ct);

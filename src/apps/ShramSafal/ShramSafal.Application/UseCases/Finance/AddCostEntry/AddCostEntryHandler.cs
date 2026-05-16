@@ -164,19 +164,23 @@ public sealed class AddCostEntryHandler(
         }
 
         await repository.AddCostEntryAsync(entry, ct);
+        // DATA_PRINCIPLE_SPINE sub-phase 04.3b — migrate from AuditEvent.Create
+        // (sentinel provenance) to AuditEventFactory.Create with the real
+        // X-Device-Id / IP hash / X-App-Version sourced from the endpoint's
+        // AuditContextAccessor. SourceAiJobId is lifted from the command (set
+        // on the voice-Confirm path; null on true-manual).
         await repository.AddAuditEventAsync(
-            AuditEvent.Create(
-                command.FarmId,
-                "CostEntry",
-                entry.Id,
-                "Created",
-                command.CreatedByUserId,
-                command.ActorRole ?? "unknown",
+            AuditEventFactory.Create(
+                entityType: "CostEntry",
+                entityId: entry.Id,
+                action: "Created",
+                actorUserId: command.CreatedByUserId,
+                actorRole: command.ActorRole ?? "unknown",
                 // DATA_PRINCIPLE_SPINE sub-phase 02.5 (R3 verdict): audit
                 // JSON key stays `category` byte-equivalent (do not break
                 // existing log readers); the stored value is now the
                 // canonical code (e.g. `fertilizer`, `labour_misc`).
-                new
+                payload: new
                 {
                     entry.Id,
                     command.FarmId,
@@ -188,8 +192,12 @@ public sealed class AddCostEntryHandler(
                     command.EntryDate,
                     command.Location
                 },
-                command.ClientCommandId,
-                clock.UtcNow),
+                farmId: command.FarmId,
+                clientCommandId: command.ClientCommandId,
+                appVersion: stampedAppVersion,
+                deviceId: command.AuditDeviceId,
+                ipHash: command.AuditIpHash,
+                sourceAiJobId: command.SourceAiJobId),
             ct);
         await repository.SaveChangesAsync(ct);
 

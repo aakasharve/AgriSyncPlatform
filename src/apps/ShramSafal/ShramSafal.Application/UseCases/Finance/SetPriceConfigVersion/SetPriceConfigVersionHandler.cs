@@ -39,14 +39,19 @@ public sealed class SetPriceConfigVersionHandler(
             clock.UtcNow);
 
         await repository.AddPriceConfigAsync(config, ct);
+        // DATA_PRINCIPLE_SPINE sub-phase 04.3b — migrate from AuditEvent.Create
+        // (sentinel provenance) to AuditEventFactory.Create with the real
+        // X-Device-Id / IP hash / X-App-Version sourced from the endpoint's
+        // AuditContextAccessor. Price configs are global (no farm scope) so
+        // farmId stays null; admin operation, no SourceAiJobId.
         await repository.AddAuditEventAsync(
-            AuditEvent.Create(
-                "PriceConfig",
-                config.Id,
-                "VersionSet",
-                command.CreatedByUserId,
-                command.ActorRole ?? "unknown",
-                new
+            AuditEventFactory.Create(
+                entityType: "PriceConfig",
+                entityId: config.Id,
+                action: "VersionSet",
+                actorUserId: command.CreatedByUserId,
+                actorRole: command.ActorRole ?? "unknown",
+                payload: new
                 {
                     config.Id,
                     config.ItemName,
@@ -55,8 +60,14 @@ public sealed class SetPriceConfigVersionHandler(
                     config.EffectiveFrom,
                     config.Version
                 },
-                command.ClientCommandId,
-                clock.UtcNow),
+                farmId: null,
+                clientCommandId: command.ClientCommandId,
+                appVersion: string.IsNullOrWhiteSpace(command.ClientAppVersion)
+                    ? AgriSync.BuildingBlocks.Persistence.AppVersionProvider.Current
+                    : command.ClientAppVersion,
+                deviceId: command.AuditDeviceId,
+                ipHash: command.AuditIpHash,
+                sourceAiJobId: null),
             ct);
         await repository.SaveChangesAsync(ct);
 

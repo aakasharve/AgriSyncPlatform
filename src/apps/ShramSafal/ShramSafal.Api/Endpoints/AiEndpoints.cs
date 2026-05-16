@@ -3,6 +3,7 @@ using System.Security.Claims;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using AgriSync.BuildingBlocks.Audit;
 using AgriSync.BuildingBlocks.Results;
 using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.RateLimiting;
@@ -204,6 +205,14 @@ public static class AiEndpoints
             if (scope is null) return Results.Empty;
             if (!await AdminScopeHelper.RequirePlatformAdminAsync(http, scope)) return Results.Empty;
 
+            // DATA_PRINCIPLE_SPINE sub-phase 04.3b — extract forensic
+            // provenance for the AuditEvent row. UpdateProviderConfig is an
+            // admin operation but still runs inside an HTTP request, so we
+            // use the normal HttpContext.AuditClaims() path (not the
+            // WorkerClaims() sentinel reserved for background services).
+            var (auditDeviceId, auditIpHash) = http.AuditClaims();
+            var clientAppVersion = ResolveClientAppVersion(http);
+
             var result = await handler.HandleAsync(
                 new UpdateProviderConfigCommand(
                     actorUserId,
@@ -218,7 +227,10 @@ public static class AiEndpoints
                     request.ReceiptConfidenceThreshold,
                     request.VoiceProvider,
                     request.ReceiptProvider,
-                    request.PattiProvider),
+                    request.PattiProvider,
+                    ClientAppVersion: clientAppVersion,
+                    AuditDeviceId: auditDeviceId,
+                    AuditIpHash: auditIpHash),
                 ct);
 
             return result.IsSuccess ? Results.Ok(result.Value) : ToErrorResult(result.Error);
@@ -1240,6 +1252,15 @@ public static class AiEndpoints
     private static IResult UnexpectedNullResult(string operation)
     {
         return Results.StatusCode(StatusCodes.Status500InternalServerError);
+    }
+
+    // DATA_PRINCIPLE_SPINE sub-phase 04.3b — single source for resolving the
+    // X-App-Version header into the AuditEvent.AppVersion column, mirroring
+    // the sub-phase 01.4 fallback used by the voice-parse endpoint above.
+    private static string ResolveClientAppVersion(HttpContext httpContext)
+    {
+        var header = httpContext.Request.Headers["X-App-Version"].FirstOrDefault();
+        return string.IsNullOrWhiteSpace(header) ? "unknown" : header!.Trim();
     }
 }
 
