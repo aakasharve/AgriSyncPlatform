@@ -48,6 +48,14 @@ jobs:
       ConnectionStrings__ShramSafalDb: "Host=localhost;Port=5433;Database=agrisync;Username=postgres;Password=akash123"
       # JWT signing key (non-secret CI value; min 32 chars)
       Jwt__SigningKey: "ci-e2e-only-not-a-secret-key-32ch"
+      # Phase 04 (spine 04.2) — IpHasher requires Audit:IpHashSalt at DI
+      # registration time (fail-fast InvalidOperationException). Prod sets
+      # this via AWS SecretsManager 'agrisync/audit/ip_salt'; appsettings.
+      # Development.json carries the dev placeholder. CI environment uses
+      # ASPNETCORE_ENVIRONMENT=CI so Development.json is NOT loaded — the
+      # dev placeholder must be passed via env here. Same 50-byte base64
+      # value as appsettings.Development.json; not a real secret.
+      Audit__IpHashSalt: "ZGV2X29ubHlfc2FsdF8xNl9ieXRlc19taW5pbXVtX2FncmlzeW5jX2F1ZGl0XzIwMjY="
       # Non-Development, non-Production environment so the backend takes the
       # ApplyStartupMigrationsIfAllowedAsync path (not EnsureContextTablesCreated).
       ASPNETCORE_ENVIRONMENT: "CI"
