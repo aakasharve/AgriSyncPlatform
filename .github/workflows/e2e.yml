@@ -46,6 +46,18 @@ jobs:
       # so two strings are sufficient.
       ConnectionStrings__UserDb: "Host=localhost;Port=5433;Database=agrisync;Username=postgres;Password=akash123"
       ConnectionStrings__ShramSafalDb: "Host=localhost;Port=5433;Database=agrisync;Username=postgres;Password=akash123"
+      # Phase 04 (spine 04.7) — IAdminDbContextFactory.CreateAsync reads
+      # ShramSafalDb_Migration first, falls back to ShramSafalDb. appsettings.json
+      # ships a placeholder ("CHANGE_ME_IN_ENVIRONMENT") so the env-override
+      # path must be primed in CI; otherwise the sweeper backgound services
+      # (ComplianceEvaluatorSweeper, TestOverdueSweeper, WorkerRetentionJob,
+      # BackfillFarmOwnerAccounts) fail with 28P01 password-auth and bring
+      # down the host before /health/ready can answer. Use the same superuser
+      # creds as ShramSafalDb above — the e2e Postgres has no separate
+      # privileged role, and the migration semantics don't depend on the
+      # role attribute in this scope.
+      ConnectionStrings__ShramSafalDb_Migration: "Host=localhost;Port=5433;Database=agrisync;Username=postgres;Password=akash123"
+      ConnectionStrings__UserDb_Migration: "Host=localhost;Port=5433;Database=agrisync;Username=postgres;Password=akash123"
       # JWT signing key (non-secret CI value; min 32 chars)
       Jwt__SigningKey: "ci-e2e-only-not-a-secret-key-32ch"
       # Phase 04 (spine 04.2) — IpHasher requires Audit:IpHashSalt at DI
