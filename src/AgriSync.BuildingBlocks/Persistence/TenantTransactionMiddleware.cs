@@ -75,6 +75,29 @@ public sealed class TenantTransactionMiddleware
         "/user/auth", "/auth",
         // E2E test harness endpoints are dev-only and bypass tenancy.
         "/__e2e",
+        // Post-login, pre-farm-selection bootstrap surface. This
+        // endpoint intentionally spans all of the caller's farms (so
+        // it cannot scope to a single farmId) yet still hits the
+        // tenant-scoped ShramSafalDbContext. Without admin elevation
+        // the interceptor fail-closes on the first DbCommand because
+        // ShramSafalAuthorizationEnforcer.EnsureIsFarmMember was never
+        // invoked (no farmId in scope to enforce against).
+        //
+        // GET /shramsafal/farms/mine — list farms the caller is a
+        // member of. The frontend bootstrap calls this to populate the
+        // FarmContextSwitcher BEFORE any farm is selected; e2e spec
+        // 05_farm_context_switch is the smoking gun, and specs 02–04
+        // also depend on this completing so the app shell renders.
+        //
+        // NOTE: deliberately NOT a catch-all on "/shramsafal" —
+        // /shramsafal/logs, /shramsafal/farms/{farmId}/..., /sync,
+        // /shramsafal/attachments, etc. MUST keep running under the
+        // tenant-scoped transaction so RLS + the interceptor enforce
+        // farm-level isolation. Adding peer "list-my-X" endpoints
+        // here should follow the same per-route audit (confirm the
+        // handler legitimately spans the caller's tenancies and has
+        // user-scoped filtering of its own).
+        "/shramsafal/farms/mine",
     };
 
     private readonly RequestDelegate _next;
