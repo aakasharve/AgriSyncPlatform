@@ -168,23 +168,41 @@ public sealed class RowLevelSecurityTests : IAsyncLifetime
         }
 
         // ── DI graph — real AddShramSafalInfrastructure wiring ──────────
-        // Resolves ShramSafalDbContext with the production interceptor
-        // chain, including TenantConnectionInterceptor + scoped
-        // TenantContext. This is the same wiring Program.cs uses; we just
-        // point the connection string at the testcontainer.
+        // CRITICAL: tests must connect as agrisync_app (the W1a-created
+        // non-superuser role), NOT the testcontainer superuser. Postgres
+        // ALWAYS bypasses RLS for superusers even with FORCE ROW LEVEL
+        // SECURITY — connecting as superuser would make these tests
+        // vacuously pass (returning all rows regardless of tenant claim).
+        // The agrisync_app role + password literal is set by migration
+        // 20260515090000_BootstrapDbRoles which has already run above.
+        var appConn = BuildAppRoleConnectionString(conn);
+
         var services = new ServiceCollection();
         services.AddLogging();
         var inMemoryConfig = new ConfigurationBuilder()
             .AddInMemoryCollection(new Dictionary<string, string?>
             {
-                ["ConnectionStrings:ShramSafalDb"] = conn,
-                ["ConnectionStrings:UserDb"] = conn,
+                ["ConnectionStrings:ShramSafalDb"] = appConn,
+                ["ConnectionStrings:UserDb"] = appConn,
             }!)
             .Build();
         services.AddSingleton<IConfiguration>(inMemoryConfig);
         services.AddShramSafalInfrastructure(inMemoryConfig);
 
         _rootProvider = services.BuildServiceProvider();
+    }
+
+    // Rewrite testcontainer's superuser connection string into one
+    // authenticated as agrisync_app. Password matches the literal in
+    // 20260515090000_BootstrapDbRoles.cs (dev_app_change_me).
+    private static string BuildAppRoleConnectionString(string superuserConn)
+    {
+        var builder = new Npgsql.NpgsqlConnectionStringBuilder(superuserConn)
+        {
+            Username = "agrisync_app",
+            Password = "dev_app_change_me",
+        };
+        return builder.ConnectionString;
     }
 
     public async Task DisposeAsync()
