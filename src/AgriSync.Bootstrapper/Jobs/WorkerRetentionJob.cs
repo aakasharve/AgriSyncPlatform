@@ -1,10 +1,13 @@
 using Accounts.Application.Ports;
 using Accounts.Domain.Affiliation;
 using AgriSync.BuildingBlocks.Abstractions;
+using AgriSync.BuildingBlocks.Auditing;
+using AgriSync.BuildingBlocks.Persistence;
 using AgriSync.SharedKernel.Contracts.Ids;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using ShramSafal.Infrastructure.Persistence;
 
 namespace AgriSync.Bootstrapper.Jobs;
 
@@ -42,13 +45,31 @@ public sealed class WorkerRetentionJob(
     private async Task RunPassAsync(CancellationToken ct)
     {
         await using var scope = scopeFactory.CreateAsyncScope();
-        // DATA_PRINCIPLE_SPINE 03.2 R6 mitigation — the retention reader
-        // joins ssf.farm_memberships across every farm in the system; a
-        // single-farm tenant claim would mask all but one. Elevate so the
-        // interceptor skips GUC injection and the join sees every row.
-        // TODO 03.5: elevate to admin scope via IAdminDbContextFactory.
+        // DATA_PRINCIPLE_SPINE 04.7 carry-over (was 03.5b) — the retention
+        // reader joins ssf.farm_memberships across every farm in the
+        // system; a single-farm tenant claim would mask all but one. The
+        // admin factory writes an AuditEvent("admin_cross_tenant","open")
+        // row with farm_id=NULL BEFORE returning, so each nightly pass
+        // leaves a forensic breadcrumb naming this job as the opener.
+        //
+        // The returned context is disposed immediately — WorkerRetentionReader
+        // is a scoped service that resolves the SCOPED ShramSafalDbContext
+        // (interceptor-attached), and AffiliationRepository binds to the
+        // scoped AccountsDbContext (no interceptor). The SSF scoped
+        // context still needs TenantContext elevation to skip the fail-
+        // closed GUC-injection prelude. Holding both calls keeps the audit
+        // trail honest while preserving the reader/repo wiring.
+        var adminFactory = scope.ServiceProvider
+            .GetRequiredService<IAdminDbContextFactory<ShramSafalDbContext>>();
+        await using (await adminFactory.CreateAsync(
+            reason: nameof(WorkerRetentionJob),
+            actorUserId: SystemActor.Worker,
+            ct: ct))
+        {
+            // Audit row committed; primary context disposed.
+        }
         scope.ServiceProvider
-            .GetRequiredService<AgriSync.BuildingBlocks.Persistence.TenantContext>()
+            .GetRequiredService<TenantContext>()
             .ElevateToAdminCrossTenant();
         var affiliationRepo = scope.ServiceProvider.GetRequiredService<IAffiliationRepository>();
         var retentionReader = scope.ServiceProvider.GetRequiredService<IWorkerRetentionReader>();

@@ -1,6 +1,8 @@
 using Accounts.Domain.OwnerAccounts;
 using Accounts.Domain.Subscriptions;
 using Accounts.Infrastructure.Persistence;
+using AgriSync.BuildingBlocks.Auditing;
+using AgriSync.BuildingBlocks.Persistence;
 using AgriSync.SharedKernel.Contracts.Ids;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -39,14 +41,27 @@ internal sealed class BackfillFarmOwnerAccounts : IHostedService
         try
         {
             await using var scope = _services.CreateAsyncScope();
-            // DATA_PRINCIPLE_SPINE 03.2 R6 mitigation — backfill operates
-            // across every farm in the system, so we elevate the per-scope
-            // TenantContext to admin to bypass the interceptor's fail-closed
-            // throw. TODO 03.5: elevate to admin scope via IAdminDbContextFactory.
-            scope.ServiceProvider
-                .GetRequiredService<AgriSync.BuildingBlocks.Persistence.TenantContext>()
-                .ElevateToAdminCrossTenant();
-            var ssfDb = scope.ServiceProvider.GetRequiredService<ShramSafalDbContext>();
+            // DATA_PRINCIPLE_SPINE 04.7 carry-over (was 03.5b) — backfill
+            // scans every farm in the system, so we open a fresh
+            // ShramSafalDbContext via IAdminDbContextFactory. The factory:
+            //   1. Writes an AuditEvent("admin_cross_tenant","open") row
+            //      with farm_id=NULL (visible to every tenant per the
+            //      04.4 RLS policy on audit_events) BEFORE returning the
+            //      context, so the cross-tenant scope is recorded even
+            //      if backfill itself crashes mid-loop.
+            //   2. Returns a context whose options chain has NO
+            //      TenantConnectionInterceptor attached and whose
+            //      connection string is the privileged migration role
+            //      (ShramSafalDb_Migration → table-owner → RLS bypass).
+            // AccountsDbContext has no TenantConnectionInterceptor (see
+            // Accounts.Infrastructure.DependencyInjection), so we resolve
+            // it from the scope as-is — no elevation required.
+            var adminFactory = scope.ServiceProvider
+                .GetRequiredService<IAdminDbContextFactory<ShramSafalDbContext>>();
+            await using var ssfDb = await adminFactory.CreateAsync(
+                reason: nameof(BackfillFarmOwnerAccounts),
+                actorUserId: SystemActor.Worker,
+                ct: cancellationToken);
             var accountsDb = scope.ServiceProvider.GetRequiredService<AccountsDbContext>();
 
             // Post-Phase-2 the OwnerAccountId column is NOT NULL in the DB,

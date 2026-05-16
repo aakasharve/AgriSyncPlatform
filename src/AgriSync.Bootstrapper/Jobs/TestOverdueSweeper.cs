@@ -1,10 +1,12 @@
 using AgriSync.BuildingBlocks.Application;
 using AgriSync.BuildingBlocks.Audit;
+using AgriSync.BuildingBlocks.Auditing;
 using AgriSync.BuildingBlocks.Persistence;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using ShramSafal.Application.UseCases.Tests.MarkOverdueInstances;
+using ShramSafal.Infrastructure.Persistence;
 
 namespace AgriSync.Bootstrapper.Jobs;
 
@@ -40,12 +42,32 @@ public sealed class TestOverdueSweeper(
     private async Task RunPassAsync(CancellationToken ct)
     {
         await using var scope = scopeFactory.CreateAsyncScope();
-        // DATA_PRINCIPLE_SPINE 03.2 R6 mitigation — the overdue sweep
-        // transitions TestInstance rows across every farm; cross-tenant
-        // by definition. Elevate so the interceptor skips GUC injection.
-        // TODO 03.5: elevate to admin scope via IAdminDbContextFactory.
+        // DATA_PRINCIPLE_SPINE 04.7 carry-over (was 03.5b) — the overdue
+        // sweep transitions TestInstance rows across every farm; cross-
+        // tenant by definition. The admin factory writes an
+        // AuditEvent("admin_cross_tenant","open") row with farm_id=NULL
+        // BEFORE returning the privileged context, so every nightly pass
+        // leaves a forensic breadcrumb on ssf.audit_events that names
+        // this sweeper as the opener.
+        //
+        // We dispose the returned context immediately — the resolved
+        // MarkOverdueInstancesHandler operates on the SCOPED
+        // ShramSafalDbContext + IShramSafalRepository chain (interceptor-
+        // attached), which still needs TenantContext elevation to skip
+        // the fail-closed GUC-injection prelude. Holding both calls keeps
+        // the audit trail honest while preserving the handler's existing
+        // wiring.
+        var adminFactory = scope.ServiceProvider
+            .GetRequiredService<IAdminDbContextFactory<ShramSafalDbContext>>();
+        await using (await adminFactory.CreateAsync(
+            reason: nameof(TestOverdueSweeper),
+            actorUserId: SystemActor.Worker,
+            ct: ct))
+        {
+            // Audit row committed; primary context disposed.
+        }
         scope.ServiceProvider
-            .GetRequiredService<AgriSync.BuildingBlocks.Persistence.TenantContext>()
+            .GetRequiredService<TenantContext>()
             .ElevateToAdminCrossTenant();
         var handler = scope.ServiceProvider.GetRequiredService<IHandler<MarkOverdueInstancesCommand, int>>();
 

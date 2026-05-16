@@ -1,5 +1,6 @@
 using AgriSync.BuildingBlocks.Application;
 using AgriSync.BuildingBlocks.Audit;
+using AgriSync.BuildingBlocks.Auditing;
 using AgriSync.BuildingBlocks.Persistence;
 using AgriSync.SharedKernel.Contracts.Ids;
 using Microsoft.Extensions.DependencyInjection;
@@ -7,6 +8,7 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using ShramSafal.Application.Ports;
 using ShramSafal.Application.UseCases.Compliance.EvaluateCompliance;
+using ShramSafal.Infrastructure.Persistence;
 
 namespace AgriSync.Bootstrapper.Jobs;
 
@@ -47,11 +49,27 @@ public sealed class ComplianceEvaluatorSweeper(
 
         await using (var scope = scopeFactory.CreateAsyncScope())
         {
-            // DATA_PRINCIPLE_SPINE 03.2 R6 mitigation — listing all active
-            // farms is by definition a cross-tenant read.
-            // TODO 03.5: elevate to admin scope via IAdminDbContextFactory.
+            // DATA_PRINCIPLE_SPINE 04.7 carry-over (was 03.5b) — listing
+            // every active farm is by definition a cross-tenant read. The
+            // admin factory writes an AuditEvent("admin_cross_tenant","open")
+            // row with farm_id=NULL BEFORE returning, recording the pre-
+            // pass enumeration on ssf.audit_events.
+            //
+            // The returned context is disposed immediately — the resolved
+            // IShramSafalRepository binds to the SCOPED ShramSafalDbContext
+            // (interceptor-attached), which still needs TenantContext
+            // elevation to skip the fail-closed GUC-injection prelude.
+            var adminFactory = scope.ServiceProvider
+                .GetRequiredService<IAdminDbContextFactory<ShramSafalDbContext>>();
+            await using (await adminFactory.CreateAsync(
+                reason: $"{nameof(ComplianceEvaluatorSweeper)}.enumerate",
+                actorUserId: SystemActor.Worker,
+                ct: ct))
+            {
+                // Audit row committed; primary context disposed.
+            }
             scope.ServiceProvider
-                .GetRequiredService<AgriSync.BuildingBlocks.Persistence.TenantContext>()
+                .GetRequiredService<TenantContext>()
                 .ElevateToAdminCrossTenant();
             var repository = scope.ServiceProvider.GetRequiredService<IShramSafalRepository>();
             farmIds = await repository.GetAllActiveFarmIdsAsync(ct);
@@ -71,16 +89,35 @@ public sealed class ComplianceEvaluatorSweeper(
             try
             {
                 await using var scope = scopeFactory.CreateAsyncScope();
-                // DATA_PRINCIPLE_SPINE 03.2 R6 mitigation — the compliance
-                // handler operates on a single farm but its DAOs span
-                // multiple tables under one ShramSafalDbContext scope;
-                // elevating to admin keeps the interceptor fail-closed
-                // throw from breaking the sweep loop. A future Phase 03.5
-                // can downgrade this to SetTenant(farmId, ownerAccountId)
-                // once a per-farm owner lookup is wired here.
-                // TODO 03.5: elevate to admin scope via IAdminDbContextFactory.
+                // DATA_PRINCIPLE_SPINE 04.7 carry-over (was 03.5b) — the
+                // compliance handler operates on a single farm but its
+                // DAOs span multiple tables under one ShramSafalDbContext
+                // scope; routing through the admin factory records a
+                // per-farm AuditEvent("admin_cross_tenant","open") row
+                // with farm_id=NULL on ssf.audit_events. The reason string
+                // is keyed to the FarmId so investigators can correlate
+                // the opening with downstream tenant-scoped audit writes
+                // emitted by EvaluateComplianceHandler itself.
+                //
+                // The returned context is disposed immediately — the
+                // resolved EvaluateComplianceHandler operates on the
+                // SCOPED ShramSafalDbContext + IShramSafalRepository
+                // chain (interceptor-attached), which still needs
+                // TenantContext elevation to skip the fail-closed GUC-
+                // injection prelude. A future hardening can downgrade to
+                // SetTenant(farmId, ownerAccountId) once a per-farm owner
+                // lookup is wired here.
+                var adminFactory = scope.ServiceProvider
+                    .GetRequiredService<IAdminDbContextFactory<ShramSafalDbContext>>();
+                await using (await adminFactory.CreateAsync(
+                    reason: $"{nameof(ComplianceEvaluatorSweeper)}.evaluate.{farmId:N}",
+                    actorUserId: SystemActor.Worker,
+                    ct: ct))
+                {
+                    // Audit row committed; primary context disposed.
+                }
                 scope.ServiceProvider
-                    .GetRequiredService<AgriSync.BuildingBlocks.Persistence.TenantContext>()
+                    .GetRequiredService<TenantContext>()
                     .ElevateToAdminCrossTenant();
                 var handler = scope.ServiceProvider.GetRequiredService<IHandler<EvaluateComplianceCommand, EvaluateComplianceResult>>();
 
