@@ -62,9 +62,18 @@ public static class DependencyInjection
                         maxRetryDelay: TimeSpan.FromSeconds(10),
                         errorCodesToAdd: null);
                 })
+                // DATA_PRINCIPLE_SPINE 03.2 — TenantConnectionInterceptor
+                // (Scoped) stamps each command with the per-request
+                // agrisync.farm_id / agrisync.owner_account_id GUCs that
+                // Phase 03.3 RLS policies key on. The outbox interceptors
+                // remain Singletons; mixing lifetimes inside one
+                // AddInterceptors call is supported because EF Core
+                // resolves each entry independently via the sp captured
+                // by the (sp, options) overload.
                 .AddInterceptors(
                     sp.GetRequiredService<DomainEventToOutboxInterceptor>(),
-                    sp.GetRequiredService<OutboxTransactionInterceptor>()));
+                    sp.GetRequiredService<OutboxTransactionInterceptor>(),
+                    sp.GetRequiredService<AgriSync.BuildingBlocks.Persistence.TenantConnectionInterceptor>()));
         services.AddScoped<DbContext>(provider => provider.GetRequiredService<ShramSafalDbContext>());
 
         services.Configure<GeminiOptions>(options =>

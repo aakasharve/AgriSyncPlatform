@@ -39,6 +39,13 @@ internal sealed class BackfillFarmOwnerAccounts : IHostedService
         try
         {
             await using var scope = _services.CreateAsyncScope();
+            // DATA_PRINCIPLE_SPINE 03.2 R6 mitigation — backfill operates
+            // across every farm in the system, so we elevate the per-scope
+            // TenantContext to admin to bypass the interceptor's fail-closed
+            // throw. TODO 03.5: elevate to admin scope via IAdminDbContextFactory.
+            scope.ServiceProvider
+                .GetRequiredService<AgriSync.BuildingBlocks.Persistence.TenantContext>()
+                .ElevateToAdminCrossTenant();
             var ssfDb = scope.ServiceProvider.GetRequiredService<ShramSafalDbContext>();
             var accountsDb = scope.ServiceProvider.GetRequiredService<AccountsDbContext>();
 

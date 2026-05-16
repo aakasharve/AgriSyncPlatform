@@ -42,6 +42,14 @@ public sealed class WorkerRetentionJob(
     private async Task RunPassAsync(CancellationToken ct)
     {
         await using var scope = scopeFactory.CreateAsyncScope();
+        // DATA_PRINCIPLE_SPINE 03.2 R6 mitigation — the retention reader
+        // joins ssf.farm_memberships across every farm in the system; a
+        // single-farm tenant claim would mask all but one. Elevate so the
+        // interceptor skips GUC injection and the join sees every row.
+        // TODO 03.5: elevate to admin scope via IAdminDbContextFactory.
+        scope.ServiceProvider
+            .GetRequiredService<AgriSync.BuildingBlocks.Persistence.TenantContext>()
+            .ElevateToAdminCrossTenant();
         var affiliationRepo = scope.ServiceProvider.GetRequiredService<IAffiliationRepository>();
         var retentionReader = scope.ServiceProvider.GetRequiredService<IWorkerRetentionReader>();
         var clock = scope.ServiceProvider.GetRequiredService<IClock>();

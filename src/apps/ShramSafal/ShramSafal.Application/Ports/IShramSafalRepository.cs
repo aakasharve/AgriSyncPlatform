@@ -89,6 +89,45 @@ public interface IShramSafalRepository
     Task<bool> IsUserMemberOfFarmAsync(Guid farmId, Guid userId, CancellationToken ct = default);
 
     /// <summary>
+    /// DATA_PRINCIPLE_SPINE Phase 03 sub-phase 03.2 — returns a non-terminal
+    /// farm-membership decision plus the farm's <c>owner_account_id</c>
+    /// (denormalised onto <c>ssf.farm_memberships</c> by migration
+    /// <c>20260516120000_AddOwnerAccountIdToFarmMemberships</c>) so the
+    /// <c>ShramSafalAuthorizationEnforcer</c> can populate
+    /// <c>TenantContext</c> with both halves of the RLS key in a single
+    /// round-trip.
+    /// <para>
+    /// Returns <c>(false, Guid.Empty)</c> when the user has no active
+    /// membership on the farm. Returns <c>(true, ownerAccountId)</c> for
+    /// any non-terminal status — Active, PendingApproval, PendingOtpClaim,
+    /// Suspended — matching the same predicate the existing
+    /// <see cref="GetFarmMembershipAsync"/> entity-returning overload uses.
+    /// Owner-of-farm shortcut: when <paramref name="userId"/> is the
+    /// declared <c>Farm.OwnerUserId</c>, the method returns
+    /// <c>(true, farm.OwnerAccountId)</c> even if the membership row is
+    /// absent (mirrors <see cref="IsUserMemberOfFarmAsync"/> semantics).
+    /// </para>
+    /// <para>
+    /// Naming deviation from sub-phase 03.2 spec: the spec named the new
+    /// method <c>GetFarmMembershipAsync</c> with a tuple return type, but
+    /// that name already exists at L32 above returning <c>FarmMembership?</c>.
+    /// C# cannot overload by return type, so this method takes the
+    /// <c>ForTenant</c> suffix; the consumer (
+    /// <c>ShramSafalAuthorizationEnforcer</c>) and the semantics are
+    /// unchanged from the spec. Documented in the hand-off envelope.
+    /// </para>
+    /// </summary>
+    Task<(bool IsMember, Guid OwnerAccountId)> GetFarmMembershipForTenantAsync(
+        Guid farmId,
+        Guid userId,
+        CancellationToken ct = default)
+        // Default impl returns "not a member" so the dozens of in-tree
+        // test doubles for IShramSafalRepository do not break. Production
+        // ShramSafalRepository overrides; FakeAuthorizationRepository
+        // (baseline-814ec70 suite) overrides with a deterministic owner.
+        => Task.FromResult((false, Guid.Empty));
+
+    /// <summary>
     /// Count of <c>Active</c> <c>PrimaryOwner</c> memberships on a farm.
     /// Used by the exit-membership handler to defend invariant I3 (the
     /// last PrimaryOwner cannot leave).

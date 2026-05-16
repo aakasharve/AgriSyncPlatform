@@ -80,6 +80,20 @@ public sealed class OutboxDispatcher : BackgroundService
             try
             {
                 using var scope = _scopeFactory.CreateScope();
+                // DATA_PRINCIPLE_SPINE 03.2 R6 mitigation — the publisher
+                // dispatches each outbox message to its registered handlers
+                // within this scope; those handlers (e.g. WorkerNameProjector)
+                // resolve ShramSafalDbContext and the TenantConnectionInterceptor
+                // is fail-closed. Elevate per cycle so a missing TenantContext
+                // does not break the dispatch loop.
+                // The TenantContext service is only present when the host has
+                // wired it (Program.cs above); guard with GetService so
+                // BuildingBlocks unit tests that stand up a bare OutboxDbContext
+                // without a TenantContext registration keep working.
+                // TODO 03.5: elevate to admin scope via IAdminDbContextFactory.
+                scope.ServiceProvider
+                    .GetService<TenantContext>()
+                    ?.ElevateToAdminCrossTenant();
                 var dbContext = scope.ServiceProvider.GetRequiredService<OutboxDbContext>();
                 var publisher = scope.ServiceProvider.GetRequiredService<IOutboxPublisher>();
 

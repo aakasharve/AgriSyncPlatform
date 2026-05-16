@@ -613,6 +613,54 @@ internal sealed class ShramSafalRepository(ShramSafalDbContext db) : IShramSafal
                 ct);
     }
 
+    public async Task<(bool IsMember, Guid OwnerAccountId)> GetFarmMembershipForTenantAsync(
+        Guid farmId,
+        Guid userId,
+        CancellationToken ct = default)
+    {
+        // DATA_PRINCIPLE_SPINE 03.2 — Owner shortcut first so a farm's
+        // declared OwnerUserId resolves to its OwnerAccountId in one
+        // round-trip even when the membership row is absent (matches the
+        // semantic of IsUserMemberOfFarmAsync above).
+        var typedFarmId = new FarmId(farmId);
+        var typedUserId = new UserId(userId);
+
+        var ownerHit = await db.Farms
+            .AsNoTracking()
+            .Where(f => f.Id == typedFarmId && f.OwnerUserId == typedUserId)
+            .Select(f => (Guid?)f.OwnerAccountId.Value)
+            .FirstOrDefaultAsync(ct);
+        if (ownerHit is Guid ownerAccount)
+        {
+            return (true, ownerAccount);
+        }
+
+        // owner_account_id was added to ssf.farm_memberships by migration
+        // 20260516120000_AddOwnerAccountIdToFarmMemberships but is not on
+        // the FarmMembership domain entity (kept stable for that migration
+        // per its own rationale comment). Read it via raw SQL alongside
+        // the non-terminal status filter the existing LINQ predicates use.
+        // Status enum: 0=PendingOtpClaim, 1=PendingApproval, 2=Active,
+        // 3=Suspended, 5=Revoked, 6=Exited (see MembershipStatus enum).
+        var membershipOwner = await db.Database
+            .SqlQueryRaw<Guid?>(
+                """
+                SELECT owner_account_id AS "Value"
+                FROM ssf.farm_memberships
+                WHERE farm_id = {0}
+                  AND user_id = {1}
+                  AND status NOT IN (5, 6)
+                LIMIT 1
+                """,
+                farmId,
+                userId)
+            .FirstOrDefaultAsync(ct);
+
+        return membershipOwner is Guid mappedOwner
+            ? (true, mappedOwner)
+            : (false, Guid.Empty);
+    }
+
     public async Task<int> CountActivePrimaryOwnersAsync(Guid farmId, CancellationToken ct = default)
     {
         var typedFarmId = new FarmId(farmId);

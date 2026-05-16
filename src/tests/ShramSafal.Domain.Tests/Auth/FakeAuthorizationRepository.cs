@@ -58,6 +58,26 @@ internal sealed class FakeAuthorizationRepository : IShramSafalRepository
         return Task.FromResult(_memberships.ContainsKey((farmId, userId)));
     }
 
+    // DATA_PRINCIPLE_SPINE 03.2 — return a deterministic owner_account_id
+    // synthesised from the farmId so the baseline tests can call SetTenant
+    // on the per-test TenantContext without owning a real ssf.farms row.
+    // Phase 03.3 RLS tests will use the real repository implementation.
+    public Task<(bool IsMember, Guid OwnerAccountId)> GetFarmMembershipForTenantAsync(
+        Guid farmId,
+        Guid userId,
+        CancellationToken ct = default)
+    {
+        if (_memberships.ContainsKey((farmId, userId)))
+        {
+            // Synthesise: XOR farmId bytes with a constant marker so the
+            // value is non-Guid.Empty and stable per farmId.
+            var bytes = farmId.ToByteArray();
+            bytes[15] ^= 0x77;
+            return Task.FromResult((true, new Guid(bytes)));
+        }
+        return Task.FromResult((false, Guid.Empty));
+    }
+
     public Task<int> CountActivePrimaryOwnersAsync(Guid farmId, CancellationToken ct = default)
     {
         var count = _memberships

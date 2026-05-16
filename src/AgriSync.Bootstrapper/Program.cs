@@ -142,6 +142,20 @@ try
         });
     });
 
+    // DATA_PRINCIPLE_SPINE 03.2 — TenantContext (per-request claim holder)
+    // + TenantConnectionInterceptor (stamps every ShramSafalDbContext
+    // command with set_config('agrisync.farm_id', ..., true) /
+    // set_config('agrisync.owner_account_id', ..., true)). MUST be
+    // registered BEFORE AddShramSafalApi so the (sp, options) =>
+    // overload inside ShramSafal.Infrastructure.DependencyInjection
+    // can resolve the interceptor at DbContext-options build time.
+    // Both Scoped — the interceptor closes over the per-request
+    // TenantContext, so do NOT switch ShramSafalDbContext to
+    // AddDbContextPool (pooled contexts would smear tenant claims
+    // across requests).
+    builder.Services.AddScoped<AgriSync.BuildingBlocks.Persistence.TenantContext>();
+    builder.Services.AddScoped<AgriSync.BuildingBlocks.Persistence.TenantConnectionInterceptor>();
+
     builder.Services.AddUserApi(builder.Configuration);
     builder.Services.AddShramSafalApi(builder.Configuration);
     builder.Services.AddAccountsModule(builder.Configuration);
@@ -321,6 +335,15 @@ try
     app.UseAuthentication();
     app.UseRateLimiter();
     app.UseAuthorization();
+    // DATA_PRINCIPLE_SPINE 03.2 — TenantTransactionMiddleware wraps every
+    // business request in a single DbContext transaction so the
+    // TenantConnectionInterceptor's set_config(..., true) GUC writes
+    // (Postgres scopes those to the current transaction) propagate across
+    // every command in the request. MUST sit AFTER UseAuthorization so
+    // the downstream pipeline (handlers + IAuthorizationEnforcer) can
+    // read claims, and BEFORE RequestObservabilityMiddleware so the
+    // request scope only opens its DB transaction once.
+    app.UseMiddleware<AgriSync.BuildingBlocks.Persistence.TenantTransactionMiddleware>();
     // Ops observability — placed after auth so FarmId claim is available in middleware
     app.UseMiddleware<AgriSync.Bootstrapper.Middleware.RequestObservabilityMiddleware>();
 
@@ -689,6 +712,13 @@ static async Task InitializeApplicationDataAsync(WebApplication app)
     using var scope = app.Services.CreateScope();
     var services = scope.ServiceProvider;
     var logger = services.GetRequiredService<ILoggerFactory>().CreateLogger("AgriSync.Bootstrapper.Startup");
+    // DATA_PRINCIPLE_SPINE 03.2 R6 mitigation — startup scope opens migrations,
+    // schema bootstrap and seed paths against ShramSafalDbContext. The
+    // TenantConnectionInterceptor is fail-closed (throws if no tenant claim
+    // and not admin) so we must elevate to admin before the first command.
+    // TODO 03.5: elevate to admin scope via IAdminDbContextFactory.
+    services.GetRequiredService<AgriSync.BuildingBlocks.Persistence.TenantContext>()
+        .ElevateToAdminCrossTenant();
     try
     {
         var userContext = services.GetRequiredService<User.Infrastructure.Persistence.UserDbContext>();

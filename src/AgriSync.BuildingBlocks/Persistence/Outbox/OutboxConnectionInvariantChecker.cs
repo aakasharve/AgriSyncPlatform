@@ -50,6 +50,16 @@ public sealed class OutboxConnectionInvariantChecker : IHostedService
         try
         {
             using var scope = _services.CreateScope();
+            // DATA_PRINCIPLE_SPINE 03.2 R6 mitigation — the invariant check
+            // does not execute SQL against ShramSafalDbContext, but EF Core
+            // may still touch the connection (e.g. opening it for the
+            // GetConnectionString fast-path on some providers). Elevate
+            // defensively so the interceptor's fail-closed throw cannot
+            // break the boot loop.
+            // TODO 03.5: elevate to admin scope via IAdminDbContextFactory.
+            scope.ServiceProvider
+                .GetService<TenantContext>()
+                ?.ElevateToAdminCrossTenant();
 
             var outboxCtx = scope.ServiceProvider.GetService<OutboxDbContext>();
             if (outboxCtx is null)

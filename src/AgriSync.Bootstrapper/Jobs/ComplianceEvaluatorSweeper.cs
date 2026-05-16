@@ -45,6 +45,12 @@ public sealed class ComplianceEvaluatorSweeper(
 
         await using (var scope = scopeFactory.CreateAsyncScope())
         {
+            // DATA_PRINCIPLE_SPINE 03.2 R6 mitigation — listing all active
+            // farms is by definition a cross-tenant read.
+            // TODO 03.5: elevate to admin scope via IAdminDbContextFactory.
+            scope.ServiceProvider
+                .GetRequiredService<AgriSync.BuildingBlocks.Persistence.TenantContext>()
+                .ElevateToAdminCrossTenant();
             var repository = scope.ServiceProvider.GetRequiredService<IShramSafalRepository>();
             farmIds = await repository.GetAllActiveFarmIdsAsync(ct);
         }
@@ -63,6 +69,17 @@ public sealed class ComplianceEvaluatorSweeper(
             try
             {
                 await using var scope = scopeFactory.CreateAsyncScope();
+                // DATA_PRINCIPLE_SPINE 03.2 R6 mitigation — the compliance
+                // handler operates on a single farm but its DAOs span
+                // multiple tables under one ShramSafalDbContext scope;
+                // elevating to admin keeps the interceptor fail-closed
+                // throw from breaking the sweep loop. A future Phase 03.5
+                // can downgrade this to SetTenant(farmId, ownerAccountId)
+                // once a per-farm owner lookup is wired here.
+                // TODO 03.5: elevate to admin scope via IAdminDbContextFactory.
+                scope.ServiceProvider
+                    .GetRequiredService<AgriSync.BuildingBlocks.Persistence.TenantContext>()
+                    .ElevateToAdminCrossTenant();
                 var handler = scope.ServiceProvider.GetRequiredService<IHandler<EvaluateComplianceCommand, EvaluateComplianceResult>>();
                 var result = await handler.HandleAsync(
                     new EvaluateComplianceCommand(new FarmId(farmId)), ct);

@@ -38,6 +38,13 @@ public sealed class TestOverdueSweeper(
     private async Task RunPassAsync(CancellationToken ct)
     {
         await using var scope = scopeFactory.CreateAsyncScope();
+        // DATA_PRINCIPLE_SPINE 03.2 R6 mitigation — the overdue sweep
+        // transitions TestInstance rows across every farm; cross-tenant
+        // by definition. Elevate so the interceptor skips GUC injection.
+        // TODO 03.5: elevate to admin scope via IAdminDbContextFactory.
+        scope.ServiceProvider
+            .GetRequiredService<AgriSync.BuildingBlocks.Persistence.TenantContext>()
+            .ElevateToAdminCrossTenant();
         var handler = scope.ServiceProvider.GetRequiredService<IHandler<MarkOverdueInstancesCommand, int>>();
 
         try

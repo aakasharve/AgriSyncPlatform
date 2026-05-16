@@ -44,7 +44,13 @@ public sealed class FarmMembershipAuthorizationBaselineTests
     private static (ShramSafalAuthorizationEnforcer enforcer, FakeAuthorizationRepository repo) CreateSubject()
     {
         var repo = new FakeAuthorizationRepository();
-        var enforcer = new ShramSafalAuthorizationEnforcer(repo);
+        // DATA_PRINCIPLE_SPINE 03.2 — enforcer now publishes the resolved
+        // (farmId, ownerAccountId) tuple into the per-request TenantContext.
+        // The baseline regression suite exercises only the Result outcomes,
+        // not the tenant publication, so a fresh TenantContext per test is
+        // sufficient. Reassignment / elevation invariants are covered by
+        // TenantContextTests in this same project.
+        var enforcer = new ShramSafalAuthorizationEnforcer(repo, new AgriSync.BuildingBlocks.Persistence.TenantContext());
         return (enforcer, repo);
     }
 
