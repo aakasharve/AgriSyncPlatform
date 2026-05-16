@@ -3,9 +3,12 @@ using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using Accounts.Infrastructure.Persistence;
+using AgriSync.BuildingBlocks.Analytics;
 using AgriSync.BuildingBlocks.Persistence;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Npgsql;
@@ -362,6 +365,13 @@ public sealed class RowLevelSecurityTests : IAsyncLifetime
 
     private static async Task ApplyFullMigrationChainAsync(string conn)
     {
+        // Mirrors DwcScoreMatviewTests.ApplyFullMigrationChainAsync. The
+        // SSF migration 20260422180547_AddAdminScopeHealthView references
+        // analytics.events, so the chain MUST be:
+        //   User → Accounts → SSF Phase-A (fence) → Analytics → SSF Phase-B
+        // Without the Analytics interleave SSF Phase-B fails with
+        // "relation analytics.events does not exist".
+
         // User schema first (public.users).
         var userOpts = new DbContextOptionsBuilder<UserDbContext>().UseNpgsql(conn).Options;
         await using (var user = new UserDbContext(userOpts))
@@ -376,18 +386,64 @@ public sealed class RowLevelSecurityTests : IAsyncLifetime
             await accounts.Database.MigrateAsync();
         }
 
-        // ShramSafal full chain — through 03.3 EnableRowLevelSecurity.
-        // We bypass the interceptor chain on this DbContext because it's
-        // only used to run migrations (which must execute without a tenant
-        // claim). The production DI wiring will register a separate
-        // DbContext with the interceptor for actual test queries.
+        // SSF Phase A — stop at the migration immediately before
+        // 20260422180547_AddAdminScopeHealthView (which depends on
+        // analytics.events existing). Bypass the tenant interceptor by
+        // configuring this DbContext WITHOUT the production DI wiring;
+        // migrations must execute without a tenant claim.
+        const string ssfPhaseATarget = "20260421075311_AlterCostEntriesAddJobCardId";
         var ssfOpts = new DbContextOptionsBuilder<ShramSafalDbContext>()
             .UseNpgsql(conn)
             .Options;
         await using (var ssf = new ShramSafalDbContext(ssfOpts))
         {
+            var migrator = ssf.Database.GetService<IMigrator>();
+            await migrator.MigrateAsync(ssfPhaseATarget);
+        }
+
+        // Analytics chain — separate migrations history table inside the
+        // analytics schema (matches Bootstrapper Program.cs wiring).
+        var analyticsOpts = new DbContextOptionsBuilder<AnalyticsDbContext>()
+            .UseNpgsql(conn, npgsql =>
+            {
+                npgsql.MigrationsAssembly(
+                    typeof(AgriSync.Bootstrapper.Migrations.Analytics.AnalyticsRewrite).Assembly.FullName);
+                npgsql.MigrationsHistoryTable(
+                    tableName: "__analytics_migrations_history",
+                    schema: AnalyticsDbContext.SchemaName);
+            })
+            .Options;
+        await using (var analytics = new AnalyticsDbContext(analyticsOpts))
+        {
+            await analytics.Database.MigrateAsync();
+        }
+
+        // SSF Phase B — resume to head, now that analytics.events exists.
+        // This applies 20260422180547_AddAdminScopeHealthView and
+        // everything after, including 03.3 EnableRowLevelSecurity.
+        await using (var ssf = new ShramSafalDbContext(ssfOpts))
+        {
             await ssf.Database.MigrateAsync();
         }
+
+        // analytics.events is partitioned by month. The AnalyticsInitial
+        // migration creates only current + next month partitions. If any
+        // SSF code path (e.g. AnalyticsWriter via outbox) writes a row
+        // dated in the previous month, the insert fails. Ensure the
+        // previous-month partition exists — copied verbatim from
+        // DwcScoreMatviewTests' helper for the same defensive reason.
+        await using var rawConn = new NpgsqlConnection(conn);
+        await rawConn.OpenAsync();
+        var prev = DateTimeOffset.UtcNow.AddMonths(-1);
+        var curr = new DateTimeOffset(DateTimeOffset.UtcNow.Year, DateTimeOffset.UtcNow.Month, 1, 0, 0, 0, TimeSpan.Zero);
+        await using var ensurePartition = rawConn.CreateCommand();
+        ensurePartition.CommandText = $"""
+            CREATE TABLE IF NOT EXISTS analytics.events_y{prev.Year:D4}m{prev.Month:D2}
+            PARTITION OF analytics.events
+            FOR VALUES FROM ('{prev.Year:D4}-{prev.Month:D2}-01')
+                        TO  ('{curr.Year:D4}-{curr.Month:D2}-01');
+            """;
+        await ensurePartition.ExecuteNonQueryAsync();
     }
 
     private static async Task SeedFarmAsync(NpgsqlConnection db, Guid farmId, Guid ownerUserId, string name)
