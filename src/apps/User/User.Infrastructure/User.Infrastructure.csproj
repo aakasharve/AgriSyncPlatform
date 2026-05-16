@@ -9,6 +9,14 @@
   <ItemGroup>
     <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.0" />
     <PackageReference Include="BCrypt.Net-Next" Version="4.0.3" />
+    <!-- spec: data-principle-spine-2026-05-05/03.1 — design-time factory reads
+         appsettings.json + appsettings.Development.json to resolve the
+         UserDb_Migration connection string for `dotnet ef` invocations. -->
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.0">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+    <PackageReference Include="Microsoft.Extensions.Configuration.Json" Version="10.0.0" />
   </ItemGroup>
 
   <ItemGroup>
