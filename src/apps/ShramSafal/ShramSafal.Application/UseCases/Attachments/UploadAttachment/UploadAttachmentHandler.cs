@@ -56,15 +56,18 @@ public sealed class UploadAttachmentHandler(
         attachment.MarkUploaded(relativePath, bytesWritten, nowUtc);
         attachment.FinalizeUpload(nowUtc);
 
+        // DATA_PRINCIPLE_SPINE sub-phase 04.3b — migrate from AuditEvent.Create
+        // (sentinel provenance) to AuditEventFactory.Create with the real
+        // X-Device-Id / IP hash / X-App-Version sourced from the endpoint's
+        // AuditContextAccessor.
         await repository.AddAuditEventAsync(
-            AuditEvent.Create(
-                (Guid)attachment.FarmId,
-                "Attachment",
-                attachment.Id,
-                "UploadedAndFinalized",
-                command.UploadedByUserId,
-                command.ActorRole ?? "unknown",
-                new
+            AuditEventFactory.Create(
+                entityType: "Attachment",
+                entityId: attachment.Id,
+                action: "UploadedAndFinalized",
+                actorUserId: command.UploadedByUserId,
+                actorRole: command.ActorRole ?? "unknown",
+                payload: new
                 {
                     attachment.Id,
                     attachment.LinkedEntityId,
@@ -75,8 +78,14 @@ public sealed class UploadAttachmentHandler(
                     attachment.SizeBytes,
                     attachment.Status
                 },
-                command.ClientCommandId,
-                nowUtc),
+                farmId: (Guid)attachment.FarmId,
+                clientCommandId: command.ClientCommandId,
+                appVersion: string.IsNullOrWhiteSpace(command.ClientAppVersion)
+                    ? AgriSync.BuildingBlocks.Persistence.AppVersionProvider.Current
+                    : command.ClientAppVersion,
+                deviceId: command.AuditDeviceId,
+                ipHash: command.AuditIpHash,
+                sourceAiJobId: null),
             ct);
 
         await repository.SaveChangesAsync(ct);

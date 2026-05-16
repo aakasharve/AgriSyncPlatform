@@ -143,15 +143,19 @@ public sealed class CreateDailyLogHandler(
             sourceAiJobId: command.SourceAiJobId);
 
         await repository.AddDailyLogAsync(log, ct);
+        // DATA_PRINCIPLE_SPINE sub-phase 04.3b — migrate from AuditEvent.Create
+        // (sentinel provenance) to AuditEventFactory.Create with the real
+        // X-Device-Id / IP hash / X-App-Version sourced from the endpoint's
+        // AuditContextAccessor. SourceAiJobId is lifted from the command (set
+        // on the voice-Confirm path; null on true-manual).
         await repository.AddAuditEventAsync(
-            AuditEvent.Create(
-                command.FarmId,
-                "DailyLog",
-                log.Id,
-                "Created",
-                command.OperatorUserId,
-                command.ActorRole ?? "unknown",
-                new
+            AuditEventFactory.Create(
+                entityType: "DailyLog",
+                entityId: log.Id,
+                action: "Created",
+                actorUserId: command.OperatorUserId,
+                actorRole: command.ActorRole ?? "unknown",
+                payload: new
                 {
                     log.Id,
                     command.FarmId,
@@ -160,8 +164,12 @@ public sealed class CreateDailyLogHandler(
                     command.LogDate,
                     command.Location
                 },
-                command.ClientRequestId,
-                clock.UtcNow),
+                farmId: command.FarmId,
+                clientCommandId: command.ClientRequestId,
+                appVersion: stampedAppVersion,
+                deviceId: command.AuditDeviceId,
+                ipHash: command.AuditIpHash,
+                sourceAiJobId: command.SourceAiJobId),
             ct);
         await repository.SaveChangesAsync(ct);
 

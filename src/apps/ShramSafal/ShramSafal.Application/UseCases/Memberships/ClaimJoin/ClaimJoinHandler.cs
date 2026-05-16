@@ -123,17 +123,25 @@ public sealed class ClaimJoinHandler(
         membership.ClaimWithoutApproval(utcNow);
 
         await farmRepository.AddFarmMembershipAsync(membership, ct);
+        // DATA_PRINCIPLE_SPINE sub-phase 04.3b — migrate from AuditEvent.Create
+        // (sentinel provenance) to AuditEventFactory.Create with X-Device-Id /
+        // IP hash / X-App-Version sourced from the endpoint's AuditContextAccessor.
         await farmRepository.AddAuditEventAsync(
-            AuditEvent.Create(
-                farmId: farm.Id.Value,
+            AuditEventFactory.Create(
                 entityType: "FarmMembership",
                 entityId: membership.Id,
                 action: "MemberJoined",
                 actorUserId: command.CallerUserId.Value,
                 actorRole: membership.Role.ToString().ToLowerInvariant(),
                 payload: new { farmId = farm.Id, userId = command.CallerUserId, role = membership.Role.ToString(), joinedVia = "QrScan" },
+                farmId: farm.Id.Value,
                 clientCommandId: null,
-                occurredAtUtc: utcNow), ct);
+                appVersion: string.IsNullOrWhiteSpace(command.ClientAppVersion)
+                    ? AgriSync.BuildingBlocks.Persistence.AppVersionProvider.Current
+                    : command.ClientAppVersion,
+                deviceId: command.AuditDeviceId,
+                ipHash: command.AuditIpHash,
+                sourceAiJobId: null), ct);
         await farmRepository.SaveChangesAsync(ct);
 
         await analytics.EmitAsync(new AnalyticsEvent(

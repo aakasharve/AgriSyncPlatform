@@ -52,15 +52,18 @@ public sealed class CreateAttachmentHandler(
             clock.UtcNow);
 
         await repository.AddAttachmentAsync(attachment, ct);
+        // DATA_PRINCIPLE_SPINE sub-phase 04.3b — migrate from AuditEvent.Create
+        // (sentinel provenance) to AuditEventFactory.Create with the real
+        // X-Device-Id / IP hash / X-App-Version sourced from the endpoint's
+        // AuditContextAccessor.
         await repository.AddAuditEventAsync(
-            AuditEvent.Create(
-                command.FarmId,
-                "Attachment",
-                attachment.Id,
-                "Created",
-                command.CreatedByUserId,
-                command.ActorRole ?? "unknown",
-                new
+            AuditEventFactory.Create(
+                entityType: "Attachment",
+                entityId: attachment.Id,
+                action: "Created",
+                actorUserId: command.CreatedByUserId,
+                actorRole: command.ActorRole ?? "unknown",
+                payload: new
                 {
                     attachment.Id,
                     command.FarmId,
@@ -70,8 +73,14 @@ public sealed class CreateAttachmentHandler(
                     command.MimeType,
                     attachment.Status
                 },
-                command.ClientCommandId,
-                clock.UtcNow),
+                farmId: command.FarmId,
+                clientCommandId: command.ClientCommandId,
+                appVersion: string.IsNullOrWhiteSpace(command.ClientAppVersion)
+                    ? AgriSync.BuildingBlocks.Persistence.AppVersionProvider.Current
+                    : command.ClientAppVersion,
+                deviceId: command.AuditDeviceId,
+                ipHash: command.AuditIpHash,
+                sourceAiJobId: null),
             ct);
 
         await repository.SaveChangesAsync(ct);

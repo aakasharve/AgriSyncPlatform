@@ -102,17 +102,26 @@ public sealed class IssueFarmInviteHandler(
         if (existing is null)
         {
             await invitationRepository.AddInvitationAsync(invitation, ct);
+            // DATA_PRINCIPLE_SPINE sub-phase 04.3b — migrate from
+            // AuditEvent.Create (sentinel provenance) to AuditEventFactory.Create
+            // with X-Device-Id / IP hash / X-App-Version sourced from the
+            // endpoint's AuditContextAccessor.
             await farmRepository.AddAuditEventAsync(
-                AuditEvent.Create(
-                    farmId: command.FarmId.Value,
+                AuditEventFactory.Create(
                     entityType: "FarmInvitation",
                     entityId: invitation.Id.Value,
                     action: "InvitationIssued",
                     actorUserId: command.CallerUserId.Value,
                     actorRole: AppRole.PrimaryOwner.ToString().ToLowerInvariant(),
                     payload: new { farmId = command.FarmId, invitationId = invitation.Id },
+                    farmId: command.FarmId.Value,
                     clientCommandId: null,
-                    occurredAtUtc: utcNow), ct);
+                    appVersion: string.IsNullOrWhiteSpace(command.ClientAppVersion)
+                        ? AgriSync.BuildingBlocks.Persistence.AppVersionProvider.Current
+                        : command.ClientAppVersion,
+                    deviceId: command.AuditDeviceId,
+                    ipHash: command.AuditIpHash,
+                    sourceAiJobId: null), ct);
         }
         await invitationRepository.AddTokenAsync(token, ct);
         await invitationRepository.SaveChangesAsync(ct);

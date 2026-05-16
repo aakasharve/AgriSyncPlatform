@@ -23,7 +23,16 @@ public sealed record CreateDailyLogCommand(
     // DATA_PRINCIPLE_SPINE sub-phase 01.4 — client app version sourced from
     // the X-App-Version header at the endpoint (fallback "unknown"). Always
     // stamped onto the resulting Provenance.AppVersion.
-    string ClientAppVersion = "unknown")
+    string ClientAppVersion = "unknown",
+    // DATA_PRINCIPLE_SPINE sub-phase 04.3b — forensic provenance fields
+    // sourced from the AuditContextMiddleware (HttpContext.AuditClaims()).
+    // Distinct from the legacy nullable DeviceId above, which participates
+    // only in the idempotency key. AuditDeviceId / AuditIpHash carry the
+    // X-Device-Id header + salted remote-IP hash for the audit row's
+    // DeviceId / IpHash columns. Default sentinels match the worker /
+    // unknown path so direct-construction unit tests stay green.
+    string AuditDeviceId = "unknown",
+    string AuditIpHash = "sha256:unknown")
 {
     public string? IdempotencyKey
     {

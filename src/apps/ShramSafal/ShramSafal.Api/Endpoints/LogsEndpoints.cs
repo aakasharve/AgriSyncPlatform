@@ -1,5 +1,6 @@
 using System.Security.Claims;
 using AgriSync.BuildingBlocks.Application;
+using AgriSync.BuildingBlocks.Audit;
 using AgriSync.BuildingBlocks.Results;
 using AgriSync.SharedKernel.Contracts.Roles;
 using ShramSafal.Application.Contracts.Dtos;
@@ -47,6 +48,13 @@ public static class LogsEndpoints
                 ? "unknown"
                 : headerAppVersion!.Trim();
 
+            // DATA_PRINCIPLE_SPINE sub-phase 04.3b — extract forensic
+            // device-id + IP-hash from AuditContextMiddleware (HttpContext.Items)
+            // so the emitted AuditEvent row carries real provenance instead of
+            // the sentinel "unknown" / "sha256:unknown" defaults baked into the
+            // command for direct-construction test callers.
+            var (auditDeviceId, auditIpHash) = httpContext.AuditClaims();
+
             var command = new CreateDailyLogCommand(
                 request.FarmId,
                 request.PlotId,
@@ -60,7 +68,9 @@ public static class LogsEndpoints
                 DailyLogId: null,
                 ActorRole: EndpointActorContext.GetActorRole(user),
                 SourceAiJobId: request.SourceAiJobId,
-                ClientAppVersion: clientAppVersion);
+                ClientAppVersion: clientAppVersion,
+                AuditDeviceId: auditDeviceId,
+                AuditIpHash: auditIpHash);
 
             var result = await handler.HandleAsync(command, ct);
             return result.IsSuccess ? Results.Ok(result.Value) : ToErrorResult(result.Error);
@@ -77,6 +87,7 @@ public static class LogsEndpoints
         group.MapPost("/logs/{id:guid}/tasks", async (
             Guid id,
             AddLogTaskRequest request,
+            HttpContext httpContext,
             ClaimsPrincipal user,
             IHandler<AddLogTaskCommand, DailyLogDto> handler,
             CancellationToken ct) =>
@@ -86,6 +97,11 @@ public static class LogsEndpoints
                 return Results.Unauthorized();
             }
 
+            // DATA_PRINCIPLE_SPINE sub-phase 04.3b — extract forensic
+            // provenance for the AuditEvent row.
+            var (auditDeviceId, auditIpHash) = httpContext.AuditClaims();
+            var clientAppVersion = ResolveClientAppVersion(httpContext);
+
             var command = new AddLogTaskCommand(
                 id,
                 request.ActivityType,
@@ -93,7 +109,10 @@ public static class LogsEndpoints
                 request.OccurredAtUtc,
                 LogTaskId: null,
                 ActorUserId: actorUserId,
-                ActorRole: EndpointActorContext.GetActorRole(user));
+                ActorRole: EndpointActorContext.GetActorRole(user),
+                ClientAppVersion: clientAppVersion,
+                AuditDeviceId: auditDeviceId,
+                AuditIpHash: auditIpHash);
             var result = await handler.HandleAsync(command, ct);
             return result.IsSuccess ? Results.Ok(result.Value) : ToErrorResult(result.Error);
         })
@@ -112,6 +131,7 @@ public static class LogsEndpoints
         group.MapPost("/logs/{id:guid}/verify", async (
             Guid id,
             VerifyLogRequest request,
+            HttpContext httpContext,
             ClaimsPrincipal user,
             IHandler<VerifyLogCommand, DailyLogDto> handler,
             CancellationToken ct) =>
@@ -126,13 +146,21 @@ public static class LogsEndpoints
                 return Results.Unauthorized();
             }
 
+            // DATA_PRINCIPLE_SPINE sub-phase 04.3b — extract forensic
+            // provenance for the AuditEvent row.
+            var (auditDeviceId, auditIpHash) = httpContext.AuditClaims();
+            var clientAppVersion = ResolveClientAppVersion(httpContext);
+
             var command = new VerifyLogCommand(
                 id,
                 status,
                 request.Reason,
                 actorUserId,
                 VerificationEventId: null,
-                ActorRole: EndpointActorContext.GetActorRole(user));
+                ActorRole: EndpointActorContext.GetActorRole(user),
+                ClientAppVersion: clientAppVersion,
+                AuditDeviceId: auditDeviceId,
+                AuditIpHash: auditIpHash);
             var result = await handler.HandleAsync(command, ct);
             return result.IsSuccess ? Results.Ok(result.Value) : ToErrorResult(result.Error);
         })
@@ -201,6 +229,15 @@ public static class LogsEndpoints
         return error.Code.EndsWith("NotFound", StringComparison.Ordinal)
             ? Results.NotFound(new { error = error.Code, message = error.Description })
             : Results.BadRequest(new { error = error.Code, message = error.Description });
+    }
+
+    // DATA_PRINCIPLE_SPINE sub-phase 04.3b — single source for resolving the
+    // X-App-Version header into the AuditEvent.AppVersion column, mirroring the
+    // sub-phase 01.4 fallback used by the CreateDailyLog endpoint above.
+    private static string ResolveClientAppVersion(HttpContext httpContext)
+    {
+        var header = httpContext.Request.Headers["X-App-Version"].FirstOrDefault();
+        return string.IsNullOrWhiteSpace(header) ? "unknown" : header!.Trim();
     }
 
 }

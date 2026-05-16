@@ -27,7 +27,13 @@ public sealed class ExitMembershipHandler(
     public async Task<Result<ExitMembershipResult>> HandleAsync(
         FarmId farmId,
         UserId callerUserId,
-        CancellationToken ct = default)
+        CancellationToken ct = default,
+        // DATA_PRINCIPLE_SPINE sub-phase 04.3b — forensic provenance for the
+        // emitted AuditEvent row. Sourced from HttpContext.AuditClaims() at the
+        // endpoint; sentinel defaults keep existing test callers green.
+        string clientAppVersion = "unknown",
+        string auditDeviceId = "unknown",
+        string auditIpHash = "sha256:unknown")
     {
         if (farmId.IsEmpty || callerUserId.IsEmpty)
         {
@@ -68,17 +74,25 @@ public sealed class ExitMembershipHandler(
                 "You are the only primary owner of this farm. Promote someone else first."));
         }
 
+        // DATA_PRINCIPLE_SPINE sub-phase 04.3b — migrate from AuditEvent.Create
+        // (sentinel provenance) to AuditEventFactory.Create with X-Device-Id /
+        // IP hash / X-App-Version sourced from the endpoint's AuditContextAccessor.
         await repository.AddAuditEventAsync(
-            AuditEvent.Create(
-                farmId: farmId.Value,
+            AuditEventFactory.Create(
                 entityType: "FarmMembership",
                 entityId: membership.Id,
                 action: "MemberExited",
                 actorUserId: callerUserId.Value,
                 actorRole: membership.Role.ToString().ToLowerInvariant(),
                 payload: new { farmId = farmId.Value, userId = callerUserId.Value, role = membership.Role.ToString() },
+                farmId: farmId.Value,
                 clientCommandId: null,
-                occurredAtUtc: exitAtUtc), ct);
+                appVersion: string.IsNullOrWhiteSpace(clientAppVersion)
+                    ? AgriSync.BuildingBlocks.Persistence.AppVersionProvider.Current
+                    : clientAppVersion,
+                deviceId: auditDeviceId,
+                ipHash: auditIpHash,
+                sourceAiJobId: null), ct);
         await repository.SaveChangesAsync(ct);
 
         await analytics.EmitAsync(new AnalyticsEvent(

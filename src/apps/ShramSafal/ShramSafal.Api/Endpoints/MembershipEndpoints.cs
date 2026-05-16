@@ -1,5 +1,6 @@
 using System.Security.Claims;
 using AgriSync.BuildingBlocks.Application;
+using AgriSync.BuildingBlocks.Audit;
 using AgriSync.BuildingBlocks.Results;
 using AgriSync.SharedKernel.Contracts.Ids;
 using ShramSafal.Application.UseCases.Memberships.ClaimJoin;
@@ -28,6 +29,7 @@ public static class MembershipEndpoints
         // failures as typed Result.Failure → ToErrorResult → 403.
         group.MapPost("/farms/{farmId:guid}/invite-qr", async (
             Guid farmId,
+            HttpContext httpContext,
             ClaimsPrincipal user,
             IHandler<IssueFarmInviteCommand, IssueFarmInviteResult> handler,
             CancellationToken ct) =>
@@ -37,8 +39,18 @@ public static class MembershipEndpoints
                 return Results.Unauthorized();
             }
 
+            // DATA_PRINCIPLE_SPINE sub-phase 04.3b — forensic provenance for
+            // the FarmInvitation audit row.
+            var (auditDeviceId, auditIpHash) = httpContext.AuditClaims();
+            var clientAppVersion = ResolveClientAppVersion(httpContext);
+
             var result = await handler.HandleAsync(
-                new IssueFarmInviteCommand(new FarmId(farmId), new UserId(userId)),
+                new IssueFarmInviteCommand(
+                    new FarmId(farmId),
+                    new UserId(userId),
+                    ClientAppVersion: clientAppVersion,
+                    AuditDeviceId: auditDeviceId,
+                    AuditIpHash: auditIpHash),
                 ct);
 
             return result.IsSuccess
@@ -90,6 +102,7 @@ public static class MembershipEndpoints
         // JoinFarmLandingPage branches on err.error.
         group.MapPost("/join/claim", async (
             ClaimJoinRequest request,
+            HttpContext httpContext,
             ClaimsPrincipal user,
             IHandler<ClaimJoinCommand, ClaimJoinResult> handler,
             CancellationToken ct) =>
@@ -104,11 +117,19 @@ public static class MembershipEndpoints
                 "true",
                 StringComparison.OrdinalIgnoreCase);
 
+            // DATA_PRINCIPLE_SPINE sub-phase 04.3b — forensic provenance for
+            // the FarmMembership audit row.
+            var (auditDeviceId, auditIpHash) = httpContext.AuditClaims();
+            var clientAppVersion = ResolveClientAppVersion(httpContext);
+
             var command = new ClaimJoinCommand(
                 Token: request?.Token ?? string.Empty,
                 FarmCode: request?.FarmCode ?? string.Empty,
                 CallerUserId: new UserId(userId),
-                PhoneVerified: phoneVerified);
+                PhoneVerified: phoneVerified,
+                ClientAppVersion: clientAppVersion,
+                AuditDeviceId: auditDeviceId,
+                AuditIpHash: auditIpHash);
 
             var result = await handler.HandleAsync(command, ct);
 
@@ -141,6 +162,7 @@ public static class MembershipEndpoints
         // Self-exit from a farm. Honours invariant I3 (last PrimaryOwner cannot leave).
         group.MapPost("/farms/{farmId:guid}/memberships/self-exit", async (
             Guid farmId,
+            HttpContext httpContext,
             ClaimsPrincipal user,
             ExitMembershipHandler handler,
             CancellationToken ct) =>
@@ -150,7 +172,18 @@ public static class MembershipEndpoints
                 return Results.Unauthorized();
             }
 
-            var result = await handler.HandleAsync(new FarmId(farmId), new UserId(userId), ct);
+            // DATA_PRINCIPLE_SPINE sub-phase 04.3b — forensic provenance for
+            // the FarmMembership audit row.
+            var (auditDeviceId, auditIpHash) = httpContext.AuditClaims();
+            var clientAppVersion = ResolveClientAppVersion(httpContext);
+
+            var result = await handler.HandleAsync(
+                new FarmId(farmId),
+                new UserId(userId),
+                ct,
+                clientAppVersion: clientAppVersion,
+                auditDeviceId: auditDeviceId,
+                auditIpHash: auditIpHash);
             if (result.IsFailure)
             {
                 var statusCode = result.Error.Code switch
@@ -217,6 +250,14 @@ public static class MembershipEndpoints
             // 500 for true server faults is a follow-up.
             _ => Results.BadRequest(body),
         };
+    }
+
+    // DATA_PRINCIPLE_SPINE sub-phase 04.3b — single source for resolving the
+    // X-App-Version header into the AuditEvent.AppVersion column.
+    private static string ResolveClientAppVersion(HttpContext httpContext)
+    {
+        var header = httpContext.Request.Headers["X-App-Version"].FirstOrDefault();
+        return string.IsNullOrWhiteSpace(header) ? "unknown" : header!.Trim();
     }
 
     private sealed record InviteResponse(

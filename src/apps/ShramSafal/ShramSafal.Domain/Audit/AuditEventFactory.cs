@@ -6,6 +6,8 @@
 // the [Obsolete] annotation lands in the 04.3 commit so this commit doesn't
 // detonate the warning-as-error guard at all 46 callers.
 
+using System.Text.Json;
+
 namespace ShramSafal.Domain.Audit;
 
 /// <summary>
@@ -16,6 +18,49 @@ namespace ShramSafal.Domain.Audit;
 /// </summary>
 public static class AuditEventFactory
 {
+    private static readonly JsonSerializerOptions PayloadSerializerOptions = new()
+    {
+        PropertyNamingPolicy = JsonNamingPolicy.CamelCase
+    };
+
+    /// <summary>
+    /// Convenience overload that accepts <paramref name="payload"/> as an
+    /// anonymous object (the dominant 04.3 handler call-site shape) and
+    /// JSON-serializes it with the same camelCase policy the legacy
+    /// <c>AuditEvent.Create(...)</c> methods used. Forwards to the
+    /// string-payload overload after serialization; all provenance
+    /// validation rules are identical.
+    /// </summary>
+    public static AuditEvent Create(
+        string entityType,
+        Guid entityId,
+        string action,
+        Guid actorUserId,
+        string actorRole,
+        object payload,
+        Guid? farmId,
+        string? clientCommandId,
+        string appVersion,
+        string deviceId,
+        string ipHash,
+        Guid? sourceAiJobId = null)
+    {
+        var serialized = JsonSerializer.Serialize(payload, PayloadSerializerOptions);
+        return Create(
+            entityType: entityType,
+            entityId: entityId,
+            action: action,
+            actorUserId: actorUserId,
+            actorRole: actorRole,
+            payload: serialized,
+            farmId: farmId,
+            clientCommandId: clientCommandId,
+            appVersion: appVersion,
+            deviceId: deviceId,
+            ipHash: ipHash,
+            sourceAiJobId: sourceAiJobId);
+    }
+
     /// <summary>
     /// Build a new <see cref="AuditEvent"/> with full provenance stamped from
     /// the calling request context. <paramref name="appVersion"/> /

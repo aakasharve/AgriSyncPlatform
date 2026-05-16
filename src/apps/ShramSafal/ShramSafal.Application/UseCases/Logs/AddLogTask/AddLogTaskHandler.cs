@@ -114,15 +114,18 @@ public sealed class AddLogTaskHandler(
             ct);
         task.StampCompliance(compliance);
 
+        // DATA_PRINCIPLE_SPINE sub-phase 04.3b — migrate from AuditEvent.Create
+        // (sentinel provenance) to AuditEventFactory.Create with the real
+        // X-Device-Id / IP hash / X-App-Version sourced from the endpoint's
+        // AuditContextAccessor.
         await repository.AddAuditEventAsync(
-            AuditEvent.Create(
-                log.FarmId,
-                "DailyLog",
-                log.Id,
-                "TaskAdded",
-                command.ActorUserId,
-                command.ActorRole ?? "unknown",
-                new
+            AuditEventFactory.Create(
+                entityType: "DailyLog",
+                entityId: log.Id,
+                action: "TaskAdded",
+                actorUserId: command.ActorUserId,
+                actorRole: command.ActorRole ?? "unknown",
+                payload: new
                 {
                     logId = log.Id,
                     taskId = task.Id,
@@ -132,8 +135,14 @@ public sealed class AddLogTaskHandler(
                     complianceOutcome = compliance.Outcome.ToString(),
                     complianceDeltaDays = compliance.DeltaDays
                 },
-                command.ClientCommandId,
-                clock.UtcNow),
+                farmId: log.FarmId,
+                clientCommandId: command.ClientCommandId,
+                appVersion: string.IsNullOrWhiteSpace(command.ClientAppVersion)
+                    ? AgriSync.BuildingBlocks.Persistence.AppVersionProvider.Current
+                    : command.ClientAppVersion,
+                deviceId: command.AuditDeviceId,
+                ipHash: command.AuditIpHash,
+                sourceAiJobId: null),
             ct);
 
         await repository.SaveChangesAsync(ct);

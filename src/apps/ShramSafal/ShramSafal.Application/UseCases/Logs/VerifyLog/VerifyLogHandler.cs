@@ -89,15 +89,18 @@ public sealed class VerifyLogHandler(
                 command.VerifiedByUserId,
                 clock.UtcNow);
 
+            // DATA_PRINCIPLE_SPINE sub-phase 04.3b — migrate from
+            // AuditEvent.Create (sentinel provenance) to AuditEventFactory.Create
+            // with X-Device-Id / IP hash / X-App-Version sourced from the
+            // endpoint's AuditContextAccessor.
             await repository.AddAuditEventAsync(
-                AuditEvent.Create(
-                    log.FarmId,
-                    "DailyLog",
-                    log.Id,
-                    "VerificationChanged",
-                    command.VerifiedByUserId,
-                    resolvedCallerRole.ToString(),
-                    new
+                AuditEventFactory.Create(
+                    entityType: "DailyLog",
+                    entityId: log.Id,
+                    action: "VerificationChanged",
+                    actorUserId: command.VerifiedByUserId,
+                    actorRole: resolvedCallerRole.ToString(),
+                    payload: new
                     {
                         logId = log.Id,
                         verificationId = verification.Id,
@@ -105,8 +108,14 @@ public sealed class VerifyLogHandler(
                         verification.Reason,
                         verification.OccurredAtUtc
                     },
-                    command.ClientCommandId,
-                    clock.UtcNow),
+                    farmId: log.FarmId,
+                    clientCommandId: command.ClientCommandId,
+                    appVersion: string.IsNullOrWhiteSpace(command.ClientAppVersion)
+                        ? AgriSync.BuildingBlocks.Persistence.AppVersionProvider.Current
+                        : command.ClientAppVersion,
+                    deviceId: command.AuditDeviceId,
+                    ipHash: command.AuditIpHash,
+                    sourceAiJobId: null),
                 ct);
         }
         catch (ArgumentException)

@@ -1,5 +1,6 @@
 using System.Security.Claims;
 using System.Text;
+using AgriSync.BuildingBlocks.Audit;
 using AgriSync.BuildingBlocks.Results;
 using Microsoft.AspNetCore.Mvc;
 using ShramSafal.Application.UseCases.Attachments.CreateAttachment;
@@ -26,6 +27,7 @@ public static class AttachmentEndpoints
     {
         group.MapPost("/attachments", async (
             CreateAttachmentRequest request,
+            HttpContext httpContext,
             ClaimsPrincipal user,
             CreateAttachmentHandler handler,
             CancellationToken ct) =>
@@ -44,6 +46,11 @@ public static class AttachmentEndpoints
                 });
             }
 
+            // DATA_PRINCIPLE_SPINE sub-phase 04.3b — extract forensic
+            // provenance for the AuditEvent row.
+            var (auditDeviceId, auditIpHash) = httpContext.AuditClaims();
+            var clientAppVersion = ResolveClientAppVersion(httpContext);
+
             var command = new CreateAttachmentCommand(
                 request.FarmId,
                 request.LinkedEntityId,
@@ -52,7 +59,11 @@ public static class AttachmentEndpoints
                 request.MimeType,
                 actorUserId,
                 request.AttachmentId,
-                EndpointActorContext.GetActorRole(user));
+                EndpointActorContext.GetActorRole(user),
+                ClientCommandId: null,
+                ClientAppVersion: clientAppVersion,
+                AuditDeviceId: auditDeviceId,
+                AuditIpHash: auditIpHash);
 
             var result = await handler.HandleAsync(command, ct);
             if (!result.IsSuccess)
@@ -73,6 +84,7 @@ public static class AttachmentEndpoints
         group.MapPost("/attachments/{id:guid}/upload", async (
             Guid id,
             IFormFile? file,
+            HttpContext httpContext,
             ClaimsPrincipal user,
             UploadAttachmentHandler handler,
             CancellationToken ct) =>
@@ -119,13 +131,22 @@ public static class AttachmentEndpoints
                 });
             }
 
+            // DATA_PRINCIPLE_SPINE sub-phase 04.3b — extract forensic
+            // provenance for the AuditEvent row.
+            var (auditDeviceId, auditIpHash) = httpContext.AuditClaims();
+            var clientAppVersion = ResolveClientAppVersion(httpContext);
+
             var command = new UploadAttachmentCommand(
                 id,
                 stream,
                 actorUserId,
                 file.ContentType,
                 file.FileName,
-                EndpointActorContext.GetActorRole(user));
+                EndpointActorContext.GetActorRole(user),
+                ClientCommandId: null,
+                ClientAppVersion: clientAppVersion,
+                AuditDeviceId: auditDeviceId,
+                AuditIpHash: auditIpHash);
 
             var result = await handler.HandleAsync(command, ct);
             return result.IsSuccess ? Results.Ok(result.Value) : ToErrorResult(result.Error);
@@ -273,6 +294,14 @@ public static class AttachmentEndpoints
         return error.Code.EndsWith("NotFound", StringComparison.Ordinal)
             ? Results.NotFound(new { error = error.Code, message = error.Description })
             : Results.BadRequest(new { error = error.Code, message = error.Description });
+    }
+
+    // DATA_PRINCIPLE_SPINE sub-phase 04.3b — single source for resolving the
+    // X-App-Version header into the AuditEvent.AppVersion column.
+    private static string ResolveClientAppVersion(HttpContext httpContext)
+    {
+        var header = httpContext.Request.Headers["X-App-Version"].FirstOrDefault();
+        return string.IsNullOrWhiteSpace(header) ? "unknown" : header!.Trim();
     }
 }
 
