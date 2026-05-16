@@ -67,19 +67,38 @@ public sealed class TenantTransactionMiddleware
 {
     private static readonly string[] SkipPathPrefixes =
     {
-        "/health", "/version", "/metrics", "/swagger", "/telemetry/client-error", "/test"
+        "/health", "/version", "/metrics", "/swagger", "/telemetry/client-error", "/test",
+        // Anonymous auth surface — login/register/refresh/OTP hit UserDb
+        // without a tenant claim by definition (the user has not yet
+        // authenticated). Without admin elevation the interceptor's
+        // fail-closed throw blocks the login query and breaks e2e.
+        "/user/auth", "/auth",
+        // E2E test harness endpoints are dev-only and bypass tenancy.
+        "/__e2e",
     };
 
     private readonly RequestDelegate _next;
     public TenantTransactionMiddleware(RequestDelegate next) => _next = next;
 
-    public async Task InvokeAsync(HttpContext context, ITenantScopedDbContextRegistry registry)
+    public async Task InvokeAsync(
+        HttpContext context,
+        ITenantScopedDbContextRegistry registry,
+        TenantContext tenantContext)
     {
         var path = context.Request.Path.Value ?? string.Empty;
         foreach (var prefix in SkipPathPrefixes)
         {
             if (path.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
             {
+                // Skip-listed paths don't have a tenant claim by design
+                // (health checks, /metrics scrape, anonymous auth, e2e
+                // test harness). Elevate to admin so the interceptor's
+                // fail-closed guard on any DbCommand in this scope
+                // doesn't 500 the request. ElevateToAdminCrossTenant is
+                // idempotent when FarmId is unset; handlers that already
+                // elevate explicitly (e.g. /health/ready, /__e2e/seed)
+                // remain correct because the second call is a no-op.
+                tenantContext.ElevateToAdminCrossTenant();
                 await _next(context);
                 return;
             }
