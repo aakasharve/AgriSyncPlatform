@@ -66,8 +66,11 @@ public sealed class AddLocalPlannedActivityHandler(
         await repository.AddPlannedActivitiesAsync([activity], ct);
 
         // Step 6: audit event
-        var audit = AuditEvent.Create(
-            farmId: command.FarmId,
+        // DATA_PRINCIPLE_SPINE sub-phase 04.3b — migrate from AuditEvent.Create
+        // (sentinel provenance) to AuditEventFactory.Create with the real
+        // X-Device-Id / IP hash / X-App-Version sourced from the endpoint's
+        // AuditContextAccessor.
+        var audit = AuditEventFactory.Create(
             entityType: "PlannedActivity",
             entityId: command.NewActivityId,
             action: "plan.added",
@@ -80,8 +83,12 @@ public sealed class AddLocalPlannedActivityHandler(
                 plannedDate = command.PlannedDate.ToString("yyyy-MM-dd"),
                 reason = command.Reason
             },
+            farmId: command.FarmId,
             clientCommandId: command.ClientCommandId,
-            occurredAtUtc: clock.UtcNow);
+            appVersion: command.ClientAppVersion,
+            deviceId: command.AuditDeviceId,
+            ipHash: command.AuditIpHash,
+            sourceAiJobId: null);
 
         await repository.AddAuditEventAsync(audit, ct);
 

@@ -81,7 +81,12 @@ public sealed class EditScheduleTemplateHandler(
         await repository.AddScheduleTemplateAsync(newTemplate, ct);
 
         // Step 7: audit
-        var audit = AuditEvent.Create(
+        // DATA_PRINCIPLE_SPINE sub-phase 04.3b — migrate from AuditEvent.Create
+        // (sentinel provenance) to AuditEventFactory.Create with the real
+        // X-Device-Id / IP hash / X-App-Version sourced from the endpoint's
+        // AuditContextAccessor. ScheduleTemplate is a tenant-scoped artefact
+        // (no farmId binding), so farmId is null.
+        var audit = AuditEventFactory.Create(
             entityType: "ScheduleTemplate",
             entityId: command.NewTemplateId,
             action: "schedule.edited",
@@ -92,8 +97,12 @@ public sealed class EditScheduleTemplateHandler(
                 sourceId = command.SourceTemplateId,
                 newVersion = newTemplate.Version
             },
+            farmId: null,
             clientCommandId: command.ClientCommandId,
-            occurredAtUtc: clock.UtcNow);
+            appVersion: command.ClientAppVersion,
+            deviceId: command.AuditDeviceId,
+            ipHash: command.AuditIpHash,
+            sourceAiJobId: null);
 
         await repository.AddAuditEventAsync(audit, ct);
 

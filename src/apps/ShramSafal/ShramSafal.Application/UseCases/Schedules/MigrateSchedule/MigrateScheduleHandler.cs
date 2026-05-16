@@ -156,15 +156,22 @@ public sealed class MigrateScheduleHandler(
         await repository.AddScheduleSubscriptionAsync(newSubscription, ct);
         await repository.AddScheduleMigrationEventAsync(migrationEvent, ct);
 
+        // DATA_PRINCIPLE_SPINE sub-phase 04.3b — migrate from AuditEvent.Create
+        // (sentinel provenance) to AuditEventFactory.Create with the real
+        // X-Device-Id / IP hash / X-App-Version sourced from the endpoint's
+        // AuditContextAccessor. Migration emits a single "Migrated" audit row
+        // (the prev → new transition is captured atomically in the payload's
+        // prevSubscriptionId / newSubscriptionId pair plus the I-16
+        // ScheduleMigrationEvent record); both views share the same forensic
+        // provenance from this command.
         await repository.AddAuditEventAsync(
-            AuditEvent.Create(
-                command.FarmId,
-                "ScheduleSubscription",
-                newSubscription.Id,
-                "Migrated",
-                command.ActorUserId,
-                command.ActorRole ?? "unknown",
-                new
+            AuditEventFactory.Create(
+                entityType: "ScheduleSubscription",
+                entityId: newSubscription.Id,
+                action: "Migrated",
+                actorUserId: command.ActorUserId,
+                actorRole: command.ActorRole ?? "unknown",
+                payload: new
                 {
                     prevSubscriptionId = prev.Id,
                     newSubscriptionId = newSubscription.Id,
@@ -174,8 +181,12 @@ public sealed class MigrateScheduleHandler(
                     command.ReasonText,
                     complianceAtMigrationPct
                 },
-                command.ClientCommandId,
-                nowUtc),
+                farmId: command.FarmId,
+                clientCommandId: command.ClientCommandId,
+                appVersion: command.ClientAppVersion,
+                deviceId: command.AuditDeviceId,
+                ipHash: command.AuditIpHash,
+                sourceAiJobId: null),
             ct);
 
         await repository.SaveChangesAsync(ct);

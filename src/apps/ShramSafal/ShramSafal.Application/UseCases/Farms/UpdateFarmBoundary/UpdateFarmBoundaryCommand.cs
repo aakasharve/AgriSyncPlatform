@@ -8,5 +8,12 @@ public sealed record UpdateFarmBoundaryCommand(
     double CentreLng,
     decimal CalculatedAreaAcres,
     string? ActorRole = null,
-    string? ClientCommandId = null);
+    string? ClientCommandId = null,
+    // DATA_PRINCIPLE_SPINE sub-phase 04.3b — forensic provenance fields
+    // sourced from the endpoint's HttpContext.AuditClaims() + X-App-Version
+    // header. Defaults match the worker / unknown path so direct-construction
+    // unit tests stay green.
+    string ClientAppVersion = "unknown",
+    string AuditDeviceId = "unknown",
+    string AuditIpHash = "sha256:unknown");
 

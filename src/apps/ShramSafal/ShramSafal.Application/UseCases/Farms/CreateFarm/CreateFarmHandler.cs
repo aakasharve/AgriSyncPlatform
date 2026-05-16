@@ -48,21 +48,28 @@ public sealed class CreateFarmHandler(
 
         await repository.AddFarmAsync(farm, ct);
         await repository.AddFarmMembershipAsync(ownerMembership, ct);
+        // DATA_PRINCIPLE_SPINE sub-phase 04.3b — migrate from AuditEvent.Create
+        // (sentinel provenance) to AuditEventFactory.Create with the real
+        // X-Device-Id / IP hash / X-App-Version sourced from the endpoint's
+        // AuditContextAccessor.
         await repository.AddAuditEventAsync(
-            AuditEvent.Create(
-                farm.Id,
-                "Farm",
-                farm.Id,
-                "Created",
-                command.OwnerUserId,
-                actorRole,
-                new
+            AuditEventFactory.Create(
+                entityType: "Farm",
+                entityId: farm.Id,
+                action: "Created",
+                actorUserId: command.OwnerUserId,
+                actorRole: actorRole,
+                payload: new
                 {
                     farmId = farm.Id,
                     farm.Name
                 },
-                command.ClientCommandId,
-                nowUtc),
+                farmId: farm.Id,
+                clientCommandId: command.ClientCommandId,
+                appVersion: command.ClientAppVersion,
+                deviceId: command.AuditDeviceId,
+                ipHash: command.AuditIpHash,
+                sourceAiJobId: null),
             ct);
         await repository.SaveChangesAsync(ct);
 

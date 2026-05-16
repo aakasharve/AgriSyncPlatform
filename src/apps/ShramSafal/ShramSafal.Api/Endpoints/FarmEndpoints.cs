@@ -1,3 +1,4 @@
+using AgriSync.BuildingBlocks.Audit;
 using AgriSync.BuildingBlocks.Results;
 using System.Security.Claims;
 using ShramSafal.Application.UseCases.CropCycles.CreateCropCycle;
@@ -15,6 +16,7 @@ public static class FarmEndpoints
     {
         group.MapPost("/farms", async (
             CreateFarmRequest request,
+            HttpContext httpContext,
             ClaimsPrincipal user,
             CreateFarmHandler handler,
             CancellationToken ct) =>
@@ -24,7 +26,20 @@ public static class FarmEndpoints
                 return Results.Unauthorized();
             }
 
-            var command = new CreateFarmCommand(request.Name, actorUserId);
+            // DATA_PRINCIPLE_SPINE sub-phase 04.3b — extract forensic
+            // provenance for the AuditEvent row.
+            var (auditDeviceId, auditIpHash) = httpContext.AuditClaims();
+            var clientAppVersion = ResolveClientAppVersion(httpContext);
+
+            var command = new CreateFarmCommand(
+                request.Name,
+                actorUserId,
+                FarmId: null,
+                ActorRole: null,
+                ClientCommandId: null,
+                ClientAppVersion: clientAppVersion,
+                AuditDeviceId: auditDeviceId,
+                AuditIpHash: auditIpHash);
             var result = await handler.HandleAsync(command, ct);
             return result.IsSuccess ? Results.Ok(result.Value) : ToErrorResult(result.Error);
         })
@@ -83,6 +98,7 @@ public static class FarmEndpoints
         group.MapPut("/farms/{farmId:guid}/boundary", async (
             Guid farmId,
             UpdateFarmBoundaryRequest request,
+            HttpContext httpContext,
             ClaimsPrincipal user,
             AgriSync.BuildingBlocks.Application.IHandler<UpdateFarmBoundaryCommand, ShramSafal.Application.Contracts.Dtos.FarmDto> handler,
             CancellationToken ct) =>
@@ -92,6 +108,11 @@ public static class FarmEndpoints
                 return Results.Unauthorized();
             }
 
+            // DATA_PRINCIPLE_SPINE sub-phase 04.3b — extract forensic
+            // provenance for the AuditEvent row.
+            var (auditDeviceId, auditIpHash) = httpContext.AuditClaims();
+            var clientAppVersion = ResolveClientAppVersion(httpContext);
+
             var command = new UpdateFarmBoundaryCommand(
                 farmId,
                 actorUserId,
@@ -99,7 +120,11 @@ public static class FarmEndpoints
                 request.CentreLat,
                 request.CentreLng,
                 request.CalculatedAreaAcres,
-                ActorRole: EndpointActorContext.GetActorRole(user));
+                ActorRole: EndpointActorContext.GetActorRole(user),
+                ClientCommandId: null,
+                ClientAppVersion: clientAppVersion,
+                AuditDeviceId: auditDeviceId,
+                AuditIpHash: auditIpHash);
             var result = await handler.HandleAsync(command, ct);
             return result.IsSuccess ? Results.Ok(result.Value) : ToErrorResult(result.Error);
         })
@@ -107,6 +132,7 @@ public static class FarmEndpoints
 
         group.MapPost("/plots", async (
             CreatePlotRequest request,
+            HttpContext httpContext,
             ClaimsPrincipal user,
             AgriSync.BuildingBlocks.Application.IHandler<CreatePlotCommand, ShramSafal.Application.Contracts.Dtos.PlotDto> handler,
             CancellationToken ct) =>
@@ -116,13 +142,22 @@ public static class FarmEndpoints
                 return Results.Unauthorized();
             }
 
+            // DATA_PRINCIPLE_SPINE sub-phase 04.3b — extract forensic
+            // provenance for the AuditEvent row.
+            var (auditDeviceId, auditIpHash) = httpContext.AuditClaims();
+            var clientAppVersion = ResolveClientAppVersion(httpContext);
+
             var command = new CreatePlotCommand(
                 request.FarmId,
                 request.Name,
                 request.AreaInAcres,
                 actorUserId,
                 PlotId: null,
-                ActorRole: EndpointActorContext.GetActorRole(user));
+                ActorRole: EndpointActorContext.GetActorRole(user),
+                ClientCommandId: null,
+                ClientAppVersion: clientAppVersion,
+                AuditDeviceId: auditDeviceId,
+                AuditIpHash: auditIpHash);
             var result = await handler.HandleAsync(command, ct);
             return result.IsSuccess ? Results.Ok(result.Value) : ToErrorResult(result.Error);
         })
@@ -130,6 +165,7 @@ public static class FarmEndpoints
 
         group.MapPost("/cropcycles", async (
             CreateCropCycleRequest request,
+            HttpContext httpContext,
             ClaimsPrincipal user,
             AgriSync.BuildingBlocks.Application.IHandler<CreateCropCycleCommand, ShramSafal.Application.Contracts.Dtos.CropCycleDto> handler,
             CancellationToken ct) =>
@@ -138,6 +174,11 @@ public static class FarmEndpoints
             {
                 return Results.Unauthorized();
             }
+
+            // DATA_PRINCIPLE_SPINE sub-phase 04.3b — extract forensic
+            // provenance for the AuditEvent row.
+            var (auditDeviceId, auditIpHash) = httpContext.AuditClaims();
+            var clientAppVersion = ResolveClientAppVersion(httpContext);
 
             var command = new CreateCropCycleCommand(
                 request.FarmId,
@@ -148,7 +189,11 @@ public static class FarmEndpoints
                 request.EndDate,
                 actorUserId,
                 CropCycleId: null,
-                ActorRole: EndpointActorContext.GetActorRole(user));
+                ActorRole: EndpointActorContext.GetActorRole(user),
+                ClientCommandId: null,
+                ClientAppVersion: clientAppVersion,
+                AuditDeviceId: auditDeviceId,
+                AuditIpHash: auditIpHash);
 
             var result = await handler.HandleAsync(command, ct);
             return result.IsSuccess ? Results.Ok(result.Value) : ToErrorResult(result.Error);
@@ -175,6 +220,15 @@ public static class FarmEndpoints
         return error.Code.EndsWith("NotFound", StringComparison.Ordinal)
             ? Results.NotFound(new { error = error.Code, message = error.Description })
             : Results.BadRequest(new { error = error.Code, message = error.Description });
+    }
+
+    // DATA_PRINCIPLE_SPINE sub-phase 04.3b — single source for resolving the
+    // X-App-Version header into the AuditEvent.AppVersion column, mirroring the
+    // sub-phase 01.4 fallback used by other endpoints (FinanceEndpoints etc).
+    private static string ResolveClientAppVersion(HttpContext httpContext)
+    {
+        var header = httpContext.Request.Headers["X-App-Version"].FirstOrDefault();
+        return string.IsNullOrWhiteSpace(header) ? "unknown" : header!.Trim();
     }
 }
 

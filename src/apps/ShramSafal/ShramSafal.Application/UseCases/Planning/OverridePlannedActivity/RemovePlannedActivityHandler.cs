@@ -58,8 +58,11 @@ public sealed class RemovePlannedActivityHandler(
         activity.SoftRemove(new UserId(command.CallerUserId), command.Reason, clock.UtcNow);
 
         // Step 7: audit event
-        var audit = AuditEvent.Create(
-            farmId: command.FarmId,
+        // DATA_PRINCIPLE_SPINE sub-phase 04.3b — migrate from AuditEvent.Create
+        // (sentinel provenance) to AuditEventFactory.Create with the real
+        // X-Device-Id / IP hash / X-App-Version sourced from the endpoint's
+        // AuditContextAccessor.
+        var audit = AuditEventFactory.Create(
             entityType: "PlannedActivity",
             entityId: command.PlannedActivityId,
             action: "plan.removed",
@@ -70,8 +73,12 @@ public sealed class RemovePlannedActivityHandler(
                 reason = command.Reason,
                 wasLocallyAdded = activity.IsLocallyAdded
             },
+            farmId: command.FarmId,
             clientCommandId: command.ClientCommandId,
-            occurredAtUtc: clock.UtcNow);
+            appVersion: command.ClientAppVersion,
+            deviceId: command.AuditDeviceId,
+            ipHash: command.AuditIpHash,
+            sourceAiJobId: null);
 
         await repository.AddAuditEventAsync(audit, ct);
 

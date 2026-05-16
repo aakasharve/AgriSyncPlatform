@@ -89,15 +89,18 @@ public sealed class UpdateFarmBoundaryHandler(
             nowUtc);
 
         await repository.AddFarmBoundaryAsync(boundary, ct);
+        // DATA_PRINCIPLE_SPINE sub-phase 04.3b — migrate from AuditEvent.Create
+        // (sentinel provenance) to AuditEventFactory.Create with the real
+        // X-Device-Id / IP hash / X-App-Version sourced from the endpoint's
+        // AuditContextAccessor.
         await repository.AddAuditEventAsync(
-            AuditEvent.Create(
-                farm.Id,
-                "Farm",
-                farm.Id,
-                "BoundaryUpdated",
-                command.ActorUserId,
-                command.ActorRole ?? "unknown",
-                new
+            AuditEventFactory.Create(
+                entityType: "Farm",
+                entityId: farm.Id,
+                action: "BoundaryUpdated",
+                actorUserId: command.ActorUserId,
+                actorRole: command.ActorRole ?? "unknown",
+                payload: new
                 {
                     farmId = farm.Id,
                     ownerAccountId = farm.OwnerAccountId,
@@ -105,8 +108,12 @@ public sealed class UpdateFarmBoundaryHandler(
                     centreSource = FarmCentreSource.PolygonCentroid.ToString(),
                     command.CalculatedAreaAcres
                 },
-                command.ClientCommandId,
-                nowUtc),
+                farmId: farm.Id,
+                clientCommandId: command.ClientCommandId,
+                appVersion: command.ClientAppVersion,
+                deviceId: command.AuditDeviceId,
+                ipHash: command.AuditIpHash,
+                sourceAiJobId: null),
             ct);
         await repository.SaveChangesAsync(ct);
 

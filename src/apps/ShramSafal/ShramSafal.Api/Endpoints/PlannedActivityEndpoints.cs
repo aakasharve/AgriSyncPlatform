@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using AgriSync.BuildingBlocks.Audit;
 using AgriSync.BuildingBlocks.Results;
 using ShramSafal.Application.UseCases.Planning.OverridePlannedActivity;
 
@@ -11,6 +12,7 @@ public static class PlannedActivityEndpoints
         group.MapPost("/planned-activities/{id:guid}/override", async (
             Guid id,
             OverridePlannedActivityRequest request,
+            HttpContext httpContext,
             ClaimsPrincipal user,
             OverridePlannedActivityHandler handler,
             CancellationToken ct) =>
@@ -20,6 +22,11 @@ public static class PlannedActivityEndpoints
                 return Results.Unauthorized();
             }
 
+            // DATA_PRINCIPLE_SPINE sub-phase 04.3b — extract forensic
+            // provenance for the AuditEvent row.
+            var (auditDeviceId, auditIpHash) = httpContext.AuditClaims();
+            var clientAppVersion = ResolveClientAppVersion(httpContext);
+
             var command = new OverridePlannedActivityCommand(
                 PlannedActivityId: id,
                 FarmId: request.FarmId,
@@ -28,7 +35,10 @@ public static class PlannedActivityEndpoints
                 NewStage: request.NewStage,
                 Reason: request.Reason,
                 CallerUserId: actorUserId,
-                ClientCommandId: request.ClientCommandId);
+                ClientCommandId: request.ClientCommandId,
+                ClientAppVersion: clientAppVersion,
+                AuditDeviceId: auditDeviceId,
+                AuditIpHash: auditIpHash);
 
             var result = await handler.HandleAsync(command, ct);
             return result.IsSuccess ? Results.Ok() : ToErrorResult(result.Error);
@@ -37,6 +47,7 @@ public static class PlannedActivityEndpoints
 
         group.MapPost("/planned-activities", async (
             AddLocalPlannedActivityRequest request,
+            HttpContext httpContext,
             ClaimsPrincipal user,
             AddLocalPlannedActivityHandler handler,
             CancellationToken ct) =>
@@ -45,6 +56,11 @@ public static class PlannedActivityEndpoints
             {
                 return Results.Unauthorized();
             }
+
+            // DATA_PRINCIPLE_SPINE sub-phase 04.3b — extract forensic
+            // provenance for the AuditEvent row.
+            var (auditDeviceId, auditIpHash) = httpContext.AuditClaims();
+            var clientAppVersion = ResolveClientAppVersion(httpContext);
 
             var command = new AddLocalPlannedActivityCommand(
                 NewActivityId: request.NewActivityId ?? Guid.NewGuid(),
@@ -55,7 +71,10 @@ public static class PlannedActivityEndpoints
                 PlannedDate: request.PlannedDate,
                 Reason: request.Reason,
                 CallerUserId: actorUserId,
-                ClientCommandId: request.ClientCommandId);
+                ClientCommandId: request.ClientCommandId,
+                ClientAppVersion: clientAppVersion,
+                AuditDeviceId: auditDeviceId,
+                AuditIpHash: auditIpHash);
 
             var result = await handler.HandleAsync(command, ct);
             return result.IsSuccess ? Results.Created() : ToErrorResult(result.Error);
@@ -65,6 +84,7 @@ public static class PlannedActivityEndpoints
         group.MapPost("/planned-activities/{id:guid}/remove", async (
             Guid id,
             RemovePlannedActivityRequest request,
+            HttpContext httpContext,
             ClaimsPrincipal user,
             RemovePlannedActivityHandler handler,
             CancellationToken ct) =>
@@ -74,12 +94,20 @@ public static class PlannedActivityEndpoints
                 return Results.Unauthorized();
             }
 
+            // DATA_PRINCIPLE_SPINE sub-phase 04.3b — extract forensic
+            // provenance for the AuditEvent row.
+            var (auditDeviceId, auditIpHash) = httpContext.AuditClaims();
+            var clientAppVersion = ResolveClientAppVersion(httpContext);
+
             var command = new RemovePlannedActivityCommand(
                 PlannedActivityId: id,
                 FarmId: request.FarmId,
                 Reason: request.Reason,
                 CallerUserId: actorUserId,
-                ClientCommandId: request.ClientCommandId);
+                ClientCommandId: request.ClientCommandId,
+                ClientAppVersion: clientAppVersion,
+                AuditDeviceId: auditDeviceId,
+                AuditIpHash: auditIpHash);
 
             var result = await handler.HandleAsync(command, ct);
             return result.IsSuccess ? Results.Ok() : ToErrorResult(result.Error);
@@ -96,6 +124,15 @@ public static class PlannedActivityEndpoints
             : error.Code.EndsWith("Forbidden", StringComparison.Ordinal)
                 ? Results.Forbid()
                 : Results.BadRequest(new { error = error.Code, message = error.Description });
+    }
+
+    // DATA_PRINCIPLE_SPINE sub-phase 04.3b — single source for resolving the
+    // X-App-Version header into the AuditEvent.AppVersion column, mirroring the
+    // sub-phase 01.4 fallback used by other endpoints (FinanceEndpoints etc).
+    private static string ResolveClientAppVersion(HttpContext httpContext)
+    {
+        var header = httpContext.Request.Headers["X-App-Version"].FirstOrDefault();
+        return string.IsNullOrWhiteSpace(header) ? "unknown" : header!.Trim();
     }
 }
 

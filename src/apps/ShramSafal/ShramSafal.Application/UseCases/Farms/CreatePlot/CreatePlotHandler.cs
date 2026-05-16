@@ -78,23 +78,30 @@ public sealed class CreatePlotHandler(
             nowUtc);
 
         await repository.AddPlotAsync(plot, ct);
+        // DATA_PRINCIPLE_SPINE sub-phase 04.3b — migrate from AuditEvent.Create
+        // (sentinel provenance) to AuditEventFactory.Create with the real
+        // X-Device-Id / IP hash / X-App-Version sourced from the endpoint's
+        // AuditContextAccessor.
         await repository.AddAuditEventAsync(
-            AuditEvent.Create(
-                command.FarmId,
-                "Plot",
-                plot.Id,
-                "Created",
-                command.ActorUserId,
-                resolvedActorRole.ToString(),
-                new
+            AuditEventFactory.Create(
+                entityType: "Plot",
+                entityId: plot.Id,
+                action: "Created",
+                actorUserId: command.ActorUserId,
+                actorRole: resolvedActorRole.ToString(),
+                payload: new
                 {
                     plot.Id,
                     command.FarmId,
                     plot.Name,
                     plot.AreaInAcres
                 },
-                command.ClientCommandId,
-                nowUtc),
+                farmId: command.FarmId,
+                clientCommandId: command.ClientCommandId,
+                appVersion: command.ClientAppVersion,
+                deviceId: command.AuditDeviceId,
+                ipHash: command.AuditIpHash,
+                sourceAiJobId: null),
             ct);
         await repository.SaveChangesAsync(ct);
 

@@ -8,4 +8,11 @@ public sealed record OverridePlannedActivityCommand(
     string? NewStage,
     string Reason,
     Guid CallerUserId,
-    string? ClientCommandId);
+    string? ClientCommandId,
+    // DATA_PRINCIPLE_SPINE sub-phase 04.3b — forensic provenance fields
+    // sourced from the endpoint's HttpContext.AuditClaims() + X-App-Version
+    // header. Defaults match the worker / unknown path so direct-construction
+    // unit tests stay green.
+    string ClientAppVersion = "unknown",
+    string AuditDeviceId = "unknown",
+    string AuditIpHash = "sha256:unknown");

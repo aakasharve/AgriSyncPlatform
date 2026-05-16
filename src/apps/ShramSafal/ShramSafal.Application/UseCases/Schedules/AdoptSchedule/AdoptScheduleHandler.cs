@@ -104,15 +104,18 @@ public sealed class AdoptScheduleHandler(
             nowUtc);
 
         await repository.AddScheduleSubscriptionAsync(subscription, ct);
+        // DATA_PRINCIPLE_SPINE sub-phase 04.3b — migrate from AuditEvent.Create
+        // (sentinel provenance) to AuditEventFactory.Create with the real
+        // X-Device-Id / IP hash / X-App-Version sourced from the endpoint's
+        // AuditContextAccessor.
         await repository.AddAuditEventAsync(
-            AuditEvent.Create(
-                command.FarmId,
-                "ScheduleSubscription",
-                subscription.Id,
-                "Adopted",
-                command.ActorUserId,
-                command.ActorRole ?? "unknown",
-                new
+            AuditEventFactory.Create(
+                entityType: "ScheduleSubscription",
+                entityId: subscription.Id,
+                action: "Adopted",
+                actorUserId: command.ActorUserId,
+                actorRole: command.ActorRole ?? "unknown",
+                payload: new
                 {
                     subscriptionId = subscription.Id,
                     farmId = command.FarmId,
@@ -123,8 +126,12 @@ public sealed class AdoptScheduleHandler(
                     templateKey = template.TemplateKey,
                     versionTag = template.VersionTag
                 },
-                command.ClientCommandId,
-                nowUtc),
+                farmId: command.FarmId,
+                clientCommandId: command.ClientCommandId,
+                appVersion: command.ClientAppVersion,
+                deviceId: command.AuditDeviceId,
+                ipHash: command.AuditIpHash,
+                sourceAiJobId: null),
             ct);
 
         await repository.SaveChangesAsync(ct);

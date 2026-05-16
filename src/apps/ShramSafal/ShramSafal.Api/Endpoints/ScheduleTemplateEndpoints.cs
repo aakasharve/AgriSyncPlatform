@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using AgriSync.BuildingBlocks.Audit;
 using ShramSafal.Application.UseCases.Planning.CloneScheduleTemplate;
 using ShramSafal.Application.UseCases.Planning.EditScheduleTemplate;
 using ShramSafal.Application.UseCases.Planning.GetScheduleLineage;
@@ -15,6 +16,7 @@ public static class ScheduleTemplateEndpoints
         group.MapPost("/schedule-templates/{id}/clone", async (
             Guid id,
             CloneScheduleTemplateRequest request,
+            HttpContext httpContext,
             ClaimsPrincipal user,
             CloneScheduleTemplateHandler handler,
             CancellationToken ct) =>
@@ -26,6 +28,11 @@ public static class ScheduleTemplateEndpoints
 
             var newTemplateId = request.NewId ?? Guid.NewGuid();
 
+            // DATA_PRINCIPLE_SPINE sub-phase 04.3b — extract forensic
+            // provenance for the AuditEvent row.
+            var (auditDeviceId, auditIpHash) = httpContext.AuditClaims();
+            var clientAppVersion = ResolveClientAppVersion(httpContext);
+
             var command = new CloneScheduleTemplateCommand(
                 SourceTemplateId: id,
                 NewTemplateId: newTemplateId,
@@ -33,7 +40,10 @@ public static class ScheduleTemplateEndpoints
                 CallerRole: EndpointActorContext.GetActorRoleEnum(user),
                 NewScope: request.NewScope,
                 Reason: request.Reason,
-                ClientCommandId: request.ClientCommandId);
+                ClientCommandId: request.ClientCommandId,
+                ClientAppVersion: clientAppVersion,
+                AuditDeviceId: auditDeviceId,
+                AuditIpHash: auditIpHash);
 
             var result = await handler.HandleAsync(command, ct);
             return result.IsSuccess
@@ -45,6 +55,7 @@ public static class ScheduleTemplateEndpoints
         group.MapPost("/schedule-templates/{id}/edit", async (
             Guid id,
             EditScheduleTemplateRequest request,
+            HttpContext httpContext,
             ClaimsPrincipal user,
             EditScheduleTemplateHandler handler,
             CancellationToken ct) =>
@@ -54,6 +65,11 @@ public static class ScheduleTemplateEndpoints
                 return Results.Unauthorized();
             }
 
+            // DATA_PRINCIPLE_SPINE sub-phase 04.3b — extract forensic
+            // provenance for the AuditEvent row.
+            var (auditDeviceId, auditIpHash) = httpContext.AuditClaims();
+            var clientAppVersion = ResolveClientAppVersion(httpContext);
+
             var command = new EditScheduleTemplateCommand(
                 SourceTemplateId: id,
                 NewTemplateId: request.NewId,
@@ -61,7 +77,10 @@ public static class ScheduleTemplateEndpoints
                 CallerRole: EndpointActorContext.GetActorRoleEnum(user),
                 NewName: request.NewName,
                 NewStage: request.NewStage,
-                ClientCommandId: request.ClientCommandId);
+                ClientCommandId: request.ClientCommandId,
+                ClientAppVersion: clientAppVersion,
+                AuditDeviceId: auditDeviceId,
+                AuditIpHash: auditIpHash);
 
             var result = await handler.HandleAsync(command, ct);
             return result.IsSuccess
@@ -73,6 +92,7 @@ public static class ScheduleTemplateEndpoints
         group.MapPost("/schedule-templates/{id}/publish", async (
             Guid id,
             PublishScheduleTemplateRequest request,
+            HttpContext httpContext,
             ClaimsPrincipal user,
             PublishScheduleTemplateHandler handler,
             CancellationToken ct) =>
@@ -82,11 +102,19 @@ public static class ScheduleTemplateEndpoints
                 return Results.Unauthorized();
             }
 
+            // DATA_PRINCIPLE_SPINE sub-phase 04.3b — extract forensic
+            // provenance for the AuditEvent row.
+            var (auditDeviceId, auditIpHash) = httpContext.AuditClaims();
+            var clientAppVersion = ResolveClientAppVersion(httpContext);
+
             var command = new PublishScheduleTemplateCommand(
                 TemplateId: id,
                 CallerUserId: actorUserId,
                 CallerRole: EndpointActorContext.GetActorRoleEnum(user),
-                ClientCommandId: request.ClientCommandId);
+                ClientCommandId: request.ClientCommandId,
+                ClientAppVersion: clientAppVersion,
+                AuditDeviceId: auditDeviceId,
+                AuditIpHash: auditIpHash);
 
             var result = await handler.HandleAsync(command, ct);
             return result.IsSuccess ? Results.Ok(result.Value) : ToErrorResult(result.Error);
@@ -115,6 +143,15 @@ public static class ScheduleTemplateEndpoints
             return Results.Forbid();
 
         return Results.BadRequest(new { error = error.Code, message = error.Description });
+    }
+
+    // DATA_PRINCIPLE_SPINE sub-phase 04.3b — single source for resolving the
+    // X-App-Version header into the AuditEvent.AppVersion column, mirroring the
+    // sub-phase 01.4 fallback used by other endpoints (FinanceEndpoints etc).
+    private static string ResolveClientAppVersion(HttpContext httpContext)
+    {
+        var header = httpContext.Request.Headers["X-App-Version"].FirstOrDefault();
+        return string.IsNullOrWhiteSpace(header) ? "unknown" : header!.Trim();
     }
 }
 

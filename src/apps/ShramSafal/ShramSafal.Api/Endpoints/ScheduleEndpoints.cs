@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using AgriSync.BuildingBlocks.Audit;
 using AgriSync.BuildingBlocks.Results;
 using ShramSafal.Application.UseCases.Schedules.AbandonSchedule;
 using ShramSafal.Application.UseCases.Schedules.AdoptSchedule;
@@ -24,6 +25,7 @@ public static class ScheduleEndpoints
             Guid plotId,
             Guid cycleId,
             AdoptScheduleRequest request,
+            HttpContext httpContext,
             ClaimsPrincipal user,
             AdoptScheduleHandler handler,
             CancellationToken ct) =>
@@ -33,6 +35,11 @@ public static class ScheduleEndpoints
                 return Results.Unauthorized();
             }
 
+            // DATA_PRINCIPLE_SPINE sub-phase 04.3b — extract forensic
+            // provenance for the AuditEvent row.
+            var (auditDeviceId, auditIpHash) = httpContext.AuditClaims();
+            var clientAppVersion = ResolveClientAppVersion(httpContext);
+
             var command = new AdoptScheduleCommand(
                 FarmId: request.FarmId,
                 PlotId: plotId,
@@ -41,7 +48,10 @@ public static class ScheduleEndpoints
                 ActorUserId: actorUserId,
                 ActorRole: EndpointActorContext.GetActorRole(user),
                 ClientCommandId: request.ClientCommandId,
-                SubscriptionId: request.SubscriptionId);
+                SubscriptionId: request.SubscriptionId,
+                ClientAppVersion: clientAppVersion,
+                AuditDeviceId: auditDeviceId,
+                AuditIpHash: auditIpHash);
 
             var result = await handler.HandleAsync(command, ct);
             return result.IsSuccess ? Results.Ok(result.Value) : ToErrorResult(result.Error);
@@ -52,6 +62,7 @@ public static class ScheduleEndpoints
             Guid plotId,
             Guid cycleId,
             MigrateScheduleRequest request,
+            HttpContext httpContext,
             ClaimsPrincipal user,
             MigrateScheduleHandler handler,
             CancellationToken ct) =>
@@ -70,6 +81,11 @@ public static class ScheduleEndpoints
                 });
             }
 
+            // DATA_PRINCIPLE_SPINE sub-phase 04.3b — extract forensic
+            // provenance for the AuditEvent row.
+            var (auditDeviceId, auditIpHash) = httpContext.AuditClaims();
+            var clientAppVersion = ResolveClientAppVersion(httpContext);
+
             var command = new MigrateScheduleCommand(
                 FarmId: request.FarmId,
                 PlotId: plotId,
@@ -81,7 +97,10 @@ public static class ScheduleEndpoints
                 ActorRole: EndpointActorContext.GetActorRole(user),
                 ClientCommandId: request.ClientCommandId,
                 NewSubscriptionId: request.NewSubscriptionId,
-                MigrationEventId: request.MigrationEventId);
+                MigrationEventId: request.MigrationEventId,
+                ClientAppVersion: clientAppVersion,
+                AuditDeviceId: auditDeviceId,
+                AuditIpHash: auditIpHash);
 
             var result = await handler.HandleAsync(command, ct);
             return result.IsSuccess ? Results.Ok(result.Value) : ToErrorResult(result.Error);
@@ -92,6 +111,7 @@ public static class ScheduleEndpoints
             Guid plotId,
             Guid cycleId,
             AbandonScheduleRequest request,
+            HttpContext httpContext,
             ClaimsPrincipal user,
             AbandonScheduleHandler handler,
             CancellationToken ct) =>
@@ -101,6 +121,11 @@ public static class ScheduleEndpoints
                 return Results.Unauthorized();
             }
 
+            // DATA_PRINCIPLE_SPINE sub-phase 04.3b — extract forensic
+            // provenance for the AuditEvent row.
+            var (auditDeviceId, auditIpHash) = httpContext.AuditClaims();
+            var clientAppVersion = ResolveClientAppVersion(httpContext);
+
             var command = new AbandonScheduleCommand(
                 FarmId: request.FarmId,
                 PlotId: plotId,
@@ -108,7 +133,10 @@ public static class ScheduleEndpoints
                 ActorUserId: actorUserId,
                 ReasonText: request.ReasonText,
                 ActorRole: EndpointActorContext.GetActorRole(user),
-                ClientCommandId: request.ClientCommandId);
+                ClientCommandId: request.ClientCommandId,
+                ClientAppVersion: clientAppVersion,
+                AuditDeviceId: auditDeviceId,
+                AuditIpHash: auditIpHash);
 
             var result = await handler.HandleAsync(command, ct);
             return result.IsSuccess ? Results.Ok(result.Value) : ToErrorResult(result.Error);
@@ -119,6 +147,7 @@ public static class ScheduleEndpoints
             Guid plotId,
             Guid cycleId,
             CompleteScheduleRequest request,
+            HttpContext httpContext,
             ClaimsPrincipal user,
             CompleteScheduleHandler handler,
             CancellationToken ct) =>
@@ -128,13 +157,21 @@ public static class ScheduleEndpoints
                 return Results.Unauthorized();
             }
 
+            // DATA_PRINCIPLE_SPINE sub-phase 04.3b — extract forensic
+            // provenance for the AuditEvent row.
+            var (auditDeviceId, auditIpHash) = httpContext.AuditClaims();
+            var clientAppVersion = ResolveClientAppVersion(httpContext);
+
             var command = new CompleteScheduleCommand(
                 FarmId: request.FarmId,
                 PlotId: plotId,
                 CropCycleId: cycleId,
                 ActorUserId: actorUserId,
                 ActorRole: EndpointActorContext.GetActorRole(user),
-                ClientCommandId: request.ClientCommandId);
+                ClientCommandId: request.ClientCommandId,
+                ClientAppVersion: clientAppVersion,
+                AuditDeviceId: auditDeviceId,
+                AuditIpHash: auditIpHash);
 
             var result = await handler.HandleAsync(command, ct);
             return result.IsSuccess ? Results.Ok(result.Value) : ToErrorResult(result.Error);
@@ -151,6 +188,15 @@ public static class ScheduleEndpoints
             : error.Code.EndsWith("Forbidden", StringComparison.Ordinal)
                 ? Results.Forbid()
                 : Results.BadRequest(new { error = error.Code, message = error.Description });
+    }
+
+    // DATA_PRINCIPLE_SPINE sub-phase 04.3b — single source for resolving the
+    // X-App-Version header into the AuditEvent.AppVersion column, mirroring the
+    // sub-phase 01.4 fallback used by other endpoints (FinanceEndpoints etc).
+    private static string ResolveClientAppVersion(HttpContext httpContext)
+    {
+        var header = httpContext.Request.Headers["X-App-Version"].FirstOrDefault();
+        return string.IsNullOrWhiteSpace(header) ? "unknown" : header!.Trim();
     }
 }
 

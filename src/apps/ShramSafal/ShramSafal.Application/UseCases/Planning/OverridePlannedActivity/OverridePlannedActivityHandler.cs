@@ -71,8 +71,11 @@ public sealed class OverridePlannedActivityHandler(
         if (!string.IsNullOrWhiteSpace(command.NewActivityName)) fieldsChanged.Add("activityName");
         if (!string.IsNullOrWhiteSpace(command.NewStage)) fieldsChanged.Add("stage");
 
-        var audit = AuditEvent.Create(
-            farmId: command.FarmId,
+        // DATA_PRINCIPLE_SPINE sub-phase 04.3b — migrate from AuditEvent.Create
+        // (sentinel provenance) to AuditEventFactory.Create with the real
+        // X-Device-Id / IP hash / X-App-Version sourced from the endpoint's
+        // AuditContextAccessor.
+        var audit = AuditEventFactory.Create(
             entityType: "PlannedActivity",
             entityId: command.PlannedActivityId,
             action: "plan.overridden",
@@ -83,8 +86,12 @@ public sealed class OverridePlannedActivityHandler(
                 fieldsChanged = fieldsChanged.ToArray(),
                 reason = command.Reason
             },
+            farmId: command.FarmId,
             clientCommandId: command.ClientCommandId,
-            occurredAtUtc: clock.UtcNow);
+            appVersion: command.ClientAppVersion,
+            deviceId: command.AuditDeviceId,
+            ipHash: command.AuditIpHash,
+            sourceAiJobId: null);
 
         await repository.AddAuditEventAsync(audit, ct);
 
