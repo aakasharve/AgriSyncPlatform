@@ -95,8 +95,9 @@ public sealed class UserDbRowLevelSecurityTests : IAsyncLifetime
         await using (var raw = new NpgsqlConnection(conn))
         {
             await raw.OpenAsync();
-            await SeedUserAsync(raw, _userA, phone: "+919999000001", displayName: "User A");
-            await SeedUserAsync(raw, _userB, phone: "+919999000002", displayName: "User B");
+            // phone column is varchar(12) — keep within bounds (10 digits, India format)
+            await SeedUserAsync(raw, _userA, phone: "9999000001", displayName: "User A");
+            await SeedUserAsync(raw, _userB, phone: "9999000002", displayName: "User B");
 
             await SeedMembershipAsync(raw, Guid.NewGuid(), _userA, appId: "shramsafal");
             await SeedMembershipAsync(raw, Guid.NewGuid(), _userA, appId: "useradmin");

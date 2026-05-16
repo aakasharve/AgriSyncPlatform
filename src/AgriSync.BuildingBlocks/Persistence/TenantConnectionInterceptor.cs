@@ -39,20 +39,22 @@ namespace AgriSync.BuildingBlocks.Persistence;
 /// </summary>
 public sealed class TenantConnectionInterceptor(TenantContext tenantContext) : DbCommandInterceptor
 {
-    // DATA_PRINCIPLE_SPINE 03.6 — third GUC `agrisync.user_id` lands
-    // alongside farm_id + owner_account_id so UserDbContext commands
-    // can RLS-key on the per-request user identity (e.g. public.memberships
-    // policy `user_id = current_setting('agrisync.user_id', true)::uuid`).
-    // Always emitted (even when the request is anonymous) — the bound
-    // value falls back to the empty string when TenantContext.UserId is
-    // null, and the Postgres cast `''::uuid` would throw, so the
-    // policy expression uses the `true` (missing_ok) flag pair with a
-    // NULL-tolerant CAST in the policy body. See migration
-    // 20260516150000_EnableUserDbRowLevelSecurity for the policy SQL.
-    private const string SetConfigSql =
-        "SELECT set_config('agrisync.farm_id', @__tenant_farm_id, true); " +
-        "SELECT set_config('agrisync.owner_account_id', @__tenant_owner_account_id, true); " +
-        "SELECT set_config('agrisync.user_id', @__tenant_user_id, true); ";
+    // DATA_PRINCIPLE_SPINE 03.2/03.6 — emit GUC writes as SET LOCAL
+    // (NOT SELECT set_config(...)) because set_config emits a result
+    // set per call; EF's DataReader reads the FIRST result set as the
+    // intended query result, causing "Reading as Guid is not supported
+    // for fields having DataTypeName 'text'" on every wrapped query.
+    // SET LOCAL emits zero result sets — EF reads the real query output.
+    //
+    // Guid.ToString() is RFC 4122 hex+hyphens — no SQL-injection risk
+    // even with literal interpolation. TenantContext exposes FarmId /
+    // OwnerAccountId / UserId as Guid? (validated at the property
+    // setter; never string), so a future refactor that swaps the type
+    // would break compilation rather than open an injection hole.
+    //
+    // SET LOCAL is a no-op + WARNING outside a transaction —
+    // TenantTransactionMiddleware guarantees we are always in a tx
+    // before any DbContext command runs through this interceptor.
 
     public override InterceptionResult<DbDataReader> ReaderExecuting(
         DbCommand command, CommandEventData eventData, InterceptionResult<DbDataReader> result)
@@ -106,32 +108,17 @@ public sealed class TenantConnectionInterceptor(TenantContext tenantContext) : D
             throw new InvalidOperationException(
                 "TenantConnectionInterceptor: no tenant claim set and not in admin scope.");
 
-        var farmParam = command.CreateParameter();
-        farmParam.ParameterName = "@__tenant_farm_id";
-        farmParam.Value = tenantContext.FarmId.Value.ToString();
-        command.Parameters.Add(farmParam);
+        // SET LOCAL with literal Guid (RFC 4122 hex+hyphens; safe to
+        // interpolate). UserId may be unset for some flows; emit empty
+        // string and let the policy's NULLIF wrap coerce that to NULL.
+        var farmId = tenantContext.FarmId.Value;
+        var ownerAccountId = tenantContext.OwnerAccountId.Value;
+        var userId = tenantContext.UserId?.ToString() ?? string.Empty;
 
-        var ownerParam = command.CreateParameter();
-        ownerParam.ParameterName = "@__tenant_owner_account_id";
-        ownerParam.Value = tenantContext.OwnerAccountId.Value.ToString();
-        command.Parameters.Add(ownerParam);
-
-        // DATA_PRINCIPLE_SPINE 03.6 — bind agrisync.user_id even when
-        // the request did not capture a UserId (workers, hosted tasks).
-        // Empty string is the conventional "no claim" sentinel — the
-        // UserDb policy uses `current_setting('agrisync.user_id', true)::uuid`
-        // which would throw on an empty string, but Postgres' cast of
-        // an empty text to uuid is intercepted by the `, true`
-        // (missing_ok) flag combined with the policy body wrapping the
-        // cast in NULLIF(...). Documented in migration
-        // 20260516150000_EnableUserDbRowLevelSecurity.
-        var userParam = command.CreateParameter();
-        userParam.ParameterName = "@__tenant_user_id";
-        userParam.Value = tenantContext.UserId is { } uid
-            ? uid.ToString()
-            : string.Empty;
-        command.Parameters.Add(userParam);
-
-        command.CommandText = SetConfigSql + command.CommandText;
+        command.CommandText =
+            $"SET LOCAL agrisync.farm_id = '{farmId}'; " +
+            $"SET LOCAL agrisync.owner_account_id = '{ownerAccountId}'; " +
+            $"SET LOCAL agrisync.user_id = '{userId}'; " +
+            command.CommandText;
     }
 }
