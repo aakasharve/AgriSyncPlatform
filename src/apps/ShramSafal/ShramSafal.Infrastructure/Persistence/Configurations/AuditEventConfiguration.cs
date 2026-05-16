@@ -61,5 +61,18 @@ internal sealed class AuditEventConfiguration : IEntityTypeConfiguration<AuditEv
         builder.HasIndex(x => new { x.FarmId, x.OccurredAtUtc });
 
         builder.Ignore(x => x.DomainEvents);
+
+        // Phase 04.1 — the 4 provenance properties (AppVersion, DeviceId,
+        // IpHash, SourceAiJobId) are domain-only until sub-phase 04.4
+        // ships the ALTER TABLE migration. Ignore them on the EF side so
+        // the ModelSnapshot doesn't detect "pending model changes"
+        // against the unchanged DB schema. The Ignore() calls disappear
+        // in 04.4 when the columns become real and Property(...).
+        // HasColumnName(...) takes their place. See plan §04.4 + decisions-
+        // log R3 OQ-1.
+        builder.Ignore(x => x.AppVersion);
+        builder.Ignore(x => x.DeviceId);
+        builder.Ignore(x => x.IpHash);
+        builder.Ignore(x => x.SourceAiJobId);
     }
 }
