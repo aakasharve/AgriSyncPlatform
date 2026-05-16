@@ -56,6 +56,14 @@ public static class DependencyInjection
         services.TryAddScoped<AgriSync.BuildingBlocks.Persistence.TenantContext>();
         services.TryAddScoped<AgriSync.BuildingBlocks.Persistence.TenantConnectionInterceptor>();
 
+        // DATA_PRINCIPLE_SPINE 02-patch — IRawBlobStore must resolve in the
+        // test harness too. Production Program.cs registers S3RawBlobStore
+        // after AddShramSafalInfrastructure runs; that registration wins
+        // (last-in for AddScoped). TryAdd is for test harnesses that
+        // never call into Program.cs.
+        services.TryAddScoped<ShramSafal.Application.Storage.IRawBlobStore,
+            ShramSafal.Infrastructure.Storage.InMemoryRawBlobStore>();
+
         // DATA_PRINCIPLE_SPINE 03.6 — register the writing-context
         // registry singleton (or reuse the existing one) and append
         // ShramSafalDbContext as a writing context the
