@@ -6,6 +6,7 @@ import { getAuthSession } from '../storage/AuthTokenStore';
 import { getDatabase, type PendingAiJobContext, type VoiceClipStatus } from '../storage/DexieDatabase';
 import { IdempotencyKeyFactory } from './IdempotencyKeyFactory';
 import { annotateFieldConfidencesWithBuckets } from '../../domain/ai/contracts/FieldConfidence';
+import { AgriLogResponseSchema } from '../../domain/ai/contracts/AgriLogResponseSchema';
 import { computeProcessingVoiceClipExpiry, purgeExpiredProcessingVoiceClips } from '../voice/VoiceClipRetention';
 import { resolveApiBaseUrl } from '../api/transport';
 import { parseStreamConsumer } from './ParseStreamConsumer';
@@ -42,22 +43,12 @@ async function resolveFarmIdFromCache(): Promise<string | undefined> {
     return firstDayLedger?.farmId;
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-    return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
-}
-
-function isAgriLogResponse(value: unknown): value is AgriLogResponse {
-    return isRecord(value)
-        && typeof value.summary === 'string'
-        && typeof value.dayOutcome === 'string'
-        && Array.isArray(value.cropActivities)
-        && Array.isArray(value.irrigation)
-        && Array.isArray(value.labour)
-        && Array.isArray(value.inputs)
-        && Array.isArray(value.machinery)
-        && Array.isArray(value.activityExpenses)
-        && Array.isArray(value.missingSegments);
-}
+// DATA_PRINCIPLE_SPINE 02.6 — the legacy `isRecord` / `isAgriLogResponse`
+// shallow type guards previously gated the parse boundary here. They
+// were removed in favor of `AgriLogResponseSchema.safeParse` (Zod,
+// strict + enum-checked). `GeminiClient` still uses its own copy of
+// the legacy guard during the transitional period — once that path
+// is also migrated, the guard can be deleted from this codebase.
 
 function base64ToBlob(base64: string, mimeType: string): Blob {
     const normalized = base64.includes(',') ? base64.split(',')[1] : base64;
@@ -186,14 +177,31 @@ export class BackendAiClient implements VoiceParserPort {
                 })
                 .map(([field]) => field);
             const suggestedAction = normalizeSuggestedAction(apiResult.suggestedAction);
-            if (!isAgriLogResponse(apiResult.parsedLog)) {
-                return {
-                    success: false,
-                    error: 'Server returned unexpected data format',
-                };
-            }
 
-            const parsedLog = apiResult.parsedLog;
+            // DATA_PRINCIPLE_SPINE 02.6 — strict Zod validation at the
+            // wire boundary. The shallow `isAgriLogResponse` typeof check
+            // accepted any object with the eight expected array keys,
+            // letting hallucinated fields and off-canon enum values
+            // (e.g. `categoryId: "made_up"`) corrupt the trust ledger
+            // silently. The schema below enforces:
+            //   - `.strict()` at the top level (unknown keys rejected)
+            //   - canonical 13-code `categoryId` on activity expenses
+            //   - typed enums for dayOutcome / labour.type / etc.
+            //   - YYYY-MM-DD date-keys and ISO-8601 timestamps
+            // Anything that fails throws synchronously and the caller
+            // surfaces a parse error rather than persisting drift.
+            const parseResult = AgriLogResponseSchema.safeParse(apiResult.parsedLog);
+            if (!parseResult.success) {
+                throw new Error(
+                    `AgriLogResponse validation failed: ${parseResult.error.toString()}`,
+                );
+            }
+            // We cast back to the structural `AgriLogResponse` from
+            // log.types.ts because that interface (with its concrete
+            // event-event union shapes) is what the rest of the app
+            // consumes. The schema and the TS interface are kept in
+            // lockstep by the AgriLogResponseSchema header invariant.
+            const parsedLog = parseResult.data as unknown as AgriLogResponse;
             const inferredTranscript = typeof parsedLog?.fullTranscript === 'string'
                 ? parsedLog.fullTranscript
                 : (input.type === 'text' ? input.content : undefined);
