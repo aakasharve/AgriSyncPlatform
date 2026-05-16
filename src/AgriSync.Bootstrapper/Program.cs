@@ -362,11 +362,16 @@ try
     app.MapGet("/health/ready", async (
         UserDbContext userDb,
         ShramSafal.Infrastructure.Persistence.ShramSafalDbContext ssfDb,
+        AgriSync.BuildingBlocks.Persistence.TenantContext tenantContext,
         ILoggerFactory loggerFactory,
         CancellationToken ct) =>
     {
         try
         {
+            // DATA_PRINCIPLE_SPINE 03.2: CanConnectAsync issues a real DbCommand
+            // that goes through TenantConnectionInterceptor, which fail-closes
+            // when no claim is set. Health checks have no tenant; elevate.
+            tenantContext.ElevateToAdminCrossTenant();
             var userDbReady = await userDb.Database.CanConnectAsync(ct);
             var shramSafalDbReady = await ssfDb.Database.CanConnectAsync(ct);
             var ready = userDbReady && shramSafalDbReady;
@@ -571,11 +576,14 @@ static void ConfigureDevelopmentSwagger(WebApplication app)
 
 static void MapDevelopmentOnlyTestEndpoints(WebApplication app)
 {
-    app.MapGet("/test/db", async (UserDbContext db) =>
+    app.MapGet("/test/db", async (UserDbContext db, AgriSync.BuildingBlocks.Persistence.TenantContext tenantContext) =>
     {
         var result = new Dictionary<string, object>();
         try
         {
+            // DATA_PRINCIPLE_SPINE 03.2 — dev test endpoint elevates to admin
+            // before any DB hit (no tenant claim exists at this path).
+            tenantContext.ElevateToAdminCrossTenant();
             var canConnect = await db.Database.CanConnectAsync();
             result["canConnect"] = canConnect;
 
