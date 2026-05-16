@@ -154,7 +154,7 @@ public sealed class UserDbRowLevelSecurityTests : IAsyncLifetime
             ownerAccountId: Guid.NewGuid(),
             userId: _userA);
 
-        await using var tx = await BeginTxAsync(ctx);
+        await using var tx = await ctx.Database.BeginTransactionAsync();
         // Project to UserId only — avoids the obsolete AppMembership
         // type at the test boundary while still exercising the RLS gate.
         var rows = await ctx.Memberships
@@ -184,7 +184,7 @@ public sealed class UserDbRowLevelSecurityTests : IAsyncLifetime
             ownerAccountId: Guid.NewGuid(),
             userId: _userA);
 
-        await using var tx = await BeginTxAsync(ctx);
+        await using var tx = await ctx.Database.BeginTransactionAsync();
         var count = await ctx.Memberships.AsNoTracking().CountAsync();
 
         count.Should().Be(2,
@@ -201,7 +201,7 @@ public sealed class UserDbRowLevelSecurityTests : IAsyncLifetime
         var ctx = scope.ServiceProvider.GetRequiredService<UserDbContext>();
         // DO NOT call SetTenant.
 
-        await using var tx = await BeginTxAsync(ctx);
+        await using var tx = await ctx.Database.BeginTransactionAsync();
         Func<Task> act = async () => await ctx.Memberships.AsNoTracking().CountAsync();
 
         await act.Should().ThrowAsync<InvalidOperationException>(
@@ -212,23 +212,6 @@ public sealed class UserDbRowLevelSecurityTests : IAsyncLifetime
     // ────────────────────────────────────────────────────────────────────
     // Migration + seeding helpers.
     // ────────────────────────────────────────────────────────────────────
-
-    // Transaction helper — wraps BeginTransactionAsync in an ExecutionStrategy
-    // because AddShramSafalInfrastructure enables EnableRetryOnFailure on the
-    // shared TenantConnectionInterceptor's host context. The strategy is a
-    // no-op for non-retry contexts (e.g. UserDbContext today).
-    private static async Task<Microsoft.EntityFrameworkCore.Storage.IDbContextTransaction> BeginTxAsync(
-        Microsoft.EntityFrameworkCore.DbContext ctx,
-        System.Threading.CancellationToken ct = default)
-    {
-        var strategy = ctx.Database.CreateExecutionStrategy();
-        Microsoft.EntityFrameworkCore.Storage.IDbContextTransaction? opened = null;
-        await strategy.ExecuteAsync(async () =>
-        {
-            opened = await ctx.Database.BeginTransactionAsync(ct);
-        });
-        return opened!;
-    }
 
     private static async Task ApplyMigrationsAsync(string conn)
     {

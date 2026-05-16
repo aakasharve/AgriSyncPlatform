@@ -88,14 +88,19 @@ public static class DependencyInjection
                 npgsql =>
                 {
                     npgsql.MigrationsHistoryTable("__ef_migrations", "ssf");
-                    // PushSyncBatchHandler routes its transactional block
-                    // through dbContext.Database.CreateExecutionStrategy()
-                    // so user-initiated BeginTransactionAsync stays
-                    // compatible with the retrying strategy.
-                    npgsql.EnableRetryOnFailure(
-                        maxRetryCount: 5,
-                        maxRetryDelay: TimeSpan.FromSeconds(10),
-                        errorCodesToAdd: null);
+                    // DATA_PRINCIPLE_SPINE 03.2/03.6 — EnableRetryOnFailure
+                    // was removed because TenantTransactionMiddleware wraps
+                    // the entire HTTP request in an explicit transaction
+                    // (so set_config(...,true) GUCs propagate across every
+                    // command). EF Core's NpgsqlRetryingExecutionStrategy
+                    // is incompatible with user-initiated transactions and
+                    // throws "execution strategy does not support
+                    // user-initiated transactions" on BeginTransactionAsync.
+                    // An HTTP pipeline cannot be safely retried anyway;
+                    // PushSyncBatchHandler's existing
+                    // dbContext.Database.CreateExecutionStrategy() call
+                    // becomes a no-op single-shot strategy — its
+                    // idempotency story is unchanged.
                 })
                 // DATA_PRINCIPLE_SPINE 03.2 — TenantConnectionInterceptor
                 // (Scoped) stamps each command with the per-request

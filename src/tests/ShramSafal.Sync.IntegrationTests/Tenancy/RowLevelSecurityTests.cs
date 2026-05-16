@@ -208,7 +208,7 @@ public sealed class RowLevelSecurityTests : IAsyncLifetime
 
         tenant.SetTenant(_farmA, ownerAccountId: _ownerA);
 
-        await using var tx = await BeginTxAsync(ctx);
+        await using var tx = await ctx.Database.BeginTransactionAsync();
         var logs = await ctx.DailyLogs.AsNoTracking().ToListAsync();
 
         logs.Should().HaveCount(2, "Farm A was seeded with exactly two daily_logs");
@@ -248,7 +248,7 @@ public sealed class RowLevelSecurityTests : IAsyncLifetime
         var ctx = scope.ServiceProvider.GetRequiredService<ShramSafalDbContext>();
         // DO NOT call SetTenant.
 
-        await using var tx = await BeginTxAsync(ctx);
+        await using var tx = await ctx.Database.BeginTransactionAsync();
         Func<Task> act = async () => await ctx.DailyLogs.AsNoTracking().ToListAsync();
 
         await act.Should().ThrowAsync<InvalidOperationException>(
@@ -268,7 +268,7 @@ public sealed class RowLevelSecurityTests : IAsyncLifetime
 
         tenant.SetTenant(_farmA, ownerAccountId: _ownerA);
 
-        await using var tx = await BeginTxAsync(ctx);
+        await using var tx = await ctx.Database.BeginTransactionAsync();
         var rowsForB = await ctx.DailyLogs
             .FromSqlRaw("SELECT * FROM ssf.daily_logs WHERE farm_id = {0}", _farmB)
             .AsNoTracking()
@@ -292,7 +292,7 @@ public sealed class RowLevelSecurityTests : IAsyncLifetime
 
         tenant.SetTenant(_farmA, ownerAccountId: _ownerA);
 
-        await using var tx = await BeginTxAsync(ctx);
+        await using var tx = await ctx.Database.BeginTransactionAsync();
         var transcripts = await ctx.Transcripts.AsNoTracking().ToListAsync();
 
         transcripts.Should().HaveCount(1,
@@ -317,7 +317,7 @@ public sealed class RowLevelSecurityTests : IAsyncLifetime
 
         tenant.SetTenant(_farmA, ownerAccountId: _ownerA);
 
-        await using var tx = await BeginTxAsync(ctx);
+        await using var tx = await ctx.Database.BeginTransactionAsync();
         var farms = await ctx.Farms.AsNoTracking().ToListAsync();
 
         farms.Should().HaveCount(1,
@@ -348,7 +348,7 @@ public sealed class RowLevelSecurityTests : IAsyncLifetime
         // ElevateToAdminCrossTenant throws if FarmId is already set.
         tenant.ElevateToAdminCrossTenant();
 
-        await using var tx = await BeginTxAsync(ctx);
+        await using var tx = await ctx.Database.BeginTransactionAsync();
         var logs = await ctx.DailyLogs.AsNoTracking().ToListAsync();
 
         logs.Should().BeEmpty(
@@ -356,27 +356,6 @@ public sealed class RowLevelSecurityTests : IAsyncLifetime
             "on agrisync_owner (or installs IAdminDbContextFactory), the policy still applies and " +
             "`farm_id = NULL::uuid` filters out every row. Asserting zero rows pins the 03.4 contract; " +
             "the 03.5 follow-up test must flip this to assert all-tenant visibility.");
-    }
-
-    // ────────────────────────────────────────────────────────────────────
-    // Transaction helper — wraps BeginTransactionAsync in an ExecutionStrategy
-    // because AddShramSafalInfrastructure enables EnableRetryOnFailure on
-    // ShramSafalDbContext. Raw BeginTransactionAsync throws under retry
-    // strategy ("execution strategy does not support user-initiated
-    // transactions"). The strategy is a no-op for non-retry contexts.
-    // ────────────────────────────────────────────────────────────────────
-
-    private static async Task<Microsoft.EntityFrameworkCore.Storage.IDbContextTransaction> BeginTxAsync(
-        Microsoft.EntityFrameworkCore.DbContext ctx,
-        System.Threading.CancellationToken ct = default)
-    {
-        var strategy = ctx.Database.CreateExecutionStrategy();
-        Microsoft.EntityFrameworkCore.Storage.IDbContextTransaction? opened = null;
-        await strategy.ExecuteAsync(async () =>
-        {
-            opened = await ctx.Database.BeginTransactionAsync(ct);
-        });
-        return opened!;
     }
 
     // ────────────────────────────────────────────────────────────────────

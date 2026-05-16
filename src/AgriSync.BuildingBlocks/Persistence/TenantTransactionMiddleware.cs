@@ -89,29 +89,20 @@ public sealed class TenantTransactionMiddleware
         // chain sees its own `set_config(..., true)` GUC. Postgres
         // scopes those GUCs to the connection's current transaction.
         //
-        // EnableRetryOnFailure on ShramSafalDbContext requires that
-        // user-initiated transactions go through ExecutionStrategy.
-        // BeginTransactionAsync directly throws "execution strategy
-        // does not support user-initiated transactions". Route every
-        // tx-begin through CreateExecutionStrategy().ExecuteAsync so
-        // both retry-enabled and non-retry contexts work uniformly —
-        // for non-retry contexts the strategy is a single-shot no-op
-        // wrapper. The retry layer can't meaningfully replay an
-        // arbitrary HTTP pipeline, but BeginTransaction itself is
-        // a safe operation to retry under transient connection loss.
+        // EnableRetryOnFailure was removed from the ShramSafalDbContext
+        // registration (DependencyInjection.cs spec 03.2/03.6) because
+        // user-initiated transactions are incompatible with EF Core's
+        // retry strategy — and an arbitrary HTTP pipeline cannot be
+        // safely retried anyway. With retry disabled, raw
+        // BeginTransactionAsync is the correct call here.
         var contexts = registry.GetWritingContexts(context.RequestServices);
         var transactions = new List<IDbContextTransaction>(contexts.Count);
         try
         {
             foreach (var db in contexts)
             {
-                var strategy = db.Database.CreateExecutionStrategy();
-                IDbContextTransaction? opened = null;
-                await strategy.ExecuteAsync(async () =>
-                {
-                    opened = await db.Database.BeginTransactionAsync(context.RequestAborted);
-                });
-                transactions.Add(opened!);
+                var tx = await db.Database.BeginTransactionAsync(context.RequestAborted);
+                transactions.Add(tx);
             }
 
             await _next(context);
