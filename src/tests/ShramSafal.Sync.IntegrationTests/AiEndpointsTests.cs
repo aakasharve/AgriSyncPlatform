@@ -112,11 +112,15 @@ public sealed class AiEndpointsTests
         // appVersion — round-tripped from the X-App-Version request header.
         Assert.Equal("test-1.0.0", root.GetProperty("appVersion").GetString());
 
-        // rawInputRef — NULL-tolerant: either absent or JsonValueKind.Null.
-        // Phase 01 returns null; Phase 02 (storage tiering) will populate it.
+        // rawInputRef — Phase 02 patch (77cae6d) wires AiOrchestrator to
+        // persist raw voice bytes via IRawBlobStore.PutAsync and stamps the
+        // returned SHA-256 onto AiJob.RawInputRef. The test harness uses
+        // InMemoryRawBlobStore which computes the real SHA-256 without
+        // persisting bytes — so rawInputRef MUST now be a 64-char hex string.
         if (root.TryGetProperty("rawInputRef", out var rawInputRef))
         {
-            Assert.Equal(JsonValueKind.Null, rawInputRef.ValueKind);
+            Assert.Equal(JsonValueKind.String, rawInputRef.ValueKind);
+            Assert.Matches("^[0-9a-f]{64}$", rawInputRef.GetString()!);
         }
     }
 
