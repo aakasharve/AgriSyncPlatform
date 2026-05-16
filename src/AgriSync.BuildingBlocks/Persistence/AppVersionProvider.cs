@@ -29,6 +29,15 @@ namespace AgriSync.BuildingBlocks.Persistence;
 /// </summary>
 public static class AppVersionProvider
 {
+    // Phase 04.4 — ssf.audit_events.app_version is varchar(32). Centralized
+    // truncation here so every audit emission stays within the DB ceiling.
+    // AssemblyInformationalVersionAttribute frequently embeds a commit-SHA
+    // suffix that pushes the string past 32 chars (e.g. "1.0.0+abc123def...").
+    // Truncating from the right preserves the semver prefix; the full
+    // version is still resolvable from git via commit metadata if forensic
+    // need arises.
+    private const int MaxLength = 32;
+
     private static readonly Lazy<string> CurrentLazy = new(ResolveCurrent);
 
     public static string Current => CurrentLazy.Value;
@@ -41,16 +50,19 @@ public static class AppVersionProvider
             var info = entry.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion;
             if (!string.IsNullOrWhiteSpace(info))
             {
-                return info!.Trim();
+                return Truncate(info!.Trim());
             }
 
             var file = entry.GetName().Version?.ToString();
             if (!string.IsNullOrWhiteSpace(file))
             {
-                return file!;
+                return Truncate(file!);
             }
         }
 
         return "unknown";
     }
+
+    private static string Truncate(string value) =>
+        value.Length <= MaxLength ? value : value[..MaxLength];
 }

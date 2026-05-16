@@ -18,10 +18,22 @@ namespace ShramSafal.Domain.Audit;
 /// </summary>
 public static class AuditEventFactory
 {
+    // Phase 04.4 — DB column ceilings (mirror AuditEventConfiguration.cs).
+    // Truncate at the factory boundary so untrusted inputs (clients passing
+    // an oversized X-App-Version header, long device IDs, etc.) never reach
+    // SaveChanges with a value that overflows varchar(N). DB-side IsRequired()
+    // still catches null/empty post-trim; this defends against over-length only.
+    private const int AppVersionMaxLength = 32;
+    private const int DeviceIdMaxLength = 64;
+    private const int IpHashMaxLength = 80;
+
     private static readonly JsonSerializerOptions PayloadSerializerOptions = new()
     {
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase
     };
+
+    private static string Clamp(string value, int max) =>
+        value.Length <= max ? value : value[..max];
 
     /// <summary>
     /// Convenience overload that accepts <paramref name="payload"/> as an
@@ -136,9 +148,9 @@ public static class AuditEventFactory
             payload: payload,
             farmId: farmId,
             clientCommandId: clientCommandId,
-            appVersion: appVersion.Trim(),
-            deviceId: deviceId.Trim(),
-            ipHash: ipHash.Trim(),
+            appVersion: Clamp(appVersion.Trim(), AppVersionMaxLength),
+            deviceId: Clamp(deviceId.Trim(), DeviceIdMaxLength),
+            ipHash: Clamp(ipHash.Trim(), IpHashMaxLength),
             sourceAiJobId: sourceAiJobId);
     }
 }
