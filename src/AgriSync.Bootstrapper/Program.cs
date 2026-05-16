@@ -156,6 +156,22 @@ try
     builder.Services.AddScoped<AgriSync.BuildingBlocks.Persistence.TenantContext>();
     builder.Services.AddScoped<AgriSync.BuildingBlocks.Persistence.TenantConnectionInterceptor>();
 
+    // DATA_PRINCIPLE_SPINE 04.2 — IpHasher (salted SHA-256 of caller IP for
+    // the audit_events.ip_hash column). Singleton because the salt is fixed
+    // for the process lifetime; rotated yearly via deploy. Dev placeholder
+    // lives in appsettings.Development.json; production salt is provisioned
+    // via AWS SecretsManager (agrisync/audit/ip_salt) and merged into
+    // IConfiguration by AddAgriSyncSecretsManager() above. Fail-fast on
+    // missing config so a misconfigured prod env never silently writes
+    // "sha256:unknown" for every row.
+    builder.Services.AddSingleton(sp =>
+    {
+        var saltB64 = builder.Configuration["Audit:IpHashSalt"]
+            ?? throw new InvalidOperationException(
+                "Audit:IpHashSalt not configured (set via AWS SecretsManager 'agrisync/audit/ip_salt' in prod, appsettings.Development.json in dev).");
+        return new AgriSync.BuildingBlocks.Audit.IpHasher(Convert.FromBase64String(saltB64));
+    });
+
     builder.Services.AddUserApi(builder.Configuration);
     builder.Services.AddShramSafalApi(builder.Configuration);
     builder.Services.AddAccountsModule(builder.Configuration);
@@ -332,6 +348,16 @@ try
         MapDevelopmentOnlyTestEndpoints(app);
     }
 
+    // DATA_PRINCIPLE_SPINE 04.3a — AuditContextMiddleware stamps
+    // HttpContext.Items["audit.device_id"] (from X-Device-Id header,
+    // defaults to "unknown") and HttpContext.Items["audit.ip_hash"]
+    // (salted SHA-256 of ctx.Connection.RemoteIpAddress via IpHasher).
+    // MUST sit AFTER UseRouting (auto-inserted by minimal API) and
+    // BEFORE UseAuthentication so unauthenticated audit rows
+    // (denied admin attempts, 401 paths) still carry forensic
+    // provenance. Consumers (04.3b handler sweep) read via
+    // HttpContext.AuditClaims() — that wiring lands next phase.
+    app.UseMiddleware<AgriSync.BuildingBlocks.Audit.AuditContextMiddleware>();
     app.UseAuthentication();
     app.UseRateLimiter();
     app.UseAuthorization();
