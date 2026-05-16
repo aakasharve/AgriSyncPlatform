@@ -35,8 +35,9 @@ namespace ShramSafal.Infrastructure.Storage;
 /// <b>Get/Dereference are not supported here.</b> Calls throw
 /// <see cref="NotSupportedException"/> because the bytes were never
 /// stored. Tests that need round-trip should explicitly register a
-/// recording stub or use the LocalStack-backed integration test
-/// (deferred to Phase 02 MAJOR #4 follow-up).
+/// recording stub or use the LocalStack-backed integration test at
+/// <c>src/tests/ShramSafal.Sync.IntegrationTests/Storage/S3RawBlobStoreIntegrationTests.cs</c>
+/// (closed spine 02-MAJOR-4).
 /// </para>
 /// </remarks>
 public sealed class InMemoryRawBlobStore : IRawBlobStore

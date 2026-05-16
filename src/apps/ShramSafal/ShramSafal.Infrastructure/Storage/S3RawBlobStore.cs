@@ -1,7 +1,5 @@
-// TODO(spine-02.1.7): LocalStack-backed integration test deferred to sub-phase 02.1bis pending fixture infrastructure.
-// Project hygiene (per `_COFOUNDER/memory/...` "avoid Docker on local dev") + no LocalStackContainer
-// fixture exists yet in ShramSafal.Sync.IntegrationTests. The idempotent-put assertion lives in the
-// plan recipe (step 2.1.7) and will land once a Testcontainers LocalStack fixture is in place.
+// Integration test: src/tests/ShramSafal.Sync.IntegrationTests/Storage/S3RawBlobStoreIntegrationTests.cs
+// (LocalStack-backed PUT → GET → DELETE round-trip; closes spine 02-MAJOR-4).
 //
 // 02-patch (cold-storage wiring): the S3 object key shape is now `raw/{sha256}` with
 // no extension — the PUT path uses `blobRef.S3Key` produced by the new RawBlobRef
