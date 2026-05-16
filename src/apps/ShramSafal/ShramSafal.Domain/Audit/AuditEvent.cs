@@ -1,4 +1,3 @@
-using System.Text.Json;
 using AgriSync.BuildingBlocks.Domain;
 using AgriSync.SharedKernel.Contracts.Ids;
 
@@ -8,19 +7,18 @@ namespace ShramSafal.Domain.Audit;
 /// Append-only audit ledger entry. Phase 04 (DATA_PRINCIPLE_SPINE_2026-05-05)
 /// adds four provenance columns — <see cref="AppVersion"/>, <see cref="DeviceId"/>,
 /// <see cref="IpHash"/>, <see cref="SourceAiJobId"/> — and restricts construction
-/// to <see cref="AuditEventFactory"/>. Existing static <see cref="Create"/>
-/// overloads remain functional (defaulted to sentinel provenance values) until
-/// sub-phase 04.3 migrates all 46 handler call sites; the
-/// <c>[Obsolete]</c> annotation will be added in that sub-commit so this commit
-/// does not detonate the warning-as-error guard at every existing caller.
+/// to <see cref="AuditEventFactory"/>.
+/// <para>
+/// Sub-commit D (sub-phase 04.3b §Part 5) DELETED the legacy
+/// <c>public static AuditEvent Create(...)</c> overloads. Every prior caller
+/// now routes through <see cref="AuditEventFactory.Create"/> which validates
+/// the forensic-provenance trio (<c>app_version</c> / <c>device_id</c> /
+/// <c>ip_hash</c>) up-front. Architectural lock:
+/// <see cref="AgriSync.ArchitectureTests.AuditConstructionRules"/>.
+/// </para>
 /// </summary>
 public sealed class AuditEvent : Entity<Guid>
 {
-    private static readonly JsonSerializerOptions PayloadSerializerOptions = new()
-    {
-        PropertyNamingPolicy = JsonNamingPolicy.CamelCase
-    };
-
     private AuditEvent() : base(Guid.Empty) { } // EF Core
 
     private AuditEvent(
@@ -57,8 +55,8 @@ public sealed class AuditEvent : Entity<Guid>
 
     /// <summary>
     /// Internal ctor used by <see cref="AuditEventFactory.Create"/> — the
-    /// only public construction path going forward. Stamps a fresh
-    /// <see cref="Guid"/> and <see cref="DateTime.UtcNow"/> on every call.
+    /// only supported construction path. Stamps a fresh <see cref="Guid"/>
+    /// and <see cref="DateTime.UtcNow"/> on every call.
     /// </summary>
     internal AuditEvent(
         string entityType,
@@ -103,90 +101,12 @@ public sealed class AuditEvent : Entity<Guid>
 
     // Phase 04.1: provenance columns. Until the EF migration in 04.4 adds the
     // physical columns, these fields are domain-only (EF config does NOT yet
-    // map them — that bind lands in 04.4 with the ALTER TABLE). Sentinel
-    // defaults on the legacy Create() paths are "unknown" / "sha256:unknown"
-    // so existing 46 call sites continue to compile + emit through 04.3
-    // migration; the factory path REJECTS empty/whitespace inputs.
+    // map them — that bind lands in 04.4 with the ALTER TABLE). The factory
+    // path REJECTS empty/whitespace inputs for app_version, device_id, and
+    // ip_hash so an audit row cannot be persisted without identifiable
+    // provenance.
     public string AppVersion { get; private set; } = string.Empty;
     public string DeviceId { get; private set; } = string.Empty;
     public string IpHash { get; private set; } = string.Empty;
     public Guid? SourceAiJobId { get; private set; }
-
-    public static AuditEvent Create(
-        string entityType,
-        Guid entityId,
-        string action,
-        Guid actorUserId,
-        string actorRole,
-        object payload,
-        string? clientCommandId = null,
-        DateTime? occurredAtUtc = null) =>
-        Create(
-            farmId: null,
-            entityType,
-            entityId,
-            action,
-            actorUserId,
-            actorRole,
-            payload,
-            clientCommandId,
-            occurredAtUtc);
-
-    public static AuditEvent Create(
-        Guid? farmId,
-        string entityType,
-        Guid entityId,
-        string action,
-        Guid actorUserId,
-        string actorRole,
-        object payload,
-        string? clientCommandId = null,
-        DateTime? occurredAtUtc = null)
-    {
-        if (string.IsNullOrWhiteSpace(entityType))
-        {
-            throw new ArgumentException("Entity type is required.", nameof(entityType));
-        }
-
-        if (entityId == Guid.Empty)
-        {
-            throw new ArgumentException("Entity id is required.", nameof(entityId));
-        }
-
-        if (string.IsNullOrWhiteSpace(action))
-        {
-            throw new ArgumentException("Action is required.", nameof(action));
-        }
-
-        if (actorUserId == Guid.Empty)
-        {
-            throw new ArgumentException("Actor user id is required.", nameof(actorUserId));
-        }
-
-        var normalizedRole = string.IsNullOrWhiteSpace(actorRole)
-            ? "unknown"
-            : actorRole.Trim();
-
-        var serializedPayload = JsonSerializer.Serialize(payload, PayloadSerializerOptions);
-
-        return new AuditEvent(
-            id: Guid.NewGuid(),
-            farmId: farmId == Guid.Empty ? null : farmId,
-            entityType: entityType.Trim(),
-            entityId,
-            action: action.Trim(),
-            actorUserId: new UserId(actorUserId),
-            actorRole: normalizedRole,
-            payload: serializedPayload,
-            occurredAtUtc: occurredAtUtc ?? DateTime.UtcNow,
-            clientCommandId: string.IsNullOrWhiteSpace(clientCommandId) ? null : clientCommandId.Trim(),
-            // Phase 04.1 sentinels — legacy callers do not yet thread
-            // provenance through; sub-phase 04.3 migrates them to
-            // AuditEventFactory.Create with real values from the request
-            // context (X-Device-Id header + remote IP hash + assembly version).
-            appVersion: "unknown",
-            deviceId: "unknown",
-            ipHash: "sha256:unknown",
-            sourceAiJobId: null);
-    }
 }

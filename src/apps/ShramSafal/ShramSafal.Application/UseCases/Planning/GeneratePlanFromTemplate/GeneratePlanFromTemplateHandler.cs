@@ -94,6 +94,11 @@ public sealed class GeneratePlanFromTemplateHandler(
                 new(command.Stage, command.PlanStartDate, planEnd)
             };
 
+            // DATA_PRINCIPLE_SPINE sub-phase 04.3b — propagate the same
+            // forensic provenance trio (X-Device-Id / IP hash / X-App-Version)
+            // that arrived on the /plan/generate request down to the chained
+            // TestInstance audit row, so both rows share an identifiable
+            // source on the audit ledger.
             await scheduleTestDueDatesHandler.HandleAsync(
                 new ScheduleTestDueDatesCommand(
                     CropCycleId: command.CropCycleId,
@@ -101,7 +106,10 @@ public sealed class GeneratePlanFromTemplateHandler(
                     PlotId: cropCycle.PlotId,
                     CropType: cropCycle.CropName,
                     Stages: stageInfos,
-                    ActorUserId: new UserId(command.ActorUserId)),
+                    ActorUserId: new UserId(command.ActorUserId),
+                    ClientAppVersion: command.ClientAppVersion,
+                    AuditDeviceId: command.AuditDeviceId,
+                    AuditIpHash: command.AuditIpHash),
                 ct);
         }
 

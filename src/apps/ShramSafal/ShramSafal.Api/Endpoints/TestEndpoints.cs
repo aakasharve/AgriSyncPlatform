@@ -1,5 +1,6 @@
 using System.Security.Claims;
 using AgriSync.BuildingBlocks.Application;
+using AgriSync.BuildingBlocks.Audit;
 using AgriSync.BuildingBlocks.Results;
 using AgriSync.SharedKernel.Contracts.Ids;
 using Microsoft.AspNetCore.Mvc;
@@ -25,6 +26,7 @@ public static class TestEndpoints
         // ----------------------------------------------------------------- Protocols
         group.MapPost("/test-protocols", async (
             CreateTestProtocolRequest request,
+            HttpContext httpContext,
             ClaimsPrincipal user,
             CreateTestProtocolHandler handler,
             CancellationToken ct) =>
@@ -33,6 +35,11 @@ public static class TestEndpoints
             {
                 return Results.Unauthorized();
             }
+
+            // DATA_PRINCIPLE_SPINE sub-phase 04.3b — extract forensic
+            // provenance for the AuditEvent row.
+            var (auditDeviceId, auditIpHash) = httpContext.AuditClaims();
+            var clientAppVersion = ResolveClientAppVersion(httpContext);
 
             var command = new CreateTestProtocolCommand(
                 Name: request.Name,
@@ -43,7 +50,10 @@ public static class TestEndpoints
                 StageNames: request.StageNames ?? Array.Empty<string>(),
                 ParameterCodes: request.ParameterCodes ?? Array.Empty<string>(),
                 CallerUserId: new UserId(actorUserId),
-                CallerRole: EndpointActorContext.GetActorRoleEnum(user));
+                CallerRole: EndpointActorContext.GetActorRoleEnum(user),
+                ClientAppVersion: clientAppVersion,
+                AuditDeviceId: auditDeviceId,
+                AuditIpHash: auditIpHash);
 
             var result = await handler.HandleAsync(command, ct);
             return result.IsSuccess
@@ -55,6 +65,7 @@ public static class TestEndpoints
         // -------------------------------------------------------- Instances: schedule
         group.MapPost("/test-instances/schedule-from-plan", async (
             ScheduleTestInstancesRequest request,
+            HttpContext httpContext,
             ClaimsPrincipal user,
             ScheduleTestDueDatesHandler handler,
             CancellationToken ct) =>
@@ -68,13 +79,21 @@ public static class TestEndpoints
                 .Select(s => new CropCycleStageInfo(s.StageName, s.StartDate, s.EndDate))
                 .ToList();
 
+            // DATA_PRINCIPLE_SPINE sub-phase 04.3b — extract forensic
+            // provenance for the AuditEvent row.
+            var (auditDeviceId, auditIpHash) = httpContext.AuditClaims();
+            var clientAppVersion = ResolveClientAppVersion(httpContext);
+
             var command = new ScheduleTestDueDatesCommand(
                 CropCycleId: request.CropCycleId,
                 FarmId: new FarmId(request.FarmId),
                 PlotId: request.PlotId,
                 CropType: request.CropType,
                 Stages: stages,
-                ActorUserId: new UserId(actorUserId));
+                ActorUserId: new UserId(actorUserId),
+                ClientAppVersion: clientAppVersion,
+                AuditDeviceId: auditDeviceId,
+                AuditIpHash: auditIpHash);
 
             var scheduled = await handler.HandleAsync(command, ct);
             return Results.Ok(new { scheduledCount = scheduled });
@@ -84,6 +103,7 @@ public static class TestEndpoints
         // --------------------------------------------------------- Instances: collect
         group.MapPost("/test-instances/{id:guid}/collect", async (
             Guid id,
+            HttpContext httpContext,
             ClaimsPrincipal user,
             RecordTestCollectedHandler handler,
             CancellationToken ct) =>
@@ -93,10 +113,18 @@ public static class TestEndpoints
                 return Results.Unauthorized();
             }
 
+            // DATA_PRINCIPLE_SPINE sub-phase 04.3b — extract forensic
+            // provenance for the AuditEvent row.
+            var (auditDeviceId, auditIpHash) = httpContext.AuditClaims();
+            var clientAppVersion = ResolveClientAppVersion(httpContext);
+
             var command = new RecordTestCollectedCommand(
                 TestInstanceId: id,
                 CallerUserId: new UserId(actorUserId),
-                CallerRole: EndpointActorContext.GetActorRoleEnum(user));
+                CallerRole: EndpointActorContext.GetActorRoleEnum(user),
+                ClientAppVersion: clientAppVersion,
+                AuditDeviceId: auditDeviceId,
+                AuditIpHash: auditIpHash);
 
             var result = await handler.HandleAsync(command, ct);
             return result.IsSuccess ? Results.Ok(result.Value) : ToErrorResult(result.Error);
@@ -107,6 +135,7 @@ public static class TestEndpoints
         group.MapPost("/test-instances/{id:guid}/report", async (
             Guid id,
             RecordTestResultRequest request,
+            HttpContext httpContext,
             ClaimsPrincipal user,
             RecordTestResultHandler handler,
             CancellationToken ct) =>
@@ -125,13 +154,21 @@ public static class TestEndpoints
                     r.ReferenceRangeHigh))
                 .ToList();
 
+            // DATA_PRINCIPLE_SPINE sub-phase 04.3b — extract forensic
+            // provenance for the AuditEvent row.
+            var (auditDeviceId, auditIpHash) = httpContext.AuditClaims();
+            var clientAppVersion = ResolveClientAppVersion(httpContext);
+
             var command = new RecordTestResultCommand(
                 TestInstanceId: id,
                 Results: results,
                 AttachmentIds: request.AttachmentIds ?? Array.Empty<Guid>(),
                 CallerUserId: new UserId(actorUserId),
                 CallerRole: EndpointActorContext.GetActorRoleEnum(user),
-                ClientCommandId: request.ClientCommandId);
+                ClientCommandId: request.ClientCommandId,
+                ClientAppVersion: clientAppVersion,
+                AuditDeviceId: auditDeviceId,
+                AuditIpHash: auditIpHash);
 
             var result = await handler.HandleAsync(command, ct);
             return result.IsSuccess
@@ -149,6 +186,7 @@ public static class TestEndpoints
         group.MapPost("/test-instances/{id:guid}/waive", async (
             Guid id,
             WaiveTestInstanceRequest request,
+            HttpContext httpContext,
             ClaimsPrincipal user,
             IHandler<WaiveTestInstanceCommand> handler,
             CancellationToken ct) =>
@@ -158,11 +196,19 @@ public static class TestEndpoints
                 return Results.Unauthorized();
             }
 
+            // DATA_PRINCIPLE_SPINE sub-phase 04.3b — extract forensic
+            // provenance for the AuditEvent row.
+            var (auditDeviceId, auditIpHash) = httpContext.AuditClaims();
+            var clientAppVersion = ResolveClientAppVersion(httpContext);
+
             var command = new WaiveTestInstanceCommand(
                 TestInstanceId: id,
                 Reason: request.Reason ?? string.Empty,
                 CallerUserId: new UserId(actorUserId),
-                CallerRole: EndpointActorContext.GetActorRoleEnum(user));
+                CallerRole: EndpointActorContext.GetActorRoleEnum(user),
+                ClientAppVersion: clientAppVersion,
+                AuditDeviceId: auditDeviceId,
+                AuditIpHash: auditIpHash);
 
             var result = await handler.HandleAsync(command, ct);
             return result.IsSuccess ? Results.Ok() : ToErrorResult(result.Error);
@@ -259,6 +305,14 @@ public static class TestEndpoints
         return error.Code.EndsWith("NotFound", StringComparison.Ordinal)
             ? Results.NotFound(new { error = error.Code, message = error.Description })
             : Results.BadRequest(new { error = error.Code, message = error.Description });
+    }
+
+    // DATA_PRINCIPLE_SPINE sub-phase 04.3b — single source for resolving the
+    // X-App-Version header into the AuditEvent.AppVersion column.
+    private static string ResolveClientAppVersion(HttpContext httpContext)
+    {
+        var header = httpContext.Request.Headers["X-App-Version"].FirstOrDefault();
+        return string.IsNullOrWhiteSpace(header) ? "unknown" : header!.Trim();
     }
 }
 

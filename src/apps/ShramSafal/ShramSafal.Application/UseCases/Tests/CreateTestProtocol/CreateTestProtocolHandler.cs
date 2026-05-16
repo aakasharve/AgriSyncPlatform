@@ -92,7 +92,11 @@ public sealed class CreateTestProtocolHandler(
 
         await testProtocolRepository.AddAsync(protocol, ct);
 
-        var audit = AuditEvent.Create(
+        // DATA_PRINCIPLE_SPINE sub-phase 04.3b — migrate from AuditEvent.Create
+        // (sentinel provenance) to AuditEventFactory.Create with the real
+        // X-Device-Id / IP hash / X-App-Version sourced from the endpoint's
+        // AuditContextAccessor.
+        var audit = AuditEventFactory.Create(
             entityType: "TestProtocol",
             entityId: protocol.Id,
             action: "test.protocol.created",
@@ -109,7 +113,12 @@ public sealed class CreateTestProtocolHandler(
                 stageNames = protocol.StageNames,
                 parameterCodes = protocol.ParameterCodes
             },
-            occurredAtUtc: now);
+            farmId: null,
+            clientCommandId: null,
+            appVersion: command.ClientAppVersion,
+            deviceId: command.AuditDeviceId,
+            ipHash: command.AuditIpHash,
+            sourceAiJobId: null);
 
         await repository.AddAuditEventAsync(audit, ct);
         await repository.SaveChangesAsync(ct);

@@ -85,8 +85,11 @@ public sealed class ScheduleTestDueDatesHandler(
 
         await testInstanceRepository.AddRangeAsync(created, ct);
 
-        var audit = AuditEvent.Create(
-            farmId: command.FarmId.Value,
+        // DATA_PRINCIPLE_SPINE sub-phase 04.3b — migrate from AuditEvent.Create
+        // (sentinel provenance) to AuditEventFactory.Create with the real
+        // X-Device-Id / IP hash / X-App-Version sourced from the calling
+        // endpoint or propagated by GeneratePlanFromTemplateHandler.
+        var audit = AuditEventFactory.Create(
             entityType: "TestInstance",
             entityId: command.CropCycleId,
             action: "test.instances.scheduled",
@@ -102,7 +105,12 @@ public sealed class ScheduleTestDueDatesHandler(
                 instanceCount = created.Count,
                 instanceIds = created.Select(i => i.Id).ToArray()
             },
-            occurredAtUtc: now);
+            farmId: command.FarmId.Value,
+            clientCommandId: null,
+            appVersion: command.ClientAppVersion,
+            deviceId: command.AuditDeviceId,
+            ipHash: command.AuditIpHash,
+            sourceAiJobId: null);
 
         await repository.AddAuditEventAsync(audit, ct);
         await repository.SaveChangesAsync(ct);

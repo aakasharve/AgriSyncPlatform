@@ -97,11 +97,16 @@ public sealed class ShramSafalAdminDbContextFactory : IAdminDbContextFactory<Shr
         var openedAtUtc = DateTime.UtcNow;
         await using (var auditContext = new ShramSafalDbContext(options))
         {
-            var auditEvent = AuditEvent.Create(
-                farmId: null,
+            // DATA_PRINCIPLE_SPINE sub-phase 04.3b — migrate from
+            // AuditEvent.Create (sentinel provenance) to AuditEventFactory.
+            // Admin cross-tenant elevation is not user-facing and runs
+            // outside any HttpContext; we stamp the trio with the "admin"
+            // sentinel pair to make these rows easy to filter on the
+            // audit ledger (distinct from "worker" cron rows).
+            var auditEvent = AuditEventFactory.Create(
                 entityType: "admin_cross_tenant",
-                // AuditEvent.Create rejects Guid.Empty, so each opening
-                // gets its own unique entity id — also handy for
+                // AuditEventFactory.Create rejects Guid.Empty, so each
+                // opening gets its own unique entity id — also handy for
                 // correlating audit rows with downstream operations.
                 entityId: Guid.NewGuid(),
                 action: "open",
@@ -113,8 +118,12 @@ public sealed class ShramSafalAdminDbContextFactory : IAdminDbContextFactory<Shr
                     openedAtUtc,
                     appVersion = AppVersionProvider.Current,
                 },
+                farmId: null,
                 clientCommandId: null,
-                occurredAtUtc: openedAtUtc);
+                appVersion: AppVersionProvider.Current,
+                deviceId: "admin",
+                ipHash: "sha256:admin",
+                sourceAiJobId: null);
 
             auditContext.AuditEvents.Add(auditEvent);
             await auditContext.SaveChangesAsync(ct);

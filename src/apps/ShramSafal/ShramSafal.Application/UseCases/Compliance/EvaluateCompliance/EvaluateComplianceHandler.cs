@@ -79,6 +79,16 @@ public sealed class EvaluateComplianceHandler(
 
         int opened = 0, refreshed = 0, autoResolved = 0;
 
+        // DATA_PRINCIPLE_SPINE sub-phase 04.3b — capture forensic provenance
+        // from the command once; the EmitAudit helper inherits it for every
+        // signal row written below. HTTP callers pass real X-Device-Id / IP
+        // hash via ComplianceEndpoints; cron callers (ComplianceEvaluatorSweeper)
+        // pass the worker sentinel pair from AuditContextAccessor.WorkerClaims().
+        var auditProvenance = new AuditProvenance(
+            command.ClientAppVersion,
+            command.AuditDeviceId,
+            command.AuditIpHash);
+
         // Track keys that the fresh evaluation produced
         var freshKeys = new HashSet<SignalKey>();
 
@@ -96,7 +106,7 @@ public sealed class EvaluateComplianceHandler(
             {
                 existing.Refresh(now);
                 refreshed++;
-                EmitAudit(repository, existing, "compliance.refreshed", now);
+                EmitAudit(repository, existing, "compliance.refreshed", now, auditProvenance);
             }
             else
             {
@@ -117,7 +127,7 @@ public sealed class EvaluateComplianceHandler(
 
                 signalRepository.Add(signal);
                 opened++;
-                EmitAudit(repository, signal, "compliance.opened", now);
+                EmitAudit(repository, signal, "compliance.opened", now, auditProvenance);
             }
         }
 
@@ -182,7 +192,7 @@ public sealed class EvaluateComplianceHandler(
                         existing.Refresh(now);
                         existing.UpdatePayload(newPayload);
                         refreshed++;
-                        EmitAudit(repository, existing, "compliance.refreshed", now);
+                        EmitAudit(repository, existing, "compliance.refreshed", now, auditProvenance);
                     }
                     else
                     {
@@ -203,7 +213,7 @@ public sealed class EvaluateComplianceHandler(
 
                         signalRepository.Add(signal);
                         opened++;
-                        EmitAudit(repository, signal, "compliance.opened", now);
+                        EmitAudit(repository, signal, "compliance.opened", now, auditProvenance);
                     }
                 }
                 else if (openByKey.TryGetValue(pbKey, out var trackingSignal))
@@ -226,7 +236,7 @@ public sealed class EvaluateComplianceHandler(
                     "Auto-resolved: condition no longer detected by compliance evaluator.",
                     now);
                 autoResolved++;
-                EmitAudit(repository, signal, "compliance.auto-resolved", now);
+                EmitAudit(repository, signal, "compliance.auto-resolved", now, auditProvenance);
             }
         }
 
@@ -236,14 +246,28 @@ public sealed class EvaluateComplianceHandler(
         return Result.Success(new EvaluateComplianceResult(opened, refreshed, autoResolved));
     }
 
+    /// <summary>
+    /// Carries the forensic-provenance trio (<c>app_version</c> +
+    /// <c>device_id</c> + <c>ip_hash</c>) into every <see cref="EmitAudit"/>
+    /// call so the static helper can stamp each <see cref="AuditEvent"/> row
+    /// with the same context the handler received from its caller.
+    /// </summary>
+    private sealed record AuditProvenance(string AppVersion, string DeviceId, string IpHash);
+
     private static void EmitAudit(
         IShramSafalRepository repository,
         ComplianceSignal signal,
         string action,
-        DateTime now)
+        DateTime now,
+        AuditProvenance provenance)
     {
-        var audit = AuditEvent.Create(
-            farmId: (Guid?)((Guid)signal.FarmId),
+        // DATA_PRINCIPLE_SPINE sub-phase 04.3b — migrate from AuditEvent.Create
+        // (sentinel provenance) to AuditEventFactory.Create. The system actor
+        // user id remains the all-zeros sentinel (the rule is "no human"),
+        // but the forensic provenance trio is inherited from the command:
+        // HTTP path → real X-Device-Id / IP hash; cron path → ("worker",
+        // "sha256:worker") via AuditContextAccessor.WorkerClaims().
+        var audit = AuditEventFactory.Create(
             entityType: "ComplianceSignal",
             entityId: signal.Id,
             action: action,
@@ -257,7 +281,12 @@ public sealed class EvaluateComplianceHandler(
                 plotId = signal.PlotId,
                 cropCycleId = signal.CropCycleId
             },
-            occurredAtUtc: now);
+            farmId: (Guid)signal.FarmId,
+            clientCommandId: null,
+            appVersion: provenance.AppVersion,
+            deviceId: provenance.DeviceId,
+            ipHash: provenance.IpHash,
+            sourceAiJobId: null);
 
         _ = repository.AddAuditEventAsync(audit);
     }

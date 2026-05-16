@@ -53,8 +53,12 @@ public sealed class MarkOverdueInstancesHandler(
             // an audit row when we actually transitioned.
             if (before == TestInstanceStatus.Due && instance.Status == TestInstanceStatus.Overdue)
             {
-                var audit = AuditEvent.Create(
-                    farmId: instance.FarmId.Value,
+                // DATA_PRINCIPLE_SPINE sub-phase 04.3b — migrate from
+                // AuditEvent.Create (sentinel provenance) to AuditEventFactory.
+                // Pure cron actor: provenance trio comes from the command,
+                // which the TestOverdueSweeper constructs with
+                // AuditContextAccessor.WorkerClaims() ("worker" / "sha256:worker").
+                var audit = AuditEventFactory.Create(
                     entityType: "TestInstance",
                     entityId: instance.Id,
                     action: "test.overdue",
@@ -69,7 +73,12 @@ public sealed class MarkOverdueInstancesHandler(
                         plannedDueDate = instance.PlannedDueDate,
                         markedOverdueAtUtc = now
                     },
-                    occurredAtUtc: now);
+                    farmId: instance.FarmId.Value,
+                    clientCommandId: null,
+                    appVersion: command.ClientAppVersion,
+                    deviceId: command.AuditDeviceId,
+                    ipHash: command.AuditIpHash,
+                    sourceAiJobId: null);
 
                 await repository.AddAuditEventAsync(audit, ct);
                 marked++;

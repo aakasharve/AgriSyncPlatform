@@ -14,7 +14,16 @@ public sealed record ScheduleTestDueDatesCommand(
     Guid PlotId,
     string CropType,
     IReadOnlyList<CropCycleStageInfo> Stages,
-    UserId ActorUserId);
+    UserId ActorUserId,
+    // DATA_PRINCIPLE_SPINE sub-phase 04.3b — forensic provenance fields
+    // sourced from the calling endpoint's HttpContext.AuditClaims() (when
+    // invoked via /test-instances/schedule-from-plan) or propagated from
+    // GeneratePlanFromTemplateCommand's own forensic trio (when invoked
+    // from /plan/generate). Defaults match the worker / unknown path so
+    // direct-construction unit tests stay green.
+    string ClientAppVersion = "unknown",
+    string AuditDeviceId = "unknown",
+    string AuditIpHash = "sha256:unknown");
 
 /// <summary>
 /// A single stage inside a crop cycle with its planned start/end window.

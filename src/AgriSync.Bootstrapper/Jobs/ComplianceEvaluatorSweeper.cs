@@ -1,4 +1,6 @@
 using AgriSync.BuildingBlocks.Application;
+using AgriSync.BuildingBlocks.Audit;
+using AgriSync.BuildingBlocks.Persistence;
 using AgriSync.SharedKernel.Contracts.Ids;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -81,8 +83,21 @@ public sealed class ComplianceEvaluatorSweeper(
                     .GetRequiredService<AgriSync.BuildingBlocks.Persistence.TenantContext>()
                     .ElevateToAdminCrossTenant();
                 var handler = scope.ServiceProvider.GetRequiredService<IHandler<EvaluateComplianceCommand, EvaluateComplianceResult>>();
+
+                // DATA_PRINCIPLE_SPINE sub-phase 04.3b §Part 2 — cron path
+                // has no HttpContext, so we explicitly construct the command
+                // with AuditContextAccessor.WorkerClaims() ("worker",
+                // "sha256:worker") plus the entry assembly's
+                // AppVersionProvider.Current. Every AuditEvent row emitted
+                // by the handler inherits this forensic-provenance trio.
+                var (deviceId, ipHash) = AuditContextAccessor.WorkerClaims();
                 var result = await handler.HandleAsync(
-                    new EvaluateComplianceCommand(new FarmId(farmId)), ct);
+                    new EvaluateComplianceCommand(
+                        FarmId: new FarmId(farmId),
+                        ClientAppVersion: AppVersionProvider.Current,
+                        AuditDeviceId: deviceId,
+                        AuditIpHash: ipHash),
+                    ct);
 
                 if (result.IsSuccess && result.Value is not null)
                 {

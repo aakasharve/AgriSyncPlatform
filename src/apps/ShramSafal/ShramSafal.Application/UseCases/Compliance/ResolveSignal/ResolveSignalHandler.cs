@@ -54,8 +54,11 @@ public sealed class ResolveSignalHandler(
 
         await signalRepository.SaveChangesAsync(ct);
 
-        var audit = AuditEvent.Create(
-            farmId: (Guid?)((Guid)signal.FarmId),
+        // DATA_PRINCIPLE_SPINE sub-phase 04.3b — migrate from AuditEvent.Create
+        // (sentinel provenance) to AuditEventFactory.Create with the real
+        // X-Device-Id / IP hash / X-App-Version sourced from the endpoint's
+        // AuditContextAccessor.
+        var audit = AuditEventFactory.Create(
             entityType: "ComplianceSignal",
             entityId: signal.Id,
             action: "compliance.resolved",
@@ -68,7 +71,12 @@ public sealed class ResolveSignalHandler(
                 note = signal.ResolutionNote,
                 resolvedAtUtc = signal.ResolvedAtUtc
             },
-            occurredAtUtc: now);
+            farmId: (Guid)signal.FarmId,
+            clientCommandId: null,
+            appVersion: command.ClientAppVersion,
+            deviceId: command.AuditDeviceId,
+            ipHash: command.AuditIpHash,
+            sourceAiJobId: null);
 
         await repository.AddAuditEventAsync(audit);
         await repository.SaveChangesAsync(ct);

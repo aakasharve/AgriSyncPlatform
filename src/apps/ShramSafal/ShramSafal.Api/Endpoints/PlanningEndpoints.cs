@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using AgriSync.BuildingBlocks.Audit;
 using AgriSync.BuildingBlocks.Results;
 using ShramSafal.Application.UseCases.Planning.ComputePlannedVsExecutedDelta;
 using ShramSafal.Application.UseCases.Planning.GeneratePlanFromTemplate;
@@ -13,6 +14,7 @@ public static class PlanningEndpoints
     {
         group.MapPost("/plan/generate", async (
             GeneratePlanRequest request,
+            HttpContext httpContext,
             ClaimsPrincipal user,
             GeneratePlanFromTemplateHandler handler,
             CancellationToken ct) =>
@@ -26,13 +28,22 @@ public static class PlanningEndpoints
                 .Select(a => new TemplateActivityInput(a.ActivityName, a.OffsetDays))
                 .ToList();
 
+            // DATA_PRINCIPLE_SPINE sub-phase 04.3b — extract forensic
+            // provenance for downstream propagation into the chained
+            // ScheduleTestDueDatesCommand.
+            var (auditDeviceId, auditIpHash) = httpContext.AuditClaims();
+            var clientAppVersion = ResolveClientAppVersion(httpContext);
+
             var command = new GeneratePlanFromTemplateCommand(
                 actorUserId,
                 request.CropCycleId,
                 request.TemplateName,
                 request.Stage,
                 request.PlanStartDate,
-                activities);
+                activities,
+                ClientAppVersion: clientAppVersion,
+                AuditDeviceId: auditDeviceId,
+                AuditIpHash: auditIpHash);
 
             var result = await handler.HandleAsync(command, ct);
             return result.IsSuccess ? Results.Ok(result.Value) : ToErrorResult(result.Error);
@@ -115,6 +126,14 @@ public static class PlanningEndpoints
         return error.Code.EndsWith("NotFound", StringComparison.Ordinal)
             ? Results.NotFound(new { error = error.Code, message = error.Description })
             : Results.BadRequest(new { error = error.Code, message = error.Description });
+    }
+
+    // DATA_PRINCIPLE_SPINE sub-phase 04.3b — single source for resolving the
+    // X-App-Version header into the AuditEvent.AppVersion column.
+    private static string ResolveClientAppVersion(HttpContext httpContext)
+    {
+        var header = httpContext.Request.Headers["X-App-Version"].FirstOrDefault();
+        return string.IsNullOrWhiteSpace(header) ? "unknown" : header!.Trim();
     }
 }
 

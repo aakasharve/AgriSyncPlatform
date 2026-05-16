@@ -1,5 +1,6 @@
 using System.Security.Claims;
 using AgriSync.BuildingBlocks.Application;
+using AgriSync.BuildingBlocks.Audit;
 using AgriSync.BuildingBlocks.Results;
 using AgriSync.SharedKernel.Contracts.Ids;
 using AgriSync.SharedKernel.Contracts.Roles;
@@ -52,6 +53,7 @@ public static class ComplianceEndpoints
         // POST /compliance/{signalId}/acknowledge
         group.MapPost("/compliance/{signalId:guid}/acknowledge", async (
             Guid signalId,
+            HttpContext httpContext,
             ClaimsPrincipal user,
             IHandler<AcknowledgeSignalCommand> handler,
             CancellationToken ct) =>
@@ -59,10 +61,18 @@ public static class ComplianceEndpoints
             if (!EndpointActorContext.TryGetUserId(user, out var actorUserId))
                 return Results.Unauthorized();
 
+            // DATA_PRINCIPLE_SPINE sub-phase 04.3b — extract forensic
+            // provenance for the AuditEvent row.
+            var (auditDeviceId, auditIpHash) = httpContext.AuditClaims();
+            var clientAppVersion = ResolveClientAppVersion(httpContext);
+
             var command = new AcknowledgeSignalCommand(
                 SignalId: signalId,
                 CallerUserId: new UserId(actorUserId),
-                CallerRole: EndpointActorContext.GetActorRoleEnum(user));
+                CallerRole: EndpointActorContext.GetActorRoleEnum(user),
+                ClientAppVersion: clientAppVersion,
+                AuditDeviceId: auditDeviceId,
+                AuditIpHash: auditIpHash);
 
             var result = await handler.HandleAsync(command, ct);
             return result.IsSuccess ? Results.Ok() : ToErrorResult(result.Error);
@@ -73,6 +83,7 @@ public static class ComplianceEndpoints
         group.MapPost("/compliance/{signalId:guid}/resolve", async (
             Guid signalId,
             ResolveSignalRequest request,
+            HttpContext httpContext,
             ClaimsPrincipal user,
             IHandler<ResolveSignalCommand> handler,
             CancellationToken ct) =>
@@ -80,11 +91,19 @@ public static class ComplianceEndpoints
             if (!EndpointActorContext.TryGetUserId(user, out var actorUserId))
                 return Results.Unauthorized();
 
+            // DATA_PRINCIPLE_SPINE sub-phase 04.3b — extract forensic
+            // provenance for the AuditEvent row.
+            var (auditDeviceId, auditIpHash) = httpContext.AuditClaims();
+            var clientAppVersion = ResolveClientAppVersion(httpContext);
+
             var command = new ResolveSignalCommand(
                 SignalId: signalId,
                 CallerUserId: new UserId(actorUserId),
                 CallerRole: EndpointActorContext.GetActorRoleEnum(user),
-                Note: request.Note ?? string.Empty);
+                Note: request.Note ?? string.Empty,
+                ClientAppVersion: clientAppVersion,
+                AuditDeviceId: auditDeviceId,
+                AuditIpHash: auditIpHash);
 
             var result = await handler.HandleAsync(command, ct);
             return result.IsSuccess ? Results.Ok() : ToErrorResult(result.Error);
@@ -94,6 +113,7 @@ public static class ComplianceEndpoints
         // POST /compliance/evaluate/{farmId} → 202 Accepted
         group.MapPost("/compliance/evaluate/{farmId:guid}", async (
             Guid farmId,
+            HttpContext httpContext,
             ClaimsPrincipal user,
             IHandler<EvaluateComplianceCommand, EvaluateComplianceResult> handler,
             CancellationToken ct) =>
@@ -105,7 +125,16 @@ public static class ComplianceEndpoints
             if (!EvaluateAllowedRoles.Contains(callerRole))
                 return Results.Forbid();
 
-            var command = new EvaluateComplianceCommand(new FarmId(farmId));
+            // DATA_PRINCIPLE_SPINE sub-phase 04.3b — extract forensic
+            // provenance for the AuditEvent rows emitted per signal.
+            var (auditDeviceId, auditIpHash) = httpContext.AuditClaims();
+            var clientAppVersion = ResolveClientAppVersion(httpContext);
+
+            var command = new EvaluateComplianceCommand(
+                FarmId: new FarmId(farmId),
+                ClientAppVersion: clientAppVersion,
+                AuditDeviceId: auditDeviceId,
+                AuditIpHash: auditIpHash);
             var result = await handler.HandleAsync(command, ct);
 
             return result.IsSuccess
@@ -133,6 +162,16 @@ public static class ComplianceEndpoints
         return error.Code.EndsWith("NotFound", StringComparison.Ordinal)
             ? Results.NotFound(new { error = error.Code, message = error.Description })
             : Results.BadRequest(new { error = error.Code, message = error.Description });
+    }
+
+    // DATA_PRINCIPLE_SPINE sub-phase 04.3b — single source for resolving the
+    // X-App-Version header into the AuditEvent.AppVersion column, mirroring
+    // the helper used in other endpoint files (ScheduleEndpoints,
+    // FarmEndpoints, etc.).
+    private static string ResolveClientAppVersion(HttpContext httpContext)
+    {
+        var header = httpContext.Request.Headers["X-App-Version"].FirstOrDefault();
+        return string.IsNullOrWhiteSpace(header) ? "unknown" : header!.Trim();
     }
 }
 
