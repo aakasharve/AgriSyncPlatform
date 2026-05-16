@@ -98,6 +98,36 @@ public sealed class TenantTransactionMiddleware
         // handler legitimately spans the caller's tenancies and has
         // user-scoped filtering of its own).
         "/shramsafal/farms/mine",
+        // POST /sync/push, GET /sync/pull — user-scoped multi-farm
+        // sync surface. Both handlers (PushSyncBatchHandler,
+        // PullSyncChangesHandler) take only actorUserId and span every
+        // farm the user is a member of; they have no farmId in scope
+        // and therefore never invoke ShramSafalAuthorizationEnforcer.
+        // EnsureIsFarmMember, so TenantContext stays unset and the
+        // interceptor fail-closes on the first DbCommand. Each per-
+        // mutation handler dispatched by PushSyncBatchHandler runs its
+        // own IsUserMemberOfFarmAsync pre-check (see e.g.
+        // CreateAttachmentAuthorizer docstring) and PullSyncChanges
+        // filters every projection by actorUserId, so user-scoped
+        // isolation is preserved without per-request RLS.
+        //
+        // Unblocks: spec 02 (offline log capture → /sync/push),
+        // spec 03 (sync retry after rejection → /sync/push).
+        "/sync/",
+        // POST /shramsafal/attachments (+ /{id}/upload, /{id},
+        // /{id}/download, list) — attachment lifecycle endpoints.
+        // The CREATE accepts FarmId in the body and CreateAttachment-
+        // Authorizer runs IsUserMemberOfFarmAsync(FarmId, actorUserId)
+        // before the handler touches the DbContext. Upload, download,
+        // metadata, list all resolve the attachment by id + actorUserId
+        // and surface ShramSafalErrors.Forbidden for non-members. Like
+        // the sync surface, none of these flows invoke EnsureIsFarmMember
+        // (the authorizer talks to the repository directly), so the
+        // tenant claim never gets set and the interceptor fail-closes.
+        //
+        // Unblocks: spec 04 (attachment upload state machine →
+        // POST /shramsafal/attachments + POST /shramsafal/attachments/{id}/upload).
+        "/shramsafal/attachments",
     };
 
     private readonly RequestDelegate _next;
