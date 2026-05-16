@@ -47,6 +47,14 @@ public static class DependencyInjection
         services.TryAddSingleton<OutboxTransactionInterceptor>(sp =>
             new OutboxTransactionInterceptor(sp.GetRequiredService<DomainEventToOutboxInterceptor>()));
 
+        // DATA_PRINCIPLE_SPINE 03.2 — TenantContext + Interceptor must be
+        // registered here (not only in Program.cs) so the Sync Integration
+        // test harness picks them up when it calls AddShramSafalInfrastructure
+        // without going through Bootstrapper. TryAddScoped is a no-op if
+        // Program.cs already registered them; idempotent.
+        services.TryAddScoped<AgriSync.BuildingBlocks.Persistence.TenantContext>();
+        services.TryAddScoped<AgriSync.BuildingBlocks.Persistence.TenantConnectionInterceptor>();
+
         services.AddDbContext<ShramSafalDbContext>((sp, options) =>
             options.UseNpgsql(
                 connectionString,
