@@ -1,6 +1,8 @@
 using Microsoft.Extensions.Logging.Abstractions;
 using ShramSafal.Application.Ports.External;
+using ShramSafal.Application.Storage;
 using ShramSafal.Domain.AI;
+using ShramSafal.Domain.Storage;
 using ShramSafal.Infrastructure.AI;
 using Xunit;
 
@@ -251,6 +253,8 @@ public sealed class AiOrchestratorTests
         var repository = new InMemoryAiJobRepository(config);
         var sarvam = new FakeAiProvider(AiProviderType.Sarvam);
         var gemini = new FakeAiProvider(AiProviderType.Gemini);
+        var blobStore = new InMemoryRawBlobStore();
+        var ssfRepository = new RecordingShramSafalRepository();
 
         var orchestrator = new AiOrchestrator(
             [sarvam, gemini],
@@ -259,6 +263,8 @@ public sealed class AiOrchestratorTests
             new AiFailureClassifier(),
             new AiAttemptCostEstimator(),
             new AiPromptBuilder(),
+            blobStore,
+            ssfRepository,
             NullLogger<AiOrchestrator>.Instance);
 
         return new OrchestratorTestHarness(
@@ -266,6 +272,8 @@ public sealed class AiOrchestratorTests
             repository,
             sarvam,
             gemini,
+            blobStore,
+            ssfRepository,
             Guid.NewGuid(),
             Guid.NewGuid());
     }
@@ -275,8 +283,176 @@ public sealed class AiOrchestratorTests
         InMemoryAiJobRepository Repository,
         FakeAiProvider Sarvam,
         FakeAiProvider Gemini,
+        InMemoryRawBlobStore BlobStore,
+        RecordingShramSafalRepository ShramSafalRepository,
         Guid UserId,
         Guid FarmId);
+
+    /// <summary>
+    /// DATA_PRINCIPLE_SPINE 02-patch: assert that a successful voice parse
+    /// stamps the AiJob's <see cref="AiJob.RawInputRef"/> with the SHA-256
+    /// of the audio payload (instead of <c>null</c>, the BLOCKER #1 surfaced
+    /// by Codex cross-verification on 2026-05-15) AND that the cold-tier
+    /// blob store receives the bytes AND that the ref-count index is
+    /// upserted in the same flow.
+    /// </summary>
+    [Fact]
+    public async Task SuccessfulVoiceParse_PersistsRawInputToColdTier_AndStampsRawInputRefOnAiJob()
+    {
+        var harness = CreateHarness(CreateConfig());
+        harness.Gemini.EnqueueVoiceResult(SuccessVoiceResult(0.91m));
+
+        var execution = await ExecuteVoiceAsync(
+            harness.Orchestrator,
+            harness.UserId,
+            harness.FarmId,
+            "orchestrator-rawinput-1");
+
+        Assert.True(execution.Result.Success);
+
+        var job = await harness.Repository.GetByIdAsync(execution.JobId);
+        Assert.NotNull(job);
+        Assert.False(string.IsNullOrWhiteSpace(job!.RawInputRef));
+        Assert.Equal(64, job.RawInputRef!.Length); // sha-256 lowercase hex
+
+        // Blob store received exactly one PUT for the payload.
+        Assert.Single(harness.BlobStore.Puts);
+        Assert.Equal(job.RawInputRef, harness.BlobStore.Puts[0].Sha256);
+
+        // Ref-count index upserted once with the same SHA.
+        Assert.Single(harness.ShramSafalRepository.RawBlobUpserts);
+        Assert.Equal(job.RawInputRef, harness.ShramSafalRepository.RawBlobUpserts[0].Sha256);
+    }
+}
+
+/// <summary>
+/// DATA_PRINCIPLE_SPINE 02-patch: minimal cold-tier stub. Returns a
+/// <see cref="RawBlobRef"/> computed from the bytes it receives, records
+/// every PUT for assertion, and never touches a real S3 client.
+/// </summary>
+internal sealed class InMemoryRawBlobStore : IRawBlobStore
+{
+    public List<RawBlobRef> Puts { get; } = new();
+    public Dictionary<string, byte[]> Storage { get; } = new(StringComparer.Ordinal);
+
+    public async Task<RawBlobRef> PutAsync(Stream payload, string contentType, CancellationToken ct)
+    {
+        using var ms = new MemoryStream();
+        await payload.CopyToAsync(ms, ct);
+        var bytes = ms.ToArray();
+        var blobRef = RawBlobRef.FromBytes(bytes, contentType);
+        Puts.Add(blobRef);
+        Storage[blobRef.Sha256] = bytes;
+        return blobRef;
+    }
+
+    public Task<Stream> GetAsync(string sha256, CancellationToken ct)
+    {
+        if (!Storage.TryGetValue(sha256, out var bytes))
+        {
+            throw new InvalidOperationException($"No blob with sha {sha256}.");
+        }
+        return Task.FromResult<Stream>(new MemoryStream(bytes, writable: false));
+    }
+
+    public Task DereferenceAsync(string sha256, CancellationToken ct)
+    {
+        Storage.Remove(sha256);
+        return Task.CompletedTask;
+    }
+}
+
+/// <summary>
+/// DATA_PRINCIPLE_SPINE 02-patch: inert <see cref="ShramSafal.Application.Ports.IShramSafalRepository"/>
+/// the orchestrator calls only for <c>UpsertRawBlobIndexAsync</c>. Every
+/// other member uses the interface's default no-op impl, so this class
+/// stays a one-method recorder. Any future codepath that routes through a
+/// new interface method without a default will surface as a runtime
+/// AbstractMethodCall — exactly the loud failure the existing
+/// <c>AddTranscriptAsync</c> convention defends.
+/// </summary>
+internal sealed class RecordingShramSafalRepository : ShramSafal.Application.Ports.IShramSafalRepository
+{
+    public List<RawBlobRef> RawBlobUpserts { get; } = new();
+
+    public Task UpsertRawBlobIndexAsync(RawBlobRef blobRef, CancellationToken ct = default)
+    {
+        RawBlobUpserts.Add(blobRef);
+        return Task.CompletedTask;
+    }
+
+    // Required (no-default) members must be implemented; the orchestrator
+    // never invokes any of them on the voice / receipt / patti paths under
+    // test, so a NotSupportedException is the loud signal we want.
+    public Task AddFarmAsync(ShramSafal.Domain.Farms.Farm farm, CancellationToken ct = default) => throw new NotSupportedException();
+    public Task AddFarmBoundaryAsync(ShramSafal.Domain.Farms.FarmBoundary boundary, CancellationToken ct = default) => throw new NotSupportedException();
+    public Task<ShramSafal.Domain.Farms.Farm?> GetFarmByIdAsync(Guid farmId, CancellationToken ct = default) => throw new NotSupportedException();
+    public Task AddFarmMembershipAsync(ShramSafal.Domain.Farms.FarmMembership membership, CancellationToken ct = default) => throw new NotSupportedException();
+    public Task<ShramSafal.Domain.Farms.FarmMembership?> GetFarmMembershipAsync(Guid farmId, Guid userId, CancellationToken ct = default) => throw new NotSupportedException();
+    public Task<AgriSync.SharedKernel.Contracts.Roles.AppRole?> GetUserRoleForFarmAsync(Guid farmId, Guid userId, CancellationToken ct = default) => throw new NotSupportedException();
+    public Task<bool> IsUserOwnerOfFarmAsync(Guid farmId, Guid userId, CancellationToken ct = default) => throw new NotSupportedException();
+    public Task AddPlotAsync(ShramSafal.Domain.Farms.Plot plot, CancellationToken ct = default) => throw new NotSupportedException();
+    public Task<ShramSafal.Domain.Farms.Plot?> GetPlotByIdAsync(Guid plotId, CancellationToken ct = default) => throw new NotSupportedException();
+    public Task<List<ShramSafal.Domain.Farms.Plot>> GetPlotsByFarmIdAsync(Guid farmId, CancellationToken ct = default) => throw new NotSupportedException();
+    public Task AddCropCycleAsync(ShramSafal.Domain.Crops.CropCycle cropCycle, CancellationToken ct = default) => throw new NotSupportedException();
+    public Task<ShramSafal.Domain.Crops.CropCycle?> GetCropCycleByIdAsync(Guid cropCycleId, CancellationToken ct = default) => throw new NotSupportedException();
+    public Task<List<ShramSafal.Domain.Crops.CropCycle>> GetCropCyclesByPlotIdAsync(Guid plotId, CancellationToken ct = default) => throw new NotSupportedException();
+    public Task AddDailyLogAsync(ShramSafal.Domain.Logs.DailyLog log, CancellationToken ct = default) => throw new NotSupportedException();
+    public Task<ShramSafal.Domain.Logs.DailyLog?> GetDailyLogByIdAsync(Guid dailyLogId, CancellationToken ct = default) => throw new NotSupportedException();
+    public Task<ShramSafal.Domain.Logs.DailyLog?> GetDailyLogByIdempotencyKeyAsync(string idempotencyKey, CancellationToken ct = default) => throw new NotSupportedException();
+    public Task AddCostEntryAsync(ShramSafal.Domain.Finance.CostEntry costEntry, CancellationToken ct = default) => throw new NotSupportedException();
+    public Task<ShramSafal.Domain.Finance.CostEntry?> GetCostEntryByIdAsync(Guid costEntryId, CancellationToken ct = default) => throw new NotSupportedException();
+    public Task<List<ShramSafal.Domain.Finance.CostEntry>> GetCostEntriesByIdsAsync(IEnumerable<Guid> costEntryIds, CancellationToken ct = default) => throw new NotSupportedException();
+    public Task<List<ShramSafal.Domain.Finance.CostEntry>> GetCostEntriesForDuplicateCheck(AgriSync.SharedKernel.Contracts.Ids.FarmId farmId, Guid? plotId, string category, DateTime since, CancellationToken ct = default) => throw new NotSupportedException();
+    public Task AddFinanceCorrectionAsync(ShramSafal.Domain.Finance.FinanceCorrection correction, CancellationToken ct = default) => throw new NotSupportedException();
+    public Task AddDayLedgerAsync(ShramSafal.Domain.Finance.DayLedger dayLedger, CancellationToken ct = default) => throw new NotSupportedException();
+    public Task<ShramSafal.Domain.Finance.DayLedger?> GetDayLedgerByIdAsync(Guid dayLedgerId, CancellationToken ct = default) => throw new NotSupportedException();
+    public Task<ShramSafal.Domain.Finance.DayLedger?> GetDayLedgerBySourceCostEntryIdAsync(Guid costEntryId, CancellationToken ct = default) => throw new NotSupportedException();
+    public Task<List<ShramSafal.Domain.Finance.DayLedger>> GetDayLedgersForFarm(Guid farmId, DateOnly from, DateOnly to, CancellationToken ct = default) => throw new NotSupportedException();
+    public Task AddAttachmentAsync(ShramSafal.Domain.Attachments.Attachment attachment, CancellationToken ct = default) => throw new NotSupportedException();
+    public Task<ShramSafal.Domain.Attachments.Attachment?> GetAttachmentByIdAsync(Guid attachmentId, CancellationToken ct = default) => throw new NotSupportedException();
+    public Task<List<ShramSafal.Domain.Attachments.Attachment>> GetAttachmentsForEntityAsync(Guid entityId, string entityType, CancellationToken ct = default) => throw new NotSupportedException();
+    public Task AddPriceConfigAsync(ShramSafal.Domain.Finance.PriceConfig config, CancellationToken ct = default) => throw new NotSupportedException();
+    public Task AddAuditEventAsync(ShramSafal.Domain.Audit.AuditEvent auditEvent, CancellationToken ct = default) => throw new NotSupportedException();
+    public Task AddScheduleTemplateAsync(ShramSafal.Domain.Planning.ScheduleTemplate template, CancellationToken ct = default) => throw new NotSupportedException();
+    public Task<List<ShramSafal.Domain.Planning.ScheduleTemplate>> GetScheduleTemplatesAsync(CancellationToken ct = default) => throw new NotSupportedException();
+    public Task AddPlannedActivitiesAsync(IEnumerable<ShramSafal.Domain.Planning.PlannedActivity> plannedActivities, CancellationToken ct = default) => throw new NotSupportedException();
+    public Task<ShramSafal.Domain.Planning.PlannedActivity?> GetPlannedActivityByIdAsync(Guid id, CancellationToken ct = default) => throw new NotSupportedException();
+    public Task<List<ShramSafal.Domain.Planning.PlannedActivity>> GetPlannedActivitiesByCropCycleIdAsync(Guid cropCycleId, CancellationToken ct = default) => throw new NotSupportedException();
+    public Task<List<ShramSafal.Domain.Logs.LogTask>> GetExecutedTasksByCropCycleIdAsync(Guid cropCycleId, CancellationToken ct = default) => throw new NotSupportedException();
+    public Task<List<ShramSafal.Domain.Finance.CostEntry>> GetCostEntriesAsync(DateOnly? fromDate, DateOnly? toDate, CancellationToken ct = default) => throw new NotSupportedException();
+    public Task<List<ShramSafal.Domain.Finance.FinanceCorrection>> GetCorrectionsForEntriesAsync(IEnumerable<Guid> costEntryIds, CancellationToken ct = default) => throw new NotSupportedException();
+    public Task<List<ShramSafal.Domain.Farms.Farm>> GetFarmsChangedSinceAsync(DateTime sinceUtc, CancellationToken ct = default) => throw new NotSupportedException();
+    public Task<List<ShramSafal.Domain.Farms.Plot>> GetPlotsChangedSinceAsync(DateTime sinceUtc, CancellationToken ct = default) => throw new NotSupportedException();
+    public Task<List<ShramSafal.Domain.Crops.CropCycle>> GetCropCyclesChangedSinceAsync(DateTime sinceUtc, CancellationToken ct = default) => throw new NotSupportedException();
+    public Task<List<ShramSafal.Domain.Logs.DailyLog>> GetDailyLogsChangedSinceAsync(DateTime sinceUtc, CancellationToken ct = default) => throw new NotSupportedException();
+    public Task<List<ShramSafal.Domain.Finance.CostEntry>> GetCostEntriesChangedSinceAsync(DateTime sinceUtc, CancellationToken ct = default) => throw new NotSupportedException();
+    public Task<List<ShramSafal.Domain.Finance.FinanceCorrection>> GetFinanceCorrectionsChangedSinceAsync(DateTime sinceUtc, CancellationToken ct = default) => throw new NotSupportedException();
+    public Task<List<ShramSafal.Domain.Finance.DayLedger>> GetDayLedgersChangedSinceAsync(DateTime sinceUtc, CancellationToken ct = default) => throw new NotSupportedException();
+    public Task<List<ShramSafal.Domain.Finance.PriceConfig>> GetPriceConfigsChangedSinceAsync(DateTime sinceUtc, CancellationToken ct = default) => throw new NotSupportedException();
+    public Task<List<ShramSafal.Domain.Planning.PlannedActivity>> GetPlannedActivitiesChangedSinceAsync(DateTime sinceUtc, CancellationToken ct = default) => throw new NotSupportedException();
+    public Task<List<ShramSafal.Domain.Attachments.Attachment>> GetAttachmentsChangedSinceAsync(DateTime sinceUtc, CancellationToken ct = default) => throw new NotSupportedException();
+    public Task<List<ShramSafal.Domain.Audit.AuditEvent>> GetAuditEventsChangedSinceAsync(DateTime sinceUtc, CancellationToken ct = default) => throw new NotSupportedException();
+    public Task<List<ShramSafal.Domain.Audit.AuditEvent>> GetAuditEventsForEntityAsync(Guid entityId, string entityType, CancellationToken ct = default) => throw new NotSupportedException();
+    public Task<List<ShramSafal.Domain.Audit.AuditEvent>> GetAuditEventsForFarmAsync(Guid farmId, DateOnly from, DateOnly to, int limit, int offset, CancellationToken ct = default) => throw new NotSupportedException();
+    public Task<List<Guid>> GetFarmIdsForUserAsync(Guid userId, CancellationToken ct = default) => throw new NotSupportedException();
+    public Task<IReadOnlyList<ShramSafal.Application.Contracts.Dtos.SyncOperatorDto>> GetOperatorsByIdsAsync(IEnumerable<Guid> userIds, CancellationToken ct = default) => throw new NotSupportedException();
+    public Task<bool> IsUserMemberOfFarmAsync(Guid farmId, Guid userId, CancellationToken ct = default) => throw new NotSupportedException();
+    public Task<int> CountActivePrimaryOwnersAsync(Guid farmId, CancellationToken ct = default) => throw new NotSupportedException();
+    public Task AddCropScheduleTemplateAsync(ShramSafal.Domain.Schedules.CropScheduleTemplate template, CancellationToken ct = default) => throw new NotSupportedException();
+    public Task<ShramSafal.Domain.Schedules.CropScheduleTemplate?> GetCropScheduleTemplateByIdAsync(AgriSync.SharedKernel.Contracts.Ids.ScheduleTemplateId templateId, CancellationToken ct = default) => throw new NotSupportedException();
+    public Task<List<ShramSafal.Domain.Schedules.CropScheduleTemplate>> GetCropScheduleTemplatesForCropAsync(string cropKey, string? regionCode, CancellationToken ct = default) => throw new NotSupportedException();
+    public Task AddScheduleSubscriptionAsync(ShramSafal.Domain.Schedules.ScheduleSubscription subscription, CancellationToken ct = default) => throw new NotSupportedException();
+    public Task<ShramSafal.Domain.Schedules.ScheduleSubscription?> GetScheduleSubscriptionByIdAsync(AgriSync.SharedKernel.Contracts.Ids.ScheduleSubscriptionId subscriptionId, CancellationToken ct = default) => throw new NotSupportedException();
+    public Task<ShramSafal.Domain.Schedules.ScheduleSubscription?> GetActiveScheduleSubscriptionAsync(Guid plotId, string cropKey, Guid cropCycleId, CancellationToken ct = default) => throw new NotSupportedException();
+    public Task AddScheduleMigrationEventAsync(ShramSafal.Domain.Schedules.ScheduleMigrationEvent migrationEvent, CancellationToken ct = default) => throw new NotSupportedException();
+    public Task<ShramSafal.Domain.Planning.ScheduleTemplate?> GetScheduleTemplateByIdAsync(Guid templateId, CancellationToken ct = default) => throw new NotSupportedException();
+    public Task<bool> HasActiveOwnerMembershipAsync(Guid userId, CancellationToken ct = default) => throw new NotSupportedException();
+    public Task<List<ShramSafal.Domain.Planning.ScheduleTemplate>> GetScheduleLineageAsync(Guid rootTemplateId, CancellationToken ct = default) => throw new NotSupportedException();
+    public Task SaveChangesAsync(CancellationToken ct = default) => Task.CompletedTask;
+    public Task<int> GetDisputedLogCountForPlotAsync(Guid plotId, CancellationToken ct = default) => throw new NotSupportedException();
+    public Task AddJobCardAsync(ShramSafal.Domain.Work.JobCard jobCard, CancellationToken ct = default) => throw new NotSupportedException();
+    public Task AddTranscriptAsync(ShramSafal.Domain.AI.Transcript transcript, CancellationToken ct = default) => Task.CompletedTask;
 }
 
 internal sealed class InMemoryAiJobRepository(AiProviderConfig config) : IAiJobRepository

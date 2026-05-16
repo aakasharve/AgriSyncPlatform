@@ -2,6 +2,13 @@
 // Project hygiene (per `_COFOUNDER/memory/...` "avoid Docker on local dev") + no LocalStackContainer
 // fixture exists yet in ShramSafal.Sync.IntegrationTests. The idempotent-put assertion lives in the
 // plan recipe (step 2.1.7) and will land once a Testcontainers LocalStack fixture is in place.
+//
+// 02-patch (cold-storage wiring): the S3 object key shape is now `raw/{sha256}` with
+// no extension — the PUT path uses `blobRef.S3Key` produced by the new RawBlobRef
+// factory, and the GET / DereferenceAsync paths reconstruct the same shape from the
+// SHA-256 directly. Extension was decorative; content type lives in `ContentType` on
+// RawBlobRef, on the S3 object metadata (PutObjectRequest.ContentType below), and on
+// the `ssf.raw_blob_index.content_type` column.
 
 using Amazon.S3;
 using Amazon.S3.Model;

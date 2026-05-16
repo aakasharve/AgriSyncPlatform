@@ -25,25 +25,17 @@ public sealed record RawBlobRef
     }
 
     /// <summary>
-    /// Compute the SHA-256 (lowercase hex) of <paramref name="bytes"/> and pair it with
-    /// a content-type-derived extension to produce a stable cold-tier object key of the
-    /// form <c>raw/&lt;sha256&gt;.&lt;ext&gt;</c>. Unknown content types fall back to <c>.bin</c>.
+    /// Compute the SHA-256 (lowercase hex) of <paramref name="bytes"/> and produce a
+    /// stable cold-tier object key of the form <c>raw/&lt;sha256&gt;</c>. Bytes are
+    /// content-addressed by the SHA-256 alone — the extension was decorative and has
+    /// been dropped (sub-phase 02-patch). Content type is preserved on the
+    /// <see cref="ContentType"/> property (and stamped on the S3 object metadata and
+    /// the <c>raw_blob_index.content_type</c> column by the calling adapter), so
+    /// downstream readers retain MIME fidelity without round-tripping through the key.
     /// </summary>
     public static RawBlobRef FromBytes(ReadOnlySpan<byte> bytes, string contentType)
     {
         var hash = Convert.ToHexString(SHA256.HashData(bytes)).ToLowerInvariant();
-        var ext = ExtensionFor(contentType);
-        return new RawBlobRef(hash, $"raw/{hash}.{ext}", contentType, bytes.Length);
+        return new RawBlobRef(hash, $"raw/{hash}", contentType, bytes.Length);
     }
-
-    private static string ExtensionFor(string contentType) => contentType switch
-    {
-        "audio/opus" => "opus",
-        "audio/webm" => "webm",
-        "audio/wav" => "wav",
-        "image/jpeg" => "jpg",
-        "image/png" => "png",
-        "image/webp" => "webp",
-        _ => "bin",
-    };
 }

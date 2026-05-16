@@ -1,8 +1,10 @@
 using FluentAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
 using ShramSafal.Application.Ports.External;
+using ShramSafal.Application.Storage;
 using ShramSafal.Domain.AI;
 using ShramSafal.Domain.Common;
+using ShramSafal.Domain.Storage;
 using ShramSafal.Infrastructure.AI;
 using Xunit;
 
@@ -60,6 +62,14 @@ public sealed class AiOrchestratorCachedPathTests
             failureClassifier: new AiFailureClassifier(),
             attemptCostEstimator: new AiAttemptCostEstimator(),
             promptBuilder: new StubPromptBuilder(BuilderPromptContentHash),
+            // DATA_PRINCIPLE_SPINE 02-patch — the cached path returns before
+            // either of these is invoked (PutAsync / UpsertRawBlobIndexAsync
+            // live AFTER the TryReturnCachedVoiceResult short-circuit in
+            // AiOrchestrator.ParseVoiceWithFallbackAsync). Inert doubles
+            // assert that fact by throwing if the cached path ever slips
+            // past the early return.
+            blobStore: new InertRawBlobStore(),
+            shramSafalRepository: new RecordingShramSafalRepository(),
             logger: NullLogger<AiOrchestrator>.Instance);
 
         await using var payload = new MemoryStream(new byte[] { 0x01, 0x02 });
@@ -185,6 +195,25 @@ public sealed class AiOrchestratorCachedPathTests
 
         public Task<ReceiptExtractCanonicalResult> ExtractPattiAsync(
             Stream imageStream, string mimeType, string systemPrompt, CancellationToken ct = default)
+            => throw new InvalidOperationException("Not exercised by this test.");
+    }
+
+    /// <summary>
+    /// DATA_PRINCIPLE_SPINE 02-patch: cold-tier double for the cached path.
+    /// The orchestrator must short-circuit on a cached AiJob BEFORE it
+    /// reaches the cold-tier PUT — invoking any method here means the
+    /// cached path slipped past, and the test should fail loudly.
+    /// </summary>
+    private sealed class InertRawBlobStore : IRawBlobStore
+    {
+        public Task<RawBlobRef> PutAsync(Stream payload, string contentType, CancellationToken ct)
+            => throw new InvalidOperationException(
+                "Cached path should not park new bytes in the cold tier — the AiJob is already persisted with its RawInputRef.");
+
+        public Task<Stream> GetAsync(string sha256, CancellationToken ct)
+            => throw new InvalidOperationException("Not exercised by this test.");
+
+        public Task DereferenceAsync(string sha256, CancellationToken ct)
             => throw new InvalidOperationException("Not exercised by this test.");
     }
 }

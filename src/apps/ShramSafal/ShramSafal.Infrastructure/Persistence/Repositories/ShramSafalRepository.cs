@@ -13,6 +13,7 @@ using ShramSafal.Domain.Finance;
 using ShramSafal.Domain.Logs;
 using ShramSafal.Domain.Planning;
 using ShramSafal.Domain.Schedules;
+using ShramSafal.Domain.Storage;
 
 namespace ShramSafal.Infrastructure.Persistence.Repositories;
 
@@ -876,6 +877,37 @@ internal sealed class ShramSafalRepository(ShramSafalDbContext db) : IShramSafal
     {
         db.Transcripts.Add(transcript);
         return Task.CompletedTask;
+    }
+
+    // --- DATA_PRINCIPLE_SPINE 02-patch (cold-storage wiring) --------------
+    /// <summary>
+    /// Upsert by SHA-256 — increment ref-count on a repeat sighting, insert a
+    /// fresh row (RefCount=1) on first sighting. SaveChanges is invoked
+    /// directly so the index row is durable BEFORE the caller stamps the
+    /// SHA-256 onto an <see cref="AiJob.RawInputRef"/>. Both DbContext-bound
+    /// repositories (this one and <c>AiJobRepository</c>) share the same
+    /// scoped <c>ShramSafalDbContext</c>, so this flushes any pending
+    /// orchestrator writes too — which is fine: the orchestrator does the
+    /// upsert call BEFORE it adds the AiJob to the tracker, so nothing else
+    /// is in flight at this point.
+    /// </summary>
+    public async Task UpsertRawBlobIndexAsync(RawBlobRef blobRef, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(blobRef);
+
+        var existing = await db.RawBlobIndices
+            .FirstOrDefaultAsync(x => x.Sha256 == blobRef.Sha256, ct);
+
+        if (existing is not null)
+        {
+            existing.IncrementRefCount();
+        }
+        else
+        {
+            await db.RawBlobIndices.AddAsync(RawBlobIndexEntry.New(blobRef), ct);
+        }
+
+        await db.SaveChangesAsync(ct);
     }
 
     private sealed class OperatorDirectoryRow

@@ -7,6 +7,7 @@ using ShramSafal.Domain.Finance;
 using ShramSafal.Domain.Logs;
 using ShramSafal.Domain.Planning;
 using ShramSafal.Domain.Schedules;
+using ShramSafal.Domain.Storage;
 using ShramSafal.Domain.Work;
 using ShramSafal.Application.Contracts.Dtos;
 using AgriSync.SharedKernel.Contracts.Ids;
@@ -267,4 +268,22 @@ public interface IShramSafalRepository
     /// on <see cref="AddFarmBoundaryAsync"/>.
     /// </summary>
     Task AddTranscriptAsync(Transcript transcript, CancellationToken ct = default);
+
+    // --- DATA_PRINCIPLE_SPINE 02-patch (cold-storage wiring) --------------
+    /// <summary>
+    /// Upserts the ref-count entry in <c>ssf.raw_blob_index</c> for a content-
+    /// addressed raw blob the orchestrator just parked in the cold tier (see
+    /// <see cref="ShramSafal.Application.Storage.IRawBlobStore.PutAsync"/>).
+    /// Insert-and-set-RefCount=1 on first sighting; increment on a repeat
+    /// upload of the same SHA-256. The unique key is
+    /// <see cref="RawBlobRef.Sha256"/>.
+    /// <para>
+    /// Default impl is a no-op so the dozens of in-tree
+    /// <c>IShramSafalRepository</c> test doubles keep compiling. Production
+    /// <c>ShramSafalRepository</c> overrides with EF Core writes; integration
+    /// suites that care about ref-count semantics override as well.
+    /// </para>
+    /// </summary>
+    Task UpsertRawBlobIndexAsync(RawBlobRef blobRef, CancellationToken ct = default)
+        => Task.CompletedTask;
 }

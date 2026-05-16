@@ -4,7 +4,9 @@ using System.Text;
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using ShramSafal.Application.Contracts.Dtos;
+using ShramSafal.Application.Ports;
 using ShramSafal.Application.Ports.External;
+using ShramSafal.Application.Storage;
 using ShramSafal.Domain.AI;
 using ShramSafal.Domain.Common;
 
@@ -17,6 +19,8 @@ internal sealed class AiOrchestrator(
     AiFailureClassifier failureClassifier,
     AiAttemptCostEstimator attemptCostEstimator,
     IAiPromptBuilder promptBuilder,
+    IRawBlobStore blobStore,
+    IShramSafalRepository shramSafalRepository,
     ILogger<AiOrchestrator> logger) : IAiOrchestrator
 {
     private const int MinProviderAttempts = 1;
@@ -61,6 +65,21 @@ internal sealed class AiOrchestrator(
         var config = await aiJobRepository.GetProviderConfigAsync(ct);
         var payload = await ReadPayloadAsync(audioStream, ct);
 
+        // DATA_PRINCIPLE_SPINE 02-patch (cold-storage wiring) — persist raw
+        // voice bytes to the cold tier BEFORE creating the AiJob so the
+        // AiJob's RawInputRef is the real content-addressed SHA-256 (and not
+        // null, which was the BLOCKER #1 surfaced by Codex cross-verification
+        // on 2026-05-15). The ref-count entry in ssf.raw_blob_index is
+        // upserted in the same logical step so a later sweep can see how
+        // many AiJobs (and downstream DailyLogs / CostEntries) reference this
+        // payload. The S3 PutAsync is idempotent on content, so a retry that
+        // re-enters this method for the same audio bytes is a HEAD short-
+        // circuit, not a double-write. The DB upsert is also idempotent:
+        // first sighting inserts RefCount=1, repeat sighting increments.
+        using var blobStream = new MemoryStream(payload);
+        var blobRef = await blobStore.PutAsync(blobStream, mimeType, ct);
+        await shramSafalRepository.UpsertRawBlobIndexAsync(blobRef, ct);
+
         // DATA_PRINCIPLE_SPINE sub-phase 01.4 — stamp the AiJob with real voice
         // provenance instead of the Manual("unknown") default.
         // PromptVersion carries the stable semver label "v1"; the 64-char
@@ -81,7 +100,7 @@ internal sealed class AiOrchestrator(
             userId,
             farmId,
             inputContentHash: requestPayloadHash,
-            rawInputRef: null,
+            rawInputRef: blobRef.Sha256,
             inputSessionMetadataJson: segmentMetadataJson,
             provenance: voiceProvenance);
 
@@ -499,6 +518,15 @@ internal sealed class AiOrchestrator(
         var config = await aiJobRepository.GetProviderConfigAsync(ct);
         var payload = await ReadPayloadAsync(payloadStream, ct);
 
+        // DATA_PRINCIPLE_SPINE 02-patch (cold-storage wiring) — receipt/patti
+        // images are first-class raw evidence too. Founder decision
+        // 2026-05-15: both paths persist their input bytes to the cold tier
+        // (was: voice-only). Same idempotent PUT + ref-counted index pattern
+        // the voice path uses above; see that comment for the rationale.
+        using var blobStream = new MemoryStream(payload);
+        var blobRef = await blobStore.PutAsync(blobStream, mimeType, ct);
+        await shramSafalRepository.UpsertRawBlobIndexAsync(blobRef, ct);
+
         // Codex cross-verification 2026-05-15 MAJOR-2: stamp real provenance
         // on the receipt/patti AiJob at creation. Was: null (falls back to
         // Provenance.Manual("unknown")). Source maps from operation.
@@ -520,7 +548,7 @@ internal sealed class AiOrchestrator(
             userId,
             farmId,
             inputContentHash: null,
-            rawInputRef: null,
+            rawInputRef: blobRef.Sha256,
             inputSessionMetadataJson: null,
             provenance: receiptProvenance);
 
