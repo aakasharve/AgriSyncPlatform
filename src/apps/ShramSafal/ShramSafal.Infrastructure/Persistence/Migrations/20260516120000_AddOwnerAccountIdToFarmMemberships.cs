@@ -66,11 +66,15 @@ namespace ShramSafal.Infrastructure.Persistence.Migrations
                 nullable: true);
 
             // ── B. Backfill from ssf.farms via the existing farm_id join ─
+            //   Note: ssf.farms.Id column is QUOTED (case-sensitive "Id") because
+            //   the InitialShramSafalSchema migration created it via raw SQL
+            //   without EF's snake_case convention. Unquoted `f.id` would be
+            //   folded to lowercase by Postgres and fail with column-not-found.
             migrationBuilder.Sql(@"
 UPDATE ssf.farm_memberships fm
    SET owner_account_id = f.owner_account_id
   FROM ssf.farms f
- WHERE fm.farm_id = f.id
+ WHERE fm.farm_id = f.""Id""
    AND fm.owner_account_id IS NULL;
 ");
 
