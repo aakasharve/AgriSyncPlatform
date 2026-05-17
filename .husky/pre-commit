@@ -40,7 +40,7 @@ if [ -n "$STAGED_TS" ]; then
   cd "$REPO_ROOT/src/clients/mobile-web"
   STAGED_TS_REL=$(echo "$STAGED_TS" | sed 's|^src/clients/mobile-web/||')
   # shellcheck disable=SC2086
-  if ! npx eslint --max-warnings 0 $STAGED_TS_REL 2>/dev/null; then
+  if ! npx eslint --max-warnings 0 --no-warn-ignored $STAGED_TS_REL 2>/dev/null; then
     echo "[pre-commit] ERROR: ESLint errors in staged files. Fix before committing." >&2
     exit 1
   fi
