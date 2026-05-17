@@ -1,0 +1,59 @@
+{
+  "_comment": [
+    "AgriSync Voice Retained Storage - Backend Role IAM Policy Template",
+    "spec_id: voice-diary-e2e-2026-05-17",
+    "Owner: Kiro (AWS apply) + Akash (backend config)",
+    "",
+    "USAGE:",
+    "  Replace ${env} with: dev | staging | prod",
+    "  Replace <ACCOUNT_ID> with your 12-digit AWS account ID.",
+    "  Attach to the backend execution role only (e.g. role/agrisync-backend-${env}).",
+    "  The Bootstrapper resolves env credentials at startup; no per-developer creds.",
+    "",
+    "  Create or update:",
+    "    aws iam create-policy \\",
+    "      --policy-name agrisync-voice-retained-${env} \\",
+    "      --policy-document file://iam-policy.json",
+    "    aws iam attach-role-policy \\",
+    "      --role-name agrisync-backend-${env} \\",
+    "      --policy-arn arn:aws:iam::<ACCOUNT_ID>:policy/agrisync-voice-retained-${env}",
+    "",
+    "SCOPE: Two resources only:",
+    "  - Bucket ARN (for ListBucket / GetBucketLocation): no trailing /*",
+    "  - Object ARN (for object ops): trailing /*",
+    "",
+    "ACTIONS (closed list — verifier ensures no s3:* widening):",
+    "  Object: PutObject, GetObject, DeleteObject",
+    "  Bucket: ListBucket, GetBucketLocation",
+    "",
+    "DELIBERATELY EXCLUDED in v1:",
+    "  PutObjectAcl    -> ACLs disabled by bucket-owner-enforced (object ACLs blocked).",
+    "  PutBucketPolicy -> Bucket policy authored once via Kiro, not by runtime role.",
+    "  RestoreObject   -> No Glacier in v1 (lifecycle-policy.json is NoOp).",
+    "",
+    "AAD (after-the-fact defence): bucket-policy.json denies any PutObject without",
+    "  SSE-S3 header, even if a future role drift accidentally widens permissions."
+  ],
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "VoiceRetainedObjectOps",
+      "Effect": "Allow",
+      "Action": [
+        "s3:PutObject",
+        "s3:GetObject",
+        "s3:DeleteObject"
+      ],
+      "Resource": "arn:aws:s3:::agrisync-voice-retained-${env}/*"
+    },
+    {
+      "Sid": "VoiceRetainedBucketOps",
+      "Effect": "Allow",
+      "Action": [
+        "s3:ListBucket",
+        "s3:GetBucketLocation"
+      ],
+      "Resource": "arn:aws:s3:::agrisync-voice-retained-${env}"
+    }
+  ]
+}

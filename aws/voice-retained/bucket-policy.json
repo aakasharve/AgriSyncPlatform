@@ -1,0 +1,66 @@
+{
+  "_comment": [
+    "AgriSync Voice Retained Storage - S3 Bucket Policy Template",
+    "spec_id: voice-diary-e2e-2026-05-17",
+    "Owner: Kiro (AWS apply) + Akash (backend config)",
+    "",
+    "USAGE: Replace ${env} with one of: dev | staging | prod",
+    "Apply with: aws s3api put-bucket-policy --bucket agrisync-voice-retained-${env} --policy file://bucket-policy.json --region ap-south-1",
+    "",
+    "GUARANTEES (non-negotiable; verifier checks these in Wave 3):",
+    "  1. Deny any PutObject lacking SSE-S3 server-side encryption (AES256).",
+    "  2. Deny any request that does NOT use TLS (aws:SecureTransport=false).",
+    "  3. Bucket-level Public Access Block + bucket-owner-enforced are applied",
+    "     SEPARATELY via create-bucket.sh (they are bucket settings, not policy).",
+    "",
+    "WHY DENY-ONLY: Allow-permissions for the backend role live in iam-policy.json,",
+    "  attached to the role itself. The bucket policy enforces hard rails that bind",
+    "  even if the role is over-broad. Defence in depth.",
+    "",
+    "NOT IN v1: Cross-account access, VPC endpoint policy, KMS-key restriction.",
+    "  Phase 07 may layer KMS CMK enforcement on top of SSE-S3."
+  ],
+  "Version": "2012-10-17",
+  "Id": "AgriSyncVoiceRetainedBucketPolicy",
+  "Statement": [
+    {
+      "Sid": "DenyInsecureTransport",
+      "Effect": "Deny",
+      "Principal": "*",
+      "Action": "s3:*",
+      "Resource": [
+        "arn:aws:s3:::agrisync-voice-retained-${env}",
+        "arn:aws:s3:::agrisync-voice-retained-${env}/*"
+      ],
+      "Condition": {
+        "Bool": {
+          "aws:SecureTransport": "false"
+        }
+      }
+    },
+    {
+      "Sid": "DenyUnencryptedObjectUploads",
+      "Effect": "Deny",
+      "Principal": "*",
+      "Action": "s3:PutObject",
+      "Resource": "arn:aws:s3:::agrisync-voice-retained-${env}/*",
+      "Condition": {
+        "StringNotEquals": {
+          "s3:x-amz-server-side-encryption": "AES256"
+        }
+      }
+    },
+    {
+      "Sid": "DenyMissingEncryptionHeader",
+      "Effect": "Deny",
+      "Principal": "*",
+      "Action": "s3:PutObject",
+      "Resource": "arn:aws:s3:::agrisync-voice-retained-${env}/*",
+      "Condition": {
+        "Null": {
+          "s3:x-amz-server-side-encryption": "true"
+        }
+      }
+    }
+  ]
+}

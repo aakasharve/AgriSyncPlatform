@@ -1,0 +1,47 @@
+{
+  "_comment": [
+    "AgriSync Voice Retained Storage - S3 Lifecycle Configuration",
+    "spec_id: voice-diary-e2e-2026-05-17",
+    "Owner: Kiro (AWS apply) + Akash (backend config)",
+    "",
+    "v1 STATUS: NoOp.",
+    "  Voice clips stay in S3 STANDARD storage class indefinitely so long as the",
+    "  user retains FullHistoryJournal consent. Erasure is consent-driven and is",
+    "  executed by the backend ErasureWorker, NOT by S3 lifecycle.",
+    "",
+    "  The single rule below cleans up *failed multipart uploads* after 7 days.",
+    "  This is the only non-destructive housekeeping rule worth shipping in v1 -",
+    "  every other transition / expiration belongs to Phase 07 hardening.",
+    "",
+    "PHASE 07 (deferred per founder scope decision 2026-05-17):",
+    "  - Glacier Instant Retrieval transition for clips older than N days",
+    "  - Glacier Deep Archive transition for clips older than M months",
+    "  - Object Lock for compliance retention (DPDP rights audit trail)",
+    "  - Versioning + MFA-Delete (if multi-actor erasure becomes a requirement)",
+    "  See: _COFOUNDER/Projects/AgriSync/Specs/_active/DATA_PRINCIPLE_SPINE_2026-05-05/",
+    "       07_[27]_AUDIO_DIARY_RETAINED_STORAGE.md",
+    "",
+    "APPLY (via create-bucket.sh, or manually):",
+    "  aws s3api put-bucket-lifecycle-configuration \\",
+    "    --bucket agrisync-voice-retained-${env} \\",
+    "    --lifecycle-configuration file://lifecycle-policy.json \\",
+    "    --region ap-south-1",
+    "",
+    "VERIFY:",
+    "  aws s3api get-bucket-lifecycle-configuration \\",
+    "    --bucket agrisync-voice-retained-${env} \\",
+    "    --region ap-south-1"
+  ],
+  "Rules": [
+    {
+      "ID": "AbortIncompleteMultipartUploadsAfter7Days",
+      "Status": "Enabled",
+      "Filter": {
+        "Prefix": ""
+      },
+      "AbortIncompleteMultipartUpload": {
+        "DaysAfterInitiation": 7
+      }
+    }
+  ]
+}
