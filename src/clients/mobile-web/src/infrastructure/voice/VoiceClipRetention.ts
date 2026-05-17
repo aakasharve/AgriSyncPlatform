@@ -7,10 +7,23 @@
 //
 // Retention rule is unchanged: clips expire 30 days after recording,
 // `purgeExpiredProcessingVoiceClips` deletes them on the next sweep.
+//
+// spec: voice-diary-e2e-2026-05-17 (D.14)
+//
+// ADDITIVE EXTENSION — `archiveToRetainedTierIfConsented(clipId)` reads
+// the user's FullHistoryJournal consent state and, when granted, calls
+// `voiceDiaryApiClient.persistRetainedVoiceClip` with the sealed
+// ciphertext + envelope metadata. `purgeExpiredProcessingVoiceClips`
+// is UNCHANGED — the local 30-day sweep still runs because the S3 copy
+// holds the retained tier independently. Per supervisor risk #1, the
+// local Dexie `voiceClips.id` is reused verbatim as the server PK so
+// the unified VoiceDiary view de-dups cleanly.
 
 import { getDatabase, type VoiceClipCacheRecord, type VoiceClipStatus } from '../storage/DexieDatabase';
 import { sealVoiceClip, openVoiceClip } from '../security/voiceEnvelope';
 import { getCurrentTenantDek, resolveDek } from '../security/tenantDekClient';
+import { agriSyncClient } from '../api/AgriSyncClient';
+import { persistRetainedVoiceClip } from '../voiceDiary/voiceDiaryApiClient';
 
 export const PROCESSING_VOICE_CLIP_RETENTION_DAYS = 30;
 
@@ -107,4 +120,119 @@ export async function readVoiceClipPlaintext(clipId: string): Promise<Uint8Array
         { ciphertext: row.ciphertext, iv: row.iv, wrappedDekId: row.wrappedDekId },
         dek,
     );
+}
+
+// =============================================================================
+// VOICE DIARY E2E — retained-tier archive (D.14)
+// =============================================================================
+
+/** WebCrypto AES-GCM auth-tag width — always 16 bytes (NIST SP 800-38D §5.2.1.2). */
+const AES_GCM_TAG_BYTES = 16;
+
+function uint8ToBase64(bytes: Uint8Array): string {
+    let binary = '';
+    const chunkSize = 0x8000;
+    for (let i = 0; i < bytes.byteLength; i += chunkSize) {
+        const chunk = bytes.subarray(i, Math.min(i + chunkSize, bytes.byteLength));
+        binary += String.fromCharCode.apply(null, Array.from(chunk));
+    }
+    return btoa(binary);
+}
+
+/**
+ * Archive a locally-sealed voice clip to the retained S3 tier IF the
+ * user has granted `FullHistoryJournal` consent. No-op otherwise.
+ *
+ * Flow:
+ *   1. Check `agriSyncClient.getConsent().fullHistoryJournal` — bail if false.
+ *   2. Read the sealed row from Dexie. Bail if missing or pre-v18 plaintext.
+ *   3. Split the WebCrypto combined ciphertext into (ct_body, auth_tag).
+ *   4. POST to `/shramsafal/voice-diary/persist` with the local clip id
+ *      reused as the server PK (supervisor risk #1 — de-dup contract).
+ *
+ * Errors are SWALLOWED (logged) — this is a best-effort opportunistic
+ * archive triggered from AiJobWorker. A failed archive does NOT block
+ * the local 30-day journal; the clip is still readable locally via
+ * `readVoiceClipPlaintext`. A future sweep can re-attempt.
+ *
+ * spec: voice-diary-e2e-2026-05-17 (D.14)
+ */
+export async function archiveToRetainedTierIfConsented(clipId: string): Promise<boolean> {
+    let consentGranted: boolean;
+    try {
+        const dto = await agriSyncClient.getConsent();
+        consentGranted = dto.fullHistoryJournal === true;
+    } catch {
+        // No prior consent record / network failure — treat as not granted.
+        return false;
+    }
+    if (!consentGranted) {
+        return false;
+    }
+
+    const db = getDatabase();
+    const row = await db.voiceClips.get(clipId);
+    if (!row) {
+        return false;
+    }
+    if (!row.ciphertext || !row.iv || !row.wrappedDekId) {
+        // Pre-v18 plaintext shape — can't archive without re-sealing first.
+        // Re-seal cascade is the Phase 07 §6.5.2 hand-off. For this ship we
+        // simply skip — those rows expire locally on the 30-day boundary.
+        return false;
+    }
+    if (row.s3RetainedKey) {
+        // Already archived — no-op (idempotent contract; the backend would
+        // accept a repeat PUT as well, but skipping saves a round-trip).
+        return false;
+    }
+
+    // Split WebCrypto AES-GCM combined output: ct_body + 16-byte auth_tag
+    // (the backend stores them in separate columns per its envelope schema).
+    if (row.ciphertext.byteLength <= AES_GCM_TAG_BYTES) {
+        return false;
+    }
+    const cipherBody = row.ciphertext.subarray(0, row.ciphertext.byteLength - AES_GCM_TAG_BYTES);
+    const authTag = row.ciphertext.subarray(row.ciphertext.byteLength - AES_GCM_TAG_BYTES);
+
+    const durationSeconds = Math.max(
+        1,
+        Math.round((row.durationMs ?? 1000) / 1000),
+    );
+
+    try {
+        const result = await persistRetainedVoiceClip({
+            clipId: row.id,
+            recordedAtUtc: row.recordedAtUtc,
+            cipherBase64: uint8ToBase64(cipherBody),
+            dekId: row.wrappedDekId,
+            ivBase64: uint8ToBase64(row.iv),
+            authTagBase64: uint8ToBase64(authTag),
+            durationSeconds,
+            // Language is not persisted on the local Dexie row today; the
+            // backend Language column is informational. Default to a
+            // sensible neutral until per-clip language detection lands.
+            language: 'mr-IN',
+        });
+
+        // Stamp the local row with the server's clip pointer so a future
+        // local sweep doesn't lose the cross-reference (Dexie v18 row
+        // shape already carries `id`; v21 adds `s3RetainedKey` for the
+        // pointer back to the retained tier).
+        await db.voiceClips.update(clipId, {
+            s3RetainedKey: result.clipId,
+            updatedAt: new Date().toISOString(),
+        });
+        return true;
+    } catch (error) {
+        // Log + swallow per the best-effort contract. Higher-level
+        // observability (sentry, analytics outbox) is owned by the
+        // caller (AiJobWorker hook).
+         
+        console.warn('[voice-diary] archive failed', {
+            clipId,
+            error: error instanceof Error ? error.message : String(error),
+        });
+        return false;
+    }
 }

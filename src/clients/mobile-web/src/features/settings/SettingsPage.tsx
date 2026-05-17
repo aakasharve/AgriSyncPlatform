@@ -193,7 +193,7 @@ const SettingsPage: React.FC<SettingsPageProps> = ({
                         </div>
                     </div>
                     <button
-                        onClick={() => setCurrentRoute('voice-journal')}
+                        onClick={() => setCurrentRoute('voiceDiary')}
                         className="shrink-0 rounded-xl bg-emerald-100 px-3 py-2 text-xs font-black text-emerald-800 transition-colors hover:bg-emerald-200 active:scale-95"
                     >
                         <BookOpen size={16} className="inline-block mr-1.5 align-[-3px]" />

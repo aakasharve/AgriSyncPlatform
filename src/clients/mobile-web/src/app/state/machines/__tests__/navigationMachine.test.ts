@@ -84,7 +84,7 @@ describe('navigationMachine — route transitions', () => {
         // Spec DoD #2: the machine models the full route grammar — every entry
         // from lazyComponents.ts is a state node. We assert each one transitions.
         const allRoutes = [
-            'main', 'profile', 'settings', 'voice-journal', 'ai-admin', 'ops-admin',
+            'main', 'profile', 'settings', 'voiceDiary', 'ai-admin', 'ops-admin',
             'schedule', 'procurement', 'income', 'test-e2e', 'finance-manager',
             'finance-ledger', 'finance-price-book', 'finance-review-inbox',
             'finance-reports', 'finance-settings', 'qr-demo', 'referrals',

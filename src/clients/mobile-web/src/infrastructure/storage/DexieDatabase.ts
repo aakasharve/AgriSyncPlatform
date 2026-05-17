@@ -39,6 +39,7 @@ import { applyV17 } from './dexie/versions/v17';
 import { applyV18 } from './dexie/versions/v18';
 import { applyV19 } from './dexie/versions/v19';
 import { applyV20 } from './dexie/versions/v20';
+import { applyV21 } from './dexie/versions/v21';
 
 // =============================================================================
 // OUTBOX (Pending sync events)
@@ -272,6 +273,16 @@ export interface VoiceClipCacheRecord {
      * spec: data-principle-spine-2026-05-05/06.5
      */
     consentTokenKid?: string;
+    /**
+     * Pointer to the retained-tier S3 clip when this clip has been
+     * archived by `archiveToRetainedTierIfConsented`. When set, the
+     * local 30-day sweep still deletes the row (S3 holds the canonical
+     * copy independently), but downstream observability can tell which
+     * local clips already landed in the cloud tier.
+     *
+     * spec: voice-diary-e2e-2026-05-17 (D.17)
+     */
+    s3RetainedKey?: string;
     status: VoiceClipStatus;
     retentionPolicy: VoiceClipRetentionPolicy;
     expiresAtUtc: string;
@@ -648,7 +659,7 @@ export interface AnalyticsOutboxRow {
 // =============================================================================
 
 /** Current Dexie schema version — bump this when adding version(N).stores(). */
-export const DATABASE_VERSION = 20; // DATA_PRINCIPLE_SPINE sub-phase 10.6 — additive bump for `pii_redaction` CorrectionType (OQ-9).
+export const DATABASE_VERSION = 21; // voice-diary-e2e-2026-05-17 (D.17) — additive bump for `s3RetainedKey` index on voiceClips.
 /** CEI Phase 1 schema version (now active — applied by Task 5.1.1). */
 export const CEI_PHASE1_SCHEMA_VERSION = 7;
 /** CEI Phase 2 schema version — adds test stack (protocols/instances/recs). */
@@ -677,6 +688,8 @@ export const DATA_PRINCIPLE_SPINE_VOICE_ENVELOPE_SCHEMA_VERSION = 18;
 export const DATA_PRINCIPLE_SPINE_CONSENT_TOKEN_KID_SCHEMA_VERSION = 19;
 /** DATA_PRINCIPLE_SPINE sub-phase 10.6 (OQ-9) — `pii_redaction` correction-event type registered (TS union extension; pure-additive schema bump). */
 export const DATA_PRINCIPLE_SPINE_PII_REDACTION_EVENT_SCHEMA_VERSION = 20;
+/** voice-diary-e2e-2026-05-17 (D.17) — voiceClips row gains `s3RetainedKey` index for cross-reference into the retained S3 tier. */
+export const VOICE_DIARY_RETAINED_KEY_SCHEMA_VERSION = 21;
 
 // =============================================================================
 // DATABASE CLASS
@@ -758,6 +771,7 @@ export class AgriLogDatabase extends Dexie {
         applyV18(this);
         applyV19(this);
         applyV20(this);
+        applyV21(this);
     }
 }
 

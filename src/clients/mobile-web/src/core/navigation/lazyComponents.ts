@@ -7,7 +7,8 @@ import { IS_E2E_HARNESS_ENABLED } from '../../app/featureFlags';
 
 export const ProfilePage = React.lazy(() => import('../../pages/ProfilePage'));
 export const SettingsPage = React.lazy(() => import('../../pages/SettingsPage'));
-export const VoiceJournalPage = React.lazy(() => import('../../features/voiceJournal/pages/VoiceJournalPage'));
+// spec: voice-diary-e2e-2026-05-17 (D.18) — V1 VoiceJournalPage REPLACED by VoiceDiaryPage.
+export const VoiceDiaryPage = React.lazy(() => import('../../features/voiceDiary/pages/VoiceDiaryPage'));
 export const SchedulerPage = React.lazy(() => import('../../pages/SchedulerPage'));
 export const ProcurementPage = React.lazy(() => import('../../pages/ProcurementPage'));
 export const HarvestIncomePage = React.lazy(() => import('../../pages/HarvestIncomePage'));

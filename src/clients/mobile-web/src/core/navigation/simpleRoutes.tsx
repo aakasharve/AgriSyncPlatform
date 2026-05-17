@@ -9,7 +9,7 @@ import { AppRouterContext } from './routeContext';
 import {
     ProfilePage,
     SettingsPage,
-    VoiceJournalPage,
+    VoiceDiaryPage,
     AdminAiOpsPage,
     AdminOpsPage,
     ReferralsPage,
@@ -73,11 +73,15 @@ export const renderSettingsRoute = (ctx: AppRouterContext): React.ReactNode => {
     );
 };
 
-export const renderVoiceJournalRoute = (ctx: AppRouterContext): React.ReactNode => {
-    if (ctx.currentRoute !== 'voice-journal') return null;
+// spec: voice-diary-e2e-2026-05-17 (D.18) — V1 voice-journal RENAMED to voiceDiary (camelCase).
+export const renderVoiceDiaryRoute = (ctx: AppRouterContext): React.ReactNode => {
+    if (ctx.currentRoute !== 'voiceDiary') return null;
     return (
         <div className="animate-in fade-in slide-in-from-right-4 duration-300">
-            <VoiceJournalPage onBack={() => ctx.setCurrentRoute('settings')} />
+            <VoiceDiaryPage
+                onBack={() => ctx.setCurrentRoute('settings')}
+                onOpenSettings={() => ctx.setCurrentRoute('settings')}
+            />
         </div>
     );
 };
@@ -404,7 +408,7 @@ export const renderWorkerProfileRoute = (ctx: AppRouterContext): React.ReactNode
 export const SIMPLE_ROUTE_RENDERERS: Array<(ctx: AppRouterContext) => React.ReactNode> = [
     renderProfileRoute,
     renderSettingsRoute,
-    renderVoiceJournalRoute,
+    renderVoiceDiaryRoute,
     renderAiAdminRoute,
     renderOpsAdminRoute,
     renderReferralsRoute,

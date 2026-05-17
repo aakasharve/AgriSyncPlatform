@@ -12,6 +12,12 @@ import { idGenerator } from '../core/domain/services/IdGenerator';
 import { getMyFarms, type MyFarmDto } from '../features/onboarding/qr/inviteApi';
 import SubscriptionCard from '../features/admin/billing/SubscriptionCard';
 import { useUiPref } from '../shared/hooks/useUiPref';
+// spec: voice-diary-e2e-2026-05-17 (D.19) — Settings entry for the
+// FullHistoryJournal consent toggle. Lives next to the existing
+// Voice Journal "Open" CTA so the toggle is discoverable in the same
+// surface that opens the Voice Diary page.
+import VoiceRetainedConsentToggle from '../features/consent/VoiceRetainedConsentToggle';
+import { toVoiceDiaryLocale } from '../i18n/voiceDiaryTranslations';
 
 interface SettingsPageProps {
     defaults: LedgerDefaults;
@@ -268,13 +274,24 @@ const SettingsPage: React.FC<SettingsPageProps> = ({
                         </div>
                     </div>
                     <button
-                        onClick={() => setCurrentRoute('voice-journal')}
+                        onClick={() => setCurrentRoute('voiceDiary')}
                         className="shrink-0 rounded-xl bg-emerald-100 px-3 py-2 text-xs font-black text-emerald-800 transition-colors hover:bg-emerald-200 active:scale-95"
                     >
                         <BookOpen size={16} className="inline-block mr-1.5 align-[-3px]" />
                         Open
                     </button>
                 </div>
+            </div>
+
+            {/* spec: voice-diary-e2e-2026-05-17 (D.19) — FullHistoryJournal
+                consent toggle. Mounted directly below the Voice Journal CTA
+                so the user can grant retention right where they discover
+                the diary surface. */}
+            <div className="mb-6">
+                <VoiceRetainedConsentToggle
+                    locale={toVoiceDiaryLocale(language)}
+                    onOpenVoiceDiary={() => setCurrentRoute('voiceDiary')}
+                />
             </div>
 
 <div className="pt-4">

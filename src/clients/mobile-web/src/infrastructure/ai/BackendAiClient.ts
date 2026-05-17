@@ -11,6 +11,20 @@ import { computeProcessingVoiceClipExpiry, purgeExpiredProcessingVoiceClips } fr
 import { resolveApiBaseUrl } from '../api/transport';
 import { parseStreamConsumer } from './ParseStreamConsumer';
 import type { ParseStreamEvent } from '../../domain/ai/contracts/ParseStreamEvent';
+// spec: voice-diary-e2e-2026-05-17 (D.15) — internal pass-throughs to the
+// dedicated voice-diary API client. Other call sites should import the
+// `voiceDiaryApiClient` module directly; these methods exist so the
+// AI-job-worker hook (D.16) can flow the archive call through the
+// VoiceClipRetention extension without spreading a second API surface.
+import {
+    persistRetainedVoiceClip as persistRetainedVoiceClipApi,
+    getVoiceDiaryByRange as getVoiceDiaryByRangeApi,
+    getVoiceDiaryById as getVoiceDiaryByIdApi,
+    type PersistVoiceClipRetainedRequest,
+    type PersistVoiceClipRetainedResponse,
+    type VoiceDiaryListItem,
+    type VoiceDiaryByIdResult,
+} from '../voiceDiary/voiceDiaryApiClient';
 
 type VoiceUploadMaterial = {
     audioBlob: Blob;
@@ -609,6 +623,33 @@ export class BackendAiClient implements VoiceParserPort {
         });
 
         await purgeExpiredProcessingVoiceClips();
+    }
+
+    // -------------------------------------------------------------------
+    // VOICE DIARY E2E — retained-tier surface (D.15)
+    //
+    // Thin pass-throughs to `voiceDiaryApiClient.ts`. The dedicated
+    // client module is the public surface for VoiceDiaryPage + the
+    // archive worker in `VoiceClipRetention.ts`; these methods exist
+    // so AI-pipeline callers (sync, observability, future re-seal
+    // cascades) can re-use the same client without reaching across
+    // module boundaries. They DO NOT introduce new business rules;
+    // the consent gate lives 100% on the backend in
+    // PersistVoiceClipRetainedHandler.
+    // -------------------------------------------------------------------
+
+    async persistRetainedVoiceClip(
+        request: PersistVoiceClipRetainedRequest,
+    ): Promise<PersistVoiceClipRetainedResponse> {
+        return persistRetainedVoiceClipApi(request);
+    }
+
+    async getVoiceDiaryByRange(fromDate: string, toDate: string): Promise<VoiceDiaryListItem[]> {
+        return getVoiceDiaryByRangeApi(fromDate, toDate);
+    }
+
+    async getVoiceDiaryById(clipId: string): Promise<VoiceDiaryByIdResult | null> {
+        return getVoiceDiaryByIdApi(clipId);
     }
 
     private buildContext(

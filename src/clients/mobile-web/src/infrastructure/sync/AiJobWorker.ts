@@ -4,6 +4,10 @@ import { agriSyncClient } from '../api/AgriSyncClient';
 import { getDatabase, type PendingAiJobRecord } from '../storage/DexieDatabase';
 import { isVoiceDoomLoopDetectorEnabled } from '../../app/featureFlags';
 import { recordAiFailureSignature } from './AiDoomLoopDetector';
+// spec: voice-diary-e2e-2026-05-17 (D.16) — opportunistic retained-tier
+// archive immediately after a successful AI parse. The function is a
+// no-op when the user has not granted FullHistoryJournal.
+import { archiveToRetainedTierIfConsented } from '../voice/VoiceClipRetention';
 
 const MAX_RETRIES = 5;
 const BATCH_LIMIT = 10;
@@ -87,6 +91,18 @@ export class AiJobWorker {
                 nextRetryAfterMs: undefined,
             });
             await this.updateVoiceClipStatus(job, 'parsed');
+
+            // spec: voice-diary-e2e-2026-05-17 (D.16) — opportunistic
+            // retained-tier archive. The function reads FullHistoryJournal
+            // consent and exits early when not granted, so this hook is
+            // safe to call unconditionally on every successful voice
+            // parse. Errors are swallowed inside the function (logged
+            // only) — a failed archive must not affect the AI job
+            // completion path.
+            const clipId = job.context.idempotencyKey;
+            if (clipId && job.operationType === 'voice_parse' && job.context.operation !== 'text') {
+                await archiveToRetainedTierIfConsented(clipId);
+            }
         } catch (error) {
             const nextRetryCount = job.retryCount + 1;
             const doomLoopDecision = recordAiFailureSignature(job, error);
