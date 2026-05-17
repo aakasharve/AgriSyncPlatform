@@ -15,6 +15,7 @@
 
 using System.Security.Claims;
 using AgriSync.BuildingBlocks.Results;
+using Microsoft.AspNetCore.Mvc;
 using ShramSafal.Application.UseCases.VoiceDiary.GetVoiceDiaryByRange;
 using ShramSafal.Application.UseCases.VoiceDiary.PersistVoiceClipRetained;
 using ShramSafal.Application.Privacy.Ports;
@@ -47,8 +48,8 @@ public static class VoiceDiaryEndpoints
 
     private static async Task<IResult> HandlePersistAsync(
         ClaimsPrincipal user,
-        PersistVoiceDiaryRequest request,
-        PersistVoiceClipRetainedHandler handler,
+        [FromBody] PersistVoiceDiaryRequest request,
+        [FromServices] PersistVoiceClipRetainedHandler handler,
         CancellationToken ct)
     {
         if (!EndpointActorContext.TryGetUserId(user, out var userId))
@@ -90,9 +91,9 @@ public static class VoiceDiaryEndpoints
 
     private static async Task<IResult> HandleByRangeAsync(
         ClaimsPrincipal user,
-        DateOnly from,
-        DateOnly to,
-        GetVoiceDiaryByRangeHandler handler,
+        [FromQuery] DateOnly from,
+        [FromQuery] DateOnly to,
+        [FromServices] GetVoiceDiaryByRangeHandler handler,
         CancellationToken ct)
     {
         if (!EndpointActorContext.TryGetUserId(user, out var userId))
@@ -123,9 +124,9 @@ public static class VoiceDiaryEndpoints
     }
 
     private static async Task<IResult> HandleByIdAsync(
-        Guid clipId,
+        [FromRoute] Guid clipId,
         ClaimsPrincipal user,
-        IRetainedBlobStore retainedBlobStore,
+        [FromServices] IRetainedBlobStore retainedBlobStore,
         CancellationToken ct)
     {
         if (!EndpointActorContext.TryGetUserId(user, out var userId))
