@@ -273,15 +273,7 @@ export interface VoiceClipCacheRecord {
      * spec: data-principle-spine-2026-05-05/06.5
      */
     consentTokenKid?: string;
-    /**
-     * Pointer to the retained-tier S3 clip when this clip has been
-     * archived by `archiveToRetainedTierIfConsented`. When set, the
-     * local 30-day sweep still deletes the row (S3 holds the canonical
-     * copy independently), but downstream observability can tell which
-     * local clips already landed in the cloud tier.
-     *
-     * spec: voice-diary-e2e-2026-05-17 (D.17)
-     */
+    /** Cross-ref into retained S3 tier after archiveToRetainedTierIfConsented. Local 30d sweep still deletes the row; S3 holds the canonical copy. spec: voice-diary-e2e-2026-05-17 (D.17) */
     s3RetainedKey?: string;
     status: VoiceClipStatus;
     retentionPolicy: VoiceClipRetentionPolicy;
