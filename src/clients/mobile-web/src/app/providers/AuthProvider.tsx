@@ -7,6 +7,11 @@ import {
     setAuthSession,
     type AuthSession
 } from '../../infrastructure/storage/AuthTokenStore';
+// spec: data-principle-spine-2026-05-05/05.3
+// On logout we drop the in-memory tenant DEK so the next user on the
+// device cannot decrypt the previous user's voice clips without
+// re-authenticating to the backend (and getting a fresh KMS-bound DEK).
+import { clearCachedDek } from '../../infrastructure/security/tenantDekClient';
 
 interface AuthContextValue {
     session: AuthSession | null;
@@ -152,6 +157,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     const logout = useCallback(() => {
         clearAuthSession();
+        // spec: data-principle-spine-2026-05-05/05.3
+        // Drop the in-memory tenant DEK; any subsequent voice-clip seal
+        // will re-fetch from the backend under the next authenticated
+        // session.
+        clearCachedDek();
         setSession(null);
         setAuthError(null);
     }, []);

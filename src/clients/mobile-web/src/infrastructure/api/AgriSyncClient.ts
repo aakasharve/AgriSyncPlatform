@@ -47,10 +47,12 @@ import type {
     GetExtractionSessionResponse,
     LoginRequest,
     MigrateScheduleRequest,
+    ResolveDekResponse,
     ScheduleSubscriptionDto,
     SyncPullResponse,
     SyncPushRequest,
     SyncPushResponse,
+    TenantDekResponse,
     UpdateAiProviderConfigRequest,
 } from './dtos';
 import * as Auth from './resources/AuthResource';
@@ -59,6 +61,7 @@ import * as Attachments from './resources/AttachmentsResource';
 import * as Ai from './resources/AiResource';
 import * as Admin from './resources/AdminResource';
 import * as Schedule from './resources/ScheduleResource';
+import * as Security from './resources/SecurityResource';
 import * as Export from './resources/ExportResource';
 
 // ---------------------------------------------------------------------------
@@ -111,6 +114,8 @@ export type {
     OpsFarmErrorDto,
     PlannedTask,
     PlotDto,
+    ResolveDekRequest,
+    ResolveDekResponse,
     ScheduleSubscriptionDto,
     SyncOperatorDto,
     SyncPullResponse,
@@ -118,6 +123,7 @@ export type {
     SyncPushRequest,
     SyncPushResponse,
     SyncPushResult,
+    TenantDekResponse,
     UpdateAiProviderConfigRequest,
     VerificationEventDto,
     VerificationStatus,
@@ -347,6 +353,24 @@ export class AgriSyncClient implements HttpTransport {
     // rationale (kills the browser-direct Gemini path).
     coveReverify(request: CoVeReverifyRequest): Promise<CoVeReverifyResponse> {
         return Ai.coveReverify(this, request);
+    }
+
+    // --- Security ---------------------------------------------------------
+    //
+    // spec: data-principle-spine-2026-05-05/05.3
+    //
+    // NOTE: Endpoint paths assume Phase 05 sub-phase 05.2 ships
+    // `GET /shramsafal/security/tenant-dek` and
+    // `POST /shramsafal/security/tenant-dek/resolve`. 05.2 is being
+    // implemented in parallel; if its paths or response shapes differ,
+    // fix `SecurityResource.ts` + `dtos.ts` in a follow-up.
+
+    getTenantDek(): Promise<TenantDekResponse> {
+        return Security.getTenantDek(this);
+    }
+
+    resolveDek(dekId: string): Promise<ResolveDekResponse | null> {
+        return Security.resolveDek(this, dekId);
     }
 
     // --- Admin ------------------------------------------------------------

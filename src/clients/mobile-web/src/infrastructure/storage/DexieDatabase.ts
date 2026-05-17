@@ -36,6 +36,7 @@ import { applyV14 } from './dexie/versions/v14';
 import { applyV15 } from './dexie/versions/v15';
 import { applyV16 } from './dexie/versions/v16';
 import { applyV17 } from './dexie/versions/v17';
+import { applyV18 } from './dexie/versions/v18';
 
 // =============================================================================
 // OUTBOX (Pending sync events)
@@ -219,7 +220,46 @@ export interface VoiceClipCacheRecord {
     durationMs?: number;
     mimeType: string;
     sizeBytes: number;
-    localBlob: Blob;
+    /**
+     * Pre-v18 plaintext blob. Optional during the upgrade window — rows
+     * written before v18 carry this; rows written after v18 carry the
+     * sealed triple (`ciphertext` + `iv` + `wrappedDekId`) instead.
+     * Backward-compat lives here only so the v18 upgrade callback can
+     * detect legacy rows and flag them for re-seal.
+     *
+     * spec: data-principle-spine-2026-05-05/05.3
+     */
+    localBlob?: Blob;
+    /**
+     * AES-GCM ciphertext (includes the 16-byte auth tag). Written by
+     * `sealVoiceClip` in `infrastructure/security/voiceEnvelope.ts`.
+     *
+     * spec: data-principle-spine-2026-05-05/05.3
+     */
+    ciphertext?: Uint8Array;
+    /**
+     * 96-bit random IV used for the AES-GCM seal. Reuse with the same
+     * DEK is catastrophic; `sealVoiceClip` generates a fresh IV per call.
+     *
+     * spec: data-principle-spine-2026-05-05/05.3
+     */
+    iv?: Uint8Array;
+    /**
+     * Opaque DEK identifier issued by the backend. Used on read to
+     * resolve back to plaintext key bytes via the resolve endpoint
+     * (see `tenantDekClient.resolveDek`).
+     *
+     * spec: data-principle-spine-2026-05-05/05.3
+     */
+    wrappedDekId?: string;
+    /**
+     * Migration marker — v18 upgrade tags legacy plaintext rows with
+     * this flag so the read/write path knows to re-seal them on next
+     * access. See `infrastructure/storage/dexie/versions/v18.ts`.
+     *
+     * spec: data-principle-spine-2026-05-05/05.3
+     */
+    needsResealOnNextAccess?: boolean;
     status: VoiceClipStatus;
     retentionPolicy: VoiceClipRetentionPolicy;
     expiresAtUtc: string;
@@ -596,7 +636,7 @@ export interface AnalyticsOutboxRow {
 // =============================================================================
 
 /** Current Dexie schema version — bump this when adding version(N).stores(). */
-export const DATABASE_VERSION = 17; // DATA_PRINCIPLE_SPINE sub-phase 02.7 — cost-entry category → canonical categoryId migration.
+export const DATABASE_VERSION = 18; // DATA_PRINCIPLE_SPINE sub-phase 05.3 — voice clip envelope encryption (WebCrypto AES-GCM).
 /** CEI Phase 1 schema version (now active — applied by Task 5.1.1). */
 export const CEI_PHASE1_SCHEMA_VERSION = 7;
 /** CEI Phase 2 schema version — adds test stack (protocols/instances/recs). */
@@ -619,6 +659,8 @@ export const DWC_TELEMETRY_OUTBOX_SCHEMA_VERSION = 15;
 export const DATA_PRINCIPLE_SPINE_PROVENANCE_SCHEMA_VERSION = 16;
 /** DATA_PRINCIPLE_SPINE sub-phase 02.7 — offline cost-entry rows migrate `category` → canonical `categoryId`. */
 export const DATA_PRINCIPLE_SPINE_COST_CATEGORY_SCHEMA_VERSION = 17;
+/** DATA_PRINCIPLE_SPINE sub-phase 05.3 — voice clip envelope encryption (WebCrypto AES-GCM); voiceClips row gains ciphertext/iv/wrappedDekId. */
+export const DATA_PRINCIPLE_SPINE_VOICE_ENVELOPE_SCHEMA_VERSION = 18;
 
 // =============================================================================
 // DATABASE CLASS
@@ -697,6 +739,7 @@ export class AgriLogDatabase extends Dexie {
         applyV15(this);
         applyV16(this);
         applyV17(this);
+        applyV18(this);
     }
 }
 

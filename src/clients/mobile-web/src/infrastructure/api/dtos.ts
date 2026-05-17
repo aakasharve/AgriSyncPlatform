@@ -538,3 +538,31 @@ export interface AllowedTransitionsDto {
         description: string;
     }>;
 }
+
+// spec: data-principle-spine-2026-05-05/05.3
+//
+// Tenant DEK transport shapes. Backend issues a 256-bit AES-GCM key
+// wrapped by a per-tenant KMS CMK; the client uses it to seal voice
+// clips at rest (see infrastructure/security/voiceEnvelope.ts). The
+// `dekBase64` field is plaintext key bytes — base64-encoded only as
+// JSON transport — and the client must drop it from memory on logout.
+//
+// NOTE: 05.2 (backend) is being implemented in parallel; if its
+// response/request field names differ, fix this file in a follow-up.
+export interface TenantDekResponse {
+    /** Opaque KMS-wrapped DEK identifier; echoes back via /resolve. */
+    dekId: string;
+    /** Base64 of the 32-byte raw AES-256 key. Never persist to disk. */
+    dekBase64: string;
+    /** ISO-8601 UTC instant after which the client should re-fetch. */
+    expiresAtUtc: string;
+}
+
+export interface ResolveDekRequest {
+    dekId: string;
+}
+
+export interface ResolveDekResponse {
+    /** Base64 of the 32-byte raw AES-256 key. Never persist to disk. */
+    dekBase64: string;
+}
