@@ -128,6 +128,19 @@ public sealed class ShramSafalDbContext(DbContextOptions<ShramSafalDbContext> op
     public DbSet<ConsentAuditEntry> ConsentAuditEntries => Set<ConsentAuditEntry>();
 
     /// <summary>
+    /// Voice Diary ship (voice-diary-e2e-2026-05-17) — retained-tier
+    /// voice clip metadata. One row per clip that the user has chosen
+    /// to keep beyond the 30-day local journal (gated by
+    /// <see cref="UserConsentState.FullHistoryJournal"/>). Mapped to
+    /// <c>ssf.voice_clips_retained</c>. RLS-exempt in this ship
+    /// (user-keyed; handler boundary enforces); Phase 07 layers RLS.
+    /// The ciphertext lives in S3 via <c>IRetainedBlobStore</c>; this
+    /// table holds the envelope metadata + S3 pointer + accounting
+    /// fields. Server NEVER decrypts.
+    /// </summary>
+    public DbSet<VoiceClipRetained> VoiceClipsRetained => Set<VoiceClipRetained>();
+
+    /// <summary>
     /// DATA_PRINCIPLE_SPINE Phase 08 sub-phase 08.1 — DPDP §12 erasure
     /// request queue. Mapped to <c>ssf.erasure_requests</c>. RLS-exempt
     /// (user-keyed admin-only surface). Processed asynchronously by

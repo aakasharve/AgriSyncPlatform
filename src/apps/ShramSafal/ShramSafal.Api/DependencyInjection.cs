@@ -10,6 +10,8 @@ using ShramSafal.Application.UseCases.AI.CoVeReverify;
 using ShramSafal.Application.UseCases.AI.CreateDocumentSession;
 using ShramSafal.Application.UseCases.Consent.GetConsent;
 using ShramSafal.Application.UseCases.Consent.UpdateConsent;
+using ShramSafal.Application.UseCases.VoiceDiary.GetVoiceDiaryByRange;
+using ShramSafal.Application.UseCases.VoiceDiary.PersistVoiceClipRetained;
 using ShramSafal.Application.UseCases.Privacy.IssueTenantDek;
 using ShramSafal.Application.UseCases.Privacy.ResolveTenantDek;
 using ShramSafal.Application.UseCases.AI.ExtractPattiImage;
@@ -169,6 +171,13 @@ public static class DependencyInjection
         // IShramSafalRepository methods added in 06.1.
         services.AddScoped<GetConsentHandler>();
         services.AddScoped<UpdateConsentHandler>();
+
+        // Voice Diary ship (voice-diary-e2e-2026-05-17 §B.9, §B.10) —
+        // retained-tier persist + range query. PersistHandler depends on
+        // IConsentEnforcer (registered in Bootstrapper alongside the S3
+        // adapter rebind); range query depends only on IRetainedBlobStore.
+        services.AddScoped<PersistVoiceClipRetainedHandler>();
+        services.AddScoped<GetVoiceDiaryByRangeHandler>();
 
         // DATA_PRINCIPLE_SPINE 08.2 / 08.3 / 08.5 — DPDP rights surface
         // handlers. All three depend on TimeProvider + IShramSafalRepository.

@@ -109,6 +109,18 @@ public sealed class RlsExemptionAllowlistTests
         "user_consent_state",
         "consent_audit",
 
+        // Voice Diary ship (voice-diary-e2e-2026-05-17) —
+        // voice_clips_retained is user-keyed (one row per retained
+        // clip, PK is the client-supplied Dexie voiceClips.id). Same
+        // posture as user_consent_state / consent_audit above: the
+        // Phase 03 RLS policy keyed on agrisync.farm_id would filter
+        // every row because the consent endpoints surface only the
+        // `sub` claim. Defence in this ship is at the Application
+        // layer — IRetainedBlobStore read paths take callerUserId
+        // and the EF query scopes every read/write to it. Phase 07
+        // layers RLS on top.
+        "voice_clips_retained",
+
         // ── Phase 05 net-new exemptions ──────────────────────────────
 
         // Phase 05.6 (OQ-5) — admin-only read path, system-only write path.

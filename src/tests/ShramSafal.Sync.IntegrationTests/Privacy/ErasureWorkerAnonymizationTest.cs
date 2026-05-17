@@ -11,6 +11,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
@@ -115,7 +116,15 @@ public sealed class ErasureWorkerAnonymizationTest : IAsyncLifetime
             .Build();
         services.AddSingleton<IConfiguration>(inMemoryConfig);
         services.AddShramSafalInfrastructure(inMemoryConfig);
-        services.AddSingleton<IRetainedBlobStore, PendingRetainedBlobStore>();
+        // Voice Diary ship (voice-diary-e2e-2026-05-17 §B.18) — the
+        // throwing PendingRetainedBlobStore stub is DELETED in this
+        // envelope; replace with an in-memory fake so ErasureWorker
+        // can complete its delete-retained-voice pass without booting
+        // a LocalStack S3 sidecar. The fixture seeds no
+        // voice_clips_retained rows, so the fake's
+        // DeleteRetainedVoiceForUserAsync is a no-op — but the
+        // registration must satisfy the IRetainedBlobStore dependency.
+        services.AddSingleton<IRetainedBlobStore, InMemoryRetainedBlobStore>();
 
         _rootProvider = services.BuildServiceProvider();
     }
@@ -425,5 +434,77 @@ public sealed class ErasureWorkerAnonymizationTest : IAsyncLifetime
         {
             await ssf.Database.MigrateAsync();
         }
+    }
+}
+
+/// <summary>
+/// Voice Diary ship (voice-diary-e2e-2026-05-17 §B.18) — minimal
+/// in-memory <see cref="IRetainedBlobStore"/> for the ErasureWorker
+/// integration test. Replaces the deleted PendingRetainedBlobStore
+/// stub. The fixture seeds zero <c>voice_clips_retained</c> rows so
+/// <see cref="DeleteRetainedVoiceForUserAsync"/> finds nothing to
+/// purge; the test only needs the DI registration to satisfy the
+/// adapter dependency.
+/// </summary>
+internal sealed class InMemoryRetainedBlobStore : IRetainedBlobStore
+{
+    private readonly Dictionary<Guid, (VoiceClipRetained Meta, byte[] Cipher)> _store = new();
+
+    public Task DeleteRetainedVoiceForUserAsync(Guid userId, CancellationToken ct)
+    {
+        var keys = _store
+            .Where(kv => kv.Value.Meta.UserId == userId)
+            .Select(kv => kv.Key)
+            .ToList();
+        foreach (var key in keys)
+        {
+            _store.Remove(key);
+        }
+        return Task.CompletedTask;
+    }
+
+    public Task<Guid> PersistAsync(VoiceClipRetained metadata, byte[] cipherBytes, CancellationToken ct)
+    {
+        _store[metadata.ClipId] = (metadata, cipherBytes);
+        return Task.FromResult(metadata.ClipId);
+    }
+
+    public Task<RetainedClipResult?> GetByIdAsync(Guid clipId, Guid callerUserId, CancellationToken ct)
+    {
+        if (_store.TryGetValue(clipId, out var entry) && entry.Meta.UserId == callerUserId)
+        {
+            return Task.FromResult<RetainedClipResult?>(new RetainedClipResult(
+                ClipId: entry.Meta.ClipId,
+                UserId: entry.Meta.UserId,
+                RecordedAtUtc: entry.Meta.RecordedAtUtc,
+                S3Key: entry.Meta.S3Key,
+                DekId: entry.Meta.DekId,
+                IvBase64: entry.Meta.IvBase64,
+                AuthTagBase64: entry.Meta.AuthTagBase64,
+                DurationSeconds: entry.Meta.DurationSeconds,
+                Language: entry.Meta.Language,
+                CipherBytes: entry.Cipher));
+        }
+        return Task.FromResult<RetainedClipResult?>(null);
+    }
+
+    public Task<IReadOnlyList<VoiceClipRetainedListItem>> GetByRangeAsync(
+        Guid userId, DateOnly from, DateOnly to, CancellationToken ct)
+    {
+        var fromUtc = from.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc);
+        var toUtc = to.AddDays(1).ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc);
+        var rows = _store.Values
+            .Where(e => e.Meta.UserId == userId
+                        && e.Meta.RecordedAtUtc >= fromUtc
+                        && e.Meta.RecordedAtUtc < toUtc)
+            .OrderByDescending(e => e.Meta.RecordedAtUtc)
+            .Select(e => new VoiceClipRetainedListItem(
+                e.Meta.ClipId,
+                e.Meta.RecordedAtUtc,
+                e.Meta.DurationSeconds,
+                e.Meta.Language,
+                e.Meta.S3Key))
+            .ToList();
+        return Task.FromResult<IReadOnlyList<VoiceClipRetainedListItem>>(rows);
     }
 }

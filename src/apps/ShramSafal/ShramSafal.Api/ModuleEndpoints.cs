@@ -25,6 +25,9 @@ public static class ModuleEndpoints
         group.MapFinanceEndpoints();
         group.MapAiEndpoints();
         group.MapAiStreamingEndpoints();
+        // Voice Diary ship (voice-diary-e2e-2026-05-17 §B.13) — three
+        // routes under /shramsafal/voice-diary/* for persist + read.
+        group.MapVoiceDiaryEndpoints();
         group.MapAttachmentEndpoints();
         group.MapPlanningEndpoints();
         group.MapPlannedActivityEndpoints();

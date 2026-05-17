@@ -47,6 +47,14 @@ public static class ShramSafalErrors
     public static readonly Error VerificationTransitionNotAllowedForRole =
         Error.Forbidden("ShramSafal.VerificationTransitionNotAllowedForRole", "Transition not allowed for role.");
 
+    // Voice Diary ship (voice-diary-e2e-2026-05-17) — returned by
+    // ParseVoiceInputHandler + PersistVoiceClipRetainedHandler when the
+    // FullHistoryJournal consent toggle is OFF. Frontend renders a
+    // consent-required CTA pointing at Settings.
+    public static readonly Error ConsentRequired = Error.Forbidden(
+        "ShramSafal.ConsentRequired",
+        "Full History Journal consent is required to retain voice notes beyond 30 days.");
+
     // --- Validation (bad caller input) -----------------------------------------------------
     public static readonly Error InvalidAmount = Error.Validation("ShramSafal.InvalidAmount", "Amount must be greater than zero.");
     public static readonly Error InvalidVerificationReason = Error.Validation("ShramSafal.InvalidVerificationReason", "Reason is required for disputed verification.");

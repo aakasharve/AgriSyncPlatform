@@ -199,6 +199,15 @@ try
         .Bind(builder.Configuration.GetSection("RawBlobStore"));
     builder.Services.AddScoped<IRawBlobStore, S3RawBlobStore>();
 
+    // Voice Diary ship (voice-diary-e2e-2026-05-17 §B.14) —
+    // retained-tier voice-clip blob store. Options bound parallel to
+    // RawBlobStore; production sets BucketName via env var override
+    // (RetainedBlobStore__BucketName) at Kiro deploy. Dev leaves
+    // BucketName empty — the adapter no-ops the S3 path so handlers
+    // can still exercise the metadata flow against Postgres.
+    builder.Services.AddOptions<ShramSafal.Infrastructure.Privacy.RetainedBlobStoreOptions>()
+        .Bind(builder.Configuration.GetSection("RetainedBlobStore"));
+
     // DATA_PRINCIPLE_SPINE 05.2 — KMS-backed tenant DEK service.
     // TenantDekOptions binds from the "TenantDek" config section
     // (TenantDek:MasterKeyId is the ap-south-1 CMK alias, e.g.
@@ -388,14 +397,27 @@ try
     builder.Services.AddHostedService<ShramSafal.Infrastructure.Privacy.ErasureWorker>();
     builder.Services.AddHostedService<ShramSafal.Infrastructure.Privacy.ExportWorker>();
     builder.Services.AddHostedService<AgriSync.Bootstrapper.Jobs.RetentionSweepWorker>();
-    // DATA_PRINCIPLE_SPINE 08.7 (OQ-8) — Phase 08 binds a throwing
-    // stub for retained voice deletion. Phase 07 REPLACES this
-    // registration with an S3-backed adapter once voice_clips_retained
-    // ships. ErasureWorker catches the NotImplementedException + marks
-    // voice_clips_retained_deferred=true on the request payload.
-    builder.Services.AddSingleton<
+    // Voice Diary ship (voice-diary-e2e-2026-05-17 §B.14) — REPLACES
+    // the Phase 08.7 throwing stub (PendingRetainedBlobStore) with the
+    // real S3-backed adapter now that ssf.voice_clips_retained ships
+    // in the same envelope. Lifetime switched from Singleton (the
+    // stub was stateless) to Scoped because S3RetainedBlobStore takes
+    // a Scoped ShramSafalDbContext + the HTTP-bound IAmazonS3 client
+    // — mirrors the S3RawBlobStore registration above. ErasureWorker
+    // no longer needs to catch NotImplementedException; the real
+    // adapter deletes rows + S3 objects atomically and is idempotent
+    // on a re-run.
+    builder.Services.AddScoped<
         ShramSafal.Application.Privacy.Ports.IRetainedBlobStore,
-        ShramSafal.Infrastructure.Privacy.PendingRetainedBlobStore>();
+        ShramSafal.Infrastructure.Privacy.S3RetainedBlobStore>();
+    // Voice Diary ship (voice-diary-e2e-2026-05-17 §B.3) — Phase 06.2's
+    // long-promised consent enforcer. Reads UserConsentState via
+    // IShramSafalRepository.GetUserConsentStateAsync and emits a
+    // ConsentAuditEntry on deny. ParseVoiceInputHandler + the new
+    // PersistVoiceClipRetainedHandler depend on it.
+    builder.Services.AddScoped<
+        ShramSafal.Application.Privacy.Ports.IConsentEnforcer,
+        ShramSafal.Infrastructure.Privacy.ConsentEnforcer>();
     builder.Services.AddScoped<AgriSync.Bootstrapper.Jobs.IWorkerRetentionReader,
         AgriSync.Bootstrapper.Infrastructure.WorkerRetentionReader>();
     builder.Services.AddTransient<AgriSync.Bootstrapper.Infrastructure.DatabaseSeeder>();

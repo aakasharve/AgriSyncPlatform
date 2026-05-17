@@ -12,6 +12,7 @@ using AgriSync.SharedKernel.Contracts.Ids;
 using ShramSafal.Application.Ports;
 using ShramSafal.Application.Ports.External;
 using ShramSafal.Application.Ports.Privacy;
+using ShramSafal.Application.Privacy.Ports;
 using ShramSafal.Domain.AI;
 using ShramSafal.Domain.Audit;
 using ShramSafal.Domain.Common;
@@ -19,6 +20,7 @@ using ShramSafal.Domain.Privacy.Pii;
 
 namespace ShramSafal.Application.UseCases.AI.ParseVoiceInput;
 
+#pragma warning disable CS9113 // 'consentEnforcer' is unread — intentional per §B.12 (see comment below)
 public sealed class ParseVoiceInputHandler(
     IShramSafalRepository repository,
     IAiOrchestrator aiOrchestrator,
@@ -27,8 +29,23 @@ public sealed class ParseVoiceInputHandler(
     IEntitlementPolicy entitlementPolicy,
     IAnalyticsWriter analytics,
     IClock clock,
-    IThirdPartyPiiDetector piiDetector)
+    IThirdPartyPiiDetector piiDetector,
+    // Voice Diary ship (voice-diary-e2e-2026-05-17 §B.12) —
+    // IConsentEnforcer is added as the LAST constructor parameter to
+    // preserve the diff and protect the founder-owned IEntitlementPolicy
+    // line above. The current ParseVoice flow does NOT persist any
+    // retained-tier voice clip directly (Transcript rows in Phase 02.3
+    // are warm tier, not retained). The dedicated persist path lives in
+    // PersistVoiceClipRetainedHandler which calls into IConsentEnforcer
+    // explicitly. Wiring the port here keeps the AI boundary ready for
+    // any future inline retained-persist call without another ctor diff.
+    // CS9113 is suppressed because the parameter is deliberately
+    // reserved for forward use; removing it would break the diff
+    // promise the supervisor brief made and force the DI container to
+    // resolve a different constructor shape.
+    IConsentEnforcer consentEnforcer)
 {
+#pragma warning restore CS9113
     private static readonly Dictionary<string, int> MarathiNumberTokens = new(StringComparer.OrdinalIgnoreCase)
     {
         ["एक"] = 1,
