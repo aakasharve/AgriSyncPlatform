@@ -38,8 +38,8 @@ Usage: $0 --env <dev|staging|prod> --trigger <reason> [--git-sha <sha>]
 Required environment:
   PG_HOST, PG_PORT, PG_USER, PG_DATABASE   PostgreSQL connection
   PGPASSWORD                                PostgreSQL password (set via secret)
-  RAW_BLOB_BUCKET                           e.g. agrisync-raw-prod
-  RETAINED_VOICE_BUCKET                     e.g. agrisync-voice-retained-prod
+  RAW_BLOB_BUCKET                           prod: shramsafal-uploads-prod
+  RETAINED_VOICE_BUCKET                     prod: shramsafal-voice-retained-prod
   AWS_REGION                                e.g. ap-south-1
 EOF
     exit 64

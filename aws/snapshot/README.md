@@ -101,8 +101,8 @@ aws iam create-role \
 # Attach a permissions policy scoped to:
 #   - KMS Encrypt/Decrypt/GenerateDataKey on alias/agrisync-snapshots-${ENV}
 #   - S3 PutObject/GetObject/ListBucket on agrisync-snapshots-${ENV}
-#   - S3 ListBucket/ListObjectVersions on agrisync-raw-${ENV} (read-only)
-#   - S3 ListBucket/ListObjectVersions on agrisync-voice-retained-${ENV} (read-only)
+#   - S3 ListBucket/ListObjectVersions on shramsafal-uploads-prod (read-only)
+#   - S3 ListBucket/ListObjectVersions on shramsafal-voice-retained-prod (read-only)
 aws iam put-role-policy \
   --role-name "agrisync-snapshot-${ENV}" \
   --policy-name "snapshot-permissions" \
@@ -135,7 +135,7 @@ Kiro can invoke directly with AWS creds (`aws configure sso` first):
 
 ```bash
 export PG_HOST=... PG_PORT=5433 PG_USER=... PG_DATABASE=agrisync PGPASSWORD=...
-export RAW_BLOB_BUCKET=agrisync-raw-prod RETAINED_VOICE_BUCKET=agrisync-voice-retained-prod
+export RAW_BLOB_BUCKET=shramsafal-uploads-prod RETAINED_VOICE_BUCKET=shramsafal-voice-retained-prod
 export AWS_REGION=ap-south-1
 bash aws/snapshot/snapshot.sh --env prod --trigger "manual:kiro-incident-2026-05-17"
 ```

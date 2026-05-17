@@ -12,11 +12,11 @@
     "",
     "  Create or update:",
     "    aws iam create-policy \\",
-    "      --policy-name agrisync-voice-retained-${env} \\",
+    "      --policy-name shramsafal-voice-retained-${env} \\",
     "      --policy-document file://iam-policy.json",
     "    aws iam attach-role-policy \\",
     "      --role-name agrisync-backend-${env} \\",
-    "      --policy-arn arn:aws:iam::<ACCOUNT_ID>:policy/agrisync-voice-retained-${env}",
+    "      --policy-arn arn:aws:iam::<ACCOUNT_ID>:policy/shramsafal-voice-retained-${env}",
     "",
     "SCOPE: Two resources only:",
     "  - Bucket ARN (for ListBucket / GetBucketLocation): no trailing /*",
@@ -44,7 +44,7 @@
         "s3:GetObject",
         "s3:DeleteObject"
       ],
-      "Resource": "arn:aws:s3:::agrisync-voice-retained-${env}/*"
+      "Resource": "arn:aws:s3:::shramsafal-voice-retained-${env}/*"
     },
     {
       "Sid": "VoiceRetainedBucketOps",
@@ -53,7 +53,7 @@
         "s3:ListBucket",
         "s3:GetBucketLocation"
       ],
-      "Resource": "arn:aws:s3:::agrisync-voice-retained-${env}"
+      "Resource": "arn:aws:s3:::shramsafal-voice-retained-${env}"
     }
   ]
 }

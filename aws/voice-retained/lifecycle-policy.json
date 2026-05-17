@@ -23,13 +23,13 @@
     "",
     "APPLY (via create-bucket.sh, or manually):",
     "  aws s3api put-bucket-lifecycle-configuration \\",
-    "    --bucket agrisync-voice-retained-${env} \\",
+    "    --bucket shramsafal-voice-retained-${env} \\",
     "    --lifecycle-configuration file://lifecycle-policy.json \\",
     "    --region ap-south-1",
     "",
     "VERIFY:",
     "  aws s3api get-bucket-lifecycle-configuration \\",
-    "    --bucket agrisync-voice-retained-${env} \\",
+    "    --bucket shramsafal-voice-retained-${env} \\",
     "    --region ap-south-1"
   ],
   "Rules": [

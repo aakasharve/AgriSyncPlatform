@@ -7,7 +7,7 @@
 #   ./create-bucket.sh --env dev|staging|prod [--account-id <12-digit-id>] [--region ap-south-1]
 #
 # WHAT THIS SCRIPT DOES (idempotent — safe to re-run)
-#   1. Creates the bucket "agrisync-voice-retained-${env}" in ap-south-1 if absent.
+#   1. Creates the bucket "shramsafal-voice-retained-${env}" in ap-south-1 if absent.
 #   2. Applies bucket Ownership Controls = bucket-owner-enforced (disables ACLs).
 #   3. Applies Block Public Access on ALL FOUR sub-settings.
 #   4. Sets default server-side encryption to SSE-S3 (AES256).
@@ -44,7 +44,7 @@ usage() {
   cat <<'USAGE'
 Usage: create-bucket.sh --env dev|staging|prod [--account-id <12-digit-id>] [--region ap-south-1]
 
-Provisions the agrisync-voice-retained-<env> bucket per spec voice-diary-e2e-2026-05-17.
+Provisions the shramsafal-voice-retained-<env> bucket per spec voice-diary-e2e-2026-05-17.
 
 Flags:
   --env          REQUIRED. One of: dev | staging | prod.
@@ -110,9 +110,9 @@ if [[ -z "$ACCOUNT_ID" ]]; then
   ACCOUNT_ID="$(echo "$CALLER_IDENTITY" | jq -r '.Account')"
 fi
 
-BUCKET="agrisync-voice-retained-${ENV}"
+BUCKET="shramsafal-voice-retained-${ENV}"
 BUCKET_ARN="arn:aws:s3:::${BUCKET}"
-IAM_POLICY_NAME="agrisync-voice-retained-${ENV}"
+IAM_POLICY_NAME="shramsafal-voice-retained-${ENV}"
 IAM_POLICY_ARN="arn:aws:iam::${ACCOUNT_ID}:policy/${IAM_POLICY_NAME}"
 
 echo "[create-bucket] target bucket: ${BUCKET}"

@@ -129,14 +129,26 @@ jobs:
             echo "PGPASSWORD=$(echo "$SECRET_JSON" | jq -r .password)"
           } >> "$GITHUB_ENV"
 
-      - name: Resolve bucket names from env
+      - name: Resolve bucket names
         env:
           ENV: ${{ inputs.env }}
         run: |
           set -euo pipefail
+          # Single-account prod scope (founder lock 2026-05-17): bucket names
+          # are fixed to the existing shramsafal-* convention; we do NOT
+          # interpolate ${ENV} into the bucket name because dev/staging
+          # buckets don't exist in this account.
+          # - shramsafal-uploads-prod: confirmed against
+          #   _deploy/api/appsettings.Production.json (ShramSafal.Storage
+          #   section). The "raw blob" abstraction physically maps here.
+          # - shramsafal-voice-retained-prod: pending Kiro applying Wave 1.C
+          #   IaC at aws/voice-retained/create-bucket.sh. If the bucket does
+          #   not exist at snapshot time, the inventory step for it will
+          #   fail with NoSuchBucket — first runs may need to defer the
+          #   retained-voice inventory until Kiro applies the IaC.
           {
-            echo "RAW_BLOB_BUCKET=agrisync-raw-${ENV}"
-            echo "RETAINED_VOICE_BUCKET=agrisync-voice-retained-${ENV}"
+            echo "RAW_BLOB_BUCKET=shramsafal-uploads-prod"
+            echo "RETAINED_VOICE_BUCKET=shramsafal-voice-retained-prod"
             echo "AWS_REGION=ap-south-1"
           } >> "$GITHUB_ENV"
 

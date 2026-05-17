@@ -66,12 +66,12 @@ ACCOUNT_ID=123456789012
 sed "s/\${env}/${ENV}/g" aws/voice-retained/iam-policy.json > /tmp/voice-retained-${ENV}.json
 
 aws iam create-policy \
-  --policy-name agrisync-voice-retained-${ENV} \
+  --policy-name shramsafal-voice-retained-${ENV} \
   --policy-document file:///tmp/voice-retained-${ENV}.json
 
 aws iam attach-role-policy \
   --role-name agrisync-backend-${ENV} \
-  --policy-arn arn:aws:iam::${ACCOUNT_ID}:policy/agrisync-voice-retained-${ENV}
+  --policy-arn arn:aws:iam::${ACCOUNT_ID}:policy/shramsafal-voice-retained-${ENV}
 
 rm /tmp/voice-retained-${ENV}.json
 ```
@@ -82,7 +82,7 @@ rm /tmp/voice-retained-${ENV}.json
 
 ```bash
 # ECS task definition / .env / SSM parameter:
-RetainedBlobStore__BucketName=agrisync-voice-retained-dev
+RetainedBlobStore__BucketName=shramsafal-voice-retained-dev
 RetainedBlobStore__Region=ap-south-1
 ```
 
@@ -93,7 +93,7 @@ Do **not** commit per-env bucket names into `appsettings.<env>.json` — the ove
 ```bash
 ENV=dev
 REGION=ap-south-1
-BUCKET=agrisync-voice-retained-${ENV}
+BUCKET=shramsafal-voice-retained-${ENV}
 
 # (a) Block Public Access — every field must be true
 aws s3api get-public-access-block --bucket ${BUCKET} --region ${REGION}
@@ -152,7 +152,7 @@ If the bucket truly must be removed:
 ```bash
 ENV=dev
 REGION=ap-south-1
-BUCKET=agrisync-voice-retained-${ENV}
+BUCKET=shramsafal-voice-retained-${ENV}
 
 # 1. Empty the bucket (this is irreversible).
 aws s3 rm s3://${BUCKET}/ --recursive --region ${REGION}
@@ -163,9 +163,9 @@ aws s3api delete-bucket --bucket ${BUCKET} --region ${REGION}
 # 3. Detach + delete the IAM policy.
 aws iam detach-role-policy \
   --role-name agrisync-backend-${ENV} \
-  --policy-arn arn:aws:iam::<ACCOUNT_ID>:policy/agrisync-voice-retained-${ENV}
+  --policy-arn arn:aws:iam::<ACCOUNT_ID>:policy/shramsafal-voice-retained-${ENV}
 aws iam delete-policy \
-  --policy-arn arn:aws:iam::<ACCOUNT_ID>:policy/agrisync-voice-retained-${ENV}
+  --policy-arn arn:aws:iam::<ACCOUNT_ID>:policy/shramsafal-voice-retained-${ENV}
 ```
 
 ## What this does NOT do
@@ -188,7 +188,7 @@ Per plan `VOICE_DIARY_END_TO_END_BEFORE_SPINE_HARDENING_2026-05-17.md` §What's 
 - Formal ADR-DS-009 authoring + Decision Log row
 - Counsel sign-off + LRP -> final-copy swap
 
-Phase 07 hardening lands on top of this ship without changing the bucket name or path layout — that's why v1 names the bucket `agrisync-voice-retained-${env}` (no version suffix).
+Phase 07 hardening lands on top of this ship without changing the bucket name or path layout — that's why v1 names the bucket `shramsafal-voice-retained-${env}` (no version suffix).
 
 ## References
 

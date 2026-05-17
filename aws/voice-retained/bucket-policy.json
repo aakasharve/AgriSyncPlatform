@@ -5,7 +5,7 @@
     "Owner: Kiro (AWS apply) + Akash (backend config)",
     "",
     "USAGE: Replace ${env} with one of: dev | staging | prod",
-    "Apply with: aws s3api put-bucket-policy --bucket agrisync-voice-retained-${env} --policy file://bucket-policy.json --region ap-south-1",
+    "Apply with: aws s3api put-bucket-policy --bucket shramsafal-voice-retained-${env} --policy file://bucket-policy.json --region ap-south-1",
     "",
     "GUARANTEES (non-negotiable; verifier checks these in Wave 3):",
     "  1. Deny any PutObject lacking SSE-S3 server-side encryption (AES256).",
@@ -29,8 +29,8 @@
       "Principal": "*",
       "Action": "s3:*",
       "Resource": [
-        "arn:aws:s3:::agrisync-voice-retained-${env}",
-        "arn:aws:s3:::agrisync-voice-retained-${env}/*"
+        "arn:aws:s3:::shramsafal-voice-retained-${env}",
+        "arn:aws:s3:::shramsafal-voice-retained-${env}/*"
       ],
       "Condition": {
         "Bool": {
@@ -43,7 +43,7 @@
       "Effect": "Deny",
       "Principal": "*",
       "Action": "s3:PutObject",
-      "Resource": "arn:aws:s3:::agrisync-voice-retained-${env}/*",
+      "Resource": "arn:aws:s3:::shramsafal-voice-retained-${env}/*",
       "Condition": {
         "StringNotEquals": {
           "s3:x-amz-server-side-encryption": "AES256"
@@ -55,7 +55,7 @@
       "Effect": "Deny",
       "Principal": "*",
       "Action": "s3:PutObject",
-      "Resource": "arn:aws:s3:::agrisync-voice-retained-${env}/*",
+      "Resource": "arn:aws:s3:::shramsafal-voice-retained-${env}/*",
       "Condition": {
         "Null": {
           "s3:x-amz-server-side-encryption": "true"

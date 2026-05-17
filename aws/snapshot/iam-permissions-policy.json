@@ -6,8 +6,8 @@
     "",
     "Scope (founder lock):",
     "  WRITE-only to agrisync-snapshots-prod bucket (PutObject + GetObject for verify; NO Delete)",
-    "  READ-only inventory on agrisync-raw-prod (List + GetObjectVersions)",
-    "  READ-only inventory on agrisync-voice-retained-prod (List + GetObjectVersions)",
+    "  READ-only inventory on shramsafal-uploads-prod (List + GetObjectVersions)",
+    "  READ-only inventory on shramsafal-voice-retained-prod (List + GetObjectVersions)",
     "  Encrypt + Decrypt + GenerateDataKey on alias/agrisync-snapshots-prod",
     "  GetSecretValue on agrisync/snapshot/pg-prod (the secret comes later; permission ready)",
     "",
@@ -46,7 +46,7 @@
         "s3:GetBucketVersioning",
         "s3:GetBucketLocation"
       ],
-      "Resource": "arn:aws:s3:::agrisync-raw-prod"
+      "Resource": "arn:aws:s3:::shramsafal-uploads-prod"
     },
     {
       "Sid": "RetainedVoiceInventoryReadOnly",
@@ -57,7 +57,7 @@
         "s3:GetBucketVersioning",
         "s3:GetBucketLocation"
       ],
-      "Resource": "arn:aws:s3:::agrisync-voice-retained-prod"
+      "Resource": "arn:aws:s3:::shramsafal-voice-retained-prod"
     },
     {
       "Sid": "KmsForSnapshotKey",

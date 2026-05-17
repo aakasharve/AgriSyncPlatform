@@ -106,29 +106,35 @@ Option A applied (hot 30d → IA 30d → Glacier 18mo → expire @607d). Founder
 
 Secret created with master credentials from `rds-credentials.txt`. Functional.
 
-### 3. **Source bucket naming mismatch** ⚠️ BLOCKING FIRST RUN
+### 3. ~~Source bucket naming mismatch~~ ✅ RESOLVED 2026-05-17
 
-The snapshot script enumerates `agrisync-raw-prod` and `agrisync-voice-retained-prod` (per my IAM policy + script env vars). **Neither bucket exists in this account.**
+Founder lock 2026-05-17 (Q1-Q3 answers):
 
-What IS in the account (`aws s3 ls`):
-- `agrisync-snapshots-prod` (the snapshot destination we just created) ✓
-- `shramsafal-admin-prod`
-- `shramsafal-app-prod` (created 2026-05-07 — recent; likely raw-blob candidate?)
-- `shramsafal-cloudtrail-prod-951921970996`
-- `shramsafal-marketing-prod`
-- `shramsafal-uploads-prod` (created 2026-04-22 — older; likely raw-blob candidate?)
+| Bucket | Name (locked) | Verification source |
+|---|---|---|
+| Raw uploads (RAW_BLOB_BUCKET) | **`shramsafal-uploads-prod`** | `_deploy/api/appsettings.Production.json` line 15 — `ShramSafal.Storage.BucketName`. Top-level contents `_deploys/ apk/ attachments/` confirm it's the prod data bucket. |
+| Retained voice (RETAINED_VOICE_BUCKET) | **`shramsafal-voice-retained-prod`** | Founder Q2 lock — follow `shramsafal-*` convention. Bucket DOES NOT EXIST YET; Kiro creates it by applying Wave 1.C IaC at [`aws/voice-retained/create-bucket.sh`](../voice-retained/create-bucket.sh) (already patched to this name). |
+| Snapshot destination | `agrisync-snapshots-prod` | Already created. Kept the `agrisync-` prefix because this is a NEW bucket for the snapshot tooling, not part of the existing prod data plane. Founder may rename later if desired. |
 
-Production naming convention is `shramsafal-*`, not `agrisync-*`. My Wave 1.C IaC at [`aws/voice-retained/create-bucket.sh`](../voice-retained/create-bucket.sh) generates `agrisync-voice-retained-{env}` — **inconsistent with the existing prod convention**.
+Patched files (commit pending):
+- `aws/snapshot/iam-permissions-policy.json` — bucket ARNs updated
+- `.github/workflows/prod-snapshot.yml` — env var values changed; single-account scope (no `${ENV}` interpolation since dev/staging don't exist)
+- `aws/snapshot/snapshot.sh` — usage doc updated
+- `aws/snapshot/README.md` — examples updated
+- `aws/voice-retained/{bucket-policy.json, create-bucket.sh, iam-policy.json, lifecycle-policy.json, README.md}` — all renamed `agrisync-voice-retained-{env}` → `shramsafal-voice-retained-{env}`
 
-**Founder, please answer:**
+### 4. Retained-voice bucket does not exist yet — first-run consideration ⚠️ NOT BLOCKING
 
-| Question | Why I'm asking |
+Wave 1.C IaC (`aws/voice-retained/create-bucket.sh`) is committed but Kiro has not applied it. So `shramsafal-voice-retained-prod` doesn't physically exist in AWS yet.
+
+**Impact on first snapshot run:** the script's retained-voice inventory step would hit `NoSuchBucket`. Two paths:
+
+| Option | What |
 |---|---|
-| Which existing bucket holds the raw voice envelopes (`IRawBlobStore` writes)? `shramsafal-uploads-prod`, `shramsafal-app-prod`, or another? | The script's `RAW_BLOB_BUCKET` env var needs the real name |
-| Does the retained-voice bucket exist yet, or is it pending Kiro applying Wave 1.C IaC? | If pending: do we want to name it `shramsafal-voice-retained-prod` (matches convention) or keep `agrisync-voice-retained-prod` (matches my IaC)? |
-| Should I rename my Wave 1.C IaC + IAM permissions to match `shramsafal-*` convention? | Cleaner long-term; one round of edits + commits |
+| (a) Kiro applies Wave 1.C IaC first, then snapshot run includes both inventories | Cleanest end-state |
+| (b) Run snapshot now with retained-voice inventory tolerated as empty (script needs a small tolerance patch) | Faster validation of pg_dump + raw inventory path |
 
-**Until this is resolved, the snapshot would fail at the raw + retained inventory steps** (NoSuchBucket errors). pg_dump + manifest would still work; bucket-versioning inventory would not.
+Founder picks before first-run approval.
 
 ## What did NOT happen
 
