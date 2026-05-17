@@ -56,7 +56,7 @@ const reactHooksRules = Object.fromEntries(
 );
 
 export default defineConfig([
-  globalIgnores(['dist', 'node_modules', '**/*.cjs', 'scripts']),
+  globalIgnores(['dist', 'node_modules', '**/*.cjs', 'scripts', 'e2e']),
   // Build-config files run under Node, not the React app. Apply
   // minimal-strict rules so the pre-commit hook (which lints staged
   // .ts files with --max-warnings 0) doesn't trip on either a
