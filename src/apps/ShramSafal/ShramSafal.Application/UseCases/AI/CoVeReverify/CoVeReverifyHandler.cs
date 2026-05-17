@@ -218,7 +218,11 @@ Return ONLY the JSON. No prose before or after.
         }
         catch (JsonException)
         {
-            // Use raw input as-is.
+            // Use raw input as-is. Surface the malformed-parse event for telemetry
+            // so the architecture rule (no silent swallow in Application) is satisfied
+            // and a future incident has the breadcrumb.
+            System.Diagnostics.Activity.Current?.AddEvent(new System.Diagnostics.ActivityEvent(
+                "cove_reverify.parsed_json_malformed_passthrough"));
         }
 
         return $"TRANSCRIPT:\n{transcript}\n\nPARSED_JSON:\n{compactParsed}";
@@ -251,7 +255,11 @@ Return ONLY the JSON. No prose before or after.
             }
             catch (JsonException)
             {
-                // Fall through to the conservative default.
+                // Fall through to the conservative default (score = 0 → lowConfidence=true).
+                // Surface the malformed-normalized-JSON event so the architecture rule
+                // (no silent swallow in Application) is satisfied.
+                System.Diagnostics.Activity.Current?.AddEvent(new System.Diagnostics.ActivityEvent(
+                    "cove_reverify.normalized_json_malformed_fallback"));
             }
         }
 
