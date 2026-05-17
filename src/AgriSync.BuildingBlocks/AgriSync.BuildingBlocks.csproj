@@ -18,6 +18,12 @@
     <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="10.0.3" />
     <PackageReference Include="Microsoft.EntityFrameworkCore" Version="10.0.3" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" Version="10.0.3" />
+    <!-- DATA_PRINCIPLE_SPINE Phase 05.2 (OQ-6 verdict) — AWS KMS adapter for
+         ITenantDekService.KmsTenantDekService lives in this assembly so the
+         consumer's project owns the dependency. Major version 4.x kept in
+         lockstep with the existing AWSSDK.S3 4.0.18.7 wire to avoid mixed
+         major versions inside the AWSCore graph. -->
+    <PackageReference Include="AWSSDK.KeyManagementService" Version="4.0.4" />
   </ItemGroup>
 
 </Project>

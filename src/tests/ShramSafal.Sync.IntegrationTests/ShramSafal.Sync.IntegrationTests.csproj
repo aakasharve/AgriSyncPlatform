@@ -13,6 +13,10 @@
     <PackageReference Include="Microsoft.EntityFrameworkCore.InMemory" Version="10.0.3" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="18.0.1" />
     <PackageReference Include="AWSSDK.S3" Version="4.0.18.7" />
+    <!-- DATA_PRINCIPLE_SPINE 05.2 — LocalStack KMS round-trip integration
+         test for KmsTenantDekService. Same major as the S3 line above to
+         keep the AWSCore graph on one major. -->
+    <PackageReference Include="AWSSDK.KeyManagementService" Version="4.0.4" />
     <PackageReference Include="Testcontainers.LocalStack" Version="4.11.0" />
     <PackageReference Include="Testcontainers.PostgreSql" Version="4.11.0" />
     <PackageReference Include="xunit" Version="2.9.3" />

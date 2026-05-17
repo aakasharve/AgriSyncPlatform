@@ -8,6 +8,8 @@ using ShramSafal.Application.UseCases.Attachments.UploadAttachment;
 using ShramSafal.Application.UseCases.CropCycles.CreateCropCycle;
 using ShramSafal.Application.UseCases.AI.CoVeReverify;
 using ShramSafal.Application.UseCases.AI.CreateDocumentSession;
+using ShramSafal.Application.UseCases.Privacy.IssueTenantDek;
+using ShramSafal.Application.UseCases.Privacy.ResolveTenantDek;
 using ShramSafal.Application.UseCases.AI.ExtractPattiImage;
 using ShramSafal.Application.UseCases.AI.ExtractReceipt;
 using ShramSafal.Application.UseCases.AI.GetAiDashboard;
@@ -138,6 +140,12 @@ public static class DependencyInjection
 
         services.AddScoped<ParseVoiceInputHandler>();
         services.AddScoped<CoVeReverifyHandler>();
+        // DATA_PRINCIPLE_SPINE 05.2 — KMS-backed tenant DEK use cases.
+        // Handlers depend on AgriSync.BuildingBlocks.Security.ITenantDekService
+        // (registered in AgriSync.Bootstrapper/Program.cs alongside the AWS
+        // KMS client + TenantDekOptions binding).
+        services.AddScoped<IssueTenantDekHandler>();
+        services.AddScoped<ResolveTenantDekHandler>();
         services.AddScoped<ExtractReceiptHandler>();
         services.AddScoped<ExtractPattiImageHandler>();
         services.AddScoped<CreateDocumentSessionHandler>();

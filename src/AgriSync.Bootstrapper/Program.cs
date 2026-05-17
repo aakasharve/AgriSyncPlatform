@@ -7,6 +7,7 @@ using AgriSync.Bootstrapper.Middleware;
 using AgriSync.BuildingBlocks;
 using AgriSync.BuildingBlocks.Analytics;
 using Amazon;
+using Amazon.KeyManagementService;
 using Amazon.S3;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.RateLimiting;
@@ -197,6 +198,56 @@ try
     builder.Services.AddOptions<RawBlobStoreOptions>()
         .Bind(builder.Configuration.GetSection("RawBlobStore"));
     builder.Services.AddScoped<IRawBlobStore, S3RawBlobStore>();
+
+    // DATA_PRINCIPLE_SPINE 05.2 — KMS-backed tenant DEK service.
+    // TenantDekOptions binds from the "TenantDek" config section
+    // (TenantDek:MasterKeyId is the ap-south-1 CMK alias, e.g.
+    // alias/agrisync-tenant-dek-cmk). The IpHasher precedent (Phase 04)
+    // taught us to never fail-fast on missing prod-only secrets in dev/CI
+    // (commits e2bbeed + 629bc56 burned twice), so when MasterKeyId is
+    // null/empty in non-Production we register a NullTenantDekService stub
+    // that throws on use. Production env MUST set TenantDek:MasterKeyId.
+    builder.Services.AddOptions<AgriSync.BuildingBlocks.Security.TenantDekOptions>()
+        .Bind(builder.Configuration.GetSection("TenantDek"));
+    builder.Services.AddSingleton<IAmazonKeyManagementService>(sp =>
+    {
+        // Single region pin — see Phase 05.4 RegionGuard. AWS:Region drives
+        // both the S3 client (already registered above with ShramSafal:
+        // Storage:Region) and KMS; keeping a separate config key lets ops
+        // override per-service if region pinning ever needs a transition.
+        var regionName = builder.Configuration["AWS:Region"];
+        if (string.IsNullOrWhiteSpace(regionName))
+        {
+            regionName = "ap-south-1";
+        }
+
+        return new AmazonKeyManagementServiceClient(new AmazonKeyManagementServiceConfig
+        {
+            RegionEndpoint = RegionEndpoint.GetBySystemName(regionName.Trim())
+        });
+    });
+
+    var tenantDekMasterKeyId = builder.Configuration["TenantDek:MasterKeyId"];
+    if (string.IsNullOrWhiteSpace(tenantDekMasterKeyId) && !builder.Environment.IsProduction())
+    {
+        // Dev/CI fallback (mirrors Phase 04 IpHasher recovery pattern).
+        // NullTenantDekService throws NotSupportedException on use so any
+        // dev codepath that accidentally exercises the DEK port surfaces
+        // a loud failure without bringing down the whole API.
+        Log.Warning(
+            "TenantDek:MasterKeyId is not configured in {Environment}. "
+            + "Registering NullTenantDekService stub — any call to the tenant "
+            + "DEK endpoints will throw NotSupportedException. Production MUST "
+            + "set TenantDek:MasterKeyId via AWS SecretsManager.",
+            builder.Environment.EnvironmentName);
+        builder.Services.AddScoped<AgriSync.BuildingBlocks.Security.ITenantDekService,
+            AgriSync.BuildingBlocks.Security.NullTenantDekService>();
+    }
+    else
+    {
+        builder.Services.AddScoped<AgriSync.BuildingBlocks.Security.ITenantDekService,
+            AgriSync.BuildingBlocks.Security.KmsTenantDekService>();
+    }
 
     // MeContext composition adapters — the only place in the backend that
     // reads across app DbContexts. Swapped for projection readers later.
