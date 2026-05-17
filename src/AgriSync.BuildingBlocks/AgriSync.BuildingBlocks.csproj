@@ -24,6 +24,12 @@
          lockstep with the existing AWSSDK.S3 4.0.18.7 wire to avoid mixed
          major versions inside the AWSCore graph. -->
     <PackageReference Include="AWSSDK.KeyManagementService" Version="4.0.4" />
+    <!-- DATA_PRINCIPLE_SPINE Phase 06.3 — AWS Secrets Manager adapter for
+         IConsentSigningKeyResolver (HS256 consent token signing key).
+         Same major as AWSSDK.KeyManagementService above; the Bootstrapper
+         already references AWSSDK.SecretsManager 4.0.4.4 for the config
+         provider — keeping the dependency mirrored here. -->
+    <PackageReference Include="AWSSDK.SecretsManager" Version="4.0.4.4" />
   </ItemGroup>
 
 </Project>

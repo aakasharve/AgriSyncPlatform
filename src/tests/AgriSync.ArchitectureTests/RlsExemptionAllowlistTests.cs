@@ -58,6 +58,21 @@ public sealed class RlsExemptionAllowlistTests
     /// </summary>
     private static readonly HashSet<string> ExpectedRlsExemptions = new(StringComparer.Ordinal)
     {
+        // ── Phase 06 net-new exemptions ──────────────────────────────
+
+        // Phase 06.1 — user_consent_state + consent_audit are user-keyed
+        // not farm-keyed. The Phase 03 RLS policy keyed on
+        // agrisync.farm_id would filter every row out (the GUC is null
+        // on the consent endpoints — they only have a sub claim, not a
+        // farm_id claim). Defence-in-depth is at the handler boundary:
+        // the endpoint reads `sub` from the JWT and the handler scopes
+        // every read/write to that user via ICurrentUser. The grant
+        // boundary further locks consent_audit to SELECT + INSERT only
+        // (append-only by privilege, mirrors Phase 04 audit_events).
+        // See ADR-DS-008 + the 20260519000000_ConsentDomain migration.
+        "user_consent_state",
+        "consent_audit",
+
         // ── Phase 05 net-new exemptions ──────────────────────────────
 
         // Phase 05.6 (OQ-5) — admin-only read path, system-only write path.

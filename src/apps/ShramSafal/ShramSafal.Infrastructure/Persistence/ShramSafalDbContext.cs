@@ -109,6 +109,25 @@ public sealed class ShramSafalDbContext(DbContextOptions<ShramSafalDbContext> op
     public DbSet<CrossBorderTransfer> CrossBorderTransfers => Set<CrossBorderTransfer>();
 
     /// <summary>
+    /// DATA_PRINCIPLE_SPINE Phase 06 sub-phase 06.1 — live consent state
+    /// for each user (one row per user, primary key
+    /// <see cref="UserConsentState.UserId"/>). Mapped to
+    /// <c>ssf.user_consent_state</c>. RLS-exempt: user-keyed not
+    /// farm-keyed; handler-level guard via <c>ICurrentUser</c>. See
+    /// ADR-DS-008.
+    /// </summary>
+    public DbSet<UserConsentState> UserConsentStates => Set<UserConsentState>();
+
+    /// <summary>
+    /// DATA_PRINCIPLE_SPINE Phase 06 sub-phase 06.1 — append-only ledger
+    /// of every consent change. Mapped to <c>ssf.consent_audit</c>;
+    /// migration REVOKEs UPDATE + DELETE from <c>agrisync_app</c>.
+    /// Append-only by privilege, mirrors the Phase 04 audit-events
+    /// doctrine. RLS-exempt: user-keyed; handler-level guard.
+    /// </summary>
+    public DbSet<ConsentAuditEntry> ConsentAuditEntries => Set<ConsentAuditEntry>();
+
+    /// <summary>
     /// T-IGH-03-OUTBOX-WIRING: outbox queue. Domain events raised on
     /// any tracked aggregate are flushed into this DbSet by
     /// <see cref="DomainEventToOutboxInterceptor"/> in the same

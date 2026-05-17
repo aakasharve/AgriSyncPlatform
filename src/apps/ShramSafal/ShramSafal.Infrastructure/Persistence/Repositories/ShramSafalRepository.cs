@@ -12,6 +12,7 @@ using ShramSafal.Domain.Farms;
 using ShramSafal.Domain.Finance;
 using ShramSafal.Domain.Logs;
 using ShramSafal.Domain.Planning;
+using ShramSafal.Domain.Privacy;
 using ShramSafal.Domain.Schedules;
 using ShramSafal.Domain.Storage;
 
@@ -908,6 +909,71 @@ internal sealed class ShramSafalRepository(ShramSafalDbContext db) : IShramSafal
         }
 
         await db.SaveChangesAsync(ct);
+    }
+
+    // ── DATA_PRINCIPLE_SPINE sub-phase 06.1 / 06.2 (consent domain) ──────
+    // spec: data-principle-spine-2026-05-05/06.2
+
+    /// <summary>
+    /// Fetch the live consent row for <paramref name="userId"/> or null
+    /// when the user has never toggled any consent (first-time
+    /// interaction). The <c>ssf.user_consent_state</c> PK is
+    /// <c>user_id</c>; <see cref="DbSet{TEntity}.FindAsync"/> hits the
+    /// identity map first so a within-request re-read is free.
+    /// </summary>
+    public async Task<UserConsentState?> GetUserConsentStateAsync(Guid userId, CancellationToken ct = default)
+    {
+        if (userId == Guid.Empty)
+        {
+            return null;
+        }
+
+        return await db.UserConsentStates.FirstOrDefaultAsync(s => s.UserId == userId, ct);
+    }
+
+    public async Task AddUserConsentStateAsync(UserConsentState state, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(state);
+        await db.UserConsentStates.AddAsync(state, ct);
+    }
+
+    /// <summary>
+    /// Replace the live consent row. The factory pattern on
+    /// <see cref="UserConsentState"/> returns a NEW instance on every
+    /// update; the handler hands us that new instance and we
+    /// reattach + mark modified. Pre-existing rows that the handler
+    /// already loaded through this same context get their tracked entry
+    /// updated via <see cref="DbContext.Entry"/>.
+    /// </summary>
+    public async Task UpdateUserConsentStateAsync(UserConsentState state, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(state);
+
+        // The handler loads the existing row, computes the diff, then
+        // hands us a new value instance. Reuse the tracked entity
+        // when present so EF emits an UPDATE; otherwise, attach and
+        // mark Modified so EF still emits an UPDATE (not an INSERT —
+        // the row exists in DB).
+        var tracked = await db.UserConsentStates
+            .FirstOrDefaultAsync(s => s.UserId == state.UserId, ct);
+
+        if (tracked is null)
+        {
+            db.UserConsentStates.Attach(state);
+            db.Entry(state).State = EntityState.Modified;
+            return;
+        }
+
+        // Overwrite the tracked entity's scalar values from the new
+        // instance — CurrentValues.SetValues copies every mapped
+        // property by name without invalidating the tracking entry.
+        db.Entry(tracked).CurrentValues.SetValues(state);
+    }
+
+    public async Task AddConsentAuditEntryAsync(ConsentAuditEntry entry, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(entry);
+        await db.ConsentAuditEntries.AddAsync(entry, ct);
     }
 
     private sealed class OperatorDirectoryRow

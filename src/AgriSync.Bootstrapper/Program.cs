@@ -249,6 +249,59 @@ try
             AgriSync.BuildingBlocks.Security.KmsTenantDekService>();
     }
 
+    // DATA_PRINCIPLE_SPINE 06.3 — HS256 consent token service (OQ-2
+    // verdict: Microsoft.IdentityModel.Tokens / JsonWebTokenHandler;
+    // OQ-3 verdict: env-var override + null adapter switch).
+    // Same Production-vs-dev/CI switch pattern as KmsTenantDekService
+    // vs NullTenantDekService above. Production reads HS256 secrets
+    // from AWS Secrets Manager under 'agrisync/consent/hs256/{kid}';
+    // dev/CI reads Consent:Hs256Secret (>=32 UTF8 bytes); null
+    // resolver throws on use when neither is available.
+    builder.Services.AddOptions<AgriSync.BuildingBlocks.Consent.ConsentSigningOptions>()
+        .Bind(builder.Configuration.GetSection(AgriSync.BuildingBlocks.Consent.ConsentSigningOptions.SectionName));
+    builder.Services.AddSingleton<Amazon.SecretsManager.IAmazonSecretsManager>(sp =>
+    {
+        // Same region resolution as the KMS client above (single
+        // ap-south-1 pin; AWS:Region drives both).
+        var regionName = builder.Configuration["AWS:Region"];
+        if (string.IsNullOrWhiteSpace(regionName))
+        {
+            regionName = "ap-south-1";
+        }
+
+        return new Amazon.SecretsManager.AmazonSecretsManagerClient(
+            new Amazon.SecretsManager.AmazonSecretsManagerConfig
+            {
+                RegionEndpoint = RegionEndpoint.GetBySystemName(regionName.Trim()),
+            });
+    });
+
+    var consentHs256Secret = builder.Configuration["Consent:Hs256Secret"];
+    if (builder.Environment.IsProduction())
+    {
+        builder.Services.AddSingleton<AgriSync.BuildingBlocks.Consent.IConsentSigningKeyResolver,
+            AgriSync.BuildingBlocks.Consent.AwsSecretsManagerConsentSigningKeyResolver>();
+    }
+    else if (!string.IsNullOrWhiteSpace(consentHs256Secret))
+    {
+        builder.Services.AddSingleton<AgriSync.BuildingBlocks.Consent.IConsentSigningKeyResolver,
+            AgriSync.BuildingBlocks.Consent.EnvVarConsentSigningKeyResolver>();
+    }
+    else
+    {
+        Log.Warning(
+            "Consent:Hs256Secret missing in {Environment}; registering "
+            + "NullConsentSigningKeyResolver. Any consent token operation will throw "
+            + "InvalidOperationException. Set Consent:Hs256Secret in "
+            + "appsettings.Development.json (>=32 UTF8 bytes) or run with AWS "
+            + "credentials in Production.",
+            builder.Environment.EnvironmentName);
+        builder.Services.AddSingleton<AgriSync.BuildingBlocks.Consent.IConsentSigningKeyResolver,
+            AgriSync.BuildingBlocks.Consent.NullConsentSigningKeyResolver>();
+    }
+    builder.Services.AddSingleton<AgriSync.BuildingBlocks.Consent.IConsentTokenService,
+        AgriSync.BuildingBlocks.Consent.Hs256ConsentTokenService>();
+
     // MeContext composition adapters — the only place in the backend that
     // reads across app DbContexts. Swapped for projection readers later.
     builder.Services.AddScoped<User.Application.Ports.IAccountsSnapshotReader,

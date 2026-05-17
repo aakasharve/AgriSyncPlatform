@@ -46,6 +46,9 @@ public static class ModuleEndpoints
         // used) rather than the plan body's bare /api/security/* so the
         // tenant-context middleware stack covers both routes.
         group.MapSecurityEndpoints();
+        // DATA_PRINCIPLE_SPINE 06.2 — consent state surface.
+        // Mounts under /shramsafal/consent/* (same convention as security).
+        group.MapConsentEndpoints();
         endpoints.MapSyncEndpoints();
 
         return endpoints;

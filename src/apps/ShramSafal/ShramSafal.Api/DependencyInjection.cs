@@ -8,6 +8,8 @@ using ShramSafal.Application.UseCases.Attachments.UploadAttachment;
 using ShramSafal.Application.UseCases.CropCycles.CreateCropCycle;
 using ShramSafal.Application.UseCases.AI.CoVeReverify;
 using ShramSafal.Application.UseCases.AI.CreateDocumentSession;
+using ShramSafal.Application.UseCases.Consent.GetConsent;
+using ShramSafal.Application.UseCases.Consent.UpdateConsent;
 using ShramSafal.Application.UseCases.Privacy.IssueTenantDek;
 using ShramSafal.Application.UseCases.Privacy.ResolveTenantDek;
 using ShramSafal.Application.UseCases.AI.ExtractPattiImage;
@@ -146,6 +148,13 @@ public static class DependencyInjection
         // KMS client + TenantDekOptions binding).
         services.AddScoped<IssueTenantDekHandler>();
         services.AddScoped<ResolveTenantDekHandler>();
+
+        // DATA_PRINCIPLE_SPINE 06.2 — consent state read + update handlers.
+        // The UpdateConsent handler depends on TimeProvider (registered by
+        // AddBuildingBlocks in Program.cs); both depend on the
+        // IShramSafalRepository methods added in 06.1.
+        services.AddScoped<GetConsentHandler>();
+        services.AddScoped<UpdateConsentHandler>();
         services.AddScoped<ExtractReceiptHandler>();
         services.AddScoped<ExtractPattiImageHandler>();
         services.AddScoped<CreateDocumentSessionHandler>();

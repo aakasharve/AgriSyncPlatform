@@ -6,6 +6,7 @@ using ShramSafal.Domain.Farms;
 using ShramSafal.Domain.Finance;
 using ShramSafal.Domain.Logs;
 using ShramSafal.Domain.Planning;
+using ShramSafal.Domain.Privacy;
 using ShramSafal.Domain.Schedules;
 using ShramSafal.Domain.Storage;
 using ShramSafal.Domain.Work;
@@ -285,5 +286,47 @@ public interface IShramSafalRepository
     /// </para>
     /// </summary>
     Task UpsertRawBlobIndexAsync(RawBlobRef blobRef, CancellationToken ct = default)
+        => Task.CompletedTask;
+
+    // --- DATA_PRINCIPLE_SPINE sub-phase 06.1 / 06.2 (consent domain) ------
+    /// <summary>
+    /// Fetch the live <see cref="UserConsentState"/> row for
+    /// <paramref name="userId"/>, or <c>null</c> when no row exists yet
+    /// (first-ever consent interaction for that user). Default impl
+    /// returns <c>null</c> so legacy test doubles compile; production
+    /// <c>ShramSafalRepository</c> overrides.
+    /// </summary>
+    Task<UserConsentState?> GetUserConsentStateAsync(Guid userId, CancellationToken ct = default)
+        => Task.FromResult<UserConsentState?>(null);
+
+    /// <summary>
+    /// Persist a brand-new <see cref="UserConsentState"/> row (first toggle
+    /// for this user). The handler decides between Add vs Update — the
+    /// repository surface mirrors the existing
+    /// <see cref="AddAuditEventAsync"/> shape (no UpdateXxx counterpart
+    /// because EF tracks the entity once it is materialised through the
+    /// DbContext).
+    /// </summary>
+    Task AddUserConsentStateAsync(UserConsentState state, CancellationToken ct = default)
+        => Task.CompletedTask;
+
+    /// <summary>
+    /// Replace the live <see cref="UserConsentState"/> for the user
+    /// embedded in <paramref name="state"/>. The Infrastructure
+    /// implementation reattaches the value via the DbSet's existing
+    /// tracking entry; the in-memory test doubles overwrite their
+    /// dictionary. <c>UserId</c> is the row's primary key.
+    /// </summary>
+    Task UpdateUserConsentStateAsync(UserConsentState state, CancellationToken ct = default)
+        => Task.CompletedTask;
+
+    /// <summary>
+    /// Append a <see cref="ConsentAuditEntry"/> row to the
+    /// <c>ssf.consent_audit</c> ledger. The migration revokes UPDATE +
+    /// DELETE on this table so an existing row can never be mutated —
+    /// this method is INSERT-only by both port contract and DB
+    /// privilege.
+    /// </summary>
+    Task AddConsentAuditEntryAsync(ConsentAuditEntry entry, CancellationToken ct = default)
         => Task.CompletedTask;
 }
