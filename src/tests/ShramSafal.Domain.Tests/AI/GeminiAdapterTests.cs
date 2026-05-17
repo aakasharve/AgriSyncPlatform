@@ -1,9 +1,12 @@
 using System.Net;
 using System.Text;
+using AgriSync.BuildingBlocks.Persistence;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using ShramSafal.Infrastructure.AI;
 using ShramSafal.Infrastructure.Integrations.Gemini;
+using ShramSafal.Infrastructure.Persistence;
 using Xunit;
 
 namespace ShramSafal.Domain.Tests.AI;
@@ -102,7 +105,8 @@ public sealed class GeminiAdapterTests
             options,
             factory,
             new AiResponseNormalizer(),
-            NullLogger<GeminiAiProvider>.Instance);
+            NullLogger<GeminiAiProvider>.Instance,
+            new ThrowingAdminDbContextFactory());
     }
 }
 
@@ -118,4 +122,20 @@ internal sealed class StubHttpMessageHandler(
     {
         return Task.FromResult(responder(request));
     }
+}
+
+/// <summary>
+/// Stub for the 05.6 cross-border log injection. The provider catches
+/// any factory failure and downgrades it to a Warning log (best-effort
+/// audit-trail write — see <c>GeminiAiProvider.LogCrossBorderTransferAsync</c>
+/// remarks); the unit-test happy path keeps asserting on the
+/// caller-visible Gemini response, not the side-effect write. A throw
+/// here exercises the catch branch and proves the response still
+/// surfaces unchanged.
+/// </summary>
+internal sealed class ThrowingAdminDbContextFactory : IAdminDbContextFactory<ShramSafalDbContext>
+{
+    public Task<ShramSafalDbContext> CreateAsync(string reason, Guid actorUserId, CancellationToken ct) =>
+        throw new InvalidOperationException(
+            "GeminiAdapterTests stub — admin DB factory intentionally throws so the 05.6 best-effort log path is exercised.");
 }

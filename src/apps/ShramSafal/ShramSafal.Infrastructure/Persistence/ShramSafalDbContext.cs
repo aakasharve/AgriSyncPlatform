@@ -11,6 +11,7 @@ using ShramSafal.Domain.Finance;
 using ShramSafal.Domain.Logs;
 using ShramSafal.Domain.Organizations;
 using ShramSafal.Domain.Planning;
+using ShramSafal.Domain.Privacy;
 using ShramSafal.Domain.Work;
 using ShramSafal.Domain.Schedules;
 using ShramSafal.Domain.Storage;
@@ -88,6 +89,24 @@ public sealed class ShramSafalDbContext(DbContextOptions<ShramSafalDbContext> op
     /// <see cref="AiJobAttempt"/>. Mapped to <c>ssf.transcripts</c>.
     /// </summary>
     public DbSet<Transcript> Transcripts => Set<Transcript>();
+
+    /// <summary>
+    /// DATA_PRINCIPLE_SPINE Phase 05 sub-phase 05.5 — DPDP §8(2) Data
+    /// Processing Agreement registry (one row per third-party processor).
+    /// Mapped to <c>ssf.dpa_registry</c>. The startup gap-warning in
+    /// <c>Program.cs</c> queries this set for <c>IsActive=false</c> rows
+    /// and emits one <c>LogWarning</c> listing the pending vendors.
+    /// </summary>
+    public DbSet<DpaRecord> DpaRecords => Set<DpaRecord>();
+
+    /// <summary>
+    /// DATA_PRINCIPLE_SPINE Phase 05 sub-phase 05.6 — append-only log of
+    /// outbound calls to non-India processors. Mapped to
+    /// <c>ssf.cross_border_transfers</c>. RLS-exempt per OQ-5: admin-only
+    /// read path (Phase 08), system-only write path
+    /// (<c>GeminiAiProvider</c> via <see cref="AgriSync.BuildingBlocks.Persistence.IAdminDbContextFactory{TContext}"/>).
+    /// </summary>
+    public DbSet<CrossBorderTransfer> CrossBorderTransfers => Set<CrossBorderTransfer>();
 
     /// <summary>
     /// T-IGH-03-OUTBOX-WIRING: outbox queue. Domain events raised on

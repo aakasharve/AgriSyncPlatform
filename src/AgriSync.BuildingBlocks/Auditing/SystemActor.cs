@@ -45,4 +45,21 @@ public static class SystemActor
     /// </summary>
     public static readonly System.Guid Worker =
         new("ffffffff-ffff-ffff-ffff-ffffffffffff");
+
+    /// <summary>
+    /// DATA_PRINCIPLE_SPINE Phase 05 sub-phase 05.6 — sentinel for the
+    /// cross-border transfer logger. Every successful Gemini call writes
+    /// one <c>CrossBorderTransfer</c> row via
+    /// <see cref="AgriSync.BuildingBlocks.Persistence.IAdminDbContextFactory{TContext}"/>
+    /// (admin scope, no tenant claim). The factory rejects
+    /// <see cref="System.Guid.Empty"/>; using a deterministic sibling to
+    /// <see cref="Worker"/> keeps the audit ledger queryable
+    /// (<c>WHERE actor_user_id = '…fffe'</c> returns every cross-border
+    /// logger opening). The penultimate-byte difference vs Worker
+    /// (<c>0xfe</c> vs <c>0xff</c>) preserves the same out-of-RFC-4122-v4
+    /// reservation argument: byte-8 stays at <c>0xff</c> (variant=10
+    /// requires byte-8 ∈ [0x80, 0xbf]).
+    /// </summary>
+    public static readonly System.Guid CrossBorderLoggerUserId =
+        new("ffffffff-ffff-ffff-ffff-fffffffffffe");
 }

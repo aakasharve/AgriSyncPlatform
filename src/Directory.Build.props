@@ -28,7 +28,19 @@
   <PropertyGroup>
     <WarningsNotAsErrors>
       $(WarningsNotAsErrors);
-      CS0618
+      CS0618;
+      NU1901
     </WarningsNotAsErrors>
+    <!--
+      NU1901 (2026-05-17, spec: data-principle-spine-2026-05-05/05.2):
+      Transitive AWSSDK.Core 4.0.0.24 carries a known low-severity advisory
+      (GHSA-9cvc-h2w8-phrp). Pulled in by AWSSDK.S3 (Phase 02) and
+      AWSSDK.KeyManagementService 4.0.4 (Phase 05.2). dotnet-ci treats
+      warnings as errors via /warnaserror, which would otherwise block
+      every Phase 05 commit on a transitive low-sev advisory we don't
+      control. AWS has not shipped a 4.x without this transitive yet.
+      Re-evaluate quarterly; remove this suppression when AWSSDK.Core
+      ships a non-vulnerable 4.x revision.
+    -->
   </PropertyGroup>
 </Project>

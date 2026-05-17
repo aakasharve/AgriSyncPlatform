@@ -355,6 +355,20 @@ try
 
     var app = builder.Build();
 
+    // DATA_PRINCIPLE_SPINE 05.4 — RegionGuard. Verify AWS:Region is
+    // ap-south-1 (Mumbai) before any AWS client is invoked. Per OQ-3
+    // verdict: warn-on-missing (dev/CI), throw-on-mismatch (any non-
+    // ap-south-1 value fails the boot). The check runs AFTER
+    // builder.Build() so a host-resolved ILogger is available.
+    // RegionGuard is a static class so it cannot be a generic
+    // type-argument on ILogger<T>; we create one via ILoggerFactory
+    // with the type's full name as the category string.
+    AgriSync.BuildingBlocks.Security.RegionGuard.AssertApSouth1(
+        app.Configuration,
+        app.Services
+            .GetRequiredService<ILoggerFactory>()
+            .CreateLogger(typeof(AgriSync.BuildingBlocks.Security.RegionGuard).FullName!));
+
     app.UseForwardedHeaders(new ForwardedHeadersOptions
     {
         ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto
@@ -938,6 +952,34 @@ static async Task InitializeApplicationDataAsync(WebApplication app)
             seedRamuDemo,
             clearPurveshDemo,
             seedPurveshDemo);
+
+        // DATA_PRINCIPLE_SPINE 05.5 — DPA gap warning. After migrations
+        // applied, query ssf.dpa_registry for IsActive=false rows and
+        // surface the pending vendors as a single LogWarning. The PRO
+        // path lists three rows by default (AWS, Google_Gemini, Sarvam
+        // — all PENDING_LEGAL_UPLOAD per OQ-4 seed). The TRY/CATCH
+        // defends against the DpaRecords table not yet existing in
+        // ephemeral test contexts that bypass migrations (test harnesses
+        // call EnsureCreatedAsync without applying every migration).
+        try
+        {
+            var pendingVendors = await ssfContext.DpaRecords
+                .Where(d => !d.IsActive)
+                .Select(d => d.VendorName)
+                .ToListAsync();
+            if (pendingVendors.Count > 0)
+            {
+                logger.LogWarning(
+                    "DPA pending for: {Vendors}. DPDP §8(2) compliance gap.",
+                    string.Join(", ", pendingVendors));
+            }
+        }
+        catch (Exception dpaEx)
+        {
+            logger.LogDebug(
+                dpaEx,
+                "DPA gap-warning query skipped (dpa_registry table may not yet exist in this environment).");
+        }
     }
     catch (Exception ex)
     {

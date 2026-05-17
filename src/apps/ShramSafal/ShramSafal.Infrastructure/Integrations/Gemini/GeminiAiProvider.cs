@@ -3,21 +3,58 @@ using System.Net.Http.Json;
 using System.Runtime.CompilerServices;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using AgriSync.BuildingBlocks.Auditing;
+using AgriSync.BuildingBlocks.Persistence;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using ShramSafal.Application.Ports.External;
 using ShramSafal.Domain.AI;
+using ShramSafal.Domain.Privacy;
 using ShramSafal.Infrastructure.AI;
+using ShramSafal.Infrastructure.Persistence;
 
 namespace ShramSafal.Infrastructure.Integrations.Gemini;
 
-internal sealed class GeminiAiProvider(
-    IOptions<GeminiOptions> optionsAccessor,
-    IHttpClientFactory httpClientFactory,
-    AiResponseNormalizer responseNormalizer,
-    ILogger<GeminiAiProvider> logger) : IAiProvider
+internal sealed class GeminiAiProvider : IAiProvider
 {
-    private readonly GeminiOptions _options = optionsAccessor.Value;
+    // DATA_PRINCIPLE_SPINE 05.6 — destination metadata for cross-border
+    // log rows. Region is the Gemini default routing region (Google does
+    // not pin AgriSync's traffic to ap-south-1; until a SoR shipping
+    // contract exists, conservatively log us-central1). Vendor matches
+    // the DpaRecord.VendorName for the join Phase 08 export aggregates.
+    private const string DestinationRegion = "us-central1";
+    private const string DestinationVendor = "Google_Gemini";
+
+    private readonly GeminiOptions _options;
+    private readonly IHttpClientFactory _httpClientFactory;
+    private readonly AiResponseNormalizer _responseNormalizer;
+    private readonly ILogger<GeminiAiProvider> _logger;
+    private readonly IAdminDbContextFactory<ShramSafalDbContext> _adminDbFactory;
+
+    public GeminiAiProvider(
+        IOptions<GeminiOptions> optionsAccessor,
+        IHttpClientFactory httpClientFactory,
+        AiResponseNormalizer responseNormalizer,
+        ILogger<GeminiAiProvider> logger,
+        IAdminDbContextFactory<ShramSafalDbContext> adminDbFactory)
+    {
+        _options = (optionsAccessor ?? throw new ArgumentNullException(nameof(optionsAccessor))).Value;
+        _httpClientFactory = httpClientFactory ?? throw new ArgumentNullException(nameof(httpClientFactory));
+        _responseNormalizer = responseNormalizer ?? throw new ArgumentNullException(nameof(responseNormalizer));
+        _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+        _adminDbFactory = adminDbFactory ?? throw new ArgumentNullException(nameof(adminDbFactory));
+    }
+
+    // Keep the old primary-ctor-style identifier names reachable to
+    // existing method bodies without a large diff. The 05.6 change
+    // converted from a primary constructor (where parameter names act
+    // as fields) to an explicit ctor so the 5th dependency
+    // (IAdminDbContextFactory) could carry the descriptive comment
+    // block on the cross-border-log responsibility. Method bodies
+    // continue to address the dependencies by their old short names.
+    private IHttpClientFactory httpClientFactory => _httpClientFactory;
+    private AiResponseNormalizer responseNormalizer => _responseNormalizer;
+    private ILogger<GeminiAiProvider> logger => _logger;
 
     public AiProviderType ProviderType => AiProviderType.Gemini;
 
@@ -133,6 +170,18 @@ internal sealed class GeminiAiProvider(
             var confidence = TryExtractConfidence(normalized) ?? 0.75m;
             rawTranscript ??= TryExtractString(normalized, "fullTranscript");
 
+            // DATA_PRINCIPLE_SPINE 05.6 — append one row per successful
+            // outbound Gemini call. Estimated payload bytes ≈ length of
+            // the user parts payload we just sent (transcript bytes for
+            // text path, 3/4-decoded base64 length for audio path).
+            await LogCrossBorderTransferAsync(
+                payloadClass: "voice_transcript",
+                sizeBytes: EstimateUserPartsSize(userParts),
+                sourceAiJobId: null,
+                farmId: null,
+                consentKid: null,
+                ct: ct);
+
             return new VoiceParseCanonicalResult
             {
                 Success = true,
@@ -166,6 +215,7 @@ internal sealed class GeminiAiProvider(
             systemPrompt,
             BuildReceiptResponseSchema(),
             LooksMeaningfulReceiptResult,
+            payloadClass: "receipt_ocr",
             ct);
     }
 
@@ -181,6 +231,7 @@ internal sealed class GeminiAiProvider(
             systemPrompt,
             BuildPattiResponseSchema(),
             LooksMeaningfulPattiResult,
+            payloadClass: "patti_ocr",
             ct);
     }
 
@@ -190,6 +241,7 @@ internal sealed class GeminiAiProvider(
         string systemPrompt,
         JsonElement responseJsonSchema,
         Func<string, bool> hasMeaningfulResult,
+        string payloadClass,
         CancellationToken ct)
     {
         if (string.IsNullOrWhiteSpace(_options.ApiKey))
@@ -241,6 +293,18 @@ internal sealed class GeminiAiProvider(
                     Error = "Gemini returned an empty structured extraction."
                 };
             }
+
+            // DATA_PRINCIPLE_SPINE 05.6 — append one row per successful
+            // image extraction (receipt or patti). Decoded base64 length
+            // ≈ 3/4 of the base64 string length. The number is an
+            // estimate; the column is documented as "approximate".
+            await LogCrossBorderTransferAsync(
+                payloadClass: payloadClass,
+                sizeBytes: (base64?.Length ?? 0) * 3L / 4L,
+                sourceAiJobId: null,
+                farmId: null,
+                consentKid: null,
+                ct: ct);
 
             return new ReceiptExtractCanonicalResult
             {
@@ -320,6 +384,21 @@ internal sealed class GeminiAiProvider(
                           ?? $"Gemini stream call failed with status {(int)response.StatusCode}.";
             throw new HttpRequestException(message);
         }
+
+        // DATA_PRINCIPLE_SPINE 05.6 — outbound transfer occurred when
+        // the request hit Gemini (response.IsSuccessStatusCode == true).
+        // Log once per stream open; we don't redo it as chunks arrive
+        // because the "transfer" is the upload, not the download.
+        // payload bytes ≈ transcript length (the upload body is mostly
+        // the system prompt + the user transcript; conservatively log
+        // transcript only — system prompt is template, not PII).
+        await LogCrossBorderTransferAsync(
+            payloadClass: "voice_transcript_stream",
+            sizeBytes: transcript?.Length ?? 0,
+            sourceAiJobId: null,
+            farmId: null,
+            consentKid: null,
+            ct: ct);
 
         await using var stream = await response.Content.ReadAsStreamAsync(timeout.Token);
         using var reader = new StreamReader(stream);
@@ -827,5 +906,108 @@ internal sealed class GeminiAiProvider(
         {
             return false;
         }
+    }
+
+    /// <summary>
+    /// DATA_PRINCIPLE_SPINE 05.6 — append one row to
+    /// <c>ssf.cross_border_transfers</c> via the admin context factory
+    /// (the table has no RLS per OQ-5; the factory bypasses RLS by
+    /// design + writes an audit-event-elevation row for the open).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>Why admin factory not a regular DbContext.</b> See OQ-2
+    /// verdict — Gemini calls happen in scopes that do not always carry
+    /// a tenant claim (CoVe reverify path, orchestrator background
+    /// retries). The admin factory accepts the missing-tenant invariant
+    /// and stamps <c>SystemActor.CrossBorderLoggerUserId</c> on the
+    /// audit-events trail so every cross-border log row has a paired
+    /// admin-elevation audit row queryable from
+    /// <c>WHERE actor_user_id = '…fffe'</c>.
+    /// </para>
+    /// <para>
+    /// <b>Failure handling.</b> The write is best-effort — a database
+    /// failure here MUST NOT bring down the Gemini happy path
+    /// (rollback semantics would discard a successful AI response the
+    /// caller already has in hand). Catch + log; do not rethrow.
+    /// </para>
+    /// </remarks>
+    private async Task LogCrossBorderTransferAsync(
+        string payloadClass,
+        long sizeBytes,
+        Guid? sourceAiJobId,
+        Guid? farmId,
+        string? consentKid,
+        CancellationToken ct)
+    {
+        try
+        {
+            await using var db = await _adminDbFactory.CreateAsync(
+                "gemini_cross_border_log",
+                SystemActor.CrossBorderLoggerUserId,
+                ct);
+            db.CrossBorderTransfers.Add(CrossBorderTransfer.Create(
+                region: DestinationRegion,
+                vendor: DestinationVendor,
+                payloadClass: payloadClass,
+                sourceAiJobId: sourceAiJobId,
+                farmId: farmId,
+                consentKid: consentKid,
+                size: sizeBytes));
+            await db.SaveChangesAsync(ct);
+        }
+        catch (Exception ex)
+        {
+            // Best-effort — see remarks. A failed cross-border log row
+            // should NOT take down the Gemini response that the caller
+            // already received successfully. Phase 08 export will
+            // surface holes in the log as a data-integrity warning.
+            logger.LogWarning(
+                ex,
+                "Cross-border transfer log write failed (payloadClass={PayloadClass}, sizeBytes={SizeBytes}). Gemini response remains valid for the caller.",
+                payloadClass,
+                sizeBytes);
+        }
+    }
+
+    /// <summary>
+    /// Estimate the payload size of a Gemini <c>userParts</c> array for
+    /// the cross-border log column. The exact upload body size includes
+    /// JSON framing too, but the column is documented as approximate;
+    /// summing the dominant content (text strings + decoded base64) is
+    /// sufficient for the audit purpose.
+    /// </summary>
+    private static long EstimateUserPartsSize(IReadOnlyCollection<object> userParts)
+    {
+        long total = 0;
+        foreach (var part in userParts)
+        {
+            // Anonymous-type reflection: probe the two shapes the
+            // caller builds (new { text = ... } and new { inlineData
+            // = new { mimeType, data } }). Defensive over the property
+            // graph — any deviation falls through to a zero
+            // contribution rather than throwing.
+            var type = part.GetType();
+            var textProp = type.GetProperty("text");
+            if (textProp?.GetValue(part) is string textValue)
+            {
+                total += textValue.Length;
+                continue;
+            }
+
+            var inlineDataProp = type.GetProperty("inlineData");
+            var inlineData = inlineDataProp?.GetValue(part);
+            if (inlineData is not null)
+            {
+                var dataProp = inlineData.GetType().GetProperty("data");
+                if (dataProp?.GetValue(inlineData) is string base64)
+                {
+                    // base64 → ~3/4 raw bytes.
+                    total += base64.Length * 3L / 4L;
+                }
+            }
+        }
+
+        return total;
     }
 }
