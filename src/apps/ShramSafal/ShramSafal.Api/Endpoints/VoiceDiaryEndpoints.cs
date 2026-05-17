@@ -1,9 +1,10 @@
 // spec: voice-diary-e2e-2026-05-17 (B.13)
 //
-// Wave 1.B — Voice Diary HTTP surface. Three endpoints:
-//   POST /api/voice-diary/persist       — archive a sealed clip
-//   GET  /api/voice-diary/by-range      — list clips in a date window
-//   GET  /api/voice-diary/by-id/{clipId} — fetch one clip with bytes
+// Wave 1.B — Voice Diary HTTP surface. Three endpoints (mounted via
+// ModuleEndpoints.cs under the /shramsafal group):
+//   POST /shramsafal/voice-diary/persist       — archive a sealed clip
+//   GET  /shramsafal/voice-diary/by-range      — list clips in a date window
+//   GET  /shramsafal/voice-diary/by-id/{clipId} — fetch one clip with bytes
 //
 // Endpoint shape mirrors AiEndpoints.cs (sibling pattern):
 //   - RequireAuthorization on every route
