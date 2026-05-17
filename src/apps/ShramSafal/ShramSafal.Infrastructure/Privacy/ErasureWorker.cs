@@ -307,9 +307,9 @@ UPDATE ssf.cost_entries
     {
         const string sql = @"
 UPDATE ssf.correction_events
-   SET ""UserId"" = {0}
- WHERE ""UserId"" = {1}
-   AND ""UserId"" <> {0};";
+   SET user_id = {0}
+ WHERE user_id = {1}
+   AND user_id <> {0};";
         return await db.Database.ExecuteSqlRawAsync(sql, new object[] { sentinel, userId }, ct)
             .ConfigureAwait(false);
     }

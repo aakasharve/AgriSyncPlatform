@@ -346,7 +346,7 @@ public sealed class ErasureWorkerAnonymizationTest : IAsyncLifetime
         {
             c.CommandText = """
                 INSERT INTO ssf.correction_events
-                    ("Id", "UserId", "OriginalParseId", "OriginalParseRaw", "CorrectedParse", "PromptVersion", "Locale", "Trigger", "CapturedAtUtc")
+                    ("Id", user_id, original_parse_id, original_parse_raw, corrected_parse, prompt_version, locale, trigger, captured_at_utc)
                 VALUES
                     (@id, @uid, @opid, @raw::jsonb, @cor::jsonb, 'v1', 'mr-IN', 'EditUI', NOW());
                 """;
