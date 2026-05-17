@@ -64,6 +64,16 @@ public static class DependencyInjection
         services.TryAddScoped<ShramSafal.Application.Storage.IRawBlobStore,
             ShramSafal.Infrastructure.Storage.InMemoryRawBlobStore>();
 
+        // voice-diary-e2e-2026-05-17 (B.3 fix) — IConsentEnforcer must
+        // resolve in the test harness too. Same pattern as IRawBlobStore
+        // above: production Program.cs explicitly AddScoped's the real
+        // ConsentEnforcer; TryAddScoped here ensures test harnesses that
+        // call AddShramSafalInfrastructure (without going through
+        // Bootstrapper) still resolve it. ConsentEnforcer only needs
+        // IShramSafalRepository which test harnesses always have.
+        services.TryAddScoped<ShramSafal.Application.Privacy.Ports.IConsentEnforcer,
+            ShramSafal.Infrastructure.Privacy.ConsentEnforcer>();
+
         // DATA_PRINCIPLE_SPINE 03.6 — register the writing-context
         // registry singleton (or reuse the existing one) and append
         // ShramSafalDbContext as a writing context the
