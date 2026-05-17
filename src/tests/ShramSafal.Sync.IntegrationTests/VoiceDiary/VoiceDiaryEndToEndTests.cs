@@ -21,6 +21,7 @@ using System.Threading.Tasks;
 using Accounts.Infrastructure.Persistence;
 using AgriSync.BuildingBlocks.Abstractions;
 using AgriSync.BuildingBlocks.Analytics;
+using AgriSync.BuildingBlocks.Persistence;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
@@ -103,7 +104,7 @@ public sealed class VoiceDiaryEndToEndTests : IAsyncLifetime
     public async Task Voice_diary_flow_grant_persist_read_revoke_deny()
     {
         // ── 1. Grant FullHistoryJournal ─────────────────────────────
-        await using (var scope = _rootProvider.CreateAsyncScope())
+        await using (var scope = CreateAdminScope())
         {
             var update = scope.ServiceProvider.GetRequiredService<UpdateConsentHandler>();
             var grantResult = await update.HandleAsync(new UpdateConsentCommand(
@@ -122,7 +123,7 @@ public sealed class VoiceDiaryEndToEndTests : IAsyncLifetime
         // ── 2. Persist a clip ───────────────────────────────────────
         var clipId = Guid.NewGuid();
         var cipherBytes = Encoding.UTF8.GetBytes("fake-ciphertext-bytes");
-        await using (var scope = _rootProvider.CreateAsyncScope())
+        await using (var scope = CreateAdminScope())
         {
             var persist = scope.ServiceProvider.GetRequiredService<PersistVoiceClipRetainedHandler>();
             var result = await persist.HandleAsync(new PersistVoiceClipRetainedCommand(
@@ -141,7 +142,7 @@ public sealed class VoiceDiaryEndToEndTests : IAsyncLifetime
         }
 
         // ── 3. Retrieve by range ────────────────────────────────────
-        await using (var scope = _rootProvider.CreateAsyncScope())
+        await using (var scope = CreateAdminScope())
         {
             var range = scope.ServiceProvider.GetRequiredService<GetVoiceDiaryByRangeHandler>();
             var result = await range.HandleAsync(new GetVoiceDiaryByRangeQuery(
@@ -155,7 +156,7 @@ public sealed class VoiceDiaryEndToEndTests : IAsyncLifetime
         }
 
         // ── 4. Retrieve by id ───────────────────────────────────────
-        await using (var scope = _rootProvider.CreateAsyncScope())
+        await using (var scope = CreateAdminScope())
         {
             var blobStore = scope.ServiceProvider.GetRequiredService<IRetainedBlobStore>();
             var clip = await blobStore.GetByIdAsync(clipId, _userId, CancellationToken.None);
@@ -166,7 +167,7 @@ public sealed class VoiceDiaryEndToEndTests : IAsyncLifetime
         }
 
         // ── 5. Revoke FullHistoryJournal ────────────────────────────
-        await using (var scope = _rootProvider.CreateAsyncScope())
+        await using (var scope = CreateAdminScope())
         {
             var update = scope.ServiceProvider.GetRequiredService<UpdateConsentHandler>();
             var revokeResult = await update.HandleAsync(new UpdateConsentCommand(
@@ -184,7 +185,7 @@ public sealed class VoiceDiaryEndToEndTests : IAsyncLifetime
         }
 
         // ── 6. Attempt persist again — must deny ────────────────────
-        await using (var scope = _rootProvider.CreateAsyncScope())
+        await using (var scope = CreateAdminScope())
         {
             var persist = scope.ServiceProvider.GetRequiredService<PersistVoiceClipRetainedHandler>();
             var deniedResult = await persist.HandleAsync(new PersistVoiceClipRetainedCommand(
@@ -253,5 +254,18 @@ public sealed class VoiceDiaryEndToEndTests : IAsyncLifetime
     private sealed class TestClock(DateTime fixedUtc) : IClock
     {
         public DateTime UtcNow { get; } = fixedUtc;
+    }
+
+    // The test orchestrates DB setup outside the HTTP request flow, so
+    // TenantTransactionMiddleware never runs to set TenantContext. The
+    // tables this test touches (user_consent_state, consent_audit,
+    // voice_clips_retained) are RLS-exempt — user-keyed, not farm-keyed
+    // — so admin-cross-tenant scope is the correct escape per the
+    // pattern documented on TenantContext.ElevateToAdminCrossTenant.
+    private AsyncServiceScope CreateAdminScope()
+    {
+        var scope = _rootProvider.CreateAsyncScope();
+        scope.ServiceProvider.GetRequiredService<TenantContext>().ElevateToAdminCrossTenant();
+        return scope;
     }
 }
