@@ -10,15 +10,18 @@
 #   1. Creates the bucket "shramsafal-voice-retained-${env}" in ap-south-1 if absent.
 #   2. Applies bucket Ownership Controls = bucket-owner-enforced (disables ACLs).
 #   3. Applies Block Public Access on ALL FOUR sub-settings.
-#   4. Sets default server-side encryption to SSE-S3 (AES256).
-#   5. Applies the bucket policy from bucket-policy.json (TLS-only + SSE-S3 deny rails).
-#   6. Applies the lifecycle policy from lifecycle-policy.json (NoOp v1, aborts MPU>7d).
-#   7. Prints bucket ARN, region, and the IAM policy ARN scope so Kiro can wire the
+#   4. Enables Versioning (founder verification requirement 2026-05-17 — added so
+#      re-runs of this script match the live prod bucket state and don't introduce
+#      setup drift; preserves overwrite history for compliance + DPDP audit).
+#   5. Sets default server-side encryption to SSE-S3 (AES256).
+#   6. Applies the bucket policy from bucket-policy.json (TLS-only + SSE-S3 deny rails).
+#   7. Applies the lifecycle policy from lifecycle-policy.json (NoOp v1, aborts MPU>7d).
+#   8. Prints bucket ARN, region, and the IAM policy ARN scope so Kiro can wire the
 #      backend execution role.
 #
 # WHAT THIS SCRIPT DOES NOT DO
 #   - Does NOT create or attach IAM policies (Kiro does this against the target role).
-#   - Does NOT enable versioning, Object Lock, or KMS CMK (Phase 07 hardening).
+#   - Does NOT enable Object Lock or KMS CMK (Phase 07 hardening).
 #   - Does NOT enable replication.
 #
 # PRE-REQS
@@ -122,9 +125,9 @@ echo ""
 
 # -------- step 1: create bucket (idempotent) --------
 if aws s3api head-bucket --bucket "$BUCKET" --region "$REGION" >/dev/null 2>&1; then
-  echo "[create-bucket] step 1/6: bucket ${BUCKET} already exists - skipping create"
+  echo "[create-bucket] step 1/7: bucket ${BUCKET} already exists - skipping create"
 else
-  echo "[create-bucket] step 1/6: creating bucket ${BUCKET} in ${REGION}"
+  echo "[create-bucket] step 1/7: creating bucket ${BUCKET} in ${REGION}"
   # ap-south-1 needs an explicit LocationConstraint; us-east-1 must omit it.
   if [[ "$REGION" == "us-east-1" ]]; then
     aws s3api create-bucket --bucket "$BUCKET" --region "$REGION" >/dev/null
@@ -138,22 +141,29 @@ else
 fi
 
 # -------- step 2: ownership controls (disable ACLs) --------
-echo "[create-bucket] step 2/6: applying Ownership Controls = BucketOwnerEnforced"
+echo "[create-bucket] step 2/7: applying Ownership Controls = BucketOwnerEnforced"
 aws s3api put-bucket-ownership-controls \
   --bucket "$BUCKET" \
   --region "$REGION" \
   --ownership-controls '{"Rules":[{"ObjectOwnership":"BucketOwnerEnforced"}]}' >/dev/null
 
 # -------- step 3: block public access (all four sub-settings) --------
-echo "[create-bucket] step 3/6: applying Block Public Access (all four sub-settings ON)"
+echo "[create-bucket] step 3/7: applying Block Public Access (all four sub-settings ON)"
 aws s3api put-public-access-block \
   --bucket "$BUCKET" \
   --region "$REGION" \
   --public-access-block-configuration \
     "BlockPublicAcls=true,IgnorePublicAcls=true,BlockPublicPolicy=true,RestrictPublicBuckets=true" >/dev/null
 
-# -------- step 4: default SSE-S3 encryption --------
-echo "[create-bucket] step 4/6: applying default SSE-S3 (AES256) encryption"
+# -------- step 4: versioning (founder verification requirement 2026-05-17) --------
+echo "[create-bucket] step 4/7: enabling Versioning"
+aws s3api put-bucket-versioning \
+  --bucket "$BUCKET" \
+  --region "$REGION" \
+  --versioning-configuration Status=Enabled >/dev/null
+
+# -------- step 5: default SSE-S3 encryption --------
+echo "[create-bucket] step 5/7: applying default SSE-S3 (AES256) encryption"
 aws s3api put-bucket-encryption \
   --bucket "$BUCKET" \
   --region "$REGION" \
@@ -166,8 +176,8 @@ aws s3api put-bucket-encryption \
     ]
   }' >/dev/null
 
-# -------- step 5: bucket policy (TLS-only + reject non-SSE PutObject) --------
-echo "[create-bucket] step 5/6: applying bucket policy (TLS-only + SSE-S3 mandatory)"
+# -------- step 6: bucket policy (TLS-only + reject non-SSE PutObject) --------
+echo "[create-bucket] step 6/7: applying bucket policy (TLS-only + SSE-S3 mandatory)"
 BUCKET_POLICY="$(jq --arg env "$ENV" '
   del(._comment)
   | walk(if type == "string" then gsub("\\$\\{env\\}"; $env) else . end)
@@ -181,8 +191,8 @@ echo "$BUCKET_POLICY" | aws s3api put-bucket-policy \
   --region "$REGION" \
   --policy file:///dev/stdin >/dev/null
 
-# -------- step 6: lifecycle policy --------
-echo "[create-bucket] step 6/6: applying lifecycle policy (NoOp v1; aborts MPU>7d)"
+# -------- step 7: lifecycle policy --------
+echo "[create-bucket] step 7/7: applying lifecycle policy (NoOp v1; aborts MPU>7d)"
 LIFECYCLE="$(jq 'del(._comment)' "${SCRIPT_DIR}/lifecycle-policy.json")"
 echo "$LIFECYCLE" | aws s3api put-bucket-lifecycle-configuration \
   --bucket "$BUCKET" \
