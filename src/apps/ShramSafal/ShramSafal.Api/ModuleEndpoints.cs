@@ -49,6 +49,18 @@ public static class ModuleEndpoints
         // DATA_PRINCIPLE_SPINE 06.2 — consent state surface.
         // Mounts under /shramsafal/consent/* (same convention as security).
         group.MapConsentEndpoints();
+        // DATA_PRINCIPLE_SPINE 08.2 / 08.3 — DPDP §11 / §12 self-serve
+        // data rights (export + erasure). Mounts under /shramsafal/me/*.
+        group.MapDataRightsEndpoints();
+        // DATA_PRINCIPLE_SPINE 08.5 — DPDP §8(6) admin breach-report
+        // endpoint (scaffolding only — see BreachEndpoints + OQ-5
+        // verdict). Mounts under /shramsafal/admin/breach/*.
+        group.MapBreachEndpoints();
+        // DATA_PRINCIPLE_SPINE Phase 10 sub-phase 10.4 — admin PII
+        // review queue. Mounts under /shramsafal/admin/pii-review/*
+        // and is gated by the "pii_reviewer" policy (allow-list from
+        // PiiOptions).
+        group.MapPiiReviewEndpoints();
         endpoints.MapSyncEndpoints();
 
         return endpoints;

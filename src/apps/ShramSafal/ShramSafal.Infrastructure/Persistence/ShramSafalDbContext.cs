@@ -128,6 +128,53 @@ public sealed class ShramSafalDbContext(DbContextOptions<ShramSafalDbContext> op
     public DbSet<ConsentAuditEntry> ConsentAuditEntries => Set<ConsentAuditEntry>();
 
     /// <summary>
+    /// DATA_PRINCIPLE_SPINE Phase 08 sub-phase 08.1 — DPDP §12 erasure
+    /// request queue. Mapped to <c>ssf.erasure_requests</c>. RLS-exempt
+    /// (user-keyed admin-only surface). Processed asynchronously by
+    /// <c>ErasureWorker</c> (08.2) per the DS-017 5-rule ANONYMIZE
+    /// contract.
+    /// </summary>
+    public DbSet<ErasureRequest> ErasureRequests => Set<ErasureRequest>();
+
+    /// <summary>
+    /// DATA_PRINCIPLE_SPINE Phase 08 sub-phase 08.1 — DPDP §11 / §11(1)(c)
+    /// data-access + portability export queue. Mapped to
+    /// <c>ssf.export_requests</c>. RLS-exempt. Processed by
+    /// <c>ExportWorker</c> (08.3) which writes a ZIP per the OQ-3
+    /// manifest to <c>s3://agrisync-exports/{userId}/{requestId}.zip</c>
+    /// and stamps a 24h-TTL presigned URL.
+    /// </summary>
+    public DbSet<ExportRequest> ExportRequests => Set<ExportRequest>();
+
+    /// <summary>
+    /// DATA_PRINCIPLE_SPINE Phase 08 sub-phase 08.1 / 08.4 — append-only
+    /// ledger of every <c>RetentionSweepWorker</c> daily run. Mapped to
+    /// <c>ssf.retention_sweep_runs</c>. RLS-exempt.
+    /// </summary>
+    public DbSet<RetentionSweepRun> RetentionSweepRuns => Set<RetentionSweepRun>();
+
+    /// <summary>
+    /// DATA_PRINCIPLE_SPINE Phase 08 sub-phase 08.1 / 08.5 — DPDP §8(6)
+    /// + 2025 Rules Rule 7 breach incident records. Mapped to
+    /// <c>ssf.breach_incidents</c>. Scaffolding only in Phase 08 (OQ-5
+    /// — no SendGrid dispatch wired yet; Phase 12+ rebinds the dispatch
+    /// adapter). RLS-exempt (admin-only surface).
+    /// </summary>
+    public DbSet<BreachIncident> BreachIncidents => Set<BreachIncident>();
+
+    /// <summary>
+    /// DATA_PRINCIPLE_SPINE Phase 10 sub-phase 10.2 — third-party PII
+    /// review-queue ledger. Mapped to <c>ssf.pii_review_queue</c>.
+    /// Admin-only surface so no farm-scoped RLS (allowlisted in
+    /// <c>RlsExemptionAllowlistTests</c>); the migration revokes DELETE
+    /// to keep the queue append-only. Reviewers transition row status
+    /// via <see cref="ShramSafal.Domain.Privacy.Pii.PiiReviewQueueEntry.Approve"/> /
+    /// <see cref="ShramSafal.Domain.Privacy.Pii.PiiReviewQueueEntry.Reject"/>.
+    /// </summary>
+    public DbSet<ShramSafal.Domain.Privacy.Pii.PiiReviewQueueEntry> PiiReviewQueueEntries =>
+        Set<ShramSafal.Domain.Privacy.Pii.PiiReviewQueueEntry>();
+
+    /// <summary>
     /// T-IGH-03-OUTBOX-WIRING: outbox queue. Domain events raised on
     /// any tracked aggregate are flushed into this DbSet by
     /// <see cref="DomainEventToOutboxInterceptor"/> in the same

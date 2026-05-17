@@ -864,6 +864,12 @@ namespace ShramSafal.Infrastructure.Persistence.Migrations
                         .HasDefaultValue("Unchecked")
                         .HasColumnName("geo_validation_status");
 
+                    b.Property<bool>("LabourHeavyCorpusEnabled")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("labour_heavy_corpus_enabled");
+
                     b.Property<DateTime>("ModifiedAtUtc")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("modified_at_utc");
@@ -1878,6 +1884,54 @@ namespace ShramSafal.Infrastructure.Persistence.Migrations
                     b.ToTable("template_activities", "ssf");
                 });
 
+            modelBuilder.Entity("ShramSafal.Domain.Privacy.BreachIncident", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<int>("AffectedUserCount")
+                        .HasColumnType("integer")
+                        .HasColumnName("affected_user_count");
+
+                    b.Property<DateTime?>("BoardNotifiedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("board_notified_at_utc");
+
+                    b.Property<DateTime>("DetectedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("detected_at_utc");
+
+                    b.Property<DateTime?>("PrincipalsNotifiedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("principals_notified_at_utc");
+
+                    b.Property<string>("ScopeDescription")
+                        .IsRequired()
+                        .HasMaxLength(2048)
+                        .HasColumnType("character varying(2048)")
+                        .HasColumnName("scope_description");
+
+                    b.Property<int>("Severity")
+                        .HasColumnType("integer")
+                        .HasColumnName("severity");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("integer")
+                        .HasColumnName("status");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("DetectedAt")
+                        .HasDatabaseName("ix_breach_incidents_detected");
+
+                    b.HasIndex("Status")
+                        .HasDatabaseName("ix_breach_incidents_status");
+
+                    b.ToTable("breach_incidents", "ssf");
+                });
+
             modelBuilder.Entity("ShramSafal.Domain.Privacy.ConsentAuditEntry", b =>
                 {
                     b.Property<Guid>("Id")
@@ -2045,6 +2099,198 @@ namespace ShramSafal.Infrastructure.Persistence.Migrations
                     b.HasKey("Id");
 
                     b.ToTable("dpa_registry", "ssf");
+                });
+
+            modelBuilder.Entity("ShramSafal.Domain.Privacy.ErasureRequest", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTime?>("CompletedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("completed_at_utc");
+
+                    b.Property<string>("FailureReason")
+                        .HasMaxLength(1024)
+                        .HasColumnType("character varying(1024)")
+                        .HasColumnName("failure_reason");
+
+                    b.Property<Guid?>("OnBehalfOfUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("on_behalf_of_user_id");
+
+                    b.Property<DateTime>("RequestedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("requested_at_utc");
+
+                    b.Property<Guid>("RequestedByUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("requested_by_user_id");
+
+                    b.Property<int?>("RowsAnonymizedCount")
+                        .HasColumnType("integer")
+                        .HasColumnName("rows_anonymized_count");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("integer")
+                        .HasColumnName("status");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("RequestedByUserId")
+                        .HasDatabaseName("ix_erasure_requests_requested_by");
+
+                    b.HasIndex("Status")
+                        .HasDatabaseName("ix_erasure_requests_status");
+
+                    b.ToTable("erasure_requests", "ssf");
+                });
+
+            modelBuilder.Entity("ShramSafal.Domain.Privacy.ExportRequest", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTime?>("CompletedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("completed_at_utc");
+
+                    b.Property<DateTime?>("ExpiresAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("expires_at_utc");
+
+                    b.Property<string>("FailureReason")
+                        .HasMaxLength(1024)
+                        .HasColumnType("character varying(1024)")
+                        .HasColumnName("failure_reason");
+
+                    b.Property<Guid?>("OnBehalfOfUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("on_behalf_of_user_id");
+
+                    b.Property<string>("PresignedUrl")
+                        .HasMaxLength(2048)
+                        .HasColumnType("character varying(2048)")
+                        .HasColumnName("presigned_url");
+
+                    b.Property<DateTime>("RequestedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("requested_at_utc");
+
+                    b.Property<Guid>("RequestedByUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("requested_by_user_id");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("integer")
+                        .HasColumnName("status");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("RequestedByUserId")
+                        .HasDatabaseName("ix_export_requests_requested_by");
+
+                    b.HasIndex("Status")
+                        .HasDatabaseName("ix_export_requests_status");
+
+                    b.ToTable("export_requests", "ssf");
+                });
+
+            modelBuilder.Entity("ShramSafal.Domain.Privacy.Pii.PiiReviewQueueEntry", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("DetectionJson")
+                        .IsRequired()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("detection_json");
+
+                    b.Property<DateTime>("OccurredAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("occurred_at_utc");
+
+                    b.Property<string>("OriginalText")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("original_text");
+
+                    b.Property<string>("RedactedText")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("redacted_text");
+
+                    b.Property<string>("ReviewNote")
+                        .HasMaxLength(2048)
+                        .HasColumnType("character varying(2048)")
+                        .HasColumnName("review_note");
+
+                    b.Property<DateTime?>("ReviewedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("reviewed_at_utc");
+
+                    b.Property<Guid?>("ReviewedByUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("reviewed_by_user_id");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(24)
+                        .HasColumnType("character varying(24)")
+                        .HasColumnName("status");
+
+                    b.Property<Guid>("TranscriptId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("transcript_id");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Status")
+                        .HasDatabaseName("ix_pii_review_queue_status");
+
+                    b.HasIndex("TranscriptId")
+                        .HasDatabaseName("ix_pii_review_queue_transcript_id");
+
+                    b.ToTable("pii_review_queue", "ssf");
+                });
+
+            modelBuilder.Entity("ShramSafal.Domain.Privacy.RetentionSweepRun", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTime>("OccurredAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("occurred_at_utc");
+
+                    b.Property<int>("RowsRemovedCount")
+                        .HasColumnType("integer")
+                        .HasColumnName("rows_removed_count");
+
+                    b.Property<int>("S3ObjectsRemovedCount")
+                        .HasColumnType("integer")
+                        .HasColumnName("s3_objects_removed_count");
+
+                    b.Property<string>("TablesSwept")
+                        .IsRequired()
+                        .HasMaxLength(512)
+                        .HasColumnType("character varying(512)")
+                        .HasColumnName("tables_swept");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("OccurredAtUtc")
+                        .HasDatabaseName("ix_retention_sweep_runs_occurred");
+
+                    b.ToTable("retention_sweep_runs", "ssf");
                 });
 
             modelBuilder.Entity("ShramSafal.Domain.Privacy.UserConsentState", b =>

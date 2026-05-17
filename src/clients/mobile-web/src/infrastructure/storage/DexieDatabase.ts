@@ -38,6 +38,7 @@ import { applyV16 } from './dexie/versions/v16';
 import { applyV17 } from './dexie/versions/v17';
 import { applyV18 } from './dexie/versions/v18';
 import { applyV19 } from './dexie/versions/v19';
+import { applyV20 } from './dexie/versions/v20';
 
 // =============================================================================
 // OUTBOX (Pending sync events)
@@ -647,7 +648,7 @@ export interface AnalyticsOutboxRow {
 // =============================================================================
 
 /** Current Dexie schema version — bump this when adding version(N).stores(). */
-export const DATABASE_VERSION = 19; // DATA_PRINCIPLE_SPINE sub-phase 06.5 — consentTokenKid index on voiceClips.
+export const DATABASE_VERSION = 20; // DATA_PRINCIPLE_SPINE sub-phase 10.6 — additive bump for `pii_redaction` CorrectionType (OQ-9).
 /** CEI Phase 1 schema version (now active — applied by Task 5.1.1). */
 export const CEI_PHASE1_SCHEMA_VERSION = 7;
 /** CEI Phase 2 schema version — adds test stack (protocols/instances/recs). */
@@ -674,6 +675,8 @@ export const DATA_PRINCIPLE_SPINE_COST_CATEGORY_SCHEMA_VERSION = 17;
 export const DATA_PRINCIPLE_SPINE_VOICE_ENVELOPE_SCHEMA_VERSION = 18;
 /** DATA_PRINCIPLE_SPINE sub-phase 06.5 — voiceClips row gains consentTokenKid (HS256 `kid` claim) for consent-audit pinning. */
 export const DATA_PRINCIPLE_SPINE_CONSENT_TOKEN_KID_SCHEMA_VERSION = 19;
+/** DATA_PRINCIPLE_SPINE sub-phase 10.6 (OQ-9) — `pii_redaction` correction-event type registered (TS union extension; pure-additive schema bump). */
+export const DATA_PRINCIPLE_SPINE_PII_REDACTION_EVENT_SCHEMA_VERSION = 20;
 
 // =============================================================================
 // DATABASE CLASS
@@ -754,6 +757,7 @@ export class AgriLogDatabase extends Dexie {
         applyV17(this);
         applyV18(this);
         applyV19(this);
+        applyV20(this);
     }
 }
 

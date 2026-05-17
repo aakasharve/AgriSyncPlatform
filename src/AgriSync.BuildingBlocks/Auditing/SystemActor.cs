@@ -62,4 +62,27 @@ public static class SystemActor
     /// </summary>
     public static readonly System.Guid CrossBorderLoggerUserId =
         new("ffffffff-ffff-ffff-ffff-fffffffffffe");
+
+    /// <summary>
+    /// DATA_PRINCIPLE_SPINE Phase 08 sub-phase 08.0 — sentinel for rows
+    /// whose original operator/creator/actor user has been anonymized by
+    /// the DPDP §12 ErasureWorker (DS-017 rule (a)). After the worker
+    /// processes an <c>ErasureRequest</c> the original user-id columns
+    /// (e.g. <c>operator_user_id</c>, <c>created_by_user_id</c>,
+    /// <c>actor_user_id</c>) on the surviving farm/compliance/accounting
+    /// rows are overwritten with this Guid. The rows then carry their
+    /// audit/financial weight WITHOUT identifying the principal —
+    /// satisfying §12 (erasure of personal data) while preserving the
+    /// non-personal fields the platform needs (DS-017 rule (c) keep
+    /// fields). The penultimate-byte differs from <see cref="Worker"/>
+    /// (<c>0xfd</c> vs <c>0xff</c>) and <see cref="CrossBorderLoggerUserId"/>
+    /// (<c>0xfd</c> vs <c>0xfe</c>), giving a deterministic sibling that
+    /// is queryable (<c>WHERE actor_user_id = '…fffd'</c> returns every
+    /// row touched by an erasure across the lifetime of the database).
+    /// Byte-8 stays at <c>0xff</c> so the reservation argument from
+    /// <see cref="Worker"/> still holds: an RFC 4122 v4 UserId cannot
+    /// collide with this constant.
+    /// </summary>
+    public static readonly System.Guid ErasedFarmer =
+        new("ffffffff-ffff-ffff-ffff-fffffffffffd");
 }

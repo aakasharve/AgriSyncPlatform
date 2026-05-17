@@ -33,7 +33,10 @@ import {
     JobCardsPage,
     JobCardDetailPage,
     WorkerProfilePage,
-    ConsentScreen
+    ConsentScreen,
+    ErasureRequestScreen,
+    ExportRequestScreen,
+    PiiReviewQueuePage
 } from './lazyComponents';
 
 export const renderProfileRoute = (ctx: AppRouterContext): React.ReactNode => {
@@ -341,6 +344,36 @@ export const renderConsentRoute = (ctx: AppRouterContext): React.ReactNode => {
     );
 };
 
+// spec: data-principle-spine-2026-05-05/08.6 — DPDP §12 self-serve erasure.
+export const renderErasureRequestRoute = (ctx: AppRouterContext): React.ReactNode => {
+    if (ctx.currentRoute !== 'dataRights/erasure') return null;
+    return (
+        <div className="animate-in fade-in slide-in-from-right-4 duration-300">
+            <ErasureRequestScreen onBack={() => ctx.setCurrentRoute('settings')} />
+        </div>
+    );
+};
+
+// spec: data-principle-spine-2026-05-05/08.6 — DPDP §11 self-serve export.
+export const renderExportRequestRoute = (ctx: AppRouterContext): React.ReactNode => {
+    if (ctx.currentRoute !== 'dataRights/export') return null;
+    return (
+        <div className="animate-in fade-in slide-in-from-right-4 duration-300">
+            <ExportRequestScreen onBack={() => ctx.setCurrentRoute('settings')} />
+        </div>
+    );
+};
+
+// spec: data-principle-spine-2026-05-05/10.4 — admin PII review queue.
+export const renderPiiReviewRoute = (ctx: AppRouterContext): React.ReactNode => {
+    if (ctx.currentRoute !== 'piiReview') return null;
+    return (
+        <div className="animate-in fade-in slide-in-from-right-4 duration-300">
+            <PiiReviewQueuePage />
+        </div>
+    );
+};
+
 // CEI Phase 4 §4.8 — Worker profile
 export const renderWorkerProfileRoute = (ctx: AppRouterContext): React.ReactNode => {
     if (ctx.currentRoute !== 'worker-profile') return null;
@@ -395,5 +428,8 @@ export const SIMPLE_ROUTE_RENDERERS: Array<(ctx: AppRouterContext) => React.Reac
     renderJobsRoute,
     renderJobDetailRoute,
     renderWorkerProfileRoute,
-    renderConsentRoute
+    renderConsentRoute,
+    renderErasureRequestRoute,
+    renderExportRequestRoute,
+    renderPiiReviewRoute
 ];

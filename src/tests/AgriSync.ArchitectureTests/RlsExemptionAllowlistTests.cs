@@ -58,6 +58,42 @@ public sealed class RlsExemptionAllowlistTests
     /// </summary>
     private static readonly HashSet<string> ExpectedRlsExemptions = new(StringComparer.Ordinal)
     {
+        // ── Phase 08 net-new exemptions ──────────────────────────────
+
+        // Phase 08.1 (per OQ-5 verdict on the 08.1 envelope) — DPDP
+        // rights surface tables. All six are user-keyed admin-only
+        // surfaces with no per-farm policy:
+        //   - erasure_requests / export_requests: user-keyed queue rows
+        //     read via IAdminDbContextFactory by the worker.
+        //   - retention_sweep_runs: system-only writes (sweeper);
+        //     admin-only reads.
+        //   - breach_incidents: admin-only writes
+        //     (POST /shramsafal/admin/breach/report) + admin-only reads.
+        //   - export_artifacts: indexed S3 keys; system-only writes
+        //     (ExportWorker), admin-only reads (sweeper).
+        //   - audit_read_telemetry: privileged-read sample; admin-only
+        //     reads via the breach-detection scaffolding.
+        // The 20260520000000_DpdpRightsSurface migration's GRANT block
+        // locks each table to the appropriate INSERT/UPDATE/SELECT
+        // boundary (DELETE revoked across the board — sweeper uses the
+        // admin-elevated factory).
+        "erasure_requests",
+        "export_requests",
+        "retention_sweep_runs",
+        "breach_incidents",
+        "export_artifacts",
+        "audit_read_telemetry",
+
+        // ── Phase 10 net-new exemptions ──────────────────────────────
+
+        // Phase 10.2 (OQ-6) — pii_review_queue is admin-only; reviewers
+        // span all farms (allow-list claim, not membership). An RLS
+        // policy keyed on agrisync.farm_id would evaluate NULL on every
+        // request and filter every row. The grant boundary
+        // (SELECT/INSERT/UPDATE; DELETE revoked) carries the
+        // append-only invariant. See ADR-DS-012.
+        "pii_review_queue",
+
         // ── Phase 06 net-new exemptions ──────────────────────────────
 
         // Phase 06.1 — user_consent_state + consent_audit are user-keyed

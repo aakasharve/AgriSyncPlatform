@@ -11,8 +11,11 @@ using AgriSync.BuildingBlocks.Results;
 using AgriSync.SharedKernel.Contracts.Ids;
 using ShramSafal.Application.Ports;
 using ShramSafal.Application.Ports.External;
+using ShramSafal.Application.Ports.Privacy;
 using ShramSafal.Domain.AI;
+using ShramSafal.Domain.Audit;
 using ShramSafal.Domain.Common;
+using ShramSafal.Domain.Privacy.Pii;
 
 namespace ShramSafal.Application.UseCases.AI.ParseVoiceInput;
 
@@ -23,7 +26,8 @@ public sealed class ParseVoiceInputHandler(
     IAiPromptBuilder promptBuilder,
     IEntitlementPolicy entitlementPolicy,
     IAnalyticsWriter analytics,
-    IClock clock)
+    IClock clock,
+    IThirdPartyPiiDetector piiDetector)
 {
     private static readonly Dictionary<string, int> MarathiNumberTokens = new(StringComparer.OrdinalIgnoreCase)
     {
@@ -226,13 +230,94 @@ public sealed class ParseVoiceInputHandler(
                 .LastOrDefault(a => a.IsSuccess)?.Id ?? Guid.Empty;
             if (winningAttemptId != Guid.Empty)
             {
-                var transcriptRow = Transcript.Create(
-                    aiJobId: orchestration.JobId,
-                    aiJobAttemptId: winningAttemptId,
-                    text: canonicalResult.RawTranscript,
-                    languageTag: "mr-IN",
-                    perTokenConfidenceJson: "[]");
-                await repository.AddTranscriptAsync(transcriptRow, ct);
+                // DATA_PRINCIPLE_SPINE Phase 10 sub-phase 10.3 (OQ-5)
+                // ─────────────────────────────────────────────────────
+                // Run the heuristic PII detector synchronously BEFORE
+                // persisting the transcript. DS-017 erasure expects
+                // scrubbed transcripts at rest; an async detector would
+                // leave a window where raw PII sits in the database.
+                // The detector is regex-only (no Gemini call) so the
+                // added latency is ~5-20ms — invisible against the
+                // 1-3s Gemini parse path. Perf budget: <30ms p95.
+                var rawTranscriptText = canonicalResult.RawTranscript ?? string.Empty;
+                var transcriptId = Guid.NewGuid();
+                var detection = await piiDetector.DetectAsync(transcriptId, rawTranscriptText, ct);
+
+                string? textToPersist = null;
+                switch (detection.Status)
+                {
+                    case PiiDetectionStatus.Clean:
+                        textToPersist = rawTranscriptText;
+                        break;
+                    case PiiDetectionStatus.AutoRedacted:
+                    case PiiDetectionStatus.ReviewQueue:
+                        textToPersist = detection.RedactedText ?? rawTranscriptText;
+                        break;
+                    case PiiDetectionStatus.Discard:
+                        // Drop the transcript entirely — only the queue
+                        // row survives (status=Discarded) as the audit
+                        // trail of the decision. No transcript persists.
+                        textToPersist = null;
+                        break;
+                }
+
+                if (textToPersist is not null)
+                {
+                    var transcriptRow = Transcript.Create(
+                        aiJobId: orchestration.JobId,
+                        aiJobAttemptId: winningAttemptId,
+                        text: textToPersist,
+                        languageTag: "mr-IN",
+                        perTokenConfidenceJson: "[]");
+                    // Re-stamp the deterministic transcriptId so the
+                    // queue row's FK matches what we actually persist.
+                    // Transcript.Create assigned a fresh Guid; we
+                    // already committed our copy to the queue row
+                    // below. The simplest invariant: regenerate the
+                    // queue row's transcript-id reference from the
+                    // transcript we just made.
+                    transcriptId = transcriptRow.Id;
+                    await repository.AddTranscriptAsync(transcriptRow, ct);
+                }
+
+                if (detection.Status != PiiDetectionStatus.Clean)
+                {
+                    var queueEntry = PiiReviewQueueEntry.FromDetection(
+                        transcriptId: transcriptId,
+                        originalText: rawTranscriptText,
+                        detection: detection,
+                        nowUtc: clock.UtcNow);
+                    await repository.AddPiiReviewQueueEntryAsync(queueEntry, ct);
+                }
+
+                // Emit one AuditEvent per scan (success or null result).
+                // entityType=Transcript pins the audit row to the
+                // warm-tier projection; entityId is the transcript id we
+                // assigned (even on discard, so the audit trail still
+                // resolves consistently).
+                var piiAudit = AuditEventFactory.Create(
+                    entityType: "Transcript",
+                    entityId: transcriptId,
+                    action: "PiiScanCompleted",
+                    actorUserId: command.UserId,
+                    actorRole: "operator",
+                    payload: new
+                    {
+                        score = detection.Score,
+                        status = detection.Status.ToString(),
+                        markerCount = detection.MarkerCount,
+                        nameCount = detection.NameCount,
+                        transcriptPersisted = textToPersist is not null,
+                    },
+                    farmId: command.FarmId,
+                    clientCommandId: null,
+                    appVersion: string.IsNullOrWhiteSpace(command.ClientAppVersion)
+                        ? AgriSync.BuildingBlocks.Persistence.AppVersionProvider.Current
+                        : command.ClientAppVersion,
+                    deviceId: "voice-parse",
+                    ipHash: "sha256:voice-parse",
+                    sourceAiJobId: orchestration.JobId);
+                await repository.AddAuditEventAsync(piiAudit, ct);
             }
 
             await EmitAiInvocationAsync(

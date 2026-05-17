@@ -78,6 +78,14 @@ internal sealed class FarmConfiguration : IEntityTypeConfiguration<Farm>
             .HasColumnName("farm_code")
             .HasMaxLength(12);
 
+        // spec: data-principle-spine-2026-05-05/10.5 (OQ-8) — corpus-
+        // inclusion gate for labour-heavy farms. Default false; ops
+        // engineer flips manually per the runbook after counsel sign-off.
+        builder.Property(x => x.LabourHeavyCorpusEnabled)
+            .HasColumnName("labour_heavy_corpus_enabled")
+            .HasDefaultValue(false)
+            .IsRequired();
+
         builder.HasIndex(x => x.ModifiedAtUtc);
         builder.HasIndex(x => x.OwnerAccountId)
             .HasDatabaseName("ix_farms_owner_account_id");

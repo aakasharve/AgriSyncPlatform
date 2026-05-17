@@ -30,6 +30,8 @@
 
   <ItemGroup>
     <EmbeddedResource Include="AI\Prompts\**\*.md" />
+    <!-- spec: data-principle-spine-2026-05-05/10.1 — heuristic PII name dictionary. -->
+    <EmbeddedResource Include="Privacy\Resources\*.txt" />
   </ItemGroup>
 
 </Project>

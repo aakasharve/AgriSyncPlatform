@@ -1,0 +1,47 @@
+# LEGAL_REVIEW_PENDING: counsel must finalize this name list before production review queue accepts non-test data
+# DATA_PRINCIPLE_SPINE Phase 10 sub-phase 10.1 — heuristic worker-name dictionary.
+# Common Marathi given names used as labour/mukadam placeholders for the v1 detector.
+# Lines starting with '#' are comments. Blank lines ignored. One name per line, Devanagari.
+# Verified: none of these names correspond to any real farmer / co-op partner
+# present in seed data or onboarded test users as of 2026-05-17.
+Ravi
+Sunil
+Akash
+Pradeep
+Mukadam
+Sahebrao
+Sandeep
+Mahesh
+Suresh
+Ramesh
+Ganesh
+Dinesh
+Rajesh
+Bharat
+Arjun
+Vijay
+Prakash
+Manoj
+Anil
+Sanjay
+रवी
+सुनील
+प्रदीप
+साहेबराव
+संदीप
+महेश
+सुरेश
+रमेश
+गणेश
+दिनेश
+राजेश
+भरत
+अर्जुन
+विजय
+प्रकाश
+मनोज
+अनिल
+संजय
+रामू
+सीता
+मुकादम

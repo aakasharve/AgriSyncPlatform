@@ -42,6 +42,11 @@ export const WorkerProfilePage = React.lazy(() => import('../../features/work/pa
 export const OfflineConflictPage = React.lazy(() => import('../../features/sync/conflict/OfflineConflictPage'));
 // spec: data-principle-spine-2026-05-05/06.4 — privacy/consent settings screen.
 export const ConsentScreen = React.lazy(() => import('../../features/consent/ConsentScreen'));
+// spec: data-principle-spine-2026-05-05/08.6 — DPDP §11 / §12 data-rights screens.
+export const ErasureRequestScreen = React.lazy(() => import('../../features/dataRights/ErasureRequestScreen'));
+export const ExportRequestScreen = React.lazy(() => import('../../features/dataRights/ExportRequestScreen'));
+// spec: data-principle-spine-2026-05-05/10.4 — admin PII review queue.
+export const PiiReviewQueuePage = React.lazy(() => import('../../features/admin/piiReview/PiiReviewQueuePage'));
 
 export const RouteLoader: React.FC = () => (
     React.createElement('div', {

@@ -90,6 +90,8 @@ const KNOWN_ROUTES: readonly AppRoute[] = [
     'job-detail',
     'worker-profile',
     'farm-boundary',
+    // DATA_PRINCIPLE_SPINE Phase 10.4 — admin PII review queue.
+    'piiReview',
 ];
 
 export function isKnownRoute(value: string): value is AppRoute {

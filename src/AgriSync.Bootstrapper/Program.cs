@@ -379,6 +379,23 @@ try
     builder.Services.AddHostedService<AgriSync.Bootstrapper.Jobs.TestOverdueSweeper>();
     // CEI Phase 3 §4.6 — nightly compliance evaluation sweep at 03:00 UTC
     builder.Services.AddHostedService<AgriSync.Bootstrapper.Jobs.ComplianceEvaluatorSweeper>();
+    // DATA_PRINCIPLE_SPINE 08.2 / 08.3 / 08.4 — DPDP rights surface
+    // workers. ErasureWorker drains ssf.erasure_requests (DS-017
+    // 5-rule ANONYMIZE); ExportWorker drains ssf.export_requests
+    // (assembles per-user ZIP per OQ-3 manifest); RetentionSweepWorker
+    // fires at 03:00 IST daily to age out export_artifacts > 7d and
+    // audit_read_telemetry > 30d.
+    builder.Services.AddHostedService<ShramSafal.Infrastructure.Privacy.ErasureWorker>();
+    builder.Services.AddHostedService<ShramSafal.Infrastructure.Privacy.ExportWorker>();
+    builder.Services.AddHostedService<AgriSync.Bootstrapper.Jobs.RetentionSweepWorker>();
+    // DATA_PRINCIPLE_SPINE 08.7 (OQ-8) — Phase 08 binds a throwing
+    // stub for retained voice deletion. Phase 07 REPLACES this
+    // registration with an S3-backed adapter once voice_clips_retained
+    // ships. ErasureWorker catches the NotImplementedException + marks
+    // voice_clips_retained_deferred=true on the request payload.
+    builder.Services.AddSingleton<
+        ShramSafal.Application.Privacy.Ports.IRetainedBlobStore,
+        ShramSafal.Infrastructure.Privacy.PendingRetainedBlobStore>();
     builder.Services.AddScoped<AgriSync.Bootstrapper.Jobs.IWorkerRetentionReader,
         AgriSync.Bootstrapper.Infrastructure.WorkerRetentionReader>();
     builder.Services.AddTransient<AgriSync.Bootstrapper.Infrastructure.DatabaseSeeder>();

@@ -410,7 +410,13 @@ export type AppRoute =
     /** Canonical farm boundary drawing (weather anchor). */
     | 'farm-boundary'
     /** DATA_PRINCIPLE_SPINE Phase 06.4 — privacy/consent settings screen. */
-    | 'consent';
+    | 'consent'
+    /** DATA_PRINCIPLE_SPINE Phase 08.6 — DPDP §12 self-serve erasure screen. */
+    | 'dataRights/erasure'
+    /** DATA_PRINCIPLE_SPINE Phase 08.6 — DPDP §11 self-serve export screen. */
+    | 'dataRights/export'
+    /** DATA_PRINCIPLE_SPINE Phase 10.4 — admin PII review queue. */
+    | 'piiReview';
 
 export interface AudioData {
     blob: Blob;

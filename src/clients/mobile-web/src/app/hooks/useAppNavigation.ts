@@ -29,6 +29,8 @@ const KNOWN_ROUTES: readonly AppRoute[] = [
     'qr-demo',
     // spec: data-principle-spine-2026-05-05/06.4
     'consent',
+    // spec: data-principle-spine-2026-05-05/10.4 — admin PII review queue.
+    'piiReview',
 ];
 
 const readInitialRouteFromUrl = (): AppRoute => {

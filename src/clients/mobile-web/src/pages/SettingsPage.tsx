@@ -206,6 +206,54 @@ const SettingsPage: React.FC<SettingsPageProps> = ({
                 </div>
             </div>
 
+            {/* spec: data-principle-spine-2026-05-05/08.6 — DPDP §11 Export entry. */}
+            <div className="glass-panel p-5 mb-3">
+                <div className="flex items-start justify-between gap-4">
+                    <div className="flex items-start gap-4 text-stone-700">
+                        <div className="bg-emerald-100 p-3 rounded-2xl text-emerald-700 shadow-sm">
+                            <Shield size={22} strokeWidth={2.5} />
+                        </div>
+                        <div>
+                            <h4 className="font-bold text-lg">Export my data</h4>
+                            <p className="text-xs text-stone-500 mt-1 leading-relaxed max-w-[280px]">
+                                Download a copy of all your AgriSync data.
+                            </p>
+                        </div>
+                    </div>
+                    <button
+                        onClick={() => setCurrentRoute('dataRights/export')}
+                        className="shrink-0 rounded-xl bg-emerald-100 px-3 py-2 text-xs font-black text-emerald-800 transition-colors hover:bg-emerald-200 active:scale-95"
+                        data-testid="settings-open-data-export"
+                    >
+                        Open
+                    </button>
+                </div>
+            </div>
+
+            {/* spec: data-principle-spine-2026-05-05/08.6 — DPDP §12 Erasure entry. */}
+            <div className="glass-panel p-5 mb-6">
+                <div className="flex items-start justify-between gap-4">
+                    <div className="flex items-start gap-4 text-stone-700">
+                        <div className="bg-red-100 p-3 rounded-2xl text-red-700 shadow-sm">
+                            <Trash2 size={22} strokeWidth={2.5} />
+                        </div>
+                        <div>
+                            <h4 className="font-bold text-lg">Erase my data</h4>
+                            <p className="text-xs text-stone-500 mt-1 leading-relaxed max-w-[280px]">
+                                Permanently anonymize your personal data.
+                            </p>
+                        </div>
+                    </div>
+                    <button
+                        onClick={() => setCurrentRoute('dataRights/erasure')}
+                        className="shrink-0 rounded-xl bg-red-100 px-3 py-2 text-xs font-black text-red-800 transition-colors hover:bg-red-200 active:scale-95"
+                        data-testid="settings-open-data-erasure"
+                    >
+                        Open
+                    </button>
+                </div>
+            </div>
+
             <div className="glass-panel p-5 mb-6">
                 <div className="flex items-start justify-between gap-4">
                     <div className="flex items-start gap-4 text-stone-700">
@@ -406,6 +454,14 @@ const SettingsPage: React.FC<SettingsPageProps> = ({
                     >
                         <Activity size={20} />
                         Open Ops Health (Admin)
+                    </button>
+                    {/* spec: data-principle-spine-2026-05-05/10.4 — admin PII review queue. */}
+                    <button
+                        onClick={() => setCurrentRoute('piiReview')}
+                        className="w-full py-3 px-4 bg-amber-50 text-amber-800 font-bold rounded-xl hover:bg-amber-100 transition-colors flex items-center justify-center gap-2 active:scale-[0.98]"
+                    >
+                        <Bot size={20} />
+                        Open PII Review Queue (Admin)
                     </button>
                 </div>
             </div>

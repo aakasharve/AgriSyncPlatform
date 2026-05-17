@@ -97,7 +97,19 @@ public static class DependencyInjection
     public static IServiceCollection AddShramSafalApi(this IServiceCollection services, IConfiguration configuration)
     {
         services.AddShramSafalInfrastructure(configuration);
-        services.AddAuthorization();
+        services.AddAuthorization(options =>
+        {
+            // DATA_PRINCIPLE_SPINE Phase 10 sub-phase 10.4 — admin
+            // review-queue surface. Reviewer allow-list lives in
+            // PiiOptions (bound in AddShramSafalInfrastructure above).
+            options.AddPolicy(
+                ShramSafal.Api.Authorization.PiiReviewerRequirement.PolicyName,
+                policy => policy.Requirements.Add(
+                    new ShramSafal.Api.Authorization.PiiReviewerRequirement()));
+        });
+        services.AddSingleton<
+            Microsoft.AspNetCore.Authorization.IAuthorizationHandler,
+            ShramSafal.Api.Authorization.PiiReviewerAuthorizationHandler>();
         services.AddScoped<ExportDailySummaryHandler>();
         services.AddScoped<ExportMonthlyCostHandler>();
         services.AddScoped<ExportVerificationReportHandler>();
@@ -142,6 +154,8 @@ public static class DependencyInjection
 
         services.AddScoped<ParseVoiceInputHandler>();
         services.AddScoped<CoVeReverifyHandler>();
+        // DATA_PRINCIPLE_SPINE Phase 10 sub-phase 10.4 — PII review handler.
+        services.AddScoped<ShramSafal.Application.UseCases.Privacy.PiiReview.ReviewPiiQueueEntryHandler>();
         // DATA_PRINCIPLE_SPINE 05.2 — KMS-backed tenant DEK use cases.
         // Handlers depend on AgriSync.BuildingBlocks.Security.ITenantDekService
         // (registered in AgriSync.Bootstrapper/Program.cs alongside the AWS
@@ -155,6 +169,12 @@ public static class DependencyInjection
         // IShramSafalRepository methods added in 06.1.
         services.AddScoped<GetConsentHandler>();
         services.AddScoped<UpdateConsentHandler>();
+
+        // DATA_PRINCIPLE_SPINE 08.2 / 08.3 / 08.5 — DPDP rights surface
+        // handlers. All three depend on TimeProvider + IShramSafalRepository.
+        services.AddScoped<ShramSafal.Application.UseCases.Privacy.RequestErasure.RequestErasureHandler>();
+        services.AddScoped<ShramSafal.Application.UseCases.Privacy.RequestExport.RequestExportHandler>();
+        services.AddScoped<ShramSafal.Application.UseCases.Privacy.ReportBreach.ReportBreachHandler>();
         services.AddScoped<ExtractReceiptHandler>();
         services.AddScoped<ExtractPattiImageHandler>();
         services.AddScoped<CreateDocumentSessionHandler>();

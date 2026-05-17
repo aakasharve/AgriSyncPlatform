@@ -43,6 +43,18 @@ public sealed class Farm : Entity<FarmId>
     /// </summary>
     public string? FarmCode { get; private set; }
 
+    /// <summary>
+    /// DATA_PRINCIPLE_SPINE Phase 10 sub-phase 10.5 (OQ-8) — gate for
+    /// the Phase 09 corpus reader. Defaults to <c>false</c>; an ops
+    /// engineer flips this via the
+    /// <c>LABOUR_HEAVY_CORPUS_ENABLEMENT.md</c> runbook AFTER counsel
+    /// sign-off + first-100-clips review. The Phase 09 reader query
+    /// filters with
+    /// <c>WHERE labour_heavy_corpus_enabled = true OR job_card_count &lt;= 5</c>
+    /// — see envelope §10.5 forward-reference.
+    /// </summary>
+    public bool LabourHeavyCorpusEnabled { get; private set; }
+
     public static Farm Create(FarmId id, string name, UserId ownerUserId, DateTime createdAtUtc)
     {
         if (string.IsNullOrWhiteSpace(name))

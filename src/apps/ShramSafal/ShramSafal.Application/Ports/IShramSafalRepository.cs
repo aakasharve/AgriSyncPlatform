@@ -329,4 +329,75 @@ public interface IShramSafalRepository
     /// </summary>
     Task AddConsentAuditEntryAsync(ConsentAuditEntry entry, CancellationToken ct = default)
         => Task.CompletedTask;
+
+    // --- DATA_PRINCIPLE_SPINE sub-phase 10.2 / 10.4 (PII review queue) ---
+    /// <summary>
+    /// Append a brand-new <see cref="ShramSafal.Domain.Privacy.Pii.PiiReviewQueueEntry"/>
+    /// row to <c>ssf.pii_review_queue</c>. INSERT-only by privilege
+    /// (migration revokes DELETE). Used by
+    /// <c>ParseVoiceInputHandler</c> on every detection event that
+    /// produces a redaction (auto-redacted, review-pending, or
+    /// discard).
+    /// </summary>
+    Task AddPiiReviewQueueEntryAsync(
+        ShramSafal.Domain.Privacy.Pii.PiiReviewQueueEntry entry,
+        CancellationToken ct = default)
+        => Task.CompletedTask;
+
+    /// <summary>
+    /// Fetch the queue entry by id, or <c>null</c> when absent. Used
+    /// by the approve/reject endpoints; no farm-scope check (reviewer
+    /// allow-list spans all farms per OQ-6).
+    /// </summary>
+    Task<ShramSafal.Domain.Privacy.Pii.PiiReviewQueueEntry?> GetPiiReviewQueueEntryAsync(
+        Guid entryId,
+        CancellationToken ct = default)
+        => Task.FromResult<ShramSafal.Domain.Privacy.Pii.PiiReviewQueueEntry?>(null);
+
+    /// <summary>
+    /// List queue entries filtered by status. The admin UI calls
+    /// this with <see cref="ShramSafal.Domain.Privacy.Pii.PiiReviewStatus.Pending"/>
+    /// to drain the review queue.
+    /// </summary>
+    Task<IReadOnlyList<ShramSafal.Domain.Privacy.Pii.PiiReviewQueueEntry>> ListPiiReviewQueueAsync(
+        ShramSafal.Domain.Privacy.Pii.PiiReviewStatus status,
+        int limit,
+        CancellationToken ct = default)
+        => Task.FromResult<IReadOnlyList<ShramSafal.Domain.Privacy.Pii.PiiReviewQueueEntry>>(Array.Empty<ShramSafal.Domain.Privacy.Pii.PiiReviewQueueEntry>());
+
+    // --- DATA_PRINCIPLE_SPINE sub-phase 08.1 (DPDP rights surface) -------
+    /// <summary>
+    /// Enqueue a fresh <see cref="ErasureRequest"/> row for the async
+    /// ErasureWorker (08.2) to process. Default impl is a no-op so test
+    /// stubs that don't exercise the erasure path stay compiling; the
+    /// production <c>ShramSafalRepository</c> overrides.
+    /// </summary>
+    Task AddErasureRequestAsync(ErasureRequest request, CancellationToken ct = default)
+        => Task.CompletedTask;
+
+    /// <summary>
+    /// Enqueue a fresh <see cref="ExportRequest"/> row for the async
+    /// ExportWorker (08.3) to process.
+    /// </summary>
+    Task AddExportRequestAsync(ExportRequest request, CancellationToken ct = default)
+        => Task.CompletedTask;
+
+    /// <summary>
+    /// Append a <see cref="BreachIncident"/> to the breach ledger
+    /// (Phase 08.5 scaffolding — admin records a breach; Phase 12+
+    /// wires the dispatcher).
+    /// </summary>
+    Task AddBreachIncidentAsync(BreachIncident incident, CancellationToken ct = default)
+        => Task.CompletedTask;
+
+    /// <summary>
+    /// Read the user's recent erasure requests for the mobile
+    /// "Recent requests" UI. Default impl returns empty so test stubs
+    /// stay compiling.
+    /// </summary>
+    Task<List<ErasureRequest>> GetErasureRequestsForUserAsync(Guid userId, CancellationToken ct = default)
+        => Task.FromResult(new List<ErasureRequest>());
+
+    Task<List<ExportRequest>> GetExportRequestsForUserAsync(Guid userId, CancellationToken ct = default)
+        => Task.FromResult(new List<ExportRequest>());
 }

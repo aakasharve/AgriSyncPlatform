@@ -255,6 +255,18 @@ public static class DependencyInjection
             }
         });
 
+        // DATA_PRINCIPLE_SPINE Phase 10 sub-phase 10.1 — PII detector
+        // options + adapter binding. The detector adapter is a Scoped
+        // service so each request gets fresh threshold values; the
+        // embedded dictionary is loaded once per process via a Lazy<>
+        // inside the adapter. The port is consumed by
+        // ParseVoiceInputHandler (synchronous wire — OQ-5).
+        services.Configure<ShramSafal.Infrastructure.Privacy.PiiOptions>(
+            configuration.GetSection(ShramSafal.Infrastructure.Privacy.PiiOptions.SectionName));
+        services.AddScoped<
+            ShramSafal.Application.Ports.Privacy.IThirdPartyPiiDetector,
+            ShramSafal.Infrastructure.Privacy.HeuristicWorkerNameDetector>();
+
         services.Configure<TomorrowIoOptions>(options =>
         {
             var section = configuration.GetSection(TomorrowIoOptions.SectionName);

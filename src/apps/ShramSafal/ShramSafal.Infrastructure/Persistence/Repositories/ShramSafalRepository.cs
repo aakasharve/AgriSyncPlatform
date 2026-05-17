@@ -976,6 +976,89 @@ internal sealed class ShramSafalRepository(ShramSafalDbContext db) : IShramSafal
         await db.ConsentAuditEntries.AddAsync(entry, ct);
     }
 
+    // ── DATA_PRINCIPLE_SPINE sub-phase 10.2 / 10.4 (PII review queue) ────
+    // spec: data-principle-spine-2026-05-05/10.2
+
+    public async Task AddPiiReviewQueueEntryAsync(
+        ShramSafal.Domain.Privacy.Pii.PiiReviewQueueEntry entry,
+        CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(entry);
+        await db.PiiReviewQueueEntries.AddAsync(entry, ct);
+    }
+
+    public async Task<ShramSafal.Domain.Privacy.Pii.PiiReviewQueueEntry?> GetPiiReviewQueueEntryAsync(
+        Guid entryId,
+        CancellationToken ct = default)
+    {
+        if (entryId == Guid.Empty)
+        {
+            return null;
+        }
+
+        return await db.PiiReviewQueueEntries.FirstOrDefaultAsync(e => e.Id == entryId, ct);
+    }
+
+    public async Task<IReadOnlyList<ShramSafal.Domain.Privacy.Pii.PiiReviewQueueEntry>> ListPiiReviewQueueAsync(
+        ShramSafal.Domain.Privacy.Pii.PiiReviewStatus status,
+        int limit,
+        CancellationToken ct = default)
+    {
+        var clamped = limit <= 0 ? 50 : Math.Min(limit, 200);
+        return await db.PiiReviewQueueEntries
+            .Where(e => e.Status == status)
+            .OrderBy(e => e.OccurredAtUtc)
+            .Take(clamped)
+            .ToListAsync(ct);
+    }
+
+    // ── DATA_PRINCIPLE_SPINE sub-phase 08.1 (DPDP rights surface) ────────
+    // spec: data-principle-spine-2026-05-05/08.1
+
+    public async Task AddErasureRequestAsync(ErasureRequest request, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        await db.ErasureRequests.AddAsync(request, ct);
+    }
+
+    public async Task AddExportRequestAsync(ExportRequest request, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        await db.ExportRequests.AddAsync(request, ct);
+    }
+
+    public async Task AddBreachIncidentAsync(BreachIncident incident, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(incident);
+        await db.BreachIncidents.AddAsync(incident, ct);
+    }
+
+    public async Task<List<ErasureRequest>> GetErasureRequestsForUserAsync(Guid userId, CancellationToken ct = default)
+    {
+        if (userId == Guid.Empty)
+        {
+            return new List<ErasureRequest>();
+        }
+        return await db.ErasureRequests
+            .Where(r => r.RequestedByUserId == userId || r.OnBehalfOfUserId == userId)
+            .OrderByDescending(r => r.RequestedAtUtc)
+            .Take(50)
+            .ToListAsync(ct);
+    }
+
+    public async Task<List<ExportRequest>> GetExportRequestsForUserAsync(Guid userId, CancellationToken ct = default)
+    {
+        if (userId == Guid.Empty)
+        {
+            return new List<ExportRequest>();
+        }
+        return await db.ExportRequests
+            .Where(r => r.RequestedByUserId == userId || r.OnBehalfOfUserId == userId)
+            .OrderByDescending(r => r.RequestedAtUtc)
+            .Take(50)
+            .ToListAsync(ct);
+    }
+
     private sealed class OperatorDirectoryRow
     {
         public Guid UserId { get; set; }
