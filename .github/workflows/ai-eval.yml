@@ -35,8 +35,15 @@ jobs:
 
       - name: Run smoke eval (10 cases)
         working-directory: src/clients/mobile-web
+        # GEMINI_API_KEY (no VITE_ prefix): this is a Node ts-node CLI
+        # runner that calls Gemini directly to measure parse quality on
+        # golden cases. It is CI-only and never bundled into mobile-web
+        # — the dist-grep step in dotnet-ci.yml + the vite.config.ts
+        # assertNoForbiddenEnv guard both still enforce zero browser-
+        # exposure of any Gemini key. See ADR-DS-004 §AI-Eval Exception
+        # for the architectural rationale.
         env:
-          VITE_GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           EVAL_MODE: smoke
           EVAL_MAX_CASES: "10"
         run: |
@@ -66,8 +73,10 @@ jobs:
 
       - name: Run full eval
         working-directory: src/clients/mobile-web
+        # GEMINI_API_KEY (no VITE_ prefix): see comment on smoke job above.
+        # CI-only Node ts-node runner; never bundled into mobile-web.
         env:
-          VITE_GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           EVAL_MODE: full
         run: |
           if [ -f "_COFOUNDER/eval/run.ts" ]; then
