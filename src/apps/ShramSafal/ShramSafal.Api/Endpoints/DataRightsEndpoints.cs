@@ -1,13 +1,18 @@
 // spec: data-principle-spine-2026-05-05/08.2
 // spec: data-principle-spine-2026-05-05/08.3
 //
-// DPDP §11 / §12 data-rights endpoints. Self-serve flow only here
-// (the admin-on-behalf-of erasure endpoint lives in AdminEndpoints —
-// see /shramsafal/admin/erasure/request). All routes mount under
-// /shramsafal/me/* and require the bearer token.
+// DPDP §11 / §12 data-rights endpoints per Phase 08 R0/OQ-2 verdict
+// (OPTION_C: self-serve AND admin override). Self-serve mounts under
+// /shramsafal/me/*; admin-on-behalf-of mounts under
+// /shramsafal/admin/erasure/request and requires platform-admin claim
+// via AdminScopeHelper (BreachEndpoints precedent). Both endpoints
+// enqueue identical ErasureRequest payload; the audit trail
+// differentiates via RequestedByUserId (admin) vs OnBehalfOfUserId
+// (target). All routes require bearer token.
 
 using AgriSync.BuildingBlocks.Audit;
 using AgriSync.BuildingBlocks.Results;
+using ShramSafal.Application.Admin.Ports;
 using ShramSafal.Application.UseCases.Privacy.RequestErasure;
 using ShramSafal.Application.UseCases.Privacy.RequestExport;
 using ShramSafal.Domain.Common;
@@ -26,7 +31,66 @@ public static class DataRightsEndpoints
             .WithName("RequestExportForCurrentUser")
             .RequireAuthorization();
 
+        // Phase 08 R0/OQ-2 OPTION_C — admin-on-behalf-of erasure trigger.
+        // Required for fraud, account closure, support-ticket-driven flows
+        // where the principal cannot or will not initiate. AdminScopeHelper
+        // platform-admin gate matches BreachEndpoints precedent.
+        group.MapPost("/admin/erasure/request", HandleAdminErasureRequestAsync)
+            .WithName("RequestErasureOnBehalfOfUser")
+            .RequireAuthorization();
+
         return group;
+    }
+
+    public sealed record AdminErasureRequest(Guid TargetUserId);
+
+    private static async Task<IResult> HandleAdminErasureRequestAsync(
+        HttpContext httpContext,
+        IEntitlementResolver resolver,
+        AdminErasureRequest request,
+        RequestErasureHandler handler,
+        CancellationToken ct)
+    {
+        var scope = await AdminScopeHelper.ResolveOrDenyAsync(httpContext, resolver, ct);
+        if (scope is null) return Results.Empty;
+        if (!await AdminScopeHelper.RequirePlatformAdminAsync(httpContext, scope)) return Results.Empty;
+
+        if (request is null || request.TargetUserId == Guid.Empty)
+        {
+            return Results.BadRequest(new
+            {
+                error = ShramSafalErrors.InvalidCommand.Code,
+                message = "TargetUserId is required.",
+            });
+        }
+
+        if (!EndpointActorContext.TryGetUserId(httpContext.User, out var adminUserId))
+        {
+            return Results.Unauthorized();
+        }
+
+        var (deviceId, ipHash) = httpContext.AuditClaims();
+        var appVersion = ResolveAppVersion(httpContext);
+
+        // RequestedByUserId = admin (the actor); OnBehalfOfUserId = target
+        // (the principal whose data is being erased). Worker enqueues
+        // identical anonymization regardless of trigger; audit row carries
+        // both fields so reviewers can distinguish self-serve from admin-
+        // initiated post-hoc.
+        var command = new RequestErasureCommand(
+            RequestedByUserId: adminUserId,
+            OnBehalfOfUserId: request.TargetUserId,
+            ClientAppVersion: appVersion,
+            AuditDeviceId: deviceId,
+            AuditIpHash: ipHash);
+
+        var result = await handler.HandleAsync(command, ct);
+        if (!result.IsSuccess)
+        {
+            return ToErrorResult(result.Error);
+        }
+
+        return Results.Accepted(value: result.Value);
     }
 
     private static async Task<IResult> HandleRequestErasureAsync(
