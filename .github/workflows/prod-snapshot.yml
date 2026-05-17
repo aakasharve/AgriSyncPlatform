@@ -100,53 +100,31 @@ jobs:
           # be replaced with the real account ID before first run (Kiro
           # owns this, not committed in the repo).
 
-      - name: Install Postgres client + jq
+      - name: Install jq (no Postgres client in v2 HYBRID)
         run: |
           set -euo pipefail
+          # v2 HYBRID architecture (Option δ, 2026-05-17): the script uses
+          # aws rds create-db-snapshot for the DB backup, NOT pg_dump. So
+          # postgresql-client-16 is no longer needed. Only jq + aws CLI.
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends postgresql-client-16 jq
-          pg_dump --version
+          sudo apt-get install -y --no-install-recommends jq
           jq --version
           aws --version
 
-      - name: Fetch Postgres connection from AWS Secrets Manager
-        id: pg-secret
+      - name: Resolve env (buckets, RDS instance, region)
         env:
           ENV: ${{ inputs.env }}
         run: |
           set -euo pipefail
-          # The secret stores: { host, port, user, database, password } as JSON.
-          # Kiro creates this secret per env per aws/snapshot/README.md prereq #4.
-          SECRET_JSON="$(aws secretsmanager get-secret-value \
-              --secret-id "agrisync/snapshot/pg-${ENV}" \
-              --query SecretString --output text)"
-          {
-            echo "PG_HOST=$(echo "$SECRET_JSON" | jq -r .host)"
-            echo "PG_PORT=$(echo "$SECRET_JSON" | jq -r .port)"
-            echo "PG_USER=$(echo "$SECRET_JSON" | jq -r .user)"
-            echo "PG_DATABASE=$(echo "$SECRET_JSON" | jq -r .database)"
-            echo "::add-mask::$(echo "$SECRET_JSON" | jq -r .password)"
-            echo "PGPASSWORD=$(echo "$SECRET_JSON" | jq -r .password)"
-          } >> "$GITHUB_ENV"
-
-      - name: Resolve bucket names
-        env:
-          ENV: ${{ inputs.env }}
-        run: |
-          set -euo pipefail
-          # Single-account prod scope (founder lock 2026-05-17): bucket names
-          # are fixed to the existing shramsafal-* convention; we do NOT
-          # interpolate ${ENV} into the bucket name because dev/staging
-          # buckets don't exist in this account.
+          # v2 HYBRID: single-account prod scope (founder lock 2026-05-17).
+          # Fixed names match what's in account 951921970996 today:
           # - shramsafal-uploads-prod: confirmed against
-          #   _deploy/api/appsettings.Production.json (ShramSafal.Storage
-          #   section). The "raw blob" abstraction physically maps here.
-          # - shramsafal-voice-retained-prod: pending Kiro applying Wave 1.C
-          #   IaC at aws/voice-retained/create-bucket.sh. If the bucket does
-          #   not exist at snapshot time, the inventory step for it will
-          #   fail with NoSuchBucket — first runs may need to defer the
-          #   retained-voice inventory until Kiro applies the IaC.
+          #   _deploy/api/appsettings.Production.json (ShramSafal.Storage)
+          # - shramsafal-voice-retained-prod: created by Wave 1.C IaC apply
+          # - shramsafal-prod-db: RDS instance (private VPC; we use AWS RDS
+          #   native snapshot API, no DB credentials needed)
           {
+            echo "DB_INSTANCE_IDENTIFIER=shramsafal-prod-db"
             echo "RAW_BLOB_BUCKET=shramsafal-uploads-prod"
             echo "RETAINED_VOICE_BUCKET=shramsafal-voice-retained-prod"
             echo "AWS_REGION=ap-south-1"
