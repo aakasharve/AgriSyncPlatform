@@ -38,6 +38,8 @@ import type {
     AdminOpsHealthDto,
     AttachmentDto,
     AuthResponseDto,
+    CoVeReverifyRequest,
+    CoVeReverifyResponse,
     CreateAttachmentRequest,
     CreateAttachmentResponse,
     CreateExtractionSessionResponse,
@@ -86,6 +88,8 @@ export type {
     AttentionBoardDto,
     AttentionCardDto,
     AuthResponseDto,
+    CoVeReverifyRequest,
+    CoVeReverifyResponse,
     CostEntryDto,
     CreateAttachmentRequest,
     CreateAttachmentResponse,
@@ -336,6 +340,13 @@ export class AgriSyncClient implements HttpTransport {
 
     getAiDashboard(): Promise<AiDashboardResponse> {
         return Ai.getAiDashboard(this);
+    }
+
+    // spec: data-principle-spine-2026-05-05/05.1
+    // Server-side CoVe re-query — see AiResource.coveReverify for the
+    // rationale (kills the browser-direct Gemini path).
+    coveReverify(request: CoVeReverifyRequest): Promise<CoVeReverifyResponse> {
+        return Ai.coveReverify(this, request);
     }
 
     // --- Admin ------------------------------------------------------------

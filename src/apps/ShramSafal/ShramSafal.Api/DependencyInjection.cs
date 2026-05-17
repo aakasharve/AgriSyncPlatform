@@ -6,6 +6,7 @@ using ShramSafal.Application.UseCases.Attachments.GetAttachmentMetadata;
 using ShramSafal.Application.UseCases.Attachments.ListAttachmentsForEntity;
 using ShramSafal.Application.UseCases.Attachments.UploadAttachment;
 using ShramSafal.Application.UseCases.CropCycles.CreateCropCycle;
+using ShramSafal.Application.UseCases.AI.CoVeReverify;
 using ShramSafal.Application.UseCases.AI.CreateDocumentSession;
 using ShramSafal.Application.UseCases.AI.ExtractPattiImage;
 using ShramSafal.Application.UseCases.AI.ExtractReceipt;
@@ -136,6 +137,7 @@ public static class DependencyInjection
         services.AddScoped<GetDeviationReasonCodesHandler>();
 
         services.AddScoped<ParseVoiceInputHandler>();
+        services.AddScoped<CoVeReverifyHandler>();
         services.AddScoped<ExtractReceiptHandler>();
         services.AddScoped<ExtractPattiImageHandler>();
         services.AddScoped<CreateDocumentSessionHandler>();

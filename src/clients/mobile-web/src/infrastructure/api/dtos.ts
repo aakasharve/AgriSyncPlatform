@@ -301,6 +301,31 @@ export interface AiParseResponse {
     rawInputRef?: string | null;
 }
 
+// spec: data-principle-spine-2026-05-05/05.1
+//
+// Request and response shapes for POST /shramsafal/ai/cove-reverify. The
+// backend gates the call behind the same PaidFeature.AiParse entitlement
+// /ai/voice-parse uses, so failures arrive as the standard {error, message}
+// shape with code "entitlement.*" or "ShramSafal.*" — the AgriSyncClient
+// 401-refresh interceptor already handles those.
+export interface CoVeReverifyRequest {
+    farmId: string;
+    transcript: string;
+    // The structured parse we want verified. Posted as an object so the
+    // client doesn't have to JSON.stringify; backend keeps the raw text
+    // via JsonElement.GetRawText() and forwards to the handler verbatim.
+    parsed: Record<string, unknown>;
+    // Optional — when present, the backend stamps it on the AuditEvent's
+    // SourceAiJobId so the verification row joins back to the source parse.
+    sourceAiJobId?: string;
+}
+
+export interface CoVeReverifyResponse {
+    verificationScore: number; // 0..1
+    lowConfidence: boolean;
+    demotionReason?: string | null;
+}
+
 export interface AiJobStatusResponse {
     id: string;
     status: string;

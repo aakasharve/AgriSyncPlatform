@@ -8,6 +8,8 @@ import type {
     AiJobStatusResponse,
     AiParseResponse,
     AiProviderConfigResponse,
+    CoVeReverifyRequest,
+    CoVeReverifyResponse,
     CreateExtractionSessionResponse,
     GetExtractionSessionResponse,
     UpdateAiProviderConfigRequest,
@@ -240,5 +242,22 @@ export async function updateAiProviderConfig(
 
 export async function getAiDashboard(t: HttpTransport): Promise<AiDashboardResponse> {
     const response = await t.http.get<AiDashboardResponse>('/shramsafal/ai/dashboard');
+    return response.data;
+}
+
+// spec: data-principle-spine-2026-05-05/05.1
+//
+// Server-side Chain-of-Verification re-query. The browser used to call
+// Gemini directly with VITE_GEMINI_API_KEY; that path is now build-time
+// blocked by vite.config.ts. This shim posts to the backend handler
+// which holds the key server-side and runs the same scoring logic.
+export async function coveReverify(
+    t: HttpTransport,
+    request: CoVeReverifyRequest,
+): Promise<CoVeReverifyResponse> {
+    const response = await t.http.post<CoVeReverifyResponse>(
+        '/shramsafal/ai/cove-reverify',
+        request,
+    );
     return response.data;
 }

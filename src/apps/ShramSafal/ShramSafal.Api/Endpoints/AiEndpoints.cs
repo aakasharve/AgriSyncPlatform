@@ -10,6 +10,7 @@ using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.Extensions.Options;
 using ShramSafal.Application.Ports;
 using ShramSafal.Application.Ports.External;
+using ShramSafal.Application.UseCases.AI.CoVeReverify;
 using ShramSafal.Application.UseCases.AI.CreateDocumentSession;
 using ShramSafal.Application.UseCases.AI.ExtractPattiImage;
 using ShramSafal.Application.UseCases.AI.ExtractReceipt;
@@ -79,6 +80,16 @@ public static class AiEndpoints
 
         group.MapPost("/ai/patti-extract", HandlePattiExtractAsync)
             .WithName("ExtractPatti")
+            .RequireRateLimiting("ai")
+            .RequireAuthorization();
+
+        // DATA_PRINCIPLE_SPINE sub-phase 05.1.2 — server-side Chain-of-Verification
+        // re-query. Replaces the deleted browser-direct path in CoVeWrapper.ts.
+        // Authentication is required (mirror of /ai/voice-parse); the handler
+        // runs the same PaidFeature.AiParse entitlement gate before calling
+        // Gemini, so worker accounts with no AI entitlement see Forbidden.
+        group.MapPost("/ai/cove-reverify", HandleCoVeReverifyAsync)
+            .WithName("CoVeReverify")
             .RequireRateLimiting("ai")
             .RequireAuthorization();
 
@@ -420,6 +431,95 @@ public static class AiEndpoints
                 fallbackUsed = session.FallbackUsed,
                 warnings = session.Warnings
             }
+        });
+    }
+
+    // DATA_PRINCIPLE_SPINE sub-phase 05.1.2 — CoVe endpoint dispatcher.
+    // Mirrors the X-App-Version header capture + httpContext.AuditClaims()
+    // forensic-provenance pattern used by /ai/config (UpdateProviderConfig)
+    // so the AuditEvent row carries device id + IP hash + app version
+    // without the handler reaching into HttpContext itself.
+    private static async Task<IResult> HandleCoVeReverifyAsync(
+        HttpContext httpContext,
+        CoVeReverifyRequest request,
+        CoVeReverifyHandler handler,
+        CancellationToken ct)
+    {
+        if (!EndpointActorContext.TryGetUserId(httpContext.User, out var userId))
+        {
+            return Results.Unauthorized();
+        }
+
+        if (request is null)
+        {
+            return Results.BadRequest(new
+            {
+                error = ShramSafalErrors.InvalidCommand.Code,
+                message = "CoVe request body is required."
+            });
+        }
+
+        if (request.FarmId == Guid.Empty)
+        {
+            return Results.BadRequest(new
+            {
+                error = ShramSafalErrors.InvalidCommand.Code,
+                message = "farmId is required."
+            });
+        }
+
+        if (string.IsNullOrWhiteSpace(request.Transcript))
+        {
+            return Results.BadRequest(new
+            {
+                error = ShramSafalErrors.MissingVoiceTranscript.Code,
+                message = "transcript is required."
+            });
+        }
+
+        // Parsed JSON arrives as a JsonElement so the client can send the
+        // structured parse without re-serializing to a string. We hand the
+        // handler the raw JSON text — the handler is the one that decides
+        // how to compact and feed it to the model.
+        string parsedJson;
+        if (request.Parsed.ValueKind == JsonValueKind.Undefined ||
+            request.Parsed.ValueKind == JsonValueKind.Null)
+        {
+            return Results.BadRequest(new
+            {
+                error = ShramSafalErrors.InvalidCommand.Code,
+                message = "parsed object is required."
+            });
+        }
+
+        parsedJson = request.Parsed.GetRawText();
+
+        var (auditDeviceId, auditIpHash) = httpContext.AuditClaims();
+        var clientAppVersion = ResolveClientAppVersion(httpContext);
+
+        var command = new CoVeReverifyCommand(
+            UserId: userId,
+            FarmId: request.FarmId,
+            Transcript: request.Transcript,
+            ParsedJson: parsedJson,
+            SourceAiJobId: request.SourceAiJobId,
+            ClientAppVersion: clientAppVersion,
+            ActorRole: EndpointActorContext.GetActorRole(httpContext.User),
+            AuditDeviceId: auditDeviceId,
+            AuditIpHash: auditIpHash);
+
+        var result = await handler.HandleAsync(command, ct);
+        if (!result.IsSuccess)
+        {
+            return ToErrorResult(result.Error);
+        }
+
+        var payload = result.Value!;
+        return Results.Ok(new
+        {
+            verificationScore = payload.VerificationScore,
+            lowConfidence = payload.LowConfidence,
+            demotionReason = payload.DemotionReason,
         });
     }
 
@@ -1290,6 +1390,19 @@ public sealed record UpdateAiProviderConfigRequest(
     AiProviderType? VoiceProvider,
     AiProviderType? ReceiptProvider,
     AiProviderType? PattiProvider);
+
+// spec: data-principle-spine-2026-05-05/05.1
+//
+// Wire shape for POST /shramsafal/ai/cove-reverify. `Parsed` is a JsonElement
+// rather than a string so the client can post the structured parse directly
+// from `agriSyncClient.coveReverify({transcript, parsed})` without round-
+// tripping through JSON.stringify on the wire; the server keeps the raw text
+// via GetRawText() and forwards it to the handler verbatim.
+public sealed record CoVeReverifyRequest(
+    Guid FarmId,
+    string Transcript,
+    JsonElement Parsed,
+    Guid? SourceAiJobId);
 
 internal sealed record ParseVoiceHttpRequest(
     Guid FarmId,
