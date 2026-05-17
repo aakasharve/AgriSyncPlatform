@@ -54,6 +54,9 @@ import type {
     SyncPushResponse,
     TenantDekResponse,
     UpdateAiProviderConfigRequest,
+    ConsentStateDto,
+    UpdateConsentRequest,
+    IssueConsentTokenResponse,
 } from './dtos';
 import * as Auth from './resources/AuthResource';
 import * as Sync from './resources/SyncResource';
@@ -63,6 +66,8 @@ import * as Admin from './resources/AdminResource';
 import * as Schedule from './resources/ScheduleResource';
 import * as Security from './resources/SecurityResource';
 import * as Export from './resources/ExportResource';
+// spec: data-principle-spine-2026-05-05/06.4
+import * as Consent from './resources/ConsentResource';
 
 // ---------------------------------------------------------------------------
 // Re-exports — keep every name the rest of the codebase imports from this
@@ -127,6 +132,13 @@ export type {
     UpdateAiProviderConfigRequest,
     VerificationEventDto,
     VerificationStatus,
+} from './dtos';
+
+// spec: data-principle-spine-2026-05-05/06.4 — Consent DTOs re-export.
+export type {
+    ConsentStateDto,
+    UpdateConsentRequest,
+    IssueConsentTokenResponse,
 } from './dtos';
 
 // ---------------------------------------------------------------------------
@@ -371,6 +383,26 @@ export class AgriSyncClient implements HttpTransport {
 
     resolveDek(dekId: string): Promise<ResolveDekResponse | null> {
         return Security.resolveDek(this, dekId);
+    }
+
+    // --- Consent ----------------------------------------------------------
+    //
+    // spec: data-principle-spine-2026-05-05/06.4
+    //
+    // NOTE: assumes 06.2 backend lands GET/PUT /shramsafal/consent/me and
+    // 06.3 backend lands POST /shramsafal/consent/token/issue. If wire
+    // shapes diverge, fix ConsentResource.ts + dtos.ts in a follow-up.
+
+    getConsent(): Promise<ConsentStateDto> {
+        return Consent.getConsent(this);
+    }
+
+    updateConsent(request: UpdateConsentRequest): Promise<ConsentStateDto> {
+        return Consent.updateConsent(this, request);
+    }
+
+    issueConsentToken(): Promise<IssueConsentTokenResponse> {
+        return Consent.issueConsentToken(this);
     }
 
     // --- Admin ------------------------------------------------------------

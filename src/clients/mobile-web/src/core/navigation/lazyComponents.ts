@@ -40,6 +40,8 @@ export const JobCardDetailPage = React.lazy(() => import('../../features/work/pa
 export const WorkerProfilePage = React.lazy(() => import('../../features/work/pages/WorkerProfilePage'));
 // Sub-plan 04 Task 5 — offline conflict resolution.
 export const OfflineConflictPage = React.lazy(() => import('../../features/sync/conflict/OfflineConflictPage'));
+// spec: data-principle-spine-2026-05-05/06.4 — privacy/consent settings screen.
+export const ConsentScreen = React.lazy(() => import('../../features/consent/ConsentScreen'));
 
 export const RouteLoader: React.FC = () => (
     React.createElement('div', {

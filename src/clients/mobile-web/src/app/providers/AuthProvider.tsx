@@ -12,6 +12,9 @@ import {
 // device cannot decrypt the previous user's voice clips without
 // re-authenticating to the backend (and getting a fresh KMS-bound DEK).
 import { clearCachedDek } from '../../infrastructure/security/tenantDekClient';
+// spec: data-principle-spine-2026-05-05/06.5
+// Same discipline for the in-memory consent token (HS256, 24h TTL).
+import { clearCachedConsentToken } from '../../infrastructure/consent/ConsentTokenClient';
 
 interface AuthContextValue {
     session: AuthSession | null;
@@ -162,6 +165,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         // will re-fetch from the backend under the next authenticated
         // session.
         clearCachedDek();
+        // spec: data-principle-spine-2026-05-05/06.5
+        // Drop the in-memory consent token; revocation cascades on the
+        // next /issue call (server is authoritative).
+        clearCachedConsentToken();
         setSession(null);
         setAuthError(null);
     }, []);

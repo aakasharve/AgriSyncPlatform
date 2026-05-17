@@ -1,0 +1,53 @@
+# spec: data-principle-spine-2026-05-05/06.4
+#
+# LEGAL_REVIEW_PENDING gate. Per OQ-7 verdict (founder DS-015,
+# 2026-05-17): engineering ships placeholder Marathi/Hindi/English
+# legal copy NOW; counsel reviews and swaps before real-farmer onboard.
+# This workflow has two jobs:
+#
+#   warn_on_tag  — counts LEGAL_REVIEW_PENDING occurrences on every
+#                  push to every branch + on PRs to integration
+#                  branches. Emits an ::notice:: annotation with the
+#                  count. Never fails the build (warn-only).
+#
+#   block_on_tag — runs only when github.ref == 'refs/heads/prod-deploy'.
+#                  Greps the tree and exits 1 if any tag remains —
+#                  prod-deploy is rejected until counsel completes the
+#                  swap.
+#
+# Protocol: _COFOUNDER/01_Operations/Protocols/LEGAL_REVIEW_PENDING_CONVENTION.md
+# ADR (pending): ADR-DS-008 — authored by architect.
+
+name: legal-review-gate
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+    branches: [main, akash_edits, prod-deploy]
+
+jobs:
+  warn-on-tag:
+    name: Warn on LEGAL_REVIEW_PENDING tags (any branch)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Count LEGAL_REVIEW_PENDING occurrences
+        run: |
+          COUNT=$(grep -rIn --include='*.md' --include='*.ts' --include='*.tsx' --include='*.cs' "LEGAL_REVIEW_PENDING" src/ _COFOUNDER/ .github/ 2>/dev/null | wc -l || echo 0)
+          echo "::notice::LEGAL_REVIEW_PENDING count: $COUNT (warn-only on this branch; blocks on prod-deploy)"
+          exit 0
+
+  block-on-tag:
+    name: Block LEGAL_REVIEW_PENDING on prod-deploy
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/prod-deploy'
+    steps:
+      - uses: actions/checkout@v4
+      - name: Reject if LEGAL_REVIEW_PENDING tag remains
+        run: |
+          if grep -rIn --include='*.md' --include='*.ts' --include='*.tsx' --include='*.cs' "LEGAL_REVIEW_PENDING" src/ _COFOUNDER/ 2>/dev/null; then
+            echo "::error::LEGAL_REVIEW_PENDING tag present — counsel review incomplete. Reject prod-deploy."
+            exit 1
+          fi
+          echo "::notice::No LEGAL_REVIEW_PENDING tags remain. OK to deploy."

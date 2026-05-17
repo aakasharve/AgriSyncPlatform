@@ -32,7 +32,8 @@ import {
     ServiceProofPage,
     JobCardsPage,
     JobCardDetailPage,
-    WorkerProfilePage
+    WorkerProfilePage,
+    ConsentScreen
 } from './lazyComponents';
 
 export const renderProfileRoute = (ctx: AppRouterContext): React.ReactNode => {
@@ -330,6 +331,16 @@ export const renderJobDetailRoute = (ctx: AppRouterContext): React.ReactNode => 
     );
 };
 
+// spec: data-principle-spine-2026-05-05/06.4 — Consent settings screen.
+export const renderConsentRoute = (ctx: AppRouterContext): React.ReactNode => {
+    if (ctx.currentRoute !== 'consent') return null;
+    return (
+        <div className="animate-in fade-in slide-in-from-right-4 duration-300">
+            <ConsentScreen onBack={() => ctx.setCurrentRoute('settings')} />
+        </div>
+    );
+};
+
 // CEI Phase 4 §4.8 — Worker profile
 export const renderWorkerProfileRoute = (ctx: AppRouterContext): React.ReactNode => {
     if (ctx.currentRoute !== 'worker-profile') return null;
@@ -383,5 +394,6 @@ export const SIMPLE_ROUTE_RENDERERS: Array<(ctx: AppRouterContext) => React.Reac
     renderServiceProofRoute,
     renderJobsRoute,
     renderJobDetailRoute,
-    renderWorkerProfileRoute
+    renderWorkerProfileRoute,
+    renderConsentRoute
 ];

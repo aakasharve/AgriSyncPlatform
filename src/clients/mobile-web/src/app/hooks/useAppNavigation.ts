@@ -27,6 +27,8 @@ const KNOWN_ROUTES: readonly AppRoute[] = [
     'finance-reports',
     'finance-settings',
     'qr-demo',
+    // spec: data-principle-spine-2026-05-05/06.4
+    'consent',
 ];
 
 const readInitialRouteFromUrl = (): AppRoute => {

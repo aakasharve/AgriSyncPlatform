@@ -37,6 +37,7 @@ import { applyV15 } from './dexie/versions/v15';
 import { applyV16 } from './dexie/versions/v16';
 import { applyV17 } from './dexie/versions/v17';
 import { applyV18 } from './dexie/versions/v18';
+import { applyV19 } from './dexie/versions/v19';
 
 // =============================================================================
 // OUTBOX (Pending sync events)
@@ -260,6 +261,16 @@ export interface VoiceClipCacheRecord {
      * spec: data-principle-spine-2026-05-05/05.3
      */
     needsResealOnNextAccess?: boolean;
+    /**
+     * HS256 `kid` claim from the consent token that was active when
+     * this clip was sealed. Lets the audit / export path pin clips
+     * to a specific consent state + signing key generation. Optional
+     * (undefined on pre-v19 rows + on rows sealed before a consent
+     * token is available).
+     *
+     * spec: data-principle-spine-2026-05-05/06.5
+     */
+    consentTokenKid?: string;
     status: VoiceClipStatus;
     retentionPolicy: VoiceClipRetentionPolicy;
     expiresAtUtc: string;
@@ -636,7 +647,7 @@ export interface AnalyticsOutboxRow {
 // =============================================================================
 
 /** Current Dexie schema version — bump this when adding version(N).stores(). */
-export const DATABASE_VERSION = 18; // DATA_PRINCIPLE_SPINE sub-phase 05.3 — voice clip envelope encryption (WebCrypto AES-GCM).
+export const DATABASE_VERSION = 19; // DATA_PRINCIPLE_SPINE sub-phase 06.5 — consentTokenKid index on voiceClips.
 /** CEI Phase 1 schema version (now active — applied by Task 5.1.1). */
 export const CEI_PHASE1_SCHEMA_VERSION = 7;
 /** CEI Phase 2 schema version — adds test stack (protocols/instances/recs). */
@@ -661,6 +672,8 @@ export const DATA_PRINCIPLE_SPINE_PROVENANCE_SCHEMA_VERSION = 16;
 export const DATA_PRINCIPLE_SPINE_COST_CATEGORY_SCHEMA_VERSION = 17;
 /** DATA_PRINCIPLE_SPINE sub-phase 05.3 — voice clip envelope encryption (WebCrypto AES-GCM); voiceClips row gains ciphertext/iv/wrappedDekId. */
 export const DATA_PRINCIPLE_SPINE_VOICE_ENVELOPE_SCHEMA_VERSION = 18;
+/** DATA_PRINCIPLE_SPINE sub-phase 06.5 — voiceClips row gains consentTokenKid (HS256 `kid` claim) for consent-audit pinning. */
+export const DATA_PRINCIPLE_SPINE_CONSENT_TOKEN_KID_SCHEMA_VERSION = 19;
 
 // =============================================================================
 // DATABASE CLASS
@@ -740,6 +753,7 @@ export class AgriLogDatabase extends Dexie {
         applyV16(this);
         applyV17(this);
         applyV18(this);
+        applyV19(this);
     }
 }
 

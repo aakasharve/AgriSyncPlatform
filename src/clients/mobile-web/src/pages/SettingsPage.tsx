@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useAppNavigationState } from '../app/context/AppFeatureContexts';
-import { Settings, Droplets, Users, Tractor, BookOpen, FlaskConical, Bot, Plus, Trash2, Coins, Leaf, Check, Pencil, ChevronDown, ChevronUp, Globe, Shield, MapPin, Mic, Camera, Activity } from 'lucide-react';
-import { LedgerDefaults, LabourShift, DailyLog, CropProfile, HarvestConfig } from '../types';
+import { BookOpen, FlaskConical, Bot, Trash2, Coins, Leaf, Check, Pencil, ChevronDown, Globe, Shield, MapPin, Mic, Camera, Activity } from 'lucide-react';
+import { LedgerDefaults, LabourShift, CropProfile, HarvestConfig } from '../types';
 import { getHarvestConfig } from '../services/harvestService';
 import NotificationTestComponent from '../shared/components/NotificationTestComponent';
 import HarvestConfigSheet from '../features/logs/components/harvest/HarvestConfigSheet';
@@ -50,9 +50,9 @@ const SettingsPage: React.FC<SettingsPageProps> = ({
     const [harvestConfigExpanded, setHarvestConfigExpanded] = useState(false);
     const [editingPlotId, setEditingPlotId] = useState<string | null>(null);
     const [editingCrop, setEditingCrop] = useState<CropProfile | null>(null);
-    const [configRefreshKey, setConfigRefreshKey] = useState(0);
+    const [_configRefreshKey, setConfigRefreshKey] = useState(0);
 
-    const handleDefaultChange = (category: keyof LedgerDefaults, field: string, value: any) => {
+    const handleDefaultChange = (category: keyof LedgerDefaults, field: string, value: unknown) => {
         onUpdateDefaults({
             ...defaults,
             [category]: {
@@ -62,7 +62,7 @@ const SettingsPage: React.FC<SettingsPageProps> = ({
         });
     };
 
-    const addShift = () => {
+    const _addShift = () => {
         const newShift: LabourShift = {
             id: `shift_${idGenerator.generate()}`,
             name: 'New Shift',
@@ -73,12 +73,12 @@ const SettingsPage: React.FC<SettingsPageProps> = ({
         handleDefaultChange('labour', 'shifts', newShifts);
     };
 
-    const updateShift = (id: string, field: keyof LabourShift, value: any) => {
+    const _updateShift = (id: string, field: keyof LabourShift, value: unknown) => {
         const newShifts = defaults.labour.shifts.map(s => s.id === id ? { ...s, [field]: value } : s);
         handleDefaultChange('labour', 'shifts', newShifts);
     };
 
-    const deleteShift = (id: string) => {
+    const _deleteShift = (id: string) => {
         const newShifts = defaults.labour.shifts.filter(s => s.id !== id);
         handleDefaultChange('labour', 'shifts', newShifts);
     };
@@ -175,6 +175,33 @@ const SettingsPage: React.FC<SettingsPageProps> = ({
                         className="text-xs font-bold text-emerald-700 bg-emerald-100 px-4 py-2 rounded-lg hover:bg-emerald-200 transition-colors"
                     >
                         Browser Settings
+                    </button>
+                </div>
+            </div>
+
+            {/* spec: data-principle-spine-2026-05-05/06.4 — Privacy/Consent entry. */}
+            <div className="pt-4">
+                <h3 className="text-xl font-display font-black text-stone-800 px-1">Privacy</h3>
+            </div>
+            <div className="glass-panel p-5 mb-6">
+                <div className="flex items-start justify-between gap-4">
+                    <div className="flex items-start gap-4 text-stone-700">
+                        <div className="bg-emerald-100 p-3 rounded-2xl text-emerald-700 shadow-sm">
+                            <Shield size={22} strokeWidth={2.5} />
+                        </div>
+                        <div>
+                            <h4 className="font-bold text-lg">Consent</h4>
+                            <p className="text-xs text-stone-500 mt-1 leading-relaxed max-w-[280px]">
+                                Manage your three independent data permissions.
+                            </p>
+                        </div>
+                    </div>
+                    <button
+                        onClick={() => setCurrentRoute('consent')}
+                        className="shrink-0 rounded-xl bg-emerald-100 px-3 py-2 text-xs font-black text-emerald-800 transition-colors hover:bg-emerald-200 active:scale-95"
+                        data-testid="settings-open-consent"
+                    >
+                        Open
                     </button>
                 </div>
             </div>
