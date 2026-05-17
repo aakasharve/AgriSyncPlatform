@@ -123,18 +123,24 @@ Patched files (commit pending):
 - `aws/snapshot/README.md` — examples updated
 - `aws/voice-retained/{bucket-policy.json, create-bucket.sh, iam-policy.json, lifecycle-policy.json, README.md}` — all renamed `agrisync-voice-retained-{env}` → `shramsafal-voice-retained-{env}`
 
-### 4. Retained-voice bucket does not exist yet — first-run consideration ⚠️ NOT BLOCKING
+### 4. ~~Retained-voice bucket~~ ✅ RESOLVED 2026-05-17 (Option A)
 
-Wave 1.C IaC (`aws/voice-retained/create-bucket.sh`) is committed but Kiro has not applied it. So `shramsafal-voice-retained-prod` doesn't physically exist in AWS yet.
+Founder lock 2026-05-17: chose Option (a) — apply Wave 1.C IaC first.
 
-**Impact on first snapshot run:** the script's retained-voice inventory step would hit `NoSuchBucket`. Two paths:
+Claude applied the Wave 1.C IaC manually (script's `/dev/stdin` is POSIX-only and unreliable on Windows AWS CLI). Same JSON policies used; bucket policy `${env}` placeholder substituted via `sed`. Versioning ENABLED beyond the script's default (founder verification requirement; Wave 1.C marked it as "Phase 07 hardening").
 
-| Option | What |
-|---|---|
-| (a) Kiro applies Wave 1.C IaC first, then snapshot run includes both inventories | Cleanest end-state |
-| (b) Run snapshot now with retained-voice inventory tolerated as empty (script needs a small tolerance patch) | Faster validation of pg_dump + raw inventory path |
+**`shramsafal-voice-retained-prod` is live in AWS.** Founder verification checklist results:
 
-Founder picks before first-run approval.
+| # | Check | Result | Detail |
+|---|---|---|---|
+| V1 | bucket exists | ✓ | `arn:aws:s3:::shramsafal-voice-retained-prod` (ap-south-1) |
+| V2 | versioning enabled | ✓ | `Status: Enabled` |
+| V3 | encryption enabled | ✓ | `SSEAlgorithm: AES256` (SSE-S3 per Wave 1.C design — client-side envelope-encrypted ciphertext, SSE-S3 as second layer) |
+| V4 | lifecycle applied | ✓ | Rule `AbortIncompleteMultipartUploadsAfter7Days` (NoOp v1 per Wave 1.C — Phase 07 may add tier transitions) |
+| V5 | IAM role can inventory it | ✓ | `simulate-principal-policy` for `agrisync-snapshot-prod` returns `allowed` for `s3:ListBucket`, `s3:ListBucketVersions`, `s3:GetBucketLocation` on the bucket ARN |
+| V6 | no snapshot has run | ✓ | `agrisync-snapshots-prod` bucket empty; no `prod-snapshot.yml` workflow run found (workflow exists on `akash_edits` branch only — gh API 404 against default `main` is the expected "no runs" signal) |
+
+**End state:** all snapshot prereqs in place. The chain `IAM role → KMS key → snapshot bucket / source buckets / secret` is fully wired and verified.
 
 ## What did NOT happen
 
