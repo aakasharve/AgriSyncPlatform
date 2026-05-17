@@ -1,0 +1,163 @@
+# spec: voice-diary-e2e-2026-05-17 (DoD gate)
+# runbook: _COFOUNDER/runbooks/prod-snapshot.md (status: DESIGN-APPROVED)
+#
+# DO NOT RUN UNTIL FOUNDER ISSUES FRESH FIRST-RUN APPROVAL.
+#
+# workflow_dispatch only — no auto-trigger. Restricted to founder + Kiro
+# GitHub actors per runbook §5 founder lock 2026-05-17. Anyone else who tries
+# to trigger gets a hard fail in the gate step.
+#
+# Auth: AWS OIDC (no long-lived secrets). The OIDC trust role
+# `agrisync-snapshot-${ENV}` must exist per aws/snapshot/README.md prereq #3.
+
+name: prod-snapshot
+
+on:
+  workflow_dispatch:
+    inputs:
+      env:
+        description: 'Target environment'
+        type: choice
+        required: true
+        options:
+          - dev
+          - staging
+          - prod
+      trigger_reason:
+        description: 'Why this snapshot? (e.g. "merge:c3aaaca8", "manual:founder", "pre-migration:AddX")'
+        type: string
+        required: true
+
+permissions:
+  id-token: write   # required for AWS OIDC
+  contents: read    # to checkout the script
+
+jobs:
+  snapshot:
+    name: 'Snapshot ${{ inputs.env }}'
+    runs-on: ubuntu-latest
+    # Concurrency: only one snapshot per env at a time (no double-encrypt races)
+    concurrency:
+      group: prod-snapshot-${{ inputs.env }}
+      cancel-in-progress: false
+    steps:
+
+      # ────────────────────────────────────────────────────────────────────
+      # Gate 1: actor allow-list (runbook §5 founder lock)
+      # ────────────────────────────────────────────────────────────────────
+      - name: Verify actor is allowed (founder + Kiro only)
+        env:
+          ACTOR: ${{ github.actor }}
+          # PROPOSED — founder + Kiro GitHub handles. Founder may need to
+          # adjust these to match the actual handles. Anyone else who triggers
+          # this workflow fails here without touching AWS.
+          ALLOWED_ACTORS: 'aakasharve agrisync-bot kiro-deploy-bot'
+        run: |
+          set -euo pipefail
+          if ! echo " $ALLOWED_ACTORS " | grep -q " $ACTOR "; then
+            echo "::error::Actor '$ACTOR' is not in the snapshot allow-list. Per runbook §5, only founder + Kiro may trigger snapshots. Update ALLOWED_ACTORS if this is incorrect." >&2
+            exit 1
+          fi
+          echo "Actor $ACTOR is allowed."
+
+      # ────────────────────────────────────────────────────────────────────
+      # Gate 2: prod requires extra confirmation in trigger_reason
+      # ────────────────────────────────────────────────────────────────────
+      - name: Verify prod trigger carries justification
+        if: inputs.env == 'prod'
+        env:
+          REASON: ${{ inputs.trigger_reason }}
+        run: |
+          set -euo pipefail
+          # Reason for prod must be at least 20 chars + contain a colon-prefix
+          # like 'merge:<sha>' / 'manual:<who>' / 'pre-migration:<name>'.
+          if [ "${#REASON}" -lt 20 ] || ! echo "$REASON" | grep -qE ':'; then
+            echo "::error::Prod snapshot trigger_reason must be ≥20 chars and use 'prefix:detail' shape (e.g. 'merge:c3aaaca8'). Got: $REASON" >&2
+            exit 1
+          fi
+          echo "Prod trigger reason validated."
+
+      - name: Checkout (only the script + runbook)
+        uses: actions/checkout@v4
+        with:
+          # We do NOT need full history. Sparse checkout limits blast radius.
+          sparse-checkout: |
+            aws/snapshot
+            _COFOUNDER/runbooks/prod-snapshot.md
+
+      - name: Configure AWS credentials via OIDC
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::PLACEHOLDER_ACCOUNT_ID:role/agrisync-snapshot-${{ inputs.env }}
+          role-session-name: github-actions-prod-snapshot-${{ inputs.env }}-${{ github.run_id }}
+          aws-region: ap-south-1
+          # Founder lock §5: role permissions are scoped per env in the
+          # IAM policy attached to agrisync-snapshot-${ENV}. See
+          # aws/snapshot/README.md prereq #3. PLACEHOLDER_ACCOUNT_ID must
+          # be replaced with the real account ID before first run (Kiro
+          # owns this, not committed in the repo).
+
+      - name: Install Postgres client + jq
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends postgresql-client-16 jq
+          pg_dump --version
+          jq --version
+          aws --version
+
+      - name: Fetch Postgres connection from AWS Secrets Manager
+        id: pg-secret
+        env:
+          ENV: ${{ inputs.env }}
+        run: |
+          set -euo pipefail
+          # The secret stores: { host, port, user, database, password } as JSON.
+          # Kiro creates this secret per env per aws/snapshot/README.md prereq #4.
+          SECRET_JSON="$(aws secretsmanager get-secret-value \
+              --secret-id "agrisync/snapshot/pg-${ENV}" \
+              --query SecretString --output text)"
+          {
+            echo "PG_HOST=$(echo "$SECRET_JSON" | jq -r .host)"
+            echo "PG_PORT=$(echo "$SECRET_JSON" | jq -r .port)"
+            echo "PG_USER=$(echo "$SECRET_JSON" | jq -r .user)"
+            echo "PG_DATABASE=$(echo "$SECRET_JSON" | jq -r .database)"
+            echo "::add-mask::$(echo "$SECRET_JSON" | jq -r .password)"
+            echo "PGPASSWORD=$(echo "$SECRET_JSON" | jq -r .password)"
+          } >> "$GITHUB_ENV"
+
+      - name: Resolve bucket names from env
+        env:
+          ENV: ${{ inputs.env }}
+        run: |
+          set -euo pipefail
+          {
+            echo "RAW_BLOB_BUCKET=agrisync-raw-${ENV}"
+            echo "RETAINED_VOICE_BUCKET=agrisync-voice-retained-${ENV}"
+            echo "AWS_REGION=ap-south-1"
+          } >> "$GITHUB_ENV"
+
+      - name: Run snapshot
+        env:
+          ENV: ${{ inputs.env }}
+          TRIGGER_REASON: ${{ inputs.trigger_reason }}
+          GITHUB_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          bash aws/snapshot/snapshot.sh \
+            --env "$ENV" \
+            --trigger "$TRIGGER_REASON" \
+            --git-sha "$GITHUB_SHA"
+
+      - name: Upload snapshot manifest as workflow artifact (audit trail)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: prod-snapshot-manifest-${{ inputs.env }}-${{ github.run_id }}
+          # The manifest lives in S3 per the script; we don't ship it here
+          # because Secrets Manager creds + raw inventories may be embedded.
+          # The workflow log is the audit trail; the S3 verification log is
+          # the canonical record.
+          path: |
+            aws/snapshot/README.md
+          retention-days: 90
