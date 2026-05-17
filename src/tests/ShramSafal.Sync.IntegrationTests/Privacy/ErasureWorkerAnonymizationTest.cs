@@ -311,10 +311,10 @@ public sealed class ErasureWorkerAnonymizationTest : IAsyncLifetime
         await using (var c = db.CreateCommand())
         {
             c.CommandText = """
-                INSERT INTO ssf.log_tasks (id, daily_log_id, activity_type, notes, deviation_note, occurred_at_utc, execution_status)
+                INSERT INTO ssf.log_tasks ("Id", daily_log_id, activity_type, notes, deviation_note, occurred_at_utc, execution_status, compliance_outcome)
                 VALUES
-                    (@id1, @lid, 'Spray', @notes, NULL, NOW(), 'Done'),
-                    (@id2, @lid, 'Weed', NULL, @dev, NOW(), 'Done');
+                    (@id1, @lid, 'Spray', @notes, NULL, NOW(), 0, 0),
+                    (@id2, @lid, 'Weed', NULL, @dev, NOW(), 0, 0);
                 """;
             c.Parameters.AddWithValue("id1", Guid.NewGuid());
             c.Parameters.AddWithValue("id2", Guid.NewGuid());
@@ -329,9 +329,9 @@ public sealed class ErasureWorkerAnonymizationTest : IAsyncLifetime
         {
             c.CommandText = """
                 INSERT INTO ssf.cost_entries
-                    (id, farm_id, plot_id, category, description, amount, currency, cost_date, created_at_utc, created_by_user_id, source, model_version, prompt_version, schema_version)
+                    ("Id", farm_id, plot_id, category_id, description, amount, currency_code, entry_date, created_at_utc, modified_at_utc, created_by_user_id, source, model_version, prompt_version, prompt_content_hash, app_version)
                 VALUES
-                    (@id, @fid, @pid, 'OTHER', @desc, 100.00, 'INR', CURRENT_DATE, NOW(), @uid, 'pre_spine', 'unknown', 'unknown', '1.0.0');
+                    (@id, @fid, @pid, 'other', @desc, 100.00, 'INR', CURRENT_DATE, NOW(), NOW(), @uid, 'pre_spine', 'unknown', 'unknown', 'unknown', 'unknown');
                 """;
             c.Parameters.AddWithValue("id", Guid.NewGuid());
             c.Parameters.AddWithValue("fid", _farmId);
@@ -346,7 +346,7 @@ public sealed class ErasureWorkerAnonymizationTest : IAsyncLifetime
         {
             c.CommandText = """
                 INSERT INTO ssf.correction_events
-                    (id, user_id, original_parse_id, original_parse_raw, corrected_parse, prompt_version, locale, trigger, captured_at_utc)
+                    ("Id", "UserId", "OriginalParseId", "OriginalParseRaw", "CorrectedParse", "PromptVersion", "Locale", "Trigger", "CapturedAtUtc")
                 VALUES
                     (@id, @uid, @opid, @raw::jsonb, @cor::jsonb, 'v1', 'mr-IN', 'EditUI', NOW());
                 """;
@@ -362,8 +362,8 @@ public sealed class ErasureWorkerAnonymizationTest : IAsyncLifetime
         await using (var c = db.CreateCommand())
         {
             c.CommandText = """
-                INSERT INTO ssf.finance_corrections (id, cost_entry_id, applied_at_utc, reason, corrected_by_user_id, schema_version)
-                VALUES (@id, @ceid, NOW(), @reason, @uid, '1.0.0');
+                INSERT INTO ssf.finance_corrections ("Id", cost_entry_id, original_amount, corrected_amount, currency_code, reason, corrected_by_user_id, corrected_at_utc, modified_at_utc)
+                VALUES (@id, @ceid, 100.00, 80.00, 'INR', @reason, @uid, NOW(), NOW());
                 """;
             c.Parameters.AddWithValue("id", Guid.NewGuid());
             c.Parameters.AddWithValue("ceid", Guid.NewGuid());

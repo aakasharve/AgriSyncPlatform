@@ -275,7 +275,7 @@ UPDATE ssf.log_tasks AS t
    SET notes = NULL,
        deviation_note = NULL
   FROM ssf.daily_logs AS l
- WHERE t.daily_log_id = l.id
+ WHERE t.daily_log_id = l.""Id""
    AND l.operator_user_id = {0}
    AND (t.notes IS NOT NULL OR t.deviation_note IS NOT NULL);";
         // Note: by the time we run this the daily_logs operator_user_id may
@@ -307,9 +307,9 @@ UPDATE ssf.cost_entries
     {
         const string sql = @"
 UPDATE ssf.correction_events
-   SET user_id = {0}
- WHERE user_id = {1}
-   AND user_id <> {0};";
+   SET ""UserId"" = {0}
+ WHERE ""UserId"" = {1}
+   AND ""UserId"" <> {0};";
         return await db.Database.ExecuteSqlRawAsync(sql, new object[] { sentinel, userId }, ct)
             .ConfigureAwait(false);
     }
