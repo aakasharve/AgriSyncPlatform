@@ -48,10 +48,13 @@ jobs:
       - name: Verify actor is allowed (founder + Kiro only)
         env:
           ACTOR: ${{ github.actor }}
-          # PROPOSED — founder + Kiro GitHub handles. Founder may need to
-          # adjust these to match the actual handles. Anyone else who triggers
-          # this workflow fails here without touching AWS.
-          ALLOWED_ACTORS: 'aakasharve agrisync-bot kiro-deploy-bot'
+          # CONFIRMED — founder GitHub handle only. Kiro's handle is NOT
+          # yet confirmed by founder (2026-05-17); add it here only after
+          # founder explicitly provides it. Guessed handles (kiro-deploy-bot,
+          # agrisync-bot) were removed per founder discipline 2026-05-17.
+          # Anyone else who triggers this workflow fails here without
+          # touching AWS.
+          ALLOWED_ACTORS: 'aakasharve'
         run: |
           set -euo pipefail
           if ! echo " $ALLOWED_ACTORS " | grep -q " $ACTOR "; then
