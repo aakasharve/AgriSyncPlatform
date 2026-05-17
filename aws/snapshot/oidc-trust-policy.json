@@ -1,0 +1,34 @@
+{
+  "_comment": [
+    "OIDC trust policy for IAM role agrisync-snapshot-dev.",
+    "spec: voice-diary-e2e-2026-05-17 (snapshot prereqs)",
+    "runbook: _COFOUNDER/runbooks/prod-snapshot.md §5 (founder lock)",
+    "",
+    "Restricts who can assume this role via GitHub Actions OIDC:",
+    "  - repo: aakasharve/AgriSyncPlatform (exact match)",
+    "  - ref: refs/heads/akash_edits (only this branch can mint workflow-OIDC tokens)",
+    "  - audience: sts.amazonaws.com (default AWS audience)",
+    "",
+    "Defense-in-depth — workflow YAML also enforces ALLOWED_ACTORS=aakasharve.",
+    "Even if the IAM trust accepts the assertion, the workflow step fails for any",
+    "actor not on the allow-list before any AWS call runs."
+  ],
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Principal": {
+        "Federated": "arn:aws:iam::951921970996:oidc-provider/token.actions.githubusercontent.com"
+      },
+      "Action": "sts:AssumeRoleWithWebIdentity",
+      "Condition": {
+        "StringEquals": {
+          "token.actions.githubusercontent.com:aud": "sts.amazonaws.com"
+        },
+        "StringLike": {
+          "token.actions.githubusercontent.com:sub": "repo:aakasharve/AgriSyncPlatform:ref:refs/heads/akash_edits"
+        }
+      }
+    }
+  ]
+}

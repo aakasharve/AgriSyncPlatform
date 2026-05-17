@@ -1,0 +1,50 @@
+{
+  "_comment": [
+    "Lifecycle policy for agrisync-snapshots-dev.",
+    "spec: voice-diary-e2e-2026-05-17 (snapshot prereqs)",
+    "runbook: _COFOUNDER/runbooks/prod-snapshot.md §3 (founder lock)",
+    "",
+    "Founder lock §3: hot 14d → IA 30d → Glacier Flexible 18mo → expire.",
+    "Day computations from object creation:",
+    "  Day  0-14: STANDARD (hot tier, 14 days)",
+    "  Day 14-44: STANDARD_IA (30 days in IA, satisfies the 30-day-minimum-storage rule)",
+    "  Day 44-591: GLACIER (547 days = ~18 months, well past Glacier's 90-day minimum)",
+    "  Day 591+: Expired",
+    "Total lifetime: 591 days (~19.4 months from creation to expiration).",
+    "",
+    "Noncurrent versions (created when files are overwritten — e.g. _verification-log.jsonl)",
+    "follow the same tiering but age out separately so the append-only history is preserved",
+    "for the full retention window before garbage collection.",
+    "",
+    "AbortIncompleteMultipartUpload after 7 days catches stuck uploads that won't otherwise",
+    "be visible — common cause of mystery bills on snapshot buckets."
+  ],
+  "Rules": [
+    {
+      "ID": "snapshot-current-version-tiering",
+      "Status": "Enabled",
+      "Filter": {"Prefix": ""},
+      "Transitions": [
+        {"Days": 14, "StorageClass": "STANDARD_IA"},
+        {"Days": 44, "StorageClass": "GLACIER"}
+      ],
+      "Expiration": {"Days": 591}
+    },
+    {
+      "ID": "snapshot-noncurrent-version-tiering",
+      "Status": "Enabled",
+      "Filter": {"Prefix": ""},
+      "NoncurrentVersionTransitions": [
+        {"NoncurrentDays": 14, "StorageClass": "STANDARD_IA"},
+        {"NoncurrentDays": 44, "StorageClass": "GLACIER"}
+      ],
+      "NoncurrentVersionExpiration": {"NoncurrentDays": 591}
+    },
+    {
+      "ID": "abort-incomplete-multipart",
+      "Status": "Enabled",
+      "Filter": {"Prefix": ""},
+      "AbortIncompleteMultipartUpload": {"DaysAfterInitiation": 7}
+    }
+  ]
+}

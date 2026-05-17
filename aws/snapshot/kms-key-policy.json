@@ -1,0 +1,27 @@
+{
+  "_comment": [
+    "KMS key policy for alias/agrisync-snapshots-dev.",
+    "spec: voice-diary-e2e-2026-05-17 (snapshot prereqs)",
+    "runbook: _COFOUNDER/runbooks/prod-snapshot.md §3 (DESIGN-APPROVED)",
+    "",
+    "Pattern: account root retains full KMS admin (so founder can rotate / revoke via console);",
+    "the snapshot role (created separately) gets only Encrypt + Decrypt + GenerateDataKey via",
+    "its IAM permissions policy, which references this key by alias.",
+    "",
+    "We do NOT grant the snapshot role here directly — that would couple key creation order to",
+    "role existence. The grant flows through IAM (account root delegates to IAM principals)."
+  ],
+  "Version": "2012-10-17",
+  "Id": "agrisync-snapshots-dev-key-policy",
+  "Statement": [
+    {
+      "Sid": "EnableIAMUserPermissions",
+      "Effect": "Allow",
+      "Principal": {
+        "AWS": "arn:aws:iam::951921970996:root"
+      },
+      "Action": "kms:*",
+      "Resource": "*"
+    }
+  ]
+}

@@ -1,0 +1,88 @@
+{
+  "_comment": [
+    "IAM permissions policy for role agrisync-snapshot-dev.",
+    "spec: voice-diary-e2e-2026-05-17 (snapshot prereqs)",
+    "runbook: _COFOUNDER/runbooks/prod-snapshot.md §1+§3+§5",
+    "",
+    "Scope (founder lock):",
+    "  WRITE-only to agrisync-snapshots-dev bucket (PutObject + GetObject for verify; NO Delete)",
+    "  READ-only inventory on agrisync-raw-dev (List + GetObjectVersions)",
+    "  READ-only inventory on agrisync-voice-retained-dev (List + GetObjectVersions)",
+    "  Encrypt + Decrypt + GenerateDataKey on alias/agrisync-snapshots-dev",
+    "  GetSecretValue on agrisync/snapshot/pg-dev (the secret comes later; permission ready)",
+    "",
+    "Notably: NO s3:DeleteObject / s3:DeleteObjectVersion anywhere. Combined with bucket",
+    "versioning, this enforces append-only on the verification log AND the snapshot files",
+    "themselves — only the bucket lifecycle policy (a bucket-owner action) can age them out.",
+    "",
+    "The script writes per-snapshot files and appends to _verification-log.jsonl by",
+    "READ-then-PUT-with-versioning. Old versions of the log are preserved forever (until",
+    "the lifecycle NoncurrentVersionExpiration ages them out at 591 days)."
+  ],
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "SnapshotBucketWriteAndReadForVerify",
+      "Effect": "Allow",
+      "Action": [
+        "s3:PutObject",
+        "s3:GetObject",
+        "s3:GetObjectVersion",
+        "s3:ListBucket",
+        "s3:ListBucketVersions",
+        "s3:GetBucketLocation"
+      ],
+      "Resource": [
+        "arn:aws:s3:::agrisync-snapshots-dev",
+        "arn:aws:s3:::agrisync-snapshots-dev/*"
+      ]
+    },
+    {
+      "Sid": "RawBlobInventoryReadOnly",
+      "Effect": "Allow",
+      "Action": [
+        "s3:ListBucket",
+        "s3:ListBucketVersions",
+        "s3:GetBucketVersioning",
+        "s3:GetBucketLocation"
+      ],
+      "Resource": "arn:aws:s3:::agrisync-raw-dev"
+    },
+    {
+      "Sid": "RetainedVoiceInventoryReadOnly",
+      "Effect": "Allow",
+      "Action": [
+        "s3:ListBucket",
+        "s3:ListBucketVersions",
+        "s3:GetBucketVersioning",
+        "s3:GetBucketLocation"
+      ],
+      "Resource": "arn:aws:s3:::agrisync-voice-retained-dev"
+    },
+    {
+      "Sid": "KmsForSnapshotKey",
+      "Effect": "Allow",
+      "Action": [
+        "kms:Encrypt",
+        "kms:Decrypt",
+        "kms:GenerateDataKey",
+        "kms:DescribeKey"
+      ],
+      "Resource": "*",
+      "Condition": {
+        "ForAnyValue:StringEquals": {
+          "kms:ResourceAliases": "alias/agrisync-snapshots-dev"
+        }
+      }
+    },
+    {
+      "Sid": "PgSecretReadOnly",
+      "Effect": "Allow",
+      "Action": [
+        "secretsmanager:GetSecretValue",
+        "secretsmanager:DescribeSecret"
+      ],
+      "Resource": "arn:aws:secretsmanager:ap-south-1:951921970996:secret:agrisync/snapshot/pg-dev-*"
+    }
+  ]
+}

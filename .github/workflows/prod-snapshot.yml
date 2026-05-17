@@ -91,7 +91,7 @@ jobs:
       - name: Configure AWS credentials via OIDC
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: arn:aws:iam::PLACEHOLDER_ACCOUNT_ID:role/agrisync-snapshot-${{ inputs.env }}
+          role-to-assume: arn:aws:iam::951921970996:role/agrisync-snapshot-${{ inputs.env }}
           role-session-name: github-actions-prod-snapshot-${{ inputs.env }}-${{ github.run_id }}
           aws-region: ap-south-1
           # Founder lock §5: role permissions are scoped per env in the

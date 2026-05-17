@@ -1,0 +1,48 @@
+{
+  "_comment": [
+    "S3 bucket policy for agrisync-snapshots-dev.",
+    "spec: voice-diary-e2e-2026-05-17 (snapshot prereqs)",
+    "runbook: _COFOUNDER/runbooks/prod-snapshot.md §3+§4 (founder lock)",
+    "",
+    "Two denies, bucket-wide:",
+    "  1. DenyInsecureTransport — block any S3 call not over TLS",
+    "  2. DenyUnencryptedUploads — block any PutObject that doesn't use KMS encryption",
+    "",
+    "We do NOT add an explicit DenyDelete in the bucket policy because:",
+    "  (a) The snapshot IAM role's permissions policy already omits s3:Delete*",
+    "  (b) An explicit Principal:* Deny on Delete would interfere with the bucket",
+    "      lifecycle policy's expiration action, which is the canonical aging-out",
+    "      path per founder lock §3 (hot 14d → IA 30d → Glacier 18mo → expire)."
+  ],
+  "Version": "2012-10-17",
+  "Id": "agrisync-snapshots-dev-bucket-policy",
+  "Statement": [
+    {
+      "Sid": "DenyInsecureTransport",
+      "Effect": "Deny",
+      "Principal": "*",
+      "Action": "s3:*",
+      "Resource": [
+        "arn:aws:s3:::agrisync-snapshots-dev",
+        "arn:aws:s3:::agrisync-snapshots-dev/*"
+      ],
+      "Condition": {
+        "Bool": {
+          "aws:SecureTransport": "false"
+        }
+      }
+    },
+    {
+      "Sid": "DenyUnencryptedUploads",
+      "Effect": "Deny",
+      "Principal": "*",
+      "Action": "s3:PutObject",
+      "Resource": "arn:aws:s3:::agrisync-snapshots-dev/*",
+      "Condition": {
+        "StringNotEquals": {
+          "s3:x-amz-server-side-encryption": "aws:kms"
+        }
+      }
+    }
+  ]
+}
