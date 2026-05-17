@@ -1,6 +1,6 @@
 {
   "_comment": [
-    "KMS key policy for alias/agrisync-snapshots-dev.",
+    "KMS key policy for alias/agrisync-snapshots-prod.",
     "spec: voice-diary-e2e-2026-05-17 (snapshot prereqs)",
     "runbook: _COFOUNDER/runbooks/prod-snapshot.md §3 (DESIGN-APPROVED)",
     "",
@@ -12,7 +12,7 @@
     "role existence. The grant flows through IAM (account root delegates to IAM principals)."
   ],
   "Version": "2012-10-17",
-  "Id": "agrisync-snapshots-dev-key-policy",
+  "Id": "agrisync-snapshots-prod-key-policy",
   "Statement": [
     {
       "Sid": "EnableIAMUserPermissions",

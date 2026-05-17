@@ -1,6 +1,6 @@
 {
   "_comment": [
-    "S3 bucket policy for agrisync-snapshots-dev.",
+    "S3 bucket policy for agrisync-snapshots-prod.",
     "spec: voice-diary-e2e-2026-05-17 (snapshot prereqs)",
     "runbook: _COFOUNDER/runbooks/prod-snapshot.md §3+§4 (founder lock)",
     "",
@@ -15,7 +15,7 @@
     "      path per founder lock §3 (hot 14d → IA 30d → Glacier 18mo → expire)."
   ],
   "Version": "2012-10-17",
-  "Id": "agrisync-snapshots-dev-bucket-policy",
+  "Id": "agrisync-snapshots-prod-bucket-policy",
   "Statement": [
     {
       "Sid": "DenyInsecureTransport",
@@ -23,8 +23,8 @@
       "Principal": "*",
       "Action": "s3:*",
       "Resource": [
-        "arn:aws:s3:::agrisync-snapshots-dev",
-        "arn:aws:s3:::agrisync-snapshots-dev/*"
+        "arn:aws:s3:::agrisync-snapshots-prod",
+        "arn:aws:s3:::agrisync-snapshots-prod/*"
       ],
       "Condition": {
         "Bool": {
@@ -37,7 +37,7 @@
       "Effect": "Deny",
       "Principal": "*",
       "Action": "s3:PutObject",
-      "Resource": "arn:aws:s3:::agrisync-snapshots-dev/*",
+      "Resource": "arn:aws:s3:::agrisync-snapshots-prod/*",
       "Condition": {
         "StringNotEquals": {
           "s3:x-amz-server-side-encryption": "aws:kms"

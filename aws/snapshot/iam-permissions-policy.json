@@ -1,15 +1,15 @@
 {
   "_comment": [
-    "IAM permissions policy for role agrisync-snapshot-dev.",
+    "IAM permissions policy for role agrisync-snapshot-prod.",
     "spec: voice-diary-e2e-2026-05-17 (snapshot prereqs)",
     "runbook: _COFOUNDER/runbooks/prod-snapshot.md §1+§3+§5",
     "",
     "Scope (founder lock):",
-    "  WRITE-only to agrisync-snapshots-dev bucket (PutObject + GetObject for verify; NO Delete)",
-    "  READ-only inventory on agrisync-raw-dev (List + GetObjectVersions)",
-    "  READ-only inventory on agrisync-voice-retained-dev (List + GetObjectVersions)",
-    "  Encrypt + Decrypt + GenerateDataKey on alias/agrisync-snapshots-dev",
-    "  GetSecretValue on agrisync/snapshot/pg-dev (the secret comes later; permission ready)",
+    "  WRITE-only to agrisync-snapshots-prod bucket (PutObject + GetObject for verify; NO Delete)",
+    "  READ-only inventory on agrisync-raw-prod (List + GetObjectVersions)",
+    "  READ-only inventory on agrisync-voice-retained-prod (List + GetObjectVersions)",
+    "  Encrypt + Decrypt + GenerateDataKey on alias/agrisync-snapshots-prod",
+    "  GetSecretValue on agrisync/snapshot/pg-prod (the secret comes later; permission ready)",
     "",
     "Notably: NO s3:DeleteObject / s3:DeleteObjectVersion anywhere. Combined with bucket",
     "versioning, this enforces append-only on the verification log AND the snapshot files",
@@ -33,8 +33,8 @@
         "s3:GetBucketLocation"
       ],
       "Resource": [
-        "arn:aws:s3:::agrisync-snapshots-dev",
-        "arn:aws:s3:::agrisync-snapshots-dev/*"
+        "arn:aws:s3:::agrisync-snapshots-prod",
+        "arn:aws:s3:::agrisync-snapshots-prod/*"
       ]
     },
     {
@@ -46,7 +46,7 @@
         "s3:GetBucketVersioning",
         "s3:GetBucketLocation"
       ],
-      "Resource": "arn:aws:s3:::agrisync-raw-dev"
+      "Resource": "arn:aws:s3:::agrisync-raw-prod"
     },
     {
       "Sid": "RetainedVoiceInventoryReadOnly",
@@ -57,7 +57,7 @@
         "s3:GetBucketVersioning",
         "s3:GetBucketLocation"
       ],
-      "Resource": "arn:aws:s3:::agrisync-voice-retained-dev"
+      "Resource": "arn:aws:s3:::agrisync-voice-retained-prod"
     },
     {
       "Sid": "KmsForSnapshotKey",
@@ -71,7 +71,7 @@
       "Resource": "*",
       "Condition": {
         "ForAnyValue:StringEquals": {
-          "kms:ResourceAliases": "alias/agrisync-snapshots-dev"
+          "kms:ResourceAliases": "alias/agrisync-snapshots-prod"
         }
       }
     },
@@ -82,7 +82,7 @@
         "secretsmanager:GetSecretValue",
         "secretsmanager:DescribeSecret"
       ],
-      "Resource": "arn:aws:secretsmanager:ap-south-1:951921970996:secret:agrisync/snapshot/pg-dev-*"
+      "Resource": "arn:aws:secretsmanager:ap-south-1:951921970996:secret:agrisync/snapshot/pg-prod-*"
     }
   ]
 }
