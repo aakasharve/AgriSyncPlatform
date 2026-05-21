@@ -128,6 +128,28 @@ public sealed class TenantTransactionMiddleware
         // Unblocks: spec 04 (attachment upload state machine →
         // POST /shramsafal/attachments + POST /shramsafal/attachments/{id}/upload).
         "/shramsafal/attachments",
+        // GET/PUT /shramsafal/consent/me — user-scoped consent state.
+        // The ssf.user_consents table is keyed by user_id only; there
+        // is no farm_id column, no tenant scoping, and the handler
+        // (UpdateConsentHandler) validates userId from the bearer
+        // before touching the row. The flow legitimately spans the
+        // user globally (consent toggles in Settings happen before
+        // farm selection on first launch), so TenantContext stays
+        // unset and the interceptor fail-closes on
+        // GetUserConsentStateAsync. Phase 06 shipped the endpoint
+        // 2026-05-17 but the elevation entry was missed — bug
+        // surfaced when Voice Diary E2E consent-gate Playwright test
+        // added 2026-05-17 (commit 707ef91f) tried to drive the
+        // first-grant modal in headless browser; modal's confirm
+        // click triggers PUT /consent/me which 500'd with
+        // "TenantConnectionInterceptor: no tenant claim set and not
+        // in admin scope". Local Purvesh v2 hides the bug because
+        // its bearer carries a stale farmId from prior farm
+        // selection. Phase 07 spine-hardening closes the gap.
+        //
+        // Unblocks: spec 06 (voice diary consent gate → PUT consent
+        // → modal closes → checkbox flips checked).
+        "/shramsafal/consent",
     };
 
     private readonly RequestDelegate _next;
