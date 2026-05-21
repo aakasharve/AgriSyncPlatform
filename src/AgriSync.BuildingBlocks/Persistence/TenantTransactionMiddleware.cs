@@ -150,6 +150,26 @@ public sealed class TenantTransactionMiddleware
         // Unblocks: spec 06 (voice diary consent gate → PUT consent
         // → modal closes → checkbox flips checked).
         "/shramsafal/consent",
+        // POST /shramsafal/voice-diary/persist (+ /list, /{clipId}) —
+        // retained voice diary endpoints. All three are user-scoped
+        // (ssf.voice_clips_retained is keyed by user_id; no farm_id
+        // column). Persist runs the IConsentEnforcer.RequireGrantAsync
+        // gate against ssf.user_consents BEFORE any retained write —
+        // when consent is revoked the enforcer returns Denied(reason)
+        // and the handler maps to ShramSafalErrors.ConsentRequired
+        // (403). For that gate to function, the enforcer's
+        // GetUserConsentStateAsync EF query must succeed, which means
+        // the request must run under admin elevation (same reason as
+        // /shramsafal/consent above). List + GetById endpoints read
+        // voice_clips_retained directly filtered by callerUserId.
+        // Phase 07 spine-hardening commit covers the elevation gap
+        // for the persist + read endpoints alongside the consent
+        // surface.
+        //
+        // Unblocks: spec 06 (voice diary consent gate step 8 → post-
+        // revoke persist must return 403 ConsentRequired, not 500
+        // TenantConnectionInterceptor).
+        "/shramsafal/voice-diary",
     };
 
     private readonly RequestDelegate _next;
