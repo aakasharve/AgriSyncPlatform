@@ -1,4 +1,5 @@
 // spec: voice-diary-e2e-2026-05-17 (B.9)
+//        + data-principle-spine-2026-05-05/phase-07-spine-hardening
 //
 // Wave 1.B — handler for the Voice Diary persist surface. Flow:
 //   1. Caller-shape validation (every field non-empty / non-default)
@@ -7,14 +8,24 @@
 //   3. Build VoiceClipRetained aggregate (factory enforces invariants)
 //   4. Persist via IRetainedBlobStore.PersistAsync (idempotent on
 //      ClipId — Dexie PK reuse per supervisor risk #1)
+//   5. ADR-DS-009 audit-payload kid stamp (Phase 07): emit one
+//      AuditEvent(entityType="VoiceClipRetained", action="Persisted")
+//      carrying consentTokenKid in payload so DPDP §11 export can
+//      prove which signed consent token authorized this persist.
 //
-// No outer SaveChangesAsync here; the adapter saves the unit of work
-// itself because the S3 write + DB insert must succeed together or
-// not at all.
+// No outer SaveChangesAsync needed for the persist itself; the
+// S3RetainedBlobStore adapter saves its own unit of work because the
+// S3 write + DB insert must succeed together. The audit emission goes
+// through IShramSafalRepository.AddAuditEventAsync + repository
+// SaveChangesAsync so the audit row is committed in its own
+// transaction AFTER the blob store call returns success.
 
 using AgriSync.BuildingBlocks.Abstractions;
+using AgriSync.BuildingBlocks.Persistence;
 using AgriSync.BuildingBlocks.Results;
+using ShramSafal.Application.Ports;
 using ShramSafal.Application.Privacy.Ports;
+using ShramSafal.Domain.Audit;
 using ShramSafal.Domain.Common;
 using ShramSafal.Domain.Privacy;
 
@@ -23,6 +34,7 @@ namespace ShramSafal.Application.UseCases.VoiceDiary.PersistVoiceClipRetained;
 public sealed class PersistVoiceClipRetainedHandler(
     IConsentEnforcer consentEnforcer,
     IRetainedBlobStore retainedBlobStore,
+    IShramSafalRepository repository,
     IClock clock)
 {
     public async Task<Result<PersistVoiceClipRetainedResult>> HandleAsync(
@@ -92,6 +104,41 @@ public sealed class PersistVoiceClipRetainedHandler(
         var persistedId = await retainedBlobStore
             .PersistAsync(metadata, cipher, ct)
             .ConfigureAwait(false);
+
+        // ADR-DS-009 audit-payload kid stamp (Phase 07 spine-hardening).
+        // Re-read consent state to source CurrentTokenKid; the
+        // IConsentEnforcer.RequireGrantAsync call above did not surface
+        // it (returns ConsentDecision only). One extra read per
+        // successful persist is acceptable — the persist path is
+        // bounded by user-initiated voice clip count, not request fan-out.
+        var consentState = await repository
+            .GetUserConsentStateAsync(command.UserId, ct)
+            .ConfigureAwait(false);
+
+        var auditRow = AuditEventFactory.Create(
+            entityType: "VoiceClipRetained",
+            entityId: persistedId,
+            action: "Persisted",
+            actorUserId: command.UserId,
+            actorRole: "operator",
+            payload: new
+            {
+                consentTokenKid = consentState?.CurrentTokenKid, // ADR-DS-009 audit-payload kid stamp
+                clipId = persistedId,
+                userId = command.UserId,
+                s3Key = metadata.S3Key,
+                recordedAtUtc = recordedAtUtc,
+                durationSeconds = command.DurationSeconds,
+                language = command.Language,
+            },
+            farmId: null,
+            clientCommandId: null,
+            appVersion: AppVersionProvider.Current,
+            deviceId: "voice-diary-persist",
+            ipHash: "sha256:voice-diary-persist",
+            sourceAiJobId: null);
+        await repository.AddAuditEventAsync(auditRow, ct).ConfigureAwait(false);
+        await repository.SaveChangesAsync(ct).ConfigureAwait(false);
 
         return Result.Success(new PersistVoiceClipRetainedResult(persistedId));
     }
