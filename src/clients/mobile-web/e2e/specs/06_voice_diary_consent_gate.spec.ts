@@ -214,7 +214,15 @@ test.describe('Voice Diary consent gate @persona:Farmer', () => {
         // prior user_consents row written by an earlier run. (The endpoint
         // returns 404 → useFullHistoryJournalConsent defaults to false.)
         await expect(consentCheckbox).not.toBeChecked();
-        await consentCheckbox.check();
+        // NOTE: this is a *controlled* checkbox — VoiceRetainedConsentToggle
+        // intercepts the first ON click and opens the first-grant attestation
+        // modal BEFORE persisting (server PUT) and BEFORE the controlled
+        // `checked` state flips. Playwright's `.check()` asserts post-click
+        // state and would fail here because the state stays false until the
+        // modal flow completes. Use `.click()` (no post-state assertion); the
+        // explicit `toBeChecked` assertion after the modal confirm validates
+        // the eventual real outcome.
+        await consentCheckbox.click();
 
         const firstGrantBanner = page.getByTestId('voice-retained-first-grant-banner');
         await expect(firstGrantBanner).toBeVisible({ timeout: 5_000 });
@@ -275,7 +283,12 @@ test.describe('Voice Diary consent gate @persona:Farmer', () => {
         // from a never-granted state does). The checkbox uncheck PUTs
         // fullHistoryJournal=false directly.
         await expect(consentCheckbox).toBeChecked();
-        await consentCheckbox.uncheck();
+        // OFF transition does NOT open the modal — VoiceRetainedConsentToggle
+        // falls through to a direct PUT + reload, but the controlled `checked`
+        // attribute only flips after the network round-trip resolves. Playwright's
+        // `.uncheck()` would assert post-click state synchronously and race the
+        // reload. Use `.click()` + the eventual `not.toBeChecked` assertion below.
+        await consentCheckbox.click();
         // The first-grant banner must NOT appear on the OFF transition.
         await expect(firstGrantBanner).toBeHidden({ timeout: 5_000 });
         // After reload, the checkbox lands on unchecked.
