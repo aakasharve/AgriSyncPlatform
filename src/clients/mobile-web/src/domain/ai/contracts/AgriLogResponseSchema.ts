@@ -549,6 +549,41 @@ export const AgriLogResponseSchema = z.object({
     aiSourceSummary: z.string().optional(),
     originalLogId: z.string().optional(),
     suggestedContext: SuggestedContextSchema.optional(),
+
+    // -------------------------------------------------------------------------
+    // VOICE-SPINE FIELDS (Sarvam pipeline, Phase 1.12 / 2026-05-21)
+    // -------------------------------------------------------------------------
+    // Five top-level siblings of the AgriLog bucket structure. All optional
+    // so prompt-v3.x responses (which never emit these) continue to parse.
+    // Wire-contract names are snake_case to match the AiJob column names
+    // landed in Phase 1.1 (`transcript_english`, `transcript_english_redacted`,
+    // `referenced_date`, `referenced_date_confidence`, `referenced_date_reason`)
+    // minus the `transcript_` prefix that lives on the DB column only.
+    //
+    // - `english` / `english_redacted`: natural-English transcript with and
+    //   without PII redaction. Redaction uses [FARMER_N] / [PHONE_N] /
+    //   [PLOT_N] / [WORKER_N] / [VENDOR_N] tokens keyed by occurrence-order
+    //   within the clip. Numbers, dates, and currency stay literal.
+    // - `referenced_date`: ISO-8601 `YYYY-MM-DD` date the farmer is talking
+    //   ABOUT (may differ from `captured_at`, which is when the recording
+    //   happened). Resolved from temporal cues like "काल" / "yesterday" /
+    //   "last Monday". Omitted entirely when no cue is present — do NOT
+    //   default to `captured_at`.
+    // - `referenced_date_confidence`: 0.0–1.0 confidence in that resolution.
+    // - `referenced_date_reason`: short audit string explaining the
+    //   derivation, e.g. "User said 'काल' on 2026-05-22 → 2026-05-21".
+    //
+    // These additions intentionally do NOT replace `fullTranscript` — both
+    // co-exist during the Sarvam pipeline rollout. Phase 2 cuts new code
+    // over to `english` / `english_redacted`; legacy paths keep reading
+    // `fullTranscript` until that cutover lands.
+    english: z.string().optional(),
+    english_redacted: z.string().optional(),
+    referenced_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, {
+        message: 'Expected YYYY-MM-DD',
+    }).optional(),
+    referenced_date_confidence: z.number().min(0).max(1).optional(),
+    referenced_date_reason: z.string().optional(),
 }).strict();
 
 /**

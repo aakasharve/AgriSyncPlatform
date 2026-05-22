@@ -20,6 +20,65 @@ public sealed class AiPromptBuilderTests
         Assert.Contains("FEW SHOT EXAMPLES", prompt, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// Phase 1.12 / SARVAM_PRIMARY_VOICE_PIPELINE_2026-05-21 — the modular
+    /// voice-parsing prompt must surface the five new voice-spine fields
+    /// (`english`, `english_redacted`, `referenced_date`,
+    /// `referenced_date_confidence`, `referenced_date_reason`) plus the
+    /// `captured_at` context cue, so the Gemini structurer emits them
+    /// alongside the legacy AgriLog bucket structure.
+    /// </summary>
+    [Fact]
+    public void ModularVoicePrompt_ContainsVoiceSpineFields()
+    {
+        var builder = new AiPromptBuilder(
+            new AiPromptTemplateRegistry(),
+            Options.Create(new AiPromptOptions { UseModularPrompt = true }));
+
+        var prompt = builder.BuildVoiceParsingPrompt(CreateContext());
+
+        // Output-contract additions — the five new JSON field names must
+        // appear verbatim in the assembled prompt so the model knows to
+        // emit them.
+        Assert.Contains("english", prompt, StringComparison.Ordinal);
+        Assert.Contains("english_redacted", prompt, StringComparison.Ordinal);
+        Assert.Contains("referenced_date", prompt, StringComparison.Ordinal);
+        Assert.Contains("referenced_date_confidence", prompt, StringComparison.Ordinal);
+        Assert.Contains("referenced_date_reason", prompt, StringComparison.Ordinal);
+
+        // Redaction-token families (the model must use these exact tokens
+        // when populating english_redacted).
+        Assert.Contains("[FARMER_N]", prompt, StringComparison.Ordinal);
+        Assert.Contains("[PHONE_N]", prompt, StringComparison.Ordinal);
+        Assert.Contains("[PLOT_N]", prompt, StringComparison.Ordinal);
+        Assert.Contains("[WORKER_N]", prompt, StringComparison.Ordinal);
+        Assert.Contains("[VENDOR_N]", prompt, StringComparison.Ordinal);
+
+        // systemBase.md instructs the model to resolve temporal cues
+        // against `captured_at` rather than wall-clock time.
+        Assert.Contains("captured_at", prompt, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The audit `PromptContentHash` (stamped on every AI-derived row per
+    /// DATA_PRINCIPLE_SPINE 01.2) must be non-empty and deterministic
+    /// across consecutive calls — drift in the prompt module content
+    /// must change the hash, but two reads of the same on-disk prompt
+    /// content must produce the same hash.
+    /// </summary>
+    [Fact]
+    public void VoicePromptContentHash_IsStableAndNonEmpty()
+    {
+        var registry = new AiPromptTemplateRegistry();
+
+        var firstHash = registry.CurrentVoicePromptContentHash;
+        var secondHash = registry.CurrentVoicePromptContentHash;
+
+        Assert.False(string.IsNullOrWhiteSpace(firstHash), "Prompt content hash must not be empty.");
+        Assert.Equal(64, firstHash.Length); // SHA-256 hex string
+        Assert.Equal(firstHash, secondHash);
+    }
+
     [Fact]
     public void ReceiptPrompt_ContainsCategoryList()
     {
