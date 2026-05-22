@@ -53,6 +53,30 @@ public sealed class AiJob
     public int TotalAttempts { get; private set; }
     public DateTime ModifiedAtUtc { get; private set; }
 
+    // ── SARVAM_PRIMARY_VOICE_PIPELINE_2026-05-21 Task 1.1 ────────────────
+    // Additive columns for the voice spine: six transcript variants, the
+    // provider/model that produced them, when they were produced, the
+    // schema-version of the transcript record, the extractor code SHA, a
+    // structured (date, confidence, reason) triple for the referenced
+    // farm-day, and the raw diarized transcript payload. All nullable for
+    // backfill safety except TranscriptSchemaVersion which defaults to
+    // "v1.0" so legacy rows have a deterministic value.
+    public string? TranscriptCodemix { get; private set; }
+    public string? TranscriptEnglish { get; private set; }
+    public string? TranscriptEnglishRedacted { get; private set; }
+    public string? TranscriptVerbatim { get; private set; }
+    public string? TranscriptTranslit { get; private set; }
+    public string? TranscriptTranslate { get; private set; }
+    public string? TranscriptProvider { get; private set; }
+    public string? TranscriptModelVersion { get; private set; }
+    public DateTime? TranscribedAtUtc { get; private set; }
+    public string TranscriptSchemaVersion { get; private set; } = "v1.0";
+    public string? ExtractorCodeSha { get; private set; }
+    public DateOnly? ReferencedDate { get; private set; }
+    public decimal? ReferencedDateConfidence { get; private set; }
+    public string? ReferencedDateReason { get; private set; }
+    public string? DiarizedTranscriptJson { get; private set; }
+
     public IReadOnlyCollection<AiJobAttempt> Attempts => _attempts.AsReadOnly();
 
     public static AiJob Create(
@@ -190,6 +214,94 @@ public sealed class AiJob
         InputSessionMetadataJson = string.IsNullOrWhiteSpace(sessionMetadataJson)
             ? null
             : sessionMetadataJson.Trim();
+        ModifiedAtUtc = DateTime.UtcNow;
+    }
+
+    // ── SARVAM_PRIMARY_VOICE_PIPELINE_2026-05-21 Task 1.1 ────────────────
+    // Domain encapsulation for the six transcript variants emitted by the
+    // voice pipeline. All variant strings are optional (provider may emit
+    // a subset); transcriptProvider + transcriptModelVersion are required
+    // because every transcript carries its lineage. transcriptSchemaVersion
+    // is opt-in — null means "leave the existing value alone" so callers
+    // can update transcript content without rolling the schema-version
+    // pointer. TranscribedAtUtc is stamped here (DateTime.UtcNow) as the
+    // single authoritative "we just wrote a transcript" timestamp.
+    public void SetTranscriptResults(
+        string? codemix,
+        string? english,
+        string? englishRedacted,
+        string? verbatim,
+        string? translit,
+        string? translate,
+        string transcriptProvider,
+        string transcriptModelVersion,
+        string? transcriptSchemaVersion = null)
+    {
+        if (string.IsNullOrWhiteSpace(transcriptProvider))
+        {
+            throw new ArgumentException("transcriptProvider is required", nameof(transcriptProvider));
+        }
+
+        if (string.IsNullOrWhiteSpace(transcriptModelVersion))
+        {
+            throw new ArgumentException("transcriptModelVersion is required", nameof(transcriptModelVersion));
+        }
+
+        TranscriptCodemix = string.IsNullOrWhiteSpace(codemix) ? null : codemix.Trim();
+        TranscriptEnglish = string.IsNullOrWhiteSpace(english) ? null : english.Trim();
+        TranscriptEnglishRedacted = string.IsNullOrWhiteSpace(englishRedacted) ? null : englishRedacted.Trim();
+        TranscriptVerbatim = string.IsNullOrWhiteSpace(verbatim) ? null : verbatim.Trim();
+        TranscriptTranslit = string.IsNullOrWhiteSpace(translit) ? null : translit.Trim();
+        TranscriptTranslate = string.IsNullOrWhiteSpace(translate) ? null : translate.Trim();
+
+        TranscriptProvider = transcriptProvider.Trim();
+        TranscriptModelVersion = transcriptModelVersion.Trim();
+        TranscribedAtUtc = DateTime.UtcNow;
+
+        if (!string.IsNullOrWhiteSpace(transcriptSchemaVersion))
+        {
+            TranscriptSchemaVersion = transcriptSchemaVersion.Trim();
+        }
+
+        ModifiedAtUtc = DateTime.UtcNow;
+    }
+
+    // ── SARVAM_PRIMARY_VOICE_PIPELINE_2026-05-21 Task 1.1 ────────────────
+    // ReferencedDate is the farm-day the user is talking about (which may
+    // differ from CreatedAtUtc — e.g. "yesterday I sprayed"). Stored as a
+    // (date, confidence, reason) triple because every inferred date needs
+    // an auditable explanation. Confidence is clamped to [0,1] when
+    // supplied so callers that overshoot don't poison the column. Caller
+    // may pass all-null to clear an earlier inference.
+    public void SetReferencedDate(DateOnly? date, decimal? confidence, string? reason)
+    {
+        ReferencedDate = date;
+        ReferencedDateConfidence = confidence is null
+            ? null
+            : Math.Clamp(confidence.Value, 0m, 1m);
+        ReferencedDateReason = string.IsNullOrWhiteSpace(reason) ? null : reason.Trim();
+        ModifiedAtUtc = DateTime.UtcNow;
+    }
+
+    // ── SARVAM_PRIMARY_VOICE_PIPELINE_2026-05-21 Task 1.1 ────────────────
+    // The diarized transcript is the raw provider payload (speaker turns,
+    // word-level timings). We persist it as a jsonb string for replay/audit;
+    // null = no diarization was produced for this job.
+    public void SetDiarizedTranscript(string? diarizedJson)
+    {
+        DiarizedTranscriptJson = string.IsNullOrWhiteSpace(diarizedJson)
+            ? null
+            : diarizedJson.Trim();
+        ModifiedAtUtc = DateTime.UtcNow;
+    }
+
+    // ── SARVAM_PRIMARY_VOICE_PIPELINE_2026-05-21 Task 1.1 ────────────────
+    // Git SHA of the extractor code that produced NormalizedResultJson.
+    // Stored at column width 40 (full SHA); short SHAs are also accepted.
+    // Whitespace-only / empty arguments clear the column.
+    public void SetExtractorCodeSha(string? sha)
+    {
+        ExtractorCodeSha = string.IsNullOrWhiteSpace(sha) ? null : sha.Trim();
         ModifiedAtUtc = DateTime.UtcNow;
     }
 
