@@ -76,6 +76,32 @@ public sealed class UserConsentState
     public bool ResearchCorpusExport { get; private set; }
 
     /// <summary>
+    /// §4 — SARVAM_PRIMARY_VOICE_PIPELINE Task 1.11 / ADR-DS-014 §C —
+    /// allow the platform to sample the raw verbatim transcript of a
+    /// retained voice clip into a labelled training corpus. Default
+    /// <c>false</c>: this is a strict DPDP §7(1) opt-in posture because
+    /// verbatim audio carries voice biometrics + every utterance the
+    /// farmer made on the clip (not just the structured log). The
+    /// Phase 2.11 sampling worker MUST gate every read on this flag via
+    /// <see cref="Application.Privacy.Ports.IConsentEnforcer"/>.
+    /// </summary>
+    public bool VerbatimTrainingCorpus { get; private set; }
+
+    /// <summary>
+    /// §5 — SARVAM_PRIMARY_VOICE_PIPELINE Task 1.11 / ADR-DS-014 §C —
+    /// allow the structurer to emit an English translation of each clip
+    /// for the admin/operator console (so a non-Marathi reviewer can
+    /// triage a flagged log). Default <c>true</c>: notice-and-opt-out
+    /// posture because admin triage is a platform-required feature and
+    /// blocking every clip until the user explicitly opts in would
+    /// break the admin pipeline on day one. Risk R13 (Phase 0.10
+    /// compliance-watch) tracks the DPDP §7(1) drift case where this
+    /// default may need to flip to opt-in; the consent text v2.0 makes
+    /// the toggle prominent in onboarding regardless.
+    /// </summary>
+    public bool EnglishTranslationForAdmin { get; private set; }
+
+    /// <summary>
     /// Version stamp of the consent text the user agreed to. Bumps when
     /// counsel approves a new agreement; an audit row is written every
     /// time the version on a save changes.
@@ -131,6 +157,11 @@ public sealed class UserConsentState
             FullHistoryJournal = false,
             CrossFarmAggregation = false,
             ResearchCorpusExport = false,
+            // SARVAM Task 1.11 — opt-in (false) per DPDP §7(1).
+            VerbatimTrainingCorpus = false,
+            // SARVAM Task 1.11 — opt-out (true) per ADR-DS-014 §C
+            // notice-and-opt-out posture for the admin-triage feature.
+            EnglishTranslationForAdmin = true,
             Version = 1,
             GrantedAtUtc = null,
             WithdrawnAtUtc = null,
@@ -210,12 +241,145 @@ public sealed class UserConsentState
             FullHistoryJournal = nextFullHistory,
             CrossFarmAggregation = nextCrossFarm,
             ResearchCorpusExport = nextResearch,
+            // SARVAM Task 1.11 — preserve the new toggles unchanged across
+            // an Update() call. The existing 3-toggle UpdateConsentHandler
+            // intentionally does NOT touch them (Phase 2.11 / 1.12 wire
+            // their own consumers); we keep the current values so a
+            // version-bump Update() does not silently flip a verbatim
+            // opt-in back to false.
+            VerbatimTrainingCorpus = VerbatimTrainingCorpus,
+            EnglishTranslationForAdmin = EnglishTranslationForAdmin,
             Version = consentTextVersion,
             GrantedAtUtc = nextGrantedAt,
             WithdrawnAtUtc = nextWithdrawnAt,
             CurrentTokenKid = string.IsNullOrWhiteSpace(currentTokenKid)
                 ? CurrentTokenKid
                 : currentTokenKid.Trim(),
+        };
+    }
+
+    // ── SARVAM_PRIMARY_VOICE_PIPELINE Task 1.11 ────────────────────────
+    // Per-toggle mutators for the two ADR-DS-014 §C toggles. These return
+    // NEW instances (mirroring the existing immutable-with-Update
+    // pattern). Phase 2.11 (verbatim sampling worker) + Phase 1.12
+    // (prompt extension) call these from their own command handlers;
+    // the existing UpdateConsentHandler does not invoke them per the
+    // envelope's "do not wire consumers" gate.
+
+    /// <summary>
+    /// Flip <see cref="VerbatimTrainingCorpus"/> to <c>true</c>. Returns
+    /// a NEW instance. Used by the future Phase 2.11 verbatim-sampling
+    /// onboarding flow when the user opts in to the labelled corpus
+    /// program.
+    /// </summary>
+    public UserConsentState EnableVerbatimTrainingCorpus(DateTime nowUtc)
+    {
+        if (VerbatimTrainingCorpus)
+        {
+            return this; // idempotent — already enabled
+        }
+
+        return new UserConsentState
+        {
+            UserId = UserId,
+            FullHistoryJournal = FullHistoryJournal,
+            CrossFarmAggregation = CrossFarmAggregation,
+            ResearchCorpusExport = ResearchCorpusExport,
+            VerbatimTrainingCorpus = true,
+            EnglishTranslationForAdmin = EnglishTranslationForAdmin,
+            Version = Version,
+            // First-ever grant of any purpose stamps GrantedAtUtc; if
+            // the user already has a GrantedAtUtc on another purpose
+            // we keep the earlier stamp (DPDP audit "when did consent
+            // start").
+            GrantedAtUtc = GrantedAtUtc ?? nowUtc,
+            // Regrant after a prior withdrawal clears WithdrawnAtUtc
+            // — see Update() above for the same semantics on the
+            // existing toggles.
+            WithdrawnAtUtc = null,
+            CurrentTokenKid = CurrentTokenKid,
+        };
+    }
+
+    /// <summary>
+    /// Flip <see cref="VerbatimTrainingCorpus"/> to <c>false</c>. Returns
+    /// a NEW instance.
+    /// </summary>
+    public UserConsentState DisableVerbatimTrainingCorpus(DateTime nowUtc)
+    {
+        if (!VerbatimTrainingCorpus)
+        {
+            return this; // idempotent — already disabled
+        }
+
+        return new UserConsentState
+        {
+            UserId = UserId,
+            FullHistoryJournal = FullHistoryJournal,
+            CrossFarmAggregation = CrossFarmAggregation,
+            ResearchCorpusExport = ResearchCorpusExport,
+            VerbatimTrainingCorpus = false,
+            EnglishTranslationForAdmin = EnglishTranslationForAdmin,
+            Version = Version,
+            GrantedAtUtc = GrantedAtUtc,
+            WithdrawnAtUtc = nowUtc,
+            CurrentTokenKid = CurrentTokenKid,
+        };
+    }
+
+    /// <summary>
+    /// Flip <see cref="EnglishTranslationForAdmin"/> to <c>false</c>.
+    /// Returns a NEW instance. Default is <c>true</c> (opt-out posture),
+    /// so this is the explicit user choice to suppress English admin
+    /// triage of their clips.
+    /// </summary>
+    public UserConsentState OptOutEnglishTranslationForAdmin(DateTime nowUtc)
+    {
+        if (!EnglishTranslationForAdmin)
+        {
+            return this; // idempotent — already opted out
+        }
+
+        return new UserConsentState
+        {
+            UserId = UserId,
+            FullHistoryJournal = FullHistoryJournal,
+            CrossFarmAggregation = CrossFarmAggregation,
+            ResearchCorpusExport = ResearchCorpusExport,
+            VerbatimTrainingCorpus = VerbatimTrainingCorpus,
+            EnglishTranslationForAdmin = false,
+            Version = Version,
+            GrantedAtUtc = GrantedAtUtc,
+            // Opting out of a default-on purpose is a revocation event —
+            // stamp WithdrawnAtUtc so the DPDP audit ledger records it.
+            WithdrawnAtUtc = nowUtc,
+            CurrentTokenKid = CurrentTokenKid,
+        };
+    }
+
+    /// <summary>
+    /// Flip <see cref="EnglishTranslationForAdmin"/> back to <c>true</c>
+    /// after an explicit opt-out. Returns a NEW instance.
+    /// </summary>
+    public UserConsentState OptInEnglishTranslationForAdmin(DateTime nowUtc)
+    {
+        if (EnglishTranslationForAdmin)
+        {
+            return this; // idempotent — already opted in
+        }
+
+        return new UserConsentState
+        {
+            UserId = UserId,
+            FullHistoryJournal = FullHistoryJournal,
+            CrossFarmAggregation = CrossFarmAggregation,
+            ResearchCorpusExport = ResearchCorpusExport,
+            VerbatimTrainingCorpus = VerbatimTrainingCorpus,
+            EnglishTranslationForAdmin = true,
+            Version = Version,
+            GrantedAtUtc = GrantedAtUtc ?? nowUtc,
+            WithdrawnAtUtc = null,
+            CurrentTokenKid = CurrentTokenKid,
         };
     }
 
@@ -244,6 +408,14 @@ public sealed class UserConsentState
             FullHistoryJournal = clientToken.FullHistoryJournal && server.FullHistoryJournal,
             CrossFarmAggregation = clientToken.CrossFarmAggregation && server.CrossFarmAggregation,
             ResearchCorpusExport = clientToken.ResearchCorpusExport && server.ResearchCorpusExport,
+            // SARVAM Task 1.11 — both new toggles follow the
+            // stricter-wins intersection. Verbatim is AND-merged (both
+            // sides must grant for sampling to be allowed); English
+            // translation is also AND-merged because the stricter side
+            // is whichever side has CONSENT WITHHELD — a client token
+            // claiming opt-in cannot override a server-side opt-out.
+            VerbatimTrainingCorpus = clientToken.VerbatimTrainingCorpus && server.VerbatimTrainingCorpus,
+            EnglishTranslationForAdmin = clientToken.EnglishTranslationForAdmin && server.EnglishTranslationForAdmin,
             // Version: highest wins (mirrors the plan §6.1 sketch — the
             // newer text version was approved by counsel later).
             Version = Math.Max(clientToken.Version, server.Version),

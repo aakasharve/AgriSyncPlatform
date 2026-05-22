@@ -147,6 +147,13 @@ public sealed class ConsentAuditEntry
         fullHistoryJournal = state.FullHistoryJournal,
         crossFarmAggregation = state.CrossFarmAggregation,
         researchCorpusExport = state.ResearchCorpusExport,
+        // SARVAM_PRIMARY_VOICE_PIPELINE Task 1.11 / ADR-DS-014 §C — emit
+        // the two new toggles in the audit-row snapshot so the DPDP §16
+        // export sees every consent surface a user agreed to. Legacy
+        // audit rows authored before this column landed simply won't
+        // include the keys; jsonb readers tolerate the absence.
+        verbatimTrainingCorpus = state.VerbatimTrainingCorpus,
+        englishTranslationForAdmin = state.EnglishTranslationForAdmin,
         version = state.Version,
         grantedAtUtc = state.GrantedAtUtc,
         withdrawnAtUtc = state.WithdrawnAtUtc,

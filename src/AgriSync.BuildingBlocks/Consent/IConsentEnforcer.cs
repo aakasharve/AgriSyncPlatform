@@ -36,15 +36,22 @@ public interface IConsentEnforcer
 }
 
 /// <summary>
-/// Three independent purposes per DPDP §7(1) (purpose limitation) +
-/// V2 §1 Non-Negotiables. Matches the booleans on
-/// <c>ShramSafal.Domain.Privacy.UserConsentState</c>.
+/// Independent purposes per DPDP §7(1) (purpose limitation) + V2 §1
+/// Non-Negotiables. Matches the booleans on
+/// <c>ShramSafal.Domain.Privacy.UserConsentState</c>. Adding a value
+/// here REQUIRES extending <see cref="ConsentClaims"/> and the
+/// <see cref="ConsentEnforcer"/> switch (compile-time enforcement).
 /// </summary>
 public enum ConsentPurpose
 {
     FullHistoryJournal,
     CrossFarmAggregation,
     ResearchCorpusExport,
+    // SARVAM_PRIMARY_VOICE_PIPELINE Task 1.11 / ADR-DS-014 §C — verbatim
+    // training corpus sampling consent. Default false (opt-in) on the
+    // server aggregate; the BuildingBlocks ConsentEnforcer switch in
+    // RequireGrantOrThrowAsync below is extended to map this value.
+    VerbatimTrainingCorpus,
 }
 
 /// <summary>

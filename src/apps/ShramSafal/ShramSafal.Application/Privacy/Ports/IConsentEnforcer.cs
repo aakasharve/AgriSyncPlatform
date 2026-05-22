@@ -69,12 +69,11 @@ public interface IConsentEnforcer
 }
 
 /// <summary>
-/// Mirror of the three live <c>UserConsentState</c> toggles authored in
-/// Phase 06.1. Adding a fourth value here REQUIRES first adding the
-/// matching property to <c>UserConsentState</c> + the
-/// <c>UpdateConsentCommand</c> wire surface — see the supervisor
-/// guardrail in <c>VOICE_DIARY_END_TO_END_BEFORE_SPINE_HARDENING_2026-05-17.md</c>
-/// for why the Voice Diary ship does NOT add one.
+/// Mirror of the live <c>UserConsentState</c> toggles. Adding a value
+/// here REQUIRES first adding the matching property to
+/// <c>UserConsentState</c> (Domain) + every consumer's
+/// <c>switch (purpose)</c> branch — see the supervisor guardrail in
+/// <c>VOICE_DIARY_END_TO_END_BEFORE_SPINE_HARDENING_2026-05-17.md</c>.
 /// </summary>
 public enum ConsentPurpose
 {
@@ -96,6 +95,17 @@ public enum ConsentPurpose
     /// government partners under DPA-governed export.
     /// </summary>
     ResearchCorpusExport = 3,
+
+    /// <summary>
+    /// §4 — SARVAM_PRIMARY_VOICE_PIPELINE Task 1.11 / ADR-DS-014 §C —
+    /// allow Phase 2.11's sampling worker to copy the raw verbatim
+    /// transcript of a retained clip into the labelled training
+    /// corpus. Strict DPDP §7(1) opt-in (default false on
+    /// <see cref="ShramSafal.Domain.Privacy.UserConsentState"/>); the
+    /// sampling worker MUST call <see cref="IConsentEnforcer.RequireGrantAsync"/>
+    /// with this purpose before reading any verbatim row.
+    /// </summary>
+    VerbatimTrainingCorpus = 4,
 }
 
 /// <summary>

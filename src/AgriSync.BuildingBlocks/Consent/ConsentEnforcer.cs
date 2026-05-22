@@ -50,7 +50,7 @@ public sealed class ConsentEnforcer : IConsentEnforcer
         // default. The stricter-wins intersection collapses to all-false
         // immediately and the purpose fails closed.
         var stricter = serverClaims is null
-            ? new ConsentClaims(false, false, false, capturedClaims.Version)
+            ? new ConsentClaims(false, false, false, capturedClaims.Version, VerbatimTrainingCorpus: false)
             : StricterIntersection(capturedClaims, serverClaims);
 
         var granted = purpose switch
@@ -58,6 +58,12 @@ public sealed class ConsentEnforcer : IConsentEnforcer
             ConsentPurpose.FullHistoryJournal => stricter.FullHistoryJournal,
             ConsentPurpose.CrossFarmAggregation => stricter.CrossFarmAggregation,
             ConsentPurpose.ResearchCorpusExport => stricter.ResearchCorpusExport,
+            // SARVAM Task 1.11 — verbatim sampling consent. The
+            // BuildingBlocks ConsentClaims record carries the toggle as a
+            // default-false positional param; the AND-merge in
+            // StricterIntersection below honors the stricter-wins rule
+            // (server or client may withhold; both must grant).
+            ConsentPurpose.VerbatimTrainingCorpus => stricter.VerbatimTrainingCorpus,
             _ => throw new ArgumentOutOfRangeException(nameof(purpose), purpose, null),
         };
 
@@ -76,5 +82,9 @@ public sealed class ConsentEnforcer : IConsentEnforcer
         FullHistoryJournal: a.FullHistoryJournal && b.FullHistoryJournal,
         CrossFarmAggregation: a.CrossFarmAggregation && b.CrossFarmAggregation,
         ResearchCorpusExport: a.ResearchCorpusExport && b.ResearchCorpusExport,
-        Version: Math.Max(a.Version, b.Version));
+        Version: Math.Max(a.Version, b.Version),
+        // SARVAM Task 1.11 — verbatim toggle is also AND-merged so a
+        // stale client token claiming opt-in cannot widen scope past a
+        // server-side opt-out.
+        VerbatimTrainingCorpus: a.VerbatimTrainingCorpus && b.VerbatimTrainingCorpus);
 }

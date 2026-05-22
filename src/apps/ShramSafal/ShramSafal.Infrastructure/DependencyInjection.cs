@@ -467,6 +467,17 @@ public static class DependencyInjection
         services.AddScoped<IAiOrchestrator, AiOrchestrator>();
         services.AddHostedService<ExtractionVerificationWorker>();
 
+        // SARVAM_PRIMARY_VOICE_PIPELINE_2026-05-21 Task 1.10 — transcript
+        // backfill worker. Disabled by default
+        // (Ai:TranscriptBackfill:Enabled=false on every environment);
+        // production opts in via env var Ai__TranscriptBackfill__Enabled
+        // after Phase 1 ships and Phase 2 is stable. The hosted service
+        // still spawns in dev/test but ExecuteAsync exits immediately
+        // when Enabled is false — zero load.
+        services.Configure<TranscriptBackfillOptions>(
+            configuration.GetSection(TranscriptBackfillOptions.SectionName));
+        services.AddHostedService<TranscriptBackfillWorker>();
+
         services.AddHttpClient("GeminiAiProvider")
             .ConfigureHttpClient((sp, client) =>
             {

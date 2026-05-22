@@ -68,6 +68,11 @@ public sealed class ConsentEnforcer(
             ConsentPurpose.FullHistoryJournal => state.FullHistoryJournal,
             ConsentPurpose.CrossFarmAggregation => state.CrossFarmAggregation,
             ConsentPurpose.ResearchCorpusExport => state.ResearchCorpusExport,
+            // SARVAM_PRIMARY_VOICE_PIPELINE Task 1.11 — Phase 2.11
+            // (verbatim sampling worker) is the first call site that
+            // will route through this branch. Default-false on the
+            // aggregate ensures unenrolled users fail closed.
+            ConsentPurpose.VerbatimTrainingCorpus => state.VerbatimTrainingCorpus,
             _ => false,
         };
 

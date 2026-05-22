@@ -77,13 +77,20 @@ public sealed record ConsentTokenValidation(
     string? FailureReason);
 
 /// <summary>
-/// The three independent purpose toggles + the consent text version the
+/// The independent purpose toggles + the consent text version the
 /// user agreed to. Mirrors the live <c>UserConsentState</c> read-side
 /// shape — minus the timestamps and current_token_kid that the token
 /// itself does not need to carry.
+/// <para>
+/// <b>SARVAM Task 1.11.</b> Added <see cref="VerbatimTrainingCorpus"/>
+/// as a positional default-false param so the 9+ existing call sites
+/// stay binary-compatible. Phase 2.11 (verbatim sampling worker) is
+/// the first consumer that mints a token with this set to true.
+/// </para>
 /// </summary>
 public sealed record ConsentClaims(
     bool FullHistoryJournal,
     bool CrossFarmAggregation,
     bool ResearchCorpusExport,
-    int Version);
+    int Version,
+    bool VerbatimTrainingCorpus = false);
