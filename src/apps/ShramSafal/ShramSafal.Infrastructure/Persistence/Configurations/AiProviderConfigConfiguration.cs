@@ -80,5 +80,32 @@ internal sealed class AiProviderConfigConfiguration : IEntityTypeConfiguration<A
         builder.Property(x => x.ModifiedByUserId)
             .HasColumnName("modified_by_user_id")
             .IsRequired();
+
+        // SARVAM_PRIMARY_VOICE_PIPELINE Task 1.2 — voice-pipeline split
+        // (transcriber | mode | structurer | translator). Required pair
+        // (transcriber + structurer) defaults to 'Gemini' so the
+        // additive migration does not break existing rows; the
+        // accompanying capability matrix seed in
+        // `ssf.ai_provider_capabilities` lists the supported values per
+        // operation. Mode/translator are nullable reservations.
+        builder.Property(x => x.TranscriberProvider)
+            .HasColumnName("transcriber_provider")
+            .HasMaxLength(64)
+            .HasDefaultValue("Gemini")
+            .IsRequired();
+
+        builder.Property(x => x.TranscriberMode)
+            .HasColumnName("transcriber_mode")
+            .HasMaxLength(32);
+
+        builder.Property(x => x.StructurerProvider)
+            .HasColumnName("structurer_provider")
+            .HasMaxLength(64)
+            .HasDefaultValue("Gemini")
+            .IsRequired();
+
+        builder.Property(x => x.TranslatorProvider)
+            .HasColumnName("translator_provider")
+            .HasMaxLength(64);
     }
 }

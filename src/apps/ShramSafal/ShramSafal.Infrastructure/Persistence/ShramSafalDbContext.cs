@@ -50,6 +50,16 @@ public sealed class ShramSafalDbContext(DbContextOptions<ShramSafalDbContext> op
     public DbSet<AiJob> AiJobs => Set<AiJob>();
     public DbSet<AiJobAttempt> AiJobAttempts => Set<AiJobAttempt>();
     public DbSet<AiProviderConfig> AiProviderConfigs => Set<AiProviderConfig>();
+
+    /// <summary>
+    /// SARVAM_PRIMARY_VOICE_PIPELINE Task 1.2 — runtime authority for the
+    /// provider × operation × mode capability matrix. Seeded from
+    /// <c>_COFOUNDER/Projects/AgriSync/Architecture/CAPABILITY_MATRIX.md</c>;
+    /// read by <c>AiOrchestrator</c> / <see cref="AiProviderConfig"/> to
+    /// resolve which provider handles which operation. Mapped to
+    /// <c>ssf.ai_provider_capabilities</c>.
+    /// </summary>
+    public DbSet<AiProviderCapability> AiProviderCapabilities => Set<AiProviderCapability>();
     public DbSet<ScheduleTemplate> ScheduleTemplates => Set<ScheduleTemplate>();
     public DbSet<TemplateActivity> TemplateActivities => Set<TemplateActivity>();
     public DbSet<PlannedActivity> PlannedActivities => Set<PlannedActivity>();

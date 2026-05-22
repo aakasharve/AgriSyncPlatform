@@ -46,6 +46,17 @@ public sealed class AiProviderConfig
     public AiProviderType? ReceiptProvider { get; private set; }
     public AiProviderType? PattiProvider { get; private set; }
 
+    // SARVAM_PRIMARY_VOICE_PIPELINE Task 1.2 — split voice pipeline into
+    // transcriber (Sarvam Saaras V3) + structurer (Gemini 3.1 Flash-Lite)
+    // tuple. `TranscriberMode` carries Sarvam STT mode ('codemix' |
+    // 'verbatim' | 'translit' | ...; per `CAPABILITY_MATRIX.md`).
+    // `TranslatorProvider` is reserved (currently NULL — English bundle is
+    // produced inside the Gemini structurer per ADR-DS-014).
+    public string TranscriberProvider { get; private set; } = "Gemini";
+    public string? TranscriberMode { get; private set; }
+    public string StructurerProvider { get; private set; } = "Gemini";
+    public string? TranslatorProvider { get; private set; }
+
     public static AiProviderConfig CreateDefault()
     {
         var config = new AiProviderConfig(
@@ -104,6 +115,46 @@ public sealed class AiProviderConfig
         ReceiptProvider = receiptProvider;
         PattiProvider = pattiProvider;
         ModifiedByUserId = modifiedByUserId;
+        ModifiedAtUtc = DateTime.UtcNow;
+    }
+
+    /// <summary>
+    /// SARVAM_PRIMARY_VOICE_PIPELINE Task 1.2 — set the voice-pipeline
+    /// provider tuple: transcriber (e.g. Sarvam Saaras V3) +
+    /// transcriber mode (e.g. <c>codemix</c>) + structurer (e.g. Gemini
+    /// 3.1 Flash-Lite) + optional translator. Validates that the two
+    /// required providers are non-empty; trims nullable fields and
+    /// stores <c>null</c> for empty/whitespace strings; bumps
+    /// <see cref="ModifiedAtUtc"/>.
+    /// </summary>
+    public void SetProviderTuple(
+        string transcriberProvider,
+        string? transcriberMode,
+        string structurerProvider,
+        string? translatorProvider)
+    {
+        if (string.IsNullOrWhiteSpace(transcriberProvider))
+        {
+            throw new ArgumentException(
+                "Transcriber provider is required.",
+                nameof(transcriberProvider));
+        }
+
+        if (string.IsNullOrWhiteSpace(structurerProvider))
+        {
+            throw new ArgumentException(
+                "Structurer provider is required.",
+                nameof(structurerProvider));
+        }
+
+        TranscriberProvider = transcriberProvider.Trim();
+        TranscriberMode = string.IsNullOrWhiteSpace(transcriberMode)
+            ? null
+            : transcriberMode.Trim();
+        StructurerProvider = structurerProvider.Trim();
+        TranslatorProvider = string.IsNullOrWhiteSpace(translatorProvider)
+            ? null
+            : translatorProvider.Trim();
         ModifiedAtUtc = DateTime.UtcNow;
     }
 }

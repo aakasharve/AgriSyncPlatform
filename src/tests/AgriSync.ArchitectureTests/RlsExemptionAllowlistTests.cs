@@ -195,6 +195,15 @@ public sealed class RlsExemptionAllowlistTests
         // explicit SELECT(true) policy.
         "test_protocols",
         "test_recommendations",
+
+        // SARVAM_PRIMARY_VOICE_PIPELINE Task 1.2 — global capability matrix
+        // mirror of _COFOUNDER/Projects/AgriSync/Architecture/CAPABILITY_MATRIX.md.
+        // No farm dimension; rows describe (provider × operation × mode) →
+        // (supports_streaming, cost_per_unit_inr, sla_ttft_ms) for the
+        // AiOrchestrator's runtime routing decisions. Admin-managed via
+        // the /shramsafal/ai/config admin surface; same pattern as
+        // cost_categories without the explicit SELECT(true) policy.
+        "ai_provider_capabilities",
     };
 
     [Fact]
