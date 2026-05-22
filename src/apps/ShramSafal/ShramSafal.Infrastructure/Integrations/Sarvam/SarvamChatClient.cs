@@ -175,11 +175,4 @@ internal sealed class SarvamChatClient(
     }
 }
 
-internal sealed record SarvamChatResult(bool IsSuccess, string? Content, string? Error)
-{
-    public static SarvamChatResult Success(string content) =>
-        new(true, content, null);
-
-    public static SarvamChatResult Failure(string error) =>
-        new(false, null, error);
-}
+// SarvamChatResult moved to SarvamApiDtos.cs (Task 2.9 ACL — Safeguard S3).

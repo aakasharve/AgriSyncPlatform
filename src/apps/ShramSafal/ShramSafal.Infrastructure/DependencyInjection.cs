@@ -464,6 +464,19 @@ public static class DependencyInjection
         services.AddScoped<SarvamDocIntelClient>();
         services.AddScoped<IAiProvider, SarvamAiProvider>();
         services.AddScoped<IAiProvider, GeminiAiProvider>();
+
+        // SARVAM_PRIMARY_VOICE_PIPELINE Task 2.1 — SarvamStreamingSttClient
+        // implements the single-role ITranscriberProvider port (Task 1.9).
+        // Registered IN ADDITION to the concrete-class scope above so direct
+        // injection (e.g. the legacy AiStreamingEndpoints handler) keeps
+        // working AND new orchestrator code resolves through the port.
+        services.AddScoped<ITranscriberProvider>(sp => sp.GetRequiredService<SarvamStreamingSttClient>());
+
+        // SARVAM_PRIMARY_VOICE_PIPELINE Task 2.2 — verbatim REST adapter
+        // used by the verbatim D-MOAT sampling worker (Task 2.11). NOT
+        // registered as ITranscriberProvider — verbatim is async/background,
+        // not part of the interactive transcribe/structure pipeline.
+        services.AddScoped<SarvamVerbatimSttClient>();
         services.AddScoped<IAiOrchestrator, AiOrchestrator>();
         services.AddHostedService<ExtractionVerificationWorker>();
 

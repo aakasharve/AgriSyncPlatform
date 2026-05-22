@@ -197,11 +197,4 @@ internal sealed class SarvamSttClient(
     }
 }
 
-internal sealed record SarvamSttResult(bool IsSuccess, string? Transcript, string? LanguageCode, string? Error)
-{
-    public static SarvamSttResult Success(string transcript, string? languageCode) =>
-        new(true, transcript, languageCode, null);
-
-    public static SarvamSttResult Failure(string error) =>
-        new(false, null, null, error);
-}
+// SarvamSttResult moved to SarvamApiDtos.cs (Task 2.9 ACL — Safeguard S3).

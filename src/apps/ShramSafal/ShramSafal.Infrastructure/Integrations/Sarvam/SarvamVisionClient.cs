@@ -208,11 +208,4 @@ internal sealed class SarvamVisionClient(
     }
 }
 
-internal sealed record SarvamVisionResult(bool IsSuccess, string? ExtractedText, string? Error)
-{
-    public static SarvamVisionResult Success(string extractedText) =>
-        new(true, extractedText, null);
-
-    public static SarvamVisionResult Failure(string error) =>
-        new(false, null, error);
-}
+// SarvamVisionResult moved to SarvamApiDtos.cs (Task 2.9 ACL — Safeguard S3).

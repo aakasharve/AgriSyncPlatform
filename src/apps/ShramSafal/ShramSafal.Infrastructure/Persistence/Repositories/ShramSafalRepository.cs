@@ -911,6 +911,111 @@ internal sealed class ShramSafalRepository(ShramSafalDbContext db) : IShramSafal
         await db.SaveChangesAsync(ct);
     }
 
+    // --- SARVAM_PRIMARY_VOICE_PIPELINE Task 2.10 (transcript idempotency) ---
+    // The unique key on ssf.transcript_history is
+    // (audio_content_hash, transcript_provider, transcript_model_version,
+    // transcript_mode). See TranscriptHistoryConfiguration.cs for the EF
+    // mapping. The lookup hits the unique index
+    // ux_transcript_history_audio_provider_model_mode by name.
+
+    public async Task<TranscriptHistory?> GetTranscriptHistoryAsync(
+        string audioContentHash,
+        string transcriptProvider,
+        string transcriptModelVersion,
+        string transcriptMode,
+        CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(audioContentHash) ||
+            string.IsNullOrWhiteSpace(transcriptProvider) ||
+            string.IsNullOrWhiteSpace(transcriptModelVersion) ||
+            string.IsNullOrWhiteSpace(transcriptMode))
+        {
+            return null;
+        }
+
+        return await db.TranscriptHistories
+            .AsNoTracking()
+            .FirstOrDefaultAsync(
+                h => h.AudioContentHash == audioContentHash &&
+                     h.TranscriptProvider == transcriptProvider &&
+                     h.TranscriptModelVersion == transcriptModelVersion &&
+                     h.TranscriptMode == transcriptMode,
+                ct);
+    }
+
+    /// <summary>
+    /// "ON CONFLICT DO NOTHING" semantics. We pre-check the unique tuple
+    /// inside the same DbContext to avoid the UPDATE landmine on a tracked
+    /// entity collision; SaveChanges is invoked directly so the row is
+    /// durable before the caller returns the transcript to the user. If a
+    /// concurrent writer beat us to it (race window), the duplicate-key
+    /// INSERT path raises a Postgres unique-violation which we catch +
+    /// swallow — the loser's transcript text is presumed equivalent because
+    /// the same audio + same (provider, model, mode) deterministically
+    /// produces the same text.
+    /// </summary>
+    public async Task UpsertTranscriptHistoryAsync(TranscriptHistory history, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(history);
+
+        // First-line check: if the row already exists, no-op. AsNoTracking
+        // keeps the EF identity map clean so a later GET in the same scope
+        // re-reads from DB if needed.
+        var existing = await db.TranscriptHistories
+            .AsNoTracking()
+            .AnyAsync(
+                h => h.AudioContentHash == history.AudioContentHash &&
+                     h.TranscriptProvider == history.TranscriptProvider &&
+                     h.TranscriptModelVersion == history.TranscriptModelVersion &&
+                     h.TranscriptMode == history.TranscriptMode,
+                ct);
+
+        if (existing)
+        {
+            return;
+        }
+
+        try
+        {
+            await db.TranscriptHistories.AddAsync(history, ct);
+            await db.SaveChangesAsync(ct);
+        }
+        catch (DbUpdateException ex) when (IsUniqueViolation(ex))
+        {
+            // Race window between the pre-check and the SaveChanges: a
+            // concurrent writer landed the same row. Detach our copy so
+            // EF stops tracking it and the next SaveChanges in this scope
+            // doesn't re-attempt the INSERT.
+            db.Entry(history).State = EntityState.Detached;
+        }
+    }
+
+    private static bool IsUniqueViolation(DbUpdateException ex)
+    {
+        // Npgsql surfaces unique-violation as SQLSTATE 23505 inside an
+        // inner PostgresException. We avoid a hard reference to
+        // Npgsql.PostgresException so the production assembly's reference
+        // surface stays unchanged; instead, we sniff the SqlState property
+        // via reflection-safe Exception.Data and the inner-exception
+        // message. The defensive check is intentional — losing the race
+        // and silently swallowing is the correct behavior per the
+        // ON CONFLICT DO NOTHING semantics in the port contract.
+        for (Exception? inner = ex; inner is not null; inner = inner.InnerException)
+        {
+            if (inner.GetType().Name == "PostgresException")
+            {
+                var sqlStateProp = inner.GetType().GetProperty("SqlState");
+                if (sqlStateProp?.GetValue(inner) is string sqlState &&
+                    string.Equals(sqlState, "23505", StringComparison.Ordinal))
+                {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
     // ── DATA_PRINCIPLE_SPINE sub-phase 06.1 / 06.2 (consent domain) ──────
     // spec: data-principle-spine-2026-05-05/06.2
 

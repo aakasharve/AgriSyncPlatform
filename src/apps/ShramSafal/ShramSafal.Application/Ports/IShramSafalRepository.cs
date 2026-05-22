@@ -288,6 +288,43 @@ public interface IShramSafalRepository
     Task UpsertRawBlobIndexAsync(RawBlobRef blobRef, CancellationToken ct = default)
         => Task.CompletedTask;
 
+    // --- SARVAM_PRIMARY_VOICE_PIPELINE Task 2.10 (transcript idempotency) ---
+    /// <summary>
+    /// Lookup a prior transcript by the unique tuple
+    /// <c>(audio_content_hash, transcript_provider, transcript_model_version,
+    /// transcript_mode)</c>. Returns the prior <see cref="TranscriptHistory"/>
+    /// row if present (Sarvam idempotency check — Task 2.10 Lever #8) or
+    /// <c>null</c> when this is a first sighting. Used by
+    /// <c>SarvamStreamingSttClient.TranscribeAsync</c> and
+    /// <c>SarvamVerbatimSttClient.TranscribeVerbatimAsync</c> to short-circuit
+    /// the Sarvam REST call when the same audio has already been transcribed
+    /// against the same (provider, model, mode). Default impl returns
+    /// <c>null</c> so legacy test doubles compile; production overrides hit
+    /// <c>ssf.transcript_history</c>.
+    /// </summary>
+    Task<TranscriptHistory?> GetTranscriptHistoryAsync(
+        string audioContentHash,
+        string transcriptProvider,
+        string transcriptModelVersion,
+        string transcriptMode,
+        CancellationToken ct = default)
+        => Task.FromResult<TranscriptHistory?>(null);
+
+    /// <summary>
+    /// Insert a new <see cref="TranscriptHistory"/> row with
+    /// <c>ON CONFLICT DO NOTHING</c> semantics against the unique tuple
+    /// <c>(audio_content_hash, transcript_provider, transcript_model_version,
+    /// transcript_mode)</c>. A race between two concurrent transcribers of
+    /// the same audio resolves to one persisted row; the loser silently
+    /// no-ops. Used by <c>SarvamStreamingSttClient</c> /
+    /// <c>SarvamVerbatimSttClient</c> after a successful Sarvam call.
+    /// Default impl is a no-op so legacy test doubles compile.
+    /// </summary>
+    Task UpsertTranscriptHistoryAsync(
+        TranscriptHistory history,
+        CancellationToken ct = default)
+        => Task.CompletedTask;
+
     // --- DATA_PRINCIPLE_SPINE sub-phase 06.1 / 06.2 (consent domain) ------
     /// <summary>
     /// Fetch the live <see cref="UserConsentState"/> row for
