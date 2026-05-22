@@ -16,6 +16,49 @@ internal sealed class SarvamSttClient(
         Stream audioStream,
         string mimeType,
         string? languageHint,
+        CancellationToken ct = default) =>
+        await TranscribeAsync(audioStream, mimeType, languageHint, withDiarization: false, ct: ct).ConfigureAwait(false);
+
+    /// <summary>
+    /// SARVAM_PRIMARY_VOICE_PIPELINE_2026-05-21 Task 2.11a — extended
+    /// transcribe surface that lets callers request diarization as an
+    /// add-on capability. When <paramref name="withDiarization"/> is
+    /// <c>true</c> the multipart form carries a <c>with_diarization</c>
+    /// flag in addition to the existing <c>mode</c> field; the response
+    /// payload's <c>diarized_transcript</c> array is captured into
+    /// <see cref="SarvamSttResult.DiarizedTranscriptJson"/> as a raw
+    /// JSON string (no domain mapping — the worker persists it as
+    /// jsonb on <c>ssf.ai_jobs.diarized_transcript_json</c>).
+    ///
+    /// <para>
+    /// Per ADR-DS-014 / Task 1.5a, diarization is a separate capability
+    /// NOT a Sarvam STT mode — it is gated by
+    /// <c>ssf.diarization_policy</c>, billed against the existing
+    /// VoiceToStructuredLog rollup with a "+diarization" sentinel on
+    /// the attempt, and the field name on the wire here
+    /// (<c>with_diarization</c>) is the documented Sarvam parameter as
+    /// of 2026-05 — verify at execution time.
+    ///
+    /// WARNING (supervisor blocker — 2026-05-22): the <c>with_diarization</c>
+    /// form-field name is BEST-EFFORT against Sarvam's published docs and
+    /// has NOT been verified against a live Sarvam call. The
+    /// <see cref="SelectiveDiarizationWorker"/> ships disabled by default
+    /// (<c>Ai:SelectiveDiarization:Enabled</c> defaults <c>false</c>).
+    /// DO NOT enable the worker in any environment until a manual curl
+    /// against Sarvam's REST endpoint confirms the field name + response
+    /// shape. If Sarvam's actual field name differs, the worker will get
+    /// empty <c>diarized_transcript</c> responses and silently produce
+    /// zero diarized rows — failure mode is correct (no false data) but
+    /// invisible from outside the field-name validation. Pre-enable
+    /// runbook is logged in <c>_COFOUNDER/memory/corrections.md</c>
+    /// 2026-05-22 Slice D row.
+    /// </para>
+    /// </summary>
+    public async Task<SarvamSttResult> TranscribeAsync(
+        Stream audioStream,
+        string mimeType,
+        string? languageHint,
+        bool withDiarization,
         CancellationToken ct = default)
     {
         if (string.IsNullOrWhiteSpace(_options.ApiSubscriptionKey))
@@ -46,6 +89,15 @@ internal sealed class SarvamSttClient(
             multipart.Add(new StringContent(string.IsNullOrWhiteSpace(languageHint) ? _options.SttLanguage : languageHint.Trim()), "language_code");
             multipart.Add(new StringContent(_options.SttMode), "mode");
 
+            if (withDiarization)
+            {
+                // Sarvam treats with_diarization as a stringified bool form-field
+                // (lowercase). The field name is independent of the mode dimension
+                // per ADR-DS-014 §C and Task 1.5a — diarization is a capability,
+                // not an STT mode.
+                multipart.Add(new StringContent("true"), "with_diarization");
+            }
+
             using var request = new HttpRequestMessage(HttpMethod.Post, _options.SttEndpoint)
             {
                 Content = multipart
@@ -67,12 +119,52 @@ internal sealed class SarvamSttClient(
                 return SarvamSttResult.Failure("Sarvam STT did not return a transcript.");
             }
 
-            return SarvamSttResult.Success(transcript, languageCode);
+            string? diarizedJson = null;
+            if (withDiarization)
+            {
+                diarizedJson = TryExtractDiarizedTranscriptJson(body);
+            }
+
+            return SarvamSttResult.Success(transcript, languageCode, diarizedJson);
         }
         catch (Exception ex)
         {
             logger.LogWarning(ex, "Sarvam STT call failed.");
             return SarvamSttResult.Failure(ex.Message);
+        }
+    }
+
+    /// <summary>
+    /// Extract Sarvam's <c>diarized_transcript</c> array from the response
+    /// envelope and return it as a serialized JSON string. The shape on
+    /// the wire is
+    /// <c>[{"speaker_label":"A","start_ms":120,"end_ms":2400,"text":"..."}, ...]</c>
+    /// per Sarvam's documented Phase 2 schema. We persist the raw array
+    /// verbatim so a future schema bump (e.g. word-level timings) is
+    /// non-destructive — the worker captures whatever Sarvam returns.
+    /// Returns <c>null</c> when the field is missing or malformed; the
+    /// caller treats a null payload as "diarization was requested but
+    /// the provider did not return one" and leaves the ai_jobs column
+    /// untouched.
+    /// </summary>
+    private static string? TryExtractDiarizedTranscriptJson(string responseBody)
+    {
+        try
+        {
+            using var document = JsonDocument.Parse(responseBody);
+            var root = document.RootElement;
+
+            if (!root.TryGetProperty("diarized_transcript", out var node) ||
+                node.ValueKind != JsonValueKind.Array)
+            {
+                return null;
+            }
+
+            return node.GetRawText();
+        }
+        catch (JsonException)
+        {
+            return null;
         }
     }
 

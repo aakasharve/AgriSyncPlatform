@@ -16,18 +16,29 @@ namespace ShramSafal.Infrastructure.Integrations.Sarvam;
 /// <summary>
 /// Result envelope returned by <c>SarvamSttClient.TranscribeAsync</c>.
 /// Wraps the Sarvam REST <c>POST /speech-to-text</c> response: a JSON
-/// object with <c>transcript</c> (or <c>text</c>) and <c>language_code</c>.
+/// object with <c>transcript</c> (or <c>text</c>) and <c>language_code</c>,
+/// plus an optional <c>diarized_transcript</c> array surfaced via
+/// <see cref="DiarizedTranscriptJson"/> when the caller requested
+/// diarization (Task 2.11a).
 /// Used by both <c>SarvamAiProvider</c> (codemix path) and the new
 /// <c>SarvamVerbatimSttClient</c> (verbatim path) for the verbatim D-MOAT
 /// sampler in Phase 2.
 /// </summary>
-internal sealed record SarvamSttResult(bool IsSuccess, string? Transcript, string? LanguageCode, string? Error)
+internal sealed record SarvamSttResult(
+    bool IsSuccess,
+    string? Transcript,
+    string? LanguageCode,
+    string? Error,
+    string? DiarizedTranscriptJson = null)
 {
     public static SarvamSttResult Success(string transcript, string? languageCode) =>
-        new(true, transcript, languageCode, null);
+        new(true, transcript, languageCode, null, null);
+
+    public static SarvamSttResult Success(string transcript, string? languageCode, string? diarizedTranscriptJson) =>
+        new(true, transcript, languageCode, null, diarizedTranscriptJson);
 
     public static SarvamSttResult Failure(string error) =>
-        new(false, null, null, error);
+        new(false, null, null, error, null);
 }
 
 /// <summary>

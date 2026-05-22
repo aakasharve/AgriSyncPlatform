@@ -524,6 +524,41 @@ public static class DependencyInjection
             configuration.GetSection(AiCostBudgetOptions.SectionName));
         services.AddHostedService<AiCostBudgetGuard>();
 
+        // SARVAM_PRIMARY_VOICE_PIPELINE_2026-05-21 Task 2.11 — verbatim
+        // D-MOAT sampling worker. Disabled by default
+        // (Ai:VerbatimSampling:Enabled=false). Three independent gates
+        // before any Sarvam call fires:
+        //   1. Options.Enabled (env var Ai__VerbatimSampling__Enabled)
+        //   2. ssf.feature_flags row 'verbatim_corpus_sampling_enabled'
+        //      (Phase 1.4 / Safeguard S7) flipped via the admin surface.
+        //   3. ssf.mode_policy row 'verbatim_sample' (Phase 1.5) — cost
+        //      cap enforced against the daily ai_provider_spend_daily
+        //      rollup (Slice C commit e8a1aac3).
+        // Default 10% hash-bucket sampling rate (ADR-DS-014 §C);
+        // per-user IConsentEnforcer check against
+        // ConsentPurpose.VerbatimTrainingCorpus (Task 1.11) is additional
+        // and non-bypassable.
+        services.Configure<VerbatimSamplingOptions>(
+            configuration.GetSection(VerbatimSamplingOptions.SectionName));
+        services.AddHostedService<VerbatimSamplingWorker>();
+
+        // SARVAM_PRIMARY_VOICE_PIPELINE_2026-05-21 Task 2.11a — selective
+        // diarization worker. Disabled by default
+        // (Ai:SelectiveDiarization:Enabled=false). Targets ai_jobs whose
+        // linked daily_logs are in the Trust Ladder dispute states
+        // (Disputed / CorrectionPending). Gates:
+        //   1. Options.Enabled (env var Ai__SelectiveDiarization__Enabled)
+        //   2. ssf.diarization_policy row 'dispute_flagged' (Phase 1.5a)
+        //      with enabled=true.
+        //   3. max_daily_cost_inr cap on the same policy row, checked
+        //      against ai_provider_spend_daily for today.
+        // Adds an AiJobAttempt with a 1.20× cost multiplier so the
+        // AiCostBudgetGuard rollup picks up the diarization spend on
+        // its next tick.
+        services.Configure<SelectiveDiarizationOptions>(
+            configuration.GetSection(SelectiveDiarizationOptions.SectionName));
+        services.AddHostedService<SelectiveDiarizationWorker>();
+
         services.AddHttpClient("GeminiAiProvider")
             .ConfigureHttpClient((sp, client) =>
             {

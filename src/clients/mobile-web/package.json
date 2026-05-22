@@ -19,6 +19,7 @@
     "test:watch": "vitest",
     "test:voice-pipeline": "tsx scripts/voice_pipeline_gate_check.ts",
     "test:doom-loop": "tsx scripts/ai_doom_loop_gate_check.ts",
+    "test:golden-set-parity": "tsx scripts/golden_set_parity_check.ts",
     "e2e": "playwright test --config e2e/playwright.config.ts",
     "e2e:ui": "playwright test --config e2e/playwright.config.ts --ui",
     "e2e:install": "playwright install --with-deps",
