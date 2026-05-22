@@ -55,8 +55,8 @@ internal sealed class AiJobRepository(ShramSafalDbContext db) : IAiJobRepository
                 config.ReceiptProvider != AiProviderType.Gemini ||
                 config.PattiProvider != AiProviderType.Gemini)
             {
-                // Keep unset operation overrides on the Gemini-primary baseline and prevent
-                // image extraction from drifting to providers without a valid synchronous OCR path.
+                // Sarvam is the voice baseline, while image extraction remains locked to
+                // Gemini so receipt/patti OCR does not drift with voice-provider changes.
                 config.UpdateSettings(
                     modifiedByUserId: config.ModifiedByUserId,
                     defaultProvider: config.DefaultProvider,
@@ -67,7 +67,7 @@ internal sealed class AiJobRepository(ShramSafalDbContext db) : IAiJobRepository
                     circuitBreakerResetSeconds: config.CircuitBreakerResetSeconds,
                     voiceConfidenceThreshold: config.VoiceConfidenceThreshold,
                     receiptConfidenceThreshold: config.ReceiptConfidenceThreshold,
-                    voiceProvider: config.VoiceProvider ?? AiProviderType.Gemini,
+                    voiceProvider: config.VoiceProvider ?? AiProviderType.Sarvam,
                     receiptProvider: AiProviderType.Gemini,
                     pattiProvider: AiProviderType.Gemini);
                 await db.SaveChangesAsync(ct);

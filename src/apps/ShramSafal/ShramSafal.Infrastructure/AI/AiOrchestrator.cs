@@ -212,9 +212,7 @@ internal sealed class AiOrchestrator(
             yield break;
         }
 
-        var provider = ResolveProvider(
-            config.GetProviderForOperation(AiOperationType.VoiceToStructuredLog),
-            AiOperationType.VoiceToStructuredLog);
+        var provider = ResolveVoiceStructurerProvider(config);
 
         if (provider is null)
         {
@@ -371,9 +369,7 @@ internal sealed class AiOrchestrator(
 
         var promptVersion = AiPromptLineage.ResolvePromptVersion(prompt);
         var config = await aiJobRepository.GetProviderConfigAsync(ct);
-        var provider = ResolveProvider(
-            config.GetProviderForOperation(AiOperationType.VoiceToStructuredLog),
-            AiOperationType.VoiceToStructuredLog);
+        var provider = ResolveVoiceStructurerProvider(config);
 
         if (provider is null)
         {
@@ -965,6 +961,19 @@ internal sealed class AiOrchestrator(
         }
 
         return _providers.Values.FirstOrDefault(provider => provider.CanHandle(operation));
+    }
+
+    private IAiProvider? ResolveVoiceStructurerProvider(AiProviderConfig config)
+    {
+        if (_providers.TryGetValue(AiProviderType.Gemini, out var gemini) &&
+            gemini.CanHandle(AiOperationType.VoiceToStructuredLog))
+        {
+            return gemini;
+        }
+
+        return ResolveProvider(
+            config.GetProviderForOperation(AiOperationType.VoiceToStructuredLog),
+            AiOperationType.VoiceToStructuredLog);
     }
 
     private IAiProvider? ResolveFallbackProvider(AiProviderType? primaryType, AiOperationType operation)

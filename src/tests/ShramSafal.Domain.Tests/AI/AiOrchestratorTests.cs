@@ -1,4 +1,6 @@
+using System.Runtime.CompilerServices;
 using Microsoft.Extensions.Logging.Abstractions;
+using ShramSafal.Application.Contracts.Dtos;
 using ShramSafal.Application.Ports.External;
 using ShramSafal.Application.Storage;
 using ShramSafal.Domain.AI;
@@ -172,6 +174,34 @@ public sealed class AiOrchestratorTests
         Assert.False(second.FallbackUsed);
         Assert.Equal(AiProviderType.Gemini, second.ProviderUsed);
         Assert.Equal(2, harness.Gemini.VoiceParseCallCount);
+    }
+
+    [Fact]
+    public async Task StreamingTextParse_UsesGeminiStructurer_WhenVoiceDefaultIsSarvam()
+    {
+        var harness = CreateHarness(AiProviderConfig.CreateDefault());
+        harness.Gemini.EnqueueStreamChunks(
+            "{\"summary\":\"ok\",",
+            "\"confidence\":0.91}");
+
+        var events = new List<ParseStreamEvent>();
+        await foreach (var evt in harness.Orchestrator.ParseVoiceStreamAsync(
+                           "आज grapes ला spray मारला.",
+                           new VoiceParseContext(
+                               AvailableCrops: [],
+                               Profile: new FarmerProfileInfo([], [], [], null),
+                               FarmContext: null,
+                               FocusCategory: null,
+                               VocabDb: null),
+                           scenarioId: "sarvam-default-structurer-test",
+                           CancellationToken.None))
+        {
+            events.Add(evt);
+        }
+
+        Assert.Equal(0, harness.Sarvam.VoiceStreamCallCount);
+        Assert.Equal(1, harness.Gemini.VoiceStreamCallCount);
+        Assert.Contains(events, evt => evt.Type == "complete");
     }
 
     private static async Task<(VoiceParseCanonicalResult Result, Guid JobId, AiProviderType ProviderUsed, bool FallbackUsed)> ExecuteVoiceAsync(
@@ -551,14 +581,21 @@ internal sealed class InMemoryAiJobRepository(AiProviderConfig config) : IAiJobR
 internal sealed class FakeAiProvider(AiProviderType providerType) : IAiProvider
 {
     private readonly Queue<VoiceParseCanonicalResult> _voiceResults = new();
+    private readonly Queue<IReadOnlyList<string>> _streamChunks = new();
 
     public AiProviderType ProviderType { get; } = providerType;
 
     public int VoiceParseCallCount { get; private set; }
+    public int VoiceStreamCallCount { get; private set; }
 
     public void EnqueueVoiceResult(VoiceParseCanonicalResult result)
     {
         _voiceResults.Enqueue(result);
+    }
+
+    public void EnqueueStreamChunks(params string[] chunks)
+    {
+        _streamChunks.Enqueue(chunks);
     }
 
     public Task<bool> HealthCheckAsync(CancellationToken ct = default)
@@ -615,5 +652,23 @@ internal sealed class FakeAiProvider(AiProviderType providerType) : IAiProvider
             NormalizedJson = "{}",
             OverallConfidence = 0.85m
         });
+    }
+
+    public async IAsyncEnumerable<string> ParseVoiceStreamAsync(
+        string transcript,
+        string systemPrompt,
+        [EnumeratorCancellation] CancellationToken ct = default)
+    {
+        VoiceStreamCallCount++;
+        var chunks = _streamChunks.TryDequeue(out var queued)
+            ? queued
+            : ["{}"];
+
+        foreach (var chunk in chunks)
+        {
+            ct.ThrowIfCancellationRequested();
+            await Task.Yield();
+            yield return chunk;
+        }
     }
 }

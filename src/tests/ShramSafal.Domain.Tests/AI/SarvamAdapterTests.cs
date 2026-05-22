@@ -160,6 +160,94 @@ public sealed class SarvamAdapterTests
         Assert.Contains("/chat", callOrder[1], StringComparison.OrdinalIgnoreCase);
     }
 
+    [Fact]
+    public void SarvamProvider_OnlyParticipatesInVoiceRouting()
+    {
+        var options = Options.Create(CreateOptions());
+        var factory = new StaticHttpClientFactory(new HttpClient(new StubHttpMessageHandler(_ => new HttpResponseMessage(HttpStatusCode.OK))));
+        var provider = new SarvamAiProvider(
+            new SarvamSttClient(options, factory, NullLogger<SarvamSttClient>.Instance),
+            new SarvamChatClient(options, factory, NullLogger<SarvamChatClient>.Instance),
+            new SarvamVisionClient(options, factory, NullLogger<SarvamVisionClient>.Instance),
+            options,
+            new AiResponseNormalizer(),
+            NullLogger<SarvamAiProvider>.Instance);
+
+        Assert.True(provider.CanHandle(ShramSafal.Domain.AI.AiOperationType.VoiceToStructuredLog));
+        Assert.False(provider.CanHandle(ShramSafal.Domain.AI.AiOperationType.ReceiptToExpenseItems));
+        Assert.False(provider.CanHandle(ShramSafal.Domain.AI.AiOperationType.PattiImageToSaleData));
+    }
+
+    [Fact]
+    public void StreamingSttClient_BuildsHeaderSafeUrl()
+    {
+        var options = CreateOptions();
+        options.StreamingSttEndpoint = "wss://unit.test/speech-to-text/ws";
+        options.StreamingSttModel = "saaras:v3";
+        options.StreamingSttMode = "codemix";
+        options.StreamingSttLanguage = "mr-IN";
+        options.StreamingSampleRate = 16000;
+        options.StreamingInputAudioCodec = "wav";
+        options.StreamingHighVadSensitivity = true;
+        options.StreamingVadSignals = true;
+        options.StreamingFlushSignal = true;
+
+        var uri = SarvamStreamingSttClient.BuildStreamingUri(options);
+        var headers = SarvamStreamingSttClient.BuildHeaders(options);
+
+        Assert.Equal("wss://unit.test/speech-to-text/ws", uri.GetLeftPart(UriPartial.Path));
+        Assert.Contains("language-code=mr-IN", uri.Query, StringComparison.Ordinal);
+        Assert.Contains("model=saaras%3Av3", uri.Query, StringComparison.Ordinal);
+        Assert.Contains("mode=codemix", uri.Query, StringComparison.Ordinal);
+        Assert.Contains("sample_rate=16000", uri.Query, StringComparison.Ordinal);
+        Assert.Contains("input_audio_codec=wav", uri.Query, StringComparison.Ordinal);
+        Assert.Contains("high_vad_sensitivity=true", uri.Query, StringComparison.Ordinal);
+        Assert.Contains("vad_signals=true", uri.Query, StringComparison.Ordinal);
+        Assert.Contains("flush_signal=true", uri.Query, StringComparison.Ordinal);
+        Assert.DoesNotContain("k-test", uri.AbsoluteUri, StringComparison.Ordinal);
+        Assert.Equal("k-test", headers["Api-Subscription-Key"]);
+    }
+
+    [Fact]
+    public async Task StreamingSttClient_RejectsUnsupportedWebmMime()
+    {
+        var options = Options.Create(CreateOptions());
+        var client = new SarvamStreamingSttClient(
+            options,
+            NullLogger<SarvamStreamingSttClient>.Instance);
+
+        await using var stream = new MemoryStream([0x10, 0x20]);
+        var result = await client.TranscribeAsync(stream, "audio/webm", CancellationToken.None);
+
+        Assert.False(result.IsSuccess);
+        Assert.Null(result.Transcript);
+        Assert.Contains("WAV or raw PCM", result.Error, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("webm", result.Error, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Theory]
+    [InlineData("{\"type\":\"data\",\"data\":{\"transcript\":\"आज काम केले\"}}", "आज काम केले")]
+    [InlineData("{\"type\":\"transcript\",\"text\":\"today work done\"}", "today work done")]
+    [InlineData("{\"type\":\"transcript\",\"transcript\":\"नमस्कार\"}", "नमस्कार")]
+    public void StreamingSttClient_ParsesTranscriptResponses(string responseBody, string expectedTranscript)
+    {
+        var parsed = SarvamStreamingSttClient.TryExtractTranscript(responseBody, out var transcript);
+
+        Assert.True(parsed);
+        Assert.Equal(expectedTranscript, transcript);
+    }
+
+    [Theory]
+    [InlineData("{\"type\":\"speech_start\"}")]
+    [InlineData("{\"type\":\"speech_end\"}")]
+    public void StreamingSttClient_TreatsVadSignalsAsNonTerminal(string responseBody)
+    {
+        var parsed = SarvamStreamingSttClient.TryExtractTranscript(responseBody, out var transcript);
+
+        Assert.False(parsed);
+        Assert.Equal(string.Empty, transcript);
+    }
+
     private static SarvamOptions CreateOptions()
     {
         return new SarvamOptions

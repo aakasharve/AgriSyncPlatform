@@ -689,6 +689,7 @@ public class DatabaseSeeder
         if (existing is not null)
         {
             var requiresPatch =
+                existing.VoiceProvider is null ||
                 existing.ReceiptProvider != AiProviderType.Gemini ||
                 existing.PattiProvider != AiProviderType.Gemini;
 
