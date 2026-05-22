@@ -36,7 +36,9 @@ internal sealed class GeminiParsingService(IOptions<GeminiOptions> optionsAccess
             throw new InvalidOperationException("Gemini API key is not configured. Set GEMINI_API_KEY or Gemini:ApiKey.");
         }
 
-        var model = string.IsNullOrWhiteSpace(_options.Model) ? GeminiOptions.DefaultModelId : _options.Model.Trim();
+        var model = string.IsNullOrWhiteSpace(_options.StructurerModelId)
+            ? GeminiOptions.DefaultStructurerModelId
+            : _options.StructurerModelId.Trim();
         var stopwatch = Stopwatch.StartNew();
 
         var requestBody = new

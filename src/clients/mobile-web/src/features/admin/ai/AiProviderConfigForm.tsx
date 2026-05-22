@@ -134,7 +134,9 @@ export const AiProviderConfigForm: React.FC<AiProviderConfigFormProps> = ({
                 Voice: {config.resolvedVoiceProvider ?? config.voiceProvider ?? config.defaultProvider}
                 {' | '}Receipt: {config.resolvedReceiptProvider ?? config.receiptProvider ?? config.defaultProvider}
                 {' | '}Patti: {config.resolvedPattiProvider ?? config.pattiProvider ?? config.defaultProvider}
-                {config.geminiModelId ? ` | Gemini model: ${config.geminiModelId}` : ''}
+                {config.geminiStructurerModelId ? ` | Gemini structurer: ${config.geminiStructurerModelId}` : ''}
+                {config.geminiOcrModelId ? ` | OCR: ${config.geminiOcrModelId}` : ''}
+                {config.geminiVoiceFallbackModelId ? ` | Voice fallback: ${config.geminiVoiceFallbackModelId}` : ''}
             </div>
 
             <div className="grid grid-cols-1 gap-3">

@@ -193,7 +193,7 @@ public static class AiEndpoints
             if (!await AdminScopeHelper.RequireReadAsync(http, scope, ModuleKey.OpsVoice)) return Results.Empty;
 
             var config = await repository.GetProviderConfigAsync(ct);
-            return Results.Ok(ToConfigResponse(config, geminiOptions.Value.ModelId));
+            return Results.Ok(ToConfigResponse(config, geminiOptions.Value));
         })
         .WithName("GetAiProviderConfig")
         .RequireRateLimiting("ai")
@@ -1295,8 +1295,12 @@ public static class AiEndpoints
     }
 
 
-    private static object ToConfigResponse(AiProviderConfig config, string? geminiModelId = null)
+    private static object ToConfigResponse(AiProviderConfig config, GeminiOptions? geminiOptions = null)
     {
+        var structurerModelId = geminiOptions?.StructurerModelId;
+        var ocrModelId = geminiOptions?.OcrModelId;
+        var voiceFallbackModelId = geminiOptions?.VoiceFallbackModelId;
+
         return new
         {
             config.Id,
@@ -1314,7 +1318,10 @@ public static class AiEndpoints
             resolvedVoiceProvider = config.GetProviderForOperation(AiOperationType.VoiceToStructuredLog).ToString(),
             resolvedReceiptProvider = config.GetProviderForOperation(AiOperationType.ReceiptToExpenseItems).ToString(),
             resolvedPattiProvider = config.GetProviderForOperation(AiOperationType.PattiImageToSaleData).ToString(),
-            geminiModelId = string.IsNullOrWhiteSpace(geminiModelId) ? GeminiOptions.DefaultModelId : geminiModelId.Trim(),
+            geminiModelId = string.IsNullOrWhiteSpace(structurerModelId) ? GeminiOptions.DefaultStructurerModelId : structurerModelId.Trim(),
+            geminiStructurerModelId = string.IsNullOrWhiteSpace(structurerModelId) ? GeminiOptions.DefaultStructurerModelId : structurerModelId.Trim(),
+            geminiOcrModelId = string.IsNullOrWhiteSpace(ocrModelId) ? GeminiOptions.DefaultOcrModelId : ocrModelId.Trim(),
+            geminiVoiceFallbackModelId = string.IsNullOrWhiteSpace(voiceFallbackModelId) ? GeminiOptions.DefaultVoiceFallbackModelId : voiceFallbackModelId.Trim(),
             config.ModifiedAtUtc,
             config.ModifiedByUserId
         };

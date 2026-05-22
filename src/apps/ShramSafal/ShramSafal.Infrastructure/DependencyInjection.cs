@@ -143,13 +143,37 @@ public static class DependencyInjection
                 options.ApiKey = section["ApiKey"]!.Trim();
             }
 
-            if (!string.IsNullOrWhiteSpace(section["ModelId"]))
+            var legacyModelId = !string.IsNullOrWhiteSpace(section["ModelId"])
+                ? section["ModelId"]!.Trim()
+                : !string.IsNullOrWhiteSpace(section["Model"])
+                    ? section["Model"]!.Trim()
+                    : null;
+
+            if (!string.IsNullOrWhiteSpace(section["StructurerModelId"]))
             {
-                options.ModelId = section["ModelId"]!.Trim();
+                options.StructurerModelId = section["StructurerModelId"]!.Trim();
             }
-            else if (!string.IsNullOrWhiteSpace(section["Model"]))
+            else if (!string.IsNullOrWhiteSpace(legacyModelId))
             {
-                options.ModelId = section["Model"]!.Trim();
+                options.StructurerModelId = legacyModelId;
+            }
+
+            if (!string.IsNullOrWhiteSpace(section["OcrModelId"]))
+            {
+                options.OcrModelId = section["OcrModelId"]!.Trim();
+            }
+            else if (!string.IsNullOrWhiteSpace(legacyModelId))
+            {
+                options.OcrModelId = legacyModelId;
+            }
+
+            if (!string.IsNullOrWhiteSpace(section["VoiceFallbackModelId"]))
+            {
+                options.VoiceFallbackModelId = section["VoiceFallbackModelId"]!.Trim();
+            }
+            else if (!string.IsNullOrWhiteSpace(legacyModelId))
+            {
+                options.VoiceFallbackModelId = legacyModelId;
             }
 
             if (!string.IsNullOrWhiteSpace(section["BaseUrl"]))
@@ -208,6 +232,56 @@ public static class DependencyInjection
             if (!string.IsNullOrWhiteSpace(section["SttLanguage"]))
             {
                 options.SttLanguage = section["SttLanguage"]!.Trim();
+            }
+
+            if (!string.IsNullOrWhiteSpace(section["StreamingSttEndpoint"]))
+            {
+                options.StreamingSttEndpoint = section["StreamingSttEndpoint"]!.Trim();
+            }
+
+            if (!string.IsNullOrWhiteSpace(section["StreamingSttModel"]))
+            {
+                options.StreamingSttModel = section["StreamingSttModel"]!.Trim();
+            }
+
+            if (!string.IsNullOrWhiteSpace(section["StreamingSttMode"]))
+            {
+                options.StreamingSttMode = section["StreamingSttMode"]!.Trim();
+            }
+
+            if (!string.IsNullOrWhiteSpace(section["StreamingSttLanguage"]))
+            {
+                options.StreamingSttLanguage = section["StreamingSttLanguage"]!.Trim();
+            }
+
+            if (int.TryParse(section["StreamingSampleRate"], NumberStyles.Integer, CultureInfo.InvariantCulture, out var streamingSampleRate))
+            {
+                options.StreamingSampleRate = streamingSampleRate;
+            }
+
+            if (!string.IsNullOrWhiteSpace(section["StreamingInputAudioCodec"]))
+            {
+                options.StreamingInputAudioCodec = section["StreamingInputAudioCodec"]!.Trim();
+            }
+
+            if (bool.TryParse(section["StreamingHighVadSensitivity"], out var streamingHighVadSensitivity))
+            {
+                options.StreamingHighVadSensitivity = streamingHighVadSensitivity;
+            }
+
+            if (bool.TryParse(section["StreamingVadSignals"], out var streamingVadSignals))
+            {
+                options.StreamingVadSignals = streamingVadSignals;
+            }
+
+            if (bool.TryParse(section["StreamingFlushSignal"], out var streamingFlushSignal))
+            {
+                options.StreamingFlushSignal = streamingFlushSignal;
+            }
+
+            if (int.TryParse(section["StreamingTimeoutSeconds"], NumberStyles.Integer, CultureInfo.InvariantCulture, out var streamingTimeoutSeconds))
+            {
+                options.StreamingTimeoutSeconds = streamingTimeoutSeconds;
             }
 
             if (!string.IsNullOrWhiteSpace(section["ChatEndpoint"]))
@@ -384,6 +458,7 @@ public static class DependencyInjection
         services.AddSingleton<AiAttemptCostEstimator>();
         services.AddScoped<IAiPromptBuilder, AiPromptBuilder>();
         services.AddScoped<SarvamSttClient>();
+        services.AddScoped<SarvamStreamingSttClient>();
         services.AddScoped<SarvamChatClient>();
         services.AddScoped<SarvamVisionClient>();
         services.AddScoped<SarvamDocIntelClient>();

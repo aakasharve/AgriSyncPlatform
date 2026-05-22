@@ -248,7 +248,7 @@ export async function getAiDashboard(t: HttpTransport): Promise<AiDashboardRespo
 // spec: data-principle-spine-2026-05-05/05.1
 //
 // Server-side Chain-of-Verification re-query. The browser used to call
-// Gemini directly with VITE_GEMINI_API_KEY; that path is now build-time
+// Gemini directly with a client-visible Gemini key; that path is now build-time
 // blocked by vite.config.ts. This shim posts to the backend handler
 // which holds the key server-side and runs the same scoring logic.
 export async function coveReverify(

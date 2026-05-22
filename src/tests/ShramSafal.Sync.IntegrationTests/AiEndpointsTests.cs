@@ -337,7 +337,7 @@ public sealed class AiEndpointsTests
         var secondJobId = secondDoc.RootElement.GetProperty("jobId").GetGuid();
 
         Assert.Equal(firstJobId, secondJobId);
-        Assert.Equal(1, harness.Provider.VoiceParseCallCount);
+        Assert.Equal(1, harness.Providers[AiProviderType.Sarvam].VoiceParseCallCount);
 
         var statusResponse = await harness.Client.GetAsync($"/shramsafal/ai/jobs/{firstJobId}");
         statusResponse.EnsureSuccessStatusCode();
@@ -366,7 +366,7 @@ public sealed class AiEndpointsTests
         var secondJobId = secondDoc.RootElement.GetProperty("jobId").GetGuid();
 
         Assert.Equal(firstJobId, secondJobId);
-        Assert.Equal(1, harness.Provider.ReceiptCallCount);
+        Assert.Equal(1, harness.Providers[AiProviderType.Gemini].ReceiptCallCount);
 
         var statusResponse = await harness.Client.GetAsync($"/shramsafal/ai/jobs/{firstJobId}");
         statusResponse.EnsureSuccessStatusCode();
@@ -395,7 +395,7 @@ public sealed class AiEndpointsTests
         var secondJobId = secondDoc.RootElement.GetProperty("jobId").GetGuid();
 
         Assert.Equal(firstJobId, secondJobId);
-        Assert.Equal(1, harness.Provider.PattiCallCount);
+        Assert.Equal(1, harness.Providers[AiProviderType.Gemini].PattiCallCount);
 
         var statusResponse = await harness.Client.GetAsync($"/shramsafal/ai/jobs/{firstJobId}");
         statusResponse.EnsureSuccessStatusCode();
@@ -404,7 +404,7 @@ public sealed class AiEndpointsTests
     }
 
     [Fact]
-    public async Task VoiceParse_UsesGeminiAsDefaultProvider_WhenGeminiIsHealthy()
+    public async Task VoiceParse_UsesSarvamAsDefaultProvider_WhenSarvamIsHealthy()
     {
         await using var harness = await TestHarness.CreateDualProviderAsync(
             sarvamMode: FakeAiProviderMode.Success,
@@ -421,11 +421,11 @@ public sealed class AiEndpointsTests
         var responseBody = await response.Content.ReadAsStringAsync();
         Assert.True(response.IsSuccessStatusCode, responseBody);
         using var doc = JsonDocument.Parse(responseBody);
-        Assert.Equal("Gemini", doc.RootElement.GetProperty("providerUsed").GetString());
+        Assert.Equal("Sarvam", doc.RootElement.GetProperty("providerUsed").GetString());
         Assert.False(doc.RootElement.GetProperty("fallbackUsed").GetBoolean());
 
-        Assert.Equal(0, harness.Providers[AiProviderType.Sarvam].VoiceParseCallCount);
-        Assert.Equal(1, harness.Providers[AiProviderType.Gemini].VoiceParseCallCount);
+        Assert.Equal(1, harness.Providers[AiProviderType.Sarvam].VoiceParseCallCount);
+        Assert.Equal(0, harness.Providers[AiProviderType.Gemini].VoiceParseCallCount);
 
         var jobId = doc.RootElement.GetProperty("jobId").GetGuid();
         var statusResponse = await harness.Client.GetAsync($"/shramsafal/ai/jobs/{jobId}");
@@ -434,15 +434,15 @@ public sealed class AiEndpointsTests
         Assert.Equal("Succeeded", statusDoc.RootElement.GetProperty("status").GetString());
         var attempts = statusDoc.RootElement.GetProperty("attempts").EnumerateArray().ToList();
         Assert.Single(attempts);
-        Assert.Equal("Gemini", attempts[0].GetProperty("provider").GetString());
+        Assert.Equal("Sarvam", attempts[0].GetProperty("provider").GetString());
     }
 
     [Fact]
-    public async Task VoiceParse_FallsBackToSarvam_WhenGeminiFails()
+    public async Task VoiceParse_FallsBackToGemini_WhenSarvamFails()
     {
         await using var harness = await TestHarness.CreateDualProviderAsync(
-            sarvamMode: FakeAiProviderMode.Success,
-            geminiMode: FakeAiProviderMode.FailVoice);
+            sarvamMode: FakeAiProviderMode.FailVoice,
+            geminiMode: FakeAiProviderMode.Success);
 
         var farmId = Guid.NewGuid();
         await PushCreateFarmAsync(harness.Client, "device-ai-gemini-2", "req-farm-ai-gemini-2", farmId, "AI Fallback Farm");
@@ -455,11 +455,11 @@ public sealed class AiEndpointsTests
         var responseBody = await response.Content.ReadAsStringAsync();
         Assert.True(response.IsSuccessStatusCode, responseBody);
         using var doc = JsonDocument.Parse(responseBody);
-        Assert.Equal("Sarvam", doc.RootElement.GetProperty("providerUsed").GetString());
+        Assert.Equal("Gemini", doc.RootElement.GetProperty("providerUsed").GetString());
         Assert.True(doc.RootElement.GetProperty("fallbackUsed").GetBoolean());
 
-        Assert.Equal(1, harness.Providers[AiProviderType.Gemini].VoiceParseCallCount);
         Assert.Equal(1, harness.Providers[AiProviderType.Sarvam].VoiceParseCallCount);
+        Assert.Equal(1, harness.Providers[AiProviderType.Gemini].VoiceParseCallCount);
 
         var jobId = doc.RootElement.GetProperty("jobId").GetGuid();
         var statusResponse = await harness.Client.GetAsync($"/shramsafal/ai/jobs/{jobId}");
@@ -469,8 +469,8 @@ public sealed class AiEndpointsTests
 
         var attempts = statusDoc.RootElement.GetProperty("attempts").EnumerateArray().ToList();
         Assert.Equal(2, attempts.Count);
-        Assert.Equal("Gemini", attempts[0].GetProperty("provider").GetString());
-        Assert.Equal("Sarvam", attempts[1].GetProperty("provider").GetString());
+        Assert.Equal("Sarvam", attempts[0].GetProperty("provider").GetString());
+        Assert.Equal("Gemini", attempts[1].GetProperty("provider").GetString());
     }
 
     [Fact]
@@ -495,15 +495,15 @@ public sealed class AiEndpointsTests
         });
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
-        Assert.Equal(2, harness.Provider.VoiceParseCallCount);
+        Assert.Equal(2, harness.Providers[AiProviderType.Sarvam].VoiceParseCallCount);
     }
 
     [Fact]
     public async Task VoiceParse_DoesNotFallback_WhenFailureClassIsUnsupportedInput()
     {
         await using var harness = await TestHarness.CreateDualProviderAsync(
-            sarvamMode: FakeAiProviderMode.Success,
-            geminiMode: FakeAiProviderMode.UnsupportedVoice);
+            sarvamMode: FakeAiProviderMode.UnsupportedVoice,
+            geminiMode: FakeAiProviderMode.Success);
 
         var farmId = Guid.NewGuid();
         await PushCreateFarmAsync(harness.Client, "device-ai-unsupported-1", "req-farm-ai-unsupported-1", farmId, "AI Unsupported Farm");
@@ -514,8 +514,8 @@ public sealed class AiEndpointsTests
             idempotencyKey: "voice-unsupported-no-fallback-1");
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
-        Assert.Equal(1, harness.Providers[AiProviderType.Gemini].VoiceParseCallCount);
-        Assert.Equal(0, harness.Providers[AiProviderType.Sarvam].VoiceParseCallCount);
+        Assert.Equal(1, harness.Providers[AiProviderType.Sarvam].VoiceParseCallCount);
+        Assert.Equal(0, harness.Providers[AiProviderType.Gemini].VoiceParseCallCount);
 
         using var payload = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
         Assert.Contains("Unsupported", payload.RootElement.GetProperty("message").GetString() ?? string.Empty, StringComparison.OrdinalIgnoreCase);
@@ -542,7 +542,7 @@ public sealed class AiEndpointsTests
         }
 
         Assert.NotNull(lastResponse);
-        Assert.Equal(5, harness.Provider.VoiceParseCallCount);
+        Assert.Equal(5, harness.Providers[AiProviderType.Sarvam].VoiceParseCallCount);
 
         var errorPayload = await lastResponse!.Content.ReadAsStringAsync();
         Assert.Contains("circuit", errorPayload, StringComparison.OrdinalIgnoreCase);
@@ -557,9 +557,12 @@ public sealed class AiEndpointsTests
         configResponse.EnsureSuccessStatusCode();
         using var configDoc = JsonDocument.Parse(await configResponse.Content.ReadAsStringAsync());
         var configId = configDoc.RootElement.GetProperty("id").GetGuid();
-        Assert.Equal("Gemini", configDoc.RootElement.GetProperty("defaultProvider").GetString());
-        Assert.Equal("Gemini", configDoc.RootElement.GetProperty("resolvedVoiceProvider").GetString());
-        Assert.Equal("gemini-2.5-flash", configDoc.RootElement.GetProperty("geminiModelId").GetString());
+        Assert.Equal("Sarvam", configDoc.RootElement.GetProperty("defaultProvider").GetString());
+        Assert.Equal("Sarvam", configDoc.RootElement.GetProperty("resolvedVoiceProvider").GetString());
+        Assert.Equal("gemini-3.1-flash-lite-preview", configDoc.RootElement.GetProperty("geminiModelId").GetString());
+        Assert.Equal("gemini-3.1-flash-lite-preview", configDoc.RootElement.GetProperty("geminiStructurerModelId").GetString());
+        Assert.Equal("gemini-2.5-flash", configDoc.RootElement.GetProperty("geminiOcrModelId").GetString());
+        Assert.Equal("gemini-2.5-flash", configDoc.RootElement.GetProperty("geminiVoiceFallbackModelId").GetString());
 
         var updateResponse = await harness.Client.PutAsJsonAsync("/shramsafal/ai/config", new
         {
@@ -605,8 +608,8 @@ public sealed class AiEndpointsTests
     public async Task Dashboard_ReturnsProviderStats_AndRecentFailures()
     {
         await using var harness = await TestHarness.CreateDualProviderAsync(
-            sarvamMode: FakeAiProviderMode.Success,
-            geminiMode: FakeAiProviderMode.FailVoice);
+            sarvamMode: FakeAiProviderMode.FailVoice,
+            geminiMode: FakeAiProviderMode.Success);
 
         var farmId = Guid.NewGuid();
         await PushCreateFarmAsync(harness.Client, "device-ai-dashboard-1", "req-farm-ai-dashboard-1", farmId, "AI Dashboard Farm");
@@ -646,7 +649,23 @@ public sealed class AiEndpointsTests
         multipart.Add(file, "image", "bad.txt");
 
         var response = await harness.Client.PostAsync("/shramsafal/ai/receipt-extract", multipart);
+        Assert.Equal(HttpStatusCode.ServiceUnavailable, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task ReceiptExtract_DoesNotFallbackToSarvam_WhenGeminiFails()
+    {
+        await using var harness = await TestHarness.CreateDualProviderAsync(
+            sarvamMode: FakeAiProviderMode.Success,
+            geminiMode: FakeAiProviderMode.FailAll);
+        var farmId = Guid.NewGuid();
+        await PushCreateFarmAsync(harness.Client, "device-ai-ocr-lock-1", "req-farm-ai-ocr-lock-1", farmId, "AI OCR Lock Farm");
+
+        var response = await PostReceiptExtractAsync(harness.Client, farmId, "receipt-ocr-lock-1");
+
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Equal(1, harness.Providers[AiProviderType.Gemini].ReceiptCallCount);
+        Assert.Equal(0, harness.Providers[AiProviderType.Sarvam].ReceiptCallCount);
     }
 
     [Fact]
@@ -673,7 +692,7 @@ public sealed class AiEndpointsTests
         Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
         using var doc = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
         Assert.Equal("entitlement.subscriptionexpired", doc.RootElement.GetProperty("error").GetString());
-        Assert.Equal(0, harness.Provider.VoiceParseCallCount);
+        Assert.Equal(0, harness.Providers[AiProviderType.Sarvam].VoiceParseCallCount);
     }
 
     [Fact]
@@ -694,7 +713,7 @@ public sealed class AiEndpointsTests
         Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
         using var doc = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
         Assert.Equal("entitlement.subscriptionexpired", doc.RootElement.GetProperty("error").GetString());
-        Assert.Equal(0, harness.Provider.ReceiptCallCount);
+        Assert.Equal(0, harness.Providers[AiProviderType.Gemini].ReceiptCallCount);
     }
 
     private static async Task PushCreateFarmAsync(
@@ -804,8 +823,9 @@ public sealed class AiEndpointsTests
             FakeAiProviderMode mode,
             EntitlementPolicyMode entitlementPolicyMode = EntitlementPolicyMode.Allow)
         {
-            var provider = new FakeAiProvider(mode, AiProviderType.Gemini);
-            return await CreateInternalAsync([provider], entitlementPolicyMode);
+            var sarvam = new FakeAiProvider(mode, AiProviderType.Sarvam);
+            var gemini = new FakeAiProvider(mode, AiProviderType.Gemini);
+            return await CreateInternalAsync([sarvam, gemini], entitlementPolicyMode);
         }
 
         public static async Task<TestHarness> CreateDualProviderAsync(
@@ -966,7 +986,11 @@ public sealed class AiEndpointsTests
 
         public Task<bool> HealthCheckAsync(CancellationToken ct = default) => Task.FromResult(true);
 
-        public bool CanHandle(AiOperationType operation) => true;
+        public bool CanHandle(AiOperationType operation)
+        {
+            return ProviderType == AiProviderType.Gemini ||
+                   operation == AiOperationType.VoiceToStructuredLog;
+        }
 
         public Task<VoiceParseCanonicalResult> ParseVoiceAsync(
             Stream audioStream,

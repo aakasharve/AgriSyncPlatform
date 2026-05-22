@@ -376,6 +376,9 @@ export interface AiProviderConfigResponse {
     resolvedReceiptProvider?: string;
     resolvedPattiProvider?: string;
     geminiModelId?: string;
+    geminiStructurerModelId?: string;
+    geminiOcrModelId?: string;
+    geminiVoiceFallbackModelId?: string;
     modifiedAtUtc: string;
     modifiedByUserId: string;
 }

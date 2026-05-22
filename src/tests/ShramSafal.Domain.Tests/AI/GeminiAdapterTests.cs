@@ -86,7 +86,9 @@ public sealed class GeminiAdapterTests
         {
             ApiKey = "test-key",
             BaseUrl = "https://unit.test",
-            ModelId = "gemini-2.0-flash",
+            StructurerModelId = "gemini-2.0-flash",
+            OcrModelId = "gemini-2.0-flash",
+            VoiceFallbackModelId = "gemini-2.0-flash",
             TimeoutSeconds = 5
         });
 

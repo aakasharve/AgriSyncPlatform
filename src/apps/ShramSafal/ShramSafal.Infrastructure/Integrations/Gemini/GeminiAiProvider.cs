@@ -95,7 +95,7 @@ internal sealed class GeminiAiProvider : IAiProvider
                 }
             };
 
-            using var request = new HttpRequestMessage(HttpMethod.Post, BuildGenerateContentUrl())
+            using var request = new HttpRequestMessage(HttpMethod.Post, BuildGenerateContentUrl(ResolveStructurerModelId()))
             {
                 Content = JsonContent.Create(requestBody)
             };
@@ -154,7 +154,11 @@ internal sealed class GeminiAiProvider : IAiProvider
                 }
             }
 
-            var generated = await GenerateContentAsync(systemPrompt, userParts, ct);
+            var modelId = string.IsNullOrWhiteSpace(rawTranscript)
+                ? ResolveVoiceFallbackModelId()
+                : ResolveStructurerModelId();
+
+            var generated = await GenerateContentAsync(systemPrompt, userParts, modelId, ct);
             if (!generated.Success)
             {
                 return new VoiceParseCanonicalResult
@@ -185,7 +189,7 @@ internal sealed class GeminiAiProvider : IAiProvider
             return new VoiceParseCanonicalResult
             {
                 Success = true,
-                ModelUsed = ResolveModelId(),
+                ModelUsed = modelId,
                 PromptVersion = promptVersion,
                 NormalizedJson = normalized,
                 RawTranscript = rawTranscript,
@@ -271,6 +275,7 @@ internal sealed class GeminiAiProvider : IAiProvider
             var generated = await GenerateContentAsync(
                 systemPrompt,
                 userParts,
+                ResolveOcrModelId(),
                 ct,
                 responseJsonSchema,
                 thinkingBudget: 0);
@@ -309,7 +314,7 @@ internal sealed class GeminiAiProvider : IAiProvider
             return new ReceiptExtractCanonicalResult
             {
                 Success = true,
-                ModelUsed = ResolveModelId(),
+                ModelUsed = ResolveOcrModelId(),
                 NormalizedJson = normalized,
                 OverallConfidence = TryExtractConfidence(normalized) ?? 0.70m
             };
@@ -367,7 +372,7 @@ internal sealed class GeminiAiProvider : IAiProvider
             ["generationConfig"] = generationConfig
         };
 
-        using var request = new HttpRequestMessage(HttpMethod.Post, BuildStreamGenerateContentUrl())
+        using var request = new HttpRequestMessage(HttpMethod.Post, BuildStreamGenerateContentUrl(ResolveStructurerModelId()))
         {
             Content = JsonContent.Create(requestBody)
         };
@@ -466,9 +471,8 @@ internal sealed class GeminiAiProvider : IAiProvider
         return null;
     }
 
-    private string BuildStreamGenerateContentUrl()
+    private string BuildStreamGenerateContentUrl(string model)
     {
-        var model = ResolveModelId();
         var baseUrl = string.IsNullOrWhiteSpace(_options.BaseUrl)
             ? "https://generativelanguage.googleapis.com/v1beta"
             : _options.BaseUrl.Trim().TrimEnd('/');
@@ -479,6 +483,7 @@ internal sealed class GeminiAiProvider : IAiProvider
     private async Task<(bool Success, string? Content, string? Error)> GenerateContentAsync(
         string systemPrompt,
         List<object> userParts,
+        string modelId,
         CancellationToken ct,
         JsonElement? responseJsonSchema = null,
         int? thinkingBudget = null)
@@ -523,7 +528,7 @@ internal sealed class GeminiAiProvider : IAiProvider
             ["generationConfig"] = generationConfig
         };
 
-        using var request = new HttpRequestMessage(HttpMethod.Post, BuildGenerateContentUrl())
+        using var request = new HttpRequestMessage(HttpMethod.Post, BuildGenerateContentUrl(modelId))
         {
             Content = JsonContent.Create(requestBody)
         };
@@ -553,9 +558,8 @@ internal sealed class GeminiAiProvider : IAiProvider
         return (true, generatedText, null);
     }
 
-    private string BuildGenerateContentUrl()
+    private string BuildGenerateContentUrl(string model)
     {
-        var model = ResolveModelId();
         var baseUrl = string.IsNullOrWhiteSpace(_options.BaseUrl)
             ? "https://generativelanguage.googleapis.com/v1beta"
             : _options.BaseUrl.Trim().TrimEnd('/');
@@ -563,11 +567,26 @@ internal sealed class GeminiAiProvider : IAiProvider
         return $"{baseUrl}/models/{Uri.EscapeDataString(model)}:generateContent?key={Uri.EscapeDataString(_options.ApiKey)}";
     }
 
-    private string ResolveModelId()
+    private string ResolveStructurerModelId()
     {
-        return string.IsNullOrWhiteSpace(_options.ModelId)
-            ? GeminiOptions.DefaultModelId
-            : _options.ModelId.Trim();
+        return ResolveModelId(_options.StructurerModelId, GeminiOptions.DefaultStructurerModelId);
+    }
+
+    private string ResolveOcrModelId()
+    {
+        return ResolveModelId(_options.OcrModelId, GeminiOptions.DefaultOcrModelId);
+    }
+
+    private string ResolveVoiceFallbackModelId()
+    {
+        return ResolveModelId(_options.VoiceFallbackModelId, GeminiOptions.DefaultVoiceFallbackModelId);
+    }
+
+    private static string ResolveModelId(string? configured, string fallback)
+    {
+        return string.IsNullOrWhiteSpace(configured)
+            ? fallback
+            : configured.Trim();
     }
 
     private CancellationTokenSource CreateTimeoutToken(CancellationToken ct)
