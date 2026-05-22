@@ -53,14 +53,20 @@ public sealed class AiJob
     public int TotalAttempts { get; private set; }
     public DateTime ModifiedAtUtc { get; private set; }
 
-    // ── SARVAM_PRIMARY_VOICE_PIPELINE_2026-05-21 Task 1.1 ────────────────
+    // ── SARVAM_PRIMARY_VOICE_PIPELINE_2026-05-21 Task 1.1 + 1.7 ─────────
     // Additive columns for the voice spine: six transcript variants, the
     // provider/model that produced them, when they were produced, the
-    // schema-version of the transcript record, the extractor code SHA, a
-    // structured (date, confidence, reason) triple for the referenced
-    // farm-day, and the raw diarized transcript payload. All nullable for
-    // backfill safety except TranscriptSchemaVersion which defaults to
-    // "v1.0" so legacy rows have a deterministic value.
+    // schema-version of the transcript record, a structured (date,
+    // confidence, reason) triple for the referenced farm-day, and the raw
+    // diarized transcript payload. All nullable for backfill safety except
+    // TranscriptSchemaVersion which defaults to "v1.0" so legacy rows have
+    // a deterministic value.
+    //
+    // Task 1.7: ExtractorCodeSha moved from a top-level AiJob property to
+    // the shared Provenance owned record so every Provenance-owning table
+    // carries the column uniformly (ADR-DS-014 §E). The Phase 1.1 column
+    // on ssf.ai_jobs stays put — it is just remapped to be owned by
+    // Provenance instead of AiJob. Read it via Provenance.ExtractorCodeSha.
     public string? TranscriptCodemix { get; private set; }
     public string? TranscriptEnglish { get; private set; }
     public string? TranscriptEnglishRedacted { get; private set; }
@@ -71,7 +77,6 @@ public sealed class AiJob
     public string? TranscriptModelVersion { get; private set; }
     public DateTime? TranscribedAtUtc { get; private set; }
     public string TranscriptSchemaVersion { get; private set; } = "v1.0";
-    public string? ExtractorCodeSha { get; private set; }
     public DateOnly? ReferencedDate { get; private set; }
     public decimal? ReferencedDateConfidence { get; private set; }
     public string? ReferencedDateReason { get; private set; }
@@ -169,7 +174,8 @@ public sealed class AiJob
             modelVersion: modelVersion,
             promptVersion: Provenance.PromptVersion,
             promptContentHash: Provenance.PromptContentHash,
-            appVersion: Provenance.AppVersion);
+            appVersion: Provenance.AppVersion,
+            extractorCodeSha: Provenance.ExtractorCodeSha);
 
         ModifiedAtUtc = DateTime.UtcNow;
     }
@@ -295,15 +301,19 @@ public sealed class AiJob
         ModifiedAtUtc = DateTime.UtcNow;
     }
 
-    // ── SARVAM_PRIMARY_VOICE_PIPELINE_2026-05-21 Task 1.1 ────────────────
-    // Git SHA of the extractor code that produced NormalizedResultJson.
-    // Stored at column width 40 (full SHA); short SHAs are also accepted.
-    // Whitespace-only / empty arguments clear the column.
-    public void SetExtractorCodeSha(string? sha)
-    {
-        ExtractorCodeSha = string.IsNullOrWhiteSpace(sha) ? null : sha.Trim();
-        ModifiedAtUtc = DateTime.UtcNow;
-    }
+    // ── SARVAM_PRIMARY_VOICE_PIPELINE_2026-05-21 Task 1.7 ────────────────
+    // Phase 1.1's top-level SetExtractorCodeSha mutator was removed because
+    // ExtractorCodeSha now lives on the shared Provenance owned record
+    // (ADR-DS-014 §E). Callers that need to stamp the extractor SHA
+    // construct a new Provenance and pass it on AiJob.Create, or rely on
+    // UpdateProvenance to copy the SHA forward when only ModelVersion
+    // changes.
+    //
+    // TODO(spec-1.7-step4): wire <SourceRevisionId> MSBuild → embedded
+    // AssemblyInformationalVersion → static accessor and have the
+    // orchestrator pass the SHA via Provenance on AiJob.Create. Until
+    // that lands the extractor SHA stays null on most rows (deliberate,
+    // not a bug).
 
     private void EnsureAttemptBelongsToThisJob(AiJobAttempt attempt)
     {

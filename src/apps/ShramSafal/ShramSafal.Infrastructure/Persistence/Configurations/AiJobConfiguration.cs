@@ -130,9 +130,11 @@ internal sealed class AiJobConfiguration : IEntityTypeConfiguration<AiJob>
             .HasDefaultValue("v1.0")
             .IsRequired();
 
-        builder.Property(x => x.ExtractorCodeSha)
-            .HasColumnName("extractor_code_sha")
-            .HasMaxLength(40);
+        // SARVAM_PRIMARY_VOICE_PIPELINE_2026-05-21 Task 1.7 — the
+        // extractor_code_sha column added in Phase 1.1 now lives on the
+        // shared Provenance owned record (see ProvenanceConfiguration).
+        // The physical column on ssf.ai_jobs stays in place; only the EF
+        // ownership moved. No top-level mapping here on AiJob.
 
         builder.Property(x => x.ReferencedDate)
             .HasColumnName("referenced_date");

@@ -47,6 +47,15 @@ internal static class ProvenanceConfiguration
             .HasColumnName("app_version")
             .HasMaxLength(32);
 
+        // SARVAM_PRIMARY_VOICE_PIPELINE_2026-05-21 Task 1.7 — extractor-code
+        // SHA is the sixth Provenance field. Width 40 matches a full git SHA;
+        // shorter SHAs (or null) are accepted. Owned by Provenance rather
+        // than each aggregate so every Provenance-owning table carries the
+        // same column without bespoke per-aggregate plumbing.
+        builder.Property(p => p.ExtractorCodeSha)
+            .HasColumnName("extractor_code_sha")
+            .HasMaxLength(40);
+
         return builder;
     }
 }

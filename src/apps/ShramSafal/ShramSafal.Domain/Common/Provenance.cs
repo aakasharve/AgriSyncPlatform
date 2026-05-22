@@ -1,14 +1,17 @@
 namespace ShramSafal.Domain.Common;
 
 /// <summary>
-/// Immutable five-field identity record stamped on every AI-derived or
-/// AI-assisted row in the ShramSafal schema. Lives on the row as columns
-/// (not JSONB) so query planners can index on <c>model_version</c> and
-/// <c>prompt_version</c> for A/B comparisons and audit.
+/// Immutable identity record stamped on every AI-derived or AI-assisted row
+/// in the ShramSafal schema. Lives on the row as columns (not JSONB) so query
+/// planners can index on <c>model_version</c> and <c>prompt_version</c> for
+/// A/B comparisons and audit.
 ///
 /// Defined by DATA_PRINCIPLE_SPINE_2026-05-05 Phase 01 (TS01) Sub-phase 01.1.
-/// See <c>_COFOUNDER/Projects/AgriSync/Operations/Plans/DATA_PRINCIPLE_SPINE_2026-05-05/</c>
-/// for the principles this record serves (P1, P8, P9).
+/// Extended by SARVAM_PRIMARY_VOICE_PIPELINE_2026-05-21 Task 1.7 with the
+/// <see cref="ExtractorCodeSha"/> field so the git SHA of the extractor code
+/// that produced the row is carried in the same owned record as the rest of
+/// the lineage (one tuple per row, not a parallel top-level column on each
+/// owner). See <c>_COFOUNDER/Projects/AgriSync/Operations/Plans/</c>.
 /// </summary>
 public sealed record Provenance
 {
@@ -35,12 +38,27 @@ public sealed record Provenance
     /// <summary>Client (or backend) assembly version that wrote the row. <c>null</c> for pre-spine rows.</summary>
     public string? AppVersion { get; }
 
+    /// <summary>
+    /// Git SHA of the extractor code that produced the row (full 40-char hex,
+    /// short SHAs also accepted). <c>null</c> when unknown — pre-spine rows,
+    /// manual writes, and code paths that have not yet been wired to the
+    /// build-time <c>SourceRevisionId</c> accessor leave this empty.
+    ///
+    /// Defined by SARVAM_PRIMARY_VOICE_PIPELINE_2026-05-21 Task 1.7 +
+    /// ADR-DS-014 §E. Carrying the extractor SHA on every Provenance-owning
+    /// row lets downstream replay diff "same prompt + same model + different
+    /// extractor code" outcomes — a class of regression the original five
+    /// fields could not surface.
+    /// </summary>
+    public string? ExtractorCodeSha { get; }
+
     public Provenance(
         string source,
         string modelVersion,
         string promptVersion,
         string? promptContentHash,
-        string? appVersion)
+        string? appVersion,
+        string? extractorCodeSha = null)
     {
         if (string.IsNullOrWhiteSpace(source))
         {
@@ -67,6 +85,9 @@ public sealed record Provenance
         PromptVersion = promptVersion;
         PromptContentHash = promptContentHash;
         AppVersion = appVersion;
+        ExtractorCodeSha = string.IsNullOrWhiteSpace(extractorCodeSha)
+            ? null
+            : extractorCodeSha.Trim();
     }
 
     /// <summary>
@@ -75,7 +96,7 @@ public sealed record Provenance
     /// deliberately exclude <c>pre_spine</c> rows.
     /// </summary>
     public static Provenance PreSpine() =>
-        new(Common.Source.PreSpine, "unknown", "unknown", null, null);
+        new(Common.Source.PreSpine, "unknown", "unknown", null, null, extractorCodeSha: null);
 
     /// <summary>
     /// Convenience factory for manual UI writes. <see cref="ModelVersion"/>
@@ -83,5 +104,5 @@ public sealed record Provenance
     /// supplies the client app version for audit lineage.
     /// </summary>
     public static Provenance Manual(string appVersion) =>
-        new(Common.Source.Manual, "n/a", "n/a", null, appVersion);
+        new(Common.Source.Manual, "n/a", "n/a", null, appVersion, extractorCodeSha: null);
 }
