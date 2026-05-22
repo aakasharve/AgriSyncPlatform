@@ -92,6 +92,18 @@ public sealed class ShramSafalDbContext(DbContextOptions<ShramSafalDbContext> op
     public DbSet<FeatureFlag> FeatureFlags => Set<FeatureFlag>();
 
     /// <summary>
+    /// SARVAM_PRIMARY_VOICE_PIPELINE Task 3.3 (data-eng Theme B-2,
+    /// Safeguard B2) — golden-set feedback-loop candidate ledger.
+    /// One row per farmer-correction event captured by
+    /// <see cref="Infrastructure.AI.GoldenSetFeedbackWorker"/>. Mapped
+    /// to <c>ssf.golden_set_candidate</c>. RLS-exempt: training-corpus
+    /// surface; <c>user_id</c> + <c>farm_id</c> present but write
+    /// semantics are admin-elevated via the worker (same posture as
+    /// <see cref="VoiceClipsRetained"/>).
+    /// </summary>
+    public DbSet<GoldenSetCandidate> GoldenSetCandidates => Set<GoldenSetCandidate>();
+
+    /// <summary>
     /// SARVAM_PRIMARY_VOICE_PIPELINE Task 1.5 — data-driven trigger →
     /// Sarvam-mode-list policy per ADR-DS-016. Mapped to
     /// <c>ssf.mode_policy</c>. RLS-exempt: global operational lookup

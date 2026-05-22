@@ -1,5 +1,7 @@
 using Microsoft.AspNetCore.Http;
 using ShramSafal.Application.Admin.Ports;
+using ShramSafal.Application.UseCases.Admin.GetAiProviderHealth24h;
+using ShramSafal.Application.UseCases.Admin.GetAiSpendMonthly;
 using ShramSafal.Application.UseCases.Admin.GetFarmsList;
 using ShramSafal.Application.UseCases.Admin.GetOpsErrors;
 using ShramSafal.Application.UseCases.Admin.GetOpsHealth;
@@ -242,6 +244,49 @@ public static class AdminEndpoints
         })
         .WithName("GetAdminUsers")
         .CacheOutput("AdminLive");
+
+        // SARVAM_PRIMARY_VOICE_PIPELINE_2026-05-21 Task 3.1 — rolling 24h
+        // provider-health rollup. Reads ssf.v_ai_provider_health_24h via
+        // IAdminAiObservabilityRepository. Gated on ModuleKey.OpsVoice
+        // (same scope as /admin/ops/voice — same operational surface).
+        group.MapGet("/admin/ai-health", async (
+            HttpContext http,
+            IEntitlementResolver resolver,
+            GetAiProviderHealth24hHandler handler,
+            CancellationToken ct) =>
+        {
+            var scope = await AdminScopeHelper.ResolveOrDenyAsync(http, resolver, ct);
+            if (scope is null) return Results.Empty;
+            if (!await AdminScopeHelper.RequireReadAsync(http, scope, ModuleKey.OpsVoice)) return Results.Empty;
+
+            var result = await handler.HandleAsync(
+                new GetAiProviderHealth24hQuery(http.User.GetUserIdOrEmpty()), ct);
+            return result.IsSuccess ? Results.Ok(result.Value) : Results.Problem();
+        })
+        .WithName("GetAdminAiHealth")
+        .CacheOutput("AdminLive");
+
+        // SARVAM_PRIMARY_VOICE_PIPELINE_2026-05-21 Task 3.2 — monthly
+        // AI provider spend rollup. Reads ssf.v_ai_spend_monthly +
+        // ssf.ai_provider_configs.monthly_budget_inr via
+        // IAdminAiObservabilityRepository. Gated on ModuleKey.OpsVoice
+        // alongside the health endpoint.
+        group.MapGet("/admin/ai-spend", async (
+            HttpContext http,
+            IEntitlementResolver resolver,
+            GetAiSpendMonthlyHandler handler,
+            CancellationToken ct) =>
+        {
+            var scope = await AdminScopeHelper.ResolveOrDenyAsync(http, resolver, ct);
+            if (scope is null) return Results.Empty;
+            if (!await AdminScopeHelper.RequireReadAsync(http, scope, ModuleKey.OpsVoice)) return Results.Empty;
+
+            var result = await handler.HandleAsync(
+                new GetAiSpendMonthlyQuery(http.User.GetUserIdOrEmpty()), ct);
+            return result.IsSuccess ? Results.Ok(result.Value) : Results.Problem();
+        })
+        .WithName("GetAdminAiSpend")
+        .CacheOutput("AdminMaterialized");
 
         return group;
     }

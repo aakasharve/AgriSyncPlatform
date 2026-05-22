@@ -3,6 +3,7 @@ using System;
 using System.Collections.Generic;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using ShramSafal.Infrastructure.Persistence;
@@ -12,9 +13,11 @@ using ShramSafal.Infrastructure.Persistence;
 namespace ShramSafal.Infrastructure.Persistence.Migrations
 {
     [DbContext(typeof(ShramSafalDbContext))]
-    partial class ShramSafalDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260522190000_AddAiProviderHealth24hView")]
+    partial class AddAiProviderHealth24hView
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -706,98 +709,6 @@ namespace ShramSafal.Infrastructure.Persistence.Migrations
                         .HasDatabaseName("ux_feature_flags_flag_name");
 
                     b.ToTable("feature_flags", "ssf");
-                });
-
-            modelBuilder.Entity("ShramSafal.Domain.AI.GoldenSetCandidate", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .HasColumnType("uuid")
-                        .HasColumnName("id");
-
-                    b.Property<string>("AiSuggestedJson")
-                        .IsRequired()
-                        .HasColumnType("jsonb")
-                        .HasColumnName("ai_suggested_json");
-
-                    b.Property<string>("AudioContentHash")
-                        .IsRequired()
-                        .HasMaxLength(64)
-                        .HasColumnType("char(64)")
-                        .HasColumnName("audio_content_hash");
-
-                    b.Property<string>("BucketId")
-                        .IsRequired()
-                        .HasMaxLength(64)
-                        .HasColumnType("character varying(64)")
-                        .HasColumnName("bucket_id");
-
-                    b.Property<string>("CorrectionType")
-                        .IsRequired()
-                        .HasMaxLength(32)
-                        .HasColumnType("character varying(32)")
-                        .HasColumnName("correction_type");
-
-                    b.Property<DateTime>("CreatedAtUtc")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("created_at_utc");
-
-                    b.Property<string>("ExtractorCodeSha")
-                        .HasMaxLength(40)
-                        .HasColumnType("character varying(40)")
-                        .HasColumnName("extractor_code_sha");
-
-                    b.Property<Guid>("FarmId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("farm_id");
-
-                    b.Property<string>("FarmerCorrectedJson")
-                        .IsRequired()
-                        .HasColumnType("jsonb")
-                        .HasColumnName("farmer_corrected_json");
-
-                    b.Property<string>("PromptVersion")
-                        .HasMaxLength(64)
-                        .HasColumnType("character varying(64)")
-                        .HasColumnName("prompt_version");
-
-                    b.Property<DateTime?>("PromotedAtUtc")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("promoted_at_utc");
-
-                    b.Property<bool>("PromotedToGoldenSet")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("boolean")
-                        .HasDefaultValue(false)
-                        .HasColumnName("promoted_to_golden_set");
-
-                    b.Property<string>("TranscriptCodemix")
-                        .HasColumnType("text")
-                        .HasColumnName("transcript_codemix");
-
-                    b.Property<string>("TranscriptVerbatim")
-                        .HasColumnType("text")
-                        .HasColumnName("transcript_verbatim");
-
-                    b.Property<Guid>("UserId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("user_id");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("BucketId")
-                        .HasDatabaseName("ix_golden_set_candidate_bucket");
-
-                    b.HasIndex("UserId")
-                        .HasDatabaseName("ix_golden_set_candidate_user");
-
-                    b.HasIndex("AudioContentHash", "CorrectionType")
-                        .IsUnique()
-                        .HasDatabaseName("ux_golden_set_candidate_audio_correction");
-
-                    b.HasIndex("PromotedToGoldenSet", "CreatedAtUtc")
-                        .HasDatabaseName("ix_golden_set_candidate_promoted_created");
-
-                    b.ToTable("golden_set_candidate", "ssf");
                 });
 
             modelBuilder.Entity("ShramSafal.Domain.AI.ModePolicy", b =>

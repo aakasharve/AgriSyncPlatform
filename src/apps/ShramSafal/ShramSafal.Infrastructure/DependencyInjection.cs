@@ -386,6 +386,12 @@ public static class DependencyInjection
         services.AddScoped<IUserDirectory, UserDirectoryService>();
         services.AddScoped<IMisReportRepository, MisReportRepository>();
         services.AddScoped<IAdminOpsRepository, AdminOpsRepository>();
+        // SARVAM_PRIMARY_VOICE_PIPELINE Task 3.1 + 3.2 — admin AI
+        // observability read port. Reads the two Phase 3 Slice E
+        // views (v_ai_provider_health_24h + v_ai_spend_monthly).
+        // Scoped to share the request's ShramSafalDbContext.
+        services.AddScoped<IAdminAiObservabilityRepository,
+            ShramSafal.Infrastructure.Persistence.Repositories.AdminAiObservabilityRepository>();
 
         // W0-A admin spine — resolver + projector + redactor (wired for W0-B endpoint pivot).
         services.AddScoped<ShramSafal.Application.Admin.Ports.IEntitlementResolver,
@@ -558,6 +564,21 @@ public static class DependencyInjection
         services.Configure<SelectiveDiarizationOptions>(
             configuration.GetSection(SelectiveDiarizationOptions.SectionName));
         services.AddHostedService<SelectiveDiarizationWorker>();
+
+        // SARVAM_PRIMARY_VOICE_PIPELINE_2026-05-21 Task 3.3 (data-eng
+        // brief Theme B-2, Safeguard B2) — golden-set feedback capture
+        // worker. Disabled by default
+        // (Ai:GoldenSetFeedback:Enabled=false on every environment).
+        // Projects each non-PII CorrectionEvent into a
+        // GoldenSetCandidate row that the future weekly batch
+        // promote-job (parking lot — golden-set repo authoring infra
+        // deferred) will admit into the active golden set. The
+        // hosted service still spawns in dev/test but
+        // ExecuteAsync exits immediately when Enabled is false —
+        // zero load.
+        services.Configure<GoldenSetFeedbackOptions>(
+            configuration.GetSection(GoldenSetFeedbackOptions.SectionName));
+        services.AddHostedService<GoldenSetFeedbackWorker>();
 
         services.AddHttpClient("GeminiAiProvider")
             .ConfigureHttpClient((sp, client) =>

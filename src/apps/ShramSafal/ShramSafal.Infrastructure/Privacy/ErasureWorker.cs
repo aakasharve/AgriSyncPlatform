@@ -1,4 +1,6 @@
 // spec: data-principle-spine-2026-05-05/08.2
+//        +SARVAM_PRIMARY_VOICE_PIPELINE_2026-05-21 Task 3.4 (cascade
+//         extension — voice spine tables added in Phase 1+2+3.3)
 //
 // Sub-phase 08.2 (per DS-017 binding contract 2026-05-17) — DPDP §12
 // erasure worker. Polls ssf.erasure_requests for Requested rows and
@@ -25,6 +27,58 @@
 // unconditionally; the stub throws NotImplementedException which the
 // worker catches + logs + marks voice_clips_retained_deferred=true on
 // the request payload.
+//
+// SARVAM_PRIMARY_VOICE_PIPELINE Task 3.4 — extension to the cascade.
+// The voice-spine schema adds three user-keyed surfaces that DELETE
+// rather than ANONYMIZE on erasure:
+//   - ssf.ai_jobs (Phase 1.1) — DELETE WHERE user_id = X.
+//     Cascading deletes via EF/relational FKs on ssf.ai_job_attempts
+//     (defined in AiJobConfiguration.HasMany.OnDelete(Cascade)) and
+//     on the Provenance owned-record columns embedded in ai_jobs.
+//     The new transcript_* columns (codemix/english/redacted/
+//     verbatim/translit/translate + provider + model + referenced
+//     date + diarized json) drop transitively because they live ON
+//     the ai_jobs row.
+//   - ssf.voice_clips_retained (Voice Diary ship) — purged via
+//     IRetainedBlobStore.DeleteRetainedVoiceForUserAsync as before.
+//   - ssf.golden_set_candidate (Task 3.3) — DELETE WHERE user_id = X.
+//     The unique-index gate on (audio_content_hash, correction_type)
+//     means the table is naturally small per user; bulk DELETE is
+//     the right shape.
+// Plus one orphan-clean surface:
+//   - ssf.transcript_history (Phase 1.3) has NO user_id column —
+//     it's keyed on (audio_content_hash, provider, model, mode). The
+//     cascade collects the user's audio hashes from ai_jobs BEFORE
+//     deleting the ai_jobs rows, then DELETE FROM transcript_history
+//     WHERE audio_content_hash IN (collected hashes). This is the
+//     transitive cascade: hashes that belonged only to this user
+//     drop with their owning rows.
+// Surfaces that DO NOT cascade:
+//   - ssf.ai_provider_spend_daily — per-farm aggregated rollup keyed
+//     on (tenant_id=farm_id, provider, operation, day) with no
+//     user_id column. The row is structurally de-identified at
+//     write time: the AiCostBudgetGuard UPSERTs a daily sum across
+//     all users contributing to that farm, so the surviving row
+//     cannot be re-attributed to the erased user after the
+//     ai_jobs DELETE above removes their per-attempt cost rows.
+//     DPDP §12 permits retention of de-identified / aggregated
+//     records where (i) the personal identifier has been removed
+//     and re-association is not feasible, AND (ii) retention
+//     serves a legitimate accounting / audit / dispute purpose.
+//     Both conditions hold: (i) the rollup sum was computed across
+//     the farm, not the user — there is no projection back to the
+//     erased principal once ai_jobs is gone; (ii) FinOps / vendor
+//     invoice reconciliation against Sarvam + Gemini bills depends
+//     on this table surviving the erasure event. If a future audit
+//     requires per-farm spend takedown (e.g. the entire farm is
+//     erased, not a single user), that is a separate workflow on
+//     the farm aggregate — not this DPDP §12 user-scoped path.
+//   - ssf.daily_logs.evidence_sources — farm-scoped not user-scoped;
+//     introducing user-level deletion here would break the audit
+//     ledger (Trust Ladder semantics).
+//   - ssf.consent_audit / ssf.audit_events — append-only by
+//     privilege; flagged "redacted" at the column level, never
+//     deleted.
 //
 // All DB writes use IAdminDbContextFactory<ShramSafalDbContext> per
 // Phase 04 precedent (the cross-tenant span here is by definition
@@ -186,6 +240,73 @@ public sealed class ErasureWorker(
         //     reason free-text per OQ-10.
         perTableCounts["finance_corrections"] = await AnonymizeFinanceCorrectionsAsync(admin, targetUserId, sentinel, ct).ConfigureAwait(false);
         totalAnonymized += perTableCounts["finance_corrections"];
+
+        // ── SARVAM_PRIMARY_VOICE_PIPELINE Task 3.4 cascade extension ─
+        // Voice-spine tables follow a DELETE manifest (not ANONYMIZE)
+        // because they are pure training-corpus + observability rows
+        // whose identity collapses to the audio content hash. Order
+        // matters here: collect audio hashes from ai_jobs FIRST, then
+        // delete ai_jobs (which cascade-removes ai_job_attempts +
+        // owned Provenance + the transcript_* columns embedded on
+        // ai_jobs), then orphan-clean transcript_history by the
+        // collected hashes. golden_set_candidate is a parallel user-
+        // keyed delete (independent of the hash collection).
+
+        // 1) Collect the user's audio content hashes BEFORE deleting
+        //    ai_jobs. We materialise the distinct set so the orphan-
+        //    clean DELETE on transcript_history can use a stable IN
+        //    list. Empty list = nothing to orphan-clean.
+        var userAudioHashes = await admin.AiJobs
+            .AsNoTracking()
+            .Where(j => j.UserId == targetUserId && j.InputContentHash != null)
+            .Select(j => j.InputContentHash!)
+            .Distinct()
+            .ToListAsync(ct)
+            .ConfigureAwait(false);
+
+        // 2) Delete ai_jobs WHERE user_id = X. EF's ExecuteDeleteAsync
+        //    emits a single SQL DELETE; the configured cascade on
+        //    ai_job_attempts (DeleteBehavior.Cascade in
+        //    AiJobConfiguration.HasMany) drops the children. The
+        //    Provenance owned columns + the Phase 1.1 transcript_*
+        //    columns live ON the ai_jobs row and drop with it.
+        perTableCounts["ai_jobs"] = await admin.AiJobs
+            .Where(j => j.UserId == targetUserId)
+            .ExecuteDeleteAsync(ct)
+            .ConfigureAwait(false);
+        totalAnonymized += perTableCounts["ai_jobs"];
+
+        // 3) Orphan-clean transcript_history. The table has no
+        //    user_id column; rows are keyed on
+        //    (audio_content_hash, provider, model_version, mode).
+        //    Rows whose audio hash belonged to the user are removed
+        //    transitively. Hashes that survived because they were
+        //    re-used by a different user (extremely rare —
+        //    SHA-256 collision is the only legitimate cross-user
+        //    case) stay. Skip the DELETE when the user had no
+        //    audio hashes.
+        if (userAudioHashes.Count > 0)
+        {
+            perTableCounts["transcript_history"] = await admin.TranscriptHistories
+                .Where(t => userAudioHashes.Contains(t.AudioContentHash))
+                .ExecuteDeleteAsync(ct)
+                .ConfigureAwait(false);
+            totalAnonymized += perTableCounts["transcript_history"];
+        }
+        else
+        {
+            perTableCounts["transcript_history"] = 0;
+        }
+
+        // 4) Delete golden_set_candidate WHERE user_id = X. The
+        //    training-corpus row is user-attributable by construction
+        //    (Task 3.3 carries user_id + farm_id as first-class
+        //    columns); DPDP §12 erases the row outright.
+        perTableCounts["golden_set_candidate"] = await admin.GoldenSetCandidates
+            .Where(g => g.UserId == targetUserId)
+            .ExecuteDeleteAsync(ct)
+            .ConfigureAwait(false);
+        totalAnonymized += perTableCounts["golden_set_candidate"];
 
         // (e) Retained voice S3 — via port (Phase 07 rebinds the stub).
         var retainedStore = sp.GetRequiredService<IRetainedBlobStore>();
@@ -384,6 +505,14 @@ UPDATE ssf.finance_corrections
         "cost_entries" => new[] { "created_by_user_id", "description" },
         "correction_events" => new[] { "user_id" },
         "finance_corrections" => new[] { "corrected_by_user_id", "reason" },
+        // SARVAM_PRIMARY_VOICE_PIPELINE Task 3.4 — voice-spine tables
+        // follow a DELETE manifest. The audit payload records "deleted"
+        // as the scrubbed-columns sentinel so the audit row's shape
+        // (which uses ScrubbedColumns to describe the action) is
+        // unambiguous: the whole row was removed, not field-scrubbed.
+        "ai_jobs" => new[] { "deleted" },
+        "transcript_history" => new[] { "deleted" },
+        "golden_set_candidate" => new[] { "deleted" },
         _ => Array.Empty<string>(),
     };
 

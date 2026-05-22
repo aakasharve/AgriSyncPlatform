@@ -543,6 +543,12 @@ public static class DependencyInjection
         services.AddScoped<ShramSafal.Application.UseCases.Admin.GetOpsErrors.GetOpsErrorsHandler>();
         services.AddScoped<ShramSafal.Application.UseCases.Admin.GetOpsVoice.GetOpsVoiceHandler>();
 
+        // SARVAM_PRIMARY_VOICE_PIPELINE Task 3.1 + 3.2 — admin AI
+        // observability handlers reading the two Phase 3 Slice E
+        // views (provider health 24h + monthly spend rollup).
+        services.AddScoped<ShramSafal.Application.UseCases.Admin.GetAiProviderHealth24h.GetAiProviderHealth24hHandler>();
+        services.AddScoped<ShramSafal.Application.UseCases.Admin.GetAiSpendMonthly.GetAiSpendMonthlyHandler>();
+
         // Admin MIS — Phase 3+ (WVFD, Farms, Users)
         services.AddScoped<ShramSafal.Application.UseCases.Admin.GetWvfdHistory.GetWvfdHistoryHandler>();
         services.AddScoped<ShramSafal.Application.UseCases.Admin.GetFarmsList.GetFarmsListHandler>();

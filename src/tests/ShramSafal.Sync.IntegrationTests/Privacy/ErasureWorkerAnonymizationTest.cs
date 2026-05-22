@@ -271,6 +271,36 @@ public sealed class ErasureWorkerAnonymizationTest : IAsyncLifetime
             "SELECT count(*) FROM ssf.audit_events WHERE entity_type = 'ErasureRequest' AND action = 'Completed'");
         Convert.ToInt32(completionCountObj!).Should().Be(1,
             "ErasureWorker must emit exactly one ErasureRequest/Completed audit row per processed request");
+
+        // ── 6. SARVAM_PRIMARY_VOICE_PIPELINE Task 3.4 cascade assertions ──
+        // The voice-spine cascade follows a DELETE manifest (vs the
+        // ANONYMIZE manifest for the pre-spine tables above). Counts
+        // match SeedVoiceSpineFixtureAsync's seed exactly.
+
+        // ai_jobs: every row for the user is gone (cascade-deletes
+        // ai_job_attempts + the Phase 1.1 transcript_* columns
+        // embedded on the row).
+        var aiJobsRemaining = Convert.ToInt32((await ScalarAsync(raw,
+            "SELECT count(*) FROM ssf.ai_jobs WHERE user_id = @uid",
+            ("uid", _userId)))!);
+        aiJobsRemaining.Should().Be(0,
+            "Task 3.4: every ssf.ai_jobs row for the target user must be deleted (5 seeded → 0 remaining)");
+
+        // transcript_history: the 4 rows keyed on the user's audio
+        // hashes are orphan-cleaned. None of the user's hashes
+        // should survive.
+        var historyRemainingForUser = Convert.ToInt32((await ScalarAsync(raw,
+            "SELECT count(*) FROM ssf.transcript_history WHERE audio_content_hash = ANY(@hashes)",
+            ("hashes", _seededAudioHashes.ToArray())))!);
+        historyRemainingForUser.Should().Be(0,
+            "Task 3.4: transcript_history rows for the user's audio hashes must be orphan-cleaned (4 seeded → 0 remaining)");
+
+        // golden_set_candidate: both rows for the user are deleted.
+        var goldenRemaining = Convert.ToInt32((await ScalarAsync(raw,
+            "SELECT count(*) FROM ssf.golden_set_candidate WHERE user_id = @uid",
+            ("uid", _userId)))!);
+        goldenRemaining.Should().Be(0,
+            "Task 3.4: every ssf.golden_set_candidate row for the target user must be deleted (2 seeded → 0 remaining)");
     }
 
     // ── Helpers ──────────────────────────────────────────────────────
@@ -283,6 +313,14 @@ public sealed class ErasureWorkerAnonymizationTest : IAsyncLifetime
         foreach (var (n, v) in parameters) cmd.Parameters.AddWithValue(n, v);
         return await cmd.ExecuteScalarAsync();
     }
+
+    // SARVAM_PRIMARY_VOICE_PIPELINE Task 3.4 cascade fixture knobs —
+    // populated by SeedFixtureAsync so the test method can assert
+    // exact counts post-erasure.
+    private const int VoiceSpineAiJobCount = 5;
+    private const int VoiceSpineGoldenCandidateCount = 2;
+    private const int VoiceSpineTranscriptHistoryCount = 4;
+    private readonly List<string> _seededAudioHashes = new();
 
     private async Task SeedFixtureAsync(string conn)
     {
@@ -378,6 +416,122 @@ public sealed class ErasureWorkerAnonymizationTest : IAsyncLifetime
             c.Parameters.AddWithValue("ceid", Guid.NewGuid());
             c.Parameters.AddWithValue("reason", $"Reason from {DisplayName} ({PhoneNumber})");
             c.Parameters.AddWithValue("uid", _userId);
+            await c.ExecuteNonQueryAsync();
+        }
+
+        await SeedVoiceSpineFixtureAsync(db);
+    }
+
+    /// <summary>
+    /// SARVAM_PRIMARY_VOICE_PIPELINE Task 3.4 — seeds the voice-spine
+    /// surfaces the cascade extension must walk:
+    /// <list type="bullet">
+    /// <item>5 <c>ssf.ai_jobs</c> rows, each with the Phase 1.1
+    ///   transcript_* columns populated, each carrying a distinct
+    ///   audio_content_hash recorded in <see cref="_seededAudioHashes"/>
+    ///   for the post-erasure transcript_history assertion.</item>
+    /// <item>4 <c>ssf.transcript_history</c> rows keyed on the first
+    ///   4 of those hashes — the 5th hash has no history row, which
+    ///   lets the test confirm that orphan-clean does not touch
+    ///   unrelated rows.</item>
+    /// <item>2 <c>ssf.golden_set_candidate</c> rows keyed on the
+    ///   user_id + first 2 hashes (each with a distinct
+    ///   correction_type so the unique index does not collapse them).</item>
+    /// </list>
+    /// We do NOT seed voice_clips_retained rows here — the existing
+    /// <see cref="InMemoryRetainedBlobStore"/> fake covers that path
+    /// without a LocalStack sidecar; an explicit seed would require
+    /// the AES envelope shape, which is out of scope for the cascade
+    /// test.
+    /// </summary>
+    private async Task SeedVoiceSpineFixtureAsync(NpgsqlConnection db)
+    {
+        var aiJobIds = new List<Guid>(VoiceSpineAiJobCount);
+        for (var i = 0; i < VoiceSpineAiJobCount; i++)
+        {
+            var jobId = Guid.NewGuid();
+            aiJobIds.Add(jobId);
+            // 64-char hex audio_content_hash — deterministic per
+            // seed-index so the test can re-derive the hash list
+            // if needed.
+            var hash = new string('a', 62) + i.ToString("X2");
+            _seededAudioHashes.Add(hash);
+
+            await using var c = db.CreateCommand();
+            c.CommandText = """
+                INSERT INTO ssf.ai_jobs (
+                    id, idempotency_key, operation_type, user_id, farm_id, status,
+                    input_content_hash, schema_version,
+                    transcript_codemix, transcript_english, transcript_provider,
+                    transcript_model_version, transcript_schema_version,
+                    created_at_utc, modified_at_utc, total_attempts,
+                    source, model_version, prompt_version, prompt_content_hash, app_version, extractor_code_sha
+                )
+                VALUES (
+                    @id, @ikey, 'VoiceToStructuredLog', @uid, @fid, 'Succeeded',
+                    @hash, '1.0.0',
+                    @codemix, @english, 'Sarvam',
+                    'saaras:v3', 'v1.0',
+                    NOW(), NOW(), 1,
+                    'voice', 'saaras:v3', 'v1', 'pcv1', 'app', 'sha'
+                );
+                """;
+            c.Parameters.AddWithValue("id", jobId);
+            c.Parameters.AddWithValue("ikey", $"idem-{i}");
+            c.Parameters.AddWithValue("uid", _userId);
+            c.Parameters.AddWithValue("fid", _farmId);
+            c.Parameters.AddWithValue("hash", hash);
+            c.Parameters.AddWithValue("codemix", $"codemix transcript {i}");
+            c.Parameters.AddWithValue("english", $"english transcript {i}");
+            await c.ExecuteNonQueryAsync();
+        }
+
+        // 4 transcript_history rows keyed on the first 4 hashes.
+        for (var i = 0; i < VoiceSpineTranscriptHistoryCount; i++)
+        {
+            await using var c = db.CreateCommand();
+            c.CommandText = """
+                INSERT INTO ssf.transcript_history (
+                    id, audio_content_hash, transcript_provider,
+                    transcript_model_version, transcript_mode, transcript_text,
+                    produced_at_utc
+                )
+                VALUES (
+                    @id, @hash, 'Sarvam', 'saaras:v3', 'codemix', @text, NOW()
+                );
+                """;
+            c.Parameters.AddWithValue("id", Guid.NewGuid());
+            c.Parameters.AddWithValue("hash", _seededAudioHashes[i]);
+            c.Parameters.AddWithValue("text", $"history text {i}");
+            await c.ExecuteNonQueryAsync();
+        }
+
+        // 2 golden_set_candidate rows. Distinct correction_types so
+        // the unique index on (audio_content_hash, correction_type)
+        // does not reject the second insert.
+        var correctionTypes = new[] { "value-correction", "structural-correction" };
+        for (var i = 0; i < VoiceSpineGoldenCandidateCount; i++)
+        {
+            await using var c = db.CreateCommand();
+            c.CommandText = """
+                INSERT INTO ssf.golden_set_candidate (
+                    id, audio_content_hash, user_id, farm_id,
+                    bucket_id, correction_type,
+                    ai_suggested_json, farmer_corrected_json,
+                    promoted_to_golden_set, created_at_utc
+                )
+                VALUES (
+                    @id, @hash, @uid, @fid,
+                    'workDone', @ctype,
+                    '{}'::jsonb, '{}'::jsonb,
+                    false, NOW()
+                );
+                """;
+            c.Parameters.AddWithValue("id", Guid.NewGuid());
+            c.Parameters.AddWithValue("hash", _seededAudioHashes[i]);
+            c.Parameters.AddWithValue("uid", _userId);
+            c.Parameters.AddWithValue("fid", _farmId);
+            c.Parameters.AddWithValue("ctype", correctionTypes[i]);
             await c.ExecuteNonQueryAsync();
         }
     }

@@ -244,6 +244,22 @@ public sealed class RlsExemptionAllowlistTests
         // table only with admin elevation. Same posture as
         // ai_provider_capabilities + mode_policy.
         "ai_provider_spend_daily",
+
+        // SARVAM_PRIMARY_VOICE_PIPELINE Task 3.3 (data-eng Theme B-2,
+        // Safeguard B2) — golden-set feedback-loop candidate ledger.
+        // Training-corpus surface; user_id + farm_id are present on
+        // every row but write semantics are admin-elevated via the
+        // GoldenSetFeedbackWorker (system-elevated background
+        // service) and reads happen only from the future promote
+        // batch + admin surfaces. The Phase 03 RLS policy keyed on
+        // agrisync.farm_id would filter the worker's writes (the
+        // worker runs without a tenant claim). Same posture as
+        // voice_clips_retained: defence at the worker boundary +
+        // admin-only read paths; Phase 11+ may layer a future
+        // training-corpus policy. The DPDP §12 erasure cascade
+        // (Task 3.4) drops rows where user_id matches the target
+        // user.
+        "golden_set_candidate",
     };
 
     [Fact]
