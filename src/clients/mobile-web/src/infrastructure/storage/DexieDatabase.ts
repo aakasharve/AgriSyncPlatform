@@ -189,6 +189,13 @@ export interface PendingAiJobContext {
     inputSpeechDurationMs?: number;
     inputRawDurationMs?: number;
     segmentMetadataJson?: string;
+    // SARVAM_PRIMARY_VOICE_PIPELINE_2026-05-21 founder fix (Option B):
+    // the ISO-8601 UTC instant when MediaRecorder captured the audio.
+    // Persisted on the offline-queue row so that when the background
+    // worker drains the queue (possibly hours later after connectivity
+    // returns), the original recording instant is what's posted as
+    // `recorded_at` — not the queue-drain wall clock.
+    recordedAtUtc?: string;
 }
 
 export interface PendingAiJobRecord {

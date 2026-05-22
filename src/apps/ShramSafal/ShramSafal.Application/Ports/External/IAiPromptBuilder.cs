@@ -17,7 +17,26 @@ public sealed record VoiceParseContext(
     FarmerProfileInfo Profile,
     FarmContextInfo? FarmContext,
     string? FocusCategory,
-    VocabDatabaseInfo? VocabDb);
+    VocabDatabaseInfo? VocabDb)
+{
+    /// <summary>
+    /// SARVAM_PRIMARY_VOICE_PIPELINE_2026-05-21 Task 2.4 — ISO-8601 UTC
+    /// instant the audio was recorded. Threaded into the structurer prompt
+    /// via the <c>{{captured_at}}</c> placeholder so the model resolves
+    /// temporal cues ("आज" / "काल" / "मागच्या सोमवारी") against the actual
+    /// capture moment rather than the prompt-evaluation wall-clock.
+    ///
+    /// <para>
+    /// Defaulted to <c>null</c> (init-only property) so legacy call sites
+    /// — including the streaming parse path and the eval-only path —
+    /// compile without diff. The 2-stage orchestrator method
+    /// (<c>ParseVoiceTwoStageAsync</c>) populates it from the audio-blob
+    /// metadata; the prompt builder substitutes <c>"unknown"</c> when the
+    /// value is absent.
+    /// </para>
+    /// </summary>
+    public DateTime? CapturedAtUtc { get; init; }
+}
 
 public sealed record CropInfo(string Id, string Name, List<PlotInfo> Plots);
 public sealed record PlotInfo(string Id, string Name, PlotInfrastructureInfo? Infrastructure, IrrigationPlanInfo? IrrigationPlan);

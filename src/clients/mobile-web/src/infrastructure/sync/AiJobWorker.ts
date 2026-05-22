@@ -190,6 +190,14 @@ export class AiJobWorker {
                         inputSpeechDurationMs: context.inputSpeechDurationMs,
                         inputRawDurationMs: context.inputRawDurationMs,
                         segmentMetadataJson: context.segmentMetadataJson,
+                        // SARVAM_PRIMARY_VOICE_PIPELINE_2026-05-21
+                        // founder fix — when the queued job was a
+                        // text fallback that originally accompanied a
+                        // voice clip (clarification answer flow), the
+                        // upstream recorder's recordedAtUtc was
+                        // persisted in context; replay it here so the
+                        // server stamps the original capture instant.
+                        recordedAtUtc: context.recordedAtUtc,
                     },
                 );
                 return;
@@ -212,6 +220,13 @@ export class AiJobWorker {
                     inputSpeechDurationMs: context.inputSpeechDurationMs,
                     inputRawDurationMs: context.inputRawDurationMs,
                     segmentMetadataJson: context.segmentMetadataJson,
+                    // SARVAM_PRIMARY_VOICE_PIPELINE_2026-05-21 founder
+                    // fix (Option B): replay the recorded-time stamp
+                    // from the offline-queued context so post-drain
+                    // POSTs match the wire contract a real-time POST
+                    // would have used. Critical for evening offline
+                    // recordings drained the next morning.
+                    recordedAtUtc: context.recordedAtUtc,
                 },
             );
             return;

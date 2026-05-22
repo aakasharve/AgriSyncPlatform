@@ -113,6 +113,14 @@ export type VoiceInput =
         inputRawDurationMs?: number;
         segmentMetadataJson?: string;
         requestPayloadHash?: string;
+        // SARVAM_PRIMARY_VOICE_PIPELINE_2026-05-21 founder fix (Option
+        // B): ISO-8601 UTC instant the audio was recorded. Sourced
+        // from MediaRecorder.onstop (or its preprocessor analog) and
+        // posted as the multipart `recorded_at` form field. The
+        // backend threads this into VoiceParseContext.CapturedAtUtc so
+        // the structurer prompt resolves temporal cues against the
+        // true capture moment instead of request-receipt time.
+        recordedAtUtc?: string;
     }
     | {
         type: 'text';

@@ -422,6 +422,20 @@ export interface AudioData {
     blob: Blob;
     base64: string;
     mimeType: string;
+    // SARVAM_PRIMARY_VOICE_PIPELINE_2026-05-21 founder fix (capturedAt
+    // = recordedAt, Option B) — ISO-8601 UTC instant the audio was
+    // captured by MediaRecorder.onstop. Threaded through to the
+    // multipart `recorded_at` form field so the backend structurer
+    // prompt resolves "काल"/"आज" against the actual recording moment.
+    //
+    // Optional: legacy AudioRecorder builds (pre-fix) did not stamp
+    // this; hooks downstream (useVoiceRecorder.handleAudioReady) fall
+    // back to Date.now() at receipt — slightly less accurate than the
+    // onstop edge but still better than the server's request-receipt
+    // wall clock. Once both AudioRecorder.tsx and AudioRecorderStreaming.tsx
+    // re-pass through their UI gate to stamp this directly, the
+    // fallback can be removed and the field made required.
+    recordedAtUtc?: string;
 }
 
 export interface AppConfig {

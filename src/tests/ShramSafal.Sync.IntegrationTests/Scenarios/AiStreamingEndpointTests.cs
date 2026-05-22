@@ -170,6 +170,27 @@ public sealed class AiStreamingEndpointTests
                 CancellationToken ct = default)
             => throw new NotImplementedException();
 
+        // SARVAM_PRIMARY_VOICE_PIPELINE_2026-05-21 Task 2.4 — scripted
+        // orchestrator exercises only the streaming/SSE path, so the new
+        // 2-stage method throws like the other unused operations.
+        public Task<(VoiceParseCanonicalResult Result, Guid JobId, AiProviderType ProviderUsed, bool FallbackUsed)>
+            ParseVoiceTwoStageAsync(
+                Guid userId,
+                Guid farmId,
+                Stream audioStream,
+                string mimeType,
+                VoiceParseContext promptContext,
+                string idempotencyKey,
+                string languageHint = "mr-IN",
+                DateTime? capturedAtUtc = null,
+                int? inputSpeechDurationMs = null,
+                int? inputRawDurationMs = null,
+                string? segmentMetadataJson = null,
+                string? requestPayloadHash = null,
+                string clientAppVersion = "unknown",
+                CancellationToken ct = default)
+            => throw new NotImplementedException();
+
         public Task<(ReceiptExtractCanonicalResult Result, Guid JobId, AiProviderType ProviderUsed, bool FallbackUsed)>
             ExtractReceiptWithFallbackAsync(
                 Guid userId,

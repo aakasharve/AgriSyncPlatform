@@ -280,6 +280,11 @@ export class AgriSyncClient implements HttpTransport {
             inputRawDurationMs?: number;
             segmentMetadataJson?: string;
             requestPayloadHash?: string;
+            // SARVAM_PRIMARY_VOICE_PIPELINE_2026-05-21 founder fix —
+            // JSON callers (no multipart) send recordedAt as part of
+            // the body so the structurer prompt still sees the
+            // recording instant when audio is base64-inlined.
+            recordedAtUtc?: string;
         },
     ): Promise<AiParseResponse> {
         return Ai.parseVoice(this, textTranscript, options);
@@ -298,6 +303,10 @@ export class AgriSyncClient implements HttpTransport {
             inputRawDurationMs?: number;
             segmentMetadataJson?: string;
             requestPayloadHash?: string;
+            // SARVAM_PRIMARY_VOICE_PIPELINE_2026-05-21 founder fix
+            // (Option B): ISO-8601 UTC capture moment from
+            // MediaRecorder.onstop. Posted as multipart `recorded_at`.
+            recordedAtUtc?: string;
         },
     ): Promise<AiParseResponse> {
         return Ai.parseVoiceLog(this, audio, mimeType, context, farmId, options);
@@ -315,6 +324,12 @@ export class AgriSyncClient implements HttpTransport {
             inputRawDurationMs?: number;
             segmentMetadataJson?: string;
             requestPayloadHash?: string;
+            // SARVAM_PRIMARY_VOICE_PIPELINE_2026-05-21 founder fix —
+            // text inputs don't have a true "recording" moment, but
+            // we still allow the field for callers that synthesize
+            // one (e.g. typed-after-voice fallback) so the contract
+            // is uniform with parseVoice/parseVoiceLog.
+            recordedAtUtc?: string;
         },
     ): Promise<AiParseResponse> {
         return Ai.parseTextLog(this, text, context, farmId, options);

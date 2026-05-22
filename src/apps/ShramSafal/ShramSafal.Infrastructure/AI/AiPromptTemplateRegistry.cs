@@ -93,9 +93,22 @@ internal sealed class AiPromptTemplateRegistry
             RequiredBucketIds.Select(bucketId =>
                 $"### Visible Bucket: {bucketId}{Environment.NewLine}{_bucketModules[bucketId].Content}"));
 
+        // SARVAM_PRIMARY_VOICE_PIPELINE_2026-05-21 Task 2.4 — captured_at
+        // substitution. systemBase.md references {{captured_at}} so the
+        // structurer can resolve "yesterday"/"आज" relative to the real
+        // capture moment. We substitute "unknown" when the context did
+        // not carry one (legacy single-call path, eval, tests) so the
+        // model still has a defined token to anchor on.
+        var capturedAtToken = context.CapturedAtUtc?.ToString("o", System.Globalization.CultureInfo.InvariantCulture)
+            ?? "unknown";
+        var systemBase = _systemBase.Content.Replace(
+            "{{captured_at}}",
+            capturedAtToken,
+            StringComparison.Ordinal);
+
         var prompt = $"""
                      <!-- AGRISYNC_PROMPT_VERSION {CurrentVoicePromptVersion} -->
-                     {_systemBase.Content}
+                     {systemBase}
 
                      {farmKnowledge}
                      {visualContext}

@@ -67,7 +67,14 @@ public static class AiStreamingEndpoints
             return;
         }
 
-        var ctx = request.Context ?? EmptyContext;
+        // SARVAM_PRIMARY_VOICE_PIPELINE_2026-05-21 founder fix — thread
+        // the client-supplied recordedAt onto the VoiceParseContext so
+        // the streaming structurer's {{captured_at}} placeholder
+        // resolves against the real recording moment (matches the
+        // non-streaming /ai/voice-parse contract). Missing → null →
+        // prompt substitutes "unknown".
+        var ctxBase = request.Context ?? EmptyContext;
+        var ctx = ctxBase with { CapturedAtUtc = NormalizeToUtc(request.RecordedAt) };
 
         httpContext.Response.Headers["Content-Type"] = "text/event-stream";
         httpContext.Response.Headers["Cache-Control"] = "no-cache";
@@ -82,9 +89,36 @@ public static class AiStreamingEndpoints
             await httpContext.Response.Body.FlushAsync(ct);
         }
     }
+
+    // SARVAM_PRIMARY_VOICE_PIPELINE_2026-05-21 founder fix — coerce a
+    // bound DateTime? into UTC. System.Text.Json may produce
+    // Unspecified/Local depending on the wire format; the structurer
+    // prompt's ToString("o") would then emit the wrong offset. Mirrors
+    // the same helper in AiEndpoints.cs for the multipart path.
+    private static DateTime? NormalizeToUtc(DateTime? value)
+    {
+        if (!value.HasValue)
+        {
+            return null;
+        }
+
+        return value.Value.Kind switch
+        {
+            DateTimeKind.Utc => value,
+            DateTimeKind.Local => value.Value.ToUniversalTime(),
+            _ => DateTime.SpecifyKind(value.Value, DateTimeKind.Utc),
+        };
+    }
 }
 
 public sealed record ParseVoiceStreamRequest(
     string Transcript,
     VoiceParseContext? Context,
-    string? ScenarioId);
+    string? ScenarioId,
+    // SARVAM_PRIMARY_VOICE_PIPELINE_2026-05-21 founder fix — Option B
+    // capturedAt = recordedAt. ISO-8601 UTC when present; null when the
+    // client omits it (legacy/orphan). Threaded into
+    // VoiceParseContext.CapturedAtUtc so the structurer prompt's
+    // {{captured_at}} placeholder reflects when the farmer recorded
+    // rather than the server's request-receipt time.
+    DateTime? RecordedAt = null);

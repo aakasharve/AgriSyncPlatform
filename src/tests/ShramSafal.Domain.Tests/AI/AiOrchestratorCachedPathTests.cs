@@ -57,6 +57,13 @@ public sealed class AiOrchestratorCachedPathTests
 
         var orchestrator = new AiOrchestrator(
             providers: new[] { new InertAiProvider(AiProviderType.Gemini), new InertAiProvider(AiProviderType.Sarvam) },
+            // SARVAM_PRIMARY_VOICE_PIPELINE_2026-05-21 Task 2.4 — the
+            // 2-stage pipeline took an IEnumerable<ITranscriberProvider>
+            // dependency. Cached-path tests do NOT exercise the new
+            // method, so an empty enumerable is sufficient; the test
+            // asserts that the cached fallback path still returns the
+            // stored hash before any transcriber lookup happens.
+            transcribers: Array.Empty<ShramSafal.Application.Ports.External.ITranscriberProvider>(),
             aiJobRepository: repository,
             breakerRegistry: new AiCircuitBreakerRegistry(),
             failureClassifier: new AiFailureClassifier(),

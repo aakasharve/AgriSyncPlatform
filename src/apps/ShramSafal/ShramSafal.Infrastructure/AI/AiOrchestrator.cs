@@ -14,6 +14,7 @@ namespace ShramSafal.Infrastructure.AI;
 
 internal sealed class AiOrchestrator(
     IEnumerable<IAiProvider> providers,
+    IEnumerable<ITranscriberProvider> transcribers,
     IAiJobRepository aiJobRepository,
     AiCircuitBreakerRegistry breakerRegistry,
     AiFailureClassifier failureClassifier,
@@ -29,6 +30,14 @@ internal sealed class AiOrchestrator(
     private const int RetryMaxDelayMs = 2000;
 
     private readonly Dictionary<AiProviderType, IAiProvider> _providers = providers
+        .GroupBy(x => x.ProviderType)
+        .ToDictionary(x => x.Key, x => x.First());
+
+    // SARVAM_PRIMARY_VOICE_PIPELINE_2026-05-21 Task 2.4 — single-role
+    // transcriber port lookup. Registered alongside the legacy multi-role
+    // IAiProvider so SarvamStreamingSttClient (currently the only impl)
+    // is resolvable by provider type for the 2-stage pipeline.
+    private readonly Dictionary<AiProviderType, ITranscriberProvider> _transcribers = transcribers
         .GroupBy(x => x.ProviderType)
         .ToDictionary(x => x.Key, x => x.First());
 
@@ -186,6 +195,401 @@ internal sealed class AiOrchestrator(
         job.MarkFailed();
         await aiJobRepository.SaveChangesAsync(ct);
         return (fallbackExecution.Result with { PromptContentHash = promptContentHash }, job.Id, fallbackExecution.ProviderUsed, true);
+    }
+
+    // ── SARVAM_PRIMARY_VOICE_PIPELINE_2026-05-21 Task 2.4 ─────────────────
+    // 2-stage voice pipeline (transcribe → structure). Resolves the
+    // (transcriber, structurer) tuple from AiProviderConfig; falls back to
+    // the legacy single-call multimodal path when (a) the tuple collapses
+    // to one provider, (b) no transcriber is registered, or (c) the
+    // transcriber step fails in a fallback-eligible way.
+    //
+    // Idempotency, AiJob persistence, blob upload, and Provenance stamping
+    // mirror ParseVoiceWithFallbackAsync — this method exists ALONGSIDE the
+    // legacy path, NOT as a replacement, per the Slice B brief.
+    public async Task<(VoiceParseCanonicalResult Result, Guid JobId, AiProviderType ProviderUsed, bool FallbackUsed)> ParseVoiceTwoStageAsync(
+        Guid userId,
+        Guid farmId,
+        Stream audioStream,
+        string mimeType,
+        VoiceParseContext promptContext,
+        string idempotencyKey,
+        string languageHint = "mr-IN",
+        DateTime? capturedAtUtc = null,
+        int? inputSpeechDurationMs = null,
+        int? inputRawDurationMs = null,
+        string? segmentMetadataJson = null,
+        string? requestPayloadHash = null,
+        string clientAppVersion = "unknown",
+        CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(promptContext);
+
+        var promptContextWithCapture = promptContext with { CapturedAtUtc = capturedAtUtc };
+        var systemPrompt = promptBuilder.BuildVoiceParsingPrompt(promptContextWithCapture);
+
+        // Resolve provider tuple. If the transcriber column equals the
+        // structurer column, OR no ITranscriberProvider is registered for
+        // the requested transcriber, fall back to the legacy single-call
+        // multimodal path so the AiJob still lands on the same idempotency
+        // row.
+        var config = await aiJobRepository.GetProviderConfigAsync(ct);
+        var transcriberType = ParseProviderTypeOrDefault(config.TranscriberProvider, AiProviderType.Gemini);
+        var structurerType = ParseProviderTypeOrDefault(config.StructurerProvider, AiProviderType.Gemini);
+
+        if (transcriberType == structurerType ||
+            !_transcribers.TryGetValue(transcriberType, out var transcriber))
+        {
+            // Tuple collapses to a single provider OR transcriber port is
+            // not wired — delegate to the legacy multimodal one-call path.
+            return await ParseVoiceWithFallbackAsync(
+                userId,
+                farmId,
+                audioStream,
+                mimeType,
+                systemPrompt,
+                idempotencyKey,
+                languageHint,
+                inputSpeechDurationMs,
+                inputRawDurationMs,
+                segmentMetadataJson,
+                requestPayloadHash,
+                clientAppVersion,
+                ct);
+        }
+
+        var key = string.IsNullOrWhiteSpace(idempotencyKey) ? Guid.NewGuid().ToString("N") : idempotencyKey.Trim();
+        var existing = await aiJobRepository.GetByIdempotencyKeyAsync(key, ct);
+        var promptContentHash = promptBuilder.CurrentVoicePromptContentHash;
+
+        if (TryReturnCachedVoiceResult(existing, out var cached, promptContentHash))
+        {
+            return cached;
+        }
+
+        var payload = await ReadPayloadAsync(audioStream, ct);
+
+        // Mirror ParseVoiceWithFallbackAsync's cold-tier wiring (sub-phase
+        // 02-patch) so the AiJob's RawInputRef is a real content-addressed
+        // SHA-256 and ref counts on raw_blob_index stay consistent.
+        using var blobStream = new MemoryStream(payload);
+        var blobRef = await blobStore.PutAsync(blobStream, mimeType, ct);
+        await shramSafalRepository.UpsertRawBlobIndexAsync(blobRef, ct);
+
+        var voiceProvenance = new Provenance(
+            source: Source.Voice,
+            modelVersion: "unknown",
+            promptVersion: "v1",
+            promptContentHash: promptContentHash,
+            appVersion: string.IsNullOrWhiteSpace(clientAppVersion) ? "unknown" : clientAppVersion);
+
+        var job = existing ?? AiJob.Create(
+            Guid.NewGuid(),
+            key,
+            AiOperationType.VoiceToStructuredLog,
+            userId,
+            farmId,
+            inputContentHash: requestPayloadHash,
+            rawInputRef: blobRef.Sha256,
+            inputSessionMetadataJson: segmentMetadataJson,
+            provenance: voiceProvenance);
+
+        job.SetInputDurations(inputSpeechDurationMs, inputRawDurationMs);
+        job.SetInputSessionMetadataJson(segmentMetadataJson);
+
+        if (existing is null)
+        {
+            await aiJobRepository.AddAsync(job, ct);
+        }
+
+        if (config.IsAiProcessingDisabled)
+        {
+            job.MarkFailed();
+            await aiJobRepository.SaveChangesAsync(ct);
+            return (
+                new VoiceParseCanonicalResult
+                {
+                    Success = false,
+                    Error = "AI processing is currently disabled.",
+                    PromptContentHash = promptContentHash
+                },
+                job.Id,
+                transcriberType,
+                false);
+        }
+
+        // ─── Stage 1: transcribe via ITranscriberProvider ───────────────
+        TranscribeResult transcribeResult;
+        var transcribeMode = string.IsNullOrWhiteSpace(config.TranscriberMode) ? "codemix" : config.TranscriberMode!;
+        try
+        {
+            await using var transcribeStream = new MemoryStream(payload, writable: false);
+            transcribeResult = await transcriber.TranscribeAsync(
+                transcribeStream,
+                mimeType,
+                languageHint,
+                transcribeMode,
+                ct);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            logger.LogWarning(
+                ex,
+                "[parse-voice-two-stage] transcribe failed for job {JobId} (provider={Transcriber}). Falling back to legacy multimodal path.",
+                job.Id,
+                transcriberType);
+
+            // Transcriber failure → fall back to the legacy single-call
+            // multimodal path. The AiJob has already been persisted with
+            // the cold-tier blob ref; the legacy path will resolve the
+            // same idempotency key and append a new attempt to this row
+            // rather than creating a duplicate.
+            return await ParseVoiceWithFallbackAsync(
+                userId,
+                farmId,
+                new MemoryStream(payload, writable: false),
+                mimeType,
+                systemPrompt,
+                key,
+                languageHint,
+                inputSpeechDurationMs,
+                inputRawDurationMs,
+                segmentMetadataJson,
+                requestPayloadHash,
+                clientAppVersion,
+                ct);
+        }
+
+        if (!transcribeResult.Success || string.IsNullOrWhiteSpace(transcribeResult.Transcript))
+        {
+            var transcriptCandidate = transcribeResult.Transcript;
+            var failureClass = failureClassifier.ClassifySarvamFailure(
+                httpStatusCode: null,
+                exception: null,
+                transcript: transcriptCandidate,
+                firstTokenTimedOut: false);
+
+            logger.LogWarning(
+                "[parse-voice-two-stage] transcribe returned no transcript for job {JobId} (provider={Transcriber}, failureClass={FailureClass}). Falling back.",
+                job.Id,
+                transcriberType,
+                failureClass);
+
+            if (config.FallbackEnabled && failureClassifier.IsFallbackEligible(failureClass))
+            {
+                return await ParseVoiceWithFallbackAsync(
+                    userId,
+                    farmId,
+                    new MemoryStream(payload, writable: false),
+                    mimeType,
+                    systemPrompt,
+                    key,
+                    languageHint,
+                    inputSpeechDurationMs,
+                    inputRawDurationMs,
+                    segmentMetadataJson,
+                    requestPayloadHash,
+                    clientAppVersion,
+                    ct);
+            }
+
+            job.MarkFailed();
+            await aiJobRepository.SaveChangesAsync(ct);
+            return (
+                new VoiceParseCanonicalResult
+                {
+                    Success = false,
+                    Error = transcribeResult.Error ?? "Transcribe returned empty transcript.",
+                    PromptContentHash = promptContentHash
+                },
+                job.Id,
+                transcriberType,
+                false);
+        }
+
+        // Stamp the transcript on the AiJob (Task 1.1 mutator) BEFORE the
+        // structurer call so a structurer failure still leaves the raw
+        // transcript persisted for audit + replay.
+        job.SetTranscriptResults(
+            codemix: transcribeResult.Transcript,
+            english: null,
+            englishRedacted: null,
+            verbatim: null,
+            translit: null,
+            translate: null,
+            transcriptProvider: transcriberType.ToString(),
+            transcriptModelVersion: string.IsNullOrWhiteSpace(transcribeResult.ProviderModelVersion)
+                ? "unknown"
+                : transcribeResult.ProviderModelVersion!);
+
+        // ─── Stage 2: structure via legacy IAiProvider.ParseVoiceAsync ─
+        // The structurer adapter (Gemini today) does not yet implement
+        // IStructurerProvider — Phase 1 wired the port but Phase 2 adapter
+        // migration is its own slice. We route the transcript through
+        // IAiProvider.ParseVoiceAsync with mime=text/plain so the existing
+        // Gemini text-completion path handles the structure step. Mirrors
+        // the eval-only ParseVoiceWithOverrideAsync flow on lines 359-428.
+        var structurer = ResolveProvider(structurerType, AiOperationType.VoiceToStructuredLog);
+        if (structurer is null)
+        {
+            logger.LogWarning(
+                "[parse-voice-two-stage] no structurer registered for type {Structurer}; falling back to legacy path for job {JobId}.",
+                structurerType,
+                job.Id);
+            return await ParseVoiceWithFallbackAsync(
+                userId,
+                farmId,
+                new MemoryStream(payload, writable: false),
+                mimeType,
+                systemPrompt,
+                key,
+                languageHint,
+                inputSpeechDurationMs,
+                inputRawDurationMs,
+                segmentMetadataJson,
+                requestPayloadHash,
+                clientAppVersion,
+                ct);
+        }
+
+        var transcriptBytes = Encoding.UTF8.GetBytes(transcribeResult.Transcript!);
+        var structurerExecution = await ExecuteVoiceAttemptWithRetriesAsync(
+            job,
+            structurer,
+            transcriptBytes,
+            mimeType: "text/plain",
+            languageHint,
+            systemPrompt,
+            config,
+            requestPayloadHash,
+            ct);
+
+        if (structurerExecution.IsSuccess)
+        {
+            var resultWithHash = structurerExecution.Result with
+            {
+                PromptContentHash = promptContentHash,
+                TranscriptCodemix = transcribeResult.Transcript,
+                TranscriptProvider = transcriberType.ToString(),
+                TranscriptModelVersion = transcribeResult.ProviderModelVersion,
+            };
+
+            // Map structurer-emitted referenced_date triple onto the
+            // AiJob via the Task 1.1 mutator. Best-effort: malformed JSON
+            // / missing fields leave ReferencedDate null without aborting
+            // the success path.
+            TryStampReferencedDate(job, structurerExecution.Result.NormalizedJson);
+
+            job.UpdateProvenance(structurerExecution.Result.ModelUsed ?? "unknown");
+            job.MarkSucceeded(resultWithHash.NormalizedJson ?? "{}", structurerExecution.Attempt!);
+            await aiJobRepository.SaveChangesAsync(ct);
+            return (resultWithHash, job.Id, structurerExecution.ProviderUsed, false);
+        }
+
+        // Structurer failed: fall back the STRUCTURER step only. We
+        // route to the legacy multimodal path (single-call audio →
+        // JSON) so the model can re-do both stages — this is the safest
+        // backstop because we don't yet have a sibling structurer that
+        // can take text-in and return AgriLog JSON-out with the same
+        // confidence semantics.
+        if (config.FallbackEnabled && failureClassifier.IsFallbackEligible(structurerExecution.FailureClass))
+        {
+            logger.LogWarning(
+                "[parse-voice-two-stage] structurer failed for job {JobId} (failureClass={FailureClass}); falling back to legacy multimodal.",
+                job.Id,
+                structurerExecution.FailureClass);
+            return await ParseVoiceWithFallbackAsync(
+                userId,
+                farmId,
+                new MemoryStream(payload, writable: false),
+                mimeType,
+                systemPrompt,
+                key,
+                languageHint,
+                inputSpeechDurationMs,
+                inputRawDurationMs,
+                segmentMetadataJson,
+                requestPayloadHash,
+                clientAppVersion,
+                ct);
+        }
+
+        job.MarkFailed();
+        await aiJobRepository.SaveChangesAsync(ct);
+        return (
+            structurerExecution.Result with { PromptContentHash = promptContentHash, TranscriptCodemix = transcribeResult.Transcript },
+            job.Id,
+            structurerExecution.ProviderUsed,
+            false);
+    }
+
+    private static AiProviderType ParseProviderTypeOrDefault(string? raw, AiProviderType fallback)
+    {
+        if (string.IsNullOrWhiteSpace(raw))
+        {
+            return fallback;
+        }
+
+        return Enum.TryParse<AiProviderType>(raw.Trim(), ignoreCase: true, out var parsed)
+            ? parsed
+            : fallback;
+    }
+
+    private static void TryStampReferencedDate(AiJob job, string? normalizedJson)
+    {
+        if (string.IsNullOrWhiteSpace(normalizedJson))
+        {
+            return;
+        }
+
+        try
+        {
+            using var document = JsonDocument.Parse(normalizedJson);
+            var root = document.RootElement;
+
+            DateOnly? referencedDate = null;
+            if (root.TryGetProperty("referenced_date", out var referencedDateNode) &&
+                referencedDateNode.ValueKind == JsonValueKind.String &&
+                DateOnly.TryParse(referencedDateNode.GetString(), out var parsedDate))
+            {
+                referencedDate = parsedDate;
+            }
+
+            decimal? confidence = null;
+            if (root.TryGetProperty("referenced_date_confidence", out var confidenceNode) &&
+                confidenceNode.ValueKind == JsonValueKind.Number &&
+                confidenceNode.TryGetDecimal(out var parsedConfidence))
+            {
+                confidence = parsedConfidence;
+            }
+
+            string? reason = null;
+            if (root.TryGetProperty("referenced_date_reason", out var reasonNode) &&
+                reasonNode.ValueKind == JsonValueKind.String)
+            {
+                reason = reasonNode.GetString();
+            }
+
+            // Only invoke the mutator if at least one signal was present;
+            // a no-signal call would clobber any earlier inference.
+            if (referencedDate is not null || confidence is not null || reason is not null)
+            {
+                job.SetReferencedDate(referencedDate, confidence, reason);
+            }
+        }
+        catch (JsonException ex)
+        {
+            // Malformed normalized JSON is a structurer-side issue, not a
+            // fatal orchestrator error — the success path already returned
+            // the row; we just don't get a referenced-date stamp.
+            System.Diagnostics.Activity.Current?.AddEvent(new System.Diagnostics.ActivityEvent(
+                "AiOrchestrator.TryStampReferencedDate.MalformedJson",
+                tags: new System.Diagnostics.ActivityTagsCollection
+                {
+                    ["exception.type"] = ex.GetType().Name,
+                    ["exception.message"] = ex.Message,
+                }));
+        }
     }
 
     // Phase 3 (VOICE_LATENCY_PIPELINE_V2 §7 Task 3.4) — streaming voice parse.

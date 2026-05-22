@@ -150,25 +150,64 @@ public sealed class ParseVoiceInputHandler(
             ? command.IdempotencyKey!.Trim()
             : BuildIdempotencyKey(command, transcript, command.AudioBase64);
 
+        // SARVAM_PRIMARY_VOICE_PIPELINE_2026-05-21 Task 2.4 — feature-flag
+        // route. The `voice_provider_sarvam_cohort` flag is not yet wired
+        // with an Application-layer query helper (Phase 1.4 shipped the
+        // FeatureFlag entity; the read-side helper is a separate slice).
+        // For Slice B we route based on the legacy `voice_provider` column
+        // equaling `Sarvam` — the same signal a cohort flag flip would
+        // ultimately produce on AiProviderConfig.VoiceProvider. When the
+        // config row says Sarvam (CreateDefault now defaults to Sarvam),
+        // route through the 2-stage pipeline; otherwise stay on legacy.
+        var providerConfig = await aiJobRepository.GetProviderConfigAsync(ct);
+        var routeTwoStage = providerConfig.VoiceProvider == Domain.AI.AiProviderType.Sarvam;
+
         var stopwatch = Stopwatch.StartNew();
         try
         {
-            var orchestration = await aiOrchestrator.ParseVoiceWithFallbackAsync(
-                command.UserId,
-                command.FarmId,
-                payloadStream,
-                mimeType,
-                systemPrompt,
-                idempotencyKey,
-                languageHint: "mr-IN",
-                inputSpeechDurationMs: command.InputSpeechDurationMs,
-                inputRawDurationMs: command.InputRawDurationMs,
-                segmentMetadataJson: command.SegmentMetadataJson,
-                requestPayloadHash: command.RequestPayloadHash,
-                clientAppVersion: string.IsNullOrWhiteSpace(command.ClientAppVersion)
-                    ? "unknown"
-                    : command.ClientAppVersion,
-                ct: ct);
+            var orchestration = routeTwoStage
+                ? await aiOrchestrator.ParseVoiceTwoStageAsync(
+                    command.UserId,
+                    command.FarmId,
+                    payloadStream,
+                    mimeType,
+                    promptContext,
+                    idempotencyKey,
+                    languageHint: "mr-IN",
+                    // SARVAM_PRIMARY_VOICE_PIPELINE_2026-05-21 founder fix
+                    // (Option B): thread the actual recording timestamp from
+                    // the client (Dexie voice_clips.recordedAtUtc → multipart
+                    // recorded_at form field → command.RecordedAtUtc) rather
+                    // than clock.UtcNow. The latter is request-receipt time
+                    // and produces off-by-one "काल" resolutions for evening
+                    // recordings synced after midnight. When the client did
+                    // not send a recorded_at value (legacy/orphan clips)
+                    // this is null and the prompt substitutes "unknown".
+                    capturedAtUtc: command.RecordedAtUtc,
+                    inputSpeechDurationMs: command.InputSpeechDurationMs,
+                    inputRawDurationMs: command.InputRawDurationMs,
+                    segmentMetadataJson: command.SegmentMetadataJson,
+                    requestPayloadHash: command.RequestPayloadHash,
+                    clientAppVersion: string.IsNullOrWhiteSpace(command.ClientAppVersion)
+                        ? "unknown"
+                        : command.ClientAppVersion,
+                    ct: ct)
+                : await aiOrchestrator.ParseVoiceWithFallbackAsync(
+                    command.UserId,
+                    command.FarmId,
+                    payloadStream,
+                    mimeType,
+                    systemPrompt,
+                    idempotencyKey,
+                    languageHint: "mr-IN",
+                    inputSpeechDurationMs: command.InputSpeechDurationMs,
+                    inputRawDurationMs: command.InputRawDurationMs,
+                    segmentMetadataJson: command.SegmentMetadataJson,
+                    requestPayloadHash: command.RequestPayloadHash,
+                    clientAppVersion: string.IsNullOrWhiteSpace(command.ClientAppVersion)
+                        ? "unknown"
+                        : command.ClientAppVersion,
+                    ct: ct);
             stopwatch.Stop();
 
             var canonicalResult = orchestration.Result;

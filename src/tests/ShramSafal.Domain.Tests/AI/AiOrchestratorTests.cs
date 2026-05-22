@@ -288,6 +288,13 @@ public sealed class AiOrchestratorTests
 
         var orchestrator = new AiOrchestrator(
             [sarvam, gemini],
+            // SARVAM_PRIMARY_VOICE_PIPELINE_2026-05-21 Task 2.4 — new
+            // ITranscriberProvider dependency. Legacy tests exercise only
+            // ParseVoiceWithFallbackAsync, so an empty enumerable preserves
+            // the previous behavior; ParseVoiceTwoStageAsync would resolve
+            // its tuple, see no registered transcriber for the desired
+            // type, and delegate back to the legacy path.
+            Array.Empty<ShramSafal.Application.Ports.External.ITranscriberProvider>(),
             repository,
             new AiCircuitBreakerRegistry(),
             new AiFailureClassifier(),

@@ -25,6 +25,11 @@ public static class ModuleEndpoints
         group.MapFinanceEndpoints();
         group.MapAiEndpoints();
         group.MapAiStreamingEndpoints();
+        // SARVAM_PRIMARY_VOICE_PIPELINE_2026-05-21 Task 2.3 — SSE endpoint
+        // that streams partial + final Sarvam transcripts. Lives next to
+        // MapAiStreamingEndpoints (parse-voice-stream) so it inherits the
+        // same /shramsafal/ai/* prefix + auth + rate-limit posture.
+        group.MapAiTranscribeStreamEndpoints();
         // Voice Diary ship (voice-diary-e2e-2026-05-17 §B.13) — three
         // routes under /shramsafal/voice-diary/* for persist + read.
         group.MapVoiceDiaryEndpoints();

@@ -224,6 +224,14 @@ export const useVoiceRecorder = ({
         setStatus('processing');
         setError(null);
         const preprocessed = await preprocessAudio(audioData);
+        // SARVAM_PRIMARY_VOICE_PIPELINE_2026-05-21 founder fix (Option
+        // B): pass the recordedAtUtc from the recorder upward to the
+        // VoiceInput envelope so AgriSyncClient.parseVoiceLog can send
+        // it as the multipart `recorded_at` form field. If a legacy
+        // AudioRecorder build didn't stamp the field, fall back to now
+        // — this is still closer to recording-time than the server's
+        // request-receipt wall clock would be.
+        const recordedAtUtc = audioData.recordedAtUtc ?? new Date().toISOString();
         await processInput({
             type: 'audio',
             data: preprocessed.base64,
@@ -233,6 +241,7 @@ export const useVoiceRecorder = ({
             segmentMetadataJson: preprocessed.segmentMetadataJson,
             idempotencyKey: preprocessed.idempotencyKey,
             requestPayloadHash: preprocessed.requestPayloadHash,
+            recordedAtUtc,
         });
     };
 
@@ -249,6 +258,12 @@ export const useVoiceRecorder = ({
         segmentMetadataJson?: string;
         idempotencyKey?: string;
         requestPayloadHash?: string;
+        // SARVAM_PRIMARY_VOICE_PIPELINE_2026-05-21 founder fix — only
+        // applies to the audio branch; text inputs don't have a
+        // recording moment (the farmer typed). When present, threaded
+        // into VoiceInput so BackendAiClient can stamp the multipart
+        // form field.
+        recordedAtUtc?: string;
     }) => {
         if (!hasActiveLogContext) {
             // PHASE 25: Allow Global Log (Removed Blocker)
@@ -281,6 +296,9 @@ export const useVoiceRecorder = ({
         try {
             // Construct correct payload type — forward preprocessor metadata for audio
             // so BackendAiClient uses authoritative durations and idempotency key.
+            // SARVAM_PRIMARY_VOICE_PIPELINE_2026-05-21 founder fix — also
+            // forward recordedAtUtc so the backend structurer resolves
+            // "काल"/"आज" against the recording instant, not request-receipt.
             const payload = payloadInput.type === 'audio'
                 ? {
                     type: 'audio' as const,
@@ -291,6 +309,7 @@ export const useVoiceRecorder = ({
                     segmentMetadataJson: payloadInput.segmentMetadataJson,
                     idempotencyKey: payloadInput.idempotencyKey,
                     requestPayloadHash: payloadInput.requestPayloadHash,
+                    recordedAtUtc: payloadInput.recordedAtUtc,
                 }
                 : { type: 'text' as const, content: payloadInput.data };
 

@@ -580,7 +580,15 @@ public static class AiEndpoints
             parsed.InputRawDurationMs,
             parsed.SegmentMetadataJson,
             parsed.RequestPayloadHash,
-            clientAppVersion);
+            clientAppVersion,
+            // SARVAM_PRIMARY_VOICE_PIPELINE_2026-05-21 founder fix
+            // (capturedAt = recordedAt, Option B). The form/json field
+            // `recorded_at` / `recordedAt` is parsed in
+            // ParseVoiceRequestAsync; missing → null; unparseable already
+            // 400-rejected upstream. From here the value flows into
+            // AiOrchestrator.ParseVoiceTwoStageAsync(capturedAtUtc:) and
+            // ultimately the structurer prompt's {{captured_at}} token.
+            RecordedAtUtc: parsed.RecordedAtUtc);
 
         var result = await handler.HandleAsync(command, ct);
         if (!result.IsSuccess)
@@ -836,6 +844,18 @@ public static class AiEndpoints
                 return Result.Failure<ParseVoiceHttpRequest>(segmentMetadataValidation);
             }
 
+            // SARVAM_PRIMARY_VOICE_PIPELINE_2026-05-21 founder fix —
+            // multipart form field `recorded_at`. Empty/missing → null
+            // (legacy client backward compat); present but unparseable →
+            // 400 so the bug surfaces early instead of silently producing
+            // a wrong "काल" resolution.
+            var recordedAtRaw = form["recorded_at"].ToString();
+            var recordedAtParse = TryParseRecordedAtUtc(recordedAtRaw);
+            if (!recordedAtParse.IsSuccess)
+            {
+                return Result.Failure<ParseVoiceHttpRequest>(recordedAtParse.Error);
+            }
+
             return Result.Success(new ParseVoiceHttpRequest(
                 farmId,
                 plotId,
@@ -848,7 +868,8 @@ public static class AiEndpoints
                 speechDuration,
                 rawDuration,
                 segmentMetadataJson,
-                requestPayloadHash));
+                requestPayloadHash,
+                RecordedAtUtc: recordedAtParse.Value));
         }
 
         var jsonRequest = await request.ReadFromJsonAsync<ParseVoiceInputRequest>(cancellationToken: ct);
@@ -895,6 +916,14 @@ public static class AiEndpoints
             return Result.Failure<ParseVoiceHttpRequest>(jsonSegmentMetadataValidation);
         }
 
+        // SARVAM_PRIMARY_VOICE_PIPELINE_2026-05-21 founder fix — JSON
+        // callers may send recordedAt; System.Text.Json bound it to
+        // DateTime?. We only need to normalize it to UTC for the prompt
+        // substitution. Unlike multipart strings, this branch cannot
+        // hit the unparseable case (model-bound DateTime? rejects bad
+        // input at deserialization with a 400 from the framework).
+        var jsonRecordedAtUtc = NormalizeToUtc(jsonRequest.RecordedAt);
+
         return Result.Success(new ParseVoiceHttpRequest(
             jsonRequest.FarmId,
             jsonRequest.PlotId,
@@ -907,7 +936,61 @@ public static class AiEndpoints
             jsonRequest.InputSpeechDurationMs,
             jsonRequest.InputRawDurationMs,
             jsonRequest.SegmentMetadataJson,
-            jsonRequest.RequestPayloadHash));
+            jsonRequest.RequestPayloadHash,
+            RecordedAtUtc: jsonRecordedAtUtc));
+    }
+
+    // SARVAM_PRIMARY_VOICE_PIPELINE_2026-05-21 founder fix — parse the
+    // multipart `recorded_at` string into DateTime? (UTC) with a strict
+    // contract:
+    //   • null / empty / whitespace → success(null) — legacy backward compat
+    //   • parseable ISO-8601 → success(UTC DateTime)
+    //   • anything else → failure (caller returns 400)
+    //
+    // We accept ISO-8601 with offset (e.g. "2026-05-22T18:34:51.123Z" or
+    // "2026-05-22T23:34:51+05:00") and normalize to UTC. Local-kind
+    // values (no offset) are rejected because the server cannot infer
+    // the farmer's timezone safely — the contract requires UTC.
+    private static Result<DateTime?> TryParseRecordedAtUtc(string? raw)
+    {
+        if (string.IsNullOrWhiteSpace(raw))
+        {
+            return Result.Success<DateTime?>(null);
+        }
+
+        var trimmed = raw.Trim();
+        if (!DateTimeOffset.TryParse(
+            trimmed,
+            System.Globalization.CultureInfo.InvariantCulture,
+            System.Globalization.DateTimeStyles.AssumeUniversal | System.Globalization.DateTimeStyles.AdjustToUniversal,
+            out var parsed))
+        {
+            return Result.Failure<DateTime?>(Error.Validation(
+                "ShramSafal.InvalidCommand",
+                "recorded_at must be a valid ISO-8601 UTC timestamp."));
+        }
+
+        return Result.Success<DateTime?>(parsed.UtcDateTime);
+    }
+
+    // SARVAM_PRIMARY_VOICE_PIPELINE_2026-05-21 founder fix — System.Text.Json
+    // can land a DateTime in Unspecified/Local kind depending on the
+    // payload. The orchestrator's structurer prompt substitutes
+    // `.ToString("o")`, so passing a Local-kind value through would
+    // serialize the wrong offset into {{captured_at}}. Coerce to UTC.
+    private static DateTime? NormalizeToUtc(DateTime? value)
+    {
+        if (!value.HasValue)
+        {
+            return null;
+        }
+
+        return value.Value.Kind switch
+        {
+            DateTimeKind.Utc => value,
+            DateTimeKind.Local => value.Value.ToUniversalTime(),
+            _ => DateTime.SpecifyKind(value.Value, DateTimeKind.Utc),
+        };
     }
 
     private static bool TryParseGuid(Microsoft.Extensions.Primitives.StringValues value, out Guid guid)
@@ -1383,7 +1466,12 @@ public sealed record ParseVoiceInputRequest(
     int? InputSpeechDurationMs,
     int? InputRawDurationMs,
     string? SegmentMetadataJson,
-    string? RequestPayloadHash);
+    string? RequestPayloadHash,
+    // SARVAM_PRIMARY_VOICE_PIPELINE_2026-05-21 founder fix — JSON callers
+    // (parseVoice / parseTextLog) post `recordedAt` so the 2-stage
+    // structurer can resolve "काल"/"आज" against the true capture instant
+    // rather than the request-receipt timestamp. ISO-8601 UTC.
+    DateTime? RecordedAt = null);
 
 public sealed record UpdateAiProviderConfigRequest(
     AiProviderType? DefaultProvider,
@@ -1423,4 +1511,10 @@ internal sealed record ParseVoiceHttpRequest(
     int? InputSpeechDurationMs,
     int? InputRawDurationMs,
     string? SegmentMetadataJson,
-    string? RequestPayloadHash);
+    string? RequestPayloadHash,
+    // SARVAM_PRIMARY_VOICE_PIPELINE_2026-05-21 founder fix — parsed from
+    // multipart form field `recorded_at` OR JSON property `recordedAt`.
+    // ISO-8601 UTC; null when the client did not send the field
+    // (legacy/orphan clips). Backward-compatible default avoids breaking
+    // pre-fix clients.
+    DateTime? RecordedAtUtc = null);

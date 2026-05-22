@@ -31,6 +31,9 @@ export async function parseVoice(
         inputRawDurationMs?: number;
         segmentMetadataJson?: string;
         requestPayloadHash?: string;
+        // SARVAM_PRIMARY_VOICE_PIPELINE_2026-05-21 founder fix —
+        // mirror of AgriSyncClient.parseVoice; sent as JSON `recordedAt`.
+        recordedAtUtc?: string;
     },
 ): Promise<AiParseResponse> {
     const payload = {
@@ -46,6 +49,12 @@ export async function parseVoice(
         inputRawDurationMs: options.inputRawDurationMs,
         segmentMetadataJson: options.segmentMetadataJson,
         requestPayloadHash: options.requestPayloadHash,
+        // SARVAM_PRIMARY_VOICE_PIPELINE_2026-05-21 founder fix —
+        // JSON payload field aligns with ParseVoiceInputRequest.RecordedAt
+        // on the backend (System.Text.Json camelCase → PascalCase
+        // binding). Server normalizes to UTC before threading into
+        // VoiceParseContext.CapturedAtUtc.
+        recordedAt: options.recordedAtUtc,
     };
 
     const response = await t.http.post<AiParseResponse>('/shramsafal/ai/voice-parse', payload);
@@ -66,6 +75,11 @@ export async function parseVoiceLog(
         inputRawDurationMs?: number;
         segmentMetadataJson?: string;
         requestPayloadHash?: string;
+        // SARVAM_PRIMARY_VOICE_PIPELINE_2026-05-21 founder fix (Option
+        // B): ISO-8601 UTC recording instant. Posted as the multipart
+        // `recorded_at` form field. Omitted when undefined; server
+        // tolerates absence and substitutes "unknown" in the prompt.
+        recordedAtUtc?: string;
     },
 ): Promise<AiParseResponse> {
     const payload = mimeType && audio.type !== mimeType
@@ -84,6 +98,11 @@ export async function parseVoiceLog(
     if (options?.inputRawDurationMs !== undefined) formData.append('inputRawDurationMs', `${options.inputRawDurationMs}`);
     if (options?.segmentMetadataJson) formData.append('segmentMetadata', options.segmentMetadataJson);
     if (options?.requestPayloadHash) formData.append('requestPayloadHash', options.requestPayloadHash);
+    // SARVAM_PRIMARY_VOICE_PIPELINE_2026-05-21 founder fix — the
+    // critical wire field. Snake-case `recorded_at` matches the
+    // backend's `form["recorded_at"]` lookup in AiEndpoints.cs and
+    // AiTranscribeStreamEndpoints.cs.
+    if (options?.recordedAtUtc) formData.append('recorded_at', options.recordedAtUtc);
 
     const response = await t.http.post<AiParseResponse>('/shramsafal/ai/voice-parse', formData);
     return response.data;
@@ -102,6 +121,12 @@ export async function parseTextLog(
         inputRawDurationMs?: number;
         segmentMetadataJson?: string;
         requestPayloadHash?: string;
+        // SARVAM_PRIMARY_VOICE_PIPELINE_2026-05-21 founder fix —
+        // text-only callers don't truly have a recordedAt but the
+        // contract is kept uniform so a future caller that types in
+        // an answer to a clarification can still anchor downstream
+        // temporal cues to the original voice moment.
+        recordedAtUtc?: string;
     },
 ): Promise<AiParseResponse> {
     const response = await t.http.post<AiParseResponse>('/shramsafal/ai/voice-parse', {
@@ -115,6 +140,9 @@ export async function parseTextLog(
         inputRawDurationMs: options?.inputRawDurationMs,
         segmentMetadataJson: options?.segmentMetadataJson,
         requestPayloadHash: options?.requestPayloadHash,
+        // SARVAM_PRIMARY_VOICE_PIPELINE_2026-05-21 founder fix —
+        // JSON body field aligns with backend ParseVoiceInputRequest.RecordedAt.
+        recordedAt: options?.recordedAtUtc,
     });
     return response.data;
 }

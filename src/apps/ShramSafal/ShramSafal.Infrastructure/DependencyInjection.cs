@@ -22,6 +22,7 @@ using ShramSafal.Infrastructure.Storage;
 using ShramSafal.Infrastructure.Reports;
 using ShramSafal.Application.Wtl;
 using ShramSafal.Domain.Events;
+using ShramSafal.Infrastructure.Audio;
 using ShramSafal.Infrastructure.Wtl;
 
 namespace ShramSafal.Infrastructure;
@@ -477,6 +478,16 @@ public static class DependencyInjection
         // registered as ITranscriberProvider — verbatim is async/background,
         // not part of the interactive transcribe/structure pipeline.
         services.AddScoped<SarvamVerbatimSttClient>();
+
+        // SARVAM_PRIMARY_VOICE_PIPELINE Task 2.3a — server-side audio
+        // transcoder. Singleton because FfmpegAudioTranscoder is stateless
+        // and FFMpegCore looks up the ffmpeg binary path once at first use
+        // (GlobalFFOptions). Registered alongside the existing Sarvam
+        // streaming pieces so the /api/ai/transcribe-stream endpoint
+        // (Task 2.3) can pipe browser audio → PCM → Sarvam without the
+        // transcriber adapter inspecting MIME types.
+        services.AddSingleton<IAudioTranscoder, FfmpegAudioTranscoder>();
+
         services.AddScoped<IAiOrchestrator, AiOrchestrator>();
         services.AddHostedService<ExtractionVerificationWorker>();
 

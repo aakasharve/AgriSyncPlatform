@@ -23,6 +23,41 @@ public interface IAiOrchestrator
         string clientAppVersion = "unknown",
         CancellationToken ct = default);
 
+    /// <summary>
+    /// SARVAM_PRIMARY_VOICE_PIPELINE_2026-05-21 Task 2.4 — 2-stage voice
+    /// pipeline (transcribe → structure). The transcriber and structurer
+    /// are resolved per the active <c>AiProviderConfig</c> tuple
+    /// (<c>TranscriberProvider</c> / <c>StructurerProvider</c>); when the
+    /// tuple collapses to a single provider OR the transcriber call fails
+    /// in a fallback-eligible way, the orchestrator routes to the legacy
+    /// single-call multimodal path (<see cref="ParseVoiceWithFallbackAsync"/>)
+    /// without losing the AiJob.
+    ///
+    /// <para>
+    /// Compared to <see cref="ParseVoiceWithFallbackAsync"/>, this method
+    /// additionally accepts <paramref name="capturedAtUtc"/> (threaded
+    /// into the structurer prompt's <c>{{captured_at}}</c> placeholder so
+    /// the model can resolve "yesterday"/"आज" relative to capture time
+    /// rather than wall-clock time) and rebuilds the structurer prompt
+    /// from the supplied <see cref="VoiceParseContext"/>.
+    /// </para>
+    /// </summary>
+    Task<(VoiceParseCanonicalResult Result, Guid JobId, AiProviderType ProviderUsed, bool FallbackUsed)> ParseVoiceTwoStageAsync(
+        Guid userId,
+        Guid farmId,
+        Stream audioStream,
+        string mimeType,
+        VoiceParseContext promptContext,
+        string idempotencyKey,
+        string languageHint = "mr-IN",
+        DateTime? capturedAtUtc = null,
+        int? inputSpeechDurationMs = null,
+        int? inputRawDurationMs = null,
+        string? segmentMetadataJson = null,
+        string? requestPayloadHash = null,
+        string clientAppVersion = "unknown",
+        CancellationToken ct = default);
+
     Task<(ReceiptExtractCanonicalResult Result, Guid JobId, AiProviderType ProviderUsed, bool FallbackUsed)> ExtractReceiptWithFallbackAsync(
         Guid userId,
         Guid farmId,

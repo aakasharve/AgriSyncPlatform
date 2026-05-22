@@ -34,6 +34,12 @@ type VoiceUploadMaterial = {
     inputSpeechDurationMs?: number;
     inputRawDurationMs?: number;
     segmentMetadataJson?: string;
+    // SARVAM_PRIMARY_VOICE_PIPELINE_2026-05-21 founder fix (Option B):
+    // forwarded as the multipart `recorded_at` form field by
+    // agriSyncClient.parseVoiceLog. ISO-8601 UTC. Omitted when the
+    // input carried no recording timestamp — server falls back to
+    // null and the structurer prompt substitutes "unknown".
+    recordedAtUtc?: string;
 };
 
 function normalizeSuggestedAction(action?: string): 'auto_confirm' | 'manual_review' | 'ask_clarification' {
@@ -312,7 +318,21 @@ export class BackendAiClient implements VoiceParserPort {
 
         let response: Response;
         try {
-            response = await this.fetchParseVoiceStream(transcript, scope, crops, profile, options);
+            // SARVAM_PRIMARY_VOICE_PIPELINE_2026-05-21 founder fix —
+            // text inputs typically have no MediaRecorder moment, but
+            // useVoiceRecorder.processInput may forward a transcript
+            // produced by an upstream STT step where the original
+            // audio's recordedAtUtc IS known. We tunnel it through
+            // VoiceInput via a runtime cast so the streaming POST can
+            // include it on the JSON body without breaking the
+            // VoiceInput compile-time union (text variant has no
+            // recordedAtUtc declared today; adding one would force a
+            // shape diff across every text-only callsite).
+            const recordedAtUtc = (input as { recordedAtUtc?: string }).recordedAtUtc;
+            response = await this.fetchParseVoiceStream(transcript, scope, crops, profile, {
+                ...options,
+                recordedAtUtc,
+            });
         } catch {
             yield* fallback();
             return;
@@ -354,7 +374,7 @@ export class BackendAiClient implements VoiceParserPort {
         scope: LogScope,
         crops: CropProfile[],
         profile: FarmerProfile,
-        options?: { focusCategory?: string; scenarioId?: string },
+        options?: { focusCategory?: string; scenarioId?: string; recordedAtUtc?: string },
     ): Promise<Response> {
         const baseUrl = resolveApiBaseUrl();
         const session = getAuthSession();
@@ -366,10 +386,15 @@ export class BackendAiClient implements VoiceParserPort {
             headers.Authorization = `Bearer ${session.accessToken}`;
         }
 
+        // SARVAM_PRIMARY_VOICE_PIPELINE_2026-05-21 founder fix — JSON
+        // body field `recordedAt` aligns with the backend
+        // ParseVoiceStreamRequest.RecordedAt property. When omitted
+        // the structurer prompt falls back to "unknown" per contract.
         const body = JSON.stringify({
             transcript,
             context: this.buildContext(scope, crops, profile, options),
             scenarioId: options?.scenarioId,
+            recordedAt: options?.recordedAtUtc,
         });
 
         return fetch(`${baseUrl}/shramsafal/ai/parse-voice-stream`, {
@@ -426,6 +451,11 @@ export class BackendAiClient implements VoiceParserPort {
                     inputSpeechDurationMs: material.inputSpeechDurationMs,
                     inputRawDurationMs: material.inputRawDurationMs,
                     segmentMetadataJson: material.segmentMetadataJson,
+                    // SARVAM_PRIMARY_VOICE_PIPELINE_2026-05-21 founder
+                    // fix (Option B): forward to the multipart
+                    // `recorded_at` form field so the structurer prompt
+                    // anchors temporal cues to the recording moment.
+                    recordedAtUtc: material.recordedAtUtc,
                 },
             );
             await this.persistProcessingVoiceClip(material, farmId, scope, 'parsed');
@@ -517,6 +547,11 @@ export class BackendAiClient implements VoiceParserPort {
             inputSpeechDurationMs,
             inputRawDurationMs,
             segmentMetadataJson,
+            // SARVAM_PRIMARY_VOICE_PIPELINE_2026-05-21 founder fix —
+            // forward the recorder-supplied recordedAtUtc straight
+            // through. Missing (legacy/orphan clip / pre-fix recorder)
+            // → omitted by parseVoiceLog and server falls back to null.
+            recordedAtUtc: input.recordedAtUtc,
         };
     }
 
@@ -551,6 +586,13 @@ export class BackendAiClient implements VoiceParserPort {
                     inputSpeechDurationMs: material.inputSpeechDurationMs,
                     inputRawDurationMs: material.inputRawDurationMs,
                     segmentMetadataJson: material.segmentMetadataJson,
+                    // SARVAM_PRIMARY_VOICE_PIPELINE_2026-05-21 founder
+                    // fix — persist the recordedAtUtc onto the offline
+                    // queue context so when the worker drains the
+                    // queue (possibly hours later when connectivity
+                    // returns) the original recording instant flows to
+                    // the server, not the queue-drain wall clock.
+                    recordedAtUtc: material.recordedAtUtc,
                 },
                 status: 'pending',
                 createdAt: nowIso,
@@ -600,7 +642,12 @@ export class BackendAiClient implements VoiceParserPort {
         const db = getDatabase();
         const nowIso = new Date().toISOString();
         const existing = await db.voiceClips.get(material.idempotencyKey);
-        const recordedAtUtc = existing?.recordedAtUtc ?? nowIso;
+        // SARVAM_PRIMARY_VOICE_PIPELINE_2026-05-21 founder fix — prefer
+        // the material.recordedAtUtc (from MediaRecorder.onstop) over
+        // nowIso so the Dexie row's recordedAtUtc and the wire's
+        // multipart `recorded_at` field stay in lockstep. Existing rows
+        // win to keep idempotent re-persists stable.
+        const recordedAtUtc = existing?.recordedAtUtc ?? material.recordedAtUtc ?? nowIso;
 
         await db.voiceClips.put({
             ...existing,
