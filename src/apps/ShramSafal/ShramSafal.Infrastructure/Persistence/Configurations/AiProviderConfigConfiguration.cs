@@ -107,5 +107,12 @@ internal sealed class AiProviderConfigConfiguration : IEntityTypeConfiguration<A
         builder.Property(x => x.TranslatorProvider)
             .HasColumnName("translator_provider")
             .HasMaxLength(64);
+
+        // SARVAM_PRIMARY_VOICE_PIPELINE Task 2.7 (Safeguard S9) —
+        // nullable monthly INR budget. Existing rows backfill to NULL
+        // (== "unconstrained"); the cost guardrail no-ops on NULL.
+        builder.Property(x => x.MonthlyBudgetInr)
+            .HasColumnName("monthly_budget_inr")
+            .HasPrecision(12, 2);
     }
 }

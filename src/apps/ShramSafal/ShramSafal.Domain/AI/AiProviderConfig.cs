@@ -57,6 +57,17 @@ public sealed class AiProviderConfig
     public string StructurerProvider { get; private set; } = "Gemini";
     public string? TranslatorProvider { get; private set; }
 
+    /// <summary>
+    /// SARVAM_PRIMARY_VOICE_PIPELINE_2026-05-21 Task 2.7 (Safeguard S9) —
+    /// admin-managed monthly INR budget for the full AI stack across
+    /// every provider × operation. Nullable so existing rows default to
+    /// "unconstrained" — the cost guardrail worker no-ops when this is
+    /// <c>null</c>. Set via <see cref="SetMonthlyBudget(decimal?)"/>.
+    /// Founder enables explicit budgets via the admin /shramsafal/ai/config
+    /// surface after Phase 2 ships.
+    /// </summary>
+    public decimal? MonthlyBudgetInr { get; private set; }
+
     public static AiProviderConfig CreateDefault()
     {
         var config = new AiProviderConfig(
@@ -155,6 +166,29 @@ public sealed class AiProviderConfig
         TranslatorProvider = string.IsNullOrWhiteSpace(translatorProvider)
             ? null
             : translatorProvider.Trim();
+        ModifiedAtUtc = DateTime.UtcNow;
+    }
+
+    /// <summary>
+    /// SARVAM_PRIMARY_VOICE_PIPELINE_2026-05-21 Task 2.7 (Safeguard S9) —
+    /// set or clear the monthly INR budget. <paramref name="inr"/> = null
+    /// disables the budget (no warning emitted regardless of spend).
+    /// Negative inputs are clamped to zero (a negative budget would
+    /// always trip the 100% gate, surfacing the misconfiguration loudly
+    /// — but storing 0 is a "kill switch" semantics the founder may
+    /// legitimately want, so we clamp instead of throwing).
+    /// </summary>
+    public void SetMonthlyBudget(decimal? inr)
+    {
+        if (inr is null)
+        {
+            MonthlyBudgetInr = null;
+        }
+        else
+        {
+            MonthlyBudgetInr = inr.Value < 0 ? 0 : inr.Value;
+        }
+
         ModifiedAtUtc = DateTime.UtcNow;
     }
 }

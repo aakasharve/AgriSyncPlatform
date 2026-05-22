@@ -52,6 +52,16 @@ public sealed class ShramSafalDbContext(DbContextOptions<ShramSafalDbContext> op
     public DbSet<AiProviderConfig> AiProviderConfigs => Set<AiProviderConfig>();
 
     /// <summary>
+    /// SARVAM_PRIMARY_VOICE_PIPELINE Task 2.7 (Safeguard S9) — daily
+    /// rollup of estimated AI provider spend, one row per
+    /// (tenant_id, provider, operation, day_utc). Written by
+    /// <see cref="Infrastructure.AI.AiCostBudgetGuard"/> on each tick.
+    /// Mapped to <c>ssf.ai_provider_spend_daily</c>. RLS-exempt: global
+    /// admin-managed surface; no per-farm policy applies.
+    /// </summary>
+    public DbSet<AiProviderSpendDaily> AiProviderSpendDaily => Set<AiProviderSpendDaily>();
+
+    /// <summary>
     /// SARVAM_PRIMARY_VOICE_PIPELINE Task 1.2 — runtime authority for the
     /// provider × operation × mode capability matrix. Seeded from
     /// <c>_COFOUNDER/Projects/AgriSync/Architecture/CAPABILITY_MATRIX.md</c>;

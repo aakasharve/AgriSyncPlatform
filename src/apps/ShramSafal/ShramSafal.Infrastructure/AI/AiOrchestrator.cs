@@ -1211,6 +1211,9 @@ internal sealed class AiOrchestrator(
                     failureClass,
                     result.Error ?? "Provider call failed.");
                 breaker.RecordFailure();
+                // SARVAM_PRIMARY_VOICE_PIPELINE_2026-05-21 Task 2.6 — see
+                // ExecuteVoiceAttemptAsync catch-block comment.
+                breakerRegistry.RecordWindowFailure(provider.ProviderType, AiOperationType.VoiceToStructuredLog);
                 return VoiceAttemptExecution.Failed(provider.ProviderType, failureClass, result.Error, attempt);
             }
 
@@ -1231,12 +1234,20 @@ internal sealed class AiOrchestrator(
                     result.OverallConfidence,
                     config.VoiceConfidenceThreshold);
                 breaker.RecordFailure();
+                breakerRegistry.RecordWindowFailure(provider.ProviderType, AiOperationType.VoiceToStructuredLog);
                 return VoiceAttemptExecution.Failed(provider.ProviderType, AiFailureClass.LowConfidence, "Low confidence.", attempt, result);
             }
 
             attempt.RecordSuccess(result.NormalizedJson ?? "{}", latencyMs, null, result.OverallConfidence);
             attempt.SetEstimatedCostUnits(estimatedCost);
             breaker.RecordSuccess();
+            // SARVAM_PRIMARY_VOICE_PIPELINE_2026-05-21 Task 2.6 — rolling
+            // 24h window mirror. The classic breaker counts CONSECUTIVE
+            // failures (fast-fail in seconds); this counts the
+            // success/failure ratio across the full day so the founder
+            // can spot a 5%-sustained regression that never trips the
+            // burst threshold.
+            breakerRegistry.RecordWindowSuccess(provider.ProviderType, AiOperationType.VoiceToStructuredLog);
             return VoiceAttemptExecution.Succeeded(provider.ProviderType, result, attempt);
         }
         catch (Exception ex)
@@ -1254,6 +1265,7 @@ internal sealed class AiOrchestrator(
                 latencyMs,
                 failureClass);
             breaker.RecordFailure();
+            breakerRegistry.RecordWindowFailure(provider.ProviderType, AiOperationType.VoiceToStructuredLog);
             return VoiceAttemptExecution.Failed(provider.ProviderType, failureClass, ex.Message, attempt);
         }
     }
@@ -1310,6 +1322,9 @@ internal sealed class AiOrchestrator(
                     failureClass,
                     result.Error ?? "Provider call failed.");
                 breaker.RecordFailure();
+                // SARVAM_PRIMARY_VOICE_PIPELINE_2026-05-21 Task 2.6 — see
+                // ExecuteVoiceAttemptAsync comment.
+                breakerRegistry.RecordWindowFailure(provider.ProviderType, operation);
                 return ReceiptAttemptExecution.Failed(provider.ProviderType, failureClass, result.Error, attempt);
             }
 
@@ -1330,12 +1345,14 @@ internal sealed class AiOrchestrator(
                     result.OverallConfidence,
                     config.ReceiptConfidenceThreshold);
                 breaker.RecordFailure();
+                breakerRegistry.RecordWindowFailure(provider.ProviderType, operation);
                 return ReceiptAttemptExecution.Failed(provider.ProviderType, AiFailureClass.LowConfidence, "Low confidence.", attempt);
             }
 
             attempt.RecordSuccess(result.NormalizedJson ?? "{}", latencyMs, null, result.OverallConfidence);
             attempt.SetEstimatedCostUnits(estimatedCost);
             breaker.RecordSuccess();
+            breakerRegistry.RecordWindowSuccess(provider.ProviderType, operation);
             return ReceiptAttemptExecution.Succeeded(provider.ProviderType, result, attempt);
         }
         catch (Exception ex)
@@ -1353,6 +1370,7 @@ internal sealed class AiOrchestrator(
                 latencyMs,
                 failureClass);
             breaker.RecordFailure();
+            breakerRegistry.RecordWindowFailure(provider.ProviderType, operation);
             return ReceiptAttemptExecution.Failed(provider.ProviderType, failureClass, ex.Message, attempt);
         }
     }

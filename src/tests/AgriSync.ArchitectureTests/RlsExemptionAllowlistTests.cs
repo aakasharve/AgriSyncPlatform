@@ -232,6 +232,18 @@ public sealed class RlsExemptionAllowlistTests
         // because diarization is NOT a Sarvam STT mode). Global
         // operational lookup; same RLS posture as mode_policy.
         "diarization_policy",
+
+        // SARVAM_PRIMARY_VOICE_PIPELINE Task 2.7 (Safeguard S9) —
+        // daily cost rollup of estimated AI provider spend. Admin
+        // managed; the AiCostBudgetGuard worker writes via an
+        // admin-elevated DbContext on a fixed cadence. The
+        // tenant_id column is recorded for future per-tenant budgets
+        // but the rollup itself has no farm dimension — a Phase 03
+        // RLS policy keyed on agrisync.farm_id would filter every row.
+        // The /shramsafal/admin/ai-spend surface (future) reads this
+        // table only with admin elevation. Same posture as
+        // ai_provider_capabilities + mode_policy.
+        "ai_provider_spend_daily",
     };
 
     [Fact]

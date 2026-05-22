@@ -502,6 +502,28 @@ public static class DependencyInjection
             configuration.GetSection(TranscriptBackfillOptions.SectionName));
         services.AddHostedService<TranscriptBackfillWorker>();
 
+        // SARVAM_PRIMARY_VOICE_PIPELINE_2026-05-21 Task 2.6 — rolling
+        // 24h fail-rate probe. Disabled by default
+        // (Ai:CircuitBreakerProbe:Enabled=false). Production opts in via
+        // env var Ai__CircuitBreakerProbe__Enabled after Phase 2 ships
+        // and the 24h window has had a chance to populate; until then
+        // the probe would emit only "no observations yet" no-ops.
+        var probeOptions = new AiProviderRollbackProbeOptions();
+        configuration.GetSection(AiProviderRollbackProbeOptions.SectionName).Bind(probeOptions);
+        services.AddSingleton(probeOptions);
+        services.AddHostedService<AiProviderRollbackProbeWorker>();
+
+        // SARVAM_PRIMARY_VOICE_PIPELINE_2026-05-21 Task 2.7 (Safeguard S9) —
+        // cost budget guardrail. Disabled by default
+        // (Ai:CostBudgetGuard:Enabled=false). Production opts in via
+        // env var Ai__CostBudgetGuard__Enabled after Phase 2 ships and
+        // the 20260522180000_AddMonthlyBudgetInrToProviderConfig
+        // migration has been applied. Aggregator + budget probe both
+        // sit behind the same enable flag.
+        services.Configure<AiCostBudgetOptions>(
+            configuration.GetSection(AiCostBudgetOptions.SectionName));
+        services.AddHostedService<AiCostBudgetGuard>();
+
         services.AddHttpClient("GeminiAiProvider")
             .ConfigureHttpClient((sp, client) =>
             {
