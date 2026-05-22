@@ -204,6 +204,34 @@ public sealed class RlsExemptionAllowlistTests
         // the /shramsafal/ai/config admin surface; same pattern as
         // cost_categories without the explicit SELECT(true) policy.
         "ai_provider_capabilities",
+
+        // SARVAM_PRIMARY_VOICE_PIPELINE Task 1.3 (Safeguard S4) —
+        // re-transcription audit ledger. Keyed on
+        // (audio_content_hash, provider, model_version, mode); no farm
+        // dimension. Audit replay queries run via admin-elevated
+        // contexts; the Phase 03 RLS policy keyed on agrisync.farm_id
+        // would filter every row out.
+        "transcript_history",
+
+        // SARVAM_PRIMARY_VOICE_PIPELINE Task 1.4 (Safeguard S7) —
+        // admin-managed global feature flags. Backs cohort rollout for
+        // the Sarvam pipeline + verbatim corpus sampling + selective
+        // diarization. No farm dimension; reads happen during runtime
+        // gating before any tenant claim exists.
+        "feature_flags",
+
+        // SARVAM_PRIMARY_VOICE_PIPELINE Task 1.5 (ADR-DS-016) —
+        // data-driven trigger → Sarvam-STT-mode-list policy. Global
+        // operational lookup read by the voice worker on every clip
+        // evaluation. No farm dimension; same pattern as
+        // ai_provider_capabilities above.
+        "mode_policy",
+
+        // SARVAM_PRIMARY_VOICE_PIPELINE Task 1.5a (founder blocker #4) —
+        // diarization-as-capability policy (separate from mode_policy
+        // because diarization is NOT a Sarvam STT mode). Global
+        // operational lookup; same RLS posture as mode_policy.
+        "diarization_policy",
     };
 
     [Fact]

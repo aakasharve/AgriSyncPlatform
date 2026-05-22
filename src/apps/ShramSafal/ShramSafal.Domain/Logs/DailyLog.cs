@@ -53,6 +53,17 @@ public sealed class DailyLog : Entity<Guid>
     public LocationSnapshot? Location { get; private set; }
     public Provenance Provenance { get; private set; } = null!;
     public Guid? SourceAiJobId { get; private set; }
+
+    // ── SARVAM_PRIMARY_VOICE_PIPELINE_2026-05-21 Task 1.6 ────────────────
+    // ADR-DS-015 §C forward-compat seam for the future multi-evidence
+    // consumer (m2m). Today this column carries
+    // [{type: 'voice', voice_capture_id: ...}]; tomorrow it carries
+    // weather/GPS/OCR/UPI evidence references. Persisted as a jsonb
+    // string with a default empty array; ADR-DS-015 also requires the
+    // column to describe immutable facts only (no mutable state) so the
+    // future event-sourced migration is non-destructive.
+    public string EvidenceSourcesJson { get; private set; } = "[]";
+
     public IReadOnlyCollection<LogTask> Tasks => _tasks.AsReadOnly();
     public IReadOnlyCollection<VerificationEvent> VerificationEvents => _verificationEvents.AsReadOnly();
 
@@ -225,5 +236,20 @@ public sealed class DailyLog : Entity<Guid>
             editedByUserId));
 
         return verification;
+    }
+
+    // ── SARVAM_PRIMARY_VOICE_PIPELINE_2026-05-21 Task 1.6 ────────────────
+    // Sets the forward-compat evidence-sources jsonb payload. Per
+    // ADR-DS-015 the m2m consumer is deferred to a future spec; this
+    // mutator exists only so the column can be populated by the voice
+    // pipeline today ([{type: 'voice', voice_capture_id: ...}]) and by
+    // future evidence sources tomorrow. Empty / whitespace input falls
+    // back to the canonical "[]" so the column NEVER goes null.
+    public void SetEvidenceSourcesJson(string? evidenceSourcesJson)
+    {
+        EvidenceSourcesJson = string.IsNullOrWhiteSpace(evidenceSourcesJson)
+            ? "[]"
+            : evidenceSourcesJson.Trim();
+        ModifiedAtUtc = DateTime.UtcNow;
     }
 }

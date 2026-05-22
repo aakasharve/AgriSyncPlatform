@@ -60,6 +60,42 @@ public sealed class ShramSafalDbContext(DbContextOptions<ShramSafalDbContext> op
     /// <c>ssf.ai_provider_capabilities</c>.
     /// </summary>
     public DbSet<AiProviderCapability> AiProviderCapabilities => Set<AiProviderCapability>();
+
+    /// <summary>
+    /// SARVAM_PRIMARY_VOICE_PIPELINE Task 1.3 — re-transcription audit
+    /// ledger (Safeguard S4). One row per
+    /// <c>(audio_content_hash, provider, model_version, mode)</c>
+    /// transcript produced. Mapped to <c>ssf.transcript_history</c>.
+    /// RLS-exempt: global operational lookup with no farm dimension —
+    /// audit replay queries run via admin-elevated contexts.
+    /// </summary>
+    public DbSet<TranscriptHistory> TranscriptHistories => Set<TranscriptHistory>();
+
+    /// <summary>
+    /// SARVAM_PRIMARY_VOICE_PIPELINE Task 1.4 — admin-managed feature
+    /// flag table (Safeguard S7) that backs cohort rollout for the
+    /// Sarvam pipeline and other gated capabilities. Mapped to
+    /// <c>ssf.feature_flags</c>. RLS-exempt: global operational table
+    /// administered via the <c>/shramsafal/admin/feature-flags</c>
+    /// surface.
+    /// </summary>
+    public DbSet<FeatureFlag> FeatureFlags => Set<FeatureFlag>();
+
+    /// <summary>
+    /// SARVAM_PRIMARY_VOICE_PIPELINE Task 1.5 — data-driven trigger →
+    /// Sarvam-mode-list policy per ADR-DS-016. Mapped to
+    /// <c>ssf.mode_policy</c>. RLS-exempt: global operational lookup
+    /// read by the voice worker on every clip evaluation.
+    /// </summary>
+    public DbSet<ModePolicy> ModePolicies => Set<ModePolicy>();
+
+    /// <summary>
+    /// SARVAM_PRIMARY_VOICE_PIPELINE Task 1.5a — diarization-as-capability
+    /// policy (founder blocker #4: diarization is NOT a Sarvam STT
+    /// mode). Mapped to <c>ssf.diarization_policy</c>. RLS-exempt: same
+    /// posture as <see cref="ModePolicies"/>.
+    /// </summary>
+    public DbSet<DiarizationPolicy> DiarizationPolicies => Set<DiarizationPolicy>();
     public DbSet<ScheduleTemplate> ScheduleTemplates => Set<ScheduleTemplate>();
     public DbSet<TemplateActivity> TemplateActivities => Set<TemplateActivity>();
     public DbSet<PlannedActivity> PlannedActivities => Set<PlannedActivity>();

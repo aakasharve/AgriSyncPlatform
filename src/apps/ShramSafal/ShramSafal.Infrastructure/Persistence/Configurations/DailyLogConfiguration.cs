@@ -98,6 +98,16 @@ internal sealed class DailyLogConfiguration : IEntityTypeConfiguration<DailyLog>
         builder.HasIndex(x => x.SourceAiJobId)
             .HasDatabaseName("ix_daily_logs_source_ai_job_id");
 
+        // SARVAM_PRIMARY_VOICE_PIPELINE_2026-05-21 Task 1.6 — ADR-DS-015 §C
+        // forward-compat seam. The column ships NOT NULL with default
+        // '[]'::jsonb so legacy rows backfill deterministically and the
+        // future m2m consumer never has to handle a NULL.
+        builder.Property(x => x.EvidenceSourcesJson)
+            .HasColumnName("evidence_sources")
+            .HasColumnType("jsonb")
+            .HasDefaultValueSql("'[]'::jsonb")
+            .IsRequired();
+
         builder.HasIndex(x => x.IdempotencyKey)
             .IsUnique()
             .HasFilter("idempotency_key IS NOT NULL");
