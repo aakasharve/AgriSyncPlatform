@@ -411,7 +411,7 @@ const en: Translation = {
   },
 
   footer: {
-    tagline: 'ShramSafal - Trusted Daily Farm Work Companion',
+    tagline: 'ShramSafal — Trusted Daily Farm Work Companion',
     subline: '',
     copyright: '\u00A9 2026 ShramSafal. All rights reserved.',
     privacy: 'Privacy',
@@ -702,7 +702,7 @@ const mr: Translation = {
   },
 
   footer: {
-    tagline: 'ShramSafal - Trusted Daily Farm Work Companion',
+    tagline: 'ShramSafal — Trusted Daily Farm Work Companion',
     subline: '',
     copyright: '\u00A9 2026 \u0936\u094D\u0930\u092E\u0938\u092B\u0932. \u0938\u0930\u094D\u0935 \u0939\u0915\u094D\u0915 \u0930\u093E\u0916\u0940\u0935.',
     privacy: '\u0917\u094B\u092A\u0928\u0940\u092F\u0924\u093E',
