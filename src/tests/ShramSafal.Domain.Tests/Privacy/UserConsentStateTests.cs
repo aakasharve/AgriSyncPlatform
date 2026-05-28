@@ -27,6 +27,16 @@ public sealed class UserConsentStateTests
         s.FullHistoryJournal.Should().BeFalse();
         s.CrossFarmAggregation.Should().BeFalse();
         s.ResearchCorpusExport.Should().BeFalse();
+        // SARVAM Task 1.11 — verbatim corpus is strict DPDP §7(1) opt-in.
+        s.VerbatimTrainingCorpus.Should().BeFalse();
+        // SARVAM Task 1.11 — EnglishTranslationForAdmin default flipped
+        // from true → false on 2026-05-28 per SARVAM_DEPLOY_READINESS
+        // gate B1 conservative resolution (counsel question still open).
+        // Locking the default to false ensures every new user starts in
+        // opt-in posture; this assertion will catch any accidental
+        // regression of the gate B1 fix.
+        s.EnglishTranslationForAdmin.Should().BeFalse(
+            "gate B1 (2026-05-28) flipped EnglishTranslationForAdmin default to opt-in");
         s.Version.Should().Be(1);
         s.GrantedAtUtc.Should().BeNull();
         s.WithdrawnAtUtc.Should().BeNull();

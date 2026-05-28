@@ -36,11 +36,16 @@ internal sealed class UserConsentStateConfiguration : IEntityTypeConfiguration<U
             .IsRequired();
 
         // ── SARVAM_PRIMARY_VOICE_PIPELINE Task 1.11 / ADR-DS-014 §C ──
-        // Two new consent toggles. VerbatimTrainingCorpus defaults to
-        // false (DPDP §7(1) opt-in posture). EnglishTranslationForAdmin
-        // defaults to true (notice-and-opt-out posture per ADR-DS-014
-        // §C — every existing row backfills via the migration's DEFAULT
-        // clauses so no in-flight UPDATE is required).
+        // Two consent toggles, both default false (DPDP §7(1) opt-in
+        // posture). EnglishTranslationForAdmin's default was flipped from
+        // true → false on 2026-05-28 per SARVAM_DEPLOY_READINESS gate B1
+        // conservative resolution, pending counsel sign-off on the
+        // SARVAM_ADMIN_TRANSLATION_DEFAULT_TRUE_COUNSEL_QUESTION_2026-05-28
+        // artifact. Migration 20260522170000 was edited in-place because
+        // it had not yet been applied to production at the time of the
+        // flip; fresh applies (incl. prod) now backfill with FALSE.
+        // Dev environments that had already applied the original
+        // migration must drop+rerun to pick up the new default.
         b.Property(x => x.VerbatimTrainingCorpus)
             .HasColumnName("verbatim_training_corpus")
             .HasDefaultValue(false)
@@ -48,7 +53,7 @@ internal sealed class UserConsentStateConfiguration : IEntityTypeConfiguration<U
 
         b.Property(x => x.EnglishTranslationForAdmin)
             .HasColumnName("english_translation_for_admin")
-            .HasDefaultValue(true)
+            .HasDefaultValue(false)
             .IsRequired();
 
         b.Property(x => x.Version)

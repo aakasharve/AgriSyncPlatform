@@ -4,11 +4,19 @@ using Microsoft.Extensions.Options;
 using ShramSafal.Application.Ports.External;
 using ShramSafal.Infrastructure.AI;
 using Xunit;
+using Xunit.Abstractions;
 
 namespace ShramSafal.Domain.Tests.AI;
 
 public sealed class PromptContentHashTests
 {
+    private readonly ITestOutputHelper _output;
+
+    public PromptContentHashTests(ITestOutputHelper output)
+    {
+        _output = output;
+    }
+
     [Fact]
     public void ComputeFullContentHash_returns_64_lowercase_hex_chars()
     {
@@ -80,5 +88,23 @@ public sealed class PromptContentHashTests
         var builder = new AiPromptBuilder(registry, Options.Create(new AiPromptOptions()));
 
         builder.CurrentVoicePromptContentHash.Should().Be(registry.CurrentVoicePromptContentHash);
+    }
+
+    /// <summary>
+    /// Diagnostic — emits the live <c>CurrentVoicePromptContentHash</c> value
+    /// to the xUnit test output so SARVAM_PROMPT_REGISTRY_HASH_TBD_2026-05-28
+    /// can be finalized. Look for the <c>VOICE_PROMPT_HASH=</c> line in
+    /// <c>dotnet test --logger "console;verbosity=detailed"</c> output and
+    /// paste the 64-char value into
+    /// <c>_COFOUNDER/memory/prompt-registry.md</c>'s draft row.
+    /// </summary>
+    [Fact]
+    public void Emit_current_voice_prompt_hash_for_registry_capture()
+    {
+        var registry = new AiPromptTemplateRegistry();
+        var hash = registry.CurrentVoicePromptContentHash;
+
+        hash.Should().MatchRegex("^[0-9a-f]{64}$");
+        _output.WriteLine($"VOICE_PROMPT_HASH={hash}");
     }
 }

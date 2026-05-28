@@ -9,7 +9,17 @@ namespace ShramSafal.Infrastructure.Persistence.Migrations
     /// extend <c>ssf.user_consent_state</c> with the 4th + 5th consent
     /// toggles required by the V2 data-moat envelope:
     ///   - <c>verbatim_training_corpus boolean NOT NULL DEFAULT false</c>
-    ///   - <c>english_translation_for_admin boolean NOT NULL DEFAULT true</c>
+    ///   - <c>english_translation_for_admin boolean NOT NULL DEFAULT false</c>
+    ///
+    /// <para>
+    /// <b>Default flip 2026-05-28.</b> The english_translation_for_admin
+    /// default was originally authored as <c>true</c> per ADR-DS-014 §C
+    /// notice-and-opt-out posture. Per SARVAM_DEPLOY_READINESS gate B1
+    /// conservative resolution 2026-05-28, the default was flipped to
+    /// <c>false</c> in-place because this migration had not been applied
+    /// to production yet. See
+    /// <c>_COFOUNDER/Projects/AgriSync/Legal/Pending/SARVAM_ADMIN_TRANSLATION_DEFAULT_TRUE_COUNSEL_QUESTION_2026-05-28.md</c>.
+    /// </para>
     /// </summary>
     /// <remarks>
     /// <para>
@@ -74,7 +84,7 @@ namespace ShramSafal.Infrastructure.Persistence.Migrations
                 table: "user_consent_state",
                 type: "boolean",
                 nullable: false,
-                defaultValue: true);
+                defaultValue: false);
         }
 
         /// <inheritdoc />

@@ -91,13 +91,18 @@ public sealed class UserConsentState
     /// §5 — SARVAM_PRIMARY_VOICE_PIPELINE Task 1.11 / ADR-DS-014 §C —
     /// allow the structurer to emit an English translation of each clip
     /// for the admin/operator console (so a non-Marathi reviewer can
-    /// triage a flagged log). Default <c>true</c>: notice-and-opt-out
-    /// posture because admin triage is a platform-required feature and
-    /// blocking every clip until the user explicitly opts in would
-    /// break the admin pipeline on day one. Risk R13 (Phase 0.10
-    /// compliance-watch) tracks the DPDP §7(1) drift case where this
-    /// default may need to flip to opt-in; the consent text v2.0 makes
-    /// the toggle prominent in onboarding regardless.
+    /// triage a flagged log). Default <c>false</c> per
+    /// SARVAM_DEPLOY_READINESS gate B1 conservative resolution
+    /// 2026-05-28 — explicit DPDP §7(1) opt-in posture; the original
+    /// ADR-DS-014 §C "notice-and-opt-out (default true)" posture is
+    /// reverted pending counsel sign-off on the
+    /// SARVAM_ADMIN_TRANSLATION_DEFAULT_TRUE_COUNSEL_QUESTION_2026-05-28
+    /// artifact. The admin pipeline must respect this flag at the
+    /// admin-read boundary (no admin page surfaces english/english_redacted
+    /// for a user whose flag is false). Onboarding consent UI surfaces
+    /// the toggle for opt-in; the structurer continues to compute the
+    /// english projection per the prompt contract (cheap, deterministic)
+    /// but downstream admin consumers MUST gate the read.
     /// </summary>
     public bool EnglishTranslationForAdmin { get; private set; }
 
@@ -159,9 +164,12 @@ public sealed class UserConsentState
             ResearchCorpusExport = false,
             // SARVAM Task 1.11 — opt-in (false) per DPDP §7(1).
             VerbatimTrainingCorpus = false,
-            // SARVAM Task 1.11 — opt-out (true) per ADR-DS-014 §C
-            // notice-and-opt-out posture for the admin-triage feature.
-            EnglishTranslationForAdmin = true,
+            // SARVAM Task 1.11 — opt-in (false) per SARVAM_DEPLOY_READINESS
+            // gate B1 conservative resolution 2026-05-28. Original
+            // ADR-DS-014 §C default-true (opt-out) posture is reverted
+            // pending DPDP §7(2)(b) counsel sign-off (see
+            // SARVAM_ADMIN_TRANSLATION_DEFAULT_TRUE_COUNSEL_QUESTION_2026-05-28).
+            EnglishTranslationForAdmin = false,
             Version = 1,
             GrantedAtUtc = null,
             WithdrawnAtUtc = null,
@@ -329,9 +337,11 @@ public sealed class UserConsentState
 
     /// <summary>
     /// Flip <see cref="EnglishTranslationForAdmin"/> to <c>false</c>.
-    /// Returns a NEW instance. Default is <c>true</c> (opt-out posture),
-    /// so this is the explicit user choice to suppress English admin
-    /// triage of their clips.
+    /// Returns a NEW instance. As of 2026-05-28 the default is
+    /// <c>false</c> (opt-in posture per gate B1 conservative resolution);
+    /// this method now handles the rarer case of a previously opted-in
+    /// user choosing to opt back out — historically (before the default
+    /// flip) it was the primary toggle path.
     /// </summary>
     public UserConsentState OptOutEnglishTranslationForAdmin(DateTime nowUtc)
     {
@@ -350,16 +360,19 @@ public sealed class UserConsentState
             EnglishTranslationForAdmin = false,
             Version = Version,
             GrantedAtUtc = GrantedAtUtc,
-            // Opting out of a default-on purpose is a revocation event —
-            // stamp WithdrawnAtUtc so the DPDP audit ledger records it.
+            // Opting out is a revocation event — stamp WithdrawnAtUtc so
+            // the DPDP audit ledger records it.
             WithdrawnAtUtc = nowUtc,
             CurrentTokenKid = CurrentTokenKid,
         };
     }
 
     /// <summary>
-    /// Flip <see cref="EnglishTranslationForAdmin"/> back to <c>true</c>
-    /// after an explicit opt-out. Returns a NEW instance.
+    /// Flip <see cref="EnglishTranslationForAdmin"/> to <c>true</c> via
+    /// explicit user opt-in. Returns a NEW instance. As of 2026-05-28
+    /// this is the PRIMARY grant path (the default is now <c>false</c>);
+    /// the onboarding consent UI calls this when the user ticks the
+    /// admin-translation toggle.
     /// </summary>
     public UserConsentState OptInEnglishTranslationForAdmin(DateTime nowUtc)
     {
