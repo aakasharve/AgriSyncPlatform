@@ -2,12 +2,15 @@ using System.Security.Claims;
 using AgriSync.BuildingBlocks.Abstractions;
 using AgriSync.BuildingBlocks.Results;
 using Microsoft.AspNetCore.RateLimiting;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using User.Application.Ports;
 using User.Application.UseCases.Auth.Login;
 using User.Application.UseCases.Auth.RefreshToken;
 using User.Application.UseCases.Auth.RegisterUser;
 using User.Application.UseCases.Auth.StartOtp;
+using User.Application.UseCases.Auth.TestLogin;
 using User.Application.UseCases.Auth.VerifyOtp;
 using User.Application.UseCases.Users.GetMeContext;
 using AgriSync.SharedKernel.Contracts.Ids;
@@ -160,6 +163,61 @@ public static class AuthEndpoints
         .WithName("VerifyOtp")
         .AllowAnonymous();
 
+        // SARVAM_DEPLOY_READINESS gate B6 enabler (2026-05-28) —
+        // conditionally register POST /user/auth/test-login. The
+        // endpoint is added to the route table ONLY when
+        // TestLoginOptions.Enabled is true at startup. When the flag
+        // is false (the default + production posture), no route is
+        // registered: requests to /user/auth/test-login return 404
+        // from ASP.NET's own routing layer, never reaching any
+        // handler. The handler's own internal gate check
+        // (TestLoginHandler.HandleAsync gate 1) is defense-in-depth.
+        var testLoginOptions = endpoints.ServiceProvider
+            .GetRequiredService<IOptions<TestLoginOptions>>().Value;
+        if (testLoginOptions.Enabled)
+        {
+            publicGroup.MapPost("/test-login", async (
+                TestLoginRequest request,
+                TestLoginHandler handler,
+                CancellationToken ct) =>
+            {
+                if (string.IsNullOrWhiteSpace(request?.Phone))
+                {
+                    return Results.ValidationProblem(new Dictionary<string, string[]>
+                    {
+                        ["phone"] = ["Phone is required."],
+                    });
+                }
+
+                var result = await handler.HandleAsync(new TestLoginCommand(request.Phone), ct);
+
+                if (result.IsFailure)
+                {
+                    var statusCode = result.Error.Code switch
+                    {
+                        "test_login.disabled" => 403,
+                        "test_login.phone_not_allowlisted" => 403,
+                        "test_login.user_not_found" => 404,
+                        "test_login.invalid_phone" => 400,
+                        _ => 400,
+                    };
+                    return Results.Json(
+                        new { error = result.Error.Code, message = result.Error.Description },
+                        statusCode: statusCode);
+                }
+
+                return Results.Ok(new
+                {
+                    userId = result.Value!.UserId,
+                    accessToken = result.Value.AccessToken,
+                    refreshToken = result.Value.RefreshToken,
+                    expiresAtUtc = result.Value.ExpiresAtUtc,
+                });
+            })
+            .WithName("TestLogin")
+            .AllowAnonymous();
+        }
+
         publicGroup.MapPost("/refresh", async (
             RefreshRequest request,
             RefreshTokenHandler handler,
@@ -274,3 +332,7 @@ public sealed record RefreshRequest(string RefreshToken);
 public sealed record StartOtpRequest(string? Phone);
 
 public sealed record VerifyOtpRequest(string? Phone, string? Otp, string? DisplayName);
+
+// SARVAM_DEPLOY_READINESS gate B6 enabler (2026-05-28) — request shape
+// for POST /user/auth/test-login. Only Phone; no OTP field by design.
+public sealed record TestLoginRequest(string? Phone);
