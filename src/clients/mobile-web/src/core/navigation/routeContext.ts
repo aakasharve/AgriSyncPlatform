@@ -98,6 +98,11 @@ export interface AppRouterContext {
     draftLog: VoiceState['draftLog'];
     setDraftLog: VoiceState['setDraftLog'];
     provenance: VoiceState['provenance'];
+    // SARVAM_PRIMARY_VOICE_PIPELINE_2026-05-28 — LiveCaption Way-2.
+    // Surfaces the Sarvam transcribe-stream lifecycle to render-functions
+    // so mainView can mount <LiveCaption /> alongside AudioRecorderStreaming.
+    voiceStreamingPhase: VoiceState['voiceStreamingPhase'];
+    liveCaption: VoiceState['liveCaption'];
 
     // weather
     weatherData: WeatherState['weatherData'];

@@ -12,6 +12,7 @@ import CropSelector, { CropSymbol } from '../../features/context/components/Crop
 import InputMethodToggle from '../../shared/components/ui/InputMethodToggle';
 import AudioRecorder from '../../features/voice/components/AudioRecorder';
 import AudioRecorderStreaming from '../../features/voice/components/AudioRecorderStreaming';
+import LiveCaption from '../../features/voice/components/LiveCaption';
 import { DEFAULT_VOICE_CONFIG } from '../../infrastructure/voice/types';
 import ManualEntry from '../../features/logs/components/ManualEntry';
 import DailyLogCard from '../../features/logs/components/DailyLogCard';
@@ -106,6 +107,8 @@ export const renderLogView = (ctx: AppRouterContext): React.ReactNode => {
         handleAudioReady, handleTextReady, handleManualSubmit,
         currentLogContext, ledgerDefaults, farmerProfile,
         draftLog, setDraftLog, provenance,
+        // SARVAM_PRIMARY_VOICE_PIPELINE_2026-05-28 — LiveCaption Way-2.
+        voiceStreamingPhase, liveCaption,
         getTodayCounts, getContextColorIndicator,
         history, todayLogs, operatorNameById,
         getLogContextSnapshot, handleEditLog,
@@ -359,6 +362,15 @@ export const renderLogView = (ctx: AppRouterContext): React.ReactNode => {
                                             }}
                                         />
                                     )}
+                                    {/* SARVAM_PRIMARY_VOICE_PIPELINE_2026-05-28 — LiveCaption Way-2.
+                                        Cost-safe: consumes the same Sarvam transcribe-stream that
+                                        useVoiceRecorder.runTranscribeStage already opened; no
+                                        additional Sarvam call. Self-hides when there are no
+                                        partials AND the stream isn't open. */}
+                                    <LiveCaption
+                                        text={liveCaption}
+                                        isTranscribing={voiceStreamingPhase === 'transcribing'}
+                                    />
                                 </>
                             ) : (
                                 hasActiveLogContext ? (

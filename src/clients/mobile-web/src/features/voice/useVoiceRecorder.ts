@@ -9,6 +9,7 @@ import { VoicePreprocessor } from '../../infrastructure/voice/VoicePreprocessor'
 import { VoiceIdempotency } from '../../infrastructure/voice/VoiceIdempotency';
 import { DEFAULT_VOICE_CONFIG, VoiceSessionMetadata } from '../../infrastructure/voice/types';
 import { normalizeLegacyLogSegmentId } from '../../domain/ai/BucketId';
+import { TranscribeStreamConsumer } from '../../infrastructure/ai/TranscribeStreamConsumer';
 
 const hasSuccessfulIrrigation = (events: Array<{ durationHours?: number; waterVolumeLitres?: number; method?: string; source?: string }>): boolean => {
     return events.some(event => {
@@ -53,10 +54,28 @@ export const useVoiceRecorder = ({
     // is on; fieldsArrived collects the top-level field names from `field_complete`
     // events so consumers (the wizard) can render an arrival indicator before the
     // terminal `complete` event lands. Both stay at idle/empty on the batch path.
-    const [voiceStreamingPhase, setVoiceStreamingPhase] = useState<'idle' | 'streaming' | 'complete' | 'error'>('idle');
+    //
+    // SARVAM_PRIMARY_VOICE_PIPELINE_2026-05-28 — LiveCaption Way-2 (cost-safe
+    // 2-stage client split): the union gains `'transcribing'`. When audio
+    // input arrives and the live-caption path is enabled, handleAudioReady
+    // runs a Sarvam transcribe-stream stage first (phase='transcribing'),
+    // streaming `transcript_partial` events into `liveCaption` state for the
+    // mounted `<LiveCaption />` to render. On `transcript_final`, the flow
+    // converts the result into a text payload and re-enters processInput,
+    // which routes through the existing streaming Gemini structurer
+    // (phase='streaming'). Net Sarvam call count per recording stays at 1;
+    // the structurer parse-voice-stream call sends `transcript` text only
+    // (no audio re-upload), and the server-side path is Gemini-only.
+    const [voiceStreamingPhase, setVoiceStreamingPhase] = useState<'idle' | 'transcribing' | 'streaming' | 'complete' | 'error'>('idle');
     const [voiceStreamingFieldsArrived, setVoiceStreamingFieldsArrived] = useState<ReadonlySet<string>>(() => new Set());
+    const [liveCaption, setLiveCaption] = useState<string>('');
     const lastVoiceSessionMetadataRef = useRef<VoiceSessionMetadata | null>(null);
     const lastVoiceIdempotencySeedRef = useRef<string | null>(null);
+    const transcribeConsumerRef = useRef<TranscribeStreamConsumer | null>(null);
+    const transcribeAbortRef = useRef<AbortController | null>(null);
+    if (!transcribeConsumerRef.current) {
+        transcribeConsumerRef.current = new TranscribeStreamConsumer();
+    }
 
     const resolveFarmId = (): string => {
         const farmId = currentLogContext?.selection
@@ -220,6 +239,89 @@ export const useVoiceRecorder = ({
         };
     };
 
+    // SARVAM_PRIMARY_VOICE_PIPELINE_2026-05-28 — LiveCaption Way-2
+    // stage 1: Sarvam transcribe-stream. Opens an SSE against
+    // POST /shramsafal/ai/transcribe-stream, streams `transcript_partial`
+    // chunks into `liveCaption` state, and resolves to the assembled
+    // transcript (or an error). The blob argument is the raw recorded
+    // audio (pre-preprocessor) because TranscribeStreamConsumer ships a
+    // multipart form containing the original blob — server-side ffmpeg
+    // handles transcoding to PCM 16 kHz mono per Phase 2.3a.
+    //
+    // Cost note: this is the ONLY Sarvam call per recording. The stage-2
+    // parse-voice-stream call (handled by runStreamingParse via the
+    // existing text branch) is Gemini-only and never re-issues a Sarvam
+    // request — verified in BackendAiClient.streamOrFallback where the
+    // text path goes through fetchParseVoiceStream (Gemini structurer).
+    const runTranscribeStage = async (
+        blob: Blob,
+        recordedAtUtc: string,
+    ): Promise<{ transcript: string } | { error: string }> => {
+        setVoiceStreamingPhase('transcribing');
+        setLiveCaption('');
+        // Reset any previous structurer field-arrivals so the wizard does
+        // not surface stale indicators while the new transcribe runs.
+        setVoiceStreamingFieldsArrived(new Set());
+
+        // Cancel any prior in-flight transcribe (defensive — typical flow
+        // is one stream per recording but a user double-tap could race).
+        if (transcribeAbortRef.current) {
+            transcribeAbortRef.current.abort();
+        }
+        const controller = new AbortController();
+        transcribeAbortRef.current = controller;
+
+        let assembled = '';
+        let finalTranscript: string | null = null;
+        let streamError: string | null = null;
+
+        try {
+            for await (const event of transcribeConsumerRef.current!.consume(
+                blob,
+                'mr-IN',
+                'codemix',
+                recordedAtUtc,
+                controller.signal,
+            )) {
+                if (controller.signal.aborted) break;
+                if (event.type === 'transcript_partial') {
+                    // Backend wire semantics: each partial is the DELTA to
+                    // append (per useTranscribeStream comment). Mirror the
+                    // existing hook's accumulation behavior.
+                    assembled += event.text;
+                    setLiveCaption(assembled);
+                } else if (event.type === 'transcript_final') {
+                    finalTranscript = event.text;
+                    // Final may be the full assembled string or a redacted
+                    // canonical form. Show it as the caption surface.
+                    setLiveCaption(event.text);
+                } else if (event.type === 'error') {
+                    streamError = event.message || event.code || 'Transcribe stream error.';
+                }
+            }
+        } catch (err) {
+            if (controller.signal.aborted) {
+                return { error: 'aborted' };
+            }
+            streamError = err instanceof Error && err.message
+                ? err.message
+                : 'Voice transcribe stream failed.';
+        } finally {
+            if (transcribeAbortRef.current === controller) {
+                transcribeAbortRef.current = null;
+            }
+        }
+
+        if (streamError) {
+            return { error: streamError };
+        }
+        const transcript = (finalTranscript ?? assembled).trim();
+        if (!transcript) {
+            return { error: 'Transcribe stream returned empty transcript.' };
+        }
+        return { transcript };
+    };
+
     const handleAudioReady = async (audioData: AudioData) => {
         setStatus('processing');
         setError(null);
@@ -232,6 +334,47 @@ export const useVoiceRecorder = ({
         // — this is still closer to recording-time than the server's
         // request-receipt wall clock would be.
         const recordedAtUtc = audioData.recordedAtUtc ?? new Date().toISOString();
+
+        // SARVAM_PRIMARY_VOICE_PIPELINE_2026-05-28 — LiveCaption Way-2:
+        // attempt the cost-safe 2-stage path (Sarvam transcribe-stream →
+        // Gemini-only parse-voice-stream with text). Preconditions: the
+        // parser exposes parseInputStream (so stage 2 is reachable), the
+        // streaming-parse flag is on, the browser is online, and the
+        // recording actually produced a blob. On any precondition miss
+        // OR transcribe failure, silently fall back to the existing
+        // batch audio path so the founder rule "must not break the
+        // existing voice-note flow" holds.
+        const canRunLiveCaption =
+            DEFAULT_VOICE_CONFIG.useStreamingParse
+            && typeof parser.parseInputStream === 'function'
+            && (typeof navigator === 'undefined' || navigator.onLine)
+            && !!audioData.blob;
+
+        if (canRunLiveCaption) {
+            const result = await runTranscribeStage(audioData.blob, recordedAtUtc);
+            if ('transcript' in result) {
+                // Stage 2: text-only parse. processInput sees type:'text'
+                // → canStream true → runStreamingParse → BackendAiClient
+                // fetchParseVoiceStream → Gemini structurer SSE. No
+                // second Sarvam call (verified in BackendAiClient).
+                await processInput({
+                    type: 'text',
+                    data: result.transcript,
+                    recordedAtUtc,
+                });
+                return;
+            }
+            // Transcribe failed (or aborted). Silently fall through to
+            // the existing batch audio path so the save/audit/diary
+            // pipeline still runs end-to-end. Reset transcribe-side UI
+            // state so the recorder doesn't show stale captions.
+            setLiveCaption('');
+            setVoiceStreamingPhase('idle');
+            if (result.error !== 'aborted') {
+                console.warn('[useVoiceRecorder] live-caption stage failed; falling back to batch audio path.', result.error);
+            }
+        }
+
         await processInput({
             type: 'audio',
             data: preprocessed.base64,
@@ -311,7 +454,15 @@ export const useVoiceRecorder = ({
                     requestPayloadHash: payloadInput.requestPayloadHash,
                     recordedAtUtc: payloadInput.recordedAtUtc,
                 }
-                : { type: 'text' as const, content: payloadInput.data };
+                // SARVAM_PRIMARY_VOICE_PIPELINE_2026-05-28 — LiveCaption
+                // Way-2 stage 2: thread recordedAtUtc through to the
+                // text-only parse-voice-stream call so the Gemini
+                // structurer can still resolve "आज"/"काल" against the
+                // original recording instant rather than now(). The
+                // payload's text-variant doesn't have a recordedAtUtc
+                // in its compile-time shape; BackendAiClient reads it
+                // via a runtime cast (see fetchParseVoiceStream).
+                : { type: 'text' as const, content: payloadInput.data, recordedAtUtc: payloadInput.recordedAtUtc };
 
             // VOICE_LATENCY_PIPELINE_V2 Phase 3 (§7 Task 3.12) — streaming routing.
             // Conditions for the SSE path: flag on AND adapter implements
@@ -472,6 +623,12 @@ export const useVoiceRecorder = ({
         setErrorTranscript(undefined);
         setVoiceStreamingPhase('idle');
         setVoiceStreamingFieldsArrived(new Set());
+        // Abort any in-flight transcribe stream + clear live captions.
+        if (transcribeAbortRef.current) {
+            transcribeAbortRef.current.abort();
+            transcribeAbortRef.current = null;
+        }
+        setLiveCaption('');
     };
 
     return {
@@ -490,7 +647,14 @@ export const useVoiceRecorder = ({
         // Consumers (LogWizardContainer wrapper) may render an "AI is reading…"
         // indicator while voiceStreamingPhase === 'streaming'. Both stay
         // idle/empty whenever the batch path runs.
+        //
+        // SARVAM_PRIMARY_VOICE_PIPELINE_2026-05-28 — LiveCaption Way-2:
+        // `liveCaption` accumulates Sarvam transcript_partial chunks during
+        // voiceStreamingPhase === 'transcribing'. Consumers mount the
+        // <LiveCaption /> component reading this value to surface
+        // farmer-visible live text. Stays empty on the batch fallback path.
         voiceStreamingPhase,
         voiceStreamingFieldsArrived,
+        liveCaption,
     };
 };
