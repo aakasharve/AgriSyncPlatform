@@ -2687,7 +2687,7 @@ namespace ShramSafal.Infrastructure.Persistence.Migrations
                     b.Property<bool>("EnglishTranslationForAdmin")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("boolean")
-                        .HasDefaultValue(true)
+                        .HasDefaultValue(false)
                         .HasColumnName("english_translation_for_admin");
 
                     b.Property<bool>("FullHistoryJournal")
