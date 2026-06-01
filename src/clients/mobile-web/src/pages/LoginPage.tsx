@@ -3,6 +3,7 @@ import { QrCode } from 'lucide-react';
 import { useAuth } from '../app/providers/AuthProvider';
 import OtpLoginForm from '../features/auth/components/OtpLoginForm';
 import OtpVerifyForm from '../features/auth/components/OtpVerifyForm';
+import TestLoginButton from '../features/auth/components/TestLoginButton';
 import type { StartOtpResponse } from '../features/auth/data/otpClient';
 import { invalidateMeContext } from '../core/session/MeContextService';
 
@@ -63,7 +64,13 @@ const LoginPage: React.FC = () => {
     // OTP flow is the primary path (plan §3.6). Password is legacy / dev.
     if (topMode === 'otp') {
         return (
-            <div className="min-h-screen-safe bg-transparent text-stone-900 flex items-center justify-center px-4 py-6">
+            // h-full + overflow-y-auto: the AppShell content slot is a bounded
+            // `flex-1 min-h-0 overflow-hidden` box, so the card MUST scroll
+            // inside it. The inner min-h-full wrapper centers the card when it
+            // fits and lets it scroll (top reachable, no footer/keyboard clip)
+            // when it doesn't. spec: test-login-bypass-frontend-wiring-2026-06-01
+            <div className="h-full overflow-y-auto bg-transparent text-stone-900">
+                <div className="flex min-h-full items-center justify-center px-4 py-6 pb-[calc(1.5rem+var(--safe-area-inset-bottom,env(safe-area-inset-bottom,0px)))]">
                 <div className="w-full max-w-sm glass-panel p-6 space-y-5 shadow-xl border border-stone-200/70">
                     <div className="text-center space-y-0.5">
                         <h1 className="text-2xl font-black font-display text-stone-800">ShramSafal</h1>
@@ -82,6 +89,9 @@ const LoginPage: React.FC = () => {
                             onBack={() => setOtpMeta(null)}
                         />
                     )}
+
+                    {/* Founder-only OTP bypass; self-hides unless VITE_TEST_LOGIN_PHONE is set. */}
+                    <TestLoginButton onLoggedIn={() => { invalidateMeContext(); /* AuthProvider picks up session */ }} />
 
                     <div className="text-center">
                         <button
@@ -124,12 +134,14 @@ const LoginPage: React.FC = () => {
                         </button>
                     </div>
                 </div>
+                </div>
             </div>
         );
     }
 
     return (
-        <div className="min-h-screen-safe bg-transparent text-stone-900 flex items-center justify-center px-4 py-6 pt-safe-area pb-safe-area pl-safe-area pr-safe-area">
+        <div className="h-full overflow-y-auto bg-transparent text-stone-900">
+            <div className="flex min-h-full items-center justify-center px-4 py-6 pb-[calc(1.5rem+var(--safe-area-inset-bottom,env(safe-area-inset-bottom,0px)))] pl-safe-area pr-safe-area">
             <div className="w-full max-w-none glass-panel p-6 space-y-5 shadow-xl border border-stone-200/70 md:border-0 md:bg-transparent md:shadow-none md:backdrop-blur-none">
                 <div className="space-y-1 text-center">
                     <h1 className="text-2xl font-black font-display text-stone-800">ShramSafal</h1>
@@ -292,11 +304,15 @@ const LoginPage: React.FC = () => {
                     </p>
                 </div>
 
+                {/* Founder-only OTP bypass; self-hides unless VITE_TEST_LOGIN_PHONE is set. */}
+                <TestLoginButton onLoggedIn={() => { invalidateMeContext(); /* AuthProvider picks up session */ }} />
+
                 <div className="mt-6 text-center">
                     <p className="text-xs text-stone-400">
                         AgriSync Platform v1.0
                     </p>
                 </div>
+            </div>
             </div>
         </div>
     );

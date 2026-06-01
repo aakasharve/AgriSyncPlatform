@@ -70,9 +70,6 @@ const OtpLoginForm: React.FC<OtpLoginFormProps> = ({ onOtpSent }) => {
                         inputMode="numeric"
                     />
                 </div>
-                <p className="text-[10px] text-stone-400">
-                    Demo: type <span className="font-mono font-bold text-stone-600">purvesh</span> for the demo account.
-                </p>
             </div>
 
             {error && (
