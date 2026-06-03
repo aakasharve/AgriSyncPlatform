@@ -40,18 +40,6 @@ export interface VerifyOtpResponse {
     createdNewUser: boolean;
 }
 
-/**
- * Test-login bypass response (spec: test-login-bypass-frontend-wiring-2026-06-01).
- * Mirrors VerifyOtpResponse minus `createdNewUser` — the backend
- * TestLoginResult never creates users, so the field is meaningless.
- */
-export interface TestLoginResponse {
-    userId: string;
-    accessToken: string;
-    refreshToken: string;
-    expiresAtUtc: string;
-}
-
 export interface OtpError {
     error: string;
     message: string;
@@ -102,32 +90,6 @@ export const verifyOtp = async (
     }
 
     return (await response.json()) as VerifyOtpResponse;
-};
-
-/**
- * testLogin — founder-only OTP bypass for hand-testing deployed builds.
- * spec: test-login-bypass-frontend-wiring-2026-06-01
- *
- * Calls POST /user/auth/test-login (registered server-side ONLY when
- * TestLogin:Enabled=true). The server enforces two gates of its own
- * (Enabled flag + phone allowlist) and never auto-creates users, so a
- * non-allowlisted phone or a missing seed returns a structured error:
- *   403 test_login.disabled | 403 test_login.phone_not_allowlisted
- *   404 test_login.user_not_found | 400 test_login.invalid_phone
- * The real OTP flow (startOtp/verifyOtp) is completely independent.
- */
-export const testLogin = async (phone: string): Promise<TestLoginResponse> => {
-    const response = await fetch(`${resolveBaseUrl()}/user/auth/test-login`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ phone }),
-    });
-
-    if (!response.ok) {
-        throw await parseError(response);
-    }
-
-    return (await response.json()) as TestLoginResponse;
 };
 
 export const isOtpError = (value: unknown): value is OtpError =>

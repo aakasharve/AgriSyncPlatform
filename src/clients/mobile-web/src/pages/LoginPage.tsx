@@ -3,24 +3,19 @@ import { QrCode } from 'lucide-react';
 import { useAuth } from '../app/providers/AuthProvider';
 import OtpLoginForm from '../features/auth/components/OtpLoginForm';
 import OtpVerifyForm from '../features/auth/components/OtpVerifyForm';
-import TestLoginButton from '../features/auth/components/TestLoginButton';
 import type { StartOtpResponse } from '../features/auth/data/otpClient';
 import { invalidateMeContext } from '../core/session/MeContextService';
 
-// Top-level auth mode: 'otp' is the primary flow; 'password' is legacy.
+// Top-level auth mode. 'otp' is the single PUBLIC flow — real users enter their
+// phone, verify via OTP once, and the account is created-or-found by phone
+// number (passwordless; the session then persists until logout). 'password' is
+// a quiet phone+password sign-in kept ONLY for the internal test user
+// (8888888888) — it is not advertised to real users.
 type TopMode = 'otp' | 'password';
-type AuthMode = 'login' | 'register';
 
-// 2026-05-13 (purvesh-demo-v2 Halt Point 3): the "purvesh" demo phone shortcut
-// was removed entirely (supervisor-flagged + founder-authorized). Reason: the
-// design-mode brief was "production-ready look"; a stealth back-door that
-// routes real users typing "purvesh" into the demo account is incongruent.
-// Demo testers type the literal phone 8888888888 (8 eights, memorable).
 const LoginPage: React.FC = () => {
-    const { login, register, isLoading, authError, clearAuthError } = useAuth();
+    const { login, isLoading, authError, clearAuthError } = useAuth();
     const [topMode, setTopMode] = useState<TopMode>('otp');
-    const [mode, setMode] = useState<AuthMode>('login');
-    const [displayName, setDisplayName] = useState('');
     const [phone, setPhone] = useState('');
     const [password, setPassword] = useState('');
 
@@ -28,47 +23,30 @@ const LoginPage: React.FC = () => {
     const [otpPhone, setOtpPhone] = useState('');
     const [otpMeta, setOtpMeta] = useState<StartOtpResponse | null>(null);
 
-    const isRegisterMode = mode === 'register';
-
-    const switchMode = (nextMode: AuthMode) => {
-        setMode(nextMode);
-        clearAuthError();
-    };
-
     const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
         event.preventDefault();
         const normalizedPhone = phone.trim();
         const normalizedPassword = password.trim();
-        const normalizedDisplayName = displayName.trim();
-
         if (!normalizedPhone || !normalizedPassword) {
             return;
         }
-
         try {
-            if (isRegisterMode) {
-                if (!normalizedDisplayName) {
-                    return;
-                }
-
-                await register(normalizedPhone, normalizedPassword, normalizedDisplayName);
-                return;
-            }
-
             await login(normalizedPhone, normalizedPassword);
         } catch {
             // Error is surfaced by AuthProvider state.
         }
     };
 
-    // OTP flow is the primary path (plan §3.6). Password is legacy / dev.
+    // OTP is the primary path and the only public sign-up flow: VerifyOtp
+    // auto-creates the account on first login and finds it by phone on every
+    // later login, so there is no separate "register" step here.
     if (topMode === 'otp') {
         return (
             // h-full + overflow-y-auto: the AppShell content slot is a bounded
             // `flex-1 min-h-0 overflow-hidden` box, so the card MUST scroll
             // inside it. The inner min-h-full wrapper centers the card when it
             // fits and lets it scroll (top reachable, no footer/keyboard clip)
-            // when it doesn't. spec: test-login-bypass-frontend-wiring-2026-06-01
+            // when it doesn't. (Shipped + live-verified at 8887239a / c7e2a019.)
             <div className="h-full overflow-y-auto bg-transparent text-stone-900">
                 <div className="flex min-h-full items-center justify-center px-4 py-6 pb-[calc(1.5rem+var(--safe-area-inset-bottom,env(safe-area-inset-bottom,0px)))]">
                 <div className="w-full max-w-sm glass-panel p-6 space-y-5 shadow-xl border border-stone-200/70">
@@ -90,16 +68,13 @@ const LoginPage: React.FC = () => {
                         />
                     )}
 
-                    {/* Founder-only OTP bypass; self-hides unless VITE_TEST_LOGIN_PHONE is set. */}
-                    <TestLoginButton onLoggedIn={() => { invalidateMeContext(); /* AuthProvider picks up session */ }} />
-
                     <div className="text-center">
                         <button
                             type="button"
                             onClick={() => setTopMode('password')}
                             className="text-[10px] text-stone-400 hover:text-stone-600 underline underline-offset-2"
                         >
-                            पासवर्डने लॉग इन करा / Use password (legacy)
+                            पासवर्डने लॉग इन करा / Use password
                         </button>
                     </div>
 
@@ -139,6 +114,8 @@ const LoginPage: React.FC = () => {
         );
     }
 
+    // Password sign-in — quiet path for the internal test user only. Real users
+    // use OTP (above). No registration here: new accounts are created via OTP.
     return (
         <div className="h-full overflow-y-auto bg-transparent text-stone-900">
             <div className="flex min-h-full items-center justify-center px-4 py-6 pb-[calc(1.5rem+var(--safe-area-inset-bottom,env(safe-area-inset-bottom,0px)))] pl-safe-area pr-safe-area">
@@ -146,55 +123,14 @@ const LoginPage: React.FC = () => {
                 <div className="space-y-1 text-center">
                     <h1 className="text-2xl font-black font-display text-stone-800">ShramSafal</h1>
                     <p className="text-xs text-stone-500 font-medium">
-                        {isRegisterMode
-                            ? 'Create a real empty farmer account and enter the first-run workflow immediately.'
-                            : 'Sign in with password (legacy). Switch to OTP for the primary flow.'}
+                        Sign in with phone and password.
                     </p>
                 </div>
                 <button type="button" onClick={() => setTopMode('otp')} className="w-full text-xs font-bold text-emerald-600 hover:text-emerald-700 py-1 rounded-xl border border-emerald-200 bg-emerald-50">
                     ← OTP ने लॉग इन करा / Back to OTP sign-in (recommended)
                 </button>
 
-                <div className="grid grid-cols-2 gap-2 rounded-xl border border-stone-200 bg-stone-50 p-1">
-                    <button
-                        type="button"
-                        onClick={() => switchMode('login')}
-                        className={`rounded-lg px-3 py-2 text-xs font-bold transition-colors ${!isRegisterMode ? 'bg-white text-emerald-700 shadow-sm' : 'text-stone-500 hover:text-stone-700'}`}
-                    >
-                        Sign In
-                    </button>
-                    <button
-                        type="button"
-                        onClick={() => switchMode('register')}
-                        className={`rounded-lg px-3 py-2 text-xs font-bold transition-colors ${isRegisterMode ? 'bg-white text-blue-700 shadow-sm' : 'text-stone-500 hover:text-stone-700'}`}
-                    >
-                        New Farmer
-                    </button>
-                </div>
-
-                {/* 2026-05-13 (purvesh-demo-v2): demo-credentials hint panel removed
-                    per founder spec for a production-ready look. The "New Farmer"
-                    tab still provides the fresh-account onboarding path. */}
-
                 <form className="space-y-4" onSubmit={handleSubmit}>
-                    {isRegisterMode && (
-                        <div className="space-y-1">
-                            <label htmlFor="register-name" className="block text-xs font-semibold text-stone-600 uppercase tracking-wide">
-                                Display Name
-                            </label>
-                            <input
-                                id="register-name"
-                                type="text"
-                                autoComplete="name"
-                                value={displayName}
-                                onChange={(e) => setDisplayName(e.target.value)}
-                                placeholder="New Farmer"
-                                className="w-full rounded-xl border border-stone-200 bg-white px-3 py-2.5 text-sm font-medium outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-200/60"
-                                disabled={isLoading}
-                            />
-                        </div>
-                    )}
-
                     <div className="space-y-1">
                         <label htmlFor="auth-phone" className="block text-xs font-semibold text-stone-600 uppercase tracking-wide">
                             Phone
@@ -202,7 +138,7 @@ const LoginPage: React.FC = () => {
                         <input
                             id="auth-phone"
                             type="tel"
-                            autoComplete={isRegisterMode ? 'tel' : 'username'}
+                            autoComplete="username"
                             value={phone}
                             onChange={(e) => {
                                 setPhone(e.target.value);
@@ -210,8 +146,8 @@ const LoginPage: React.FC = () => {
                                     clearAuthError();
                                 }
                             }}
-                            placeholder={isRegisterMode ? 'Use a new 10-digit phone number' : '9876543210'}
-                            className={`w-full rounded-xl border border-stone-200 bg-white px-3 py-2.5 text-sm font-medium outline-none focus:ring-2 ${isRegisterMode ? 'focus:border-blue-400 focus:ring-blue-200/60' : 'focus:border-emerald-400 focus:ring-emerald-200/60'}`}
+                            placeholder="9876543210"
+                            className="w-full rounded-xl border border-stone-200 bg-white px-3 py-2.5 text-sm font-medium outline-none focus:ring-2 focus:border-emerald-400 focus:ring-emerald-200/60"
                             disabled={isLoading}
                         />
                     </div>
@@ -223,7 +159,7 @@ const LoginPage: React.FC = () => {
                         <input
                             id="auth-password"
                             type="password"
-                            autoComplete={isRegisterMode ? 'new-password' : 'current-password'}
+                            autoComplete="current-password"
                             value={password}
                             onChange={(e) => {
                                 setPassword(e.target.value);
@@ -231,7 +167,7 @@ const LoginPage: React.FC = () => {
                                     clearAuthError();
                                 }
                             }}
-                            className={`w-full rounded-xl border border-stone-200 bg-white px-3 py-2.5 text-sm font-medium outline-none focus:ring-2 ${isRegisterMode ? 'focus:border-blue-400 focus:ring-blue-200/60' : 'focus:border-emerald-400 focus:ring-emerald-200/60'}`}
+                            className="w-full rounded-xl border border-stone-200 bg-white px-3 py-2.5 text-sm font-medium outline-none focus:ring-2 focus:border-emerald-400 focus:ring-emerald-200/60"
                             disabled={isLoading}
                         />
                     </div>
@@ -245,18 +181,10 @@ const LoginPage: React.FC = () => {
                     <button
                         type="submit"
                         disabled={isLoading}
-                        className={`w-full rounded-xl disabled:opacity-60 disabled:cursor-not-allowed text-white font-bold text-sm py-2.5 transition-colors ${isRegisterMode ? 'bg-blue-600 hover:bg-blue-700' : 'bg-emerald-600 hover:bg-emerald-700'}`}
+                        className="w-full rounded-xl disabled:opacity-60 disabled:cursor-not-allowed text-white font-bold text-sm py-2.5 transition-colors bg-emerald-600 hover:bg-emerald-700"
                     >
-                        {isLoading
-                            ? (isRegisterMode ? 'Creating account...' : 'Signing in...')
-                            : (isRegisterMode ? 'Create New Farmer Account' : 'Sign In')}
+                        {isLoading ? 'Signing in...' : 'Sign In'}
                     </button>
-
-                    {isRegisterMode && (
-                        <p className="text-[11px] leading-5 text-stone-500">
-                            This creates a real empty account with no farm, no plots, and no seeded workflow data so you can test the first-time UX safely.
-                        </p>
-                    )}
                 </form>
 
                 <div className="mt-6 space-y-2">
@@ -300,12 +228,9 @@ const LoginPage: React.FC = () => {
                         शेतीच्या QR ने सामील व्हा / Join using farm QR
                     </button>
                     <p className="text-[10px] text-stone-400 text-center leading-relaxed">
-                        You'll only need your phone number and the OTP. No password.
+                        Workers only need their phone number and the OTP. No password.
                     </p>
                 </div>
-
-                {/* Founder-only OTP bypass; self-hides unless VITE_TEST_LOGIN_PHONE is set. */}
-                <TestLoginButton onLoggedIn={() => { invalidateMeContext(); /* AuthProvider picks up session */ }} />
 
                 <div className="mt-6 text-center">
                     <p className="text-xs text-stone-400">

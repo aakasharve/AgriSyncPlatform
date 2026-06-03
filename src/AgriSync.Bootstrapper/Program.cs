@@ -1019,18 +1019,31 @@ static async Task InitializeApplicationDataAsync(WebApplication app)
 
         if (clearPurveshDemo || seedPurveshDemo)
         {
-            var purveshSeeder = services.GetRequiredService<AgriSync.Bootstrapper.Infrastructure.PurveshDemoSeeder>();
-
-            if (clearPurveshDemo)
+            // Non-fatal startup data-seeding (spec: auth-rework-testuser-otp-first-2026-06-03).
+            // A data-seeder failure must NEVER crash the host. Schema migrations above stay
+            // FATAL (outside this catch); only DATA seeding is made non-fatal here. This is the
+            // safety net that prevents any seed bug (e.g. an RLS WITH CHECK rejection) from
+            // crash-looping prod the way SEED_PURVESH_DEMO did in deploy e4d9a72b.
+            try
             {
-                var clearResult = await purveshSeeder.ClearPurveshDemoAsync();
-                Log.Information("Purvesh demo clear result: {Result}", clearResult);
+                var purveshSeeder = services.GetRequiredService<AgriSync.Bootstrapper.Infrastructure.PurveshDemoSeeder>();
+
+                if (clearPurveshDemo)
+                {
+                    var clearResult = await purveshSeeder.ClearPurveshDemoAsync();
+                    Log.Information("Purvesh demo clear result: {Result}", clearResult);
+                }
+
+                if (seedPurveshDemo)
+                {
+                    var seedResult = await purveshSeeder.SeedPurveshDemoAsync();
+                    Log.Information("Purvesh demo seed result: {Result}", seedResult);
+                }
             }
-
-            if (seedPurveshDemo)
+            catch (Exception purveshSeedEx)
             {
-                var seedResult = await purveshSeeder.SeedPurveshDemoAsync();
-                Log.Information("Purvesh demo seed result: {Result}", seedResult);
+                logger.LogError(purveshSeedEx,
+                    "Purvesh demo seeding failed; continuing startup (data seeding is non-fatal).");
             }
         }
 
