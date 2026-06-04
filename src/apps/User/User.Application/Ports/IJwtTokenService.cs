@@ -5,10 +5,11 @@ public sealed record TokenPair(string AccessToken, string RefreshToken, DateTime
 public interface IJwtTokenService
 {
     /// <summary>
-    /// Legacy password-login token path. Carries membership claims.
-    /// Slated for removal once the web client migrates entirely to OTP.
+    /// Legacy password-login token path. Carries membership claims AND the
+    /// <c>phone_verified</c> claim (consumed by /bootstrap/first-farm). Slated
+    /// for removal once the web client migrates entirely to OTP.
     /// </summary>
-    TokenPair GenerateTokens(Guid userId, string phone, string displayName, IReadOnlyCollection<MembershipClaim> memberships);
+    TokenPair GenerateTokens(Guid userId, string phone, string displayName, IReadOnlyCollection<MembershipClaim> memberships, bool phoneVerified);
 
     /// <summary>
     /// Phase 3 identity-only token per plan §4.2. The JWT carries only

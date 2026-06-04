@@ -37,6 +37,19 @@ public sealed class LoginHandler(
 
         var utcNow = clock.UtcNow;
 
+        // The password sign-in path is, by design (auth-rework 2026-06-03), the
+        // internal test user only — there is no public password registration; real
+        // users are OTP-only. That account is trusted, so a successful password
+        // login is treated as phone-verified: stamp it if the seeded row was created
+        // with a null PhoneVerifiedAtUtc, so the issued token (and every refresh,
+        // which reads this same state) carries phone_verified=true and the
+        // /bootstrap/first-farm gate passes.
+        if (!user.PhoneVerifiedAtUtc.HasValue)
+        {
+            user.MarkPhoneVerified(utcNow);
+            await userRepository.SaveChangesAsync(ct);
+        }
+
         // Revoke existing refresh tokens
         await refreshTokenRepository.RevokeAllForUserAsync(user.Id, utcNow, ct);
 
@@ -46,7 +59,7 @@ public sealed class LoginHandler(
             .Select(m => new MembershipClaim(m.AppId, m.Role.ToString()))
             .ToList();
 
-        var tokens = jwtTokenService.GenerateTokens(user.Id, phone.Value, user.DisplayName, memberships);
+        var tokens = jwtTokenService.GenerateTokens(user.Id, phone.Value, user.DisplayName, memberships, phoneVerified: user.PhoneVerifiedAtUtc.HasValue);
 
         // Store new refresh token
         var refreshToken = new Domain.Security.RefreshToken(

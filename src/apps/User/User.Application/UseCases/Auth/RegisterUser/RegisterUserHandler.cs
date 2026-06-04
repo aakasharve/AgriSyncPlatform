@@ -52,7 +52,7 @@ public sealed class RegisterUserHandler(
             .Select(m => new MembershipClaim(m.AppId, m.Role.ToString()))
             .ToList();
 
-        var tokens = jwtTokenService.GenerateTokens(user.Id, phone.Value, user.DisplayName, memberships);
+        var tokens = jwtTokenService.GenerateTokens(user.Id, phone.Value, user.DisplayName, memberships, phoneVerified: user.PhoneVerifiedAtUtc.HasValue);
 
         // Store refresh token
         var refreshToken = new Domain.Security.RefreshToken(

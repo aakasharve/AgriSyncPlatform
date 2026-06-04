@@ -17,7 +17,8 @@ internal sealed class JwtTokenIssuer(
         Guid userId,
         string phone,
         string displayName,
-        IReadOnlyCollection<MembershipClaim> memberships)
+        IReadOnlyCollection<MembershipClaim> memberships,
+        bool phoneVerified)
     {
         var utcNow = DateTime.UtcNow;
         var expiresAt = utcNow.AddMinutes(_options.AccessTokenMinutes);
@@ -27,7 +28,11 @@ internal sealed class JwtTokenIssuer(
             new(JwtRegisteredClaimNames.Sub, userId.ToString()),
             new(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString()),
             new("phone", phone),
-            new("display_name", displayName)
+            new("display_name", displayName),
+            // Parity with GenerateIdentityTokens (the OTP path). Without this the
+            // password/refresh token lacked phone_verified entirely, so the
+            // /bootstrap/first-farm gate 403'd ("Verify your phone first.").
+            new("phone_verified", phoneVerified ? "true" : "false")
         };
 
         foreach (var m in memberships)

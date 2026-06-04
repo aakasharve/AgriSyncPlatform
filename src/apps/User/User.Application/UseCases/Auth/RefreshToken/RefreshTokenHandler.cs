@@ -40,7 +40,7 @@ public sealed class RefreshTokenHandler(
             .Select(m => new MembershipClaim(m.AppId, m.Role.ToString()))
             .ToList();
 
-        var tokens = jwtTokenService.GenerateTokens(user.Id, user.Phone.Value, user.DisplayName, memberships);
+        var tokens = jwtTokenService.GenerateTokens(user.Id, user.Phone.Value, user.DisplayName, memberships, phoneVerified: user.PhoneVerifiedAtUtc.HasValue);
 
         // Store new refresh token
         var newRefreshToken = new Domain.Security.RefreshToken(
