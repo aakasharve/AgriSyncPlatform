@@ -1,10 +1,19 @@
 /// <reference lib="webworker" />
 
-const APP_SHELL_CACHE = 'shramsafal-app-shell-v3';
+// v4: bumped from v3 so `activate` purges the stale v3 app-shell cache (which held
+// a cache-first index.html pinned to an old asset hash — that masked deploys).
+const APP_SHELL_CACHE = 'shramsafal-app-shell-v4';
 const API_CACHE = 'shramsafal-api-v3';
-const STATIC_ASSET_PATTERNS = [
+// HTML shell (the entry document) — NETWORK-FIRST. A new deploy's index.html points
+// at new hashed asset filenames, so the shell MUST be re-fetched or returning users
+// are served the old bundle forever. Caching the shell cache-first was the bug.
+const HTML_SHELL_PATTERNS = [
     /^\/$/,
-    /^\/index\.html$/,
+    /^\/index\.html$/
+];
+// Hashed/static assets — cache-first is correct: a new deploy emits NEW filenames,
+// so a stale cache simply misses and fetches fresh. Never cache-first the shell.
+const STATIC_ASSET_PATTERNS = [
     /^\/assets\//,
     /^\/icons\//,
     /^\/manifest/,
@@ -51,6 +60,11 @@ self.addEventListener('fetch', (event) => {
 
     if (url.pathname.startsWith('/sync/') || url.pathname.startsWith('/shramsafal/') || url.pathname.startsWith('/user/')) {
         event.respondWith(networkFirst(request));
+        return;
+    }
+
+    if (HTML_SHELL_PATTERNS.some((pattern) => pattern.test(url.pathname))) {
+        event.respondWith(networkFirstShell(request));
         return;
     }
 
@@ -158,6 +172,25 @@ async function cacheFirst(request) {
         cache.put(request, response.clone());
     }
     return response;
+}
+
+// Network-first for the HTML shell: always try the live index.html so a fresh
+// deploy is picked up immediately; fall back to the cached shell only offline.
+async function networkFirstShell(request) {
+    const cache = await caches.open(APP_SHELL_CACHE);
+    try {
+        const response = await fetchWithTimeout(request, 3000);
+        if (response && response.ok) {
+            cache.put(request, response.clone());
+        }
+        return response;
+    } catch (error) {
+        const cached = await cache.match(request);
+        if (cached) {
+            return cached;
+        }
+        throw error;
+    }
 }
 
 async function networkFirst(request) {
