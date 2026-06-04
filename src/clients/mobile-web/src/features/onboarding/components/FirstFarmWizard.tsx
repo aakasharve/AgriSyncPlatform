@@ -112,7 +112,10 @@ const FirstFarmWizard: React.FC<FirstFarmWizardProps> = ({
     );
 
     return (
-        <div className="fixed inset-0 z-50 flex flex-col bg-gradient-to-b from-emerald-50 via-stone-50 to-white">
+        /* z-[60], not z-50: BottomNavigation is z-50 and is rendered *after* this
+           wizard in AppContent's DOM, so an equal z-index let the nav paint over the
+           full-screen wizard and bury the "पुढे चला" CTA. Sit above the nav. */
+        <div className="fixed inset-0 z-[60] flex flex-col bg-gradient-to-b from-emerald-50 via-stone-50 to-white">
             {headerClose}
 
             <div className="flex-1 overflow-y-auto px-5 pb-10 pt-10 sm:px-8">

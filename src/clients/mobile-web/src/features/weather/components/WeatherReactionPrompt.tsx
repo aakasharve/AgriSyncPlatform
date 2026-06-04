@@ -47,7 +47,10 @@ const WeatherReactionPrompt: React.FC<Props> = ({ event, onReact, onDismiss }) =
     };
 
     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in">
+        /* z-[60], not z-50: this prompt is rendered before the z-50 BottomNavigation
+           in AppContent, so an equal z-index let the nav paint over this modal's
+           backdrop/bottom edge. Sit above the nav. */
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in">
             <div className="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden">
                 <div className="bg-slate-50 p-4 border-b flex items-center gap-3">
                     {getIcon()}
