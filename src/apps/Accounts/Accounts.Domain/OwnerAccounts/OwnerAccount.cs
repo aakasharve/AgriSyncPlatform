@@ -43,6 +43,17 @@ public sealed class OwnerAccount : Entity<OwnerAccountId>
     public DateTime CreatedAtUtc { get; private set; }
     public DateTime ModifiedAtUtc { get; private set; }
 
+    /// <summary>
+    /// The ssf Farm id created by the first-farm bootstrap, recorded HERE on the
+    /// accounts side (which is not under the ssf farm_id RLS) so the bootstrap flow
+    /// can establish the tenant context BEFORE touching the FORCE-RLS ssf tables, and
+    /// so the operation is idempotent + recoverable across a partial write. Null until
+    /// the first farm is bootstrapped (or for accounts created before this column).
+    /// Stored as a raw <see cref="Guid"/>, not a FarmId, to avoid an Accounts→ShramSafal
+    /// cross-context type reference.
+    /// </summary>
+    public Guid? BootstrappedFarmId { get; private set; }
+
     public IReadOnlyCollection<OwnerAccountMembership> Memberships => _memberships.AsReadOnly();
 
     public static OwnerAccount Create(
@@ -140,6 +151,35 @@ public sealed class OwnerAccount : Entity<OwnerAccountId>
         }
 
         target.Revoke(utcNow);
+        ModifiedAtUtc = utcNow;
+    }
+
+    /// <summary>
+    /// Links this account to the ssf Farm produced by the first-farm bootstrap.
+    /// Idempotent: re-linking the SAME farm id is a no-op; relinking to a DIFFERENT
+    /// farm throws (an account bootstraps exactly one first farm). Set before the ssf
+    /// write so the bootstrap survives a partial write (account saved, farm not) and
+    /// can be completed deterministically with the same farm id on retry.
+    /// </summary>
+    public void SetBootstrappedFarm(Guid farmId, DateTime utcNow)
+    {
+        if (farmId == Guid.Empty)
+        {
+            throw new ArgumentException("Bootstrapped farm id is required.", nameof(farmId));
+        }
+
+        if (BootstrappedFarmId is { } existing && existing != farmId)
+        {
+            throw new InvalidOperationException(
+                $"OwnerAccount '{Id}' is already linked to bootstrapped farm '{existing}'; refusing relink to '{farmId}'.");
+        }
+
+        if (BootstrappedFarmId == farmId)
+        {
+            return; // idempotent no-op
+        }
+
+        BootstrappedFarmId = farmId;
         ModifiedAtUtc = utcNow;
     }
 

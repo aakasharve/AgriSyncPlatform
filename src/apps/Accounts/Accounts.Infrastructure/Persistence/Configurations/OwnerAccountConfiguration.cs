@@ -42,6 +42,12 @@ internal sealed class OwnerAccountConfiguration : IEntityTypeConfiguration<Owner
             .HasColumnName("modified_at_utc")
             .IsRequired();
 
+        // Nullable: null for accounts created before first-farm bootstrap (or before
+        // this column existed). Recorded accounts-side so the bootstrap flow can set the
+        // tenant GUC before the FORCE-RLS ssf farm write. See OwnerAccount.SetBootstrappedFarm.
+        builder.Property(x => x.BootstrappedFarmId)
+            .HasColumnName("bootstrapped_farm_id");
+
         builder.HasIndex(x => x.PrimaryOwnerUserId)
             .HasDatabaseName("ix_owner_accounts_primary_owner_user_id");
 

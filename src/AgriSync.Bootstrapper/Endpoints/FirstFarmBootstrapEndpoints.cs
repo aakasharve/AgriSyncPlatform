@@ -2,6 +2,7 @@ using System.Security.Claims;
 using Accounts.Domain.OwnerAccounts;
 using Accounts.Domain.Subscriptions;
 using Accounts.Infrastructure.Persistence;
+using AgriSync.BuildingBlocks.Persistence;
 using AgriSync.SharedKernel.Contracts.Ids;
 using AgriSync.SharedKernel.Contracts.Roles;
 using Microsoft.AspNetCore.Authorization;
@@ -32,6 +33,7 @@ public static class FirstFarmBootstrapEndpoints
             ClaimsPrincipal user,
             ShramSafalDbContext ssfDb,
             AccountsDbContext accountsDb,
+            TenantContext tenantContext,
             CancellationToken ct) =>
         {
             if (!TryGetUserId(user, out var userId))
@@ -54,89 +56,89 @@ public static class FirstFarmBootstrapEndpoints
             }
 
             var typedUserId = new UserId(userId);
+            var farmName = request.FarmName.Trim();
             var nowUtc = DateTime.UtcNow;
 
-            // Idempotent-ish guard: if this user already has an OwnerAccount
-            // with at least one farm, return it instead of creating a second.
-            var existingAccount = await accountsDb.OwnerAccounts
+            // 1. Find-or-create the OwnerAccount. The `accounts` schema is NOT under the
+            //    ssf farm_id RLS (AccountsDbContext registers no TenantConnectionInterceptor),
+            //    so these reads/writes need no tenant context.
+            var account = await accountsDb.OwnerAccounts
                 .FirstOrDefaultAsync(a => a.PrimaryOwnerUserId == typedUserId, ct);
 
-            if (existingAccount is not null)
+            if (account is null)
             {
-                var existingFarm = await ssfDb.Farms
-                    .FirstOrDefaultAsync(f => f.OwnerAccountId == existingAccount.Id, ct);
-
-                if (existingFarm is not null)
-                {
-                    return Results.Ok(BuildResponse(
-                        farm: existingFarm,
-                        account: existingAccount,
-                        subscription: await accountsDb.Subscriptions
-                            .Where(s => s.OwnerAccountId == existingAccount.Id
-                                && (s.Status == SubscriptionStatus.Trialing || s.Status == SubscriptionStatus.Active))
-                            .FirstOrDefaultAsync(ct),
-                        wasAlreadyBootstrapped: true));
-                }
-            }
-
-            // 1. OwnerAccount
-            var account = existingAccount ?? OwnerAccount.Create(
-                id: OwnerAccountId.New(),
-                accountName: request.FarmName.Trim(),
-                primaryOwnerUserId: typedUserId,
-                accountType: OwnerAccountType.Individual,
-                createdAtUtc: nowUtc);
-
-            if (existingAccount is null)
-            {
+                account = OwnerAccount.Create(
+                    id: OwnerAccountId.New(),
+                    accountName: farmName,
+                    primaryOwnerUserId: typedUserId,
+                    accountType: OwnerAccountType.Individual,
+                    createdAtUtc: nowUtc);
                 accountsDb.OwnerAccounts.Add(account);
             }
 
-            // 2. Trial subscription (only if the account doesn't already
-            // have one — preserves invariant I6).
-            var existingTrial = existingAccount is null
-                ? null
-                : await accountsDb.Subscriptions
-                    .FirstOrDefaultAsync(s => s.OwnerAccountId == existingAccount.Id
-                        && (s.Status == SubscriptionStatus.Trialing || s.Status == SubscriptionStatus.Active), ct);
+            // 2. Trial subscription — preserve invariant I6 (at most one Active/Trialing).
+            var subscription = await accountsDb.Subscriptions
+                .Where(s => s.OwnerAccountId == account.Id
+                    && (s.Status == SubscriptionStatus.Trialing || s.Status == SubscriptionStatus.Active))
+                .FirstOrDefaultAsync(ct);
 
-            var subscription = existingTrial ?? Subscription.StartTrial(
-                id: SubscriptionId.New(),
-                ownerAccountId: account.Id,
-                planCode: PlanCode.ShramSafalPro,
-                trialStartUtc: nowUtc,
-                trialEndsAtUtc: nowUtc.AddDays(14));
-
-            if (existingTrial is null)
+            if (subscription is null)
             {
+                subscription = Subscription.StartTrial(
+                    id: SubscriptionId.New(),
+                    ownerAccountId: account.Id,
+                    planCode: PlanCode.ShramSafalPro,
+                    trialStartUtc: nowUtc,
+                    trialEndsAtUtc: nowUtc.AddDays(14));
                 accountsDb.Subscriptions.Add(subscription);
             }
 
+            // 3. Decide the bootstrap farm id and RECORD IT ON THE ACCOUNT (accounts side)
+            //    BEFORE any ssf write. This is what makes the operation idempotent and
+            //    recoverable across a partial write (account saved, farm not): a re-run
+            //    reuses the same farm id, so we either find the already-created farm or
+            //    create it deterministically — never a duplicate, never an orphan stuck.
+            var farmId = account.BootstrappedFarmId ?? Guid.NewGuid();
+            account.SetBootstrappedFarm(farmId, nowUtc);
+
             await accountsDb.SaveChangesAsync(ct);
 
-            // 3. Farm + FarmCode + PrimaryOwner membership (ssf schema)
-            var farm = Farm.Create(
-                id: FarmId.New(),
-                name: request.FarmName.Trim(),
-                ownerUserId: typedUserId,
-                createdAtUtc: nowUtc);
-            farm.AttachToOwnerAccount(account.Id, nowUtc);
-            farm.AssignFarmCode(GenerateFarmCode(), nowUtc);
+            // 4. Establish tenant context for the FORCE-RLS ssf tables. The
+            //    TenantConnectionInterceptor then emits `SET LOCAL agrisync.farm_id = <farmId>`,
+            //    so the ssf.farms WITH CHECK ("Id" = current_setting('agrisync.farm_id')) and the
+            //    ssf.farm_memberships policy both pass for THIS user's own new farm. Admin scope
+            //    would skip the GUC and FORCE-RLS (no BYPASSRLS) would then block the insert.
+            var typedFarmId = new FarmId(farmId);
+            tenantContext.SetTenant(farmId, (Guid)account.Id, userId);
 
-            ssfDb.Farms.Add(farm);
+            // 5. Find-or-create the Farm (ssf). With the tenant set, this read is scoped to
+            //    exactly this farm id, so it returns the farm iff a prior run already created it.
+            var farm = await ssfDb.Farms.FirstOrDefaultAsync(f => f.Id == typedFarmId, ct);
+            var wasAlreadyBootstrapped = farm is not null;
 
-            var membership = FarmMembership.Create(
-                id: Guid.NewGuid(),
-                farmId: farm.Id,
-                userId: typedUserId,
-                role: AppRole.PrimaryOwner,
-                grantedAtUtc: nowUtc);
+            if (farm is null)
+            {
+                farm = Farm.Create(
+                    id: typedFarmId,
+                    name: farmName,
+                    ownerUserId: typedUserId,
+                    createdAtUtc: nowUtc);
+                farm.AttachToOwnerAccount(account.Id, nowUtc);
+                farm.AssignFarmCode(GenerateFarmCode(), nowUtc);
+                ssfDb.Farms.Add(farm);
 
-            ssfDb.FarmMemberships.Add(membership);
+                var membership = FarmMembership.Create(
+                    id: Guid.NewGuid(),
+                    farmId: farm.Id,
+                    userId: typedUserId,
+                    role: AppRole.PrimaryOwner,
+                    grantedAtUtc: nowUtc);
+                ssfDb.FarmMemberships.Add(membership);
 
-            await ssfDb.SaveChangesAsync(ct);
+                await ssfDb.SaveChangesAsync(ct);
+            }
 
-            return Results.Ok(BuildResponse(farm, account, subscription, wasAlreadyBootstrapped: false));
+            return Results.Ok(BuildResponse(farm, account, subscription, wasAlreadyBootstrapped));
         })
         .WithName("BootstrapFirstFarm")
         .WithTags("Onboarding")
