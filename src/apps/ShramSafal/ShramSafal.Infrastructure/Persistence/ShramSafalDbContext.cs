@@ -264,6 +264,62 @@ public sealed class ShramSafalDbContext(DbContextOptions<ShramSafalDbContext> op
     /// </summary>
     public DbSet<OutboxMessage> OutboxMessages => Set<OutboxMessage>();
 
+    // ── farm_memberships.owner_account_id denormalisation ─────────────────
+    // The column is NOT NULL (migration 20260516120000) and mapped as a shadow
+    // property (FarmMembershipConfiguration) but the FarmMembership domain entity
+    // doesn't carry it. Populate it centrally on save — for EVERY creation path
+    // (bootstrap, CreateFarm, ClaimJoin) — from the membership's farm, so no caller
+    // has to know about the denormalised column and no insert writes NULL/empty.
+    public override async Task<int> SaveChangesAsync(bool acceptAllChangesOnSuccess, CancellationToken cancellationToken = default)
+    {
+        await PopulateFarmMembershipOwnerAccountIdsAsync(cancellationToken);
+        return await base.SaveChangesAsync(acceptAllChangesOnSuccess, cancellationToken);
+    }
+
+    public override int SaveChanges(bool acceptAllChangesOnSuccess)
+    {
+        PopulateFarmMembershipOwnerAccountIdsAsync(CancellationToken.None).GetAwaiter().GetResult();
+        return base.SaveChanges(acceptAllChangesOnSuccess);
+    }
+
+    private async Task PopulateFarmMembershipOwnerAccountIdsAsync(CancellationToken ct)
+    {
+        var addedMemberships = ChangeTracker.Entries<FarmMembership>()
+            .Where(e => e.State == EntityState.Added)
+            .ToList();
+        if (addedMemberships.Count == 0)
+        {
+            return;
+        }
+
+        foreach (var entry in addedMemberships)
+        {
+            var prop = entry.Property("owner_account_id");
+            if (prop.CurrentValue is System.Guid current && current != System.Guid.Empty)
+            {
+                continue; // already set explicitly
+            }
+
+            var farmId = entry.Entity.FarmId;
+
+            // Prefer a farm tracked in this same unit of work (bootstrap / CreateFarm
+            // co-create the farm) to avoid a round-trip; otherwise read it (ClaimJoin
+            // joins a pre-existing farm). Every farm has a non-null owner_account_id
+            // (migration 20260418144911), so First is safe.
+            var trackedFarm = ChangeTracker.Entries<Farm>()
+                .FirstOrDefault(f => f.Entity.Id == farmId);
+
+            var ownerAccountId = trackedFarm is not null
+                ? (System.Guid)trackedFarm.Entity.OwnerAccountId
+                : (System.Guid)(await Farms
+                    .Where(f => f.Id == farmId)
+                    .Select(f => f.OwnerAccountId)
+                    .FirstAsync(ct));
+
+            prop.CurrentValue = ownerAccountId;
+        }
+    }
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.HasDefaultSchema("ssf");

@@ -20,6 +20,22 @@ internal sealed class FarmMembershipConfiguration : IEntityTypeConfiguration<Far
             .HasConversion(TypedIdConverters.FarmId)
             .IsRequired();
 
+        // owner_account_id: denormalised from ssf.farms for the Phase 03.3 RLS
+        // policies. Migration 20260516120000 added it NOT NULL but deliberately
+        // left it OFF the EF model ("Phase 03.2/03.3 will extend the EF model").
+        // Mapped here as a shadow property so EF includes it on INSERT; populated
+        // centrally in ShramSafalDbContext.SaveChangesAsync from the membership's
+        // farm (every farm has a non-null owner_account_id). Before this, EVERY
+        // farm_memberships insert (bootstrap, CreateFarm, ClaimJoin) wrote NULL and
+        // hit a 23502 not-null violation — masked until the RLS tenant-context fix
+        // let the insert path actually run.
+        builder.Property<System.Guid>("owner_account_id")
+            .HasColumnName("owner_account_id")
+            .IsRequired();
+
+        builder.HasIndex("owner_account_id")
+            .HasDatabaseName("ix_farm_memberships_owner_account_id");
+
         builder.Property(x => x.UserId)
             .HasColumnName("user_id")
             .HasConversion(TypedIdConverters.UserId)
