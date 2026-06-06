@@ -424,6 +424,12 @@ try
     builder.Services.AddTransient<AgriSync.Bootstrapper.Infrastructure.PurveshDemoSeeder>();
     builder.Services.AddTransient<AgriSync.Bootstrapper.Infrastructure.BlankTestUserSeeder>();
     builder.Services.AddTransient<AgriSync.Bootstrapper.Infrastructure.PlatformAdminBridgeSeeder>();
+    // TestFixtures: prod ships everything OFF + empty allowlist (appsettings.json) AND TestFixtureService
+    // hard-blocks in Production regardless. Dev defaults (appsettings.Development.json) list the exact
+    // deterministic seeder owner-account ids only (exact-match, never pattern). Spec: test-fixture-service-runtime-2026-06-06.
+    builder.Services.AddOptions<AgriSync.Bootstrapper.Infrastructure.TestFixtureOptions>()
+        .Bind(builder.Configuration.GetSection(AgriSync.Bootstrapper.Infrastructure.TestFixtureOptions.SectionName));
+    builder.Services.AddTransient<AgriSync.Bootstrapper.Infrastructure.TestFixtureService>();
     builder.Services.AddTransient<ShramSafal.Infrastructure.Persistence.Seeding.TestProtocolSeed>();
 
     // Sub-plan 05 Task 2: Playwright E2E control plane. Registered only when the
