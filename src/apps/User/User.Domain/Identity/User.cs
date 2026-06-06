@@ -122,6 +122,21 @@ public sealed class User : Entity<UserId>
     }
 
     /// <summary>
+    /// Sets the display name (Farmer Name) captured in the minimal post-OTP
+    /// onboarding step. Trims; ignores null/whitespace so a blank submit never
+    /// wipes an existing name. spec: getmyfarms-user-scoped-rls-read-path-2026-06-06.
+    /// </summary>
+    public void UpdateDisplayName(string displayName)
+    {
+        if (string.IsNullOrWhiteSpace(displayName))
+        {
+            return;
+        }
+
+        DisplayName = displayName.Trim();
+    }
+
+    /// <summary>
     /// Updates the preferred language. Accepts <c>"mr"</c>, <c>"hi"</c>, or
     /// <c>"en"</c>; anything else falls back to <c>"mr"</c>.
     /// </summary>

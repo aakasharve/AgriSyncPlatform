@@ -9,6 +9,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.EntityFrameworkCore;
 using ShramSafal.Domain.Farms;
 using ShramSafal.Infrastructure.Persistence;
+using User.Infrastructure.Persistence;
 
 namespace AgriSync.Bootstrapper.Endpoints;
 
@@ -33,6 +34,7 @@ public static class FirstFarmBootstrapEndpoints
             ClaimsPrincipal user,
             ShramSafalDbContext ssfDb,
             AccountsDbContext accountsDb,
+            UserDbContext userDb,
             TenantContext tenantContext,
             CancellationToken ct) =>
         {
@@ -138,6 +140,23 @@ public static class FirstFarmBootstrapEndpoints
                 await ssfDb.SaveChangesAsync(ct);
             }
 
+            // 6. Farmer Name (minimal post-OTP onboarding) → user display name.
+            //    public.users is NOT under RLS (it is the global auth directory —
+            //    see 20260516150000_EnableUserDbRowLevelSecurity remarks), so this
+            //    update carries no farm tenancy. It runs AFTER SetTenant only so the
+            //    interceptor (this route is not skip-listed) has a claim to inject
+            //    and does not fail-closed on the UserDbContext command. Idempotent:
+            //    re-bootstrap with the same name is a no-op; a blank name is ignored.
+            if (!string.IsNullOrWhiteSpace(request.FarmerName))
+            {
+                var farmerUser = await userDb.Users.FirstOrDefaultAsync(u => u.Id == typedUserId, ct);
+                if (farmerUser is not null)
+                {
+                    farmerUser.UpdateDisplayName(request.FarmerName);
+                    await userDb.SaveChangesAsync(ct);
+                }
+            }
+
             return Results.Ok(BuildResponse(farm, account, subscription, wasAlreadyBootstrapped));
         })
         .WithName("BootstrapFirstFarm")
@@ -193,4 +212,4 @@ public static class FirstFarmBootstrapEndpoints
     }
 }
 
-public sealed record BootstrapFirstFarmRequest(string? FarmName, string? Village);
+public sealed record BootstrapFirstFarmRequest(string? FarmName, string? Village, string? FarmerName = null);

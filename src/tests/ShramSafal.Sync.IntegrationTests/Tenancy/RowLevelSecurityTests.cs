@@ -12,8 +12,10 @@ using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Npgsql;
+using AgriSync.SharedKernel.Contracts.Ids;
 using AgriSync.SharedKernel.Contracts.Roles;
 using ShramSafal.Application.Ports;
+using ShramSafal.Domain.Farms;
 using ShramSafal.Infrastructure;
 using ShramSafal.Infrastructure.Persistence;
 using Testcontainers.PostgreSql;
@@ -425,6 +427,50 @@ public sealed class RowLevelSecurityTests : IAsyncLifetime
         var strangerFarms = await repo.GetMyFarmsAsync(Guid.NewGuid());
         strangerFarms.Should().BeEmpty(
             "a user with no ownership and no membership must see no farms — proves no cross-tenant leak via the user-scoped policies");
+    }
+
+    // ────────────────────────────────────────────────────────────────────
+    // 9. create-farm WRITE path — the exact ssf write /bootstrap/first-farm
+    //    performs (the area that burned 3 prod deploys with
+    //    "DbUpdateConcurrencyException: affected 0 rows"). SetTenant to the NEW
+    //    farm id → the interceptor emits SET LOCAL agrisync.farm_id, so both the
+    //    WITH CHECK and the EF RETURNING read-back (which is RLS-filtered by the
+    //    USING clause) see the new row. owner_account_id on the membership is
+    //    populated centrally in ShramSafalDbContext.SaveChangesAsync (5a270dd0).
+    //    SaveChanges must NOT throw and must report >=2 rows.
+    // ────────────────────────────────────────────────────────────────────
+    [Fact]
+    public async Task Bootstrap_style_ssf_write_succeeds_when_tenant_set_to_new_farm()
+    {
+        using var scope = _rootProvider.CreateScope();
+        var ctx = scope.ServiceProvider.GetRequiredService<ShramSafalDbContext>();
+        var tenant = scope.ServiceProvider.GetRequiredService<TenantContext>();
+
+        var newFarmId = Guid.NewGuid();
+        var newOwnerUser = Guid.NewGuid();
+        var newAccount = Guid.NewGuid();
+        var nowUtc = DateTime.UtcNow;
+
+        // Mirror FirstFarmBootstrapEndpoints: tenant scoped to the brand-new farm.
+        tenant.SetTenant(newFarmId, newAccount, newOwnerUser);
+
+        await using var tx = await ctx.Database.BeginTransactionAsync();
+
+        var farm = Farm.Create(new FarmId(newFarmId), "Bootstrap Write Test", new UserId(newOwnerUser), nowUtc);
+        farm.AttachToOwnerAccount(new OwnerAccountId(newAccount), nowUtc);
+        farm.AssignFarmCode("BTST01", nowUtc);
+        ctx.Farms.Add(farm);
+
+        var membership = FarmMembership.Create(
+            Guid.NewGuid(), new FarmId(newFarmId), new UserId(newOwnerUser), AppRole.PrimaryOwner, nowUtc);
+        ctx.FarmMemberships.Add(membership);
+
+        var act = async () => await ctx.SaveChangesAsync();
+        var affected = await act.Should().NotThrowAsync(
+            "with agrisync.farm_id set to the new farm, WITH CHECK passes and the RETURNING read-back is visible — no DbUpdateConcurrencyException");
+        affected.Subject.Should().BeGreaterThanOrEqualTo(2, "the farm and its PrimaryOwner membership both persist");
+
+        await tx.CommitAsync();
     }
 
     // ────────────────────────────────────────────────────────────────────
