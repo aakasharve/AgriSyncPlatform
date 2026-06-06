@@ -257,3 +257,19 @@ coverage/
 # Per-deploy scratch (runners, SQL bundles, research probes, SSM outputs)
 # Each deploy session writes scripts + outputs here. Forensic value local-only.
 /.deploy-tmp/
+
+# ── Actual deploy-lane artifact paths (agrisync-deploy plugin + dotnet publish) ──
+# These accumulated as ~1,100 untracked orphans because the names above never
+# matched what the lane actually writes. Reproducible build output + local
+# provenance backups — never commit. (added 2026-06-06)
+publish-output/
+publish-output-*/
+/agrisync-deploy-*.tar.gz
+.local-dev-backups/
+.build-chart-*.py
+.prep-*-staged.md
+baseline_send_err.txt
+
+# Agent scratch at root
+.codex/
+/AGENTS.md
