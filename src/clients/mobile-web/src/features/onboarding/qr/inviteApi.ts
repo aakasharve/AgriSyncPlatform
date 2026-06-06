@@ -153,11 +153,16 @@ export interface BootstrapFirstFarmResponse {
 export const bootstrapFirstFarm = async (
     farmName: string,
     village?: string,
+    farmerName?: string,
 ): Promise<BootstrapFirstFarmResponse> => {
     const response = await fetch(`${resolveBaseUrl()}/bootstrap/first-farm`, {
         method: 'POST',
         headers: authHeaders(),
-        body: JSON.stringify({ farmName: farmName.trim(), village: village?.trim() || null }),
+        body: JSON.stringify({
+            farmName: farmName.trim(),
+            village: village?.trim() || null,
+            farmerName: farmerName?.trim() || null,
+        }),
     });
     if (!response.ok) throw await parseError(response);
     return (await response.json()) as BootstrapFirstFarmResponse;

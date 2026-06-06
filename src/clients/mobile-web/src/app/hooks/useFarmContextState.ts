@@ -25,6 +25,9 @@ export interface FarmContextState {
     currentFarmId: string | null;
     showFirstFarmWizard: boolean;
     setShowFirstFarmWizard: React.Dispatch<React.SetStateAction<boolean>>;
+    /** True when the user has 0 farms — shows the minimal 2-field onboarding. */
+    showMinimalOnboarding: boolean;
+    setShowMinimalOnboarding: React.Dispatch<React.SetStateAction<boolean>>;
     handleSwitchFarm: (farmId: string) => void;
     handleWizardComplete: (result: BootstrapFirstFarmResponse) => void;
     handleJoinViaQr: () => void;
@@ -37,12 +40,14 @@ export function useFarmContextState(): FarmContextState {
         () => SessionStore.getCurrentFarmId() || null,
     );
     const [showFirstFarmWizard, setShowFirstFarmWizard] = React.useState(false);
+    const [showMinimalOnboarding, setShowMinimalOnboarding] = React.useState(false);
     const [refreshCounter, setRefreshCounter] = React.useState(0);
 
     React.useEffect(() => {
         if (!isAuthenticated) {
             setMyFarms(null);
             setShowFirstFarmWizard(false);
+            setShowMinimalOnboarding(false);
             return;
         }
 
@@ -54,7 +59,10 @@ export function useFarmContextState(): FarmContextState {
                 setMyFarms(farms);
 
                 if (farms.length === 0) {
-                    setShowFirstFarmWizard(true);
+                    // Show the minimal 2-field onboarding, NOT the heavy wizard.
+                    // The heavy wizard (FirstFarmWizard) is still available from the
+                    // AppHeader "create farm" affordance (setShowFirstFarmWizard).
+                    setShowMinimalOnboarding(true);
                     return;
                 }
 
@@ -78,6 +86,7 @@ export function useFarmContextState(): FarmContextState {
 
     const handleWizardComplete = React.useCallback((result: BootstrapFirstFarmResponse) => {
         setShowFirstFarmWizard(false);
+        setShowMinimalOnboarding(false);
         setCurrentFarmId(result.farmId);
         SessionStore.setCurrentFarmId(result.farmId);
         setRefreshCounter(x => x + 1);
@@ -109,6 +118,8 @@ export function useFarmContextState(): FarmContextState {
         currentFarmId,
         showFirstFarmWizard,
         setShowFirstFarmWizard,
+        showMinimalOnboarding,
+        setShowMinimalOnboarding,
         handleSwitchFarm,
         handleWizardComplete,
         handleJoinViaQr,

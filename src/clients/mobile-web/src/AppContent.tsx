@@ -15,6 +15,7 @@ import AppRouter from './core/navigation/AppRouter';
 import ActionToast from './shared/components/ui/ActionToast';
 import WeatherReactionPrompt from './features/weather/components/WeatherReactionPrompt';
 import FirstFarmWizard from './features/onboarding/components/FirstFarmWizard';
+import MinimalOnboarding from './features/onboarding/components/MinimalOnboarding';
 import { AiTestModeBanner } from './shared/components/AiTestModeBanner';
 
 import { CropProfile } from './types';
@@ -45,6 +46,7 @@ const AppContent: React.FC<AppContentProps> = ({ crops: initialCrops, setCrops }
         currentFarmId,
         showFirstFarmWizard,
         setShowFirstFarmWizard,
+        showMinimalOnboarding,
         handleSwitchFarm,
         handleWizardComplete,
         handleJoinViaQr,
@@ -104,6 +106,16 @@ const AppContent: React.FC<AppContentProps> = ({ crops: initialCrops, setCrops }
                 </AppFeatureProviders>
             </main>
 
+            {/* Minimal 2-field onboarding shown to genuinely-new users (0 farms).
+                Replaces the force-opened heavy wizard on the 0-farm path. */}
+            <MinimalOnboarding
+                isOpen={showMinimalOnboarding}
+                onComplete={handleWizardComplete}
+                onJoinViaQr={handleJoinViaQr}
+            />
+
+            {/* Heavy wizard — still available from AppHeader "create farm" CTA
+                (setShowFirstFarmWizard) and is NOT force-opened on 0 farms any more. */}
             <FirstFarmWizard
                 isOpen={showFirstFarmWizard}
                 onComplete={handleWizardComplete}
