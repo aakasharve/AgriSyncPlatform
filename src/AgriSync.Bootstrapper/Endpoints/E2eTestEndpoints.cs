@@ -2,11 +2,7 @@ using AgriSync.Bootstrapper.Infrastructure;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
-using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Logging;
 using ShramSafal.Application.Abstractions.Sync;
-using ShramSafal.Infrastructure.Persistence;
 
 namespace AgriSync.Bootstrapper.Endpoints;
 
@@ -16,11 +12,11 @@ namespace AgriSync.Bootstrapper.Endpoints;
 /// being literally <c>"true"</c>. Production must never set this flag.
 ///
 /// Endpoints:
-///   POST /__e2e/reset        TRUNCATEs the mutable ssf tables and clears
-///                            in-memory E2E harness toggles.
-///   POST /__e2e/seed         Delegates to the existing DatabaseSeeder for the
-///                            "ramu" fixture; returns 501 for fixtures that are
-///                            not yet implemented.
+///   POST /__e2e/reset        Delegates to <see cref="TestFixtureService.ResetFixtureAsync"/>
+///                            and clears in-memory E2E harness toggles.
+///   POST /__e2e/seed         Delegates to <see cref="TestFixtureService.SeedFixtureAsync"/>.
+///                            Legacy fixture keys "ramu" and "admin_two_orgs" are mapped to
+///                            their canonical service names ("ramu-demo", "admin-two-orgs").
 ///   POST /__e2e/fail-pushes  Toggles an in-memory flag observed by
 ///                            <see cref="E2eFailPushesToggle"/>. Wiring the
 ///                            sync push handler to consult the toggle is a
@@ -33,19 +29,6 @@ namespace AgriSync.Bootstrapper.Endpoints;
 public static class E2eTestEndpoints
 {
     public const string EnvFlag = "ALLOW_E2E_SEED";
-
-    private static readonly string[] TruncateTables =
-    [
-        "ssf.daily_logs",
-        "ssf.cost_entries",
-        "ssf.attachments",
-        "ssf.verification_events",
-        "ssf.audit_events",
-        "ssf.day_ledgers",
-        "ssf.log_tasks",
-        "ssf.sync_mutations",
-        "ssf.compliance_signals",
-    ];
 
     public static bool IsEnabled() =>
         string.Equals(
@@ -65,47 +48,32 @@ public static class E2eTestEndpoints
             .AllowAnonymous();
 
         group.MapPost("/reset", async (
-            IServiceScopeFactory scopes,
+            TestFixtureService fixtures,
             E2eFailPushesToggle failPushes,
-            ILoggerFactory loggerFactory,
+            HttpContext ctx,
             CancellationToken ct) =>
         {
-            var logger = loggerFactory.CreateLogger("AgriSync.Bootstrapper.E2eTestEndpoints");
             failPushes.Reason = null;
 
-            using var scope = scopes.CreateScope();
-            // DATA_PRINCIPLE_SPINE 03.2 — elevate before DbContext resolution
-            // so TenantConnectionInterceptor skips the fail-closed path.
-            // Truncate is a cross-tenant administrative operation by definition.
-            scope.ServiceProvider
-                .GetRequiredService<AgriSync.BuildingBlocks.Persistence.TenantContext>()
-                .ElevateToAdminCrossTenant();
-            var ssf = scope.ServiceProvider.GetRequiredService<ShramSafalDbContext>();
-
-            foreach (var table in TruncateTables)
+            var fixture = (ctx.Request.Query["fixture"].ToString() is { Length: > 0 } f) ? f : "purvesh-demo";
+            try
             {
-                var sql = $"TRUNCATE TABLE {table} CASCADE;";
-                try
-                {
-                    await ssf.Database.ExecuteSqlRawAsync(sql, ct);
-                }
-                catch (Exception ex)
-                {
-                    logger.LogWarning(ex, "E2E reset: truncate of {Table} failed (table may not exist yet)", table);
-                }
+                var result = await fixtures.ResetFixtureAsync(fixture, ct);
+                return Results.Ok(new { reset = true, result });
             }
-
-            return Results.Ok(new { reset = true, tables = TruncateTables });
+            catch (TestFixturesDisabledException ex)
+            {
+                return Results.Json(new { reset = false, error = "test_fixtures_disabled", message = ex.Message },
+                    statusCode: StatusCodes.Status403Forbidden);
+            }
         })
         .WithName("E2eReset");
 
         group.MapPost("/seed", async (
+            TestFixtureService fixtures,
             HttpContext ctx,
-            IServiceScopeFactory scopes,
-            ILoggerFactory loggerFactory,
             CancellationToken ct) =>
         {
-            var logger = loggerFactory.CreateLogger("AgriSync.Bootstrapper.E2eTestEndpoints");
             SeedRequest body;
             try
             {
@@ -116,41 +84,24 @@ public static class E2eTestEndpoints
                 body = new SeedRequest("ramu");
             }
 
-            var fixture = (body.Fixture ?? "ramu").Trim().ToLowerInvariant();
-
-            using var scope = scopes.CreateScope();
-            // DATA_PRINCIPLE_SPINE 03.2 — seeders span every tenant by design.
-            scope.ServiceProvider
-                .GetRequiredService<AgriSync.BuildingBlocks.Persistence.TenantContext>()
-                .ElevateToAdminCrossTenant();
-
-            switch (fixture)
+            // Map legacy harness fixture keys to canonical TestFixtureService names.
+            var rawFixture = (body.Fixture ?? "ramu").Trim().ToLowerInvariant();
+            var fixture = rawFixture switch
             {
-                case "ramu":
-                    {
-                        var seeder = scope.ServiceProvider.GetRequiredService<DatabaseSeeder>();
-                        var summary = await seeder.SeedDemoDataAsync();
-                        var result = new
-                        {
-                            userId = "00000000-0000-0000-0000-000000000001",
-                            phone = "9999999999",
-                            password = "ramu123",
-                            farmId = "",
-                            fixture,
-                            summary,
-                        };
-                        return Results.Ok(result);
-                    }
-                case "admin_two_orgs":
-                    {
-                        var adminSeeder = scope.ServiceProvider.GetRequiredService<E2eFixtureSeeder>();
-                        var result = await adminSeeder.SeedAdminTwoOrgsAsync(ct);
-                        return Results.Ok(result);
-                    }
-                default:
-                    {
-                        return Results.BadRequest(new { error = "unknown_fixture", fixture });
-                    }
+                "ramu" => "ramu-demo",
+                "admin_two_orgs" => "admin-two-orgs",
+                _ => rawFixture,
+            };
+
+            try
+            {
+                var result = await fixtures.SeedFixtureAsync(fixture, ct);
+                return Results.Ok(new { seeded = true, result });
+            }
+            catch (TestFixturesDisabledException ex)
+            {
+                return Results.Json(new { seeded = false, error = "test_fixtures_disabled", message = ex.Message },
+                    statusCode: StatusCodes.Status403Forbidden);
             }
         })
         .WithName("E2eSeed");
