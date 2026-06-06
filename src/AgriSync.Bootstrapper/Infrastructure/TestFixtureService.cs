@@ -1,3 +1,4 @@
+using AgriSync.Bootstrapper.Endpoints;
 using AgriSync.BuildingBlocks.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -152,7 +153,27 @@ public sealed class TestFixtureService(
             : $"deleted {total} rows across {farmCount} allowlisted test farm(s)";
     }
 
-    // Seed body is filled in Task 4.
-    private Task<FixtureResult> SeedInternalAsync(string fixture, CancellationToken ct) =>
-        throw new System.NotImplementedException();
+    private async Task<FixtureResult> SeedInternalAsync(string fixture, CancellationToken ct)
+    {
+        using var scope = services.CreateScope();
+        scope.ServiceProvider.GetRequiredService<TenantContext>().ElevateToAdminCrossTenant();
+        string summary = fixture switch
+        {
+            "purvesh-demo" => await scope.ServiceProvider
+                .GetRequiredService<PurveshDemoSeeder>().SeedPurveshDemoAsync(ct),
+            "blank-test-user" => await SeedBlankAsync(scope, ct),
+            "ramu-demo" => await scope.ServiceProvider
+                .GetRequiredService<DatabaseSeeder>().SeedDemoDataAsync(),
+            "admin-two-orgs" => (await scope.ServiceProvider
+                .GetRequiredService<E2eFixtureSeeder>().SeedAdminTwoOrgsAsync(ct)).ToString() ?? "admin-two-orgs seeded",
+            _ => throw new System.ArgumentException($"Unknown fixture '{fixture}'.", nameof(fixture)),
+        };
+        return new FixtureResult(fixture, "seed", summary);
+    }
+
+    private static async Task<string> SeedBlankAsync(IServiceScope scope, CancellationToken ct)
+    {
+        await scope.ServiceProvider.GetRequiredService<BlankTestUserSeeder>().SeedAsync(ct);
+        return "blank test user seeded";
+    }
 }
