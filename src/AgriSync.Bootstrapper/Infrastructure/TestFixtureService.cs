@@ -90,11 +90,17 @@ public sealed class TestFixtureService(
                     // Delegate to the already-scoped clear (deletes only Purvesh deterministic ids).
                     var purvesh = scope.ServiceProvider.GetRequiredService<PurveshDemoSeeder>();
                     var summary = await purvesh.ClearPurveshDemoAsync(ct);
+                    logger.LogInformation(
+                        "TestFixtures {Action} complete: actor={Actor} fixture={Fixture} env={Env} result={Summary}",
+                        "reset", "test-fixture-service", fixture, env.EnvironmentName, summary);
                     return new FixtureResult(fixture, "reset", summary);
                 }
             default:
                 {
                     var summary = await DeleteByAllowlistAsync(ssf, ct);
+                    logger.LogInformation(
+                        "TestFixtures {Action} complete: actor={Actor} fixture={Fixture} env={Env} result={Summary}",
+                        "reset", "test-fixture-service", fixture, env.EnvironmentName, summary);
                     return new FixtureResult(fixture, "reset", summary);
                 }
         }
@@ -108,6 +114,18 @@ public sealed class TestFixtureService(
     {
         var farmCount = 0;
         var total = 0;
+        var byTable = new System.Collections.Generic.Dictionary<string, int>
+        {
+            ["logTasks"] = 0,
+            ["verificationEvents"] = 0,
+            ["dailyLogs"] = 0,
+            ["financeCorrections"] = 0,
+            ["dayLedgers"] = 0,
+            ["costEntries"] = 0,
+            ["attachments"] = 0,
+            ["cropCycles"] = 0,
+            ["plots"] = 0,
+        };
 
         foreach (var ownerGuid in _opts.AllowedOwnerAccountIds)
         {
@@ -126,31 +144,49 @@ public sealed class TestFixtureService(
                 var costIds = await ssf.CostEntries
                     .Where(c => c.FarmId == farmId).Select(c => c.Id).ToListAsync(ct);
 
-                total += await ssf.LogTasks
+                var n = await ssf.LogTasks
                     .Where(t => logIds.Contains(t.DailyLogId)).ExecuteDeleteAsync(ct);
-                total += await ssf.VerificationEvents
+                byTable["logTasks"] += n; total += n;
+
+                n = await ssf.VerificationEvents
                     .Where(v => logIds.Contains(v.DailyLogId)).ExecuteDeleteAsync(ct);
-                total += await ssf.DailyLogs
+                byTable["verificationEvents"] += n; total += n;
+
+                n = await ssf.DailyLogs
                     .Where(l => l.FarmId == farmId).ExecuteDeleteAsync(ct);
-                total += await ssf.FinanceCorrections
+                byTable["dailyLogs"] += n; total += n;
+
+                n = await ssf.FinanceCorrections
                     .Where(fc => costIds.Contains(fc.CostEntryId)).ExecuteDeleteAsync(ct);
-                total += await ssf.DayLedgers
+                byTable["financeCorrections"] += n; total += n;
+
+                n = await ssf.DayLedgers
                     .Where(dl => dl.FarmId == farmId).ExecuteDeleteAsync(ct);
-                total += await ssf.CostEntries
+                byTable["dayLedgers"] += n; total += n;
+
+                n = await ssf.CostEntries
                     .Where(c => c.FarmId == farmId).ExecuteDeleteAsync(ct);
-                total += await ssf.Attachments
+                byTable["costEntries"] += n; total += n;
+
+                n = await ssf.Attachments
                     .Where(a => a.FarmId == farmId).ExecuteDeleteAsync(ct);
-                total += await ssf.CropCycles
+                byTable["attachments"] += n; total += n;
+
+                n = await ssf.CropCycles
                     .Where(c => c.FarmId == farmId).ExecuteDeleteAsync(ct);
-                total += await ssf.Plots
+                byTable["cropCycles"] += n; total += n;
+
+                n = await ssf.Plots
                     .Where(p => p.FarmId == farmId).ExecuteDeleteAsync(ct);
+                byTable["plots"] += n; total += n;
                 // Farm shell + FarmMemberships kept so a re-seed is idempotent.
             }
         }
 
+        var perTable = string.Join(", ", byTable.Select(kv => $"{kv.Key}={kv.Value}"));
         return farmCount == 0
             ? "no allowlisted test farms found — 0 rows deleted"
-            : $"deleted {total} rows across {farmCount} allowlisted test farm(s)";
+            : $"deleted {total} rows across {farmCount} farm(s) [{perTable}]";
     }
 
     private async Task<FixtureResult> SeedInternalAsync(string fixture, CancellationToken ct)
@@ -168,6 +204,9 @@ public sealed class TestFixtureService(
                 .GetRequiredService<E2eFixtureSeeder>().SeedAdminTwoOrgsAsync(ct)).ToString() ?? "admin-two-orgs seeded",
             _ => throw new System.ArgumentException($"Unknown fixture '{fixture}'.", nameof(fixture)),
         };
+        logger.LogInformation(
+            "TestFixtures {Action} complete: actor={Actor} fixture={Fixture} env={Env} result={Summary}",
+            "seed", "test-fixture-service", fixture, env.EnvironmentName, summary);
         return new FixtureResult(fixture, "seed", summary);
     }
 
