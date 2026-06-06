@@ -432,15 +432,25 @@ public sealed class RowLevelSecurityTests : IAsyncLifetime
     // ────────────────────────────────────────────────────────────────────
     // 9. create-farm WRITE path — the exact ssf write /bootstrap/first-farm
     //    performs (the area that burned 3 prod deploys with
-    //    "DbUpdateConcurrencyException: affected 0 rows"). SetTenant to the NEW
-    //    farm id → the interceptor emits SET LOCAL agrisync.farm_id, so both the
-    //    WITH CHECK and the EF RETURNING read-back (which is RLS-filtered by the
-    //    USING clause) see the new row. owner_account_id on the membership is
-    //    populated centrally in ShramSafalDbContext.SaveChangesAsync (5a270dd0).
-    //    SaveChanges must NOT throw and must report >=2 rows.
+    //    "DbUpdateConcurrencyException: affected 0 rows").
+    //
+    //    ROOT CAUSE (proven via local EF repro 2026-06-06): on a SINGLE-TENANT
+    //    claim (SetTenant), TenantConnectionInterceptor prepends
+    //    `SET LOCAL agrisync.* = ...` to every EF command. On a WRITING command
+    //    that prepend desynchronises EF's rows-affected accounting → EF reads 0
+    //    rows for the INSERT → DbUpdateConcurrencyException. It is NOT an RLS
+    //    WITH CHECK denial and NOT a RETURNING/RLS-filter issue (MaxBatchSize(1)
+    //    and ValueGeneratedNever both failed to fix it; admin-elevation fixed it).
+    //
+    //    FIX (mirrors getMyFarms read path): elevate to admin so the interceptor
+    //    no-ops (no prepend), then set agrisync.farm_id ourselves so the ssf
+    //    WITH CHECK ("= current_setting('agrisync.farm_id')") still passes for
+    //    THIS user's own new farm. owner_account_id on the membership is populated
+    //    centrally in ShramSafalDbContext.SaveChangesAsync (5a270dd0). SaveChanges
+    //    must NOT throw and must report >=2 rows.
     // ────────────────────────────────────────────────────────────────────
     [Fact]
-    public async Task Bootstrap_style_ssf_write_succeeds_when_tenant_set_to_new_farm()
+    public async Task Bootstrap_style_ssf_write_succeeds_under_admin_elevation_with_manual_farm_guc()
     {
         using var scope = _rootProvider.CreateScope();
         var ctx = scope.ServiceProvider.GetRequiredService<ShramSafalDbContext>();
@@ -451,10 +461,18 @@ public sealed class RowLevelSecurityTests : IAsyncLifetime
         var newAccount = Guid.NewGuid();
         var nowUtc = DateTime.UtcNow;
 
-        // Mirror FirstFarmBootstrapEndpoints: tenant scoped to the brand-new farm.
-        tenant.SetTenant(newFarmId, newAccount, newOwnerUser);
+        // Mirror FirstFarmBootstrapEndpoints: admin-elevate so the interceptor
+        // no-ops, then set the farm GUC manually inside the write transaction.
+        tenant.ElevateToAdminCrossTenant();
 
         await using var tx = await ctx.Database.BeginTransactionAsync();
+
+        await ctx.Database.ExecuteSqlInterpolatedAsync(
+            $"SELECT set_config('agrisync.farm_id', {newFarmId.ToString()}, true)");
+        await ctx.Database.ExecuteSqlInterpolatedAsync(
+            $"SELECT set_config('agrisync.owner_account_id', {newAccount.ToString()}, true)");
+        await ctx.Database.ExecuteSqlInterpolatedAsync(
+            $"SELECT set_config('agrisync.user_id', {newOwnerUser.ToString()}, true)");
 
         var farm = Farm.Create(new FarmId(newFarmId), "Bootstrap Write Test", new UserId(newOwnerUser), nowUtc);
         farm.AttachToOwnerAccount(new OwnerAccountId(newAccount), nowUtc);
@@ -467,7 +485,7 @@ public sealed class RowLevelSecurityTests : IAsyncLifetime
 
         var act = async () => await ctx.SaveChangesAsync();
         var affected = await act.Should().NotThrowAsync(
-            "with agrisync.farm_id set to the new farm, WITH CHECK passes and the RETURNING read-back is visible — no DbUpdateConcurrencyException");
+            "admin elevation drops the interceptor prepend that desynced EF's rows-affected; the manual farm GUC keeps WITH CHECK passing");
         affected.Subject.Should().BeGreaterThanOrEqualTo(2, "the farm and its PrimaryOwner membership both persist");
 
         await tx.CommitAsync();

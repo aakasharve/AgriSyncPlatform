@@ -105,15 +105,29 @@ public static class FirstFarmBootstrapEndpoints
 
             await accountsDb.SaveChangesAsync(ct);
 
-            // 4. Establish tenant context for the FORCE-RLS ssf tables. The
-            //    TenantConnectionInterceptor then emits `SET LOCAL agrisync.farm_id = <farmId>`,
-            //    so the ssf.farms WITH CHECK ("Id" = current_setting('agrisync.farm_id')) and the
-            //    ssf.farm_memberships policy both pass for THIS user's own new farm. Admin scope
-            //    would skip the GUC and FORCE-RLS (no BYPASSRLS) would then block the insert.
+            // 4. Scope the FORCE-RLS ssf writes WITHOUT the TenantConnectionInterceptor's
+            //    SET LOCAL prelude. The interceptor prepends `SET LOCAL agrisync.* = ...` to
+            //    every EF command on a single-tenant claim; on a WRITING command that prepend
+            //    desynchronises EF's rows-affected accounting and surfaces a spurious
+            //    DbUpdateConcurrencyException ("expected 1 row, affected 0") on the INSERT —
+            //    the real root cause of the first-farm 500s (NOT a WITH CHECK / RLS denial).
+            //    Instead, elevate to admin scope so the interceptor no-ops, then set the farm
+            //    GUC ourselves so the ssf.farms / ssf.farm_memberships WITH CHECK
+            //    ("= current_setting('agrisync.farm_id')") still pass for THIS user's own new
+            //    farm. Same self-GUC pattern as the getMyFarms read path
+            //    (ShramSafalRepository.GetMyFarmsAsync). The GUCs are tx-local (is_local=true)
+            //    and ride the per-request transaction TenantTransactionMiddleware already opened
+            //    on this writing context. spec: getmyfarms-user-scoped-rls-read-path-2026-06-06.
             var typedFarmId = new FarmId(farmId);
-            tenantContext.SetTenant(farmId, (Guid)account.Id, userId);
+            tenantContext.ElevateToAdminCrossTenant();
+            await ssfDb.Database.ExecuteSqlInterpolatedAsync(
+                $"SELECT set_config('agrisync.farm_id', {farmId.ToString()}, true)", ct);
+            await ssfDb.Database.ExecuteSqlInterpolatedAsync(
+                $"SELECT set_config('agrisync.owner_account_id', {((Guid)account.Id).ToString()}, true)", ct);
+            await ssfDb.Database.ExecuteSqlInterpolatedAsync(
+                $"SELECT set_config('agrisync.user_id', {userId.ToString()}, true)", ct);
 
-            // 5. Find-or-create the Farm (ssf). With the tenant set, this read is scoped to
+            // 5. Find-or-create the Farm (ssf). The manual farm GUC scopes this read to
             //    exactly this farm id, so it returns the farm iff a prior run already created it.
             var farm = await ssfDb.Farms.FirstOrDefaultAsync(f => f.Id == typedFarmId, ct);
             var wasAlreadyBootstrapped = farm is not null;
@@ -143,9 +157,9 @@ public static class FirstFarmBootstrapEndpoints
             // 6. Farmer Name (minimal post-OTP onboarding) → user display name.
             //    public.users is NOT under RLS (it is the global auth directory —
             //    see 20260516150000_EnableUserDbRowLevelSecurity remarks), so this
-            //    update carries no farm tenancy. It runs AFTER SetTenant only so the
-            //    interceptor (this route is not skip-listed) has a claim to inject
-            //    and does not fail-closed on the UserDbContext command. Idempotent:
+            //    update needs no farm tenancy. Under the admin elevation above the
+            //    interceptor no-ops on the UserDbContext command too (so its prelude
+            //    can't desync EF's rows-affected on this UPDATE). Idempotent:
             //    re-bootstrap with the same name is a no-op; a blank name is ignored.
             if (!string.IsNullOrWhiteSpace(request.FarmerName))
             {
