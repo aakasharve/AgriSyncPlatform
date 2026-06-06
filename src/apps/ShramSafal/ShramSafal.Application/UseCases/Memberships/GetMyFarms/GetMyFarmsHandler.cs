@@ -42,20 +42,19 @@ public sealed class GetMyFarmsHandler(
             return Result.Failure<MyFarmsResult>(Error.Unauthenticated("me.unauthenticated", "Caller must be authenticated."));
         }
 
-        var farmIds = await repository.GetFarmIdsForUserAsync(command.CallerUserId.Value, ct);
+        // Single user-scoped projection: opens its own tx + SET LOCAL agrisync.user_id
+        // so the p_user_select_* RLS policies surface the caller's owned + member farms
+        // on the admin-elevated /shramsafal/farms/mine route (the interceptor injects no
+        // farm_id GUC there, so the legacy farm_id-keyed policy would hide every row).
+        var rows = await repository.GetMyFarmsAsync(command.CallerUserId.Value, ct);
 
-        var farms = new List<MyFarmDto>(farmIds.Count);
-        foreach (var farmId in farmIds)
+        var farms = new List<MyFarmDto>(rows.Count);
+        foreach (var row in rows)
         {
-            var farm = await repository.GetFarmByIdAsync(farmId, ct);
-            if (farm is null) continue;
-
-            var role = await repository.GetUserRoleForFarmAsync(farmId, command.CallerUserId.Value, ct);
-
             SubscriptionSnapshot? snapshot = null;
-            if (!farm.OwnerAccountId.IsEmpty)
+            if (row.OwnerAccountId != Guid.Empty)
             {
-                var sub = await subscriptionReader.GetByOwnerAccountAsync(farm.OwnerAccountId, ct);
+                var sub = await subscriptionReader.GetByOwnerAccountAsync(new OwnerAccountId(row.OwnerAccountId), ct);
                 if (sub is not null)
                 {
                     snapshot = new SubscriptionSnapshot(
@@ -68,10 +67,10 @@ public sealed class GetMyFarmsHandler(
             }
 
             farms.Add(new MyFarmDto(
-                FarmId: farmId,
-                Name: farm.Name,
-                Role: role?.ToString() ?? "Worker",
-                FarmCode: farm.FarmCode,
+                FarmId: row.FarmId,
+                Name: row.Name,
+                Role: row.Role?.ToString() ?? "Worker",
+                FarmCode: row.FarmCode,
                 Subscription: snapshot));
         }
 

@@ -17,6 +17,19 @@ using AgriSync.SharedKernel.Contracts.Roles;
 
 namespace ShramSafal.Application.Ports;
 
+/// <summary>
+/// User-scoped my-farms projection row — one per farm the caller owns or is an
+/// active member of, with the caller's role on that farm. Returned by
+/// <see cref="IShramSafalRepository.GetMyFarmsAsync"/> for the
+/// <c>/shramsafal/farms/mine</c> read path.
+/// </summary>
+public sealed record MyFarmProjection(
+    Guid FarmId,
+    string Name,
+    string? FarmCode,
+    Guid OwnerAccountId,
+    AppRole? Role);
+
 public interface IShramSafalRepository
 {
     Task AddFarmAsync(Farm farm, CancellationToken ct = default);
@@ -87,6 +100,20 @@ public interface IShramSafalRepository
     Task<List<AuditEvent>> GetAuditEventsForEntityAsync(Guid entityId, string entityType, CancellationToken ct = default);
     Task<List<AuditEvent>> GetAuditEventsForFarmAsync(Guid farmId, DateOnly from, DateOnly to, int limit, int offset, CancellationToken ct = default);
     Task<List<Guid>> GetFarmIdsForUserAsync(Guid userId, CancellationToken ct = default);
+
+    /// <summary>
+    /// User-scoped my-farms projection (owner + active-member farms, with the
+    /// caller's role per farm). Opens its OWN transaction and emits
+    /// <c>SET LOCAL agrisync.user_id</c> so the <c>p_user_select_farms</c> /
+    /// <c>p_user_select_memberships</c> RLS policies surface the caller's farms
+    /// on the admin-elevated <c>/shramsafal/farms/mine</c> route (where the
+    /// interceptor injects no GUC and the middleware opens no transaction).
+    /// Default impl returns empty so the many in-tree test doubles compile;
+    /// production <c>ShramSafalRepository</c> overrides.
+    /// </summary>
+    Task<List<MyFarmProjection>> GetMyFarmsAsync(Guid userId, CancellationToken ct = default)
+        => Task.FromResult(new List<MyFarmProjection>());
+
     Task<IReadOnlyList<SyncOperatorDto>> GetOperatorsByIdsAsync(IEnumerable<Guid> userIds, CancellationToken ct = default);
     Task<bool> IsUserMemberOfFarmAsync(Guid farmId, Guid userId, CancellationToken ct = default);
 

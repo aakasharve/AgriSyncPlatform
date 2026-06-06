@@ -12,6 +12,8 @@ using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Npgsql;
+using AgriSync.SharedKernel.Contracts.Roles;
+using ShramSafal.Application.Ports;
 using ShramSafal.Infrastructure;
 using ShramSafal.Infrastructure.Persistence;
 using Testcontainers.PostgreSql;
@@ -110,6 +112,7 @@ public sealed class RowLevelSecurityTests : IAsyncLifetime
     private Guid _ownerB;
     private Guid _ownerUserA;
     private Guid _ownerUserB;
+    private Guid _memberUserC;
     private Guid _aiJobA;
     private Guid _aiJobB;
     private Guid _transcriptA;
@@ -143,6 +146,14 @@ public sealed class RowLevelSecurityTests : IAsyncLifetime
 
             await SeedFarmAsync(raw, _farmA, _ownerUserA, "Farm A");
             await SeedFarmAsync(raw, _farmB, _ownerUserB, "Farm B");
+
+            // Active membership: member C is a Worker on Farm A (NOT the owner).
+            // Exercises the p_user_select_farms EXISTS branch + the
+            // p_user_select_memberships policy in test #8. owner_account_id
+            // matches Farm A's (SeedFarmAsync stamps owner_account_id =
+            // ownerUserId as a stand-in account id).
+            _memberUserC = Guid.NewGuid();
+            await SeedFarmMembershipAsync(raw, Guid.NewGuid(), _farmA, _memberUserC, _ownerUserA, "Worker", status: 3);
 
             // Two daily_logs per farm so the count assertion is unambiguous.
             await InsertDailyLogAsync(raw, Guid.NewGuid(), _farmA, _ownerUserA, DateTime.UtcNow.AddDays(-1));
@@ -377,6 +388,46 @@ public sealed class RowLevelSecurityTests : IAsyncLifetime
     }
 
     // ────────────────────────────────────────────────────────────────────
+    // 8. User-scoped read path — GetMyFarmsAsync (spec
+    //    getmyfarms-user-scoped-rls-read-path-2026-06-06). Mirrors the
+    //    admin-elevated /shramsafal/farms/mine route: ElevateToAdminCrossTenant
+    //    so the interceptor no-ops (it would otherwise fail-closed-throw on the
+    //    first command, since the guard checks TenantContext, not the session
+    //    GUC), then GetMyFarmsAsync opens its OWN tx + SET LOCAL agrisync.user_id
+    //    and the new p_user_select_* policies surface the caller's OWN farms.
+    //    Owner → role=PrimaryOwner via the owner shortcut (no membership row);
+    //    a member → the farm via the EXISTS branch with role=Worker; a stranger
+    //    → nothing (no cross-tenant leak). This is the exact Purvesh scenario.
+    // ────────────────────────────────────────────────────────────────────
+    [Fact]
+    public async Task GetMyFarmsAsync_returns_callers_own_farms_under_admin_elevation()
+    {
+        using var scope = _rootProvider.CreateScope();
+        var repo = scope.ServiceProvider.GetRequiredService<IShramSafalRepository>();
+        var tenant = scope.ServiceProvider.GetRequiredService<TenantContext>();
+
+        // Replicate the prod /farms/mine pipeline: admin-elevated so the
+        // interceptor skips its prelude AND its fail-closed throw. Without this
+        // the very first command in GetMyFarmsAsync (the SET LOCAL) would throw.
+        tenant.ElevateToAdminCrossTenant();
+
+        var ownerFarms = await repo.GetMyFarmsAsync(_ownerUserA);
+        ownerFarms.Should().HaveCount(1, "owner A owns exactly Farm A");
+        ownerFarms[0].FarmId.Should().Be(_farmA);
+        ownerFarms[0].Role.Should().Be(AppRole.PrimaryOwner,
+            "the owner has no membership row, so the owner shortcut must resolve PrimaryOwner (not the Worker default)");
+
+        var memberFarms = await repo.GetMyFarmsAsync(_memberUserC);
+        memberFarms.Should().HaveCount(1, "member C is an active member of Farm A via the EXISTS branch");
+        memberFarms[0].FarmId.Should().Be(_farmA);
+        memberFarms[0].Role.Should().Be(AppRole.Worker, "member C's membership role is Worker");
+
+        var strangerFarms = await repo.GetMyFarmsAsync(Guid.NewGuid());
+        strangerFarms.Should().BeEmpty(
+            "a user with no ownership and no membership must see no farms — proves no cross-tenant leak via the user-scoped policies");
+    }
+
+    // ────────────────────────────────────────────────────────────────────
     // Migration chain + seeding helpers. Self-contained (mirrors
     // DwcScoreMatviewTests' inline-helper pattern §3.4 task-file boundary).
     // ────────────────────────────────────────────────────────────────────
@@ -479,6 +530,33 @@ public sealed class RowLevelSecurityTests : IAsyncLifetime
         cmd.Parameters.AddWithValue("name", name);
         cmd.Parameters.AddWithValue("owner", ownerUserId);
         cmd.Parameters.AddWithValue("account", ownerUserId);
+        await cmd.ExecuteNonQueryAsync();
+    }
+
+    private static async Task SeedFarmMembershipAsync(
+        NpgsqlConnection db,
+        Guid id,
+        Guid farmId,
+        Guid userId,
+        Guid ownerAccountId,
+        string role,
+        int status)
+    {
+        // ssf.farm_memberships — quoted "Id" PK (EF CreateTable, 20260418023102);
+        // snake_case data columns. owner_account_id NOT NULL (20260516120000).
+        // joined_via + is_revoked rely on their DB defaults.
+        await using var cmd = db.CreateCommand();
+        cmd.CommandText = """
+            INSERT INTO ssf.farm_memberships
+                ("Id", farm_id, user_id, role, granted_at_utc, modified_at_utc, owner_account_id, status)
+            VALUES (@id, @farm, @user, @role, NOW(), NOW(), @account, @status);
+            """;
+        cmd.Parameters.AddWithValue("id", id);
+        cmd.Parameters.AddWithValue("farm", farmId);
+        cmd.Parameters.AddWithValue("user", userId);
+        cmd.Parameters.AddWithValue("role", role);
+        cmd.Parameters.AddWithValue("account", ownerAccountId);
+        cmd.Parameters.AddWithValue("status", status);
         await cmd.ExecuteNonQueryAsync();
     }
 
