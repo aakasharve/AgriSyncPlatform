@@ -1,6 +1,10 @@
+using AgriSync.BuildingBlocks.Persistence;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using ShramSafal.Infrastructure.Persistence;
 
 namespace AgriSync.Bootstrapper.Infrastructure;
 
@@ -64,9 +68,91 @@ public sealed class TestFixtureService(
 
     private static string Normalize(string f) => (f ?? "").Trim().ToLowerInvariant();
 
-    // Reset/Seed bodies are filled in Tasks 3 + 4.
-    private Task<FixtureResult> ResetInternalAsync(string fixture, CancellationToken ct) =>
-        throw new System.NotImplementedException();
+    private async Task<FixtureResult> ResetInternalAsync(string fixture, CancellationToken ct)
+    {
+        using var scope = services.CreateScope();
+        // Cross-tenant elevation is required to read/delete across tenants; the allowlist
+        // below — NOT elevation — is the safety boundary. (Mirrors the old E2e pattern.)
+        scope.ServiceProvider.GetRequiredService<TenantContext>().ElevateToAdminCrossTenant();
+        var ssf = scope.ServiceProvider.GetRequiredService<ShramSafalDbContext>();
+
+        if (_opts.AllowedOwnerAccountIds.Count == 0)
+        {
+            logger.LogWarning("TestFixtures reset: allowlist empty; deleting nothing (fixture={Fixture})", fixture);
+            return new FixtureResult(fixture, "reset", "allowlist empty — 0 rows deleted");
+        }
+
+        switch (fixture)
+        {
+            case "purvesh-demo":
+                {
+                    // Delegate to the already-scoped clear (deletes only Purvesh deterministic ids).
+                    var purvesh = scope.ServiceProvider.GetRequiredService<PurveshDemoSeeder>();
+                    var summary = await purvesh.ClearPurveshDemoAsync(ct);
+                    return new FixtureResult(fixture, "reset", summary);
+                }
+            default:
+                {
+                    var summary = await DeleteByAllowlistAsync(ssf, ct);
+                    return new FixtureResult(fixture, "reset", summary);
+                }
+        }
+    }
+
+    // Generic safety-net delete: bounded strictly to farms whose OwnerAccountId is allowlisted.
+    // Repo-truth: LogTask/VerificationEvent (DailyLogId) + FinanceCorrection (CostEntryId) have NO
+    // FarmId — reached via Guid parent-id sets. The other six carry a value-object FarmId; compare
+    // with single-value `== farmId` (proven-translatable), NEVER List<FarmId>.Contains.
+    private async Task<string> DeleteByAllowlistAsync(ShramSafalDbContext ssf, CancellationToken ct)
+    {
+        var farmCount = 0;
+        var total = 0;
+
+        foreach (var ownerGuid in _opts.AllowedOwnerAccountIds)
+        {
+            var ownerId = new AgriSync.SharedKernel.Contracts.Ids.OwnerAccountId(ownerGuid);
+            var farmIds = await ssf.Farms
+                .Where(f => f.OwnerAccountId == ownerId)
+                .Select(f => f.Id)
+                .ToListAsync(ct);
+
+            foreach (var farmId in farmIds)
+            {
+                farmCount++;
+
+                var logIds = await ssf.DailyLogs
+                    .Where(l => l.FarmId == farmId).Select(l => l.Id).ToListAsync(ct);
+                var costIds = await ssf.CostEntries
+                    .Where(c => c.FarmId == farmId).Select(c => c.Id).ToListAsync(ct);
+
+                total += await ssf.LogTasks
+                    .Where(t => logIds.Contains(t.DailyLogId)).ExecuteDeleteAsync(ct);
+                total += await ssf.VerificationEvents
+                    .Where(v => logIds.Contains(v.DailyLogId)).ExecuteDeleteAsync(ct);
+                total += await ssf.DailyLogs
+                    .Where(l => l.FarmId == farmId).ExecuteDeleteAsync(ct);
+                total += await ssf.FinanceCorrections
+                    .Where(fc => costIds.Contains(fc.CostEntryId)).ExecuteDeleteAsync(ct);
+                total += await ssf.DayLedgers
+                    .Where(dl => dl.FarmId == farmId).ExecuteDeleteAsync(ct);
+                total += await ssf.CostEntries
+                    .Where(c => c.FarmId == farmId).ExecuteDeleteAsync(ct);
+                total += await ssf.Attachments
+                    .Where(a => a.FarmId == farmId).ExecuteDeleteAsync(ct);
+                total += await ssf.CropCycles
+                    .Where(c => c.FarmId == farmId).ExecuteDeleteAsync(ct);
+                total += await ssf.Plots
+                    .Where(p => p.FarmId == farmId).ExecuteDeleteAsync(ct);
+                // Farm shell + FarmMemberships kept so a re-seed is idempotent.
+            }
+        }
+
+        return farmCount == 0
+            ? "no allowlisted test farms found — 0 rows deleted"
+            : $"deleted {total} rows across {farmCount} allowlisted test farm(s)";
+    }
+
+    // Seed body is filled in Task 4.
     private Task<FixtureResult> SeedInternalAsync(string fixture, CancellationToken ct) =>
         throw new System.NotImplementedException();
 }
