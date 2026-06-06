@@ -71,17 +71,17 @@ public sealed class TestFixtureService(
 
     private async Task<FixtureResult> ResetInternalAsync(string fixture, CancellationToken ct)
     {
-        using var scope = services.CreateScope();
-        // Cross-tenant elevation is required to read/delete across tenants; the allowlist
-        // below — NOT elevation — is the safety boundary. (Mirrors the old E2e pattern.)
-        scope.ServiceProvider.GetRequiredService<TenantContext>().ElevateToAdminCrossTenant();
-        var ssf = scope.ServiceProvider.GetRequiredService<ShramSafalDbContext>();
-
         if (_opts.AllowedOwnerAccountIds.Count == 0)
         {
             logger.LogWarning("TestFixtures reset: allowlist empty; deleting nothing (fixture={Fixture})", fixture);
             return new FixtureResult(fixture, "reset", "allowlist empty — 0 rows deleted");
         }
+
+        using var scope = services.CreateScope();
+        // Cross-tenant elevation is required to read/delete across tenants; the allowlist
+        // above — NOT elevation — is the safety boundary. (Mirrors the old E2e pattern.)
+        scope.ServiceProvider.GetRequiredService<TenantContext>().ElevateToAdminCrossTenant();
+        var ssf = scope.ServiceProvider.GetRequiredService<ShramSafalDbContext>();
 
         switch (fixture)
         {

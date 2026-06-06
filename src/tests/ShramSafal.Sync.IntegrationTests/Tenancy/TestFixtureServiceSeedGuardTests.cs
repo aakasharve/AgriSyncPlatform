@@ -28,4 +28,17 @@ public sealed class TestFixtureServiceSeedGuardTests
             () => svc.SeedFixtureAsync("ramu-demo"));
         Assert.Contains("seed", ex.Message, System.StringComparison.OrdinalIgnoreCase);
     }
+
+    [Fact]
+    public async Task Reset_with_empty_allowlist_deletes_nothing_and_returns_empty_summary()
+    {
+        var svc = TestFixtureServiceFactory.ForTest(
+            environmentName: Environments.Development,
+            allowReset: true, allowSeed: true,
+            allowedOwnerAccountIds: [],     // EMPTY allowlist
+            ssf: null!);                    // null proves no DB access on the empty path
+        var result = await svc.ResetFixtureAsync("ramu-demo");
+        Assert.Equal("reset", result.Action);
+        Assert.Contains("allowlist empty", result.Summary, System.StringComparison.OrdinalIgnoreCase);
+    }
 }
