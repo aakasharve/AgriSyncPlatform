@@ -30,6 +30,7 @@ public sealed class TenantContextTests
     private static readonly Guid FarmB = Guid.Parse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb");
     private static readonly Guid OwnerA = Guid.Parse("11111111-1111-1111-1111-111111111111");
     private static readonly Guid OwnerB = Guid.Parse("22222222-2222-2222-2222-222222222222");
+    private static readonly Guid UserX = Guid.Parse("33333333-3333-3333-3333-333333333333");
 
     [Fact(DisplayName = "SetTenant with same farmId is idempotent")]
     public void SetTenant_with_same_farmId_is_idempotent()
@@ -81,5 +82,79 @@ public sealed class TenantContextTests
         Assert.True(ctx.IsAdminCrossTenant);
         Assert.Null(ctx.FarmId);
         Assert.Null(ctx.OwnerAccountId);
+    }
+
+    // ── ADR 0019 — user-scoped (third terminal state). These assert the
+    //   founder's binding condition: adding the third mode does NOT weaken
+    //   the single-tenant (badge 1) or admin (badge 2) guards. The new mode
+    //   is mutually exclusive with both, in every direction.
+
+    [Fact(DisplayName = "SetUserScoped records userId + flag only — not farm, not admin")]
+    public void SetUserScoped_records_userId_only()
+    {
+        var ctx = new TenantContext();
+        ctx.SetUserScoped(UserX);
+
+        Assert.True(ctx.IsUserScoped);
+        Assert.Equal(UserX, ctx.UserId);
+        Assert.Null(ctx.FarmId);
+        Assert.Null(ctx.OwnerAccountId);
+        Assert.False(ctx.IsAdminCrossTenant);
+    }
+
+    [Fact(DisplayName = "SetUserScoped with empty userId throws (Caveat B)")]
+    public void SetUserScoped_with_empty_userId_throws()
+    {
+        var ctx = new TenantContext();
+
+        Assert.Throws<ArgumentException>(() => ctx.SetUserScoped(Guid.Empty));
+        Assert.False(ctx.IsUserScoped);
+        Assert.Null(ctx.UserId);
+    }
+
+    [Fact(DisplayName = "SetTenant after SetUserScoped throws (badge 1 unweakened)")]
+    public void SetTenant_after_SetUserScoped_throws()
+    {
+        var ctx = new TenantContext();
+        ctx.SetUserScoped(UserX);
+
+        Assert.Throws<InvalidOperationException>(() => ctx.SetTenant(FarmA, OwnerA));
+        // No single-farm claim may leak in over a user-scoped scope.
+        Assert.True(ctx.IsUserScoped);
+        Assert.Null(ctx.FarmId);
+        Assert.Null(ctx.OwnerAccountId);
+    }
+
+    [Fact(DisplayName = "ElevateToAdminCrossTenant after SetUserScoped throws (badge 2 unweakened)")]
+    public void ElevateToAdminCrossTenant_after_SetUserScoped_throws()
+    {
+        var ctx = new TenantContext();
+        ctx.SetUserScoped(UserX);
+
+        Assert.Throws<InvalidOperationException>(() => ctx.ElevateToAdminCrossTenant());
+        Assert.True(ctx.IsUserScoped);
+        Assert.False(ctx.IsAdminCrossTenant);
+    }
+
+    [Fact(DisplayName = "SetUserScoped after SetTenant throws (single-tenant stays terminal)")]
+    public void SetUserScoped_after_SetTenant_throws()
+    {
+        var ctx = new TenantContext();
+        ctx.SetTenant(FarmA, OwnerA);
+
+        Assert.Throws<InvalidOperationException>(() => ctx.SetUserScoped(UserX));
+        Assert.False(ctx.IsUserScoped);
+        Assert.Equal(FarmA, ctx.FarmId);
+    }
+
+    [Fact(DisplayName = "SetUserScoped after ElevateToAdminCrossTenant throws (admin stays terminal)")]
+    public void SetUserScoped_after_ElevateToAdminCrossTenant_throws()
+    {
+        var ctx = new TenantContext();
+        ctx.ElevateToAdminCrossTenant();
+
+        Assert.Throws<InvalidOperationException>(() => ctx.SetUserScoped(UserX));
+        Assert.False(ctx.IsUserScoped);
+        Assert.True(ctx.IsAdminCrossTenant);
     }
 }

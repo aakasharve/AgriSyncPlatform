@@ -1,4 +1,5 @@
 using AgriSync.BuildingBlocks.Abstractions;
+using AgriSync.BuildingBlocks.Persistence;
 using AgriSync.BuildingBlocks.Results;
 using AgriSync.SharedKernel.Contracts.Ids;
 using Microsoft.Extensions.Logging;
@@ -21,6 +22,7 @@ public sealed class PullSyncChangesHandler(
     ITestRecommendationRepository testRecommendationRepository,
     IComplianceSignalRepository complianceSignalRepository,
     EvaluateComplianceHandler evaluateComplianceHandler,
+    TenantContext tenantContext,
     ILogger<PullSyncChangesHandler> logger)
 {
     // Sub-plan 03 Task 10 — stable component identifiers used in
@@ -36,39 +38,39 @@ public sealed class PullSyncChangesHandler(
         var farmIds = await repository.GetFarmIdsForUserAsync(query.UserId, ct);
         var farmIdSet = farmIds.ToHashSet();
 
-        var farms = (await repository.GetFarmsChangedSinceAsync(sinceUtc, ct))
+        var farms = (await repository.GetFarmsChangedSinceAsync(farmIds, sinceUtc, ct))
             .Where(f => farmIdSet.Contains((Guid)f.Id))
             .ToList();
-        var plots = (await repository.GetPlotsChangedSinceAsync(sinceUtc, ct))
+        var plots = (await repository.GetPlotsChangedSinceAsync(farmIds, sinceUtc, ct))
             .Where(p => farmIdSet.Contains((Guid)p.FarmId))
             .ToList();
-        var cropCycles = (await repository.GetCropCyclesChangedSinceAsync(sinceUtc, ct))
+        var cropCycles = (await repository.GetCropCyclesChangedSinceAsync(farmIds, sinceUtc, ct))
             .Where(c => farmIdSet.Contains((Guid)c.FarmId))
             .ToList();
-        var dailyLogs = (await repository.GetDailyLogsChangedSinceAsync(sinceUtc, ct))
+        var dailyLogs = (await repository.GetDailyLogsChangedSinceAsync(farmIds, sinceUtc, ct))
             .Where(l => farmIdSet.Contains((Guid)l.FarmId))
             .ToList();
-        var attachments = (await repository.GetAttachmentsChangedSinceAsync(sinceUtc, ct))
+        var attachments = (await repository.GetAttachmentsChangedSinceAsync(farmIds, sinceUtc, ct))
             .Where(a => farmIdSet.Contains((Guid)a.FarmId))
             .ToList();
-        var costEntries = (await repository.GetCostEntriesChangedSinceAsync(sinceUtc, ct))
+        var costEntries = (await repository.GetCostEntriesChangedSinceAsync(farmIds, sinceUtc, ct))
             .Where(c => farmIdSet.Contains((Guid)c.FarmId))
             .ToList();
         var costEntryIds = costEntries.Select(c => c.Id).ToHashSet();
-        var financeCorrections = (await repository.GetFinanceCorrectionsChangedSinceAsync(sinceUtc, ct))
+        var financeCorrections = (await repository.GetFinanceCorrectionsChangedSinceAsync(farmIds, sinceUtc, ct))
             .Where(c => costEntryIds.Contains(c.CostEntryId))
             .ToList();
-        var dayLedgers = (await repository.GetDayLedgersChangedSinceAsync(sinceUtc, ct))
+        var dayLedgers = (await repository.GetDayLedgersChangedSinceAsync(farmIds, sinceUtc, ct))
             .Where(l => farmIdSet.Contains((Guid)l.FarmId))
             .ToList();
         var priceConfigs = (await repository.GetPriceConfigsChangedSinceAsync(sinceUtc, ct))
             .Where(p => (Guid)p.CreatedByUserId == query.UserId)
             .ToList();
         var cropCycleIds = cropCycles.Select(c => c.Id).ToHashSet();
-        var plannedActivities = (await repository.GetPlannedActivitiesChangedSinceAsync(sinceUtc, ct))
+        var plannedActivities = (await repository.GetPlannedActivitiesChangedSinceAsync(farmIds, sinceUtc, ct))
             .Where(a => cropCycleIds.Contains(a.CropCycleId))
             .ToList();
-        var auditEvents = (await repository.GetAuditEventsChangedSinceAsync(sinceUtc, ct))
+        var auditEvents = (await repository.GetAuditEventsChangedSinceAsync(farmIds, sinceUtc, ct))
             .Where(a => !a.FarmId.HasValue || farmIdSet.Contains(a.FarmId.Value))
             .ToList();
         var templatesResult = await getScheduleTemplatesHandler.HandleAsync(ct);
@@ -234,9 +236,20 @@ public sealed class PullSyncChangesHandler(
                 var latestEval = await complianceSignalRepository.GetLatestEvaluationTimeAsync(typedFarmId, ct);
                 if (latestEval is null || (serverNowUtc - latestEval.Value).TotalHours > 6)
                 {
-                    await evaluateComplianceHandler.HandleAsync(
-                        new EvaluateComplianceCommand(typedFarmId),
-                        ct);
+                    // ADR 0019 / STOP-1 — the inline compliance EVALUATION is a
+                    // WRITE to ssf.compliance_signals (WITH CHECK keyed on
+                    // agrisync.farm_id). Under user-scoped /sync/pull no farm_id
+                    // GUC is set, so the write fails RLS and POISONS the shared
+                    // pull transaction (the surrounding catch cannot rescue an
+                    // aborted tx). Skip the write in user-scoped mode; freshness
+                    // is owned by the nightly ComplianceEvaluatorSweeper. The
+                    // freshness READ above and the signals READ below still run.
+                    if (!tenantContext.IsUserScoped)
+                    {
+                        await evaluateComplianceHandler.HandleAsync(
+                            new EvaluateComplianceCommand(typedFarmId),
+                            ct);
+                    }
                 }
             }
             catch (Exception ex)

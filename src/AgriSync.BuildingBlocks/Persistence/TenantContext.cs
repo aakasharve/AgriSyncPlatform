@@ -15,7 +15,7 @@ namespace AgriSync.BuildingBlocks.Persistence;
 /// </para>
 ///
 /// <para>
-/// <b>Two terminal states, never mixed:</b>
+/// <b>Three terminal states, never mixed:</b>
 /// <list type="bullet">
 /// <item>Single-tenant — <see cref="SetTenant"/> recorded. Reassigning to a
 /// DIFFERENT farm within the same scope throws (catches cross-tenant
@@ -24,8 +24,12 @@ namespace AgriSync.BuildingBlocks.Persistence;
 /// recorded. The interceptor then skips GUC injection so the
 /// session-level admin role bypasses RLS. Used by hosted services and
 /// the upcoming <c>IAdminDbContextFactory</c> (Phase 03.5).</item>
+/// <item>User-scoped — <see cref="SetUserScoped"/> recorded (ADR 0019). A
+/// multi-farm, NON-admin READ mode: the interceptor injects ONLY
+/// <c>agrisync.user_id</c> and the user-scoped RLS policies filter to the
+/// caller's own farms. Used by <c>GET /sync/pull</c>.</item>
 /// </list>
-/// Downgrade in either direction throws — explicit guard against the
+/// Downgrade or mixing in ANY direction throws — explicit guard against the
 /// "elevate then re-narrow" anti-pattern that would leak cross-tenant
 /// rows into a single-farm response.
 /// </para>
@@ -37,6 +41,13 @@ public sealed class TenantContext
     public Guid? UserId { get; private set; }
     public bool IsAdminCrossTenant { get; private set; }
 
+    /// <summary>
+    /// ADR 0019 — user-scoped (multi-farm, NON-admin) read mode. The interceptor
+    /// injects ONLY <c>agrisync.user_id</c>; the user-scoped RLS policies filter
+    /// to the caller's own farms. Mutually exclusive with the other two states.
+    /// </summary>
+    public bool IsUserScoped { get; private set; }
+
     public void SetTenant(Guid farmId, Guid ownerAccountId, Guid? userId = null)
     {
         if (FarmId is { } existing && existing != farmId)
@@ -45,6 +56,10 @@ public sealed class TenantContext
         if (IsAdminCrossTenant)
             throw new InvalidOperationException(
                 "TenantContext is elevated to AdminCrossTenant; cannot downgrade to single-tenant scope.");
+        // ADR 0019 — additive guard; the two checks above are unchanged.
+        if (IsUserScoped)
+            throw new InvalidOperationException(
+                "TenantContext is user-scoped; cannot downgrade to single-tenant scope.");
         FarmId = farmId;
         OwnerAccountId = ownerAccountId;
         UserId = userId ?? UserId;
@@ -55,6 +70,31 @@ public sealed class TenantContext
         if (FarmId is not null)
             throw new InvalidOperationException(
                 "Cannot elevate to AdminCrossTenant after SetTenant was called.");
+        // ADR 0019 — additive guard; the check above is unchanged.
+        if (IsUserScoped)
+            throw new InvalidOperationException(
+                "Cannot elevate to AdminCrossTenant after user-scoped mode was entered.");
         IsAdminCrossTenant = true;
+    }
+
+    /// <summary>
+    /// ADR 0019 — enter user-scoped (multi-farm, NON-admin) read mode. The
+    /// interceptor then injects ONLY <c>agrisync.user_id</c> (Caveat A: the
+    /// single-tenant fail-closed guard and the admin early-return are UNCHANGED).
+    /// Entered from the validated JWT claim only (Caveat B); a non-empty userId is
+    /// required. Mutually exclusive with both other terminal states.
+    /// </summary>
+    public void SetUserScoped(Guid userId)
+    {
+        if (userId == Guid.Empty)
+            throw new ArgumentException("SetUserScoped requires a non-empty userId.", nameof(userId));
+        if (FarmId is not null)
+            throw new InvalidOperationException(
+                "Cannot enter user-scoped mode after SetTenant was called.");
+        if (IsAdminCrossTenant)
+            throw new InvalidOperationException(
+                "Cannot enter user-scoped mode after ElevateToAdminCrossTenant.");
+        IsUserScoped = true;
+        UserId = userId;
     }
 }

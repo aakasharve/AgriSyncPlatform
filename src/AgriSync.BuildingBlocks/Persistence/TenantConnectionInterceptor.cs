@@ -104,6 +104,23 @@ public sealed class TenantConnectionInterceptor(TenantContext tenantContext) : D
     private void InjectTenantClaim(DbCommand command)
     {
         if (tenantContext.IsAdminCrossTenant) return;
+
+        // ADR 0019 — user-scoped (multi-farm, non-admin) mode: inject ONLY
+        // agrisync.user_id and proceed WITHOUT a farm_id/owner_account_id claim.
+        // Caveat A: this relaxation is gated to IsUserScoped ONLY. The
+        // single-tenant fail-closed guard below is UNCHANGED — a misconfigured
+        // single-tenant request still throws (it never silently runs unfiltered).
+        // UserId comes from TenantContext.SetUserScoped (validated JWT claim,
+        // Caveat B); an empty value coerces to NULL via the policy NULLIF wrap so
+        // the read fails closed rather than leaking.
+        if (tenantContext.IsUserScoped)
+        {
+            var scopedUserId = tenantContext.UserId?.ToString() ?? string.Empty;
+            command.CommandText =
+                $"SET LOCAL agrisync.user_id = '{scopedUserId}'; " + command.CommandText;
+            return;
+        }
+
         if (tenantContext.FarmId is null || tenantContext.OwnerAccountId is null)
             throw new InvalidOperationException(
                 "TenantConnectionInterceptor: no tenant claim set and not in admin scope.");

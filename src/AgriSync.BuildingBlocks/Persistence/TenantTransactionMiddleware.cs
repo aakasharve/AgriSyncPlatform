@@ -7,6 +7,7 @@
 // ShramSafalDbContext) silently failed-closed under UserDb RLS because
 // auto-commit transactions expire the `set_config(..., true)` GUC
 // before the policy sees it.
+using System.Security.Claims;
 using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage;
@@ -98,21 +99,21 @@ public sealed class TenantTransactionMiddleware
         // handler legitimately spans the caller's tenancies and has
         // user-scoped filtering of its own).
         "/shramsafal/farms/mine",
-        // POST /sync/push, GET /sync/pull — user-scoped multi-farm
-        // sync surface. Both handlers (PushSyncBatchHandler,
-        // PullSyncChangesHandler) take only actorUserId and span every
-        // farm the user is a member of; they have no farmId in scope
-        // and therefore never invoke ShramSafalAuthorizationEnforcer.
-        // EnsureIsFarmMember, so TenantContext stays unset and the
-        // interceptor fail-closes on the first DbCommand. Each per-
-        // mutation handler dispatched by PushSyncBatchHandler runs its
-        // own IsUserMemberOfFarmAsync pre-check (see e.g.
-        // CreateAttachmentAuthorizer docstring) and PullSyncChanges
-        // filters every projection by actorUserId, so user-scoped
-        // isolation is preserved without per-request RLS.
+        // POST /sync/push — user-scoped multi-farm WRITE surface.
+        // PushSyncBatchHandler takes only actorUserId and dispatches per-
+        // mutation handlers that each run their own IsUserMemberOfFarmAsync
+        // pre-check (see CreateAttachmentAuthorizer docstring), so the write
+        // path stays admin-elevated here. Unblocks spec 02 / spec 03.
         //
-        // Unblocks: spec 02 (offline log capture → /sync/push),
-        // spec 03 (sync retry after rejection → /sync/push).
+        // ADR 0019 NOTE: GET /sync/pull is NO LONGER served by this skip
+        // entry — it is intercepted by the user-scoped branch at the TOP of
+        // InvokeAsync (enters TenantContext.SetUserScoped from the JWT claim +
+        // opens a tx so the user-scoped RLS policies filter the read). The old
+        // claim that "PullSyncChanges filters by actorUserId so isolation is
+        // preserved without per-request RLS" was FALSE under FORCE-RLS: admin
+        // elevation sets no GUC, so every farm-scoped read returned 0 rows and
+        // the pull came back empty. The "/sync/" prefix still matches the
+        // /sync/push WRITE path (unchanged); /sync/pull is handled earlier.
         "/sync/",
         // POST /shramsafal/attachments (+ /{id}/upload, /{id},
         // /{id}/download, list) — attachment lifecycle endpoints.
@@ -192,6 +193,27 @@ public sealed class TenantTransactionMiddleware
         TenantContext tenantContext)
     {
         var path = context.Request.Path.Value ?? string.Empty;
+
+        // ADR 0019 — GET /sync/pull is user-scoped (multi-farm, NON-admin).
+        // Enter user-scoped mode from the validated JWT claim (Caveat B) and run
+        // the whole request inside the per-context transaction(s) so the
+        // tx-scoped SET LOCAL agrisync.user_id reaches every read, including the
+        // sub-handlers that share the request-scoped ShramSafalDbContext.
+        // Scoped to /sync/pull ONLY: /sync/push is a WRITE path and stays on the
+        // admin-elevated skip-list below (user-scoped mode is read-only).
+        if (path.StartsWith("/sync/pull", StringComparison.OrdinalIgnoreCase))
+        {
+            if (!TryGetAuthenticatedUserId(context, out var syncUserId))
+            {
+                context.Response.StatusCode = StatusCodes.Status401Unauthorized;
+                return;
+            }
+
+            tenantContext.SetUserScoped(syncUserId);
+            await RunPipelineInTransactionsAsync(context, registry);
+            return;
+        }
+
         foreach (var prefix in SkipPathPrefixes)
         {
             if (path.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
@@ -210,16 +232,23 @@ public sealed class TenantTransactionMiddleware
             }
         }
 
-        // Open one transaction PER writing context so each commands
-        // chain sees its own `set_config(..., true)` GUC. Postgres
-        // scopes those GUCs to the connection's current transaction.
-        //
-        // EnableRetryOnFailure was removed from the ShramSafalDbContext
-        // registration (DependencyInjection.cs spec 03.2/03.6) because
-        // user-initiated transactions are incompatible with EF Core's
-        // retry strategy — and an arbitrary HTTP pipeline cannot be
-        // safely retried anyway. With retry disabled, raw
-        // BeginTransactionAsync is the correct call here.
+        await RunPipelineInTransactionsAsync(context, registry);
+    }
+
+    // Open one transaction PER writing context so each command chain sees its
+    // own `set_config(..., true)` GUC. Postgres scopes those GUCs to the
+    // connection's current transaction. Used by BOTH the normal
+    // single-tenant/admin path and the ADR 0019 user-scoped /sync/pull branch.
+    //
+    // EnableRetryOnFailure was removed from the ShramSafalDbContext
+    // registration (DependencyInjection.cs spec 03.2/03.6) because
+    // user-initiated transactions are incompatible with EF Core's retry
+    // strategy — and an arbitrary HTTP pipeline cannot be safely retried
+    // anyway. With retry disabled, raw BeginTransactionAsync is correct here.
+    private async Task RunPipelineInTransactionsAsync(
+        HttpContext context,
+        ITenantScopedDbContextRegistry registry)
+    {
         var contexts = registry.GetWritingContexts(context.RequestServices);
         var transactions = new List<IDbContextTransaction>(contexts.Count);
         try
@@ -262,5 +291,25 @@ public sealed class TenantTransactionMiddleware
                 await tx.DisposeAsync();
             }
         }
+    }
+
+    // ADR 0019 Caveat B — user-scoped mode is entered from the validated JWT
+    // claim ONLY (sub / NameIdentifier), never a request header/body, never
+    // Guid.Empty. Returns false for anonymous/unparseable principals so the
+    // caller falls through to the fail-closed path instead of user-scoping.
+    private static bool TryGetAuthenticatedUserId(HttpContext context, out Guid userId)
+    {
+        userId = Guid.Empty;
+        var principal = context.User;
+        if (principal?.Identity?.IsAuthenticated != true)
+        {
+            return false;
+        }
+
+        var subject =
+            principal.FindFirst("sub")?.Value ??
+            principal.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+
+        return Guid.TryParse(subject, out userId) && userId != Guid.Empty;
     }
 }

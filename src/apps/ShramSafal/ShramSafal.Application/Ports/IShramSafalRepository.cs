@@ -97,6 +97,32 @@ public interface IShramSafalRepository
     Task<List<PlannedActivity>> GetPlannedActivitiesChangedSinceAsync(DateTime sinceUtc, CancellationToken ct = default);
     Task<List<Attachment>> GetAttachmentsChangedSinceAsync(DateTime sinceUtc, CancellationToken ct = default);
     Task<List<AuditEvent>> GetAuditEventsChangedSinceAsync(DateTime sinceUtc, CancellationToken ct = default);
+
+    // ADR 0019 / sync-pull-user-scoped-rls-read-path-2026-06-07 R3:
+    // farm-filtered changed-since overloads. Production overrides push the
+    // farm scope into SQL before RLS evaluates per-row user-scoped policies;
+    // default implementations keep existing test doubles source-compatible.
+    Task<List<Farm>> GetFarmsChangedSinceAsync(IEnumerable<Guid> farmIds, DateTime sinceUtc, CancellationToken ct = default)
+        => GetFarmsChangedSinceAsync(sinceUtc, ct);
+    Task<List<Plot>> GetPlotsChangedSinceAsync(IEnumerable<Guid> farmIds, DateTime sinceUtc, CancellationToken ct = default)
+        => GetPlotsChangedSinceAsync(sinceUtc, ct);
+    Task<List<CropCycle>> GetCropCyclesChangedSinceAsync(IEnumerable<Guid> farmIds, DateTime sinceUtc, CancellationToken ct = default)
+        => GetCropCyclesChangedSinceAsync(sinceUtc, ct);
+    Task<List<DailyLog>> GetDailyLogsChangedSinceAsync(IEnumerable<Guid> farmIds, DateTime sinceUtc, CancellationToken ct = default)
+        => GetDailyLogsChangedSinceAsync(sinceUtc, ct);
+    Task<List<CostEntry>> GetCostEntriesChangedSinceAsync(IEnumerable<Guid> farmIds, DateTime sinceUtc, CancellationToken ct = default)
+        => GetCostEntriesChangedSinceAsync(sinceUtc, ct);
+    Task<List<FinanceCorrection>> GetFinanceCorrectionsChangedSinceAsync(IEnumerable<Guid> farmIds, DateTime sinceUtc, CancellationToken ct = default)
+        => GetFinanceCorrectionsChangedSinceAsync(sinceUtc, ct);
+    Task<List<DayLedger>> GetDayLedgersChangedSinceAsync(IEnumerable<Guid> farmIds, DateTime sinceUtc, CancellationToken ct = default)
+        => GetDayLedgersChangedSinceAsync(sinceUtc, ct);
+    Task<List<PlannedActivity>> GetPlannedActivitiesChangedSinceAsync(IEnumerable<Guid> farmIds, DateTime sinceUtc, CancellationToken ct = default)
+        => GetPlannedActivitiesChangedSinceAsync(sinceUtc, ct);
+    Task<List<Attachment>> GetAttachmentsChangedSinceAsync(IEnumerable<Guid> farmIds, DateTime sinceUtc, CancellationToken ct = default)
+        => GetAttachmentsChangedSinceAsync(sinceUtc, ct);
+    Task<List<AuditEvent>> GetAuditEventsChangedSinceAsync(IEnumerable<Guid> farmIds, DateTime sinceUtc, CancellationToken ct = default)
+        => GetAuditEventsChangedSinceAsync(sinceUtc, ct);
+
     Task<List<AuditEvent>> GetAuditEventsForEntityAsync(Guid entityId, string entityType, CancellationToken ct = default);
     Task<List<AuditEvent>> GetAuditEventsForFarmAsync(Guid farmId, DateOnly from, DateOnly to, int limit, int offset, CancellationToken ct = default);
     Task<List<Guid>> GetFarmIdsForUserAsync(Guid userId, CancellationToken ct = default);

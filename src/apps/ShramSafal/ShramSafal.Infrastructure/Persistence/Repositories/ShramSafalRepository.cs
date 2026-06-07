@@ -380,6 +380,18 @@ internal sealed class ShramSafalRepository(ShramSafalDbContext db) : IShramSafal
             .ToListAsync(ct);
     }
 
+    public async Task<List<Farm>> GetFarmsChangedSinceAsync(IEnumerable<Guid> farmIds, DateTime sinceUtc, CancellationToken ct = default)
+    {
+        var ids = NormalizeFarmIds(farmIds);
+        if (ids.Count == 0) return [];
+
+        return await db.Farms
+            .AsNoTracking()
+            .Where(f => ids.Contains((Guid)f.Id) && f.ModifiedAtUtc > sinceUtc)
+            .OrderBy(f => f.ModifiedAtUtc)
+            .ToListAsync(ct);
+    }
+
     public async Task<List<Plot>> GetPlotsChangedSinceAsync(DateTime sinceUtc, CancellationToken ct = default)
     {
         return await db.Plots
@@ -389,11 +401,35 @@ internal sealed class ShramSafalRepository(ShramSafalDbContext db) : IShramSafal
             .ToListAsync(ct);
     }
 
+    public async Task<List<Plot>> GetPlotsChangedSinceAsync(IEnumerable<Guid> farmIds, DateTime sinceUtc, CancellationToken ct = default)
+    {
+        var ids = NormalizeFarmIds(farmIds);
+        if (ids.Count == 0) return [];
+
+        return await db.Plots
+            .AsNoTracking()
+            .Where(p => ids.Contains((Guid)p.FarmId) && p.ModifiedAtUtc > sinceUtc)
+            .OrderBy(p => p.ModifiedAtUtc)
+            .ToListAsync(ct);
+    }
+
     public async Task<List<CropCycle>> GetCropCyclesChangedSinceAsync(DateTime sinceUtc, CancellationToken ct = default)
     {
         return await db.CropCycles
             .AsNoTracking()
             .Where(c => c.ModifiedAtUtc > sinceUtc)
+            .OrderBy(c => c.ModifiedAtUtc)
+            .ToListAsync(ct);
+    }
+
+    public async Task<List<CropCycle>> GetCropCyclesChangedSinceAsync(IEnumerable<Guid> farmIds, DateTime sinceUtc, CancellationToken ct = default)
+    {
+        var ids = NormalizeFarmIds(farmIds);
+        if (ids.Count == 0) return [];
+
+        return await db.CropCycles
+            .AsNoTracking()
+            .Where(c => ids.Contains((Guid)c.FarmId) && c.ModifiedAtUtc > sinceUtc)
             .OrderBy(c => c.ModifiedAtUtc)
             .ToListAsync(ct);
     }
@@ -409,11 +445,37 @@ internal sealed class ShramSafalRepository(ShramSafalDbContext db) : IShramSafal
             .ToListAsync(ct);
     }
 
+    public async Task<List<DailyLog>> GetDailyLogsChangedSinceAsync(IEnumerable<Guid> farmIds, DateTime sinceUtc, CancellationToken ct = default)
+    {
+        var ids = NormalizeFarmIds(farmIds);
+        if (ids.Count == 0) return [];
+
+        return await db.DailyLogs
+            .AsNoTracking()
+            .Include(l => l.Tasks)
+            .Include(l => l.VerificationEvents)
+            .Where(l => ids.Contains((Guid)l.FarmId) && l.ModifiedAtUtc > sinceUtc)
+            .OrderBy(l => l.ModifiedAtUtc)
+            .ToListAsync(ct);
+    }
+
     public async Task<List<CostEntry>> GetCostEntriesChangedSinceAsync(DateTime sinceUtc, CancellationToken ct = default)
     {
         return await db.CostEntries
             .AsNoTracking()
             .Where(c => c.ModifiedAtUtc > sinceUtc)
+            .OrderBy(c => c.ModifiedAtUtc)
+            .ToListAsync(ct);
+    }
+
+    public async Task<List<CostEntry>> GetCostEntriesChangedSinceAsync(IEnumerable<Guid> farmIds, DateTime sinceUtc, CancellationToken ct = default)
+    {
+        var ids = NormalizeFarmIds(farmIds);
+        if (ids.Count == 0) return [];
+
+        return await db.CostEntries
+            .AsNoTracking()
+            .Where(c => ids.Contains((Guid)c.FarmId) && c.ModifiedAtUtc > sinceUtc)
             .OrderBy(c => c.ModifiedAtUtc)
             .ToListAsync(ct);
     }
@@ -427,12 +489,40 @@ internal sealed class ShramSafalRepository(ShramSafalDbContext db) : IShramSafal
             .ToListAsync(ct);
     }
 
+    public async Task<List<FinanceCorrection>> GetFinanceCorrectionsChangedSinceAsync(IEnumerable<Guid> farmIds, DateTime sinceUtc, CancellationToken ct = default)
+    {
+        var ids = NormalizeFarmIds(farmIds);
+        if (ids.Count == 0) return [];
+
+        return await db.FinanceCorrections
+            .AsNoTracking()
+            .Where(c => c.ModifiedAtUtc > sinceUtc)
+            .Where(c => db.CostEntries.Any(entry =>
+                entry.Id == c.CostEntryId &&
+                ids.Contains((Guid)entry.FarmId)))
+            .OrderBy(c => c.ModifiedAtUtc)
+            .ToListAsync(ct);
+    }
+
     public async Task<List<DayLedger>> GetDayLedgersChangedSinceAsync(DateTime sinceUtc, CancellationToken ct = default)
     {
         return await db.DayLedgers
             .AsNoTracking()
             .Include(x => x.Allocations)
             .Where(x => x.ModifiedAtUtc > sinceUtc)
+            .OrderBy(x => x.ModifiedAtUtc)
+            .ToListAsync(ct);
+    }
+
+    public async Task<List<DayLedger>> GetDayLedgersChangedSinceAsync(IEnumerable<Guid> farmIds, DateTime sinceUtc, CancellationToken ct = default)
+    {
+        var ids = NormalizeFarmIds(farmIds);
+        if (ids.Count == 0) return [];
+
+        return await db.DayLedgers
+            .AsNoTracking()
+            .Include(x => x.Allocations)
+            .Where(x => ids.Contains((Guid)x.FarmId) && x.ModifiedAtUtc > sinceUtc)
             .OrderBy(x => x.ModifiedAtUtc)
             .ToListAsync(ct);
     }
@@ -455,6 +545,21 @@ internal sealed class ShramSafalRepository(ShramSafalDbContext db) : IShramSafal
             .ToListAsync(ct);
     }
 
+    public async Task<List<PlannedActivity>> GetPlannedActivitiesChangedSinceAsync(IEnumerable<Guid> farmIds, DateTime sinceUtc, CancellationToken ct = default)
+    {
+        var ids = NormalizeFarmIds(farmIds);
+        if (ids.Count == 0) return [];
+
+        return await db.PlannedActivities
+            .AsNoTracking()
+            .Where(a => a.ModifiedAtUtc > sinceUtc)
+            .Where(a => db.CropCycles.Any(cycle =>
+                cycle.Id == a.CropCycleId &&
+                ids.Contains((Guid)cycle.FarmId)))
+            .OrderBy(a => a.ModifiedAtUtc)
+            .ToListAsync(ct);
+    }
+
     public async Task<List<Attachment>> GetAttachmentsChangedSinceAsync(DateTime sinceUtc, CancellationToken ct = default)
     {
         return await db.Attachments
@@ -468,11 +573,40 @@ internal sealed class ShramSafalRepository(ShramSafalDbContext db) : IShramSafal
             .ToListAsync(ct);
     }
 
+    public async Task<List<Attachment>> GetAttachmentsChangedSinceAsync(IEnumerable<Guid> farmIds, DateTime sinceUtc, CancellationToken ct = default)
+    {
+        var ids = NormalizeFarmIds(farmIds);
+        if (ids.Count == 0) return [];
+
+        return await db.Attachments
+            .AsNoTracking()
+            .Where(a =>
+                ids.Contains((Guid)a.FarmId) &&
+                (a.CreatedAtUtc > sinceUtc ||
+                 a.ModifiedAtUtc > sinceUtc ||
+                 (a.UploadedAtUtc.HasValue && a.UploadedAtUtc.Value > sinceUtc) ||
+                 (a.FinalizedAtUtc.HasValue && a.FinalizedAtUtc.Value > sinceUtc)))
+            .OrderBy(a => a.ModifiedAtUtc)
+            .ToListAsync(ct);
+    }
+
     public async Task<List<AuditEvent>> GetAuditEventsChangedSinceAsync(DateTime sinceUtc, CancellationToken ct = default)
     {
         return await db.AuditEvents
             .AsNoTracking()
             .Where(a => a.OccurredAtUtc > sinceUtc)
+            .OrderBy(a => a.OccurredAtUtc)
+            .ToListAsync(ct);
+    }
+
+    public async Task<List<AuditEvent>> GetAuditEventsChangedSinceAsync(IEnumerable<Guid> farmIds, DateTime sinceUtc, CancellationToken ct = default)
+    {
+        var ids = NormalizeFarmIds(farmIds);
+
+        return await db.AuditEvents
+            .AsNoTracking()
+            .Where(a => a.OccurredAtUtc > sinceUtc)
+            .Where(a => !a.FarmId.HasValue || ids.Contains(a.FarmId.Value))
             .OrderBy(a => a.OccurredAtUtc)
             .ToListAsync(ct);
     }
@@ -1207,6 +1341,14 @@ internal sealed class ShramSafalRepository(ShramSafalDbContext db) : IShramSafal
             .OrderByDescending(r => r.RequestedAtUtc)
             .Take(50)
             .ToListAsync(ct);
+    }
+
+    private static List<Guid> NormalizeFarmIds(IEnumerable<Guid> farmIds)
+    {
+        return farmIds
+            .Where(id => id != Guid.Empty)
+            .Distinct()
+            .ToList();
     }
 
     private sealed class OperatorDirectoryRow
