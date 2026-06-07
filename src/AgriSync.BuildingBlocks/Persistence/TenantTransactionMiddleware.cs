@@ -128,6 +128,17 @@ public sealed class TenantTransactionMiddleware
         // Unblocks: spec 04 (attachment upload state machine →
         // POST /shramsafal/attachments + POST /shramsafal/attachments/{id}/upload).
         "/shramsafal/attachments",
+        // Admin console routes intentionally start without a farm tenant:
+        // the first DB question is "which admin organizations does this
+        // user belong to?" If we require a farm claim before that resolver
+        // runs, /shramsafal/admin/me/scope fail-closes and admin-web sends
+        // a valid platform owner to the misleading 403 page. AdminScopeHelper
+        // still performs the membership/module gates inside each endpoint.
+        "/shramsafal/admin",
+        // Farmer-health admin routes are mounted at the API root for the
+        // admin-web route contract, but they use the same AdminScopeHelper
+        // gate and have the same no-farm-at-entry shape.
+        "/admin/farmer-health",
         // GET/PUT /shramsafal/consent/me — user-scoped consent state.
         // The ssf.user_consents table is keyed by user_id only; there
         // is no farm_id column, no tenant scoping, and the handler
