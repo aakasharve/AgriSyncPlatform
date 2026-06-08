@@ -48,6 +48,19 @@ internal sealed class CallerFarmTenantScope(
             return Result.Failure(ShramSafalErrors.InvalidCommand);
         }
 
+        // The single-farm scope is established via Postgres GUCs (set_config) —
+        // a relational-only mechanism. Under a NON-relational provider (the EF
+        // InMemory provider the AI/farm endpoint integration tests swap in)
+        // there is no FORCE-RLS to satisfy and raw SQL is unavailable, so this
+        // is a no-op. Authorization is unaffected: every wired handler still
+        // runs its own IsUserMemberOfFarmAsync membership check (LINQ, provider-
+        // agnostic). Production always uses Npgsql, so the full validated-scope
+        // path below runs and the GUC write-path stays exactly as reviewed.
+        if (!db.Database.IsRelational())
+        {
+            return Result.Success();
+        }
+
         // Step 2 — admin-elevate so the interceptor no-ops (no SET LOCAL
         // prelude → no EF write-rows-affected desync). MUST precede any DB
         // command on this context; ElevateToAdminCrossTenant throws if a
