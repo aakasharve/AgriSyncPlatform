@@ -49,11 +49,24 @@ public static class FarmEndpoints
             Guid farmId,
             ClaimsPrincipal user,
             GetFarmDetailsHandler handler,
+            ShramSafal.Application.Ports.ICallerFarmTenantScope scope,
             CancellationToken ct) =>
         {
             if (!EndpointActorContext.TryGetUserId(user, out var actorUserId))
             {
                 return Results.Unauthorized();
+            }
+
+            // spec: voice-tenant-claim-caller-farm-2026-06-08 — establish the
+            // membership-validated single-farm tenant scope so the farm read
+            // passes under prod FORCE-RLS (this handler self-authorizes via the
+            // repository and never sets the tenant claim). A non-member farmId
+            // returns Forbidden → ToErrorResult maps the "...Forbidden" code to
+            // Results.Forbid().
+            var scopeResult = await scope.EstablishForCallerAsync(farmId, actorUserId, ct);
+            if (!scopeResult.IsSuccess)
+            {
+                return ToErrorResult(scopeResult.Error);
             }
 
             var command = new GetFarmDetailsCommand(farmId, actorUserId);
@@ -66,11 +79,21 @@ public static class FarmEndpoints
             Guid farmId,
             ClaimsPrincipal user,
             GetFarmWeatherHandler handler,
+            ShramSafal.Application.Ports.ICallerFarmTenantScope scope,
             CancellationToken ct) =>
         {
             if (!EndpointActorContext.TryGetUserId(user, out var actorUserId))
             {
                 return Results.Unauthorized();
+            }
+
+            // spec: voice-tenant-claim-caller-farm-2026-06-08 — establish scope
+            // before the farm read; weather then reaches its existing
+            // WeatherProviderNotConfigured (503) path rather than the RLS 500.
+            var scopeResult = await scope.EstablishForCallerAsync(farmId, actorUserId, ct);
+            if (!scopeResult.IsSuccess)
+            {
+                return ToErrorResult(scopeResult.Error);
             }
 
             var result = await handler.HandleAsync(new GetFarmWeatherCommand(farmId, actorUserId), ct);
@@ -83,11 +106,21 @@ public static class FarmEndpoints
             int? days,
             ClaimsPrincipal user,
             GetFarmWeatherHandler handler,
+            ShramSafal.Application.Ports.ICallerFarmTenantScope scope,
             CancellationToken ct) =>
         {
             if (!EndpointActorContext.TryGetUserId(user, out var actorUserId))
             {
                 return Results.Unauthorized();
+            }
+
+            // spec: voice-tenant-claim-caller-farm-2026-06-08 — establish scope
+            // before the farm read; weather then reaches its existing
+            // WeatherProviderNotConfigured (503) path rather than the RLS 500.
+            var scopeResult = await scope.EstablishForCallerAsync(farmId, actorUserId, ct);
+            if (!scopeResult.IsSuccess)
+            {
+                return ToErrorResult(scopeResult.Error);
             }
 
             var result = await handler.HandleAsync(new GetFarmForecastCommand(farmId, actorUserId, days ?? 5), ct);

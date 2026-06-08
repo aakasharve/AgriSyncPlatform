@@ -406,6 +406,14 @@ public static class DependencyInjection
         services.AddScoped<IDocumentExtractionSessionRepository, DocumentExtractionSessionRepository>();
         services.AddScoped<IReportExportService, PdfReportExportService>();
         services.AddScoped<IAuthorizationEnforcer, ShramSafalAuthorizationEnforcer>();
+        // spec: voice-tenant-claim-caller-farm-2026-06-08 — membership-validated
+        // single-farm tenant scope established at the endpoint edge for the AI +
+        // farm-read endpoints that self-authorize and never set the tenant claim.
+        // Registered here (Infrastructure DI) — not Api DI — because the impl is
+        // internal sealed to this assembly, exactly like ShramSafalAuthorizationEnforcer
+        // above. The interface lives in ShramSafal.Application.Ports so Api adapters
+        // can inject it.
+        services.AddScoped<ICallerFarmTenantScope, CallerFarmTenantScope>();
         services.AddScoped<IAiJobRepository, AiJobRepository>();
         services.AddScoped<ISyncMutationStore, SyncMutationStore>();
 

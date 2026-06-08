@@ -274,6 +274,7 @@ public static class AiEndpoints
         HttpRequest request,
         ClaimsPrincipal user,
         CreateDocumentSessionHandler handler,
+        ICallerFarmTenantScope scope,
         CancellationToken ct)
     {
         if (!EndpointActorContext.TryGetUserId(user, out var userId))
@@ -301,6 +302,14 @@ public static class AiEndpoints
         if (!TryValidateImageFile(image, out var imageValidationError))
         {
             return Results.BadRequest(new { error = "ShramSafal.InvalidCommand", message = imageValidationError });
+        }
+
+        // spec: voice-tenant-claim-caller-farm-2026-06-08 — membership-validated
+        // single-farm tenant scope before the handler writes ssf.ai_jobs.
+        var scopeResult = await scope.EstablishForCallerAsync(farmId, userId, ct);
+        if (!scopeResult.IsSuccess)
+        {
+            return ToErrorResult(scopeResult.Error);
         }
 
         var idempotencyKey = string.IsNullOrWhiteSpace(form["idempotencyKey"])
@@ -353,6 +362,7 @@ public static class AiEndpoints
         HttpRequest request,
         ClaimsPrincipal user,
         CreateDocumentSessionHandler handler,
+        ICallerFarmTenantScope scope,
         CancellationToken ct)
     {
         if (!EndpointActorContext.TryGetUserId(user, out var userId))
@@ -386,6 +396,14 @@ public static class AiEndpoints
         if (!TryValidateImageFile(image, out var imageValidationError))
         {
             return Results.BadRequest(new { error = "ShramSafal.InvalidCommand", message = imageValidationError });
+        }
+
+        // spec: voice-tenant-claim-caller-farm-2026-06-08 — membership-validated
+        // single-farm tenant scope before the handler writes ssf.ai_jobs.
+        var scopeResult = await scope.EstablishForCallerAsync(farmId, userId, ct);
+        if (!scopeResult.IsSuccess)
+        {
+            return ToErrorResult(scopeResult.Error);
         }
 
         var idempotencyKey = string.IsNullOrWhiteSpace(form["idempotencyKey"])
@@ -443,6 +461,7 @@ public static class AiEndpoints
         HttpContext httpContext,
         CoVeReverifyRequest request,
         CoVeReverifyHandler handler,
+        ICallerFarmTenantScope scope,
         CancellationToken ct)
     {
         if (!EndpointActorContext.TryGetUserId(httpContext.User, out var userId))
@@ -475,6 +494,14 @@ public static class AiEndpoints
                 error = ShramSafalErrors.MissingVoiceTranscript.Code,
                 message = "transcript is required."
             });
+        }
+
+        // spec: voice-tenant-claim-caller-farm-2026-06-08 — membership-validated
+        // single-farm tenant scope before the handler writes ssf.ai_jobs.
+        var scopeResult = await scope.EstablishForCallerAsync(request.FarmId, userId, ct);
+        if (!scopeResult.IsSuccess)
+        {
+            return ToErrorResult(scopeResult.Error);
         }
 
         // Parsed JSON arrives as a JsonElement so the client can send the
@@ -528,6 +555,7 @@ public static class AiEndpoints
         ClaimsPrincipal user,
         ParseVoiceInputHandler handler,
         IAiJobRepository aiJobRepository,
+        ICallerFarmTenantScope scope,
         CancellationToken ct)
     {
         if (!EndpointActorContext.TryGetUserId(user, out var userId))
@@ -549,6 +577,18 @@ public static class AiEndpoints
         if (parsed is null)
         {
             return UnexpectedNullResult("ParseVoiceRequest");
+        }
+
+        // spec: voice-tenant-claim-caller-farm-2026-06-08 — establish the
+        // membership-validated single-farm tenant scope BEFORE the handler runs
+        // so the farm-scoped reads AND the ssf.ai_jobs WITH-CHECK write pass
+        // under prod FORCE-RLS. A forged farmId the caller is not a member of
+        // returns Forbidden here (mapped to 403 by ToErrorResult) with no farm
+        // GUC ever set. This is the sole authorization gate for voice.
+        var scopeResult = await scope.EstablishForCallerAsync(parsed.FarmId, userId, ct);
+        if (!scopeResult.IsSuccess)
+        {
+            return ToErrorResult(scopeResult.Error);
         }
 
         var effectiveIdempotencyKey = string.IsNullOrWhiteSpace(parsed.IdempotencyKey)
@@ -634,6 +674,7 @@ public static class AiEndpoints
         HttpRequest request,
         ClaimsPrincipal user,
         ExtractReceiptHandler handler,
+        ICallerFarmTenantScope scope,
         CancellationToken ct)
     {
         if (!EndpointActorContext.TryGetUserId(user, out var userId))
@@ -665,6 +706,14 @@ public static class AiEndpoints
                 error = "ShramSafal.InvalidCommand",
                 message = imageValidationError
             });
+        }
+
+        // spec: voice-tenant-claim-caller-farm-2026-06-08 — membership-validated
+        // single-farm tenant scope before the handler writes ssf.ai_jobs.
+        var scopeResult = await scope.EstablishForCallerAsync(farmId, userId, ct);
+        if (!scopeResult.IsSuccess)
+        {
+            return ToErrorResult(scopeResult.Error);
         }
 
         var idempotencyKey = string.IsNullOrWhiteSpace(form["idempotencyKey"])
@@ -710,6 +759,7 @@ public static class AiEndpoints
         HttpRequest request,
         ClaimsPrincipal user,
         ExtractPattiImageHandler handler,
+        ICallerFarmTenantScope scope,
         CancellationToken ct)
     {
         if (!EndpointActorContext.TryGetUserId(user, out var userId))
@@ -747,6 +797,14 @@ public static class AiEndpoints
                 error = "ShramSafal.InvalidCommand",
                 message = imageValidationError
             });
+        }
+
+        // spec: voice-tenant-claim-caller-farm-2026-06-08 — membership-validated
+        // single-farm tenant scope before the handler writes ssf.ai_jobs.
+        var scopeResult = await scope.EstablishForCallerAsync(farmId, userId, ct);
+        if (!scopeResult.IsSuccess)
+        {
+            return ToErrorResult(scopeResult.Error);
         }
 
         var idempotencyKey = string.IsNullOrWhiteSpace(form["idempotencyKey"])
