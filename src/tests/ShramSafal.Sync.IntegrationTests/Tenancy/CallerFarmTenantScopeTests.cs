@@ -215,13 +215,61 @@ public sealed class CallerFarmTenantScopeTests : IAsyncLifetime
         result.Error.Should().Be(ShramSafalErrors.Forbidden,
             "the membership-validated gate is the sole authorization gate; a foreign farmId yields Forbidden");
 
-        // Prove no farm_id GUC was set — current_setting(..., true) returns the
-        // empty string when the GUC is unset/unchanged on this transaction.
+        // Prove the FOREIGN farm's id was never established as the tenant scope
+        // — the real isolation property. Step 3b sets an all-zeros sentinel
+        // farm_id before the membership read (so the bare-cast p_tenant_*
+        // policies don't throw 22P02 on an empty GUC); that sentinel matches no
+        // real farm. The gate denies BEFORE step 6 overwrites it with a real
+        // farm_id, so the foreign Farm A id never reaches the GUC.
         var farmGuc = await ctx.Database
             .SqlQuery<string>($"SELECT COALESCE(current_setting('agrisync.farm_id', true), '') AS \"Value\"")
             .SingleAsync();
-        farmGuc.Should().BeEmpty(
-            "the gate must NOT establish the single-farm scope on denial — nothing about the foreign farm leaks");
+        farmGuc.Should().NotBe(_farmA.ToString(),
+            "on denial the foreign Farm A id must NEVER be established as the single-farm scope — nothing about Farm A leaks");
+        farmGuc.Should().BeOneOf(string.Empty, Guid.Empty.ToString(),
+            "on denial the farm_id GUC is at most the all-zeros sentinel (matches no farm), never a real farm id");
+
+        await tx.CommitAsync();
+    }
+
+    // ────────────────────────────────────────────────────────────────────
+    // 3. Empty farm_id GUC (the prod voice-parse 22P02 repro). The membership
+    //    read touches ssf.farms / ssf.farm_memberships whose ORIGINAL
+    //    p_tenant_* policies (20260516130000) bare-cast
+    //    current_setting('agrisync.farm_id', true)::uuid (no NULLIF). On the
+    //    prod voice-parse path that GUC is an empty string when the gate runs,
+    //    so ''::uuid throws 22P02 and the request 500s before the gate can
+    //    decide. The ORIGINAL tests missed this because a fresh container
+    //    leaves the GUC genuinely UNSET (→ NULL → no error). This test seeds
+    //    the GUC to '' to model prod. Without step 3b it throws 22P02; with it
+    //    the owner gate succeeds.
+    // ────────────────────────────────────────────────────────────────────
+    [Fact]
+    public async Task Establish_for_owner_succeeds_even_when_farm_id_guc_is_empty_string()
+    {
+        using var scope = _rootProvider.CreateScope();
+        var ctx = scope.ServiceProvider.GetRequiredService<ShramSafalDbContext>();
+        var sut = scope.ServiceProvider.GetRequiredService<ICallerFarmTenantScope>();
+        var tenantContext = scope.ServiceProvider.GetRequiredService<TenantContext>();
+
+        await using var tx = await ctx.Database.BeginTransactionAsync();
+
+        // Seed the prod precondition: agrisync.farm_id present but EMPTY (not
+        // NULL) on this transaction. Elevate FIRST so the interceptor no-ops —
+        // otherwise its fail-closed guard throws before we can seed the GUC;
+        // EstablishForCallerAsync's own idempotent elevate is then a no-op.
+        tenantContext.ElevateToAdminCrossTenant();
+        await ctx.Database.ExecuteSqlRawAsync("SELECT set_config('agrisync.farm_id', '', true)");
+
+        // Must NOT throw 22P02; must succeed for the real owner.
+        var result = await sut.EstablishForCallerAsync(_farmA, _ownerUserA);
+
+        result.IsSuccess.Should().BeTrue(
+            "an empty agrisync.farm_id GUC must not crash the membership read — step 3b neutralises it to the all-zeros sentinel before reading ssf.farms / ssf.farm_memberships (regression: prod voice-parse 22P02)");
+
+        var farms = await ctx.Farms.AsNoTracking().ToListAsync();
+        farms.Should().ContainSingle(f => f.Id.Value == _farmA,
+            "after the gate succeeds, step 6 sets the real farm_id and p_tenant_farms surfaces exactly Farm A");
 
         await tx.CommitAsync();
     }

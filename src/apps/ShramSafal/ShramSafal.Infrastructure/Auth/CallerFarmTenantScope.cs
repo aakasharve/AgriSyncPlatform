@@ -73,6 +73,27 @@ internal sealed class CallerFarmTenantScope(
         await db.Database.ExecuteSqlInterpolatedAsync(
             $"SELECT set_config('agrisync.user_id', {userId.ToString()}, true)", ct);
 
+        // Step 3b — neutralise agrisync.farm_id BEFORE the membership read.
+        // The read (step 4) touches ssf.farms + ssf.farm_memberships, whose
+        // ORIGINAL 03.3 tenant policies (20260516130000_EnableRowLevelSecurity,
+        // p_tenant_farms / p_tenant_farm_memberships) cast
+        // current_setting('agrisync.farm_id', true)::uuid with a BARE cast and
+        // NO NULLIF wrap. If that GUC is an empty string at this point — which
+        // it is on the voice-parse request path on prod (and which the original
+        // CallerFarmTenantScopeTests did NOT catch because a fresh container
+        // leaves the GUC genuinely unset → NULL → no error) — the bare
+        // ''::uuid cast throws 22P02 invalid-input-syntax-for-uuid and the whole
+        // request 500s before the gate can decide. Setting it to the all-zeros
+        // sentinel makes the cast valid: the zero-UUID matches NO real farm, so
+        // the tenant policy contributes nothing and the user-scoped policies
+        // (keyed on agrisync.user_id, set in step 3) + the explicit WHERE
+        // clauses in GetFarmMembershipForTenantAsync remain the SOLE
+        // authorization gate. A forged farmId still resolves to no
+        // owner/membership row → Forbidden (step 5) with the real farm_id never
+        // set. Step 6 overwrites this sentinel with the validated farm_id.
+        await db.Database.ExecuteSqlInterpolatedAsync(
+            $"SELECT set_config('agrisync.farm_id', {Guid.Empty.ToString()}, true)", ct);
+
         // Step 4 — the isolation gate. Reads ssf.farms (owner shortcut) +
         // ssf.farm_memberships under the user-scoped policies set in step 3.
         var (isMember, ownerAccountId) = await repository
