@@ -138,13 +138,32 @@ public sealed class AiJob
         // flow (F3) updates the parent's ModelVersion once known; that
         // refresh applies to subsequent attempts but each attempt's
         // recorded provenance must at minimum carry the correct Source.
+        //
+        // 2026-06-09: give the attempt its OWN Provenance instance (a value
+        // copy of the parent's), NOT the shared parent reference. EF Core
+        // owned types are per-owner: assigning the SAME CLR Provenance instance
+        // to both the AiJob and its AiJobAttempt makes EF bind the owned tuple
+        // to the first owner (the job) and persist NULL for the attempt's owned
+        // columns — which trips the `source` NOT NULL constraint on
+        // ssf.ai_job_attempts (Npgsql 23502) the first time a voice-parse job
+        // actually completes its write on a real relational provider. The EF
+        // InMemory provider used by the AI endpoint tests does not enforce
+        // NOT NULL, so this was latent/prod-only. A distinct instance gives the
+        // attempt its own owned tuple while preserving identical lineage values.
+        var attemptProvenance = new Provenance(
+            Provenance.Source,
+            Provenance.ModelVersion,
+            Provenance.PromptVersion,
+            Provenance.PromptContentHash,
+            Provenance.AppVersion,
+            Provenance.ExtractorCodeSha);
         var attempt = AiJobAttempt.Create(
             Guid.NewGuid(),
             Id,
             TotalAttempts + 1,
             provider,
             requestPayloadHash,
-            Provenance);
+            attemptProvenance);
         _attempts.Add(attempt);
         TotalAttempts++;
         Status = AiJobStatus.Running;

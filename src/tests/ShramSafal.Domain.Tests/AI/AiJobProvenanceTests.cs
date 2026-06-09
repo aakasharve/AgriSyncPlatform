@@ -225,4 +225,45 @@ public sealed class AiJobProvenanceTests
             "AiJobAttempt must inherit Source.ReceiptOcr from the parent receipt job");
         attempt.Provenance.AppVersion.Should().Be("1.2.3");
     }
+
+    // ─────────────────────────────────────────────────────────────────────
+    // 2026-06-09 regression: the attempt must own a SEPARATE Provenance CLR
+    // instance (identical values), NOT the parent job's instance. EF Core
+    // owned types are per-owner; assigning the SAME instance to both the job
+    // and its attempt makes EF persist NULL for the attempt's owned `source`
+    // column on a real relational provider → Npgsql 23502 (NOT NULL violation
+    // on ssf.ai_job_attempts.source), which 500'd the first voice-parse to
+    // complete its write on prod. The InMemory provider used by the AI
+    // endpoint tests does not enforce NOT NULL, so this was prod-only; this
+    // unit test guards the distinct-reference requirement provider-agnostically.
+    // ─────────────────────────────────────────────────────────────────────
+    [Fact]
+    public void AddAttempt_gives_attempt_a_distinct_provenance_instance_not_the_shared_parent_reference()
+    {
+        var parentProvenance = new Provenance(
+            source: Source.Voice,
+            modelVersion: "gemini-2.0-flash",
+            promptVersion: "v1",
+            promptContentHash: "feedface".PadRight(64, '0'),
+            appVersion: "1.2.3");
+
+        var aiJob = AiJob.Create(
+            id: AnyJobId,
+            idempotencyKey: "idem-addattempt-distinct",
+            operationType: AiOperationType.VoiceToStructuredLog,
+            userId: AnyUserId,
+            farmId: AnyFarmId,
+            inputContentHash: "abc",
+            rawInputRef: null,
+            inputSessionMetadataJson: null,
+            provenance: parentProvenance);
+
+        var attempt = aiJob.AddAttempt(AiProviderType.Gemini, requestPayloadHash: "req-hash-distinct");
+
+        attempt.Provenance.Should().NotBeSameAs(aiJob.Provenance,
+            "the attempt must own a distinct Provenance instance so EF persists its own owned `source` tuple (a shared instance → NULL source → Npgsql 23502 on ssf.ai_job_attempts)");
+        attempt.Provenance.Source.Should().Be(aiJob.Provenance.Source, "lineage values must still match the parent");
+        attempt.Provenance.ModelVersion.Should().Be(aiJob.Provenance.ModelVersion);
+        attempt.Provenance.PromptVersion.Should().Be(aiJob.Provenance.PromptVersion);
+    }
 }
