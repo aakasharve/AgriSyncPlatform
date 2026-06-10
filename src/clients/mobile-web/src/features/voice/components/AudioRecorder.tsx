@@ -35,6 +35,15 @@ const AudioRecorder: React.FC<AudioRecorderProps> = ({ onAudioCaptured, onTextCa
 
   const startRecording = useCallback(async () => {
     setInternalError(null);
+
+    // Platform / secure-context guard: navigator.mediaDevices is undefined in insecure
+    // contexts and some WebViews; without this it surfaces as a confusing generic
+    // "permission" error even though it's really a context/availability problem.
+    if (!navigator.mediaDevices || typeof navigator.mediaDevices.getUserMedia !== 'function') {
+      setInternalError(`${t('voice.micError')} [no-mediaDevices]`);
+      return;
+    }
+
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       streamRef.current = stream;
@@ -101,8 +110,13 @@ const AudioRecorder: React.FC<AudioRecorderProps> = ({ onAudioCaptured, onTextCa
       }, 1000);
 
     } catch (err) {
+      // Surface the precise failure code — on-device there is no console, so the
+      // bracketed name is the only way to distinguish denied (NotAllowedError) from
+      // mic-busy (NotReadableError), no-device (NotFoundError) or recorder/codec
+      // (NotSupportedError). Remove the suffix once the root cause is confirmed.
+      const name = (err as { name?: string })?.name || 'Error';
       console.error("Error accessing microphone:", err);
-      setInternalError(t('voice.micError'));
+      setInternalError(`${t('voice.micError')} [${name}]`);
     }
   }, [onAudioCaptured, t]);
 

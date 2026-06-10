@@ -69,8 +69,13 @@ export class StreamingPcmRecorder {
 
         this.audioContext = new Ctor({ sampleRate: 16000 });
 
-        // Worklet module path is resolved at build-time by Vite's URL constructor pattern.
-        const moduleUrl = new URL('./StreamingPcmRecorder.worklet.ts', import.meta.url).href;
+        // Worklet is served as a STATIC asset from public/. The previous reference —
+        // new URL('./StreamingPcmRecorder.worklet.ts', import.meta.url) — was NOT
+        // emitted/compiled by Vite, so addModule() 404'd in production and the
+        // streaming recorder surfaced a misleading "Could not access microphone" on
+        // both web and the Capacitor APK. BASE_URL keeps the path correct under the
+        // web origin and the https://localhost Capacitor shell alike.
+        const moduleUrl = `${import.meta.env.BASE_URL}streaming-pcm-processor.worklet.js`;
         await this.audioContext.audioWorklet.addModule(moduleUrl);
 
         this.sourceNode = this.audioContext.createMediaStreamSource(this.mediaStream);

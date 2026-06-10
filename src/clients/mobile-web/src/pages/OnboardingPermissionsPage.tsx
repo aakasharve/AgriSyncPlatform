@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Shield, MapPin, Mic, Camera, HardDrive, CheckCircle2, ChevronRight, Check } from 'lucide-react';
+import { Shield, MapPin, Mic, Camera, HardDrive, CheckCircle2 } from 'lucide-react';
 import Button from '../shared/components/ui/Button';
 import { useUiPref } from '../shared/hooks/useUiPref';
 
@@ -41,14 +41,19 @@ const OnboardingPermissionsPage: React.FC<OnboardingPermissionsPageProps> = ({ o
 
      const requestAllPermissions = async () => {
           try {
-               // Sequential requesting is more reliable in browsers than Promise.all for permissions
+               // Sequential requesting is more reliable in browsers than Promise.all for permissions.
+               // IMPORTANT: stop the tracks immediately after the grant — onboarding only needs the
+               // PERMISSION, not the live device. Leaving the mic stream open here held the microphone
+               // so the AudioRecorder's later getUserMedia() failed with a false "mic not granted".
                try {
-                    await navigator.mediaDevices.getUserMedia({ audio: true });
+                    const micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                    micStream.getTracks().forEach((track) => track.stop());
                } catch (e) {
                     console.warn('Microphone permission denied', e);
                }
                try {
-                    await navigator.mediaDevices.getUserMedia({ video: true });
+                    const camStream = await navigator.mediaDevices.getUserMedia({ video: true });
+                    camStream.getTracks().forEach((track) => track.stop());
                } catch (e) {
                     console.warn('Camera permission denied', e);
                }

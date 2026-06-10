@@ -46,7 +46,7 @@ const OtpLoginForm: React.FC<OtpLoginFormProps> = ({ onOtpSent }) => {
     return (
         <form onSubmit={handleSubmit} className="space-y-5">
             <div className="text-center space-y-1">
-                <h2 className="text-xl font-display font-black text-stone-800">
+                <h2 className="text-xl font-serif font-bold text-stone-800">
                     लॉग इन करा
                 </h2>
                 <p className="text-xs text-stone-500">Sign in with your phone number</p>
@@ -56,18 +56,22 @@ const OtpLoginForm: React.FC<OtpLoginFormProps> = ({ onOtpSent }) => {
                 <label htmlFor="otp-phone" className="block text-xs font-bold uppercase tracking-wide text-stone-500">
                     मोबाईल नंबर · Phone
                 </label>
-                <div className="relative">
-                    <Phone size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-400" />
+                <div className="flex items-stretch overflow-hidden rounded-xl border border-stone-200 bg-white transition-colors focus-within:border-emerald-400 focus-within:ring-2 focus-within:ring-emerald-200/60">
+                    <span className="flex select-none items-center gap-1.5 border-r border-stone-200 bg-stone-50/80 px-3 text-stone-700">
+                        <Phone size={15} className="text-emerald-600" />
+                        <span className="text-sm font-bold">+91</span>
+                    </span>
                     <input
                         id="otp-phone"
                         type="tel"
                         value={phone}
-                        onChange={e => { setPhone(e.target.value); setError(null); }}
+                        onChange={e => { setPhone(e.target.value.replace(/[^0-9]/g, '')); setError(null); }}
                         placeholder="10-digit number"
                         autoComplete="tel"
-                        className="w-full pl-9 pr-3 py-2.5 rounded-xl border border-stone-200 bg-white text-sm font-medium outline-none focus:border-emerald-400 focus:ring-2 focus:ring-emerald-200/60"
+                        className="min-w-0 flex-1 bg-transparent px-3 py-3 text-sm font-medium outline-none placeholder:text-stone-400"
                         disabled={isLoading}
                         inputMode="numeric"
+                        maxLength={10}
                     />
                 </div>
             </div>

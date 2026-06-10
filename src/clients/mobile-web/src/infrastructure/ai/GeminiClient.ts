@@ -3,6 +3,8 @@ import { AgriLogResponse, CropProfile, FarmerProfile } from '../../types';
 import { LogScope } from '../../domain/types/log.types';
 import { agriSyncClient } from '../api/AgriSyncClient';
 import { getDatabase } from '../storage/DexieDatabase';
+import { SessionStore } from '../storage/SessionStore';
+import { getLastCachedMeContext } from '../../core/session/MeContextService';
 import { annotateFieldConfidencesWithBuckets } from '../../domain/ai/contracts/FieldConfidence';
 
 function normalizeSuggestedAction(action?: string): 'auto_confirm' | 'manual_review' | 'ask_clarification' {
@@ -13,6 +15,22 @@ function normalizeSuggestedAction(action?: string): 'auto_confirm' | 'manual_rev
 }
 
 async function resolveFarmIdFromCache(): Promise<string | undefined> {
+    // Mirror BackendAiClient: prefer the session's current farm (set on login,
+    // persisted to localStorage), then the in-memory me-context, before the
+    // sync-pull payload cache — the LogContext selection carries no farmId and
+    // the pull cache can be empty for a freshly-linked user. (2026-06-08 fix.)
+    const sessionFarmId = SessionStore.getCurrentFarmId();
+    if (sessionFarmId && sessionFarmId.trim().length > 0) {
+        return sessionFarmId;
+    }
+
+    const meFarmId = getLastCachedMeContext()?.farms?.find(
+        farm => typeof farm.farmId === 'string' && farm.farmId.trim().length > 0,
+    )?.farmId;
+    if (meFarmId) {
+        return meFarmId;
+    }
+
     const db = getDatabase();
 
     const cachedPayload = await db.appMeta.get('shramsafal_last_pull_payload');
