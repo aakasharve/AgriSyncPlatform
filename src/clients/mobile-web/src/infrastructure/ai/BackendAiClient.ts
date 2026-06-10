@@ -4,6 +4,8 @@ import { LogScope } from '../../domain/types/log.types';
 import { agriSyncClient } from '../api/AgriSyncClient';
 import { getAuthSession } from '../storage/AuthTokenStore';
 import { getDatabase, type PendingAiJobContext, type VoiceClipStatus } from '../storage/DexieDatabase';
+import { SessionStore } from '../storage/SessionStore';
+import { getLastCachedMeContext } from '../../core/session/MeContextService';
 import { IdempotencyKeyFactory } from './IdempotencyKeyFactory';
 import { annotateFieldConfidencesWithBuckets } from '../../domain/ai/contracts/FieldConfidence';
 import { AgriLogResponseSchema } from '../../domain/ai/contracts/AgriLogResponseSchema';
@@ -49,7 +51,53 @@ function normalizeSuggestedAction(action?: string): 'auto_confirm' | 'manual_rev
     return 'manual_review';
 }
 
+// ROBUSTNESS_2026-06-10 (Option A — unblock; proper contract alignment = follow-up B).
+// The backend's legacy-prompt parsedLog (promptVersion legacy-2026-02-22) drifts from
+// the strict AgriLogResponseSchema: event items omit `id`, `confidence` is a scalar, and
+// extra `_meta`/`fieldConfidences` keys are present. Discarding the whole parse blocks the
+// farmer entirely. This generates the missing event ids so the parse renders on the
+// confirm screen; it is PURE shape-normalization (never invents/changes content). The
+// human confirm-step is the integrity gate. Does NOT touch the schema (shared contract).
+function normalizeDriftedParsedLog(raw: unknown): unknown {
+    if (!raw || typeof raw !== 'object') return raw;
+    const genId = (): string =>
+        (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function')
+            ? crypto.randomUUID()
+            : `gen-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+    const withIds = (value: unknown): unknown =>
+        Array.isArray(value)
+            ? value.map(item =>
+                (item && typeof item === 'object' && !(item as { id?: unknown }).id)
+                    ? { ...(item as object), id: genId() }
+                    : item)
+            : value;
+    const out: Record<string, unknown> = { ...(raw as Record<string, unknown>) };
+    for (const key of ['cropActivities', 'irrigation', 'labour', 'inputs', 'machinery', 'activityExpenses', 'observations', 'plannedTasks']) {
+        if (key in out) out[key] = withIds(out[key]);
+    }
+    return out;
+}
+
 async function resolveFarmIdFromCache(): Promise<string | undefined> {
+    // 1) Authoritative source: the current farm from the session. It is set when
+    //    the farm context loads on login and persists to localStorage. The
+    //    LogContext selection objects do NOT carry a farmId, and the sync-pull
+    //    payload cache below is empty for a freshly-linked user — so without this
+    //    the parse failed with "No farm context available for AI parsing." even
+    //    with a crop + plot selected. (2026-06-08 root-cause fix.)
+    const sessionFarmId = SessionStore.getCurrentFarmId();
+    if (sessionFarmId && sessionFarmId.trim().length > 0) {
+        return sessionFarmId;
+    }
+
+    // 2) The /user/auth/me/context aggregate (the caller's farms), cached in memory.
+    const meFarmId = getLastCachedMeContext()?.farms?.find(
+        farm => typeof farm.farmId === 'string' && farm.farmId.trim().length > 0,
+    )?.farmId;
+    if (meFarmId) {
+        return meFarmId;
+    }
+
     const db = getDatabase();
 
     const cachedPayload = await db.appMeta.get('shramsafal_last_pull_payload');
@@ -211,17 +259,27 @@ export class BackendAiClient implements VoiceParserPort {
             // Anything that fails throws synchronously and the caller
             // surfaces a parse error rather than persisting drift.
             const parseResult = AgriLogResponseSchema.safeParse(apiResult.parsedLog);
-            if (!parseResult.success) {
-                throw new Error(
-                    `AgriLogResponse validation failed: ${parseResult.error.toString()}`,
-                );
-            }
             // We cast back to the structural `AgriLogResponse` from
             // log.types.ts because that interface (with its concrete
             // event-event union shapes) is what the rest of the app
             // consumes. The schema and the TS interface are kept in
             // lockstep by the AgriLogResponseSchema header invariant.
-            const parsedLog = parseResult.data as unknown as AgriLogResponse;
+            let parsedLog: AgriLogResponse;
+            if (parseResult.success) {
+                parsedLog = parseResult.data as unknown as AgriLogResponse;
+            } else {
+                // ROBUSTNESS_2026-06-10 (Option A): the server parsed the log fine,
+                // but its legacy-prompt shape fails the strict schema (missing event
+                // ids, scalar confidence, extra _meta keys). Don't discard a usable
+                // parse — log the drift for telemetry and normalize the raw payload so
+                // it renders on the confirm screen (the human review is the integrity
+                // gate). Proper schema/prompt contract alignment tracked as follow-up B.
+                console.warn(
+                    '[voice-parse] AgriLogResponse schema drift — using normalized raw parse instead of discarding.',
+                    parseResult.error?.issues,
+                );
+                parsedLog = normalizeDriftedParsedLog(apiResult.parsedLog) as unknown as AgriLogResponse;
+            }
             const inferredTranscript = typeof parsedLog?.fullTranscript === 'string'
                 ? parsedLog.fullTranscript
                 : (input.type === 'text' ? input.content : undefined);
