@@ -374,6 +374,20 @@ export class BackendAiClient implements VoiceParserPort {
             return;
         }
 
+        // voice-live-captions-banner-2026-06-10 — prod backend SHA 016374f1
+        // made /shramsafal/ai/parse-voice-stream establish a tenant scope from
+        // a `farmId` field on the request body (matching the batch
+        // /ai/voice-parse contract). Resolve it the same way the batch path
+        // does (SessionStore → me-context → pull cache → dayLedgers). Without a
+        // resolvable farm there's no tenant to scope to, so degrade to the
+        // batch path (which surfaces the same "No farm context" error rather
+        // than a confusing 500 from the stream).
+        const farmId = await resolveFarmIdFromCache();
+        if (!farmId) {
+            yield* fallback();
+            return;
+        }
+
         let response: Response;
         try {
             // SARVAM_PRIMARY_VOICE_PIPELINE_2026-05-21 founder fix —
@@ -390,6 +404,7 @@ export class BackendAiClient implements VoiceParserPort {
             response = await this.fetchParseVoiceStream(transcript, scope, crops, profile, {
                 ...options,
                 recordedAtUtc,
+                farmId,
             });
         } catch {
             yield* fallback();
@@ -432,7 +447,7 @@ export class BackendAiClient implements VoiceParserPort {
         scope: LogScope,
         crops: CropProfile[],
         profile: FarmerProfile,
-        options?: { focusCategory?: string; scenarioId?: string; recordedAtUtc?: string },
+        options?: { focusCategory?: string; scenarioId?: string; recordedAtUtc?: string; farmId?: string },
     ): Promise<Response> {
         const baseUrl = resolveApiBaseUrl();
         const session = getAuthSession();
@@ -448,8 +463,12 @@ export class BackendAiClient implements VoiceParserPort {
         // body field `recordedAt` aligns with the backend
         // ParseVoiceStreamRequest.RecordedAt property. When omitted
         // the structurer prompt falls back to "unknown" per contract.
+        // voice-live-captions-banner-2026-06-10 — `farmId` lets the endpoint
+        // establish the caller's tenant scope (prod SHA 016374f1) so the
+        // stream no longer 500s on the DB read.
         const body = JSON.stringify({
             transcript,
+            farmId: options?.farmId,
             context: this.buildContext(scope, crops, profile, options),
             scenarioId: options?.scenarioId,
             recordedAt: options?.recordedAtUtc,

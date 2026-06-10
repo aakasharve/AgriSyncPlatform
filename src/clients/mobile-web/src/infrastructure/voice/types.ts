@@ -128,20 +128,22 @@ export const DEFAULT_VOICE_CONFIG: VoicePreprocessorConfig = {
         frameSize: 128,
         workletBufferSize: 16384,
     },
-    // 2026-06-09 — FLIPPED to false to unblock voice-logging on prod.
-    // The streaming live-transcript path (transcribe-stream → parse-voice-stream)
-    // is currently non-functional on prod for TWO reasons: (1) both streaming
-    // endpoints hit the DB without establishing a tenant scope → 500 "no tenant
-    // claim" (they skip the EstablishForCallerAsync the batch /ai/voice-parse does);
-    // and (2) transcribe-stream requires the Sarvam transcriber, whose API key is
-    // NOT configured on prod (sarvam_key_lines=0). With false, the recorder uses the
-    // batch path (parseVoiceToDraft → /ai/voice-parse), which establishes the farm
-    // scope correctly and — since Sarvam is unwired — falls back to the Gemini
-    // single-call multimodal path (audio→JSON; Gemini key funded). Trade-off: no
-    // live word-by-word caption, but voice-logging works end-to-end.
-    // Re-enable to true ONLY after BOTH land: (a) tenant-scope fix on the two
-    // streaming endpoints, and (b) a working Sarvam API key on prod.
-    useStreamingParse: false,
+    // 2026-06-10 — RE-FLIPPED to true (spec voice-live-captions-banner-2026-06-10).
+    // Prod backend SHA 016374f1 cleared the two blockers that forced the
+    // 2026-06-09 flip to false: (1) both streaming endpoints now establish a
+    // tenant scope (transcribe-stream via the skip-list fix; parse-voice-stream
+    // now takes a `farmId` field and establishes scope), verified streaming live
+    // on prod; and (2) the LiveCaption Way-2 path is SILENT-FALLBACK-SAFE — if
+    // Stage 1 (Sarvam transcribe-stream) fails for ANY reason (e.g. Sarvam key
+    // still unfunded), useVoiceRecorder.handleAudioReady falls through to the
+    // existing batch audio path (parseVoiceToDraft → /ai/voice-parse → Gemini
+    // multimodal), which still hydrates the buckets. And if Stage 2
+    // (parse-voice-stream) fails before the first SSE event, BackendAiClient
+    // silent-falls-back to the batch text path (parseTextLog → /ai/voice-parse).
+    // Net effect with true: live word-by-word caption WHEN transcribe-stream
+    // works, no regression to the parse→bucket flow when it doesn't.
+    // Note: this is a SEPARATE flag from streamingPcm.enabled (Phase 2 recording).
+    useStreamingParse: true,
     limits: {
         softSegmentLimit: 20,
         hardSegmentLimit: 30,

@@ -11,6 +11,25 @@ import { DEFAULT_VOICE_CONFIG, VoiceSessionMetadata } from '../../infrastructure
 import { normalizeLegacyLogSegmentId } from '../../domain/ai/BucketId';
 import { TranscribeStreamConsumer } from '../../infrastructure/ai/TranscribeStreamConsumer';
 
+// TASK 3 (voice-live-captions-banner-2026-06-10) — yield to the browser so a
+// just-committed React state change can paint before heavy synchronous-ish
+// work runs on the same async stack. Prefers requestAnimationFrame (fires
+// right before the next paint); falls back to a setTimeout(0) macrotask when
+// rAF is unavailable (jsdom / non-browser). Resolves immediately if neither
+// exists. Kept out of the component so it's allocation-free per render.
+const yieldToPaint = (): Promise<void> =>
+    new Promise<void>((resolve) => {
+        if (typeof requestAnimationFrame === 'function') {
+            requestAnimationFrame(() => resolve());
+            return;
+        }
+        if (typeof setTimeout === 'function') {
+            setTimeout(() => resolve(), 0);
+            return;
+        }
+        resolve();
+    });
+
 const hasSuccessfulIrrigation = (events: Array<{ durationHours?: number; waterVolumeLitres?: number; method?: string; source?: string }>): boolean => {
     return events.some(event => {
         if ((event.durationHours || 0) > 0) return true;
@@ -325,6 +344,19 @@ export const useVoiceRecorder = ({
     const handleAudioReady = async (audioData: AudioData) => {
         setStatus('processing');
         setError(null);
+        // TASK 3 (voice-live-captions-banner-2026-06-10): the "Your Shram
+        // sathi is trying to understand…" banner is driven by status ===
+        // 'processing'. preprocessAudio below is heavy (AudioWorklet
+        // silence-trim + hashing + base64) and, run synchronously in the
+        // same tick as the setStatus commit, blocks the browser from
+        // painting the banner until it finishes — so on long clips the
+        // banner appears late. Yield to the next animation frame (with a
+        // macrotask fallback for non-rAF environments / jsdom) so React
+        // flushes the 'processing' state and the browser paints the banner
+        // BEFORE the heavy preprocessing starts. This is purely a paint
+        // ordering fix: no change to what runs, only when the first paint
+        // happens relative to the CPU work.
+        await yieldToPaint();
         const preprocessed = await preprocessAudio(audioData);
         // SARVAM_PRIMARY_VOICE_PIPELINE_2026-05-21 founder fix (Option
         // B): pass the recordedAtUtc from the recorder upward to the
