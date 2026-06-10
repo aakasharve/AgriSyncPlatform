@@ -7,6 +7,7 @@ using AgriSync.BuildingBlocks.Audit;
 using AgriSync.BuildingBlocks.Results;
 using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.RateLimiting;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using ShramSafal.Application.Ports;
 using ShramSafal.Application.Ports.External;
@@ -556,6 +557,7 @@ public static class AiEndpoints
         ParseVoiceInputHandler handler,
         IAiJobRepository aiJobRepository,
         ICallerFarmTenantScope scope,
+        ILoggerFactory loggerFactory,
         CancellationToken ct)
     {
         if (!EndpointActorContext.TryGetUserId(user, out var userId))
@@ -563,7 +565,8 @@ public static class AiEndpoints
             return Results.Unauthorized();
         }
 
-        var parsedRequest = await ParseVoiceRequestAsync(httpRequest, ct);
+        var logger = loggerFactory.CreateLogger("ShramSafal.Api.Endpoints.AiEndpoints");
+        var parsedRequest = await ParseVoiceRequestAsync(httpRequest, logger, ct);
         if (!parsedRequest.IsSuccess)
         {
             return Results.BadRequest(new
@@ -847,15 +850,12 @@ public static class AiEndpoints
         });
     }
 
-    private static async Task<Result<ParseVoiceHttpRequest>> ParseVoiceRequestAsync(HttpRequest request, CancellationToken ct)
+    private static async Task<Result<ParseVoiceHttpRequest>> ParseVoiceRequestAsync(HttpRequest request, ILogger logger, CancellationToken ct)
     {
         if (request.HasFormContentType)
         {
             var form = await request.ReadFormAsync(ct);
-            if (!TryParseGuid(form["farmId"], out var farmId))
-            {
-                return Result.Failure<ParseVoiceHttpRequest>(Error.Validation("ShramSafal.InvalidCommand", "farmId is required."));
-            }
+            var farmIdParsed = TryParseGuid(form["farmId"], out var farmId);
 
             var plotId = TryParseNullableGuid(form["plotId"]);
             var cropCycleId = TryParseNullableGuid(form["cropCycleId"]);
@@ -865,11 +865,6 @@ public static class AiEndpoints
             int? rawDuration = int.TryParse(form["inputRawDurationMs"], out var parsedRawDuration)
                 ? parsedRawDuration
                 : null;
-            var durationValidationError = ValidateVoiceDurations(speechDuration, rawDuration);
-            if (durationValidationError is not null)
-            {
-                return Result.Failure<ParseVoiceHttpRequest>(durationValidationError);
-            }
 
             var textTranscript = form["textTranscript"].ToString();
             var audioFile = form.Files["audio"] ?? form.Files["audioSegments"] ?? form.Files.FirstOrDefault();
@@ -877,9 +872,60 @@ public static class AiEndpoints
             string? mimeType = null;
             var segmentMetadataJson = ReadSegmentMetadata(form["segmentMetadata"], form["segmentMetadataJson"]);
             var requestPayloadHash = form["requestPayloadHash"].ToString();
+            var recordedAtRaw = form["recorded_at"].ToString();
+
+            // spec: voice-parse-advisory-metadata-2026-06-10 — TEMPORARY
+            // diagnostics. The batch multipart voice-parse was 400-ing real
+            // browser recordings on ADVISORY metadata; clean 400s weren't
+            // logged so we couldn't see which check fired. Emit ONE structured
+            // WARN of the raw request shape so real-recording values surface in
+            // the prod journal. WARN-level is intentional (visible without a
+            // log-level flip); fine to keep.
+            logger.LogWarning(
+                "[voice-parse-diag] mimeType={MimeType} audioBytes={AudioBytes} speechDurationMs={SpeechDurationMs} rawDurationMs={RawDurationMs} segmentMetadataLen={SegmentMetadataLen} recordedAtRaw={RecordedAtRaw} farmIdParsed={FarmIdParsed}",
+                audioFile?.ContentType,
+                audioFile?.Length ?? 0,
+                speechDuration,
+                rawDuration,
+                segmentMetadataJson?.Length ?? 0,
+                recordedAtRaw,
+                farmIdParsed);
+
+            // FATAL: farmId is required (authorization-relevant — the caller's
+            // farm membership is validated downstream against this value).
+            if (!farmIdParsed)
+            {
+                return Result.Failure<ParseVoiceHttpRequest>(Error.Validation("ShramSafal.InvalidCommand", "farmId is required."));
+            }
+
+            // spec: voice-parse-advisory-metadata-2026-06-10 — durations are
+            // ADVISORY observability data, NOT security/correctness. Log-and-
+            // proceed instead of rejecting a valid recording over them.
+            var durationValidationError = ValidateVoiceDurations(speechDuration, rawDuration);
+            if (durationValidationError is not null)
+            {
+                logger.LogWarning(
+                    "[voice-parse-advisory] duration validation soft-failed (proceeding): {Reason} speechDurationMs={SpeechDurationMs} rawDurationMs={RawDurationMs}",
+                    durationValidationError.Description,
+                    speechDuration,
+                    rawDuration);
+            }
+
+            // Defensively NULL-out negative durations so downstream isn't fed
+            // garbage; the advisory soft-fail above already logged the reason.
+            if (speechDuration is < 0)
+            {
+                speechDuration = null;
+            }
+
+            if (rawDuration is < 0)
+            {
+                rawDuration = null;
+            }
 
             if (audioFile is not null && audioFile.Length > 0)
             {
+                // FATAL: mime/size are real resource-safety limits.
                 if (!TryValidateAudioFile(audioFile, out var audioValidationError))
                 {
                     return Result.Failure<ParseVoiceHttpRequest>(Error.Validation("ShramSafal.InvalidCommand", audioValidationError));
@@ -893,25 +939,40 @@ public static class AiEndpoints
             }
             else if (string.IsNullOrWhiteSpace(textTranscript))
             {
+                // FATAL: with neither audio nor transcript there is nothing to parse.
                 return Result.Failure<ParseVoiceHttpRequest>(Error.Validation("ShramSafal.InvalidCommand", "textTranscript or audio is required."));
             }
 
+            // spec: voice-parse-advisory-metadata-2026-06-10 — segment metadata
+            // sanity checks are ADVISORY observability data. (016374f1 already
+            // made the reconciliation checks advisory; this makes the remaining
+            // size/shape sanity checks advisory too.) Log-and-proceed.
             var segmentMetadataValidation = ValidateSegmentMetadata(segmentMetadataJson, mimeType, speechDuration, rawDuration);
             if (segmentMetadataValidation is not null)
             {
-                return Result.Failure<ParseVoiceHttpRequest>(segmentMetadataValidation);
+                logger.LogWarning(
+                    "[voice-parse-advisory] segmentMetadata validation soft-failed (proceeding): {Reason} segmentMetadataLen={SegmentMetadataLen}",
+                    segmentMetadataValidation.Description,
+                    segmentMetadataJson?.Length ?? 0);
             }
 
-            // SARVAM_PRIMARY_VOICE_PIPELINE_2026-05-21 founder fix —
-            // multipart form field `recorded_at`. Empty/missing → null
-            // (legacy client backward compat); present but unparseable →
-            // 400 so the bug surfaces early instead of silently producing
-            // a wrong "काल" resolution.
-            var recordedAtRaw = form["recorded_at"].ToString();
+            // spec: voice-parse-advisory-metadata-2026-06-10 — `recorded_at` is
+            // ADVISORY (drives the {{captured_at}} prompt token only). The
+            // server already tolerates a null recorded_at, so an unparseable
+            // value must NOT 400 a genuine recording — log WARN and fall back
+            // to null. Empty/missing → null as before (legacy backward compat).
             var recordedAtParse = TryParseRecordedAtUtc(recordedAtRaw);
+            DateTime? recordedAtUtc;
             if (!recordedAtParse.IsSuccess)
             {
-                return Result.Failure<ParseVoiceHttpRequest>(recordedAtParse.Error);
+                logger.LogWarning(
+                    "[voice-parse-advisory] recorded_at unparseable (proceeding with null): {RecordedAtRaw}",
+                    recordedAtRaw);
+                recordedAtUtc = null;
+            }
+            else
+            {
+                recordedAtUtc = recordedAtParse.Value;
             }
 
             return Result.Success(new ParseVoiceHttpRequest(
@@ -927,7 +988,7 @@ public static class AiEndpoints
                 rawDuration,
                 segmentMetadataJson,
                 requestPayloadHash,
-                RecordedAtUtc: recordedAtParse.Value));
+                RecordedAtUtc: recordedAtUtc));
         }
 
         var jsonRequest = await request.ReadFromJsonAsync<ParseVoiceInputRequest>(cancellationToken: ct);
