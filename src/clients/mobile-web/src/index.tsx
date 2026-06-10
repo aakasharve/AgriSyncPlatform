@@ -32,6 +32,20 @@ initSentry();
 NotificationService.registerSW();
 NotificationService.scheduleDisciplineNudges();
 
+// login-cache-ghost fix (2026-06-11): when a NEW service worker takes control
+// (after an app update OR the stale-shell-cache migration), reload ONCE so the
+// fresh app shell renders immediately. Without this, the first open after an
+// update can briefly show the previously-cached screen (the "old login UI"
+// ghost) until the user manually relaunches. Guarded so it never loops.
+if ('serviceWorker' in navigator) {
+    let swReloaded = false;
+    navigator.serviceWorker.addEventListener('controllerchange', () => {
+        if (swReloaded) return;
+        swReloaded = true;
+        window.location.reload();
+    });
+}
+
 // DWC v2 §2.6 — boot the analytics event bus and wire the global
 // error/unhandledrejection sinks into `client.error`. The bus is
 // idempotent; safe under React StrictMode double-invoke in development.

@@ -1,9 +1,14 @@
 /// <reference lib="webworker" />
 
-// v4: bumped from v3 so `activate` purges the stale v3 app-shell cache (which held
-// a cache-first index.html pinned to an old asset hash — that masked deploys).
-const APP_SHELL_CACHE = 'shramsafal-app-shell-v4';
-const API_CACHE = 'shramsafal-api-v3';
+// v6/v4: shell bumped to v6 so `activate` purges the stale v5 app-shell cache —
+// it held a snapshot of the PREVIOUS login screen, which (combined with the old
+// service worker controlling the very first open after an app reinstall) is what
+// surfaced as the "old login UI shows first, clean UI after relaunch" ghost. The
+// new shell cache is re-populated fresh on install; paired with a client-side
+// controllerchange→reload (see index.tsx) so the first open self-corrects.
+// Earlier v5/v4 bump purged a stale /sync/pull (empty plots pre-RLS-fix).
+const APP_SHELL_CACHE = 'shramsafal-app-shell-v6';
+const API_CACHE = 'shramsafal-api-v4';
 // HTML shell (the entry document) — NETWORK-FIRST. A new deploy's index.html points
 // at new hashed asset filenames, so the shell MUST be re-fetched or returning users
 // are served the old bundle forever. Caching the shell cache-first was the bug.
