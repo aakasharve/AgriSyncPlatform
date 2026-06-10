@@ -521,7 +521,18 @@ export const renderLogView = (ctx: AppRouterContext): React.ReactNode => {
                         </div>
                     </div>
                     <h3 className="text-xl font-bold text-stone-800 mb-3 leading-snug">Your Shram sathi is trying to understand what work you did today...</h3>
-                    <div className="text-sm text-stone-400 max-w-xs mx-auto mt-2 italic">Listening carefully to your log...</div>
+                    {/* SARVAM_PRIMARY_VOICE_PIPELINE — live transcript, placed right below the
+                        recorder/banner so the farmer sees their words appear as Sarvam transcribes
+                        the clip (post-Stop, cost-safe: reuses the single transcribe-stream that
+                        runTranscribeStage already opened; no extra Sarvam call). Self-hides when
+                        empty; the static placeholder below shows only until the first words land. */}
+                    <LiveCaption
+                        text={liveCaption}
+                        isTranscribing={voiceStreamingPhase === 'transcribing'}
+                    />
+                    {!liveCaption && voiceStreamingPhase !== 'transcribing' && (
+                        <div className="text-sm text-stone-400 max-w-xs mx-auto mt-2 italic">Listening carefully to your log...</div>
+                    )}
                 </div>
             )}
 
