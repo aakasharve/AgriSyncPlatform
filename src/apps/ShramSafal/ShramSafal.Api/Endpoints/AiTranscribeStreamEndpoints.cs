@@ -183,15 +183,27 @@ public static class AiTranscribeStreamEndpoints
 
         if (!transcriberMap.TryGetValue(transcriberType, out var transcriber))
         {
-            httpContext.Response.StatusCode = StatusCodes.Status503ServiceUnavailable;
-            await httpContext.Response.WriteAsJsonAsync(
-                new
-                {
-                    error = "ShramSafal.AiTranscribeUnavailable",
-                    message = $"No transcriber provider registered for {transcriberType}."
-                },
-                ct);
-            return;
+            // voice-live-captions-2026-06-11: the configured TranscriberProvider
+            // (default "Gemini", which drives the BATCH multimodal parse via
+            // ParseVoiceTwoStageAsync's delegate-to-multimodal branch) has no
+            // streaming-STT adapter. THIS endpoint is the live-caption streaming
+            // flow, implemented only by Sarvam (SarvamStreamingSttClient). Fall
+            // back to any registered ITranscriberProvider (Sarvam) rather than
+            // 503 — decoupled from the global config so the proven batch parse
+            // path is left entirely on the multimodal route.
+            transcriber = transcriberMap.Values.FirstOrDefault();
+            if (transcriber is null)
+            {
+                httpContext.Response.StatusCode = StatusCodes.Status503ServiceUnavailable;
+                await httpContext.Response.WriteAsJsonAsync(
+                    new
+                    {
+                        error = "ShramSafal.AiTranscribeUnavailable",
+                        message = "No transcriber provider registered."
+                    },
+                    ct);
+                return;
+            }
         }
 
         // SSE headers. Must be set BEFORE any body write; the proxy hints
