@@ -33,6 +33,10 @@ interface AudioRecorderStreamingProps {
   transcript?: string;
   suggestInteraction?: boolean;
   onRequestContextSelection?: () => void;
+  /** Fired the instant Stop is tapped, BEFORE the heavy trim/encode/hash +
+   *  base64 finalize work, so the parent paints the processing banner with zero
+   *  latency (voice-live-captions-banner-2026-06-10). */
+  onProcessingStart?: () => void;
 }
 
 async function blobToBase64NoPrefix(blob: Blob): Promise<string> {
@@ -60,6 +64,7 @@ const AudioRecorderStreaming: React.FC<AudioRecorderStreamingProps> = ({
   transcript,
   suggestInteraction,
   onRequestContextSelection,
+  onProcessingStart,
 }) => {
   const { t } = useLanguage();
   const [isRecording, setIsRecording] = useState(false);
@@ -112,8 +117,12 @@ const AudioRecorderStreaming: React.FC<AudioRecorderStreamingProps> = ({
         }
       }, 1000);
     } catch (err) {
+      // Surface the precise cause — on-device there is no console. A worklet/module
+      // load failure (the addModule 404) shows a non-permission error name here, which
+      // distinguishes it from a genuine getUserMedia denial. Remove once confirmed.
+      const name = (err as { name?: string })?.name || 'Error';
       console.error('Error accessing microphone (streaming):', err);
-      setInternalError(t('voice.micError'));
+      setInternalError(`${t('voice.micError')} [${name}]`);
       setIsRecording(false);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- stopRecording is a stable callback
@@ -149,6 +158,14 @@ const AudioRecorderStreaming: React.FC<AudioRecorderStreamingProps> = ({
         return;
       }
 
+      // BANNER LATENCY FIX (voice-live-captions-banner-2026-06-10): the recorder
+      // has stopped and we're committed to emitting — paint the processing banner
+      // NOW, before the heavy processStreamingResult (encode) + base64 below that
+      // otherwise delay onAudioCaptured (and thus the banner) by the full finalize
+      // time. Placed AFTER recorder.stop() so flipping status (which unmounts this
+      // recorder block) cannot race the in-flight stop.
+      onProcessingStart?.();
+
       const sessionId = VoiceIdempotency.createSessionId();
       const farmId = 'unknown-farm'; // useVoiceRecorder downstream resolves the real farmId
       // processStreamingResult emits its own internal marks (voice:trim-finalize-done,
@@ -182,6 +199,7 @@ const AudioRecorderStreaming: React.FC<AudioRecorderStreamingProps> = ({
       trimmerRef.current = null;
       hasherRef.current = null;
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- onProcessingStart is optional + behavior-stable (parent's setStatus from useState is stable); omitting it keeps stopRecording stable for the unmount-cleanup effect
   }, [isRecording, onAudioCaptured, t]);
 
   const cancelRecording = useCallback(() => {

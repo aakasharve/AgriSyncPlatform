@@ -128,22 +128,21 @@ export const DEFAULT_VOICE_CONFIG: VoicePreprocessorConfig = {
         frameSize: 128,
         workletBufferSize: 16384,
     },
-    // 2026-06-10 — RE-FLIPPED to true (spec voice-live-captions-banner-2026-06-10).
-    // Prod backend SHA 016374f1 cleared the two blockers that forced the
-    // 2026-06-09 flip to false: (1) both streaming endpoints now establish a
-    // tenant scope (transcribe-stream via the skip-list fix; parse-voice-stream
-    // now takes a `farmId` field and establishes scope), verified streaming live
-    // on prod; and (2) the LiveCaption Way-2 path is SILENT-FALLBACK-SAFE — if
-    // Stage 1 (Sarvam transcribe-stream) fails for ANY reason (e.g. Sarvam key
-    // still unfunded), useVoiceRecorder.handleAudioReady falls through to the
-    // existing batch audio path (parseVoiceToDraft → /ai/voice-parse → Gemini
-    // multimodal), which still hydrates the buckets. And if Stage 2
-    // (parse-voice-stream) fails before the first SSE event, BackendAiClient
-    // silent-falls-back to the batch text path (parseTextLog → /ai/voice-parse).
-    // Net effect with true: live word-by-word caption WHEN transcribe-stream
-    // works, no regression to the parse→bucket flow when it doesn't.
-    // Note: this is a SEPARATE flag from streamingPcm.enabled (Phase 2 recording).
-    useStreamingParse: true,
+    // 2026-06-10 — REVERTED to false after REAL-device testing (the prior re-flip
+    // to true was validated only with a synthetic probe, not a real recording —
+    // a superficial verification). ROOT CAUSE from the prod journal: with true,
+    // voice routes through /ai/transcribe-stream, which 503s ("No transcriber
+    // provider registered") because the live AiProviderConfig.TranscriberProvider
+    // is NOT Sarvam (transcriberType ≠ any registered provider → 503 by design,
+    // meant to signal the client to fall back to /ai/voice-parse). But the client's
+    // transcribe-503 → batch fallback did NOT reliably reach /ai/voice-parse, so
+    // voice failed to parse at all. The batch path (false) is PROVEN: voice →
+    // /ai/voice-parse → Gemini multimodal → buckets. Live captions are deferred to
+    // a proper fix (set config.TranscriberProvider=Sarvam + verify the REAL Sarvam
+    // streaming call + harden the handleAudioReady fallback) — the CORE parse path
+    // must NOT be gated on the fragile streaming path.
+    // Note: SEPARATE flag from streamingPcm.enabled (Phase 2 recording).
+    useStreamingParse: false,
     limits: {
         softSegmentLimit: 20,
         hardSegmentLimit: 30,

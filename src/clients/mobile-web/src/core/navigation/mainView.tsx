@@ -330,6 +330,7 @@ export const renderLogView = (ctx: AppRouterContext): React.ReactNode => {
                                     {DEFAULT_VOICE_CONFIG.streamingPcm.enabled ? (
                                         <AudioRecorderStreaming
                                             onAudioCaptured={handleAudioReady}
+                                            onProcessingStart={() => setStatus('processing')}
                                             onTextCaptured={handleTextReady}
                                             disabled={!isContextReady}
                                             externalError={error}
