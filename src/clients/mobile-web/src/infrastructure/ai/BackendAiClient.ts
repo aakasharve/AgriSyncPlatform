@@ -28,6 +28,18 @@ import {
     type VoiceDiaryByIdResult,
 } from '../voiceDiary/voiceDiaryApiClient';
 
+// voice-safetrim-harden-2026-06-10 — a .trim() on a non-string (response/input
+// field that's unexpectedly a number/object) was throwing "x.trim is not a
+// function" and blocking voice logs. Coerce safely + log the culprit so the
+// real offending field is visible in the console for a precise follow-up.
+export function safeTrim(value: unknown, label: string): string {
+    if (typeof value === 'string') return value.trim();
+    if (value !== null && value !== undefined) {
+        console.warn(`[voice-safetrim] non-string passed to .trim() at "${label}":`, typeof value, value);
+    }
+    return '';
+}
+
 type VoiceUploadMaterial = {
     audioBlob: Blob;
     mimeType: string;
@@ -45,7 +57,7 @@ type VoiceUploadMaterial = {
 };
 
 function normalizeSuggestedAction(action?: string): 'auto_confirm' | 'manual_review' | 'ask_clarification' {
-    const normalized = (action || '').trim().toLowerCase();
+    const normalized = safeTrim(action, 'suggestedAction').toLowerCase();
     if (normalized === 'auto_confirm') return 'auto_confirm';
     if (normalized === 'ask_clarification') return 'ask_clarification';
     return 'manual_review';
@@ -85,8 +97,8 @@ async function resolveFarmIdFromCache(): Promise<string | undefined> {
     //    payload cache below is empty for a freshly-linked user — so without this
     //    the parse failed with "No farm context available for AI parsing." even
     //    with a crop + plot selected. (2026-06-08 root-cause fix.)
-    const sessionFarmId = SessionStore.getCurrentFarmId();
-    if (sessionFarmId && sessionFarmId.trim().length > 0) {
+    const sessionFarmId = safeTrim(SessionStore.getCurrentFarmId(), 'sessionFarmId');
+    if (sessionFarmId.length > 0) {
         return sessionFarmId;
     }
 
@@ -133,8 +145,9 @@ function base64ToBlob(base64: string, mimeType: string): Blob {
 
 function resolveUserIdFromSession(): string {
     const session = getAuthSession();
-    if (session?.userId && session.userId.trim().length > 0) {
-        return session.userId.trim();
+    const userId = safeTrim(session?.userId, 'userId');
+    if (userId.length > 0) {
+        return userId;
     }
 
     return 'unknown-user';
@@ -368,7 +381,7 @@ export class BackendAiClient implements VoiceParserPort {
             return;
         }
 
-        const transcript = input.content.trim();
+        const transcript = safeTrim(input.content, 'input.content');
         if (!transcript) {
             yield* fallback();
             return;
@@ -557,7 +570,7 @@ export class BackendAiClient implements VoiceParserPort {
         parseContext: object,
         scope: LogScope,
     ) {
-        const transcript = input.content.trim();
+        const transcript = safeTrim(input.content, 'input.content');
         const requestPayloadHash = input.requestPayloadHash
             ?? await IdempotencyKeyFactory.hashString(transcript);
 
@@ -593,7 +606,7 @@ export class BackendAiClient implements VoiceParserPort {
             ?? input.contentHash
             ?? await IdempotencyKeyFactory.hashBlob(audioBlob);
 
-        const sessionId = input.sessionId?.trim() || payloadHash.slice(0, 24);
+        const sessionId = safeTrim(input.sessionId, 'sessionId') || payloadHash.slice(0, 24);
         const segmentIndex = Number.isFinite(input.segmentIndex) ? (input.segmentIndex as number) : 0;
         const keyMaterial = input.idempotencyKey
             ? { idempotencyKey: input.idempotencyKey, deterministicSeed: '' }
@@ -680,7 +693,7 @@ export class BackendAiClient implements VoiceParserPort {
             return;
         }
 
-        const transcript = input.content.trim();
+        const transcript = safeTrim(input.content, 'input.content');
         const requestPayloadHash = input.requestPayloadHash
             ?? await IdempotencyKeyFactory.hashString(transcript);
         const keyMaterial = input.idempotencyKey
