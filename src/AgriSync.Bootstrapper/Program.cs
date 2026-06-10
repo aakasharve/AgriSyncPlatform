@@ -191,7 +191,23 @@ try
         var regionName = string.IsNullOrWhiteSpace(storageOptions.Region) ? "ap-south-1" : storageOptions.Region.Trim();
         return new AmazonS3Client(new AmazonS3Config
         {
-            RegionEndpoint = RegionEndpoint.GetBySystemName(regionName)
+            RegionEndpoint = RegionEndpoint.GetBySystemName(regionName),
+
+            // voice-rawblob-resilient-2026-06-10 — code-level checksum disable
+            // (root-fix attempt for the AWSSDK.S3 v4 PutObject SignatureDoesNotMatch
+            // seen on prod for the cold-tier raw-blob PUT). AWSSDK v4 defaults to
+            // WHEN_SUPPORTED, which prepends an aws-chunked CRC32 checksum trailer to
+            // the PUT body; when the SigV4 signature and that trailer disagree S3
+            // rejects with SignatureDoesNotMatch. Pinning both to WHEN_REQUIRED
+            // suppresses the trailer for requests that don't mandate a checksum,
+            // matching the pre-v4 (and `aws s3api put-object`) behavior that succeeds
+            // from the same instance role. The env var
+            // AWS_REQUEST_CHECKSUM_CALCULATION=when_required did NOT take on prod, so
+            // this code-level setting is the authoritative attempt. Enum members are
+            // SCREAMING_SNAKE_CASE in AWSSDK.Core v4 (verified by compile probe:
+            // WHEN_SUPPORTED / WHEN_REQUIRED), not the PascalCase the SDK docs imply.
+            RequestChecksumCalculation = Amazon.Runtime.RequestChecksumCalculation.WHEN_REQUIRED,
+            ResponseChecksumValidation = Amazon.Runtime.ResponseChecksumValidation.WHEN_REQUIRED,
         });
     });
     // spine-02.1: cold-tier raw-blob store (content-addressed S3 keys).

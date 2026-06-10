@@ -9,6 +9,7 @@ using ShramSafal.Application.Ports.External;
 using ShramSafal.Application.Storage;
 using ShramSafal.Domain.AI;
 using ShramSafal.Domain.Common;
+using ShramSafal.Domain.Storage;
 
 namespace ShramSafal.Infrastructure.AI;
 
@@ -28,6 +29,15 @@ internal sealed class AiOrchestrator(
     private const int MaxProviderAttempts = 5;
     private const int RetryBaseDelayMs = 200;
     private const int RetryMaxDelayMs = 2000;
+
+    // voice-rawblob-resilient-2026-06-10 — diagnostic-only bucket label for the
+    // non-fatal raw-blob-store ERROR log. Mirrors RawBlobStoreOptions.BucketName's
+    // default and the configured prod bucket; used solely so the swallowed PUT
+    // failure is alertable by bucket. Kept as a const (not an injected option) so
+    // the non-fatal hotfix does NOT change the orchestrator's constructor surface
+    // (positional primary ctor — adding a param would break direct test
+    // instantiation, owned by test-writer).
+    private const string ColdTierBucketLabel = "agrisync-raw-ap-south-1";
 
     private readonly Dictionary<AiProviderType, IAiProvider> _providers = providers
         .GroupBy(x => x.ProviderType)
@@ -85,9 +95,11 @@ internal sealed class AiOrchestrator(
         // re-enters this method for the same audio bytes is a HEAD short-
         // circuit, not a double-write. The DB upsert is also idempotent:
         // first sighting inserts RefCount=1, repeat sighting increments.
-        using var blobStream = new MemoryStream(payload);
-        var blobRef = await blobStore.PutAsync(blobStream, mimeType, ct);
-        await shramSafalRepository.UpsertRawBlobIndexAsync(blobRef, ct);
+        //
+        // voice-rawblob-resilient-2026-06-10 — NON-FATAL: a cold-tier storage
+        // failure no longer fails the farmer's voice log. On failure blobRef is
+        // null → rawInputRef is null (a valid Phase-01 state) and we continue.
+        var blobRef = await TryPersistRawBlobAsync(payload, mimeType, ct);
 
         // DATA_PRINCIPLE_SPINE sub-phase 01.4 — stamp the AiJob with real voice
         // provenance instead of the Manual("unknown") default.
@@ -109,7 +121,7 @@ internal sealed class AiOrchestrator(
             userId,
             farmId,
             inputContentHash: requestPayloadHash,
-            rawInputRef: blobRef.Sha256,
+            rawInputRef: blobRef?.Sha256,
             inputSessionMetadataJson: segmentMetadataJson,
             provenance: voiceProvenance);
 
@@ -272,9 +284,11 @@ internal sealed class AiOrchestrator(
         // Mirror ParseVoiceWithFallbackAsync's cold-tier wiring (sub-phase
         // 02-patch) so the AiJob's RawInputRef is a real content-addressed
         // SHA-256 and ref counts on raw_blob_index stay consistent.
-        using var blobStream = new MemoryStream(payload);
-        var blobRef = await blobStore.PutAsync(blobStream, mimeType, ct);
-        await shramSafalRepository.UpsertRawBlobIndexAsync(blobRef, ct);
+        //
+        // voice-rawblob-resilient-2026-06-10 — NON-FATAL (see helper): a
+        // cold-tier storage failure leaves blobRef null → rawInputRef null,
+        // and the two-stage parse still proceeds.
+        var blobRef = await TryPersistRawBlobAsync(payload, mimeType, ct);
 
         var voiceProvenance = new Provenance(
             source: Source.Voice,
@@ -290,7 +304,7 @@ internal sealed class AiOrchestrator(
             userId,
             farmId,
             inputContentHash: requestPayloadHash,
-            rawInputRef: blobRef.Sha256,
+            rawInputRef: blobRef?.Sha256,
             inputSessionMetadataJson: segmentMetadataJson,
             provenance: voiceProvenance);
 
@@ -923,9 +937,12 @@ internal sealed class AiOrchestrator(
         // 2026-05-15: both paths persist their input bytes to the cold tier
         // (was: voice-only). Same idempotent PUT + ref-counted index pattern
         // the voice path uses above; see that comment for the rationale.
-        using var blobStream = new MemoryStream(payload);
-        var blobRef = await blobStore.PutAsync(blobStream, mimeType, ct);
-        await shramSafalRepository.UpsertRawBlobIndexAsync(blobRef, ct);
+        //
+        // voice-rawblob-resilient-2026-06-10 — NON-FATAL (see helper): the
+        // receipt/patti raw-evidence PUT goes through the same AWSSDK.S3 v4
+        // client that fails SignatureDoesNotMatch on prod, so it gets the same
+        // resilience — a storage failure no longer fails the OCR extraction.
+        var blobRef = await TryPersistRawBlobAsync(payload, mimeType, ct);
 
         // Codex cross-verification 2026-05-15 MAJOR-2: stamp real provenance
         // on the receipt/patti AiJob at creation. Was: null (falls back to
@@ -948,7 +965,7 @@ internal sealed class AiOrchestrator(
             userId,
             farmId,
             inputContentHash: null,
-            rawInputRef: blobRef.Sha256,
+            rawInputRef: blobRef?.Sha256,
             inputSessionMetadataJson: null,
             provenance: receiptProvenance);
 
@@ -1441,6 +1458,44 @@ internal sealed class AiOrchestrator(
         }
 
         return (int)Math.Round(milliseconds, MidpointRounding.AwayFromZero);
+    }
+
+    // voice-rawblob-resilient-2026-06-10 — NON-FATAL cold-tier persistence.
+    //
+    // The raw-blob store is compliance/audit only (DPDP raw-voice retention).
+    // A storage-infra failure (e.g. the AWSSDK.S3 v4 PutObject
+    // SignatureDoesNotMatch regression on prod) MUST NOT fail the farmer's
+    // voice/receipt parse — the model has already done the real work. Any
+    // exception from the PUT (or the ref-count index upsert that depends on
+    // the resulting blobRef) is logged at ERROR (alertable) and swallowed;
+    // the method returns null so the caller stamps rawInputRef=null — a valid
+    // Phase-01 state (AiJob.Create normalizes null/empty rawInputRef). Only
+    // this storage step is made non-fatal; Gemini/parse failures still
+    // propagate through the normal attempt/fallback path below.
+    //
+    // OperationCanceledException is re-thrown so request cancellation still
+    // unwinds normally and is never masquerading as a "store failed" log.
+    private async Task<RawBlobRef?> TryPersistRawBlobAsync(byte[] payload, string mimeType, CancellationToken ct)
+    {
+        try
+        {
+            using var blobStream = new MemoryStream(payload, writable: false);
+            var blobRef = await blobStore.PutAsync(blobStream, mimeType, ct);
+            await shramSafalRepository.UpsertRawBlobIndexAsync(blobRef, ct);
+            return blobRef;
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(
+                ex,
+                "[raw-blob-store] PUT failed — voice parse continues without raw-audio retention; rawInputRef=null. Bucket={Bucket}",
+                ColdTierBucketLabel);
+            return null;
+        }
     }
 
     private static async Task<byte[]> ReadPayloadAsync(Stream stream, CancellationToken ct)
