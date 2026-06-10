@@ -63,6 +63,15 @@ public sealed class S3RawBlobStore : IRawBlobStore
             ContentType = contentType,
             InputStream = put,
             AutoCloseStream = false,
+
+            // spec: s3-put-signing-v4-fix-2026-06-10 — AWSSDK.S3 v4 botches the SigV4
+            // body-hash on PutObject (SignatureDoesNotMatch on prod; GET/HEAD sign fine,
+            // and `aws s3api put-object` with the same instance role succeeds). Setting
+            // DisablePayloadSigning sends x-amz-content-sha256: UNSIGNED-PAYLOAD, bypassing
+            // the broken body-hash signing. Safe: prod is HTTPS so TLS provides integrity
+            // (the SDK requires HTTPS for this flag). Checksum default was already ruled out
+            // (f749d380 WHEN_REQUIRED did not fix it).
+            DisablePayloadSigning = true,
         };
 
         // Delta 2: nullable KmsKeyId. When configured, use AWS-KMS SSE with the

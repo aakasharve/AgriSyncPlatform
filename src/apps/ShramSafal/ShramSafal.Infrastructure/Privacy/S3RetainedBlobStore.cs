@@ -150,6 +150,12 @@ public sealed class S3RetainedBlobStore : IRetainedBlobStore
                 ContentType = "application/octet-stream",
                 InputStream = put,
                 AutoCloseStream = false,
+
+                // spec: s3-put-signing-v4-fix-2026-06-10 — see S3RawBlobStore for rationale.
+                // AWSSDK.S3 v4 SigV4 body-hash signing fails (SignatureDoesNotMatch) on PUT;
+                // UNSIGNED-PAYLOAD over HTTPS is the documented workaround (TLS provides
+                // integrity). Same IAmazonS3 client as the other two PUT adapters.
+                DisablePayloadSigning = true,
             };
 
             // Mirror S3RawBlobStore's KMS-vs-AES256 split so dev

@@ -36,7 +36,13 @@ internal sealed class S3AttachmentStorageService(
             InputStream = buffer,
             AutoCloseStream = false,
             ContentType = string.IsNullOrWhiteSpace(contentType) ? "application/octet-stream" : contentType.Trim(),
-            ServerSideEncryptionMethod = ServerSideEncryptionMethod.AES256
+            ServerSideEncryptionMethod = ServerSideEncryptionMethod.AES256,
+
+            // spec: s3-put-signing-v4-fix-2026-06-10 — see S3RawBlobStore for rationale.
+            // AWSSDK.S3 v4 SigV4 body-hash signing fails (SignatureDoesNotMatch) on PUT;
+            // UNSIGNED-PAYLOAD over HTTPS is the documented workaround (TLS provides
+            // integrity). Same IAmazonS3 client as the other two PUT adapters.
+            DisablePayloadSigning = true
         };
 
         await s3Client.PutObjectAsync(request, ct);
