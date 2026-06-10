@@ -35,10 +35,18 @@ namespace ShramSafal.Api.Endpoints;
 /// </para>
 ///
 /// <para>
-/// Auth + tenancy mirror <c>/ai/parse-voice-stream</c>: <c>[RequireAuthorization]</c>
-/// plus the <c>ai</c> rate-limiter policy. The userId resolved from the
-/// JWT is used only for entitlement checks; tenant context middleware
-/// already binds the row-level-security <c>set_config</c> call upstream.
+/// Auth + tenancy. <c>[RequireAuthorization]</c> + the <c>ai</c>
+/// rate-limiter policy. The userId resolved from the JWT is used only for
+/// entitlement checks. This route is farm-AGNOSTIC: it reads ONLY the
+/// global <c>AiProviderConfig</c> and never touches a farm-scoped table,
+/// so it carries no tenant claim. spec:
+/// voice-stream-tenant-and-lenient-metadata-2026-06-10 added
+/// <c>/shramsafal/ai/transcribe-stream</c> to the
+/// <c>TenantTransactionMiddleware</c> skip-list, which admin-elevates the
+/// request so the provider-config read does not fail-closed in
+/// <c>TenantConnectionInterceptor</c> with "no tenant claim set". (The
+/// prior claim here that the middleware "binds the set_config call
+/// upstream" was FALSE for this route — no farm GUC is ever set.)
 /// </para>
 /// </summary>
 public static class AiTranscribeStreamEndpoints

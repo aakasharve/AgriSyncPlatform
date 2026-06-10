@@ -182,6 +182,21 @@ public sealed class TenantTransactionMiddleware
         // revoke persist must return 403 ConsentRequired, not 500
         // TenantConnectionInterceptor).
         "/shramsafal/voice-diary",
+        // spec: voice-stream-tenant-and-lenient-metadata-2026-06-10 —
+        // POST /shramsafal/ai/transcribe-stream is the live-caption SSE
+        // endpoint. It is farm-AGNOSTIC: it reads ONLY the global
+        // AiProviderConfig (AiJobRepository.GetProviderConfigAsync) to pick
+        // the active transcriber, transcodes the uploaded audio, and streams
+        // the transcript back. It performs NO farm-scoped read and NO write
+        // (no ssf.ai_jobs INSERT, no farm tables). Without elevation the very
+        // first DbCommand (the provider-config read) fail-closes in
+        // TenantConnectionInterceptor with "no tenant claim set and not in
+        // admin scope" → 500. Admin-elevating here (no per-request tx, no GUC
+        // prelude) is the correct posture for a global-config-only read and
+        // keeps the SSE flush path free of a long-held transaction. The
+        // global config is platform-shared, not tenant data, so no isolation
+        // is lost. Confirmed root on prod 2026-06-10.
+        "/shramsafal/ai/transcribe-stream",
     };
 
     private readonly RequestDelegate _next;

@@ -1169,23 +1169,19 @@ public static class AiEndpoints
                     "segmentMetadata totalRawDurationMs must be >= totalSpeechDurationMs.");
             }
 
-            if (requestSpeechDurationMs.HasValue &&
-                totalSpeechDurationMs.HasValue &&
-                requestSpeechDurationMs.Value != totalSpeechDurationMs.Value)
-            {
-                return Error.Validation(
-                    InvalidSegmentMetadataCode,
-                    "segmentMetadata totalSpeechDurationMs must match inputSpeechDurationMs.");
-            }
-
-            if (requestRawDurationMs.HasValue &&
-                totalRawDurationMs.HasValue &&
-                requestRawDurationMs.Value != totalRawDurationMs.Value)
-            {
-                return Error.Validation(
-                    InvalidSegmentMetadataCode,
-                    "segmentMetadata totalRawDurationMs must match inputRawDurationMs.");
-            }
+            // spec: voice-stream-tenant-and-lenient-metadata-2026-06-10 — the
+            // duration totals are ADVISORY observability fields, not
+            // authorization- or correctness-relevant. A real browser/mobile
+            // recording derives the form `inputSpeechDurationMs` and the
+            // segmentMetadata totals from two SLIGHTLY different sources (the
+            // recorder's reported duration vs a decode/round of the compressed
+            // Opus blob), so they can drift by a few ms and previously
+            // 400-rejected genuine user audio on a reconciliation technicality.
+            // We no longer reject on exact-match drift here; the internal
+            // sanity checks above (non-negative, <= ceiling, raw >= speech)
+            // remain fatal so genuinely-malformed metadata is still caught.
+            // Reproduced on prod 2026-06-10 (form=500 vs metadata=512 → 400
+            // "totalSpeechDurationMs must match inputSpeechDurationMs").
 
             if (root.TryGetProperty("segments", out var segmentsElement))
             {
@@ -1202,14 +1198,19 @@ public static class AiEndpoints
                         $"segmentMetadata.segments exceeds {MaxVoiceSegmentsPerSession} entries.");
                 }
 
-                if (segmentCount > 0 && segmentCount != totalSegments)
-                {
-                    return Error.Validation(
-                        InvalidSegmentMetadataCode,
-                        "segmentMetadata.segments length must match totalSegments.");
-                }
+                // spec: voice-stream-tenant-and-lenient-metadata-2026-06-10 —
+                // reconciliation-only check relaxed (advisory, see duration
+                // note above). The hard segment-count ceiling above stays
+                // fatal; an exact segments-array length vs totalSegments
+                // mismatch no longer rejects real user audio.
 
-                var normalizedAudioMime = NormalizeMimeType(audioMimeType);
+                // spec: voice-stream-tenant-and-lenient-metadata-2026-06-10 —
+                // the per-segment mimeType vs request-audio mimeType check was
+                // removed (advisory only): browsers report the merged upload as
+                // e.g. "audio/webm;codecs=opus" while a segment may record the
+                // pre-merge container, and the codec-param normalize does not
+                // always converge — it rejected real recordings on a MIME-label
+                // technicality. Structural + ceiling checks below stay fatal.
                 foreach (var segment in segmentsElement.EnumerateArray())
                 {
                     if (segment.ValueKind != JsonValueKind.Object)
@@ -1234,20 +1235,6 @@ public static class AiEndpoints
                         return Error.Validation(
                             InvalidSegmentMetadataCode,
                             "segment rawDurationMs must be >= durationMs.");
-                    }
-
-                    if (segment.TryGetProperty("mimeType", out var mimeNode) &&
-                        mimeNode.ValueKind == JsonValueKind.String &&
-                        !string.IsNullOrWhiteSpace(normalizedAudioMime))
-                    {
-                        var segmentMime = NormalizeMimeType(mimeNode.GetString());
-                        if (!string.IsNullOrWhiteSpace(segmentMime) &&
-                            !string.Equals(segmentMime, normalizedAudioMime, StringComparison.OrdinalIgnoreCase))
-                        {
-                            return Error.Validation(
-                                InvalidSegmentMetadataCode,
-                                "segmentMetadata mimeType does not match request audio mime type.");
-                        }
                     }
                 }
             }
