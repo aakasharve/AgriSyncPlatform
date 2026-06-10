@@ -48,7 +48,13 @@ export function useManualEntryHydration(params: HydrationParams): void {
     } = params;
 
     useEffect(() => {
-        if (!activePlot) return;
+        // Bail only when there is genuinely nothing to hydrate. We still want to
+        // run for a fresh parse (initialData present) even when no single plot is
+        // resolved — e.g. "Entire Farm" / multi-plot / overview selection, where
+        // activePlot is undefined. Without this, the parsed flat buckets
+        // (irrigation/labour/inputs/machinery) never load and the review screen
+        // renders empty ("log accepted but no buckets render").
+        if (!initialData && !activePlot) return;
 
         // If voice data was already applied (initialData just became null due to
         // onDataConsumed), do not re-run the hydration loop — that would wipe the
@@ -71,10 +77,15 @@ export function useManualEntryHydration(params: HydrationParams): void {
         const newMachineryMap: Record<string, MachineryEvent> = {};
         const newInputMap: Record<string, InputEvent[]> = {};
 
-        // Phase 14: HYDRATION - Load existing logs for this plot today to ensure "One Plot, One Card"
-        const logsForCurrentPlot = todayLogs.filter(l =>
-            l.context.selection[0].selectedPlotIds.includes(activePlot.id)
-        );
+        // Phase 14: HYDRATION - Load existing logs for this plot today to ensure "One Plot, One Card".
+        // When no single plot is resolved (Entire Farm / multi-plot / overview), there is no
+        // specific plot to merge existing-today logs against — skip this merge but still
+        // synthesize the global card and overlay any initialData below.
+        const logsForCurrentPlot = activePlot
+            ? todayLogs.filter(l =>
+                l.context.selection[0].selectedPlotIds.includes(activePlot.id)
+            )
+            : [];
 
         const currentExpenses: ActivityExpenseEvent[] = [];
         const currentObservations: ObservationNote[] = [];
@@ -165,7 +176,7 @@ export function useManualEntryHydration(params: HydrationParams): void {
             // Handle Irrigation
             if (initialData.irrigation && initialData.irrigation.length > 0) {
                 const aiIrrigation = initialData.irrigation.find(isCompletedIrrigationEvent);
-                const infra = activePlot.infrastructure;
+                const infra = activePlot?.infrastructure;
                 const motorId = infra?.linkedMotorId || '';
                 const source = 'Well';
                 const method = infra?.irrigationMethod || defaults?.irrigation.method || 'drip';
@@ -193,6 +204,7 @@ export function useManualEntryHydration(params: HydrationParams): void {
                     const labourEntryId = index === 0 ? globalActivity.id : (aiLabour.id || `ai_labour_${index}`);
                     newLabourMap[labourEntryId] = {
                         id: aiLabour.id || `lab_${Date.now()}_${index}`,
+                        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- AI payload type is open string; narrowed downstream
                         type: (aiLabour.type as any) || 'HIRED',
                         count: aiLabour.count || 0,
                         maleCount: aiLabour.maleCount,
@@ -230,6 +242,7 @@ export function useManualEntryHydration(params: HydrationParams): void {
             if (initialData.inputs && initialData.inputs.length > 0) {
                 newInputMap[globalActivity.id] = initialData.inputs.map((inp, idx) => ({
                     id: `inp_${Date.now()}_${idx}`,
+                    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- AI payload type is open string; narrowed downstream
                     type: (inp.type as any) || 'pesticide',
                     quantity: inp.quantity || 0,
                     unit: inp.unit || 'unit',
@@ -260,7 +273,9 @@ export function useManualEntryHydration(params: HydrationParams): void {
                 const aiMach = initialData.machinery[0];
                 newMachineryMap[globalActivity.id] = {
                     id: `mach_${Date.now()}`,
+                    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- AI payload types are open strings; narrowed downstream
                     type: (aiMach.type as any) || 'tractor',
+                    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- AI payload types are open strings; narrowed downstream
                     ownership: (aiMach.ownership as any) || 'owned',
                     hoursUsed: aiMach.hoursUsed || 2,
                     linkedActivityId: globalActivity.id,
@@ -302,7 +317,7 @@ export function useManualEntryHydration(params: HydrationParams): void {
                 initialData.plannedTasks.forEach(pt => {
                     currentTasks.push({
                         id: `task_${crypto.randomUUID()}`,
-                        title: pt.title, status: 'suggested' as PlannedTask['status'], priority: 'normal' as PlannedTask['priority'], plotId: activePlot.id, createdAt: new Date().toISOString(), sourceType: 'ai_extracted' as PlannedTask['sourceType'], description: pt.dueHint || undefined,
+                        title: pt.title, status: 'suggested' as PlannedTask['status'], priority: 'normal' as PlannedTask['priority'], plotId: activePlot?.id || '', createdAt: new Date().toISOString(), sourceType: 'ai_extracted' as PlannedTask['sourceType'], description: pt.dueHint || undefined,
                         sourceText: pt.sourceText, systemInterpretation: pt.systemInterpretation
                     });
                 });
@@ -327,5 +342,8 @@ export function useManualEntryHydration(params: HydrationParams): void {
             if (onDataConsumed) onDataConsumed();
         }
 
+        // Setters and refs are stable and intentionally omitted; re-running on
+        // their identity would wipe the pre-filled form.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [initialData, activePlot, defaults, profile, todayLogs]);
 }
