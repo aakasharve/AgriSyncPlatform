@@ -35,7 +35,12 @@ internal sealed class S3AttachmentStorageService(
             Key = objectKey,
             InputStream = buffer,
             AutoCloseStream = false,
-            ContentType = string.IsNullOrWhiteSpace(contentType) ? "application/octet-stream" : contentType.Trim(),
+            // spec: s3-put-signing-v4-fix-2026-06-10 — strip media-type parameters so SigV4
+            // matches. AWSSDK.S3 v4 signs the raw ContentType BEFORE System.Net.Http
+            // renormalizes a parameterized value (inserts a space after the `;`), so AWS
+            // recomputes from the with-space wire value → SignatureDoesNotMatch. A bare base
+            // type is signed and sent identically.
+            ContentType = StripMediaTypeParameters(contentType),
             ServerSideEncryptionMethod = ServerSideEncryptionMethod.AES256,
 
             // spec: s3-put-signing-v4-fix-2026-06-10 — see S3RawBlobStore for rationale.
@@ -70,6 +75,14 @@ internal sealed class S3AttachmentStorageService(
             return null;
         }
     }
+
+    // spec: s3-put-signing-v4-fix-2026-06-10 — base media type only (everything before the
+    // first `;`). Preserves the prior fallback to application/octet-stream for null/empty
+    // input; avoids the .NET media-type-normalization-vs-SigV4 mismatch on PutObject.
+    private static string StripMediaTypeParameters(string? contentType)
+        => string.IsNullOrWhiteSpace(contentType)
+            ? "application/octet-stream"
+            : contentType.Split(';', 2)[0].Trim();
 
     private string ResolveBucketName()
     {

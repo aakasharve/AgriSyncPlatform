@@ -60,7 +60,13 @@ public sealed class S3RawBlobStore : IRawBlobStore
         {
             BucketName = _opt.BucketName,
             Key = blobRef.S3Key,
-            ContentType = contentType,
+            // spec: s3-put-signing-v4-fix-2026-06-10 — strip media-type parameters so the
+            // SigV4 signature matches. AWSSDK.S3 v4 signs the raw `ContentType` BEFORE
+            // System.Net.Http renormalizes a parameterized value (e.g. `audio/webm;codecs=opus`
+            // → `audio/webm; codecs=opus`, inserting a space after the `;`); AWS recomputes
+            // from the received with-space value → SignatureDoesNotMatch. A bare base type
+            // (no `;`) is signed and sent identically. Preserve null/absent behavior.
+            ContentType = StripMediaTypeParameters(contentType),
             InputStream = put,
             AutoCloseStream = false,
 
@@ -104,4 +110,10 @@ public sealed class S3RawBlobStore : IRawBlobStore
         // Phase 02 leaves dereference as a hard-delete; Phase 08 introduces ref-counted erasure.
         await _s3.DeleteObjectAsync(_opt.BucketName, $"raw/{sha256}", ct);
     }
+
+    // spec: s3-put-signing-v4-fix-2026-06-10 — return the base media type only (everything
+    // before the first `;`), or null when the source is null/empty. Avoids the .NET
+    // media-type-normalization-vs-SigV4 mismatch on PutObject.
+    private static string? StripMediaTypeParameters(string? contentType)
+        => contentType is { Length: > 0 } ct ? ct.Split(';', 2)[0].Trim() : null;
 }

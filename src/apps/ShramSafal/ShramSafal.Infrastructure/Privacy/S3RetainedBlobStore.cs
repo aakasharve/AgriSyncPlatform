@@ -147,6 +147,12 @@ public sealed class S3RetainedBlobStore : IRetainedBlobStore
             {
                 BucketName = _opt.BucketName,
                 Key = metadata.S3Key,
+                // spec: s3-put-signing-v4-fix-2026-06-10 — a bare base media type with NO `;`
+                // parameter is signed and sent byte-identically, so it can't trip the .NET
+                // media-type-normalization-vs-SigV4 mismatch that breaks the parameterized
+                // Content-Type on PutObject (AWSSDK.S3 v4 signs the raw value before
+                // System.Net.Http inserts a space after the `;`). Keep this constant
+                // parameter-free.
                 ContentType = "application/octet-stream",
                 InputStream = put,
                 AutoCloseStream = false,
