@@ -367,15 +367,34 @@ export const useVoiceRecorder = ({
         // request-receipt wall clock would be.
         const recordedAtUtc = audioData.recordedAtUtc ?? new Date().toISOString();
 
-        // SARVAM_PRIMARY_VOICE_PIPELINE_2026-05-28 — LiveCaption Way-2:
-        // attempt the cost-safe 2-stage path (Sarvam transcribe-stream →
-        // Gemini-only parse-voice-stream with text). Preconditions: the
-        // parser exposes parseInputStream (so stage 2 is reachable), the
+        // The single PROVEN batch audio path — the guaranteed safety net.
+        // /ai/voice-parse → Gemini multimodal → buckets. This is invoked
+        // when streaming is off OR when ANY streaming stage fails. Its
+        // behavior is preserved exactly as the pre-streaming flow.
+        const runBatchAudioPath = (): Promise<void> =>
+            processInput({
+                type: 'audio',
+                data: preprocessed.base64,
+                mimeType: preprocessed.mimeType,
+                inputSpeechDurationMs: preprocessed.inputSpeechDurationMs,
+                inputRawDurationMs: preprocessed.inputRawDurationMs,
+                segmentMetadataJson: preprocessed.segmentMetadataJson,
+                idempotencyKey: preprocessed.idempotencyKey,
+                requestPayloadHash: preprocessed.requestPayloadHash,
+                recordedAtUtc,
+            });
+
+        // SARVAM_PRIMARY_VOICE_PIPELINE / voice-sarvam-live-captions-2026-06-11
+        // — LiveCaption is the PRIMARY voice path: attempt the 2-stage
+        // streaming flow (Sarvam transcribe-stream = the live caption →
+        // Gemini parse-voice-stream with text). Preconditions: the parser
+        // exposes parseInputStream (so stage 2 is reachable), the
         // streaming-parse flag is on, the browser is online, and the
-        // recording actually produced a blob. On any precondition miss
-        // OR transcribe failure, silently fall back to the existing
-        // batch audio path so the founder rule "must not break the
-        // existing voice-note flow" holds.
+        // recording produced a blob. On ANY precondition miss OR ANY
+        // streaming failure (transcribe error/empty/network, parse error/
+        // no-terminal-event), we fall through to runBatchAudioPath so a log
+        // is ALWAYS created and auto-bucketed — the founder rule "voice can
+        // NEVER break" holds.
         const canRunLiveCaption =
             DEFAULT_VOICE_CONFIG.useStreamingParse
             && typeof parser.parseInputStream === 'function'
@@ -385,39 +404,199 @@ export const useVoiceRecorder = ({
         if (canRunLiveCaption) {
             const result = await runTranscribeStage(audioData.blob, recordedAtUtc);
             if ('transcript' in result) {
-                // Stage 2: text-only parse. processInput sees type:'text'
-                // → canStream true → runStreamingParse → BackendAiClient
-                // fetchParseVoiceStream → Gemini structurer SSE. No
-                // second Sarvam call (verified in BackendAiClient).
-                await processInput({
-                    type: 'text',
-                    data: result.transcript,
-                    recordedAtUtc,
-                });
+                // Stage 2: text-only parse via the streaming structurer.
+                // runStreamingTextParse returns true only when the stream
+                // delivered a usable draft (terminal `complete` with a
+                // payload). On false (terminal error, no-terminal-event,
+                // empty payload, or thrown stream), we fall back to the
+                // PROVEN batch AUDIO path below — NOT the text payload —
+                // so the gold-standard Gemini-multimodal parse runs and a
+                // log is guaranteed. The original audio is preserved in
+                // `preprocessed` for exactly this purpose.
+                const streamCommitted = await runStreamingTextParse(result.transcript, recordedAtUtc);
+                if (streamCommitted) {
+                    return;
+                }
+                console.warn('[useVoiceRecorder] streaming parse stage produced no committable draft; falling back to batch audio path.');
+                // Reset streaming-side UI so the batch attempt is clean;
+                // keep liveCaption so the farmer still sees what was heard.
+                setVoiceStreamingPhase('idle');
+                setVoiceStreamingFieldsArrived(new Set());
+                await runBatchAudioPath();
                 return;
             }
-            // Transcribe failed (or aborted). Silently fall through to
-            // the existing batch audio path so the save/audit/diary
+            // Transcribe (Stage 1) failed, was empty, or aborted. Fall
+            // through to the batch audio path so the save/audit/diary
             // pipeline still runs end-to-end. Reset transcribe-side UI
             // state so the recorder doesn't show stale captions.
             setLiveCaption('');
             setVoiceStreamingPhase('idle');
             if (result.error !== 'aborted') {
-                console.warn('[useVoiceRecorder] live-caption stage failed; falling back to batch audio path.', result.error);
+                console.warn('[useVoiceRecorder] live-caption transcribe stage failed; falling back to batch audio path.', result.error);
+            }
+            if (result.error === 'aborted') {
+                // User cancelled the recording mid-transcribe — do NOT
+                // silently re-submit a batch parse they didn't ask for.
+                return;
             }
         }
 
-        await processInput({
-            type: 'audio',
-            data: preprocessed.base64,
-            mimeType: preprocessed.mimeType,
-            inputSpeechDurationMs: preprocessed.inputSpeechDurationMs,
-            inputRawDurationMs: preprocessed.inputRawDurationMs,
-            segmentMetadataJson: preprocessed.segmentMetadataJson,
-            idempotencyKey: preprocessed.idempotencyKey,
-            requestPayloadHash: preprocessed.requestPayloadHash,
+        await runBatchAudioPath();
+    };
+
+    // voice-sarvam-live-captions-2026-06-11 — Stage 2 streaming structurer.
+    // Drives parser.parseInputStream over the transcript text and commits the
+    // draft on the terminal `complete` event. Returns true ONLY when a usable
+    // draft was committed; returns false on every failure mode (terminal
+    // error, stream threw, no terminal event, empty payload, IRRELEVANT_INPUT
+    // clarification handled here) so handleAudioReady can fall back to the
+    // proven batch audio path. This function NEVER sets a terminal user-facing
+    // error on stream failure — that decision belongs to the fallback path so
+    // voice can never dead-end with no log.
+    const runStreamingTextParse = async (
+        transcript: string,
+        recordedAtUtc: string,
+    ): Promise<boolean> => {
+        const result = await runStreamingParse({
+            type: 'text',
+            content: transcript,
             recordedAtUtc,
-        });
+        } as unknown as { type: 'audio' | 'text' } & Record<string, unknown>);
+
+        if (!result.success || !result.data) {
+            // Streaming failed — signal the caller to fall back to batch.
+            // Do NOT setError here: the batch fallback is the source of
+            // truth for whether voice ultimately succeeded.
+            return false;
+        }
+
+        return commitParsedDraft(result, transcript);
+    };
+
+    // voice-sarvam-live-captions-2026-06-11 — shared draft-commit logic.
+    // Extracted from processInput so BOTH the streaming-text stage and the
+    // batch path run identical re-entry / IRRELEVANT_INPUT / segment-merge
+    // / draft handling. Returns true when the result reached a terminal
+    // state (committed a draft, opened a clarification, or surfaced an
+    // IRRELEVANT_INPUT) — i.e. nothing more to do. Returns false ONLY when
+    // the parse failed and the caller should fall back to the batch path.
+    // `originalData` is the transcript/text the input carried, used as the
+    // pending-transcript seed for the clarification re-entry flow.
+    const commitParsedDraft = async (
+        result: VoiceParseResult,
+        originalData: string,
+    ): Promise<boolean> => {
+        if (!result.success || !result.data) {
+            return false;
+        }
+
+        const isSegmentUpdate = !!draftLog && !!recordingSegment;
+        const focusCategory = isSegmentUpdate ? recordingSegment : undefined;
+        const focusBucket = focusCategory ? normalizeLegacyLogSegmentId(focusCategory) : undefined;
+
+        const response = result.data;
+        const prov = result.provenance;
+        setProvenance(prov || null);
+
+        // RE-ENTRY LOGIC (Audio Answer):
+        // If we had a pending transcript and just parsed new audio -> Combine and Re-Process
+        if (pendingTranscript && response.fullTranscript) {
+            const combined = `${pendingTranscript} ${response.fullTranscript}`;
+            console.log("🎤 Combined Voice Clarification:", combined);
+            setPendingTranscript(null);
+            setClarificationNeeded(null);
+
+            // Recursive call with combined text
+            await processInput({ type: 'text', data: combined });
+            return true;
+        }
+
+        // CHECK: Out of Context / Irrelevant Input
+        if (response.dayOutcome === 'IRRELEVANT_INPUT') {
+            // PHASE 25: Check for Empathetic Clarification (CONTEXT_CHECK)
+            const contextQuestion = response.questionsForUser?.find(q => q.type === 'CONTEXT_CHECK');
+
+            if (contextQuestion) {
+                setStatus('idle');
+                setClarificationNeeded(contextQuestion);
+                // Store the original intent (e.g., "Watered") to combine with the answer
+                setPendingTranscript(response.fullTranscript || originalData);
+                return true;
+            }
+
+            setStatus('idle');
+            setError(response.summary || "Input seems unrelated to selected crop.");
+            setErrorTranscript(response.fullTranscript); // Show what was heard
+            return true;
+        }
+
+        // Always show ManualEntry for review — never skip to auto-save.
+        // User must see what was parsed before it is written to the ledger.
+
+        // FUTURE: if selections.length > 1 and draftLog is ready, auto-open wizard
+        if (isSegmentUpdate) {
+            const mergedDraft = { ...draftLog! };
+
+            // Merge Logic aligned with App.tsx
+            if (focusBucket === 'cropActivities' && response.cropActivities.length > 0) mergedDraft.cropActivities = response.cropActivities;
+            if (focusBucket === 'irrigation' && response.irrigation.length > 0) mergedDraft.irrigation = response.irrigation;
+            if (focusBucket === 'labour' && response.labour.length > 0) mergedDraft.labour = response.labour;
+            if (focusBucket === 'inputs' && response.inputs.length > 0) mergedDraft.inputs = response.inputs;
+            if (focusBucket === 'machinery' && response.machinery.length > 0) mergedDraft.machinery = response.machinery;
+            if (response.activityExpenses && response.activityExpenses.length > 0) mergedDraft.activityExpenses = response.activityExpenses;
+
+            // Merge transcript (Replace is safer for now as segments are usually re-records)
+            if (response.fullTranscript) mergedDraft.fullTranscript = response.fullTranscript;
+
+            if (response.disturbance) {
+                const existingDisturbance = mergedDraft.disturbance;
+                if (existingDisturbance) {
+                    const mergedBlocked = Array.from(new Set([...existingDisturbance.blockedSegments, ...response.disturbance.blockedSegments]));
+                    mergedDraft.disturbance = {
+                        ...existingDisturbance,
+                        blockedSegments: mergedBlocked,
+                        reason: response.disturbance.reason || existingDisturbance.reason,
+                        note: `${existingDisturbance.note || ''} | ${response.disturbance.note || ''}`
+                    };
+                } else {
+                    mergedDraft.disturbance = response.disturbance;
+                }
+
+                const hasWork = mergedDraft.cropActivities.length > 0
+                    || hasSuccessfulIrrigation(mergedDraft.irrigation || [])
+                    || mergedDraft.labour.length > 0
+                    || mergedDraft.inputs.length > 0
+                    || mergedDraft.machinery.length > 0;
+                if (hasWork && mergedDraft.disturbance) {
+                    mergedDraft.disturbance.scope = 'PARTIAL';
+                }
+            }
+
+            const hasWorkFinal = mergedDraft.cropActivities.length > 0
+                || hasSuccessfulIrrigation(mergedDraft.irrigation || [])
+                || mergedDraft.labour.length > 0
+                || mergedDraft.inputs.length > 0
+                || mergedDraft.machinery.length > 0;
+            if (hasWorkFinal) {
+                mergedDraft.dayOutcome = 'WORK_RECORDED';
+            } else if (mergedDraft.disturbance) {
+                mergedDraft.dayOutcome = 'DISTURBANCE_RECORDED';
+            }
+
+            if (focusBucket === 'labour' && response.labour.length > 0) {
+                mergedDraft.questionsForUser = mergedDraft.questionsForUser?.filter(q => q.target !== 'LABOUR');
+            }
+
+            setDraftLog(mergedDraft);
+            setRecordingSegment(null);
+        } else {
+            // Fallback: If no auto-save prop (e.g. testing) or it was unclear, set draft
+            setDraftLog(response);
+        }
+
+        setStatus('idle');
+        setMode('manual');
+        return true;
     };
 
     const handleTextReady = async (text: string) => {
@@ -466,7 +645,6 @@ export const useVoiceRecorder = ({
 
         const isSegmentUpdate = !!draftLog && !!recordingSegment;
         const focusCategory = isSegmentUpdate ? recordingSegment : undefined;
-        const focusBucket = focusCategory ? normalizeLegacyLogSegmentId(focusCategory) : undefined;
 
         try {
             // Construct correct payload type — forward preprocessor metadata for audio
@@ -502,6 +680,15 @@ export const useVoiceRecorder = ({
             // path (the streaming endpoint accepts only transcripts today;
             // STT-then-stream is a future phase). On any precondition miss
             // the existing batch path runs unchanged.
+            //
+            // voice-sarvam-live-captions-2026-06-11 — NOTE: the PRIMARY
+            // streaming flow for voice now enters via handleAudioReady →
+            // runStreamingTextParse (which calls runStreamingParse directly
+            // and falls back to the batch AUDIO path on failure). This
+            // canStream branch still covers text inputs that arrive through
+            // handleTextReady / clarification re-entry; on streaming failure
+            // here the batch TEXT path (parseVoiceToDraft) runs so a log is
+            // still created from the typed/combined text.
             const canStream =
                 DEFAULT_VOICE_CONFIG.useStreamingParse &&
                 typeof parser.parseInputStream === 'function' &&
@@ -510,6 +697,23 @@ export const useVoiceRecorder = ({
             let result: VoiceParseResult;
             if (canStream) {
                 result = await runStreamingParse(payload);
+                if (!result.success || !result.data) {
+                    // voice-sarvam-live-captions-2026-06-11 — streaming text
+                    // parse failed; fall back to the batch TEXT path so a log
+                    // is still created from the same transcript rather than
+                    // dead-ending with an error.
+                    console.warn('[useVoiceRecorder] streaming text parse failed; falling back to batch text path.', result.error);
+                    setVoiceStreamingPhase('idle');
+                    setVoiceStreamingFieldsArrived(new Set());
+                    result = await parseVoiceToDraft(
+                        payload,
+                        logScope,
+                        crops,
+                        farmerProfile,
+                        parser,
+                        { focusCategory: focusCategory || undefined }
+                    );
+                }
             } else {
                 result = await parseVoiceToDraft(
                     payload,
@@ -527,108 +731,7 @@ export const useVoiceRecorder = ({
                 return;
             }
 
-            const response = result.data;
-            const prov = result.provenance;
-            setProvenance(prov || null);
-
-            // RE-ENTRY LOGIC (Audio Answer):
-            // If we had a pending transcript and just parsed new audio -> Combine and Re-Process
-            if (pendingTranscript && response.fullTranscript) {
-                const combined = `${pendingTranscript} ${response.fullTranscript}`;
-                console.log("🎤 Combined Voice Clarification:", combined);
-                setPendingTranscript(null);
-                setClarificationNeeded(null);
-
-                // Recursive call with combined text
-                await processInput({ type: 'text', data: combined });
-                return;
-            }
-
-            // CHECK: Out of Context / Irrelevant Input
-            if (response.dayOutcome === 'IRRELEVANT_INPUT') {
-                // PHASE 25: Check for Empathetic Clarification (CONTEXT_CHECK)
-                const contextQuestion = response.questionsForUser?.find(q => q.type === 'CONTEXT_CHECK');
-
-                if (contextQuestion) {
-                    setStatus('idle');
-                    setClarificationNeeded(contextQuestion);
-                    // Store the original intent (e.g., "Watered") to combine with the answer
-                    setPendingTranscript(response.fullTranscript || input.data);
-                    return;
-                }
-
-                setStatus('idle');
-                setError(response.summary || "Input seems unrelated to selected crop.");
-                setErrorTranscript(response.fullTranscript); // Show what was heard
-                return;
-            }
-
-            // Always show ManualEntry for review — never skip to auto-save.
-            // User must see what was parsed before it is written to the ledger.
-
-            // FUTURE: if selections.length > 1 and draftLog is ready, auto-open wizard
-            if (isSegmentUpdate) {
-                const mergedDraft = { ...draftLog! };
-
-                // Merge Logic aligned with App.tsx
-                if (focusBucket === 'cropActivities' && response.cropActivities.length > 0) mergedDraft.cropActivities = response.cropActivities;
-                if (focusBucket === 'irrigation' && response.irrigation.length > 0) mergedDraft.irrigation = response.irrigation;
-                if (focusBucket === 'labour' && response.labour.length > 0) mergedDraft.labour = response.labour;
-                if (focusBucket === 'inputs' && response.inputs.length > 0) mergedDraft.inputs = response.inputs;
-                if (focusBucket === 'machinery' && response.machinery.length > 0) mergedDraft.machinery = response.machinery;
-                if (response.activityExpenses && response.activityExpenses.length > 0) mergedDraft.activityExpenses = response.activityExpenses;
-
-                // Merge transcript (Replace is safer for now as segments are usually re-records)
-                if (response.fullTranscript) mergedDraft.fullTranscript = response.fullTranscript;
-
-                if (response.disturbance) {
-                    const existingDisturbance = mergedDraft.disturbance;
-                    if (existingDisturbance) {
-                        const mergedBlocked = Array.from(new Set([...existingDisturbance.blockedSegments, ...response.disturbance.blockedSegments]));
-                        mergedDraft.disturbance = {
-                            ...existingDisturbance,
-                            blockedSegments: mergedBlocked,
-                            reason: response.disturbance.reason || existingDisturbance.reason,
-                            note: `${existingDisturbance.note || ''} | ${response.disturbance.note || ''}`
-                        };
-                    } else {
-                        mergedDraft.disturbance = response.disturbance;
-                    }
-
-                    const hasWork = mergedDraft.cropActivities.length > 0
-                        || hasSuccessfulIrrigation(mergedDraft.irrigation || [])
-                        || mergedDraft.labour.length > 0
-                        || mergedDraft.inputs.length > 0
-                        || mergedDraft.machinery.length > 0;
-                    if (hasWork && mergedDraft.disturbance) {
-                        mergedDraft.disturbance.scope = 'PARTIAL';
-                    }
-                }
-
-                const hasWorkFinal = mergedDraft.cropActivities.length > 0
-                    || hasSuccessfulIrrigation(mergedDraft.irrigation || [])
-                    || mergedDraft.labour.length > 0
-                    || mergedDraft.inputs.length > 0
-                    || mergedDraft.machinery.length > 0;
-                if (hasWorkFinal) {
-                    mergedDraft.dayOutcome = 'WORK_RECORDED';
-                } else if (mergedDraft.disturbance) {
-                    mergedDraft.dayOutcome = 'DISTURBANCE_RECORDED';
-                }
-
-                if (focusBucket === 'labour' && response.labour.length > 0) {
-                    mergedDraft.questionsForUser = mergedDraft.questionsForUser?.filter(q => q.target !== 'LABOUR');
-                }
-
-                setDraftLog(mergedDraft);
-                setRecordingSegment(null);
-            } else {
-                // Fallback: If no auto-save prop (e.g. testing) or it was unclear, set draft
-                setDraftLog(response);
-            }
-
-            setStatus('idle');
-            setMode('manual');
+            await commitParsedDraft(result, input.data);
 
         } catch (err) {
             console.error(err);

@@ -128,21 +128,28 @@ export const DEFAULT_VOICE_CONFIG: VoicePreprocessorConfig = {
         frameSize: 128,
         workletBufferSize: 16384,
     },
-    // 2026-06-10 — REVERTED to false after REAL-device testing (the prior re-flip
-    // to true was validated only with a synthetic probe, not a real recording —
-    // a superficial verification). ROOT CAUSE from the prod journal: with true,
-    // voice routes through /ai/transcribe-stream, which 503s ("No transcriber
-    // provider registered") because the live AiProviderConfig.TranscriberProvider
-    // is NOT Sarvam (transcriberType ≠ any registered provider → 503 by design,
-    // meant to signal the client to fall back to /ai/voice-parse). But the client's
-    // transcribe-503 → batch fallback did NOT reliably reach /ai/voice-parse, so
-    // voice failed to parse at all. The batch path (false) is PROVEN: voice →
-    // /ai/voice-parse → Gemini multimodal → buckets. Live captions are deferred to
-    // a proper fix (set config.TranscriberProvider=Sarvam + verify the REAL Sarvam
-    // streaming call + harden the handleAudioReady fallback) — the CORE parse path
-    // must NOT be gated on the fragile streaming path.
+    // 2026-06-11 (spec: voice-sarvam-live-captions-2026-06-11) — RE-ENABLED.
+    // Sarvam live captions are now the PRIMARY voice path: with `true`, voice
+    // routes through /ai/transcribe-stream (Sarvam STT → streams the transcript =
+    // the LIVE CAPTION the farmer sees) then /ai/parse-voice-stream (structures
+    // that transcript → buckets).
+    //
+    // The historical 503 root cause is FIXED backend-side: the live
+    // AiProviderConfig.TranscriberProvider is now Sarvam, so /ai/transcribe-stream
+    // no longer returns "No transcriber provider registered". The earlier reversal
+    // to `false` was driven by the SECOND, client-side failure: when streaming
+    // failed the fallback did NOT reliably reach /ai/voice-parse, so NO log got
+    // created and voice appeared broken.
+    //
+    // That client gap is now CLOSED. handleAudioReady wraps the entire streaming
+    // attempt (transcribe Stage 1 + parse Stage 2) and, on ANY failure mode
+    // (transcribe non-200/error/network/timeout/empty-transcript, OR
+    // parse-voice-stream error/network/no-terminal-event), falls through to the
+    // PROVEN batch audio path: /ai/voice-parse → Gemini multimodal → buckets. A
+    // log is therefore ALWAYS created regardless of streaming health — the batch
+    // path is the guaranteed safety net and its behavior is preserved exactly.
     // Note: SEPARATE flag from streamingPcm.enabled (Phase 2 recording).
-    useStreamingParse: false,
+    useStreamingParse: true,
     limits: {
         softSegmentLimit: 20,
         hardSegmentLimit: 30,

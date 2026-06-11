@@ -432,27 +432,46 @@ export class BackendAiClient implements VoiceParserPort {
             return;
         }
 
-        let firstEventSeen = false;
+        // voice-sarvam-live-captions-2026-06-11 — bulletproof fallback.
+        // The streaming parse-voice-stream call is only a "success" when it
+        // delivers a terminal `complete` event carrying a payload. ANY other
+        // terminus — a terminal `error` event, a stream that breaks mid-flight,
+        // or a stream that simply ends without ever emitting `complete` (no
+        // terminal event) — means NO log would be created on this path. In
+        // every such case we MUST fall back to the proven batch /voice-parse
+        // path so a log is always created. We buffer the streamed events and
+        // only flush them to the consumer once we have seen the terminal
+        // `complete`; if the stream terminates any other way, we discard the
+        // partial events and yield the batch fallback instead. This keeps the
+        // founder rule "voice can NEVER break" — a streaming failure can never
+        // leave the user with no log.
+        const buffered: ParseStreamEvent[] = [];
+        let sawComplete = false;
         try {
             for await (const event of parseStreamConsumer(response)) {
-                firstEventSeen = true;
-                yield event;
+                buffered.push(event);
+                if (event.type === 'complete') {
+                    sawComplete = true;
+                }
             }
-        } catch (streamError) {
-            if (!firstEventSeen) {
-                yield* fallback();
-                return;
-            }
-            // Stream broke mid-flight — surface as a synthetic terminal error
-            // so the consumer's switch hits the `error` branch rather than
-            // a silently truncated stream.
-            yield {
-                type: 'error',
-                error: streamError instanceof Error && streamError.message
-                    ? streamError.message
-                    : 'Voice stream failed mid-flight.',
-            };
+        } catch {
+            // Stream broke mid-flight (network drop, malformed framing, etc).
+            // Treat exactly like "no terminal complete" → batch fallback below.
         }
+
+        if (sawComplete) {
+            // Happy path: flush the streamed events (text chunks +
+            // field_complete arrivals + the terminal complete) to the
+            // consumer so the wizard still sees live field arrivals.
+            yield* buffered;
+            return;
+        }
+
+        // No terminal `complete` — terminal error, mid-flight break, or a
+        // stream that ended without completing. Discard the partial events
+        // (a half-arrived stream is unusable for committing a draft) and run
+        // the guaranteed batch fallback so a log is always created.
+        yield* fallback();
     }
 
     private async fetchParseVoiceStream(

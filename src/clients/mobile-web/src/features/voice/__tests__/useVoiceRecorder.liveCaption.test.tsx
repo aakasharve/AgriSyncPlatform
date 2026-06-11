@@ -139,6 +139,41 @@ function buildHappyParser(): VoiceParserPort & {
     return { parseInput, parseInputStream } as never;
 }
 
+// voice-sarvam-live-captions-2026-06-11 — parser whose STREAMING stage 2
+// fails (terminal `error` event, no `complete`) but whose BATCH parseInput
+// still succeeds. This models the exact regression that broke voice: Sarvam
+// transcribe-stream succeeded (so we have a transcript), but
+// parse-voice-stream errored — and previously the flow dead-ended with no
+// log. The hardened flow must fall back to the batch AUDIO path.
+function buildStreamFailsBatchOkParser(): VoiceParserPort & {
+    parseInput: ReturnType<typeof vi.fn>;
+    parseInputStream: ReturnType<typeof vi.fn>;
+} {
+    const parseInputStream = vi.fn(
+        (): AsyncIterable<ParseStreamEvent> =>
+            (async function* () {
+                yield { type: 'text', content: '{"cropActiv' };
+                yield {
+                    type: 'error',
+                    error: 'parse-voice-stream 503 Service Unavailable',
+                };
+            })(),
+    );
+    const parseInput = vi.fn(
+        async (): Promise<VoiceParseResult> => ({
+            success: true,
+            data: FAKE_AGRI_LOG,
+            provenance: {
+                source: 'ai',
+                timestamp: new Date().toISOString(),
+                promptVersion: 'v3.2',
+                processingTimeMs: 900,
+            },
+        }),
+    );
+    return { parseInput, parseInputStream } as never;
+}
+
 function buildPreprocessor(): VoicePreprocessor {
     // Stub the only method useVoiceRecorder.preprocessAudio touches.
     return {
@@ -341,6 +376,42 @@ describe('useVoiceRecorder LiveCaption Way-2 (SARVAM_PRIMARY_VOICE_PIPELINE_2026
         expect(parser.parseInput).toHaveBeenCalledTimes(1);
         expect(parser.parseInputStream).not.toHaveBeenCalled();
         expect(result.current.draftLog).toEqual(FAKE_AGRI_LOG);
+    });
+
+    it('CRITICAL fallback: transcribe OK but parse-voice-stream errors → batch AUDIO path runs, a draft is ALWAYS created', async () => {
+        // voice-sarvam-live-captions-2026-06-11 — the exact regression that
+        // broke voice before. Stage 1 (Sarvam transcribe-stream) succeeds and
+        // yields a transcript (the live caption). Stage 2 (parse-voice-stream)
+        // emits a terminal `error` with NO `complete` event. Previously the
+        // flow surfaced an error and created NO log. The hardened flow MUST
+        // fall back to the proven batch AUDIO path so a draft is created.
+        mockConsume.mockImplementation(() => buildHappyTranscribeStream());
+        const parser = buildStreamFailsBatchOkParser();
+
+        const { result } = renderHook(() => useVoiceRecorder(buildHookProps(parser)));
+
+        await act(async () => {
+            await result.current.handleAudioReady(FAKE_AUDIO_DATA);
+        });
+
+        // Stage 1 ran once (transcribe) and the live caption shows the heard text.
+        expect(mockConsume).toHaveBeenCalledTimes(1);
+        expect(result.current.liveCaption).toBe(FAKE_FINAL);
+
+        // Stage 2 streaming structurer was attempted...
+        expect(parser.parseInputStream).toHaveBeenCalledTimes(1);
+        // ...it failed (terminal error, no complete), so the batch AUDIO path
+        // ran as the safety net. parseInput is invoked with an AUDIO input —
+        // NOT text — so the gold-standard Gemini-multimodal parse runs.
+        expect(parser.parseInput).toHaveBeenCalledTimes(1);
+        const batchInput = (parser.parseInput as ReturnType<typeof vi.fn>).mock.calls[0][0];
+        expect(batchInput.type).toBe('audio');
+
+        // The crucial invariant: a draft was created. Voice did NOT break.
+        expect(result.current.draftLog).toEqual(FAKE_AGRI_LOG);
+        // The flow settled cleanly with no user-facing error.
+        expect(result.current.error).toBeNull();
+        expect(result.current.status).toBe('idle');
     });
 
     // NOTE: A 7th "step-by-step partial accumulation" test was authored
