@@ -6,6 +6,7 @@ using System.Text.Json.Serialization;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
+using Microsoft.Extensions.Logging;
 using ShramSafal.Application.Ports;
 using ShramSafal.Application.Ports.External;
 using ShramSafal.Domain.AI;
@@ -88,9 +89,11 @@ public static class AiTranscribeStreamEndpoints
         IAudioTranscoder audioTranscoder,
         IEnumerable<ITranscriberProvider> transcribers,
         IAiJobRepository aiJobRepository,
+        ILoggerFactory loggerFactory,
         HttpContext httpContext,
         CancellationToken ct)
     {
+        var logger = loggerFactory.CreateLogger("AiTranscribeStream");
         if (!EndpointActorContext.TryGetUserId(user, out _))
         {
             httpContext.Response.StatusCode = StatusCodes.Status401Unauthorized;
@@ -239,6 +242,7 @@ public static class AiTranscribeStreamEndpoints
         }
         catch (Exception ex)
         {
+            logger.LogWarning(ex, "[transcribe-stream] AudioTranscodeFailed (inMime={Mime})", audioFile.ContentType);
             await WriteEventAsync(httpContext, "error", new
             {
                 code = "AudioTranscodeFailed",
@@ -247,8 +251,13 @@ public static class AiTranscribeStreamEndpoints
             return;
         }
 
+        logger.LogInformation(
+            "[transcribe-stream] transcoded {Bytes} PCM bytes (inMime={Mime}, transcriber={Provider})",
+            pcmBytes.Length, audioFile.ContentType, transcriber.ProviderType);
+
         if (pcmBytes.Length == 0)
         {
+            logger.LogWarning("[transcribe-stream] EmptyAudio — transcode produced 0 PCM bytes (inMime={Mime})", audioFile.ContentType);
             await WriteEventAsync(httpContext, "error", new
             {
                 code = "EmptyAudio",
@@ -260,6 +269,7 @@ public static class AiTranscribeStreamEndpoints
         // Stage 2 — feed PCM into the Sarvam streaming transcriber and
         // forward each partial transcript chunk as an SSE event.
         var assembled = new StringBuilder();
+        var partialCount = 0;
         try
         {
             await using var pcmStream = new MemoryStream(pcmBytes, writable: false);
@@ -276,6 +286,7 @@ public static class AiTranscribeStreamEndpoints
                     continue;
                 }
 
+                partialCount++;
                 assembled.Append(chunk);
                 await WriteEventAsync(httpContext, "transcript_partial", new { text = chunk }, ct);
             }
@@ -287,6 +298,7 @@ public static class AiTranscribeStreamEndpoints
         }
         catch (Exception ex)
         {
+            logger.LogWarning(ex, "[transcribe-stream] TranscribeStreamFailed (provider={Provider}, partialsSoFar={Partials})", transcriber.ProviderType, partialCount);
             await WriteEventAsync(httpContext, "error", new
             {
                 code = "TranscribeStreamFailed",
@@ -295,6 +307,7 @@ public static class AiTranscribeStreamEndpoints
             return;
         }
 
+        logger.LogInformation("[transcribe-stream] complete: {Partials} partials, transcriptLen={Len}", partialCount, assembled.Length);
         await WriteEventAsync(httpContext, "transcript_final", new { text = assembled.ToString() }, ct);
     }
 

@@ -20,7 +20,10 @@ public sealed class SarvamOptions
     public bool StreamingFlushSignal { get; set; } = true;
     public int StreamingTimeoutSeconds { get; set; } = 30;
     public string ChatEndpoint { get; set; } = "https://api.sarvam.ai/v1/chat/completions";
-    public string ChatModel { get; set; } = "sarvam-m";
+    // sarvam-m was DEPRECATED by Sarvam (2026-06) — their API now returns
+    // "use one of: sarvam-30b, sarvam-105b". Verified sarvam-30b works via a
+    // live /v1/chat/completions probe. This is the Sarvam structurer model.
+    public string ChatModel { get; set; } = "sarvam-30b";
     public string VisionModel { get; set; } = "sarvam-vision";
     public decimal ChatTemperature { get; set; } = 0.2m;
     public int TimeoutSeconds { get; set; } = 45;
