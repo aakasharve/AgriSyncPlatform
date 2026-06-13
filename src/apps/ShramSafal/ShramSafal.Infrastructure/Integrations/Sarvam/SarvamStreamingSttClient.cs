@@ -151,7 +151,7 @@ internal sealed class SarvamStreamingSttClient : ITranscriberProvider
 
         if (cached is not null)
         {
-            _logger.LogInformation(
+            _logger.LogWarning(
                 "Sarvam streaming REST transcribe idempotency hit (audio_content_hash={Hash}, model={Model}, mode={Mode}).",
                 contentHash,
                 resolvedModel,
@@ -262,6 +262,9 @@ internal sealed class SarvamStreamingSttClient : ITranscriberProvider
         socket.Options.SetRequestHeader(ApiSubscriptionKeyHeader, _options.ApiSubscriptionKey);
 
         var connectUri = BuildStreamingUri(_options, mode, languageHint);
+        _logger.LogWarning(
+            "[sarvam-ws] connecting uri={Uri} encoding={Enc} payloadBytes={Bytes}",
+            connectUri, encoding, payload.Length);
         await socket.ConnectAsync(connectUri, timeout.Token);
 
         var message = JsonSerializer.SerializeToUtf8Bytes(new
@@ -281,10 +284,14 @@ internal sealed class SarvamStreamingSttClient : ITranscriberProvider
         // message turns into one yielded string chunk; speech_start /
         // speech_end VAD signals are filtered out by TryExtractTranscript
         // (which returns false for non-transcript message types).
-        await foreach (var chunk in ReceivePartialTranscriptsAsync(socket, timeout.Token))
+        var extracted = 0;
+        await foreach (var chunk in ReceivePartialTranscriptsAsync(socket, _logger, timeout.Token))
         {
+            extracted++;
             yield return chunk;
         }
+        _logger.LogWarning("[sarvam-ws] receive ended: {Count} transcript chunks extracted, closeStatus={Status} desc={Desc}",
+            extracted, socket.CloseStatus, socket.CloseStatusDescription);
     }
 
     // ─── Public statics (preserved for test fixtures + Task 2.3 SSE wiring) ──
@@ -386,6 +393,7 @@ internal sealed class SarvamStreamingSttClient : ITranscriberProvider
 
     private static async IAsyncEnumerable<string> ReceivePartialTranscriptsAsync(
         ClientWebSocket socket,
+        ILogger logger,
         [EnumeratorCancellation] CancellationToken ct)
     {
         var buffer = new byte[8192];
@@ -399,6 +407,7 @@ internal sealed class SarvamStreamingSttClient : ITranscriberProvider
                 result = await socket.ReceiveAsync(buffer, ct);
                 if (result.MessageType == WebSocketMessageType.Close)
                 {
+                    logger.LogWarning("[sarvam-ws] close frame: status={Status} desc={Desc}", socket.CloseStatus, socket.CloseStatusDescription);
                     yield break;
                 }
 
@@ -412,6 +421,7 @@ internal sealed class SarvamStreamingSttClient : ITranscriberProvider
             }
 
             var responseBody = Encoding.UTF8.GetString(message.ToArray());
+            logger.LogWarning("[sarvam-ws] raw msg: {Msg}", responseBody.Length > 400 ? responseBody[..400] : responseBody);
             if (TryExtractTranscript(responseBody, out var transcript))
             {
                 yield return transcript;
@@ -447,7 +457,12 @@ internal sealed class SarvamStreamingSttClient : ITranscriberProvider
         var normalizedMimeType = NormalizeMimeType(mimeType);
         if (normalizedMimeType is "audio/wav" or "audio/x-wav" or "audio/wave" or "audio/vnd.wave")
         {
-            encoding = "wav";
+            // Sarvam's streaming WebSocket expects the MIME-style "audio/wav"
+            // (per their streaming docs), NOT the bare "wav". Sending "wav"
+            // made Sarvam accept the connection + audio but decode NOTHING ->
+            // empty transcript (the live-caption bug, confirmed by raw-message
+            // logging: 0 transcript chunks, NormalClosure).
+            encoding = "audio/wav";
             return true;
         }
 

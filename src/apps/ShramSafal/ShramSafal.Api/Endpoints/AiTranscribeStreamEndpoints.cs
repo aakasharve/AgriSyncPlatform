@@ -276,35 +276,35 @@ public static class AiTranscribeStreamEndpoints
         // bug, verified via a Sarvam-TTS round-trip). We know the exact format
         // from the transcode above: 16 kHz mono s16le.
         var wavBytes = WrapPcmAsWav16BitMono(pcmBytes, 16000);
-        logger.LogInformation("[transcribe-stream] wrapped PCM as WAV ({Bytes} bytes) for Sarvam codec=wav", wavBytes.Length);
 
-        var assembled = new StringBuilder();
-        var partialCount = 0;
+        // Stage 2 — transcribe via Sarvam's REST STT (reliable) and REVEAL the
+        // transcript word-by-word as SSE partials. Sarvam's STREAMING WebSocket
+        // returns an EMPTY transcript for a single-shot clip — it connects and
+        // accepts the audio but emits 0 chunks (confirmed via raw-message
+        // logging; it needs their real-time chunked-streaming SDK protocol, not
+        // a one-message send+close). The REST STT transcribes the same audio
+        // correctly, so we use it here and keep the live-reveal caption UX by
+        // streaming one partial per word.
+        string transcript;
         try
         {
-            await using var pcmStream = new MemoryStream(wavBytes, writable: false);
-            await foreach (var chunk in transcriber
-                .TranscribeStreamAsync(pcmStream, "audio/wav", languageHint, mode, ct)
-                .ConfigureAwait(false))
+            await using var wavStream = new MemoryStream(wavBytes, writable: false);
+            var sttResult = await transcriber
+                .TranscribeAsync(wavStream, "audio/wav", languageHint, mode, ct)
+                .ConfigureAwait(false);
+            transcript = sttResult.Success ? (sttResult.Transcript ?? string.Empty) : string.Empty;
+            if (!sttResult.Success)
             {
-                if (string.IsNullOrEmpty(chunk))
-                {
-                    continue;
-                }
-
-                partialCount++;
-                assembled.Append(chunk);
-                await WriteEventAsync(httpContext, "transcript_partial", new { text = chunk }, ct);
+                logger.LogWarning("[transcribe-stream] REST transcribe failed: {Err}", sttResult.Error);
             }
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
         {
-            // Client disconnect → end without emitting an error event.
             return;
         }
         catch (Exception ex)
         {
-            logger.LogWarning(ex, "[transcribe-stream] TranscribeStreamFailed (provider={Provider}, partialsSoFar={Partials})", transcriber.ProviderType, partialCount);
+            logger.LogWarning(ex, "[transcribe-stream] TranscribeFailed (provider={Provider})", transcriber.ProviderType);
             await WriteEventAsync(httpContext, "error", new
             {
                 code = "TranscribeStreamFailed",
@@ -313,8 +313,15 @@ public static class AiTranscribeStreamEndpoints
             return;
         }
 
-        logger.LogInformation("[transcribe-stream] complete: {Partials} partials, transcriptLen={Len}", partialCount, assembled.Length);
-        await WriteEventAsync(httpContext, "transcript_final", new { text = assembled.ToString() }, ct);
+        var words = transcript.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        logger.LogWarning("[transcribe-stream] REST transcript: {Words} words, len={Len}", words.Length, transcript.Length);
+        foreach (var word in words)
+        {
+            await WriteEventAsync(httpContext, "transcript_partial", new { text = word + " " }, ct);
+            try { await Task.Delay(45, ct); }
+            catch (OperationCanceledException) { return; }
+        }
+        await WriteEventAsync(httpContext, "transcript_final", new { text = transcript }, ct);
     }
 
     private static async Task WriteEventAsync(
