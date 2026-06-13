@@ -268,17 +268,23 @@ public static class AiTranscribeStreamEndpoints
 
         // Stage 2 — feed PCM into the Sarvam streaming transcriber and
         // forward each partial transcript chunk as an SSE event.
+        // Wrap the raw s16le PCM in a minimal WAV container so the bytes match
+        // Sarvam's declared input_audio_codec=wav. The streaming client sends
+        // the whole clip in ONE WebSocket message; the previous code sent
+        // HEADERLESS PCM tagged "audio/pcm" -> encoding "wav", so Sarvam could
+        // not decode it and returned an EMPTY transcript (the live-caption
+        // bug, verified via a Sarvam-TTS round-trip). We know the exact format
+        // from the transcode above: 16 kHz mono s16le.
+        var wavBytes = WrapPcmAsWav16BitMono(pcmBytes, 16000);
+        logger.LogInformation("[transcribe-stream] wrapped PCM as WAV ({Bytes} bytes) for Sarvam codec=wav", wavBytes.Length);
+
         var assembled = new StringBuilder();
         var partialCount = 0;
         try
         {
-            await using var pcmStream = new MemoryStream(pcmBytes, writable: false);
-            // Mirror Sarvam's expected MIME for raw PCM bytes (see
-            // SarvamStreamingSttClient.TryResolveAudioFormat — "audio/pcm"
-            // is one of the accepted forms; the WAV codepath would require
-            // a header that we are NOT prepending here).
+            await using var pcmStream = new MemoryStream(wavBytes, writable: false);
             await foreach (var chunk in transcriber
-                .TranscribeStreamAsync(pcmStream, "audio/pcm", languageHint, mode, ct)
+                .TranscribeStreamAsync(pcmStream, "audio/wav", languageHint, mode, ct)
                 .ConfigureAwait(false))
             {
                 if (string.IsNullOrEmpty(chunk))
@@ -338,6 +344,40 @@ public static class AiTranscribeStreamEndpoints
         return Enum.TryParse<AiProviderType>(raw.Trim(), ignoreCase: true, out var parsed)
             ? parsed
             : fallback;
+    }
+
+    /// <summary>
+    /// Wrap raw little-endian 16-bit mono PCM in a 44-byte WAV/RIFF header so
+    /// the payload is a valid WAV — required because the Sarvam streaming STT
+    /// is told input_audio_codec=wav. Sending headerless PCM under that codec
+    /// made Sarvam return an empty transcript (the live-caption bug).
+    /// </summary>
+    private static byte[] WrapPcmAsWav16BitMono(byte[] pcm, int sampleRate)
+    {
+        const short channels = 1;
+        const short bitsPerSample = 16;
+        var byteRate = sampleRate * channels * bitsPerSample / 8;
+        var blockAlign = (short)(channels * bitsPerSample / 8);
+
+        using var ms = new MemoryStream(44 + pcm.Length);
+        using (var w = new BinaryWriter(ms, Encoding.ASCII, leaveOpen: true))
+        {
+            w.Write("RIFF"u8.ToArray());
+            w.Write(36 + pcm.Length);
+            w.Write("WAVE"u8.ToArray());
+            w.Write("fmt "u8.ToArray());
+            w.Write(16);                 // fmt chunk size (PCM)
+            w.Write((short)1);           // audio format = PCM
+            w.Write(channels);
+            w.Write(sampleRate);
+            w.Write(byteRate);
+            w.Write(blockAlign);
+            w.Write(bitsPerSample);
+            w.Write("data"u8.ToArray());
+            w.Write(pcm.Length);
+            w.Write(pcm);
+        }
+        return ms.ToArray();
     }
 
     // SARVAM_PRIMARY_VOICE_PIPELINE_2026-05-21 founder fix — strict parse
