@@ -1,47 +1,47 @@
+using System.Diagnostics;
 using System.Globalization;
 using System.Runtime.CompilerServices;
-using System.Threading.Channels;
-using FFMpegCore;
-using FFMpegCore.Pipes;
+using System.Text;
 using Microsoft.Extensions.Logging;
 using ShramSafal.Application.Ports.External;
 
 namespace ShramSafal.Infrastructure.Audio;
 
 /// <summary>
-/// SARVAM_PRIMARY_VOICE_PIPELINE_2026-05-21 Task 2.3a — ffmpeg-backed
-/// audio transcoder. Decodes the browser/mobile capture container
-/// (WebM/Opus, mp4/m4a, ogg, mp3, …) and resamples to mono PCM s16le at
-/// the target sample rate so the Sarvam streaming STT WebSocket can
-/// consume it without any client-side codec assumptions.
+/// SARVAM_PRIMARY_VOICE_PIPELINE_2026-05-21 Task 2.3a — ffmpeg-backed audio
+/// transcoder. Decodes the browser/mobile capture container (WebM/Opus,
+/// mp4/m4a, ogg, mp3, WAV, …) and resamples to mono PCM s16le at the target
+/// sample rate so the Sarvam streaming STT WebSocket can consume it.
 ///
 /// <para>
-/// <b>Container ffmpeg dependency.</b> The ECS production container image
-/// MUST install the <c>ffmpeg</c> binary so <c>FFMpegCore</c> can shell
-/// out to it. On Debian/Ubuntu base images:
-/// <c>apt-get install -y ffmpeg</c>. Alpine: <c>apk add --no-cache ffmpeg</c>.
-/// Local dev: <c>choco install ffmpeg</c> (Windows) or <c>brew install
-/// ffmpeg</c> (macOS). Dockerfile edits are owned by ops-engineer; this
-/// adapter documents the requirement but does not modify deployment
-/// infra in this slice.
+/// <b>2026-06-13 — rewritten to invoke ffmpeg DIRECTLY via
+/// <see cref="Process"/> instead of FFMpegCore.</b> On prod, the FFMpegCore
+/// pipe path (<c>StreamPipeSource</c> → custom <c>IPipeSink</c>) produced
+/// ZERO output bytes with no exception for valid input, while
+/// <c>ffmpeg -i pipe:0 -f s16le -ar 16000 -ac 1 pipe:1</c> works perfectly from
+/// the shell on the same box (verified: 64000 bytes for a 2 s 16 kHz clip). So
+/// the FFMpegCore plumbing — not ffmpeg — was the failure that left the live
+/// caption empty (transcribe-stream → "EmptyAudio: 0 PCM bytes" → fallback to
+/// the batch path). The direct invocation feeds the source to ffmpeg's stdin
+/// and reads PCM from stdout, with stdin/stdout/stderr drained concurrently so
+/// the OS pipes never deadlock.
 /// </para>
 ///
 /// <para>
-/// Output is yielded in roughly 4 KB chunks (~125 ms of 16 kHz mono
-/// s16le) as ffmpeg writes them. Each chunk is aligned on a 2-byte
-/// sample boundary so consumers can splice the stream at any chunk
-/// boundary. The implementation buffers a small amount internally to
-/// keep alignment; it does NOT buffer the whole transcoded payload.
+/// <b>Host ffmpeg dependency.</b> The host MUST have the <c>ffmpeg</c> binary
+/// on PATH (prod EC2: <c>/usr/bin/ffmpeg</c>, verified v6.1.1). Debian/Ubuntu:
+/// <c>apt-get install -y ffmpeg</c>.
+/// </para>
+///
+/// <para>
+/// Output is yielded in <see cref="OutputChunkSize"/>-byte chunks as ffmpeg
+/// writes them. Callers reassemble the full PCM payload, so chunks are NOT
+/// individually sample-aligned (the concatenation is); the previous
+/// alignment-buffering is unnecessary for the buffer-then-send consumer.
 /// </para>
 /// </summary>
 internal sealed class FfmpegAudioTranscoder : IAudioTranscoder
 {
-    // 4 KB read-side buffer keeps memory bounded while still being large
-    // enough that StreamPipeSink's wakeups don't dominate latency. Equates
-    // to ~125 ms of 16 kHz mono s16le (16000 samples/sec * 2 bytes/sample
-    // = 32000 B/s; 4096 B / 32000 B/s ≈ 0.128 s). Smaller chunks raise
-    // per-frame overhead; larger chunks add buffering latency on the
-    // first-token path.
     private const int OutputChunkSize = 4096;
 
     private readonly ILogger<FfmpegAudioTranscoder> _logger;
@@ -67,165 +67,89 @@ internal sealed class FfmpegAudioTranscoder : IAudioTranscoder
                 "Target sample rate must be positive.");
         }
 
-        // ffmpeg -i pipe:0 -f s16le -ar <rate> -ac 1 -loglevel quiet pipe:1
-        //   -f s16le         : raw 16-bit signed little-endian PCM (no header)
-        //   -ar <rate>       : resample to <rate> Hz (default 16 kHz)
-        //   -ac 1            : downmix to mono
-        //   -loglevel quiet  : suppress ffmpeg's stderr chatter (it would
-        //                      otherwise show up in container logs as noise)
         var rate = targetSampleRateHz.ToString(CultureInfo.InvariantCulture);
 
-        // Channel-based hand-off between ffmpeg's stdout writer and this
-        // async enumerator. Bounded so a slow consumer back-pressures ffmpeg
-        // rather than buffering the whole transcode in memory. 16 chunks
-        // ≈ 2 seconds of buffered PCM — small enough to bound memory,
-        // large enough to absorb consumer hiccups.
-        var channel = Channel.CreateBounded<ReadOnlyMemory<byte>>(
-            new BoundedChannelOptions(16)
-            {
-                FullMode = BoundedChannelFullMode.Wait,
-                SingleReader = true,
-                SingleWriter = true,
-            });
+        // ffmpeg -hide_banner -loglevel error -i pipe:0 -f s16le -ar <rate> -ac 1 pipe:1
+        //   -i pipe:0  : read source container from stdin (format auto-detected)
+        //   -f s16le   : raw 16-bit signed little-endian PCM (no header)
+        //   -ar <rate> : resample to <rate> Hz; -ac 1 : downmix to mono
+        //   pipe:1     : write PCM to stdout
+        var psi = new ProcessStartInfo
+        {
+            FileName = "ffmpeg",
+            RedirectStandardInput = true,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+            CreateNoWindow = true,
+        };
+        foreach (var arg in new[]
+        {
+            "-hide_banner", "-loglevel", "error",
+            "-i", "pipe:0",
+            "-f", "s16le", "-ar", rate, "-ac", "1",
+            "pipe:1",
+        })
+        {
+            psi.ArgumentList.Add(arg);
+        }
 
-        // Run ffmpeg on a background task. The StreamPipeSource reads from
-        // the caller-supplied source stream; ChannelPipeSink writes each
-        // ffmpeg output chunk into the channel. We surface ffmpeg errors
-        // through the channel's completion (writer.Complete(exception)) so
-        // the consumer sees them as a thrown exception during MoveNextAsync.
-        var ffmpegTask = Task.Run(async () =>
+        using var proc = new Process { StartInfo = psi };
+        proc.Start();
+
+        // Drain stderr + feed stdin on background tasks so the three OS pipes
+        // never deadlock (ffmpeg blocks writing stdout/stderr if we stop
+        // reading; it blocks reading stdin if we stop writing).
+        var stderr = new StringBuilder();
+        var stderrTask = Task.Run(async () =>
+        {
+            try { stderr.Append(await proc.StandardError.ReadToEndAsync(ct).ConfigureAwait(false)); }
+            catch { /* best-effort diagnostics only */ }
+        }, ct);
+
+        var writeTask = Task.Run(async () =>
         {
             try
             {
-                await FFMpegArguments
-                    .FromPipeInput(new StreamPipeSource(sourceAudio))
-                    .OutputToPipe(
-                        new ChannelPipeSink(channel.Writer, OutputChunkSize, ct),
-                        options => options
-                            .ForceFormat("s16le")
-                            .WithCustomArgument($"-ar {rate}")
-                            .WithCustomArgument("-ac 1")
-                            .WithCustomArgument("-loglevel quiet"))
-                    .CancellableThrough(ct)
-                    .ProcessAsynchronously();
-
-                channel.Writer.TryComplete();
+                await sourceAudio.CopyToAsync(proc.StandardInput.BaseStream, ct).ConfigureAwait(false);
+                await proc.StandardInput.BaseStream.FlushAsync(ct).ConfigureAwait(false);
             }
-            catch (Exception ex)
+            catch
             {
-                _logger.LogWarning(
-                    ex,
-                    "FfmpegAudioTranscoder failed (sourceMime={SourceMime}, targetRate={Rate}).",
-                    sourceMimeType,
-                    targetSampleRateHz);
-                channel.Writer.TryComplete(ex);
+                // Broken pipe if ffmpeg exits early on bad input — surfaced
+                // via the non-zero exit code below.
+            }
+            finally
+            {
+                try { proc.StandardInput.Close(); } catch { /* already closed */ }
             }
         }, ct);
 
-        // Drain the channel. Each read yields a ReadOnlyMemory<byte> chunk
-        // already aligned on a 2-byte sample boundary by ChannelPipeSink.
-        await foreach (var chunk in channel.Reader.ReadAllAsync(ct).ConfigureAwait(false))
+        var buffer = new byte[OutputChunkSize];
+        int read;
+        while ((read = await proc.StandardOutput.BaseStream
+                   .ReadAsync(buffer.AsMemory(), ct).ConfigureAwait(false)) > 0)
         {
-            yield return chunk;
+            var emitted = new byte[read];
+            Buffer.BlockCopy(buffer, 0, emitted, 0, read);
+            yield return emitted;
         }
 
-        // Surface any ffmpeg-side exception that the writer.Complete(ex)
-        // call attached to the channel. ReadAllAsync() already threw it,
-        // but we still await the background task so its exception isn't
-        // observed as an unobserved-task fault if the consumer broke out
-        // of the loop early.
-        await ffmpegTask.ConfigureAwait(false);
-    }
+        await writeTask.ConfigureAwait(false);
+        await proc.WaitForExitAsync(ct).ConfigureAwait(false);
+        await stderrTask.ConfigureAwait(false);
 
-    /// <summary>
-    /// FFMpegCore <see cref="IPipeSink"/> adapter that writes ffmpeg's
-    /// stdout into a <see cref="ChannelWriter{T}"/>. Splits the incoming
-    /// byte stream into <see cref="OutputChunkSize"/>-byte chunks and
-    /// guarantees 2-byte sample alignment by buffering any odd-byte tail
-    /// across reads.
-    /// </summary>
-    private sealed class ChannelPipeSink : IPipeSink
-    {
-        private readonly ChannelWriter<ReadOnlyMemory<byte>> _writer;
-        private readonly int _chunkSize;
-        private readonly CancellationToken _ct;
-
-        public ChannelPipeSink(
-            ChannelWriter<ReadOnlyMemory<byte>> writer,
-            int chunkSize,
-            CancellationToken ct)
+        if (proc.ExitCode != 0)
         {
-            _writer = writer ?? throw new ArgumentNullException(nameof(writer));
-            _chunkSize = chunkSize > 0 ? chunkSize : 4096;
-            _ct = ct;
-        }
-
-        public string GetFormat() => "s16le";
-
-        public async Task ReadAsync(Stream inputStream, CancellationToken cancellationToken)
-        {
-            using var linked = CancellationTokenSource.CreateLinkedTokenSource(_ct, cancellationToken);
-            var token = linked.Token;
-
-            var buffer = new byte[_chunkSize];
-            // Tail buffer keeps a single byte across reads to guarantee
-            // even-aligned output (s16le samples are 2 bytes). It's at
-            // most 1 byte because we always pair tails with the next read.
-            byte? tail = null;
-
-            while (!token.IsCancellationRequested)
-            {
-                var read = await inputStream.ReadAsync(buffer.AsMemory(), token).ConfigureAwait(false);
-                if (read <= 0)
-                {
-                    break;
-                }
-
-                // If we have a tail byte queued, prepend it to the current
-                // payload so the output chunks always start on a sample
-                // boundary.
-                var payloadStart = 0;
-                int payloadLength;
-                byte[] payload;
-
-                if (tail.HasValue)
-                {
-                    payload = new byte[read + 1];
-                    payload[0] = tail.Value;
-                    Buffer.BlockCopy(buffer, 0, payload, 1, read);
-                    payloadLength = read + 1;
-                    tail = null;
-                }
-                else
-                {
-                    payload = buffer;
-                    payloadLength = read;
-                }
-
-                // If the resulting payload has an odd byte, hold the last
-                // byte back as the next iteration's tail so every yielded
-                // chunk is a whole number of s16le samples.
-                if ((payloadLength & 1) == 1)
-                {
-                    tail = payload[payloadStart + payloadLength - 1];
-                    payloadLength -= 1;
-                }
-
-                if (payloadLength == 0)
-                {
-                    continue;
-                }
-
-                // Copy out the aligned slice so the consumer can hold onto
-                // the memory after the reusable `buffer` is overwritten.
-                var emitted = new byte[payloadLength];
-                Buffer.BlockCopy(payload, payloadStart, emitted, 0, payloadLength);
-                await _writer.WriteAsync(emitted, token).ConfigureAwait(false);
-            }
-
-            // If a stray tail byte survived to EOF, drop it. A lone byte
-            // cannot form a valid s16le sample, and the downstream STT
-            // wouldn't accept it anyway.
+            var err = stderr.ToString().Trim();
+            _logger.LogWarning(
+                "FfmpegAudioTranscoder: ffmpeg exited {Code} (sourceMime={SourceMime}, targetRate={Rate}). stderr={Stderr}",
+                proc.ExitCode,
+                sourceMimeType,
+                targetSampleRateHz,
+                string.IsNullOrWhiteSpace(err) ? "(empty)" : err);
+            throw new InvalidOperationException(
+                $"ffmpeg transcode failed (exit {proc.ExitCode}): {(string.IsNullOrWhiteSpace(err) ? "no stderr" : err)}");
         }
     }
 }
