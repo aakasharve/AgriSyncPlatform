@@ -22,6 +22,12 @@ import { NotificationService } from './shared/services/NotificationService';
 import { eventBus } from './core/telemetry/AnalyticsEventBus';
 import { emitClientError } from './core/telemetry/eventEmitters';
 import { initSentry } from './lib/sentry';
+import { BUILD_TAG } from './buildInfo';
+
+// Build-identity marker (login-cache-ghost / stale-install diagnostics): prints
+// the exact running build so we can confirm a device is on the latest bundle
+// rather than a silently-skipped stale install. Read by the DevTools agent.
+console.log(`%c[ShramSafal] ${BUILD_TAG}`, 'color:#16a34a;font-weight:bold;font-size:13px');
 
 // Sentry must be initialised before the React root renders so that
 // the error boundary and unhandled-rejection capture are active for
