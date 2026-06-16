@@ -6,7 +6,7 @@ name: e2e
 
 on:
   push:
-    branches: [akash_edits, main]
+    branches: [main]
     paths:
       - 'src/clients/mobile-web/**'
       - 'src/AgriSync.Bootstrapper/**'
