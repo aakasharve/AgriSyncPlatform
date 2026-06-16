@@ -1,0 +1,75 @@
+name: Prod Hygiene & Cost Audit
+
+# Weekly read-only audit of prod AWS: orphaned RDS instances, overdue snapshots,
+# budget forecast, and month-to-date real spend. Emails the founder via SNS with a
+# severity-labelled subject. Runs with NO stored credentials — assumes a read-only
+# IAM role via GitHub OIDC. See aws/audit/prod-hygiene-audit.sh.
+#
+# NOTE: scheduled (cron) workflows only run from the default branch (main). This file
+# must be on `main` for the weekly schedule to fire. workflow_dispatch works from any
+# branch the file exists on (trust policy allows main + akash_edits).
+
+on:
+  schedule:
+    - cron: "17 4 * * 1"   # Mondays 04:17 UTC (~09:47 IST). Off-minute on purpose.
+  workflow_dispatch: {}     # manual run / test
+
+permissions:
+  id-token: write   # required for OIDC
+  contents: read
+
+concurrency:
+  group: prod-hygiene-audit
+  cancel-in-progress: false
+
+env:
+  AWS_REGION: ap-south-1
+  AUDIT_TOPIC_ARN: arn:aws:sns:ap-south-1:951921970996:shramsafal-prod-audit-alerts
+  AUDIT_ROLE_ARN: arn:aws:iam::951921970996:role/agrisync-prod-audit
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ env.AUDIT_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+          role-session-name: prod-hygiene-audit
+
+      - name: Run audit
+        id: run
+        run: |
+          set +e
+          bash aws/audit/prod-hygiene-audit.sh | tee report.txt
+          echo "code=${PIPESTATUS[0]}" >> "$GITHUB_OUTPUT"
+
+      - name: Email result via SNS
+        if: always()
+        run: |
+          DATE=$(date -u +%F)
+          CRIT=$(grep -oE 'CRITICAL_FINDINGS=[0-9]+' report.txt | head -1 | cut -d= -f2)
+          WARN=$(grep -oE 'WARN_FINDINGS=[0-9]+' report.txt | head -1 | cut -d= -f2)
+          CRIT=${CRIT:-0}; WARN=${WARN:-0}
+          if [ "$CRIT" -gt 0 ]; then
+            SUBJECT="[AgriSync Prod Audit] ACTION NEEDED - ${CRIT} critical (${DATE})"
+          elif [ "$WARN" -gt 0 ]; then
+            SUBJECT="[AgriSync Prod Audit] review - ${WARN} warning(s) (${DATE})"
+          else
+            SUBJECT="[AgriSync Prod Audit] OK - all clear (${DATE})"
+          fi
+          echo "Publishing: $SUBJECT"
+          aws sns publish --region "${AWS_REGION}" \
+            --topic-arn "${AUDIT_TOPIC_ARN}" \
+            --subject "$SUBJECT" \
+            --message file://report.txt
+
+      - name: Mark run red on critical findings
+        if: steps.run.outputs.code != '0'
+        run: |
+          echo "::error::Critical prod-hygiene findings present — see the emailed report."
+          exit 1
