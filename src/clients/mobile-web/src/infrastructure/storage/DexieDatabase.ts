@@ -18,6 +18,12 @@ import type { DailyLog } from '../../types';
 import type { AuditEvent } from './AuditLogRepository';
 import type { JobCard } from '../../domain/work/JobCard';
 import type { WorkerProfileData } from '../../domain/work/ReliabilityScore';
+import type {
+    DexieTestProtocol,
+    DexieTestResult,
+    DexieTestInstance,
+    DexieTestRecommendation,
+} from './DexieDatabase.testTypes';
 import type { CorrectionEvent } from '../../domain/ai/contracts/CorrectionEvent';
 import { applyV1 } from './dexie/versions/v1';
 import { applyV2 } from './dexie/versions/v2';
@@ -520,63 +526,14 @@ export interface DexieComplianceSignal {
 // CEI PHASE 2 — TEST STACK (§4.5)
 // =============================================================================
 
-/** Mirrors ShramSafal.Domain.Tests.TestProtocolKind (numeric for index friendliness). */
-export interface DexieTestProtocol {
-    id: string;
-    name: string;
-    cropType: string;
-    kind: number;
-    periodicity: number;
-    everyNDays?: number;
-    stageNames: string[];
-    parameterCodes: string[];
-    createdByUserId: string;
-    createdAtUtc: string;
-}
-
-export interface DexieTestResult {
-    parameterCode: string;
-    parameterValue: string;
-    unit: string;
-    referenceRangeLow?: number;
-    referenceRangeHigh?: number;
-}
-
-export interface DexieTestInstance {
-    id: string;
-    testProtocolId: string;
-    cropCycleId: string;
-    farmId: string;
-    plotId: string;
-    stageName: string;
-    /** ISO date "YYYY-MM-DD" */
-    plannedDueDate: string;
-    /** 0=Due, 1=Collected, 2=Reported, 3=Overdue, 4=Waived */
-    status: number;
-    collectedByUserId?: string;
-    collectedAtUtc?: string;
-    reportedByUserId?: string;
-    reportedAtUtc?: string;
-    waivedReason?: string;
-    attachmentIds: string[];
-    results: DexieTestResult[];
-    protocolKind: number;
-    modifiedAtUtc: string;
-    createdAtUtc: string;
-    /** Denormalized for list rendering */
-    testProtocolName?: string;
-}
-
-export interface DexieTestRecommendation {
-    id: string;
-    testInstanceId: string;
-    ruleCode: string;
-    titleEn: string;
-    titleMr: string;
-    suggestedActivityName: string;
-    suggestedOffsetDays: number;
-    createdAtUtc: string;
-}
+// Record types extracted to ./DexieDatabase.testTypes (Sub-plan 04 §DoD ≤800
+// lines). Re-exported so existing `from '.../DexieDatabase'` imports keep working.
+export type {
+    DexieTestProtocol,
+    DexieTestResult,
+    DexieTestInstance,
+    DexieTestRecommendation,
+};
 
 // =============================================================================
 // CEI PHASE 4 — JOB CARDS (§4.8)
