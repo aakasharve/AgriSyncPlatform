@@ -110,7 +110,7 @@ credit=$(aws ce get-cost-and-usage --region "$BILLING_REGION" \
 echo "  net spend (after credits) MTD: \$${net:-?}"
 echo "  credits applied MTD:           \$${credit:-?}"
 if [ -n "${net:-}" ] && awk "BEGIN{exit !(${net:-0} > 0)}" 2>/dev/null; then
-  echo "  ..  real charges are accruing this month (credits no longer fully cover usage)"
+  echo "  WARN  real charges accruing this month (credits no longer fully cover usage)"; WARN=$((WARN+1))
 fi
 
 # ---------- verdict ----------
