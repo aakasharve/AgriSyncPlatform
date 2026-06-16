@@ -2,7 +2,7 @@ name: security
 
 on:
   push:
-    branches: [main, akash_edits]
+    branches: [main]
   pull_request:
     branches: [main]
   schedule:

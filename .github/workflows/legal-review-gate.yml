@@ -24,7 +24,7 @@ on:
   push:
     branches: ['**']
   pull_request:
-    branches: [main, akash_edits, prod-deploy]
+    branches: [main, prod-deploy]
 
 jobs:
   warn-on-tag:

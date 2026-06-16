@@ -45,7 +45,7 @@ All decisions, plans, ADRs, specs, and agent memory live under `_COFOUNDER/` (pr
 - Conventional Commits format (`feat:`, `fix:`, `chore:`, etc.)
 - PR body must reference spec ID from `_COFOUNDER/specs/_active/`
 - Never amend after push
-- Branch: `akash_edits` for all app code
+- Branch: `main` for all app code
 
 ---
 

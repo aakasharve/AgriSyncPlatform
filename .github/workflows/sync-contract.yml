@@ -16,7 +16,7 @@ name: sync-contract
 
 on:
   push:
-    branches: [main, akash_edits]
+    branches: [main]
     paths:
       - 'sync-contract/**'
       - 'src/clients/mobile-web/src/infrastructure/sync/SyncMutationCatalog.ts'
@@ -24,7 +24,7 @@ on:
       - '.github/workflows/sync-contract.yml'
   pull_request:
     # Sub-plan 04 close-out — also gate PRs targeting akash_edits.
-    branches: [main, akash_edits]
+    branches: [main]
     paths:
       - 'sync-contract/**'
       - 'src/clients/mobile-web/src/infrastructure/sync/SyncMutationCatalog.ts'

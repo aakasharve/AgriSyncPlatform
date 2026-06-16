@@ -2,7 +2,7 @@ name: ai-eval
 
 on:
   pull_request:
-    branches: [main, akash_edits]
+    branches: [main]
     paths:
       - 'src/clients/mobile-web/src/infrastructure/ai/**'
       - 'src/clients/mobile-web/src/domain/schemas/**'

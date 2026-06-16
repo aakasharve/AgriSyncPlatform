@@ -2,7 +2,7 @@ name: dotnet-ci
 
 on:
   push:
-    branches: [main, akash_edits]
+    branches: [main]
     paths:
       - 'src/**'
       - '!src/clients/**'

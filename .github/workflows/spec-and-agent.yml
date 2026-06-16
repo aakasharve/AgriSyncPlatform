@@ -2,7 +2,7 @@ name: spec-and-agent
 
 on:
   pull_request:
-    branches: [main, akash_edits]
+    branches: [main]
     types: [opened, synchronize, ready_for_review]
 
 jobs:

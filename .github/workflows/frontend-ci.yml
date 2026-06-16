@@ -2,13 +2,13 @@ name: frontend-ci
 
 on:
   push:
-    branches: [main, akash_edits]
+    branches: [main]
     paths:
       - 'src/clients/**'
       - 'sync-contract/**'
       - '.github/workflows/frontend-ci.yml'
   pull_request:
-    branches: [main, akash_edits]
+    branches: [main]
     paths:
       - 'src/clients/**'
       - 'sync-contract/**'
