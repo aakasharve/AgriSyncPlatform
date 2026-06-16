@@ -448,41 +448,9 @@ public sealed class TranscriptBackfillWorkerTests : IAsyncLifetime
         return raw is null or DBNull ? null : Convert.ToDateTime(raw);
     }
 
-    private static async Task ApplyFullMigrationChainAsync(string conn)
-    {
-        // Same migration apply pattern as the sibling Privacy tests.
-        var userOpts = new DbContextOptionsBuilder<UserDbContext>().UseNpgsql(conn).Options;
-        await using (var user = new UserDbContext(userOpts))
-        {
-            await user.Database.MigrateAsync();
-        }
-
-        var accountsOpts = new DbContextOptionsBuilder<AccountsDbContext>().UseNpgsql(conn).Options;
-        await using (var accounts = new AccountsDbContext(accountsOpts))
-        {
-            await accounts.Database.MigrateAsync();
-        }
-
-        var ssfOpts = new DbContextOptionsBuilder<ShramSafalDbContext>()
-            .UseNpgsql(conn).Options;
-        await using (var ssf = new ShramSafalDbContext(ssfOpts))
-        {
-            await ssf.Database.MigrateAsync();
-        }
-
-        var analyticsOpts = new DbContextOptionsBuilder<AnalyticsDbContext>()
-            .UseNpgsql(conn, npgsql =>
-            {
-                npgsql.MigrationsAssembly(
-                    typeof(AgriSync.Bootstrapper.Migrations.Analytics.AnalyticsRewrite).Assembly.FullName);
-                npgsql.MigrationsHistoryTable(
-                    tableName: "__analytics_migrations_history",
-                    schema: AnalyticsDbContext.SchemaName);
-            })
-            .Options;
-        await using (var analytics = new AnalyticsDbContext(analyticsOpts))
-        {
-            await analytics.Database.MigrateAsync();
-        }
-    }
+    // Correct 4-phase order lives in IntegrationMigrationChain; the previous inline
+    // order ran the full SSF chain before analytics and failed with
+    // 42P01 relation "analytics.events" does not exist.
+    private static Task ApplyFullMigrationChainAsync(string conn)
+        => IntegrationMigrationChain.ApplyAsync(conn);
 }

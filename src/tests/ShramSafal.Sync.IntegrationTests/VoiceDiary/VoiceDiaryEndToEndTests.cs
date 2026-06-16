@@ -205,51 +205,11 @@ public sealed class VoiceDiaryEndToEndTests : IAsyncLifetime
         }
     }
 
-    private static async Task ApplyFullMigrationChainAsync(string conn)
-    {
-        var userOpts = new DbContextOptionsBuilder<UserDbContext>().UseNpgsql(conn).Options;
-        await using (var user = new UserDbContext(userOpts))
-        {
-            await user.Database.MigrateAsync();
-        }
-
-        var accountsOpts = new DbContextOptionsBuilder<AccountsDbContext>().UseNpgsql(conn).Options;
-        await using (var accounts = new AccountsDbContext(accountsOpts))
-        {
-            await accounts.Database.MigrateAsync();
-        }
-
-        // Apply the ENTIRE ShramSafal chain — voice_clips_retained
-        // lands as the latest migration so we need it on the DB before
-        // the persist flow runs.
-        var ssfOpts = new DbContextOptionsBuilder<ShramSafalDbContext>()
-            .UseNpgsql(conn).Options;
-        await using (var ssfPhaseA = new ShramSafalDbContext(ssfOpts))
-        {
-            var migrator = ssfPhaseA.Database.GetService<IMigrator>();
-            await migrator.MigrateAsync("20260421075311_AlterCostEntriesAddJobCardId");
-        }
-
-        var analyticsOpts = new DbContextOptionsBuilder<AnalyticsDbContext>()
-            .UseNpgsql(conn, npgsql =>
-            {
-                npgsql.MigrationsAssembly(
-                    typeof(AgriSync.Bootstrapper.Migrations.Analytics.AnalyticsRewrite).Assembly.FullName);
-                npgsql.MigrationsHistoryTable(
-                    tableName: "__analytics_migrations_history",
-                    schema: AnalyticsDbContext.SchemaName);
-            })
-            .Options;
-        await using (var analytics = new AnalyticsDbContext(analyticsOpts))
-        {
-            await analytics.Database.MigrateAsync();
-        }
-
-        await using (var ssfFull = new ShramSafalDbContext(ssfOpts))
-        {
-            await ssfFull.Database.MigrateAsync();
-        }
-    }
+    // Correct 4-phase order lives in IntegrationMigrationChain. The previous inline
+    // order ran analytics-full before the SSF Phase-B chain, so DwcV2Matviews hit
+    // missing ssf.workers (and the full chain hit analytics.events ordering).
+    private static Task ApplyFullMigrationChainAsync(string conn)
+        => IntegrationMigrationChain.ApplyAsync(conn);
 
     private sealed class TestClock(DateTime fixedUtc) : IClock
     {
