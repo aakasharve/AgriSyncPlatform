@@ -273,3 +273,5 @@ baseline_send_err.txt
 # Agent scratch at root
 .codex/
 /AGENTS.md
+*.bak
+*.stale-bak
