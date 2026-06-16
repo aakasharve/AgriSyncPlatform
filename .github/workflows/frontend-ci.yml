@@ -39,6 +39,11 @@ jobs:
         run: npm ci
         working-directory: src/clients/mobile-web
 
+      # DWC v2 §2.7 — fail the build if the C# EventVocabulary registry
+      # and the mobile-web Zod EventSchemas registry drift apart. The
+      # script is dependency-free node, so it runs before the more
+      # expensive tsc / build steps. Lives at .github/scripts/ because
+      # the repo's /scripts/ is gitignored for personal scratch use.
       - name: Event vocabulary parity (C# <-> TS)
         run: node .github/scripts/check-event-vocabulary-parity.mjs
 
@@ -54,6 +59,12 @@ jobs:
         run: npm run build
         working-directory: src/clients/mobile-web
 
+      # DATA_PRINCIPLE_SPINE sub-phase 05.1.4 — fail the build if the
+      # browser-direct Gemini URL leaks into the production bundle.
+      # CoVeWrapper.ts was rewired to call /shramsafal/ai/cove-reverify
+      # in 05.1.2; vite.config.ts blocks VITE_GEMINI_API_KEY at build
+      # time; this grep is the third defence — it catches code that
+      # hard-codes the host literal regardless of env vars.
       - name: Grep dist/ for direct Gemini URLs
         run: |
           if grep -RIn "generativelanguage.googleapis.com" src/clients/mobile-web/dist/; then
