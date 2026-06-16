@@ -1,0 +1,127 @@
+name: frontend-ci
+
+on:
+  push:
+    branches: [main, akash_edits]
+    paths:
+      - 'src/clients/**'
+      - 'sync-contract/**'
+      - '.github/workflows/frontend-ci.yml'
+  pull_request:
+    branches: [main, akash_edits]
+    paths:
+      - 'src/clients/**'
+      - 'sync-contract/**'
+      - '.github/workflows/frontend-ci.yml'
+  workflow_dispatch:
+
+jobs:
+  mobile-web:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: |
+            src/clients/mobile-web/package-lock.json
+            sync-contract/package-lock.json
+
+      - name: Install sync-contract deps
+        run: npm ci
+        working-directory: sync-contract
+
+      - name: Install mobile-web deps
+        run: npm ci
+        working-directory: src/clients/mobile-web
+
+      - name: Event vocabulary parity (C# <-> TS)
+        run: node .github/scripts/check-event-vocabulary-parity.mjs
+
+      - name: TypeScript check
+        run: npx tsc --noEmit
+        working-directory: src/clients/mobile-web
+
+      - name: Unit tests (vitest)
+        run: npm test
+        working-directory: src/clients/mobile-web
+
+      - name: Build
+        run: npm run build
+        working-directory: src/clients/mobile-web
+
+      - name: Grep dist/ for direct Gemini URLs
+        run: |
+          if grep -RIn "generativelanguage.googleapis.com" src/clients/mobile-web/dist/; then
+            echo "FAIL: direct Gemini URL leaked into production bundle. AI calls must route through the backend (ADR-DS-004)."
+            exit 1
+          fi
+          echo "OK: no direct Gemini URLs in dist/."
+
+  marketing-web:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: src/clients/marketing-web
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: src/clients/marketing-web/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Astro typecheck
+        run: npm run typecheck
+
+      - name: Build
+        run: npm run build
+
+  frontend-arch-test:
+    name: Frontend Layer Tests
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: src/clients/mobile-web/package-lock.json
+
+      - name: Install deps
+        run: npm ci
+        working-directory: src/clients/mobile-web
+
+      - name: Frontend layer violation scan
+        run: |
+          node -e "
+          const { execSync } = require('child_process');
+          try {
+            const result = execSync(
+              'grep -rn --include=*.ts --include=*.tsx ' +
+              '-E \"from [^;]*(infrastructure|/pages/|/features/)\" ' +
+              'src/clients/mobile-web/src/domain/ || true'
+            ).toString();
+            if (result.trim()) {
+              console.error('Frontend layer violation detected:');
+              console.error(result);
+              process.exit(1);
+            }
+            console.log('Frontend layer check: OK');
+          } catch(e) {
+            console.error(e.message);
+            process.exit(1);
+          }
+          "
