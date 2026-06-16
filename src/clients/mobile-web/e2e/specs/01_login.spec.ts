@@ -2,7 +2,7 @@
  * Spec 01 — Login
  *
  * Tests the password-form (LoginPage.tsx "legacy" flow) rather than the OTP flow.
- * Rationale: the seeded Ramu user (phone 9999999999 / password ramu123) was
+ * Rationale: the seeded Purvesh user (phone 8888888888 / password Testuser@123) was
  * created with a hashed password and can be authenticated via the password form
  * directly. The OTP flow sends a real SMS code and cannot be exercised headlessly
  * without a stub. The password form is the reliable path for CI.
@@ -13,16 +13,16 @@ import { loginViaPassword } from '../fixtures/loginHelper';
 
 test.describe('Login', () => {
     test('login with seeded user lands on home', async ({ page }) => {
-        await resetAndSeed('ramu');
+        await resetAndSeed('purvesh-demo');
 
-        await loginViaPassword(page, '9999999999', 'ramu123');
+        await loginViaPassword(page, '8888888888', 'Testuser@123');
 
         // Assert we are no longer on the /login route
         await expect(page).not.toHaveURL(/login/i);
     });
 
     test('invalid password shows inline error and stays on login', async ({ page }) => {
-        await resetAndSeed('ramu');
+        await resetAndSeed('purvesh-demo');
 
         // Negative test — cannot use loginViaPassword (it asserts success).
         // Inline the toggle-to-password flow with a WRONG password.
@@ -34,7 +34,7 @@ test.describe('Login', () => {
 
         const phoneInput = page.locator('#auth-phone');
         await phoneInput.waitFor({ timeout: 10_000 });
-        await phoneInput.fill('9999999999');
+        await phoneInput.fill('8888888888');
 
         const passwordInput = page.locator('#auth-password');
         await passwordInput.waitFor({ timeout: 10_000 });

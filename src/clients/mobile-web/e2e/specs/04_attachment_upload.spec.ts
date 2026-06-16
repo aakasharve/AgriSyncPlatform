@@ -42,12 +42,12 @@ function base64ToBuffer(b64: string): Buffer {
 
 test.describe('Attachment upload state machine', () => {
     test('selecting a receipt image queues attachment as pending, then worker uploads it', async ({ page }) => {
-        await resetAndSeed('ramu');
+        await resetAndSeed('purvesh-demo');
 
         // --- Login ---
         // loginViaPassword also waits for home-greeting, which ensures the initial
         // sync pull has run (shramsafal_last_pull_payload is written; farmId available).
-        await loginViaPassword(page, '9999999999', 'ramu123');
+        await loginViaPassword(page, '8888888888', 'Testuser@123');
 
         // --- Navigate to Procurement via bottom nav (state-machine routing — NOT page.goto) ---
         const procurementNavBtn = page.getByTestId('procurement-nav-btn');

@@ -9,9 +9,12 @@ export interface E2ESeed {
   farmId: string;
 }
 
-export type SeedFixture = 'ramu' | 'admin_two_orgs';
+// Single canonical test user is Purvesh (8888888888 / Testuser@123). The legacy
+// Ramu fixture was retired — do not reintroduce it. `admin_two_orgs` remains for
+// the admin-dashboard org fixtures (a distinct, non-login concern).
+export type SeedFixture = 'purvesh-demo' | 'admin_two_orgs';
 
-export async function resetAndSeed(fixture: SeedFixture = 'ramu'): Promise<E2ESeed> {
+export async function resetAndSeed(fixture: SeedFixture = 'purvesh-demo'): Promise<E2ESeed> {
   const ctx = await request.newContext();
   const reset = await ctx.post(`${BACKEND_URL}/__e2e/reset`);
   if (!reset.ok()) {

@@ -19,7 +19,7 @@ import { selectFirstPlotLogContext } from '../fixtures/logContextHelper';
 
 test.describe('Sync retry after rejected mutation', () => {
     test('rejected mutation surfaces in OfflineConflictPage and can be retried after fix', async ({ page }) => {
-        await resetAndSeed('ramu');
+        await resetAndSeed('purvesh-demo');
 
         // Arm the push-rejection toggle BEFORE logging in
         await setFailPushes('CLIENT_TOO_OLD');
@@ -29,7 +29,7 @@ test.describe('Sync retry after rejected mutation', () => {
         // enqueueLogsForSync to skip the log entirely. With nothing in the
         // queue there is no /sync/push call, no rejection, and the
         // conflict-badge never renders. See logContextHelper docstring.
-        await loginViaPassword(page, '9999999999', 'ramu123');
+        await loginViaPassword(page, '8888888888', 'Testuser@123');
         await selectFirstPlotLogContext(page);
 
         // --- Capture a log (online, but pushes will be rejected by server) ---

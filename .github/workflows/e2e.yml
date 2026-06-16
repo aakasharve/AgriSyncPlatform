@@ -79,8 +79,16 @@ jobs:
       ALLOW_PRODUCTION_STARTUP_MIGRATIONS: "true"
       # E2E seed endpoints and fail-push toggle.
       ALLOW_E2E_SEED: "true"
-      # Seed the canonical Ramu demo user so login specs can authenticate.
-      SEED_RAMU_DEMO: "true"
+      # Single canonical test user is Purvesh (8888888888 / Testuser@123). Each
+      # spec seeds it via resetAndSeed('purvesh-demo'); no startup Ramu seed.
+      # The /__e2e/reset + /__e2e/seed endpoints delegate to TestFixtureService,
+      # which is gated on these flags (NOT the legacy ALLOW_E2E_SEED). Without
+      # them every spec's resetAndSeed() fails with 403 test_fixtures_disabled.
+      # Non-Production env (ASPNETCORE_ENVIRONMENT=CI) + these flags = enabled.
+      # The default reset fixture (purvesh-demo) clears only deterministic ids,
+      # so no owner-account allowlist is required here.
+      TestFixtures__AllowRuntimeReset: "true"
+      TestFixtures__AllowRuntimeSeed: "true"
       # Allow Playwright's preview server (Vite 4173) through CORS.
       Cors__AllowedOrigins__0: "http://localhost:4173"
       Cors__AllowedOrigins__1: "http://localhost:5173"

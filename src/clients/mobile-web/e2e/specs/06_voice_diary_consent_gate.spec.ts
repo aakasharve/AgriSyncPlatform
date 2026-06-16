@@ -6,7 +6,7 @@
  * Verifies the full FullHistoryJournal consent lifecycle from the Farmer's
  * perspective:
  *
- *   1. Launch the app and log in (Ramu fixture).
+ *   1. Launch the app and log in (Purvesh fixture).
  *   2. Open Settings via the AppHeader Settings button.
  *   3. Toggle `VoiceRetainedConsentToggle` ON — the first-grant attestation
  *      banner (`VoiceRetainedFirstGrantBanner`) opens; click "I agree" to
@@ -56,8 +56,8 @@ import { test, expect, type Page } from '@playwright/test';
 import { resetAndSeed } from '../fixtures/seed.api';
 import { loginViaPassword } from '../fixtures/loginHelper';
 
-const RAMU_PHONE = '9999999999';
-const RAMU_PASSWORD = 'ramu123';
+const PURVESH_PHONE = '8888888888';
+const PURVESH_PASSWORD = 'Testuser@123';
 
 const BACKEND_URL = process.env.E2E_API_URL ?? 'http://localhost:5000';
 
@@ -197,10 +197,10 @@ async function openVoiceDiary(page: Page): Promise<void> {
 
 test.describe('Voice Diary consent gate @persona:Farmer', () => {
     test('grant → record → diary shows clip; revoke → persist fails with ConsentRequired @persona:Farmer', async ({ page }) => {
-        await resetAndSeed('ramu');
+        await resetAndSeed('purvesh-demo');
 
         // --- 1. Launch + login ------------------------------------------
-        await loginViaPassword(page, RAMU_PHONE, RAMU_PASSWORD);
+        await loginViaPassword(page, PURVESH_PHONE, PURVESH_PASSWORD);
 
         // --- 2. Navigate to Settings ------------------------------------
         await openSettings(page);

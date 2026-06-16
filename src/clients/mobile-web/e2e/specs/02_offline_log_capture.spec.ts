@@ -27,10 +27,10 @@ import { selectFirstPlotLogContext } from '../fixtures/logContextHelper';
 
 test.describe('Offline log capture', () => {
     test('user can log a daily activity while offline; it queues and syncs on reconnect', async ({ page }) => {
-        await resetAndSeed('ramu');
+        await resetAndSeed('purvesh-demo');
 
         // --- Login + pick a real plot so sync mutations actually queue ---
-        await loginViaPassword(page, '9999999999', 'ramu123');
+        await loginViaPassword(page, '8888888888', 'Testuser@123');
         await selectFirstPlotLogContext(page);
 
         // --- Go offline ---

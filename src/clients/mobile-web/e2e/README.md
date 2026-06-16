@@ -19,8 +19,10 @@ What is in tree right now:
 ## How to run (once specs land)
 
 ```bash
-# 1. Start the backend with the E2E flag.
-ALLOW_E2E_SEED=true dotnet run --project src/AgriSync.Bootstrapper --urls http://localhost:5000
+# 1. Start the backend with the E2E flags. The /__e2e/reset + /__e2e/seed
+#    endpoints delegate to TestFixtureService, gated on the TestFixtures flags.
+ALLOW_E2E_SEED=true TestFixtures__AllowRuntimeReset=true TestFixtures__AllowRuntimeSeed=true \
+  dotnet run --project src/AgriSync.Bootstrapper --urls http://localhost:5000
 
 # 2. Install browsers (first time only).
 cd src/clients/mobile-web
@@ -46,7 +48,7 @@ When `_COFOUNDER` ADR 0018 went into effect (2026-05-08), high-trust specs (`tru
 
 Tag every relevant `test()` or `test.describe()` block with the persona it walks through. Allowed values mirror the spec template:
 
-- `@persona:Farmer`   — low-literacy primary user (Ramu Patil profile)
+- `@persona:Farmer`   — low-literacy primary user (Purvesh Arve — 8888888888 / Testuser@123)
 - `@persona:Mukadam`  — labour overseer / supervisor profile
 - `@persona:Worker`   — voice-only worker profile
 - `@persona:Owner`    — review / approval profile
