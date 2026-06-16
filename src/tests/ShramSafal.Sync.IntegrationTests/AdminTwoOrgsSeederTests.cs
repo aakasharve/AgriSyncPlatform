@@ -51,18 +51,21 @@ public sealed class AdminTwoOrgsSeederTests
         using var doc = JsonDocument.Parse(body);
         var root = doc.RootElement;
 
-        Assert.True(root.TryGetProperty("userId", out var userId), "response must have userId");
-        Assert.True(root.TryGetProperty("phone", out var phone), "response must have phone");
-        Assert.True(root.TryGetProperty("password", out var password), "response must have password");
-        Assert.True(root.TryGetProperty("farmId", out var farmId), "response must have farmId");
-        Assert.True(root.TryGetProperty("fixture", out var fixture), "response must have fixture");
-        Assert.True(root.TryGetProperty("summary", out _), "response must have summary");
+        // The /__e2e/seed endpoint delegates to TestFixtureService and returns a
+        // { seeded, result: { fixture, action, summary } } envelope. The seeder's
+        // identity fields (userId/phone/password/farmId) are carried inside the
+        // result.summary string. Entity-level shape is asserted in the DbState test.
+        Assert.True(root.GetProperty("seeded").GetBoolean(), "response must report seeded=true");
 
-        Assert.Equal(E2eFixtureSeeder.AdminUserIdValue.ToString(), userId.GetString());
-        Assert.Equal("7777777777", phone.GetString());
-        Assert.Equal("admin123", password.GetString());
-        Assert.Equal(E2eFixtureSeeder.FarmAId.ToString(), farmId.GetString());
-        Assert.Equal("admin_two_orgs", fixture.GetString());
+        var result = root.GetProperty("result");
+        Assert.Equal("admin-two-orgs", result.GetProperty("fixture").GetString());
+        Assert.Equal("seed", result.GetProperty("action").GetString());
+
+        var summary = result.GetProperty("summary").GetString() ?? "";
+        Assert.Contains(E2eFixtureSeeder.AdminUserIdValue.ToString(), summary);
+        Assert.Contains("7777777777", summary);
+        Assert.Contains("admin123", summary);
+        Assert.Contains(E2eFixtureSeeder.FarmAId.ToString(), summary);
     }
 
     [Fact]
@@ -167,10 +170,10 @@ public sealed class AdminTwoOrgsSeederTests
             s => s.Id == E2eFixtureSeeder.FarmScopeAId || s.Id == E2eFixtureSeeder.FarmScopeBId);
         Assert.Equal(2, scopeCount);
 
-        // Summary must say "already seeded"
+        // Summary must say "already seeded" (now nested under result.summary)
         var body2 = await r2.Content.ReadAsStringAsync();
         using var doc2 = JsonDocument.Parse(body2);
-        var summary2 = doc2.RootElement.GetProperty("summary").GetString() ?? "";
+        var summary2 = doc2.RootElement.GetProperty("result").GetProperty("summary").GetString() ?? "";
         Assert.Contains("already seeded", summary2, StringComparison.OrdinalIgnoreCase);
     }
 
@@ -260,6 +263,17 @@ public sealed class AdminTwoOrgsSeederTests
             // Register E2e harness services (toggle + fixture seeder)
             builder.Services.AddSingleton<E2eFailPushesToggle>();
             builder.Services.AddTransient<E2eFixtureSeeder>();
+
+            // The /__e2e endpoints delegate to TestFixtureService; register it (+
+            // options with seeding enabled) so minimal-API resolves it from DI
+            // instead of binding it from the request body (which threw a
+            // System.Text.Json ctor-bind error). Spec: ci-red-to-green-handover-2026-06-16.
+            builder.Services.Configure<AgriSync.Bootstrapper.Infrastructure.TestFixtureOptions>(o =>
+            {
+                o.AllowRuntimeSeed = true;
+                o.AllowRuntimeReset = true;
+            });
+            builder.Services.AddTransient<AgriSync.Bootstrapper.Infrastructure.TestFixtureService>();
 
             var app = builder.Build();
             // Map only the E2e endpoints — no auth middleware required since
