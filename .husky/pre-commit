@@ -62,5 +62,25 @@ if [ -x "$TEST_SCOPE_CHECK" ]; then
   fi
 fi
 
+# 6. Release signing keystore warning (non-blocking)
+#    The release keystore is a sensitive credential. PRODUCTION signing uses the
+#    GitHub secret KEYSTORE_BASE64 (android-release.yml overwrites the committed
+#    file at build time). Changing the signing key incorrectly can break Play
+#    Store updates, so never let a keystore change commit silently.
+KEYSTORE_CHANGED=$(git diff --cached --name-only --diff-filter=d | grep -E '\.(keystore|jks)$' || true)
+if [ -n "$KEYSTORE_CHANGED" ]; then
+  echo "" >&2
+  echo "  ============================================================" >&2
+  echo "  WARNING: committing a SIGNING KEYSTORE change:" >&2
+  echo "$KEYSTORE_CHANGED" | sed 's/^/       /' >&2
+  echo "  ------------------------------------------------------------" >&2
+  echo "  The release signing key must stay consistent or Play Store" >&2
+  echo "  updates can break. Production signing uses the GitHub secret" >&2
+  echo "  KEYSTORE_BASE64 - if this change is intentional, update that" >&2
+  echo "  secret to match. (Warning only, not a block.)" >&2
+  echo "  ============================================================" >&2
+  echo "" >&2
+fi
+
 echo "[pre-commit] All checks passed."
 exit 0
