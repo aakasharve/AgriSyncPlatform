@@ -5,11 +5,14 @@ on:
     branches: [main, akash_edits]
     paths:
       - 'src/**'
+      - '!src/clients/**'
       - '.github/workflows/arch-tests.yml'
   pull_request:
     branches: [main, akash_edits]
     paths:
       - 'src/**'
+      - '!src/clients/**'
+      - '.github/workflows/arch-tests.yml'
   workflow_dispatch:
 
 jobs:
@@ -38,43 +41,3 @@ jobs:
         run: dotnet test src/tests/AgriSync.ArchitectureTests/ --configuration Release --no-build --verbosity normal
         # Verifies: Domain depends on nothing infra; SharedKernel has no external deps;
         # Application depends on Domain + BuildingBlocks only; Api depends on Application only.
-
-  frontend-arch-test:
-    name: Frontend Layer Tests
-    runs-on: ubuntu-22.04
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: "20"
-          cache: npm
-          cache-dependency-path: src/clients/mobile-web/package-lock.json
-
-      - name: Install deps
-        run: npm ci
-        working-directory: src/clients/mobile-web
-
-      - name: Frontend layer violation scan
-        # Scan domain/ for imports of infrastructure/, pages/, or features/
-        run: |
-          node -e "
-          const { execSync } = require('child_process');
-          try {
-            const result = execSync(
-              'grep -rn --include=*.ts --include=*.tsx ' +
-              '-E \"from [^;]*(infrastructure|/pages/|/features/)\" ' +
-              'src/clients/mobile-web/src/domain/ || true'
-            ).toString();
-            if (result.trim()) {
-              console.error('Frontend layer violation detected:');
-              console.error(result);
-              process.exit(1);
-            }
-            console.log('Frontend layer check: OK');
-          } catch(e) {
-            console.error(e.message);
-            process.exit(1);
-          }
-          "

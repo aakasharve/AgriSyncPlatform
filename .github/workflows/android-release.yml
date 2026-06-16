@@ -8,14 +8,8 @@ on:
         required: false
         default: 'none'
   push:
-    branches: [akash_edits, main]
-    paths:
-      - 'src/clients/mobile-web/src/**'
-      - 'src/clients/mobile-web/public/**'
-      - 'src/clients/mobile-web/package.json'
-      - 'src/clients/mobile-web/capacitor.config.ts'
-      - 'src/clients/mobile-web/android/app/build.gradle'
-      - '.github/workflows/android-release.yml'
+    tags:
+      - 'v*'
 
 jobs:
   build-apk:
