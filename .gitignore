@@ -84,6 +84,7 @@ src/clients/mobile-web/ios/
 
 # Python virtual environments
 venv*/
+.venv/
 
 # ===========================================
 # §4  IDE & OS
