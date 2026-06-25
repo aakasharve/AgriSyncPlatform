@@ -79,6 +79,11 @@ node_modules/
 # Capacitor native — ios stays ignored; android is tracked (granular exclusions in mobile-web/.gitignore)
 src/clients/mobile-web/ios/
 
+# WIP client rewrite — DO NOT COMMIT until finalized. Carries node_modules/dist/
+# /*.log; a broad `git add .` would otherwise stage the whole half-finished site.
+# (Locked 2026-06-25 — corrects the prior assumption that it was already ignored.)
+src/clients/Static_V2/
+
 # Astro generated types (rebuilt on `astro dev`)
 **/.astro/
 
