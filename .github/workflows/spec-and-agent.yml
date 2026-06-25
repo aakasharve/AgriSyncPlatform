@@ -72,12 +72,16 @@ jobs:
             echo "::warning::  authoring-agent: <implementor-backend|implementor-frontend|implementor-ai>"
           fi
 
-          # Wave 2: block on main, advisory on akash_edits
+          # ADVISORY ONLY. The original two-tier design (advisory on the
+          # akash_edits dev branch, blocking on main) collapsed when
+          # akash_edits was renamed to main — leaving every PR to main
+          # blocked, including legitimate hygiene chores, even though this
+          # check is not a required status check. The single REQUIRED merge
+          # gate is `gate` (CI Gate). This stays a non-blocking reminder so
+          # that "red means red". To re-enforce specs later, make this a
+          # required check deliberately and restore the exit 1 below.
           if [ "$FAILED" = true ]; then
-            if [ "${{ github.base_ref }}" = "main" ]; then
-              echo "::error::Spec/agent gate BLOCKED — PR targeting main must have spec: <id> and authoring-agent: <name>"
-              exit 1
-            fi
+            echo "::warning::Spec/agent advisory — a PR to main should carry 'spec: <id>' and 'authoring-agent: <name>'. Not blocking."
           fi
 
           exit 0
