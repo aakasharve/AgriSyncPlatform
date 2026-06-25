@@ -4,9 +4,9 @@
  *
  * Sub-plan 04 Task 7 — extracted from SyncPullReconciler.ts.
  *
- * Purvesh-specific demo data fillers. Triggered only when the owner's
- * display name matches the demo persona — production sync paths should
- * never see these defaults applied.
+ * Purvesh-specific demo data fillers. Gated on the demo owner's deterministic
+ * USER ID (never the display name) — a real farmer named "Purvesh" must never
+ * receive these defaults. Production sync paths for real users never match.
  *
  * This module is isolated so the reconciler's main path does not have to
  * carry demo concerns inline.
@@ -15,8 +15,19 @@
 import { VerificationStatus, type CropProfile, type FarmOperator, type FarmerProfile, type Plot } from '../../../../types';
 import { normalizeMojibakeText } from '../../../../shared/utils/textEncoding';
 
-export function isPurveshDemoOwner(name: string): boolean {
-    return name.trim().toLowerCase().includes('purvesh');
+/**
+ * Deterministic owner user id of the seeded Purvesh demo farm — equals
+ * `CreateDeterministicGuid("purvesh-demo-v2:user:purvesh")` in
+ * PurveshDemoSeeder.cs (SHA-256 of the seed key → RFC-4122-style GUID).
+ * Matching on this id — not the display name — is what stops a real user
+ * named "Purvesh" from being injected with demo data. If the seeder's
+ * SeedVersion ever changes, recompute this; purveshDemoEnrichment.test.ts
+ * pins the value so a drift fails CI loudly.
+ */
+export const PURVESH_DEMO_OWNER_USER_ID = 'fa420ebb-fd60-5f5a-9ded-a6ad570bbfe7';
+
+export function isPurveshDemoOwner(ownerUserId: string | undefined | null): boolean {
+    return ownerUserId === PURVESH_DEMO_OWNER_USER_ID;
 }
 
 export function buildPurveshDemoProfileDefaults(receivedAtUtc: string): Partial<FarmerProfile> {
@@ -97,7 +108,7 @@ export function fillMissingProfileDetails(
     ownerOperator: FarmOperator,
     receivedAtUtc: string
 ): Partial<FarmerProfile> | null {
-    if (!isPurveshDemoOwner(ownerOperator.name)) {
+    if (!isPurveshDemoOwner(ownerOperator.id)) {
         return null;
     }
 
@@ -108,8 +119,8 @@ export function fillMissingProfileDetails(
     return buildPurveshDemoProfileDefaults(receivedAtUtc);
 }
 
-export function enrichPurveshDemoCrops(crops: CropProfile[], profile: FarmerProfile | null): CropProfile[] {
-    if (!profile || !isPurveshDemoOwner(profile.name)) {
+export function enrichPurveshDemoCrops(crops: CropProfile[], ownerUserId: string | undefined | null): CropProfile[] {
+    if (!isPurveshDemoOwner(ownerUserId)) {
         return crops;
     }
 
@@ -147,16 +158,6 @@ export function enrichPurveshDemoCrops(crops: CropProfile[], profile: FarmerProf
                 return;
             }
 
-            if (plotName.includes('P1')) {
-                mergeInfrastructure({
-                    irrigationMethod: 'Drip',
-                    linkedMotorId: 'motor_solar_10',
-                    dripDetails: { pipeSize: '20mm', hasFilter: true, flowRatePerHour: 1500 },
-                    linkedMachineryIds: ['machine_blower', 'machine_sprayer'],
-                });
-                return;
-            }
-
             if (plotName.includes('S1')) {
                 mergeInfrastructure({
                     irrigationMethod: 'Flood',
@@ -170,24 +171,6 @@ export function enrichPurveshDemoCrops(crops: CropProfile[], profile: FarmerProf
                 mergeInfrastructure({
                     irrigationMethod: 'Flood',
                     linkedMotorId: 'motor_cri_5',
-                    linkedMachineryIds: ['machine_tractor'],
-                });
-                return;
-            }
-
-            if (plotName.includes('T1')) {
-                mergeInfrastructure({
-                    irrigationMethod: 'Sprinkler',
-                    linkedMotorId: 'motor_cri_5',
-                    linkedMachineryIds: ['machine_rotavator'],
-                });
-                return;
-            }
-
-            if (plotName.includes('B1')) {
-                mergeInfrastructure({
-                    irrigationMethod: 'Flood',
-                    linkedMotorId: 'motor_diesel_mobile',
                     linkedMachineryIds: ['machine_tractor'],
                 });
             }

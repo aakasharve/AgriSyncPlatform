@@ -97,7 +97,7 @@ export async function reconcileProfileAndCrops(
         payload.farms[0]?.ownerUserId,
         existingProfile,
         receivedAtUtc);
-    const mergedCrops = enrichPurveshDemoCrops([...cropsById.values()], reconciledProfile);
+    const mergedCrops = enrichPurveshDemoCrops([...cropsById.values()], payload.farms[0]?.ownerUserId);
     await cropsRepo.save(mergedCrops);
     if (reconciledProfile) {
         await profileRepo.save(reconciledProfile);
