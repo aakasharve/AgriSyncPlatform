@@ -29,7 +29,8 @@
     <WarningsNotAsErrors>
       $(WarningsNotAsErrors);
       CS0618;
-      NU1901
+      NU1901;
+      NU1903
     </WarningsNotAsErrors>
     <!--
       NU1901 (2026-05-17, spec: data-principle-spine-2026-05-05/05.2):
@@ -41,6 +42,16 @@
       control. AWS has not shipped a 4.x without this transitive yet.
       Re-evaluate quarterly; remove this suppression when AWSSDK.Core
       ships a non-vulnerable 4.x revision.
+    -->
+    <!--
+      NU1903 (2026-06-25): transitive SQLitePCLRaw.lib.e_sqlite3 2.1.11 in the
+      TEST-ONLY project AgriSync.BuildingBlocks.Tests (via EF Core Sqlite 10.0.3,
+      used only for in-memory SQLite tests) carries a newly-published high-severity
+      advisory (GHSA-2m69-gcr7-jv3q). It is NOT in the shipped app — prod uses
+      Postgres. Suppressed-as-error so a freshly-published transitive advisory can't
+      block every merge on the trunk; still visible as a warning + caught by the
+      Dependency Review / CodeQL workflows. FOLLOW-UP: bump EF Core Sqlite or pin a
+      patched SQLitePCLRaw.lib.e_sqlite3, then remove this line.
     -->
   </PropertyGroup>
 </Project>
