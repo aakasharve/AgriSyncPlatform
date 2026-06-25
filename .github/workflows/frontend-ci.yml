@@ -31,8 +31,14 @@ jobs:
             src/clients/mobile-web/package-lock.json
             sync-contract/package-lock.json
 
-      - name: Install sync-contract deps
-        run: npm ci
+      - name: Install sync-contract deps (tolerant — lock omits Linux-only @emnapi optional deps)
+        # `npm ci` requires the lockfile to list every resolved dependency,
+        # but sync-contract's lock (generated on Windows) omits the Linux-only
+        # @emnapi optional deps, so `npm ci` fails EUSAGE on the Ubuntu runner
+        # and turned this check red on EVERY frontend PR. ci-gate.yml already
+        # uses this same tolerant install. FOLLOW-UP: regenerate a
+        # cross-platform lock (include optional deps) and restore `npm ci`.
+        run: npm install --no-audit --no-fund
         working-directory: sync-contract
 
       - name: Install mobile-web deps
