@@ -80,7 +80,13 @@ public sealed class ShramSafalDbContextFactory : IDesignTimeDbContextFactory<Shr
                 "Set it in src/AgriSync.Bootstrapper/appsettings.Development.json or export ConnectionStrings__ShramSafalDb_Migration.");
 
         var options = new DbContextOptionsBuilder<ShramSafalDbContext>()
-            .UseNpgsql(connectionString)
+            // Must match the runtime DI history table (ShramSafal.Infrastructure
+            // DependencyInjection: "__ef_migrations" in the "ssf" schema). Without
+            // this, dotnet-ef tooling reads the default public.__EFMigrationsHistory
+            // and reports phantom "pending" migrations / trips the startup migration guard.
+            .UseNpgsql(
+                connectionString,
+                npgsql => npgsql.MigrationsHistoryTable("__ef_migrations", "ssf"))
             .Options;
 
         return new ShramSafalDbContext(options);

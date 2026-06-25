@@ -80,7 +80,13 @@ public sealed class UserDbContextFactory : IDesignTimeDbContextFactory<UserDbCon
                 "Set it in src/AgriSync.Bootstrapper/appsettings.Development.json or export ConnectionStrings__UserDb_Migration.");
 
         var options = new DbContextOptionsBuilder<UserDbContext>()
-            .UseNpgsql(connectionString)
+            // Must match the runtime DI history table (User.Infrastructure
+            // DependencyInjection: "__ef_migrations" in "public"). Without this,
+            // dotnet-ef tooling reads the default public.__EFMigrationsHistory and
+            // reports phantom "pending" migrations / trips the startup migration guard.
+            .UseNpgsql(
+                connectionString,
+                npgsql => npgsql.MigrationsHistoryTable("__ef_migrations", "public"))
             .Options;
 
         return new UserDbContext(options);
