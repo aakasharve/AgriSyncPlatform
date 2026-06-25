@@ -1,0 +1,99 @@
+name: CI Gate
+
+# Single, always-running merge gate for `main` (the trunk).
+# Branch protection requires the `gate` job below — because it runs on EVERY PR
+# (no path filter), it can never get stuck "pending" the way path-filtered checks do.
+# It runs the reliable, fast tests and EXCLUDES the chronically-broken RequiresDocker
+# integration suite (those are fixed as their own project, then promoted into this gate).
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-gate-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: akash123
+          POSTGRES_DB: postgres
+        ports:
+          - 5433:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      ADMIN_TESTS_ADMIN_ROOT_CONN: "Host=localhost;Port=5433;Database=postgres;Username=postgres;Password=akash123"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+          cache: true
+          cache-dependency-path: |
+            **/*.csproj
+            **/packages.lock.json
+      - run: dotnet restore src/AgriSync.sln
+      - name: Build (warnings = errors)
+        run: dotnet build src/AgriSync.sln --configuration Release --no-restore /warnaserror
+      - name: Wait for Postgres
+        run: |
+          for i in {1..30}; do
+            if pg_isready -h localhost -p 5433 -U postgres; then echo "Postgres ready."; exit 0; fi
+            sleep 2
+          done
+          echo "::error::Postgres did not become ready within 60s."; exit 1
+      - name: Test (excluding RequiresDocker)
+        run: dotnet test src/AgriSync.sln --configuration Release --no-build --filter "Category!=RequiresDocker"
+
+  frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: |
+            src/clients/mobile-web/package-lock.json
+            sync-contract/package-lock.json
+      - run: npm ci
+        working-directory: sync-contract
+      - run: npm ci
+        working-directory: src/clients/mobile-web
+      - name: TypeScript check
+        run: npx tsc --noEmit
+        working-directory: src/clients/mobile-web
+      - name: Unit tests (vitest)
+        run: npm test
+        working-directory: src/clients/mobile-web
+      - name: Build
+        run: npm run build
+        working-directory: src/clients/mobile-web
+
+  gate:
+    name: gate
+    needs: [backend, frontend]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verify all gate jobs passed
+        run: |
+          echo "backend=${{ needs.backend.result }}  frontend=${{ needs.frontend.result }}"
+          if [ "${{ needs.backend.result }}" != "success" ] || [ "${{ needs.frontend.result }}" != "success" ]; then
+            echo "::error::CI Gate failed — not safe to merge."
+            exit 1
+          fi
+          echo "CI Gate green — safe to merge."
