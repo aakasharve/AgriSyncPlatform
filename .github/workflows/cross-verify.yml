@@ -8,7 +8,10 @@ name: cross-verify
 # cofounder-OS cross-verify feature can be re-enabled deliberately.
 # TO RE-ENABLE: (1) add the two API-key repo secrets, (2) add
 # verdict.schema.json, (3) guard the diff size (write to a file + pass via
-# --rawfile to jq instead of inlining), then restore the pull_request trigger.
+# --rawfile to jq instead of inlining), (4) thread `inputs.pr_number` through
+# the steps — they currently read `github.event.pull_request.number`, which is
+# empty on a manual workflow_dispatch run, so the manual path won't target a PR
+# until this is wired, then restore the pull_request trigger.
 on:
   workflow_dispatch:
     inputs:
