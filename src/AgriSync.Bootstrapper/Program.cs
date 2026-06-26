@@ -436,7 +436,6 @@ try
         ShramSafal.Infrastructure.Privacy.ConsentEnforcer>();
     builder.Services.AddScoped<AgriSync.Bootstrapper.Jobs.IWorkerRetentionReader,
         AgriSync.Bootstrapper.Infrastructure.WorkerRetentionReader>();
-    builder.Services.AddTransient<AgriSync.Bootstrapper.Infrastructure.DatabaseSeeder>();
     builder.Services.AddTransient<AgriSync.Bootstrapper.Infrastructure.PurveshDemoSeeder>();
     builder.Services.AddTransient<AgriSync.Bootstrapper.Infrastructure.BlankTestUserSeeder>();
     builder.Services.AddTransient<AgriSync.Bootstrapper.Infrastructure.PlatformAdminBridgeSeeder>();
@@ -898,26 +897,6 @@ static void MapDevelopmentOnlyTestEndpoints(WebApplication app)
     .WithTags("System")
     .AllowAnonymous();
 
-    app.MapPost("/test/seed", async (AgriSync.Bootstrapper.Infrastructure.DatabaseSeeder seeder) =>
-    {
-        try
-        {
-            var result = await seeder.SeedDemoDataAsync();
-            return Results.Ok(new { status = "ok", message = result });
-        }
-        catch (Exception ex)
-        {
-            Log.Error(ex, "Development seed endpoint failed.");
-            return Results.Json(new
-            {
-                status = "error",
-                message = "Demo data seeding failed"
-            }, statusCode: StatusCodes.Status500InternalServerError);
-        }
-    })
-    .WithName("SeedDemoData")
-    .WithTags("System")
-    .AllowAnonymous();
 }
 
 static async Task InitializeApplicationDataAsync(WebApplication app)
@@ -1007,17 +986,6 @@ static async Task InitializeApplicationDataAsync(WebApplication app)
             logger.LogError(ex, "PlatformAdminBridgeSeeder failed — admin login may require manual intervention.");
         }
 
-        var seedRamuDemo = string.Equals(
-            Environment.GetEnvironmentVariable("SEED_RAMU_DEMO"),
-            "true",
-            StringComparison.OrdinalIgnoreCase);
-        if (seedRamuDemo)
-        {
-            var seeder = services.GetRequiredService<AgriSync.Bootstrapper.Infrastructure.DatabaseSeeder>();
-            await seeder.SeedDemoDataAsync();
-            Log.Information("Ramu demo seeding completed.");
-        }
-
         // CEI §4.5 Phase 3 — default Grapes test protocols (idempotent).
         var seedTestProtocolsV1 = string.Equals(
             Environment.GetEnvironmentVariable("SEED_TEST_PROTOCOLS_V1"),
@@ -1070,13 +1038,12 @@ static async Task InitializeApplicationDataAsync(WebApplication app)
         }
 
         Log.Information(
-            "Database initialization completed. Environment: {Environment}, UserSchemaChanged: {UserSchemaChanged}, AccountsSchemaChanged: {AccountsSchemaChanged}, SsfSchemaChanged: {SsfSchemaChanged}, AnalyticsSchemaChanged: {AnalyticsSchemaChanged}, seedRamu: {SeedRamuDemo}, clearPurvesh: {ClearPurveshDemo}, seedPurvesh: {SeedPurveshDemo}",
+            "Database initialization completed. Environment: {Environment}, UserSchemaChanged: {UserSchemaChanged}, AccountsSchemaChanged: {AccountsSchemaChanged}, SsfSchemaChanged: {SsfSchemaChanged}, AnalyticsSchemaChanged: {AnalyticsSchemaChanged}, clearPurvesh: {ClearPurveshDemo}, seedPurvesh: {SeedPurveshDemo}",
             app.Environment.EnvironmentName,
             userSchemaCreated,
             accountsSchemaCreated,
             ssfSchemaCreated,
             analyticsSchemaCreated,
-            seedRamuDemo,
             clearPurveshDemo,
             seedPurveshDemo);
 

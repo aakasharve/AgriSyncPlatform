@@ -54,7 +54,6 @@ ALLOW_PRODUCTION_STARTUP_MIGRATIONS="false"
 ## Seeding
 
 ```bash
-SEED_RAMU_DEMO="false"
 SEED_PURVESH_DEMO="false"
 CLEAR_PURVESH_DEMO="false"
 ```
