@@ -960,6 +960,17 @@ public sealed class PushSyncBatchHandler(
             return MutationExecutionOutcome.Failure("ShramSafal.SyncInvalidPayload", "Invalid payload for create_attachment.");
         }
 
+        // Wire-stability guard for the generated payload swap (T-IGH-02-CS-PAYLOADS).
+        // Same rationale as HandleCreateDailyLogAsync / HandleAddCostEntryAsync: the
+        // generated CreateAttachmentPayload.AttachmentId is non-nullable `Guid` (the
+        // canonical zod schema marks attachmentId required), whereas the old
+        // hand-authored record was `Guid?`. CreateAttachmentHandler does
+        // `command.AttachmentId ?? idGenerator.New()`, so a Guid.Empty (from an
+        // omitted field) would silently create an attachment with an empty id
+        // instead of a server-generated one. Map Empty back to null to preserve
+        // the prior wire behavior exactly.
+        Guid? attachmentId = request.AttachmentId == Guid.Empty ? null : request.AttachmentId;
+
         var isMember = await repository.IsUserMemberOfFarmAsync(request.FarmId, actorUserId, ct);
         if (!isMember)
         {
@@ -974,7 +985,7 @@ public sealed class PushSyncBatchHandler(
                 request.FileName,
                 request.MimeType,
                 actorUserId,
-                request.AttachmentId,
+                attachmentId,
                 actorRole,
                 clientRequestId),
             ct);
