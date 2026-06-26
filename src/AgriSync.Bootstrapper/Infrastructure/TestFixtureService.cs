@@ -25,7 +25,7 @@ public sealed class TestFixtureService(
     ILogger<TestFixtureService> logger)
 {
     private static readonly string[] KnownFixtures =
-        ["blank-test-user", "purvesh-demo", "ramu-demo", "admin-two-orgs"];
+        ["blank-test-user", "purvesh-demo", "admin-two-orgs"];
 
     private readonly TestFixtureOptions _opts = options.Value;
 
@@ -198,8 +198,6 @@ public sealed class TestFixtureService(
             "purvesh-demo" => await scope.ServiceProvider
                 .GetRequiredService<PurveshDemoSeeder>().SeedPurveshDemoAsync(ct),
             "blank-test-user" => await SeedBlankAsync(scope, ct),
-            "ramu-demo" => await scope.ServiceProvider
-                .GetRequiredService<DatabaseSeeder>().SeedDemoDataAsync(),
             "admin-two-orgs" => (await scope.ServiceProvider
                 .GetRequiredService<E2eFixtureSeeder>().SeedAdminTwoOrgsAsync(ct)).ToString() ?? "admin-two-orgs seeded",
             _ => throw new System.ArgumentException($"Unknown fixture '{fixture}'.", nameof(fixture)),
