@@ -10,6 +10,7 @@ using Microsoft.EntityFrameworkCore.Storage;
 using ShramSafal.Application.Abstractions.Sync;
 using ShramSafal.Application.Contracts.Dtos;
 using ShramSafal.Application.Contracts.Sync;
+using ShramSafal.Application.Contracts.Sync.Payloads;
 using ShramSafal.Application.Ports;
 using ShramSafal.Application.UseCases.Attachments.CreateAttachment;
 using ShramSafal.Application.UseCases.Compliance.AcknowledgeSignal;
@@ -467,7 +468,7 @@ public sealed class PushSyncBatchHandler(
                 "create_farm payload contains unsupported fields.");
         }
 
-        var request = DeserializePayload<CreateFarmMutationPayload>(payload);
+        var request = DeserializePayload<CreateFarmPayload>(payload);
         if (request is null || string.IsNullOrWhiteSpace(request.Name))
         {
             return MutationExecutionOutcome.Failure("ShramSafal.SyncInvalidPayload", "Invalid payload for create_farm.");
@@ -499,7 +500,7 @@ public sealed class PushSyncBatchHandler(
                 "create_plot payload contains unsupported fields.");
         }
 
-        var request = DeserializePayload<CreatePlotMutationPayload>(payload);
+        var request = DeserializePayload<CreatePlotPayload>(payload);
         if (request is null)
         {
             return MutationExecutionOutcome.Failure("ShramSafal.SyncInvalidPayload", "Invalid payload for create_plot.");
@@ -539,7 +540,7 @@ public sealed class PushSyncBatchHandler(
                 "create_crop_cycle payload contains unsupported fields.");
         }
 
-        var request = DeserializePayload<CreateCropCycleMutationPayload>(payload);
+        var request = DeserializePayload<CreateCropCyclePayload>(payload);
         if (request is null)
         {
             return MutationExecutionOutcome.Failure("ShramSafal.SyncInvalidPayload", "Invalid payload for create_crop_cycle.");
@@ -584,11 +585,21 @@ public sealed class PushSyncBatchHandler(
                 "create_daily_log payload contains unsupported fields.");
         }
 
-        var request = DeserializePayload<CreateDailyLogMutationPayload>(payload);
+        var request = DeserializePayload<CreateDailyLogPayload>(payload);
         if (request is null)
         {
             return MutationExecutionOutcome.Failure("ShramSafal.SyncInvalidPayload", "Invalid payload for create_daily_log.");
         }
+
+        // Wire-stability guard for the generated payload swap (T-IGH-02-CS-PAYLOADS).
+        // The generated CreateDailyLogPayload.DailyLogId is non-nullable `Guid`
+        // (the canonical zod schema marks dailyLogId required) whereas the old
+        // hand-authored record was `Guid?`. A payload that omits the field now
+        // deserializes to Guid.Empty instead of null. CreateDailyLogHandler does
+        // `command.DailyLogId ?? idGenerator.New()`, so passing Guid.Empty would
+        // silently create a log with an empty id instead of a server-generated
+        // one. Map Empty back to null to preserve the prior wire behavior exactly.
+        Guid? dailyLogId = request.DailyLogId == Guid.Empty ? null : request.DailyLogId;
 
         var isMember = await repository.IsUserMemberOfFarmAsync(request.FarmId, actorUserId, ct);
         if (!isMember)
@@ -611,7 +622,7 @@ public sealed class PushSyncBatchHandler(
                 Location: ToLocationSnapshot(request.Location),
                 DeviceId: deviceId,
                 ClientRequestId: clientRequestId,
-                DailyLogId: request.DailyLogId,
+                DailyLogId: dailyLogId,
                 ActorRole: actorRole,
                 SourceAiJobId: null,
                 ClientAppVersion: string.IsNullOrWhiteSpace(appVersion) ? "unknown" : appVersion),
@@ -634,7 +645,7 @@ public sealed class PushSyncBatchHandler(
                 "add_log_task payload contains unsupported fields.");
         }
 
-        var request = DeserializePayload<AddLogTaskMutationPayload>(payload);
+        var request = DeserializePayload<AddLogTaskPayload>(payload);
         if (request is null)
         {
             return MutationExecutionOutcome.Failure("ShramSafal.SyncInvalidPayload", "Invalid payload for add_log_task.");
@@ -681,7 +692,7 @@ public sealed class PushSyncBatchHandler(
                 "verify_log payload contains unsupported fields.");
         }
 
-        var request = DeserializePayload<VerifyLogMutationPayload>(payload);
+        var request = DeserializePayload<VerifyLogPayload>(payload);
         if (request is null)
         {
             return MutationExecutionOutcome.Failure("ShramSafal.SyncInvalidPayload", "Invalid payload for verify_log.");
@@ -735,11 +746,22 @@ public sealed class PushSyncBatchHandler(
                 "add_cost_entry payload contains unsupported fields.");
         }
 
-        var request = DeserializePayload<AddCostEntryMutationPayload>(payload);
+        var request = DeserializePayload<AddCostEntryPayload>(payload);
         if (request is null)
         {
             return MutationExecutionOutcome.Failure("ShramSafal.SyncInvalidPayload", "Invalid payload for add_cost_entry.");
         }
+
+        // Wire-stability guard for the generated payload swap (T-IGH-02-CS-PAYLOADS).
+        // Same rationale as HandleCreateDailyLogAsync: the generated
+        // AddCostEntryPayload.CostEntryId is non-nullable `Guid` (the canonical
+        // zod schema marks costEntryId required), whereas the old hand-authored
+        // record was `Guid?`. AddCostEntryHandler does
+        // `command.CostEntryId ?? idGenerator.New()`, so a Guid.Empty (from an
+        // omitted field) would silently create a cost entry with an empty id
+        // instead of a server-generated one. Map Empty back to null to preserve
+        // the prior wire behavior exactly.
+        Guid? costEntryId = request.CostEntryId == Guid.Empty ? null : request.CostEntryId;
 
         var isMember = await repository.IsUserMemberOfFarmAsync(request.FarmId, actorUserId, ct);
         if (!isMember)
@@ -762,7 +784,7 @@ public sealed class PushSyncBatchHandler(
                 EntryDate: request.EntryDate,
                 CreatedByUserId: actorUserId,
                 Location: ToLocationSnapshot(request.Location),
-                CostEntryId: request.CostEntryId,
+                CostEntryId: costEntryId,
                 ActorRole: actorRole,
                 ClientCommandId: clientRequestId,
                 SourceAiJobId: null,
@@ -786,7 +808,7 @@ public sealed class PushSyncBatchHandler(
                 "allocate_global_expense payload contains unsupported fields.");
         }
 
-        var request = DeserializePayload<AllocateGlobalExpenseMutationPayload>(payload);
+        var request = DeserializePayload<AllocateGlobalExpensePayload>(payload);
         if (request is null || request.CostEntryId == Guid.Empty || string.IsNullOrWhiteSpace(request.AllocationBasis))
         {
             return MutationExecutionOutcome.Failure("ShramSafal.SyncInvalidPayload", "Invalid payload for allocate_global_expense.");
@@ -810,7 +832,7 @@ public sealed class PushSyncBatchHandler(
         return ToOutcome(result);
     }
 
-    private static LocationSnapshot? ToLocationSnapshot(LocationMutationPayload? payload)
+    private static LocationSnapshot? ToLocationSnapshot(LocationItem? payload)
     {
         if (payload is null)
         {
@@ -843,7 +865,7 @@ public sealed class PushSyncBatchHandler(
                 "correct_cost_entry payload contains unsupported fields.");
         }
 
-        var request = DeserializePayload<CorrectCostEntryMutationPayload>(payload);
+        var request = DeserializePayload<CorrectCostEntryPayload>(payload);
         if (request is null)
         {
             return MutationExecutionOutcome.Failure("ShramSafal.SyncInvalidPayload", "Invalid payload for correct_cost_entry.");
@@ -890,7 +912,7 @@ public sealed class PushSyncBatchHandler(
                 "set_price_config payload contains unsupported fields.");
         }
 
-        var request = DeserializePayload<SetPriceConfigMutationPayload>(payload);
+        var request = DeserializePayload<SetPriceConfigPayload>(payload);
         if (request is null)
         {
             return MutationExecutionOutcome.Failure("ShramSafal.SyncInvalidPayload", "Invalid payload for set_price_config.");
@@ -932,7 +954,7 @@ public sealed class PushSyncBatchHandler(
                 "create_attachment payload contains unsupported fields.");
         }
 
-        var request = DeserializePayload<CreateAttachmentMutationPayload>(payload);
+        var request = DeserializePayload<CreateAttachmentPayload>(payload);
         if (request is null)
         {
             return MutationExecutionOutcome.Failure("ShramSafal.SyncInvalidPayload", "Invalid payload for create_attachment.");
@@ -974,7 +996,7 @@ public sealed class PushSyncBatchHandler(
                 "testInstance.collected payload contains unsupported fields.");
         }
 
-        var request = DeserializePayload<RecordTestCollectedMutationPayload>(payload);
+        var request = DeserializePayload<TestInstanceCollectedPayload>(payload);
         if (request is null || request.TestInstanceId == Guid.Empty)
         {
             return MutationExecutionOutcome.Failure(
@@ -1030,7 +1052,7 @@ public sealed class PushSyncBatchHandler(
                 "testInstance.reported payload contains unsupported fields.");
         }
 
-        var request = DeserializePayload<RecordTestResultMutationPayload>(payload);
+        var request = DeserializePayload<TestInstanceReportedPayload>(payload);
         if (request is null ||
             request.TestInstanceId == Guid.Empty ||
             request.Results is null ||
@@ -1250,7 +1272,7 @@ public sealed class PushSyncBatchHandler(
         string actorRole,
         CancellationToken ct)
     {
-        var request = DeserializePayload<ComplianceAcknowledgeMutationPayload>(payload);
+        var request = DeserializePayload<ComplianceAcknowledgePayload>(payload);
         if (request is null || request.SignalId == Guid.Empty)
         {
             return MutationExecutionOutcome.Failure(
@@ -1279,7 +1301,7 @@ public sealed class PushSyncBatchHandler(
         string actorRole,
         CancellationToken ct)
     {
-        var request = DeserializePayload<ComplianceResolveMutationPayload>(payload);
+        var request = DeserializePayload<ComplianceResolvePayload>(payload);
         if (request is null || request.SignalId == Guid.Empty || string.IsNullOrWhiteSpace(request.Note))
         {
             return MutationExecutionOutcome.Failure(
@@ -1307,7 +1329,7 @@ public sealed class PushSyncBatchHandler(
     private async Task<MutationExecutionOutcome> HandleJobCardCreateAsync(
         string clientRequestId, JsonElement payload, Guid actorUserId, string actorRole, CancellationToken ct)
     {
-        var request = DeserializePayload<JobCardCreateMutationPayload>(payload);
+        var request = DeserializePayload<JobCardCreatePayload>(payload);
         if (request is null || request.FarmId == Guid.Empty || request.PlotId == Guid.Empty ||
             request.LineItems is null || request.LineItems.Count == 0)
         {
@@ -1316,13 +1338,27 @@ public sealed class PushSyncBatchHandler(
 
         if (!Enum.TryParse<AppRole>(actorRole, ignoreCase: true, out var role)) role = AppRole.Worker;
 
+        // The generated JobCardCreatePayload exposes line items as the
+        // generator's nested LineItemsItem record; CreateJobCardCommand expects
+        // the application's JobCardLineItemDto. The two shapes are identical
+        // (ActivityType, ExpectedHours, RatePerHourAmount, RatePerHourCurrencyCode,
+        // Notes?), so map field-for-field. Wire-format is unchanged.
+        var lineItems = request.LineItems
+            .Select(li => new JobCardLineItemDto(
+                li.ActivityType,
+                li.ExpectedHours,
+                li.RatePerHourAmount,
+                li.RatePerHourCurrencyCode,
+                li.Notes))
+            .ToList();
+
         var result = await createJobCardHandler.HandleAsync(
             new CreateJobCardCommand(
                 FarmId: new FarmId(request.FarmId),
                 PlotId: request.PlotId,
                 CropCycleId: request.CropCycleId,
                 PlannedDate: request.PlannedDate,
-                LineItems: request.LineItems,
+                LineItems: lineItems,
                 CallerUserId: new UserId(actorUserId),
                 ClientCommandId: clientRequestId),
             ct);
@@ -1332,7 +1368,7 @@ public sealed class PushSyncBatchHandler(
     private async Task<MutationExecutionOutcome> HandleJobCardAssignAsync(
         string clientRequestId, JsonElement payload, Guid actorUserId, string actorRole, CancellationToken ct)
     {
-        var request = DeserializePayload<JobCardAssignMutationPayload>(payload);
+        var request = DeserializePayload<JobCardAssignPayload>(payload);
         if (request is null || request.JobCardId == Guid.Empty || request.WorkerUserId == Guid.Empty)
             return MutationExecutionOutcome.Failure("ShramSafal.SyncInvalidPayload", "Invalid payload for jobcard.assign.");
 
@@ -1349,7 +1385,7 @@ public sealed class PushSyncBatchHandler(
     private async Task<MutationExecutionOutcome> HandleJobCardStartAsync(
         string clientRequestId, JsonElement payload, Guid actorUserId, string actorRole, CancellationToken ct)
     {
-        var request = DeserializePayload<JobCardIdMutationPayload>(payload);
+        var request = DeserializePayload<JobCardStartPayload>(payload);
         if (request is null || request.JobCardId == Guid.Empty)
             return MutationExecutionOutcome.Failure("ShramSafal.SyncInvalidPayload", "Invalid payload for jobcard.start.");
 
@@ -1365,7 +1401,7 @@ public sealed class PushSyncBatchHandler(
     private async Task<MutationExecutionOutcome> HandleJobCardCompleteAsync(
         string clientRequestId, JsonElement payload, Guid actorUserId, string actorRole, CancellationToken ct)
     {
-        var request = DeserializePayload<JobCardCompleteMutationPayload>(payload);
+        var request = DeserializePayload<JobCardCompletePayload>(payload);
         if (request is null || request.JobCardId == Guid.Empty || request.DailyLogId == Guid.Empty)
             return MutationExecutionOutcome.Failure("ShramSafal.SyncInvalidPayload", "Invalid payload for jobcard.complete.");
 
@@ -1382,7 +1418,7 @@ public sealed class PushSyncBatchHandler(
     private async Task<MutationExecutionOutcome> HandleJobCardSettleAsync(
         string clientRequestId, JsonElement payload, Guid actorUserId, string actorRole, string? appVersion, CancellationToken ct)
     {
-        var request = DeserializePayload<JobCardSettleMutationPayload>(payload);
+        var request = DeserializePayload<JobCardSettlePayload>(payload);
         if (request is null || request.JobCardId == Guid.Empty || request.ActualPayoutAmount <= 0 ||
             string.IsNullOrWhiteSpace(request.ActualPayoutCurrencyCode))
         {
@@ -1409,7 +1445,7 @@ public sealed class PushSyncBatchHandler(
     private async Task<MutationExecutionOutcome> HandleJobCardCancelAsync(
         string clientRequestId, JsonElement payload, Guid actorUserId, string actorRole, CancellationToken ct)
     {
-        var request = DeserializePayload<JobCardCancelMutationPayload>(payload);
+        var request = DeserializePayload<JobCardCancelPayload>(payload);
         if (request is null || request.JobCardId == Guid.Empty || string.IsNullOrWhiteSpace(request.Reason))
             return MutationExecutionOutcome.Failure("ShramSafal.SyncInvalidPayload", "Invalid payload for jobcard.cancel.");
 
@@ -1422,9 +1458,6 @@ public sealed class PushSyncBatchHandler(
             ct);
         return ToOutcome(result);
     }
-
-    private sealed record ComplianceAcknowledgeMutationPayload(Guid SignalId);
-    private sealed record ComplianceResolveMutationPayload(Guid SignalId, string? Note);
 
     private static MutationExecutionOutcome ToOutcome<T>(Result<T> result)
     {
@@ -1447,146 +1480,4 @@ public sealed class PushSyncBatchHandler(
         public static MutationExecutionOutcome Failure(string errorCode, string errorMessage) =>
             new(false, null, errorCode, errorMessage);
     }
-
-    private sealed record CreateFarmMutationPayload(Guid? FarmId, string Name, Guid? OwnerUserId);
-
-    private sealed record CreatePlotMutationPayload(Guid? PlotId, Guid FarmId, string Name, decimal AreaInAcres);
-
-    private sealed record CreateCropCycleMutationPayload(
-        Guid? CropCycleId,
-        Guid FarmId,
-        Guid PlotId,
-        string CropName,
-        string Stage,
-        DateOnly StartDate,
-        DateOnly? EndDate);
-
-    private sealed record CreateDailyLogMutationPayload(
-        Guid? DailyLogId,
-        Guid FarmId,
-        Guid PlotId,
-        Guid CropCycleId,
-        Guid? OperatorUserId,
-        DateOnly LogDate,
-        LocationMutationPayload? Location);
-
-    private sealed record AddLogTaskMutationPayload(
-        Guid? LogTaskId,
-        Guid DailyLogId,
-        string ActivityType,
-        string? Notes,
-        DateTime? OccurredAtUtc);
-
-    private sealed record VerifyLogMutationPayload(
-        Guid? VerificationEventId,
-        Guid DailyLogId,
-        string? Status,
-        string? TargetStatus,
-        string? Reason,
-        Guid? VerifiedByUserId);
-
-    private sealed record AddCostEntryMutationPayload(
-        Guid? CostEntryId,
-        Guid FarmId,
-        Guid? PlotId,
-        Guid? CropCycleId,
-        // DATA_PRINCIPLE_SPINE sub-phase 02.5 — renamed from `Category`;
-        // wire-format key is `categoryId` (allow-list updated below).
-        string CategoryId,
-        string Description,
-        decimal Amount,
-        string CurrencyCode,
-        DateOnly EntryDate,
-        Guid? CreatedByUserId,
-        LocationMutationPayload? Location);
-
-    private sealed record CorrectCostEntryMutationPayload(
-        Guid? FinanceCorrectionId,
-        Guid CostEntryId,
-        decimal CorrectedAmount,
-        string CurrencyCode,
-        string Reason,
-        Guid? CorrectedByUserId);
-
-    private sealed record AllocateGlobalExpenseMutationPayload(
-        Guid? DayLedgerId,
-        Guid CostEntryId,
-        string AllocationBasis,
-        IReadOnlyList<AllocateGlobalExpenseMutationAllocationPayload> Allocations,
-        Guid? CreatedByUserId);
-
-    private sealed record AllocateGlobalExpenseMutationAllocationPayload(
-        Guid PlotId,
-        decimal Amount);
-
-    private sealed record SetPriceConfigMutationPayload(
-        Guid? PriceConfigId,
-        string ItemName,
-        decimal UnitPrice,
-        string CurrencyCode,
-        DateOnly EffectiveFrom,
-        int Version,
-        Guid? CreatedByUserId);
-
-    private sealed record CreateAttachmentMutationPayload(
-        Guid? AttachmentId,
-        Guid FarmId,
-        Guid LinkedEntityId,
-        string LinkedEntityType,
-        string FileName,
-        string MimeType,
-        Guid? CreatedByUserId);
-
-    private sealed record LocationMutationPayload(
-        decimal Latitude,
-        decimal Longitude,
-        decimal AccuracyMeters,
-        decimal? Altitude,
-        DateTime CapturedAtUtc,
-        string Provider,
-        string PermissionState);
-
-    private sealed record RecordTestCollectedMutationPayload(Guid TestInstanceId);
-
-    private sealed record RecordTestResultMutationPayload(
-        Guid TestInstanceId,
-        IReadOnlyList<TestResultMutationPayload> Results,
-        IReadOnlyList<Guid>? AttachmentIds,
-        string? ClientCommandId);
-
-    private sealed record TestResultMutationPayload(
-        string ParameterCode,
-        string ParameterValue,
-        string? Unit,
-        decimal? ReferenceRangeLow,
-        decimal? ReferenceRangeHigh);
-
-    // --- CEI Phase 4 §4.8 — job card mutation payload records -------------------
-
-    private sealed record JobCardCreateMutationPayload(
-        Guid FarmId,
-        Guid PlotId,
-        Guid? CropCycleId,
-        DateOnly PlannedDate,
-        IReadOnlyList<Contracts.Dtos.JobCardLineItemDto> LineItems);
-
-    private sealed record JobCardAssignMutationPayload(
-        Guid JobCardId,
-        Guid WorkerUserId);
-
-    private sealed record JobCardIdMutationPayload(Guid JobCardId);
-
-    private sealed record JobCardCompleteMutationPayload(
-        Guid JobCardId,
-        Guid DailyLogId);
-
-    private sealed record JobCardSettleMutationPayload(
-        Guid JobCardId,
-        decimal ActualPayoutAmount,
-        string ActualPayoutCurrencyCode,
-        string? SettlementNote);
-
-    private sealed record JobCardCancelMutationPayload(
-        Guid JobCardId,
-        string Reason);
 }
