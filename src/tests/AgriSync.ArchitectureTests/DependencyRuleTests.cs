@@ -33,6 +33,37 @@ public sealed class DependencyRuleTests
     }
 
     [Fact]
+    public void Domain_Does_Not_Depend_On_Api()
+    {
+        // CLAUDE.md layering rule #1 has two halves: Domain may not import
+        // Infrastructure (tested above) NOR Api. Only the Infrastructure half
+        // was guarded; this closes the Api half (CTO debt #9).
+        var appsRoot = TestPathHelper.GetAppsRoot();
+        var domainProjectFiles = Directory.GetFiles(appsRoot, "*.Domain.csproj", SearchOption.AllDirectories);
+
+        Assert.NotEmpty(domainProjectFiles);
+
+        var violations = new List<string>();
+
+        foreach (var domainProjectFile in domainProjectFiles)
+        {
+            var referencedProjectPaths = ProjectReferenceReader.GetReferencedProjectPaths(domainProjectFile);
+            foreach (var referencedProjectPath in referencedProjectPaths)
+            {
+                if (Path.GetFileName(referencedProjectPath)
+                    .EndsWith(".Api.csproj", StringComparison.OrdinalIgnoreCase))
+                {
+                    violations.Add($"{domainProjectFile} -> {referencedProjectPath}");
+                }
+            }
+        }
+
+        Assert.True(
+            violations.Count == 0,
+            "Domain projects cannot reference Api projects:" + Environment.NewLine + string.Join(Environment.NewLine, violations));
+    }
+
+    [Fact]
     public void BuildingBlocks_Does_Not_Depend_On_App_Projects()
     {
         var solutionRoot = typeof(TestPathHelper)
@@ -58,6 +89,27 @@ public sealed class DependencyRuleTests
         Assert.True(
             violations.Count == 0,
             "AgriSync.BuildingBlocks cannot reference app projects:" + Environment.NewLine + string.Join(Environment.NewLine, violations));
+    }
+
+    [Fact]
+    public void SharedKernel_Has_Zero_Project_References()
+    {
+        // CLAUDE.md layering rule #2: SharedKernel has zero dependencies (pure
+        // types only). Previously unguarded (CTO debt #9). SharedKernel lives at
+        // src/AgriSync.SharedKernel/, i.e. under the solution root, NOT under
+        // apps/ — so resolve via the solution root like the BuildingBlocks test.
+        var solutionRoot = Directory.GetParent(TestPathHelper.GetAppsRoot())!.FullName;
+
+        var sharedKernelProject = Directory
+            .GetFiles(solutionRoot, "AgriSync.SharedKernel.csproj", SearchOption.AllDirectories)
+            .Single();
+
+        var referencedProjectPaths = ProjectReferenceReader.GetReferencedProjectPaths(sharedKernelProject).ToList();
+
+        Assert.True(
+            referencedProjectPaths.Count == 0,
+            "AgriSync.SharedKernel must have zero project references (pure types only):"
+                + Environment.NewLine + string.Join(Environment.NewLine, referencedProjectPaths));
     }
 
     [Fact]
