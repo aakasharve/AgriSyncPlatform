@@ -45,6 +45,11 @@ namespace AgriSync.Bootstrapper.Jobs
         private readonly ILogger<PartitionMaintenanceJob> _logger;
         private readonly TimeSpan _checkInterval = TimeSpan.FromHours(12);
 
+        // Short backoff used when the current/next partition could not be ensured
+        // (connection blip / DDL failure) — retry soon instead of leaving analytics
+        // silently broken for the full _checkInterval.
+        private readonly TimeSpan _retryInterval = TimeSpan.FromMinutes(5);
+
         public PartitionMaintenanceJob(IServiceProvider serviceProvider, ILogger<PartitionMaintenanceJob> logger)
         {
             _serviceProvider = serviceProvider;
@@ -62,11 +67,15 @@ namespace AgriSync.Bootstrapper.Jobs
             // not wait for the first interval to elapse.
             while (!stoppingToken.IsCancellationRequested)
             {
-                await EnsurePartitionsAsync(stoppingToken);
+                var criticalOk = await EnsurePartitionsAsync(stoppingToken);
 
+                // On a critical failure (current/next partition not ensured), retry on
+                // the short backoff rather than waiting the full cadence — otherwise
+                // analytics inserts stay silently dropped until the next 12h cycle.
+                var delay = criticalOk ? _checkInterval : _retryInterval;
                 try
                 {
-                    await Task.Delay(_checkInterval, stoppingToken);
+                    await Task.Delay(delay, stoppingToken);
                 }
                 catch (OperationCanceledException)
                 {
@@ -77,7 +86,7 @@ namespace AgriSync.Bootstrapper.Jobs
             _logger.LogInformation("PartitionMaintenanceJob stopping.");
         }
 
-        private async Task EnsurePartitionsAsync(CancellationToken ct)
+        private async Task<bool> EnsurePartitionsAsync(CancellationToken ct)
         {
             using (LogContext.PushProperty("Job", "PartitionMaintenanceJob"))
             {
@@ -91,7 +100,7 @@ namespace AgriSync.Bootstrapper.Jobs
                     _logger.LogError(
                         "PartitionMaintenanceJob could not resolve an analytics connection string; "
                         + "analytics.events partitions cannot be ensured and inserts may be silently dropped.");
-                    return;
+                    return false;
                 }
 
                 await using var conn = new NpgsqlConnection(connectionString);
@@ -105,18 +114,19 @@ namespace AgriSync.Bootstrapper.Jobs
                         ex,
                         "PartitionMaintenanceJob could not connect to the analytics database; "
                         + "partitions may be missing and analytics inserts silently dropped.");
-                    return;
+                    return false;
                 }
 
                 var anchor = DateOnly.FromDateTime(DateTime.UtcNow);
                 var specs = AnalyticsPartitionPlan.ForHorizon(anchor, MonthsAhead);
                 var ensured = 0;
+                var criticalOk = true;
 
                 for (var i = 0; i < specs.Count; i++)
                 {
                     if (ct.IsCancellationRequested)
                     {
-                        return;
+                        return criticalOk;
                     }
 
                     var spec = specs[i];
@@ -139,6 +149,7 @@ namespace AgriSync.Bootstrapper.Jobs
                     {
                         if (isCritical)
                         {
+                            criticalOk = false;
                             _logger.LogError(
                                 ex,
                                 "CRITICAL: failed to ensure analytics partition {Partition} for [{From:yyyy-MM-dd}..{To:yyyy-MM-dd}); "
@@ -158,6 +169,8 @@ namespace AgriSync.Bootstrapper.Jobs
                 _logger.LogInformation(
                     "PartitionMaintenanceJob ensured {Ensured}/{Total} analytics.events partitions through {MonthsAhead} months ahead.",
                     ensured, specs.Count, MonthsAhead);
+
+                return criticalOk;
             }
         }
     }
