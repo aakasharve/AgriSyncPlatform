@@ -32,3 +32,24 @@ VPC/Route53/Secrets/KMS/S3. Those don't stop; the big EC2+RDS compute does.
   `sleep.sh`. (A scheduled auto-sleep guard = "Option B"; deferred.)
 - **Wake is not instant** (~2-4 min, RDS is the slow part).
 - **Turn this OFF at launch.** Once farmers use the app, keep everything running.
+
+## Overnight auto-nap (LIVE since 2026-06-26 — pre-launch only)
+
+Instead of manually running `sleep.sh`/`wake.sh`, prod now **auto-sleeps 01:00 IST and
+auto-wakes 05:30 IST** every night (it's warm and demo-ready well before any early
+demo). This saves ~₹500/mo with no laptop involved.
+
+- **How it works:** Lambda `agrisync-prod-nap` (code in `nap-lambda/index.py`) is
+  triggered by two EventBridge rules — `agrisync-nap-sleep` (cron `30 19 * * ? *` UTC
+  = 01:00 IST) and `agrisync-nap-wake` (cron `0 0 * * ? *` UTC = 05:30 IST).
+- **Manual override:** if a stakeholder shows up during the nap window, run
+  `bash aws/hibernate/wake.sh` (back in ~2-4 min). To skip a single night, disable the
+  sleep rule: `aws events disable-rule --region ap-south-1 --name agrisync-nap-sleep`.
+- **Heads-up — nightly false alarm:** while asleep, the api-uptime CloudWatch alarm
+  will fire a "down" notification at ~01:00 and "recovered" at ~05:30. This is expected
+  during the nap window, not an outage. (Suppressing it during the window is a small
+  follow-up.)
+- **DISABLE AT LAUNCH:** run `bash aws/hibernate/nap-teardown.sh` to remove the whole
+  nap (rules + Lambda + role). Do this the day real farmers depend on the app.
+- **Do NOT combine with a Savings Plan / Reserved Instance** — those assume 24/7 usage;
+  if you commit to one, remove the nap first (you'd be paying for nap hours you skip).
