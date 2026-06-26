@@ -145,6 +145,62 @@ public static class DependencyInjection
         services.AddScoped<OverridePlannedActivityHandler>();
         services.AddScoped<AddLocalPlannedActivityHandler>();
         services.AddScoped<RemovePlannedActivityHandler>();
+
+        // T-IGH-03-PIPELINE-ROLLOUT (AddLocalPlannedActivity): caller-shape
+        // validation + Mukadam-or-higher farm-membership authorization. The
+        // endpoint (POST /planned-activities) resolves the pipeline-wrapped
+        // IHandler<AddLocalPlannedActivityCommand> for the canonical
+        // InvalidCommand → Forbidden → (body) ordering. There is no
+        // PlannedActivityNotFound stage — the use case CREATES a new
+        // planned activity rather than loading one. The raw
+        // AddLocalPlannedActivityHandler stays registered above so the
+        // pipeline factory (and any legacy/direct consumer) can resolve it.
+        // The sync-push surface (PushSyncBatchHandler) is a different entry
+        // point and is intentionally left untouched in this pass.
+        services.AddScoped<AgriSync.BuildingBlocks.Application.PipelineBehaviors.IValidator<AddLocalPlannedActivityCommand>,
+            AddLocalPlannedActivityValidator>();
+        services.AddScoped<AgriSync.BuildingBlocks.Application.PipelineBehaviors.IAuthorizationCheck<AddLocalPlannedActivityCommand>,
+            AddLocalPlannedActivityAuthorizer>();
+        services.AddScoped<AgriSync.BuildingBlocks.Application.IHandler<AddLocalPlannedActivityCommand>>(sp =>
+            AgriSync.BuildingBlocks.Application.HandlerPipeline.Build(
+                sp.GetRequiredService<AddLocalPlannedActivityHandler>(),
+                new AgriSync.BuildingBlocks.Application.PipelineBehaviors.LoggingBehavior<AddLocalPlannedActivityCommand>(
+                    sp.GetRequiredService<Microsoft.Extensions.Logging.ILogger<
+                        AgriSync.BuildingBlocks.Application.PipelineBehaviors.LoggingBehavior<AddLocalPlannedActivityCommand>>>()),
+                new AgriSync.BuildingBlocks.Application.PipelineBehaviors.ValidationBehavior<AddLocalPlannedActivityCommand>(
+                    sp.GetServices<AgriSync.BuildingBlocks.Application.PipelineBehaviors.IValidator<AddLocalPlannedActivityCommand>>()),
+                new AgriSync.BuildingBlocks.Application.PipelineBehaviors.AuthorizationBehavior<AddLocalPlannedActivityCommand>(
+                    sp.GetServices<AgriSync.BuildingBlocks.Application.PipelineBehaviors.IAuthorizationCheck<AddLocalPlannedActivityCommand>>())));
+
+        // T-IGH-03-PIPELINE-ROLLOUT (RemovePlannedActivity): caller-shape
+        // validation + planned-activity-existence + Mukadam-or-higher
+        // farm-membership authorization. The endpoint
+        // (POST /planned-activities/{id}/remove) resolves the
+        // pipeline-wrapped IHandler<RemovePlannedActivityCommand> for the
+        // canonical InvalidCommand → PlannedActivityNotFound → Forbidden →
+        // (body) ordering. Unlike OverridePlannedActivity the authorizer
+        // does NOT short-circuit on an already-soft-removed row — the
+        // handler body re-applies SoftRemove regardless, so an IsRemoved
+        // gate would change the error shape. The raw
+        // RemovePlannedActivityHandler stays registered above so the
+        // pipeline factory (and any legacy/direct consumer) can resolve it.
+        // The sync-push surface (PushSyncBatchHandler) is a different entry
+        // point and is intentionally left untouched in this pass.
+        services.AddScoped<AgriSync.BuildingBlocks.Application.PipelineBehaviors.IValidator<RemovePlannedActivityCommand>,
+            RemovePlannedActivityValidator>();
+        services.AddScoped<AgriSync.BuildingBlocks.Application.PipelineBehaviors.IAuthorizationCheck<RemovePlannedActivityCommand>,
+            RemovePlannedActivityAuthorizer>();
+        services.AddScoped<AgriSync.BuildingBlocks.Application.IHandler<RemovePlannedActivityCommand>>(sp =>
+            AgriSync.BuildingBlocks.Application.HandlerPipeline.Build(
+                sp.GetRequiredService<RemovePlannedActivityHandler>(),
+                new AgriSync.BuildingBlocks.Application.PipelineBehaviors.LoggingBehavior<RemovePlannedActivityCommand>(
+                    sp.GetRequiredService<Microsoft.Extensions.Logging.ILogger<
+                        AgriSync.BuildingBlocks.Application.PipelineBehaviors.LoggingBehavior<RemovePlannedActivityCommand>>>()),
+                new AgriSync.BuildingBlocks.Application.PipelineBehaviors.ValidationBehavior<RemovePlannedActivityCommand>(
+                    sp.GetServices<AgriSync.BuildingBlocks.Application.PipelineBehaviors.IValidator<RemovePlannedActivityCommand>>()),
+                new AgriSync.BuildingBlocks.Application.PipelineBehaviors.AuthorizationBehavior<RemovePlannedActivityCommand>(
+                    sp.GetServices<AgriSync.BuildingBlocks.Application.PipelineBehaviors.IAuthorizationCheck<RemovePlannedActivityCommand>>())));
+
         services.AddScoped<GetScheduleTemplatesHandler>();
         services.AddScoped<CloneScheduleTemplateHandler>();
         services.AddScoped<EditScheduleTemplateHandler>();
