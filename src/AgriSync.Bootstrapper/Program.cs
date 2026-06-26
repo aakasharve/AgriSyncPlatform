@@ -397,6 +397,13 @@ try
 
     builder.Services.AddHostedService<AgriSync.Bootstrapper.Migrations.BackfillFarmOwnerAccounts>();
     builder.Services.AddHostedService<AgriSync.Bootstrapper.Jobs.MisRefreshJob>();
+    // Analytics partition time-bomb fix (CTO debt #1): the initial migration
+    // created only current+next month partitions and deferred ongoing
+    // provisioning to a hosted job that was never built. Without this, all
+    // analytics inserts silently fail (23514, swallowed by AnalyticsWriter)
+    // once "now" passes the last pre-created partition. This job provisions
+    // N+3 months ahead and alarms (Error log) if the current/next is missing.
+    builder.Services.AddHostedService<AgriSync.Bootstrapper.Jobs.PartitionMaintenanceJob>();
     builder.Services.AddHostedService<AgriSync.Bootstrapper.Jobs.AlertDispatcherJob>();
     builder.Services.AddHostedService<AgriSync.Bootstrapper.Jobs.SubscriptionReconciliationJob>();
     builder.Services.AddHostedService<AgriSync.Bootstrapper.Jobs.WorkerRetentionJob>();
