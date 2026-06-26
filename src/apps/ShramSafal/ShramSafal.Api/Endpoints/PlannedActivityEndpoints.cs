@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using AgriSync.BuildingBlocks.Application;
 using AgriSync.BuildingBlocks.Audit;
 using AgriSync.BuildingBlocks.Results;
 using ShramSafal.Application.UseCases.Planning.OverridePlannedActivity;
@@ -49,7 +50,7 @@ public static class PlannedActivityEndpoints
             AddLocalPlannedActivityRequest request,
             HttpContext httpContext,
             ClaimsPrincipal user,
-            AddLocalPlannedActivityHandler handler,
+            IHandler<AddLocalPlannedActivityCommand> handler,
             CancellationToken ct) =>
         {
             if (!EndpointActorContext.TryGetUserId(user, out var actorUserId))
@@ -86,7 +87,7 @@ public static class PlannedActivityEndpoints
             RemovePlannedActivityRequest request,
             HttpContext httpContext,
             ClaimsPrincipal user,
-            RemovePlannedActivityHandler handler,
+            IHandler<RemovePlannedActivityCommand> handler,
             CancellationToken ct) =>
         {
             if (!EndpointActorContext.TryGetUserId(user, out var actorUserId))

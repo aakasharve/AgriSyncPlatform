@@ -1,5 +1,6 @@
 using System.Text.Json;
 using AgriSync.BuildingBlocks.Abstractions;
+using AgriSync.BuildingBlocks.Application;
 using AgriSync.BuildingBlocks.Results;
 using AgriSync.SharedKernel.Contracts.Ids;
 using AgriSync.SharedKernel.Contracts.Roles;
@@ -14,6 +15,7 @@ public sealed class AddLocalPlannedActivityHandler(
     IShramSafalRepository repository,
     ISyncMutationStore syncMutationStore,
     IClock clock)
+    : IHandler<AddLocalPlannedActivityCommand>
 {
     private const string MutationType = "plan.add";
 
