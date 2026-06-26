@@ -97,7 +97,16 @@ export async function reconcileProfileAndCrops(
         payload.farms[0]?.ownerUserId,
         existingProfile,
         receivedAtUtc);
-    const mergedCrops = enrichPurveshDemoCrops([...cropsById.values()], reconciledProfile);
+    // Derive the demo owner id from the STABLE reconciled profile, not the delta
+    // `payload.farms` — on an incremental /sync/pull `farms` only carries changed
+    // farms and is often empty, which would pass undefined and wrongly disable the
+    // demo enrichment for the real demo user. The reconciled profile carries
+    // operators (incl. the primary owner) merged from the last full sync via Dexie.
+    const demoOwnerUserId =
+        reconciledProfile?.operators?.find(op => op.role === 'PRIMARY_OWNER')?.id
+        ?? reconciledProfile?.activeOperatorId
+        ?? payload.farms[0]?.ownerUserId;
+    const mergedCrops = enrichPurveshDemoCrops([...cropsById.values()], demoOwnerUserId);
     await cropsRepo.save(mergedCrops);
     if (reconciledProfile) {
         await profileRepo.save(reconciledProfile);
