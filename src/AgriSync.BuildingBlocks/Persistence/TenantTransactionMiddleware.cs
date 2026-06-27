@@ -197,6 +197,20 @@ public sealed class TenantTransactionMiddleware
         // global config is platform-shared, not tenant data, so no isolation
         // is lost. Confirmed root on prod 2026-06-10.
         "/shramsafal/ai/transcribe-stream",
+        // POST /api/ai/eval-parse — non-Prod, ALLOW_EVAL_PARSE-gated
+        // prompt-ops eval harness (AiEvalEndpoints). Structurally identical
+        // to /shramsafal/ai/transcribe-stream above: it reads ONLY the global
+        // AiProviderConfig (AiJobRepository.GetProviderConfigAsync) to resolve
+        // the voice structurer, then calls the provider directly. It performs
+        // NO farm-scoped read and NO write. Without admin elevation the very
+        // first DbCommand (the provider-config read at
+        // AiOrchestrator.ParseVoiceWithOverrideAsync) fail-closes in
+        // TenantConnectionInterceptor with "no tenant claim set and not in
+        // admin scope" → 500 before the model is ever called. The global
+        // config is platform-shared, not tenant data, so no isolation is lost.
+        // The route is double-gated (non-Prod ∧ ALLOW_EVAL_PARSE) so this
+        // elevation can never apply in Production.
+        "/api/ai/eval-parse",
     };
 
     private readonly RequestDelegate _next;
