@@ -43,6 +43,10 @@ jobs:
         working-directory: src/tests/ai-eval
         run: npm ci
 
+      - name: Run eval-runner unit tests
+        working-directory: src/tests/ai-eval
+        run: npm test
+
       - name: Install mobile-web deps
         working-directory: src/clients/mobile-web
         run: npm ci
