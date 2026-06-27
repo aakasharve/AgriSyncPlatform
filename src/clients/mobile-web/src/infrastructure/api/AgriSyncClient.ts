@@ -25,7 +25,7 @@ import {
     setAuthSession,
     type AuthSession,
 } from '../storage/AuthTokenStore';
-import { readDeviceId, writeDeviceId } from '../storage/DeviceIdStore';
+import { getOrCreateDeviceId } from '../storage/DeviceIdStore';
 import { getRememberDevice } from '../storage/RememberDeviceStore';
 import { clearNativeRefreshSession } from '../storage/RefreshSessionStore';
 import { SYNC_MUTATION_TYPES } from '../sync/SyncMutationCatalog';
@@ -78,19 +78,6 @@ import * as Security from './resources/SecurityResource';
 import * as Export from './resources/ExportResource';
 // spec: data-principle-spine-2026-05-05/06.4
 import * as Consent from './resources/ConsentResource';
-
-// ---------------------------------------------------------------------------
-// Stable device-id helper: reads existing id or creates one on first call.
-// ---------------------------------------------------------------------------
-
-function getOrCreateDeviceId(): string {
-    let id = readDeviceId();
-    if (!id) {
-        id = crypto.randomUUID ? crypto.randomUUID() : `dev-${Date.now()}`;
-        writeDeviceId(id);
-    }
-    return id;
-}
 
 // ---------------------------------------------------------------------------
 // Re-exports — keep every name the rest of the codebase imports from this

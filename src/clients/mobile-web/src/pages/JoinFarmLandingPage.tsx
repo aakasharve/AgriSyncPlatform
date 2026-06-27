@@ -19,21 +19,10 @@ import { parseJoinPayload, type JoinRole } from '../features/onboarding/qr/qrTok
 import { recordJoinAttempt } from '../features/onboarding/qr/farmInviteStore';
 import { setAuthSession } from '../infrastructure/storage/AuthTokenStore';
 import { setRememberDevice } from '../infrastructure/storage/RememberDeviceStore';
-import { readDeviceId, writeDeviceId } from '../infrastructure/storage/DeviceIdStore';
+import { getOrCreateDeviceId } from '../infrastructure/storage/DeviceIdStore';
 import { startOtp, verifyOtp, isOtpError } from '../features/auth/data/otpClient';
 import { claimFarmJoin, isInviteApiError } from '../features/onboarding/qr/inviteApi';
 import { useUiPref } from '../shared/hooks/useUiPref';
-
-function getOrCreateDeviceId(): string {
-    let id = readDeviceId();
-    if (!id) {
-        id = typeof crypto !== 'undefined' && crypto.randomUUID
-            ? crypto.randomUUID()
-            : `dev-${Date.now()}`;
-        writeDeviceId(id);
-    }
-    return id;
-}
 
 type Step = 'phone' | 'otp' | 'done' | 'invalid';
 

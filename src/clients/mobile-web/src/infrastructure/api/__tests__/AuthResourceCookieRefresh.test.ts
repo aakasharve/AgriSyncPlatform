@@ -55,10 +55,12 @@ vi.mock('axios', async () => {
     };
 });
 
-// Mock DeviceIdStore
+// Mock DeviceIdStore — include getOrCreateDeviceId since AgriSyncClient imports
+// it directly (B002 DRY consolidation).
 vi.mock('../../../infrastructure/storage/DeviceIdStore', () => ({
     readDeviceId: vi.fn(() => 'test-device-id-001'),
     writeDeviceId: vi.fn(),
+    getOrCreateDeviceId: vi.fn(() => 'test-device-id-001'),
 }));
 
 // Mock RememberDeviceStore
@@ -66,6 +68,17 @@ vi.mock('../../../infrastructure/storage/RememberDeviceStore', () => ({
     getRememberDevice: vi.fn(() => true),
     setRememberDevice: vi.fn(),
     clearRememberDevice: vi.fn(),
+}));
+
+// Mock RefreshSessionStore — so we can assert clearNativeRefreshSession is
+// called on 401 (the real implementation is a no-op on web, but the call MUST
+// happen so Android/native builds pick it up correctly).
+const mockClearNativeRefreshSession = vi.fn();
+vi.mock('../../../infrastructure/storage/RefreshSessionStore', () => ({
+    clearNativeRefreshSession: (...args: unknown[]) => mockClearNativeRefreshSession(...args),
+    getNativeRefreshSession: vi.fn(() => Promise.resolve(null)),
+    setNativeRefreshSession: vi.fn(),
+    isNativeSecureRefreshEnabled: vi.fn(() => false),
 }));
 
 // Mock telemetry
@@ -145,19 +158,26 @@ describe('AgriSyncClient — cookie-based refresh (spec: secure-remembered-devic
         void clearAuthSession;
     });
 
-    it('refreshSession() clears the session on 401', async () => {
+    it('refreshSession() clears the session AND calls clearNativeRefreshSession on 401', async () => {
         const { clearAuthSession } = await import('../../../infrastructure/storage/AuthTokenStore');
         const err = Object.assign(new Error('Unauthorized'), {
             response: { status: 401, data: {} },
             isAxiosError: true,
         });
         mockPost.mockRejectedValueOnce(err);
+        // Reset call count so previous tests don't bleed in
+        mockClearNativeRefreshSession.mockClear();
 
         const { AgriSyncClient } = await import('../AgriSyncClient');
         const client = new AgriSyncClient();
         const result = await client.refreshSession();
 
         expect(result).toBeNull();
+        // clearAuthSession must be called fail-closed
         expect(clearAuthSession).toHaveBeenCalled();
+        // clearNativeRefreshSession must ALSO be called so that on Android/native
+        // builds the Keystore-backed session is wiped when the server rejects the
+        // refresh. On web this is a no-op stub, but the call must be present.
+        expect(mockClearNativeRefreshSession).toHaveBeenCalled();
     });
 });

@@ -14,7 +14,10 @@
  *
  * Task 6.2:
  * - refresh 401 (refreshSession resolves null) → clearAuthSession, authStatus anonymous.
- * - AgriSyncClient.refreshSession() clears clearNativeRefreshSession on failure.
+ * - NOTE: the assertion that AgriSyncClient.refreshSession() calls
+ *   clearNativeRefreshSession on failure lives in AuthResourceCookieRefresh.test.ts
+ *   (loads the REAL AgriSyncClient). This file mocks refreshSession wholesale and
+ *   therefore cannot prove that internal behaviour.
  */
 
 import '@testing-library/jest-dom/vitest';

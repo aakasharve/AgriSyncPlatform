@@ -14,18 +14,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { verifyOtp, type StartOtpResponse, type OtpError } from '../data/otpClient';
 import { setAuthSession } from '../../../infrastructure/storage/AuthTokenStore';
 import { setRememberDevice } from '../../../infrastructure/storage/RememberDeviceStore';
-import { readDeviceId, writeDeviceId } from '../../../infrastructure/storage/DeviceIdStore';
-
-function getOrCreateDeviceId(): string {
-    let id = readDeviceId();
-    if (!id) {
-        id = typeof crypto !== 'undefined' && crypto.randomUUID
-            ? crypto.randomUUID()
-            : `dev-${Date.now()}`;
-        writeDeviceId(id);
-    }
-    return id;
-}
+import { getOrCreateDeviceId } from '../../../infrastructure/storage/DeviceIdStore';
 
 interface OtpVerifyFormProps {
     phone: string;

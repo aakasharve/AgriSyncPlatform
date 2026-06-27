@@ -42,6 +42,7 @@ vi.mock('../../../../infrastructure/storage/RememberDeviceStore', () => ({
 vi.mock('../../../../infrastructure/storage/DeviceIdStore', () => ({
     readDeviceId: vi.fn(() => 'test-device-id'),
     writeDeviceId: vi.fn(),
+    getOrCreateDeviceId: vi.fn(() => 'test-device-id'),
 }));
 
 // ---------------------------------------------------------------------------
