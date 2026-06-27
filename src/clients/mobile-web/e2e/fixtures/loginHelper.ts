@@ -21,7 +21,7 @@ import { expect } from '@playwright/test';
  * can omit the option or pass `true`.
  *
  * Selector note: the checkbox has id="remember-device-password" and its label
- * text is "হে ডিভাইস লক্ষাত ঠেভা · Remember this device". We target it by
+ * text is "हे डिव्हाइस लक्षात ठेवा · Remember this device" (Marathi/Devanagari). We target it by
  * label role using /Remember this device/i so the query is locale-independent
  * and resilient to Marathi text changes.
  */
@@ -40,8 +40,9 @@ export async function loginViaPassword(
 
     // Toggle from OTP (default) to password (legacy) form. The button is only
     // visible while topMode === 'otp'; clicking switches to topMode='password'.
-    // LoginPage.tsx renders: "পাসবর্ডনে লগ ইন করা / Use password"
-    const useLegacyButton = page.getByRole('button', { name: /password.*legacy|পাসবর্ডনে/i });
+    // LoginPage.tsx renders: "पासवर्डने लॉग इन करा / Use password" (Marathi/Devanagari).
+    // Match the unambiguous English part — script-independent, avoids Devanagari/Bengali confusion.
+    const useLegacyButton = page.getByRole('button', { name: /Use password/i });
     await useLegacyButton.waitFor({ timeout: 15_000 });
     await useLegacyButton.click();
 
@@ -58,7 +59,7 @@ export async function loginViaPassword(
     // The "Remember this device" checkbox (id="remember-device-password") is
     // pre-checked. Only interact when the caller explicitly wants it OFF.
     // We use getByLabel so the selector is tied to the visible label text,
-    // not to a fragile id — label text: "হে ডিভাইস লক্ষাত ঠেভা · Remember this device"
+    // not to a fragile id — label text: "हे डिव्हाइस लक्षात ठेवा · Remember this device" (Marathi)
     if (options.rememberDevice === false) {
         const rememberCheckbox = page.getByLabel(/Remember this device/i);
         await rememberCheckbox.waitFor({ timeout: 10_000 });
