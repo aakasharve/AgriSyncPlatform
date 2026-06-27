@@ -3,10 +3,12 @@ using AgriSync.BuildingBlocks.Abstractions;
 using AgriSync.BuildingBlocks.Results;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using User.Application.Ports;
 using User.Application.UseCases.Auth.Login;
+using User.Application.UseCases.Auth.Logout;
 using User.Application.UseCases.Auth.RefreshToken;
 using User.Application.UseCases.Auth.RegisterUser;
 using User.Application.UseCases.Auth.Session;
@@ -29,6 +31,7 @@ public static class AuthEndpoints
             HttpContext context,
             ILoggerFactory loggerFactory,
             RegisterUserHandler handler,
+            IHostEnvironment env,
             CancellationToken ct) =>
         {
             if (!TryValidateRegisterRequest(request, out var validationErrors))
@@ -42,7 +45,7 @@ public static class AuthEndpoints
                 request.DisplayName!,
                 request.AppId,
                 request.Role,
-                BuildDeviceSession(context));
+                BuildDeviceSession(context, request.RememberDevice, request.DeviceId, request.DeviceName, request.Platform));
 
             Result<User.Application.Contracts.Dtos.AuthResponse> result;
             try
@@ -54,9 +57,18 @@ public static class AuthEndpoints
                 return CreateValidationErrorResponse(context, loggerFactory, ex);
             }
 
-            return result.IsSuccess
-                ? Results.Ok(result.Value)
-                : Results.BadRequest(new { error = result.Error.Code, message = result.Error.Description });
+            if (!result.IsSuccess)
+            {
+                return Results.BadRequest(new { error = result.Error.Code, message = result.Error.Description });
+            }
+
+            // TODO(security): consider X-CSRF-Token on state-changing auth routes — tracked follow-up
+            context.Response.Cookies.Append(
+                AuthCookieOptions.RefreshCookieName,
+                result.Value.RefreshToken,
+                AuthCookieOptions.Build(env, result.Value.ExpiresAtUtc, request.RememberDevice));
+
+            return Results.Ok(new AuthResponseBody(result.Value.UserId, result.Value.AccessToken, result.Value.ExpiresAtUtc));
         })
         .WithName("RegisterUser")
         .AllowAnonymous();
@@ -66,17 +78,27 @@ public static class AuthEndpoints
             HttpContext context,
             ILoggerFactory loggerFactory,
             LoginHandler handler,
+            IHostEnvironment env,
             CancellationToken ct) =>
         {
             try
             {
-                var session = BuildDeviceSession(context);
+                var session = BuildDeviceSession(context, request.RememberDevice, request.DeviceId, request.DeviceName, request.Platform);
                 var command = new LoginCommand(request.Phone, request.Password, session);
                 var result = await handler.HandleAsync(command, ct);
 
-                return result.IsSuccess
-                    ? Results.Ok(result.Value)
-                    : Results.Unauthorized();
+                if (!result.IsSuccess)
+                {
+                    return Results.Unauthorized();
+                }
+
+                // TODO(security): consider X-CSRF-Token on state-changing auth routes — tracked follow-up
+                context.Response.Cookies.Append(
+                    AuthCookieOptions.RefreshCookieName,
+                    result.Value.RefreshToken,
+                    AuthCookieOptions.Build(env, result.Value.ExpiresAtUtc, request.RememberDevice));
+
+                return Results.Ok(new AuthResponseBody(result.Value.UserId, result.Value.AccessToken, result.Value.ExpiresAtUtc));
             }
             catch (ArgumentException ex)
             {
@@ -124,6 +146,7 @@ public static class AuthEndpoints
             VerifyOtpRequest request,
             HttpContext context,
             VerifyOtpHandler handler,
+            IHostEnvironment env,
             CancellationToken ct) =>
         {
             if (string.IsNullOrWhiteSpace(request?.Phone) || string.IsNullOrWhiteSpace(request?.Otp))
@@ -135,7 +158,7 @@ public static class AuthEndpoints
                 });
             }
 
-            var session = BuildDeviceSession(context);
+            var session = BuildDeviceSession(context, request.RememberDevice, request.DeviceId, request.DeviceName, request.Platform);
             var result = await handler.HandleAsync(
                 new VerifyOtpCommand(request.Phone, request.Otp, request.DisplayName, session),
                 ct);
@@ -155,11 +178,16 @@ public static class AuthEndpoints
                     statusCode: statusCode);
             }
 
+            // TODO(security): consider X-CSRF-Token on state-changing auth routes — tracked follow-up
+            context.Response.Cookies.Append(
+                AuthCookieOptions.RefreshCookieName,
+                result.Value!.RefreshToken,
+                AuthCookieOptions.Build(env, result.Value.ExpiresAtUtc, request.RememberDevice));
+
             return Results.Ok(new
             {
-                userId = result.Value!.UserId,
+                userId = result.Value.UserId,
                 accessToken = result.Value.AccessToken,
-                refreshToken = result.Value.RefreshToken,
                 expiresAtUtc = result.Value.ExpiresAtUtc,
                 createdNewUser = result.Value.CreatedNewUser,
             });
@@ -171,23 +199,47 @@ public static class AuthEndpoints
             RefreshRequest request,
             HttpContext context,
             RefreshTokenHandler handler,
+            IHostEnvironment env,
             CancellationToken ct) =>
         {
-            var session = BuildDeviceSession(context);
-            var command = new RefreshTokenCommand(request.RefreshToken, session);
+            // Web: read refresh token from HttpOnly cookie.
+            // Android/native: token comes in the request body when cookie absent.
+            var cookieToken = context.Request.Cookies[AuthCookieOptions.RefreshCookieName];
+            var resolvedToken = !string.IsNullOrWhiteSpace(cookieToken)
+                ? cookieToken
+                : (!string.IsNullOrWhiteSpace(request.RefreshToken) ? request.RefreshToken : null);
+
+            if (resolvedToken is null)
+            {
+                return Results.Unauthorized();
+            }
+
+            var session = BuildDeviceSession(context, request.RememberDevice, request.DeviceId, request.DeviceName, request.Platform);
+            var command = new RefreshTokenCommand(resolvedToken, session);
             var result = await handler.HandleAsync(command, ct);
 
-            return result.IsSuccess
-                ? Results.Ok(result.Value)
-                : Results.Unauthorized();
+            if (!result.IsSuccess)
+            {
+                // Clear stale cookie on failure so browsers don't retry with a bad token.
+                context.Response.Cookies.Delete(AuthCookieOptions.RefreshCookieName, AuthCookieOptions.BuildForDelete(env));
+                return Results.Unauthorized();
+            }
+
+            // TODO(security): consider X-CSRF-Token on state-changing auth routes — tracked follow-up
+            context.Response.Cookies.Append(
+                AuthCookieOptions.RefreshCookieName,
+                result.Value.RefreshToken,
+                AuthCookieOptions.Build(env, result.Value.ExpiresAtUtc, request.RememberDevice));
+
+            return Results.Ok(new AuthResponseBody(result.Value.UserId, result.Value.AccessToken, result.Value.ExpiresAtUtc));
         })
         .WithName("RefreshToken")
         .AllowAnonymous();
 
         group.MapPost("/logout", async (
             HttpContext context,
-            IRefreshTokenRepository refreshTokenRepository,
-            IClock clock,
+            LogoutCurrentDeviceHandler logoutCurrentDeviceHandler,
+            IHostEnvironment env,
             CancellationToken ct) =>
         {
             if (!TryGetUserId(context.User, out var userId))
@@ -195,12 +247,37 @@ public static class AuthEndpoints
                 return Results.Unauthorized();
             }
 
-            await refreshTokenRepository.RevokeAllForUserAsync(userId, clock.UtcNow, ct: ct);
-            await refreshTokenRepository.SaveChangesAsync(ct);
+            var refreshToken = context.Request.Cookies[AuthCookieOptions.RefreshCookieName] ?? string.Empty;
+
+            // Revoke only the current device session. Idempotent — unknown token is a safe no-op.
+            await logoutCurrentDeviceHandler.HandleAsync(new LogoutCurrentDeviceCommand(userId, refreshToken), ct);
+
+            // Always clear the cookie regardless of whether the token was found.
+            context.Response.Cookies.Delete(AuthCookieOptions.RefreshCookieName, AuthCookieOptions.BuildForDelete(env));
 
             return Results.Ok(new { message = "Logged out successfully" });
         })
         .WithName("LogoutUser")
+        .RequireAuthorization();
+
+        group.MapPost("/logout-all", async (
+            HttpContext context,
+            RevokeAllDeviceSessionsHandler revokeAllHandler,
+            IHostEnvironment env,
+            CancellationToken ct) =>
+        {
+            if (!TryGetUserId(context.User, out var userId))
+            {
+                return Results.Unauthorized();
+            }
+
+            await revokeAllHandler.HandleAsync(new RevokeAllDeviceSessionsCommand(userId), ct);
+
+            context.Response.Cookies.Delete(AuthCookieOptions.RefreshCookieName, AuthCookieOptions.BuildForDelete(env));
+
+            return Results.Ok(new { message = "All sessions revoked" });
+        })
+        .WithName("LogoutAll")
         .RequireAuthorization();
 
         group.MapGet("/me/context", async (
@@ -225,20 +302,17 @@ public static class AuthEndpoints
         return endpoints;
     }
 
-    /// <summary>
-    /// Builds a minimal <see cref="DeviceSessionRequest"/> from HTTP headers.
-    /// Task 2.5 (a later dispatch) will fully wire cookie + Android Keystore
-    /// transport. For now, just enough to make the backend compile and pass
-    /// device metadata into commands.
-    /// </summary>
-    private static DeviceSessionRequest BuildDeviceSession(HttpContext context)
+    private static DeviceSessionRequest BuildDeviceSession(
+        HttpContext context, bool rememberDevice, string? deviceId, string? deviceName, string? platform)
     {
-        var deviceId = context.Request.Headers["X-Device-Id"].FirstOrDefault() ?? "unknown";
+        var resolvedDeviceId = !string.IsNullOrWhiteSpace(deviceId)
+            ? deviceId!
+            : (context.Request.Headers["X-Device-Id"].FirstOrDefault() ?? "unknown");
         return new DeviceSessionRequest(
-            DeviceId: deviceId,
-            RememberDevice: false,
-            DeviceName: null,
-            Platform: "unknown");
+            DeviceId: resolvedDeviceId,
+            RememberDevice: rememberDevice,
+            DeviceName: deviceName,
+            Platform: string.IsNullOrWhiteSpace(platform) ? "unknown" : platform!);
     }
 
     private static IResult CreateValidationErrorResponse(HttpContext context, ILoggerFactory loggerFactory, ArgumentException ex)
@@ -290,12 +364,22 @@ public sealed record RegisterRequest(
     string? Password,
     string? DisplayName,
     string? AppId = "shramsafal",
-    string? Role = "PrimaryOwner");
+    string? Role = "PrimaryOwner",
+    bool RememberDevice = false,
+    string? DeviceId = null,
+    string? DeviceName = null,
+    string? Platform = null);
 
-public sealed record LoginRequest(string Phone, string Password);
+public sealed record LoginRequest(
+    string Phone, string Password,
+    bool RememberDevice = false, string? DeviceId = null, string? DeviceName = null, string? Platform = null);
 
-public sealed record RefreshRequest(string RefreshToken);
+public sealed record RefreshRequest(
+    string? RefreshToken = null,            // web: omitted (cookie used); android: the Keystore token
+    bool RememberDevice = true, string? DeviceId = null, string? DeviceName = null, string? Platform = null);
 
 public sealed record StartOtpRequest(string? Phone);
 
-public sealed record VerifyOtpRequest(string? Phone, string? Otp, string? DisplayName);
+public sealed record VerifyOtpRequest(
+    string? Phone, string? Otp, string? DisplayName,
+    bool RememberDevice = false, string? DeviceId = null, string? DeviceName = null, string? Platform = null);
