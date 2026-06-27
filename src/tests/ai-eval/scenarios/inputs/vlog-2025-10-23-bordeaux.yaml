@@ -1,0 +1,78 @@
+id: vlog-2025-10-23-bordeaux
+bucket: inputs
+description: |
+  23/10 — Bordeaux mixture day. Farmer says मोरचुद (copper sulfate) 2 kg
+  and चुना (lime) 1 kg mixed in 600 L carrier for a Bordeaux fungicide spray.
+  Followed by "नेहमी प्रमाणे" 4-hour irrigation.
+
+  TARGET (W1.P0 domain-aware parser): copper sulfate and lime should be
+  recognized as Bordeaux mixture components and synthesized into one
+  fungicide application row with the per-600L basis preserved
+  (Component 3 — FormulationRecognizer). Today's domain-blind parser
+  will likely emit two unrelated input rows (or none). RED is expected.
+
+  spec: ai-intelligence-plan-2026-06-25
+
+input:
+  transcript: "मोरचुद दोन किलो आणि चुना एक किलो ६०० लिटर पाण्यात मिसळून फवारणी केली"
+
+context:
+  fixture: farmer-grape-grower
+
+expected:
+  inputs:
+    - productName: "Bordeaux mixture"
+      quantity: null
+      unit: null
+      components:
+        - productName: "copper sulfate"
+          quantity: 2
+          unit: "kg"
+        - productName: "lime"
+          quantity: 1
+          unit: "kg"
+      carrierVolume: 600
+      carrierUnit: "L"
+      chemicalClass: "fungicide"
+
+tolerances:
+  "inputs[0].productName":
+    oneOf:
+      - "Bordeaux mixture"
+      - "bordeaux mixture"
+      - "Bordeaux"
+      - "बोर्डो मिश्रण"
+  "inputs[0].carrierVolume":
+    "±%": 1
+  "inputs[0].chemicalClass":
+    oneOf:
+      - "fungicide"
+      - "fungicide (Bordeaux)"
+  "inputs[0].components[0].productName":
+    oneOf:
+      - "copper sulfate"
+      - "Copper sulfate"
+      - "CuSO4"
+      - "मोरचुद"
+  "inputs[0].components[0].quantity":
+    exact: true
+  "inputs[0].components[0].unit":
+    exact: true
+  "inputs[0].components[1].productName":
+    oneOf:
+      - "lime"
+      - "Lime"
+      - "चुना"
+      - "calcium hydroxide"
+  "inputs[0].components[1].quantity":
+    exact: true
+  "inputs[0].components[1].unit":
+    exact: true
+
+ignore_fields:
+  - summary
+  - dayOutcome
+  - irrigation
+  - labour
+  - expenses
+  - observations

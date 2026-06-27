@@ -1,0 +1,84 @@
+id: vlog-2025-10-26-cppu-mkp-curzate
+bucket: inputs
+description: |
+  26/10 — Three-product application day: CPPU (cytokinin PGR for berry
+  sizing) + 00:52:34 (MKP — mono-potassium phosphate, grade spoken as a
+  colon-separated triple by the farmer) + Curzate (कर्जट, cymoxanil
+  fungicide for downy mildew). Also: rain cut irrigation from 4h to 1h.
+
+  TARGET (W1.P0 domain-aware parser): the colon form "00:52:34" is a
+  fertilizer grade (Component 1 — NpkGradeDictionary), NOT a clock time.
+  It must appear as an inputs row with productName normalised to "0-52-34"
+  or "MKP", and rawProductName = "00:52:34". Similarly "कर्जट" maps to
+  Curzate (Component 2 — GrapeInputLexicon). Today's domain-blind parser
+  drops or mislabels the grade as a clock time. RED is expected.
+
+  spec: ai-intelligence-plan-2026-06-25
+
+input:
+  transcript: "सीपीयू, शून्य बावन्न चौतीस आणि कर्जट मिसळून फवारणी केली"
+
+context:
+  fixture: farmer-grape-grower
+
+expected:
+  inputs:
+    - productName: "0-52-34"
+      rawProductName: "00:52:34"
+      chemicalClass: "WSF"
+      agronomicRole: "MKP"
+    - productName: "CPPU"
+      chemicalClass: "cytokinin PGR"
+      agronomicRole: "berry sizing"
+    - productName: "Curzate"
+      chemicalClass: "fungicide"
+      agronomicRole: "downy mildew"
+
+tolerances:
+  "inputs[0].productName":
+    oneOf:
+      - "0-52-34"
+      - "MKP"
+      - "0-52-34 (MKP)"
+      - "mono-potassium phosphate"
+  "inputs[0].rawProductName":
+    oneOf:
+      - "00:52:34"
+      - "0:52:34"
+      - "शून्य बावन्न चौतीस"
+  "inputs[0].chemicalClass":
+    oneOf:
+      - "WSF"
+      - "water-soluble fertilizer"
+      - "fertilizer"
+  "inputs[0].agronomicRole":
+    oneOf:
+      - "MKP"
+      - "mono-potassium phosphate"
+      - "phosphorus-potassium"
+  "inputs[1].productName":
+    oneOf:
+      - "CPPU"
+      - "forchlorfenuron"
+      - "सीपीयू"
+  "inputs[1].chemicalClass":
+    fuzzy: 0.7
+  "inputs[2].productName":
+    oneOf:
+      - "Curzate"
+      - "curzate"
+      - "Cymoxanil"
+      - "cymoxanil"
+      - "कर्जट"
+  "inputs[2].chemicalClass":
+    oneOf:
+      - "fungicide"
+      - "fungicide (downy mildew)"
+
+ignore_fields:
+  - summary
+  - dayOutcome
+  - irrigation
+  - labour
+  - expenses
+  - observations
