@@ -636,6 +636,20 @@ public static class DependencyInjection
         {
             services.AddSingleton<IAttachmentStorageService, LocalFileStorageService>();
         }
+
+        // W1.P0 Batch A (ai-intelligence-plan-2026-06-25 Task 8) —
+        // Domain-knowledge pipeline adapter.  Registered as Singleton because
+        // DomainKnowledgePipelineAdapter is stateless (it simply delegates to
+        // the static DomainKnowledgePipeline.RunDomainKnowledgePipeline).
+        // The port (IDomainKnowledgePipelinePort) is defined in the Application
+        // layer; the concrete adapter (DomainKnowledgePipelineAdapter) is
+        // internal to this Infrastructure assembly.  This keeps the Application
+        // project free of a project reference to Infrastructure, satisfying the
+        // Application_Does_Not_Depend_On_Its_Own_Infrastructure architecture test.
+        services.AddSingleton<
+            ShramSafal.Application.Ports.IDomainKnowledgePipelinePort,
+            ShramSafal.Infrastructure.AI.DomainKnowledge.DomainKnowledgePipelineAdapter>();
+
         return services;
     }
 }

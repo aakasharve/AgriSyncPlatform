@@ -9,6 +9,7 @@ using AgriSync.BuildingBlocks.Abstractions;
 using AgriSync.BuildingBlocks.Analytics;
 using AgriSync.BuildingBlocks.Results;
 using AgriSync.SharedKernel.Contracts.Ids;
+using Microsoft.Extensions.Configuration;
 using ShramSafal.Application.Ports;
 using ShramSafal.Application.Ports.External;
 using ShramSafal.Application.Ports.Privacy;
@@ -17,6 +18,11 @@ using ShramSafal.Domain.AI;
 using ShramSafal.Domain.Audit;
 using ShramSafal.Domain.Common;
 using ShramSafal.Domain.Privacy.Pii;
+
+// NOTE: Microsoft.Extensions.Configuration is referenced here ONLY to read
+// the flag Ai:DomainKnowledgeLayer:Enabled (default false).  This is the
+// SOLE non-domain/non-ports import added by W1.P0 Batch A; it does NOT pull
+// in any Infrastructure or EF dependency.
 
 namespace ShramSafal.Application.UseCases.AI.ParseVoiceInput;
 
@@ -43,9 +49,31 @@ public sealed class ParseVoiceInputHandler(
     // reserved for forward use; removing it would break the diff
     // promise the supervisor brief made and force the DI container to
     // resolve a different constructor shape.
-    IConsentEnforcer consentEnforcer)
+    IConsentEnforcer consentEnforcer,
+    // W1.P0 Batch A (ai-intelligence-plan-2026-06-25 Task 8) —
+    // IConfiguration is injected AFTER IConsentEnforcer to minimise
+    // the ctor diff and avoid any change to the IEntitlementPolicy
+    // parameter.  The only value read is the flag
+    // Ai:DomainKnowledgeLayer:Enabled (default false).
+    // DI resolves IConfiguration automatically; no extra registration.
+    IConfiguration configuration,
+    // IDomainKnowledgePipelinePort allows the Application layer to
+    // invoke the Infrastructure-resident DomainKnowledgePipeline
+    // without a direct project reference (port pattern).  Registered
+    // in ShramSafal.Infrastructure.DependencyInjection.
+    IDomainKnowledgePipelinePort domainKnowledgePipeline)
 {
 #pragma warning restore CS9113
+
+    // W1.P0 Batch A — flag read once at construction time.
+    // Default is false: when unset the parse path is byte-identical to
+    // the pre-Batch-A behaviour.
+    private readonly bool _domainKnowledgeLayerEnabled =
+        configuration.GetValue<bool>("Ai:DomainKnowledgeLayer:Enabled");
+
+    // W1.P0 Batch A — held to call from ApplyTranscriptIntegrityCorrections.
+    private readonly IDomainKnowledgePipelinePort _domainKnowledgePipeline = domainKnowledgePipeline;
+
     private static readonly Dictionary<string, int> MarathiNumberTokens = new(StringComparer.OrdinalIgnoreCase)
     {
         ["एक"] = 1,
@@ -237,7 +265,9 @@ public sealed class ParseVoiceInputHandler(
             using var document = JsonDocument.Parse(
                 ApplyTranscriptIntegrityCorrections(
                     canonicalResult.NormalizedJson,
-                    canonicalResult.RawTranscript ?? transcript ?? string.Empty));
+                    canonicalResult.RawTranscript ?? transcript ?? string.Empty,
+                    _domainKnowledgeLayerEnabled,
+                    _domainKnowledgePipeline));
             var parsedLog = document.RootElement.Clone();
             var fieldConfidences = ExtractFieldConfidences(parsedLog);
             var overallConfidence = canonicalResult.OverallConfidence > 0
@@ -554,7 +584,11 @@ public sealed class ParseVoiceInputHandler(
         return Convert.ToHexString(hash).ToLowerInvariant();
     }
 
-    private static string ApplyTranscriptIntegrityCorrections(string normalizedJson, string transcript)
+    private static string ApplyTranscriptIntegrityCorrections(
+        string normalizedJson,
+        string transcript,
+        bool domainKnowledgeLayerEnabled = false,
+        IDomainKnowledgePipelinePort? domainKnowledgePipeline = null)
     {
         if (string.IsNullOrWhiteSpace(normalizedJson))
         {
@@ -719,6 +753,16 @@ public sealed class ParseVoiceInputHandler(
 
             root["observations"] = observations;
             root["plannedTasks"] = plannedTasks;
+        }
+
+        // W1.P0 Batch A — flag-guarded domain-knowledge pipeline.
+        // When Ai:DomainKnowledgeLayer:Enabled is true (default false),
+        // runs all 7 normalizers (C1–C7) in the prescribed order.
+        // When false, this block is a no-op and the output is byte-identical
+        // to the pre-Batch-A behaviour.
+        if (domainKnowledgeLayerEnabled && domainKnowledgePipeline is not null)
+        {
+            domainKnowledgePipeline.RunPipeline(root, transcript);
         }
 
         return root.ToJsonString();
