@@ -55,16 +55,15 @@ public sealed class RegisterUserHandler(
 
         var tokens = jwtTokenService.GenerateTokens(user.Id, phone.Value, user.DisplayName, memberships, phoneVerified: user.PhoneVerifiedAtUtc.HasValue);
 
-        // Store refresh token hashed. Registration uses a default device session
-        // (device id unknown at this layer; the Api boundary does not yet thread
-        // DeviceSessionRequest into RegisterUserCommand — that is a later dispatch).
+        // Store refresh token hashed. Use real device metadata from the command when available.
+        var session = command.Session;
         var refreshToken = new Domain.Security.RefreshToken(
             idGenerator.New(),
             user.Id,
             RefreshTokenHasher.Hash(tokens.RefreshToken),
-            deviceId: "unknown",
-            deviceName: null,
-            platform: "unknown",
+            deviceId: session?.DeviceId ?? "unknown",
+            deviceName: session?.DeviceName,
+            platform: session?.Platform ?? "unknown",
             utcNow,
             utcNow.AddDays(30));
 

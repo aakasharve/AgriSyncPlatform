@@ -69,6 +69,9 @@ public sealed class RefreshTokenHandler(
             utcNow,
             utcNow.AddDays(30));
 
+        // Stamp last_used_at_utc before rotating so the column reflects the final use.
+        existingToken.MarkUsed(utcNow);
+
         // Rotate the old token — marks it revoked with reason "rotated" and links to replacement
         existingToken.MarkRotated(utcNow, newRefreshTokenId);
 

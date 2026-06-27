@@ -145,6 +145,27 @@ public class RefreshTokenHandlerDeviceSessionTests
         result.IsFailure.Should().BeTrue("inactive user must not be refreshed");
     }
 
+    [Fact]
+    public async Task Successful_refresh_stamps_LastUsedAtUtc_on_rotated_token()
+    {
+        var createdAt = DateTime.UtcNow.AddMinutes(-5);
+        var utcNow = createdAt.AddMinutes(5);
+        const string rawToken = "valid-raw-refresh-markused";
+        var userId = new UserId(Guid.NewGuid());
+        var user = MakeActiveUser(userId, createdAt);
+
+        // Token was created 5 minutes ago; LastUsedAtUtc starts == CreatedAtUtc
+        var existingToken = MakeActiveToken(userId, rawToken, "device-X", createdAt);
+        existingToken.LastUsedAtUtc.Should().Be(createdAt, "LastUsedAtUtc is set to createdAt in the constructor");
+
+        var repo = new CapturingRepo(existingToken);
+        var handler = BuildHandler(user, repo, utcNow);
+        var result = await handler.HandleAsync(new RefreshTokenCommand(rawToken, DefaultSession));
+
+        result.IsSuccess.Should().BeTrue();
+        existingToken.LastUsedAtUtc.Should().Be(utcNow, "MarkUsed must update LastUsedAtUtc to the refresh time");
+    }
+
     // ---- helpers ----
 
     private static DomainUser MakeActiveUser(UserId userId, DateTime now)
@@ -214,9 +235,6 @@ public class RefreshTokenHandlerDeviceSessionTests
 
         public Task<DomainRefreshToken?> GetByTokenHashAsync(string tokenHash, CancellationToken ct = default)
             => Task.FromResult(existingToken);
-
-        public Task<DomainRefreshToken?> GetActiveForUserDeviceAsync(Guid userId, string deviceId, CancellationToken ct = default)
-            => Task.FromResult<DomainRefreshToken?>(null);
 
         public Task AddAsync(DomainRefreshToken refreshToken, CancellationToken ct = default)
         {

@@ -41,7 +41,8 @@ public static class AuthEndpoints
                 request.Password!,
                 request.DisplayName!,
                 request.AppId,
-                request.Role);
+                request.Role,
+                BuildDeviceSession(context));
 
             Result<User.Application.Contracts.Dtos.AuthResponse> result;
             try

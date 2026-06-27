@@ -12,15 +12,6 @@ internal sealed class RefreshTokenRepository(UserDbContext db) : IRefreshTokenRe
         return await db.RefreshTokens.FirstOrDefaultAsync(t => t.TokenHash == tokenHash, ct);
     }
 
-    public async Task<RefreshToken?> GetActiveForUserDeviceAsync(Guid userId, string deviceId, CancellationToken ct = default)
-    {
-        var typedUserId = new UserId(userId);
-        return await db.RefreshTokens
-            .FirstOrDefaultAsync(
-                t => t.UserId == typedUserId && t.DeviceId == deviceId && t.RevokedAtUtc == null,
-                ct);
-    }
-
     public async Task AddAsync(RefreshToken refreshToken, CancellationToken ct = default)
     {
         await db.RefreshTokens.AddAsync(refreshToken, ct);

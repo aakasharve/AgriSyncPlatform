@@ -144,7 +144,6 @@ public class VerifyOtpDeviceSessionTests
         public DomainRefreshToken? AddedToken { get; private set; }
 
         public Task<DomainRefreshToken?> GetByTokenHashAsync(string tokenHash, CancellationToken ct = default) => Task.FromResult<DomainRefreshToken?>(null);
-        public Task<DomainRefreshToken?> GetActiveForUserDeviceAsync(Guid userId, string deviceId, CancellationToken ct = default) => Task.FromResult<DomainRefreshToken?>(null);
 
         public Task AddAsync(DomainRefreshToken refreshToken, CancellationToken ct = default)
         {
