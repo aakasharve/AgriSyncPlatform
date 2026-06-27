@@ -1,10 +1,18 @@
 /**
  * otpClient — thin fetch wrapper around the Phase 3 User API OTP routes.
  *
+ * spec: secure-remembered-device-sessions-2026-06-24
+ * - verifyOtp adds credentials: 'include' so the HttpOnly agrisync_refresh
+ *   cookie is set by the server on a successful verify.
+ * - VerifyOtpResponse no longer carries refreshToken (the cookie is the token).
+ * - verifyOtp accepts optional { rememberDevice, deviceId, deviceName, platform }
+ *   so the backend can issue the right cookie expiry (session vs persistent).
+ *
  * Contracts (backend):
  *   POST /user/auth/start-otp   → { phone }           ⇒ 200 { expiresAtUtc, resendAfterSeconds, provider }
  *                                                       | 400 { error, message } | 429 rate limit
- *   POST /user/auth/verify-otp  → { phone, otp, displayName? } ⇒ 200 { userId, accessToken, refreshToken, expiresAtUtc, createdNewUser }
+ *   POST /user/auth/verify-otp  → { phone, otp, displayName?, rememberDevice?, deviceId?, platform? }
+ *                                ⇒ 200 { userId, accessToken, expiresAtUtc, createdNewUser }
  *                                                       | 401 mismatch | 410 expired | 429 locked | 404 no pending
  *
  * Both endpoints are PUBLIC (no bearer) and rate-limited on the server
@@ -32,12 +40,20 @@ export interface StartOtpResponse {
     provider: string;
 }
 
+// spec: secure-remembered-device-sessions-2026-06-24
+// refreshToken is removed from the response — it is delivered via HttpOnly cookie.
 export interface VerifyOtpResponse {
     userId: string;
     accessToken: string;
-    refreshToken: string;
     expiresAtUtc: string;
     createdNewUser: boolean;
+}
+
+export interface VerifyOtpOptions {
+    rememberDevice?: boolean;
+    deviceId?: string;
+    deviceName?: string;
+    platform?: 'web' | 'android' | 'unknown';
 }
 
 export interface OtpError {
@@ -74,15 +90,31 @@ export const startOtp = async (phone: string): Promise<StartOtpResponse> => {
     return (await response.json()) as StartOtpResponse;
 };
 
+// spec: secure-remembered-device-sessions-2026-06-24
+// credentials: 'include' ensures the HttpOnly refresh cookie is stored
+// by the browser when the server sets it in the response.
+// rememberDevice defaults to false if not specified.
 export const verifyOtp = async (
     phone: string,
     otp: string,
     displayName?: string,
+    options?: VerifyOtpOptions,
 ): Promise<VerifyOtpResponse> => {
+    const body: Record<string, unknown> = {
+        phone,
+        otp,
+        ...(displayName ? { displayName } : {}),
+        rememberDevice: options?.rememberDevice ?? false,
+        ...(options?.deviceId ? { deviceId: options.deviceId } : {}),
+        ...(options?.deviceName ? { deviceName: options.deviceName } : {}),
+        platform: options?.platform ?? 'web',
+    };
+
     const response = await fetch(`${resolveBaseUrl()}/user/auth/verify-otp`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ phone, otp, displayName }),
+        credentials: 'include',
+        body: JSON.stringify(body),
     });
 
     if (!response.ok) {

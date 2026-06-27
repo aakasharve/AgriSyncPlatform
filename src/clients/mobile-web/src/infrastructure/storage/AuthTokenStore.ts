@@ -1,7 +1,6 @@
 export interface AuthSession {
     userId: string;
     accessToken: string;
-    refreshToken: string;
     expiresAtUtc: string;
 }
 
@@ -31,16 +30,17 @@ export function getAuthSession(): AuthSession | null {
     }
 
     try {
-        const parsed = JSON.parse(raw) as Partial<AuthSession>;
-        if (!parsed.accessToken || !parsed.refreshToken || !parsed.expiresAtUtc || !parsed.userId) {
+        const parsed = JSON.parse(raw) as Record<string, unknown>;
+        // Legacy sessions that only contain refreshToken (no accessToken) are treated as null.
+        // refreshToken is intentionally ignored — it is never stored in this version.
+        if (!parsed['accessToken'] || !parsed['expiresAtUtc'] || !parsed['userId']) {
             return null;
         }
 
         return {
-            userId: parsed.userId,
-            accessToken: parsed.accessToken,
-            refreshToken: parsed.refreshToken,
-            expiresAtUtc: parsed.expiresAtUtc,
+            userId: String(parsed['userId']),
+            accessToken: String(parsed['accessToken']),
+            expiresAtUtc: String(parsed['expiresAtUtc']),
         };
     } catch {
         return null;
@@ -52,7 +52,14 @@ export function setAuthSession(session: AuthSession): void {
         return;
     }
 
-    window.localStorage.setItem(AUTH_SESSION_KEY, JSON.stringify(session));
+    // Only the three required fields are persisted — refreshToken is never written.
+    const toStore: AuthSession = {
+        userId: session.userId,
+        accessToken: session.accessToken,
+        expiresAtUtc: session.expiresAtUtc,
+    };
+
+    window.localStorage.setItem(AUTH_SESSION_KEY, JSON.stringify(toStore));
     notifyAuthSessionChanged();
 }
 

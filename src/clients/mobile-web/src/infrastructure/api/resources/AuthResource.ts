@@ -1,16 +1,14 @@
 // Sub-plan 04 Task 9: AgriSyncClient decomposition — auth + identity.
-// Methods are byte-for-byte equivalent to the originals on
-// AgriSyncClient. The slim AgriSyncClient class delegates here.
+// spec: secure-remembered-device-sessions-2026-06-24
+// Auth calls are now side-effect-free — they return AuthResponseDto and let
+// the caller (AuthProvider or AgriSyncClient.refreshSession) own session state.
+// No setAuthSession calls here; session management is centralised in AuthProvider.
 
-import { clearAuthSession, setAuthSession } from '../../storage/AuthTokenStore';
 import type { AuthResponseDto, LoginRequest } from '../dtos';
-import { toAuthSession, type HttpTransport } from '../transport';
+import { type HttpTransport } from '../transport';
 
 export async function login(t: HttpTransport, request: LoginRequest): Promise<AuthResponseDto> {
-    clearAuthSession();
     const response = await t.authHttp.post<AuthResponseDto>('/user/auth/login', request);
-    const session = toAuthSession(response.data);
-    setAuthSession(session);
     return response.data;
 }
 
@@ -18,17 +16,15 @@ export async function register(
     t: HttpTransport,
     request: { phone: string; password: string; displayName: string; appId?: string; role?: string },
 ): Promise<AuthResponseDto> {
-    clearAuthSession();
     const response = await t.authHttp.post<AuthResponseDto>('/user/auth/register', request);
-    const session = toAuthSession(response.data);
-    setAuthSession(session);
     return response.data;
 }
 
+// refreshToken is kept for backward compat but is no longer used by the web refresh path.
+// The web path (AgriSyncClient.refreshSession) posts no token body and relies on the
+// HttpOnly cookie. This function may be removed once the Android native path is wired.
 export async function refreshToken(t: HttpTransport, refreshTokenStr: string): Promise<AuthResponseDto> {
     const response = await t.authHttp.post<AuthResponseDto>('/user/auth/refresh', { refreshToken: refreshTokenStr });
-    const session = toAuthSession(response.data);
-    setAuthSession(session);
     return response.data;
 }
 

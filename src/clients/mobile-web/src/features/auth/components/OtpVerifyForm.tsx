@@ -43,7 +43,6 @@ const OtpVerifyForm: React.FC<OtpVerifyFormProps> = ({ phone, otpMeta, onVerifie
             setAuthSession({
                 userId: res.userId,
                 accessToken: res.accessToken,
-                refreshToken: res.refreshToken,
                 expiresAtUtc: res.expiresAtUtc,
             });
             if (res.createdNewUser) {

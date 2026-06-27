@@ -184,7 +184,6 @@ const JoinFarmLandingPage: React.FC<JoinFarmLandingPageProps> = ({ onComplete, o
             setAuthSession({
                 userId: result.userId,
                 accessToken: result.accessToken,
-                refreshToken: result.refreshToken,
                 expiresAtUtc: result.expiresAtUtc,
             });
 

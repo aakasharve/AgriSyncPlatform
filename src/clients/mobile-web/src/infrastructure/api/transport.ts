@@ -68,7 +68,6 @@ export function toAuthSession(dto: AuthResponseDto): AuthSession {
     return {
         userId: dto.userId,
         accessToken: dto.accessToken,
-        refreshToken: dto.refreshToken,
         expiresAtUtc: dto.expiresAtUtc,
     };
 }

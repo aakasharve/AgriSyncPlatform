@@ -9,6 +9,13 @@
 // SyncMutationType, etc. — are re-exported below so existing
 // `from '../../infrastructure/api/AgriSyncClient'` imports continue
 // to compile.
+//
+// spec: secure-remembered-device-sessions-2026-06-24
+// - Both axios instances created with withCredentials: true so the
+//   HttpOnly agrisync_refresh cookie is sent/received on every request.
+// - X-Device-Id header sourced from DeviceIdStore (reuse, no new source).
+// - refreshSession() posts no refresh token — the cookie carries it.
+// - rememberDevice flag stored in localStorage key agrisync_remember_device_v1.
 
 import axios, { AxiosError, AxiosInstance, InternalAxiosRequestConfig } from 'axios';
 import { reportClientError } from '../telemetry/ClientErrorReporter';
@@ -18,6 +25,8 @@ import {
     setAuthSession,
     type AuthSession,
 } from '../storage/AuthTokenStore';
+import { readDeviceId, writeDeviceId } from '../storage/DeviceIdStore';
+import { getRememberDevice, clearRememberDevice } from '../storage/RememberDeviceStore';
 import { SYNC_MUTATION_TYPES } from '../sync/SyncMutationCatalog';
 import {
     APP_VERSION,
@@ -68,6 +77,19 @@ import * as Security from './resources/SecurityResource';
 import * as Export from './resources/ExportResource';
 // spec: data-principle-spine-2026-05-05/06.4
 import * as Consent from './resources/ConsentResource';
+
+// ---------------------------------------------------------------------------
+// Stable device-id helper: reads existing id or creates one on first call.
+// ---------------------------------------------------------------------------
+
+function getOrCreateDeviceId(): string {
+    let id = readDeviceId();
+    if (!id) {
+        id = crypto.randomUUID ? crypto.randomUUID() : `dev-${Date.now()}`;
+        writeDeviceId(id);
+    }
+    return id;
+}
 
 // ---------------------------------------------------------------------------
 // Re-exports — keep every name the rest of the codebase imports from this
@@ -152,16 +174,25 @@ export class AgriSyncClient implements HttpTransport {
 
     constructor() {
         const baseURL = resolveApiBaseUrl();
-        this.http = axios.create({ baseURL });
-        this.authHttp = axios.create({ baseURL });
+        // spec: secure-remembered-device-sessions-2026-06-24
+        // Both instances need withCredentials so the HttpOnly agrisync_refresh
+        // cookie is sent on refresh and received on login/verify-otp.
+        this.http = axios.create({ baseURL, withCredentials: true });
+        this.authHttp = axios.create({ baseURL, withCredentials: true });
 
         this.http.interceptors.request.use((config) => this.attachAccessToken(config));
         this.http.interceptors.request.use((config) => {
             config.headers.set('X-App-Version', APP_VERSION);
+            // spec: secure-remembered-device-sessions-2026-06-24
+            // Send device-id on every authenticated request so the backend can
+            // scope refresh/revoke to the current device. Source is the existing
+            // DeviceIdStore — no new device-id source is introduced.
+            config.headers.set('X-Device-Id', getOrCreateDeviceId());
             return config;
         });
         this.authHttp.interceptors.request.use((config) => {
             config.headers.set('X-App-Version', APP_VERSION);
+            config.headers.set('X-Device-Id', getOrCreateDeviceId());
             return config;
         });
         this.http.interceptors.response.use(
@@ -475,19 +506,25 @@ export class AgriSyncClient implements HttpTransport {
         return this.http.request(originalConfig);
     }
 
-    private async refreshSession(): Promise<AuthSession | null> {
+    // spec: secure-remembered-device-sessions-2026-06-24
+    // Web refresh: POST /user/auth/refresh with NO token body — the HttpOnly
+    // cookie agrisync_refresh carries the token (withCredentials handles this).
+    // Sends rememberDevice + deviceId + platform so the backend can issue the
+    // right cookie expiry (session vs persistent). Never reads refreshToken.
+    async refreshSession(): Promise<AuthSession | null> {
         if (this.refreshPromise) {
             return this.refreshPromise;
         }
 
-        const currentSession = getAuthSession();
-        if (!currentSession?.refreshToken) {
-            clearAuthSession();
-            return null;
-        }
+        const deviceId = getOrCreateDeviceId();
+        const rememberDevice = getRememberDevice();
 
         this.refreshPromise = this.authHttp
-            .post<AuthResponseDto>('/user/auth/refresh', { refreshToken: currentSession.refreshToken })
+            .post<AuthResponseDto>('/user/auth/refresh', {
+                rememberDevice,
+                deviceId,
+                platform: 'web',
+            })
             .then(response => {
                 const session = toAuthSession(response.data);
                 setAuthSession(session);
@@ -502,6 +539,14 @@ export class AgriSyncClient implements HttpTransport {
             });
 
         return this.refreshPromise;
+    }
+
+    // Stub for Task 6.1 (full logout wiring). Prevents compilation errors if
+    // any caller already imports this method shape.
+    logoutCurrentDevice(): Promise<void> {
+        clearAuthSession();
+        clearRememberDevice();
+        return Promise.resolve();
     }
 }
 

@@ -17,12 +17,15 @@ export type VerificationStatus =
 export interface LoginRequest {
     phone: string;
     password: string;
+    rememberDevice: boolean;
+    deviceId: string;
+    deviceName?: string;
+    platform: 'web' | 'android' | 'unknown';
 }
 
 export interface AuthResponseDto {
     userId: string;
     accessToken: string;
-    refreshToken: string;
     expiresAtUtc: string;
 }
 

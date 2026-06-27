@@ -36,7 +36,10 @@ const AppFrame: React.FC<{
     crops: CropProfile[];
     setCrops: React.Dispatch<React.SetStateAction<CropProfile[]>>;
 }> = ({ crops, setCrops }) => {
-    const { isAuthenticated } = useAuth();
+    // spec: secure-remembered-device-sessions-2026-06-24
+    // Use authStatus (not isAuthenticated) so we can show a neutral loading
+    // shell during 'checking' and never flash LoginPage before boot validation.
+    const { isAuthenticated, authStatus } = useAuth();
     const [joinActive, setJoinActive] = useState<boolean>(hasJoinDeepLink);
 
     // The QR deep-link wins over login. Semi-literate workers must never
@@ -45,6 +48,17 @@ const AppFrame: React.FC<{
         return (
             <AppShell>
                 <JoinFarmLandingPage onComplete={() => setJoinActive(false)} />
+            </AppShell>
+        );
+    }
+
+    // spec: secure-remembered-device-sessions-2026-06-24
+    // While the boot-validation refresh is in flight, render SplashScreen so
+    // LoginPage never flashes for users with a valid remembered session.
+    if (authStatus === 'checking') {
+        return (
+            <AppShell>
+                <SplashScreen onComplete={() => { /* boot splash; auth check resolves independently */ }} />
             </AppShell>
         );
     }
