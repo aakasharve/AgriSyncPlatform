@@ -65,7 +65,7 @@ vi.mock('../../api/AgriSyncClient', async () => {
 });
 
 vi.mock('../../storage/AuthTokenStore', () => ({
-    getAuthSession: () => ({ userId: 'test-user', accessToken: 'test', refreshToken: 'test', expiresAtUtc: '2099-01-01T00:00:00Z' }),
+    getAuthSession: () => ({ userId: 'test-user', accessToken: 'test', expiresAtUtc: '2099-01-01T00:00:00Z' }),
 }));
 
 // reconcileSyncPull writes to localStorage; no-op it for this test.

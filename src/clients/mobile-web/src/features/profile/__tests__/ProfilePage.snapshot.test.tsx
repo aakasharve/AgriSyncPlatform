@@ -39,7 +39,6 @@ vi.mock('../../../app/providers/AuthProvider', () => ({
         session: {
             userId: 'test-user',
             accessToken: 'test-access-token',
-            refreshToken: 'test-refresh-token',
             expiresAtUtc: '2099-01-01T00:00:00Z',
         },
         isAuthenticated: true,

@@ -2,6 +2,7 @@ using AgriSync.BuildingBlocks.Auth.Jwt;
 using Microsoft.Extensions.Options;
 using User.Application.UseCases.Auth;
 using User.Application.UseCases.Auth.Login;
+using User.Application.UseCases.Auth.Logout;
 using User.Application.UseCases.Auth.RefreshToken;
 using User.Application.UseCases.Auth.RegisterUser;
 using User.Application.UseCases.Auth.StartOtp;
@@ -32,6 +33,8 @@ public static class DependencyInjection
         services.AddScoped<GetMeContextHandler>();
         services.AddScoped<StartOtpHandler>();
         services.AddScoped<VerifyOtpHandler>();
+        services.AddScoped<LogoutCurrentDeviceHandler>();
+        services.AddScoped<RevokeAllDeviceSessionsHandler>();
 
         return services;
     }

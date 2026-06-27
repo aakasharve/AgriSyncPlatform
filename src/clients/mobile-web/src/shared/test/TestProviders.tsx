@@ -29,7 +29,7 @@ import React from 'react';
  *   }));
  *   vi.mock('../../app/providers/AuthProvider', () => ({
  *     useAuth: () => ({
- *       session: { userId: 'test-user', accessToken: 't', refreshToken: 'r', expiresAtUtc: '2099-01-01T00:00:00Z' },
+ *       session: { userId: 'test-user', accessToken: 't', expiresAtUtc: '2099-01-01T00:00:00Z' },
  *       isAuthenticated: true,
  *       isLoading: false,
  *       authError: null,

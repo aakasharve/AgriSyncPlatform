@@ -137,7 +137,12 @@ try
                     "baggage",
                     // W0-B — admin-web sends this to select the active org when the
                     // user has multiple memberships (428 Ambiguous response path).
-                    "X-Active-Org-Id")
+                    "X-Active-Org-Id",
+                    // LB-1 — native Android clients send this to select the dual-shape
+                    // auth response that includes the refresh token in the body (Keystore
+                    // storage). Must be in the CORS allow-list so browser preflight passes
+                    // even if the web client ever sets it for diagnostics.
+                    "X-Client-Platform")
                 .WithMethods("GET", "POST", "PUT", "DELETE", "OPTIONS")
                 .AllowCredentials();
         });

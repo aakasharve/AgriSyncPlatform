@@ -1,3 +1,5 @@
+using User.Application.UseCases.Auth.Session;
+
 namespace User.Application.UseCases.Auth.RegisterUser;
 
 public sealed record RegisterUserCommand(
@@ -5,4 +7,5 @@ public sealed record RegisterUserCommand(
     string Password,
     string DisplayName,
     string? AppId = "shramsafal",
-    string? Role = "PrimaryOwner");
+    string? Role = "PrimaryOwner",
+    DeviceSessionRequest? Session = null);
