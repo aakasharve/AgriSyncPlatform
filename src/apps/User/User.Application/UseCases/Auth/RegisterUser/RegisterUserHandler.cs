@@ -2,6 +2,7 @@ using AgriSync.BuildingBlocks.Abstractions;
 using AgriSync.BuildingBlocks.Results;
 using User.Application.Contracts.Dtos;
 using User.Application.Ports;
+using User.Application.UseCases.Auth.Session;
 using User.Domain.Common;
 using User.Domain.Identity;
 using User.Domain.Membership;
@@ -54,11 +55,16 @@ public sealed class RegisterUserHandler(
 
         var tokens = jwtTokenService.GenerateTokens(user.Id, phone.Value, user.DisplayName, memberships, phoneVerified: user.PhoneVerifiedAtUtc.HasValue);
 
-        // Store refresh token
+        // Store refresh token hashed. Registration uses a default device session
+        // (device id unknown at this layer; the Api boundary does not yet thread
+        // DeviceSessionRequest into RegisterUserCommand — that is a later dispatch).
         var refreshToken = new Domain.Security.RefreshToken(
             idGenerator.New(),
             user.Id,
-            tokens.RefreshToken,
+            RefreshTokenHasher.Hash(tokens.RefreshToken),
+            deviceId: "unknown",
+            deviceName: null,
+            platform: "unknown",
             utcNow,
             utcNow.AddDays(30));
 

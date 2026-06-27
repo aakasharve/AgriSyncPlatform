@@ -1,5 +1,6 @@
 using AgriSync.SharedKernel.Contracts.Ids;
 using FluentAssertions;
+using User.Application.UseCases.Auth.Session;
 using User.Domain.Security;
 using Xunit;
 
@@ -188,5 +189,45 @@ public class RefreshTokenSessionTests
         token.RevocationReason.Should().Be("rotated");
         token.ReplacedByTokenId.Should().Be(replacementId);
         token.IsRevoked.Should().BeTrue();
+    }
+}
+
+/// <summary>
+/// Unit tests for RefreshTokenHasher determinism (Task 2.1).
+/// </summary>
+public class RefreshTokenHasherTests
+{
+    // Test 1 — Same token always produces the same hash.
+    [Fact]
+    public void Same_token_produces_same_hash()
+    {
+        var token = "agrisync-raw-token-abc123";
+
+        var hash1 = RefreshTokenHasher.Hash(token);
+        var hash2 = RefreshTokenHasher.Hash(token);
+
+        hash1.Should().Be(hash2, "SHA-256 is deterministic");
+    }
+
+    // Test 2 — Different tokens produce different hashes.
+    [Fact]
+    public void Different_tokens_produce_different_hashes()
+    {
+        var hash1 = RefreshTokenHasher.Hash("token-alpha");
+        var hash2 = RefreshTokenHasher.Hash("token-beta");
+
+        hash1.Should().NotBe(hash2);
+    }
+
+    // Test 3 — Hash is hex (uppercase, length 64) and not equal to the raw token.
+    [Fact]
+    public void Hash_is_hex_sha256_and_not_equal_to_raw_token()
+    {
+        var rawToken = "my-raw-refresh-token";
+        var hash = RefreshTokenHasher.Hash(rawToken);
+
+        hash.Should().HaveLength(64, "SHA-256 hex is 32 bytes = 64 hex characters");
+        hash.Should().MatchRegex("^[0-9A-F]{64}$", "Convert.ToHexString produces uppercase hex");
+        hash.Should().NotBe(rawToken, "the hash must not equal the raw token");
     }
 }

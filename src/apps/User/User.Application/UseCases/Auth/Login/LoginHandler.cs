@@ -2,6 +2,7 @@ using AgriSync.BuildingBlocks.Abstractions;
 using AgriSync.BuildingBlocks.Results;
 using User.Application.Contracts.Dtos;
 using User.Application.Ports;
+using User.Application.UseCases.Auth.Session;
 using User.Domain.Common;
 using User.Domain.Identity;
 
@@ -50,8 +51,9 @@ public sealed class LoginHandler(
             await userRepository.SaveChangesAsync(ct);
         }
 
-        // Revoke existing refresh tokens
-        await refreshTokenRepository.RevokeAllForUserAsync(user.Id, utcNow, ct);
+        // Revoke existing session for the same device only — other device sessions are preserved.
+        await refreshTokenRepository.RevokeActiveForUserDeviceAsync(
+            user.Id, command.Session.DeviceId, utcNow, "same_device_login", ct);
 
         // Generate new tokens
         var memberships = user.Memberships
@@ -61,11 +63,15 @@ public sealed class LoginHandler(
 
         var tokens = jwtTokenService.GenerateTokens(user.Id, phone.Value, user.DisplayName, memberships, phoneVerified: user.PhoneVerifiedAtUtc.HasValue);
 
-        // Store new refresh token
+        // Store new refresh token (hashed), with device metadata
+        var newRefreshTokenId = idGenerator.New();
         var refreshToken = new Domain.Security.RefreshToken(
-            idGenerator.New(),
+            newRefreshTokenId,
             user.Id,
-            tokens.RefreshToken,
+            RefreshTokenHasher.Hash(tokens.RefreshToken),
+            command.Session.DeviceId,
+            command.Session.DeviceName,
+            command.Session.Platform,
             utcNow,
             utcNow.AddDays(30));
 

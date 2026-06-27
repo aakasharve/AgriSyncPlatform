@@ -3,6 +3,7 @@ using AgriSync.SharedKernel.Contracts.Ids;
 using FluentAssertions;
 using User.Application.Ports;
 using User.Application.UseCases.Auth.Login;
+using User.Application.UseCases.Auth.Session;
 using Xunit;
 using DomainUser = global::User.Domain.Identity.User;
 using DomainPhone = global::User.Domain.Identity.PhoneNumber;
@@ -19,6 +20,9 @@ namespace UserAuthLoginTests;
 /// </summary>
 public class LoginHandlerPhoneVerifiedTests
 {
+    private static readonly DeviceSessionRequest DefaultSession =
+        new("test-device", RememberDevice: false, DeviceName: null, Platform: "unknown");
+
     [Fact]
     public async Task Password_login_of_unverified_user_stamps_verified_and_token_carries_phone_verified()
     {
@@ -30,7 +34,7 @@ public class LoginHandlerPhoneVerifiedTests
         var userRepo = new SingleUserRepository(user);
         var handler = new LoginHandler(userRepo, new NoopRefreshTokenRepository(), new AlwaysTrueHasher(), jwt, new GuidIdGenerator(), new FakeClock(now));
 
-        var result = await handler.HandleAsync(new LoginCommand("8888888888", "Testuser@123"));
+        var result = await handler.HandleAsync(new LoginCommand("8888888888", "Testuser@123", DefaultSession));
 
         result.IsSuccess.Should().BeTrue();
         user.PhoneVerifiedAtUtc.Should().NotBeNull("a successful password login stamps the internal test user phone-verified");
@@ -49,7 +53,7 @@ public class LoginHandlerPhoneVerifiedTests
         var jwt = new CapturingJwtTokenService();
         var handler = new LoginHandler(new SingleUserRepository(user), new NoopRefreshTokenRepository(), new AlwaysTrueHasher(), jwt, new GuidIdGenerator(), new FakeClock(now));
 
-        var result = await handler.HandleAsync(new LoginCommand("8888888888", "Testuser@123"));
+        var result = await handler.HandleAsync(new LoginCommand("8888888888", "Testuser@123", DefaultSession));
 
         result.IsSuccess.Should().BeTrue();
         user.PhoneVerifiedAtUtc.Should().Be(stampedAt, "an already-verified user must not be re-stamped");
@@ -80,9 +84,11 @@ public class LoginHandlerPhoneVerifiedTests
 
     private sealed class NoopRefreshTokenRepository : IRefreshTokenRepository
     {
-        public Task<DomainRefreshToken?> GetByTokenAsync(string token, CancellationToken ct = default) => Task.FromResult<DomainRefreshToken?>(null);
+        public Task<DomainRefreshToken?> GetByTokenHashAsync(string tokenHash, CancellationToken ct = default) => Task.FromResult<DomainRefreshToken?>(null);
+        public Task<DomainRefreshToken?> GetActiveForUserDeviceAsync(Guid userId, string deviceId, CancellationToken ct = default) => Task.FromResult<DomainRefreshToken?>(null);
         public Task AddAsync(DomainRefreshToken refreshToken, CancellationToken ct = default) => Task.CompletedTask;
-        public Task RevokeAllForUserAsync(Guid userId, DateTime utcNow, CancellationToken ct = default) => Task.CompletedTask;
+        public Task RevokeActiveForUserDeviceAsync(Guid userId, string deviceId, DateTime utcNow, string reason, CancellationToken ct = default) => Task.CompletedTask;
+        public Task RevokeAllForUserAsync(Guid userId, DateTime utcNow, string reason = "revoked_all", CancellationToken ct = default) => Task.CompletedTask;
         public Task SaveChangesAsync(CancellationToken ct = default) => Task.CompletedTask;
     }
 

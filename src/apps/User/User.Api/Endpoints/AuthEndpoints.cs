@@ -9,6 +9,7 @@ using User.Application.Ports;
 using User.Application.UseCases.Auth.Login;
 using User.Application.UseCases.Auth.RefreshToken;
 using User.Application.UseCases.Auth.RegisterUser;
+using User.Application.UseCases.Auth.Session;
 using User.Application.UseCases.Auth.StartOtp;
 using User.Application.UseCases.Auth.VerifyOtp;
 using User.Application.UseCases.Users.GetMeContext;
@@ -68,7 +69,8 @@ public static class AuthEndpoints
         {
             try
             {
-                var command = new LoginCommand(request.Phone, request.Password);
+                var session = BuildDeviceSession(context);
+                var command = new LoginCommand(request.Phone, request.Password, session);
                 var result = await handler.HandleAsync(command, ct);
 
                 return result.IsSuccess
@@ -119,6 +121,7 @@ public static class AuthEndpoints
 
         publicGroup.MapPost("/verify-otp", async (
             VerifyOtpRequest request,
+            HttpContext context,
             VerifyOtpHandler handler,
             CancellationToken ct) =>
         {
@@ -131,8 +134,9 @@ public static class AuthEndpoints
                 });
             }
 
+            var session = BuildDeviceSession(context);
             var result = await handler.HandleAsync(
-                new VerifyOtpCommand(request.Phone, request.Otp, request.DisplayName),
+                new VerifyOtpCommand(request.Phone, request.Otp, request.DisplayName, session),
                 ct);
 
             if (result.IsFailure)
@@ -164,10 +168,12 @@ public static class AuthEndpoints
 
         publicGroup.MapPost("/refresh", async (
             RefreshRequest request,
+            HttpContext context,
             RefreshTokenHandler handler,
             CancellationToken ct) =>
         {
-            var command = new RefreshTokenCommand(request.RefreshToken);
+            var session = BuildDeviceSession(context);
+            var command = new RefreshTokenCommand(request.RefreshToken, session);
             var result = await handler.HandleAsync(command, ct);
 
             return result.IsSuccess
@@ -188,7 +194,7 @@ public static class AuthEndpoints
                 return Results.Unauthorized();
             }
 
-            await refreshTokenRepository.RevokeAllForUserAsync(userId, clock.UtcNow, ct);
+            await refreshTokenRepository.RevokeAllForUserAsync(userId, clock.UtcNow, ct: ct);
             await refreshTokenRepository.SaveChangesAsync(ct);
 
             return Results.Ok(new { message = "Logged out successfully" });
@@ -216,6 +222,22 @@ public static class AuthEndpoints
         .RequireAuthorization();
 
         return endpoints;
+    }
+
+    /// <summary>
+    /// Builds a minimal <see cref="DeviceSessionRequest"/> from HTTP headers.
+    /// Task 2.5 (a later dispatch) will fully wire cookie + Android Keystore
+    /// transport. For now, just enough to make the backend compile and pass
+    /// device metadata into commands.
+    /// </summary>
+    private static DeviceSessionRequest BuildDeviceSession(HttpContext context)
+    {
+        var deviceId = context.Request.Headers["X-Device-Id"].FirstOrDefault() ?? "unknown";
+        return new DeviceSessionRequest(
+            DeviceId: deviceId,
+            RememberDevice: false,
+            DeviceName: null,
+            Platform: "unknown");
     }
 
     private static IResult CreateValidationErrorResponse(HttpContext context, ILoggerFactory loggerFactory, ArgumentException ex)
