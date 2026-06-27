@@ -17,7 +17,24 @@ export MSYS_NO_PATHCONV=1
 REGION=ap-south-1
 FN=agrisync-prod-nap
 ROLE=agrisync-prod-nap-role
+EXPECTED_ACCT=951921970996   # the prod account the nap lives in (IAM user first_admin)
 FAILED=0
+
+# Guard: verify we are in the RIGHT account BEFORE trusting any not-found result.
+# In a wrong-but-valid account every delete returns not-found and get-function
+# also returns not-found, which this script would otherwise treat as a clean
+# teardown -- a FALSE success while the real nap keeps running in prod.
+ACCT=$(aws sts get-caller-identity --region "$REGION" --query Account --output text 2>&1) || {
+  echo "ERROR: cannot resolve AWS caller identity (no creds / bad profile):" >&2
+  printf '%s\n' "$ACCT" >&2
+  exit 1
+}
+if [ "$ACCT" != "$EXPECTED_ACCT" ]; then
+  echo "ERROR: wrong AWS account $ACCT (expected $EXPECTED_ACCT)." >&2
+  echo "       Refusing teardown -- a not-found here would be a false success." >&2
+  exit 1
+fi
+echo "AWS account verified: $ACCT"
 
 # Run an AWS delete: tolerate "not found"/"already gone", fail-loud on anything else.
 run_del() {
