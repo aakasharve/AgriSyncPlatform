@@ -1,0 +1,72 @@
+id: vlog-2025-10-21-pruning
+bucket: inputs
+description: |
+  21/10 — Pruning day. Farmer prunes 10 rows with 12 hired men at
+  Rs 14 per vine (piece-rate). The wage model is piece-rate ("उक्त"
+  marker / per-झाड rate), NOT daily wage. Total must NOT be computed
+  as 12 × 14 = Rs 168 — the no-multiply rule applies for piece-rate.
+
+  TARGET (W1.P0 domain-aware parser):
+  - wageModel = "piece-rate", contractUnit = "vine" / झाड
+    (Component 6 — LabourWageModel).
+  - rate = 14, rateUnit = "per_vine"; total must NOT be worker-count
+    multiplied (12 × 14 is wrong; total = rows × vines/row × 14 which
+    is not spoken so stays NOT_MENTIONED).
+  - activity = "pruning" / छाटणी (Component 6 — WorkTypeDictionary).
+  - workerCount = 12 (maleCount = 12).
+  Today's domain-blind parser may compute a wrong total or drop the
+  wage model. RED is expected.
+
+  Calibration target (W1.P3 score): ~78 ±8
+
+  spec: ai-intelligence-plan-2026-06-25
+
+input:
+  transcript: "आज छाटणी केली. दहा ओळींची छाटणी झाली. बारा माणसं होती. प्रत्येक झाडाला चौदा रुपये उक्त ने दिले."
+
+context:
+  fixture: farmer-grape-grower
+
+expected:
+  labour:
+    - activity: "pruning"
+      workerCount: 12
+      wageModel: "piece-rate"
+      rate: 14
+      rateUnit: "per_vine"
+      rowsWorked: 10
+
+tolerances:
+  "labour[0].activity":
+    oneOf:
+      - "pruning"
+      - "छाटणी"
+      - "Pruning"
+  "labour[0].workerCount":
+    exact: true
+  "labour[0].wageModel":
+    oneOf:
+      - "piece-rate"
+      - "piece_rate"
+      - "per-vine"
+      - "contract"
+  "labour[0].rate":
+    exact: true
+  "labour[0].rateUnit":
+    oneOf:
+      - "per_vine"
+      - "per vine"
+      - "per_झाड"
+      - "per_tree"
+  "labour[0].rowsWorked":
+    exact: true
+
+ignore_fields:
+  - summary
+  - dayOutcome
+  - inputs
+  - irrigation
+  - machinery
+  - expenses
+  - observations
+  - tasks

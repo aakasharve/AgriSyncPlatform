@@ -1,0 +1,67 @@
+id: vlog-2025-10-24-alphamethrin-bavistin
+bucket: inputs
+description: |
+  24/10 — Tank-mix spray day: alphamethrin (pyrethroid insecticide) +
+  Bavistin (carbendazim, systemic fungicide). Two products mixed in a
+  single tank and applied together.
+
+  TARGET (W1.P0 domain-aware parser):
+  - "aplhamitren" / "अल्फामेथ्रिन" → normalised to "Alphamethrin",
+    chemicalClass = "insecticide" (Component 2 — GrapeInputLexicon
+    fuzzy alias match).
+  - "bavistin" / "Bavistin" → normalised to "Bavistin",
+    chemicalClass = "fungicide" (systemic).
+  - rawProductName preserved for both (Component 2 raw-preserving rule).
+  Today's domain-blind parser may mislabel or merge the two products.
+  RED is expected.
+
+  spec: ai-intelligence-plan-2026-06-25
+
+input:
+  transcript: "अल्फामेथ्रिन आणि बाविस्टीन मिसळून फवारणी केली."
+
+context:
+  fixture: farmer-grape-grower
+
+expected:
+  inputs:
+    - productName: "Alphamethrin"
+      rawProductName: "अल्फामेथ्रिन"
+      chemicalClass: "insecticide"
+    - productName: "Bavistin"
+      rawProductName: "बाविस्टीन"
+      chemicalClass: "fungicide"
+
+tolerances:
+  "inputs[0].productName":
+    oneOf:
+      - "Alphamethrin"
+      - "alphamethrin"
+      - "alpha-cypermethrin"
+      - "अल्फामेथ्रिन"
+  "inputs[0].chemicalClass":
+    oneOf:
+      - "insecticide"
+      - "pyrethroid"
+      - "pyrethroid insecticide"
+  "inputs[1].productName":
+    oneOf:
+      - "Bavistin"
+      - "bavistin"
+      - "carbendazim"
+      - "Carbendazim"
+      - "बाविस्टीन"
+  "inputs[1].chemicalClass":
+    oneOf:
+      - "fungicide"
+      - "systemic fungicide"
+
+ignore_fields:
+  - summary
+  - dayOutcome
+  - irrigation
+  - labour
+  - machinery
+  - expenses
+  - observations
+  - tasks

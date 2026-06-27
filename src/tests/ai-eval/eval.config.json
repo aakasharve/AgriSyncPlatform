@@ -11,6 +11,15 @@
   },
   "global": {
     "failOnRegression": true,
-    "minScenariosPerBucket": 3
+    "minScenariosPerBucket": 3,
+    "bucketFloorOverrides": {
+      "workDone": 0,
+      "irrigation": 0,
+      "labour": 0,
+      "machinery": 0,
+      "expenses": 0,
+      "tasks": 0,
+      "observations": 0
+    }
   }
 }

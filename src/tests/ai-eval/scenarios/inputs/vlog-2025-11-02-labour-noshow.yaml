@@ -1,0 +1,48 @@
+id: vlog-2025-11-02-labour-noshow
+bucket: inputs
+description: |
+  2/11 — Labour no-show day (disturbance). The farmer's hired workers
+  did not show up. This is a DISTURBANCE_RECORDED day — a blocker
+  event that prevents normal farm work. No inputs were applied; no
+  work was done.
+
+  TARGET (W1.P0 domain-aware parser):
+  - dayOutcome = DISTURBANCE_RECORDED (the blocker pattern; NOT a
+    normal day with fabricated work).
+  - disturbanceType / reason captures labour no-show.
+  - No fabricated inputs, labour counts, or irrigation entries.
+  Today's domain-blind parser may fabricate a normal work day or
+  fail to detect the disturbance. RED is expected.
+
+  Calibration target (W1.P3 score): ~92 ±8 (blockers score high
+  because honest recording of the disruption is itself high-quality
+  comprehension)
+
+  spec: ai-intelligence-plan-2026-06-25
+
+input:
+  transcript: "आज मजूर आले नाहीत. काहीच काम झालं नाही."
+
+context:
+  fixture: farmer-grape-grower
+
+expected:
+  dayOutcome: "DISTURBANCE_RECORDED"
+
+tolerances:
+  "dayOutcome":
+    oneOf:
+      - "DISTURBANCE_RECORDED"
+      - "disturbance_recorded"
+      - "DISTURBANCE"
+      - "NO_WORK_DONE"
+
+ignore_fields:
+  - summary
+  - inputs
+  - irrigation
+  - labour
+  - machinery
+  - expenses
+  - observations
+  - tasks

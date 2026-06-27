@@ -1,0 +1,39 @@
+id: vlog-2025-11-04-silent
+bucket: inputs
+description: |
+  4/11 — Silent day (no work planned). The farmer recorded that no
+  work was planned or done today. This is a NO_WORK_PLANNED day.
+
+  TARGET: dayOutcome = NO_WORK_PLANNED. No fabricated work entries.
+  Silent days MUST NOT have invented inputs, labour, irrigation, or
+  any other activity — the honesty rule prohibits fabrication from
+  an absence of content.
+
+  spec: ai-intelligence-plan-2026-06-25
+
+input:
+  transcript: "आज काही काम नव्हतं."
+
+context:
+  fixture: farmer-grape-grower
+
+expected:
+  dayOutcome: "NO_WORK_PLANNED"
+
+tolerances:
+  "dayOutcome":
+    oneOf:
+      - "NO_WORK_PLANNED"
+      - "no_work_planned"
+      - "NO_WORK"
+      - "REST_DAY"
+
+ignore_fields:
+  - summary
+  - inputs
+  - irrigation
+  - labour
+  - machinery
+  - expenses
+  - observations
+  - tasks

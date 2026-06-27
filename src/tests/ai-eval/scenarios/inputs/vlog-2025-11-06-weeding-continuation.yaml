@@ -1,0 +1,48 @@
+id: vlog-2025-11-06-weeding-continuation
+bucket: inputs
+description: |
+  6/11 — Weeding continuation day. Farmer reports weeding of 8 more
+  rows ("आणखी आठ ओळींची खुरपणी केली"), continuing from the 1/11
+  weeding session (12 rows). This tests the CONTINUITY dimension —
+  incremental progress on the same operation.
+
+  TARGET (W1.P0 domain-aware parser):
+  - activity = "weeding" (Component 6 — WorkTypeDictionary;
+    "खुरपणी" maps to weeding).
+  - rowsWorked = 8 (the Devanagari numeral "आठ" → 8,
+    Component 4 — UnitAndNumeralNormalizer).
+  Today's domain-blind parser may fail to normalise the Devanagari
+  numeral or drop the row count. RED is expected.
+
+  spec: ai-intelligence-plan-2026-06-25
+
+input:
+  transcript: "आज आणखी आठ ओळींची खुरपणी केली."
+
+context:
+  fixture: farmer-grape-grower
+
+expected:
+  labour:
+    - activity: "weeding"
+      rowsWorked: 8
+
+tolerances:
+  "labour[0].activity":
+    oneOf:
+      - "weeding"
+      - "खुरपणी"
+      - "निंदणी"
+      - "Weeding"
+  "labour[0].rowsWorked":
+    exact: true
+
+ignore_fields:
+  - summary
+  - dayOutcome
+  - inputs
+  - irrigation
+  - machinery
+  - expenses
+  - observations
+  - tasks

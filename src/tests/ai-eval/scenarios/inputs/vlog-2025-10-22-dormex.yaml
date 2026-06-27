@@ -1,0 +1,64 @@
+id: vlog-2025-10-22-dormex
+bucket: inputs
+description: |
+  22/10 — Dormex paste application day. Farmer applies Dormex
+  (hydrogen cyanamide) as a paste for dormancy breaking on grapes.
+  This is a paste operation (Dormex लावणे), not a spray.
+
+  TARGET (W1.P0 domain-aware parser):
+  - productName normalised to "Dormex" (Component 2 — GrapeInputLexicon;
+    STT alias: "dormex", "डॉर्मेक्स").
+  - activity = "paste" / Dormex लावणे (Component 6 — WorkTypeDictionary).
+  - applicationMethod = "paste", NOT spray.
+  - chemicalClass = bud-break PGR / hydrogen cyanamide.
+  Today's domain-blind parser may misclassify the paste as a spray or
+  mislabel the product. RED is expected.
+
+  spec: ai-intelligence-plan-2026-06-25
+
+input:
+  transcript: "आज डॉर्मेक्स लावला. प्रत्येक झाडाला पेस्ट लावली. डॉर्मांसी ब्रेकिंग साठी."
+
+context:
+  fixture: farmer-grape-grower
+
+expected:
+  inputs:
+    - productName: "Dormex"
+      rawProductName: "डॉर्मेक्स"
+      chemicalClass: "PGR"
+      agronomicRole: "dormancy-break"
+      applicationMethod: "paste"
+
+tolerances:
+  "inputs[0].productName":
+    oneOf:
+      - "Dormex"
+      - "dormex"
+      - "hydrogen cyanamide"
+      - "डॉर्मेक्स"
+  "inputs[0].chemicalClass":
+    oneOf:
+      - "PGR"
+      - "bud-break PGR"
+      - "dormancy-break PGR"
+  "inputs[0].agronomicRole":
+    oneOf:
+      - "dormancy-break"
+      - "bud-break"
+      - "dormancy breaking"
+  "inputs[0].applicationMethod":
+    oneOf:
+      - "paste"
+      - "Paste"
+      - "लावणे"
+
+ignore_fields:
+  - summary
+  - dayOutcome
+  - irrigation
+  - labour
+  - machinery
+  - expenses
+  - observations
+  - tasks

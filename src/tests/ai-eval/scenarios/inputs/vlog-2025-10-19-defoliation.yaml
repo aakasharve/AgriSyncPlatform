@@ -1,0 +1,111 @@
+id: vlog-2025-10-19-defoliation
+bucket: inputs
+description: |
+  19/10 — Defoliation spray day. Farmer applies Ethrel (ethephon) +
+  00:52:34 (MKP — mono-potassium phosphate grade) + phosphoric acid
+  using a blower with 10 guns active, fan off. Carrier volume = 1000 L
+  (spray carrier, NOT irrigation). Diesel spend = Rs 500 ("पाचशे
+  रुपयांचं डिझेल") — a cost entry, NOT a fuel volume.
+
+  TARGET (W1.P0 domain-aware parser):
+  - "00:52:34" is a fertilizer grade (Component 1 — NpkGradeDictionary),
+    normalised to "0-52-34" / MKP; rawProductName = "00:52:34".
+  - 1000 L is spray carrier on the Ethrel row (Component 5 —
+    WaterRoleClassifier), NOT an irrigation event.
+  - Rs 500 diesel → activityExpenses row Rs 500; fuelQuantity must be
+    NOT_MENTIONED (Component 4 — no litre figure invented).
+  - Blower: 10 guns active, fan off (Component 10 machinery config).
+  Today's domain-blind parser drops/mislabels the NPK grade and
+  misclassifies the 1000 L as irrigation. RED is expected.
+
+  Calibration target (W1.P3 score): ~92 ±8
+
+  spec: ai-intelligence-plan-2026-06-25
+
+input:
+  transcript: "इथरेल आणि शून्य बावन्न चौतीस आणि फॉस्फोरिक ॲसिड मिसळून बलोवेर ने फवारणी केली. बलोवेर च्या 10 गन चालू होत्या आणि फॅन बंद होता. एक हजार लिटर पाणी वापरलं. पाचशे रुपयांचं डिझेल लागलं."
+
+context:
+  fixture: farmer-grape-grower
+
+expected:
+  inputs:
+    - productName: "Ethrel"
+      rawProductName: "इथरेल"
+      chemicalClass: "PGR"
+      agronomicRole: "defoliation"
+    - productName: "0-52-34"
+      rawProductName: "00:52:34"
+      chemicalClass: "WSF"
+      agronomicRole: "MKP"
+    - productName: "phosphoric acid"
+      rawProductName: "फॉस्फोरिक ॲसिड"
+  expenses:
+    - amount: 500
+      currency: "INR"
+      category: "diesel"
+  machinery:
+    - implement: "blower"
+      nozzlesActive: 10
+      fanState: "off"
+
+tolerances:
+  "inputs[0].productName":
+    oneOf:
+      - "Ethrel"
+      - "ethrel"
+      - "ethephon"
+      - "इथरेल"
+  "inputs[0].chemicalClass":
+    oneOf:
+      - "PGR"
+      - "ethylene-releasing PGR"
+      - "defoliation agent"
+  "inputs[1].productName":
+    oneOf:
+      - "0-52-34"
+      - "MKP"
+      - "0-52-34 (MKP)"
+      - "mono-potassium phosphate"
+  "inputs[1].rawProductName":
+    oneOf:
+      - "00:52:34"
+      - "0:52:34"
+      - "शून्य बावन्न चौतीस"
+  "inputs[1].chemicalClass":
+    oneOf:
+      - "WSF"
+      - "water-soluble fertilizer"
+      - "fertilizer"
+  "inputs[2].productName":
+    oneOf:
+      - "phosphoric acid"
+      - "Phosphoric acid"
+      - "फॉस्फोरिक ॲसिड"
+  "expenses[0].amount":
+    exact: true
+  "expenses[0].category":
+    oneOf:
+      - "diesel"
+      - "fuel"
+      - "Diesel"
+  "machinery[0].implement":
+    oneOf:
+      - "blower"
+      - "sprayer"
+      - "Blower"
+  "machinery[0].nozzlesActive":
+    exact: true
+  "machinery[0].fanState":
+    oneOf:
+      - "off"
+      - "OFF"
+      - "बंद"
+
+ignore_fields:
+  - summary
+  - dayOutcome
+  - irrigation
+  - labour
+  - observations
+  - tasks

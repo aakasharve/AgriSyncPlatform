@@ -1,0 +1,75 @@
+id: vlog-2025-10-25-6ba-pdh-pgr
+bucket: inputs
+description: |
+  25/10 — PGR spray day: 6-BA (6-benzylaminopurine, cytokinin for
+  berry sizing) + PDH (potassium di-hydrogen phosphate adjuvant).
+  Both are spray-applied together.
+
+  TARGET (W1.P0 domain-aware parser):
+  - "6 b a" / "सहा बी ए" → normalised to "6-BA",
+    chemicalClass = "cytokinin PGR", agronomicRole = "berry sizing"
+    (Component 2 — GrapeInputLexicon).
+  - "pdh" / "पीडीएच" → normalised to "PDH",
+    chemicalClass = "PGR adjuvant".
+  - rawProductName preserved for both.
+  Today's domain-blind parser may mislabel these PGR products. RED is
+  expected.
+
+  spec: ai-intelligence-plan-2026-06-25
+
+input:
+  transcript: "आज सहा बी ए आणि पीडीएच फवारणी केली."
+
+context:
+  fixture: farmer-grape-grower
+
+expected:
+  inputs:
+    - productName: "6-BA"
+      rawProductName: "सहा बी ए"
+      chemicalClass: "cytokinin PGR"
+      agronomicRole: "berry sizing"
+    - productName: "PDH"
+      rawProductName: "पीडीएच"
+      chemicalClass: "PGR adjuvant"
+
+tolerances:
+  "inputs[0].productName":
+    oneOf:
+      - "6-BA"
+      - "6BA"
+      - "6-benzylaminopurine"
+      - "6 b a"
+  "inputs[0].chemicalClass":
+    oneOf:
+      - "cytokinin PGR"
+      - "cytokinin"
+      - "PGR"
+      - "plant growth regulator"
+  "inputs[0].agronomicRole":
+    oneOf:
+      - "berry sizing"
+      - "berry development"
+      - "cell division"
+  "inputs[1].productName":
+    oneOf:
+      - "PDH"
+      - "pdh"
+      - "potassium di-hydrogen phosphate"
+      - "पीडीएच"
+  "inputs[1].chemicalClass":
+    oneOf:
+      - "PGR adjuvant"
+      - "adjuvant"
+      - "WSF"
+      - "PGR"
+
+ignore_fields:
+  - summary
+  - dayOutcome
+  - irrigation
+  - labour
+  - machinery
+  - expenses
+  - observations
+  - tasks
