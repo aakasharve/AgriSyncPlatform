@@ -26,6 +26,10 @@ import { clearCachedDek } from '../../infrastructure/security/tenantDekClient';
 // spec: data-principle-spine-2026-05-05/06.5
 // Same discipline for the in-memory consent token (HS256, 24h TTL).
 import { clearCachedConsentToken } from '../../infrastructure/consent/ConsentTokenClient';
+// spec: secure-remembered-device-sessions-2026-06-24 — Task 4.2
+// setRememberDevice is called on successful login so the flag persists
+// for the refresh cycle (AgriSyncClient.refreshSession reads it).
+import { setRememberDevice } from '../../infrastructure/storage/RememberDeviceStore';
 
 // spec: secure-remembered-device-sessions-2026-06-24
 export type AuthStatus = 'checking' | 'authenticated' | 'anonymous';
@@ -36,7 +40,7 @@ interface AuthContextValue {
     isAuthenticated: boolean;
     isLoading: boolean;
     authError: string | null;
-    login: (phone: string, password: string) => Promise<void>;
+    login: (phone: string, password: string, rememberDevice?: boolean) => Promise<void>;
     register: (phone: string, password: string, displayName: string) => Promise<void>;
     logout: () => void;
     refresh: () => Promise<void>;
@@ -149,17 +153,21 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         };
     }, [syncFromStorage]);
 
-    const login = useCallback(async (phone: string, password: string) => {
+    const login = useCallback(async (phone: string, password: string, rememberDevice = false) => {
         setIsLoading(true);
         setAuthError(null);
         try {
             const response = await agriSyncClient.login({
                 phone,
                 password,
-                rememberDevice: false, // UI thread (Task 4.2) wires the checkbox; default false for now
+                rememberDevice,
                 deviceId: '',          // AgriSyncClient fills this via getOrCreateDeviceId()
                 platform: 'web',
             });
+            // spec: secure-remembered-device-sessions-2026-06-24 — Task 4.2
+            // Persist the remember-device flag so AgriSyncClient.refreshSession()
+            // sends the correct value on the next refresh cycle.
+            setRememberDevice(rememberDevice);
             const next = mapSession(response);
             setAuthSession(next);
             setSession(next);

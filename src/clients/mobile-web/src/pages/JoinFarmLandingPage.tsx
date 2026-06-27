@@ -18,9 +18,22 @@ import { CheckCircle2, ArrowRight, Phone, MessageCircleMore, Leaf } from 'lucide
 import { parseJoinPayload, type JoinRole } from '../features/onboarding/qr/qrTokenClient';
 import { recordJoinAttempt } from '../features/onboarding/qr/farmInviteStore';
 import { setAuthSession } from '../infrastructure/storage/AuthTokenStore';
+import { setRememberDevice } from '../infrastructure/storage/RememberDeviceStore';
+import { readDeviceId, writeDeviceId } from '../infrastructure/storage/DeviceIdStore';
 import { startOtp, verifyOtp, isOtpError } from '../features/auth/data/otpClient';
 import { claimFarmJoin, isInviteApiError } from '../features/onboarding/qr/inviteApi';
 import { useUiPref } from '../shared/hooks/useUiPref';
+
+function getOrCreateDeviceId(): string {
+    let id = readDeviceId();
+    if (!id) {
+        id = typeof crypto !== 'undefined' && crypto.randomUUID
+            ? crypto.randomUUID()
+            : `dev-${Date.now()}`;
+        writeDeviceId(id);
+    }
+    return id;
+}
 
 type Step = 'phone' | 'otp' | 'done' | 'invalid';
 
@@ -108,6 +121,9 @@ const JoinFarmLandingPage: React.FC<JoinFarmLandingPageProps> = ({ onComplete, o
     const [otp, setOtp] = useState('');
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    // spec: secure-remembered-device-sessions-2026-06-24 — Task 4.2
+    // Pre-checked by founder decision (2026-06-27).
+    const [rememberDevice, setRememberDeviceState] = useState(true);
     const otpInputRef = useRef<HTMLInputElement | null>(null);
 
     // Sub-plan 04 Task 3 — both prefs now live in Dexie's uiPrefs via
@@ -179,8 +195,16 @@ const JoinFarmLandingPage: React.FC<JoinFarmLandingPageProps> = ({ onComplete, o
         try {
             // Step 1: verify the OTP. This creates/fetches the User and
             // returns an identity-only JWT with phone_verified=true.
-            const result = await verifyOtp(phone, otp);
+            const deviceId = getOrCreateDeviceId();
+            const result = await verifyOtp(phone, otp, undefined, {
+                rememberDevice,
+                deviceId,
+                platform: 'web',
+            });
 
+            // spec: secure-remembered-device-sessions-2026-06-24 — Task 4.2
+            // Persist the flag so AgriSyncClient.refreshSession() picks it up.
+            setRememberDevice(rememberDevice);
             setAuthSession({
                 userId: result.userId,
                 accessToken: result.accessToken,
@@ -355,6 +379,29 @@ const JoinFarmLandingPage: React.FC<JoinFarmLandingPageProps> = ({ onComplete, o
                                 {error}
                             </div>
                         )}
+
+                        {/* spec: secure-remembered-device-sessions-2026-06-24 — Task 4.2
+                            Remember this device — pre-checked (founder decision 2026-06-27). */}
+                        <div className="mt-4 flex items-center gap-2">
+                            <input
+                                id="remember-device-join"
+                                type="checkbox"
+                                checked={rememberDevice}
+                                onChange={(e) => setRememberDeviceState(e.target.checked)}
+                                disabled={isSubmitting}
+                                className="h-4 w-4 rounded border-stone-300 accent-emerald-600"
+                            />
+                            <label
+                                htmlFor="remember-device-join"
+                                className="text-xs font-medium text-stone-600 select-none cursor-pointer"
+                            >
+                                <span style={{ fontFamily: "'Noto Sans Devanagari', sans-serif" }}>
+                                    हे डिव्हाइस लक्षात ठेवा
+                                </span>
+                                {' · '}
+                                <span>Remember this device</span>
+                            </label>
+                        </div>
 
                         <button
                             type="button"
