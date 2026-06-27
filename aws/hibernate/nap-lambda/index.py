@@ -56,21 +56,28 @@ def handler(event, context):
     out = []
 
     if dry:
-        # Permission self-test that changes nothing: EC2 native DryRun raises
-        # DryRunOperation when allowed; RDS describe proves read access.
+        # Permission self-test that changes nothing. EC2 native DryRun raises
+        # DryRunOperation when ALLOWED (the success signal); RDS describe proves
+        # read access. ok=False if any probe shows a missing permission, so a
+        # wrapper/operator can't accept an under-privileged role.
+        denied = []
         for fn, label in ((ec2.stop_instances, "ec2:Stop"), (ec2.start_instances, "ec2:Start")):
             try:
                 fn(InstanceIds=[EC2_ID], DryRun=True)
-                out.append(f"{label}=UNEXPECTED_OK")
+                out.append(f"{label}=UNEXPECTED_OK")  # DryRun should always raise
+                denied.append(label)
             except Exception as e:
-                code = getattr(e, "response", {}).get("Error", {}).get("Code", type(e).__name__)
+                code = _err_code(e)
                 out.append(f"{label}={code}")  # DryRunOperation=allowed, UnauthorizedOperation=denied
+                if code != "DryRunOperation":
+                    denied.append(label)
         try:
             rds.describe_db_instances(DBInstanceIdentifier=RDS_ID)
             out.append("rds:Describe=OK")
         except Exception as e:
-            out.append(f"rds:Describe={type(e).__name__}")
-        return {"ok": True, "dryRun": True, "detail": out}
+            out.append(f"rds:Describe={_err_code(e)}")
+            denied.append("rds:Describe")
+        return {"ok": not denied, "dryRun": True, "denied": denied, "detail": out}
 
     if action == "sleep":
         # Best-effort: a failed stop just means prod stays up tonight.
@@ -117,5 +124,7 @@ def handler(event, context):
         return {"ok": True, "action": action, "detail": out}
 
     else:
-        out.append(f"unknown action: {action!r}")
-        return {"ok": False, "action": action, "detail": out}
+        # A misconfigured EventBridge target (bad/missing action payload) must NOT
+        # look like success -- raise so Lambda retries and the error surfaces. A
+        # bad wake payload would otherwise leave prod asleep silently.
+        raise ValueError(f"unknown nap action: {action!r}")
