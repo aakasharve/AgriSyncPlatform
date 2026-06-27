@@ -5,7 +5,7 @@ using User.Application.UseCases.Auth.Session;
 
 namespace User.Application.UseCases.Auth.Logout;
 
-public sealed record LogoutCurrentDeviceCommand(Guid UserId, string RefreshToken);
+public sealed record LogoutCurrentDeviceCommand(Guid UserId, string? RefreshToken);
 
 public sealed class LogoutCurrentDeviceHandler(
     IRefreshTokenRepository refreshTokenRepository,
@@ -13,6 +13,12 @@ public sealed class LogoutCurrentDeviceHandler(
 {
     public async Task<Result> HandleAsync(LogoutCurrentDeviceCommand command, CancellationToken ct = default)
     {
+        // Null or empty token means there is nothing to revoke — safe no-op.
+        if (string.IsNullOrEmpty(command.RefreshToken))
+        {
+            return Result.Success();
+        }
+
         var tokenHash = RefreshTokenHasher.Hash(command.RefreshToken);
         var row = await refreshTokenRepository.GetByTokenHashAsync(tokenHash, ct);
 

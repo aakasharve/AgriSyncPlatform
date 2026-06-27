@@ -65,8 +65,7 @@ public sealed class AuthRememberedSessionRules
         const string cookieLiteral = "agrisync_refresh";
         const string expectedFileName = "AuthCookieOptions.cs";
 
-        var solutionRoot = TestPathHelper.GetSolutionRoot();
-        var userApiRoot = Path.Combine(solutionRoot, "apps", "User", "User.Api");
+        var userApiRoot = Path.Combine(TestPathHelper.GetAppsRoot(), "User", "User.Api");
 
         if (!Directory.Exists(userApiRoot))
         {

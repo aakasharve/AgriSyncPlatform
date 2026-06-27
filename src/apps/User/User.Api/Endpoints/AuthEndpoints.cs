@@ -247,9 +247,9 @@ public static class AuthEndpoints
                 return Results.Unauthorized();
             }
 
-            var refreshToken = context.Request.Cookies[AuthCookieOptions.RefreshCookieName] ?? string.Empty;
+            var refreshToken = context.Request.Cookies[AuthCookieOptions.RefreshCookieName];
 
-            // Revoke only the current device session. Idempotent — unknown token is a safe no-op.
+            // Revoke only the current device session. Idempotent — unknown/null token is a safe no-op.
             await logoutCurrentDeviceHandler.HandleAsync(new LogoutCurrentDeviceCommand(userId, refreshToken), ct);
 
             // Always clear the cookie regardless of whether the token was found.
@@ -374,9 +374,10 @@ public sealed record LoginRequest(
     string Phone, string Password,
     bool RememberDevice = false, string? DeviceId = null, string? DeviceName = null, string? Platform = null);
 
+// rememberDevice must be sent explicitly by the client on refresh; default false avoids silent session->persistent escalation
 public sealed record RefreshRequest(
     string? RefreshToken = null,            // web: omitted (cookie used); android: the Keystore token
-    bool RememberDevice = true, string? DeviceId = null, string? DeviceName = null, string? Platform = null);
+    bool RememberDevice = false, string? DeviceId = null, string? DeviceName = null, string? Platform = null);
 
 public sealed record StartOtpRequest(string? Phone);
 

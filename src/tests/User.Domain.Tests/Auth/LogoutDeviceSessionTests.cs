@@ -102,6 +102,23 @@ public class LogoutDeviceSessionTests
         repo.SaveChangesCalls.Should().Be(0, "SaveChangesAsync must not be called when nothing was revoked");
     }
 
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    public async Task CurrentDevice_logout_with_null_or_empty_token_is_safe_noop(string? rawToken)
+    {
+        var now = DateTime.UtcNow;
+        var userId = new UserId(Guid.NewGuid());
+
+        var repo = new CapturingRepo(returnedToken: null);
+
+        var handler = new LogoutCurrentDeviceHandler(repo, new FakeClock(now));
+        var result = await handler.HandleAsync(new LogoutCurrentDeviceCommand(userId.Value, rawToken));
+
+        result.IsSuccess.Should().BeTrue("null/empty refresh token must be a safe no-op, not an error");
+        repo.SaveChangesCalls.Should().Be(0, "SaveChangesAsync must not be called when there is nothing to revoke");
+    }
+
     // ---- RevokeAllDeviceSessionsHandler ----
 
     [Fact]
