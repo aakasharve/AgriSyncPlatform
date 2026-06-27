@@ -37,6 +37,7 @@ All decisions, plans, ADRs, specs, and agent memory live under `_COFOUNDER/` (pr
 - No force-push to `main`
 - Signed commits required
 - No `Class1.cs` placeholder files
+- Repo is the source of truth — never suggest, propose, or change anything from a superficial glance, assumption, or doc claim; verify in the actual code first (Read / Grep / confirm the path). Prevents scope drift.
 
 ---
 
