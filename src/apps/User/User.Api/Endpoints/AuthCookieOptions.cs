@@ -3,7 +3,7 @@ using Microsoft.Extensions.Hosting;
 
 namespace User.Api.Endpoints;
 
-internal static class AuthCookieOptions
+public static class AuthCookieOptions
 {
     public const string RefreshCookieName = "agrisync_refresh";
     private const string RefreshCookiePath = "/user/auth";

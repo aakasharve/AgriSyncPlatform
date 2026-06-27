@@ -12,10 +12,19 @@ using DomainRefreshToken = global::User.Domain.Security.RefreshToken;
 namespace UserDomainTests.Auth;
 
 /// <summary>
-/// Device-session tests for LoginHandler (Task 2.2):
-/// - Device A login does NOT revoke Device B sessions
-/// - Same-device login revokes only the prior same-device session
-/// - Created row stores hash (not raw token) and device metadata
+/// Handler-behaviour tests for LoginHandler device-session management.
+///
+/// These tests verify what the HANDLER calls on the repository fake — they do
+/// NOT test the EF predicate or real database isolation (that requires a live
+/// User DB; deferred as an integration-test follow-up).
+///
+/// Verified handler contracts:
+/// - Login calls RevokeActiveForUserDeviceAsync for the LOGIN device (device-A).
+/// - Login does NOT call RevokeAllForUserAsync (only per-device revoke, never bulk).
+/// - Created row stores token hash (not raw token) and device metadata.
+///
+/// DEFERRED: EF integration test verifying t.DeviceId == deviceId predicate
+/// in RefreshTokenRepository.RevokeActiveForUserDeviceAsync against a live DB.
 /// </summary>
 public class LoginHandlerDeviceSessionTests
 {
@@ -26,8 +35,11 @@ public class LoginHandlerDeviceSessionTests
         new("device-B", RememberDevice: true, DeviceName: "Phone B", Platform: "web");
 
     [Fact]
-    public async Task Login_on_device_A_revokes_only_device_A_sessions_not_device_B()
+    public async Task Login_calls_per_device_revoke_for_current_device_and_never_revoke_all()
     {
+        // Verifies handler behaviour: LoginHandler calls RevokeActiveForUserDeviceAsync(deviceId)
+        // and does NOT call RevokeAllForUserAsync. The EF predicate that enforces row-level
+        // per-device scoping is verified separately in an integration test (deferred — needs live DB).
         var now = DateTime.UtcNow;
         var user = MakeVerifiedUser(now);
         var repo = new CapturingRefreshTokenRepository();
@@ -42,9 +54,13 @@ public class LoginHandlerDeviceSessionTests
 
         await handler.HandleAsync(new LoginCommand("8888888888", "password", DeviceA));
 
+        // Handler MUST call per-device revoke with the current device id.
         repo.RevokedDeviceIds.Should().ContainSingle().Which.Should().Be("device-A",
-            "only device A should have its session revoked");
-        repo.RevokedDeviceIds.Should().NotContain("device-B");
+            "handler must revoke sessions for device-A only (per-device, not bulk)");
+
+        // Handler must NOT call RevokeAllForUserAsync — that would log out every device.
+        repo.RevokeAllCalled.Should().BeFalse(
+            "login must only revoke the current device; RevokeAllForUserAsync must not be called");
     }
 
     [Fact]
@@ -140,6 +156,10 @@ public class LoginHandlerDeviceSessionTests
     {
         public List<string> RevokedDeviceIds { get; } = [];
         public DomainRefreshToken? AddedToken { get; private set; }
+        /// <summary>
+        /// Set to true if RevokeAllForUserAsync is called. A login must never trigger this.
+        /// </summary>
+        public bool RevokeAllCalled { get; private set; }
 
         public Task<DomainRefreshToken?> GetByTokenHashAsync(string tokenHash, CancellationToken ct = default) => Task.FromResult<DomainRefreshToken?>(null);
 
@@ -155,7 +175,11 @@ public class LoginHandlerDeviceSessionTests
             return Task.CompletedTask;
         }
 
-        public Task RevokeAllForUserAsync(Guid userId, DateTime utcNow, string reason = "revoked_all", CancellationToken ct = default) => Task.CompletedTask;
+        public Task RevokeAllForUserAsync(Guid userId, DateTime utcNow, string reason = "revoked_all", CancellationToken ct = default)
+        {
+            RevokeAllCalled = true;
+            return Task.CompletedTask;
+        }
 
         public Task SaveChangesAsync(CancellationToken ct = default) => Task.CompletedTask;
     }

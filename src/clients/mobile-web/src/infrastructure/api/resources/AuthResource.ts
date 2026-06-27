@@ -17,6 +17,8 @@ import { getOrCreateDeviceId } from '../../storage/DeviceIdStore';
 import {
     isNativeSecureRefreshEnabled,
     setNativeRefreshSession,
+    getNativeRefreshSession,
+    clearNativeRefreshSession,
 } from '../../storage/RefreshSessionStore';
 
 /**
@@ -77,11 +79,29 @@ export async function getMeContext(t: HttpTransport): Promise<import('../../../c
  * spec: secure-remembered-device-sessions-2026-06-24 / Task 6.1
  *
  * Web: the HttpOnly agrisync_refresh cookie is sent automatically via
- * withCredentials. The X-Device-Id header is already attached by the
- * authHttp interceptor. No body is required.
+ * withCredentials. No body is required.
+ *
+ * Android/native: the backend is AllowAnonymous on /logout so the bearer is
+ * not required. We read the Keystore refresh token and send it in the body so
+ * the server can look up the session row by token hash and revoke it — even
+ * when the 15-min access token has already expired.
+ * After the POST we clear the local Keystore entry regardless of outcome.
  */
 export async function logout(t: HttpTransport): Promise<void> {
-    await t.authHttp.post('/user/auth/logout');
+    if (isNativeSecureRefreshEnabled()) {
+        // Native path: send the Keystore token so the server can revoke by hash.
+        const stored = await getNativeRefreshSession();
+        try {
+            await t.authHttp.post('/user/auth/logout', stored ? { refreshToken: stored.refreshToken } : undefined);
+        } finally {
+            // Always clear local Keystore entry — even on network failure the user
+            // intends to log out on this device.
+            await clearNativeRefreshSession();
+        }
+    } else {
+        // Web path: cookie carries the token (withCredentials); no body needed.
+        await t.authHttp.post('/user/auth/logout');
+    }
 }
 
 /** GET /accounts/affiliation/stats — referral counters. */

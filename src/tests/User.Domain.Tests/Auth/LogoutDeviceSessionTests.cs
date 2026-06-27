@@ -10,11 +10,23 @@ using DomainRefreshToken = global::User.Domain.Security.RefreshToken;
 namespace UserDomainTests.Auth;
 
 /// <summary>
-/// Tests for LogoutCurrentDeviceHandler and RevokeAllDeviceSessionsHandler (Task 2.4).
-/// - Current-device logout revokes ONLY the row whose hash matches the supplied refresh token.
-/// - Current-device logout with a token belonging to a DIFFERENT user is a no-op.
-/// - Current-device logout with an unknown token is a safe no-op.
-/// - All-device revocation calls RevokeAllForUserAsync with reason revoke_all_sessions.
+/// Tests for LogoutCurrentDeviceHandler and RevokeAllDeviceSessionsHandler.
+///
+/// LogoutCurrentDeviceCommand now carries ONLY the refresh token — no UserId.
+/// The token IS the capability: hash it, look up the row, revoke it.
+/// This makes logout work regardless of whether the bearer access token is
+/// expired (which was the CRITICAL bug: /logout returned 401 after 15 min idle).
+///
+/// Handler-behaviour contract (no EF, no real DB):
+/// - Matching-token row is revoked.
+/// - Unknown or empty token → safe no-op (idempotent, no SaveChanges).
+/// - EXPIRED-but-present session token → still revoked (the bug scenario:
+///   logout works without a valid bearer because auth is by token hash, not JWT).
+/// - All-device revocation calls RevokeAllForUserAsync with the correct reason.
+///
+/// DEFERRED: EF integration test verifying the t.DeviceId == deviceId predicate
+/// in RefreshTokenRepository.RevokeActiveForUserDeviceAsync against a live User DB.
+/// Requires a Testcontainers/PostgreSQL harness.  Tracked as a follow-up.
 /// </summary>
 public class LogoutDeviceSessionTests
 {
@@ -38,65 +50,77 @@ public class LogoutDeviceSessionTests
             at.AddDays(30));
     }
 
-    // ---- LogoutCurrentDeviceHandler ----
+    // ── LogoutCurrentDeviceHandler ─────────────────────────────────────────
 
     [Fact]
-    public async Task CurrentDevice_logout_revokes_only_matching_token_and_leaves_other_device_active()
+    public async Task CurrentDevice_logout_revokes_matching_token()
     {
         var now = DateTime.UtcNow;
         var userId = new UserId(Guid.NewGuid());
 
         const string logoutToken = "token-for-device-A";
-        const string otherToken = "token-for-device-B";
-
         var tokenA = MakeActiveToken(userId, logoutToken, deviceId: "device-A");
-        var tokenB = MakeActiveToken(userId, otherToken, deviceId: "device-B");
 
-        // Repo only returns tokenA when the logout token hash is looked up.
         var repo = new CapturingRepo(returnedToken: tokenA);
-
         var handler = new LogoutCurrentDeviceHandler(repo, new FakeClock(now));
-        var result = await handler.HandleAsync(new LogoutCurrentDeviceCommand(userId.Value, logoutToken));
+
+        // Token-only command — no UserId required.
+        var result = await handler.HandleAsync(new LogoutCurrentDeviceCommand(logoutToken));
 
         result.IsSuccess.Should().BeTrue();
         tokenA.IsRevoked.Should().BeTrue("the matching token must be revoked");
         tokenA.RevocationReason.Should().Be("logout_current_device");
-        tokenB.IsRevoked.Should().BeFalse("a different device's token must remain active");
         repo.SaveChangesCalls.Should().Be(1, "SaveChangesAsync must be called once after revoking");
     }
 
     [Fact]
-    public async Task CurrentDevice_logout_is_noop_when_token_belongs_to_different_user()
+    public async Task CurrentDevice_logout_revokes_EXPIRED_session_token_the_bug_scenario()
     {
+        // Before the fix, /logout required RequireAuthorization(); a user idle for >15 min
+        // would get a 401 before the handler ran → device session never revoked, cookie
+        // never cleared → next boot silently re-authenticated.
+        //
+        // After the fix: logout is AllowAnonymous and authorises by the SESSION TOKEN, not
+        // the bearer.  An expired-but-present refresh token row must still be revoked.
         var now = DateTime.UtcNow;
-        var ownerUserId = new UserId(Guid.NewGuid());
-        var callerUserId = new UserId(Guid.NewGuid()); // different user
+        var userId = new UserId(Guid.NewGuid());
 
-        const string rawToken = "token-owned-by-owner";
-        var ownersToken = MakeActiveToken(ownerUserId, rawToken);
+        const string rawToken = "expired-session-token";
+        // Token that EXPIRED 5 minutes ago — handler must still revoke it.
+        var expiredAt = now.AddMinutes(-5);
+        var expiredToken = new DomainRefreshToken(
+            Guid.NewGuid(),
+            userId,
+            RefreshTokenHasher.Hash(rawToken),
+            deviceId: "device-A",
+            deviceName: "Test Phone",
+            platform: "android",
+            createdAtUtc: expiredAt.AddDays(-30),
+            expiresAtUtc: expiredAt);
 
-        var repo = new CapturingRepo(returnedToken: ownersToken);
+        expiredToken.IsExpired(now).Should().BeTrue("precondition: token is indeed expired");
 
-        // Caller logs out with a token that exists but belongs to ownerUserId, not callerUserId.
+        var repo = new CapturingRepo(returnedToken: expiredToken);
         var handler = new LogoutCurrentDeviceHandler(repo, new FakeClock(now));
-        var result = await handler.HandleAsync(new LogoutCurrentDeviceCommand(callerUserId.Value, rawToken));
 
-        result.IsSuccess.Should().BeTrue("must be idempotent — no exception");
-        ownersToken.IsRevoked.Should().BeFalse("another user's token must not be revoked");
-        repo.SaveChangesCalls.Should().Be(0, "SaveChangesAsync must not be called on a no-op");
+        var result = await handler.HandleAsync(new LogoutCurrentDeviceCommand(rawToken));
+
+        result.IsSuccess.Should().BeTrue("logout of an expired session must still succeed");
+        expiredToken.IsRevoked.Should().BeTrue(
+            "an expired session token must be revocable so logout always clears the server row");
+        repo.SaveChangesCalls.Should().Be(1);
     }
 
     [Fact]
     public async Task CurrentDevice_logout_with_unknown_token_is_safe_noop()
     {
         var now = DateTime.UtcNow;
-        var userId = new UserId(Guid.NewGuid());
 
-        // Repo returns null — token hash not found.
+        // Repo returns null — token hash not found (already revoked or never issued).
         var repo = new CapturingRepo(returnedToken: null);
-
         var handler = new LogoutCurrentDeviceHandler(repo, new FakeClock(now));
-        var result = await handler.HandleAsync(new LogoutCurrentDeviceCommand(userId.Value, "completely-unknown-token"));
+
+        var result = await handler.HandleAsync(new LogoutCurrentDeviceCommand("completely-unknown-token"));
 
         result.IsSuccess.Should().BeTrue("unknown token must be a safe no-op, not an error");
         repo.SaveChangesCalls.Should().Be(0, "SaveChangesAsync must not be called when nothing was revoked");
@@ -108,18 +132,17 @@ public class LogoutDeviceSessionTests
     public async Task CurrentDevice_logout_with_null_or_empty_token_is_safe_noop(string? rawToken)
     {
         var now = DateTime.UtcNow;
-        var userId = new UserId(Guid.NewGuid());
 
         var repo = new CapturingRepo(returnedToken: null);
-
         var handler = new LogoutCurrentDeviceHandler(repo, new FakeClock(now));
-        var result = await handler.HandleAsync(new LogoutCurrentDeviceCommand(userId.Value, rawToken));
+
+        var result = await handler.HandleAsync(new LogoutCurrentDeviceCommand(rawToken));
 
         result.IsSuccess.Should().BeTrue("null/empty refresh token must be a safe no-op, not an error");
         repo.SaveChangesCalls.Should().Be(0, "SaveChangesAsync must not be called when there is nothing to revoke");
     }
 
-    // ---- RevokeAllDeviceSessionsHandler ----
+    // ── RevokeAllDeviceSessionsHandler ─────────────────────────────────────
 
     [Fact]
     public async Task RevokeAll_calls_RevokeAllForUser_with_correct_reason_and_saves()
@@ -138,7 +161,7 @@ public class LogoutDeviceSessionTests
         repo.SaveChangesCalls.Should().Be(1, "SaveChangesAsync must be called once after bulk revocation");
     }
 
-    // ---- fakes ----
+    // ── fakes ──────────────────────────────────────────────────────────────
 
     private sealed class FakeClock(DateTime now) : IClock
     {

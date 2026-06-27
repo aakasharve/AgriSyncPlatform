@@ -228,11 +228,12 @@ public static class AuthEndpoints
             CancellationToken ct) =>
         {
             // Web: read refresh token from HttpOnly cookie.
-            // Android/native: token comes in the request body when cookie absent.
+            // Android/native: token comes in the request body ONLY when cookie absent
+            //                 AND the request identifies itself as native (X-Client-Platform: android).
             var cookieToken = context.Request.Cookies[AuthCookieOptions.RefreshCookieName];
             var resolvedToken = !string.IsNullOrWhiteSpace(cookieToken)
                 ? cookieToken
-                : (!string.IsNullOrWhiteSpace(request.RefreshToken) ? request.RefreshToken : null);
+                : (IsNativeClient(context) && !string.IsNullOrWhiteSpace(request.RefreshToken) ? request.RefreshToken : null);
 
             if (resolvedToken is null)
             {
@@ -266,21 +267,23 @@ public static class AuthEndpoints
         .WithName("RefreshToken")
         .AllowAnonymous();
 
-        group.MapPost("/logout", async (
+        // AllowAnonymous: logout must work even after the 15-min access token expires.
+        // The refresh token (cookie or native body) is the capability — bearer is not required.
+        publicGroup.MapPost("/logout", async (
+            LogoutRequest? request,
             HttpContext context,
             LogoutCurrentDeviceHandler logoutCurrentDeviceHandler,
             IHostEnvironment env,
             CancellationToken ct) =>
         {
-            if (!TryGetUserId(context.User, out var userId))
-            {
-                return Results.Unauthorized();
-            }
-
-            var refreshToken = context.Request.Cookies[AuthCookieOptions.RefreshCookieName];
+            // Web: cookie carries the token (withCredentials). Native: body carries it.
+            var cookieToken = context.Request.Cookies[AuthCookieOptions.RefreshCookieName];
+            var refreshToken = !string.IsNullOrWhiteSpace(cookieToken)
+                ? cookieToken
+                : (IsNativeClient(context) ? request?.RefreshToken : null);
 
             // Revoke only the current device session. Idempotent — unknown/null token is a safe no-op.
-            await logoutCurrentDeviceHandler.HandleAsync(new LogoutCurrentDeviceCommand(userId, refreshToken), ct);
+            await logoutCurrentDeviceHandler.HandleAsync(new LogoutCurrentDeviceCommand(refreshToken), ct);
 
             // Always clear the cookie regardless of whether the token was found.
             context.Response.Cookies.Delete(AuthCookieOptions.RefreshCookieName, AuthCookieOptions.BuildForDelete(env));
@@ -288,7 +291,7 @@ public static class AuthEndpoints
             return Results.Ok(new { message = "Logged out successfully" });
         })
         .WithName("LogoutUser")
-        .RequireAuthorization();
+        .AllowAnonymous();
 
         group.MapPost("/logout-all", async (
             HttpContext context,
@@ -421,6 +424,13 @@ public sealed record RefreshRequest(
     bool RememberDevice = false, string? DeviceId = null, string? DeviceName = null, string? Platform = null);
 
 public sealed record StartOtpRequest(string? Phone);
+
+/// <summary>
+/// Optional body for POST /logout. Web clients send nothing (cookie carries the token).
+/// Native (Android) clients send the Keystore-persisted refresh token so the server
+/// can revoke the session even when the HttpOnly cookie path is unavailable.
+/// </summary>
+public sealed record LogoutRequest(string? RefreshToken = null);
 
 public sealed record VerifyOtpRequest(
     string? Phone, string? Otp, string? DisplayName,

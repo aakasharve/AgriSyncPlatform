@@ -5,7 +5,12 @@ using User.Application.UseCases.Auth.Session;
 
 namespace User.Application.UseCases.Auth.Logout;
 
-public sealed record LogoutCurrentDeviceCommand(Guid UserId, string? RefreshToken);
+/// <summary>
+/// The refresh token IS the capability: no UserId required.
+/// Hash the token → look up the row → revoke it. Works regardless of
+/// whether the access token is expired (logout is AllowAnonymous).
+/// </summary>
+public sealed record LogoutCurrentDeviceCommand(string? RefreshToken);
 
 public sealed class LogoutCurrentDeviceHandler(
     IRefreshTokenRepository refreshTokenRepository,
@@ -22,8 +27,8 @@ public sealed class LogoutCurrentDeviceHandler(
         var tokenHash = RefreshTokenHasher.Hash(command.RefreshToken);
         var row = await refreshTokenRepository.GetByTokenHashAsync(tokenHash, ct);
 
-        // Unknown token or belongs to a different user — safe no-op (idempotent).
-        if (row is null || row.UserId.Value != command.UserId)
+        // Unknown token (already revoked or never issued) — safe no-op (idempotent).
+        if (row is null)
         {
             return Result.Success();
         }
