@@ -20,6 +20,15 @@
       "expenses": 0,
       "tasks": 0,
       "observations": 0
+    },
+    "bucketFloorOverrideReasons": {
+      "workDone": "pending W1.P0 corpus — raise to 3 when domain golden fixtures land",
+      "irrigation": "pending W1.P0 corpus — raise to 3 when domain golden fixtures land",
+      "labour": "pending W1.P0 corpus — raise to 3 when domain golden fixtures land",
+      "machinery": "pending W1.P0 corpus — raise to 3 when domain golden fixtures land",
+      "expenses": "pending W1.P0 corpus — raise to 3 when domain golden fixtures land",
+      "tasks": "pending W1.P0 corpus — raise to 3 when domain golden fixtures land",
+      "observations": "pending W1.P0 corpus — raise to 3 when domain golden fixtures land"
     }
   }
 }

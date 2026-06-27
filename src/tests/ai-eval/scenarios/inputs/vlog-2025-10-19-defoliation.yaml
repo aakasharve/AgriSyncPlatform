@@ -23,7 +23,7 @@ description: |
   spec: ai-intelligence-plan-2026-06-25
 
 input:
-  transcript: "इथरेल आणि शून्य बावन्न चौतीस आणि फॉस्फोरिक ॲसिड मिसळून बलोवेर ने फवारणी केली. बलोवेर च्या 10 गन चालू होत्या आणि फॅन बंद होता. एक हजार लिटर पाणी वापरलं. पाचशे रुपयांचं डिझेल लागलं."
+  transcript: "इथरेल आणि 00:52:34 आणि फॉस्फोरिक ॲसिड मिसळून बलोवेर ने फवारणी केली. बलोवेर च्या 10 गन चालू होत्या आणि फॅन बंद होता. एक हजार लिटर पाणी वापरलं. पाचशे रुपयांचं डिझेल लागलं."
 
 context:
   fixture: farmer-grape-grower
@@ -48,6 +48,7 @@ expected:
     - implement: "blower"
       nozzlesActive: 10
       fanState: "off"
+  fuelQuantity: "NOT_MENTIONED"
 
 tolerances:
   "inputs[0].productName":
@@ -101,6 +102,8 @@ tolerances:
       - "off"
       - "OFF"
       - "बंद"
+  "fuelQuantity":
+    exact: true
 
 ignore_fields:
   - summary
