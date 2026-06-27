@@ -37,6 +37,18 @@ export async function getMeContext(t: HttpTransport): Promise<import('../../../c
     return response.data;
 }
 
+/**
+ * POST /user/auth/logout — revoke the CURRENT device session.
+ * spec: secure-remembered-device-sessions-2026-06-24 / Task 6.1
+ *
+ * Web: the HttpOnly agrisync_refresh cookie is sent automatically via
+ * withCredentials. The X-Device-Id header is already attached by the
+ * authHttp interceptor. No body is required.
+ */
+export async function logout(t: HttpTransport): Promise<void> {
+    await t.authHttp.post('/user/auth/logout');
+}
+
 /** GET /accounts/affiliation/stats — referral counters. */
 export async function getAffiliationStats(
     t: HttpTransport,

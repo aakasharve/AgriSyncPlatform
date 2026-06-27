@@ -26,7 +26,8 @@ import {
     type AuthSession,
 } from '../storage/AuthTokenStore';
 import { readDeviceId, writeDeviceId } from '../storage/DeviceIdStore';
-import { getRememberDevice, clearRememberDevice } from '../storage/RememberDeviceStore';
+import { getRememberDevice } from '../storage/RememberDeviceStore';
+import { clearNativeRefreshSession } from '../storage/RefreshSessionStore';
 import { SYNC_MUTATION_TYPES } from '../sync/SyncMutationCatalog';
 import {
     APP_VERSION,
@@ -527,7 +528,13 @@ export class AgriSyncClient implements HttpTransport {
                 return session;
             })
             .catch(() => {
+                // spec: secure-remembered-device-sessions-2026-06-24 / Task 6.2
+                // Fail-closed: clear ALL local auth state so an invalid session
+                // never grants access on a subsequent attempt. On web,
+                // clearNativeRefreshSession is a no-op; on Android it wipes the
+                // Keystore-backed secure storage.
                 clearAuthSession();
+                void clearNativeRefreshSession();
                 return null;
             })
             .finally(() => {
@@ -537,12 +544,14 @@ export class AgriSyncClient implements HttpTransport {
         return this.refreshPromise;
     }
 
-    // Stub for Task 6.1 (full logout wiring). Prevents compilation errors if
-    // any caller already imports this method shape.
-    logoutCurrentDevice(): Promise<void> {
-        clearAuthSession();
-        clearRememberDevice();
-        return Promise.resolve();
+    // spec: secure-remembered-device-sessions-2026-06-24 / Task 6.1
+    // Sends POST /user/auth/logout so the backend revokes the current device
+    // session (and clears the HttpOnly cookie server-side). The cookie is
+    // sent automatically via withCredentials on authHttp; X-Device-Id is
+    // attached by the authHttp interceptor. If the backend is unreachable the
+    // caller (AuthProvider.logout) still completes local cleanup.
+    async logoutCurrentDevice(): Promise<void> {
+        await Auth.logout(this);
     }
 }
 

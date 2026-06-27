@@ -39,7 +39,7 @@ interface IdentitySectionProps {
     profile: FarmerProfile;
     onUpdateProfile: (p: FarmerProfile) => void;
     onDeletePerson?: (id: string) => void;
-    logout: () => void;
+    logout: () => Promise<void>;
     myFarm: { farmId: string; name: string; role: string; subscription: SubscriptionSnapshotView | null } | null;
     myMemberships: MyFarmDto[];
     farmDetails: FarmDetailsDto | null;
@@ -53,6 +53,7 @@ interface IdentitySectionProps {
     nonExitableFarmIds: Set<string>;
     handleExitMembership: (farmId: string, farmName: string) => Promise<void>;
     isWorkerOnAnyFarm: boolean;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     workerProfile: { reliability: any } | null;
 }
 
@@ -356,7 +357,7 @@ const IdentitySection: React.FC<IdentitySectionProps> = ({
                     {/* LOGOUT ACTION */}
                     <div className="mt-4 pt-4 border-t border-slate-100 flex justify-center">
                         <button
-                            onClick={logout}
+                            onClick={() => { void logout(); }}
                             className="text-red-500 font-bold text-sm flex items-center gap-2 px-6 py-3 rounded-xl hover:bg-red-50 transition-colors"
                         >
                             <LogOut size={16} /> Log Out
@@ -479,6 +480,7 @@ const IdentitySection: React.FC<IdentitySectionProps> = ({
                                                 const newCaps = canLog
                                                     ? (person.capabilities || []).filter(c => c !== OperatorCapability.LOG_DATA)
                                                     : [...(person.capabilities || []), OperatorCapability.LOG_DATA];
+                                                // eslint-disable-next-line @typescript-eslint/no-explicit-any
                                                 const updatedPeople = profile.operators!.map(p => p.id === person.id ? { ...p, capabilities: newCaps } as any : p);
                                                 onUpdateProfile({ ...profile, people: updatedPeople });
                                             }}
@@ -491,7 +493,7 @@ const IdentitySection: React.FC<IdentitySectionProps> = ({
                                         </div>
 
                                         <button
-                                            onClick={(e) => { e.stopPropagation(); onDeletePerson && onDeletePerson(person.id); }}
+                                            onClick={(e) => { e.stopPropagation(); if (onDeletePerson) onDeletePerson(person.id); }}
                                             className="p-2 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-xl transition-colors"
                                         >
                                             <Trash2 size={18} />

@@ -48,6 +48,19 @@ vi.mock('../../../infrastructure/consent/ConsentTokenClient', () => ({
     clearCachedConsentToken: vi.fn(),
 }));
 
+vi.mock('../../../infrastructure/storage/RememberDeviceStore', () => ({
+    getRememberDevice: vi.fn(() => false),
+    setRememberDevice: vi.fn(),
+    clearRememberDevice: vi.fn(),
+}));
+
+vi.mock('../../../infrastructure/storage/RefreshSessionStore', () => ({
+    clearNativeRefreshSession: vi.fn(() => Promise.resolve()),
+    getNativeRefreshSession: vi.fn(() => Promise.resolve(null)),
+    setNativeRefreshSession: vi.fn(),
+    isNativeSecureRefreshEnabled: vi.fn(() => false),
+}));
+
 // ---------------------------------------------------------------------------
 // Imports after mocks
 // ---------------------------------------------------------------------------
