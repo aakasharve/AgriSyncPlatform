@@ -14,7 +14,7 @@ Negative examples:
 Mistakes you will make without guardrails:
 - UNIT_DRIFT: treating hours as worker count or wage.
 - SPEAKER_CONFUSION: counting family mention when they did not work.
-- CROP_STAGE_LEAKAGE: assuming pruning labour from crop stage.
+- CROP_STAGE_LEAKAGE: infer stage from explicit OPERATIONS the farmer described, never from products alone; a product name alone never sets stage; if the operation contradicts the stage, trust the operation.
 - QUANTITY_HALLUCINATION: rounding vague "kahi lok" into a number.
 - CROSS_BUCKET_BLEED: dropping associated input or irrigation work.
 - DATE_SHIFTING: tomorrow labour as today labour.

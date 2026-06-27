@@ -289,6 +289,8 @@ internal sealed class AiPromptBuilder : IAiPromptBuilder
             ? string.Join(", ", context.Profile.WaterResources.Select(x => x.Name))
             : "Not provided";
 
+        var stagePrior = BuildStagePrior(context.CropStage);
+
         return $"""
                 THE FARM PROFILE CONTAINS:
                 - Crops: [{cropNames}]
@@ -298,6 +300,49 @@ internal sealed class AiPromptBuilder : IAiPromptBuilder
                 CRITICAL INSTRUCTION:
                 - Associate work only with known crops/plots from profile/context.
                 - Normalize aliases to profile names where unambiguous.
+
+                {stagePrior}
+                """;
+    }
+
+    /// <summary>
+    /// AI_INTELLIGENCE_PLAN_2026-06-25 W1.P0 Component 8 — soft stage-prior.
+    /// Emits a GROWTH STAGE block with an expected-operations candidate list
+    /// when a confirmed stage is available. The block is a SOFT PRIOR only:
+    /// the model MUST infer stage from explicit OPERATIONS the farmer
+    /// described, never from products alone; a product name alone never sets
+    /// stage; if the operation contradicts the stage, trust the operation.
+    /// Returns an empty string when no stage is available so the prompt
+    /// is not polluted with a useless section.
+    /// </summary>
+    private static string BuildStagePrior(string? cropStage)
+    {
+        if (string.IsNullOrWhiteSpace(cropStage))
+        {
+            return string.Empty;
+        }
+
+        var candidateOps = cropStage.ToLowerInvariant() switch
+        {
+            "dormancy" => "dormancy_paste (e.g. Dormex application), defoliation_spray",
+            "pruning" => "pruning, earthing_up, vine_training",
+            "bud_break" or "budbreak" => "bud_break_spray, nutrient_spray",
+            "berry_development" or "berry development" => "PGR_spray (e.g. CPPU, 6-BA, GA3), fertigation",
+            "flowering" => "pollination_support, nutrient_spray",
+            "fruit_set" or "fruit set" => "thinning, PGR_spray",
+            "veraison" => "colour_enhancer_spray, irrigation_management",
+            "harvest" or "harvesting" => "harvest, packing, transport",
+            _ => "operations typical for this stage",
+        };
+
+        return $"""
+                GROWTH STAGE (soft prior — read-only, do NOT autofill):
+                - Confirmed stage: {cropStage}
+                - Expected operations candidate list: [{candidateOps}]
+                - RULE: Infer stage from explicit OPERATIONS the farmer described, never from products alone.
+                - RULE: A product name alone never sets or confirms a stage.
+                - RULE: If the farmer's described operation contradicts the stage prior, trust the operation.
+                - RULE: Do NOT emit any field value that the farmer did not explicitly state, even if the stage implies it.
                 """;
     }
 

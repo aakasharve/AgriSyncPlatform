@@ -36,6 +36,16 @@ public sealed record VoiceParseContext(
     /// </para>
     /// </summary>
     public DateTime? CapturedAtUtc { get; init; }
+
+    /// <summary>
+    /// AI_INTELLIGENCE_PLAN_2026-06-25 W1.P0 Component 8 — the confirmed
+    /// growth stage for the crop cycle being logged (e.g. "dormancy",
+    /// "berry_development", "pruning"). Sourced from
+    /// <c>CropCycle.Stage</c> and threaded here so <c>AiPromptBuilder</c>
+    /// can emit a soft stage-prior block without autofilling. Null-safe:
+    /// absent when no crop cycle is selected or stage is unset.
+    /// </summary>
+    public string? CropStage { get; init; }
 }
 
 public sealed record CropInfo(string Id, string Name, List<PlotInfo> Plots);

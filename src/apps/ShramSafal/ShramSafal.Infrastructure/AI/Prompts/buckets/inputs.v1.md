@@ -15,7 +15,7 @@ Negative examples:
 Mistakes you will make without guardrails:
 - UNIT_DRIFT: mixing ml/L, ml, kg, bags, liters.
 - SPEAKER_CONFUSION: treating seller recommendation as application.
-- CROP_STAGE_LEAKAGE: assuming standard spray products.
+- CROP_STAGE_LEAKAGE: infer stage from explicit OPERATIONS the farmer described, never from products alone; a product name alone never sets stage; if the operation contradicts the stage, trust the operation.
 - QUANTITY_HALLUCINATION: adding dose because product is known.
 - CROSS_BUCKET_BLEED: losing labour or machinery mentioned with spray.
 - DATE_SHIFTING: future purchase as current input use.

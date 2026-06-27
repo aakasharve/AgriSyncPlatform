@@ -170,7 +170,7 @@ public sealed class ParseVoiceInputHandler(
             }
         }
 
-        var promptContext = BuildPromptContext(command.ContextJson, farm.Name, plot?.Name, cropCycle?.CropName);
+        var promptContext = BuildPromptContext(command.ContextJson, farm.Name, plot?.Name, cropCycle?.CropName, cropCycle?.Stage);
         var systemPrompt = promptBuilder.BuildVoiceParsingPrompt(promptContext);
 
         await using var payloadStream = BuildPayloadStream(command, transcript, out var mimeType);
@@ -527,7 +527,8 @@ public sealed class ParseVoiceInputHandler(
         string? contextJson,
         string farmName,
         string? plotName,
-        string? cropName)
+        string? cropName,
+        string? cropStage = null)
     {
         if (!string.IsNullOrWhiteSpace(contextJson))
         {
@@ -539,6 +540,18 @@ public sealed class ParseVoiceInputHandler(
                     && parsed.AvailableCrops is not null
                     && parsed.Profile is not null)
                 {
+                    // AI_INTELLIGENCE_PLAN_2026-06-25 W1.P0 C8 — when the
+                    // caller supplies a cropStage from the confirmed
+                    // CropCycle.Stage, inject it as a soft prior even when
+                    // the full context came from the client JSON. This
+                    // ensures the stage-prior block is always available in
+                    // BuildFarmKnowledge regardless of which code path
+                    // produced the context object.
+                    if (!string.IsNullOrWhiteSpace(cropStage) && parsed.CropStage is null)
+                    {
+                        return parsed with { CropStage = cropStage };
+                    }
+
                     return parsed;
                 }
             }
@@ -571,7 +584,10 @@ public sealed class ParseVoiceInputHandler(
             Profile: new FarmerProfileInfo([], [], [], null),
             FarmContext: new FarmContextInfo([selection]),
             FocusCategory: null,
-            VocabDb: null);
+            VocabDb: null)
+        {
+            CropStage = cropStage,
+        };
     }
 
     private static string BuildIdempotencyKey(

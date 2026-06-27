@@ -17,7 +17,7 @@ Negative examples:
 Mistakes you will make without guardrails:
 - UNIT_DRIFT: converting minutes to hours incorrectly.
 - SPEAKER_CONFUSION: treating consultant advice as completed watering.
-- CROP_STAGE_LEAKAGE: assuming irrigation need from stage.
+- CROP_STAGE_LEAKAGE: infer stage from explicit OPERATIONS the farmer described, never from products alone; a product name alone never sets stage; if the operation contradicts the stage, trust the operation.
 - QUANTITY_HALLUCINATION: inventing source or duration.
 - CROSS_BUCKET_BLEED: putting fertilizer drip as only irrigation and losing input.
 - DATE_SHIFTING: treating tomorrow watering as today.

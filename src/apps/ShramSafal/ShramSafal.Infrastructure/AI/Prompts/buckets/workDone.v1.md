@@ -19,7 +19,7 @@ Mistakes you will make without guardrails:
 - DATE_SHIFTING: treating tomorrow as today.
 - UNIT_DRIFT: moving input dose into labour hours.
 - SPEAKER_CONFUSION: treating advice from seller as completed work.
-- CROP_STAGE_LEAKAGE: assuming standard seasonal tasks without speech evidence.
+- CROP_STAGE_LEAKAGE: infer stage from explicit OPERATIONS the farmer described, never from products alone; a product name alone never sets stage; if the operation contradicts the stage, trust the operation.
 
 Pre-emit checklist:
 - Did the transcript clearly say the work was done?

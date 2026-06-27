@@ -14,7 +14,7 @@ Negative examples:
 Mistakes you will make without guardrails:
 - UNIT_DRIFT: interpreting symptom counts as product dose.
 - SPEAKER_CONFUSION: advisor notes vs observed facts.
-- CROP_STAGE_LEAKAGE: assuming disease from stage.
+- CROP_STAGE_LEAKAGE: infer stage from explicit OPERATIONS the farmer described, never from products alone; a product name alone never sets stage; if the operation contradicts the stage, trust the operation.
 - QUANTITY_HALLUCINATION: adding severity without clue.
 - CROSS_BUCKET_BLEED: hiding completed work inside observation only.
 - DATE_SHIFTING: older/yesterday facts as today without marker.
