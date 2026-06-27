@@ -25,13 +25,27 @@ REGION = "ap-south-1"
 EC2_ID = "i-024b3537191712c76"
 RDS_ID = "shramsafal-prod-db"
 
-# On wake, these RDS error codes mean "not stopped" (already available or already
-# starting) — a success for our purpose, NOT a failure to retry.
-_RDS_WAKE_TOLERATED = {"InvalidDBInstanceState", "InvalidDBInstanceStateFault"}
+# On wake, these RDS statuses mean the instance is up or genuinely coming up, so a
+# start failure against them is a harmless no-op. Any OTHER status (notably
+# "stopping", which can last up to an hour) means it is NOT awake -> re-raise so
+# Lambda retries. We decide by the ACTUAL status, never by the (ambiguous)
+# InvalidDBInstanceState error code, which covers both cases.
+_RDS_UP_STATES = {
+    "available", "starting", "backing-up", "modifying", "rebooting",
+    "configuring-enhanced-monitoring", "configuring-log-exports", "storage-optimization",
+}
 
 
 def _err_code(e):
     return getattr(e, "response", {}).get("Error", {}).get("Code", type(e).__name__)
+
+
+def _rds_status(rds):
+    try:
+        r = rds.describe_db_instances(DBInstanceIdentifier=RDS_ID)
+        return r["DBInstances"][0]["DBInstanceStatus"]
+    except Exception as e:
+        return f"describe-failed:{_err_code(e)}"
 
 
 def handler(event, context):
@@ -77,14 +91,16 @@ def handler(event, context):
         errors = []
         try:
             rds.start_db_instance(DBInstanceIdentifier=RDS_ID)
-            out.append("RDS starting")
+            out.append("RDS start requested")
         except Exception as e:
-            code = _err_code(e)
-            if code in _RDS_WAKE_TOLERATED:
-                out.append(f"RDS already awake/starting ({code})")
+            # A start failure is ambiguous (InvalidDBInstanceState covers both
+            # "already up" and "still stopping") -> resolve by ACTUAL status.
+            status = _rds_status(rds)
+            if status in _RDS_UP_STATES:
+                out.append(f"RDS already up/coming up (status={status})")
             else:
-                out.append(f"RDS start FAILED ({code}): {e}")
-                errors.append(f"rds:start={code}")
+                out.append(f"RDS start FAILED ({_err_code(e)}, status={status})")
+                errors.append(f"rds:start={_err_code(e)}/{status}")
         # EC2 start_instances is idempotent (already-running -> OK, no exception).
         try:
             ec2.start_instances(InstanceIds=[EC2_ID])
