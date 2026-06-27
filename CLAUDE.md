@@ -55,3 +55,8 @@ All decisions, plans, ADRs, specs, and agent memory live under `_COFOUNDER/` (pr
 - Tests added or updated
 - Architecture tests pass (`dotnet test src/tests/AgriSync.ArchitectureTests/`)
 - If AI prompt touched: version bumped in `_COFOUNDER/memory/prompt-registry.md` + golden-set delta computed
+- Plan carries a **Change Surface** (DB / Backend / Frontend / Cross-cutting, each answered explicitly), tracked with binary `[ ]`/`[x]` tasks
+- **Founder Acceptance Gate** cleared — founder verified via supplied pointers and ticked `[x]` — BEFORE any deployment step (code-complete ≠ approved)
+- **Deployed + prod-proven** — a deployment step is `[x]` with prod evidence (`/version` SHA or HTTP status) and a `DEPLOYMENT_TRACKER.md` row (approved ≠ deployed; written ≠ live)
+
+> Plan-authoring rules (the four sections above) live in `superpowers:writing-plans` and `_COFOUNDER/CLAUDE.md` → "Plan authoring under cofounder mode".
