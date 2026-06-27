@@ -86,8 +86,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const [isLoading, setIsLoading] = useState(false);
     const [authError, setAuthError] = useState<string | null>(null);
 
+    // spec: secure-remembered-device-sessions-2026-06-24 — FIX #2
+    // syncFromStorage is called by onAuthSessionChanged (OTP login, QR-join, logout)
+    // via the AUTH_SESSION_CHANGED_EVENT listener. It must also update authStatus so
+    // that isAuthenticated === true immediately after a successful OTP login.
+    // Without this, the user stays on LoginPage because authStatus stays 'anonymous'.
+    // Guard: we do NOT override the initial 'checking' state here — the boot effect
+    // always completes and sets the terminal status itself. This handler only fires
+    // on EXPLICIT setAuthSession / clearAuthSession calls (not during boot).
     const syncFromStorage = useCallback(() => {
-        setSession(getAuthSession());
+        const current = getAuthSession();
+        setSession(current);
+        setAuthStatus(current !== null ? 'authenticated' : 'anonymous');
     }, []);
 
     const refresh = useCallback(async () => {

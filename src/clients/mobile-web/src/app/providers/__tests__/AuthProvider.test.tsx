@@ -7,6 +7,9 @@
  * - Successful refreshSession() → 'authenticated'.
  * - Failed refreshSession() → 'anonymous'.
  * - AppFrame does not render LoginPage while authStatus === 'checking'.
+ * - FIX #2 regression: AUTH_SESSION_CHANGED_EVENT (OTP/QR-join path) flips
+ *   authStatus to 'authenticated' when the new session is non-null, and back
+ *   to 'anonymous' when cleared.
  */
 
 import '@testing-library/jest-dom/vitest';
@@ -67,6 +70,7 @@ vi.mock('../../../infrastructure/storage/RefreshSessionStore', () => ({
 
 import { AuthProvider, useAuth } from '../AuthProvider';
 import { agriSyncClient } from '../../../infrastructure/api/AgriSyncClient';
+import { getAuthSession } from '../../../infrastructure/storage/AuthTokenStore';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -222,5 +226,97 @@ describe('AuthProvider — boot-validation state machine', () => {
             expect(screen.getByTestId('app-content')).toBeInTheDocument();
         });
         expect(screen.queryByTestId('login-page')).not.toBeInTheDocument();
+    });
+});
+
+// ---------------------------------------------------------------------------
+// FIX #2 regression — OTP/QR-join: AUTH_SESSION_CHANGED_EVENT must flip authStatus
+// ---------------------------------------------------------------------------
+// spec: secure-remembered-device-sessions-2026-06-24
+//
+// Root cause before fix: syncFromStorage() called by onAuthSessionChanged only
+// updated `session` state but never touched `authStatus`. So after a successful
+// OTP login the user remained on LoginPage (authStatus stayed 'anonymous').
+//
+// Fix: syncFromStorage() (and onAuthSessionChanged) must derive authStatus from
+// getAuthSession() — non-null → 'authenticated', null → 'anonymous'.
+describe('AuthProvider — FIX #2: AUTH_SESSION_CHANGED_EVENT flips authStatus', () => {
+    const AUTH_EVENT = 'agrisync:auth-session-changed';
+
+    beforeEach(() => {
+        vi.clearAllMocks();
+    });
+
+    afterEach(() => {
+        cleanup();
+    });
+
+    it('isAuthenticated flips to true when AUTH_SESSION_CHANGED_EVENT fires with a non-null session', async () => {
+        // Boot: refresh fails → anonymous
+        getRefreshSpy().mockResolvedValueOnce(null);
+        const mockGetAuthSession = getAuthSession as ReturnType<typeof vi.fn>;
+        mockGetAuthSession.mockReturnValue(null);
+
+        render(
+            <AuthProvider>
+                <StatusProbe />
+            </AuthProvider>,
+        );
+
+        await waitFor(() => {
+            expect(screen.getByTestId('auth-status').textContent).toBe('anonymous');
+        });
+        expect(screen.getByTestId('is-authenticated').textContent).toBe('no');
+
+        // Simulate OTP login success: setAuthSession stores a session and fires the event.
+        const fakeSession = {
+            userId: 'u-otp',
+            accessToken: 'tok-otp',
+            expiresAtUtc: '2099-01-01T00:00:00Z',
+        };
+        mockGetAuthSession.mockReturnValue(fakeSession);
+
+        await act(async () => {
+            window.dispatchEvent(new Event(AUTH_EVENT));
+        });
+
+        await waitFor(() => {
+            expect(screen.getByTestId('auth-status').textContent).toBe('authenticated');
+        });
+        expect(screen.getByTestId('is-authenticated').textContent).toBe('yes');
+    });
+
+    it('isAuthenticated flips to false when AUTH_SESSION_CHANGED_EVENT fires with null session (logout)', async () => {
+        // Boot: refresh succeeds → authenticated
+        const fakeSession = {
+            userId: 'u-3',
+            accessToken: 'tok-3',
+            expiresAtUtc: '2099-01-01T00:00:00Z',
+        };
+        getRefreshSpy().mockResolvedValueOnce(fakeSession);
+        const mockGetAuthSession = getAuthSession as ReturnType<typeof vi.fn>;
+        mockGetAuthSession.mockReturnValue(fakeSession);
+
+        render(
+            <AuthProvider>
+                <StatusProbe />
+            </AuthProvider>,
+        );
+
+        await waitFor(() => {
+            expect(screen.getByTestId('auth-status').textContent).toBe('authenticated');
+        });
+
+        // Simulate clearAuthSession — fires the event with null session
+        mockGetAuthSession.mockReturnValue(null);
+
+        await act(async () => {
+            window.dispatchEvent(new Event(AUTH_EVENT));
+        });
+
+        await waitFor(() => {
+            expect(screen.getByTestId('auth-status').textContent).toBe('anonymous');
+        });
+        expect(screen.getByTestId('is-authenticated').textContent).toBe('no');
     });
 });
