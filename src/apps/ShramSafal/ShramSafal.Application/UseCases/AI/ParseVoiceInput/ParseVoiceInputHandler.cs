@@ -584,7 +584,12 @@ public sealed class ParseVoiceInputHandler(
         return Convert.ToHexString(hash).ToLowerInvariant();
     }
 
-    private static string ApplyTranscriptIntegrityCorrections(
+    // internal (not private) so ShramSafal.Domain.Tests can drive the REAL
+    // flag-branching logic with both flag states (W1.P0 Task 8 fix, Finding 2).
+    // Access widened from private → internal only; the method body and the
+    // production call site are unchanged.  Guarded by InternalsVisibleTo in
+    // ShramSafal.Application.csproj.
+    internal static string ApplyTranscriptIntegrityCorrections(
         string normalizedJson,
         string transcript,
         bool domainKnowledgeLayerEnabled = false,
@@ -691,8 +696,21 @@ public sealed class ParseVoiceInputHandler(
             };
         }
 
-        // Safety net: ensure fertilizer application is captured when explicitly stated with a past-tense verb
-        if (ContainsFertilizerApplication(cleanTranscript))
+        // Safety net: ensure fertilizer application is captured when explicitly stated with a past-tense verb.
+        //
+        // W1.P0 Batch A (ai-intelligence-plan-2026-06-25 Task 8 fix) —
+        // This ORIGINAL unguarded net runs BEFORE GrapeInputLexicon, so when the
+        // domain-knowledge layer is ON it would clobber an empty inputs[] with a
+        // generic productName="खत" BEFORE the lexicon could normalize a real
+        // product row (the §1 CRITICAL pre-lexicon-clobber the spec forbids).
+        // It is therefore gated to run ONLY when the flag is OFF:
+        //   - Flag OFF (default): runs exactly as before → flag-OFF output is
+        //     byte-identical to the pre-Batch-A behaviour.
+        //   - Flag ON: SKIPPED here; the DEMOTED + GUARDED net inside
+        //     DomainKnowledgePipeline.ApplyGuardedFertilizerSafetyNet (which runs
+        //     AFTER GrapeInputLexicon and only when inputs[] is empty AND no row
+        //     carries rawProductName) is the ONLY खत injection.
+        if (!domainKnowledgeLayerEnabled && ContainsFertilizerApplication(cleanTranscript))
         {
             var inputs = root["inputs"] as JsonArray ?? new JsonArray();
             if (inputs.Count == 0)

@@ -104,23 +104,24 @@ internal static class DomainKnowledgePipeline
 
         var inputs = root["inputs"] as JsonArray ?? new JsonArray();
 
-        // Gate: do not overwrite when any row already carries rawProductName
-        if (inputs.Count == 0 || !AnyRowHasRawProductName(inputs))
+        // Gate: inject the generic खत row ONLY when inputs[] is empty AND no row
+        // carries a rawProductName.  The two conditions are intentionally ANDed:
+        // an empty array can never contain a rawProductName row, so the second
+        // clause is belt-and-suspenders for the (defensive) case where a future
+        // caller passes a placeholder row WITHOUT a product name.  Never
+        // overwrite a row that the lexicon / NPK rescuer already populated.
+        if (inputs.Count == 0 && !AnyRowHasRawProductName(inputs))
         {
-            // Only add the खत row when inputs is truly empty
-            if (inputs.Count == 0)
+            var fertilzerRow = new JsonObject
             {
-                var fertilzerRow = new JsonObject
-                {
-                    ["productName"] = "खत",
-                    ["method"] = "Soil",
-                    ["type"] = "fertilizer",
-                    ["sourceText"] = transcript,
-                    ["systemInterpretation"] = "खत देण्याचे काम नोंदवले"
-                };
-                inputs.Add(fertilzerRow);
-                root["inputs"] = inputs;
-            }
+                ["productName"] = "खत",
+                ["method"] = "Soil",
+                ["type"] = "fertilizer",
+                ["sourceText"] = transcript,
+                ["systemInterpretation"] = "खत देण्याचे काम नोंदवले"
+            };
+            inputs.Add(fertilzerRow);
+            root["inputs"] = inputs;
         }
     }
 
