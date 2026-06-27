@@ -3,7 +3,7 @@ import { buildReport } from '../reporter';
 import type { ScenarioResult, EvalConfig } from '../types';
 
 const baseFloors = {
-  workDone: 0, irrigation: 0, machinery: 0,
+  workDone: 0, irrigation: 0, labour: 0, machinery: 0,
   expenses: 0, tasks: 0, observations: 0,
 } as const;
 

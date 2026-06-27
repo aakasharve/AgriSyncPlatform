@@ -16,14 +16,11 @@
 //       `overall` triggers process.exit(1) (index.ts:194, unchanged).
 //   These are two separate switches; never collapse them.
 //
-// Floor semantics (two modes):
-//   - Explicit override (bucket key present in bucketFloorOverrides): hard floor.
-//     belowFloor = total < floor (even at total=0). A zero-scenario explicitly-
-//     floored bucket surfaces as belowFloor instead of being invisible.
-//   - Default (bucket not in bucketFloorOverrides): soft floor from
-//     minScenariosPerBucket. belowFloor = total > 0 && total < floor.
-//     Zero-scenario buckets with a soft floor are not penalized — the floor
-//     only kicks in once you've started running scenarios for that bucket.
+// Floor semantics (hard-floor-for-all):
+//   Every bucket has floor = bucketFloorOverrides[b] ?? minScenariosPerBucket;
+//   belowFloor = total < floor always. A zero-scenario bucket FAILS unless its
+//   floor is explicitly overridden to its real count (e.g. 0), per D-2 Option C.
+//   This is the honesty fix — no bucket is silently un-tested.
 
 import type { RunReport, ScenarioResult, BucketReport, EvalConfig } from './types';
 import { ALL_BUCKETS } from './types';
@@ -39,26 +36,15 @@ export function buildReport(
   // Sources actually run (e.g. ['live'] for the CI default).
   const sources = Array.from(new Set(results.map((r) => r.source))) as ('live' | 'staging')[];
 
-  const isExplicitFloor = (b: BucketReport['bucket']): boolean =>
-    config.global.bucketFloorOverrides !== undefined &&
-    Object.prototype.hasOwnProperty.call(config.global.bucketFloorOverrides, b);
-
-  const resolveFloor = (b: BucketReport['bucket']): number => {
-    if (isExplicitFloor(b)) {
-      // Explicit per-bucket override: hard floor (can be 0 to disable).
-      return config.global.bucketFloorOverrides![b]!;
-    }
-    // Soft global default — only enforced once a bucket has ≥1 result.
-    return config.global.minScenariosPerBucket;
-  };
+  const resolveFloor = (b: BucketReport['bucket']): number =>
+    config.global.bucketFloorOverrides?.[b] ?? config.global.minScenariosPerBucket;
 
   const resolveThreshold = (b: BucketReport['bucket']): number =>
     config.thresholds[b] ?? DEFAULT_THRESHOLD;
 
   // Iterate ALL_BUCKETS for every source so zero-scenario buckets are surfaced
-  // as belowFloor instead of being invisible (when explicitly floored > 0).
-  // The old "buckets only from results that ran" Object.entries loop is
-  // intentionally gone — that was the honesty bug.
+  // as belowFloor instead of being invisible. The old "buckets only from results
+  // that ran" Object.entries loop is intentionally gone — that was the honesty bug.
   const buckets: BucketReport[] = [];
   for (const source of sources) {
     for (const bucket of ALL_BUCKETS) {
@@ -67,10 +53,9 @@ export function buildReport(
       const passed = rs.filter((r) => r.passed).length;
       const floor = resolveFloor(bucket);
       const threshold = resolveThreshold(bucket);
-      // Explicit floor: hard (0 scenarios still triggers belowFloor if floor>0).
-      // Soft floor: only checked when ≥1 scenario ran (avoids penalizing buckets
-      // not yet represented in the corpus).
-      const belowFloor = isExplicitFloor(bucket) ? total < floor : total > 0 && total < floor;
+      // HARD for ALL buckets — a zero-scenario bucket fails unless its floor is
+      // overridden to its real count (D-2 Option C).
+      const belowFloor = total < floor;
       const belowThreshold = total > 0 && passed / total < threshold;
       buckets.push({
         bucket, source, total, passed,
