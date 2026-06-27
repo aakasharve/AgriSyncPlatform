@@ -1,11 +1,12 @@
 id: ethrel-blower-derivation
 bucket: inputs
 description: |
-  Farmer says "इथरेल ४ मिली ने मारल". AI must derive:
-  - dosePerLitre = 4 ml/L (explicit)
-  - blower implicit from "मारल" (sprayed/struck)
-  - tractor implicit from blower deployment
-  - totalMl = 4 × 600 = 2400 (from farmer's Aspee Blower 600 capacity)
+  Farmer says "इथरेल ४ मिली ने मारल". Only dose rate (4 ml) is spoken.
+  The carrier volume was NEVER spoken — totalMl must NOT be fabricated
+  (no 4 × assumed-600 = 2400). Honest extraction abstains on totalMl.
+  Machinery (blower/tractor) was also not spoken and is not asserted here.
+  This fixture reverses the previous totalMl=2400 fabrication-certification
+  (audit trail: spec ai-eval-ethrel-honesty-2026-06-25).
 
 input:
   transcript: "इथरेल ४ मिली ने मारल"
@@ -15,18 +16,13 @@ context:
 
 expected:
   inputs:
-    - productName: "Ethrel"
-      dosePerLitre: 4
-      doseUnit: "ml/L"
-      totalMl: 2400
-  machinery:
-    - { type: "blower", name: "Aspee Blower 600" }
-    - { type: "tractor" }
+    - productName: "इथरेल"
+      quantity: 4
+      unit: "ml"
 
 tolerances:
-  "inputs[0].productName": { fuzzy: 0.7 }
-  "inputs[0].dosePerLitre": { exact: true }
-  "inputs[0].totalMl": { "±%": 1 }
-  "machinery": { set_match: true }
+  "inputs[0].productName": { oneOf: ["इथरेल", "Ethrel", "ethrel", "ethephon"] }
+  "inputs[0].quantity": { exact: true }
+  "inputs[0].unit": { exact: true }
 
 ignore_fields: [summary, dayOutcome]
