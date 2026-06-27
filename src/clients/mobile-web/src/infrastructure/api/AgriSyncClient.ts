@@ -221,10 +221,6 @@ export class AgriSyncClient implements HttpTransport {
         return Auth.register(this, request);
     }
 
-    refreshToken(refreshToken: string): Promise<AuthResponseDto> {
-        return Auth.refreshToken(this, refreshToken);
-    }
-
     getCurrentUser(): Promise<unknown> {
         return Auth.getCurrentUser(this);
     }

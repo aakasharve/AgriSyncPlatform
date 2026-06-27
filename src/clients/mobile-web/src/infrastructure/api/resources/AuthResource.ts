@@ -20,14 +20,6 @@ export async function register(
     return response.data;
 }
 
-// refreshToken is kept for backward compat but is no longer used by the web refresh path.
-// The web path (AgriSyncClient.refreshSession) posts no token body and relies on the
-// HttpOnly cookie. This function may be removed once the Android native path is wired.
-export async function refreshToken(t: HttpTransport, refreshTokenStr: string): Promise<AuthResponseDto> {
-    const response = await t.authHttp.post<AuthResponseDto>('/user/auth/refresh', { refreshToken: refreshTokenStr });
-    return response.data;
-}
-
 export async function getCurrentUser(t: HttpTransport): Promise<unknown> {
     const response = await t.http.get('/user/auth/me');
     return response.data;
