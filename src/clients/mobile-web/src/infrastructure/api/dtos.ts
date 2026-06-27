@@ -27,6 +27,17 @@ export interface AuthResponseDto {
     userId: string;
     accessToken: string;
     expiresAtUtc: string;
+    /**
+     * spec: secure-remembered-device-sessions-2026-06-24
+     * Present ONLY on native (Android) responses when X-Client-Platform: android
+     * is sent. Absent (undefined) on web responses — the server uses the
+     * HttpOnly agrisync_refresh cookie instead.
+     *
+     * MUST be written to the Android Keystore via setNativeRefreshSession()
+     * and NEVER written to localStorage. The check:storage-discipline gate
+     * enforces this at CI time.
+     */
+    refreshToken?: string;
 }
 
 export interface SyncPushMutation {

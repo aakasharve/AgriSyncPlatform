@@ -27,7 +27,12 @@ import {
 } from '../storage/AuthTokenStore';
 import { getOrCreateDeviceId } from '../storage/DeviceIdStore';
 import { getRememberDevice } from '../storage/RememberDeviceStore';
-import { clearNativeRefreshSession } from '../storage/RefreshSessionStore';
+import {
+    clearNativeRefreshSession,
+    getNativeRefreshSession,
+    setNativeRefreshSession,
+    isNativeSecureRefreshEnabled,
+} from '../storage/RefreshSessionStore';
 import { SYNC_MUTATION_TYPES } from '../sync/SyncMutationCatalog';
 import {
     APP_VERSION,
@@ -176,11 +181,23 @@ export class AgriSyncClient implements HttpTransport {
             // scope refresh/revoke to the current device. Source is the existing
             // DeviceIdStore — no new device-id source is introduced.
             config.headers.set('X-Device-Id', getOrCreateDeviceId());
+            // spec: secure-remembered-device-sessions-2026-06-24 / Task 5.2
+            // Tell the backend we are running natively on Android so it returns
+            // the raw refreshToken in the JSON body instead of an HttpOnly cookie.
+            // Web requests send no such header — the cookie path is unchanged.
+            if (isNativeSecureRefreshEnabled()) {
+                config.headers.set('X-Client-Platform', 'android');
+            }
             return config;
         });
         this.authHttp.interceptors.request.use((config) => {
             config.headers.set('X-App-Version', APP_VERSION);
             config.headers.set('X-Device-Id', getOrCreateDeviceId());
+            // spec: secure-remembered-device-sessions-2026-06-24 / Task 5.2
+            // Mirror X-Client-Platform on the auth instance (login/register/refresh).
+            if (isNativeSecureRefreshEnabled()) {
+                config.headers.set('X-Client-Platform', 'android');
+            }
             return config;
         });
         this.http.interceptors.response.use(
@@ -491,10 +508,19 @@ export class AgriSyncClient implements HttpTransport {
     }
 
     // spec: secure-remembered-device-sessions-2026-06-24
-    // Web refresh: POST /user/auth/refresh with NO token body — the HttpOnly
-    // cookie agrisync_refresh carries the token (withCredentials handles this).
-    // Sends rememberDevice + deviceId + platform so the backend can issue the
-    // right cookie expiry (session vs persistent). Never reads refreshToken.
+    // Dual-path refresh:
+    //
+    //   WEB: POST /user/auth/refresh with NO token body — the HttpOnly cookie
+    //   agrisync_refresh carries the token (withCredentials handles this).
+    //   Sends rememberDevice + deviceId + platform:'web'. Never reads a
+    //   refreshToken field. This path is UNCHANGED from the original.
+    //
+    //   ANDROID NATIVE: reads the NativeRefreshSession from the Android
+    //   Keystore. If absent → fail-closed (clear + anonymous). If present →
+    //   POST /user/auth/refresh with body { refreshToken, rememberDevice,
+    //   deviceId, platform:'android' }. On success the server returns a
+    //   NEW refreshToken (rotation); persist it via setNativeRefreshSession.
+    //   On 401 → clearNativeRefreshSession + clear + anonymous.
     async refreshSession(): Promise<AuthSession | null> {
         if (this.refreshPromise) {
             return this.refreshPromise;
@@ -503,30 +529,75 @@ export class AgriSyncClient implements HttpTransport {
         const deviceId = getOrCreateDeviceId();
         const rememberDevice = getRememberDevice();
 
-        this.refreshPromise = this.authHttp
-            .post<AuthResponseDto>('/user/auth/refresh', {
-                rememberDevice,
-                deviceId,
-                platform: 'web',
-            })
-            .then(response => {
-                const session = toAuthSession(response.data);
-                setAuthSession(session);
-                return session;
-            })
-            .catch(() => {
-                // spec: secure-remembered-device-sessions-2026-06-24 / Task 6.2
-                // Fail-closed: clear ALL local auth state so an invalid session
-                // never grants access on a subsequent attempt. On web,
-                // clearNativeRefreshSession is a no-op; on Android it wipes the
-                // Keystore-backed secure storage.
-                clearAuthSession();
-                void clearNativeRefreshSession();
-                return null;
-            })
-            .finally(() => {
+        if (isNativeSecureRefreshEnabled()) {
+            // --- NATIVE (Android Keystore) branch ---
+            this.refreshPromise = (async () => {
+                const stored = await getNativeRefreshSession();
+                if (!stored) {
+                    // No stored session → fail-closed, force re-login.
+                    clearAuthSession();
+                    await clearNativeRefreshSession();
+                    return null;
+                }
+                try {
+                    const response = await this.authHttp.post<AuthResponseDto>(
+                        '/user/auth/refresh',
+                        {
+                            refreshToken: stored.refreshToken,
+                            rememberDevice,
+                            deviceId,
+                            platform: 'android',
+                        },
+                    );
+                    const data = response.data;
+                    // Persist the rotated token (server always issues a new one).
+                    if (data.refreshToken) {
+                        await setNativeRefreshSession({
+                            refreshToken: data.refreshToken,
+                            deviceId,
+                            expiresAtUtc: data.expiresAtUtc,
+                        });
+                    }
+                    const session = toAuthSession(data);
+                    setAuthSession(session);
+                    return session;
+                } catch {
+                    // spec: secure-remembered-device-sessions-2026-06-24 / Task 6.2
+                    // Fail-closed on any error (401, network, etc.).
+                    clearAuthSession();
+                    await clearNativeRefreshSession();
+                    return null;
+                }
+            })().finally(() => {
                 this.refreshPromise = null;
             });
+        } else {
+            // --- WEB (HttpOnly cookie) branch — UNCHANGED ---
+            this.refreshPromise = this.authHttp
+                .post<AuthResponseDto>('/user/auth/refresh', {
+                    rememberDevice,
+                    deviceId,
+                    platform: 'web',
+                })
+                .then(response => {
+                    const session = toAuthSession(response.data);
+                    setAuthSession(session);
+                    return session;
+                })
+                .catch(() => {
+                    // spec: secure-remembered-device-sessions-2026-06-24 / Task 6.2
+                    // Fail-closed: clear ALL local auth state so an invalid session
+                    // never grants access on a subsequent attempt. On web,
+                    // clearNativeRefreshSession is a no-op; on Android it wipes the
+                    // Keystore-backed secure storage.
+                    clearAuthSession();
+                    void clearNativeRefreshSession();
+                    return null;
+                })
+                .finally(() => {
+                    this.refreshPromise = null;
+                });
+        }
 
         return this.refreshPromise;
     }

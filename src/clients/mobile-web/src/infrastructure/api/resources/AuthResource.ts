@@ -3,12 +3,46 @@
 // Auth calls are now side-effect-free — they return AuthResponseDto and let
 // the caller (AuthProvider or AgriSyncClient.refreshSession) own session state.
 // No setAuthSession calls here; session management is centralised in AuthProvider.
+//
+// Native (Android) post-login side-effect:
+// When isNativeSecureRefreshEnabled() is true, the backend returns a
+// refreshToken in the JSON body (instead of an HttpOnly cookie). We persist
+// it to the Android Keystore immediately after login/register so the app can
+// survive being killed and re-opened without re-authenticating.
+// The web path is UNCHANGED — no token is ever touched on web.
 
 import type { AuthResponseDto, LoginRequest } from '../dtos';
 import { type HttpTransport } from '../transport';
+import { getOrCreateDeviceId } from '../../storage/DeviceIdStore';
+import {
+    isNativeSecureRefreshEnabled,
+    setNativeRefreshSession,
+} from '../../storage/RefreshSessionStore';
+
+/**
+ * Writes the native refresh token to the Android Keystore after a successful
+ * login/register, if running on Android native.
+ * On web this is a no-op (isNativeSecureRefreshEnabled() === false).
+ * MUST NOT write to localStorage — storage-discipline gate enforces this.
+ */
+async function persistNativeRefreshTokenIfApplicable(dto: AuthResponseDto): Promise<void> {
+    if (!isNativeSecureRefreshEnabled()) {
+        return;
+    }
+    if (!dto.refreshToken) {
+        return;
+    }
+    const deviceId = getOrCreateDeviceId();
+    await setNativeRefreshSession({
+        refreshToken: dto.refreshToken,
+        deviceId,
+        expiresAtUtc: dto.expiresAtUtc,
+    });
+}
 
 export async function login(t: HttpTransport, request: LoginRequest): Promise<AuthResponseDto> {
     const response = await t.authHttp.post<AuthResponseDto>('/user/auth/login', request);
+    await persistNativeRefreshTokenIfApplicable(response.data);
     return response.data;
 }
 
@@ -17,6 +51,7 @@ export async function register(
     request: { phone: string; password: string; displayName: string; appId?: string; role?: string },
 ): Promise<AuthResponseDto> {
     const response = await t.authHttp.post<AuthResponseDto>('/user/auth/register', request);
+    await persistNativeRefreshTokenIfApplicable(response.data);
     return response.data;
 }
 
