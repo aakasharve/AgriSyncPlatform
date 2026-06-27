@@ -18,14 +18,14 @@
 //   --threshold=<float>         override per-bucket pass threshold
 //   --endpoint=<url>            default http://localhost:5048/api/ai/eval-parse
 
-import { writeFileSync, mkdirSync } from 'node:fs';
+import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { loadScenariosForBucket, loadAllScenarios, resolveContext } from './loader';
 import { executeScenario } from './executor';
 import { diffAgainstExpected } from './differ';
 import { buildReport, formatMarkdown, formatJson } from './reporter';
-import type { Scenario, ScenarioResult, BucketId } from './types';
+import type { Scenario, ScenarioResult, BucketId, EvalConfig } from './types';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -121,6 +121,13 @@ async function runOne(
 
 async function main() {
   const flags = parseFlags(process.argv.slice(2));
+
+  // Load eval.config.json — floors, thresholds, and failOnRegression policy.
+  // The existing config has no bucketFloorOverrides (Task 3 adds them); it is
+  // valid EvalConfig as-is (overrides are optional).
+  const config: EvalConfig = JSON.parse(
+    readFileSync(join(__dirname, '..', 'eval.config.json'), 'utf-8'),
+  );
   const scenarios =
     flags.bucket === 'all'
       ? loadAllScenarios()
@@ -155,7 +162,7 @@ async function main() {
   }
   const finishedAt = new Date();
 
-  const report = buildReport(results, startedAt, finishedAt);
+  const report = buildReport(results, startedAt, finishedAt, config);
   const out =
     flags.report === 'md' ? formatMarkdown(report, results) : formatJson(report, results);
 
