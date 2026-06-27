@@ -10,7 +10,7 @@ namespace ShramSafal.Domain.Tests.AI;
 ///
 /// This test set enforces three invariants over the complete
 /// <see cref="MarathiPromptData.FewShotExamples"/> list (all 16 legacy +
-/// 12 new C10 examples):
+/// 11 new C10 examples = 27 total):
 ///
 ///   1. Every Output: body is valid JSON (guards against editing errors).
 ///   2. Each of the 4 new curriculum skills is demonstrably present:
@@ -141,11 +141,15 @@ public sealed class MarathiPromptDataFewShotTests
 
         foreach (var example in MarathiPromptData.FewShotExamples)
         {
+            // Identify carrier examples: Input mentions 1000 L in Marathi, or Output
+            // note encodes the carrier volume. The pattern "carrier: 1000 L spray water"
+            // is present in the Output, so "1000 L" catches it. The dead branch
+            // "\"notes\":\"1000" (which would only match if the note started with the
+            // digit) has been removed to avoid false confidence.
             var hasCarrierMarker =
                 example.Contains("एक हजार लिटर", StringComparison.Ordinal) ||
                 example.Contains("1000 L", StringComparison.Ordinal) ||
-                example.Contains("\"carrierVolumeLitres\":1000", StringComparison.Ordinal) ||
-                example.Contains("\"notes\":\"1000", StringComparison.Ordinal);
+                example.Contains("\"carrierVolumeLitres\":1000", StringComparison.Ordinal);
 
             if (!hasCarrierMarker)
                 continue;

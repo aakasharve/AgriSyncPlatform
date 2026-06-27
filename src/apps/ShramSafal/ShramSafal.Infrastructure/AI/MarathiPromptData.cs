@@ -181,11 +181,14 @@ internal static class MarathiPromptData
         Output: {"dayOutcome":"WORK_RECORDED","inputs":[{"productName":"Ethrel","rawProductName":"इथरेल","type":"other","method":"Spray","notes":"carrier: 1000 L spray water","sourceText":"इथरेल फवारणीसाठी एक हजार लिटर पाणी वापरलं"}],"irrigation":[],"confidence":0.95}
         """,
 
-        // S2-ABSTENTION: "पाणी दिलं" with no duration, no source, no method
-        // context → put in unclearSegments and ask; do NOT assume 2h drip.
+        // S2-ABSTENTION: "पाणी दिलं" — farmer completed work but gave no duration,
+        // no source, no method → dayOutcome=WORK_RECORDED (work happened), and
+        // put the missing detail in unclearSegments so the app can ask. Do NOT
+        // set DISTURBANCE_RECORDED (that is for when work did NOT happen / was blocked).
+        // Do NOT move "पाणी दिलं" into irrigation[] — that would re-break the carrier lesson.
         """
         Input: "आज पाणी दिलं."
-        Output: {"dayOutcome":"DISTURBANCE_RECORDED","unclearSegments":[{"rawText":"आज पाणी दिलं","reason":"incomplete_sentence","confidence":0.5,"userMessage":"किती वेळ पाणी दिले? कोणत्या पद्धतीने — ठिबक, फुहारा, की पूर पाणी?"}],"confidence":0.5}
+        Output: {"dayOutcome":"WORK_RECORDED","unclearSegments":[{"rawText":"आज पाणी दिलं","reason":"incomplete_sentence","confidence":0.5,"userMessage":"किती वेळ पाणी दिले? कोणत्या पद्धतीने — ठिबक, फुहारा, की पूर पाणी?"}],"confidence":0.5}
         """,
 
         // S2-NEGATIVE (contrast): Water volume stated for mixing — NOT irrigation.
@@ -225,11 +228,13 @@ internal static class MarathiPromptData
         // ------------------------------------------------------------------
 
         // S4-POSITIVE: Rain → irrigation cut from 4h to 1h — ONE causal entry.
-        // The disturbance is weather/rain; irrigation shows the reduced duration
-        // with the cause linked via the note.
+        // The disturbance captures the weather cause; irrigation shows the reduced
+        // duration (durationHours:1) with the causal explanation in notes.
+        // Fields used: disturbance.note (cause) + irrigation.durationHours + irrigation.notes.
+        // NEVER invent fields like "cause" or "reducedFrom" — they don't exist in the schema.
         """
         Input: "आज पाऊस आला म्हणून ४ तासाचं पाणी १ तासावर आणलं."
-        Output: {"dayOutcome":"WORK_RECORDED","disturbance":{"scope":"PARTIAL","group":"weather","reason":"rain","severity":"MEDIUM","blockedSegments":["irrigation"],"note":"पाऊस आला म्हणून सिंचन ४ तासांवरून १ तासावर कमी केले"},"irrigation":[{"method":"Drip","durationHours":1,"notes":"reduced from 4h due to rain","cause":"rain","reducedFrom":4,"sourceText":"४ तासाचं पाणी १ तासावर आणलं"}],"confidence":0.94}
+        Output: {"dayOutcome":"WORK_RECORDED","disturbance":{"scope":"PARTIAL","group":"weather","reason":"rain","severity":"MEDIUM","blockedSegments":["irrigation"],"note":"पाऊस आला म्हणून सिंचन ४ तासांवरून १ तासावर कमी केले"},"irrigation":[{"method":"Drip","durationHours":1,"notes":"reduced from 4h due to rain","sourceText":"४ तासाचं पाणी १ तासावर आणलं"}],"confidence":0.94}
         """,
 
         // S4-ABSTENTION: Effect observed (irrigation was short) but cause
@@ -241,9 +246,10 @@ internal static class MarathiPromptData
 
         // S4-NEGATIVE (contrast): Both rain AND the irrigation reduction are
         // stated — keep as ONE linked entry, NOT split into rain-note + irrigation-row.
+        // Use only existing fields: disturbance.note + irrigation.durationHours + irrigation.notes.
         """
         Input: "पाऊस आल्यामुळे आज पाणी फक्त १ तास चालू ठेवलं, नेहमीच्या ४ तासांऐवजी."
-        Output: {"dayOutcome":"WORK_RECORDED","disturbance":{"scope":"PARTIAL","group":"weather","reason":"rain","severity":"MEDIUM","blockedSegments":["irrigation"],"note":"पाऊस आल्यामुळे सिंचन ४ तासांवरून १ तासावर कमी केले"},"irrigation":[{"method":"Drip","durationHours":1,"notes":"reduced from 4h due to rain","cause":"rain","reducedFrom":4,"sourceText":"पाणी फक्त १ तास चालू ठेवलं"}],"confidence":0.96}
+        Output: {"dayOutcome":"WORK_RECORDED","disturbance":{"scope":"PARTIAL","group":"weather","reason":"rain","severity":"MEDIUM","blockedSegments":["irrigation"],"note":"पाऊस आल्यामुळे सिंचन ४ तासांवरून १ तासावर कमी केले"},"irrigation":[{"method":"Drip","durationHours":1,"notes":"reduced from 4h due to rain","sourceText":"पाणी फक्त १ तास चालू ठेवलं"}],"confidence":0.96}
         """
     ];
 
