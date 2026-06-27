@@ -5,6 +5,7 @@ import OtpLoginForm from '../features/auth/components/OtpLoginForm';
 import OtpVerifyForm from '../features/auth/components/OtpVerifyForm';
 import PasswordField from '../features/auth/components/PasswordField';
 import type { StartOtpResponse } from '../features/auth/data/otpClient';
+import { APP_VERSION } from '../buildInfo';
 import { invalidateMeContext } from '../core/session/MeContextService';
 
 // Top-level auth mode. 'otp' is the single PUBLIC flow — real users enter their
@@ -313,7 +314,7 @@ const LoginPage: React.FC = () => {
 
                 <div className="mt-6 text-center">
                     <p className="text-xs text-stone-400">
-                        AgriSync Platform v1.0
+                        AgriSync Platform v{APP_VERSION}
                     </p>
                 </div>
             </div>
