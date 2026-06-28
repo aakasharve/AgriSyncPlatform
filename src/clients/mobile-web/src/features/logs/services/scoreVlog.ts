@@ -18,6 +18,11 @@
  */
 
 import type { AgriLogResponse, InputEvent, FieldProvenance } from '../../../types';
+import type {
+    ScoreContext,
+    VlogScore,
+    VlogScoreDimension,
+} from '../../../domain/types/log.types';
 import {
     computeReceiptTotal,
     sumLabourCost,
@@ -117,81 +122,17 @@ export function deriveDimensionProvenance(log: AgriLogResponse): Record<string, 
 }
 
 // =============================================================================
-// TYPES (public)
+// TYPES (re-exported from domain for backward compatibility)
 // =============================================================================
 
 /**
- * Re-export FieldProvenance under the legacy alias ProvenanceTag so that
- * any local references within this file keep working. External consumers
- * should import `FieldProvenance` directly from `domain/types/log.types`.
+ * Types are defined in domain/types/log.types.ts (canonical location) and
+ * imported above. Re-export them so existing imports from scoreVlog.ts continue
+ * to work (backward compatibility for tests and other consumers).
  *
- * Single source of truth: `FieldProvenance` is defined in log.types.ts (domain).
- * W1.P2 consolidation — removed the local definition and replaced with import.
+ * Single source of truth: domain/types/log.types.ts.
  */
-export type ProvenanceTag = FieldProvenance;
-
-/**
- * ScoreContext — all fields optional; safe defaults when absent.
- *
- * DEPENDENCY NOTE: real provenance is W1.P2 (not yet built). When absent,
- * confidenceFactor defaults to a conservative 0.7 (unconfirmed) so the
- * engine runs today and tightens automatically when W1.P2 feeds it.
- */
-export interface ScoreContext {
-    /** Farm-level info. Solo farm (plotCount=1) waives the SCOPE penalty. */
-    farm?: { plotCount: number };
-    /**
-     * Set of field keys the farmer explicitly confirmed at the confirm-screen.
-     * When absent (W1.P2 not yet integrated), confidenceFactor defaults to 0.7.
-     * Values are dimension-level identifiers, e.g. 'dose', 'cost', 'carrier'.
-     */
-    confirmedFields?: Set<string> | string[];
-    /**
-     * Fine-grained per-field provenance map (W1.P2).
-     * Keys are dimension identifiers; values are ProvenanceTag.
-     * 'assumed' or 'derived' without a confirmedFields entry caps coverage at 0.5.
-     */
-    provenance?: Record<string, ProvenanceTag>;
-    /**
-     * Schedule binding for PURPOSE dimension.
-     * When absent, PURPOSE is not-applicable (denominator shrinks).
-     */
-    schedule?: {
-        bound: boolean;
-        stageFit?: 'fits' | 'off_stage' | 'no_schedule';
-    };
-    /**
-     * Prior continuity progress (0–1). Only used for CONTINUITY dimension.
-     * Absent → CONTINUITY not-applicable.
-     */
-    priorContinuity?: number;
-}
-
-/** Per-dimension breakdown row in the output. */
-export interface VlogScoreDimension {
-    dimension: string;
-    applicable: boolean;
-    weight: number;
-    /** 0 = absent, 0.5 = partial, 1.0 = full */
-    coverage: 0 | 0.5 | 1;
-    /** [0.7, 1.0] — from confirmed/provenance signals, never from LLM confidence */
-    confidenceFactor: number;
-    /** weight * coverage * confidenceFactor (0 for not-applicable dimensions) */
-    contribution: number;
-}
-
-/** The output of scoreVlog. */
-export interface VlogScore {
-    /**
-     * Integer 0–100, or null when outcome is UNKNOWN.
-     * Formula: round(100 * Σ_applicable[weight * coverage * confidenceFactor] / Σ_applicable[weight])
-     */
-    score: number | null;
-    /** SCORED = normal day, UNKNOWN = silent/no-work day, DISTURBANCE = blocker day */
-    outcome: 'SCORED' | 'UNKNOWN' | 'DISTURBANCE';
-    /** Per-dimension breakdown for transparency + debugging. */
-    dimensions: VlogScoreDimension[];
-}
+export type { ProvenanceTag, ScoreContext, VlogScoreDimension, VlogScore } from '../../../domain/types/log.types';
 
 // =============================================================================
 // INTERNAL CONSTANTS

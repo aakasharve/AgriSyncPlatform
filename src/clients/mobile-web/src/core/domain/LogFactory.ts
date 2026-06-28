@@ -6,12 +6,13 @@ import {
     ActivityExpenseEvent, ObservationNote, ObservationSeverity,
     PlannedTask, AgriLogResponse, DisturbanceEvent
 } from '../../types';
-import type { ObservationNoteDraft } from '../../domain/types/log.types';
+import type { ObservationNoteDraft, ScoreContext } from '../../domain/types/log.types';
 import { getPhaseAndDay } from '../../shared/utils/timelineUtils';
 import { getDateKey } from './services/DateKeyService';
 import { isCompletedIrrigationEvent } from './services/IrrigationCompletionService';
 // import { AgriLogResponse } from '../../domain/ai/contracts/AgriLogResponseSchema'; // REMOVED
 import { LogProvenance } from '../../domain/ai/LogProvenance';
+import { scoreVlog } from '../../features/logs/services/scoreVlog';
 
 // CORE SERVICES
 import { idGenerator, IdGenerator } from './services/IdGenerator';
@@ -36,6 +37,40 @@ import {
 
 const FARM_GLOBAL_ID = 'FARM_GLOBAL';
 const FARM_GLOBAL_NAME = 'Entire Farm';
+
+/**
+ * Project a DailyLog into the AgriLogResponse shape that scoreVlog reads.
+ * scoreVlog only needs the event arrays + dayOutcome + disturbance + observations + summary.
+ * DailyLog carries all of these (summary is absent → defaults to '' for scoring).
+ *
+ * This adapter is pure (no mutation, no allocation beyond the object literal)
+ * and intentionally minimal — only maps what scoreVlog actually reads.
+ */
+function projectLogForScoring(log: DailyLog): AgriLogResponse {
+    return {
+        summary: '',
+        dayOutcome: log.dayOutcome,
+        cropActivities: log.cropActivities,
+        irrigation: log.irrigation,
+        labour: log.labour,
+        inputs: log.inputs,
+        machinery: log.machinery,
+        activityExpenses: log.activityExpenses ?? [],
+        observations: log.observations,
+        disturbance: log.disturbance,
+        missingSegments: [],
+    };
+}
+
+/**
+ * Count the total distinct plots across all CropProfiles.
+ * Used to supply ScoreContext.farm.plotCount for the SCOPE dimension.
+ * Falls back to 1 (solo) when crops is empty — waives the SCOPE penalty.
+ */
+function countPlots(crops: CropProfile[]): number {
+    const count = crops.reduce((sum, c) => sum + c.plots.length, 0);
+    return count > 0 ? count : 1;
+}
 
 /**
  * Shape of the raw form data accepted by createFromManualEntry /
@@ -121,8 +156,14 @@ export class LogFactory {
         const isFarmGlobalScope =
             targetPlotIds.length === 0 && logScope.selectedCropIds.includes(FARM_GLOBAL_ID);
 
+        const plotCount = countPlots(crops);
+
         if (isFarmGlobalScope) {
-            newLogs.push(this.createFarmGlobalManualLog(data, profile, nowISO, idGen));
+            const globalLog = this.createFarmGlobalManualLog(data, profile, nowISO, idGen);
+            // Stamp understanding (always, silent — display gated by flag separately)
+            const globalCtx: ScoreContext = { farm: { plotCount: 1 } };
+            globalLog.understanding = scoreVlog(projectLogForScoring(globalLog), globalCtx);
+            newLogs.push(globalLog);
             return newLogs;
         }
 
@@ -304,6 +345,10 @@ export class LogFactory {
                 }
             };
 
+            // Stamp Understanding Meter score (always, silent — display gated by flag separately)
+            const scoreCtx: ScoreContext = { farm: { plotCount } };
+            newLog.understanding = scoreVlog(projectLogForScoring(newLog), scoreCtx);
+
             newLogs.push(newLog);
         });
 
@@ -472,8 +517,10 @@ export class LogFactory {
         const isFarmGlobalScope =
             targetPlotIds.length === 0 && logScope.selectedCropIds.includes(FARM_GLOBAL_ID);
 
+        const voicePlotCount = countPlots(crops);
+
         if (isFarmGlobalScope) {
-            newLogs.push(this.createFarmGlobalVoiceLog(
+            const globalVoiceLog = this.createFarmGlobalVoiceLog(
                 response,
                 profile,
                 mappedExpenses,
@@ -485,7 +532,11 @@ export class LogFactory {
                 provenance,
                 nowISO,
                 idGen
-            ));
+            );
+            // Stamp understanding (always, silent — display gated by flag separately)
+            const globalVoiceCtx: ScoreContext = { farm: { plotCount: 1 } };
+            globalVoiceLog.understanding = scoreVlog(projectLogForScoring(globalVoiceLog), globalVoiceCtx);
+            newLogs.push(globalVoiceLog);
             return newLogs;
         }
 
@@ -645,6 +696,10 @@ export class LogFactory {
                     verifiedAtISO: isOwner ? nowISO : undefined
                 }
             };
+
+            // Stamp Understanding Meter score (always, silent — display gated by flag separately)
+            const voiceScoreCtx: ScoreContext = { farm: { plotCount: voicePlotCount } };
+            newLog.understanding = scoreVlog(projectLogForScoring(newLog), voiceScoreCtx);
 
             newLogs.push(newLog);
         });
