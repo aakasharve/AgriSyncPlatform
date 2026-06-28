@@ -37,4 +37,12 @@ export const isE2EHarnessEnabled = (): boolean => IS_E2E_HARNESS_ENABLED;
 // preview build (handled by the runtime env helpers above).
 export const FEATURE_FLAGS = {
     DwcChip: import.meta.env.MODE === 'development' || isEnabled('VITE_DWC_CHIP'),
+    /**
+     * Understanding Meter (W1.P3.T1).
+     * Gates the DISPLAY of the VlogScore meter in the UI.
+     * The scoreVlog ENGINE is always callable; this flag only controls rendering.
+     * Default: OFF — enable via VITE_UNDERSTANDING_METER=1 in a preview build.
+     * Full ±8 calibration deferred (needs W1.P2 provenance + calibration fixtures).
+     */
+    understandingMeter: isEnabled('VITE_UNDERSTANDING_METER'),
 } as const;
