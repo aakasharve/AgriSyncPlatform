@@ -98,10 +98,12 @@ export function allocateActivityExpensesForPlot(
 ): ActivityExpenseEvent[] {
     return (expenseEvents || [])
         .filter(event => {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             const targetPlotName = (event as any).targetPlotName as string | undefined;
             return !targetPlotName || targetPlotName === plotName;
         })
         .map(event => {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             const targetPlotName = (event as any).targetPlotName as string | undefined;
             const isShared = !targetPlotName;
 
@@ -149,7 +151,16 @@ export function sumInputCost(events: InputEvent[]): number {
 }
 
 export function sumMachineryCost(events: MachineryEvent[]): number {
-    return events.reduce((sum, event) => sum + (event.rentalCost || event.fuelCost || 0), 0);
+    return events.reduce((sum, event) => sum + (event.rentalCost ?? 0) + (event.fuelCost ?? 0), 0);
+}
+
+export function computeReceiptTotal(parts: {
+    labourCost: number;
+    machineCost: number;
+    inputCost: number;
+    expenseCost: number;
+}): number {
+    return parts.labourCost + parts.machineCost + parts.inputCost + parts.expenseCost;
 }
 
 export function sumExpenseCost(events: ActivityExpenseEvent[]): number {
