@@ -107,12 +107,21 @@ internal sealed class AiOrchestrator(
         // content hash lives in PromptContentHash for forensic identity
         // (Y.md §7 Option C). ModelVersion is stamped as "unknown" here and
         // replaced post-attempt via AiJob.UpdateProvenance (F3).
+        //
+        // W1.P2 T3 — ExtractorCodeSha: the git SHA of the extractor code is
+        // not yet wired via SourceRevisionId (see TODO spec-1.7-step4).
+        // Use the prompt content hash as the stable extractor identifier
+        // for now — it changes whenever the prompt modules change and is
+        // already the primary forensic identifier per DATA_PRINCIPLE_SPINE
+        // Phase 01.  The AiPromptTemplateRegistry.CurrentVoicePromptContentHash
+        // value is available here as promptContentHash.
         var voiceProvenance = new Provenance(
             source: Source.Voice,
             modelVersion: "unknown",
             promptVersion: "v1", // Y.md §7 Option C — stable label; hash lives in PromptContentHash.
             promptContentHash: promptContentHash,
-            appVersion: string.IsNullOrWhiteSpace(clientAppVersion) ? "unknown" : clientAppVersion);
+            appVersion: string.IsNullOrWhiteSpace(clientAppVersion) ? "unknown" : clientAppVersion,
+            extractorCodeSha: promptContentHash);
 
         var job = existing ?? AiJob.Create(
             Guid.NewGuid(),
@@ -290,12 +299,15 @@ internal sealed class AiOrchestrator(
         // and the two-stage parse still proceeds.
         var blobRef = await TryPersistRawBlobAsync(payload, mimeType, ct);
 
+        // W1.P2 T3 — ExtractorCodeSha stamped with promptContentHash (same
+        // rationale as the one-stage path above: SourceRevisionId not yet wired).
         var voiceProvenance = new Provenance(
             source: Source.Voice,
             modelVersion: "unknown",
             promptVersion: "v1",
             promptContentHash: promptContentHash,
-            appVersion: string.IsNullOrWhiteSpace(clientAppVersion) ? "unknown" : clientAppVersion);
+            appVersion: string.IsNullOrWhiteSpace(clientAppVersion) ? "unknown" : clientAppVersion,
+            extractorCodeSha: promptContentHash);
 
         var job = existing ?? AiJob.Create(
             Guid.NewGuid(),

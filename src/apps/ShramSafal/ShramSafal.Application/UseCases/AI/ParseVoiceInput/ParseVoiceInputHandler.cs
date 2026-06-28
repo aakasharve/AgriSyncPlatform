@@ -796,10 +796,63 @@ public sealed class ParseVoiceInputHandler(
         // to the pre-Batch-A behaviour.
         if (domainKnowledgeLayerEnabled && domainKnowledgePipeline is not null)
         {
+            // W1.P2 T2 — stamp provenance on items that exist at this point
+            // (i.e. from the AI model output + transcript-synthesis above).
+            // All of these came from the spoken transcript, so they are "spoken".
+            // Items added by RunPipeline below (farm-knowledge inferred) will
+            // not yet have a "provenance" key; those get stamped "derived" after
+            // the pipeline runs. NEVER stamps "assumed" — "assumed" is eval-only.
+            StampProvenanceOnItems(root, "spoken", onlyIfMissing: false);
+
             domainKnowledgePipeline.RunPipeline(root, transcript);
+
+            // After the pipeline, any item that still has no "provenance" key
+            // was added by the domain-knowledge normalizers → "derived".
+            StampProvenanceOnItems(root, "derived", onlyIfMissing: true);
         }
 
         return root.ToJsonString();
+    }
+
+    // W1.P2 T2 — stamps a "provenance" value onto each item object in the
+    // known event-item arrays.  When onlyIfMissing=true only items that do
+    // not already carry the key are touched (used to mark pipeline-added
+    // items as "derived" without overwriting the "spoken" stamp already set
+    // on transcript-synthesized items).  When onlyIfMissing=false every
+    // item gets the value (used for the initial "spoken" pass).
+    // Arrays walked: labour, inputs, irrigation, observations, plannedTasks,
+    // cropActivities, machinery, activityExpenses (all top-level event arrays
+    // that may receive items from either path).
+    private static readonly string[] EventArrayKeys =
+    [
+        "labour", "inputs", "irrigation", "observations",
+        "plannedTasks", "cropActivities", "machinery", "activityExpenses"
+    ];
+
+    private static void StampProvenanceOnItems(JsonObject root, string provenanceValue, bool onlyIfMissing)
+    {
+        foreach (var key in EventArrayKeys)
+        {
+            if (root[key] is not JsonArray array)
+            {
+                continue;
+            }
+
+            foreach (var node in array)
+            {
+                if (node is not JsonObject item)
+                {
+                    continue;
+                }
+
+                if (onlyIfMissing && item.ContainsKey("provenance"))
+                {
+                    continue;
+                }
+
+                item["provenance"] = provenanceValue;
+            }
+        }
     }
 
     private static List<(int Count, string Activity, string ActivityDisplay, string SourceText)> ExtractCompoundLabourSegments(string transcript)

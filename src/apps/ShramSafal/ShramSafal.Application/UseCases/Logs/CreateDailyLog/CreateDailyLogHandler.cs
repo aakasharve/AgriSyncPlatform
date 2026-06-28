@@ -1,3 +1,5 @@
+using System.Text.Json;
+using System.Text.Json.Nodes;
 using AgriSync.BuildingBlocks.Abstractions;
 using AgriSync.BuildingBlocks.Analytics;
 using AgriSync.BuildingBlocks.Application;
@@ -109,6 +111,7 @@ public sealed class CreateDailyLogHandler(
             : command.ClientAppVersion.Trim();
 
         Provenance provenance;
+        Domain.AI.AiJob? sourceJobForEvidence = null;
         if (command.SourceAiJobId is { } sourceJobId && sourceJobId != Guid.Empty)
         {
             var sourceJob = await aiJobRepository.GetByIdAsync(sourceJobId, ct);
@@ -123,6 +126,9 @@ public sealed class CreateDailyLogHandler(
                 promptVersion: sourceJob.Provenance.PromptVersion,
                 promptContentHash: sourceJob.Provenance.PromptContentHash,
                 appVersion: stampedAppVersion);
+
+            // W1.P2 T3 — capture source job so we can extract per-field provenance below.
+            sourceJobForEvidence = sourceJob;
         }
         else
         {
@@ -141,6 +147,22 @@ public sealed class CreateDailyLogHandler(
             clock.UtcNow,
             provenance: provenance,
             sourceAiJobId: command.SourceAiJobId);
+
+        // W1.P2 T3 — persist per-field provenance into EvidenceSourcesJson.
+        // The AiJob's NormalizedResultJson carries "provenance" keys on each
+        // event-item array entry (stamped by ApplyTranscriptIntegrityCorrections
+        // when Ai:DomainKnowledgeLayer:Enabled is ON; absent when OFF).
+        // Extract the per-field provenance map and write it into the existing
+        // EvidenceSourcesJson jsonb column (schemaless — no migration needed).
+        // When the flag was OFF the NormalizedResultJson has no provenance keys
+        // so ExtractFieldProvenanceJson returns "[]" and EvidenceSourcesJson
+        // stays at its "[]" default — byte-identical to pre-W1.P2 behaviour.
+        if (sourceJobForEvidence?.NormalizedResultJson is { } normalizedJson
+            && !string.IsNullOrWhiteSpace(normalizedJson))
+        {
+            var evidenceJson = ExtractFieldProvenanceJson(normalizedJson);
+            log.SetEvidenceSourcesJson(evidenceJson);
+        }
 
         await repository.AddDailyLogAsync(log, ct);
         // DATA_PRINCIPLE_SPINE sub-phase 04.3b — migrate from AuditEvent.Create
@@ -198,5 +220,84 @@ public sealed class CreateDailyLogHandler(
         ), ct);
 
         return Result.Success(log.ToDto());
+    }
+
+    // W1.P2 T3 — extract the per-field provenance map from a NormalizedResultJson
+    // blob and serialise it as an EvidenceSourcesJson payload.
+    // Walks the known event-item arrays, finds any item that carries a
+    // "provenance" key, and emits a compact map of
+    //   { "type": "field_provenance", "fields": [ { "array": "...", "index": N, "provenance": "spoken"|"derived" }, ... ] }
+    // inside the array.  When no provenance keys are present (flag-OFF parse)
+    // returns "[]" so EvidenceSourcesJson stays at its default.
+    private static readonly string[] EvidenceArrayKeys =
+    [
+        "labour", "inputs", "irrigation", "observations",
+        "plannedTasks", "cropActivities", "machinery", "activityExpenses"
+    ];
+
+    private static string ExtractFieldProvenanceJson(string normalizedResultJson)
+    {
+        try
+        {
+            var root = JsonNode.Parse(normalizedResultJson)?.AsObject();
+            if (root is null)
+            {
+                return "[]";
+            }
+
+            var fields = new JsonArray();
+            foreach (var arrayKey in EvidenceArrayKeys)
+            {
+                if (root[arrayKey] is not JsonArray items)
+                {
+                    continue;
+                }
+
+                for (var i = 0; i < items.Count; i++)
+                {
+                    if (items[i] is not JsonObject item)
+                    {
+                        continue;
+                    }
+
+                    if (item["provenance"]?.GetValue<string>() is { } prov
+                        && !string.IsNullOrWhiteSpace(prov))
+                    {
+                        fields.Add(new JsonObject
+                        {
+                            ["array"] = arrayKey,
+                            ["index"] = i,
+                            ["provenance"] = prov
+                        });
+                    }
+                }
+            }
+
+            if (fields.Count == 0)
+            {
+                return "[]";
+            }
+
+            var entry = new JsonObject
+            {
+                ["type"] = "field_provenance",
+                ["fields"] = fields
+            };
+
+            return new JsonArray { entry }.ToJsonString();
+        }
+        catch (JsonException ex)
+        {
+            // Malformed NormalizedResultJson — fall back to empty evidence.
+            // Activity event for observability (static helper; no ILogger).
+            System.Diagnostics.Activity.Current?.AddEvent(new System.Diagnostics.ActivityEvent(
+                "CreateDailyLog.MalformedNormalizedResultJson",
+                tags: new System.Diagnostics.ActivityTagsCollection
+                {
+                    ["exception.type"] = ex.GetType().Name,
+                    ["exception.message"] = ex.Message,
+                }));
+            return "[]";
+        }
     }
 }
