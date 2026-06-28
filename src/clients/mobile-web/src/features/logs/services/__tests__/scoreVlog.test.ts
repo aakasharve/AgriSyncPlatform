@@ -19,7 +19,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { scoreVlog } from '../scoreVlog';
+import { scoreVlog, deriveDimensionProvenance } from '../scoreVlog';
 import type { ScoreContext } from '../scoreVlog';
 import type { AgriLogResponse } from '../../../../types';
 
@@ -693,5 +693,257 @@ describe('scoreVlog — COST dimension', () => {
         const result = scoreVlog(log, {});
         const costDim = result.dimensions.find(d => d.dimension === 'COST');
         expect(costDim?.coverage).toBe(1); // Non-labour cost, no labour events to check rate
+    });
+});
+
+// =============================================================================
+// C-1 FIX: deriveDimensionProvenance unit tests
+// =============================================================================
+
+describe('deriveDimensionProvenance — unit tests', () => {
+    it('returns empty map when no items carry any provenance tag', () => {
+        const log = makeLog({
+            cropActivities: [{ id: 'ca1', title: 'Pruning' }], // no provenance field
+            inputs: [{ id: 'inp1', method: 'Spray', mix: [{ id: 'm1', productName: 'Urea', unit: 'g/L' }] }],
+        });
+        const result = deriveDimensionProvenance(log);
+        expect(Object.keys(result)).toHaveLength(0);
+    });
+
+    it('all-spoken inputs → DOSE resolves to spoken', () => {
+        const log = makeLog({
+            inputs: [
+                { id: 'inp1', method: 'Spray', mix: [], provenance: 'spoken' },
+                { id: 'inp2', method: 'Spray', mix: [], provenance: 'spoken' },
+            ],
+        });
+        const result = deriveDimensionProvenance(log);
+        expect(result['DOSE']).toBe('spoken');
+    });
+
+    it('mixed-provenance inputs (spoken + assumed) → DOSE resolves to assumed (least-honest wins)', () => {
+        const log = makeLog({
+            inputs: [
+                { id: 'inp1', method: 'Spray', mix: [], provenance: 'spoken' },
+                { id: 'inp2', method: 'Spray', mix: [], provenance: 'assumed' },
+            ],
+        });
+        const result = deriveDimensionProvenance(log);
+        expect(result['DOSE']).toBe('assumed');
+    });
+
+    it('mix item with assumed provenance taints DOSE even when input item is spoken', () => {
+        const log = makeLog({
+            inputs: [
+                {
+                    id: 'inp1',
+                    method: 'Spray',
+                    provenance: 'spoken',
+                    mix: [
+                        { id: 'm1', productName: 'Urea', unit: 'g/L', provenance: 'spoken' },
+                        { id: 'm2', productName: 'NPK', unit: 'g/L', provenance: 'assumed' },
+                    ],
+                },
+            ],
+        });
+        const result = deriveDimensionProvenance(log);
+        expect(result['DOSE']).toBe('assumed');
+    });
+
+    it('cropActivities with confirmed provenance → WHAT resolves to confirmed', () => {
+        const log = makeLog({
+            cropActivities: [
+                { id: 'ca1', title: 'Pruning', provenance: 'confirmed' },
+                { id: 'ca2', title: 'Weeding', provenance: 'confirmed' },
+            ],
+        });
+        const result = deriveDimensionProvenance(log);
+        expect(result['WHAT']).toBe('confirmed');
+    });
+
+    it('cropActivities confirmed+derived → WHAT resolves to derived (least-honest wins)', () => {
+        const log = makeLog({
+            cropActivities: [
+                { id: 'ca1', title: 'Pruning', provenance: 'confirmed' },
+                { id: 'ca2', title: 'Weeding', provenance: 'derived' },
+            ],
+        });
+        const result = deriveDimensionProvenance(log);
+        expect(result['WHAT']).toBe('derived');
+    });
+
+    it('COST: labour(spoken) + expense(assumed) → COST resolves to assumed', () => {
+        const log = makeLog({
+            labour: [{ id: 'lab1', type: 'HIRED', count: 5, totalCost: 2000, provenance: 'spoken' }],
+            activityExpenses: [{ id: 'exp1', reason: 'seeds', items: [], provenance: 'assumed' }],
+        });
+        const result = deriveDimensionProvenance(log);
+        expect(result['COST']).toBe('assumed');
+    });
+
+    it('CARRIER: machinery provenance present → maps to CARRIER', () => {
+        const log = makeLog({
+            machinery: [{ id: 'mac1', type: 'tractor', ownership: 'rented', provenance: 'derived' }],
+        });
+        const result = deriveDimensionProvenance(log);
+        expect(result['CARRIER']).toBe('derived');
+    });
+
+    it('SCOPE, PURPOSE, CONTINUITY, WEATHER are never set by deriveDimensionProvenance', () => {
+        const log = makeLog({
+            cropActivities: [{ id: 'ca1', title: 'Pruning', provenance: 'assumed' }],
+            inputs: [{ id: 'inp1', method: 'Spray', mix: [], provenance: 'assumed' }],
+            labour: [{ id: 'lab1', type: 'HIRED', count: 5, provenance: 'assumed' }],
+            machinery: [{ id: 'mac1', type: 'tractor', ownership: 'owned', provenance: 'assumed' }],
+            activityExpenses: [{ id: 'exp1', reason: 'seeds', items: [], provenance: 'assumed' }],
+        });
+        const result = deriveDimensionProvenance(log);
+        expect(result['SCOPE']).toBeUndefined();
+        expect(result['PURPOSE']).toBeUndefined();
+        expect(result['CONTINUITY']).toBeUndefined();
+        expect(result['WEATHER']).toBeUndefined();
+    });
+});
+
+// =============================================================================
+// C-1 FIX: KEY end-to-end honesty test — log item provenance drives scoring
+// =============================================================================
+
+describe('scoreVlog — C-1 fix: per-item provenance wiring', () => {
+    /**
+     * KEY TEST (per brief): same log scored with inputs[0].provenance='spoken'
+     * vs ='assumed' → DOSE capped at 0.5 AND overall score strictly lower.
+     * Proves field→dimension wiring + governor fires from real log provenance.
+     */
+    it('KEY: assumed input provenance → DOSE capped at 0.5, overall score strictly lower', () => {
+        const spokenLog = makeLog({
+            cropActivities: [{ id: 'ca1', title: 'Fungicide spray', provenance: 'spoken' }],
+            inputs: [
+                {
+                    id: 'inp1',
+                    method: 'Spray',
+                    provenance: 'spoken', // <-- honest: farmer stated this
+                    mix: [{ id: 'm1', productName: 'Carbendazim', dose: 2, unit: 'g/L', provenance: 'spoken' }],
+                },
+            ],
+        });
+
+        const assumedLog = makeLog({
+            cropActivities: [{ id: 'ca1', title: 'Fungicide spray', provenance: 'spoken' }],
+            inputs: [
+                {
+                    id: 'inp1',
+                    method: 'Spray',
+                    provenance: 'assumed', // <-- dishonest: system fabricated this
+                    mix: [{ id: 'm1', productName: 'Carbendazim', dose: 2, unit: 'g/L', provenance: 'assumed' }],
+                },
+            ],
+        });
+
+        const spokenResult = scoreVlog(spokenLog, {});
+        const assumedResult = scoreVlog(assumedLog, {});
+
+        // DOSE must be capped at 0.5 when provenance is 'assumed'
+        const assumedDoseDim = assumedResult.dimensions.find(d => d.dimension === 'DOSE');
+        expect(assumedDoseDim?.coverage).toBe(0.5);
+
+        // Overall score must be strictly lower with assumed provenance
+        expect(assumedResult.score).toBeLessThan(spokenResult.score ?? 0);
+    });
+
+    it('spoken provenance → DOSE NOT capped (full coverage preserved)', () => {
+        const log = makeLog({
+            inputs: [
+                {
+                    id: 'inp1',
+                    method: 'Spray',
+                    provenance: 'spoken',
+                    mix: [{ id: 'm1', productName: 'Urea', dose: 2, unit: 'g/L', provenance: 'spoken' }],
+                },
+            ],
+        });
+        const result = scoreVlog(log, {});
+        const doseDim = result.dimensions.find(d => d.dimension === 'DOSE');
+        // spoken → cf=1.0, governor does not cap
+        expect(doseDim?.coverage).toBe(1);
+        expect(doseDim?.confidenceFactor).toBe(1.0);
+    });
+
+    it('derived provenance (unconfirmed) → DOSE capped at 0.5', () => {
+        const log = makeLog({
+            inputs: [
+                {
+                    id: 'inp1',
+                    method: 'Spray',
+                    provenance: 'derived',
+                    mix: [{ id: 'm1', productName: 'Urea', dose: 2, unit: 'g/L', provenance: 'derived' }],
+                },
+            ],
+        });
+        const result = scoreVlog(log, {});
+        const doseDim = result.dimensions.find(d => d.dimension === 'DOSE');
+        expect(doseDim?.coverage).toBe(0.5); // Governor caps derived+unconfirmed
+    });
+
+    it('confirmedFields override: assumed item provenance but DOSE in confirmedFields → NOT capped', () => {
+        const log = makeLog({
+            inputs: [
+                {
+                    id: 'inp1',
+                    method: 'Spray',
+                    provenance: 'assumed',
+                    mix: [{ id: 'm1', productName: 'Urea', dose: 2, unit: 'g/L', provenance: 'assumed' }],
+                },
+            ],
+        });
+        // Farmer confirmed DOSE at the confirm-screen → override
+        const ctx: ScoreContext = { confirmedFields: new Set(['DOSE']) };
+        const result = scoreVlog(log, ctx);
+        const doseDim = result.dimensions.find(d => d.dimension === 'DOSE');
+        expect(doseDim?.coverage).toBe(1); // Not capped — farmer confirmed
+    });
+
+    it('explicit ctx.provenance overrides derived provenance (back-compat)', () => {
+        // Log has input with assumed provenance, but caller explicitly passes spoken
+        const log = makeLog({
+            inputs: [
+                {
+                    id: 'inp1',
+                    method: 'Spray',
+                    provenance: 'assumed', // item says assumed
+                    mix: [{ id: 'm1', productName: 'Urea', dose: 2, unit: 'g/L' }],
+                },
+            ],
+        });
+        // Explicit override: caller says DOSE is spoken (back-compat path, e.g. tests)
+        const ctx: ScoreContext = { provenance: { DOSE: 'spoken' } };
+        const result = scoreVlog(log, ctx);
+        const doseDim = result.dimensions.find(d => d.dimension === 'DOSE');
+        // explicit ctx.provenance wins → spoken → coverage NOT capped
+        expect(doseDim?.coverage).toBe(1);
+        expect(doseDim?.confidenceFactor).toBe(1.0);
+    });
+
+    it('no provenance tags on any item → all dimensions use default cf=0.7 (no change from before)', () => {
+        // This is the "nothing populated yet" baseline — behaviour must be identical
+        // to the original code before C-1 fix (default factor 0.7 for everything).
+        const log = makeLog({
+            cropActivities: [{ id: 'ca1', title: 'Pruning' }],
+            inputs: [
+                {
+                    id: 'inp1',
+                    method: 'Spray',
+                    mix: [{ id: 'm1', productName: 'Urea', dose: 2, unit: 'g/L' }],
+                },
+            ],
+        });
+        const result = scoreVlog(log, {});
+        // deriveDimensionProvenance returns {} (no tags) → effectiveCtx.provenance = {}
+        // governor and resolveConfidenceFactor both fall through to default 0.7
+        const whatDim = result.dimensions.find(d => d.dimension === 'WHAT');
+        expect(whatDim?.confidenceFactor).toBe(0.7);
+        const doseDim = result.dimensions.find(d => d.dimension === 'DOSE');
+        expect(doseDim?.confidenceFactor).toBe(0.7);
+        expect(doseDim?.coverage).toBe(1); // product+dose present, no cap needed
     });
 });

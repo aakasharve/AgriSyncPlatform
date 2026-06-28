@@ -27,6 +27,96 @@ import {
 } from '../../../core/domain/helpers/log-factory-helpers';
 
 // =============================================================================
+// PROVENANCE DERIVATION (W1.P2 / C-1 fix)
+// =============================================================================
+
+/**
+ * Honesty order: confirmed > spoken > derived > assumed (most → least honest).
+ * Returns a numeric rank so we can compare two tags and keep the least honest.
+ * Lower rank = less honest.
+ */
+function honestyRank(tag: FieldProvenance): number {
+    switch (tag) {
+        case 'assumed':   return 0;
+        case 'derived':   return 1;
+        case 'spoken':    return 2;
+        case 'confirmed': return 3;
+    }
+}
+
+/**
+ * Reduce a list of optional provenance tags to the least-honest one.
+ * Tags that are `undefined` (field absent — no provenance attached) are ignored.
+ * Returns `undefined` when the list is empty or all entries are undefined.
+ */
+function leastHonest(tags: Array<FieldProvenance | undefined>): FieldProvenance | undefined {
+    let result: FieldProvenance | undefined;
+    for (const tag of tags) {
+        if (tag === undefined) continue;
+        if (result === undefined || honestyRank(tag) < honestyRank(result)) {
+            result = tag;
+        }
+    }
+    return result;
+}
+
+/**
+ * deriveDimensionProvenance — pure helper (C-1 fix).
+ *
+ * Reads the per-item `provenance` fields that W1.P2 stamps on each event and
+ * maps them to dimension-level provenance using "least-honest wins" so that
+ * one fabricated field taints the whole dimension (conservative = honest).
+ *
+ * Dimension → items it reads:
+ *   WHAT      ← cropActivities[].provenance
+ *   DOSE      ← inputs[].provenance  +  inputs[].mix[].provenance
+ *   CARRIER   ← machinery[].provenance
+ *   COST      ← activityExpenses[].provenance + labour[].provenance + machinery[].provenance
+ *   WEATHER   ← (no numeric field prone to fabrication — left UNSET)
+ *   SCOPE, PURPOSE, CONTINUITY ← left UNSET (no fabrication-prone numeric field)
+ *
+ * A dimension whose items carry NO provenance key at all → UNSET (not included
+ * in the returned map). Never invent a tag.
+ *
+ * @param log  The AgriLogResponse being scored.
+ * @returns    A partial map of dimension → FieldProvenance (only for dimensions
+ *             that have at least one provenance-tagged item).
+ */
+export function deriveDimensionProvenance(log: AgriLogResponse): Record<string, FieldProvenance> {
+    const result: Record<string, FieldProvenance> = {};
+
+    // WHAT ← cropActivities[].provenance
+    const whatTag = leastHonest(log.cropActivities.map(a => a.provenance));
+    if (whatTag !== undefined) result['WHAT'] = whatTag;
+
+    // DOSE ← inputs[].provenance + inputs[].mix[].provenance
+    const doseTags: Array<FieldProvenance | undefined> = [
+        ...(log.inputs ?? []).map(i => i.provenance),
+        ...(log.inputs ?? []).flatMap(i => (i.mix ?? []).map(m => m.provenance)),
+    ];
+    const doseTag = leastHonest(doseTags);
+    if (doseTag !== undefined) result['DOSE'] = doseTag;
+
+    // CARRIER ← machinery[].provenance
+    const carrierTag = leastHonest((log.machinery ?? []).map(m => m.provenance));
+    if (carrierTag !== undefined) result['CARRIER'] = carrierTag;
+
+    // COST ← activityExpenses[].provenance + labour[].provenance + machinery[].provenance
+    const costTags: Array<FieldProvenance | undefined> = [
+        ...(log.activityExpenses ?? []).map(e => e.provenance),
+        ...(log.labour ?? []).map(l => l.provenance),
+        ...(log.machinery ?? []).map(m => m.provenance),
+    ];
+    const costTag = leastHonest(costTags);
+    if (costTag !== undefined) result['COST'] = costTag;
+
+    // WEATHER, SCOPE, PURPOSE, CONTINUITY — intentionally UNSET (no fabrication-prone
+    // numeric field; the scoring formula's default factor applies).
+
+    return result;
+}
+
+// =============================================================================
 // TYPES (public)
 // =============================================================================
 
@@ -532,10 +622,18 @@ function isSilentDay(log: AgriLogResponse): boolean {
  * @returns    VlogScore with integer score (0–100), outcome, and per-dimension breakdown.
  */
 export function scoreVlog(log: AgriLogResponse, ctx: ScoreContext = {}): VlogScore {
+    // --- C-1 fix: derive effective provenance from log items when not explicitly supplied ---
+    // An explicit ctx.provenance overrides (test/back-compat path). When absent,
+    // we derive it from the per-item provenance tags W1.P2 stamps on the log so
+    // that the dishonesty governor + confidenceFactor fire from real data.
+    const effectiveCtx: ScoreContext = ctx.provenance
+        ? ctx
+        : { ...ctx, provenance: deriveDimensionProvenance(log) };
+
     // --- Silent day → UNKNOWN sentinel (NOT 0) ---
     if (isSilentDay(log)) {
         const dimensions = Object.keys(BASE_WEIGHTS).map(dim =>
-            makeDim(dim, false, 0, ctx)
+            makeDim(dim, false, 0, effectiveCtx)
         );
         return { score: null, outcome: 'UNKNOWN', dimensions };
     }
@@ -552,14 +650,14 @@ export function scoreVlog(log: AgriLogResponse, ctx: ScoreContext = {}): VlogSco
 
     // --- Build dimension rows ---
     const dimensions: VlogScoreDimension[] = [
-        scoreWHAT(log, ctx),
-        scoreDOSE(log, ctx),
-        scoreSCOPE(log, ctx),
-        scoreCARRIER(log, ctx),
-        scoreCOST(log, ctx),
-        scorePURPOSE(log, ctx),
-        scoreWEATHER(log, ctx, weatherWeight),
-        scoreCONTINUITY(log, ctx),
+        scoreWHAT(log, effectiveCtx),
+        scoreDOSE(log, effectiveCtx),
+        scoreSCOPE(log, effectiveCtx),
+        scoreCARRIER(log, effectiveCtx),
+        scoreCOST(log, effectiveCtx),
+        scorePURPOSE(log, effectiveCtx),
+        scoreWEATHER(log, effectiveCtx, weatherWeight),
+        scoreCONTINUITY(log, effectiveCtx),
     ];
 
     // --- Formula: Σ_applicable[weight * coverage * cf] / Σ_applicable[weight] ---
