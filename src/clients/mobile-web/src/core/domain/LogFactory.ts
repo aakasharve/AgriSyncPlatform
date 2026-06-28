@@ -1,15 +1,12 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
-// LogFactory uses `any` for raw form data and voice-response payloads during
-// the typed-forms transition. Suppressed at file level — individual sites
-// pre-date the lint ratchet (T-IGH-04) and will be addressed in a typed-forms
-// sprint.
 import {
     DailyLog, FarmContext, LogScope, FarmerProfile, CropProfile,
     LogVerificationStatus, WeatherStamp,
     CropActivityEvent, IrrigationEvent,
-    ActivityExpenseEvent, ObservationNote,
-    PlannedTask, AgriLogResponse
+    LabourEvent, InputEvent, MachineryEvent, ExpenseItem,
+    ActivityExpenseEvent, ObservationNote, ObservationSeverity,
+    PlannedTask, AgriLogResponse, DisturbanceEvent
 } from '../../types';
+import type { ObservationNoteDraft } from '../../domain/types/log.types';
 import { getPhaseAndDay } from '../../shared/utils/timelineUtils';
 import { getDateKey } from './services/DateKeyService';
 import { isCompletedIrrigationEvent } from './services/IrrigationCompletionService';
@@ -39,6 +36,39 @@ import {
 
 const FARM_GLOBAL_ID = 'FARM_GLOBAL';
 const FARM_GLOBAL_NAME = 'Entire Farm';
+
+/**
+ * Shape of the raw form data accepted by createFromManualEntry /
+ * createFarmGlobalManualLog. All event arrays are the real domain types;
+ * individual fields are optional so callers may omit unused sections.
+ */
+interface ManualEntryData {
+    date: string;
+    cropActivities?: CropActivityEvent[];
+    irrigation?: IrrigationEvent[];
+    labour?: LabourEvent[];
+    inputs?: InputEvent[];
+    machinery?: MachineryEvent[];
+    activityExpenses?: ActivityExpenseEvent[];
+    observations?: ObservationNote[];
+    plannedTasks?: PlannedTask[];
+    disturbance?: DisturbanceEvent;
+    fullTranscript?: string;
+    manualTotalCost?: number;
+}
+
+/** Inline type for a single element of AgriLogResponse.plannedTasks. */
+type AgriLogPlannedTask = NonNullable<AgriLogResponse['plannedTasks']>[number];
+
+/**
+ * Maps PlannedTask priority to ObservationNote severity.
+ * 'high' has no direct counterpart in ObservationSeverity; we use 'important'.
+ */
+function priorityToSeverity(priority: PlannedTask['priority'] | undefined): ObservationSeverity {
+    if (priority === 'urgent') return 'urgent';
+    if (priority === 'high') return 'important';
+    return 'normal';
+}
 
 /**
  * LogFactory: Centralized creation of DailyLog entities.
@@ -77,7 +107,7 @@ export class LogFactory {
      * Creates a set of DailyLogs (one per plot) from a Manual Entry form data.
      */
     static createFromManualEntry(
-        data: any, // Raw form data (typed as any during transition)
+        data: ManualEntryData,
         logScope: LogScope,
         crops: CropProfile[],
         profile: FarmerProfile,
@@ -160,7 +190,7 @@ export class LogFactory {
             const plotGrandTotal = computeReceiptTotal({ labourCost, machineCost, inputCost, expenseCost });
 
             // MIRROR: Handle Planned Tasks from Manual Entry
-            const mirroredTasks: PlannedTask[] = data.plannedTasks?.map((t: any) => ({
+            const mirroredTasks: PlannedTask[] = data.plannedTasks?.map((t: PlannedTask) => ({
                 ...t,
                 id: scopeChildId(t.id || idGen.generate(), plotId),
                 plotId: plotId,
@@ -188,7 +218,7 @@ export class LogFactory {
                     textRaw: t.title,
                     textCleaned: `Planned Task: ${t.title}`,
                     noteType: 'reminder' as const,
-                    severity: (t.priority || 'normal') as any,
+                    severity: priorityToSeverity(t.priority),
                     aiConfidence: 100,
                     tags: ['manual_task']
                 }))
@@ -281,7 +311,7 @@ export class LogFactory {
     }
 
     private static createFarmGlobalManualLog(
-        data: any,
+        data: ManualEntryData,
         profile: FarmerProfile,
         nowISO: string,
         idGen: IdGenerator
@@ -292,13 +322,13 @@ export class LogFactory {
         const machinery = data.machinery || [];
         const activityExpenses = data.activityExpenses || [];
 
-        const labourCost = labour.reduce((s: number, l: any) => s + (l.totalCost || 0), 0);
+        const labourCost = labour.reduce((s: number, l: LabourEvent) => s + (l.totalCost || 0), 0);
         const machineCost = sumMachineryCost(machinery);
-        const inputCost = inputs.reduce((s: number, i: any) => s + (i.cost || 0), 0);
-        const expenseCost = activityExpenses.reduce((s: number, e: any) => s + (e.totalAmount || 0), 0);
+        const inputCost = inputs.reduce((s: number, i: InputEvent) => s + (i.cost || 0), 0);
+        const expenseCost = activityExpenses.reduce((s: number, e: ActivityExpenseEvent) => s + (e.totalAmount || 0), 0);
         const grandTotal = computeReceiptTotal({ labourCost, machineCost, inputCost, expenseCost });
 
-        const mirroredTasks: PlannedTask[] = data.plannedTasks?.map((t: any) => ({
+        const mirroredTasks: PlannedTask[] = data.plannedTasks?.map((t: PlannedTask) => ({
             ...t,
             id: t.id || idGen.generate(),
             plotId: t.plotId || FARM_GLOBAL_ID,
@@ -324,7 +354,7 @@ export class LogFactory {
                 textRaw: t.title,
                 textCleaned: `Planned Task: ${t.title}`,
                 noteType: 'reminder' as const,
-                severity: (t.priority || 'normal') as any,
+                severity: priorityToSeverity(t.priority),
                 aiConfidence: 100,
                 tags: ['manual_task']
             }))
@@ -424,15 +454,15 @@ export class LogFactory {
         const nowISO = clock.nowISO();
 
         // Shared Costs
-        const laborCostGlobal = response.labour?.reduce((s: number, x: any) => s + (x.totalCost || 0), 0) || 0;
+        const laborCostGlobal = response.labour?.reduce((s: number, x: LabourEvent) => s + (x.totalCost || 0), 0) || 0;
         const machineCostGlobal = sumMachineryCost(response.machinery || []);
-        const inputCostGlobal = response.inputs?.reduce((s: number, x: any) => s + (x.cost || 0), 0) || 0;
-        const expenseCostGlobal = response.activityExpenses?.reduce((s: number, x: any) => s + (x.totalAmount || 0), 0) || 0;
+        const inputCostGlobal = response.inputs?.reduce((s: number, x: InputEvent) => s + (x.cost || 0), 0) || 0;
+        const expenseCostGlobal = response.activityExpenses?.reduce((s: number, x: ActivityExpenseEvent) => s + (x.totalAmount || 0), 0) || 0;
 
         // Expense Item Casting Fix
-        const mappedExpenses: ActivityExpenseEvent[] = (response.activityExpenses || []).map((exp: any) => ({
+        const mappedExpenses: ActivityExpenseEvent[] = (response.activityExpenses || []).map((exp: ActivityExpenseEvent) => ({
             ...exp,
-            items: (exp.items || []).map((item: any) => ({
+            items: (exp.items || []).map((item: ExpenseItem) => ({
                 ...item,
                 qty: item.qty || 1, // Default to 1 if missing to satisfy strict type
                 unit: item.unit || 'unit'
@@ -513,7 +543,7 @@ export class LogFactory {
                 (profile.trust?.reviewPolicy === 'AUTO_APPROVE_OWNER' && isOwner);
 
             // MIRROR: Handle Planned Tasks from Voice
-            const mirroredTasks: PlannedTask[] = response.plannedTasks?.map((pt: any) => ({
+            const mirroredTasks: PlannedTask[] = response.plannedTasks?.map((pt: AgriLogPlannedTask) => ({
                 id: idGen.generate(),
                 title: pt.title,
                 status: 'pending',
@@ -526,10 +556,10 @@ export class LogFactory {
             })) || [];
 
             const mirroredObservations: ObservationNote[] = [
-                ...(response.observations?.map((obs: any) => ({
+                ...(response.observations?.map((obs: ObservationNoteDraft): ObservationNote => ({
                     ...obs,
                     id: scopeChildId(obs.id || idGen.generate(), plotId),
-                    plotId,
+                    plotId: plotId,
                     cropId: obs.cropId || crop.id,
                     dateKey: obs.dateKey || getDateKey(),
                     timestamp: obs.timestamp || nowISO,
@@ -639,7 +669,7 @@ export class LogFactory {
         const autoApprove = profile.trust?.reviewPolicy === 'AUTO_APPROVE_ALL' ||
             (profile.trust?.reviewPolicy === 'AUTO_APPROVE_OWNER' && isOwner);
 
-        const mirroredTasks: PlannedTask[] = response.plannedTasks?.map((pt: any) => ({
+        const mirroredTasks: PlannedTask[] = response.plannedTasks?.map((pt: AgriLogPlannedTask) => ({
             id: idGen.generate(),
             title: pt.title,
             status: 'pending',
@@ -652,7 +682,7 @@ export class LogFactory {
         })) || [];
 
         const mirroredObservations: ObservationNote[] = [
-            ...(response.observations?.map((obs: any) => ({
+            ...(response.observations?.map((obs: ObservationNoteDraft): ObservationNote => ({
                 ...obs,
                 id: obs.id || idGen.generate(),
                 plotId: obs.plotId || FARM_GLOBAL_ID,
