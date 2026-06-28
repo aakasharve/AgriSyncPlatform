@@ -298,21 +298,26 @@ function makeDim(
 
 /**
  * WHAT (weight 20): Was work captured?
- * - 0: no cropActivities AND no title in summary (nothing captured at all)
+ * - 0: no cropActivities AND no summary AND no disturbance reason (nothing captured)
  * - 0.5: only summary text, no cropActivities events populated
- * - 1.0: at least one cropActivity with a non-empty title present
+ * - 1.0: at least one cropActivity with a non-empty title present,
+ *         OR a disturbance with a non-empty reason (the disturbance IS the day's event)
  *
  * Rationale: cropActivities are the primary work spine. A summary alone is
  * partial — text captured but not structured. An activity event with a title
- * is full capture.
+ * is full capture. A disturbance with a recorded reason is equally full capture:
+ * the farmer told us what happened (a blocker), which IS the day's news.
  */
 function scoreWHAT(log: AgriLogResponse, ctx: ScoreContext): VlogScoreDimension {
     const hasActivity = log.cropActivities.length > 0
         && log.cropActivities.some(a => a.title && a.title.trim().length > 0);
+    // Tuning (1b): a disturbance with a non-empty reason is full WHAT coverage —
+    // the farmer told us exactly what happened (the disruption), which IS the event.
+    const hasDisturbanceReason = !!(log.disturbance?.reason && log.disturbance.reason.trim().length > 0);
     const hasSummary = log.summary && log.summary.trim().length > 0;
 
     let coverage: 0 | 0.5 | 1;
-    if (hasActivity) coverage = 1;
+    if (hasActivity || hasDisturbanceReason) coverage = 1;
     else if (hasSummary) coverage = 0.5;
     else coverage = 0;
 
@@ -352,17 +357,25 @@ function scoreDOSE(log: AgriLogResponse, ctx: ScoreContext): VlogScoreDimension 
 /**
  * SCOPE (weight 12): Target plot named.
  * - Solo-farm waiver: if farm.plotCount === 1, full score regardless.
- * - 0: multi-plot farm, no events have targetPlotName
+ * - Full-day disturbance waiver: if disturbance.scope === 'FULL_DAY', the scope
+ *   is definitionally known (the whole farm was affected) → full score.
+ * - 0: multi-plot farm, no events have targetPlotName (and no FULL_DAY disturbance)
  * - 0.5: some events have targetPlotName, others do not
- * - 1.0: all events that could carry targetPlotName do carry it (or solo farm)
+ * - 1.0: all events carry targetPlotName, OR solo farm, OR FULL_DAY disturbance
  *
  * Rationale: On a multi-plot farm, knowing which plot the work happened on
  * is critical for per-plot cost and decision-making. Solo farm = implicit.
+ * A FULL_DAY disturbance affects the whole farm — scope is 100% known.
  */
 function scoreSCOPE(log: AgriLogResponse, ctx: ScoreContext): VlogScoreDimension {
     const plotCount = ctx.farm?.plotCount ?? 1;
     if (plotCount <= 1) {
         return makeDim('SCOPE', true, 1, ctx); // Solo-farm waiver
+    }
+
+    // Tuning (1b): FULL_DAY disturbance = we know the scope perfectly (whole farm blocked).
+    if (log.disturbance?.scope === 'FULL_DAY') {
+        return makeDim('SCOPE', true, 1, ctx);
     }
 
     // Collect events that can carry targetPlotName
@@ -419,8 +432,11 @@ function scoreCARRIER(log: AgriLogResponse, ctx: ScoreContext): VlogScoreDimensi
 
     // Spray/input ops
     if (inputs.length === 0) {
-        // No inputs, no irrigation → not a carrier-relevant day
-        return makeDim('CARRIER', true, 0, ctx);
+        // No inputs, no irrigation → CARRIER not applicable (nothing to deliver).
+        // Tuning (1b): on a day with no inputs AND no irrigation, the carrier
+        // question is not relevant — mark it N/A so it doesn't penalise the
+        // denominator for days that simply aren't delivery operations.
+        return makeDim('CARRIER', false, 0, ctx);
     }
 
     const hasVolume = inputs.some(i => i.computedWaterVolume !== undefined && i.computedWaterVolume !== null);
@@ -440,13 +456,18 @@ function scoreCARRIER(log: AgriLogResponse, ctx: ScoreContext): VlogScoreDimensi
  * COST (weight 12, up to ~22 on labour-heavy days per spec design):
  * Labour cost + rates present; uses computeReceiptTotal for the cost basis.
  *
- * - 0: no cost data at all (no labour cost, no input cost, no machinery cost)
- * - 0.5: some cost data present (at least one non-zero component) but
- *         labour rate (wagePerPerson) missing when labour events exist
+ * - 0: no cost data at all AND no wage rate stated on any labour event
+ * - 0.5: labour has a stated wage rate (wagePerPerson) but no computable total
+ *         (e.g. piece-rate where total = rate × units_not_stated), OR a total
+ *         is present but no rate breakdown when labour events exist
  * - 1.0: cost total > 0 AND (no labour OR labour has wagePerPerson/totalCost set)
  *
  * Rationale: A meaningful cost record has a non-zero total AND labour
- * breakdown if labour was the main cost driver.
+ * breakdown if labour was the main cost driver. For piece-rate labour where
+ * the farmer stated the rate ("Rs 14/vine") but the total is uncomputable
+ * (vine count not stated), the rate alone counts as partial (0.5) — the cost
+ * signal exists even though we cannot sum it. This is honest: rate is spoken,
+ * total is NOT_MENTIONED.
  */
 function scoreCOST(log: AgriLogResponse, ctx: ScoreContext): VlogScoreDimension {
     const labourCost = sumLabourCost(log.labour ?? []);
@@ -455,18 +476,22 @@ function scoreCOST(log: AgriLogResponse, ctx: ScoreContext): VlogScoreDimension 
     const expenseCost = sumExpenseCost(log.activityExpenses ?? []);
     const total = computeReceiptTotal({ labourCost, inputCost, machineCost, expenseCost });
 
-    if (total === 0) return makeDim('COST', true, 0, ctx);
-
-    // If labour events exist, check for wage/rate data.
+    // Tuning (1b): check labour rate BEFORE checking total=0.
+    // A spoken piece-rate (wagePerPerson set) is partial coverage even when
+    // the computable total is 0 (total = rate × unstated unit count).
     const hasLabour = (log.labour ?? []).length > 0;
     if (hasLabour) {
         const hasRate = (log.labour ?? []).some(
             l => (l.wagePerPerson !== undefined && l.wagePerPerson !== null)
                 || (l.totalCost !== undefined && l.totalCost !== null && l.totalCost > 0)
         );
-        return makeDim('COST', true, hasRate ? 1 : 0.5, ctx);
+        if (total > 0 && hasRate) return makeDim('COST', true, 1, ctx);
+        if (hasRate) return makeDim('COST', true, 0.5, ctx); // Rate spoken, total not computable
+        if (total > 0) return makeDim('COST', true, 0.5, ctx); // Total known but no rate breakdown
+        return makeDim('COST', true, 0, ctx);
     }
 
+    if (total === 0) return makeDim('COST', true, 0, ctx);
     return makeDim('COST', true, 1, ctx);
 }
 
