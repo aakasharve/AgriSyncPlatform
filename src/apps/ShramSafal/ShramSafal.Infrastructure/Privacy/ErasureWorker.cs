@@ -83,6 +83,13 @@
 //     which AnonymizeFarmOperationsAsync already scrubs to ErasedFarmer —
 //     severing re-attribution. KEEP (survives, DPDP §12 de-identified
 //     operational retention). No scrub action; conscious gate-4 disposition.
+//   - ssf.event_links — Track B structural join between farm_operations
+//     (and to cost_entries), ADR 0023 §1.3 / D-T3-ERASURE. NO user_id/PII
+//     column: from/to operation & cost-entry ids + link_kind + the
+//     from_farm_id/to_farm_id guard columns are de-identified structural
+//     references. The parent farm_operations.created_by_user_id is already
+//     scrubbed (D-T1-ERASURE), severing re-attribution. KEEP (survives,
+//     DPDP §12). No scrub action; conscious gate-4 disposition.
 //   - ssf.consent_audit / ssf.audit_events — append-only by
 //     privilege; flagged "redacted" at the column level, never
 //     deleted.

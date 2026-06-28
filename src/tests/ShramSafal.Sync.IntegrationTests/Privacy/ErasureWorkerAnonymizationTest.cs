@@ -259,6 +259,13 @@ public sealed class ErasureWorkerAnonymizationTest : IAsyncLifetime
             ("opid", _farmOperationId)))!;
         aiiProduct.Should().Be("Ethrel", "D-T2-ERASURE: input-item product_name (a de-identified fact) is KEPT");
 
+        // event_links (Track B table-3, D-T3-ERASURE): KEEP — the structural link
+        // SURVIVES erasure (no user_id column).
+        var elCount = Convert.ToInt32((await ScalarAsync(raw,
+            "SELECT count(*) FROM ssf.event_links WHERE from_operation_id = @opid",
+            ("opid", _farmOperationId)))!);
+        elCount.Should().Be(1, "D-T3-ERASURE: event_links survives erasure (KEEP, de-identified)");
+
         // ── 4. Regex-grep every free-text column for PII residue ────
         var phoneRegex = new Regex(@"\d{10}");
         var allTextSql = """
@@ -492,6 +499,25 @@ public sealed class ErasureWorkerAnonymizationTest : IAsyncLifetime
                 """;
             c.Parameters.AddWithValue("id", Guid.NewGuid());
             c.Parameters.AddWithValue("opid", _farmOperationId);
+            await c.ExecuteNonQueryAsync();
+        }
+
+        // event_links (Track B table-3) — owned (via from_operation) by the target
+        // user's farm. KEEP on erasure (no PII). Satisfies ck_event_links_one_target
+        // (only to_operation_id set) + ck_event_links_same_farm (from=to farm).
+        await using (var c = db.CreateCommand())
+        {
+            c.CommandText = """
+                INSERT INTO ssf.event_links
+                    ("Id", from_farm_id, to_farm_id, from_operation_id, to_operation_id,
+                     to_cost_entry_id, link_kind, created_at_utc)
+                VALUES
+                    (@id, @fid, @fid, @fromop, @toop, NULL, 'CarrierFor', NOW());
+                """;
+            c.Parameters.AddWithValue("id", Guid.NewGuid());
+            c.Parameters.AddWithValue("fid", _farmId);
+            c.Parameters.AddWithValue("fromop", _farmOperationId);
+            c.Parameters.AddWithValue("toop", Guid.NewGuid());
             await c.ExecuteNonQueryAsync();
         }
 
