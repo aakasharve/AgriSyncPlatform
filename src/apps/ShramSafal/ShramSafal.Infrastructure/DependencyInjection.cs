@@ -503,7 +503,13 @@ public static class DependencyInjection
         services.AddSingleton<IAudioTranscoder, FfmpegAudioTranscoder>();
 
         services.AddScoped<IAiOrchestrator, AiOrchestrator>();
-        services.AddHostedService<ExtractionVerificationWorker>();
+        // DISABLED (CTO ops-hardening): ExtractionVerificationWorker threw every cycle
+        // in prod — "TenantConnectionInterceptor: no tenant claim set and not in admin
+        // scope" — because it polls GetPendingVerificationAsync with no tenant context,
+        // and the verification feature it backs is unused. Registration removed to stop
+        // the recurring prod error noise. The class and IDocumentExtractionSessionRepository
+        // are retained (still used by the Create/GetDocumentSession request handlers).
+        // services.AddHostedService<ExtractionVerificationWorker>();
 
         // SARVAM_PRIMARY_VOICE_PIPELINE_2026-05-21 Task 1.10 — transcript
         // backfill worker. Disabled by default
