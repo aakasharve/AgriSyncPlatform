@@ -796,30 +796,43 @@ public sealed class ParseVoiceInputHandler(
         // to the pre-Batch-A behaviour.
         if (domainKnowledgeLayerEnabled && domainKnowledgePipeline is not null)
         {
-            // W1.P2 T2 — stamp provenance on items that exist at this point
-            // (i.e. from the AI model output + transcript-synthesis above).
-            // All of these came from the spoken transcript, so they are "spoken".
-            // Items added by RunPipeline below (farm-knowledge inferred) will
-            // not yet have a "provenance" key; those get stamped "derived" after
-            // the pipeline runs. NEVER stamps "assumed" — "assumed" is eval-only.
-            StampProvenanceOnItems(root, "spoken", onlyIfMissing: false);
+            // W1.P2 B002 fix — provenance stamping MUST defer to the pipeline,
+            // specifically C7 ProvenanceTagger which classifies "assumed" on
+            // fabricated values. Pre-stamping "spoken" before RunPipeline would
+            // disarm C7: IsKnownUpstreamProvenance("spoken") returns true and
+            // C7 early-returns, so assumed/derived values would remain "spoken"
+            // — a honesty violation that inflates the Understanding Meter.
+            //
+            // Correct order:
+            //   1. Snapshot which item object references exist NOW (pre-pipeline =
+            //      transcript-origin). We capture the actual JsonObject instances
+            //      since the root is the same tree throughout.
+            //   2. Run the pipeline. C7 (LAST normalizer) authoritatively stamps
+            //      "spoken", "derived", or "assumed" on quantity-bearing nodes.
+            //   3. GAP-FILL only items still MISSING a provenance key after C7:
+            //      - item existed pre-pipeline (reference in snapshot) → "spoken"
+            //      - item added by the pipeline (NOT in snapshot)       → "derived"
+            //   NEVER overwrite a provenance key already set by C7 or any
+            //   upstream normalizer ("assumed" and C7's tags all survive).
 
+            // Step 1: snapshot object references for items that exist right now.
+            var preRunItemRefs = SnapshotItemRefs(root);
+
+            // Step 2: run the pipeline (C7 stamps spoken/derived/assumed).
             domainKnowledgePipeline.RunPipeline(root, transcript);
 
-            // After the pipeline, any item that still has no "provenance" key
-            // was added by the domain-knowledge normalizers → "derived".
-            StampProvenanceOnItems(root, "derived", onlyIfMissing: true);
+            // Step 3: gap-fill items that C7 did not tag (non-quantity-bearing
+            // nodes that have no provenance key yet).
+            //   - pre-pipeline item with no provenance key → "spoken"
+            //   - pipeline-added item with no provenance key → "derived"
+            GapFillProvenance(root, preRunItemRefs);
         }
 
         return root.ToJsonString();
     }
 
-    // W1.P2 T2 — stamps a "provenance" value onto each item object in the
-    // known event-item arrays.  When onlyIfMissing=true only items that do
-    // not already carry the key are touched (used to mark pipeline-added
-    // items as "derived" without overwriting the "spoken" stamp already set
-    // on transcript-synthesized items).  When onlyIfMissing=false every
-    // item gets the value (used for the initial "spoken" pass).
+    // W1.P2 B002 fix — provenance helpers that let C7 ProvenanceTagger win.
+    //
     // Arrays walked: labour, inputs, irrigation, observations, plannedTasks,
     // cropActivities, machinery, activityExpenses (all top-level event arrays
     // that may receive items from either path).
@@ -829,7 +842,47 @@ public sealed class ParseVoiceInputHandler(
         "plannedTasks", "cropActivities", "machinery", "activityExpenses"
     ];
 
-    private static void StampProvenanceOnItems(JsonObject root, string provenanceValue, bool onlyIfMissing)
+    /// <summary>
+    /// Captures the set of <see cref="JsonObject"/> references that exist
+    /// inside the known event-item arrays BEFORE the pipeline runs.
+    /// Used by <see cref="GapFillProvenance"/> to distinguish transcript-origin
+    /// items from pipeline-added items when doing post-pipeline gap-fill.
+    /// </summary>
+    private static HashSet<JsonObject> SnapshotItemRefs(JsonObject root)
+    {
+        var refs = new HashSet<JsonObject>(ReferenceEqualityComparer.Instance);
+        foreach (var key in EventArrayKeys)
+        {
+            if (root[key] is not JsonArray array)
+            {
+                continue;
+            }
+
+            foreach (var node in array)
+            {
+                if (node is JsonObject item)
+                {
+                    refs.Add(item);
+                }
+            }
+        }
+
+        return refs;
+    }
+
+    /// <summary>
+    /// Gap-fills provenance ONLY on items that C7 ProvenanceTagger left
+    /// without a "provenance" key (i.e. non-quantity-bearing nodes that C7
+    /// deliberately skips).
+    /// <list type="bullet">
+    ///   <item>Item existed before RunPipeline (reference in
+    ///         <paramref name="preRunItemRefs"/>) → "spoken".</item>
+    ///   <item>Item added by the pipeline (NOT in snapshot) → "derived".</item>
+    /// </list>
+    /// NEVER overwrites a key already set by C7 or any upstream normalizer.
+    /// "assumed", "derived", and "spoken" tags set by C7 all survive unchanged.
+    /// </summary>
+    private static void GapFillProvenance(JsonObject root, HashSet<JsonObject> preRunItemRefs)
     {
         foreach (var key in EventArrayKeys)
         {
@@ -845,12 +898,14 @@ public sealed class ParseVoiceInputHandler(
                     continue;
                 }
 
-                if (onlyIfMissing && item.ContainsKey("provenance"))
+                // Never overwrite — C7's classifications must survive.
+                if (item.ContainsKey("provenance"))
                 {
                     continue;
                 }
 
-                item["provenance"] = provenanceValue;
+                var fallback = preRunItemRefs.Contains(item) ? "spoken" : "derived";
+                item["provenance"] = fallback;
             }
         }
     }

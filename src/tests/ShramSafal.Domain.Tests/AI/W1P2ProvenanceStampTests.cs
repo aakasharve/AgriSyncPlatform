@@ -78,19 +78,31 @@ public sealed class W1P2ProvenanceStampTests
 
     // -------------------------------------------------------------------------
     // T2-B: Flag ON — items added BY the domain-knowledge pipeline
-    //        (machinery items synthesized via blower→tractor inference)
+    //        (खत safety-net row injected by DomainKnowledgePipeline when
+    //        inputs[] is empty and transcript mentions fertilizer application)
     //        get "derived" provenance.
     //        Items already in the json before RunPipeline stay "spoken".
+    //
+    // B001 fix: the previous blower→tractor fixture was guarded by
+    // `if (tractorItem is not null)` so the assertion could no-op.
+    // The खत safety-net UNCONDITIONALLY adds an inputs row when the
+    // conditions are met, making the assertion always execute.
     // -------------------------------------------------------------------------
 
     [Fact]
     public void FlagOn_pipeline_inferred_item_gets_derived_provenance()
     {
-        // Machinery with only a "blower" type; the domain pipeline infers a tractor.
-        // The pre-existing blower item is spoken; the inferred tractor is derived.
-        const string normalizedJson =
-            """{ "machinery": [ { "type": "blower", "sourceText": "ब्लोअर मारलं" } ] }""";
-        const string transcript = "आज द्राक्षबागेत ब्लोअर मारलं.";
+        // Start with an empty inputs[] so the खत safety-net fires.
+        // Transcript contains खत + दिले (past-tense verb) — the exact
+        // conditions DomainKnowledgePipeline.ApplyGuardedFertilizerSafetyNet
+        // checks. The safety-net runs AFTER GrapeInputLexicon (C2) and BEFORE
+        // C3–C7, so the inserted row exists when C7 ProvenanceTagger runs.
+        // C7 will stamp it based on IsQuantityBearing — the खत row has no
+        // quantity fields, so C7 leaves it without a provenance key.
+        // GapFillProvenance then stamps it "derived" because the ref was NOT
+        // in the pre-pipeline snapshot.
+        const string normalizedJson = """{ "inputs": [] }""";
+        const string transcript = "आज शेतात खत दिले.";
 
         var result = ParseVoiceInputHandler.ApplyTranscriptIntegrityCorrections(
             normalizedJson,
@@ -99,41 +111,44 @@ public sealed class W1P2ProvenanceStampTests
             domainKnowledgePipeline: Pipeline);
 
         var root = JsonNode.Parse(result)!.AsObject();
-        var machinery = root["machinery"] as JsonArray;
-        machinery.Should().NotBeNull();
+        var inputs = root["inputs"] as JsonArray;
+        inputs.Should().NotBeNull();
 
-        // The original blower item must have "spoken".
-        var blowerItem = machinery!
-            .OfType<JsonObject>()
-            .FirstOrDefault(m => m["type"]?.GetValue<string>() == "blower");
-        blowerItem.Should().NotBeNull("the original blower item must survive");
-        blowerItem!["provenance"]?.GetValue<string>().Should().Be("spoken",
-            "the original blower item was in the JSON before RunPipeline and must be spoken");
+        // The खत safety-net MUST have added at least one row — assert unconditionally,
+        // no guarding if-check that would let the assertion silently no-op.
+        inputs!.Count.Should().BeGreaterThanOrEqualTo(1,
+            "DomainKnowledgePipeline.ApplyGuardedFertilizerSafetyNet must inject a खत row " +
+            "when inputs[] is empty and the transcript contains खत + a past-tense verb");
 
-        // If the pipeline added a tractor (DomainKnowledgePipeline C6 tractor inference),
-        // that item must carry "derived".
-        var tractorItem = machinery
+        var khatItem = inputs
             .OfType<JsonObject>()
-            .FirstOrDefault(m => m["type"]?.GetValue<string>() == "tractor");
-        if (tractorItem is not null)
-        {
-            tractorItem["provenance"]?.GetValue<string>().Should().Be("derived",
-                "a tractor inferred by the domain pipeline was not spoken and must be derived");
-        }
+            .FirstOrDefault(m => m["productName"]?.GetValue<string>() == "खत");
+        khatItem.Should().NotBeNull("the safety-net row must have productName=खत");
+
+        // The pipeline-added खत row was NOT in the pre-pipeline snapshot →
+        // GapFillProvenance stamps it "derived" (C7 leaves it untagged because
+        // it has no quantity-bearing field like dose/amount/totalMl).
+        khatItem!["provenance"]?.GetValue<string>().Should().Be("derived",
+            "a खत row injected by the domain-knowledge pipeline was not spoken and must be derived");
     }
 
     // -------------------------------------------------------------------------
-    // T2-C: Flag ON — "assumed" must NEVER appear in any provenance field.
-    //        Test with a rich transcript that exercises many synthesis branches.
+    // T2-C: Flag ON — "assumed" must NEVER appear in farmer-facing STRING fields
+    //        (summary, farmerSummary, displaySummary, etc.).
+    //        "assumed" IS valid in the provenance DATA field (B002 fix) — C7
+    //        ProvenanceTagger can and should stamp it on fabricated values so the
+    //        Understanding Meter's honesty governor can cap them.
+    //        The contract is ONLY that "assumed" never leaks into the string a
+    //        farmer reads — enforced by ProvenanceTagger.EnforceFarmerFacingFieldsUntouched.
     // -------------------------------------------------------------------------
 
     [Fact]
-    public void FlagOn_no_item_ever_gets_assumed_provenance()
+    public void FlagOn_assumed_never_appears_in_farmer_facing_string_fields()
     {
         // A transcript that exercises multiple branches: labour, irrigation,
         // inputs (fertilizer), observations (issue), planned tasks.
         const string normalizedJson =
-            """{ "labour": [], "irrigation": [], "inputs": [], "observations": [], "plannedTasks": [] }""";
+            """{ "labour": [], "irrigation": [], "inputs": [], "observations": [], "plannedTasks": [], "summary": "आज काम केले.", "farmerSummary": "सर्व काम झाले." }""";
         const string transcript =
             "आज पाच मजूर आणि पाणी दिले. खत दिले. पिवळी पाने दिसली. उद्या फवारणी करायची.";
 
@@ -144,26 +159,91 @@ public sealed class W1P2ProvenanceStampTests
             domainKnowledgePipeline: Pipeline);
 
         var root = JsonNode.Parse(result)!.AsObject();
-        var arrayKeys = new[] { "labour", "inputs", "irrigation", "observations", "plannedTasks", "cropActivities", "machinery", "activityExpenses" };
-        foreach (var key in arrayKeys)
+
+        // Farmer-facing string fields must NEVER contain "assumed".
+        var farmerFacingKeys = new[] { "summary", "farmerSummary", "displaySummary", "farmerDescription", "message" };
+        foreach (var key in farmerFacingKeys)
         {
-            if (root[key] is not JsonArray array)
+            if (root[key] is not JsonNode node)
             {
                 continue;
             }
 
-            foreach (var node in array)
-            {
-                if (node is not JsonObject item)
-                {
-                    continue;
-                }
-
-                var prov = item["provenance"]?.GetValue<string>();
-                prov.Should().NotBe("assumed",
-                    $"no item in [{key}] should ever carry assumed provenance — only spoken or derived are valid server-emitted values");
-            }
+            node.ToString().Should().NotContain("assumed",
+                $"the farmer-facing field '{key}' must never contain the word 'assumed' — " +
+                "provenance metadata is internal and must not appear in farmer-readable output");
         }
+    }
+
+    // -------------------------------------------------------------------------
+    // B002 regression: C7 ProvenanceTagger "assumed" classification must
+    // SURVIVE the pipeline and NOT be clobbered to "spoken".
+    //
+    // This test fails on the OLD clobbering code (pre-stamp "spoken" before
+    // RunPipeline → C7 sees IsKnownUpstreamProvenance="spoken" → early-returns
+    // → "assumed" never written → item stays "spoken" → governor never caps it).
+    //
+    // It passes after the B002 fix (no pre-stamp, C7 runs authoritatively,
+    // GapFillProvenance only gap-fills items C7 did NOT tag).
+    // -------------------------------------------------------------------------
+
+    [Fact]
+    public void FlagOn_C7_assumed_classification_survives_and_is_not_clobbered_to_spoken()
+    {
+        // An inputs item with assumedCarrier=true + totalMl present but no
+        // confirmed carrierVolume.  This is the exact "ethrel-blower scenario"
+        // described in C7's comments: a fabricated tank total injected by an
+        // upstream normalizer without transcript confirmation.
+        // C7 ProvenanceTagger.IsAssumed() returns true → stamps "assumed" +
+        // forces doseBasis="NOT_MENTIONED".
+        // The B002 fix ensures this "assumed" tag is NOT overwritten.
+        //
+        // Note: dose is omitted (UnitAndNumeralNormalizer assumes dose is a
+        // string; supplying a numeric dose triggers a pre-existing cast error
+        // in the normalizer).  totalMl + assumedCarrier=true is sufficient to
+        // trigger C7's IsAssumed() check.
+        const string normalizedJson =
+            """
+            {
+              "inputs": [
+                {
+                  "productName": "Ethrel",
+                  "totalMl": 900,
+                  "assumedCarrier": true,
+                  "sourceText": "इथरेल दिले"
+                }
+              ]
+            }
+            """;
+        const string transcript = "आज इथरेल दिले.";
+
+        var result = ParseVoiceInputHandler.ApplyTranscriptIntegrityCorrections(
+            normalizedJson,
+            transcript,
+            domainKnowledgeLayerEnabled: true,
+            domainKnowledgePipeline: Pipeline);
+
+        var root = JsonNode.Parse(result)!.AsObject();
+        var inputs = root["inputs"] as JsonArray;
+        inputs.Should().NotBeNull();
+        inputs!.Count.Should().BeGreaterThanOrEqualTo(1);
+
+        var ethrelItem = inputs
+            .OfType<JsonObject>()
+            .FirstOrDefault(m => m["productName"]?.GetValue<string>() == "Ethrel");
+        ethrelItem.Should().NotBeNull("the Ethrel item must survive the pipeline");
+
+        // CRITICAL (B002 honesty primitive): C7 must stamp "assumed" and
+        // the post-pipeline gap-fill must NOT overwrite it with "spoken".
+        // A fabricated tank total mislabeled "spoken" would tell the
+        // Understanding Meter's governor the value is honest → no cap → score inflates.
+        ethrelItem!["provenance"]?.GetValue<string>().Should().Be("assumed",
+            "an item with assumedCarrier=true carries a fabricated value that C7 must stamp " +
+            "'assumed'; the post-pipeline gap-fill must never clobber it to 'spoken'");
+
+        // C7 also forces doseBasis=NOT_MENTIONED on assumed items.
+        ethrelItem["doseBasis"]?.GetValue<string>().Should().Be("NOT_MENTIONED",
+            "C7 must force doseBasis=NOT_MENTIONED on assumed items to signal the governor");
     }
 
     // -------------------------------------------------------------------------
