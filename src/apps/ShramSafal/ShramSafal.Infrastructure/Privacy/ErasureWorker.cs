@@ -241,6 +241,12 @@ public sealed class ErasureWorker(
         perTableCounts["finance_corrections"] = await AnonymizeFinanceCorrectionsAsync(admin, targetUserId, sentinel, ct).ConfigureAwait(false);
         totalAnonymized += perTableCounts["finance_corrections"];
 
+        // (e) farm_operations — Track B operational ledger (D-T1-ERASURE).
+        //     Scrub created_by_user_id; KEEP farm_id + operation facts +
+        //     derived_event_key (de-identified). ANONYMIZE, not DELETE.
+        perTableCounts["farm_operations"] = await AnonymizeFarmOperationsAsync(admin, targetUserId, sentinel, ct).ConfigureAwait(false);
+        totalAnonymized += perTableCounts["farm_operations"];
+
         // ── SARVAM_PRIMARY_VOICE_PIPELINE Task 3.4 cascade extension ─
         // Voice-spine tables follow a DELETE manifest (not ANONYMIZE)
         // because they are pure training-corpus + observability rows
@@ -448,6 +454,24 @@ UPDATE ssf.finance_corrections
             .ConfigureAwait(false);
     }
 
+    private static async Task<int> AnonymizeFarmOperationsAsync(
+        ShramSafalDbContext db, Guid userId, Guid sentinel, CancellationToken ct)
+    {
+        // D-T1-ERASURE: farm_operations is the operational ledger (daily_logs-class),
+        // not training corpus — ANONYMIZE (scrub the actor) rather than DELETE. The
+        // farm_id + operation_type + operation_date + derived_event_key are KEEP
+        // (de-identified facts; DPDP §12 permits retention of de-identified
+        // operational records), and deleting would destroy farm history co-owned by
+        // other operators on the same farm.
+        const string sql = @"
+UPDATE ssf.farm_operations
+   SET created_by_user_id = {0}
+ WHERE created_by_user_id = {1}
+   AND created_by_user_id <> {0};";
+        return await db.Database.ExecuteSqlRawAsync(sql, new object[] { sentinel, userId }, ct)
+            .ConfigureAwait(false);
+    }
+
     // ── Per-row audit emission ───────────────────────────────────────
     // DS-017 rule (d): one AuditEvent per anonymized row. We do not
     // know the per-row Guids after a SET-based UPDATE without a RETURNING
@@ -505,6 +529,7 @@ UPDATE ssf.finance_corrections
         "cost_entries" => new[] { "created_by_user_id", "description" },
         "correction_events" => new[] { "user_id" },
         "finance_corrections" => new[] { "corrected_by_user_id", "reason" },
+        "farm_operations" => new[] { "created_by_user_id" },
         // SARVAM_PRIMARY_VOICE_PIPELINE Task 3.4 — voice-spine tables
         // follow a DELETE manifest. The audit payload records "deleted"
         // as the scrubbed-columns sentinel so the audit row's shape

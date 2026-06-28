@@ -229,6 +229,24 @@ public sealed class ErasureWorkerAnonymizationTest : IAsyncLifetime
         corrReason.Should().NotContain(PhoneNumber);
         corrReason.Should().NotContain(DisplayName);
 
+        // farm_operations (Track B table-1, D-T1-ERASURE): actor scrubbed to
+        // sentinel; KEEP fields (farm_id, operation_type, derived_event_key) survive.
+        var foCreator = (Guid)(await ScalarAsync(raw,
+            "SELECT created_by_user_id FROM ssf.farm_operations WHERE farm_id = @fid LIMIT 1",
+            ("fid", _farmId)))!;
+        foCreator.Should().Be(SystemActor.ErasedFarmer,
+            "D-T1-ERASURE: farm_operations.created_by_user_id must be the ErasedFarmer sentinel");
+
+        var foType = (string)(await ScalarAsync(raw,
+            "SELECT operation_type FROM ssf.farm_operations WHERE farm_id = @fid LIMIT 1",
+            ("fid", _farmId)))!;
+        foType.Should().Be("input", "D-T1-ERASURE: operation_type is a KEEP field (de-identified fact)");
+
+        var foKey = (string)(await ScalarAsync(raw,
+            "SELECT derived_event_key FROM ssf.farm_operations WHERE farm_id = @fid LIMIT 1",
+            ("fid", _farmId)))!;
+        foKey.Should().Be(new string('b', 64), "D-T1-ERASURE: derived_event_key is a KEEP field");
+
         // ── 4. Regex-grep every free-text column for PII residue ────
         var phoneRegex = new Regex(@"\d{10}");
         var allTextSql = """
@@ -415,6 +433,31 @@ public sealed class ErasureWorkerAnonymizationTest : IAsyncLifetime
             c.Parameters.AddWithValue("id", Guid.NewGuid());
             c.Parameters.AddWithValue("ceid", Guid.NewGuid());
             c.Parameters.AddWithValue("reason", $"Reason from {DisplayName} ({PhoneNumber})");
+            c.Parameters.AddWithValue("uid", _userId);
+            await c.ExecuteNonQueryAsync();
+        }
+
+        // farm_operations (Track B table-1) — owned by the target user.
+        // ANONYMIZE manifest: created_by_user_id is scrubbed to the sentinel;
+        // farm_id/operation_type/derived_event_key are KEEP fields.
+        await using (var c = db.CreateCommand())
+        {
+            c.CommandText = """
+                INSERT INTO ssf.farm_operations
+                    ("Id", farm_id, plot_id, operation_type, operation_date, source_daily_log_id,
+                     derived_event_key, is_current_version, created_by_user_id,
+                     source, model_version, prompt_version,
+                     created_at_utc, modified_at_utc)
+                VALUES
+                    (@id, @fid, @pid, 'input', CURRENT_DATE, NULL,
+                     @key, true, @uid,
+                     'voice', 'saaras:v3', 'v1',
+                     NOW(), NOW());
+                """;
+            c.Parameters.AddWithValue("id", Guid.NewGuid());
+            c.Parameters.AddWithValue("fid", _farmId);
+            c.Parameters.AddWithValue("pid", _plotId);
+            c.Parameters.AddWithValue("key", new string('b', 64));
             c.Parameters.AddWithValue("uid", _userId);
             await c.ExecuteNonQueryAsync();
         }
