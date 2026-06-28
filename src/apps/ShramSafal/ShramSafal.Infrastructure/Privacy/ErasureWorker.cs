@@ -76,6 +76,13 @@
 //   - ssf.daily_logs.evidence_sources — farm-scoped not user-scoped;
 //     introducing user-level deletion here would break the audit
 //     ledger (Trust Ladder semantics).
+//   - ssf.application_input_items — Track B typed child of farm_operations
+//     (ADR 0023 / D-T2-ERASURE). NO user_id/PII column: product_name,
+//     npk_grade, dose_* are de-identified farm operational facts. The only
+//     actor linkage is via the parent farm_operations.created_by_user_id,
+//     which AnonymizeFarmOperationsAsync already scrubs to ErasedFarmer —
+//     severing re-attribution. KEEP (survives, DPDP §12 de-identified
+//     operational retention). No scrub action; conscious gate-4 disposition.
 //   - ssf.consent_audit / ssf.audit_events — append-only by
 //     privilege; flagged "redacted" at the column level, never
 //     deleted.

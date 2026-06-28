@@ -247,6 +247,18 @@ public sealed class ErasureWorkerAnonymizationTest : IAsyncLifetime
             ("fid", _farmId)))!;
         foKey.Should().Be(new string('b', 64), "D-T1-ERASURE: derived_event_key is a KEEP field");
 
+        // application_input_items (Track B child, D-T2-ERASURE): KEEP — the
+        // de-identified farm facts SURVIVE erasure unchanged (no user_id column).
+        var aiiCount = Convert.ToInt32((await ScalarAsync(raw,
+            "SELECT count(*) FROM ssf.application_input_items WHERE operation_id = @opid",
+            ("opid", _farmOperationId)))!);
+        aiiCount.Should().Be(1, "D-T2-ERASURE: application_input_items survives erasure (KEEP, de-identified)");
+
+        var aiiProduct = (string)(await ScalarAsync(raw,
+            "SELECT product_name FROM ssf.application_input_items WHERE operation_id = @opid LIMIT 1",
+            ("opid", _farmOperationId)))!;
+        aiiProduct.Should().Be("Ethrel", "D-T2-ERASURE: input-item product_name (a de-identified fact) is KEPT");
+
         // ── 4. Regex-grep every free-text column for PII residue ────
         var phoneRegex = new Regex(@"\d{10}");
         var allTextSql = """
@@ -339,6 +351,10 @@ public sealed class ErasureWorkerAnonymizationTest : IAsyncLifetime
     private const int VoiceSpineGoldenCandidateCount = 2;
     private const int VoiceSpineTranscriptHistoryCount = 4;
     private readonly List<string> _seededAudioHashes = new();
+
+    // Track B table-2 (D-T2-ERASURE): the seeded farm_operations Id so
+    // the survival assertion can locate the child application_input_items row.
+    private Guid _farmOperationId;
 
     private async Task SeedFixtureAsync(string conn)
     {
@@ -440,6 +456,7 @@ public sealed class ErasureWorkerAnonymizationTest : IAsyncLifetime
         // farm_operations (Track B table-1) — owned by the target user.
         // ANONYMIZE manifest: created_by_user_id is scrubbed to the sentinel;
         // farm_id/operation_type/derived_event_key are KEEP fields.
+        _farmOperationId = Guid.NewGuid();
         await using (var c = db.CreateCommand())
         {
             c.CommandText = """
@@ -454,11 +471,27 @@ public sealed class ErasureWorkerAnonymizationTest : IAsyncLifetime
                      'voice', 'saaras:v3', 'v1',
                      NOW(), NOW());
                 """;
-            c.Parameters.AddWithValue("id", Guid.NewGuid());
+            c.Parameters.AddWithValue("id", _farmOperationId);
             c.Parameters.AddWithValue("fid", _farmId);
             c.Parameters.AddWithValue("pid", _plotId);
             c.Parameters.AddWithValue("key", new string('b', 64));
             c.Parameters.AddWithValue("uid", _userId);
+            await c.ExecuteNonQueryAsync();
+        }
+
+        // application_input_items (Track B table-2, D-T2-ERASURE) — typed child
+        // of farm_operations. No user_id/PII column: product_name, npk_grade,
+        // dose_amount are de-identified farm facts. Seeded to assert KEEP survival.
+        await using (var c = db.CreateCommand())
+        {
+            c.CommandText = """
+                INSERT INTO ssf.application_input_items
+                    ("Id", operation_id, product_name, npk_grade, dose_amount, ordinal, created_at_utc)
+                VALUES
+                    (@id, @opid, 'Ethrel', '00:52:34', 5, 0, NOW());
+                """;
+            c.Parameters.AddWithValue("id", Guid.NewGuid());
+            c.Parameters.AddWithValue("opid", _farmOperationId);
             await c.ExecuteNonQueryAsync();
         }
 
