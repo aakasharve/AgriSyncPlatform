@@ -23,6 +23,8 @@ import { buildTimelineEntries } from '../../services/transcriptTimelineService';
 import WeatherWidget from '../../features/weather/components/WeatherWidget';
 import { formatCurrencyINR } from '../../shared/utils/dayState';
 import { getCropTheme } from '../../shared/utils/colorTheme';
+import { FEATURE_FLAGS } from '../../app/featureFlags';
+import { MeterDisplay } from '../../features/logs/components/MeterDisplay';
 
 import { AppRouterContext } from './routeContext';
 import { ReflectPage, ComparePage } from './lazyComponents';
@@ -603,6 +605,14 @@ export const renderLogView = (ctx: AppRouterContext): React.ReactNode => {
                             </div>
                         ) : (
                             <p className="text-stone-500 mb-8">Your activity has been logged successfully.</p>
+                        )}
+
+                        {/* Understanding Meter scaffold (1d-infra, flag-gated, OFF by default).
+                            TODO(meter-data-wiring): pass the saved log's `understanding` VlogScore
+                            (fetch by lastSavedLogIds) + the farmer's logs list for the arrival gate.
+                            Deferred with the recompute-hook + confirm-signal (next-session wizard wiring). */}
+                        {FEATURE_FLAGS.understandingMeter && (
+                            <MeterDisplay score={undefined} allLogs={[]} />
                         )}
 
                         <div className="flex flex-col gap-3">
