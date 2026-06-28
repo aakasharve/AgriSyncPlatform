@@ -17,7 +17,7 @@
  * spec: ai-intelligence-plan-2026-06-25
  */
 
-import type { AgriLogResponse, InputEvent } from '../../../types';
+import type { AgriLogResponse, InputEvent, FieldProvenance } from '../../../types';
 import {
     computeReceiptTotal,
     sumLabourCost,
@@ -27,13 +27,18 @@ import {
 } from '../../../core/domain/helpers/log-factory-helpers';
 
 // =============================================================================
-// TYPES (public — re-exported via domain/types if that pattern is added later)
+// TYPES (public)
 // =============================================================================
 
-/** Provenance tag per field — spoken = farmer stated it, confirmed = farmer
- *  confirmed at the confirm-screen, derived = system inferred, assumed = system
- *  fabricated / default-filled. */
-export type ProvenanceTag = 'spoken' | 'confirmed' | 'derived' | 'assumed';
+/**
+ * Re-export FieldProvenance under the legacy alias ProvenanceTag so that
+ * any local references within this file keep working. External consumers
+ * should import `FieldProvenance` directly from `domain/types/log.types`.
+ *
+ * Single source of truth: `FieldProvenance` is defined in log.types.ts (domain).
+ * W1.P2 consolidation — removed the local definition and replaced with import.
+ */
+export type ProvenanceTag = FieldProvenance;
 
 /**
  * ScoreContext — all fields optional; safe defaults when absent.

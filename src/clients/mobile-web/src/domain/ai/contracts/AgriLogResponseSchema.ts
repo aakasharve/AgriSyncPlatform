@@ -203,6 +203,18 @@ const _PlannedTaskSourceSchema = z.enum([
     'schedule',
 ]);
 
+/**
+ * W1.P2 — per-field provenance. Mirrors `FieldProvenance` in log.types.ts.
+ * Added to nested event schemas (all .passthrough()) so the wire contract
+ * accepts and forwards the value without top-level drift risk.
+ */
+const FieldProvenanceSchema = z.enum([
+    'spoken',
+    'confirmed',
+    'derived',
+    'assumed',
+]);
+
 const QuestionForUserTypeSchema = z.enum([
     'LABOUR_SOURCE_CHECK',
     'CONTEXT_CHECK',
@@ -305,6 +317,8 @@ export const CropActivityEventSchema = z.object({
     }).passthrough()).optional(),
 
     issue: BucketIssueSchema.optional(),
+    // W1.P2 — per-field provenance (nested schema; .passthrough() keeps this additive)
+    provenance: FieldProvenanceSchema.optional(),
     ...TransparencyFields,
 }).passthrough();
 
@@ -320,6 +334,8 @@ export const IrrigationEventSchema = z.object({
     motorId: z.string().optional(),
     targetPlotName: z.string().optional(),
     issue: BucketIssueSchema.optional(),
+    // W1.P2 — per-field provenance
+    provenance: FieldProvenanceSchema.optional(),
     ...TransparencyFields,
 }).passthrough();
 
@@ -342,6 +358,8 @@ export const LabourEventSchema = z.object({
     activity: z.string().optional(),
     targetPlotName: z.string().optional(),
     issue: BucketIssueSchema.optional(),
+    // W1.P2 — per-field provenance
+    provenance: FieldProvenanceSchema.optional(),
     ...TransparencyFields,
 }).passthrough();
 
@@ -353,6 +371,8 @@ export const InputMixItemSchema = z.object({
     linkedExpenseId: z.string().optional(),
     linkedExpenseItemId: z.string().optional(),
     costSource: InputCostSourceSchema.optional(),
+    // W1.P2 — per-field provenance
+    provenance: FieldProvenanceSchema.optional(),
 }).passthrough();
 
 export const InputEventSchema = z.object({
@@ -381,6 +401,8 @@ export const InputEventSchema = z.object({
     targetPlotName: z.string().optional(),
 
     issue: BucketIssueSchema.optional(),
+    // W1.P2 — per-field provenance
+    provenance: FieldProvenanceSchema.optional(),
     ...TransparencyFields,
 }).passthrough();
 
@@ -395,6 +417,8 @@ export const MachineryEventSchema = z.object({
     targetPlotName: z.string().optional(),
     notes: z.string().optional(),
     issue: BucketIssueSchema.optional(),
+    // W1.P2 — per-field provenance
+    provenance: FieldProvenanceSchema.optional(),
     ...TransparencyFields,
 }).passthrough();
 
@@ -434,6 +458,8 @@ export const ActivityExpenseEventSchema = z.object({
     observation: z.string().optional(),
     notes: z.string().optional(),
     timestamp: z.string().optional(),
+    // W1.P2 — per-field provenance
+    provenance: FieldProvenanceSchema.optional(),
     ...TransparencyFields,
 }).passthrough();
 

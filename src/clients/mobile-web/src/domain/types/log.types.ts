@@ -15,6 +15,28 @@ import type { LogProvenance } from '../ai/LogProvenance';
 import type { PatchEvent } from '../ledger/PatchEvent';
 
 // =============================================================================
+// FIELD-LEVEL PROVENANCE (W1.P2 — per-field confidence signal)
+// =============================================================================
+
+/**
+ * Per-field provenance tag. Records HOW a field value was determined.
+ *
+ * - `spoken`:    The farmer explicitly stated this value in their voice input.
+ * - `confirmed`: The farmer confirmed this value at the confirm-screen.
+ * - `derived`:   The system inferred it from other stated values (e.g. computed cost).
+ * - `assumed`:   The system filled it in as a default / fabrication (lowest trust).
+ *
+ * NOTE: this is field-level provenance on event ITEMS. It is a DIFFERENT concept
+ * from the log-level `LogProvenance` in `domain/ai/LogProvenance.ts` which tracks
+ * the source of the entire log (ai / manual / pre_spine, model version, etc.).
+ * Do NOT conflate the two.
+ *
+ * Single source of truth — scoreVlog.ts and any future consumers MUST import
+ * this type from here rather than defining their own local alias.
+ */
+export type FieldProvenance = 'spoken' | 'confirmed' | 'derived' | 'assumed';
+
+// =============================================================================
 // LOG SCOPE (What context does a log apply to?)
 // =============================================================================
 
@@ -70,6 +92,9 @@ export interface CropActivityEvent {
 
     // Per-Bucket Issue (Phase 22)
     issue?: BucketIssue;
+
+    // W1.P2 — per-field provenance (how was this value determined?)
+    provenance?: FieldProvenance;
 }
 
 // =============================================================================
@@ -94,6 +119,9 @@ export interface IrrigationEvent {
 
     // Per-Bucket Issue (Phase 22)
     issue?: BucketIssue;
+
+    // W1.P2 — per-field provenance (how was this value determined?)
+    provenance?: FieldProvenance;
 }
 
 // =============================================================================
@@ -125,6 +153,9 @@ export interface LabourEvent {
 
     // Per-Bucket Issue (Phase 22)
     issue?: BucketIssue;
+
+    // W1.P2 — per-field provenance (how was this value determined?)
+    provenance?: FieldProvenance;
 }
 
 // =============================================================================
@@ -144,6 +175,9 @@ export interface InputMixItem {
     linkedExpenseId?: string;
     linkedExpenseItemId?: string;
     costSource?: 'MANUAL' | 'PROCUREMENT';
+
+    // W1.P2 — per-field provenance (how was this value determined?)
+    provenance?: FieldProvenance;
 }
 
 export interface InputEvent {
@@ -189,6 +223,9 @@ export interface InputEvent {
 
     // Per-Bucket Issue (Phase 22)
     issue?: BucketIssue;
+
+    // W1.P2 — per-field provenance (how was this value determined?)
+    provenance?: FieldProvenance;
 }
 
 // =============================================================================
@@ -212,6 +249,9 @@ export interface MachineryEvent {
 
     // Per-Bucket Issue (Phase 22)
     issue?: BucketIssue;
+
+    // W1.P2 — per-field provenance (how was this value determined?)
+    provenance?: FieldProvenance;
 }
 
 // =============================================================================
@@ -243,6 +283,9 @@ export interface ActivityExpenseEvent {
     // Transparency
     sourceText?: string;
     systemInterpretation?: string;
+
+    // W1.P2 — per-field provenance (how was this value determined?)
+    provenance?: FieldProvenance;
 }
 
 export interface ResourceItem {

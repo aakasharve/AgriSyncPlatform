@@ -30,6 +30,7 @@ export type {
 
 // Log types - Core events
 export type {
+    FieldProvenance,
     LogApplyPolicy,
     LogScope,
     CropActivityEvent,
