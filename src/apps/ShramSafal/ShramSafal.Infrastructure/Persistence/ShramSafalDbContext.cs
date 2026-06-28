@@ -130,6 +130,7 @@ public sealed class ShramSafalDbContext(DbContextOptions<ShramSafalDbContext> op
     public DbSet<TestRecommendation> TestRecommendations => Set<TestRecommendation>();
     public DbSet<ComplianceSignal> ComplianceSignals => Set<ComplianceSignal>();
     public DbSet<FarmOperation> FarmOperations => Set<FarmOperation>();
+    public DbSet<ApplicationInputItem> ApplicationInputItems => Set<ApplicationInputItem>();
     public DbSet<JobCard> JobCards => Set<JobCard>();
     public DbSet<Organization> Organizations => Set<Organization>();
     public DbSet<OrganizationMembership> OrganizationMemberships => Set<OrganizationMembership>();
