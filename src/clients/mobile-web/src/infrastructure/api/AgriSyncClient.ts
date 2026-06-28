@@ -9,6 +9,13 @@
 // SyncMutationType, etc. — are re-exported below so existing
 // `from '../../infrastructure/api/AgriSyncClient'` imports continue
 // to compile.
+//
+// spec: secure-remembered-device-sessions-2026-06-24
+// - Both axios instances created with withCredentials: true so the
+//   HttpOnly agrisync_refresh cookie is sent/received on every request.
+// - X-Device-Id header sourced from DeviceIdStore (reuse, no new source).
+// - refreshSession() posts no refresh token — the cookie carries it.
+// - rememberDevice flag stored in localStorage key agrisync_remember_device_v1.
 
 import axios, { AxiosError, AxiosInstance, InternalAxiosRequestConfig } from 'axios';
 import { reportClientError } from '../telemetry/ClientErrorReporter';
@@ -18,6 +25,14 @@ import {
     setAuthSession,
     type AuthSession,
 } from '../storage/AuthTokenStore';
+import { getOrCreateDeviceId } from '../storage/DeviceIdStore';
+import { getRememberDevice } from '../storage/RememberDeviceStore';
+import {
+    clearNativeRefreshSession,
+    getNativeRefreshSession,
+    setNativeRefreshSession,
+    isNativeSecureRefreshEnabled,
+} from '../storage/RefreshSessionStore';
 import { SYNC_MUTATION_TYPES } from '../sync/SyncMutationCatalog';
 import {
     APP_VERSION,
@@ -152,16 +167,37 @@ export class AgriSyncClient implements HttpTransport {
 
     constructor() {
         const baseURL = resolveApiBaseUrl();
-        this.http = axios.create({ baseURL });
-        this.authHttp = axios.create({ baseURL });
+        // spec: secure-remembered-device-sessions-2026-06-24
+        // Both instances need withCredentials so the HttpOnly agrisync_refresh
+        // cookie is sent on refresh and received on login/verify-otp.
+        this.http = axios.create({ baseURL, withCredentials: true });
+        this.authHttp = axios.create({ baseURL, withCredentials: true });
 
         this.http.interceptors.request.use((config) => this.attachAccessToken(config));
         this.http.interceptors.request.use((config) => {
             config.headers.set('X-App-Version', APP_VERSION);
+            // spec: secure-remembered-device-sessions-2026-06-24
+            // Send device-id on every authenticated request so the backend can
+            // scope refresh/revoke to the current device. Source is the existing
+            // DeviceIdStore — no new device-id source is introduced.
+            config.headers.set('X-Device-Id', getOrCreateDeviceId());
+            // spec: secure-remembered-device-sessions-2026-06-24 / Task 5.2
+            // Tell the backend we are running natively on Android so it returns
+            // the raw refreshToken in the JSON body instead of an HttpOnly cookie.
+            // Web requests send no such header — the cookie path is unchanged.
+            if (isNativeSecureRefreshEnabled()) {
+                config.headers.set('X-Client-Platform', 'android');
+            }
             return config;
         });
         this.authHttp.interceptors.request.use((config) => {
             config.headers.set('X-App-Version', APP_VERSION);
+            config.headers.set('X-Device-Id', getOrCreateDeviceId());
+            // spec: secure-remembered-device-sessions-2026-06-24 / Task 5.2
+            // Mirror X-Client-Platform on the auth instance (login/register/refresh).
+            if (isNativeSecureRefreshEnabled()) {
+                config.headers.set('X-Client-Platform', 'android');
+            }
             return config;
         });
         this.http.interceptors.response.use(
@@ -188,10 +224,6 @@ export class AgriSyncClient implements HttpTransport {
 
     register(request: { phone: string; password: string; displayName: string; appId?: string; role?: string }): Promise<AuthResponseDto> {
         return Auth.register(this, request);
-    }
-
-    refreshToken(refreshToken: string): Promise<AuthResponseDto> {
-        return Auth.refreshToken(this, refreshToken);
     }
 
     getCurrentUser(): Promise<unknown> {
@@ -475,33 +507,109 @@ export class AgriSyncClient implements HttpTransport {
         return this.http.request(originalConfig);
     }
 
-    private async refreshSession(): Promise<AuthSession | null> {
+    // spec: secure-remembered-device-sessions-2026-06-24
+    // Dual-path refresh:
+    //
+    //   WEB: POST /user/auth/refresh with NO token body — the HttpOnly cookie
+    //   agrisync_refresh carries the token (withCredentials handles this).
+    //   Sends rememberDevice + deviceId + platform:'web'. Never reads a
+    //   refreshToken field. This path is UNCHANGED from the original.
+    //
+    //   ANDROID NATIVE: reads the NativeRefreshSession from the Android
+    //   Keystore. If absent → fail-closed (clear + anonymous). If present →
+    //   POST /user/auth/refresh with body { refreshToken, rememberDevice,
+    //   deviceId, platform:'android' }. On success the server returns a
+    //   NEW refreshToken (rotation); persist it via setNativeRefreshSession.
+    //   On 401 → clearNativeRefreshSession + clear + anonymous.
+    async refreshSession(): Promise<AuthSession | null> {
         if (this.refreshPromise) {
             return this.refreshPromise;
         }
 
-        const currentSession = getAuthSession();
-        if (!currentSession?.refreshToken) {
-            clearAuthSession();
-            return null;
-        }
+        const deviceId = getOrCreateDeviceId();
+        const rememberDevice = getRememberDevice();
 
-        this.refreshPromise = this.authHttp
-            .post<AuthResponseDto>('/user/auth/refresh', { refreshToken: currentSession.refreshToken })
-            .then(response => {
-                const session = toAuthSession(response.data);
-                setAuthSession(session);
-                return session;
-            })
-            .catch(() => {
-                clearAuthSession();
-                return null;
-            })
-            .finally(() => {
+        if (isNativeSecureRefreshEnabled()) {
+            // --- NATIVE (Android Keystore) branch ---
+            this.refreshPromise = (async () => {
+                const stored = await getNativeRefreshSession();
+                if (!stored) {
+                    // No stored session → fail-closed, force re-login.
+                    clearAuthSession();
+                    await clearNativeRefreshSession();
+                    return null;
+                }
+                try {
+                    const response = await this.authHttp.post<AuthResponseDto>(
+                        '/user/auth/refresh',
+                        {
+                            refreshToken: stored.refreshToken,
+                            rememberDevice,
+                            deviceId,
+                            platform: 'android',
+                        },
+                    );
+                    const data = response.data;
+                    // Persist the rotated token (server always issues a new one).
+                    if (data.refreshToken) {
+                        await setNativeRefreshSession({
+                            refreshToken: data.refreshToken,
+                            deviceId,
+                            expiresAtUtc: data.expiresAtUtc,
+                        });
+                    }
+                    const session = toAuthSession(data);
+                    setAuthSession(session);
+                    return session;
+                } catch {
+                    // spec: secure-remembered-device-sessions-2026-06-24 / Task 6.2
+                    // Fail-closed on any error (401, network, etc.).
+                    clearAuthSession();
+                    await clearNativeRefreshSession();
+                    return null;
+                }
+            })().finally(() => {
                 this.refreshPromise = null;
             });
+        } else {
+            // --- WEB (HttpOnly cookie) branch — UNCHANGED ---
+            this.refreshPromise = this.authHttp
+                .post<AuthResponseDto>('/user/auth/refresh', {
+                    rememberDevice,
+                    deviceId,
+                    platform: 'web',
+                })
+                .then(response => {
+                    const session = toAuthSession(response.data);
+                    setAuthSession(session);
+                    return session;
+                })
+                .catch(() => {
+                    // spec: secure-remembered-device-sessions-2026-06-24 / Task 6.2
+                    // Fail-closed: clear ALL local auth state so an invalid session
+                    // never grants access on a subsequent attempt. On web,
+                    // clearNativeRefreshSession is a no-op; on Android it wipes the
+                    // Keystore-backed secure storage.
+                    clearAuthSession();
+                    void clearNativeRefreshSession();
+                    return null;
+                })
+                .finally(() => {
+                    this.refreshPromise = null;
+                });
+        }
 
         return this.refreshPromise;
+    }
+
+    // spec: secure-remembered-device-sessions-2026-06-24 / Task 6.1
+    // Sends POST /user/auth/logout so the backend revokes the current device
+    // session (and clears the HttpOnly cookie server-side). The cookie is
+    // sent automatically via withCredentials on authHttp; X-Device-Id is
+    // attached by the authHttp interceptor. If the backend is unreachable the
+    // caller (AuthProvider.logout) still completes local cleanup.
+    async logoutCurrentDevice(): Promise<void> {
+        await Auth.logout(this);
     }
 }
 

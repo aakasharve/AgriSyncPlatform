@@ -3,7 +3,9 @@ import { QrCode, ShieldCheck, UserCheck, Sprout } from 'lucide-react';
 import { useAuth } from '../app/providers/AuthProvider';
 import OtpLoginForm from '../features/auth/components/OtpLoginForm';
 import OtpVerifyForm from '../features/auth/components/OtpVerifyForm';
+import PasswordField from '../features/auth/components/PasswordField';
 import type { StartOtpResponse } from '../features/auth/data/otpClient';
+import { APP_VERSION } from '../buildInfo';
 import { invalidateMeContext } from '../core/session/MeContextService';
 
 // Top-level auth mode. 'otp' is the single PUBLIC flow — real users enter their
@@ -59,6 +61,10 @@ const LoginPage: React.FC = () => {
     const [topMode, setTopMode] = useState<TopMode>('otp');
     const [phone, setPhone] = useState('');
     const [password, setPassword] = useState('');
+    // spec: secure-remembered-device-sessions-2026-06-24 — Task 4.2
+    // Pre-checked by founder decision (2026-06-27): daily farmers stay logged in;
+    // shared-phone users can uncheck to opt out.
+    const [rememberDevice, setRememberDevice] = useState(true);
 
     // OTP state
     const [otpPhone, setOtpPhone] = useState('');
@@ -72,7 +78,7 @@ const LoginPage: React.FC = () => {
             return;
         }
         try {
-            await login(normalizedPhone, normalizedPassword);
+            await login(normalizedPhone, normalizedPassword, rememberDevice);
         } catch {
             // Error is surfaced by AuthProvider state.
         }
@@ -208,24 +214,42 @@ const LoginPage: React.FC = () => {
                         />
                     </div>
 
-                    <div className="space-y-1">
-                        <label htmlFor="auth-password" className="block text-xs font-semibold text-stone-600 uppercase tracking-wide">
-                            Password
-                        </label>
+                    <PasswordField
+                        id="auth-password"
+                        label="Password"
+                        value={password}
+                        onChange={(val) => {
+                            setPassword(val);
+                            if (authError) {
+                                clearAuthError();
+                            }
+                        }}
+                        autoComplete="current-password"
+                        disabled={isLoading}
+                    />
+
+                    {/* spec: secure-remembered-device-sessions-2026-06-24 — Task 4.2
+                        Remember this device — pre-checked (founder decision 2026-06-27).
+                        Visible and un-checkable so a shared-phone user can opt out. */}
+                    <div className="flex items-center gap-2 pt-0.5">
                         <input
-                            id="auth-password"
-                            type="password"
-                            autoComplete="current-password"
-                            value={password}
-                            onChange={(e) => {
-                                setPassword(e.target.value);
-                                if (authError) {
-                                    clearAuthError();
-                                }
-                            }}
-                            className="w-full rounded-xl border border-stone-200 bg-white px-3 py-2.5 text-sm font-medium outline-none focus:ring-2 focus:border-emerald-400 focus:ring-emerald-200/60"
+                            id="remember-device-password"
+                            type="checkbox"
+                            checked={rememberDevice}
+                            onChange={(e) => setRememberDevice(e.target.checked)}
                             disabled={isLoading}
+                            className="h-4 w-4 rounded border-stone-300 accent-emerald-600"
                         />
+                        <label
+                            htmlFor="remember-device-password"
+                            className="text-xs font-medium text-stone-600 select-none cursor-pointer"
+                        >
+                            <span style={{ fontFamily: "'Noto Sans Devanagari', sans-serif" }}>
+                                हे डिव्हाइस लक्षात ठेवा
+                            </span>
+                            {' · '}
+                            <span>Remember this device</span>
+                        </label>
                     </div>
 
                     {authError && (
@@ -290,7 +314,7 @@ const LoginPage: React.FC = () => {
 
                 <div className="mt-6 text-center">
                     <p className="text-xs text-stone-400">
-                        AgriSync Platform v1.0
+                        AgriSync Platform v{APP_VERSION}
                     </p>
                 </div>
             </div>

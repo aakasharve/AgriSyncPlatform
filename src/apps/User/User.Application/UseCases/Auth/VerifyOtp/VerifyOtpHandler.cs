@@ -4,6 +4,7 @@ using AgriSync.BuildingBlocks.Results;
 using AgriSync.SharedKernel.Contracts.Ids;
 using Microsoft.Extensions.Logging;
 using User.Application.Ports;
+using User.Application.UseCases.Auth.Session;
 using User.Domain.Identity;
 using User.Domain.Security;
 
@@ -115,15 +116,19 @@ public sealed class VerifyOtpHandler(
                 user.Id, phone.Value[^4..]);
         }
 
-        // Revoke old refresh tokens, issue identity-only JWT.
-        await refreshTokenRepository.RevokeAllForUserAsync(user.Id, utcNow, ct);
+        // Revoke old refresh tokens for this device only — other device sessions preserved.
+        await refreshTokenRepository.RevokeActiveForUserDeviceAsync(
+            user.Id, command.Session.DeviceId, utcNow, "same_device_login", ct);
 
         var tokens = jwtTokenService.GenerateIdentityTokens(user.Id, phoneVerified: true);
 
         var refreshToken = new Domain.Security.RefreshToken(
             idGenerator.New(),
             user.Id,
-            tokens.RefreshToken,
+            RefreshTokenHasher.Hash(tokens.RefreshToken),
+            command.Session.DeviceId,
+            command.Session.DeviceName,
+            command.Session.Platform,
             utcNow,
             utcNow.AddDays(30));
 

@@ -3,12 +3,15 @@ using AgriSync.BuildingBlocks.Abstractions;
 using AgriSync.BuildingBlocks.Results;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using User.Application.Ports;
 using User.Application.UseCases.Auth.Login;
+using User.Application.UseCases.Auth.Logout;
 using User.Application.UseCases.Auth.RefreshToken;
 using User.Application.UseCases.Auth.RegisterUser;
+using User.Application.UseCases.Auth.Session;
 using User.Application.UseCases.Auth.StartOtp;
 using User.Application.UseCases.Auth.VerifyOtp;
 using User.Application.UseCases.Users.GetMeContext;
@@ -28,6 +31,7 @@ public static class AuthEndpoints
             HttpContext context,
             ILoggerFactory loggerFactory,
             RegisterUserHandler handler,
+            IHostEnvironment env,
             CancellationToken ct) =>
         {
             if (!TryValidateRegisterRequest(request, out var validationErrors))
@@ -40,7 +44,8 @@ public static class AuthEndpoints
                 request.Password!,
                 request.DisplayName!,
                 request.AppId,
-                request.Role);
+                request.Role,
+                BuildDeviceSession(context, request.RememberDevice, request.DeviceId, request.DeviceName, request.Platform));
 
             Result<User.Application.Contracts.Dtos.AuthResponse> result;
             try
@@ -52,9 +57,23 @@ public static class AuthEndpoints
                 return CreateValidationErrorResponse(context, loggerFactory, ex);
             }
 
-            return result.IsSuccess
-                ? Results.Ok(result.Value)
-                : Results.BadRequest(new { error = result.Error.Code, message = result.Error.Description });
+            if (!result.IsSuccess)
+            {
+                return Results.BadRequest(new { error = result.Error.Code, message = result.Error.Description });
+            }
+
+            // TODO(security): consider X-CSRF-Token on state-changing auth routes — tracked follow-up
+            context.Response.Cookies.Append(
+                AuthCookieOptions.RefreshCookieName,
+                result.Value.RefreshToken,
+                AuthCookieOptions.Build(env, result.Value.ExpiresAtUtc, request.RememberDevice));
+
+            // LB-1: native (Android) clients receive the refresh token in the body so the
+            // Capacitor app can persist it in the Android Keystore. Web clients get the
+            // token-less body; the HttpOnly cookie set above is authoritative for them.
+            return IsNativeClient(context)
+                ? Results.Ok(new NativeAuthResponseBody(result.Value.UserId, result.Value.AccessToken, result.Value.ExpiresAtUtc, result.Value.RefreshToken))
+                : Results.Ok(new AuthResponseBody(result.Value.UserId, result.Value.AccessToken, result.Value.ExpiresAtUtc));
         })
         .WithName("RegisterUser")
         .AllowAnonymous();
@@ -64,16 +83,32 @@ public static class AuthEndpoints
             HttpContext context,
             ILoggerFactory loggerFactory,
             LoginHandler handler,
+            IHostEnvironment env,
             CancellationToken ct) =>
         {
             try
             {
-                var command = new LoginCommand(request.Phone, request.Password);
+                var session = BuildDeviceSession(context, request.RememberDevice, request.DeviceId, request.DeviceName, request.Platform);
+                var command = new LoginCommand(request.Phone, request.Password, session);
                 var result = await handler.HandleAsync(command, ct);
 
-                return result.IsSuccess
-                    ? Results.Ok(result.Value)
-                    : Results.Unauthorized();
+                if (!result.IsSuccess)
+                {
+                    return Results.Unauthorized();
+                }
+
+                // TODO(security): consider X-CSRF-Token on state-changing auth routes — tracked follow-up
+                context.Response.Cookies.Append(
+                    AuthCookieOptions.RefreshCookieName,
+                    result.Value.RefreshToken,
+                    AuthCookieOptions.Build(env, result.Value.ExpiresAtUtc, request.RememberDevice));
+
+                // LB-1: native (Android) clients receive the refresh token in the body so the
+                // Capacitor app can persist it in the Android Keystore. Web clients get the
+                // token-less body; the HttpOnly cookie set above is authoritative for them.
+                return IsNativeClient(context)
+                    ? Results.Ok(new NativeAuthResponseBody(result.Value.UserId, result.Value.AccessToken, result.Value.ExpiresAtUtc, result.Value.RefreshToken))
+                    : Results.Ok(new AuthResponseBody(result.Value.UserId, result.Value.AccessToken, result.Value.ExpiresAtUtc));
             }
             catch (ArgumentException ex)
             {
@@ -119,7 +154,9 @@ public static class AuthEndpoints
 
         publicGroup.MapPost("/verify-otp", async (
             VerifyOtpRequest request,
+            HttpContext context,
             VerifyOtpHandler handler,
+            IHostEnvironment env,
             CancellationToken ct) =>
         {
             if (string.IsNullOrWhiteSpace(request?.Phone) || string.IsNullOrWhiteSpace(request?.Otp))
@@ -131,8 +168,9 @@ public static class AuthEndpoints
                 });
             }
 
+            var session = BuildDeviceSession(context, request.RememberDevice, request.DeviceId, request.DeviceName, request.Platform);
             var result = await handler.HandleAsync(
-                new VerifyOtpCommand(request.Phone, request.Otp, request.DisplayName),
+                new VerifyOtpCommand(request.Phone, request.Otp, request.DisplayName, session),
                 ct);
 
             if (result.IsFailure)
@@ -150,11 +188,31 @@ public static class AuthEndpoints
                     statusCode: statusCode);
             }
 
+            // TODO(security): consider X-CSRF-Token on state-changing auth routes — tracked follow-up
+            context.Response.Cookies.Append(
+                AuthCookieOptions.RefreshCookieName,
+                result.Value!.RefreshToken,
+                AuthCookieOptions.Build(env, result.Value.ExpiresAtUtc, request.RememberDevice));
+
+            // LB-1: native (Android) clients receive the refresh token in the body so the
+            // Capacitor app can persist it in the Android Keystore. Web clients get the
+            // token-less body; the HttpOnly cookie set above is authoritative for them.
+            if (IsNativeClient(context))
+            {
+                return Results.Ok(new
+                {
+                    userId = result.Value.UserId,
+                    accessToken = result.Value.AccessToken,
+                    expiresAtUtc = result.Value.ExpiresAtUtc,
+                    createdNewUser = result.Value.CreatedNewUser,
+                    refreshToken = result.Value.RefreshToken,
+                });
+            }
+
             return Results.Ok(new
             {
-                userId = result.Value!.UserId,
+                userId = result.Value.UserId,
                 accessToken = result.Value.AccessToken,
-                refreshToken = result.Value.RefreshToken,
                 expiresAtUtc = result.Value.ExpiresAtUtc,
                 createdNewUser = result.Value.CreatedNewUser,
             });
@@ -164,23 +222,81 @@ public static class AuthEndpoints
 
         publicGroup.MapPost("/refresh", async (
             RefreshRequest request,
+            HttpContext context,
             RefreshTokenHandler handler,
+            IHostEnvironment env,
             CancellationToken ct) =>
         {
-            var command = new RefreshTokenCommand(request.RefreshToken);
+            // Web: read refresh token from HttpOnly cookie.
+            // Android/native: token comes in the request body ONLY when cookie absent
+            //                 AND the request identifies itself as native (X-Client-Platform: android).
+            var cookieToken = context.Request.Cookies[AuthCookieOptions.RefreshCookieName];
+            var resolvedToken = !string.IsNullOrWhiteSpace(cookieToken)
+                ? cookieToken
+                : (IsNativeClient(context) && !string.IsNullOrWhiteSpace(request.RefreshToken) ? request.RefreshToken : null);
+
+            if (resolvedToken is null)
+            {
+                return Results.Unauthorized();
+            }
+
+            var session = BuildDeviceSession(context, request.RememberDevice, request.DeviceId, request.DeviceName, request.Platform);
+            var command = new RefreshTokenCommand(resolvedToken, session);
             var result = await handler.HandleAsync(command, ct);
 
-            return result.IsSuccess
-                ? Results.Ok(result.Value)
-                : Results.Unauthorized();
+            if (!result.IsSuccess)
+            {
+                // Clear stale cookie on failure so browsers don't retry with a bad token.
+                context.Response.Cookies.Delete(AuthCookieOptions.RefreshCookieName, AuthCookieOptions.BuildForDelete(env));
+                return Results.Unauthorized();
+            }
+
+            // TODO(security): consider X-CSRF-Token on state-changing auth routes — tracked follow-up
+            context.Response.Cookies.Append(
+                AuthCookieOptions.RefreshCookieName,
+                result.Value.RefreshToken,
+                AuthCookieOptions.Build(env, result.Value.ExpiresAtUtc, request.RememberDevice));
+
+            // LB-1: native (Android) clients receive the refresh token in the body so the
+            // Capacitor app can persist it in the Android Keystore. Web clients get the
+            // token-less body; the HttpOnly cookie set above is authoritative for them.
+            return IsNativeClient(context)
+                ? Results.Ok(new NativeAuthResponseBody(result.Value.UserId, result.Value.AccessToken, result.Value.ExpiresAtUtc, result.Value.RefreshToken))
+                : Results.Ok(new AuthResponseBody(result.Value.UserId, result.Value.AccessToken, result.Value.ExpiresAtUtc));
         })
         .WithName("RefreshToken")
         .AllowAnonymous();
 
-        group.MapPost("/logout", async (
+        // AllowAnonymous: logout must work even after the 15-min access token expires.
+        // The refresh token (cookie or native body) is the capability — bearer is not required.
+        publicGroup.MapPost("/logout", async (
+            LogoutRequest? request,
             HttpContext context,
-            IRefreshTokenRepository refreshTokenRepository,
-            IClock clock,
+            LogoutCurrentDeviceHandler logoutCurrentDeviceHandler,
+            IHostEnvironment env,
+            CancellationToken ct) =>
+        {
+            // Web: cookie carries the token (withCredentials). Native: body carries it.
+            var cookieToken = context.Request.Cookies[AuthCookieOptions.RefreshCookieName];
+            var refreshToken = !string.IsNullOrWhiteSpace(cookieToken)
+                ? cookieToken
+                : (IsNativeClient(context) ? request?.RefreshToken : null);
+
+            // Revoke only the current device session. Idempotent — unknown/null token is a safe no-op.
+            await logoutCurrentDeviceHandler.HandleAsync(new LogoutCurrentDeviceCommand(refreshToken), ct);
+
+            // Always clear the cookie regardless of whether the token was found.
+            context.Response.Cookies.Delete(AuthCookieOptions.RefreshCookieName, AuthCookieOptions.BuildForDelete(env));
+
+            return Results.Ok(new { message = "Logged out successfully" });
+        })
+        .WithName("LogoutUser")
+        .AllowAnonymous();
+
+        group.MapPost("/logout-all", async (
+            HttpContext context,
+            RevokeAllDeviceSessionsHandler revokeAllHandler,
+            IHostEnvironment env,
             CancellationToken ct) =>
         {
             if (!TryGetUserId(context.User, out var userId))
@@ -188,12 +304,13 @@ public static class AuthEndpoints
                 return Results.Unauthorized();
             }
 
-            await refreshTokenRepository.RevokeAllForUserAsync(userId, clock.UtcNow, ct);
-            await refreshTokenRepository.SaveChangesAsync(ct);
+            await revokeAllHandler.HandleAsync(new RevokeAllDeviceSessionsCommand(userId), ct);
 
-            return Results.Ok(new { message = "Logged out successfully" });
+            context.Response.Cookies.Delete(AuthCookieOptions.RefreshCookieName, AuthCookieOptions.BuildForDelete(env));
+
+            return Results.Ok(new { message = "All sessions revoked" });
         })
-        .WithName("LogoutUser")
+        .WithName("LogoutAll")
         .RequireAuthorization();
 
         group.MapGet("/me/context", async (
@@ -216,6 +333,30 @@ public static class AuthEndpoints
         .RequireAuthorization();
 
         return endpoints;
+    }
+
+    /// <summary>
+    /// Returns true when the request originates from a native Android client.
+    /// Android sends <c>X-Client-Platform: android</c>; any other value (or
+    /// absence of the header) is treated as a web request (cookie-only path).
+    /// </summary>
+    private static bool IsNativeClient(HttpContext ctx) =>
+        string.Equals(
+            ctx.Request.Headers["X-Client-Platform"].FirstOrDefault(),
+            "android",
+            StringComparison.OrdinalIgnoreCase);
+
+    private static DeviceSessionRequest BuildDeviceSession(
+        HttpContext context, bool rememberDevice, string? deviceId, string? deviceName, string? platform)
+    {
+        var resolvedDeviceId = !string.IsNullOrWhiteSpace(deviceId)
+            ? deviceId!
+            : (context.Request.Headers["X-Device-Id"].FirstOrDefault() ?? "unknown");
+        return new DeviceSessionRequest(
+            DeviceId: resolvedDeviceId,
+            RememberDevice: rememberDevice,
+            DeviceName: deviceName,
+            Platform: string.IsNullOrWhiteSpace(platform) ? "unknown" : platform!);
     }
 
     private static IResult CreateValidationErrorResponse(HttpContext context, ILoggerFactory loggerFactory, ArgumentException ex)
@@ -267,12 +408,30 @@ public sealed record RegisterRequest(
     string? Password,
     string? DisplayName,
     string? AppId = "shramsafal",
-    string? Role = "PrimaryOwner");
+    string? Role = "PrimaryOwner",
+    bool RememberDevice = false,
+    string? DeviceId = null,
+    string? DeviceName = null,
+    string? Platform = null);
 
-public sealed record LoginRequest(string Phone, string Password);
+public sealed record LoginRequest(
+    string Phone, string Password,
+    bool RememberDevice = false, string? DeviceId = null, string? DeviceName = null, string? Platform = null);
 
-public sealed record RefreshRequest(string RefreshToken);
+// rememberDevice must be sent explicitly by the client on refresh; default false avoids silent session->persistent escalation
+public sealed record RefreshRequest(
+    string? RefreshToken = null,            // web: omitted (cookie used); android: the Keystore token
+    bool RememberDevice = false, string? DeviceId = null, string? DeviceName = null, string? Platform = null);
 
 public sealed record StartOtpRequest(string? Phone);
 
-public sealed record VerifyOtpRequest(string? Phone, string? Otp, string? DisplayName);
+/// <summary>
+/// Optional body for POST /logout. Web clients send nothing (cookie carries the token).
+/// Native (Android) clients send the Keystore-persisted refresh token so the server
+/// can revoke the session even when the HttpOnly cookie path is unavailable.
+/// </summary>
+public sealed record LogoutRequest(string? RefreshToken = null);
+
+public sealed record VerifyOtpRequest(
+    string? Phone, string? Otp, string? DisplayName,
+    bool RememberDevice = false, string? DeviceId = null, string? DeviceName = null, string? Platform = null);

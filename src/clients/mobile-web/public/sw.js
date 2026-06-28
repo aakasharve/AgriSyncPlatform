@@ -7,8 +7,8 @@
 // new shell cache is re-populated fresh on install; paired with a client-side
 // controllerchange→reload (see index.tsx) so the first open self-corrects.
 // Earlier v5/v4 bump purged a stale /sync/pull (empty plots pre-RLS-fix).
-const APP_SHELL_CACHE = 'shramsafal-app-shell-v6';
-const API_CACHE = 'shramsafal-api-v4';
+const APP_SHELL_CACHE = 'shramsafal-app-shell-v7';
+const API_CACHE = 'shramsafal-api-v5';
 // HTML shell (the entry document) — NETWORK-FIRST. A new deploy's index.html points
 // at new hashed asset filenames, so the shell MUST be re-fetched or returning users
 // are served the old bundle forever. Caching the shell cache-first was the bug.

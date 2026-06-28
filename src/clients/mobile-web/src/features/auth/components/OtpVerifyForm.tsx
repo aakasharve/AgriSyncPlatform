@@ -3,10 +3,18 @@
  * Calls POST /user/auth/verify-otp; on success sets session via AuthProvider.
  *
  * Multi-tenant plan §3.6.
+ *
+ * spec: secure-remembered-device-sessions-2026-06-24 — Task 4.2
+ * Adds "Remember this device" checkbox (pre-checked by default, founder decision).
+ * Wires rememberDevice + deviceId + platform into verifyOtp options.
+ * Calls RememberDeviceStore.setRememberDevice on success so the refresh cycle
+ * picks up the correct flag.
  */
 import React, { useEffect, useRef, useState } from 'react';
 import { verifyOtp, type StartOtpResponse, type OtpError } from '../data/otpClient';
 import { setAuthSession } from '../../../infrastructure/storage/AuthTokenStore';
+import { setRememberDevice } from '../../../infrastructure/storage/RememberDeviceStore';
+import { getOrCreateDeviceId } from '../../../infrastructure/storage/DeviceIdStore';
 
 interface OtpVerifyFormProps {
     phone: string;
@@ -22,6 +30,9 @@ const OtpVerifyForm: React.FC<OtpVerifyFormProps> = ({ phone, otpMeta, onVerifie
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [secondsLeft, setSecondsLeft] = useState(otpMeta.resendAfterSeconds ?? 30);
+    // spec: secure-remembered-device-sessions-2026-06-24 — Task 4.2
+    // Pre-checked by founder decision (2026-06-27).
+    const [rememberDevice, setRememberDeviceState] = useState(true);
     const inputRef = useRef<HTMLInputElement>(null);
 
     useEffect(() => {
@@ -39,11 +50,20 @@ const OtpVerifyForm: React.FC<OtpVerifyFormProps> = ({ phone, otpMeta, onVerifie
         setIsLoading(true);
         setError(null);
         try {
-            const res = await verifyOtp(phone, otp, isNewUser && displayName ? displayName : undefined);
+            const deviceId = getOrCreateDeviceId();
+            const res = await verifyOtp(
+                phone,
+                otp,
+                isNewUser && displayName ? displayName : undefined,
+                { rememberDevice, deviceId, platform: 'web' },
+            );
+            // spec: secure-remembered-device-sessions-2026-06-24 — Task 4.2
+            // Write the remember flag so AgriSyncClient.refreshSession() picks
+            // it up on the next refresh cycle.
+            setRememberDevice(rememberDevice);
             setAuthSession({
                 userId: res.userId,
                 accessToken: res.accessToken,
-                refreshToken: res.refreshToken,
                 expiresAtUtc: res.expiresAtUtc,
             });
             if (res.createdNewUser) {
@@ -119,6 +139,30 @@ const OtpVerifyForm: React.FC<OtpVerifyFormProps> = ({ phone, otpMeta, onVerifie
                         Resend in {secondsLeft}s
                     </p>
                 )}
+            </div>
+
+            {/* spec: secure-remembered-device-sessions-2026-06-24 — Task 4.2
+                Remember this device — pre-checked (founder decision 2026-06-27).
+                Visible and un-checkable so a shared-phone user can opt out. */}
+            <div className="flex items-center gap-2">
+                <input
+                    id="remember-device-otp"
+                    type="checkbox"
+                    checked={rememberDevice}
+                    onChange={(e) => setRememberDeviceState(e.target.checked)}
+                    disabled={isLoading}
+                    className="h-4 w-4 rounded border-stone-300 accent-emerald-600"
+                />
+                <label
+                    htmlFor="remember-device-otp"
+                    className="text-xs font-medium text-stone-600 select-none cursor-pointer"
+                >
+                    <span style={{ fontFamily: "'Noto Sans Devanagari', sans-serif" }}>
+                        हे डिव्हाइस लक्षात ठेवा
+                    </span>
+                    {' · '}
+                    <span>Remember this device</span>
+                </label>
             </div>
 
             {error && (
