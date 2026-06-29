@@ -133,6 +133,7 @@ public sealed class ShramSafalDbContext(DbContextOptions<ShramSafalDbContext> op
     public DbSet<ApplicationInputItem> ApplicationInputItems => Set<ApplicationInputItem>();
     public DbSet<IrrigationEntry> IrrigationEntries => Set<IrrigationEntry>();
     public DbSet<LabourAssignment> LabourAssignments => Set<LabourAssignment>();
+    public DbSet<MachineryUsage> MachineryUsages => Set<MachineryUsage>();
     public DbSet<EventLink> EventLinks => Set<EventLink>();
     public DbSet<JobCard> JobCards => Set<JobCard>();
     public DbSet<Organization> Organizations => Set<Organization>();
