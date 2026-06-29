@@ -303,6 +303,11 @@ public sealed class ErasureWorkerAnonymizationTest : IAsyncLifetime
         distReason.Should().Be("rain stopped spraying at noon",
             "D-FREETEXT-PRESERVE-2026-06-29: disturbance reason is PRESERVED (KEEP), never scrubbed by erasure");
 
+        // weather_events (Track B table-9): KEEP — system weather data survives erasure (no user column).
+        var weCount = Convert.ToInt32((await ScalarAsync(raw,
+            "SELECT count(*) FROM ssf.weather_events WHERE event_type = 'HeavyRain'"))!);
+        weCount.Should().Be(1, "weather_events survives erasure (KEEP) — system weather data, no PII to scrub");
+
         // ── 4. Regex-grep every free-text column for PII residue ────
         var phoneRegex = new Regex(@"\d{10}");
         var allTextSql = """
@@ -634,6 +639,21 @@ public sealed class ErasureWorkerAnonymizationTest : IAsyncLifetime
                 """;
             c.Parameters.AddWithValue("id", Guid.NewGuid());
             c.Parameters.AddWithValue("dlid", _dailyLogId);
+            await c.ExecuteNonQueryAsync();
+        }
+
+        // weather_events (Track B table-9, DIRECT farm_id) — system weather data, no PII.
+        // KEEP on erasure: a member's erasure must NOT delete farm-level weather history.
+        await using (var c = db.CreateCommand())
+        {
+            c.CommandText = """
+                INSERT INTO ssf.weather_events
+                    ("Id", farm_id, event_type, severity, ts_start, source, created_at_utc)
+                VALUES
+                    (@id, @farmid, 'HeavyRain', 'High', NOW(), 'tomorrow.io_trigger', NOW());
+                """;
+            c.Parameters.AddWithValue("id", Guid.NewGuid());
+            c.Parameters.AddWithValue("farmid", _farmId);
             await c.ExecuteNonQueryAsync();
         }
 

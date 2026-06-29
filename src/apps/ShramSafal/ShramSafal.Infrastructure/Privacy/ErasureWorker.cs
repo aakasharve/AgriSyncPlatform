@@ -108,6 +108,11 @@
 //     farm operational facts; the free-text notes field was deliberately EXCLUDED. The
 //     parent daily_logs.operator_user_id is already scrubbed to ErasedFarmer, severing
 //     re-attribution. KEEP (survives, DPDP §12). No scrub action; conscious gate-4 disposition.
+//   - ssf.weather_events — Track B DIRECT-farm_id row (ADR 0023 §2). System-generated weather data
+//     (event_type, severity, signal readings, source, time window) keyed on farm_id — NO user_id column,
+//     NO farmer free-text, NO PII. Like machinery_usages: de-identified farm-level operational facts;
+//     a single member's erasure must NOT delete the farm's weather history. KEEP (survives, DPDP §12).
+//     No scrub action; conscious gate-4 disposition.
 //   - ssf.observation_events — Track B daily_logs-child (ADR 0023 §2 / D-FREETEXT-PRESERVE-2026-06-29).
 //     This child HAS free-text (text_raw / text_cleaned) — the farmer's observation, experience and
 //     wisdom. Per founder directive it is FARM-co-owned knowledge and is PRESERVED on erasure: a single
