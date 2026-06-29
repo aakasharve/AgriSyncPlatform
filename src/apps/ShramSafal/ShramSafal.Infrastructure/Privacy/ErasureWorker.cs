@@ -96,6 +96,12 @@
 //     daily_logs.operator_user_id is already scrubbed to ErasedFarmer (existing
 //     manifest), severing re-attribution. KEEP (survives, DPDP §12 de-identified
 //     operational retention). No scrub action; conscious gate-4 disposition.
+//   - ssf.labour_assignments — Track B daily_logs-child (ADR 0023 §2 / D-T5-ERASURE).
+//     NO user_id/PII column: gendered worker counts, engagement type, wage/rate and
+//     the (nullable, never-fabricated) total_cost are de-identified farm operational
+//     facts; the free-text notes field was deliberately EXCLUDED. The parent
+//     daily_logs.operator_user_id is already scrubbed to ErasedFarmer, severing
+//     re-attribution. KEEP (survives, DPDP §12). No scrub action; conscious gate-4 disposition.
 //   - ssf.consent_audit / ssf.audit_events — append-only by
 //     privilege; flagged "redacted" at the column level, never
 //     deleted.

@@ -273,6 +273,13 @@ public sealed class ErasureWorkerAnonymizationTest : IAsyncLifetime
             ("dlid", _dailyLogId)))!);
         ieCount.Should().Be(1, "D-T4-ERASURE: irrigation_entries survives erasure (KEEP, de-identified)");
 
+        // labour_assignments (Track B table-5, D-T5-ERASURE): KEEP — survives erasure
+        // (no user_id column); the no-multiply NULL total_cost is preserved.
+        var laCount = Convert.ToInt32((await ScalarAsync(raw,
+            "SELECT count(*) FROM ssf.labour_assignments WHERE daily_log_id = @dlid AND total_cost IS NULL",
+            ("dlid", _dailyLogId)))!);
+        laCount.Should().Be(1, "D-T5-ERASURE: labour_assignments survives erasure (KEEP) with total_cost still NULL");
+
         // ── 4. Regex-grep every free-text column for PII residue ────
         var phoneRegex = new Regex(@"\d{10}");
         var allTextSql = """
@@ -541,6 +548,21 @@ public sealed class ErasureWorkerAnonymizationTest : IAsyncLifetime
                     ("Id", daily_log_id, role, weather_adjusted, duration_hours, created_at_utc)
                 VALUES
                     (@id, @dlid, 'Irrigation', false, 4, NOW());
+                """;
+            c.Parameters.AddWithValue("id", Guid.NewGuid());
+            c.Parameters.AddWithValue("dlid", _dailyLogId);
+            await c.ExecuteNonQueryAsync();
+        }
+
+        // labour_assignments (Track B table-5) — child of the seeded daily log.
+        // KEEP on erasure (no PII). total_cost intentionally NULL (no-multiply).
+        await using (var c = db.CreateCommand())
+        {
+            c.CommandText = """
+                INSERT INTO ssf.labour_assignments
+                    ("Id", daily_log_id, engagement_type, worker_count, wage_per_person, total_cost, created_at_utc)
+                VALUES
+                    (@id, @dlid, 'Hired', 4, 50, NULL, NOW());
                 """;
             c.Parameters.AddWithValue("id", Guid.NewGuid());
             c.Parameters.AddWithValue("dlid", _dailyLogId);
