@@ -295,6 +295,14 @@ public sealed class ErasureWorkerAnonymizationTest : IAsyncLifetime
         obsText.Should().Be("leaf curl after first rain",
             "D-FREETEXT-PRESERVE-2026-06-29: observation free-text is PRESERVED (KEEP), never scrubbed by erasure");
 
+        // disturbance_events (Track B table-8, D-FREETEXT-PRESERVE): KEEP — the free-text reason
+        // SURVIVES erasure UNCHANGED (must NOT be scrubbed to ErasedFarmer/null).
+        var distReason = (string?)(await ScalarAsync(raw,
+            "SELECT reason FROM ssf.disturbance_events WHERE daily_log_id = @dlid",
+            ("dlid", _dailyLogId)));
+        distReason.Should().Be("rain stopped spraying at noon",
+            "D-FREETEXT-PRESERVE-2026-06-29: disturbance reason is PRESERVED (KEEP), never scrubbed by erasure");
+
         // ── 4. Regex-grep every free-text column for PII residue ────
         var phoneRegex = new Regex(@"\d{10}");
         var allTextSql = """
@@ -608,6 +616,21 @@ public sealed class ErasureWorkerAnonymizationTest : IAsyncLifetime
                     ("Id", daily_log_id, note_type, severity, source, text_raw, created_at_utc)
                 VALUES
                     (@id, @dlid, 'Observation', 'Normal', 'Voice', 'leaf curl after first rain', NOW());
+                """;
+            c.Parameters.AddWithValue("id", Guid.NewGuid());
+            c.Parameters.AddWithValue("dlid", _dailyLogId);
+            await c.ExecuteNonQueryAsync();
+        }
+
+        // disturbance_events (Track B table-8) — child of the seeded daily log.
+        // KEEP on erasure (D-FREETEXT-PRESERVE-2026-06-29): the farmer's free-text reason survives UNCHANGED.
+        await using (var c = db.CreateCommand())
+        {
+            c.CommandText = """
+                INSERT INTO ssf.disturbance_events
+                    ("Id", daily_log_id, scope, reason, created_at_utc)
+                VALUES
+                    (@id, @dlid, 'Partial', 'rain stopped spraying at noon', NOW());
                 """;
             c.Parameters.AddWithValue("id", Guid.NewGuid());
             c.Parameters.AddWithValue("dlid", _dailyLogId);

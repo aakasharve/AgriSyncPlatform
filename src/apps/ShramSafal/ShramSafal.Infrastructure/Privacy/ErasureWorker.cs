@@ -115,6 +115,13 @@
 //     already-scrubbed parent daily_logs.operator_user_id (→ ErasedFarmer); the observation CONTENT
 //     SURVIVES. Rare embedded third-party PII is handled by a future surgical-redaction pass (B-FT1),
 //     never a blanket scrub. KEEP — conscious gate-4 disposition. No scrub action.
+//   - ssf.disturbance_events — Track B daily_logs-child (ADR 0023 §2 / D-FREETEXT-PRESERVE-2026-06-29).
+//     HAS free-text (reason) — the farmer's words for why the day's work was disrupted. Same disposition
+//     as observation_events: FARM-co-owned knowledge, PRESERVED on erasure (a single member's erasure must
+//     NOT delete the farm's accumulated knowledge). The WHO is de-attributed via the already-scrubbed
+//     parent daily_logs.operator_user_id (→ ErasedFarmer); the reason CONTENT SURVIVES. Rare embedded
+//     third-party PII → future surgical-redaction pass (B-FT1), never a blanket scrub. KEEP — conscious
+//     gate-4 disposition. No scrub action.
 //   - ssf.consent_audit / ssf.audit_events — append-only by
 //     privilege; flagged "redacted" at the column level, never
 //     deleted.
