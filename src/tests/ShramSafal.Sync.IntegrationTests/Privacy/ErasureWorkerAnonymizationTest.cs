@@ -266,6 +266,13 @@ public sealed class ErasureWorkerAnonymizationTest : IAsyncLifetime
             ("opid", _farmOperationId)))!);
         elCount.Should().Be(1, "D-T3-ERASURE: event_links survives erasure (KEEP, de-identified)");
 
+        // irrigation_entries (Track B table-4, D-T4-ERASURE): KEEP — the daily_logs-child
+        // SURVIVES erasure (no user_id column).
+        var ieCount = Convert.ToInt32((await ScalarAsync(raw,
+            "SELECT count(*) FROM ssf.irrigation_entries WHERE daily_log_id = @dlid",
+            ("dlid", _dailyLogId)))!);
+        ieCount.Should().Be(1, "D-T4-ERASURE: irrigation_entries survives erasure (KEEP, de-identified)");
+
         // ── 4. Regex-grep every free-text column for PII residue ────
         var phoneRegex = new Regex(@"\d{10}");
         var allTextSql = """
@@ -363,6 +370,10 @@ public sealed class ErasureWorkerAnonymizationTest : IAsyncLifetime
     // the survival assertion can locate the child application_input_items row.
     private Guid _farmOperationId;
 
+    // Track B table-4 (D-T4-ERASURE): the seeded daily_logs Id so the
+    // irrigation_entries survival assertion can locate the child row.
+    private Guid _dailyLogId;
+
     private async Task SeedFixtureAsync(string conn)
     {
         await using var db = new NpgsqlConnection(conn);
@@ -380,14 +391,14 @@ public sealed class ErasureWorkerAnonymizationTest : IAsyncLifetime
         }
 
         // daily_logs
-        var dailyLogId = Guid.NewGuid();
+        _dailyLogId = Guid.NewGuid();
         await using (var c = db.CreateCommand())
         {
             c.CommandText = """
                 INSERT INTO ssf.daily_logs ("Id", farm_id, plot_id, crop_cycle_id, operator_user_id, log_date, created_at_utc, source, model_version, prompt_version)
                 VALUES (@id, @fid, @pid, @cid, @uid, CURRENT_DATE, NOW(), 'pre_spine', 'unknown', 'unknown');
                 """;
-            c.Parameters.AddWithValue("id", dailyLogId);
+            c.Parameters.AddWithValue("id", _dailyLogId);
             c.Parameters.AddWithValue("fid", _farmId);
             c.Parameters.AddWithValue("pid", _plotId);
             c.Parameters.AddWithValue("cid", _cycleId);
@@ -406,7 +417,7 @@ public sealed class ErasureWorkerAnonymizationTest : IAsyncLifetime
                 """;
             c.Parameters.AddWithValue("id1", Guid.NewGuid());
             c.Parameters.AddWithValue("id2", Guid.NewGuid());
-            c.Parameters.AddWithValue("lid", dailyLogId);
+            c.Parameters.AddWithValue("lid", _dailyLogId);
             c.Parameters.AddWithValue("notes", $"{DisplayName} phone {PhoneNumber}");
             c.Parameters.AddWithValue("dev", TranscriptExcerpt);
             await c.ExecuteNonQueryAsync();
@@ -518,6 +529,21 @@ public sealed class ErasureWorkerAnonymizationTest : IAsyncLifetime
             c.Parameters.AddWithValue("fid", _farmId);
             c.Parameters.AddWithValue("fromop", _farmOperationId);
             c.Parameters.AddWithValue("toop", Guid.NewGuid());
+            await c.ExecuteNonQueryAsync();
+        }
+
+        // irrigation_entries (Track B table-4) — child of the seeded daily log.
+        // KEEP on erasure (no PII).
+        await using (var c = db.CreateCommand())
+        {
+            c.CommandText = """
+                INSERT INTO ssf.irrigation_entries
+                    ("Id", daily_log_id, role, weather_adjusted, duration_hours, created_at_utc)
+                VALUES
+                    (@id, @dlid, 'Irrigation', false, 4, NOW());
+                """;
+            c.Parameters.AddWithValue("id", Guid.NewGuid());
+            c.Parameters.AddWithValue("dlid", _dailyLogId);
             await c.ExecuteNonQueryAsync();
         }
 

@@ -90,6 +90,12 @@
 //     references. The parent farm_operations.created_by_user_id is already
 //     scrubbed (D-T1-ERASURE), severing re-attribution. KEEP (survives,
 //     DPDP §12). No scrub action; conscious gate-4 disposition.
+//   - ssf.irrigation_entries — Track B daily_logs-child (ADR 0023 §2 / D-T4-ERASURE).
+//     NO user_id/PII column: role/duration/volume/method/source + the daily_log_id
+//     anchor are de-identified farm operational facts. The parent
+//     daily_logs.operator_user_id is already scrubbed to ErasedFarmer (existing
+//     manifest), severing re-attribution. KEEP (survives, DPDP §12 de-identified
+//     operational retention). No scrub action; conscious gate-4 disposition.
 //   - ssf.consent_audit / ssf.audit_events — append-only by
 //     privilege; flagged "redacted" at the column level, never
 //     deleted.
