@@ -135,6 +135,7 @@ public sealed class ShramSafalDbContext(DbContextOptions<ShramSafalDbContext> op
     public DbSet<LabourAssignment> LabourAssignments => Set<LabourAssignment>();
     public DbSet<MachineryUsage> MachineryUsages => Set<MachineryUsage>();
     public DbSet<ObservationEvent> ObservationEvents => Set<ObservationEvent>();
+    public DbSet<DisturbanceEvent> DisturbanceEvents => Set<DisturbanceEvent>();
     public DbSet<EventLink> EventLinks => Set<EventLink>();
     public DbSet<JobCard> JobCards => Set<JobCard>();
     public DbSet<Organization> Organizations => Set<Organization>();
