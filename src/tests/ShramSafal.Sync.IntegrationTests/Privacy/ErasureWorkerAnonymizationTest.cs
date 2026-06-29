@@ -280,6 +280,13 @@ public sealed class ErasureWorkerAnonymizationTest : IAsyncLifetime
             ("dlid", _dailyLogId)))!);
         laCount.Should().Be(1, "D-T5-ERASURE: labour_assignments survives erasure (KEEP) with total_cost still NULL");
 
+        // machinery_usages (Track B table-6, D-T6-ERASURE): KEEP — survives erasure
+        // (no user_id column); the structured equipment config is preserved.
+        var muCount = Convert.ToInt32((await ScalarAsync(raw,
+            "SELECT count(*) FROM ssf.machinery_usages WHERE daily_log_id = @dlid AND implement = 'blower' AND nozzles_active = 10",
+            ("dlid", _dailyLogId)))!);
+        muCount.Should().Be(1, "D-T6-ERASURE: machinery_usages survives erasure (KEEP) with structured config intact");
+
         // ── 4. Regex-grep every free-text column for PII residue ────
         var phoneRegex = new Regex(@"\d{10}");
         var allTextSql = """
@@ -563,6 +570,21 @@ public sealed class ErasureWorkerAnonymizationTest : IAsyncLifetime
                     ("Id", daily_log_id, engagement_type, worker_count, wage_per_person, total_cost, created_at_utc)
                 VALUES
                     (@id, @dlid, 'Hired', 4, 50, NULL, NOW());
+                """;
+            c.Parameters.AddWithValue("id", Guid.NewGuid());
+            c.Parameters.AddWithValue("dlid", _dailyLogId);
+            await c.ExecuteNonQueryAsync();
+        }
+
+        // machinery_usages (Track B table-6) — child of the seeded daily log.
+        // KEEP on erasure (no PII); structured equipment config survives.
+        await using (var c = db.CreateCommand())
+        {
+            c.CommandText = """
+                INSERT INTO ssf.machinery_usages
+                    ("Id", daily_log_id, machine_type, ownership, implement, nozzles_active, fan_state, created_at_utc)
+                VALUES
+                    (@id, @dlid, 'Sprayer', 'Owned', 'blower', 10, 'Off', NOW());
                 """;
             c.Parameters.AddWithValue("id", Guid.NewGuid());
             c.Parameters.AddWithValue("dlid", _dailyLogId);

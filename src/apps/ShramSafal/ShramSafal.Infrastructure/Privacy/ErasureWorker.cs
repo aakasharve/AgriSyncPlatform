@@ -102,6 +102,12 @@
 //     facts; the free-text notes field was deliberately EXCLUDED. The parent
 //     daily_logs.operator_user_id is already scrubbed to ErasedFarmer, severing
 //     re-attribution. KEEP (survives, DPDP §12). No scrub action; conscious gate-4 disposition.
+//   - ssf.machinery_usages — Track B daily_logs-child (ADR 0023 §2 / D-T6-ERASURE).
+//     NO user_id/PII column: machine type/ownership, hours/costs, and the structured
+//     equipment config (implement, nozzles_active, fan_state, fuel) are de-identified
+//     farm operational facts; the free-text notes field was deliberately EXCLUDED. The
+//     parent daily_logs.operator_user_id is already scrubbed to ErasedFarmer, severing
+//     re-attribution. KEEP (survives, DPDP §12). No scrub action; conscious gate-4 disposition.
 //   - ssf.consent_audit / ssf.audit_events — append-only by
 //     privilege; flagged "redacted" at the column level, never
 //     deleted.
