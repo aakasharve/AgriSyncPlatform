@@ -9,7 +9,9 @@ namespace ShramSafal.Domain.Farms;
 /// plain <see cref="DailyLogId"/> FK, no farm_id, no Provenance, no version chain.
 /// <para>The free-text <see cref="Reason"/> is <b>PRESERVED</b> per founder directive
 /// D-FREETEXT-PRESERVE-2026-06-29 — KEEP on erasure, never scrubbed. §3.2g structured
-/// enhancements (typed cause / affectedScope / impact / resolvedStatus) DEFERRED to B2.7.</para>
+/// enhancements (typed <see cref="Cause"/> / <see cref="AffectedScope"/> / <see cref="Impact"/> /
+/// <see cref="ResolvedStatus"/>) added in B2.7 — all optional, non-breaking. The free-text
+/// <see cref="Impact"/> is likewise PRESERVED on erasure like <see cref="Reason"/>.</para>
 /// </summary>
 public sealed class DisturbanceEvent : Entity<Guid>
 {
@@ -18,7 +20,9 @@ public sealed class DisturbanceEvent : Entity<Guid>
     private DisturbanceEvent(
         Guid id, Guid dailyLogId, DisturbanceScope scope, string reason,
         DisturbanceSeverity? severity, string? blockedSegmentsJson, Guid? weatherEventId,
-        DateTime createdAtUtc)
+        DateTime createdAtUtc,
+        DisturbanceCause? cause, AffectedScope? affectedScope,
+        string? impact, ResolvedStatus? resolvedStatus)
         : base(id)
     {
         if (string.IsNullOrWhiteSpace(reason))
@@ -35,6 +39,10 @@ public sealed class DisturbanceEvent : Entity<Guid>
         BlockedSegmentsJson = blockedSegmentsJson;
         WeatherEventId = weatherEventId;
         CreatedAtUtc = createdAtUtc;
+        Cause = cause;
+        AffectedScope = affectedScope;
+        Impact = impact;
+        ResolvedStatus = resolvedStatus;
     }
 
     public Guid DailyLogId { get; private set; }
@@ -45,10 +53,18 @@ public sealed class DisturbanceEvent : Entity<Guid>
     public Guid? WeatherEventId { get; private set; }               // soft-ref to the weather spine; no FK
     public DateTime CreatedAtUtc { get; private set; }
 
+    // §3.2g structured enhancements (B2.7) — all optional, non-breaking.
+    public DisturbanceCause? Cause { get; private set; }            // typed cause; null = unspecified
+    public AffectedScope? AffectedScope { get; private set; }       // event | bucket | whole_day; null = unspecified
+    public string? Impact { get; private set; }                     // farmer's free-text impact — PRESERVED like Reason
+    public ResolvedStatus? ResolvedStatus { get; private set; }     // ongoing | resolved_same_day | carried_over
+
     public static DisturbanceEvent Create(
         Guid id, Guid dailyLogId, DisturbanceScope scope, string reason,
         DisturbanceSeverity? severity, string? blockedSegmentsJson, Guid? weatherEventId,
-        DateTime createdAtUtc)
+        DateTime createdAtUtc,
+        DisturbanceCause? cause = null, AffectedScope? affectedScope = null,
+        string? impact = null, ResolvedStatus? resolvedStatus = null)
         => new(id, dailyLogId, scope, reason, severity, blockedSegmentsJson,
-               weatherEventId, createdAtUtc);
+               weatherEventId, createdAtUtc, cause, affectedScope, impact, resolvedStatus);
 }

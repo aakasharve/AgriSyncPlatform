@@ -81,4 +81,45 @@ public sealed class DisturbanceEventTests
 
         Assert.Equal("pump broke", dist.Reason);
     }
+
+    [Fact]
+    public void Create_sets_structured_cause_fields()
+    {
+        var dist = DisturbanceEvent.Create(
+            Guid.NewGuid(), Log,
+            scope: DisturbanceScope.Partial,
+            reason: "पाऊस आला म्हणून फवारणी थांबवली",
+            severity: DisturbanceSeverity.High,
+            blockedSegmentsJson: null,
+            weatherEventId: null,
+            createdAtUtc: DateTime.UtcNow,
+            cause: DisturbanceCause.Weather,
+            affectedScope: AffectedScope.WholeDay,
+            impact: "lost half a day",
+            resolvedStatus: ResolvedStatus.ResolvedSameDay);
+
+        Assert.Equal(DisturbanceCause.Weather, dist.Cause);
+        Assert.Equal(AffectedScope.WholeDay, dist.AffectedScope);
+        Assert.Equal("lost half a day", dist.Impact);
+        Assert.Equal(ResolvedStatus.ResolvedSameDay, dist.ResolvedStatus);
+    }
+
+    [Fact]
+    public void Create_defaults_structured_fields_to_null()
+    {
+        // existing 8-arg form — no structured args (non-breaking back-compat)
+        var dist = DisturbanceEvent.Create(
+            Guid.NewGuid(), Log,
+            scope: DisturbanceScope.FullDay,
+            reason: "labour no-show",
+            severity: null,
+            blockedSegmentsJson: null,
+            weatherEventId: null,
+            createdAtUtc: DateTime.UtcNow);
+
+        Assert.Null(dist.Cause);
+        Assert.Null(dist.AffectedScope);
+        Assert.Null(dist.Impact);
+        Assert.Null(dist.ResolvedStatus);
+    }
 }
