@@ -313,6 +313,12 @@ public sealed class ErasureWorkerAnonymizationTest : IAsyncLifetime
             "SELECT count(*) FROM ssf.routine_patterns WHERE operation_type = 'irrigation'"))!);
         rpCount.Should().Be(1, "routine_patterns survives erasure (KEEP) — derived farm data, no PII to scrub");
 
+        // weather_stamps (Track B table-11): KEEP — system weather snapshot survives erasure (no user column).
+        var wsCount = Convert.ToInt32((await ScalarAsync(raw,
+            "SELECT count(*) FROM ssf.weather_stamps WHERE daily_log_id = @dlid AND condition_text = 'Partly Cloudy'",
+            ("dlid", _dailyLogId)))!);
+        wsCount.Should().Be(1, "weather_stamps survives erasure (KEEP) — system weather data, no PII to scrub");
+
         // ── 4. Regex-grep every free-text column for PII residue ────
         var phoneRegex = new Regex(@"\d{10}");
         var allTextSql = """
@@ -674,6 +680,24 @@ public sealed class ErasureWorkerAnonymizationTest : IAsyncLifetime
                 """;
             c.Parameters.AddWithValue("id", Guid.NewGuid());
             c.Parameters.AddWithValue("farmid", _farmId);
+            await c.ExecuteNonQueryAsync();
+        }
+
+        // weather_stamps (Track B table-11) — daily_logs child, system weather snapshot, no PII.
+        // KEEP on erasure: a member's erasure must NOT delete the farm's weather snapshots.
+        await using (var c = db.CreateCommand())
+        {
+            c.CommandText = """
+                INSERT INTO ssf.weather_stamps
+                    ("Id", daily_log_id, timestamp_local, timestamp_provider, provider,
+                     temp_c, humidity, wind_kph, precip_mm, cloud_cover_pct,
+                     condition_text, icon_code, rain_prob_next_6h, created_at_utc)
+                VALUES
+                    (@id, @dlid, NOW(), NOW(), 'TomorrowIo',
+                     28.5, 65, 12, 0, 40, 'Partly Cloudy', 'partly_cloudy', 20, NOW());
+                """;
+            c.Parameters.AddWithValue("id", Guid.NewGuid());
+            c.Parameters.AddWithValue("dlid", _dailyLogId);
             await c.ExecuteNonQueryAsync();
         }
 
