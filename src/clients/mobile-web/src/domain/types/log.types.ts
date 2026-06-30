@@ -93,6 +93,10 @@ export interface CropActivityEvent {
     // Per-Bucket Issue (Phase 22)
     issue?: BucketIssue;
 
+    // Track B Wave-2 (B2.6) — continuity progress (optional, back-compat).
+    // Reuses CropPhase (declared below in this module).
+    progress?: { phase?: CropPhase; unitsDone?: number; unitsTotal?: number; unit?: string };  // §3.2f — continuity
+
     // W1.P2 — per-field provenance (how was this value determined?)
     provenance?: FieldProvenance;
 }
@@ -112,6 +116,10 @@ export interface IrrigationEvent {
     detectedCrop?: string;
     motorId?: string;
     targetPlotName?: string;
+
+    // Track B Wave-2 (B2.5) — water-role discriminator + weather-trim flag (all optional, back-compat)
+    role?: 'spray-carrier' | 'irrigation' | 'fertigation';   // §3.2e — water-role discriminator
+    weatherAdjusted?: boolean;                                // §3.2e — duration trimmed by weather (e.g. rain-cut)
 
     // Transparency
     sourceText?: string;
@@ -146,6 +154,13 @@ export interface LabourEvent {
     whoWorked?: 'OWNER' | 'OPERATOR' | 'HIRED_LABOUR' | 'UNKNOWN';
     activity?: string;
     targetPlotName?: string;
+
+    // Track B Wave-2 (B2.4) — richer labour capture (all optional, back-compat;
+    // legacy fields above retained; NO totalCost auto-derivation from rate×count).
+    gender?: 'male' | 'female' | 'mixed' | 'unknown';                                  // §3.2d
+    engagementType?: 'hired_daily' | 'contract_piece' | 'self' | 'exchange';          // §3.2d
+    rate?: number;                                                                     // §3.2d (per the rateBasis)
+    rateBasis?: 'per_person_day' | 'per_vine' | 'per_row' | 'per_acre' | 'lump_sum';   // §3.2d
 
     // Transparency
     sourceText?: string;
@@ -242,6 +257,14 @@ export interface MachineryEvent {
     fuelCost?: number;
     targetPlotName?: string;
     notes?: string;
+
+    // Track B Wave-2 (B2.10) — machinery detail (all net-new, optional, back-compat).
+    implement?: string;                              // §3.2i e.g. "blower"
+    nozzlesActive?: number;                          // §3.2i "10 guns"
+    fanState?: 'on' | 'off' | 'unknown';             // §3.2i (server maps 'unknown' -> null)
+    fuelType?: 'diesel' | 'petrol' | 'unknown';
+    fuelQuantity?: number;                           // matches machinery_usages.fuel_quantity (numeric column)
+    operationPerformed?: string;
 
     // Transparency
     sourceText?: string;

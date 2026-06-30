@@ -18,6 +18,9 @@ import {
     ActivityExpenseEventSchema,
     AgriLogResponseSchema,
     CropActivityEventSchema,
+    IrrigationEventSchema,
+    LabourEventSchema,
+    MachineryEventSchema,
     PlannedTaskDraftSchema,
 } from '../AgriLogResponseSchema';
 
@@ -246,6 +249,140 @@ describe('AgriLogResponseSchema — rejection cases', () => {
             ],
         });
         expect(bad.success).toBe(false);
+    });
+});
+
+describe('AgriLogResponseSchema — Track B Wave-2 activity deltas (B2.4/B2.5/B2.6/B2.10)', () => {
+    it('parses an irrigation event WITH new fields (role, weatherAdjusted) and preserves them', () => {
+        const result = IrrigationEventSchema.safeParse({
+            id: 'ir-1',
+            method: 'Drip',
+            source: 'Borewell',
+            durationHours: 1.5,
+            role: 'irrigation',
+            weatherAdjusted: true,
+        });
+        expect(result.success).toBe(true);
+        if (result.success) {
+            expect(result.data.role).toBe('irrigation');
+            expect(result.data.weatherAdjusted).toBe(true);
+        }
+    });
+
+    it('parses a labour event WITH new fields (gender, engagementType, rate, rateBasis) and preserves them', () => {
+        const result = LabourEventSchema.safeParse({
+            id: 'lb-1',
+            type: 'CONTRACT',
+            gender: 'mixed',
+            engagementType: 'contract_piece',
+            rate: 12,
+            rateBasis: 'per_vine',
+            // legacy fields still present alongside the new ones
+            maleCount: 3,
+            femaleCount: 2,
+        });
+        expect(result.success).toBe(true);
+        if (result.success) {
+            expect(result.data.gender).toBe('mixed');
+            expect(result.data.engagementType).toBe('contract_piece');
+            expect(result.data.rate).toBe(12);
+            expect(result.data.rateBasis).toBe('per_vine');
+            expect(result.data.maleCount).toBe(3);
+        }
+    });
+
+    it('parses a crop-activity event WITH progress continuity and preserves it', () => {
+        const result = CropActivityEventSchema.safeParse({
+            id: 'ca-1',
+            title: 'Pruning',
+            progress: {
+                phase: 'CROP_CYCLE',
+                unitsDone: 120,
+                unitsTotal: 400,
+                unit: 'vines',
+            },
+        });
+        expect(result.success).toBe(true);
+        if (result.success) {
+            expect(result.data.progress?.phase).toBe('CROP_CYCLE');
+            expect(result.data.progress?.unitsDone).toBe(120);
+            expect(result.data.progress?.unit).toBe('vines');
+        }
+    });
+
+    it('parses a machinery event WITH new fields (implement, nozzlesActive, fanState, fuel*) and preserves them', () => {
+        const result = MachineryEventSchema.safeParse({
+            id: 'mc-1',
+            type: 'sprayer',
+            ownership: 'owned',
+            implement: 'blower',
+            nozzlesActive: 10,
+            fanState: 'off',
+            fuelType: 'diesel',
+            fuelQuantity: 4.5,
+            operationPerformed: 'spraying',
+        });
+        expect(result.success).toBe(true);
+        if (result.success) {
+            expect(result.data.implement).toBe('blower');
+            expect(result.data.nozzlesActive).toBe(10);
+            expect(result.data.fanState).toBe('off');
+            expect(result.data.fuelType).toBe('diesel');
+            expect(result.data.fuelQuantity).toBe(4.5);
+            expect(result.data.operationPerformed).toBe('spraying');
+        }
+    });
+
+    it('rejects an invalid enum value on a new field (irrigation.role)', () => {
+        const result = IrrigationEventSchema.safeParse({
+            id: 'ir-2',
+            method: 'Drip',
+            source: 'Borewell',
+            role: 'flooding', // not in spray-carrier | irrigation | fertigation
+        });
+        expect(result.success).toBe(false);
+    });
+
+    it('BACK-COMPAT: legacy events WITHOUT any new fields still parse', () => {
+        const legacyResponse = {
+            ...makeMinimalValidResponse(),
+            dayOutcome: 'WORK_RECORDED' as const,
+            irrigation: [{ id: 'ir-1', method: 'Drip', source: 'Borewell', durationHours: 2 }],
+            labour: [{ id: 'lb-1', type: 'HIRED' as const, maleCount: 2, wagePerPerson: 400 }],
+            cropActivities: [{ id: 'ca-1', title: 'Weeding', quantity: 10, unit: 'rows' }],
+            machinery: [{ id: 'mc-1', type: 'tractor' as const, ownership: 'rented' as const, hoursUsed: 3 }],
+        };
+        const result = AgriLogResponseSchema.safeParse(legacyResponse);
+        if (!result.success) {
+
+            console.error(result.error.toString());
+        }
+        expect(result.success).toBe(true);
+    });
+
+    it('parses a full response carrying the new fields across all four event arrays', () => {
+        const response = {
+            ...makeMinimalValidResponse(),
+            dayOutcome: 'WORK_RECORDED' as const,
+            cropActivities: [
+                { id: 'ca-1', title: 'Pruning', progress: { phase: 'CROP_CYCLE', unitsDone: 50, unitsTotal: 200, unit: 'vines' } },
+            ],
+            irrigation: [
+                { id: 'ir-1', method: 'Drip', source: 'Borewell', role: 'fertigation', weatherAdjusted: false },
+            ],
+            labour: [
+                { id: 'lb-1', type: 'SELF' as const, gender: 'unknown', engagementType: 'self', rate: 0, rateBasis: 'lump_sum' },
+            ],
+            machinery: [
+                { id: 'mc-1', type: 'sprayer' as const, ownership: 'owned' as const, implement: 'blower', nozzlesActive: 10, fanState: 'on', fuelType: 'petrol', fuelQuantity: 2 },
+            ],
+        };
+        const result = AgriLogResponseSchema.safeParse(response);
+        if (!result.success) {
+
+            console.error(result.error.toString());
+        }
+        expect(result.success).toBe(true);
     });
 });
 
