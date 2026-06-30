@@ -138,6 +138,7 @@ public sealed class ShramSafalDbContext(DbContextOptions<ShramSafalDbContext> op
     public DbSet<DisturbanceEvent> DisturbanceEvents => Set<DisturbanceEvent>();
     public DbSet<WeatherEvent> WeatherEvents => Set<WeatherEvent>();
     public DbSet<RoutinePattern> RoutinePatterns => Set<RoutinePattern>();
+    public DbSet<WeatherStamp> WeatherStamps => Set<WeatherStamp>();
     public DbSet<EventLink> EventLinks => Set<EventLink>();
     public DbSet<JobCard> JobCards => Set<JobCard>();
     public DbSet<Organization> Organizations => Set<Organization>();
