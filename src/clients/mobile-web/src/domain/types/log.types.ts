@@ -177,14 +177,19 @@ export interface LabourEvent {
 // INPUT EVENTS (Fertilizers, Pesticides, etc.)
 // =============================================================================
 
-export type InputMethod = 'Spray' | 'Drip' | 'Drenching' | 'Soil';
-export type InputReason = 'Preventive' | 'Disease' | 'Pest' | 'Growth' | 'Deficiency' | 'Seller Advice' | 'Other';
+export type InputMethod = 'Spray' | 'Drip' | 'Drenching' | 'Soil' | 'paste_manual';
+export type InputReason = 'Preventive' | 'Disease' | 'Pest' | 'Growth' | 'Deficiency' | 'Seller Advice' | 'Other' | 'defoliation' | 'root_growth' | 'nutrient_correction' | 'fruit_sizing' | 'disease_control';
 
 export interface InputMixItem {
     id: string;
     productName: string;
     dose?: number;
     unit: string; // ml/L, g/L, kg/acre, etc.
+
+    // B2.1 — dose split + npk grade (optional, back-compat; dose?: number kept as-is)
+    basisQty?: number;     // §3.2a — the "per X" basis quantity (e.g. 5ml per 1 L → basisQty:1)
+    basisUnit?: string;    // §3.2a — the basis unit (e.g. "L") → maps app_input_items.dose_basis_qty/unit
+    npkGrade?: string;     // §3.2a — e.g. "19:19:19" → maps app_input_items.npk_grade
 
     // Linkage for specific product in a mix
     linkedExpenseId?: string;
@@ -206,6 +211,11 @@ export interface InputEvent {
 
     // Delivery
     method: InputMethod;
+    carrierMedium?: 'water' | 'oil' | 'none';   // §3.2c — what the input is carried in
+
+    // B2.2 — mix/pass grouping (§3.2b)
+    mixId?: string;   // §3.2b — groups input rows sprayed together in one mix
+    passId?: string;  // §3.2b — groups one spray pass (carrier de-dupe key)
 
     // Carrier
     carrierType?: 'Blower' | 'Tank' | 'Hours' | 'Pati' | 'Bag' | 'Liters';

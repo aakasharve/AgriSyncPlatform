@@ -18,6 +18,8 @@ import {
     ActivityExpenseEventSchema,
     AgriLogResponseSchema,
     CropActivityEventSchema,
+    InputEventSchema,
+    InputMixItemSchema,
     IrrigationEventSchema,
     LabourEventSchema,
     MachineryEventSchema,
@@ -398,5 +400,92 @@ describe('AgriLogResponseSchema — nested passthrough behavior', () => {
             futureExperimentalField: 'AI suggested this field — schema should not break',
         });
         expect(result.success).toBe(true);
+    });
+});
+
+describe('InputEventSchema — Track B Wave-2 deltas (B2.1/B2.2/B2.3/B2.11)', () => {
+    it('accepts an input event/mix-item with all the new optional fields and preserves them', () => {
+        const result = InputEventSchema.safeParse({
+            id: 'inp-1',
+            method: 'paste_manual', // B2.3 — new InputMethod value
+            reason: 'defoliation', // B2.11 — new grape purpose
+            carrierMedium: 'water', // B2.3
+            mixId: 'mix-a', // B2.2
+            passId: 'pass-a', // B2.2
+            mix: [
+                {
+                    id: 'mi-1',
+                    productName: '19:19:19',
+                    unit: 'ml/L',
+                    basisQty: 1, // B2.1 — dose split basis
+                    basisUnit: 'L', // B2.1
+                    npkGrade: '19:19:19', // B2.1
+                },
+            ],
+        });
+        expect(result.success).toBe(true);
+        if (result.success) {
+            expect(result.data.method).toBe('paste_manual');
+            expect(result.data.reason).toBe('defoliation');
+            expect(result.data.carrierMedium).toBe('water');
+            expect(result.data.mixId).toBe('mix-a');
+            expect(result.data.passId).toBe('pass-a');
+            expect(result.data.mix[0].basisQty).toBe(1);
+            expect(result.data.mix[0].basisUnit).toBe('L');
+            expect(result.data.mix[0].npkGrade).toBe('19:19:19');
+        }
+    });
+
+    it('accepts each new grape-purpose reason value (B2.11)', () => {
+        for (const reason of [
+            'defoliation',
+            'root_growth',
+            'nutrient_correction',
+            'fruit_sizing',
+            'disease_control',
+        ]) {
+            const result = InputEventSchema.safeParse({
+                id: 'inp-r',
+                method: 'Spray',
+                reason,
+                mix: [],
+            });
+            expect(result.success).toBe(true);
+        }
+    });
+
+    it('rejects an unknown reason enum value', () => {
+        const result = InputEventSchema.safeParse({
+            id: 'inp-bad',
+            method: 'Spray',
+            reason: 'not_a_purpose',
+            mix: [],
+        });
+        expect(result.success).toBe(false);
+    });
+
+    it('rejects an unknown carrierMedium value', () => {
+        const result = InputEventSchema.safeParse({
+            id: 'inp-bad2',
+            method: 'Spray',
+            carrierMedium: 'lava',
+            mix: [],
+        });
+        expect(result.success).toBe(false);
+    });
+
+    it('back-compat: a legacy input event with bare numeric dose and no new fields still parses', () => {
+        const result = InputMixItemSchema.safeParse({
+            id: 'mi-legacy',
+            productName: 'Urea',
+            dose: 5, // bare number — §3.2a back-compat (dose?: number unchanged)
+            unit: 'kg/acre',
+        });
+        expect(result.success).toBe(true);
+        if (result.success) {
+            expect(result.data.dose).toBe(5);
+            expect(result.data.basisQty).toBeUndefined();
+            expect(result.data.npkGrade).toBeUndefined();
+        }
     });
 });

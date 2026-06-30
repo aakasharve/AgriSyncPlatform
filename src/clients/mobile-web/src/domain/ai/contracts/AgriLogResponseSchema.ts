@@ -118,7 +118,7 @@ const CropActivityStatusSchema = z.enum([
     'gap_recorded',
 ]);
 
-const InputMethodSchema = z.enum(['Spray', 'Drip', 'Drenching', 'Soil']);
+const InputMethodSchema = z.enum(['Spray', 'Drip', 'Drenching', 'Soil', 'paste_manual']);
 
 const InputReasonSchema = z.enum([
     'Preventive',
@@ -128,6 +128,12 @@ const InputReasonSchema = z.enum([
     'Deficiency',
     'Seller Advice',
     'Other',
+    // B2.11 — grape purposes (§3.2j, snake_case intentional)
+    'defoliation',
+    'root_growth',
+    'nutrient_correction',
+    'fruit_sizing',
+    'disease_control',
 ]);
 
 const InputLegacyTypeSchema = z.enum([
@@ -410,6 +416,10 @@ export const InputMixItemSchema = z.object({
     productName: z.string(),
     dose: z.number().optional(),
     unit: z.string(),
+    // B2.1 — dose split + npk grade (optional, back-compat)
+    basisQty: z.number().optional(),
+    basisUnit: z.string().optional(),
+    npkGrade: z.string().optional(),
     linkedExpenseId: z.string().optional(),
     linkedExpenseItemId: z.string().optional(),
     costSource: InputCostSourceSchema.optional(),
@@ -424,6 +434,11 @@ export const InputEventSchema = z.object({
     linkedExpenseItemId: z.string().optional(),
     costSource: InputCostSourceSchema.optional(),
     method: InputMethodSchema,
+    // B2.3 — carrier medium (§3.2c)
+    carrierMedium: z.enum(['water', 'oil', 'none']).optional(),
+    // B2.2 — mix/pass grouping (§3.2b)
+    mixId: z.string().optional(),
+    passId: z.string().optional(),
     carrierType: InputCarrierTypeSchema.optional(),
     carrierCount: z.number().optional(),
     carrierCapacity: z.number().optional(),
