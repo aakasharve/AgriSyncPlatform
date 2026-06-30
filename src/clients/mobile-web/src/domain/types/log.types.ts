@@ -438,6 +438,12 @@ export interface DisturbanceEvent {
     note?: string;
     weatherEventId?: string; // Link to Weather Spine
 
+    // §3.2g — structured disturbance (Track B B2.7, all optional / back-compat)
+    cause?: BucketIssueType;                                            // typed cause (reuses BucketIssueType enum)
+    affectedScope?: 'event' | 'bucket' | 'whole_day';                  // finer than the 3-value scope
+    impact?: string;                                                   // explicit impact (free-text)
+    resolvedStatus?: 'ongoing' | 'resolved_same_day' | 'carried_over';
+
     // Transparency
     sourceText?: string;
     systemInterpretation?: string;

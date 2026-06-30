@@ -18,6 +18,7 @@ import {
     ActivityExpenseEventSchema,
     AgriLogResponseSchema,
     CropActivityEventSchema,
+    DisturbanceEventSchema,
     InputEventSchema,
     InputMixItemSchema,
     IrrigationEventSchema,
@@ -486,6 +487,67 @@ describe('InputEventSchema — Track B Wave-2 deltas (B2.1/B2.2/B2.3/B2.11)', ()
             expect(result.data.dose).toBe(5);
             expect(result.data.basisQty).toBeUndefined();
             expect(result.data.npkGrade).toBeUndefined();
+        }
+    });
+});
+
+/**
+ * §3.2g — structured disturbance fields (Track B B2.7).
+ * All four new fields are optional and back-compat: legacy disturbance
+ * events without them MUST still parse; enum-typed fields MUST reject
+ * out-of-set values.
+ */
+describe('DisturbanceEventSchema — §3.2g structured fields', () => {
+    function makeMinimalDisturbance() {
+        return {
+            scope: 'PARTIAL' as const,
+            group: 'irrigation',
+            reason: 'power cut',
+            blockedSegments: ['irrigation'],
+        };
+    }
+
+    it('accepts a disturbance WITH all new §3.2g fields and they survive', () => {
+        const result = DisturbanceEventSchema.safeParse({
+            ...makeMinimalDisturbance(),
+            cause: 'WEATHER',
+            affectedScope: 'whole_day',
+            impact: 'lost half a day',
+            resolvedStatus: 'resolved_same_day',
+        });
+        expect(result.success).toBe(true);
+        if (result.success) {
+            expect(result.data.cause).toBe('WEATHER');
+            expect(result.data.affectedScope).toBe('whole_day');
+            expect(result.data.impact).toBe('lost half a day');
+            expect(result.data.resolvedStatus).toBe('resolved_same_day');
+        }
+    });
+
+    it('rejects an invalid affectedScope value', () => {
+        const result = DisturbanceEventSchema.safeParse({
+            ...makeMinimalDisturbance(),
+            affectedScope: 'galaxy',
+        });
+        expect(result.success).toBe(false);
+    });
+
+    it('rejects an invalid resolvedStatus value', () => {
+        const result = DisturbanceEventSchema.safeParse({
+            ...makeMinimalDisturbance(),
+            resolvedStatus: 'maybe',
+        });
+        expect(result.success).toBe(false);
+    });
+
+    it('back-compat: a legacy disturbance without the new fields still parses', () => {
+        const result = DisturbanceEventSchema.safeParse(makeMinimalDisturbance());
+        expect(result.success).toBe(true);
+        if (result.success) {
+            expect(result.data.cause).toBeUndefined();
+            expect(result.data.affectedScope).toBeUndefined();
+            expect(result.data.impact).toBeUndefined();
+            expect(result.data.resolvedStatus).toBeUndefined();
         }
     });
 });

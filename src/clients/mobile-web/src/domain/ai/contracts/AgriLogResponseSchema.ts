@@ -574,6 +574,11 @@ export const DisturbanceEventSchema = z.object({
     blockedSegments: z.array(LogSegmentSchema),
     note: z.string().optional(),
     weatherEventId: z.string().optional(),
+    // §3.2g — structured disturbance (Track B B2.7, all optional / back-compat)
+    cause: BucketIssueTypeSchema.optional(),                           // reuses BucketIssueTypeSchema enum
+    affectedScope: z.enum(['event', 'bucket', 'whole_day']).optional(),
+    impact: z.string().optional(),
+    resolvedStatus: z.enum(['ongoing', 'resolved_same_day', 'carried_over']).optional(),
     ...TransparencyFields,
 }).passthrough();
 
