@@ -26,6 +26,15 @@ internal sealed class DisturbanceEventConfiguration : IEntityTypeConfiguration<D
         builder.Property(x => x.WeatherEventId).HasColumnName("weather_event_id");   // nullable soft-ref, no FK
         builder.Property(x => x.CreatedAtUtc).HasColumnName("created_at_utc").IsRequired();
 
+        // B2.7 structured disturbance fields — all nullable, non-breaking AddColumn
+        builder.Property(x => x.Cause)
+            .HasColumnName("cause").HasConversion<string>().HasMaxLength(20);              // nullable enum
+        builder.Property(x => x.AffectedScope)
+            .HasColumnName("affected_scope").HasConversion<string>().HasMaxLength(15);     // nullable enum
+        builder.Property(x => x.Impact).HasColumnName("impact").HasColumnType("text");     // nullable free-text (preserved)
+        builder.Property(x => x.ResolvedStatus)
+            .HasColumnName("resolved_status").HasConversion<string>().HasMaxLength(20);    // nullable enum
+
         builder.HasIndex(x => x.DailyLogId).HasDatabaseName("ix_disturbance_events_daily_log_id");
         builder.Ignore(x => x.DomainEvents);
     }
