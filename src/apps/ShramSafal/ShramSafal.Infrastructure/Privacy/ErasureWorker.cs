@@ -113,6 +113,11 @@
 //     NO farmer free-text, NO PII. Like machinery_usages: de-identified farm-level operational facts;
 //     a single member's erasure must NOT delete the farm's weather history. KEEP (survives, DPDP §12).
 //     No scrub action; conscious gate-4 disposition.
+//   - ssf.routine_patterns — Track B DIRECT-farm_id row (ADR 0023 §2 / RoutineMemory §8.1). Derived
+//     farm-level aggregate (typical duration/method/source per farm+plot+op-type, from CONFIRMED logs)
+//     keyed on farm_id — NO user_id column, NO farmer free-text, NO PII. Like weather_events: a member's
+//     erasure must NOT delete the farm's accumulated routine memory. KEEP (survives, DPDP §12).
+//     No scrub action; conscious gate-4 disposition.
 //   - ssf.observation_events — Track B daily_logs-child (ADR 0023 §2 / D-FREETEXT-PRESERVE-2026-06-29).
 //     This child HAS free-text (text_raw / text_cleaned) — the farmer's observation, experience and
 //     wisdom. Per founder directive it is FARM-co-owned knowledge and is PRESERVED on erasure: a single

@@ -308,6 +308,11 @@ public sealed class ErasureWorkerAnonymizationTest : IAsyncLifetime
             "SELECT count(*) FROM ssf.weather_events WHERE event_type = 'HeavyRain'"))!);
         weCount.Should().Be(1, "weather_events survives erasure (KEEP) — system weather data, no PII to scrub");
 
+        // routine_patterns (Track B table-10): KEEP — derived farm memory survives erasure (no user column).
+        var rpCount = Convert.ToInt32((await ScalarAsync(raw,
+            "SELECT count(*) FROM ssf.routine_patterns WHERE operation_type = 'irrigation'"))!);
+        rpCount.Should().Be(1, "routine_patterns survives erasure (KEEP) — derived farm data, no PII to scrub");
+
         // ── 4. Regex-grep every free-text column for PII residue ────
         var phoneRegex = new Regex(@"\d{10}");
         var allTextSql = """
@@ -651,6 +656,21 @@ public sealed class ErasureWorkerAnonymizationTest : IAsyncLifetime
                     ("Id", farm_id, event_type, severity, ts_start, source, created_at_utc)
                 VALUES
                     (@id, @farmid, 'HeavyRain', 'High', NOW(), 'tomorrow.io_trigger', NOW());
+                """;
+            c.Parameters.AddWithValue("id", Guid.NewGuid());
+            c.Parameters.AddWithValue("farmid", _farmId);
+            await c.ExecuteNonQueryAsync();
+        }
+
+        // routine_patterns (Track B table-10, DIRECT farm_id) — derived farm memory, no PII.
+        // KEEP on erasure: a member's erasure must NOT delete the farm's routine memory.
+        await using (var c = db.CreateCommand())
+        {
+            c.CommandText = """
+                INSERT INTO ssf.routine_patterns
+                    ("Id", farm_id, operation_type, sample_count, created_at_utc, updated_at_utc)
+                VALUES
+                    (@id, @farmid, 'irrigation', 5, NOW(), NOW());
                 """;
             c.Parameters.AddWithValue("id", Guid.NewGuid());
             c.Parameters.AddWithValue("farmid", _farmId);
