@@ -19,6 +19,10 @@ description: |
 
   Calibration target (W1.P3 score): ~78 ±8
 
+  WP-1b JUDGMENT-FIELD target (cropActivities.progress): "दहा ओळींची छाटणी
+  झाली" = 10 rows pruned this session. progress.unitsDone = 10; no running
+  total spoken so unitsTotal OMITTED.
+
   spec: ai-intelligence-plan-2026-06-25
 
 input:
@@ -35,6 +39,11 @@ expected:
       rate: 14
       rateUnit: "per_vine"
       rowsWorked: 10
+  cropActivities:
+    - progress:
+        phase: "CROP_CYCLE"
+        unitsDone: 10
+        unit: "rows"
 
 tolerances:
   "labour[0].activity":
@@ -42,6 +51,12 @@ tolerances:
       - "pruning"
       - "छाटणी"
       - "Pruning"
+  "cropActivities[0].progress.unitsDone":
+    exact: true
+  "cropActivities[0].progress.phase":
+    oneOf:
+      - "CROP_CYCLE"
+      - "LAND_PREPARATION"
   "labour[0].workerCount":
     exact: true
   "labour[0].wageModel":

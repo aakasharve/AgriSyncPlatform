@@ -15,6 +15,10 @@ description: |
   Today's domain-blind parser may mislabel these PGR products. RED is
   expected.
 
+  WP-1b JUDGMENT-FIELD target (reason): 6-BA is a cytokinin PGR applied for
+  berry development, so the domain-aware parser maps its purpose to the
+  grape-purpose enum value "fruit_sizing" (consistent with agronomicRole).
+
   spec: ai-intelligence-plan-2026-06-25
 
 input:
@@ -29,11 +33,17 @@ expected:
       rawProductName: "सहा बी ए"
       chemicalClass: "cytokinin PGR"
       agronomicRole: "berry sizing"
+      reason: "fruit_sizing"
     - productName: "PDH"
       rawProductName: "पीडीएच"
       chemicalClass: "PGR adjuvant"
 
 tolerances:
+  "inputs[0].reason":
+    oneOf:
+      - "fruit_sizing"
+      - "berry sizing"
+      - "Growth"
   "inputs[0].productName":
     oneOf:
       - "6-BA"

@@ -14,6 +14,11 @@ description: |
   Today's domain-blind parser may fail to normalise the Devanagari
   numeral or drop the row count. RED is expected.
 
+  WP-1b JUDGMENT-FIELD target (cropActivities.progress): "आणखी आठ ओळी" =
+  8 more rows this session, continuing the 1/11 weeding. progress.unitsDone
+  = 8; the running total is NOT spoken in this clip, so progress.unitsTotal
+  is OMITTED (dishonesty governor, never back-compute the remaining rows).
+
   spec: ai-intelligence-plan-2026-06-25
 
 input:
@@ -26,6 +31,11 @@ expected:
   labour:
     - activity: "weeding"
       rowsWorked: 8
+  cropActivities:
+    - progress:
+        phase: "CROP_CYCLE"
+        unitsDone: 8
+        unit: "rows"
 
 tolerances:
   "labour[0].activity":
@@ -36,6 +46,12 @@ tolerances:
       - "Weeding"
   "labour[0].rowsWorked":
     exact: true
+  "cropActivities[0].progress.unitsDone":
+    exact: true
+  "cropActivities[0].progress.phase":
+    oneOf:
+      - "CROP_CYCLE"
+      - "LAND_PREPARATION"
 
 ignore_fields:
   - summary

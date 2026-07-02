@@ -20,6 +20,14 @@ description: |
 
   Calibration target (W1.P3 score): ~92 ±8
 
+  WP-1b JUDGMENT-FIELD targets:
+  - reason (grape-purpose): Ethrel (ethephon) is an ethylene-releasing PGR
+    used to trigger leaf-fall, so the domain-aware parser maps its purpose to
+    the enum value "defoliation" (consistent with agronomicRole above).
+  - mixId/passId: all three products mixed in ONE tank on ONE pass, so every
+    inputs row carries the SAME non-empty mixId and passId (ids are
+    model-chosen so asserted non-empty via regex ^.+$).
+
   spec: ai-intelligence-plan-2026-06-25
 
 input:
@@ -34,12 +42,19 @@ expected:
       rawProductName: "इथरेल"
       chemicalClass: "PGR"
       agronomicRole: "defoliation"
+      reason: "defoliation"
+      mixId: "mix_1"
+      passId: "pass_1"
     - productName: "0-52-34"
       rawProductName: "00:52:34"
       chemicalClass: "WSF"
       agronomicRole: "MKP"
+      mixId: "mix_1"
+      passId: "pass_1"
     - productName: "phosphoric acid"
       rawProductName: "फॉस्फोरिक ॲसिड"
+      mixId: "mix_1"
+      passId: "pass_1"
   expenses:
     - amount: 500
       currency: "INR"
@@ -62,6 +77,22 @@ tolerances:
       - "PGR"
       - "ethylene-releasing PGR"
       - "defoliation agent"
+  "inputs[0].reason":
+    oneOf:
+      - "defoliation"
+      - "Other"
+  "inputs[0].mixId":
+    regex: "^.+$"
+  "inputs[0].passId":
+    regex: "^.+$"
+  "inputs[1].mixId":
+    regex: "^.+$"
+  "inputs[1].passId":
+    regex: "^.+$"
+  "inputs[2].mixId":
+    regex: "^.+$"
+  "inputs[2].passId":
+    regex: "^.+$"
   "inputs[1].productName":
     oneOf:
       - "0-52-34"

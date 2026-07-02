@@ -15,6 +15,11 @@ description: |
   Today's domain-blind parser may mislabel or merge the two products.
   RED is expected.
 
+  WP-1b JUDGMENT-FIELD target (mixId): "मिसळून" = mixed in ONE tank, so
+  both inputs rows must carry the SAME non-empty mixId (tank-mix grouping).
+  The id string is model-chosen, so the tolerance asserts a non-empty id is
+  present on each mixed row (regex ^.+$), not a fixed literal value.
+
   spec: ai-intelligence-plan-2026-06-25
 
 input:
@@ -28,9 +33,11 @@ expected:
     - productName: "Alphamethrin"
       rawProductName: "अल्फामेथ्रिन"
       chemicalClass: "insecticide"
+      mixId: "mix_1"
     - productName: "Bavistin"
       rawProductName: "बाविस्टीन"
       chemicalClass: "fungicide"
+      mixId: "mix_1"
 
 tolerances:
   "inputs[0].productName":
@@ -44,6 +51,8 @@ tolerances:
       - "insecticide"
       - "pyrethroid"
       - "pyrethroid insecticide"
+  "inputs[0].mixId":
+    regex: "^.+$"
   "inputs[1].productName":
     oneOf:
       - "Bavistin"
@@ -55,6 +64,8 @@ tolerances:
     oneOf:
       - "fungicide"
       - "systemic fungicide"
+  "inputs[1].mixId":
+    regex: "^.+$"
 
 ignore_fields:
   - summary

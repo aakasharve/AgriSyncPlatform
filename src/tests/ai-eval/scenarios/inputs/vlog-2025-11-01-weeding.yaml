@@ -12,6 +12,11 @@ description: |
   Today's domain-blind parser may fail to map खुरपणी to "weeding"
   or drop the row count. RED is expected.
 
+  WP-1b JUDGMENT-FIELD target (cropActivities.progress): "बारा ओळींची खुरपणी"
+  = 12 rows weeded this session (the opening session of the weeding sequence
+  continued on 6/11). progress.unitsDone = 12; no running total spoken so
+  unitsTotal OMITTED.
+
   spec: ai-intelligence-plan-2026-06-25
 
 input:
@@ -24,6 +29,11 @@ expected:
   labour:
     - activity: "weeding"
       rowsWorked: 12
+  cropActivities:
+    - progress:
+        phase: "CROP_CYCLE"
+        unitsDone: 12
+        unit: "rows"
 
 tolerances:
   "labour[0].activity":
@@ -34,6 +44,12 @@ tolerances:
       - "Weeding"
   "labour[0].rowsWorked":
     exact: true
+  "cropActivities[0].progress.unitsDone":
+    exact: true
+  "cropActivities[0].progress.phase":
+    oneOf:
+      - "CROP_CYCLE"
+      - "LAND_PREPARATION"
 
 ignore_fields:
   - summary

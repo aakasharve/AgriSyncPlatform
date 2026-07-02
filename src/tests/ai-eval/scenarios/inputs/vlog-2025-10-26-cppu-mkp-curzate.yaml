@@ -13,6 +13,14 @@ description: |
   Curzate (Component 2 — GrapeInputLexicon). Today's domain-blind parser
   drops or mislabels the grade as a clock time. RED is expected.
 
+  WP-1b JUDGMENT-FIELD targets:
+  - mixId/passId: "मिसळून" = all three products in ONE tank on ONE pass, so
+    every inputs row carries the SAME non-empty mixId AND the SAME passId
+    (tank-mix + spray-pass grouping). Ids are model-chosen so asserted as
+    non-empty (regex ^.+$), not fixed literals.
+  - reason (grape-purpose): CPPU is a berry-sizing PGR, so the domain-aware
+    parser maps its purpose to the enum value "fruit_sizing".
+
   spec: ai-intelligence-plan-2026-06-25
 
 input:
@@ -27,14 +35,38 @@ expected:
       rawProductName: "00:52:34"
       chemicalClass: "WSF"
       agronomicRole: "MKP"
+      mixId: "mix_1"
+      passId: "pass_1"
     - productName: "CPPU"
       chemicalClass: "cytokinin PGR"
       agronomicRole: "berry sizing"
+      reason: "fruit_sizing"
+      mixId: "mix_1"
+      passId: "pass_1"
     - productName: "Curzate"
       chemicalClass: "fungicide"
       agronomicRole: "downy mildew"
+      mixId: "mix_1"
+      passId: "pass_1"
 
 tolerances:
+  "inputs[0].mixId":
+    regex: "^.+$"
+  "inputs[0].passId":
+    regex: "^.+$"
+  "inputs[1].mixId":
+    regex: "^.+$"
+  "inputs[1].passId":
+    regex: "^.+$"
+  "inputs[1].reason":
+    oneOf:
+      - "fruit_sizing"
+      - "berry sizing"
+      - "Growth"
+  "inputs[2].mixId":
+    regex: "^.+$"
+  "inputs[2].passId":
+    regex: "^.+$"
   "inputs[0].productName":
     oneOf:
       - "0-52-34"
