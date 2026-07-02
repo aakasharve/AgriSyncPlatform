@@ -113,4 +113,84 @@ public sealed class RoutinePatternTests
 
         Assert.Equal("irrigation", pattern.OperationType);
     }
+
+    // ── WP-2d (D5) Reinforce ─────────────────────────────────────────────────
+
+    [Fact]
+    public void Reinforce_increments_sampleCount_and_updates_typical_fields()
+    {
+        var created = new DateTime(2025, 10, 1, 6, 0, 0, DateTimeKind.Utc);
+        var pattern = RoutinePattern.Create(
+            Guid.NewGuid(), Farm,
+            plotId: Guid.NewGuid(),
+            operationType: "irrigation",
+            typicalDurationHours: null,
+            typicalMethod: null,
+            typicalSource: null,
+            sampleCount: 1,
+            createdAtUtc: created,
+            updatedAtUtc: created);
+
+        var reinforced = new DateTime(2025, 10, 5, 7, 0, 0, DateTimeKind.Utc);
+        pattern.Reinforce(
+            typicalDurationHours: 4.0m,
+            typicalMethod: "drip",
+            typicalSource: "borewell",
+            updatedAtUtc: reinforced);
+
+        Assert.Equal(2, pattern.SampleCount);
+        Assert.Equal(4.0m, pattern.TypicalDurationHours); // first non-null → adopt
+        Assert.Equal("drip", pattern.TypicalMethod);
+        Assert.Equal("borewell", pattern.TypicalSource);
+        Assert.Equal(reinforced, pattern.UpdatedAtUtc);
+        Assert.Equal(created, pattern.CreatedAtUtc); // unchanged
+    }
+
+    [Fact]
+    public void Reinforce_running_averages_duration_when_both_present()
+    {
+        // Start already carrying a typical of 4.0 over 1 sample.
+        var ts = new DateTime(2025, 11, 1, 9, 0, 0, DateTimeKind.Utc);
+        var pattern = RoutinePattern.Create(
+            Guid.NewGuid(), Farm,
+            plotId: null,
+            operationType: "irrigation",
+            typicalDurationHours: 4.0m,
+            typicalMethod: "drip",
+            typicalSource: "borewell",
+            sampleCount: 1,
+            createdAtUtc: ts,
+            updatedAtUtc: ts);
+
+        // Reinforce with 6.0 → running mean over 2 samples = (4*1 + 6) / 2 = 5.0.
+        pattern.Reinforce(6.0m, typicalMethod: "flood", typicalSource: null, updatedAtUtc: ts.AddDays(1));
+
+        Assert.Equal(2, pattern.SampleCount);
+        Assert.Equal(5.0m, pattern.TypicalDurationHours);
+        Assert.Equal("flood", pattern.TypicalMethod);      // last-write when provided
+        Assert.Equal("borewell", pattern.TypicalSource);   // null new → keep existing
+    }
+
+    [Fact]
+    public void Reinforce_keeps_existing_typicals_when_new_values_absent()
+    {
+        var ts = new DateTime(2025, 12, 1, 9, 0, 0, DateTimeKind.Utc);
+        var pattern = RoutinePattern.Create(
+            Guid.NewGuid(), Farm,
+            plotId: null,
+            operationType: "irrigation",
+            typicalDurationHours: 3.0m,
+            typicalMethod: "drip",
+            typicalSource: "canal",
+            sampleCount: 2,
+            createdAtUtc: ts,
+            updatedAtUtc: ts);
+
+        pattern.Reinforce(null, typicalMethod: null, typicalSource: "   ", updatedAtUtc: ts.AddDays(1));
+
+        Assert.Equal(3, pattern.SampleCount);
+        Assert.Equal(3.0m, pattern.TypicalDurationHours); // null new → unchanged
+        Assert.Equal("drip", pattern.TypicalMethod);       // null new → unchanged
+        Assert.Equal("canal", pattern.TypicalSource);      // blank new → unchanged
+    }
 }

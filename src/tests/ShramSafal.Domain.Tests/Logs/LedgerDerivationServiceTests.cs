@@ -229,6 +229,43 @@ public sealed class LedgerDerivationServiceTests
         outcome.ChildrenWritten.Should().Be(0);
     }
 
+    // ── WP-2d (D5) RoutineMemory upsert in the derivation ─────────────────────
+
+    [Fact]
+    public async Task derived_irrigation_upserts_routine_pattern_create_then_reinforce()
+    {
+        // Arrange — one repo across two confirms so the second upsert sees the
+        // first's routine_patterns row (mirrors the shared DbSet on prod).
+        var repo = new InMemoryShramSafalRepository();
+        var sut = new LedgerDerivationService(repo);
+        var job = MakeVoiceJob(SampleNormalizedJson);
+        var log = MakeVoiceLog(job);
+
+        // Act 1 — first confirm creates the pattern.
+        await sut.DeriveAsync(log, job, new SequentialIdGenerator(), new FixedClock(FixedNow));
+
+        // Assert — an "irrigation" routine_patterns row for (farm, plot) at SampleCount 1,
+        // carrying the spoken method/source/duration.
+        repo.CapturedRoutinePatterns.Should().ContainSingle(p => p.OperationType == "irrigation");
+        var pattern = repo.CapturedRoutinePatterns.Single(p => p.OperationType == "irrigation");
+        pattern.FarmId.Should().Be(FarmGuid);
+        pattern.PlotId.Should().Be(PlotGuid);
+        pattern.SampleCount.Should().Be(1);
+        pattern.TypicalDurationHours.Should().Be(4);
+        pattern.TypicalMethod.Should().Be("drip");
+        pattern.TypicalSource.Should().Be("borewell");
+
+        // Act 2 — a second confirm (fresh job/log, same farm+plot) reinforces.
+        var job2 = MakeVoiceJob(SampleNormalizedJson);
+        var log2 = MakeVoiceLog(job2);
+        await sut.DeriveAsync(log2, job2, new SequentialIdGenerator(), new FixedClock(FixedNow.AddDays(1)));
+
+        // Assert — still ONE irrigation pattern, now reinforced to SampleCount 2.
+        repo.CapturedRoutinePatterns.Count(p => p.OperationType == "irrigation").Should().Be(1);
+        pattern.SampleCount.Should().Be(2);
+        pattern.UpdatedAtUtc.Should().Be(FixedNow.AddDays(1));
+    }
+
     // ── helpers ──────────────────────────────────────────────────────────────
 
     private static AiJob MakeVoiceJob(string? normalizedJson)

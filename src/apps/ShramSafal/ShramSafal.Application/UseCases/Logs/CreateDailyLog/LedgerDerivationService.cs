@@ -130,23 +130,35 @@ public sealed class LedgerDerivationService(IShramSafalRepository repository) : 
         }
 
         // ── irrigation → IrrigationEntry (daily_logs child) ────────────────────
+        // First derived irrigation entry per (farm, plot, "irrigation") also seeds
+        // the RoutineMemory upsert below (WP-2d / D5).
+        var irrigationRoutine = default(RoutineSeed?);
         if (root.TryGetProperty("irrigation", out var irrigation) && irrigation.ValueKind == JsonValueKind.Array)
         {
             foreach (var item in irrigation.EnumerateArray())
             {
+                var method = ReadString(item, "method");
+                var srcSpoken = ReadString(item, "source");
+                var duration = ReadDecimal(item, "durationHours");
+
                 var entry = IrrigationEntry.Create(
                     id: ids.New(),
                     dailyLogId: log.Id,
                     role: MapIrrigationRole(ReadString(item, "role")),
                     weatherAdjusted: ReadBool(item, "weatherAdjusted") ?? false,
-                    method: ReadString(item, "method"),
-                    source: ReadString(item, "source"),
-                    durationHours: ReadDecimal(item, "durationHours"),
+                    method: method,
+                    source: srcSpoken,
+                    durationHours: duration,
                     waterVolumeLitres: ReadDecimal(item, "waterVolumeLitres"),
                     linkedActivityId: ReadGuid(item, "linkedActivityId"),
                     createdAtUtc: now);
                 await repository.AddIrrigationEntryAsync(entry, ct);
                 children++;
+
+                // Seed the routine from the FIRST irrigation entry in this log
+                // (one log rarely restates the same op-type; running-consistency
+                // is achieved across logs by Reinforce, not within one).
+                irrigationRoutine ??= new RoutineSeed(duration, method, srcSpoken);
             }
         }
 
@@ -254,8 +266,49 @@ public sealed class LedgerDerivationService(IShramSafalRepository repository) : 
             }
         }
 
+        // ── RoutineMemory upsert (WP-2d / D5) ──────────────────────────────────
+        // Rides THIS derivation transaction: a confirmed irrigation creates-or-
+        // reinforces routine_patterns(farmId, plotId, "irrigation"). Keyed on
+        // farm+plot+op-type → idempotent under replay (sync replay is idempotency-
+        // keyed upstream, so a replayed mutation never re-enters this path and
+        // won't double-count). POPULATE only — the "नेहमी प्रमाणे" read is deferred.
+        if (irrigationRoutine is RoutineSeed seed)
+        {
+            await UpsertRoutineAsync(
+                log.FarmId, log.PlotId, "irrigation", seed, ids, now, ct);
+        }
+
         return new DerivationOutcome(operations, children);
     }
+
+    // Create-or-reinforce the routine_patterns row for one (farm, plot, op-type).
+    private async Task UpsertRoutineAsync(
+        Guid farmId, Guid? plotId, string operationType, RoutineSeed seed,
+        IIdGenerator ids, DateTime now, CancellationToken ct)
+    {
+        var existing = await repository.GetRoutinePatternAsync(farmId, plotId, operationType, ct);
+        if (existing is not null)
+        {
+            existing.Reinforce(seed.DurationHours, seed.Method, seed.Source, now);
+            return;
+        }
+
+        var pattern = RoutinePattern.Create(
+            id: ids.New(),
+            farmId: farmId,
+            plotId: plotId,
+            operationType: operationType,
+            typicalDurationHours: seed.DurationHours,
+            typicalMethod: seed.Method,
+            typicalSource: seed.Source,
+            sampleCount: 1,
+            createdAtUtc: now,
+            updatedAtUtc: now);
+        await repository.AddRoutinePatternAsync(pattern, ct);
+    }
+
+    // Typical fields lifted from the first derived entry of an op-type in a log.
+    private readonly record struct RoutineSeed(decimal? DurationHours, string? Method, string? Source);
 
     // ── DerivedEventKey span (D2) ──────────────────────────────────────────────
     // sourceText when present-and-non-blank, else "<eventType>#<ordinal>".

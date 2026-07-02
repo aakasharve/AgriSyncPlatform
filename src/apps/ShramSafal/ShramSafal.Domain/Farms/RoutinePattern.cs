@@ -61,4 +61,40 @@ public sealed class RoutinePattern : Entity<Guid>
         int sampleCount, DateTime createdAtUtc, DateTime updatedAtUtc)
         => new(id, farmId, plotId, operationType, typicalDurationHours, typicalMethod,
                typicalSource, sampleCount, createdAtUtc, updatedAtUtc);
+
+    /// <summary>
+    /// WP-2d (D5) — fold one more CONFIRMED log of this (farm, plot, op-type) into
+    /// the pattern: increment <see cref="SampleCount"/> and roll the typical fields.
+    /// <para>
+    /// Duration is a running-consistent mean over the confirmed logs
+    /// (<c>(existing × oldCount + new) / (oldCount + 1)</c>); a null new duration
+    /// leaves the existing typical untouched, and the very first non-null duration
+    /// is simply adopted. Method / Source are last-write-wins but only when the new
+    /// value is non-blank — a null / blank new value never clobbers a known typical
+    /// (no-guess honesty, D3). Always stamps <see cref="UpdatedAtUtc"/>.
+    /// </para>
+    /// </summary>
+    public void Reinforce(
+        decimal? typicalDurationHours, string? typicalMethod, string? typicalSource, DateTime updatedAtUtc)
+    {
+        if (typicalDurationHours is decimal incoming)
+        {
+            TypicalDurationHours = TypicalDurationHours is decimal current
+                ? ((current * SampleCount) + incoming) / (SampleCount + 1)
+                : incoming;
+        }
+
+        if (!string.IsNullOrWhiteSpace(typicalMethod))
+        {
+            TypicalMethod = typicalMethod.Trim();
+        }
+
+        if (!string.IsNullOrWhiteSpace(typicalSource))
+        {
+            TypicalSource = typicalSource.Trim();
+        }
+
+        SampleCount++;
+        UpdatedAtUtc = updatedAtUtc;
+    }
 }

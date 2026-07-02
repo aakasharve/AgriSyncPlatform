@@ -113,6 +113,22 @@ internal sealed class InMemoryShramSafalRepository : IShramSafalRepository
         => Task.FromResult(CapturedOperations.FirstOrDefault(
             o => o.IsCurrentVersion && o.DerivedEventKey.Value == derivedEventKey));
 
+    // ── WP-2d (D5) RoutineMemory upsert ──────────────────────────────────────
+    // Captures the routine_patterns the derivation upserts so the reinforce
+    // assertion can inspect them. GetRoutinePatternAsync returns the live
+    // instance (not a copy) so the service's Reinforce mutation is observable.
+    public List<RoutinePattern> CapturedRoutinePatterns { get; } = [];
+
+    public Task<RoutinePattern?> GetRoutinePatternAsync(Guid farmId, Guid? plotId, string operationType, CancellationToken ct = default)
+    {
+        var normalizedOp = (operationType ?? string.Empty).Trim();
+        return Task.FromResult(CapturedRoutinePatterns.FirstOrDefault(
+            p => p.FarmId == farmId && p.PlotId == plotId && p.OperationType == normalizedOp));
+    }
+
+    public Task AddRoutinePatternAsync(RoutinePattern p, CancellationToken ct = default)
+    { CapturedRoutinePatterns.Add(p); return Task.CompletedTask; }
+
     public Task<bool> IsUserMemberOfFarmAsync(Guid farmId, Guid userId, CancellationToken ct = default)
         => Task.FromResult(_memberships.ContainsKey((farmId, userId)));
 
