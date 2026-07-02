@@ -1348,6 +1348,83 @@ internal sealed class ShramSafalRepository(ShramSafalDbContext db) : IShramSafal
             .ToListAsync(ct);
     }
 
+    // ── AI Intelligence Plan WP-2b (Track B typed ledger writers) ────────
+    // spec: ai-intelligence-plan-2026-06-25
+    // Confirm-time derivation (LedgerDerivationService) stages these rows on
+    // the DbSet; the caller's existing SaveChangesAsync commits them in the
+    // same unit of work as the DailyLog (mirrors AddWeatherStampAsync at
+    // L137). No SaveChanges here.
+
+    public async Task AddFarmOperationAsync(FarmOperation op, CancellationToken ct = default)
+    {
+        await db.FarmOperations.AddAsync(op, ct);
+    }
+
+    public async Task AddApplicationInputItemAsync(ApplicationInputItem item, CancellationToken ct = default)
+    {
+        await db.ApplicationInputItems.AddAsync(item, ct);
+    }
+
+    public async Task AddIrrigationEntryAsync(IrrigationEntry e, CancellationToken ct = default)
+    {
+        await db.IrrigationEntries.AddAsync(e, ct);
+    }
+
+    public async Task AddLabourAssignmentAsync(LabourAssignment a, CancellationToken ct = default)
+    {
+        await db.LabourAssignments.AddAsync(a, ct);
+    }
+
+    public async Task AddMachineryUsageAsync(MachineryUsage m, CancellationToken ct = default)
+    {
+        await db.MachineryUsages.AddAsync(m, ct);
+    }
+
+    public async Task AddObservationEventAsync(ObservationEvent o, CancellationToken ct = default)
+    {
+        await db.ObservationEvents.AddAsync(o, ct);
+    }
+
+    public async Task AddDisturbanceEventAsync(DisturbanceEvent d, CancellationToken ct = default)
+    {
+        await db.DisturbanceEvents.AddAsync(d, ct);
+    }
+
+    /// <summary>
+    /// Supersession lookup — the CURRENT-version FarmOperation whose
+    /// DerivedEventKey matches, or null. The <c>DerivedEventKey</c> value
+    /// object stores its string in <c>DerivedEventKey.Value</c>.
+    /// </summary>
+    public async Task<FarmOperation?> GetFarmOperationByKeyAsync(string derivedEventKey, CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(derivedEventKey))
+        {
+            return null;
+        }
+
+        return await db.FarmOperations
+            .FirstOrDefaultAsync(o => o.DerivedEventKey.Value == derivedEventKey && o.IsCurrentVersion, ct);
+    }
+
+    /// <summary>
+    /// RoutineMemory upsert lookup — filter on farm_id + plot_id (nullable) +
+    /// operation_type. PlotId null matches farm-wide patterns.
+    /// </summary>
+    public async Task<RoutinePattern?> GetRoutinePatternAsync(Guid farmId, Guid? plotId, string operationType, CancellationToken ct = default)
+    {
+        var normalizedOp = (operationType ?? string.Empty).Trim();
+
+        return await db.RoutinePatterns
+            .FirstOrDefaultAsync(
+                p => p.FarmId == farmId && p.PlotId == plotId && p.OperationType == normalizedOp,
+                ct);
+    }
+
+    public async Task AddRoutinePatternAsync(RoutinePattern p, CancellationToken ct = default)
+    {
+        await db.RoutinePatterns.AddAsync(p, ct);
+    }
+
     private static List<Guid> NormalizeFarmIds(IEnumerable<Guid> farmIds)
     {
         return farmIds
