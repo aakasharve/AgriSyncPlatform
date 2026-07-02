@@ -198,3 +198,29 @@ Machinery (machinery[] rows) — no-fabrication governor
   not mentioned — never estimate from hours or area.
 - `operationPerformed` (optional, string): what the machine did, as spoken
   (e.g. "फवारणी", "नांगरणी"). OMIT when not stated.
+
+Disturbance (the top-level `disturbance` object) — structured blocker fields
+NOTE ON SHAPE: these fields sit on the SINGLE top-level `disturbance` object
+(the nullable object in the JSON shape above), NOT on an array and NOT as a
+new top-level key. Keep `disturbance` a single object (or null). The existing
+`scope|group|reason|severity|blockedSegments|note` fields are unchanged; the
+four fields below are additive and back-compatible. The three governors
+(NO-GUESS / NO-MULTIPLY / ABSTENTION) apply: emit a field ONLY when the
+farmer's words support it; leave it out (or null) otherwise — never fabricate.
+- `cause` (optional, enum): the typed cause of the blocker, one of
+  `MACHINERY|ELECTRICITY|WEATHER|WATER_SOURCE|PEST|DISEASE|LABOR_SHORTAGE|MATERIAL_SHORTAGE|OTHER`.
+  Use `OTHER` only when a cause is stated but fits none of the above; OMIT
+  entirely when the farmer does not state a cause — do not default to `OTHER`.
+- `affectedScope` (optional, enum `event|bucket|whole_day`): how much the
+  blocker affected — a single logged event (`event`), one activity bucket
+  (`bucket`), or the entire day (`whole_day`). This is finer than the coarse
+  `scope` (FULL_DAY|PARTIAL|DELAYED) and is independent of it. OMIT when the
+  affected extent is not stated.
+- `impact` (optional, string): a free-text description of the concrete impact,
+  as spoken (e.g. "spraying couldn't be finished", "फवारणी अर्धवट राहिली").
+  OMIT when the farmer states a blocker but no explicit impact.
+- `resolvedStatus` (optional, enum `ongoing|resolved_same_day|carried_over`):
+  whether the blocker is still unresolved (`ongoing`), was cleared the same
+  day (`resolved_same_day`), or spilled the pending work into a later day
+  (`carried_over`). OMIT when resolution is not stated — do not assume it was
+  resolved.
