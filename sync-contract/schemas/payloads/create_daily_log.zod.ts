@@ -61,6 +61,13 @@ export const CreateDailyLogPayload = z.object({
     logDate: ZLogDate,
     location: LocationPayloadSchema.optional(),
     weatherStamp: WeatherStampPayloadSchema.optional(),
+    // AI Intelligence Plan WP-2a — when the farmer confirms a voice draft the
+    // client threads the original parse job id (AiJob.Id) so the server can
+    // derive the typed ledger rows (LedgerDerivationService) keyed to that job.
+    // Optional: manual logs and offline logs without a source job omit it.
+    // ZGuid (not z.string().uuid()) so the C# generator emits a `Guid?` that
+    // maps 1:1 onto CreateDailyLogCommand.SourceAiJobId (Guid?).
+    sourceAiJobId: ZGuid.optional(),
 });
 
 export type CreateDailyLogPayloadType = z.infer<typeof CreateDailyLogPayload>;

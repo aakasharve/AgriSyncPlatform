@@ -47,5 +47,6 @@ public sealed record CreateDailyLogPayload(
     DateOnly LogDate,
     Guid? OperatorUserId = null,
     LocationItem? Location = null,
-    WeatherStampItem? WeatherStamp = null
+    WeatherStampItem? WeatherStamp = null,
+    Guid? SourceAiJobId = null
 );

@@ -578,7 +578,7 @@ public sealed class PushSyncBatchHandler(
         string? appVersion,
         CancellationToken ct)
     {
-        if (!PayloadHasOnly(payload, "dailyLogId", "farmId", "plotId", "cropCycleId", "operatorUserId", "logDate", "location", "weatherStamp"))
+        if (!PayloadHasOnly(payload, "dailyLogId", "farmId", "plotId", "cropCycleId", "operatorUserId", "logDate", "location", "weatherStamp", "sourceAiJobId"))
         {
             return MutationExecutionOutcome.Failure(
                 "ShramSafal.SyncInvalidPayload",
@@ -624,7 +624,10 @@ public sealed class PushSyncBatchHandler(
                 ClientRequestId: clientRequestId,
                 DailyLogId: dailyLogId,
                 ActorRole: actorRole,
-                SourceAiJobId: null,
+                // AI Intelligence Plan WP-2a — thread the parse job linkage from
+                // the sync payload so CreateDailyLogHandler can derive the typed
+                // ledger rows. Null on manual/offline logs (no source job).
+                SourceAiJobId: request.SourceAiJobId,
                 ClientAppVersion: string.IsNullOrWhiteSpace(appVersion) ? "unknown" : appVersion,
                 WeatherStamp: request.WeatherStamp),
             ct);

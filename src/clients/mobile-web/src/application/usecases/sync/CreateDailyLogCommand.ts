@@ -38,6 +38,10 @@ export interface CreateDailyLogPayload {
      logDate: string;
      location?: LocationPayload;
      weatherStamp?: WeatherStampPayload;
+     // AI Intelligence Plan WP-2a — the original parse job id (AiJob.Id) carried
+     // back on confirm so the server can derive the typed ledger rows keyed to
+     // that job. Omitted for manual logs and offline logs with no source parse.
+     sourceAiJobId?: string;
 }
 
 export class CreateDailyLogCommand {
