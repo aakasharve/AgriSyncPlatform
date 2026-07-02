@@ -29,6 +29,29 @@ const LocationPayloadSchema = z.object({
     permissionState: z.string(),
 });
 
+// Mirrors the client `WeatherStamp` (weather.types.ts) MINUS `id`
+// (server-generated) and MINUS daily_log_id (comes from the parent
+// CreateDailyLogPayload). `provider` is kept as a plain string for the
+// generator; the backend maps it to the WeatherProvider enum.
+const WeatherStampPayloadSchema = z.object({
+    plotId: ZGuid.optional(),
+    timestampLocal: z.string(),
+    timestampProvider: z.string(),
+    provider: z.string(),
+    tempC: z.number(),
+    humidity: z.number(),
+    windKph: z.number(),
+    precipMm: z.number(),
+    cloudCoverPct: z.number(),
+    conditionText: z.string(),
+    iconCode: z.string(),
+    rainProbNext6h: z.number(),
+    windGustKph: z.number().optional(),
+    soilMoistureVolumetric0To10: z.number().optional(),
+    uvIndex: z.number().optional(),
+    alerts: z.array(z.string()).optional(),
+});
+
 export const CreateDailyLogPayload = z.object({
     dailyLogId: ZGuid,
     farmId: ZGuid,
@@ -37,6 +60,7 @@ export const CreateDailyLogPayload = z.object({
     operatorUserId: ZGuid.optional(),
     logDate: ZLogDate,
     location: LocationPayloadSchema.optional(),
+    weatherStamp: WeatherStampPayloadSchema.optional(),
 });
 
 export type CreateDailyLogPayloadType = z.infer<typeof CreateDailyLogPayload>;
