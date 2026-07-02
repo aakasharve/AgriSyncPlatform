@@ -199,7 +199,9 @@ public sealed class CreateDailyLogProvenanceHandlerTests
             clock,
             new AllowAllEntitlementPolicy(),
             analytics,
-            aiJobs);
+            aiJobs,
+            Microsoft.Extensions.Logging.Abstractions.NullLogger<CreateDailyLogHandler>.Instance,
+            new LedgerDerivationService(repo));
     }
 
     /// <summary>

@@ -463,7 +463,9 @@ public sealed class W1P2ProvenanceStampTests
             new FixedClock(new DateTime(2026, 5, 14, 12, 0, 0, DateTimeKind.Utc)),
             new AllowAllEntitlementPolicy(),
             new NoopAnalyticsWriter(),
-            aiJobRepo);
+            aiJobRepo,
+            Microsoft.Extensions.Logging.Abstractions.NullLogger<CreateDailyLogHandler>.Instance,
+            new LedgerDerivationService(repo));
 
         var command = new CreateDailyLogCommand(
             FarmId: TestFarmGuid,

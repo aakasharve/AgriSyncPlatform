@@ -60,7 +60,9 @@ public sealed class LogHandlerAnalyticsTests
             new FixedClock(now),
             new AllowAllEntitlementPolicy(),
             analytics,
-            new Common.NullAiJobRepository());
+            new Common.NullAiJobRepository(),
+            Microsoft.Extensions.Logging.Abstractions.NullLogger<CreateDailyLogHandler>.Instance,
+            new LedgerDerivationService(repo));
 
         var command = new CreateDailyLogCommand(
             FarmId: farmGuid,

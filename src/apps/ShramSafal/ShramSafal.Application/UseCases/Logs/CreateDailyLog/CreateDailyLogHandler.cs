@@ -45,7 +45,8 @@ public sealed class CreateDailyLogHandler(
     IEntitlementPolicy entitlementPolicy,
     IAnalyticsWriter analytics,
     IAiJobRepository aiJobRepository,
-    ILogger<CreateDailyLogHandler> logger)
+    ILogger<CreateDailyLogHandler> logger,
+    ILedgerDerivationService ledgerDerivation)
     : IHandler<CreateDailyLogCommand, DailyLogDto>
 {
     public async Task<Result<DailyLogDto>> HandleAsync(CreateDailyLogCommand command, CancellationToken ct = default)
@@ -192,6 +193,27 @@ public sealed class CreateDailyLogHandler(
             catch (Exception ex)
             {
                 logger.LogWarning(ex, "Weather stamp persist skipped for daily log {LogId} (non-blocking).", log.Id);
+            }
+        }
+
+        // AI Intelligence Plan WP-2c (Track B) — confirm-time server-side
+        // derivation of the typed ssf ledger. When the client passed a
+        // SourceAiJobId and the job was found above, parse its
+        // NormalizedResultJson into typed rows (FarmOperation + input items for
+        // inputs; irrigation/labour/machinery/observation/disturbance as
+        // daily_logs children) and stage them on the SAME unit of work (the
+        // SaveChangesAsync below commits them alongside the DailyLog).
+        // NON-BLOCKING: a missing / unparseable blob must NEVER reject the log,
+        // so the whole derivation is wrapped in try/catch (mirrors B2.8 weather).
+        if (command.SourceAiJobId is { } && sourceJobForEvidence is not null)
+        {
+            try
+            {
+                await ledgerDerivation.DeriveAsync(log, sourceJobForEvidence, idGenerator, clock, ct);
+            }
+            catch (Exception ex)
+            {
+                logger.LogWarning(ex, "Ledger derivation skipped for daily log {LogId} (non-blocking).", log.Id);
             }
         }
 
