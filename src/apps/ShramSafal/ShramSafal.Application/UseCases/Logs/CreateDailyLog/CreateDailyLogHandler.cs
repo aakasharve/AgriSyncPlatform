@@ -5,6 +5,7 @@ using AgriSync.BuildingBlocks.Analytics;
 using AgriSync.BuildingBlocks.Application;
 using AgriSync.BuildingBlocks.Results;
 using AgriSync.SharedKernel.Contracts.Ids;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using ShramSafal.Application.Contracts.Dtos;
 using ShramSafal.Application.Ports;
@@ -46,7 +47,14 @@ public sealed class CreateDailyLogHandler(
     IAnalyticsWriter analytics,
     IAiJobRepository aiJobRepository,
     ILogger<CreateDailyLogHandler> logger,
-    ILedgerDerivationService ledgerDerivation)
+    ILedgerDerivationService ledgerDerivation,
+    // Fix F1 — optional so unit tests that exercise the handler against an
+    // in-memory repository (no EF) can pass null. When resolved through DI the
+    // scoped DbContext is injected (registered in Infrastructure DI as
+    // AddScoped<DbContext>). Used ONLY to reach Database.CurrentTransaction so
+    // the non-blocking side-car (weather + derivation) can be wrapped in a
+    // SAVEPOINT on the SYNC path's ambient transaction — see PersistSideCarAsync.
+    DbContext? dbContext = null)
     : IHandler<CreateDailyLogCommand, DailyLogDto>
 {
     public async Task<Result<DailyLogDto>> HandleAsync(CreateDailyLogCommand command, CancellationToken ct = default)
@@ -169,54 +177,6 @@ public sealed class CreateDailyLogHandler(
 
         await repository.AddDailyLogAsync(log, ct);
 
-        // Track B B2.8 — persist the client-captured weather snapshot to
-        // ssf.weather_stamps alongside the daily log (same unit of work; the
-        // SaveChangesAsync below commits both). NON-BLOCKING: a blank
-        // conditionText, unknown provider, or unparseable timestamp must NEVER
-        // reject the log, so the whole map+stage is wrapped in try/catch and a
-        // failure is only logged.
-        if (command.WeatherStamp is { } ws)
-        {
-            try
-            {
-                var stamp = Domain.Farms.WeatherStamp.Create(
-                    Guid.NewGuid(), log.Id, ws.PlotId,
-                    ParseTimestamp(ws.TimestampLocal), ParseTimestamp(ws.TimestampProvider),
-                    MapWeatherProvider(ws.Provider),
-                    ws.TempC, ws.Humidity, ws.WindKph, ws.PrecipMm, ws.CloudCoverPct,
-                    ws.ConditionText, ws.IconCode, ws.RainProbNext6h,
-                    ws.WindGustKph, ws.SoilMoistureVolumetric0To10, ws.UvIndex,
-                    ws.Alerts is { Count: > 0 } alerts ? System.Text.Json.JsonSerializer.Serialize(alerts) : null,
-                    DateTime.UtcNow);
-                await repository.AddWeatherStampAsync(stamp, ct);
-            }
-            catch (Exception ex)
-            {
-                logger.LogWarning(ex, "Weather stamp persist skipped for daily log {LogId} (non-blocking).", log.Id);
-            }
-        }
-
-        // AI Intelligence Plan WP-2c (Track B) — confirm-time server-side
-        // derivation of the typed ssf ledger. When the client passed a
-        // SourceAiJobId and the job was found above, parse its
-        // NormalizedResultJson into typed rows (FarmOperation + input items for
-        // inputs; irrigation/labour/machinery/observation/disturbance as
-        // daily_logs children) and stage them on the SAME unit of work (the
-        // SaveChangesAsync below commits them alongside the DailyLog).
-        // NON-BLOCKING: a missing / unparseable blob must NEVER reject the log,
-        // so the whole derivation is wrapped in try/catch (mirrors B2.8 weather).
-        if (command.SourceAiJobId is { } && sourceJobForEvidence is not null)
-        {
-            try
-            {
-                await ledgerDerivation.DeriveAsync(log, sourceJobForEvidence, idGenerator, clock, ct);
-            }
-            catch (Exception ex)
-            {
-                logger.LogWarning(ex, "Ledger derivation skipped for daily log {LogId} (non-blocking).", log.Id);
-            }
-        }
-
         // DATA_PRINCIPLE_SPINE sub-phase 04.3b — migrate from AuditEvent.Create
         // (sentinel provenance) to AuditEventFactory.Create with the real
         // X-Device-Id / IP hash / X-App-Version sourced from the endpoint's
@@ -245,7 +205,22 @@ public sealed class CreateDailyLogHandler(
                 ipHash: command.AuditIpHash,
                 sourceAiJobId: command.SourceAiJobId),
             ct);
+
+        // ── Fix F1: TWO-PHASE persistence ────────────────────────────────────
+        // PHASE 1 — commit the farmer's DailyLog + its audit row on their OWN
+        // SaveChanges, so the log is durable INDEPENDENTLY of the non-blocking
+        // side-car (weather stamp + typed-ledger derivation). Previously the log
+        // and the side-car shared one SaveChanges: a side-car DB error (e.g. a
+        // transient 23505 on the current-version partial-unique index during an
+        // offline re-confirm) aborted the whole transaction — and on the SYNC
+        // path that rolled back PushSyncBatchHandler's ambient transaction, so
+        // the farmer's log AND the derivation both vanished and sync recorded a
+        // failure. Committing the log first removes that coupling entirely.
         await repository.SaveChangesAsync(ct);
+
+        // PHASE 2 — the side-car, best-effort and isolated. A weather-stamp or
+        // derivation failure here must NEVER discard the (already-committed) log.
+        await PersistSideCarAsync(log, command, sourceJobForEvidence, ct);
 
         await analytics.EmitAsync(new AnalyticsEvent(
             EventId: Guid.NewGuid(),
@@ -272,6 +247,138 @@ public sealed class CreateDailyLogHandler(
         ), ct);
 
         return Result.Success(log.ToDto());
+    }
+
+    // ── Fix F1: isolated side-car persistence ────────────────────────────────
+    // Stages the client weather snapshot and runs the confirm-time typed-ledger
+    // derivation, then commits them — but ISOLATED from the farmer's already-
+    // committed DailyLog so a failure here can never discard the log.
+    //
+    // Postgres semantics: once ANY statement errors inside a transaction the
+    // WHOLE transaction is aborted, so merely catching the exception does not
+    // rescue an already-flushed log that shares the transaction. Therefore:
+    //   • SYNC path (ambient transaction from PushSyncBatchHandler): wrap the
+    //     side-car in a SAVEPOINT. On failure RollbackToSavepoint un-aborts the
+    //     transaction, discarding ONLY the side-car; the log's Phase-1 writes
+    //     survive to the outer commit. (Belt-and-braces alongside the write-
+    //     ordering fix in LedgerDerivationService, which already makes the
+    //     supersession path itself unable to raise 23505.)
+    //   • HTTP path (no ambient transaction): the side-car gets its OWN
+    //     transaction so a mid-way failure (after the derivation's supersession
+    //     SaveChanges) rolls back the side-car atomically without touching the
+    //     already-committed log.
+    //   • Unit tests (dbContext null / non-relational): plain try/catch around
+    //     the staged writes.
+    private async Task PersistSideCarAsync(
+        Domain.Logs.DailyLog log,
+        CreateDailyLogCommand command,
+        Domain.AI.AiJob? sourceJobForEvidence,
+        CancellationToken ct)
+    {
+        // Nothing to persist → skip (avoids an empty SaveChanges / transaction).
+        var hasWeather = command.WeatherStamp is not null;
+        var hasDerivation = command.SourceAiJobId is { } && sourceJobForEvidence is not null;
+        if (!hasWeather && !hasDerivation)
+        {
+            return;
+        }
+
+        var relational = dbContext?.Database.IsRelational() == true;
+        var ambientTx = relational ? dbContext!.Database.CurrentTransaction : null;
+
+        // SYNC path — savepoint on the ambient transaction.
+        if (ambientTx is not null)
+        {
+            const string savepoint = "ssf_daily_log_sidecar";
+            await ambientTx.CreateSavepointAsync(savepoint, ct);
+            try
+            {
+                await StageAndSaveSideCarAsync(log, command, sourceJobForEvidence, ct);
+            }
+            catch (Exception ex)
+            {
+                logger.LogWarning(ex,
+                    "Side-car (weather/derivation) rolled back to savepoint for daily log {LogId} (non-blocking); log is durable.",
+                    log.Id);
+                // Un-abort the ambient transaction: discards ONLY the side-car,
+                // then drop any half-staged side-car entities from the tracker so
+                // the outer commit doesn't try to re-save them.
+                await ambientTx.RollbackToSavepointAsync(savepoint, ct);
+                dbContext!.ChangeTracker.Clear();
+            }
+
+            return;
+        }
+
+        // HTTP path — the side-car gets its own transaction (when relational).
+        if (relational)
+        {
+            await using var sideCarTx = await dbContext!.Database.BeginTransactionAsync(ct);
+            try
+            {
+                await StageAndSaveSideCarAsync(log, command, sourceJobForEvidence, ct);
+                await sideCarTx.CommitAsync(ct);
+            }
+            catch (Exception ex)
+            {
+                logger.LogWarning(ex,
+                    "Side-car (weather/derivation) rolled back for daily log {LogId} (non-blocking); log is durable.",
+                    log.Id);
+                await sideCarTx.RollbackAsync(ct);
+                dbContext!.ChangeTracker.Clear();
+            }
+
+            return;
+        }
+
+        // Unit-test / non-relational path — plain isolation.
+        try
+        {
+            await StageAndSaveSideCarAsync(log, command, sourceJobForEvidence, ct);
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex,
+                "Side-car (weather/derivation) skipped for daily log {LogId} (non-blocking); log is durable.",
+                log.Id);
+        }
+    }
+
+    // Stage the weather snapshot + typed-ledger derivation, then commit them.
+    // Any throw propagates to PersistSideCarAsync's isolation wrapper.
+    private async Task StageAndSaveSideCarAsync(
+        Domain.Logs.DailyLog log,
+        CreateDailyLogCommand command,
+        Domain.AI.AiJob? sourceJobForEvidence,
+        CancellationToken ct)
+    {
+        // Track B B2.8 — persist the client-captured weather snapshot to
+        // ssf.weather_stamps. NON-BLOCKING by contract (isolated in the caller).
+        if (command.WeatherStamp is { } ws)
+        {
+            var stamp = Domain.Farms.WeatherStamp.Create(
+                Guid.NewGuid(), log.Id, ws.PlotId,
+                ParseTimestamp(ws.TimestampLocal), ParseTimestamp(ws.TimestampProvider),
+                MapWeatherProvider(ws.Provider),
+                ws.TempC, ws.Humidity, ws.WindKph, ws.PrecipMm, ws.CloudCoverPct,
+                ws.ConditionText, ws.IconCode, ws.RainProbNext6h,
+                ws.WindGustKph, ws.SoilMoistureVolumetric0To10, ws.UvIndex,
+                ws.Alerts is { Count: > 0 } alerts ? System.Text.Json.JsonSerializer.Serialize(alerts) : null,
+                DateTime.UtcNow);
+            await repository.AddWeatherStampAsync(stamp, ct);
+        }
+
+        // AI Intelligence Plan WP-2c (Track B) — confirm-time server-side
+        // derivation of the typed ssf ledger. Parses the source AiJob's
+        // NormalizedResultJson into typed rows. The supersession path inside
+        // DeriveAsync flushes the current-row UPDATE before the new-row INSERT
+        // (Fix F1 write-ordering) so it can never raise a transient 23505.
+        if (command.SourceAiJobId is { } && sourceJobForEvidence is not null)
+        {
+            await ledgerDerivation.DeriveAsync(log, sourceJobForEvidence, idGenerator, clock, ct);
+        }
+
+        await repository.SaveChangesAsync(ct);
     }
 
     // Track B B2.8 — tolerant timestamp parse for the weather stamp. Falls back

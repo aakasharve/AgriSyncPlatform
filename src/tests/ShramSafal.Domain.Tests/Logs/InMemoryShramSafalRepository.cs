@@ -88,8 +88,21 @@ internal sealed class InMemoryShramSafalRepository : IShramSafalRepository
     /// <summary>Seed a CURRENT FarmOperation so a re-derivation supersedes it.</summary>
     public void SeedFarmOperation(FarmOperation op) => CapturedOperations.Add(op);
 
+    /// <summary>
+    /// Fix F1 — optional fault-injection hook fired at the START of
+    /// <see cref="AddFarmOperationAsync"/> (the first derivation write). When set,
+    /// the delegate runs before the row is captured, so a throw simulates a DB
+    /// failure inside the NON-BLOCKING derivation side-car. Null (default) keeps
+    /// the plain capture behaviour every other test relies on.
+    /// </summary>
+    public Action? OnAddFarmOperation { get; set; }
+
     public Task AddFarmOperationAsync(FarmOperation op, CancellationToken ct = default)
-    { CapturedOperations.Add(op); return Task.CompletedTask; }
+    {
+        OnAddFarmOperation?.Invoke();
+        CapturedOperations.Add(op);
+        return Task.CompletedTask;
+    }
 
     public Task AddApplicationInputItemAsync(ApplicationInputItem item, CancellationToken ct = default)
     { CapturedInputItems.Add(item); return Task.CompletedTask; }

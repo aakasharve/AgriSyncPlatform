@@ -86,10 +86,23 @@ public sealed class LedgerDerivationService(IShramSafalRepository repository) : 
                     createdAtUtc: now);
 
                 // Supersession (D2): supersede-or-no-op, never a second current row.
+                //
+                // Fix F1 — WRITE ORDERING against the non-deferrable partial unique
+                // index ix_farm_operations_current_key (WHERE is_current_version).
+                // On an offline RE-CONFIRM the same DerivedEventKey recomputes, so we
+                // MarkSuperseded (UPDATE old is_current_version=false) then Add the new
+                // current row (INSERT is_current_version=true). Both touch the same
+                // partial-unique index. If EF batched them and emitted the INSERT
+                // BEFORE the UPDATE, Postgres would transiently see two current rows
+                // for the key → 23505 → the whole tx aborts and the farmer's log is
+                // lost. Flushing the UPDATE with its own SaveChanges BEFORE staging
+                // the INSERT guarantees the DB never holds two current rows for the
+                // key at any instant, so the supersession path can NEVER raise 23505.
                 var existing = await repository.GetFarmOperationByKeyAsync(key.Value, ct);
                 if (existing is not null && existing.IsCurrentVersion)
                 {
                     existing.MarkSuperseded(opId, now);
+                    await repository.SaveChangesAsync(ct); // flush UPDATE before the INSERT
                 }
 
                 await repository.AddFarmOperationAsync(op, ct);
