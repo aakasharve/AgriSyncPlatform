@@ -1392,8 +1392,13 @@ internal sealed class ShramSafalRepository(ShramSafalDbContext db) : IShramSafal
 
     /// <summary>
     /// Supersession lookup — the CURRENT-version FarmOperation whose
-    /// DerivedEventKey matches, or null. The <c>DerivedEventKey</c> value
-    /// object stores its string in <c>DerivedEventKey.Value</c>.
+    /// DerivedEventKey matches, or null. <c>DerivedEventKey</c> is mapped as a
+    /// WHOLE-PROPERTY value converter (FarmOperationConfiguration L28-30), so we
+    /// must compare the whole value object — EF Core cannot translate member
+    /// access (<c>.Value</c>) on a value-converted property (it throws
+    /// InvalidOperationException at query time). Constructing the key and
+    /// comparing <c>o.DerivedEventKey == key</c> translates to
+    /// <c>WHERE derived_event_key = @key</c>.
     /// </summary>
     public async Task<FarmOperation?> GetFarmOperationByKeyAsync(string derivedEventKey, CancellationToken ct = default)
     {
@@ -1402,8 +1407,9 @@ internal sealed class ShramSafalRepository(ShramSafalDbContext db) : IShramSafal
             return null;
         }
 
+        var key = new DerivedEventKey(derivedEventKey);
         return await db.FarmOperations
-            .FirstOrDefaultAsync(o => o.DerivedEventKey.Value == derivedEventKey && o.IsCurrentVersion, ct);
+            .FirstOrDefaultAsync(o => o.DerivedEventKey == key && o.IsCurrentVersion, ct);
     }
 
     /// <summary>
