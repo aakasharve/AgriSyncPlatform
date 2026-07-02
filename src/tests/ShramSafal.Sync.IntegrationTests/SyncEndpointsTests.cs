@@ -665,6 +665,106 @@ public sealed class SyncEndpointsTests
         Assert.Single(costListDoc.RootElement.EnumerateArray());
     }
 
+    // B2.8 (spec: ai-intelligence-plan-2026-06-25) — CI safety gate for the
+    // live offline-sync weather path. Mirrors the plot → crop-cycle →
+    // daily-log setup of CreateAttachment_CanLinkToDailyLogAndCostEntry, but
+    // the create_daily_log payload carries an optional `weatherStamp` object.
+    // Proves the sync → handler → repo → persist chain writes exactly one
+    // WeatherStamp row for that daily log (best-effort/non-blocking: the log
+    // always saves, a valid stamp persists). Asserted via the harness's
+    // existing EF pattern (ShramSafalDbContext DbSet, CLR properties); the
+    // ssf.weather_stamps snake_case column mapping is proven separately by a
+    // real-Postgres runtime proof, so the InMemory CLR-property assertion is
+    // the right shape here.
+    [Fact]
+    public async Task CreateDailyLog_WithWeatherStamp_PersistsWeatherStampRow()
+    {
+        await using var harness = await TestHarness.CreateAsync();
+        var farmId = Guid.NewGuid();
+        var plotId = Guid.NewGuid();
+        var cropCycleId = Guid.NewGuid();
+        var dailyLogId = Guid.NewGuid();
+
+        await PushCreateFarmAsync(harness.Client, "device-w", "req-farm-weatherstamp", farmId, "WeatherStamp Farm");
+
+        var setupResponse = await harness.Client.PostAsJsonAsync("/sync/push", new
+        {
+            deviceId = "device-w",
+            mutations = new object[]
+            {
+                new
+                {
+                    clientRequestId = "req-plot-weather",
+                    mutationType = "create_plot",
+                    payload = new
+                    {
+                        plotId,
+                        farmId,
+                        name = "Weather Plot",
+                        areaInAcres = 2m
+                    }
+                },
+                new
+                {
+                    clientRequestId = "req-cycle-weather",
+                    mutationType = "create_crop_cycle",
+                    payload = new
+                    {
+                        cropCycleId,
+                        farmId,
+                        plotId,
+                        cropName = "Grapes",
+                        stage = "Growth",
+                        startDate = "2026-02-21"
+                    }
+                },
+                new
+                {
+                    clientRequestId = "req-log-weather",
+                    mutationType = "create_daily_log",
+                    payload = new
+                    {
+                        dailyLogId,
+                        farmId,
+                        plotId,
+                        cropCycleId,
+                        logDate = "2026-02-22",
+                        weatherStamp = new
+                        {
+                            plotId,
+                            timestampLocal = "2026-02-22T09:30:00+05:30",
+                            timestampProvider = "2026-02-22T04:00:00Z",
+                            provider = "tomorrow.io",
+                            tempC = 28.5,
+                            humidity = 65,
+                            windKph = 12,
+                            precipMm = 0,
+                            cloudCoverPct = 40,
+                            conditionText = "Partly Cloudy",
+                            iconCode = "partly_cloudy",
+                            rainProbNext6h = 20
+                        }
+                    }
+                }
+            }
+        });
+        setupResponse.EnsureSuccessStatusCode();
+
+        using var setupDoc = JsonDocument.Parse(await setupResponse.Content.ReadAsStringAsync());
+        var failures = setupDoc.RootElement
+            .GetProperty("results")
+            .EnumerateArray()
+            .Where(x => x.GetProperty("status").GetString() == "failed")
+            .ToList();
+        Assert.Empty(failures);
+
+        var stamps = await harness.GetWeatherStampsForDailyLogAsync(dailyLogId);
+
+        var stamp = Assert.Single(stamps);
+        Assert.Equal("Partly Cloudy", stamp.ConditionText);
+        Assert.Equal(28.5m, stamp.TempC);
+    }
+
     [Fact]
     public async Task CreateAttachment_RejectsCrossFarmEntityLink()
     {
@@ -1627,6 +1727,22 @@ public sealed class SyncEndpointsTests
                 role,
                 DateTime.UtcNow));
             await db.SaveChangesAsync();
+        }
+
+        /// <summary>
+        /// Reads the persisted <see cref="WeatherStamp"/> rows linked to a
+        /// daily log via the same <c>ShramSafalDbContext</c> the sync push
+        /// wrote through (mirrors <see cref="SeedFarmMembershipAsync"/>'s
+        /// scope pattern). Used by the B2.8 weather-path persistence gate.
+        /// </summary>
+        public async Task<IReadOnlyList<WeatherStamp>> GetWeatherStampsForDailyLogAsync(Guid dailyLogId)
+        {
+            await using var scope = app.Services.CreateAsyncScope();
+            var db = scope.ServiceProvider.GetRequiredService<ShramSafalDbContext>();
+            return await db.WeatherStamps
+                .AsNoTracking()
+                .Where(w => w.DailyLogId == dailyLogId)
+                .ToListAsync();
         }
 
         /// <summary>
