@@ -11,6 +11,25 @@ export interface LocationPayload {
      permissionState: string;
 }
 
+export interface WeatherStampPayload {
+     plotId?: string;
+     timestampLocal: string;
+     timestampProvider: string;
+     provider: string;
+     tempC: number;
+     humidity: number;
+     windKph: number;
+     precipMm: number;
+     cloudCoverPct: number;
+     conditionText: string;
+     iconCode: string;
+     rainProbNext6h: number;
+     windGustKph?: number;
+     soilMoistureVolumetric0To10?: number;
+     uvIndex?: number;
+     alerts?: string[];
+}
+
 export interface CreateDailyLogPayload {
      dailyLogId: string;
      farmId: string;
@@ -18,6 +37,7 @@ export interface CreateDailyLogPayload {
      cropCycleId: string;
      logDate: string;
      location?: LocationPayload;
+     weatherStamp?: WeatherStampPayload;
 }
 
 export class CreateDailyLogCommand {
