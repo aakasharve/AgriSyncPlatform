@@ -57,6 +57,17 @@ public interface IShramSafalRepository
     Task<List<CropCycle>> GetCropCyclesByPlotIdAsync(Guid plotId, CancellationToken ct = default);
 
     Task AddDailyLogAsync(DailyLog log, CancellationToken ct = default);
+
+    // Track B B2.8 — stage a WeatherStamp on the DbSet (no SaveChanges; the
+    // caller's existing SaveChangesAsync commits it in the same unit of work
+    // as the DailyLog). Production ShramSafalRepository overrides with the EF
+    // AddAsync. A default no-op impl is used (not a required member) so the
+    // ~28 in-tree IShramSafalRepository test doubles keep compiling untouched —
+    // the same convention the other recent additive ports here follow (e.g.
+    // UpsertRawBlobIndexAsync). Weather-stamp persistence is best-effort /
+    // NON-BLOCKING anyway, so a test double that no-ops it is harmless.
+    Task AddWeatherStampAsync(WeatherStamp stamp, CancellationToken ct = default)
+        => Task.CompletedTask;
     Task<DailyLog?> GetDailyLogByIdAsync(Guid dailyLogId, CancellationToken ct = default);
     Task<DailyLog?> GetDailyLogByIdempotencyKeyAsync(string idempotencyKey, CancellationToken ct = default);
 

@@ -134,6 +134,11 @@ internal sealed class ShramSafalRepository(ShramSafalDbContext db) : IShramSafal
         await db.DailyLogs.AddAsync(log, ct);
     }
 
+    public async Task AddWeatherStampAsync(WeatherStamp stamp, CancellationToken ct = default)
+    {
+        await db.WeatherStamps.AddAsync(stamp, ct);
+    }
+
     public async Task<DailyLog?> GetDailyLogByIdAsync(Guid dailyLogId, CancellationToken ct = default)
     {
         return await db.DailyLogs

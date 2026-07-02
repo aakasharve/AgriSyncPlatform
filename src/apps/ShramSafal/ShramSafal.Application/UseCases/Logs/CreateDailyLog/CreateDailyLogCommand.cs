@@ -1,3 +1,4 @@
+using ShramSafal.Application.Contracts.Sync.Payloads;
 using ShramSafal.Domain.Location;
 
 namespace ShramSafal.Application.UseCases.Logs.CreateDailyLog;
@@ -32,7 +33,12 @@ public sealed record CreateDailyLogCommand(
     // DeviceId / IpHash columns. Default sentinels match the worker /
     // unknown path so direct-construction unit tests stay green.
     string AuditDeviceId = "unknown",
-    string AuditIpHash = "sha256:unknown")
+    string AuditIpHash = "sha256:unknown",
+    // Track B B2.8 — optional weather snapshot captured on the client at log
+    // time. Persisted to ssf.weather_stamps by CreateDailyLogHandler on a
+    // NON-BLOCKING best-effort basis (a bad/missing stamp never rejects the
+    // log). Added at the END so existing callers/tests compile unchanged.
+    WeatherStampItem? WeatherStamp = null)
 {
     public string? IdempotencyKey
     {

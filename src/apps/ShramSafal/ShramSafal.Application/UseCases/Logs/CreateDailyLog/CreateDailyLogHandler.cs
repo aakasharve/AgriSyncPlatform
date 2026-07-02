@@ -5,6 +5,7 @@ using AgriSync.BuildingBlocks.Analytics;
 using AgriSync.BuildingBlocks.Application;
 using AgriSync.BuildingBlocks.Results;
 using AgriSync.SharedKernel.Contracts.Ids;
+using Microsoft.Extensions.Logging;
 using ShramSafal.Application.Contracts.Dtos;
 using ShramSafal.Application.Ports;
 using ShramSafal.Application.Ports.External;
@@ -43,7 +44,8 @@ public sealed class CreateDailyLogHandler(
     IClock clock,
     IEntitlementPolicy entitlementPolicy,
     IAnalyticsWriter analytics,
-    IAiJobRepository aiJobRepository)
+    IAiJobRepository aiJobRepository,
+    ILogger<CreateDailyLogHandler> logger)
     : IHandler<CreateDailyLogCommand, DailyLogDto>
 {
     public async Task<Result<DailyLogDto>> HandleAsync(CreateDailyLogCommand command, CancellationToken ct = default)
@@ -165,6 +167,34 @@ public sealed class CreateDailyLogHandler(
         }
 
         await repository.AddDailyLogAsync(log, ct);
+
+        // Track B B2.8 — persist the client-captured weather snapshot to
+        // ssf.weather_stamps alongside the daily log (same unit of work; the
+        // SaveChangesAsync below commits both). NON-BLOCKING: a blank
+        // conditionText, unknown provider, or unparseable timestamp must NEVER
+        // reject the log, so the whole map+stage is wrapped in try/catch and a
+        // failure is only logged.
+        if (command.WeatherStamp is { } ws)
+        {
+            try
+            {
+                var stamp = Domain.Farms.WeatherStamp.Create(
+                    Guid.NewGuid(), log.Id, ws.PlotId,
+                    ParseTimestamp(ws.TimestampLocal), ParseTimestamp(ws.TimestampProvider),
+                    MapWeatherProvider(ws.Provider),
+                    ws.TempC, ws.Humidity, ws.WindKph, ws.PrecipMm, ws.CloudCoverPct,
+                    ws.ConditionText, ws.IconCode, ws.RainProbNext6h,
+                    ws.WindGustKph, ws.SoilMoistureVolumetric0To10, ws.UvIndex,
+                    ws.Alerts is { Count: > 0 } alerts ? System.Text.Json.JsonSerializer.Serialize(alerts) : null,
+                    DateTime.UtcNow);
+                await repository.AddWeatherStampAsync(stamp, ct);
+            }
+            catch (Exception ex)
+            {
+                logger.LogWarning(ex, "Weather stamp persist skipped for daily log {LogId} (non-blocking).", log.Id);
+            }
+        }
+
         // DATA_PRINCIPLE_SPINE sub-phase 04.3b — migrate from AuditEvent.Create
         // (sentinel provenance) to AuditEventFactory.Create with the real
         // X-Device-Id / IP hash / X-App-Version sourced from the endpoint's
@@ -221,6 +251,23 @@ public sealed class CreateDailyLogHandler(
 
         return Result.Success(log.ToDto());
     }
+
+    // Track B B2.8 — tolerant timestamp parse for the weather stamp. Falls back
+    // to UtcNow on an unparseable value so a malformed timestamp never blocks
+    // the log (the outer try/catch also guards against everything else).
+    private static DateTime ParseTimestamp(string s)
+        => DateTime.TryParse(s, System.Globalization.CultureInfo.InvariantCulture,
+            System.Globalization.DateTimeStyles.AdjustToUniversal | System.Globalization.DateTimeStyles.AssumeUniversal, out var dt)
+            ? dt : DateTime.UtcNow;
+
+    // Track B B2.8 — map the wire provider string to the domain enum. Unknown
+    // providers fall back to Mock rather than throwing.
+    private static Domain.Farms.WeatherProvider MapWeatherProvider(string p) => p switch
+    {
+        "tomorrow.io" => Domain.Farms.WeatherProvider.TomorrowIo,
+        "open_weather" => Domain.Farms.WeatherProvider.OpenWeather,
+        _ => Domain.Farms.WeatherProvider.Mock,
+    };
 
     // W1.P2 T3 — extract the per-field provenance map from a NormalizedResultJson
     // blob and serialise it as an EvidenceSourcesJson payload.
