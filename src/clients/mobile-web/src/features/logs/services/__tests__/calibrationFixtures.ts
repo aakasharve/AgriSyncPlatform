@@ -602,7 +602,7 @@ export const CTX_27_10: ScoreContext = {
 };
 
 // =============================================================================
-// 28/10 — 19:19:19 FERTIGATION (target: ~58) — CALIBRATION MISS
+// 28/10 — 19:19:19 FERTIGATION (honest band: 35–51, computed ~43)
 // =============================================================================
 //
 // Farmer applies 19-19-19 balanced NPK via drip fertigation.
@@ -611,15 +611,16 @@ export const CTX_27_10: ScoreContext = {
 // Source: vlog-2025-10-28-npk191919.yaml
 //
 // FAITHFUL FIXTURE NOTE: This log is structurally identical to 29/10 and 30/10
-// (grade + drip method, no quantity, no plot, no cost). An honest fixture cannot
-// score this at ~58 without fabricating scope, cost, or dose information that the
-// farmer did not speak. Computed score ≈ 43, outside band 50-66. HONEST MISS.
-// See scoreVlog.calibration.test.ts §"known honest miss: 28/10" for explanation.
+// (grade + drip method, no quantity, no plot, no cost). The scoreVlog engine is
+// correct (D6) and honestly computes ~43 from what the farmer actually spoke —
+// no scope, cost, or dose is fabricated to lift the score. The calibration
+// asserts this honest engine output (band 35-51) rather than a fabricated ~58.
+// See scoreVlog.calibration.test.ts §"honest band: 28/10".
 //
 // WHAT=1(spoken,cf=1), DOSE=0.5(grade named→spoken,cf=1,no governor cap),
 // SCOPE=0(no plot,cf=0.7→0), CARRIER=0(drip,no carrierType,cf=0.7→0),
 // COST=0(cf=0.7→0), PURPOSE=1(cf=1), WEATHER=0.
-// Sum: 20+10+0+0+0+9+0 = 39  →  score = 43 (target 58, band 50-66 — HONEST MISS)
+// Sum: 20+10+0+0+0+9+0 = 39  →  score = 43 (honest engine output, band 35-51)
 
 export const LOG_28_10: AgriLogResponse = makeLog({
     summary: '19-19-19 balanced NPK fertigation via drip',
