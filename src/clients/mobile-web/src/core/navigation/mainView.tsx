@@ -608,12 +608,24 @@ export const renderLogView = (ctx: AppRouterContext): React.ReactNode => {
                         )}
 
                         {/* Understanding Meter scaffold (1d-infra, flag-gated, OFF by default).
-                            TODO(meter-data-wiring): pass the saved log's `understanding` VlogScore
-                            (fetch by lastSavedLogIds) + the farmer's logs list for the arrival gate.
-                            Deferred with the recompute-hook + confirm-signal (next-session wizard wiring). */}
-                        {FEATURE_FLAGS.understandingMeter && (
-                            <MeterDisplay score={undefined} allLogs={[]} />
-                        )}
+                            WP-4 data-wiring (Task 10): pass the just-saved log's `understanding`
+                            VlogScore (looked up by lastSavedLogIds in history) + the farmer's full
+                            logs list for the arrival gate. Logic only — visual polish deferred to
+                            founder art assets (build-infra-now-defer-ui-polish-until-assets). */}
+                        {FEATURE_FLAGS.understandingMeter && (() => {
+                            const savedLogId = lastSavedLogIds && lastSavedLogIds.length > 0
+                                ? lastSavedLogIds[0]
+                                : undefined;
+                            const savedLog = savedLogId
+                                ? history.find(l => l.id === savedLogId)
+                                : undefined;
+                            return (
+                                <MeterDisplay
+                                    score={savedLog?.understanding}
+                                    allLogs={history}
+                                />
+                            );
+                        })()}
 
                         <div className="flex flex-col gap-3">
                             {/* Review Details Button (New) */}
