@@ -25,6 +25,7 @@ import { formatCurrencyINR } from '../../shared/utils/dayState';
 import { getCropTheme } from '../../shared/utils/colorTheme';
 import { FEATURE_FLAGS } from '../../app/featureFlags';
 import { MeterDisplay } from '../../features/logs/components/MeterDisplay';
+import ShramSathiFace from '../../features/logs/components/shramsathi/ShramSathiFace';
 
 import { AppRouterContext } from './routeContext';
 import { ReflectPage, ComparePage } from './lazyComponents';
@@ -518,10 +519,26 @@ export const renderLogView = (ctx: AppRouterContext): React.ReactNode => {
             {status === 'processing' && (
                 <div className="bg-white rounded-3xl shadow-xl shadow-stone-200/50 border border-stone-100 p-16 text-center">
                     <div className="flex justify-center mb-8">
-                        <div className="relative">
-                            <div className="w-24 h-24 border-4 border-stone-100 border-t-emerald-500 rounded-full animate-spin"></div>
-                            <div className="absolute top-0 left-0 w-full h-full flex items-center justify-center"><Leaf size={32} className="text-emerald-600 animate-pulse" /></div>
+                        {/* Shram Sathi face "listening" — the character IS the focal point.
+                            band="neutral" = warm, attentive, non-alarming. Soft emerald halo
+                            behind it; a gentle breathe (transform/opacity only) via the local
+                            keyframes below, disabled under prefers-reduced-motion. */}
+                        <div className="relative flex items-center justify-center">
+                            <div className="absolute h-32 w-32 rounded-full bg-emerald-400/20 blur-2xl motion-safe:animate-[shramsathiListenHalo_2.8s_ease-in-out_infinite]" aria-hidden="true"></div>
+                            <div className="relative h-28 w-28 [&>div]:h-full [&>div]:w-full motion-safe:animate-[shramsathiListenBreathe_2.8s_ease-in-out_infinite]">
+                                <ShramSathiFace band="neutral" arrived={true} arrivingProgress={100} />
+                            </div>
                         </div>
+                        <style>{`
+                            @keyframes shramsathiListenBreathe {
+                                0%, 100% { transform: scale(1); }
+                                50% { transform: scale(1.045); }
+                            }
+                            @keyframes shramsathiListenHalo {
+                                0%, 100% { opacity: 0.45; transform: scale(1); }
+                                50% { opacity: 0.8; transform: scale(1.08); }
+                            }
+                        `}</style>
                     </div>
                     <h3 className="text-xl font-bold text-stone-800 mb-3 leading-snug">Your Shram sathi is trying to understand what work you did today...</h3>
                     {/* SARVAM_PRIMARY_VOICE_PIPELINE — live transcript, placed right below the
