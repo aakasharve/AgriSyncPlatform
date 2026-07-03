@@ -24,6 +24,26 @@ internal sealed class RoutinePatternConfiguration : IEntityTypeConfiguration<Rou
         builder.Property(x => x.UpdatedAtUtc).HasColumnName("updated_at_utc").IsRequired();
 
         builder.HasIndex(x => x.FarmId).HasDatabaseName("ix_routine_patterns_farm_id");
+
+        // ai-intelligence-plan-2026-06-25 — enforce the natural key
+        // (farm_id, plot_id, operation_type) that UpsertRoutineAsync already
+        // treats as unique (GetRoutinePatternAsync matches on all three). Two
+        // concurrent first-confirms of the same routine could otherwise insert
+        // duplicate rows. plot_id is nullable and Postgres treats NULLs as
+        // DISTINCT in a plain unique index, so a single index would NOT dedupe
+        // farm-wide (plot_id IS NULL) patterns. Split into two PARTIAL unique
+        // indexes so both the plot-specific and the farm-wide cases are gated,
+        // matching the repository's `p.PlotId == plotId` (→ IS NULL) semantics.
+        builder.HasIndex(x => new { x.FarmId, x.PlotId, x.OperationType })
+            .IsUnique()
+            .HasDatabaseName("ux_routine_patterns_farm_plot_op")
+            .HasFilter("plot_id IS NOT NULL");
+
+        builder.HasIndex(x => new { x.FarmId, x.OperationType })
+            .IsUnique()
+            .HasDatabaseName("ux_routine_patterns_farm_op_no_plot")
+            .HasFilter("plot_id IS NULL");
+
         builder.Ignore(x => x.DomainEvents);
     }
 }

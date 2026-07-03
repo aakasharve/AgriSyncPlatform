@@ -48,13 +48,19 @@ internal static class ProvenanceConfiguration
             .HasMaxLength(32);
 
         // SARVAM_PRIMARY_VOICE_PIPELINE_2026-05-21 Task 1.7 — extractor-code
-        // SHA is the sixth Provenance field. Width 40 matches a full git SHA;
-        // shorter SHAs (or null) are accepted. Owned by Provenance rather
-        // than each aggregate so every Provenance-owning table carries the
-        // same column without bespoke per-aggregate plumbing.
+        // SHA is the sixth Provenance field. Owned by Provenance rather than
+        // each aggregate so every Provenance-owning table carries the same
+        // column without bespoke per-aggregate plumbing.
+        //
+        // ai-intelligence-plan-2026-06-25 W1.P2 T3 — width widened 40→64. The
+        // orchestrator now stamps ExtractorCodeSha with the 64-char SHA-256
+        // prompt content hash (AiPromptTemplateRegistry.CurrentVoicePromptContentHash)
+        // as the stable extractor identifier; a 64-hex value overflows the
+        // former varchar(40) and fails every voice-parse AiJob INSERT with
+        // Npgsql 22001. A full git SHA (40) or null still fits.
         builder.Property(p => p.ExtractorCodeSha)
             .HasColumnName("extractor_code_sha")
-            .HasMaxLength(40);
+            .HasMaxLength(64);
 
         return builder;
     }

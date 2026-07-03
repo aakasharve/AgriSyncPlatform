@@ -3,6 +3,7 @@ using System;
 using System.Collections.Generic;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using ShramSafal.Infrastructure.Persistence;
@@ -12,9 +13,11 @@ using ShramSafal.Infrastructure.Persistence;
 namespace ShramSafal.Infrastructure.Persistence.Migrations
 {
     [DbContext(typeof(ShramSafalDbContext))]
-    partial class ShramSafalDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260703191648_HardenWeatherStampsRlsWriteCheck")]
+    partial class HardenWeatherStampsRlsWriteCheck
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -2247,16 +2250,6 @@ namespace ShramSafal.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("FarmId")
                         .HasDatabaseName("ix_routine_patterns_farm_id");
-
-                    b.HasIndex("FarmId", "OperationType")
-                        .IsUnique()
-                        .HasDatabaseName("ux_routine_patterns_farm_op_no_plot")
-                        .HasFilter("plot_id IS NULL");
-
-                    b.HasIndex("FarmId", "PlotId", "OperationType")
-                        .IsUnique()
-                        .HasDatabaseName("ux_routine_patterns_farm_plot_op")
-                        .HasFilter("plot_id IS NOT NULL");
 
                     b.ToTable("routine_patterns", "ssf");
                 });
