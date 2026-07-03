@@ -126,20 +126,33 @@ public sealed class CreateDailyLogHandler(
         if (command.SourceAiJobId is { } sourceJobId && sourceJobId != Guid.Empty)
         {
             var sourceJob = await aiJobRepository.GetByIdAsync(sourceJobId, ct);
-            if (sourceJob is null)
+
+            // SECURITY (FINDING 1 — cross-farm SourceAiJobId injection).
+            // The SYNC entry path (PushSyncBatchHandler) is admin-elevated /
+            // RLS-BYPASSED, and AiJobRepository.GetByIdAsync is unfiltered EF
+            // that relies entirely on RLS — so on sync a caller can fetch an
+            // AiJob belonging to ANOTHER farm. Guard it in the APPLICATION layer
+            // (works regardless of RLS posture): if the fetched job's FarmId does
+            // not match this command's FarmId, treat it as ABSENT so no foreign
+            // parse is lifted into provenance/evidence or derived into this
+            // farm's ledger. Mirrors the null-source path below: the log still
+            // commits with Manual provenance and derives nothing.
+            if (sourceJob is null || sourceJob.FarmId != command.FarmId)
             {
-                return Result.Failure<DailyLogDto>(ShramSafalErrors.AiParsingFailed);
+                provenance = Provenance.Manual(stampedAppVersion);
             }
+            else
+            {
+                provenance = new Provenance(
+                    source: Source.Voice,
+                    modelVersion: sourceJob.Provenance.ModelVersion,
+                    promptVersion: sourceJob.Provenance.PromptVersion,
+                    promptContentHash: sourceJob.Provenance.PromptContentHash,
+                    appVersion: stampedAppVersion);
 
-            provenance = new Provenance(
-                source: Source.Voice,
-                modelVersion: sourceJob.Provenance.ModelVersion,
-                promptVersion: sourceJob.Provenance.PromptVersion,
-                promptContentHash: sourceJob.Provenance.PromptContentHash,
-                appVersion: stampedAppVersion);
-
-            // W1.P2 T3 — capture source job so we can extract per-field provenance below.
-            sourceJobForEvidence = sourceJob;
+                // W1.P2 T3 — capture source job so we can extract per-field provenance below.
+                sourceJobForEvidence = sourceJob;
+            }
         }
         else
         {

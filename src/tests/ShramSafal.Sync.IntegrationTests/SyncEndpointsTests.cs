@@ -913,6 +913,149 @@ public sealed class SyncEndpointsTests
         Assert.Equal(FanState.Off, pass.FanState);
     }
 
+    // Security regression (FINDING 1 — cross-farm SourceAiJobId injection).
+    //
+    // The /sync/push seam is on the admin-elevated skip-list, so the whole
+    // batch runs with RLS BYPASSED (TenantConnectionInterceptor injects no
+    // GUC when IsAdminCrossTenant). On that path a client for Farm B / User B
+    // that supplies a sourceAiJobId belonging to ANOTHER farm's AiJob (Farm A /
+    // User A) would, before the fix, have that foreign parse derived into its
+    // OWN ledger — because AiJobRepository.GetByIdAsync is unfiltered EF that
+    // relies entirely on RLS, and the sync membership guard only authorizes the
+    // TARGET farm, never the SOURCE job.
+    //
+    // This test seeds an AiJob owned by Farm A / User A, then pushes a
+    // create_daily_log for Farm B / User B carrying that foreign sourceAiJobId.
+    // Contract (mirrors the null-source path CreateDailyLog_WithoutSourceAiJob…):
+    // the Farm B log COMMITS, but ZERO typed rows are derived from the foreign
+    // job — the handler must treat a non-owned source job as absent.
+    //
+    // The InMemory harness performs NO RLS, so the foreign GetByIdAsync read
+    // succeeds here exactly as it does on the admin-elevated prod sync path —
+    // which is precisely why the fix has to be an application-layer farm-match
+    // check, not an RLS reliance. (Before the fix this test FAILS: the foreign
+    // parse leaks FarmOperation/irrigation/labour/machinery rows into Farm B.)
+    [Fact]
+    public async Task CreateDailyLog_WithForeignFarmSourceAiJob_DerivesNothing()
+    {
+        await using var harness = await TestHarness.CreateAsync();
+
+        // Farm A / User A — owns the voice AiJob whose parse must NOT leak.
+        var farmAId = Guid.NewGuid();
+        var jobUserAId = SecondaryOwnerUserId;
+
+        // Farm B / User B — the caller. TestUserId (default client) is the
+        // PrimaryOwner of Farm B via create_farm below.
+        var farmBId = Guid.NewGuid();
+        var plotBId = Guid.NewGuid();
+        var cropCycleBId = Guid.NewGuid();
+        var dailyLogBId = Guid.NewGuid();
+
+        await PushCreateFarmAsync(harness.Client, "device-foreign-b", "req-farm-foreign-b", farmBId, "Foreign Target Farm B");
+
+        // A confirmed voice parse owned by Farm A (inputs + irrigation + labour +
+        // machinery) — the same rich blob the legit-derivation test uses, so if
+        // it leaked into Farm B we'd see typed rows exactly like that test does.
+        var foreignNormalizedResultJson = System.Text.Json.JsonSerializer.Serialize(new
+        {
+            inputs = new[]
+            {
+                new
+                {
+                    sourceText = "foreign farm A parse",
+                    type = "pesticide",
+                    mix = new object[]
+                    {
+                        new { productName = "ForeignProductA", npkGrade = (string?)null, dose = 30m, unit = "ml" }
+                    }
+                }
+            },
+            irrigation = new[]
+            {
+                new { role = "irrigation", method = "drip", source = "borewell", durationHours = 3m }
+            },
+            labour = new[]
+            {
+                new { engagementType = "hired_daily", maleCount = 2, femaleCount = 3, rate = 350m }
+            },
+            machinery = new[]
+            {
+                new { type = "drone", ownership = "rented", implement = "blower", nozzlesActive = 10, fanState = "off" }
+            }
+        });
+
+        // Seed the AiJob under Farm A / User A.
+        var foreignJobId = await harness.SeedAiJobAsync(jobUserAId, farmAId, foreignNormalizedResultJson);
+
+        // Build Farm B's plot + crop cycle (as its PrimaryOwner), then push a
+        // create_daily_log for Farm B carrying Farm A's foreign sourceAiJobId.
+        var setupResponse = await harness.Client.PostAsJsonAsync("/sync/push", new
+        {
+            deviceId = "device-foreign-b",
+            mutations = new object[]
+            {
+                new
+                {
+                    clientRequestId = "req-plot-foreign-b",
+                    mutationType = "create_plot",
+                    payload = new
+                    {
+                        plotId = plotBId,
+                        farmId = farmBId,
+                        name = "Foreign Target Plot B",
+                        areaInAcres = 2m
+                    }
+                },
+                new
+                {
+                    clientRequestId = "req-cycle-foreign-b",
+                    mutationType = "create_crop_cycle",
+                    payload = new
+                    {
+                        cropCycleId = cropCycleBId,
+                        farmId = farmBId,
+                        plotId = plotBId,
+                        cropName = "Grapes",
+                        stage = "Growth",
+                        startDate = "2026-02-21"
+                    }
+                },
+                new
+                {
+                    clientRequestId = "req-log-foreign-b",
+                    mutationType = "create_daily_log",
+                    payload = new
+                    {
+                        dailyLogId = dailyLogBId,
+                        farmId = farmBId,
+                        plotId = plotBId,
+                        cropCycleId = cropCycleBId,
+                        logDate = "2026-02-22",
+                        sourceAiJobId = foreignJobId
+                    }
+                }
+            }
+        });
+        setupResponse.EnsureSuccessStatusCode();
+
+        using var setupDoc = JsonDocument.Parse(await setupResponse.Content.ReadAsStringAsync());
+        var failures = setupDoc.RootElement
+            .GetProperty("results")
+            .EnumerateArray()
+            .Where(x => x.GetProperty("status").GetString() == "failed")
+            .ToList();
+        Assert.Empty(failures);
+
+        // The Farm B log committed …
+        Assert.True(await harness.DailyLogExistsAsync(dailyLogBId));
+
+        // … but the foreign Farm A parse was NOT derived into Farm B's ledger.
+        Assert.Empty(await harness.GetFarmOperationsForDailyLogAsync(dailyLogBId));
+        Assert.Empty(await harness.GetIrrigationEntriesForDailyLogAsync(dailyLogBId));
+        Assert.Empty(await harness.GetLabourAssignmentsForDailyLogAsync(dailyLogBId));
+        Assert.Empty(await harness.GetMachineryUsagesForDailyLogAsync(dailyLogBId));
+    }
+
     // AI Intelligence Plan WP-2e — the manual/offline path: a create_daily_log
     // mutation with NO sourceAiJobId derives NOTHING, but the log itself always
     // commits (non-blocking derivation, mirrors the B2.8 weather contract).
