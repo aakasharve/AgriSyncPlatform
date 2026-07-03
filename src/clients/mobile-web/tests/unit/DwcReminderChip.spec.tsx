@@ -17,6 +17,14 @@
  * Vitest sets `import.meta.env.MODE = 'test'` by default, so the chip's
  * default-on-in-development gate evaluates to OFF inside tests. We mock
  * featureFlags per-test to assert both ON and OFF branches deterministically.
+ *
+ * Clock is pinned (vi.setSystemTime) to a fixed instant that is mid-day in
+ * BOTH UTC and IST. The test builds log date keys from the runner's local
+ * timezone (new Date().getFullYear()/…), while the chip derives "today" in
+ * IST via DateKeyService (UTC+5:30). Near the UTC↔IST day boundary those two
+ * disagree — a "today"-dated log stops matching the chip's IST "today" and the
+ * state flips to TODAY_PENDING. Pinning the clock away from any day boundary
+ * removes the ambiguity so both sides always see the same calendar day.
  */
 import '@testing-library/jest-dom/vitest';
 import React from 'react';
@@ -80,13 +88,21 @@ async function loadChipWithFlag(enabled: boolean) {
     return mod.default;
 }
 
+// 2026-06-15T06:30:00Z = 12:00 IST — mid-day in both UTC and IST, so the
+// test's local-TZ date keys and the chip's IST date keys can never disagree
+// regardless of the CI runner's timezone.
+const FIXED_NOW = new Date('2026-06-15T06:30:00Z');
+
 beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(FIXED_NOW);
     vi.resetModules();
 });
 
 afterEach(() => {
     cleanup();
     vi.doUnmock('../../src/app/featureFlags');
+    vi.useRealTimers();
 });
 
 describe('DwcReminderChip', () => {
