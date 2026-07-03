@@ -174,8 +174,10 @@ public sealed class LedgerDerivationServiceTests
         // The FarmOperation carries a non-blank DerivedEventKey, and the input's
         // key == Compute(job.Id, sourceText, "input").
         op.DerivedEventKey.Value.Should().NotBeNullOrWhiteSpace();
+        // The key now folds in the plot scope (multi-plot collision fix), so the
+        // expected key is Compute(job.Id, log.PlotId, span, "input").
         var expectedInputKey = DerivedEventKey.Compute(
-            job.Id, "0:52:34 आणि 13:0:45 fertigation", "input");
+            job.Id, PlotGuid, "0:52:34 आणि 13:0:45 fertigation", "input");
         op.DerivedEventKey.Should().Be(expectedInputKey);
 
         // Outcome tally: 1 operation, and the child rows staged.
@@ -228,6 +230,144 @@ public sealed class LedgerDerivationServiceTests
         outcome.OperationsWritten.Should().Be(0);
         outcome.ChildrenWritten.Should().Be(0);
     }
+
+    // ── FIX A (multi-plot DerivedEventKey collision) ──────────────────────────
+
+    [Fact]
+    public async Task two_plots_sharing_one_source_job_keep_their_own_current_operation()
+    {
+        // The mobile flow creates one DailyLog PER selected plot while reusing the
+        // SAME SourceAiJobId. Both derivations recompute from the same span text +
+        // source job, so before FIX A the 2nd plot's key collided with the 1st on
+        // (farm_id, derived_event_key) and superseded it — only the last plot kept
+        // a current operation (silent data loss). Folding the plot scope into the
+        // key makes the two plots' operations distinct: BOTH stay current.
+        var repo = new InMemoryShramSafalRepository();
+        var ids = new SequentialIdGenerator();
+        var job = MakeVoiceJob(SampleNormalizedJson);
+
+        var plotA = Guid.Parse("aaaaaaaa-1111-1111-1111-111111111111");
+        var plotB = Guid.Parse("bbbbbbbb-2222-2222-2222-222222222222");
+        var logA = MakeVoiceLog(job, LogGuid, plotA);
+        var logB = MakeVoiceLog(job, Guid.Parse("77777777-7777-7777-7777-777777777777"), plotB);
+
+        // Act — derive both plots from the ONE shared source job.
+        await sut(repo).DeriveAsync(logA, job, ids, new FixedClock(FixedNow));
+        await sut(repo).DeriveAsync(logB, job, ids, new FixedClock(FixedNow.AddMinutes(1)));
+
+        // Assert — TWO current FarmOperations (one per plot), neither superseded.
+        repo.CapturedOperations.Should().HaveCount(2);
+        repo.CapturedOperations.Should().OnlyContain(o => o.IsCurrentVersion,
+            "two DIFFERENT plots sharing one source job must NOT supersede each other");
+        repo.CapturedOperations.Select(o => o.PlotId).Should().BeEquivalentTo([plotA, plotB]);
+        repo.CapturedOperations[0].DerivedEventKey.Should().NotBe(
+            repo.CapturedOperations[1].DerivedEventKey,
+            "each plot's operation carries a DISTINCT plot-scoped DerivedEventKey");
+    }
+
+    [Fact]
+    public async Task same_plot_reconfirm_still_supersedes_with_plot_scoped_key()
+    {
+        // The SAME plot re-confirmed offline (a DISTINCT DailyLog id but the same
+        // plot + source job + span) must still recompute the SAME key and supersede
+        // — FIX A must not regress the intended within-plot supersession.
+        var repo = new InMemoryShramSafalRepository();
+        var ids = new SequentialIdGenerator();
+        var job = MakeVoiceJob(SampleNormalizedJson);
+
+        var log1 = MakeVoiceLog(job, LogGuid, PlotGuid);
+        var log2 = MakeVoiceLog(job, Guid.Parse("77777777-7777-7777-7777-777777777777"), PlotGuid);
+
+        await sut(repo).DeriveAsync(log1, job, ids, new FixedClock(FixedNow));
+        var firstOp = repo.CapturedOperations.Single();
+
+        await sut(repo).DeriveAsync(log2, job, ids, new FixedClock(FixedNow.AddMinutes(1)));
+
+        // Assert — same plot ⇒ same key ⇒ supersession, exactly one current row.
+        firstOp.IsCurrentVersion.Should().BeFalse();
+        repo.CapturedOperations.Should().HaveCount(2);
+        var secondOp = repo.CapturedOperations[1];
+        secondOp.IsCurrentVersion.Should().BeTrue();
+        secondOp.DerivedEventKey.Should().Be(firstOp.DerivedEventKey);
+        firstOp.SupersededByOperationId.Should().Be(secondOp.Id);
+    }
+
+    // ── FIX C (legacy top-level input shape) ───────────────────────────────────
+
+    [Fact]
+    public async Task legacy_top_level_input_shape_yields_one_application_input_item()
+    {
+        // The still-supported LEGACY shape states productName/quantity/unit on the
+        // input itself with NO `mix` array. Before FIX C the parent FarmOperation
+        // was created but the child (product/dose) was dropped. Now one
+        // ApplicationInputItem is created from the legacy top-level fields.
+        var repo = new InMemoryShramSafalRepository();
+        var job = MakeVoiceJob(LegacyTopLevelInputJson);
+        var log = MakeVoiceLog(job);
+
+        await sut(repo).DeriveAsync(log, job, new SequentialIdGenerator(), new FixedClock(FixedNow));
+
+        repo.CapturedOperations.Should().ContainSingle();
+        repo.CapturedInputItems.Should().ContainSingle("the legacy top-level product/dose must not be dropped");
+        var child = repo.CapturedInputItems[0];
+        child.ProductName.Should().Be("19-19-19");
+        child.DoseAmount.Should().Be(25);
+        child.DoseUnit.Should().Be("kg");
+        child.ProductType.Should().Be("fertilizer");
+        child.OperationId.Should().Be(repo.CapturedOperations[0].Id);
+    }
+
+    [Fact]
+    public async Task input_with_mix_does_not_also_create_a_legacy_child()
+    {
+        // When a `mix` IS present the legacy branch must NOT fire — no double-create.
+        var repo = new InMemoryShramSafalRepository();
+        var job = MakeVoiceJob(MixPlusStrayTopLevelInputJson);
+        var log = MakeVoiceLog(job);
+
+        await sut(repo).DeriveAsync(log, job, new SequentialIdGenerator(), new FixedClock(FixedNow));
+
+        // Exactly the two mix items — the stray top-level productName is ignored.
+        repo.CapturedInputItems.Should().HaveCount(2);
+        repo.CapturedInputItems.Select(i => i.ProductName).Should().BeEquivalentTo(["MKP", "Potassium Nitrate"]);
+    }
+
+    // A single input carrying ONLY legacy top-level product fields (no mix array).
+    private const string LegacyTopLevelInputJson = """
+    {
+      "inputs": [
+        {
+          "id": "in-0",
+          "sourceText": "19-19-19 पंचवीस किलो",
+          "type": "fertilizer",
+          "productName": "19-19-19",
+          "quantity": 25,
+          "unit": "kg"
+        }
+      ]
+    }
+    """;
+
+    // An input with a real 2-item mix PLUS a stray top-level productName that must
+    // be ignored (no double-create).
+    private const string MixPlusStrayTopLevelInputJson = """
+    {
+      "inputs": [
+        {
+          "id": "in-0",
+          "sourceText": "0:52:34 आणि 13:0:45",
+          "type": "fertilizer",
+          "productName": "STRAY-SHOULD-BE-IGNORED",
+          "quantity": 99,
+          "unit": "kg",
+          "mix": [
+            { "id": "m0", "productName": "MKP", "npkGrade": "0:52:34", "dose": 4, "unit": "kg" },
+            { "id": "m1", "productName": "Potassium Nitrate", "npkGrade": "13:0:45", "dose": 2, "unit": "kg" }
+          ]
+        }
+      ]
+    }
+    """;
 
     // ── WP-2d (D5) RoutineMemory upsert in the derivation ─────────────────────
 
@@ -295,15 +435,23 @@ public sealed class LedgerDerivationServiceTests
         return job;
     }
 
+    // Fresh service over a given repo (keeps each Derive call reading the same
+    // captured state the handler would see on prod's shared DbSet).
+    private static LedgerDerivationService sut(InMemoryShramSafalRepository repo)
+        => new(repo);
+
     private static DailyLog MakeVoiceLog(AiJob job)
+        => MakeVoiceLog(job, LogGuid, PlotGuid);
+
+    private static DailyLog MakeVoiceLog(AiJob job, Guid logId, Guid plotId)
         => DailyLog.Create(
-            id: LogGuid,
+            id: logId,
             farmId: new FarmId(FarmGuid),
-            plotId: PlotGuid,
+            plotId: plotId,
             cropCycleId: CropCycleGuid,
             operatorUserId: new UserId(OperatorUserId),
             logDate: new DateOnly(2026, 6, 20),
-            idempotencyKey: "log-key-1",
+            idempotencyKey: $"log-key-{logId:N}",
             location: null,
             createdAtUtc: FixedNow,
             provenance: new Provenance(

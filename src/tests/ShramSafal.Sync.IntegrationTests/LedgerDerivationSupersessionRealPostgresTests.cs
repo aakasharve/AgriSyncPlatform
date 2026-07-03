@@ -40,10 +40,13 @@ namespace ShramSafal.Sync.IntegrationTests;
 /// DISTINCT <c>ClientRequestId</c>s. Because the idempotency key is
 /// <c>DeviceId:ClientRequestId</c>, the second confirm is NOT deduped — the
 /// handler runs fully again, creating a second DailyLog and re-deriving the
-/// typed ledger. Both derivations recompute the SAME
-/// <see cref="Domain.Farms.DerivedEventKey"/> (keyed on the AiJob id, span text,
-/// and event type — NOT the log id), so the second derivation must SUPERSEDE the
-/// first current FarmOperation, never insert a second current row.</para>
+/// typed ledger. Both confirms target the SAME plot, so both derivations
+/// recompute the SAME <see cref="Domain.Farms.DerivedEventKey"/> (keyed on the
+/// AiJob id, plot scope, span text, and event type — NOT the log id), so the
+/// second derivation must SUPERSEDE the first current FarmOperation, never insert
+/// a second current row. (The plot scope in the key is the multi-plot collision
+/// fix — DIFFERENT plots sharing one source job get DISTINCT keys and do NOT
+/// supersede; this same-plot re-confirm still collides and supersedes.)</para>
 ///
 /// <para><b>Four proofs (per the F2 brief).</b>
 /// <list type="roman">

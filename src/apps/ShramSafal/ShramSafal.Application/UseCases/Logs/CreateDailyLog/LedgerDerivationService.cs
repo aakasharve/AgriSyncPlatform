@@ -70,7 +70,14 @@ public sealed class LedgerDerivationService(IShramSafalRepository repository) : 
             foreach (var input in inputs.EnumerateArray())
             {
                 var span = SpanInput(input, "input", ordinal);
-                var key = DerivedEventKey.Compute(sourceJob.Id, span, "input");
+                // Multi-plot fix: fold the plot scope into the derived identity so
+                // two DailyLogs for two DIFFERENT plots that share one SourceAiJobId
+                // (the mobile one-log-per-plot flow) don't collide on
+                // (farm_id, derived_event_key) and silently supersede each other.
+                // The scope is log.PlotId (stable across re-confirms of the SAME
+                // plot), so a same-plot offline re-confirm still recomputes the same
+                // key and supersedes as intended.
+                var key = DerivedEventKey.Compute(sourceJob.Id, log.PlotId, span, "input");
 
                 var opId = ids.New();
                 var op = FarmOperation.Create(
@@ -110,7 +117,8 @@ public sealed class LedgerDerivationService(IShramSafalRepository repository) : 
 
                 var productType = ReadString(input, "type"); // legacy fertilizer/pesticide/…
                 var mixOrdinal = 0;
-                if (input.TryGetProperty("mix", out var mix) && mix.ValueKind == JsonValueKind.Array)
+                var hasMix = input.TryGetProperty("mix", out var mix) && mix.ValueKind == JsonValueKind.Array;
+                if (hasMix)
                 {
                     foreach (var item in mix.EnumerateArray())
                     {
@@ -135,6 +143,36 @@ public sealed class LedgerDerivationService(IShramSafalRepository repository) : 
                         await repository.AddApplicationInputItemAsync(child, ct);
                         children++;
                         mixOrdinal++;
+                    }
+                }
+
+                // Legacy TOP-LEVEL shape (still supported): productName/quantity/unit
+                // stated directly on the input, no `mix` array (or an empty one). The
+                // parent FarmOperation was created above; without this branch the
+                // product/dose would be dropped (no ApplicationInputItem child). Emit
+                // one child from the legacy fields. Guarded on !hasMix-produced-a-child
+                // so we never DOUBLE-create when a `mix` is present.
+                if (mixOrdinal == 0)
+                {
+                    var legacyProductName = ReadString(input, "productName");
+                    if (!string.IsNullOrWhiteSpace(legacyProductName))
+                    {
+                        var legacyChild = ApplicationInputItem.Create(
+                            id: ids.New(),
+                            operationId: opId,
+                            productName: legacyProductName!,
+                            productType: productType,
+                            npkGrade: ReadString(input, "npkGrade"),
+                            // legacy top-level dose: `quantity` is the canonical field,
+                            // `dose` is the tolerant fallback (mirrors the mix item).
+                            doseAmount: ReadDecimal(input, "quantity") ?? ReadDecimal(input, "dose"),
+                            doseUnit: ReadString(input, "unit"),
+                            doseBasisQty: ReadDecimal(input, "basisQty"),
+                            doseBasisUnit: ReadString(input, "basisUnit"),
+                            ordinal: 0,
+                            createdAtUtc: now);
+                        await repository.AddApplicationInputItemAsync(legacyChild, ct);
+                        children++;
                     }
                 }
 

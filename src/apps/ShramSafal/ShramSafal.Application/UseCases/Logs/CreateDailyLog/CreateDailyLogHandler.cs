@@ -123,6 +123,17 @@ public sealed class CreateDailyLogHandler(
 
         Provenance provenance;
         Domain.AI.AiJob? sourceJobForEvidence = null;
+
+        // FINDING 1 (F1) + residual foreign-reference fix. The client-supplied
+        // SourceAiJobId is only trustworthy once we've PROVEN this farm owns the
+        // referenced AiJob. `validatedSourceAiJobId` is that proven value: it is
+        // non-null ONLY when the guard below accepted ownership. It is what gets
+        // persisted onto daily_logs.source_ai_job_id AND the audit row — NEVER the
+        // raw command value — so a caller who supplies another farm's AiJob id (on
+        // the RLS-bypassed sync/admin path) can no longer make this farm's log
+        // reference a foreign job. Null here mirrors the true-manual path: Manual
+        // provenance, no derivation, no foreign back-reference.
+        Guid? validatedSourceAiJobId = null;
         if (command.SourceAiJobId is { } sourceJobId && sourceJobId != Guid.Empty)
         {
             var sourceJob = await aiJobRepository.GetByIdAsync(sourceJobId, ct);
@@ -152,6 +163,9 @@ public sealed class CreateDailyLogHandler(
 
                 // W1.P2 T3 — capture source job so we can extract per-field provenance below.
                 sourceJobForEvidence = sourceJob;
+
+                // Ownership proven → this id is safe to persist as a back-reference.
+                validatedSourceAiJobId = sourceJobId;
             }
         }
         else
@@ -170,7 +184,7 @@ public sealed class CreateDailyLogHandler(
             command.Location,
             clock.UtcNow,
             provenance: provenance,
-            sourceAiJobId: command.SourceAiJobId);
+            sourceAiJobId: validatedSourceAiJobId);
 
         // W1.P2 T3 — persist per-field provenance into EvidenceSourcesJson.
         // The AiJob's NormalizedResultJson carries "provenance" keys on each
@@ -193,8 +207,9 @@ public sealed class CreateDailyLogHandler(
         // DATA_PRINCIPLE_SPINE sub-phase 04.3b — migrate from AuditEvent.Create
         // (sentinel provenance) to AuditEventFactory.Create with the real
         // X-Device-Id / IP hash / X-App-Version sourced from the endpoint's
-        // AuditContextAccessor. SourceAiJobId is lifted from the command (set
-        // on the voice-Confirm path; null on true-manual).
+        // AuditContextAccessor. SourceAiJobId uses the OWNERSHIP-VALIDATED value
+        // (null when the F1 guard rejected the client-supplied id) so the audit
+        // row never records a back-reference to another farm's AiJob either.
         await repository.AddAuditEventAsync(
             AuditEventFactory.Create(
                 entityType: "DailyLog",
@@ -216,7 +231,7 @@ public sealed class CreateDailyLogHandler(
                 appVersion: stampedAppVersion,
                 deviceId: command.AuditDeviceId,
                 ipHash: command.AuditIpHash,
-                sourceAiJobId: command.SourceAiJobId),
+                sourceAiJobId: validatedSourceAiJobId),
             ct);
 
         // ── Fix F1: TWO-PHASE persistence ────────────────────────────────────

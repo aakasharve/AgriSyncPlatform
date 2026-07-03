@@ -19,7 +19,7 @@ public sealed class FarmOperationSupersessionTests
     [Fact]
     public void Create_starts_current_and_unsuperseded()
     {
-        var op = NewOp(Guid.NewGuid(), DerivedEventKey.Compute(Log, "19-19-19", "input"));
+        var op = NewOp(Guid.NewGuid(), DerivedEventKey.Compute(Log, null, "19-19-19", "input"));
         Assert.True(op.IsCurrentVersion);
         Assert.Null(op.SupersededByOperationId);
     }
@@ -27,7 +27,7 @@ public sealed class FarmOperationSupersessionTests
     [Fact]
     public void MarkSuperseded_flips_current_and_stamps_successor()
     {
-        var key = DerivedEventKey.Compute(Log, "19-19-19", "input");
+        var key = DerivedEventKey.Compute(Log, null, "19-19-19", "input");
         var oldOp = NewOp(Guid.NewGuid(), key);
         var newOp = NewOp(Guid.NewGuid(), key); // correction: SAME key, new row, current
 
@@ -42,7 +42,7 @@ public sealed class FarmOperationSupersessionTests
     [Fact]
     public void MarkSuperseded_twice_throws()
     {
-        var op = NewOp(Guid.NewGuid(), DerivedEventKey.Compute(Log, "19-19-19", "input"));
+        var op = NewOp(Guid.NewGuid(), DerivedEventKey.Compute(Log, null, "19-19-19", "input"));
         op.MarkSuperseded(Guid.NewGuid(), DateTime.UtcNow);
         Assert.Throws<InvalidOperationException>(() => op.MarkSuperseded(Guid.NewGuid(), DateTime.UtcNow));
     }
@@ -52,6 +52,6 @@ public sealed class FarmOperationSupersessionTests
     {
         Assert.Throws<ArgumentException>(() => FarmOperation.Create(
             Guid.NewGuid(), Farm, null, " ", new DateOnly(2025, 10, 28), Log,
-            DerivedEventKey.Compute(Log, "x", "input"), Actor, Provenance.Manual("unknown"), DateTime.UtcNow));
+            DerivedEventKey.Compute(Log, null, "x", "input"), Actor, Provenance.Manual("unknown"), DateTime.UtcNow));
     }
 }

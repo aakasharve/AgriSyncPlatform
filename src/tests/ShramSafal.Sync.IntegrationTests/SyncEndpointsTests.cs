@@ -885,6 +885,10 @@ public sealed class SyncEndpointsTests
             .ToList();
         Assert.Empty(failures);
 
+        // FIX B regression: the legitimate SAME-FARM sourceAiJobId is still
+        // persisted onto the log (only foreign/rejected ids are nulled).
+        Assert.Equal(jobId, await harness.GetDailyLogSourceAiJobIdAsync(dailyLogId));
+
         // inputs → exactly one CURRENT FarmOperation(application) + its mix items.
         var operations = await harness.GetFarmOperationsForDailyLogAsync(dailyLogId);
         var operation = Assert.Single(operations);
@@ -1049,7 +1053,11 @@ public sealed class SyncEndpointsTests
         // The Farm B log committed …
         Assert.True(await harness.DailyLogExistsAsync(dailyLogBId));
 
-        // … but the foreign Farm A parse was NOT derived into Farm B's ledger.
+        // FIX B (residual foreign-reference): the Farm B log must NOT persist the
+        // foreign sourceAiJobId either — source_ai_job_id is NULL, not Farm A's job.
+        Assert.Null(await harness.GetDailyLogSourceAiJobIdAsync(dailyLogBId));
+
+        // … and the foreign Farm A parse was NOT derived into Farm B's ledger.
         Assert.Empty(await harness.GetFarmOperationsForDailyLogAsync(dailyLogBId));
         Assert.Empty(await harness.GetIrrigationEntriesForDailyLogAsync(dailyLogBId));
         Assert.Empty(await harness.GetLabourAssignmentsForDailyLogAsync(dailyLogBId));
@@ -2214,6 +2222,20 @@ public sealed class SyncEndpointsTests
             return await db.DailyLogs
                 .AsNoTracking()
                 .AnyAsync(l => l.Id == dailyLogId);
+        }
+
+        // FIX B — read the persisted daily_logs.source_ai_job_id so a test can
+        // prove a rejected (foreign) SourceAiJobId is NOT persisted as a back-
+        // reference, while a valid same-farm id still round-trips.
+        public async Task<Guid?> GetDailyLogSourceAiJobIdAsync(Guid dailyLogId)
+        {
+            await using var scope = app.Services.CreateAsyncScope();
+            var db = scope.ServiceProvider.GetRequiredService<ShramSafalDbContext>();
+            return await db.DailyLogs
+                .AsNoTracking()
+                .Where(l => l.Id == dailyLogId)
+                .Select(l => l.SourceAiJobId)
+                .SingleAsync();
         }
 
         /// <summary>

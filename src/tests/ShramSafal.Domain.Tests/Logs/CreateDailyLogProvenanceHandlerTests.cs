@@ -133,6 +133,129 @@ public sealed class CreateDailyLogProvenanceHandlerTests
         saved.SourceAiJobId.Should().BeNull();
     }
 
+    // ── FIX B (residual foreign SourceAiJobId) ────────────────────────────────
+    // The F1 guard already downgrades a farm-mismatched SourceAiJobId to Manual
+    // and skips derivation. FIX B closes the residual leak: the handler must ALSO
+    // stop persisting the client-supplied foreign id onto daily_logs.source_ai_job_id
+    // (and the audit row). A user on the RLS-bypassed sync/admin path who knows
+    // another farm's AiJob id must NOT be able to create a log that still
+    // back-references that foreign job.
+
+    [Fact]
+    public async Task foreign_sourceAiJobId_is_not_persisted_and_derives_nothing()
+    {
+        // Arrange: seed this farm's parents + membership. The AiJob the client
+        // references EXISTS but belongs to ANOTHER farm (FarmId != command.FarmId),
+        // exactly the cross-farm injection the F1 guard rejects.
+        var repo = new InMemoryShramSafalRepository();
+        repo.AddFarm(MakeFarm());
+        repo.AddPlot(MakePlot());
+        repo.AddCropCycle(MakeCropCycle());
+        repo.SetMembership(FarmGuid, OperatorUserId, AppRole.Worker);
+
+        var otherFarmId = Guid.Parse("99999999-9999-9999-9999-999999999999");
+        var foreignJob = MakeAiJobForFarm(AiJobGuid, otherFarmId);
+        var aiJobs = new SeededAiJobRepository(foreignJob);
+
+        var handler = BuildHandler(repo, aiJobs);
+        var command = MakeCommand(sourceAiJobId: AiJobGuid, clientAppVersion: CommandAppVersion);
+
+        // Act
+        var result = await handler.HandleAsync(command);
+
+        // Assert: the log still commits (Manual provenance) but carries NO foreign
+        // back-reference — source_ai_job_id is NULL.
+        result.IsSuccess.Should().BeTrue();
+        var saved = await repo.GetDailyLogByIdAsync(LogGuid);
+        saved.Should().NotBeNull();
+        saved!.Provenance.Source.Should().Be(Source.Manual);
+        saved.SourceAiJobId.Should().BeNull(
+            "a farm-mismatched (foreign) SourceAiJobId must never be persisted onto the log");
+
+        // The audit row must ALSO carry no foreign back-reference.
+        repo.AuditEvents.Should().ContainSingle();
+        repo.AuditEvents[0].SourceAiJobId.Should().BeNull(
+            "the audit row must not record a back-reference to another farm's AiJob");
+
+        // No typed-ledger derivation ran for the foreign job.
+        repo.CapturedOperations.Should().BeEmpty("no foreign parse is derived into this farm's ledger");
+        repo.CapturedInputItems.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task valid_same_farm_sourceAiJobId_is_stored_and_derives()
+    {
+        // Arrange: a same-farm AiJob with a minimal derivable inputs payload — the
+        // legitimate path must be preserved (id stored + derivation runs).
+        var repo = new InMemoryShramSafalRepository();
+        repo.AddFarm(MakeFarm());
+        repo.AddPlot(MakePlot());
+        repo.AddCropCycle(MakeCropCycle());
+        repo.SetMembership(FarmGuid, OperatorUserId, AppRole.Worker);
+
+        var ownedJob = MakeAiJobForFarm(AiJobGuid, FarmGuid, MinimalInputsJson);
+        var aiJobs = new SeededAiJobRepository(ownedJob);
+
+        var handler = BuildHandler(repo, aiJobs);
+        var command = MakeCommand(sourceAiJobId: AiJobGuid, clientAppVersion: CommandAppVersion);
+
+        // Act
+        var result = await handler.HandleAsync(command);
+
+        // Assert: legitimate same-farm id IS persisted on the log AND the audit row.
+        result.IsSuccess.Should().BeTrue();
+        var saved = await repo.GetDailyLogByIdAsync(LogGuid);
+        saved!.SourceAiJobId.Should().Be(AiJobGuid, "a valid owned SourceAiJobId is still stored");
+        saved.Provenance.Source.Should().Be(Source.Voice);
+
+        repo.AuditEvents.Should().ContainSingle();
+        repo.AuditEvents[0].SourceAiJobId.Should().Be(AiJobGuid);
+
+        // And derivation ran for the owned job (one FarmOperation from the input).
+        repo.CapturedOperations.Should().ContainSingle(
+            "the legitimate same-farm case must still derive the typed ledger");
+    }
+
+    private const string MinimalInputsJson = """
+    {
+      "inputs": [
+        {
+          "id": "in-0",
+          "sourceText": "0:52:34 fertigation",
+          "type": "fertilizer",
+          "mix": [ { "id": "m0", "productName": "MKP", "dose": 4, "unit": "kg" } ]
+        }
+      ]
+    }
+    """;
+
+    private static AiJob MakeAiJobForFarm(Guid jobId, Guid farmId, string? normalizedJson = null)
+    {
+        var job = AiJob.Create(
+            id: jobId,
+            idempotencyKey: $"voice-key-{jobId:N}",
+            operationType: AiOperationType.VoiceToStructuredLog,
+            userId: OperatorUserId,
+            farmId: farmId,
+            inputContentHash: null,
+            rawInputRef: null,
+            inputSessionMetadataJson: null,
+            provenance: new Provenance(
+                source: Source.Voice,
+                modelVersion: AiJobModelVersion,
+                promptVersion: AiJobPromptVersion,
+                promptContentHash: AiJobPromptContentHash,
+                appVersion: AiJobAppVersion));
+
+        if (!string.IsNullOrWhiteSpace(normalizedJson))
+        {
+            var attempt = job.AddAttempt(AiProviderType.Gemini);
+            job.MarkSucceeded(normalizedJson, attempt);
+        }
+
+        return job;
+    }
+
     // ---- helpers ----
 
     private static CreateDailyLogCommand MakeCommand(
