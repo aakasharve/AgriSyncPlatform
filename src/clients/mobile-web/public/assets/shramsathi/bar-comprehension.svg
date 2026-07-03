@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 28" role="img" aria-label="Shram Sathi comprehension bar">
+  <defs>
+    <linearGradient id="fill" x1="0" x2="320" y1="0" y2="0" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#F4A93C"/>
+      <stop offset="1" stop-color="#2E7D52"/>
+    </linearGradient>
+    <clipPath id="track">
+      <rect x="4" y="6" width="312" height="16" rx="8"/>
+    </clipPath>
+  </defs>
+  <rect x="4" y="6" width="312" height="16" rx="8" fill="#E8E2D8"/>
+  <rect x="4" y="6" width="218" height="16" rx="8" fill="url(#fill)" clip-path="url(#track)"/>
+  <path d="M14 14H306" stroke="#F5EFE3" stroke-opacity=".38" stroke-width="2" stroke-linecap="round"/>
+</svg>

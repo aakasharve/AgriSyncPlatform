@@ -2,12 +2,25 @@
  * @license
  * SPDX-License-Identifier: Apache-2.0
  *
- * MeterDisplay — Understanding Meter scaffold (1d-infra; flag-gated; PLACEHOLDER visuals).
+ * MeterDisplay — Understanding Meter (flag-gated; visible farmer-facing meter).
  *
- * Consumes the already-built meter engine (scoreVlog output + rankMeterGaps + computeMeterArrival)
- * and renders a minimal placeholder. The final visual treatment — the /10 face, silhouette/reveal,
- * palette, font work — is DEFERRED to the visual-polish pass (founder supplies design assets).
- * Gated by FEATURE_FLAGS.understandingMeter (OFF by default) so it is inert in production.
+ * Adapter layer: consumes the REAL meter engine (scoreVlog output + rankMeterGaps
+ * + computeMeterArrival) and drives the presentational Shram Sathi meter
+ * (ShramSathiMeter → ShramSathiFace + thought-bubble + comprehension bar +
+ * arrival gate). The engine stays pure; this component only maps engine outputs
+ * onto the visual props.
+ *
+ * Engine → visual mapping:
+ *   VlogScore.score (0–100)      → ShramSathiMeter score.value (0–10)  [÷10]
+ *   rankMeterGaps(score)         → gaps [{ id: questionKey, question }]
+ *   computeMeterArrival(allLogs) → { arrived, arrivingProgress: richLogCount }
+ *
+ * Gated by FEATURE_FLAGS.understandingMeter (OFF by default) so it is inert in
+ * production. The engine is always callable; this flag gates the DISPLAY only.
+ *
+ * Font rules: the presentational meter (ShramSathiMeter) applies
+ * 'Noto Serif Devanagari' to Marathi headings, 'Noto Sans Devanagari' to Marathi
+ * body, and 'DM Sans' to English/numbers. Palette is warm (never red).
  *
  * spec: ai-intelligence-plan-2026-06-25
  */
@@ -17,41 +30,57 @@ import { FEATURE_FLAGS } from '../../../app/featureFlags';
 import { rankMeterGaps } from '../services/meterGaps';
 import { computeMeterArrival } from '../services/meterArrival';
 import type { VlogScore } from '../../../domain/types/log.types';
+import ShramSathiMeter, { type ShramSathiGap } from './shramsathi/ShramSathiMeter';
 
 export interface MeterDisplayProps {
     /** The just-saved log's understanding score (undefined until wired/available). */
     score?: VlogScore;
     /** All of the farmer's logs (each may carry an `understanding` VlogScore) — drives the arrival gate. */
     allLogs?: Array<{ understanding?: VlogScore }>;
+    /** Optional passthrough for layout tweaks (dev preview grid, etc.). */
+    className?: string;
 }
 
-export function MeterDisplay({ score, allLogs = [] }: MeterDisplayProps): React.ReactElement | null {
+/**
+ * Map the engine's 0–100 VlogScore to the presentational 0–10 scale.
+ * UNKNOWN days (score === null) map to 0 so the meter reads "still learning"
+ * rather than crashing on a silent day.
+ */
+function toTenScale(score?: VlogScore): number {
+    if (!score || score.score == null) return 0;
+    return score.score / 10;
+}
+
+/** Map ranked engine gaps onto the presentational gap shape. */
+function toVisualGaps(score?: VlogScore): ShramSathiGap[] {
+    if (!score) return [];
+    return rankMeterGaps(score).map((g) => ({
+        id: g.questionKey,
+        question: g.question,
+    }));
+}
+
+export function MeterDisplay({
+    score,
+    allLogs = [],
+    className = '',
+}: MeterDisplayProps): React.ReactElement | null {
     // Flag gate: inert in production until the meter is calibrated + founder-approved.
     if (!FEATURE_FLAGS.understandingMeter) {
         return null;
     }
 
-    const gaps = score ? rankMeterGaps(score) : [];
     const arrival = computeMeterArrival(allLogs);
+    const gaps = toVisualGaps(score);
 
-    // PLACEHOLDER visuals — intentionally minimal/unstyled. Visual polish pass replaces this.
     return (
-        <div data-testid="meter-display" className="mt-6 rounded-2xl border border-dashed border-stone-300 p-4 text-left">
-            <div data-testid="meter-score" className="text-sm text-stone-600">
-                {score && score.score != null
-                    ? `Understanding: ${score.score}/100 (${score.outcome})`
-                    : 'Understanding: —'}
-            </div>
-            <div data-testid="meter-arrival" className="mt-1 text-xs text-stone-500">
-                {`Rich logs: ${arrival.richLogCount}/${arrival.target}${arrival.arrived ? ' — arrived' : ''}`}
-            </div>
-            {gaps.length > 0 && (
-                <ul data-testid="meter-gaps" className="mt-2 space-y-1">
-                    {gaps.map((g) => (
-                        <li key={g.questionKey} className="text-xs text-stone-700">{g.question}</li>
-                    ))}
-                </ul>
-            )}
+        <div data-testid="meter-display" className={className}>
+            <ShramSathiMeter
+                arrived={arrival.arrived}
+                arrivingProgress={arrival.richLogCount}
+                score={{ value: toTenScale(score) }}
+                gaps={gaps}
+            />
         </div>
     );
 }

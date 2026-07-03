@@ -69,10 +69,27 @@ if (!rootElement) {
 }
 
 const root = ReactDOM.createRoot(rootElement);
-root.render(
-  <React.StrictMode>
-    <TenantProvider>
-      <App />
-    </TenantProvider>
-  </React.StrictMode>
-);
+
+// DEV-ONLY: Shram Sathi understanding-meter preview (founder-facing, local only).
+// Mounted standalone (no login, no backend, no Dexie) when the URL path is
+// /dev/shram-sathi in a development build. `import.meta.env.DEV` is statically
+// false in production builds, so Vite tree-shakes this branch + the lazy import
+// entirely out of the prod bundle. NEVER merged/deployed (branch
+// feat/shram-sathi-local-preview). See src/features/logs/dev/ShramSathiPreviewPage.tsx.
+if (import.meta.env.DEV && window.location.pathname.startsWith('/dev/shram-sathi')) {
+  import('./features/logs/dev/ShramSathiPreviewPage').then(({ ShramSathiPreviewPage }) => {
+    root.render(
+      <React.StrictMode>
+        <ShramSathiPreviewPage />
+      </React.StrictMode>
+    );
+  });
+} else {
+  root.render(
+    <React.StrictMode>
+      <TenantProvider>
+        <App />
+      </TenantProvider>
+    </React.StrictMode>
+  );
+}

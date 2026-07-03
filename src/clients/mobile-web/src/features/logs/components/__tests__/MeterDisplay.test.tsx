@@ -3,7 +3,13 @@
  * @license
  * SPDX-License-Identifier: Apache-2.0
  *
- * MeterDisplay — unit tests (1d-infra flag-gate scaffold)
+ * MeterDisplay — unit tests (flag-gated engine → Shram Sathi visual adapter)
+ *
+ * MeterDisplay is now an ADAPTER that maps the real meter engine
+ * (scoreVlog output + rankMeterGaps + computeMeterArrival) onto the
+ * presentational ShramSathiMeter. These tests assert the engine → visual
+ * wiring (flag gate, /10 score, gaps, arrival gate) through the Shram Sathi
+ * markup rather than the old placeholder testids.
  *
  * Follows the vi.doMock + vi.resetModules + dynamic-import pattern used in
  * AppRouter.feature-gate.test.tsx (the established repo convention for toggling
@@ -13,6 +19,7 @@
  */
 import React from 'react';
 import { render, cleanup } from '@testing-library/react';
+import '@testing-library/jest-dom/vitest';
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import type { VlogScoreDimension, VlogScore } from '../../../../domain/types/log.types';
 
@@ -88,9 +95,9 @@ describe('MeterDisplay', () => {
     });
 
     // -------------------------------------------------------------------------
-    // 2. Flag ON + SCORED VlogScore → score shown + gaps non-empty
+    // 2. Flag ON + SCORED VlogScore, ARRIVED → /10 score + gaps surfaced
     // -------------------------------------------------------------------------
-    it('shows score and gaps for a SCORED VlogScore when flag is ON', async () => {
+    it('shows the /10 score and gaps for a SCORED VlogScore when flag is ON and arrived', async () => {
         const { MeterDisplay } = await loadComponent(true);
 
         const score = makeScore(78, 'SCORED', [
@@ -99,41 +106,57 @@ describe('MeterDisplay', () => {
             makeDim('WHAT', true, 1, 20),   // fully covered → no gap
         ]);
 
-        const { getByTestId } = render(<MeterDisplay score={score} allLogs={[]} />);
+        // 20 rich logs → arrived, so the arrived branch (score + gaps) renders.
+        const arrivedLogs = Array.from({ length: 20 }, () => ({
+            understanding: makeScore(90, 'SCORED', []),
+        }));
 
-        const scoreEl = getByTestId('meter-score');
-        expect(scoreEl.textContent).toContain('78/100');
-        expect(scoreEl.textContent).toContain('SCORED');
+        const { getByTestId, getAllByTestId } = render(
+            <MeterDisplay score={score} allLogs={arrivedLogs} />,
+        );
 
-        const gapsEl = getByTestId('meter-gaps');
-        expect(gapsEl.children.length).toBeGreaterThan(0);
+        // Wrapper testid preserved for consumers.
+        expect(getByTestId('meter-display')).toBeTruthy();
+
+        // 78/100 → 7.8 → rounds to 8 on the /10 face.
+        const scoreEl = getByTestId('shramsathi-score');
+        expect(scoreEl.textContent).toContain('१० पैकी ८');
+
+        // DOSE gap (coverage 0) surfaced through the Shram Sathi gap list.
+        expect(getAllByTestId('shramsathi-gap-question').length).toBeGreaterThan(0);
     });
 
     // -------------------------------------------------------------------------
-    // 3. Flag ON + UNKNOWN VlogScore → meter-display shown, NO meter-gaps
+    // 3. Flag ON + UNKNOWN VlogScore → meter-display shown, NO gap questions
     // -------------------------------------------------------------------------
-    it('renders meter-display but no meter-gaps for an UNKNOWN VlogScore', async () => {
+    it('renders meter-display but no gap questions for an UNKNOWN VlogScore', async () => {
         const { MeterDisplay } = await loadComponent(true);
 
         const score = makeScore(null, 'UNKNOWN', [
             makeDim('DOSE', true, 0, 20),
         ]);
 
+        // Arrived so the gap region can render — proves gaps stay empty on UNKNOWN.
+        const arrivedLogs = Array.from({ length: 20 }, () => ({
+            understanding: makeScore(90, 'SCORED', []),
+        }));
+
         const { getByTestId, queryByTestId } = render(
-            <MeterDisplay score={score} allLogs={[]} />,
+            <MeterDisplay score={score} allLogs={arrivedLogs} />,
         );
 
         expect(getByTestId('meter-display')).toBeTruthy();
-        expect(queryByTestId('meter-gaps')).toBeNull();
+        // rankMeterGaps returns [] for UNKNOWN → no gap questions rendered.
+        expect(queryByTestId('shramsathi-gap-question')).toBeNull();
     });
 
     // -------------------------------------------------------------------------
-    // 4. Flag ON + allLogs with several rich logs → arrival reflects rich count
+    // 4. Flag ON + few rich logs → NOT arrived → arriving silhouette + ticks
     // -------------------------------------------------------------------------
-    it('reflects the correct rich-log count in meter-arrival', async () => {
+    it('shows the arriving silhouette (not arrived) with 20 progress ticks below the threshold', async () => {
         const { MeterDisplay } = await loadComponent(true);
 
-        // Rich log = score > 50. Build 5 rich + 2 non-rich.
+        // Rich log = score > 50. Build 5 rich + 2 non-rich → 5/20, not arrived.
         const richScore = makeScore(80, 'SCORED', []);
         const poorScore = makeScore(30, 'SCORED', []);
         const unknownScore = makeScore(null, 'UNKNOWN', []);
@@ -148,9 +171,11 @@ describe('MeterDisplay', () => {
             { understanding: unknownScore },
         ];
 
-        const { getByTestId } = render(<MeterDisplay allLogs={allLogs} />);
+        const { getByTestId, getAllByTestId } = render(<MeterDisplay allLogs={allLogs} />);
 
-        const arrivalEl = getByTestId('meter-arrival');
-        expect(arrivalEl.textContent).toContain('5/20');
+        // Not arrived → the face renders as the silhouette.
+        expect(getByTestId('shramsathi-face')).toHaveAttribute('data-band', 'silhouette');
+        // Arrival gate renders 20 progress ticks (5 filled of 20).
+        expect(getAllByTestId('shramsathi-arriving-tick')).toHaveLength(20);
     });
 });

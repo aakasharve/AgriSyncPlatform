@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" role="img" aria-label="Shram Sathi comprehension ring">
+  <defs>
+    <linearGradient id="ring-fill" x1="20" x2="100" y1="100" y2="20" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#F4A93C"/>
+      <stop offset="1" stop-color="#2E7D52"/>
+    </linearGradient>
+  </defs>
+  <circle cx="60" cy="60" r="50" fill="none" stroke="#E8E2D8" stroke-width="10"/>
+  <circle cx="60" cy="60" r="50" fill="none" stroke="url(#ring-fill)" stroke-width="10" stroke-linecap="round" stroke-dasharray="220 314" transform="rotate(-90 60 60)"/>
+</svg>
