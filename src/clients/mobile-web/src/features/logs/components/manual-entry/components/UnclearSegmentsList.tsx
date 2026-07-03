@@ -43,7 +43,7 @@ const UnclearSegmentsList: React.FC<UnclearSegmentsListProps> = ({
                     />
                     {/* Correction Input Overlay */}
                     {correctionId === seg.id && (
-                        <div className="ml-4 mr-4 -mt-2 mb-4 bg-white p-3 rounded-b-xl border-x border-b border-red-100 shadow-sm animate-in fade-in">
+                        <div className="ml-4 mr-4 -mt-2 mb-4 bg-white p-3 rounded-b-xl border-x border-b border-amber-100 shadow-sm animate-in fade-in">
                             <label className="text-xs font-bold text-slate-500 mb-1 block">Correct Meaning:</label>
                             <div className="flex gap-2">
                                 <input

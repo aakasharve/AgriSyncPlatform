@@ -23,6 +23,9 @@ import { buildTimelineEntries } from '../../services/transcriptTimelineService';
 import WeatherWidget from '../../features/weather/components/WeatherWidget';
 import { formatCurrencyINR } from '../../shared/utils/dayState';
 import { getCropTheme } from '../../shared/utils/colorTheme';
+import { FEATURE_FLAGS } from '../../app/featureFlags';
+import ShramSathiMeter from '../../features/logs/components/shramsathi/ShramSathiMeter';
+import { buildShramSathiProjection } from '../../features/logs/components/shramsathi/shramSathiProjection';
 
 import { AppRouterContext } from './routeContext';
 import { ReflectPage, ComparePage } from './lazyComponents';
@@ -116,6 +119,14 @@ export const renderLogView = (ctx: AppRouterContext): React.ReactNode => {
         setRecordingSegment,
         lastSavedLogSummary, lastSavedLogIds, mockHistory, handleReset
     } = ctx;
+    const shramSathiProjection = FEATURE_FLAGS.understandingMeter
+        ? buildShramSathiProjection(
+            (lastSavedLogIds || [])
+                .map(id => history.find(log => log.id === id) || mockHistory.find(log => log.id === id))
+                .filter((log): log is DailyLog => Boolean(log)),
+            history
+        )
+        : null;
 
     return (
         <>
@@ -548,6 +559,17 @@ export const renderLogView = (ctx: AppRouterContext): React.ReactNode => {
                                 <Leaf size={40} className="drop-shadow-sm" />
                             </div>
                         <h2 className="text-3xl font-bold text-stone-800 mb-6 tracking-tight">Saved to Ledger</h2>
+
+                        {shramSathiProjection && (
+                            <div className="mb-6">
+                                <ShramSathiMeter
+                                    arrived={shramSathiProjection.arrived}
+                                    arrivingProgress={shramSathiProjection.arrivingProgress}
+                                    score={shramSathiProjection.score}
+                                    gaps={shramSathiProjection.gaps}
+                                />
+                            </div>
+                        )}
 
                         {/* Dynamic Feedback Summary */}
                         {lastSavedLogSummary && lastSavedLogSummary.length > 0 ? (
