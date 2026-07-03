@@ -103,7 +103,7 @@ public sealed class DomainKnowledgePipelineTests
             "rawProductName must be preserved");
 
         // Ethrel row
-        var ethrelRow = inputs
+        var ethrelRow = inputs!
             .OfType<JsonObject>()
             .FirstOrDefault(r => (r["normalizedProductName"]?.GetValue<string>() ?? "")
                 .Equals("Ethrel", StringComparison.OrdinalIgnoreCase));

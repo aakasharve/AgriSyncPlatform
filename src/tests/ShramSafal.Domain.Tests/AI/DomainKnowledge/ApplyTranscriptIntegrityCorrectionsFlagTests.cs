@@ -90,7 +90,7 @@ public sealed class ApplyTranscriptIntegrityCorrectionsFlagTests
             .Any(r => (r["normalizedProductName"]?.GetValue<string>() ?? "").Contains("0-52-34"));
         hasNpkRow.Should().BeFalse("with the flag OFF the NPK rescuer must NOT run");
 
-        var ethrelNormalized = inputs.OfType<JsonObject>()
+        var ethrelNormalized = inputs!.OfType<JsonObject>()
             .Any(r => (r["normalizedProductName"]?.GetValue<string>() ?? "")
                 .Equals("Ethrel", StringComparison.OrdinalIgnoreCase));
         ethrelNormalized.Should().BeFalse("with the flag OFF the lexicon must NOT run");
