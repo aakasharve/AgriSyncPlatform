@@ -65,18 +65,27 @@ namespace ShramSafal.Sync.IntegrationTests;
 /// the Phase-1 log survives).</item>
 /// </list></para>
 ///
-/// <para><b>Write path faithfully mirrored.</b> Production drives the sync
-/// mutation under an ambient transaction (<c>TenantTransactionMiddleware</c>)
-/// with the tenant scope established by <c>CallerFarmTenantScope</c>: admin-
-/// elevate so <c>TenantConnectionInterceptor</c> no-ops (no <c>SET LOCAL</c>
-/// prepend → no EF write-rows-affected desync, per
-/// <c>reference_interceptor_setlocal_desyncs_ef_writes</c>), then set
-/// <c>agrisync.farm_id / owner_account_id / user_id</c> via
-/// <c>set_config(...,true)</c> inside that transaction. This test opens exactly
-/// that ambient transaction before invoking the handler, so
-/// <c>dbContext.Database.CurrentTransaction</c> is non-null → the handler takes
-/// the SYNC (SAVEPOINT) branch — the branch that carries the supersession /
-/// rollback bug the fix closes.</para>
+/// <para><b>Write posture exercised — the /logs (GUC-SET) path.</b> This test
+/// manually <c>set_config</c>s <c>agrisync.farm_id / owner_account_id /
+/// user_id</c> (see <c>RunHandlerUnderSyncScopeAsync</c>) after admin-elevating
+/// so <c>TenantConnectionInterceptor</c> no-ops (no <c>SET LOCAL</c> prepend →
+/// no EF write-rows-affected desync, per
+/// <c>reference_interceptor_setlocal_desyncs_ef_writes</c>). That GUC-SET
+/// posture mirrors the single-tenant HTTP <c>POST /logs</c> path, where the
+/// interceptor sets a real per-request farm GUC — NOT the production
+/// <c>POST /sync/push</c> path. It ALSO opens an ambient transaction before
+/// invoking the handler, so <c>dbContext.Database.CurrentTransaction</c> is
+/// non-null → the handler takes the SYNC (SAVEPOINT) branch — the branch that
+/// carries the supersession / rollback bug Fix F1 closes.</para>
+///
+/// <para><b>Caveat — production <c>/sync/push</c> sets NO farm GUC.</b> The
+/// real <c>/sync/push</c> route is skip-listed in <c>TenantTransactionMiddleware</c>
+/// and <c>PushSyncBatchHandler</c> never establishes the <c>agrisync.farm_id</c>
+/// GUC, so on that live path the typed-ledger derivation is currently inert (the
+/// parent tenant WITH CHECK rejects the write with the GUC unset). Wiring the
+/// farm GUC into the <c>/sync/push</c> derivation is tracked as a SEPARATE
+/// pre-flag-flip fix (spec <c>ai-intelligence-plan-2026-06-25</c>); this test
+/// does not cover it.</para>
 ///
 /// <para><b>Native :5433, opt-in, self-skipping.</b> Tagged
 /// <c>[Trait("Category","RequiresPostgres")]</c> so it never runs in the
