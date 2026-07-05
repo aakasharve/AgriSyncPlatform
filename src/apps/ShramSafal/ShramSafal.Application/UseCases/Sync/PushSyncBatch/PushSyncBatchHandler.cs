@@ -601,7 +601,24 @@ public sealed class PushSyncBatchHandler(
         // one. Map Empty back to null to preserve the prior wire behavior exactly.
         Guid? dailyLogId = request.DailyLogId == Guid.Empty ? null : request.DailyLogId;
 
-        var isMember = await repository.IsUserMemberOfFarmAsync(request.FarmId, actorUserId, ct);
+        // Fix 1 (ai-intelligence-plan-2026-06-25) — establish the membership-
+        // VALIDATED single-farm tenant scope so the confirm-time typed-ledger
+        // derivation inside CreateDailyLogHandler can WRITE ssf.farm_operations
+        // (whose tenant WITH CHECK is a direct farm_id = agrisync.farm_id match).
+        //
+        // /sync/push is admin-elevated (TenantTransactionMiddleware skip-list),
+        // so TenantConnectionInterceptor no-ops and NO agrisync.* GUC is set for
+        // this request — which is why the derivation was previously inert on the
+        // real path (the parent WITH CHECK rejected the write with 42501, silently
+        // swallowed by the non-blocking side-car). We set the GUCs ourselves on the
+        // ambient per-mutation transaction (opened at ExecuteMutationInTransactionAsync;
+        // is_local=true keeps them scoped to THIS mutation's tx, so a multi-farm
+        // batch cannot leak). This mirrors the prod-proven CallerFarmTenantScope
+        // used by the voice HTTP path; do NOT mutate TenantContext (SetTenant
+        // throws once admin-elevated) — raw set_config is the only correct
+        // mechanism.
+        var (isMember, _) = await EstablishFarmScopeForDerivationAsync(
+            request.FarmId, actorUserId, ct);
         if (!isMember)
         {
             return MutationExecutionOutcome.Failure("ShramSafal.Forbidden", "User is not a member of the target farm.");
@@ -633,6 +650,69 @@ public sealed class PushSyncBatchHandler(
             ct);
 
         return ToOutcome(result);
+    }
+
+    /// <summary>
+    /// Fix 1 (ai-intelligence-plan-2026-06-25) — membership-validated single-farm
+    /// tenant scope for the create_daily_log derivation on the admin-elevated
+    /// <c>/sync/push</c> path. Mirrors
+    /// <c>CallerFarmTenantScope.EstablishForCallerAsync</c> (the prod-proven voice
+    /// HTTP template): set <c>agrisync.user_id</c> so the user-scoped SELECT
+    /// policies surface the caller's OWN farm/membership for the read, validate
+    /// membership, then set <c>agrisync.farm_id</c> + <c>agrisync.owner_account_id</c>
+    /// so the typed-ledger writes (<c>ssf.farm_operations</c> WITH CHECK) pass.
+    /// GUCs are transaction-local (<c>is_local=true</c>) on the ambient
+    /// per-mutation tx, so a multi-farm batch cannot leak scope.
+    /// </summary>
+    private async Task<(bool IsMember, Guid OwnerAccountId)> EstablishFarmScopeForDerivationAsync(
+        Guid farmId, Guid actorUserId, CancellationToken ct)
+    {
+        // Under a NON-relational provider (the EF InMemory harness used by the
+        // sync-endpoint tests) there is no FORCE-RLS to satisfy and raw SQL is
+        // unavailable, so fall back to the provider-agnostic LINQ membership
+        // check. Behaviour is unchanged there: the derivation writes to the
+        // in-memory store regardless of GUCs. OwnerAccountId is unused on that
+        // path (only the IsMember gate matters), so return Guid.Empty for it.
+        if (!dbContext.Database.IsRelational())
+        {
+            var inMemoryMember = await repository.IsUserMemberOfFarmAsync(farmId, actorUserId, ct);
+            return (inMemoryMember, Guid.Empty);
+        }
+
+        // Set the caller's user_id GUC so the user-scoped PERMISSIVE SELECT
+        // policies (p_user_select_farms / p_user_select_memberships) surface ONLY
+        // the caller's own farms/memberships for the membership read below.
+        await dbContext.Database.ExecuteSqlInterpolatedAsync(
+            $"SELECT set_config('agrisync.user_id', {actorUserId.ToString()}, true)", ct);
+
+        // Neutralise agrisync.farm_id to the all-zeros sentinel BEFORE the read.
+        // The ORIGINAL 03.3 tenant policies on ssf.farms / ssf.farm_memberships
+        // cast current_setting('agrisync.farm_id', true)::uuid with a BARE cast
+        // (no NULLIF wrap); an empty-string GUC would throw 22P02. The zero-UUID
+        // matches no real farm, so the tenant policy contributes nothing and the
+        // user-scoped policies (keyed on user_id) remain the sole read gate.
+        await dbContext.Database.ExecuteSqlInterpolatedAsync(
+            $"SELECT set_config('agrisync.farm_id', {Guid.Empty.ToString()}, true)", ct);
+
+        // The isolation gate: reads ssf.farms (owner shortcut) + ssf.farm_memberships
+        // under the user-scoped policies. A forged/cross-farm farmId resolves to no
+        // owner/membership row → not a member → Forbidden, with the real farm_id
+        // GUC never set (nothing leaks).
+        var (isMember, ownerAccountId) = await repository
+            .GetFarmMembershipForTenantAsync(farmId, actorUserId, ct);
+        if (!isMember)
+        {
+            return (false, Guid.Empty);
+        }
+
+        // Member: establish the single-farm scope so the typed-ledger derivation
+        // writes (ssf.farm_operations + children) pass their tenant WITH CHECK.
+        await dbContext.Database.ExecuteSqlInterpolatedAsync(
+            $"SELECT set_config('agrisync.farm_id', {farmId.ToString()}, true)", ct);
+        await dbContext.Database.ExecuteSqlInterpolatedAsync(
+            $"SELECT set_config('agrisync.owner_account_id', {ownerAccountId.ToString()}, true)", ct);
+
+        return (true, ownerAccountId);
     }
 
     private async Task<MutationExecutionOutcome> HandleAddLogTaskAsync(
