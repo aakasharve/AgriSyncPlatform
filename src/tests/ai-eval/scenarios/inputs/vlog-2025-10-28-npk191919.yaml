@@ -1,0 +1,67 @@
+id: vlog-2025-10-28-npk191919
+bucket: inputs
+description: |
+  28/10 — Balanced NPK 19:19:19 fertigation day. Farmer applies 19-19-19
+  water-soluble fertilizer through the drip/fertigation system. The grade
+  is spoken as "एकोणीस एकोणीस एकोणीस" or transcribed by Sarvam as
+  "19:19:19" (colon form).
+
+  TARGET (W1.P0 domain-aware parser): "19:19:19" is a fertilizer grade
+  (Component 1 — NpkGradeDictionary), NOT a time. It must appear as an
+  inputs row with productName "19-19-19" (balanced NPK), and the water
+  method classified as fertigation (Component 5 — WaterRoleClassifier),
+  NOT as a plain irrigation event. Today's domain-blind parser mislabels
+  the grade or drops it. RED is expected.
+
+  spec: ai-intelligence-plan-2026-06-25
+
+input:
+  transcript: "एकोणीस एकोणीस एकोणीस खत ड्रीपने दिले"
+
+context:
+  fixture: farmer-grape-grower
+
+expected:
+  inputs:
+    - productName: "19-19-19"
+      rawProductName: "19:19:19"
+      chemicalClass: "WSF"
+      agronomicRole: "balanced NPK"
+      applicationMethod: "fertigation"
+
+tolerances:
+  "inputs[0].productName":
+    oneOf:
+      - "19-19-19"
+      - "19:19:19"
+      - "balanced NPK"
+      - "NPK 19-19-19"
+  "inputs[0].rawProductName":
+    oneOf:
+      - "19:19:19"
+      - "१९:१९:१९"
+      - "एकोणीस एकोणीस एकोणीस"
+  "inputs[0].chemicalClass":
+    oneOf:
+      - "WSF"
+      - "water-soluble fertilizer"
+      - "fertilizer"
+  "inputs[0].agronomicRole":
+    oneOf:
+      - "balanced NPK"
+      - "balanced NPK fertigation"
+      - "NPK fertigation"
+      - "fertigation"
+  "inputs[0].applicationMethod":
+    oneOf:
+      - "fertigation"
+      - "drip"
+      - "drip fertigation"
+
+ignore_fields:
+  - summary
+  - dayOutcome
+  - irrigation
+  - labour
+  - expenses
+  - observations

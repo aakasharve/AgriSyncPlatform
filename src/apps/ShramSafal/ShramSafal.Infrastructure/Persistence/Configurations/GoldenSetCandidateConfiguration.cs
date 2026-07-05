@@ -69,9 +69,13 @@ internal sealed class GoldenSetCandidateConfiguration : IEntityTypeConfiguration
             .HasColumnName("prompt_version")
             .HasMaxLength(64);
 
+        // ai-intelligence-plan-2026-06-25 W1.P2 T3 — width widened 40→64 to
+        // match the shared Provenance mapping (see ProvenanceConfiguration).
+        // The extractor identifier is now the 64-char SHA-256 prompt content
+        // hash, which overflows the former varchar(40).
         builder.Property(x => x.ExtractorCodeSha)
             .HasColumnName("extractor_code_sha")
-            .HasMaxLength(40);
+            .HasMaxLength(64);
 
         builder.Property(x => x.PromotedToGoldenSet)
             .HasColumnName("promoted_to_golden_set")

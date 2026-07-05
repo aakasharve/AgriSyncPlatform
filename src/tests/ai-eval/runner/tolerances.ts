@@ -85,6 +85,16 @@ export function evaluateTolerance(
     return { passed: re.test(String(actual ?? '')), reason: `regex /${rule.regex}/` };
   }
 
+  if ('score' in rule) {
+    const e = Number(rule.score.expected);
+    const a = Number(actual);
+    const pts = rule.score['±pts'] ?? 8;
+    if (Number.isNaN(e) || Number.isNaN(a)) {
+      return { passed: false, reason: 'score requires numeric values' };
+    }
+    return { passed: Math.abs(a - e) <= pts, reason: `score |Δ|=${Math.abs(a - e)} ≤ ${pts}` };
+  }
+
   return { passed: false, reason: 'unknown tolerance rule' };
 }
 

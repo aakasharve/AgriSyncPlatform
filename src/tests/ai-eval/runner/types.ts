@@ -46,7 +46,17 @@ export type ToleranceRule =
   | { fuzzy: number }
   | { oneOf: unknown[] }
   | { set_match: true }
-  | { regex: string };
+  | { regex: string }
+  | { score: { expected: number; '±pts'?: number } };
+
+export interface EvalConfig {
+  thresholds: Partial<Record<BucketId, number>>;
+  global: {
+    failOnRegression: boolean;
+    minScenariosPerBucket: number;
+    bucketFloorOverrides?: Partial<Record<BucketId, number>>;
+  };
+}
 
 export interface Scenario {
   id: string;
@@ -85,6 +95,11 @@ export interface BucketReport {
   total: number;
   passed: number;
   failedScenarioIds: string[];
+  floor: number;            // resolved minScenariosPerBucket for this bucket
+  threshold: number;        // resolved pass-rate threshold (default 0.80)
+  belowFloor: boolean;      // total < floor
+  belowThreshold: boolean;  // total > 0 && passed / total < threshold
+  gatePassed: boolean;      // !belowFloor && !belowThreshold
 }
 
 export interface RunReport {

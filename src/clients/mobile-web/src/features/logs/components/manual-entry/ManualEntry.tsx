@@ -4,30 +4,20 @@
  */
 
 import React, { useState, useEffect } from 'react';
-import { Plus, ListPlus, ChevronRight, Check, CheckSquare, StickyNote, Droplets, Users, ArrowUp, Edit3, Bell, Trash2 } from 'lucide-react';
-import { CropSymbol } from '../../../context/components/CropSelector';
-import SlidingCropSelector from '../../../context/components/SlidingCropSelector';
-import { getActiveHarvestSession, startHarvestSession } from '../../../../services/harvestService';
-import HarvestConfigSheet from '../harvest/HarvestConfigSheet';
-import { HarvestConfig } from '../../../../types';
-import ActivityExpenseCard from '../ActivityExpenseCard';
-import ObservationHubSheet from '../ObservationHubSheet';
 import {
-    FarmContext, CropActivityEvent, IrrigationEvent, LabourEvent,
-    MachineryEvent, LedgerDefaults, FarmerProfile, CropProfile,
-    WorkflowStep, InputEvent, Plot, AgriLogResponse, TodayCounts, ActivityExpenseEvent, ObservationNote,
-    LogTimelineEntry, PlannedTask, DailyLog, UnclearReason, DisturbanceEvent
+    CropActivityEvent, IrrigationEvent, LabourEvent,
+    MachineryEvent, CropProfile, Plot,
+    InputEvent, AgriLogResponse, TodayCounts, ActivityExpenseEvent, ObservationNote,
+    PlannedTask, UnclearReason, DisturbanceEvent
 } from '../../../../types';
 import { BucketIssue } from '../../../../domain/types/log.types';
 import { UnclearSegment } from '../../../logs/logs.types';
 import { loadVocabDB, addApprovedMapping } from '../../../voice/vocab/vocabStore';
 import { getDateKey } from '../../../../core/domain/services/DateKeyService';
 import { buildWorkDoneProjection } from '../../services/workDoneProjection';
-import { isCompletedIrrigationEvent } from '../../services/irrigationCompletion';
-import type { LogProvenance } from '../../../../domain/ai/LogProvenance';
-import { buildAiCorrectionEvents, persistAiCorrectionEvents } from '../../../../infrastructure/ai/CorrectionEventStore';
+import { buildAiCorrectionEvents, persistAiCorrectionEvents, postAiCorrectionBlob } from '../../../../infrastructure/ai/CorrectionEventStore';
 
-import { SAFE_DEFAULTS, ManualEntryProps, TargetSelectionGroup } from './types';
+import { ManualEntryProps, TargetSelectionGroup } from './types';
 import { useManualEntryHydration } from './hooks/useManualEntryHydration';
 import { buildLinkedDetailMaps } from './services/loadLogIntoEditor';
 import ManualEntryHeader from './components/ManualEntryHeader';
@@ -35,10 +25,11 @@ import UnclearSegmentsList from './components/UnclearSegmentsList';
 import LabourReview from './components/LabourReview';
 import ActivityLedger from './components/ActivityLedger';
 import CostStrip from './components/CostStrip';
+import ObservationHubSheet from '../ObservationHubSheet';
 import { emitClosureSubmitted } from '../../../../core/telemetry/eventEmitters';
 import { useFarmContext } from '../../../../core/session/FarmContext';
 
-const ManualEntry: React.FC<ManualEntryProps> = ({ context, crops, defaults, profile, onSubmit, disabled, initialData, provenance, onDataConsumed, todayCountsMap, transcriptEntries = [], todayLogs = [], onLogSelect }) => {
+const ManualEntry: React.FC<ManualEntryProps> = ({ context, crops, defaults, profile, onSubmit, initialData, provenance, onDataConsumed, todayCountsMap, transcriptEntries = [], todayLogs = [], onLogSelect }) => {
 
     // DWC v2 §2.8 — closure.submitted emit context. The downstream
     // logCommandService generates the persisted DailyLog.id, so for
@@ -56,10 +47,6 @@ const ManualEntry: React.FC<ManualEntryProps> = ({ context, crops, defaults, pro
     const [showObservationHub, setShowObservationHub] = useState(false); // Hub Visibility
     const [transcript, setTranscript] = useState<string>(''); // NEW: Transcript State
     const [selectedLogId, setSelectedLogId] = useState<string | null>(null);  // Track which log is being edited
-
-    // New Harvest State
-    const [showHarvestConfig, setShowHarvestConfig] = useState(false);
-    const [pendingHarvestActivity, setPendingHarvestActivity] = useState<CropActivityEvent | null>(null);
 
     // Phase 7: Unclear Segments
     const [unclearSegments, setUnclearSegments] = useState<UnclearSegment[]>([]);
@@ -106,12 +93,6 @@ const ManualEntry: React.FC<ManualEntryProps> = ({ context, crops, defaults, pro
 
     const [manualTotalCost, setManualTotalCost] = useState<number | undefined>(undefined);
 
-    // Custom Activity Input
-    const [customInput, setCustomInput] = useState('');
-
-    // Common Activities
-    const [commonActivities, setCommonActivities] = useState<WorkflowStep[]>([]);
-
     // Active Context for Defaults
     const [activeCrop, setActiveCrop] = useState<CropProfile | undefined>(undefined);
     const [activePlot, setActivePlot] = useState<Plot | undefined>(undefined);
@@ -119,7 +100,6 @@ const ManualEntry: React.FC<ManualEntryProps> = ({ context, crops, defaults, pro
     // --- DERIVE CONTEXT ---
     useEffect(() => {
         if (!context || context.selection.length === 0) {
-            setCommonActivities([]);
             setActiveCrop(undefined);
             setActivePlot(undefined);
             return;
@@ -133,10 +113,8 @@ const ManualEntry: React.FC<ManualEntryProps> = ({ context, crops, defaults, pro
             : undefined;
 
         if (context.selection.length === 1 && primaryCrop) {
-            setCommonActivities(primaryCrop.workflow || []);
             setActiveCrop(primaryCrop);
         } else {
-            setCommonActivities([]);
             setActiveCrop(undefined);
         }
 
@@ -230,123 +208,11 @@ const ManualEntry: React.FC<ManualEntryProps> = ({ context, crops, defaults, pro
         }
     };
 
-    // Handle Config Save
-    const handleHarvestConfigSaved = (config: HarvestConfig) => {
-        if (!activePlot) return;
-
-        // Auto-start a session since they are trying to log harvest
-        const session = startHarvestSession(activePlot.id, activeCrop?.id || '', config);
-
-        // Link pending activity
-        if (pendingHarvestActivity) {
-            setCropActivities(prev => prev.map(a =>
-                a.id === pendingHarvestActivity.id
-                    ? { ...a, linkedHarvestSessionId: session.id }
-                    : a
-            ));
-            setPendingHarvestActivity(null);
-        }
-
-        setShowHarvestConfig(false);
-    };
-
-    const addActivity = (name: string, isCommon: boolean = false) => {
-        // Instead of adding a NEW card, we add this 'name' as a workType to the global card
-
-        let globalCard = cropActivities[0];
-
-        // AUTO-CREATE if missing (fixes empty state bug)
-        if (!globalCard) {
-            globalCard = {
-                id: 'act_global_daily',
-                title: 'Crop Activity',
-                status: 'completed',
-                isCommonActivity: false,
-                workTypes: []
-            };
-            // Note: We'll update state with this new card at the end or use a temporary var
-        }
-
-        if (name === 'Irrigation') {
-            // ... Irrigation Logic (Update Map Only) ...
-            if (activePlot) {
-                const infra = activePlot.infrastructure;
-                const method = infra?.irrigationMethod || activePlot.irrigationPlan?.method || 'Drip';
-                const motorId = infra?.linkedMotorId || activePlot.irrigationPlan?.motorId;
-                const motor = profile.motors.find(m => m.id === motorId);
-                const source = profile.waterResources.find(w => w.id === motor?.linkedWaterSourceId);
-                const duration = activePlot.irrigationPlan?.durationMinutes ? activePlot.irrigationPlan.durationMinutes / 60 : 2;
-
-                const irrigationEvent: IrrigationEvent = {
-                    id: `irr_${Date.now()}`,
-                    linkedActivityId: globalCard.id,
-                    method: method,
-                    source: source?.name || 'Unknown',
-                    durationHours: duration,
-                    motorId: motorId,
-                    notes: 'Logged via Quick Add'
-                };
-                setIrrigationMap(prev => ({ ...prev, [globalCard.id]: irrigationEvent }));
-
-                // If we created a new card, ensure it's saved to state
-                if (cropActivities.length === 0) {
-                    setCropActivities([globalCard]);
-                }
-            }
-        }
-        else if (name === 'Labour' || name === 'Farm Labour') {
-            // No-op
-        }
-        else {
-            // It is a specific work type (Pruning, Weeding etc)
-            const updatedCard = {
-                ...globalCard,
-                workTypes: [...(globalCard.workTypes || []), name]
-            };
-            // If it was empty, we are now setting it with the new workType
-            if (cropActivities.length === 0) {
-                setCropActivities([updatedCard]);
-            } else {
-                setCropActivities([updatedCard]);
-            }
-        }
-    };
-
-    const addExpense = () => {
-        const newExpense: ActivityExpenseEvent = {
-            id: `exp_${Date.now()}`,
-            reason: '',
-            items: [],
-            totalAmount: 0
-        };
-        setExpenses([...expenses, newExpense]);
-    };
-
-    const updateExpense = (updated: ActivityExpenseEvent) => {
-        setExpenses(expenses.map(e => e.id === updated.id ? updated : e));
-    };
-
-    const deleteExpense = (id: string) => {
-        setExpenses(expenses.filter(e => e.id !== id));
-    };
-
-    const handleAddCustom = (e: React.FormEvent) => {
-        e.preventDefault();
-        if (customInput.trim()) {
-            addActivity(customInput.trim(), false);
-            setCustomInput('');
-        }
-    };
-
-    const renameActivity = (id: string, newName: string) => {
-        setCropActivities(cropActivities.map(t => t.id === id ? { ...t, title: newName } : t));
-    };
-
-    const updateDetails = (activityId: string, type: 'labour' | 'irrigation' | 'machinery' | 'input', data: any) => {
-        if (type === 'labour') setLabourMap({ ...labourMap, [activityId]: { ...data, linkedActivityId: activityId } });
-        if (type === 'irrigation') setIrrigationMap({ ...irrigationMap, [activityId]: { ...data, linkedActivityId: activityId } });
-        if (type === 'machinery') setMachineryMap({ ...machineryMap, [activityId]: { ...data, linkedActivityId: activityId } });
-        if (type === 'input') setInputMap({ ...inputMap, [activityId]: data }); // Data is InputEvent[]
+    const updateDetails = (activityId: string, type: 'labour' | 'irrigation' | 'machinery' | 'input', data: LabourEvent | IrrigationEvent | MachineryEvent | InputEvent[]) => {
+        if (type === 'labour') setLabourMap({ ...labourMap, [activityId]: { ...(data as LabourEvent), linkedActivityId: activityId } });
+        if (type === 'irrigation') setIrrigationMap({ ...irrigationMap, [activityId]: { ...(data as IrrigationEvent), linkedActivityId: activityId } });
+        if (type === 'machinery') setMachineryMap({ ...machineryMap, [activityId]: { ...(data as MachineryEvent), linkedActivityId: activityId } });
+        if (type === 'input') setInputMap({ ...inputMap, [activityId]: data as InputEvent[] }); // Data is InputEvent[]
     };
 
     const updateWorkTypes = (activityId: string, types: string[]) => {
@@ -375,7 +241,7 @@ const ManualEntry: React.FC<ManualEntryProps> = ({ context, crops, defaults, pro
         const allCosts = [
             ...finalLabour.map(l => l.totalCost || 0),
             ...finalMachinery.map(m => m.rentalCost || 0),
-            ...finalInputs.map(i => (i as any).cost || 0),
+            ...finalInputs.map(i => i.cost || 0),
             ...expenses.map(e => e.totalAmount || 0)
         ];
 
@@ -423,6 +289,8 @@ const ManualEntry: React.FC<ManualEntryProps> = ({ context, crops, defaults, pro
             });
             void persistAiCorrectionEvents(correctionEvents)
                 .catch(error => console.warn('[AI correction metrics] Failed to persist correction events.', error));
+            // C11 W1.P4.T1 — best-effort server POST of the coarse correction blob.
+            postAiCorrectionBlob({ aiDraft: initialAiDataRef.current, userDraft, provenance });
         }
 
         // DWC v2 §2.8 — closure.submitted (manual or voice path).
@@ -471,63 +339,22 @@ const ManualEntry: React.FC<ManualEntryProps> = ({ context, crops, defaults, pro
         }
     };
 
-    // --- RENDER HELPERS ---
-
-    const renderPlotSelector = () => {
-        if (!context) return null;
-
-        return (
-            <div className="flex flex-col items-center justify-center min-h-[400px] text-center p-6 animate-in fade-in space-y-8">
-                <div>
-                    <div className="inline-block bg-emerald-50 p-4 rounded-full mb-4">
-                        <ListPlus size={32} className="text-emerald-600" />
-                    </div>
-                    <h3 className="text-xl font-bold text-slate-800 mb-2">Select Target Plot</h3>
-                    <p className="text-slate-500 max-w-xs mx-auto">You have multiple plots active. Choose one to log activities for.</p>
-                </div>
-
-                <div className="w-full max-w-4xl mx-auto">
-                    <SlidingCropSelector
-                        crops={crops}
-                        selectedCropId={activeCrop?.id || null}
-                        onSelect={(id) => {
-                            const crop = crops.find(c => c.id === id);
-                            if (crop) {
-                                setActiveCrop(crop);
-                                setCommonActivities(crop.workflow || []);
-                                // Auto-select first plot if none selected?
-                                // Or wait for user to select plot from list below?
-                                // SlidingCropSelector implies selecting crop shows plots.
-                                // We want to select a plot eventually.
-                                // Let's auto-select the first plot to speed up interaction
-                                if (crop.plots.length > 0) setActivePlot(crop.plots[0]);
-                            }
-                        }}
-                        selectedPlotIds={activePlot ? [activePlot.id] : []}
-                        onPlotSelect={(plotId) => {
-                            // Find plot in active crop
-                            const plot = activeCrop?.plots.find(p => p.id === plotId);
-                            if (plot) setActivePlot(plot);
-                        }}
-                        onCropSelect={(id) => {
-                            // Redundant but good for standardized prop usage
-                            const crop = crops.find(c => c.id === id);
-                            if (crop) {
-                                setActiveCrop(crop);
-                                setCommonActivities(crop.workflow || []);
-                                if (crop.plots.length > 0) setActivePlot(crop.plots[0]);
-                            }
-                        }}
-                    />
-                </div>
-            </div>
-        );
-    };
-
     // Default counts if map not provided or plot not found
     const selectedPlotIds = context?.selection.flatMap(selection => selection.selectedPlotIds) || [];
+    const zeroTodayCounts: TodayCounts = {
+        cropActivities: 0,
+        irrigation: 0,
+        labour: 0,
+        inputs: 0,
+        machinery: 0,
+        disturbance: 0,
+        observations: 0,
+        activityExpenses: 0,
+        reminders: 0,
+        harvest: 0,
+    };
     const currentCounts = selectedPlotIds.length > 0 && todayCountsMap
-        ? selectedPlotIds.reduce((acc, plotId) => {
+        ? selectedPlotIds.reduce<TodayCounts>((acc, plotId) => {
             const next = todayCountsMap[plotId];
             if (!next) return acc;
 
@@ -539,34 +366,12 @@ const ManualEntry: React.FC<ManualEntryProps> = ({ context, crops, defaults, pro
                 machinery: acc.machinery + (next.machinery || 0),
                 disturbance: acc.disturbance + (next.disturbance || 0),
                 observations: acc.observations + (next.observations || 0),
-                activityExpenses: (acc as any).activityExpenses + ((next as any).activityExpenses || 0),
-                reminders: (acc as any).reminders + ((next as any).reminders || 0),
-                harvest: (acc as any).harvest + ((next as any).harvest || 0)
-            } as any;
-        }, {
-            cropActivities: 0,
-            irrigation: 0,
-            labour: 0,
-            inputs: 0,
-            machinery: 0,
-            disturbance: 0,
-            observations: 0,
-            activityExpenses: 0,
-            reminders: 0,
-            harvest: 0
-        } as any)
-        : {
-            cropActivities: 0,
-            irrigation: 0,
-            labour: 0,
-            inputs: 0,
-            machinery: 0,
-            disturbance: 0,
-            observations: 0,
-            activityExpenses: 0,
-            reminders: 0,
-            harvest: 0
-        };
+                activityExpenses: acc.activityExpenses + (next.activityExpenses || 0),
+                reminders: acc.reminders + (next.reminders || 0),
+                harvest: acc.harvest + (next.harvest || 0),
+            };
+        }, zeroTodayCounts)
+        : zeroTodayCounts;
 
     const selectedPlotSummary = (() => {
         if (!context || context.selection.length === 0) return 'No selection';

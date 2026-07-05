@@ -1,0 +1,67 @@
+id: vlog-2025-10-29-npk006020
+bucket: inputs
+description: |
+  29/10 — High-P/K water-soluble fertilizer day. Farmer applies 0-60-20
+  (spoken/transcribed as "00:60:20") through the fertigation system.
+  This grade is very high in phosphorus (60) and potassium (20) with zero
+  nitrogen — a late-season grape nutrition programme grade.
+
+  TARGET (W1.P0 domain-aware parser): "00:60:20" is a fertilizer grade
+  (Component 1 — NpkGradeDictionary), NOT a clock time. It must appear as
+  an inputs row with productName normalised to "0-60-20", rawProductName
+  "00:60:20", and chemicalClass WSF. The water method should be classified
+  as fertigation if drip is mentioned. Today's domain-blind parser drops
+  or mislabels this grade as a time. RED is expected.
+
+  spec: ai-intelligence-plan-2026-06-25
+
+input:
+  transcript: "शून्य साठ वीस खत ड्रीपने दिले"
+
+context:
+  fixture: farmer-grape-grower
+
+expected:
+  inputs:
+    - productName: "0-60-20"
+      rawProductName: "00:60:20"
+      chemicalClass: "WSF"
+      agronomicRole: "high-P/K WSF"
+      applicationMethod: "fertigation"
+
+tolerances:
+  "inputs[0].productName":
+    oneOf:
+      - "0-60-20"
+      - "00:60:20"
+      - "high-P/K WSF"
+      - "NPK 0-60-20"
+  "inputs[0].rawProductName":
+    oneOf:
+      - "00:60:20"
+      - "0:60:20"
+      - "शून्य साठ वीस"
+  "inputs[0].chemicalClass":
+    oneOf:
+      - "WSF"
+      - "water-soluble fertilizer"
+      - "fertilizer"
+  "inputs[0].agronomicRole":
+    oneOf:
+      - "high-P/K WSF"
+      - "high phosphorus potassium"
+      - "phosphorus-potassium"
+      - "P-K fertilizer"
+  "inputs[0].applicationMethod":
+    oneOf:
+      - "fertigation"
+      - "drip"
+      - "drip fertigation"
+
+ignore_fields:
+  - summary
+  - dayOutcome
+  - irrigation
+  - labour
+  - expenses
+  - observations

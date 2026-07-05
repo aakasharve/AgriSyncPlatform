@@ -96,3 +96,131 @@ These five top-level fields sit alongside the bucket structure above. They are o
   `User said '<cue>' on <captured_at_date> → <referenced_date>`.
   Example: "User said 'काल' on 2026-05-22 → 2026-05-21".
   This field is human-readable audit metadata; it is not parsed by code.
+
+WAVE-2 PER-EVENT FIELDS (additive, optional):
+
+These fields sit INSIDE the existing bucket rows (inputs[], labour[],
+irrigation[], machinery[], cropActivities[]) — they do NOT add any new
+top-level array or change the top-level shape above. Every field is
+OPTIONAL and back-compatible: legacy responses that omit them still parse.
+Emit a field ONLY when the farmer's words support it; otherwise OMIT it
+(or set null where a nullable value is expected). Three governing rules
+apply to the whole section:
+
+  - NO-GUESS: never infer a value the farmer did not state. Absence of a
+    signal is itself a signal — leave the field out rather than default it.
+  - NO-MULTIPLY: never fabricate a total by doing arithmetic the farmer did
+    not do out loud (e.g. rate × count). Store amounts exactly as spoken.
+  - ABSTENTION: when the farmer clearly performed an operation but a detail
+    is unstated, keep the row and omit the unstated field — do not invent it,
+    and do not drop the whole event.
+
+Inputs (inputs[] rows and their mix[] items)
+- `mix[].basisQty` (optional, number): the reference quantity a dose is
+  stated *per* (e.g. "4 ml प्रति लिटर" → dose 4, basisQty 1). OMIT when the
+  farmer states only a bare dose with no "per <X>" basis (dose-basis
+  abstention). Never back-compute a tank total from dose × basis.
+- `mix[].basisUnit` (optional, string): the unit of `basisQty` (e.g. "L",
+  "vine", "pump"). Pairs with `basisQty`; omit both when no basis is spoken.
+- `mix[].npkGrade` (optional, string): the N-P-K grade string EXACTLY as
+  spoken (e.g. "19:19:19", "0:52:34", "13:0:45"). Preserve it as a grade
+  string — never reinterpret the digits as a time, dose, or count.
+- `mixId` (optional, string): groups products sprayed together in ONE tank
+  mix. Assign the SAME `mixId` to every inputs[] row (or mix[] item) the
+  farmer combined in a single tank on a single pass; distinct tanks get
+  distinct ids. OMIT when there is only one product / no grouping signal.
+- `passId` (optional, string): groups inputs applied in the SAME spray pass
+  over the field (a pass may contain several sequential tank mixes). OMIT
+  when no multi-pass / sequencing signal is present.
+- `carrierMedium` (optional, enum `water|oil|none`): the medium the input was
+  carried in. Spray water is `water`; a neat/undiluted application is `none`.
+  OMIT when the carrier is not stated.
+- `method` gains an additional value `paste_manual` (alongside the existing
+  `Spray|Drip|Drenching|Soil`): use for hand-applied pastes (e.g. cut-paste,
+  wound dressing) daubed manually rather than sprayed or drenched.
+- `reason` gains grape-purpose values (snake_case, intentional):
+  `defoliation`, `root_growth`, `nutrient_correction`, `fruit_sizing`,
+  `disease_control` (alongside the existing reasons). Choose the one the
+  farmer's stated PURPOSE maps to; OMIT when the purpose is not stated.
+- `recommendedBy` (optional, string): who advised the input, EXACTLY as
+  spoken (e.g. "दुकानदार" / "shopkeeper", an agronomist's name). OMIT when
+  no advisor is mentioned — do not attribute to the farmer by default.
+
+Labour (labour[] rows) — no-multiply governor is strict here
+- `count` (optional, number): number of workers, as spoken.
+- `gender` (optional, enum `male|female|mixed|unknown`): worker gender as
+  stated; `mixed` when both are present; OMIT (or `unknown`) when unstated.
+- `engagementType` (optional, enum
+  `hired_daily|contract_piece|self|exchange`): how the labour was engaged.
+  OMIT when the engagement basis is not stated.
+- `rate` (optional, number): the per-unit rate spoken (e.g. 500 for
+  "५०० रुपये रोजाने"). Store the rate itself, never a computed total.
+- `rateBasis` (optional, enum
+  `per_person_day|per_vine|per_row|per_acre|lump_sum`): the unit the `rate`
+  is charged per. OMIT when the basis is not spoken.
+- `totalCost` stays NULL unless the farmer states an explicit total. Do NOT
+  derive it from rate × count (no-multiply) — a rate-per-vine with a vine
+  count is NOT an unambiguous total unless the farmer says the total out loud.
+
+Irrigation (irrigation[] rows)
+- `role` (optional, enum `spray-carrier|irrigation|fertigation`): the WATER
+  ROLE. Water that merely carries a spray is `spray-carrier` (and generally
+  belongs on the input row, not as an irrigation event); actual watering is
+  `irrigation`; nutrients dosed through the water line is `fertigation`.
+  OMIT when the role is ambiguous.
+- `weatherAdjusted` (optional, boolean): `true` ONLY when the farmer says the
+  watering duration/volume was changed because of weather (e.g. rain cut the
+  run short). OMIT (do not emit `false`) when no weather adjustment is stated.
+
+Crop activities (cropActivities[] rows) — continuity progress
+- `progress` (optional, object): tracks multi-day continuation of the same
+  task. Shape: `{ phase?, unitsDone?, unitsTotal?, unit? }`.
+  - `progress.phase` (optional, enum `LAND_PREPARATION|CROP_CYCLE`).
+  - `progress.unitsDone` (optional, number): units completed in THIS session,
+    as spoken (e.g. "आज ८ ओळी" → 8).
+  - `progress.unitsTotal` (optional, number): the total target when stated
+    (e.g. "एकूण १२ पैकी" → 12). OMIT when the total is not stated.
+  - `progress.unit` (optional, string): the unit ("rows", "vines", "acres").
+  OMIT the whole `progress` object when there is no continuation signal.
+
+Machinery (machinery[] rows) — no-fabrication governor
+- `implement` (optional, string): the attached implement/tool as spoken
+  (e.g. "blower", "rotavator", "sprayer"). OMIT when not stated.
+- `nozzlesActive` (optional, number): count of active nozzles as spoken
+  (e.g. "१० nozzle चालू" → 10). OMIT when not stated.
+- `fanState` (optional, enum `on|off|unknown`): blower/air-assist fan state.
+  Set `off` ONLY when the farmer says it was off, `on` when on; OMIT (or
+  `unknown`) when the fan is not mentioned — never fabricate "unknown" as if
+  it were an observed state.
+- `fuelType` (optional, enum `diesel|petrol|unknown`): fuel type as stated;
+  OMIT when unstated.
+- `fuelQuantity` (optional, number): fuel amount as spoken; NULL/OMIT when
+  not mentioned — never estimate from hours or area.
+- `operationPerformed` (optional, string): what the machine did, as spoken
+  (e.g. "फवारणी", "नांगरणी"). OMIT when not stated.
+
+Disturbance (the top-level `disturbance` object) — structured blocker fields
+NOTE ON SHAPE: these fields sit on the SINGLE top-level `disturbance` object
+(the nullable object in the JSON shape above), NOT on an array and NOT as a
+new top-level key. Keep `disturbance` a single object (or null). The existing
+`scope|group|reason|severity|blockedSegments|note` fields are unchanged; the
+four fields below are additive and back-compatible. The three governors
+(NO-GUESS / NO-MULTIPLY / ABSTENTION) apply: emit a field ONLY when the
+farmer's words support it; leave it out (or null) otherwise — never fabricate.
+- `cause` (optional, enum): the typed cause of the blocker, one of
+  `MACHINERY|ELECTRICITY|WEATHER|WATER_SOURCE|PEST|DISEASE|LABOR_SHORTAGE|MATERIAL_SHORTAGE|OTHER`.
+  Use `OTHER` only when a cause is stated but fits none of the above; OMIT
+  entirely when the farmer does not state a cause — do not default to `OTHER`.
+- `affectedScope` (optional, enum `event|bucket|whole_day`): how much the
+  blocker affected — a single logged event (`event`), one activity bucket
+  (`bucket`), or the entire day (`whole_day`). This is finer than the coarse
+  `scope` (FULL_DAY|PARTIAL|DELAYED) and is independent of it. OMIT when the
+  affected extent is not stated.
+- `impact` (optional, string): a free-text description of the concrete impact,
+  as spoken (e.g. "spraying couldn't be finished", "फवारणी अर्धवट राहिली").
+  OMIT when the farmer states a blocker but no explicit impact.
+- `resolvedStatus` (optional, enum `ongoing|resolved_same_day|carried_over`):
+  whether the blocker is still unresolved (`ongoing`), was cleared the same
+  day (`resolved_same_day`), or spilled the pending work into a later day
+  (`carried_over`). OMIT when resolution is not stated — do not assume it was
+  resolved.

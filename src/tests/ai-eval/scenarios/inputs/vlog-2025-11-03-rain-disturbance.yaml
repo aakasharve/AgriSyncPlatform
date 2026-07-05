@@ -1,0 +1,46 @@
+id: vlog-2025-11-03-rain-disturbance
+bucket: inputs
+description: |
+  3/11 — Rain disturbance day. It rained, preventing farm work.
+  This is a DISTURBANCE_RECORDED day — weather is the blocker.
+  No inputs applied; no field work done.
+
+  TARGET (W1.P0 domain-aware parser):
+  - dayOutcome = DISTURBANCE_RECORDED.
+  - disturbanceType / reason = rain / weather.
+  - No fabricated inputs, labour, or irrigation entries.
+  Today's domain-blind parser may fabricate work or miss the
+  disturbance classification. RED is expected.
+
+  Calibration target (W1.P3 score): ~92 ±8 (honest blocker
+  recording scores high)
+
+  spec: ai-intelligence-plan-2026-06-25
+
+input:
+  transcript: "आज पाऊस आला. शेतावर काम झालं नाही."
+
+context:
+  fixture: farmer-grape-grower
+
+expected:
+  dayOutcome: "DISTURBANCE_RECORDED"
+
+tolerances:
+  "dayOutcome":
+    oneOf:
+      - "DISTURBANCE_RECORDED"
+      - "disturbance_recorded"
+      - "DISTURBANCE"
+      - "RAIN_DISTURBANCE"
+      - "NO_WORK_DONE"
+
+ignore_fields:
+  - summary
+  - inputs
+  - irrigation
+  - labour
+  - machinery
+  - expenses
+  - observations
+  - tasks

@@ -14,7 +14,7 @@ Negative examples:
 Mistakes you will make without guardrails:
 - UNIT_DRIFT: fuel liters vs rupee fuel cost.
 - SPEAKER_CONFUSION: equipment owner is not necessarily worker.
-- CROP_STAGE_LEAKAGE: assuming machinery need from season.
+- CROP_STAGE_LEAKAGE: infer stage from explicit OPERATIONS the farmer described, never from products alone; a product name alone never sets stage; if the operation contradicts the stage, trust the operation.
 - QUANTITY_HALLUCINATION: inventing hours.
 - CROSS_BUCKET_BLEED: using sprayer mention and missing input product.
 - DATE_SHIFTING: future booking as completed machine use.

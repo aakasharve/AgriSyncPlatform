@@ -76,6 +76,67 @@
 //   - ssf.daily_logs.evidence_sources — farm-scoped not user-scoped;
 //     introducing user-level deletion here would break the audit
 //     ledger (Trust Ladder semantics).
+//   - ssf.application_input_items — Track B typed child of farm_operations
+//     (ADR 0023 / D-T2-ERASURE). NO user_id/PII column: product_name,
+//     npk_grade, dose_* are de-identified farm operational facts. The only
+//     actor linkage is via the parent farm_operations.created_by_user_id,
+//     which AnonymizeFarmOperationsAsync already scrubs to ErasedFarmer —
+//     severing re-attribution. KEEP (survives, DPDP §12 de-identified
+//     operational retention). No scrub action; conscious gate-4 disposition.
+//   - ssf.event_links — Track B structural join between farm_operations
+//     (and to cost_entries), ADR 0023 §1.3 / D-T3-ERASURE. NO user_id/PII
+//     column: from/to operation & cost-entry ids + link_kind + the
+//     from_farm_id/to_farm_id guard columns are de-identified structural
+//     references. The parent farm_operations.created_by_user_id is already
+//     scrubbed (D-T1-ERASURE), severing re-attribution. KEEP (survives,
+//     DPDP §12). No scrub action; conscious gate-4 disposition.
+//   - ssf.irrigation_entries — Track B daily_logs-child (ADR 0023 §2 / D-T4-ERASURE).
+//     NO user_id/PII column: role/duration/volume/method/source + the daily_log_id
+//     anchor are de-identified farm operational facts. The parent
+//     daily_logs.operator_user_id is already scrubbed to ErasedFarmer (existing
+//     manifest), severing re-attribution. KEEP (survives, DPDP §12 de-identified
+//     operational retention). No scrub action; conscious gate-4 disposition.
+//   - ssf.labour_assignments — Track B daily_logs-child (ADR 0023 §2 / D-T5-ERASURE).
+//     NO user_id/PII column: gendered worker counts, engagement type, wage/rate and
+//     the (nullable, never-fabricated) total_cost are de-identified farm operational
+//     facts; the free-text notes field was deliberately EXCLUDED. The parent
+//     daily_logs.operator_user_id is already scrubbed to ErasedFarmer, severing
+//     re-attribution. KEEP (survives, DPDP §12). No scrub action; conscious gate-4 disposition.
+//   - ssf.machinery_usages — Track B daily_logs-child (ADR 0023 §2 / D-T6-ERASURE).
+//     NO user_id/PII column: machine type/ownership, hours/costs, and the structured
+//     equipment config (implement, nozzles_active, fan_state, fuel) are de-identified
+//     farm operational facts; the free-text notes field was deliberately EXCLUDED. The
+//     parent daily_logs.operator_user_id is already scrubbed to ErasedFarmer, severing
+//     re-attribution. KEEP (survives, DPDP §12). No scrub action; conscious gate-4 disposition.
+//   - ssf.weather_events — Track B DIRECT-farm_id row (ADR 0023 §2). System-generated weather data
+//     (event_type, severity, signal readings, source, time window) keyed on farm_id — NO user_id column,
+//     NO farmer free-text, NO PII. Like machinery_usages: de-identified farm-level operational facts;
+//     a single member's erasure must NOT delete the farm's weather history. KEEP (survives, DPDP §12).
+//     No scrub action; conscious gate-4 disposition.
+//   - ssf.routine_patterns — Track B DIRECT-farm_id row (ADR 0023 §2 / RoutineMemory §8.1). Derived
+//     farm-level aggregate (typical duration/method/source per farm+plot+op-type, from CONFIRMED logs)
+//     keyed on farm_id — NO user_id column, NO farmer free-text, NO PII. Like weather_events: a member's
+//     erasure must NOT delete the farm's accumulated routine memory. KEEP (survives, DPDP §12).
+//     No scrub action; conscious gate-4 disposition.
+//   - ssf.weather_stamps — Track B daily_logs-child (ADR 0023 §2). System-generated weather snapshot at
+//     log time (temp/humidity/wind/precip/condition/provider) — NO user_id column, NO farmer free-text,
+//     NO PII. Parent daily_logs.operator_user_id already scrubbed; the readings are de-identified weather
+//     facts. Like weather_events: a member's erasure must NOT delete the farm's weather snapshots.
+//     KEEP (survives, DPDP §12). No scrub action; conscious gate-4 disposition.
+//   - ssf.observation_events — Track B daily_logs-child (ADR 0023 §2 / D-FREETEXT-PRESERVE-2026-06-29).
+//     This child HAS free-text (text_raw / text_cleaned) — the farmer's observation, experience and
+//     wisdom. Per founder directive it is FARM-co-owned knowledge and is PRESERVED on erasure: a single
+//     member's erasure must NOT delete the farm's accumulated knowledge. The WHO is de-attributed via the
+//     already-scrubbed parent daily_logs.operator_user_id (→ ErasedFarmer); the observation CONTENT
+//     SURVIVES. Rare embedded third-party PII is handled by a future surgical-redaction pass (B-FT1),
+//     never a blanket scrub. KEEP — conscious gate-4 disposition. No scrub action.
+//   - ssf.disturbance_events — Track B daily_logs-child (ADR 0023 §2 / D-FREETEXT-PRESERVE-2026-06-29).
+//     HAS free-text (reason) — the farmer's words for why the day's work was disrupted. Same disposition
+//     as observation_events: FARM-co-owned knowledge, PRESERVED on erasure (a single member's erasure must
+//     NOT delete the farm's accumulated knowledge). The WHO is de-attributed via the already-scrubbed
+//     parent daily_logs.operator_user_id (→ ErasedFarmer); the reason CONTENT SURVIVES. Rare embedded
+//     third-party PII → future surgical-redaction pass (B-FT1), never a blanket scrub. KEEP — conscious
+//     gate-4 disposition. No scrub action.
 //   - ssf.consent_audit / ssf.audit_events — append-only by
 //     privilege; flagged "redacted" at the column level, never
 //     deleted.
@@ -240,6 +301,12 @@ public sealed class ErasureWorker(
         //     reason free-text per OQ-10.
         perTableCounts["finance_corrections"] = await AnonymizeFinanceCorrectionsAsync(admin, targetUserId, sentinel, ct).ConfigureAwait(false);
         totalAnonymized += perTableCounts["finance_corrections"];
+
+        // (e) farm_operations — Track B operational ledger (D-T1-ERASURE).
+        //     Scrub created_by_user_id; KEEP farm_id + operation facts +
+        //     derived_event_key (de-identified). ANONYMIZE, not DELETE.
+        perTableCounts["farm_operations"] = await AnonymizeFarmOperationsAsync(admin, targetUserId, sentinel, ct).ConfigureAwait(false);
+        totalAnonymized += perTableCounts["farm_operations"];
 
         // ── SARVAM_PRIMARY_VOICE_PIPELINE Task 3.4 cascade extension ─
         // Voice-spine tables follow a DELETE manifest (not ANONYMIZE)
@@ -448,6 +515,24 @@ UPDATE ssf.finance_corrections
             .ConfigureAwait(false);
     }
 
+    private static async Task<int> AnonymizeFarmOperationsAsync(
+        ShramSafalDbContext db, Guid userId, Guid sentinel, CancellationToken ct)
+    {
+        // D-T1-ERASURE: farm_operations is the operational ledger (daily_logs-class),
+        // not training corpus — ANONYMIZE (scrub the actor) rather than DELETE. The
+        // farm_id + operation_type + operation_date + derived_event_key are KEEP
+        // (de-identified facts; DPDP §12 permits retention of de-identified
+        // operational records), and deleting would destroy farm history co-owned by
+        // other operators on the same farm.
+        const string sql = @"
+UPDATE ssf.farm_operations
+   SET created_by_user_id = {0}
+ WHERE created_by_user_id = {1}
+   AND created_by_user_id <> {0};";
+        return await db.Database.ExecuteSqlRawAsync(sql, new object[] { sentinel, userId }, ct)
+            .ConfigureAwait(false);
+    }
+
     // ── Per-row audit emission ───────────────────────────────────────
     // DS-017 rule (d): one AuditEvent per anonymized row. We do not
     // know the per-row Guids after a SET-based UPDATE without a RETURNING
@@ -505,6 +590,7 @@ UPDATE ssf.finance_corrections
         "cost_entries" => new[] { "created_by_user_id", "description" },
         "correction_events" => new[] { "user_id" },
         "finance_corrections" => new[] { "corrected_by_user_id", "reason" },
+        "farm_operations" => new[] { "created_by_user_id" },
         // SARVAM_PRIMARY_VOICE_PIPELINE Task 3.4 — voice-spine tables
         // follow a DELETE manifest. The audit payload records "deleted"
         // as the scrubbed-columns sentinel so the audit row's shape

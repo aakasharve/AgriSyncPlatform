@@ -229,6 +229,96 @@ public sealed class ErasureWorkerAnonymizationTest : IAsyncLifetime
         corrReason.Should().NotContain(PhoneNumber);
         corrReason.Should().NotContain(DisplayName);
 
+        // farm_operations (Track B table-1, D-T1-ERASURE): actor scrubbed to
+        // sentinel; KEEP fields (farm_id, operation_type, derived_event_key) survive.
+        var foCreator = (Guid)(await ScalarAsync(raw,
+            "SELECT created_by_user_id FROM ssf.farm_operations WHERE farm_id = @fid LIMIT 1",
+            ("fid", _farmId)))!;
+        foCreator.Should().Be(SystemActor.ErasedFarmer,
+            "D-T1-ERASURE: farm_operations.created_by_user_id must be the ErasedFarmer sentinel");
+
+        var foType = (string)(await ScalarAsync(raw,
+            "SELECT operation_type FROM ssf.farm_operations WHERE farm_id = @fid LIMIT 1",
+            ("fid", _farmId)))!;
+        foType.Should().Be("input", "D-T1-ERASURE: operation_type is a KEEP field (de-identified fact)");
+
+        var foKey = (string)(await ScalarAsync(raw,
+            "SELECT derived_event_key FROM ssf.farm_operations WHERE farm_id = @fid LIMIT 1",
+            ("fid", _farmId)))!;
+        foKey.Should().Be(new string('b', 64), "D-T1-ERASURE: derived_event_key is a KEEP field");
+
+        // application_input_items (Track B child, D-T2-ERASURE): KEEP — the
+        // de-identified farm facts SURVIVE erasure unchanged (no user_id column).
+        var aiiCount = Convert.ToInt32((await ScalarAsync(raw,
+            "SELECT count(*) FROM ssf.application_input_items WHERE operation_id = @opid",
+            ("opid", _farmOperationId)))!);
+        aiiCount.Should().Be(1, "D-T2-ERASURE: application_input_items survives erasure (KEEP, de-identified)");
+
+        var aiiProduct = (string)(await ScalarAsync(raw,
+            "SELECT product_name FROM ssf.application_input_items WHERE operation_id = @opid LIMIT 1",
+            ("opid", _farmOperationId)))!;
+        aiiProduct.Should().Be("Ethrel", "D-T2-ERASURE: input-item product_name (a de-identified fact) is KEPT");
+
+        // event_links (Track B table-3, D-T3-ERASURE): KEEP — the structural link
+        // SURVIVES erasure (no user_id column).
+        var elCount = Convert.ToInt32((await ScalarAsync(raw,
+            "SELECT count(*) FROM ssf.event_links WHERE from_operation_id = @opid",
+            ("opid", _farmOperationId)))!);
+        elCount.Should().Be(1, "D-T3-ERASURE: event_links survives erasure (KEEP, de-identified)");
+
+        // irrigation_entries (Track B table-4, D-T4-ERASURE): KEEP — the daily_logs-child
+        // SURVIVES erasure (no user_id column).
+        var ieCount = Convert.ToInt32((await ScalarAsync(raw,
+            "SELECT count(*) FROM ssf.irrigation_entries WHERE daily_log_id = @dlid",
+            ("dlid", _dailyLogId)))!);
+        ieCount.Should().Be(1, "D-T4-ERASURE: irrigation_entries survives erasure (KEEP, de-identified)");
+
+        // labour_assignments (Track B table-5, D-T5-ERASURE): KEEP — survives erasure
+        // (no user_id column); the no-multiply NULL total_cost is preserved.
+        var laCount = Convert.ToInt32((await ScalarAsync(raw,
+            "SELECT count(*) FROM ssf.labour_assignments WHERE daily_log_id = @dlid AND total_cost IS NULL",
+            ("dlid", _dailyLogId)))!);
+        laCount.Should().Be(1, "D-T5-ERASURE: labour_assignments survives erasure (KEEP) with total_cost still NULL");
+
+        // machinery_usages (Track B table-6, D-T6-ERASURE): KEEP — survives erasure
+        // (no user_id column); the structured equipment config is preserved.
+        var muCount = Convert.ToInt32((await ScalarAsync(raw,
+            "SELECT count(*) FROM ssf.machinery_usages WHERE daily_log_id = @dlid AND implement = 'blower' AND nozzles_active = 10",
+            ("dlid", _dailyLogId)))!);
+        muCount.Should().Be(1, "D-T6-ERASURE: machinery_usages survives erasure (KEEP) with structured config intact");
+
+        // observation_events (Track B table-7, D-FREETEXT-PRESERVE): KEEP — the free-text
+        // wisdom SURVIVES erasure UNCHANGED (must NOT be scrubbed to ErasedFarmer/null).
+        var obsText = (string?)(await ScalarAsync(raw,
+            "SELECT text_raw FROM ssf.observation_events WHERE daily_log_id = @dlid",
+            ("dlid", _dailyLogId)));
+        obsText.Should().Be("leaf curl after first rain",
+            "D-FREETEXT-PRESERVE-2026-06-29: observation free-text is PRESERVED (KEEP), never scrubbed by erasure");
+
+        // disturbance_events (Track B table-8, D-FREETEXT-PRESERVE): KEEP — the free-text reason
+        // SURVIVES erasure UNCHANGED (must NOT be scrubbed to ErasedFarmer/null).
+        var distReason = (string?)(await ScalarAsync(raw,
+            "SELECT reason FROM ssf.disturbance_events WHERE daily_log_id = @dlid",
+            ("dlid", _dailyLogId)));
+        distReason.Should().Be("rain stopped spraying at noon",
+            "D-FREETEXT-PRESERVE-2026-06-29: disturbance reason is PRESERVED (KEEP), never scrubbed by erasure");
+
+        // weather_events (Track B table-9): KEEP — system weather data survives erasure (no user column).
+        var weCount = Convert.ToInt32((await ScalarAsync(raw,
+            "SELECT count(*) FROM ssf.weather_events WHERE event_type = 'HeavyRain'"))!);
+        weCount.Should().Be(1, "weather_events survives erasure (KEEP) — system weather data, no PII to scrub");
+
+        // routine_patterns (Track B table-10): KEEP — derived farm memory survives erasure (no user column).
+        var rpCount = Convert.ToInt32((await ScalarAsync(raw,
+            "SELECT count(*) FROM ssf.routine_patterns WHERE operation_type = 'irrigation'"))!);
+        rpCount.Should().Be(1, "routine_patterns survives erasure (KEEP) — derived farm data, no PII to scrub");
+
+        // weather_stamps (Track B table-11): KEEP — system weather snapshot survives erasure (no user column).
+        var wsCount = Convert.ToInt32((await ScalarAsync(raw,
+            "SELECT count(*) FROM ssf.weather_stamps WHERE daily_log_id = @dlid AND condition_text = 'Partly Cloudy'",
+            ("dlid", _dailyLogId)))!);
+        wsCount.Should().Be(1, "weather_stamps survives erasure (KEEP) — system weather data, no PII to scrub");
+
         // ── 4. Regex-grep every free-text column for PII residue ────
         var phoneRegex = new Regex(@"\d{10}");
         var allTextSql = """
@@ -322,6 +412,14 @@ public sealed class ErasureWorkerAnonymizationTest : IAsyncLifetime
     private const int VoiceSpineTranscriptHistoryCount = 4;
     private readonly List<string> _seededAudioHashes = new();
 
+    // Track B table-2 (D-T2-ERASURE): the seeded farm_operations Id so
+    // the survival assertion can locate the child application_input_items row.
+    private Guid _farmOperationId;
+
+    // Track B table-4 (D-T4-ERASURE): the seeded daily_logs Id so the
+    // irrigation_entries survival assertion can locate the child row.
+    private Guid _dailyLogId;
+
     private async Task SeedFixtureAsync(string conn)
     {
         await using var db = new NpgsqlConnection(conn);
@@ -339,14 +437,14 @@ public sealed class ErasureWorkerAnonymizationTest : IAsyncLifetime
         }
 
         // daily_logs
-        var dailyLogId = Guid.NewGuid();
+        _dailyLogId = Guid.NewGuid();
         await using (var c = db.CreateCommand())
         {
             c.CommandText = """
                 INSERT INTO ssf.daily_logs ("Id", farm_id, plot_id, crop_cycle_id, operator_user_id, log_date, created_at_utc, source, model_version, prompt_version)
                 VALUES (@id, @fid, @pid, @cid, @uid, CURRENT_DATE, NOW(), 'pre_spine', 'unknown', 'unknown');
                 """;
-            c.Parameters.AddWithValue("id", dailyLogId);
+            c.Parameters.AddWithValue("id", _dailyLogId);
             c.Parameters.AddWithValue("fid", _farmId);
             c.Parameters.AddWithValue("pid", _plotId);
             c.Parameters.AddWithValue("cid", _cycleId);
@@ -365,7 +463,7 @@ public sealed class ErasureWorkerAnonymizationTest : IAsyncLifetime
                 """;
             c.Parameters.AddWithValue("id1", Guid.NewGuid());
             c.Parameters.AddWithValue("id2", Guid.NewGuid());
-            c.Parameters.AddWithValue("lid", dailyLogId);
+            c.Parameters.AddWithValue("lid", _dailyLogId);
             c.Parameters.AddWithValue("notes", $"{DisplayName} phone {PhoneNumber}");
             c.Parameters.AddWithValue("dev", TranscriptExcerpt);
             await c.ExecuteNonQueryAsync();
@@ -416,6 +514,190 @@ public sealed class ErasureWorkerAnonymizationTest : IAsyncLifetime
             c.Parameters.AddWithValue("ceid", Guid.NewGuid());
             c.Parameters.AddWithValue("reason", $"Reason from {DisplayName} ({PhoneNumber})");
             c.Parameters.AddWithValue("uid", _userId);
+            await c.ExecuteNonQueryAsync();
+        }
+
+        // farm_operations (Track B table-1) — owned by the target user.
+        // ANONYMIZE manifest: created_by_user_id is scrubbed to the sentinel;
+        // farm_id/operation_type/derived_event_key are KEEP fields.
+        _farmOperationId = Guid.NewGuid();
+        await using (var c = db.CreateCommand())
+        {
+            c.CommandText = """
+                INSERT INTO ssf.farm_operations
+                    ("Id", farm_id, plot_id, operation_type, operation_date, source_daily_log_id,
+                     derived_event_key, is_current_version, created_by_user_id,
+                     source, model_version, prompt_version,
+                     created_at_utc, modified_at_utc)
+                VALUES
+                    (@id, @fid, @pid, 'input', CURRENT_DATE, NULL,
+                     @key, true, @uid,
+                     'voice', 'saaras:v3', 'v1',
+                     NOW(), NOW());
+                """;
+            c.Parameters.AddWithValue("id", _farmOperationId);
+            c.Parameters.AddWithValue("fid", _farmId);
+            c.Parameters.AddWithValue("pid", _plotId);
+            c.Parameters.AddWithValue("key", new string('b', 64));
+            c.Parameters.AddWithValue("uid", _userId);
+            await c.ExecuteNonQueryAsync();
+        }
+
+        // application_input_items (Track B table-2, D-T2-ERASURE) — typed child
+        // of farm_operations. No user_id/PII column: product_name, npk_grade,
+        // dose_amount are de-identified farm facts. Seeded to assert KEEP survival.
+        await using (var c = db.CreateCommand())
+        {
+            c.CommandText = """
+                INSERT INTO ssf.application_input_items
+                    ("Id", operation_id, product_name, npk_grade, dose_amount, ordinal, created_at_utc)
+                VALUES
+                    (@id, @opid, 'Ethrel', '00:52:34', 5, 0, NOW());
+                """;
+            c.Parameters.AddWithValue("id", Guid.NewGuid());
+            c.Parameters.AddWithValue("opid", _farmOperationId);
+            await c.ExecuteNonQueryAsync();
+        }
+
+        // event_links (Track B table-3) — owned (via from_operation) by the target
+        // user's farm. KEEP on erasure (no PII). Satisfies ck_event_links_one_target
+        // (only to_operation_id set) + ck_event_links_same_farm (from=to farm).
+        await using (var c = db.CreateCommand())
+        {
+            c.CommandText = """
+                INSERT INTO ssf.event_links
+                    ("Id", from_farm_id, to_farm_id, from_operation_id, to_operation_id,
+                     to_cost_entry_id, link_kind, created_at_utc)
+                VALUES
+                    (@id, @fid, @fid, @fromop, @toop, NULL, 'CarrierFor', NOW());
+                """;
+            c.Parameters.AddWithValue("id", Guid.NewGuid());
+            c.Parameters.AddWithValue("fid", _farmId);
+            c.Parameters.AddWithValue("fromop", _farmOperationId);
+            c.Parameters.AddWithValue("toop", Guid.NewGuid());
+            await c.ExecuteNonQueryAsync();
+        }
+
+        // irrigation_entries (Track B table-4) — child of the seeded daily log.
+        // KEEP on erasure (no PII).
+        await using (var c = db.CreateCommand())
+        {
+            c.CommandText = """
+                INSERT INTO ssf.irrigation_entries
+                    ("Id", daily_log_id, role, weather_adjusted, duration_hours, created_at_utc)
+                VALUES
+                    (@id, @dlid, 'Irrigation', false, 4, NOW());
+                """;
+            c.Parameters.AddWithValue("id", Guid.NewGuid());
+            c.Parameters.AddWithValue("dlid", _dailyLogId);
+            await c.ExecuteNonQueryAsync();
+        }
+
+        // labour_assignments (Track B table-5) — child of the seeded daily log.
+        // KEEP on erasure (no PII). total_cost intentionally NULL (no-multiply).
+        await using (var c = db.CreateCommand())
+        {
+            c.CommandText = """
+                INSERT INTO ssf.labour_assignments
+                    ("Id", daily_log_id, engagement_type, worker_count, wage_per_person, total_cost, created_at_utc)
+                VALUES
+                    (@id, @dlid, 'Hired', 4, 50, NULL, NOW());
+                """;
+            c.Parameters.AddWithValue("id", Guid.NewGuid());
+            c.Parameters.AddWithValue("dlid", _dailyLogId);
+            await c.ExecuteNonQueryAsync();
+        }
+
+        // machinery_usages (Track B table-6) — child of the seeded daily log.
+        // KEEP on erasure (no PII); structured equipment config survives.
+        await using (var c = db.CreateCommand())
+        {
+            c.CommandText = """
+                INSERT INTO ssf.machinery_usages
+                    ("Id", daily_log_id, machine_type, ownership, implement, nozzles_active, fan_state, created_at_utc)
+                VALUES
+                    (@id, @dlid, 'Sprayer', 'Owned', 'blower', 10, 'Off', NOW());
+                """;
+            c.Parameters.AddWithValue("id", Guid.NewGuid());
+            c.Parameters.AddWithValue("dlid", _dailyLogId);
+            await c.ExecuteNonQueryAsync();
+        }
+
+        // observation_events (Track B table-7) — child of the seeded daily log.
+        // KEEP on erasure (D-FREETEXT-PRESERVE-2026-06-29): the farmer's free-text wisdom survives UNCHANGED.
+        await using (var c = db.CreateCommand())
+        {
+            c.CommandText = """
+                INSERT INTO ssf.observation_events
+                    ("Id", daily_log_id, note_type, severity, source, text_raw, created_at_utc)
+                VALUES
+                    (@id, @dlid, 'Observation', 'Normal', 'Voice', 'leaf curl after first rain', NOW());
+                """;
+            c.Parameters.AddWithValue("id", Guid.NewGuid());
+            c.Parameters.AddWithValue("dlid", _dailyLogId);
+            await c.ExecuteNonQueryAsync();
+        }
+
+        // disturbance_events (Track B table-8) — child of the seeded daily log.
+        // KEEP on erasure (D-FREETEXT-PRESERVE-2026-06-29): the farmer's free-text reason survives UNCHANGED.
+        await using (var c = db.CreateCommand())
+        {
+            c.CommandText = """
+                INSERT INTO ssf.disturbance_events
+                    ("Id", daily_log_id, scope, reason, created_at_utc)
+                VALUES
+                    (@id, @dlid, 'Partial', 'rain stopped spraying at noon', NOW());
+                """;
+            c.Parameters.AddWithValue("id", Guid.NewGuid());
+            c.Parameters.AddWithValue("dlid", _dailyLogId);
+            await c.ExecuteNonQueryAsync();
+        }
+
+        // weather_events (Track B table-9, DIRECT farm_id) — system weather data, no PII.
+        // KEEP on erasure: a member's erasure must NOT delete farm-level weather history.
+        await using (var c = db.CreateCommand())
+        {
+            c.CommandText = """
+                INSERT INTO ssf.weather_events
+                    ("Id", farm_id, event_type, severity, ts_start, source, created_at_utc)
+                VALUES
+                    (@id, @farmid, 'HeavyRain', 'High', NOW(), 'tomorrow.io_trigger', NOW());
+                """;
+            c.Parameters.AddWithValue("id", Guid.NewGuid());
+            c.Parameters.AddWithValue("farmid", _farmId);
+            await c.ExecuteNonQueryAsync();
+        }
+
+        // routine_patterns (Track B table-10, DIRECT farm_id) — derived farm memory, no PII.
+        // KEEP on erasure: a member's erasure must NOT delete the farm's routine memory.
+        await using (var c = db.CreateCommand())
+        {
+            c.CommandText = """
+                INSERT INTO ssf.routine_patterns
+                    ("Id", farm_id, operation_type, sample_count, created_at_utc, updated_at_utc)
+                VALUES
+                    (@id, @farmid, 'irrigation', 5, NOW(), NOW());
+                """;
+            c.Parameters.AddWithValue("id", Guid.NewGuid());
+            c.Parameters.AddWithValue("farmid", _farmId);
+            await c.ExecuteNonQueryAsync();
+        }
+
+        // weather_stamps (Track B table-11) — daily_logs child, system weather snapshot, no PII.
+        // KEEP on erasure: a member's erasure must NOT delete the farm's weather snapshots.
+        await using (var c = db.CreateCommand())
+        {
+            c.CommandText = """
+                INSERT INTO ssf.weather_stamps
+                    ("Id", daily_log_id, timestamp_local, timestamp_provider, provider,
+                     temp_c, humidity, wind_kph, precip_mm, cloud_cover_pct,
+                     condition_text, icon_code, rain_prob_next_6h, created_at_utc)
+                VALUES
+                    (@id, @dlid, NOW(), NOW(), 'TomorrowIo',
+                     28.5, 65, 12, 0, 40, 'Partly Cloudy', 'partly_cloudy', 20, NOW());
+                """;
+            c.Parameters.AddWithValue("id", Guid.NewGuid());
+            c.Parameters.AddWithValue("dlid", _dailyLogId);
             await c.ExecuteNonQueryAsync();
         }
 

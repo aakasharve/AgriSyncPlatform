@@ -9,6 +9,7 @@ using AgriSync.BuildingBlocks.Abstractions;
 using AgriSync.BuildingBlocks.Analytics;
 using AgriSync.BuildingBlocks.Results;
 using AgriSync.SharedKernel.Contracts.Ids;
+using Microsoft.Extensions.Configuration;
 using ShramSafal.Application.Ports;
 using ShramSafal.Application.Ports.External;
 using ShramSafal.Application.Ports.Privacy;
@@ -17,6 +18,11 @@ using ShramSafal.Domain.AI;
 using ShramSafal.Domain.Audit;
 using ShramSafal.Domain.Common;
 using ShramSafal.Domain.Privacy.Pii;
+
+// NOTE: Microsoft.Extensions.Configuration is referenced here ONLY to read
+// the flag Ai:DomainKnowledgeLayer:Enabled (default false).  This is the
+// SOLE non-domain/non-ports import added by W1.P0 Batch A; it does NOT pull
+// in any Infrastructure or EF dependency.
 
 namespace ShramSafal.Application.UseCases.AI.ParseVoiceInput;
 
@@ -43,9 +49,31 @@ public sealed class ParseVoiceInputHandler(
     // reserved for forward use; removing it would break the diff
     // promise the supervisor brief made and force the DI container to
     // resolve a different constructor shape.
-    IConsentEnforcer consentEnforcer)
+    IConsentEnforcer consentEnforcer,
+    // W1.P0 Batch A (ai-intelligence-plan-2026-06-25 Task 8) —
+    // IConfiguration is injected AFTER IConsentEnforcer to minimise
+    // the ctor diff and avoid any change to the IEntitlementPolicy
+    // parameter.  The only value read is the flag
+    // Ai:DomainKnowledgeLayer:Enabled (default false).
+    // DI resolves IConfiguration automatically; no extra registration.
+    IConfiguration configuration,
+    // IDomainKnowledgePipelinePort allows the Application layer to
+    // invoke the Infrastructure-resident DomainKnowledgePipeline
+    // without a direct project reference (port pattern).  Registered
+    // in ShramSafal.Infrastructure.DependencyInjection.
+    IDomainKnowledgePipelinePort domainKnowledgePipeline)
 {
 #pragma warning restore CS9113
+
+    // W1.P0 Batch A — flag read once at construction time.
+    // Default is false: when unset the parse path is byte-identical to
+    // the pre-Batch-A behaviour.
+    private readonly bool _domainKnowledgeLayerEnabled =
+        configuration.GetValue<bool>("Ai:DomainKnowledgeLayer:Enabled");
+
+    // W1.P0 Batch A — held to call from ApplyTranscriptIntegrityCorrections.
+    private readonly IDomainKnowledgePipelinePort _domainKnowledgePipeline = domainKnowledgePipeline;
+
     private static readonly Dictionary<string, int> MarathiNumberTokens = new(StringComparer.OrdinalIgnoreCase)
     {
         ["एक"] = 1,
@@ -142,7 +170,7 @@ public sealed class ParseVoiceInputHandler(
             }
         }
 
-        var promptContext = BuildPromptContext(command.ContextJson, farm.Name, plot?.Name, cropCycle?.CropName);
+        var promptContext = BuildPromptContext(command.ContextJson, farm.Name, plot?.Name, cropCycle?.CropName, cropCycle?.Stage);
         var systemPrompt = promptBuilder.BuildVoiceParsingPrompt(promptContext);
 
         await using var payloadStream = BuildPayloadStream(command, transcript, out var mimeType);
@@ -237,7 +265,9 @@ public sealed class ParseVoiceInputHandler(
             using var document = JsonDocument.Parse(
                 ApplyTranscriptIntegrityCorrections(
                     canonicalResult.NormalizedJson,
-                    canonicalResult.RawTranscript ?? transcript ?? string.Empty));
+                    canonicalResult.RawTranscript ?? transcript ?? string.Empty,
+                    _domainKnowledgeLayerEnabled,
+                    _domainKnowledgePipeline));
             var parsedLog = document.RootElement.Clone();
             var fieldConfidences = ExtractFieldConfidences(parsedLog);
             var overallConfidence = canonicalResult.OverallConfidence > 0
@@ -497,7 +527,8 @@ public sealed class ParseVoiceInputHandler(
         string? contextJson,
         string farmName,
         string? plotName,
-        string? cropName)
+        string? cropName,
+        string? cropStage = null)
     {
         if (!string.IsNullOrWhiteSpace(contextJson))
         {
@@ -509,6 +540,18 @@ public sealed class ParseVoiceInputHandler(
                     && parsed.AvailableCrops is not null
                     && parsed.Profile is not null)
                 {
+                    // AI_INTELLIGENCE_PLAN_2026-06-25 W1.P0 C8 — when the
+                    // caller supplies a cropStage from the confirmed
+                    // CropCycle.Stage, inject it as a soft prior even when
+                    // the full context came from the client JSON. This
+                    // ensures the stage-prior block is always available in
+                    // BuildFarmKnowledge regardless of which code path
+                    // produced the context object.
+                    if (!string.IsNullOrWhiteSpace(cropStage) && parsed.CropStage is null)
+                    {
+                        return parsed with { CropStage = cropStage };
+                    }
+
                     return parsed;
                 }
             }
@@ -541,7 +584,10 @@ public sealed class ParseVoiceInputHandler(
             Profile: new FarmerProfileInfo([], [], [], null),
             FarmContext: new FarmContextInfo([selection]),
             FocusCategory: null,
-            VocabDb: null);
+            VocabDb: null)
+        {
+            CropStage = cropStage,
+        };
     }
 
     private static string BuildIdempotencyKey(
@@ -554,7 +600,16 @@ public sealed class ParseVoiceInputHandler(
         return Convert.ToHexString(hash).ToLowerInvariant();
     }
 
-    private static string ApplyTranscriptIntegrityCorrections(string normalizedJson, string transcript)
+    // internal (not private) so ShramSafal.Domain.Tests can drive the REAL
+    // flag-branching logic with both flag states (W1.P0 Task 8 fix, Finding 2).
+    // Access widened from private → internal only; the method body and the
+    // production call site are unchanged.  Guarded by InternalsVisibleTo in
+    // ShramSafal.Application.csproj.
+    internal static string ApplyTranscriptIntegrityCorrections(
+        string normalizedJson,
+        string transcript,
+        bool domainKnowledgeLayerEnabled = false,
+        IDomainKnowledgePipelinePort? domainKnowledgePipeline = null)
     {
         if (string.IsNullOrWhiteSpace(normalizedJson))
         {
@@ -657,8 +712,21 @@ public sealed class ParseVoiceInputHandler(
             };
         }
 
-        // Safety net: ensure fertilizer application is captured when explicitly stated with a past-tense verb
-        if (ContainsFertilizerApplication(cleanTranscript))
+        // Safety net: ensure fertilizer application is captured when explicitly stated with a past-tense verb.
+        //
+        // W1.P0 Batch A (ai-intelligence-plan-2026-06-25 Task 8 fix) —
+        // This ORIGINAL unguarded net runs BEFORE GrapeInputLexicon, so when the
+        // domain-knowledge layer is ON it would clobber an empty inputs[] with a
+        // generic productName="खत" BEFORE the lexicon could normalize a real
+        // product row (the §1 CRITICAL pre-lexicon-clobber the spec forbids).
+        // It is therefore gated to run ONLY when the flag is OFF:
+        //   - Flag OFF (default): runs exactly as before → flag-OFF output is
+        //     byte-identical to the pre-Batch-A behaviour.
+        //   - Flag ON: SKIPPED here; the DEMOTED + GUARDED net inside
+        //     DomainKnowledgePipeline.ApplyGuardedFertilizerSafetyNet (which runs
+        //     AFTER GrapeInputLexicon and only when inputs[] is empty AND no row
+        //     carries rawProductName) is the ONLY खत injection.
+        if (!domainKnowledgeLayerEnabled && ContainsFertilizerApplication(cleanTranscript))
         {
             var inputs = root["inputs"] as JsonArray ?? new JsonArray();
             if (inputs.Count == 0)
@@ -721,7 +789,125 @@ public sealed class ParseVoiceInputHandler(
             root["plannedTasks"] = plannedTasks;
         }
 
+        // W1.P0 Batch A — flag-guarded domain-knowledge pipeline.
+        // When Ai:DomainKnowledgeLayer:Enabled is true (default false),
+        // runs all 7 normalizers (C1–C7) in the prescribed order.
+        // When false, this block is a no-op and the output is byte-identical
+        // to the pre-Batch-A behaviour.
+        if (domainKnowledgeLayerEnabled && domainKnowledgePipeline is not null)
+        {
+            // W1.P2 B002 fix — provenance stamping MUST defer to the pipeline,
+            // specifically C7 ProvenanceTagger which classifies "assumed" on
+            // fabricated values. Pre-stamping "spoken" before RunPipeline would
+            // disarm C7: IsKnownUpstreamProvenance("spoken") returns true and
+            // C7 early-returns, so assumed/derived values would remain "spoken"
+            // — a honesty violation that inflates the Understanding Meter.
+            //
+            // Correct order:
+            //   1. Snapshot which item object references exist NOW (pre-pipeline =
+            //      transcript-origin). We capture the actual JsonObject instances
+            //      since the root is the same tree throughout.
+            //   2. Run the pipeline. C7 (LAST normalizer) authoritatively stamps
+            //      "spoken", "derived", or "assumed" on quantity-bearing nodes.
+            //   3. GAP-FILL only items still MISSING a provenance key after C7:
+            //      - item existed pre-pipeline (reference in snapshot) → "spoken"
+            //      - item added by the pipeline (NOT in snapshot)       → "derived"
+            //   NEVER overwrite a provenance key already set by C7 or any
+            //   upstream normalizer ("assumed" and C7's tags all survive).
+
+            // Step 1: snapshot object references for items that exist right now.
+            var preRunItemRefs = SnapshotItemRefs(root);
+
+            // Step 2: run the pipeline (C7 stamps spoken/derived/assumed).
+            domainKnowledgePipeline.RunPipeline(root, transcript);
+
+            // Step 3: gap-fill items that C7 did not tag (non-quantity-bearing
+            // nodes that have no provenance key yet).
+            //   - pre-pipeline item with no provenance key → "spoken"
+            //   - pipeline-added item with no provenance key → "derived"
+            GapFillProvenance(root, preRunItemRefs);
+        }
+
         return root.ToJsonString();
+    }
+
+    // W1.P2 B002 fix — provenance helpers that let C7 ProvenanceTagger win.
+    //
+    // Arrays walked: labour, inputs, irrigation, observations, plannedTasks,
+    // cropActivities, machinery, activityExpenses (all top-level event arrays
+    // that may receive items from either path).
+    private static readonly string[] EventArrayKeys =
+    [
+        "labour", "inputs", "irrigation", "observations",
+        "plannedTasks", "cropActivities", "machinery", "activityExpenses"
+    ];
+
+    /// <summary>
+    /// Captures the set of <see cref="JsonObject"/> references that exist
+    /// inside the known event-item arrays BEFORE the pipeline runs.
+    /// Used by <see cref="GapFillProvenance"/> to distinguish transcript-origin
+    /// items from pipeline-added items when doing post-pipeline gap-fill.
+    /// </summary>
+    private static HashSet<JsonObject> SnapshotItemRefs(JsonObject root)
+    {
+        var refs = new HashSet<JsonObject>(ReferenceEqualityComparer.Instance);
+        foreach (var key in EventArrayKeys)
+        {
+            if (root[key] is not JsonArray array)
+            {
+                continue;
+            }
+
+            foreach (var node in array)
+            {
+                if (node is JsonObject item)
+                {
+                    refs.Add(item);
+                }
+            }
+        }
+
+        return refs;
+    }
+
+    /// <summary>
+    /// Gap-fills provenance ONLY on items that C7 ProvenanceTagger left
+    /// without a "provenance" key (i.e. non-quantity-bearing nodes that C7
+    /// deliberately skips).
+    /// <list type="bullet">
+    ///   <item>Item existed before RunPipeline (reference in
+    ///         <paramref name="preRunItemRefs"/>) → "spoken".</item>
+    ///   <item>Item added by the pipeline (NOT in snapshot) → "derived".</item>
+    /// </list>
+    /// NEVER overwrites a key already set by C7 or any upstream normalizer.
+    /// "assumed", "derived", and "spoken" tags set by C7 all survive unchanged.
+    /// </summary>
+    private static void GapFillProvenance(JsonObject root, HashSet<JsonObject> preRunItemRefs)
+    {
+        foreach (var key in EventArrayKeys)
+        {
+            if (root[key] is not JsonArray array)
+            {
+                continue;
+            }
+
+            foreach (var node in array)
+            {
+                if (node is not JsonObject item)
+                {
+                    continue;
+                }
+
+                // Never overwrite — C7's classifications must survive.
+                if (item.ContainsKey("provenance"))
+                {
+                    continue;
+                }
+
+                var fallback = preRunItemRefs.Contains(item) ? "spoken" : "derived";
+                item["provenance"] = fallback;
+            }
+        }
     }
 
     private static List<(int Count, string Activity, string ActivityDisplay, string SourceText)> ExtractCompoundLabourSegments(string transcript)

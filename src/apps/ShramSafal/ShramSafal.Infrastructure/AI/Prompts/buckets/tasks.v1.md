@@ -15,7 +15,7 @@ Negative examples:
 Mistakes you will make without guardrails:
 - UNIT_DRIFT: treating required quantity as applied quantity.
 - SPEAKER_CONFUSION: advice is not the farmer's task unless phrased as intent.
-- CROP_STAGE_LEAKAGE: adding tasks not spoken.
+- CROP_STAGE_LEAKAGE: infer stage from explicit OPERATIONS the farmer described, never from products alone; a product name alone never sets stage; if the operation contradicts the stage, trust the operation.
 - QUANTITY_HALLUCINATION: adding due dates without markers.
 - CROSS_BUCKET_BLEED: duplicating completed work as future task.
 - DATE_SHIFTING: today vs tomorrow.

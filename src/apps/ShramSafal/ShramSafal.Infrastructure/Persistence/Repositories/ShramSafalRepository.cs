@@ -134,6 +134,11 @@ internal sealed class ShramSafalRepository(ShramSafalDbContext db) : IShramSafal
         await db.DailyLogs.AddAsync(log, ct);
     }
 
+    public async Task AddWeatherStampAsync(WeatherStamp stamp, CancellationToken ct = default)
+    {
+        await db.WeatherStamps.AddAsync(stamp, ct);
+    }
+
     public async Task<DailyLog?> GetDailyLogByIdAsync(Guid dailyLogId, CancellationToken ct = default)
     {
         return await db.DailyLogs
@@ -1341,6 +1346,89 @@ internal sealed class ShramSafalRepository(ShramSafalDbContext db) : IShramSafal
             .OrderByDescending(r => r.RequestedAtUtc)
             .Take(50)
             .ToListAsync(ct);
+    }
+
+    // ── AI Intelligence Plan WP-2b (Track B typed ledger writers) ────────
+    // spec: ai-intelligence-plan-2026-06-25
+    // Confirm-time derivation (LedgerDerivationService) stages these rows on
+    // the DbSet; the caller's existing SaveChangesAsync commits them in the
+    // same unit of work as the DailyLog (mirrors AddWeatherStampAsync at
+    // L137). No SaveChanges here.
+
+    public async Task AddFarmOperationAsync(FarmOperation op, CancellationToken ct = default)
+    {
+        await db.FarmOperations.AddAsync(op, ct);
+    }
+
+    public async Task AddApplicationInputItemAsync(ApplicationInputItem item, CancellationToken ct = default)
+    {
+        await db.ApplicationInputItems.AddAsync(item, ct);
+    }
+
+    public async Task AddIrrigationEntryAsync(IrrigationEntry e, CancellationToken ct = default)
+    {
+        await db.IrrigationEntries.AddAsync(e, ct);
+    }
+
+    public async Task AddLabourAssignmentAsync(LabourAssignment a, CancellationToken ct = default)
+    {
+        await db.LabourAssignments.AddAsync(a, ct);
+    }
+
+    public async Task AddMachineryUsageAsync(MachineryUsage m, CancellationToken ct = default)
+    {
+        await db.MachineryUsages.AddAsync(m, ct);
+    }
+
+    public async Task AddObservationEventAsync(ObservationEvent o, CancellationToken ct = default)
+    {
+        await db.ObservationEvents.AddAsync(o, ct);
+    }
+
+    public async Task AddDisturbanceEventAsync(DisturbanceEvent d, CancellationToken ct = default)
+    {
+        await db.DisturbanceEvents.AddAsync(d, ct);
+    }
+
+    /// <summary>
+    /// Supersession lookup — the CURRENT-version FarmOperation whose
+    /// DerivedEventKey matches, or null. <c>DerivedEventKey</c> is mapped as a
+    /// WHOLE-PROPERTY value converter (FarmOperationConfiguration L28-30), so we
+    /// must compare the whole value object — EF Core cannot translate member
+    /// access (<c>.Value</c>) on a value-converted property (it throws
+    /// InvalidOperationException at query time). Constructing the key and
+    /// comparing <c>o.DerivedEventKey == key</c> translates to
+    /// <c>WHERE derived_event_key = @key</c>.
+    /// </summary>
+    public async Task<FarmOperation?> GetFarmOperationByKeyAsync(string derivedEventKey, CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(derivedEventKey))
+        {
+            return null;
+        }
+
+        var key = new DerivedEventKey(derivedEventKey);
+        return await db.FarmOperations
+            .FirstOrDefaultAsync(o => o.DerivedEventKey == key && o.IsCurrentVersion, ct);
+    }
+
+    /// <summary>
+    /// RoutineMemory upsert lookup — filter on farm_id + plot_id (nullable) +
+    /// operation_type. PlotId null matches farm-wide patterns.
+    /// </summary>
+    public async Task<RoutinePattern?> GetRoutinePatternAsync(Guid farmId, Guid? plotId, string operationType, CancellationToken ct = default)
+    {
+        var normalizedOp = (operationType ?? string.Empty).Trim();
+
+        return await db.RoutinePatterns
+            .FirstOrDefaultAsync(
+                p => p.FarmId == farmId && p.PlotId == plotId && p.OperationType == normalizedOp,
+                ct);
+    }
+
+    public async Task AddRoutinePatternAsync(RoutinePattern p, CancellationToken ct = default)
+    {
+        await db.RoutinePatterns.AddAsync(p, ct);
     }
 
     private static List<Guid> NormalizeFarmIds(IEnumerable<Guid> farmIds)

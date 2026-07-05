@@ -13,6 +13,30 @@
 import type { WeatherStamp, WeatherSnapshot } from './weather.types';
 import type { LogProvenance } from '../ai/LogProvenance';
 import type { PatchEvent } from '../ledger/PatchEvent';
+import type { VlogScore } from './vlog-score.types'; // local use in DailyLog; re-exported below
+import type { TranscriptSnapshot } from './log-timeline.types'; // local use in DailyLog; re-exported below
+
+// =============================================================================
+// FIELD-LEVEL PROVENANCE (W1.P2 — per-field confidence signal)
+// =============================================================================
+
+/**
+ * Per-field provenance tag. Records HOW a field value was determined.
+ *
+ * - `spoken`:    The farmer explicitly stated this value in their voice input.
+ * - `confirmed`: The farmer confirmed this value at the confirm-screen.
+ * - `derived`:   The system inferred it from other stated values (e.g. computed cost).
+ * - `assumed`:   The system filled it in as a default / fabrication (lowest trust).
+ *
+ * NOTE: this is field-level provenance on event ITEMS. It is a DIFFERENT concept
+ * from the log-level `LogProvenance` in `domain/ai/LogProvenance.ts` which tracks
+ * the source of the entire log (ai / manual / pre_spine, model version, etc.).
+ * Do NOT conflate the two.
+ *
+ * Single source of truth — scoreVlog.ts and any future consumers MUST import
+ * this type from here rather than defining their own local alias.
+ */
+export type FieldProvenance = 'spoken' | 'confirmed' | 'derived' | 'assumed';
 
 // =============================================================================
 // LOG SCOPE (What context does a log apply to?)
@@ -70,6 +94,13 @@ export interface CropActivityEvent {
 
     // Per-Bucket Issue (Phase 22)
     issue?: BucketIssue;
+
+    // Track B Wave-2 (B2.6) — continuity progress (optional, back-compat).
+    // Reuses CropPhase (declared below in this module).
+    progress?: { phase?: CropPhase; unitsDone?: number; unitsTotal?: number; unit?: string };  // §3.2f — continuity
+
+    // W1.P2 — per-field provenance (how was this value determined?)
+    provenance?: FieldProvenance;
 }
 
 // =============================================================================
@@ -88,12 +119,19 @@ export interface IrrigationEvent {
     motorId?: string;
     targetPlotName?: string;
 
+    // Track B Wave-2 (B2.5) — water-role discriminator + weather-trim flag (all optional, back-compat)
+    role?: 'spray-carrier' | 'irrigation' | 'fertigation';   // §3.2e — water-role discriminator
+    weatherAdjusted?: boolean;                                // §3.2e — duration trimmed by weather (e.g. rain-cut)
+
     // Transparency
     sourceText?: string;
     systemInterpretation?: string;
 
     // Per-Bucket Issue (Phase 22)
     issue?: BucketIssue;
+
+    // W1.P2 — per-field provenance (how was this value determined?)
+    provenance?: FieldProvenance;
 }
 
 // =============================================================================
@@ -119,20 +157,30 @@ export interface LabourEvent {
     activity?: string;
     targetPlotName?: string;
 
+    // Track B Wave-2 (B2.4) — richer labour capture (all optional, back-compat;
+    // legacy fields above retained; NO totalCost auto-derivation from rate×count).
+    gender?: 'male' | 'female' | 'mixed' | 'unknown';                                  // §3.2d
+    engagementType?: 'hired_daily' | 'contract_piece' | 'self' | 'exchange';          // §3.2d
+    rate?: number;                                                                     // §3.2d (per the rateBasis)
+    rateBasis?: 'per_person_day' | 'per_vine' | 'per_row' | 'per_acre' | 'lump_sum';   // §3.2d
+
     // Transparency
     sourceText?: string;
     systemInterpretation?: string;
 
     // Per-Bucket Issue (Phase 22)
     issue?: BucketIssue;
+
+    // W1.P2 — per-field provenance (how was this value determined?)
+    provenance?: FieldProvenance;
 }
 
 // =============================================================================
 // INPUT EVENTS (Fertilizers, Pesticides, etc.)
 // =============================================================================
 
-export type InputMethod = 'Spray' | 'Drip' | 'Drenching' | 'Soil';
-export type InputReason = 'Preventive' | 'Disease' | 'Pest' | 'Growth' | 'Deficiency' | 'Seller Advice' | 'Other';
+export type InputMethod = 'Spray' | 'Drip' | 'Drenching' | 'Soil' | 'paste_manual';
+export type InputReason = 'Preventive' | 'Disease' | 'Pest' | 'Growth' | 'Deficiency' | 'Seller Advice' | 'Other' | 'defoliation' | 'root_growth' | 'nutrient_correction' | 'fruit_sizing' | 'disease_control';
 
 export interface InputMixItem {
     id: string;
@@ -140,10 +188,18 @@ export interface InputMixItem {
     dose?: number;
     unit: string; // ml/L, g/L, kg/acre, etc.
 
+    // B2.1 — dose split + npk grade (optional, back-compat; dose?: number kept as-is)
+    basisQty?: number;     // §3.2a — the "per X" basis quantity (e.g. 5ml per 1 L → basisQty:1)
+    basisUnit?: string;    // §3.2a — the basis unit (e.g. "L") → maps app_input_items.dose_basis_qty/unit
+    npkGrade?: string;     // §3.2a — e.g. "19:19:19" → maps app_input_items.npk_grade
+
     // Linkage for specific product in a mix
     linkedExpenseId?: string;
     linkedExpenseItemId?: string;
     costSource?: 'MANUAL' | 'PROCUREMENT';
+
+    // W1.P2 — per-field provenance (how was this value determined?)
+    provenance?: FieldProvenance;
 }
 
 export interface InputEvent {
@@ -157,6 +213,11 @@ export interface InputEvent {
 
     // Delivery
     method: InputMethod;
+    carrierMedium?: 'water' | 'oil' | 'none';   // §3.2c — what the input is carried in
+
+    // B2.2 — mix/pass grouping (§3.2b)
+    mixId?: string;   // §3.2b — groups input rows sprayed together in one mix
+    passId?: string;  // §3.2b — groups one spray pass (carrier de-dupe key)
 
     // Carrier
     carrierType?: 'Blower' | 'Tank' | 'Hours' | 'Pati' | 'Bag' | 'Liters';
@@ -189,6 +250,9 @@ export interface InputEvent {
 
     // Per-Bucket Issue (Phase 22)
     issue?: BucketIssue;
+
+    // W1.P2 — per-field provenance (how was this value determined?)
+    provenance?: FieldProvenance;
 }
 
 // =============================================================================
@@ -206,12 +270,23 @@ export interface MachineryEvent {
     targetPlotName?: string;
     notes?: string;
 
+    // Track B Wave-2 (B2.10) — machinery detail (all net-new, optional, back-compat).
+    implement?: string;                              // §3.2i e.g. "blower"
+    nozzlesActive?: number;                          // §3.2i "10 guns"
+    fanState?: 'on' | 'off' | 'unknown';             // §3.2i (server maps 'unknown' -> null)
+    fuelType?: 'diesel' | 'petrol' | 'unknown';
+    fuelQuantity?: number;                           // matches machinery_usages.fuel_quantity (numeric column)
+    operationPerformed?: string;
+
     // Transparency
     sourceText?: string;
     systemInterpretation?: string;
 
     // Per-Bucket Issue (Phase 22)
     issue?: BucketIssue;
+
+    // W1.P2 — per-field provenance (how was this value determined?)
+    provenance?: FieldProvenance;
 }
 
 // =============================================================================
@@ -243,6 +318,9 @@ export interface ActivityExpenseEvent {
     // Transparency
     sourceText?: string;
     systemInterpretation?: string;
+
+    // W1.P2 — per-field provenance (how was this value determined?)
+    provenance?: FieldProvenance;
 }
 
 export interface ResourceItem {
@@ -361,6 +439,12 @@ export interface DisturbanceEvent {
     blockedSegments: LogSegment[];
     note?: string;
     weatherEventId?: string; // Link to Weather Spine
+
+    // §3.2g — structured disturbance (Track B B2.7, all optional / back-compat)
+    cause?: BucketIssueType;                                            // typed cause (reuses BucketIssueType enum)
+    affectedScope?: 'event' | 'bucket' | 'whole_day';                  // finer than the 3-value scope
+    impact?: string;                                                   // explicit impact (free-text)
+    resolvedStatus?: 'ongoing' | 'resolved_same_day' | 'carried_over';
 
     // Transparency
     sourceText?: string;
@@ -530,67 +614,9 @@ export interface LogDeletion {
     reason: string;
 }
 
-// =============================================================================
-// TRANSCRIPT TIMELINE (For UI display)
-// =============================================================================
-
-export interface TranscriptSnapshot {
-    raw: string;                      // Original user input
-    cleaned?: string;                 // AI-processed version
-    language?: 'mr' | 'hi' | 'en';    // Detected language
-}
-
-export interface LogTimelineEntry {
-    id: string;
-    logId: string;                    // Parent DailyLog ID
-
-    // Temporal - EXACT time
-    timestamp: string;                // ISO with time: "2026-02-03T07:45:00"
-    displayTime: string;              // Formatted: "7:45 AM"
-
-    // Context - crops/plots involved
-    contexts: {
-        cropId: string;
-        cropName: string;
-        cropIconName: string;         // Icon name for CropSymbol component
-        cropColor?: string;           // Tailwind color class
-        plotId?: string;
-        plotName?: string;
-    }[];
-
-    // Transcript
-    rawTranscript: string;            // Original voice/text input
-    cleanedTranscript?: string;       // AI-cleaned version
-    displayTranscript: string;        // What to show (prefer raw for connection)
-
-    // Source
-    source: 'VOICE' | 'MANUAL' | 'QUICK_ACTION';
-
-    // What was logged (summary)
-    loggedItems: {
-        activities: number;
-        observations: number;
-        labour: number;
-        irrigation: number;
-        machinery: number;
-        expenses: number;
-    };
-}
-
-export interface DayTranscriptSummary {
-    date: string;                     // YYYY-MM-DD
-    totalLogs: number;
-    entries: LogTimelineEntry[];
-
-    // Aggregated crops involved today
-    cropsInvolved: {
-        cropId: string;
-        cropName: string;
-        cropIconName: string;
-        cropColor?: string;
-        logCount: number;
-    }[];
-}
+// TRANSCRIPT TIMELINE (UI display) — moved to ./log-timeline.types.ts for the
+// 800-line cap; re-exported so consumers importing from log.types keep working.
+export type { TranscriptSnapshot, LogTimelineEntry, DayTranscriptSummary } from './log-timeline.types';
 
 // =============================================================================
 // QUESTIONS FOR USER (AI clarification requests)
@@ -603,6 +629,10 @@ export interface QuestionForUser {
     text: string;
     options?: string[]; // For Context Check (e.g. ["Plot A", "Plot B"])
 }
+
+// UNDERSTANDING METER TYPES (W1.P3) — moved to ./vlog-score.types.ts for the
+// 800-line cap; re-exported so the 34 consumers importing from log.types work.
+export type { ProvenanceTag, ScoreContext, VlogScoreDimension, VlogScore } from './vlog-score.types';
 
 // =============================================================================
 // DAILY LOG (The Aggregate Root)
@@ -649,6 +679,14 @@ export interface DailyLog {
         totalActivityExpenses?: number;
         grandTotal: number;
     };
+
+    /**
+     * Understanding Meter score — stamped at save time (W1.P3.T1, task 1c).
+     * Computed by scoreVlog and persisted silently for tuning.
+     * Display is gated by FEATURE_FLAGS.understandingMeter (default OFF).
+     * Rides the existing Dexie object blob — no schema version bump needed.
+     */
+    understanding?: VlogScore;
 }
 
 // =============================================================================

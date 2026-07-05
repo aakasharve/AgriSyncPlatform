@@ -57,6 +57,17 @@ public interface IShramSafalRepository
     Task<List<CropCycle>> GetCropCyclesByPlotIdAsync(Guid plotId, CancellationToken ct = default);
 
     Task AddDailyLogAsync(DailyLog log, CancellationToken ct = default);
+
+    // Track B B2.8 — stage a WeatherStamp on the DbSet (no SaveChanges; the
+    // caller's existing SaveChangesAsync commits it in the same unit of work
+    // as the DailyLog). Production ShramSafalRepository overrides with the EF
+    // AddAsync. A default no-op impl is used (not a required member) so the
+    // ~28 in-tree IShramSafalRepository test doubles keep compiling untouched —
+    // the same convention the other recent additive ports here follow (e.g.
+    // UpsertRawBlobIndexAsync). Weather-stamp persistence is best-effort /
+    // NON-BLOCKING anyway, so a test double that no-ops it is harmless.
+    Task AddWeatherStampAsync(WeatherStamp stamp, CancellationToken ct = default)
+        => Task.CompletedTask;
     Task<DailyLog?> GetDailyLogByIdAsync(Guid dailyLogId, CancellationToken ct = default);
     Task<DailyLog?> GetDailyLogByIdempotencyKeyAsync(string idempotencyKey, CancellationToken ct = default);
 
@@ -490,4 +501,73 @@ public interface IShramSafalRepository
 
     Task<List<ExportRequest>> GetExportRequestsForUserAsync(Guid userId, CancellationToken ct = default)
         => Task.FromResult(new List<ExportRequest>());
+
+    // --- AI Intelligence Plan WP-2b (Track B typed ledger writers) --------
+    // Confirm-time server-side derivation (LedgerDerivationService) stages
+    // these typed ssf rows on the DbSet inside CreateDailyLogHandler's
+    // existing unit of work (no SaveChanges here — the handler commits). The
+    // 11 tables + routine_patterns already exist, RLS-enabled, runtime-proven
+    // (ADR 0023). Each writer mirrors the AddWeatherStampAsync default-no-op
+    // convention (L69) so the ~28 in-tree IShramSafalRepository test doubles
+    // keep compiling untouched — derivation is best-effort / NON-BLOCKING, so
+    // a test double that no-ops it is harmless. Production ShramSafalRepository
+    // overrides with the EF AddAsync.
+
+    /// <summary>
+    /// Stage a derived <see cref="FarmOperation"/> ledger-spine parent
+    /// (inputs → operationType "application"). No SaveChanges — the handler
+    /// owns the commit.
+    /// </summary>
+    Task AddFarmOperationAsync(FarmOperation op, CancellationToken ct = default)
+        => Task.CompletedTask;
+
+    /// <summary>
+    /// Stage a derived <see cref="ApplicationInputItem"/> child of a
+    /// <see cref="FarmOperation"/> (ordinal-keyed within the input array).
+    /// </summary>
+    Task AddApplicationInputItemAsync(ApplicationInputItem item, CancellationToken ct = default)
+        => Task.CompletedTask;
+
+    /// <summary>Stage a derived <see cref="IrrigationEntry"/> (daily_logs child).</summary>
+    Task AddIrrigationEntryAsync(IrrigationEntry e, CancellationToken ct = default)
+        => Task.CompletedTask;
+
+    /// <summary>Stage a derived <see cref="LabourAssignment"/> (daily_logs child).</summary>
+    Task AddLabourAssignmentAsync(LabourAssignment a, CancellationToken ct = default)
+        => Task.CompletedTask;
+
+    /// <summary>Stage a derived <see cref="MachineryUsage"/> (daily_logs child).</summary>
+    Task AddMachineryUsageAsync(MachineryUsage m, CancellationToken ct = default)
+        => Task.CompletedTask;
+
+    /// <summary>Stage a derived <see cref="ObservationEvent"/> (daily_logs child).</summary>
+    Task AddObservationEventAsync(ObservationEvent o, CancellationToken ct = default)
+        => Task.CompletedTask;
+
+    /// <summary>Stage a derived <see cref="DisturbanceEvent"/> (daily_logs child).</summary>
+    Task AddDisturbanceEventAsync(DisturbanceEvent d, CancellationToken ct = default)
+        => Task.CompletedTask;
+
+    /// <summary>
+    /// Supersession lookup — the CURRENT-version <see cref="FarmOperation"/>
+    /// whose <see cref="DerivedEventKey"/> matches, or <c>null</c>. Re-derivation
+    /// marks the old row superseded and inserts a new current row with the same
+    /// key (append-only, never duplicates). Default impl returns <c>null</c> so
+    /// test doubles compile; production filters on <c>IsCurrentVersion</c>.
+    /// </summary>
+    Task<FarmOperation?> GetFarmOperationByKeyAsync(string derivedEventKey, CancellationToken ct = default)
+        => Task.FromResult<FarmOperation?>(null);
+
+    /// <summary>
+    /// RoutineMemory upsert lookup — the existing <see cref="RoutinePattern"/>
+    /// for (<paramref name="farmId"/>, <paramref name="plotId"/>,
+    /// <paramref name="operationType"/>) or <c>null</c> on first sighting.
+    /// Default impl returns <c>null</c> so test doubles compile.
+    /// </summary>
+    Task<RoutinePattern?> GetRoutinePatternAsync(Guid farmId, Guid? plotId, string operationType, CancellationToken ct = default)
+        => Task.FromResult<RoutinePattern?>(null);
+
+    /// <summary>Stage a brand-new <see cref="RoutinePattern"/> (first confirmed sighting).</summary>
+    Task AddRoutinePatternAsync(RoutinePattern p, CancellationToken ct = default)
+        => Task.CompletedTask;
 }

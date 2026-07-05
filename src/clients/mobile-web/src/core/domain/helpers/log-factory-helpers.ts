@@ -1,5 +1,6 @@
 import {
-    LabourEvent, InputEvent, MachineryEvent, ActivityExpenseEvent
+    LabourEvent, InputEvent, MachineryEvent, ActivityExpenseEvent,
+    CropProfile, DailyLog, AgriLogResponse, PlannedTask, ObservationSeverity
 } from '../../../types';
 
 /**
@@ -9,6 +10,50 @@ import {
  * extraction keeps the call sites identical apart from swapping `this.<fn>(...)`
  * for `<fn>(...)`.
  */
+
+/**
+ * Project a DailyLog into the AgriLogResponse shape that scoreVlog reads.
+ * scoreVlog only needs the event arrays + dayOutcome + disturbance + observations + summary.
+ * DailyLog carries all of these (summary is absent → defaults to '' for scoring).
+ *
+ * This adapter is pure (no mutation, no allocation beyond the object literal)
+ * and intentionally minimal — only maps what scoreVlog actually reads.
+ */
+export function projectLogForScoring(log: DailyLog): AgriLogResponse {
+    return {
+        summary: '',
+        dayOutcome: log.dayOutcome,
+        cropActivities: log.cropActivities,
+        irrigation: log.irrigation,
+        labour: log.labour,
+        inputs: log.inputs,
+        machinery: log.machinery,
+        activityExpenses: log.activityExpenses ?? [],
+        observations: log.observations,
+        disturbance: log.disturbance,
+        missingSegments: [],
+    };
+}
+
+/**
+ * Count the total distinct plots across all CropProfiles.
+ * Used to supply ScoreContext.farm.plotCount for the SCOPE dimension.
+ * Falls back to 1 (solo) when crops is empty — waives the SCOPE penalty.
+ */
+export function countPlots(crops: CropProfile[]): number {
+    const count = crops.reduce((sum, c) => sum + c.plots.length, 0);
+    return count > 0 ? count : 1;
+}
+
+/**
+ * Maps PlannedTask priority to ObservationNote severity.
+ * 'high' has no direct counterpart in ObservationSeverity; we use 'important'.
+ */
+export function priorityToSeverity(priority: PlannedTask['priority'] | undefined): ObservationSeverity {
+    if (priority === 'urgent') return 'urgent';
+    if (priority === 'high') return 'important';
+    return 'normal';
+}
 
 export function scopeChildId(baseId: string, plotId: string): string {
     return `${baseId}::${plotId}`;
@@ -98,10 +143,12 @@ export function allocateActivityExpensesForPlot(
 ): ActivityExpenseEvent[] {
     return (expenseEvents || [])
         .filter(event => {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             const targetPlotName = (event as any).targetPlotName as string | undefined;
             return !targetPlotName || targetPlotName === plotName;
         })
         .map(event => {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             const targetPlotName = (event as any).targetPlotName as string | undefined;
             const isShared = !targetPlotName;
 
@@ -149,7 +196,16 @@ export function sumInputCost(events: InputEvent[]): number {
 }
 
 export function sumMachineryCost(events: MachineryEvent[]): number {
-    return events.reduce((sum, event) => sum + (event.rentalCost || event.fuelCost || 0), 0);
+    return events.reduce((sum, event) => sum + (event.rentalCost ?? 0) + (event.fuelCost ?? 0), 0);
+}
+
+export function computeReceiptTotal(parts: {
+    labourCost: number;
+    machineCost: number;
+    inputCost: number;
+    expenseCost: number;
+}): number {
+    return parts.labourCost + parts.machineCost + parts.inputCost + parts.expenseCost;
 }
 
 export function sumExpenseCost(events: ActivityExpenseEvent[]): number {

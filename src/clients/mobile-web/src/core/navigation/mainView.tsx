@@ -23,6 +23,8 @@ import { buildTimelineEntries } from '../../services/transcriptTimelineService';
 import WeatherWidget from '../../features/weather/components/WeatherWidget';
 import { formatCurrencyINR } from '../../shared/utils/dayState';
 import { getCropTheme } from '../../shared/utils/colorTheme';
+import { FEATURE_FLAGS } from '../../app/featureFlags';
+import { MeterDisplay } from '../../features/logs/components/MeterDisplay';
 
 import { AppRouterContext } from './routeContext';
 import { ReflectPage, ComparePage } from './lazyComponents';
@@ -604,6 +606,26 @@ export const renderLogView = (ctx: AppRouterContext): React.ReactNode => {
                         ) : (
                             <p className="text-stone-500 mb-8">Your activity has been logged successfully.</p>
                         )}
+
+                        {/* Understanding Meter scaffold (1d-infra, flag-gated, OFF by default).
+                            WP-4 data-wiring (Task 10): pass the just-saved log's `understanding`
+                            VlogScore (looked up by lastSavedLogIds in history) + the farmer's full
+                            logs list for the arrival gate. Logic only — visual polish deferred to
+                            founder art assets (build-infra-now-defer-ui-polish-until-assets). */}
+                        {FEATURE_FLAGS.understandingMeter && (() => {
+                            const savedLogId = lastSavedLogIds && lastSavedLogIds.length > 0
+                                ? lastSavedLogIds[0]
+                                : undefined;
+                            const savedLog = savedLogId
+                                ? history.find(l => l.id === savedLogId)
+                                : undefined;
+                            return (
+                                <MeterDisplay
+                                    score={savedLog?.understanding}
+                                    allLogs={history}
+                                />
+                            );
+                        })()}
 
                         <div className="flex flex-col gap-3">
                             {/* Review Details Button (New) */}

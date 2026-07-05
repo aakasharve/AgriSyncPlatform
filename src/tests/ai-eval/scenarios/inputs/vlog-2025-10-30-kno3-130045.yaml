@@ -1,0 +1,72 @@
+id: vlog-2025-10-30-kno3-130045
+bucket: inputs
+description: |
+  30/10 — Potassium nitrate (KNO₃) fertigation day. Farmer applies the
+  grade 13-0-45 (spoken as "तेरा शून्य पंचेचाळीस", transcribed by Sarvam
+  as "13:00:45"). KNO₃ is the canonical identity for this grade in the
+  grape nutrition programme — high potassium (45) with nitrogen (13) and
+  zero phosphorus.
+
+  TARGET (W1.P0 domain-aware parser): "13:00:45" is a fertilizer grade
+  (Component 1 — NpkGradeDictionary), NOT a clock time (13:00 hrs is a
+  plausible time, making this the most dangerous NPK-vs-time confusion
+  case). It must appear as an inputs row with productName "13-0-45" or
+  "KNO3", rawProductName "13:00:45", and agronomicRole KNO3 / potassium
+  nitrate. The time-guard in the dictionary must confirm this is a KNOWN
+  grade triple before rescuing it. Today's domain-blind parser is
+  especially likely to misread "13:00" as a time. RED is expected.
+
+  spec: ai-intelligence-plan-2026-06-25
+
+input:
+  transcript: "तेरा शून्य पंचेचाळीस खत ड्रीपने दिले"
+
+context:
+  fixture: farmer-grape-grower
+
+expected:
+  inputs:
+    - productName: "13-0-45"
+      rawProductName: "13:00:45"
+      chemicalClass: "WSF"
+      agronomicRole: "KNO3"
+      applicationMethod: "fertigation"
+
+tolerances:
+  "inputs[0].productName":
+    oneOf:
+      - "13-0-45"
+      - "13:00:45"
+      - "KNO3"
+      - "KNO₃"
+      - "potassium nitrate"
+      - "NPK 13-0-45"
+  "inputs[0].rawProductName":
+    oneOf:
+      - "13:00:45"
+      - "13:0:45"
+      - "तेरा शून्य पंचेचाळीस"
+  "inputs[0].chemicalClass":
+    oneOf:
+      - "WSF"
+      - "water-soluble fertilizer"
+      - "fertilizer"
+  "inputs[0].agronomicRole":
+    oneOf:
+      - "KNO3"
+      - "KNO₃"
+      - "potassium nitrate"
+      - "potassium-nitrate"
+  "inputs[0].applicationMethod":
+    oneOf:
+      - "fertigation"
+      - "drip"
+      - "drip fertigation"
+
+ignore_fields:
+  - summary
+  - dayOutcome
+  - irrigation
+  - labour
+  - expenses
+  - observations

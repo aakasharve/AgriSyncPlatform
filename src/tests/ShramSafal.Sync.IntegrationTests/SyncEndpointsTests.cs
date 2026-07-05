@@ -26,6 +26,9 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using ShramSafal.Api;
 using ShramSafal.Application.Ports;
+using ShramSafal.Application.Ports.External;
+using ShramSafal.Domain.AI;
+using ShramSafal.Domain.Common;
 using ShramSafal.Domain.Farms;
 using ShramSafal.Domain.Tests;
 using ShramSafal.Infrastructure.Persistence;
@@ -663,6 +666,482 @@ public sealed class SyncEndpointsTests
         listCostAttachments.EnsureSuccessStatusCode();
         using var costListDoc = JsonDocument.Parse(await listCostAttachments.Content.ReadAsStringAsync());
         Assert.Single(costListDoc.RootElement.EnumerateArray());
+    }
+
+    // B2.8 (spec: ai-intelligence-plan-2026-06-25) — CI safety gate for the
+    // live offline-sync weather path. Mirrors the plot → crop-cycle →
+    // daily-log setup of CreateAttachment_CanLinkToDailyLogAndCostEntry, but
+    // the create_daily_log payload carries an optional `weatherStamp` object.
+    // Proves the sync → handler → repo → persist chain writes exactly one
+    // WeatherStamp row for that daily log (best-effort/non-blocking: the log
+    // always saves, a valid stamp persists). Asserted via the harness's
+    // existing EF pattern (ShramSafalDbContext DbSet, CLR properties); the
+    // ssf.weather_stamps snake_case column mapping is proven separately by a
+    // real-Postgres runtime proof, so the InMemory CLR-property assertion is
+    // the right shape here.
+    [Fact]
+    public async Task CreateDailyLog_WithWeatherStamp_PersistsWeatherStampRow()
+    {
+        await using var harness = await TestHarness.CreateAsync();
+        var farmId = Guid.NewGuid();
+        var plotId = Guid.NewGuid();
+        var cropCycleId = Guid.NewGuid();
+        var dailyLogId = Guid.NewGuid();
+
+        await PushCreateFarmAsync(harness.Client, "device-w", "req-farm-weatherstamp", farmId, "WeatherStamp Farm");
+
+        var setupResponse = await harness.Client.PostAsJsonAsync("/sync/push", new
+        {
+            deviceId = "device-w",
+            mutations = new object[]
+            {
+                new
+                {
+                    clientRequestId = "req-plot-weather",
+                    mutationType = "create_plot",
+                    payload = new
+                    {
+                        plotId,
+                        farmId,
+                        name = "Weather Plot",
+                        areaInAcres = 2m
+                    }
+                },
+                new
+                {
+                    clientRequestId = "req-cycle-weather",
+                    mutationType = "create_crop_cycle",
+                    payload = new
+                    {
+                        cropCycleId,
+                        farmId,
+                        plotId,
+                        cropName = "Grapes",
+                        stage = "Growth",
+                        startDate = "2026-02-21"
+                    }
+                },
+                new
+                {
+                    clientRequestId = "req-log-weather",
+                    mutationType = "create_daily_log",
+                    payload = new
+                    {
+                        dailyLogId,
+                        farmId,
+                        plotId,
+                        cropCycleId,
+                        logDate = "2026-02-22",
+                        weatherStamp = new
+                        {
+                            plotId,
+                            timestampLocal = "2026-02-22T09:30:00+05:30",
+                            timestampProvider = "2026-02-22T04:00:00Z",
+                            provider = "tomorrow.io",
+                            tempC = 28.5,
+                            humidity = 65,
+                            windKph = 12,
+                            precipMm = 0,
+                            cloudCoverPct = 40,
+                            conditionText = "Partly Cloudy",
+                            iconCode = "partly_cloudy",
+                            rainProbNext6h = 20
+                        }
+                    }
+                }
+            }
+        });
+        setupResponse.EnsureSuccessStatusCode();
+
+        using var setupDoc = JsonDocument.Parse(await setupResponse.Content.ReadAsStringAsync());
+        var failures = setupDoc.RootElement
+            .GetProperty("results")
+            .EnumerateArray()
+            .Where(x => x.GetProperty("status").GetString() == "failed")
+            .ToList();
+        Assert.Empty(failures);
+
+        var stamps = await harness.GetWeatherStampsForDailyLogAsync(dailyLogId);
+
+        var stamp = Assert.Single(stamps);
+        Assert.Equal("Partly Cloudy", stamp.ConditionText);
+        Assert.Equal(28.5m, stamp.TempC);
+    }
+
+    // AI Intelligence Plan WP-2e (Track B) — end-to-end proof of the confirm-
+    // time server-side ledger derivation over the SYNC seam. Seeds a succeeded
+    // voice AiJob whose NormalizedResultJson carries inputs + irrigation +
+    // labour + machinery, then pushes a create_daily_log mutation that carries
+    // sourceAiJobId. Proves the chain
+    //   sync push → PushSyncBatchHandler.HandleCreateDailyLogAsync
+    //             → CreateDailyLogHandler (SourceAiJobId lookup)
+    //             → LedgerDerivationService.DeriveAsync
+    //             → typed ssf rows staged on the SAME unit of work + committed
+    // persists one CURRENT FarmOperation (inputs projection) with its
+    // ApplicationInputItem child plus the irrigation / labour / machinery
+    // daily_logs children. The snake_case column mapping + FORCE-RLS tenancy of
+    // these tables are proven separately by the :5433 runtime proof; the
+    // InMemory CLR-property assertion is the right shape for the sync seam.
+    [Fact]
+    public async Task CreateDailyLog_WithSourceAiJob_DerivesTypedRows()
+    {
+        await using var harness = await TestHarness.CreateAsync();
+        var farmId = Guid.NewGuid();
+        var plotId = Guid.NewGuid();
+        var cropCycleId = Guid.NewGuid();
+        var dailyLogId = Guid.NewGuid();
+
+        await PushCreateFarmAsync(harness.Client, "device-derive", "req-farm-derive", farmId, "Derive Farm");
+
+        // A confirmed voice parse: one application (inputs) with a two-product
+        // tank-mix, one irrigation entry, one hired-labour crew, and one drone
+        // machinery pass. Wire shape = the canonical AgriLogResponse the
+        // LedgerDerivationService reads.
+        var normalizedResultJson = System.Text.Json.JsonSerializer.Serialize(new
+        {
+            inputs = new[]
+            {
+                new
+                {
+                    sourceText = "24 tarkhела alphamethrin ani bavistin fवारले",
+                    type = "pesticide",
+                    mix = new object[]
+                    {
+                        new { productName = "Alphamethrin", npkGrade = (string?)null, dose = 30m, unit = "ml" },
+                        new { productName = "Bavistin", npkGrade = (string?)null, dose = 40m, unit = "g" }
+                    }
+                }
+            },
+            irrigation = new[]
+            {
+                new { role = "irrigation", method = "drip", source = "borewell", durationHours = 3m }
+            },
+            labour = new[]
+            {
+                new { engagementType = "hired_daily", maleCount = 2, femaleCount = 3, rate = 350m }
+            },
+            machinery = new[]
+            {
+                new { type = "drone", ownership = "rented", implement = "blower", nozzlesActive = 10, fanState = "off" }
+            }
+        });
+
+        var jobId = await harness.SeedAiJobAsync(TestUserId, farmId, normalizedResultJson);
+
+        var setupResponse = await harness.Client.PostAsJsonAsync("/sync/push", new
+        {
+            deviceId = "device-derive",
+            mutations = new object[]
+            {
+                new
+                {
+                    clientRequestId = "req-plot-derive",
+                    mutationType = "create_plot",
+                    payload = new
+                    {
+                        plotId,
+                        farmId,
+                        name = "Derive Plot",
+                        areaInAcres = 2m
+                    }
+                },
+                new
+                {
+                    clientRequestId = "req-cycle-derive",
+                    mutationType = "create_crop_cycle",
+                    payload = new
+                    {
+                        cropCycleId,
+                        farmId,
+                        plotId,
+                        cropName = "Grapes",
+                        stage = "Growth",
+                        startDate = "2026-02-21"
+                    }
+                },
+                new
+                {
+                    clientRequestId = "req-log-derive",
+                    mutationType = "create_daily_log",
+                    payload = new
+                    {
+                        dailyLogId,
+                        farmId,
+                        plotId,
+                        cropCycleId,
+                        logDate = "2026-02-22",
+                        sourceAiJobId = jobId
+                    }
+                }
+            }
+        });
+        setupResponse.EnsureSuccessStatusCode();
+
+        using var setupDoc = JsonDocument.Parse(await setupResponse.Content.ReadAsStringAsync());
+        var failures = setupDoc.RootElement
+            .GetProperty("results")
+            .EnumerateArray()
+            .Where(x => x.GetProperty("status").GetString() == "failed")
+            .ToList();
+        Assert.Empty(failures);
+
+        // FIX B regression: the legitimate SAME-FARM sourceAiJobId is still
+        // persisted onto the log (only foreign/rejected ids are nulled).
+        Assert.Equal(jobId, await harness.GetDailyLogSourceAiJobIdAsync(dailyLogId));
+
+        // inputs → exactly one CURRENT FarmOperation(application) + its mix items.
+        var operations = await harness.GetFarmOperationsForDailyLogAsync(dailyLogId);
+        var operation = Assert.Single(operations);
+        Assert.Equal("application", operation.OperationType);
+        Assert.True(operation.IsCurrentVersion);
+
+        var inputItems = await harness.GetApplicationInputItemsForOperationsAsync(
+            operations.Select(o => o.Id).ToList());
+        Assert.Equal(2, inputItems.Count);
+        Assert.Contains(inputItems, i => i.ProductName == "Alphamethrin");
+        Assert.Contains(inputItems, i => i.ProductName == "Bavistin");
+
+        // irrigation / labour / machinery → daily_logs children.
+        var irrigation = await harness.GetIrrigationEntriesForDailyLogAsync(dailyLogId);
+        Assert.Single(irrigation);
+
+        var labour = await harness.GetLabourAssignmentsForDailyLogAsync(dailyLogId);
+        var crew = Assert.Single(labour);
+        Assert.Equal(2, crew.MaleCount);
+        Assert.Equal(3, crew.FemaleCount);
+
+        var machinery = await harness.GetMachineryUsagesForDailyLogAsync(dailyLogId);
+        var pass = Assert.Single(machinery);
+        Assert.Equal(MachineType.Drone, pass.MachineType);
+        // NO-MULTIPLY / no-fabrication (D3): fanState was "off" → FanState.Off.
+        Assert.Equal(FanState.Off, pass.FanState);
+    }
+
+    // Security regression (FINDING 1 — cross-farm SourceAiJobId injection).
+    //
+    // The /sync/push seam is on the admin-elevated skip-list, so the whole
+    // batch runs with RLS BYPASSED (TenantConnectionInterceptor injects no
+    // GUC when IsAdminCrossTenant). On that path a client for Farm B / User B
+    // that supplies a sourceAiJobId belonging to ANOTHER farm's AiJob (Farm A /
+    // User A) would, before the fix, have that foreign parse derived into its
+    // OWN ledger — because AiJobRepository.GetByIdAsync is unfiltered EF that
+    // relies entirely on RLS, and the sync membership guard only authorizes the
+    // TARGET farm, never the SOURCE job.
+    //
+    // This test seeds an AiJob owned by Farm A / User A, then pushes a
+    // create_daily_log for Farm B / User B carrying that foreign sourceAiJobId.
+    // Contract (mirrors the null-source path CreateDailyLog_WithoutSourceAiJob…):
+    // the Farm B log COMMITS, but ZERO typed rows are derived from the foreign
+    // job — the handler must treat a non-owned source job as absent.
+    //
+    // The InMemory harness performs NO RLS, so the foreign GetByIdAsync read
+    // succeeds here exactly as it does on the admin-elevated prod sync path —
+    // which is precisely why the fix has to be an application-layer farm-match
+    // check, not an RLS reliance. (Before the fix this test FAILS: the foreign
+    // parse leaks FarmOperation/irrigation/labour/machinery rows into Farm B.)
+    [Fact]
+    public async Task CreateDailyLog_WithForeignFarmSourceAiJob_DerivesNothing()
+    {
+        await using var harness = await TestHarness.CreateAsync();
+
+        // Farm A / User A — owns the voice AiJob whose parse must NOT leak.
+        var farmAId = Guid.NewGuid();
+        var jobUserAId = SecondaryOwnerUserId;
+
+        // Farm B / User B — the caller. TestUserId (default client) is the
+        // PrimaryOwner of Farm B via create_farm below.
+        var farmBId = Guid.NewGuid();
+        var plotBId = Guid.NewGuid();
+        var cropCycleBId = Guid.NewGuid();
+        var dailyLogBId = Guid.NewGuid();
+
+        await PushCreateFarmAsync(harness.Client, "device-foreign-b", "req-farm-foreign-b", farmBId, "Foreign Target Farm B");
+
+        // A confirmed voice parse owned by Farm A (inputs + irrigation + labour +
+        // machinery) — the same rich blob the legit-derivation test uses, so if
+        // it leaked into Farm B we'd see typed rows exactly like that test does.
+        var foreignNormalizedResultJson = System.Text.Json.JsonSerializer.Serialize(new
+        {
+            inputs = new[]
+            {
+                new
+                {
+                    sourceText = "foreign farm A parse",
+                    type = "pesticide",
+                    mix = new object[]
+                    {
+                        new { productName = "ForeignProductA", npkGrade = (string?)null, dose = 30m, unit = "ml" }
+                    }
+                }
+            },
+            irrigation = new[]
+            {
+                new { role = "irrigation", method = "drip", source = "borewell", durationHours = 3m }
+            },
+            labour = new[]
+            {
+                new { engagementType = "hired_daily", maleCount = 2, femaleCount = 3, rate = 350m }
+            },
+            machinery = new[]
+            {
+                new { type = "drone", ownership = "rented", implement = "blower", nozzlesActive = 10, fanState = "off" }
+            }
+        });
+
+        // Seed the AiJob under Farm A / User A.
+        var foreignJobId = await harness.SeedAiJobAsync(jobUserAId, farmAId, foreignNormalizedResultJson);
+
+        // Build Farm B's plot + crop cycle (as its PrimaryOwner), then push a
+        // create_daily_log for Farm B carrying Farm A's foreign sourceAiJobId.
+        var setupResponse = await harness.Client.PostAsJsonAsync("/sync/push", new
+        {
+            deviceId = "device-foreign-b",
+            mutations = new object[]
+            {
+                new
+                {
+                    clientRequestId = "req-plot-foreign-b",
+                    mutationType = "create_plot",
+                    payload = new
+                    {
+                        plotId = plotBId,
+                        farmId = farmBId,
+                        name = "Foreign Target Plot B",
+                        areaInAcres = 2m
+                    }
+                },
+                new
+                {
+                    clientRequestId = "req-cycle-foreign-b",
+                    mutationType = "create_crop_cycle",
+                    payload = new
+                    {
+                        cropCycleId = cropCycleBId,
+                        farmId = farmBId,
+                        plotId = plotBId,
+                        cropName = "Grapes",
+                        stage = "Growth",
+                        startDate = "2026-02-21"
+                    }
+                },
+                new
+                {
+                    clientRequestId = "req-log-foreign-b",
+                    mutationType = "create_daily_log",
+                    payload = new
+                    {
+                        dailyLogId = dailyLogBId,
+                        farmId = farmBId,
+                        plotId = plotBId,
+                        cropCycleId = cropCycleBId,
+                        logDate = "2026-02-22",
+                        sourceAiJobId = foreignJobId
+                    }
+                }
+            }
+        });
+        setupResponse.EnsureSuccessStatusCode();
+
+        using var setupDoc = JsonDocument.Parse(await setupResponse.Content.ReadAsStringAsync());
+        var failures = setupDoc.RootElement
+            .GetProperty("results")
+            .EnumerateArray()
+            .Where(x => x.GetProperty("status").GetString() == "failed")
+            .ToList();
+        Assert.Empty(failures);
+
+        // The Farm B log committed …
+        Assert.True(await harness.DailyLogExistsAsync(dailyLogBId));
+
+        // FIX B (residual foreign-reference): the Farm B log must NOT persist the
+        // foreign sourceAiJobId either — source_ai_job_id is NULL, not Farm A's job.
+        Assert.Null(await harness.GetDailyLogSourceAiJobIdAsync(dailyLogBId));
+
+        // … and the foreign Farm A parse was NOT derived into Farm B's ledger.
+        Assert.Empty(await harness.GetFarmOperationsForDailyLogAsync(dailyLogBId));
+        Assert.Empty(await harness.GetIrrigationEntriesForDailyLogAsync(dailyLogBId));
+        Assert.Empty(await harness.GetLabourAssignmentsForDailyLogAsync(dailyLogBId));
+        Assert.Empty(await harness.GetMachineryUsagesForDailyLogAsync(dailyLogBId));
+    }
+
+    // AI Intelligence Plan WP-2e — the manual/offline path: a create_daily_log
+    // mutation with NO sourceAiJobId derives NOTHING, but the log itself always
+    // commits (non-blocking derivation, mirrors the B2.8 weather contract).
+    [Fact]
+    public async Task CreateDailyLog_WithoutSourceAiJob_DerivesNothingButCommits()
+    {
+        await using var harness = await TestHarness.CreateAsync();
+        var farmId = Guid.NewGuid();
+        var plotId = Guid.NewGuid();
+        var cropCycleId = Guid.NewGuid();
+        var dailyLogId = Guid.NewGuid();
+
+        await PushCreateFarmAsync(harness.Client, "device-nojob", "req-farm-nojob", farmId, "No-Job Farm");
+
+        var setupResponse = await harness.Client.PostAsJsonAsync("/sync/push", new
+        {
+            deviceId = "device-nojob",
+            mutations = new object[]
+            {
+                new
+                {
+                    clientRequestId = "req-plot-nojob",
+                    mutationType = "create_plot",
+                    payload = new
+                    {
+                        plotId,
+                        farmId,
+                        name = "No-Job Plot",
+                        areaInAcres = 1m
+                    }
+                },
+                new
+                {
+                    clientRequestId = "req-cycle-nojob",
+                    mutationType = "create_crop_cycle",
+                    payload = new
+                    {
+                        cropCycleId,
+                        farmId,
+                        plotId,
+                        cropName = "Sugarcane",
+                        stage = "Growth",
+                        startDate = "2026-02-21"
+                    }
+                },
+                new
+                {
+                    clientRequestId = "req-log-nojob",
+                    mutationType = "create_daily_log",
+                    payload = new
+                    {
+                        dailyLogId,
+                        farmId,
+                        plotId,
+                        cropCycleId,
+                        logDate = "2026-02-22"
+                    }
+                }
+            }
+        });
+        setupResponse.EnsureSuccessStatusCode();
+
+        using var setupDoc = JsonDocument.Parse(await setupResponse.Content.ReadAsStringAsync());
+        var failures = setupDoc.RootElement
+            .GetProperty("results")
+            .EnumerateArray()
+            .Where(x => x.GetProperty("status").GetString() == "failed")
+            .ToList();
+        Assert.Empty(failures);
+
+        // The log row committed …
+        Assert.True(await harness.DailyLogExistsAsync(dailyLogId));
+
+        // … but nothing was derived (no source job → derivation short-circuits).
+        Assert.Empty(await harness.GetFarmOperationsForDailyLogAsync(dailyLogId));
+        Assert.Empty(await harness.GetIrrigationEntriesForDailyLogAsync(dailyLogId));
+        Assert.Empty(await harness.GetLabourAssignmentsForDailyLogAsync(dailyLogId));
+        Assert.Empty(await harness.GetMachineryUsagesForDailyLogAsync(dailyLogId));
     }
 
     [Fact]
@@ -1627,6 +2106,136 @@ public sealed class SyncEndpointsTests
                 role,
                 DateTime.UtcNow));
             await db.SaveChangesAsync();
+        }
+
+        /// <summary>
+        /// Reads the persisted <see cref="WeatherStamp"/> rows linked to a
+        /// daily log via the same <c>ShramSafalDbContext</c> the sync push
+        /// wrote through (mirrors <see cref="SeedFarmMembershipAsync"/>'s
+        /// scope pattern). Used by the B2.8 weather-path persistence gate.
+        /// </summary>
+        public async Task<IReadOnlyList<WeatherStamp>> GetWeatherStampsForDailyLogAsync(Guid dailyLogId)
+        {
+            await using var scope = app.Services.CreateAsyncScope();
+            var db = scope.ServiceProvider.GetRequiredService<ShramSafalDbContext>();
+            return await db.WeatherStamps
+                .AsNoTracking()
+                .Where(w => w.DailyLogId == dailyLogId)
+                .ToListAsync();
+        }
+
+        /// <summary>
+        /// Seeds an <see cref="AiJob"/> (voice provenance) whose
+        /// <c>NormalizedResultJson</c> is the confirmed parse blob, so a later
+        /// <c>create_daily_log</c> mutation carrying <c>sourceAiJobId</c> drives
+        /// the WP-2c server-side derivation. Persists through the same
+        /// <see cref="IAiJobRepository"/> the handler reads back via
+        /// <c>GetByIdAsync</c> (both hit the InMemory <c>ShramSafalDbContext</c>).
+        /// Mirrors <see cref="SeedFarmMembershipAsync"/>'s scope pattern.
+        /// </summary>
+        public async Task<Guid> SeedAiJobAsync(Guid userId, Guid farmId, string normalizedResultJson)
+        {
+            await using var scope = app.Services.CreateAsyncScope();
+            var repo = scope.ServiceProvider.GetRequiredService<IAiJobRepository>();
+            var job = AiJob.Create(
+                id: Guid.NewGuid(),
+                idempotencyKey: $"seed-{Guid.NewGuid():N}",
+                operationType: AiOperationType.VoiceToStructuredLog,
+                userId: userId,
+                farmId: farmId,
+                inputContentHash: null,
+                rawInputRef: null,
+                inputSessionMetadataJson: null,
+                provenance: new Provenance(
+                    source: Source.Voice,
+                    modelVersion: "gemini-2.0-flash",
+                    promptVersion: "v3.4",
+                    promptContentHash: null,
+                    appVersion: "test-1.0"));
+            var attempt = job.AddAttempt(AiProviderType.Gemini);
+            job.MarkSucceeded(normalizedResultJson, attempt);
+            await repo.AddAsync(job);
+            await repo.SaveChangesAsync();
+            return job.Id;
+        }
+
+        /// <summary>
+        /// Reads the derived CURRENT-version <see cref="FarmOperation"/> rows
+        /// whose <c>SourceDailyLogId</c> matches — the WP-2c "inputs → operation"
+        /// projection surfaces here.
+        /// </summary>
+        public async Task<IReadOnlyList<FarmOperation>> GetFarmOperationsForDailyLogAsync(Guid dailyLogId)
+        {
+            await using var scope = app.Services.CreateAsyncScope();
+            var db = scope.ServiceProvider.GetRequiredService<ShramSafalDbContext>();
+            return await db.FarmOperations
+                .AsNoTracking()
+                .Where(o => o.SourceDailyLogId == dailyLogId)
+                .ToListAsync();
+        }
+
+        public async Task<IReadOnlyList<ApplicationInputItem>> GetApplicationInputItemsForOperationsAsync(
+            IReadOnlyCollection<Guid> operationIds)
+        {
+            await using var scope = app.Services.CreateAsyncScope();
+            var db = scope.ServiceProvider.GetRequiredService<ShramSafalDbContext>();
+            return await db.ApplicationInputItems
+                .AsNoTracking()
+                .Where(i => operationIds.Contains(i.OperationId))
+                .ToListAsync();
+        }
+
+        public async Task<IReadOnlyList<IrrigationEntry>> GetIrrigationEntriesForDailyLogAsync(Guid dailyLogId)
+        {
+            await using var scope = app.Services.CreateAsyncScope();
+            var db = scope.ServiceProvider.GetRequiredService<ShramSafalDbContext>();
+            return await db.IrrigationEntries
+                .AsNoTracking()
+                .Where(e => e.DailyLogId == dailyLogId)
+                .ToListAsync();
+        }
+
+        public async Task<IReadOnlyList<LabourAssignment>> GetLabourAssignmentsForDailyLogAsync(Guid dailyLogId)
+        {
+            await using var scope = app.Services.CreateAsyncScope();
+            var db = scope.ServiceProvider.GetRequiredService<ShramSafalDbContext>();
+            return await db.LabourAssignments
+                .AsNoTracking()
+                .Where(l => l.DailyLogId == dailyLogId)
+                .ToListAsync();
+        }
+
+        public async Task<IReadOnlyList<MachineryUsage>> GetMachineryUsagesForDailyLogAsync(Guid dailyLogId)
+        {
+            await using var scope = app.Services.CreateAsyncScope();
+            var db = scope.ServiceProvider.GetRequiredService<ShramSafalDbContext>();
+            return await db.MachineryUsages
+                .AsNoTracking()
+                .Where(m => m.DailyLogId == dailyLogId)
+                .ToListAsync();
+        }
+
+        public async Task<bool> DailyLogExistsAsync(Guid dailyLogId)
+        {
+            await using var scope = app.Services.CreateAsyncScope();
+            var db = scope.ServiceProvider.GetRequiredService<ShramSafalDbContext>();
+            return await db.DailyLogs
+                .AsNoTracking()
+                .AnyAsync(l => l.Id == dailyLogId);
+        }
+
+        // FIX B — read the persisted daily_logs.source_ai_job_id so a test can
+        // prove a rejected (foreign) SourceAiJobId is NOT persisted as a back-
+        // reference, while a valid same-farm id still round-trips.
+        public async Task<Guid?> GetDailyLogSourceAiJobIdAsync(Guid dailyLogId)
+        {
+            await using var scope = app.Services.CreateAsyncScope();
+            var db = scope.ServiceProvider.GetRequiredService<ShramSafalDbContext>();
+            return await db.DailyLogs
+                .AsNoTracking()
+                .Where(l => l.Id == dailyLogId)
+                .Select(l => l.SourceAiJobId)
+                .SingleAsync();
         }
 
         /// <summary>

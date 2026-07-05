@@ -1,0 +1,63 @@
+id: vlog-2025-10-27-rally-gold
+bucket: inputs
+description: |
+  27/10 — Rally Gold spray day. Farmer mentions Rally Gold (myclobutanil,
+  systemic fungicide) but does NOT state a quantity. This is the key
+  regression fixture for the खत-safety-net clobber bug.
+
+  TARGET (W1.P0 domain-aware parser):
+  - productName = "Rally Gold" (or normalised canonical), rawProductName
+    preserved (Component 2 — GrapeInputLexicon).
+  - The existing खत safety-net MUST NOT overwrite this row with the
+    generic "खत" fallback — the fixture certifies that regression is
+    fixed (W1.P0.T2 CRITICAL note).
+  - quantity / dose must be NOT_MENTIONED (no fabrication — the farmer
+    did not state a quantity; dose-basis abstention applies).
+  Today's domain-blind parser may trigger the safety-net and clobber
+  the real brand with "खत". RED is expected.
+
+  Calibration target (W1.P3 score): ~42 ±8 (low due to missing quantity
+  and other details)
+
+  spec: ai-intelligence-plan-2026-06-25
+
+input:
+  transcript: "आज रॅली गोल्ड मारली."
+
+context:
+  fixture: farmer-grape-grower
+
+expected:
+  inputs:
+    - productName: "Rally Gold"
+      rawProductName: "रॅली गोल्ड"
+      chemicalClass: "fungicide"
+
+tolerances:
+  "inputs[0].productName":
+    oneOf:
+      - "Rally Gold"
+      - "rally gold"
+      - "myclobutanil"
+      - "Myclobutanil"
+      - "रॅली गोल्ड"
+  "inputs[0].rawProductName":
+    oneOf:
+      - "रॅली गोल्ड"
+      - "Rally Gold"
+      - "rally gold"
+  "inputs[0].chemicalClass":
+    oneOf:
+      - "fungicide"
+      - "systemic fungicide"
+      - "triazole fungicide"
+
+ignore_fields:
+  - summary
+  - dayOutcome
+  - irrigation
+  - labour
+  - machinery
+  - expenses
+  - observations
+  - tasks

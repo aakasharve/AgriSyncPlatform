@@ -118,7 +118,7 @@ const CropActivityStatusSchema = z.enum([
     'gap_recorded',
 ]);
 
-const InputMethodSchema = z.enum(['Spray', 'Drip', 'Drenching', 'Soil']);
+const InputMethodSchema = z.enum(['Spray', 'Drip', 'Drenching', 'Soil', 'paste_manual']);
 
 const InputReasonSchema = z.enum([
     'Preventive',
@@ -128,6 +128,12 @@ const InputReasonSchema = z.enum([
     'Deficiency',
     'Seller Advice',
     'Other',
+    // B2.11 — grape purposes (§3.2j, snake_case intentional)
+    'defoliation',
+    'root_growth',
+    'nutrient_correction',
+    'fruit_sizing',
+    'disease_control',
 ]);
 
 const InputLegacyTypeSchema = z.enum([
@@ -203,6 +209,18 @@ const _PlannedTaskSourceSchema = z.enum([
     'schedule',
 ]);
 
+/**
+ * W1.P2 — per-field provenance. Mirrors `FieldProvenance` in log.types.ts.
+ * Added to nested event schemas (all .passthrough()) so the wire contract
+ * accepts and forwards the value without top-level drift risk.
+ */
+const FieldProvenanceSchema = z.enum([
+    'spoken',
+    'confirmed',
+    'derived',
+    'assumed',
+]);
+
 const QuestionForUserTypeSchema = z.enum([
     'LABOUR_SOURCE_CHECK',
     'CONTEXT_CHECK',
@@ -226,6 +244,33 @@ const _TranscriptLanguageSchema = z.enum(['mr', 'hi', 'en']);
 const HarvestUnitTypeSchema = z.enum(['WEIGHT', 'COUNT', 'CONTAINER']);
 
 const HarvestWeightUnitSchema = z.enum(['KG', 'QUINTAL', 'TON']);
+
+/** Mirrors `CropPhase` in log.types.ts (Track B Wave-2 — CropActivityEvent.progress.phase). */
+const CropPhaseSchema = z.enum(['LAND_PREPARATION', 'CROP_CYCLE']);
+
+// -----------------------------------------------------------------------------
+// Track B Wave-2 activity-delta enums (B2.4 / B2.5 / B2.10).
+// All optional on their event schemas; net-new fields the AI MAY emit.
+// -----------------------------------------------------------------------------
+const IrrigationRoleSchema = z.enum(['spray-carrier', 'irrigation', 'fertigation']); // B2.5
+
+const LabourGenderSchema = z.enum(['male', 'female', 'mixed', 'unknown']);            // B2.4
+const LabourEngagementTypeSchema = z.enum([                                          // B2.4
+    'hired_daily',
+    'contract_piece',
+    'self',
+    'exchange',
+]);
+const LabourRateBasisSchema = z.enum([                                               // B2.4
+    'per_person_day',
+    'per_vine',
+    'per_row',
+    'per_acre',
+    'lump_sum',
+]);
+
+const MachineryFanStateSchema = z.enum(['on', 'off', 'unknown']);                    // B2.10
+const MachineryFuelTypeSchema = z.enum(['diesel', 'petrol', 'unknown']);             // B2.10
 
 const PlannedTaskCategorySchema = z.enum([
     'maintenance',
@@ -305,6 +350,15 @@ export const CropActivityEventSchema = z.object({
     }).passthrough()).optional(),
 
     issue: BucketIssueSchema.optional(),
+    // Track B Wave-2 (B2.6) — continuity progress (optional, back-compat)
+    progress: z.object({
+        phase: CropPhaseSchema.optional(),
+        unitsDone: z.number().optional(),
+        unitsTotal: z.number().optional(),
+        unit: z.string().optional(),
+    }).passthrough().optional(),
+    // W1.P2 — per-field provenance (nested schema; .passthrough() keeps this additive)
+    provenance: FieldProvenanceSchema.optional(),
     ...TransparencyFields,
 }).passthrough();
 
@@ -319,7 +373,12 @@ export const IrrigationEventSchema = z.object({
     detectedCrop: z.string().optional(),
     motorId: z.string().optional(),
     targetPlotName: z.string().optional(),
+    // Track B Wave-2 (B2.5) — water-role discriminator + weather-trim flag (optional, back-compat)
+    role: IrrigationRoleSchema.optional(),
+    weatherAdjusted: z.boolean().optional(),
     issue: BucketIssueSchema.optional(),
+    // W1.P2 — per-field provenance
+    provenance: FieldProvenanceSchema.optional(),
     ...TransparencyFields,
 }).passthrough();
 
@@ -341,7 +400,14 @@ export const LabourEventSchema = z.object({
     whoWorked: LabourWhoWorkedSchema.optional(),
     activity: z.string().optional(),
     targetPlotName: z.string().optional(),
+    // Track B Wave-2 (B2.4) — richer labour capture (optional, back-compat; legacy fields retained)
+    gender: LabourGenderSchema.optional(),
+    engagementType: LabourEngagementTypeSchema.optional(),
+    rate: z.number().optional(),
+    rateBasis: LabourRateBasisSchema.optional(),
     issue: BucketIssueSchema.optional(),
+    // W1.P2 — per-field provenance
+    provenance: FieldProvenanceSchema.optional(),
     ...TransparencyFields,
 }).passthrough();
 
@@ -350,9 +416,15 @@ export const InputMixItemSchema = z.object({
     productName: z.string(),
     dose: z.number().optional(),
     unit: z.string(),
+    // B2.1 — dose split + npk grade (optional, back-compat)
+    basisQty: z.number().optional(),
+    basisUnit: z.string().optional(),
+    npkGrade: z.string().optional(),
     linkedExpenseId: z.string().optional(),
     linkedExpenseItemId: z.string().optional(),
     costSource: InputCostSourceSchema.optional(),
+    // W1.P2 — per-field provenance
+    provenance: FieldProvenanceSchema.optional(),
 }).passthrough();
 
 export const InputEventSchema = z.object({
@@ -362,6 +434,11 @@ export const InputEventSchema = z.object({
     linkedExpenseItemId: z.string().optional(),
     costSource: InputCostSourceSchema.optional(),
     method: InputMethodSchema,
+    // B2.3 — carrier medium (§3.2c)
+    carrierMedium: z.enum(['water', 'oil', 'none']).optional(),
+    // B2.2 — mix/pass grouping (§3.2b)
+    mixId: z.string().optional(),
+    passId: z.string().optional(),
     carrierType: InputCarrierTypeSchema.optional(),
     carrierCount: z.number().optional(),
     carrierCapacity: z.number().optional(),
@@ -381,6 +458,8 @@ export const InputEventSchema = z.object({
     targetPlotName: z.string().optional(),
 
     issue: BucketIssueSchema.optional(),
+    // W1.P2 — per-field provenance
+    provenance: FieldProvenanceSchema.optional(),
     ...TransparencyFields,
 }).passthrough();
 
@@ -394,7 +473,16 @@ export const MachineryEventSchema = z.object({
     fuelCost: z.number().optional(),
     targetPlotName: z.string().optional(),
     notes: z.string().optional(),
+    // Track B Wave-2 (B2.10) — machinery detail (all net-new, optional, back-compat)
+    implement: z.string().optional(),
+    nozzlesActive: z.number().optional(),
+    fanState: MachineryFanStateSchema.optional(),
+    fuelType: MachineryFuelTypeSchema.optional(),
+    fuelQuantity: z.number().optional(),
+    operationPerformed: z.string().optional(),
     issue: BucketIssueSchema.optional(),
+    // W1.P2 — per-field provenance
+    provenance: FieldProvenanceSchema.optional(),
     ...TransparencyFields,
 }).passthrough();
 
@@ -434,6 +522,8 @@ export const ActivityExpenseEventSchema = z.object({
     observation: z.string().optional(),
     notes: z.string().optional(),
     timestamp: z.string().optional(),
+    // W1.P2 — per-field provenance
+    provenance: FieldProvenanceSchema.optional(),
     ...TransparencyFields,
 }).passthrough();
 
@@ -484,6 +574,11 @@ export const DisturbanceEventSchema = z.object({
     blockedSegments: z.array(LogSegmentSchema),
     note: z.string().optional(),
     weatherEventId: z.string().optional(),
+    // §3.2g — structured disturbance (Track B B2.7, all optional / back-compat)
+    cause: BucketIssueTypeSchema.optional(),                           // reuses BucketIssueTypeSchema enum
+    affectedScope: z.enum(['event', 'bucket', 'whole_day']).optional(),
+    impact: z.string().optional(),
+    resolvedStatus: z.enum(['ongoing', 'resolved_same_day', 'carried_over']).optional(),
     ...TransparencyFields,
 }).passthrough();
 

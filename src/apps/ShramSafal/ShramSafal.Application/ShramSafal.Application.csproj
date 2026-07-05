@@ -12,6 +12,15 @@
     <Nullable>enable</Nullable>
   </PropertyGroup>
 
+  <!-- W1.P0 Batch A (ai-intelligence-plan-2026-06-25 Task 8 fix) — expose
+       internal members (ParseVoiceInputHandler.ApplyTranscriptIntegrityCorrections)
+       to the Domain.Tests project so the REAL flag-branching path is testable
+       with both flag states. Mirrors the InternalsVisibleTo pattern the
+       Infrastructure assembly already uses. -->
+  <ItemGroup>
+    <InternalsVisibleTo Include="ShramSafal.Domain.Tests" />
+  </ItemGroup>
+
   <!-- T-IGH-02-CS-PAYLOADS — single source of truth for sync mutation
        payloads. Generated from sync-contract/schemas/payloads/*.zod.ts
        by `npm run generate:csharp` (Zod runtime introspection → C#).

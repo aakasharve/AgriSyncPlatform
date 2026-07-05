@@ -72,6 +72,76 @@ internal sealed class InMemoryShramSafalRepository : IShramSafalRepository
         return Task.CompletedTask;
     }
 
+    // ── AI Intelligence Plan WP-2c (Track B typed ledger writers) ────────────
+    // Capturing overrides of the IShramSafalRepository default no-op writers so
+    // LedgerDerivationServiceTests (and any handler test that runs the confirm-
+    // time derivation) can assert the staged rows. Everything is held in memory;
+    // no SaveChanges semantics — the service stages, the handler commits.
+    public List<FarmOperation> CapturedOperations { get; } = [];
+    public List<ApplicationInputItem> CapturedInputItems { get; } = [];
+    public List<IrrigationEntry> CapturedIrrigations { get; } = [];
+    public List<LabourAssignment> CapturedLabour { get; } = [];
+    public List<MachineryUsage> CapturedMachinery { get; } = [];
+    public List<ObservationEvent> CapturedObservations { get; } = [];
+    public List<DisturbanceEvent> CapturedDisturbances { get; } = [];
+
+    /// <summary>Seed a CURRENT FarmOperation so a re-derivation supersedes it.</summary>
+    public void SeedFarmOperation(FarmOperation op) => CapturedOperations.Add(op);
+
+    /// <summary>
+    /// Fix F1 — optional fault-injection hook fired at the START of
+    /// <see cref="AddFarmOperationAsync"/> (the first derivation write). When set,
+    /// the delegate runs before the row is captured, so a throw simulates a DB
+    /// failure inside the NON-BLOCKING derivation side-car. Null (default) keeps
+    /// the plain capture behaviour every other test relies on.
+    /// </summary>
+    public Action? OnAddFarmOperation { get; set; }
+
+    public Task AddFarmOperationAsync(FarmOperation op, CancellationToken ct = default)
+    {
+        OnAddFarmOperation?.Invoke();
+        CapturedOperations.Add(op);
+        return Task.CompletedTask;
+    }
+
+    public Task AddApplicationInputItemAsync(ApplicationInputItem item, CancellationToken ct = default)
+    { CapturedInputItems.Add(item); return Task.CompletedTask; }
+
+    public Task AddIrrigationEntryAsync(IrrigationEntry e, CancellationToken ct = default)
+    { CapturedIrrigations.Add(e); return Task.CompletedTask; }
+
+    public Task AddLabourAssignmentAsync(LabourAssignment a, CancellationToken ct = default)
+    { CapturedLabour.Add(a); return Task.CompletedTask; }
+
+    public Task AddMachineryUsageAsync(MachineryUsage m, CancellationToken ct = default)
+    { CapturedMachinery.Add(m); return Task.CompletedTask; }
+
+    public Task AddObservationEventAsync(ObservationEvent o, CancellationToken ct = default)
+    { CapturedObservations.Add(o); return Task.CompletedTask; }
+
+    public Task AddDisturbanceEventAsync(DisturbanceEvent d, CancellationToken ct = default)
+    { CapturedDisturbances.Add(d); return Task.CompletedTask; }
+
+    public Task<FarmOperation?> GetFarmOperationByKeyAsync(string derivedEventKey, CancellationToken ct = default)
+        => Task.FromResult(CapturedOperations.FirstOrDefault(
+            o => o.IsCurrentVersion && o.DerivedEventKey.Value == derivedEventKey));
+
+    // ── WP-2d (D5) RoutineMemory upsert ──────────────────────────────────────
+    // Captures the routine_patterns the derivation upserts so the reinforce
+    // assertion can inspect them. GetRoutinePatternAsync returns the live
+    // instance (not a copy) so the service's Reinforce mutation is observable.
+    public List<RoutinePattern> CapturedRoutinePatterns { get; } = [];
+
+    public Task<RoutinePattern?> GetRoutinePatternAsync(Guid farmId, Guid? plotId, string operationType, CancellationToken ct = default)
+    {
+        var normalizedOp = (operationType ?? string.Empty).Trim();
+        return Task.FromResult(CapturedRoutinePatterns.FirstOrDefault(
+            p => p.FarmId == farmId && p.PlotId == plotId && p.OperationType == normalizedOp));
+    }
+
+    public Task AddRoutinePatternAsync(RoutinePattern p, CancellationToken ct = default)
+    { CapturedRoutinePatterns.Add(p); return Task.CompletedTask; }
+
     public Task<bool> IsUserMemberOfFarmAsync(Guid farmId, Guid userId, CancellationToken ct = default)
         => Task.FromResult(_memberships.ContainsKey((farmId, userId)));
 

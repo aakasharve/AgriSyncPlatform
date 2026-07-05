@@ -101,6 +101,12 @@ export type {
     // Context
     SelectedCropContext,
     FarmContext,
+
+    // Understanding Meter (W1.P3)
+    ProvenanceTag,
+    ScoreContext,
+    VlogScoreDimension,
+    VlogScore,
 } from './log.types';
 
 // Enum + function exports (enums need value export, not just type)

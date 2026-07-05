@@ -46,6 +46,7 @@ import { applyV18 } from './dexie/versions/v18';
 import { applyV19 } from './dexie/versions/v19';
 import { applyV20 } from './dexie/versions/v20';
 import { applyV21 } from './dexie/versions/v21';
+import { applyV22 } from './dexie/versions/v22';
 
 // =============================================================================
 // OUTBOX (Pending sync events)
@@ -615,7 +616,7 @@ export interface AnalyticsOutboxRow {
 // =============================================================================
 
 /** Current Dexie schema version — bump this when adding version(N).stores(). */
-export const DATABASE_VERSION = 21; // voice-diary-e2e-2026-05-17 (D.17) — additive bump for `s3RetainedKey` index on voiceClips.
+export const DATABASE_VERSION = 22; // ai-intelligence-plan-2026-06-25 (W1.P2) — per-field FieldProvenance carry-through; no new index (provenance is a nested JSON field).
 /** CEI Phase 1 schema version (now active — applied by Task 5.1.1). */
 export const CEI_PHASE1_SCHEMA_VERSION = 7;
 /** CEI Phase 2 schema version — adds test stack (protocols/instances/recs). */
@@ -728,6 +729,7 @@ export class AgriLogDatabase extends Dexie {
         applyV19(this);
         applyV20(this);
         applyV21(this);
+        applyV22(this);
     }
 }
 

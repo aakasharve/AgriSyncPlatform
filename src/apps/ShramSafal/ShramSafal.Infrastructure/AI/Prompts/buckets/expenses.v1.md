@@ -14,7 +14,7 @@ Negative examples:
 Mistakes you will make without guardrails:
 - UNIT_DRIFT: rupees vs quantity.
 - SPEAKER_CONFUSION: vendor quote is not paid expense unless stated.
-- CROP_STAGE_LEAKAGE: assuming packaging during harvest.
+- CROP_STAGE_LEAKAGE: infer stage from explicit OPERATIONS the farmer described, never from products alone; a product name alone never sets stage; if the operation contradicts the stage, trust the operation.
 - QUANTITY_HALLUCINATION: inventing totals from item names.
 - CROSS_BUCKET_BLEED: duplicating same cost in input and activityExpenses.
 - DATE_SHIFTING: future purchase as current spend.

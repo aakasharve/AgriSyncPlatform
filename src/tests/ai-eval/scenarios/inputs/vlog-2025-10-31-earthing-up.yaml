@@ -1,0 +1,55 @@
+id: vlog-2025-10-31-earthing-up
+bucket: inputs
+description: |
+  31/10 — Earthing-up day (बुंध्याला माती). Farmer reports 4 men
+  (गडी) and 3 women (बायका) doing earthing-up work. Gender split
+  is explicitly spoken — the gender lexicon must capture it correctly.
+
+  TARGET (W1.P0 domain-aware parser):
+  - activity = "earthing-up" / "बुंध्याला माती" (Component 6 —
+    WorkTypeDictionary).
+  - maleCount = 4 (गडी = hired men, Component 6 — WorkerGenderLexicon).
+  - femaleCount = 3 (बायका = women, Component 6 — WorkerGenderLexicon).
+  - workerCount = 7 (total).
+  Today's domain-blind parser may miss the gender split or misclassify
+  the activity. RED is expected.
+
+  spec: ai-intelligence-plan-2026-06-25
+
+input:
+  transcript: "आज बुंध्याला माती दिली. चार गडी आणि तीन बायका होत्या."
+
+context:
+  fixture: farmer-grape-grower
+
+expected:
+  labour:
+    - activity: "earthing-up"
+      maleCount: 4
+      femaleCount: 3
+      workerCount: 7
+
+tolerances:
+  "labour[0].activity":
+    oneOf:
+      - "earthing-up"
+      - "earthing up"
+      - "बुंध्याला माती"
+      - "soil mounding"
+      - "mounding"
+  "labour[0].maleCount":
+    exact: true
+  "labour[0].femaleCount":
+    exact: true
+  "labour[0].workerCount":
+    exact: true
+
+ignore_fields:
+  - summary
+  - dayOutcome
+  - inputs
+  - irrigation
+  - machinery
+  - expenses
+  - observations
+  - tasks

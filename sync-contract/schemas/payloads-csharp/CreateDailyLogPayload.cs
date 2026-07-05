@@ -20,6 +20,25 @@ public sealed record LocationItem(
     decimal? Altitude = null
 );
 
+public sealed record WeatherStampItem(
+    string TimestampLocal,
+    string TimestampProvider,
+    string Provider,
+    decimal TempC,
+    decimal Humidity,
+    decimal WindKph,
+    decimal PrecipMm,
+    decimal CloudCoverPct,
+    string ConditionText,
+    string IconCode,
+    decimal RainProbNext6h,
+    Guid? PlotId = null,
+    decimal? WindGustKph = null,
+    decimal? SoilMoistureVolumetric0To10 = null,
+    decimal? UvIndex = null,
+    IReadOnlyList<string>? Alerts = null
+);
+
 public sealed record CreateDailyLogPayload(
     Guid DailyLogId,
     Guid FarmId,
@@ -27,5 +46,7 @@ public sealed record CreateDailyLogPayload(
     Guid CropCycleId,
     DateOnly LogDate,
     Guid? OperatorUserId = null,
-    LocationItem? Location = null
+    LocationItem? Location = null,
+    WeatherStampItem? WeatherStamp = null,
+    Guid? SourceAiJobId = null
 );

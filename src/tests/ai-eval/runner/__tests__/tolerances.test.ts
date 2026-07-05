@@ -50,4 +50,18 @@ describe('evaluateTolerance', () => {
       evaluateTolerance('2026-05-05', '2026-05-05', { regex: '^\\d{4}-\\d{2}-\\d{2}$' }).passed
     ).toBe(true);
   });
+
+  it('score: passes within ±pts (default 8) and fails outside', () => {
+    const rule = { score: { expected: 86, '±pts': 8 } } as const;
+    expect(evaluateTolerance(86, 86, rule).passed).toBe(true);   // Δ0
+    expect(evaluateTolerance(86, 78, rule).passed).toBe(true);   // Δ8 (boundary)
+    expect(evaluateTolerance(86, 94, rule).passed).toBe(true);   // Δ8 (boundary)
+    expect(evaluateTolerance(86, 95, rule).passed).toBe(false);  // Δ9
+  });
+
+  it('score: ±pts defaults to 8 when omitted', () => {
+    const rule = { score: { expected: 86 } } as const;
+    expect(evaluateTolerance(86, 93, rule).passed).toBe(true);   // Δ7
+    expect(evaluateTolerance(86, 95, rule).passed).toBe(false);  // Δ9
+  });
 });

@@ -197,6 +197,32 @@ export async function enqueueLogsForSync(logs: DailyLog[]): Promise<{ queuedLogI
             plotId: target.plotId,
             cropCycleId: target.cropCycleId,
             logDate: log.date,
+            // AI Intelligence Plan WP-2a — thread the parse job linkage recorded on
+            // the log's provenance (BackendAiClient stamps AiJob.Id there) so the
+            // server can derive the typed ledger rows. Undefined for manual logs.
+            sourceAiJobId: log.meta?.provenance?.sourceAiJobId,
+            // B2.8 — carry the weather already captured at confirm-time to the server
+            // (persisted into ssf.weather_stamps). Omit the client-only `id` (server generates).
+            weatherStamp: log.weatherStamp
+                ? {
+                      plotId: log.weatherStamp.plotId,
+                      timestampLocal: log.weatherStamp.timestampLocal,
+                      timestampProvider: log.weatherStamp.timestampProvider,
+                      provider: log.weatherStamp.provider,
+                      tempC: log.weatherStamp.tempC,
+                      humidity: log.weatherStamp.humidity,
+                      windKph: log.weatherStamp.windKph,
+                      precipMm: log.weatherStamp.precipMm,
+                      cloudCoverPct: log.weatherStamp.cloudCoverPct,
+                      conditionText: log.weatherStamp.conditionText,
+                      iconCode: log.weatherStamp.iconCode,
+                      rainProbNext6h: log.weatherStamp.rainProbNext6h,
+                      windGustKph: log.weatherStamp.windGustKph,
+                      soilMoistureVolumetric0To10: log.weatherStamp.soilMoistureVolumetric0To10,
+                      uvIndex: log.weatherStamp.uvIndex,
+                      alerts: log.weatherStamp.alerts,
+                  }
+                : undefined,
         });
 
         const taskPayloads = buildTaskPayloads(log);

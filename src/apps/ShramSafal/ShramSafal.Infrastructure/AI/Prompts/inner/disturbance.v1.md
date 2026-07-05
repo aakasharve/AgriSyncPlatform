@@ -16,7 +16,7 @@ Negative examples:
 Mistakes you will make without guardrails:
 - UNIT_DRIFT: no units belong directly in disturbance unless part of note.
 - SPEAKER_CONFUSION: do not blame a worker unless transcript says so.
-- CROP_STAGE_LEAKAGE: do not infer disease blocker from crop stage.
+- CROP_STAGE_LEAKAGE: infer stage from explicit OPERATIONS the farmer described, never from products alone; a product name alone never sets stage; if the operation contradicts the stage, trust the operation.
 - QUANTITY_HALLUCINATION: no invented severity.
 - CROSS_BUCKET_BLEED: do not replace completed work with disturbance.
 - DATE_SHIFTING: future risk is task/observation, not today disturbance.

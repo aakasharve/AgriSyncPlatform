@@ -129,6 +129,17 @@ public sealed class ShramSafalDbContext(DbContextOptions<ShramSafalDbContext> op
     public DbSet<TestInstance> TestInstances => Set<TestInstance>();
     public DbSet<TestRecommendation> TestRecommendations => Set<TestRecommendation>();
     public DbSet<ComplianceSignal> ComplianceSignals => Set<ComplianceSignal>();
+    public DbSet<FarmOperation> FarmOperations => Set<FarmOperation>();
+    public DbSet<ApplicationInputItem> ApplicationInputItems => Set<ApplicationInputItem>();
+    public DbSet<IrrigationEntry> IrrigationEntries => Set<IrrigationEntry>();
+    public DbSet<LabourAssignment> LabourAssignments => Set<LabourAssignment>();
+    public DbSet<MachineryUsage> MachineryUsages => Set<MachineryUsage>();
+    public DbSet<ObservationEvent> ObservationEvents => Set<ObservationEvent>();
+    public DbSet<DisturbanceEvent> DisturbanceEvents => Set<DisturbanceEvent>();
+    public DbSet<WeatherEvent> WeatherEvents => Set<WeatherEvent>();
+    public DbSet<RoutinePattern> RoutinePatterns => Set<RoutinePattern>();
+    public DbSet<WeatherStamp> WeatherStamps => Set<WeatherStamp>();
+    public DbSet<EventLink> EventLinks => Set<EventLink>();
     public DbSet<JobCard> JobCards => Set<JobCard>();
     public DbSet<Organization> Organizations => Set<Organization>();
     public DbSet<OrganizationMembership> OrganizationMemberships => Set<OrganizationMembership>();

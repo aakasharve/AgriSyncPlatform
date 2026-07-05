@@ -1,0 +1,62 @@
+id: vlog-2025-11-01-weeding
+bucket: inputs
+description: |
+  1/11 — Weeding day (खुरपणी). Farmer reports weeding of 12 rows.
+  "खुरपणी" is the primary Marathi word; "निंदणी" is a dialect alias —
+  both must map to the canonical work-type "weeding".
+
+  TARGET (W1.P0 domain-aware parser):
+  - activity = "weeding" (Component 6 — WorkTypeDictionary;
+    खुरपणी = weeding, alias निंदणी = weeding).
+  - rowsWorked = 12.
+  Today's domain-blind parser may fail to map खुरपणी to "weeding"
+  or drop the row count. RED is expected.
+
+  WP-1b JUDGMENT-FIELD target (cropActivities.progress): "बारा ओळींची खुरपणी"
+  = 12 rows weeded this session (the opening session of the weeding sequence
+  continued on 6/11). progress.unitsDone = 12; no running total spoken so
+  unitsTotal OMITTED.
+
+  spec: ai-intelligence-plan-2026-06-25
+
+input:
+  transcript: "आज बारा ओळींची खुरपणी केली."
+
+context:
+  fixture: farmer-grape-grower
+
+expected:
+  labour:
+    - activity: "weeding"
+      rowsWorked: 12
+  cropActivities:
+    - progress:
+        phase: "CROP_CYCLE"
+        unitsDone: 12
+        unit: "rows"
+
+tolerances:
+  "labour[0].activity":
+    oneOf:
+      - "weeding"
+      - "खुरपणी"
+      - "निंदणी"
+      - "Weeding"
+  "labour[0].rowsWorked":
+    exact: true
+  "cropActivities[0].progress.unitsDone":
+    exact: true
+  "cropActivities[0].progress.phase":
+    oneOf:
+      - "CROP_CYCLE"
+      - "LAND_PREPARATION"
+
+ignore_fields:
+  - summary
+  - dayOutcome
+  - inputs
+  - irrigation
+  - machinery
+  - expenses
+  - observations
+  - tasks

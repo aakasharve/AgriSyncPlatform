@@ -125,6 +125,72 @@ public sealed class AiPromptBuilderTests
         Assert.DoesNotContain("\"crop_activity\"", prompt, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// AI_INTELLIGENCE_PLAN_2026-06-25 W1.P0 Component 8 — anti-leakage guard.
+    /// When a confirmed CropStage is present the modular prompt must:
+    /// (a) contain the scoped CROP_STAGE_LEAKAGE rule (not the blanket ban),
+    /// (b) contain the GROWTH STAGE soft-prior block with the stage value,
+    /// (c) contain the explicit no-autofill instruction.
+    /// </summary>
+    [Fact]
+    public void ModularVoicePrompt_WithCropStage_ContainsStagePriorAndScopedLeakageRule()
+    {
+        var builder = new AiPromptBuilder(
+            new AiPromptTemplateRegistry(),
+            Options.Create(new AiPromptOptions { UseModularPrompt = true }));
+
+        var context = CreateContext() with { CropStage = "dormancy" };
+        var prompt = builder.BuildVoiceParsingPrompt(context);
+
+        // Scoped rule must be present (one occurrence per bucket is enough — assert the key phrase).
+        Assert.Contains(
+            "infer stage from explicit OPERATIONS",
+            prompt,
+            StringComparison.OrdinalIgnoreCase);
+
+        // The blanket per-bucket bans must NOT appear verbatim.
+        Assert.DoesNotContain("assuming standard spray products", prompt, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("assuming pruning labour from crop stage", prompt, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("assuming irrigation need from stage", prompt, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("assuming machinery need from season", prompt, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("assuming disease from stage", prompt, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("adding tasks not spoken", prompt, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("assuming packaging during harvest", prompt, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("assuming standard seasonal tasks without speech evidence", prompt, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("do not infer disease blocker from crop stage", prompt, StringComparison.OrdinalIgnoreCase);
+
+        // Stage-prior block must appear with the confirmed stage value.
+        Assert.Contains("GROWTH STAGE (soft prior", prompt, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("dormancy", prompt, StringComparison.OrdinalIgnoreCase);
+
+        // No-autofill instruction must be explicit.
+        Assert.Contains("do NOT autofill", prompt, StringComparison.OrdinalIgnoreCase);
+
+        // Candidate ops for dormancy stage must be present.
+        Assert.Contains("dormancy_paste", prompt, StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
+    /// AI_INTELLIGENCE_PLAN_2026-06-25 W1.P0 Component 8 — product-only
+    /// anti-leakage guard. A context with NO CropStage must NOT emit the
+    /// GROWTH STAGE block, ensuring a product name alone cannot trigger
+    /// stage injection.
+    /// </summary>
+    [Fact]
+    public void ModularVoicePrompt_WithoutCropStage_DoesNotEmitStagePriorBlock()
+    {
+        var builder = new AiPromptBuilder(
+            new AiPromptTemplateRegistry(),
+            Options.Create(new AiPromptOptions { UseModularPrompt = true }));
+
+        // Context with no stage (product-only scenario).
+        var context = CreateContext() with { CropStage = null };
+        var prompt = builder.BuildVoiceParsingPrompt(context);
+
+        // The growth-stage prior block must be absent when no stage is confirmed.
+        Assert.DoesNotContain("GROWTH STAGE (soft prior", prompt, StringComparison.OrdinalIgnoreCase);
+    }
+
     private static VoiceParseContext CreateContext()
     {
         return new VoiceParseContext(

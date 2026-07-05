@@ -23,6 +23,9 @@
  * - c3 Sugarcane: p3_1 River Bank (Weekly Flood)
  * - c4 Onion: p4_1 Summer Crop (Every 3 Days Sprinkler)
  */
+/* eslint-disable @typescript-eslint/no-explicit-any */
+// Demo service uses `as any` for enum-string coercions in mock data builders.
+// Pre-dates the lint ratchet (T-IGH-04); will be typed in a future cleanup.
 
 import {
     DailyLog,
@@ -38,16 +41,16 @@ import {
     ObservationNoteType,
     ObservationSeverity,
     DisturbanceEvent,
-    TaskCandidate,
     LogVerification,
     LogVerificationStatus,
     WeatherStamp,
     PlannedTask
 } from '../../types';
-import { HarvestSession, HarvestDayEntry, SaleEntry } from '../logs/harvest.types';
+import { HarvestSession, HarvestDayEntry } from '../logs/harvest.types';
 import { ProcurementExpense } from '../procurement/procurement.types';
 import { getDateKey, getTodayKey } from '../../core/domain/services/DateKeyService';
 import { idGenerator } from '../../core/domain/services/IdGenerator';
+import { sumMachineryCost } from '../../core/domain/helpers/log-factory-helpers';
 
 // --- VERSION ---
 export const DEMO_SEED_VERSION = "v4.0.0-90days"; // Full quarter data with comparison tracks
@@ -55,6 +58,7 @@ export const DEMO_SEED_VERSION = "v4.0.0-90days"; // Full quarter data with comp
 const TODAY = new Date();
 
 // --- OPERATORS (matches FarmerProfile in useAppData) ---
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 const DEMO_OPERATORS = {
     owner: { id: 'owner', name: 'Ramu (Owner)', role: 'PRIMARY_OWNER' },
     manager1: { id: 'manager1', name: 'Suresh (Manager)', role: 'SECONDARY_OWNER' },
@@ -356,7 +360,7 @@ const buildLog = (
 
     const labourCost = labour.reduce((s, x) => s + (x.totalCost || 0), 0);
     const inputCost = inputs.reduce((s, x) => s + (x.cost || 0), 0);
-    const machineCost = machinery.reduce((s, x) => s + (x.rentalCost || x.fuelCost || 0), 0);
+    const machineCost = sumMachineryCost(machinery);
     const grandTotal = labourCost + inputCost + machineCost + expenses.reduce((s, x) => s + (x.totalAmount || 0), 0);
 
     const isDisturbance = !!payload.disturbance;

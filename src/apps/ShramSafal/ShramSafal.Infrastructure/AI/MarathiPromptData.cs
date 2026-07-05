@@ -132,6 +132,238 @@ internal static class MarathiPromptData
         """
         Input: "चार जणांनी नांगरून घेतले. खत दिलं. मोटर खराब असल्यामुळे पाणी देता आले नाही. पानांवर काळे डाग दिसतायत."
         Output: {"dayOutcome":"WORK_RECORDED","cropActivities":[{"title":"नांगरणी","workTypes":["Tillage"],"sourceText":"नांगरून घेतले"}],"labour":[{"type":"HIRED","count":4,"activity":"tillage","sourceText":"चार जणांनी नांगरून घेतले"}],"inputs":[{"productName":"खत","type":"fertilizer","method":"Soil","sourceText":"खत दिलं"}],"disturbance":{"scope":"PARTIAL","group":"equipment","reason":"motor_failure","severity":"HIGH","blockedSegments":["irrigation"],"note":"मोटर खराब असल्यामुळे पाणी देता आले नाही"},"observations":[{"noteType":"issue","textRaw":"मोटर खराब असल्यामुळे पाणी देता आले नाही","severity":"important"},{"noteType":"issue","textRaw":"पानांवर काळे डाग दिसतायत","severity":"important"}],"confidence":0.93}
+        """,
+
+        // =====================================================================
+        // C10 CURRICULUM — 4 skills: batch-decomposition, carrier-vs-irrigation,
+        // dose-basis-abstention, decision-chain.
+        // spec: ai-intelligence-plan-2026-06-25
+        // =====================================================================
+
+        // ------------------------------------------------------------------
+        // SKILL 1: BATCH DECOMPOSITION
+        // Rule: When multiple products are named, emit ONE inputs[] row per
+        // product. NEVER merge a multi-product tank into a single row.
+        // ------------------------------------------------------------------
+
+        // S1-POSITIVE: 3 products named → 3 distinct inputs rows.
+        """
+        Input: "इथरेल आणि 00:52:34 आणि फॉस्फोरिक ॲसिड मिसळून बलोवेरने फवारणी केली."
+        Output: {"dayOutcome":"WORK_RECORDED","inputs":[{"productName":"Ethrel","rawProductName":"इथरेल","type":"other","method":"Spray","sourceText":"इथरेल"},{"productName":"0-52-34","rawProductName":"00:52:34","type":"fertilizer","method":"Spray","sourceText":"00:52:34"},{"productName":"phosphoric acid","rawProductName":"फॉस्फोरिक ॲसिड","type":"other","method":"Spray","sourceText":"फॉस्फोरिक ॲसिड"}],"confidence":0.94}
+        """,
+
+        // S1-ABSTENTION: One product clear (Ethrel), second product name
+        // unclear → emit the clear row, put the unclear segment in
+        // unclearSegments. Do NOT skip the clear one or guess the unclear one.
+        """
+        Input: "इथरेल आणि त्या गोळ्या मिसळून फवारणी केली."
+        Output: {"dayOutcome":"WORK_RECORDED","inputs":[{"productName":"Ethrel","rawProductName":"इथरेल","type":"other","method":"Spray","sourceText":"इथरेल"}],"unclearSegments":[{"rawText":"त्या गोळ्या","reason":"unknown_vocabulary","confidence":0.4}],"confidence":0.72}
+        """,
+
+        // S1-NEGATIVE (contrast): Farmer says all three in one tank — still
+        // emit 3 separate rows. Do NOT collapse into one merged row.
+        """
+        Input: "सगळं एकत्र मिसळून — इथरेल, 00:52:34, फॉस्फोरिक ॲसिड — एकाच टँकमधून फवारले."
+        Output: {"dayOutcome":"WORK_RECORDED","inputs":[{"productName":"Ethrel","rawProductName":"इथरेल","type":"other","method":"Spray","sourceText":"इथरेल"},{"productName":"0-52-34","rawProductName":"00:52:34","type":"fertilizer","method":"Spray","sourceText":"00:52:34"},{"productName":"phosphoric acid","rawProductName":"फॉस्फोरिक ॲसिड","type":"other","method":"Spray","sourceText":"फॉस्फोरिक ॲसिड"}],"confidence":0.93}
+        """,
+
+        // ------------------------------------------------------------------
+        // SKILL 2: CARRIER-VS-IRRIGATION
+        // Rule: Water used as a spray carrier belongs on the inputs[] row
+        // (as a volume note). It is NOT an irrigation event. Only emit
+        // irrigation[] when the farmer describes watering the soil/roots.
+        // ------------------------------------------------------------------
+
+        // S2-POSITIVE: 1000 L is spray carrier — goes on the input row as a
+        // note; irrigation[] is empty because no soil watering was done.
+        """
+        Input: "इथरेल फवारणीसाठी एक हजार लिटर पाणी वापरलं. बागेत पाणी दिलं नाही."
+        Output: {"dayOutcome":"WORK_RECORDED","inputs":[{"productName":"Ethrel","rawProductName":"इथरेल","type":"other","method":"Spray","notes":"carrier: 1000 L spray water","sourceText":"इथरेल फवारणीसाठी एक हजार लिटर पाणी वापरलं"}],"irrigation":[],"confidence":0.95}
+        """,
+
+        // S2-ABSTENTION: "पाणी दिलं" — farmer completed work but gave no duration,
+        // no source, no method → dayOutcome=WORK_RECORDED (work happened), and
+        // put the missing detail in unclearSegments so the app can ask. Do NOT
+        // set DISTURBANCE_RECORDED (that is for when work did NOT happen / was blocked).
+        // Do NOT move "पाणी दिलं" into irrigation[] — that would re-break the carrier lesson.
+        """
+        Input: "आज पाणी दिलं."
+        Output: {"dayOutcome":"WORK_RECORDED","unclearSegments":[{"rawText":"आज पाणी दिलं","reason":"incomplete_sentence","confidence":0.5,"userMessage":"किती वेळ पाणी दिले? कोणत्या पद्धतीने — ठिबक, फुहारा, की पूर पाणी?"}],"confidence":0.5}
+        """,
+
+        // S2-NEGATIVE (contrast): Water volume stated for mixing — NOT irrigation.
+        // "१०० लिटर पाण्यात मिसळून" is spray carrier, must not appear in irrigation[].
+        """
+        Input: "१०० लिटर पाण्यात बाविस्तीन मिसळून फवारणी केली."
+        Output: {"dayOutcome":"WORK_RECORDED","inputs":[{"productName":"Bavistin","rawProductName":"बाविस्तीन","type":"fungicide","method":"Spray","notes":"carrier: 100 L spray water","sourceText":"१०० लिटर पाण्यात बाविस्तीन मिसळून"}],"irrigation":[],"confidence":0.94}
+        """,
+
+        // ------------------------------------------------------------------
+        // SKILL 3: DOSE-BASIS ABSTENTION
+        // Rule: When a dose rate is stated (e.g. 4 ml/L) but the carrier
+        // volume is NOT stated, emit doseBasis="NOT_MENTIONED". NEVER compute
+        // or fabricate totalMl from an assumed tank size.
+        // ------------------------------------------------------------------
+
+        // S3-POSITIVE (which IS the abstention case): dose rate 4 ml/L given;
+        // tank volume not spoken → doseBasis=NOT_MENTIONED, no totalMl key.
+        """
+        Input: "इथरेल ४ मिली प्रति लिटर वापरलं. टँकचं पाणी किती ते सांगितलं नाही."
+        Output: {"dayOutcome":"WORK_RECORDED","inputs":[{"productName":"Ethrel","rawProductName":"इथरेल","type":"other","method":"Spray","dosePerLitre":4,"doseUnit":"ml","doseBasis":"NOT_MENTIONED","sourceText":"इथरेल ४ मिली प्रति लिटर"}],"confidence":0.91}
+        """,
+
+        // S3-NEGATIVE (contrast): Even if carrier volume seems implied by context
+        // (e.g. "standard blower tank"), if NOT spoken → still abstain on totalMl.
+        """
+        Input: "इथरेल ४ मिली दराने मारलं."
+        Output: {"dayOutcome":"WORK_RECORDED","inputs":[{"productName":"Ethrel","rawProductName":"इथरेल","type":"other","method":"Spray","dosePerLitre":4,"doseUnit":"ml","doseBasis":"NOT_MENTIONED","sourceText":"इथरेल ४ मिली दराने"}],"confidence":0.9}
+        """,
+
+        // ------------------------------------------------------------------
+        // SKILL 4: DECISION-CHAIN
+        // Rule: When a farmer states a cause→effect pair (e.g. rain caused
+        // them to reduce irrigation), encode it as ONE linked entry showing
+        // both the cause and the effect. NEVER split the causal pair into
+        // two unrelated standalone rows.
+        // ------------------------------------------------------------------
+
+        // S4-POSITIVE: Rain → irrigation cut from 4h to 1h — ONE causal entry.
+        // The disturbance captures the weather cause; irrigation shows the reduced
+        // duration (durationHours:1) with the causal explanation in notes.
+        // Fields used: disturbance.note (cause) + irrigation.durationHours + irrigation.notes.
+        // NEVER invent fields like "cause" or "reducedFrom" — they don't exist in the schema.
+        """
+        Input: "आज पाऊस आला म्हणून ४ तासाचं पाणी १ तासावर आणलं."
+        Output: {"dayOutcome":"WORK_RECORDED","disturbance":{"scope":"PARTIAL","group":"weather","reason":"rain","severity":"MEDIUM","blockedSegments":["irrigation"],"note":"पाऊस आला म्हणून सिंचन ४ तासांवरून १ तासावर कमी केले"},"irrigation":[{"method":"Drip","durationHours":1,"notes":"reduced from 4h due to rain","sourceText":"४ तासाचं पाणी १ तासावर आणलं"}],"confidence":0.94}
+        """,
+
+        // S4-ABSTENTION: Effect observed (irrigation was short) but cause
+        // not stated → record the effect, flag cause unclear.
+        """
+        Input: "आज फक्त १ तास पाणी दिलं."
+        Output: {"dayOutcome":"WORK_RECORDED","irrigation":[{"method":"Drip","durationHours":1,"sourceText":"१ तास पाणी दिलं"}],"observations":[{"noteType":"observation","textRaw":"फक्त १ तास पाणी दिलं — कारण सांगितले नाही","severity":"normal"}],"confidence":0.88}
+        """,
+
+        // S4-NEGATIVE (contrast): Both rain AND the irrigation reduction are
+        // stated — keep as ONE linked entry, NOT split into rain-note + irrigation-row.
+        // Use only existing fields: disturbance.note + irrigation.durationHours + irrigation.notes.
+        """
+        Input: "पाऊस आल्यामुळे आज पाणी फक्त १ तास चालू ठेवलं, नेहमीच्या ४ तासांऐवजी."
+        Output: {"dayOutcome":"WORK_RECORDED","disturbance":{"scope":"PARTIAL","group":"weather","reason":"rain","severity":"MEDIUM","blockedSegments":["irrigation"],"note":"पाऊस आल्यामुळे सिंचन ४ तासांवरून १ तासावर कमी केले"},"irrigation":[{"method":"Drip","durationHours":1,"notes":"reduced from 4h due to rain","sourceText":"पाणी फक्त १ तास चालू ठेवलं"}],"confidence":0.96}
+        """,
+
+        // =====================================================================
+        // WP-1b JUDGMENT-FIELD CURRICULUM — 4 fields that have NO deterministic
+        // normalizer, so the model must LEARN them from these few-shots:
+        //   mixId/passId (tank-mix grouping), cropActivities.progress
+        //   (multi-day continuity), reason (grape-purpose enum), recommendedBy.
+        // Each Output honors the dishonesty governors — no fabricated totals,
+        // no invented basis, grouping ids OMITTED when only one product.
+        // spec: ai-intelligence-plan-2026-06-25
+        // =====================================================================
+
+        // ------------------------------------------------------------------
+        // JUDGMENT 1: mixId / passId — TANK-MIX GROUPING
+        // Rule: products combined in ONE tank on ONE pass share the SAME mixId.
+        // Distinct tanks get distinct ids. OMIT mixId entirely when there is
+        // only ONE product (no grouping signal to encode).
+        // ------------------------------------------------------------------
+
+        // J1-POSITIVE (24/10): alphamethrin + Bavistin in ONE tank →
+        // both inputs rows carry the SAME mixId "mix_1". passId groups the pass.
+        """
+        Input: "अल्फामेथ्रिन आणि बाविस्टीन एकाच टँकमध्ये मिसळून फवारणी केली."
+        Output: {"dayOutcome":"WORK_RECORDED","inputs":[{"productName":"Alphamethrin","rawProductName":"अल्फामेथ्रिन","type":"pesticide","method":"Spray","mixId":"mix_1","passId":"pass_1","sourceText":"अल्फामेथ्रिन"},{"productName":"Bavistin","rawProductName":"बाविस्टीन","type":"fungicide","method":"Spray","mixId":"mix_1","passId":"pass_1","sourceText":"बाविस्टीन"}],"confidence":0.94}
+        """,
+
+        // J1-POSITIVE (26/10): THREE products in ONE tank (CPPU + 00:52:34/MKP +
+        // Curzate) → all three share mixId "mix_1". The grade "00:52:34" stays a
+        // grade string (npkGrade), never a clock time.
+        """
+        Input: "सीपीयू, शून्य बावन्न चौतीस आणि कर्जट एकाच टँकमध्ये मिसळून फवारलं."
+        Output: {"dayOutcome":"WORK_RECORDED","inputs":[{"productName":"CPPU","type":"other","method":"Spray","mixId":"mix_1","passId":"pass_1","sourceText":"सीपीयू"},{"productName":"0-52-34","rawProductName":"शून्य बावन्न चौतीस","type":"fertilizer","method":"Spray","npkGrade":"0:52:34","mixId":"mix_1","passId":"pass_1","sourceText":"शून्य बावन्न चौतीस"},{"productName":"Curzate","rawProductName":"कर्जट","type":"fungicide","method":"Spray","mixId":"mix_1","passId":"pass_1","sourceText":"कर्जट"}],"confidence":0.93}
+        """,
+
+        // J1-NEGATIVE (contrast): ONE product only → NO mixId/passId emitted.
+        // Do NOT fabricate a grouping id when there is nothing to group.
+        """
+        Input: "फक्त बाविस्टीन एकटंच फवारलं."
+        Output: {"dayOutcome":"WORK_RECORDED","inputs":[{"productName":"Bavistin","rawProductName":"बाविस्टीन","type":"fungicide","method":"Spray","sourceText":"बाविस्टीन"}],"confidence":0.93}
+        """,
+
+        // ------------------------------------------------------------------
+        // JUDGMENT 2: cropActivities.progress — MULTI-DAY CONTINUITY
+        // Rule: encode incremental progress on a continuing operation.
+        // unitsDone = units completed THIS session (as spoken). unitsTotal =
+        // the running/target total ONLY when the farmer states it; OMIT it
+        // otherwise. NEVER back-compute the remaining amount.
+        // ------------------------------------------------------------------
+
+        // J2-POSITIVE (6/11): "आणखी ८ ओळी" continuing the 1/11 weeding of 12 rows,
+        // and the farmer states the total (एकूण २०) → unitsDone 8, unitsTotal 20.
+        """
+        Input: "आज आणखी आठ ओळींची खुरपणी केली, एकूण वीस ओळींपैकी."
+        Output: {"dayOutcome":"WORK_RECORDED","cropActivities":[{"title":"खुरपणी","workTypes":["Weeding"],"progress":{"phase":"CROP_CYCLE","unitsDone":8,"unitsTotal":20,"unit":"rows"},"sourceText":"आणखी आठ ओळींची खुरपणी केली"}],"confidence":0.93}
+        """,
+
+        // J2-ABSTENTION: session progress spoken (8 rows) but NO total stated →
+        // emit unitsDone only, OMIT unitsTotal. Do NOT invent the total.
+        """
+        Input: "आज आणखी आठ ओळींची खुरपणी केली."
+        Output: {"dayOutcome":"WORK_RECORDED","cropActivities":[{"title":"खुरपणी","workTypes":["Weeding"],"progress":{"phase":"CROP_CYCLE","unitsDone":8,"unit":"rows"},"sourceText":"आणखी आठ ओळींची खुरपणी केली"}],"confidence":0.9}
+        """,
+
+        // J2-NEGATIVE (contrast): a one-off task with no continuation signal →
+        // OMIT the progress object entirely. Not every activity has progress.
+        """
+        Input: "आज बागेची छाटणी केली."
+        Output: {"dayOutcome":"WORK_RECORDED","cropActivities":[{"title":"छाटणी","workTypes":["Pruning"],"sourceText":"छाटणी केली"}],"confidence":0.92}
+        """,
+
+        // ------------------------------------------------------------------
+        // JUDGMENT 3: reason — GRAPE-PURPOSE ENUM
+        // Rule: map the farmer's STATED purpose to the grape-purpose enum value
+        //   (defoliation | root_growth | nutrient_correction | fruit_sizing |
+        //    disease_control). OMIT reason when no purpose is spoken.
+        // ------------------------------------------------------------------
+
+        // J3-POSITIVE (19/10): Ethrel sprayed FOR leaf-fall → reason "defoliation".
+        """
+        Input: "पानगळ करण्यासाठी इथरेल फवारलं."
+        Output: {"dayOutcome":"WORK_RECORDED","inputs":[{"productName":"Ethrel","rawProductName":"इथरेल","type":"other","method":"Spray","reason":"defoliation","sourceText":"पानगळ करण्यासाठी इथरेल फवारलं"}],"confidence":0.92}
+        """,
+
+        // J3-POSITIVE (27/10): drenched at the root zone to push new root growth →
+        // reason "root_growth". Method is drenching, not spray.
+        """
+        Input: "मुळांची वाढ होण्यासाठी बुंध्याजवळ ड्रेंचिंग केलं."
+        Output: {"dayOutcome":"WORK_RECORDED","inputs":[{"productName":"रूट प्रमोटर","type":"other","method":"Drenching","reason":"root_growth","sourceText":"मुळांची वाढ होण्यासाठी बुंध्याजवळ ड्रेंचिंग केलं"}],"confidence":0.9}
+        """,
+
+        // J3-NEGATIVE (contrast): a spray with NO stated purpose → OMIT reason.
+        // Do NOT guess a grape-purpose the farmer did not say.
+        """
+        Input: "आज बाविस्टीन फवारलं."
+        Output: {"dayOutcome":"WORK_RECORDED","inputs":[{"productName":"Bavistin","rawProductName":"बाविस्टीन","type":"fungicide","method":"Spray","sourceText":"बाविस्टीन फवारलं"}],"confidence":0.93}
+        """,
+
+        // ------------------------------------------------------------------
+        // JUDGMENT 4: recommendedBy — ADVISOR ATTRIBUTION
+        // Rule: record WHO advised the input, EXACTLY as spoken. OMIT when no
+        // advisor is mentioned — never attribute to the farmer by default.
+        // ------------------------------------------------------------------
+
+        // J4-POSITIVE: shopkeeper-advised input → recommendedBy "दुकानदार".
+        """
+        Input: "दुकानदाराने सांगितलं म्हणून रॅली गोल्ड मारलं."
+        Output: {"dayOutcome":"WORK_RECORDED","inputs":[{"productName":"Rally Gold","rawProductName":"रॅली गोल्ड","type":"fungicide","method":"Spray","recommendedBy":"दुकानदार","sourceText":"दुकानदाराने सांगितलं म्हणून रॅली गोल्ड मारलं"}],"confidence":0.91}
+        """,
+
+        // J4-NEGATIVE (contrast): input applied with NO advisor mentioned →
+        // OMIT recommendedBy. Absence of an advisor is not "the farmer decided".
+        """
+        Input: "आज रॅली गोल्ड मारलं."
+        Output: {"dayOutcome":"WORK_RECORDED","inputs":[{"productName":"Rally Gold","rawProductName":"रॅली गोल्ड","type":"fungicide","method":"Spray","sourceText":"रॅली गोल्ड मारलं"}],"confidence":0.9}
         """
     ];
 

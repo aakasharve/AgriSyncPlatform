@@ -280,7 +280,9 @@ public sealed class CreateDailyLogPipelineTests
             clock,
             new AllowAllEntitlementPolicy(),
             analytics,
-            new Common.NullAiJobRepository());
+            new Common.NullAiJobRepository(),
+            Microsoft.Extensions.Logging.Abstractions.NullLogger<CreateDailyLogHandler>.Instance,
+            new LedgerDerivationService(repo));
 
         var validator = new CreateDailyLogValidator();
         var authorizer = new CreateDailyLogAuthorizer(repo);
