@@ -264,7 +264,7 @@ public sealed class SyncPushLedgerDerivationRealPostgresTests(Xunit.Abstractions
             sourceAiJobId: AiJobA);
 
         response.IsSuccess.Should().BeTrue("the /sync/push batch call must succeed");
-        var mutationResult = Assert.Single(response.Value.Results);
+        var mutationResult = Assert.Single(response.Value!.Results);
         output.WriteLine(
             $"[EVIDENCE] mutation status='{mutationResult.Status}' errorCode='{mutationResult.ErrorCode}' errorMessage='{mutationResult.ErrorMessage}'");
         mutationResult.Status.Should().Be("applied",
@@ -342,7 +342,7 @@ public sealed class SyncPushLedgerDerivationRealPostgresTests(Xunit.Abstractions
             sourceAiJobId: AiJobA); // cross-farm
 
         response.IsSuccess.Should().BeTrue("the /sync/push batch call must succeed");
-        var mutationResult = Assert.Single(response.Value.Results);
+        var mutationResult = Assert.Single(response.Value!.Results);
         output.WriteLine(
             $"[EVIDENCE] mutation status='{mutationResult.Status}' errorCode='{mutationResult.ErrorCode}' errorMessage='{mutationResult.ErrorMessage}'");
         mutationResult.Status.Should().Be("applied",
