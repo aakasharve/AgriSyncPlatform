@@ -2,6 +2,7 @@ import { WeatherPort } from '../../application/ports/WeatherPort';
 import { PlotGeo } from '../../domain/types';
 import { WeatherStamp, DailyForecast } from '../../features/weather/weather.types';
 import { getAuthSession } from '../storage/AuthTokenStore';
+import { WeatherFetchError } from './WeatherFetchError';
 import { idGenerator } from '../../core/domain/services/IdGenerator';
 import { systemClock } from '../../core/domain/services/Clock';
 
@@ -76,6 +77,19 @@ export class BackendWeatherClient implements WeatherPort {
 
     constructor(private readonly getActiveFarmId: () => string | null | undefined) {}
 
+    private async throwFromResponse(response: Response): Promise<never> {
+        let code: string | undefined;
+        let message: string | undefined;
+        try {
+            const body = await response.json() as { error?: string; message?: string };
+            code = body?.error;
+            message = body?.message;
+        } catch {
+            /* non-JSON body — status alone is enough */
+        }
+        throw new WeatherFetchError(response.status, code, message);
+    }
+
     async getCurrentWeather(_geo: PlotGeo): Promise<WeatherStamp> {
         const farmId = this.getActiveFarmId();
         if (!farmId) throw new Error('No active farm selected; cannot fetch weather.');
@@ -90,7 +104,7 @@ export class BackendWeatherClient implements WeatherPort {
             headers: authHeaders(),
         });
         if (!response.ok) {
-            throw new Error(`Weather request failed with HTTP ${response.status}.`);
+            await this.throwFromResponse(response);
         }
         const dto = await response.json() as WeatherSnapshotDto;
         const stamp: WeatherStamp = {
@@ -129,7 +143,7 @@ export class BackendWeatherClient implements WeatherPort {
             headers: authHeaders(),
         });
         if (!response.ok) {
-            throw new Error(`Forecast request failed with HTTP ${response.status}.`);
+            await this.throwFromResponse(response);
         }
         const dtos = await response.json() as DailyForecastDto[];
         const forecast: DailyForecast[] = dtos.map(d => ({
