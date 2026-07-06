@@ -104,10 +104,10 @@ const WeatherWidget: React.FC<WeatherWidgetProps> = ({ data, status, onRetry, on
                 aria-label="Weather details"
                 onClick={() => setIsOpen(true)}
                 onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setIsOpen(true); } }}
-                className="w-full text-left bg-gradient-to-br from-blue-500 to-blue-400 rounded-3xl p-5 text-white shadow-lg shadow-blue-200 mb-6 relative overflow-hidden group transition-all active:scale-[0.99] cursor-pointer"
+                className="w-full text-left bg-gradient-to-br from-blue-500 to-blue-400 rounded-3xl p-5 text-white shadow-[0_14px_30px_-8px_rgba(59,130,246,0.5)] mb-6 relative overflow-hidden group transition-all active:scale-[0.99] cursor-pointer"
             >
                 {/* Decorative Circle */}
-                <div className="absolute -top-10 -right-10 w-40 h-40 bg-white/10 rounded-full blur-2xl"></div>
+                <div className="absolute -top-10 -right-10 w-40 h-40 bg-white/15 rounded-full blur-2xl"></div>
 
                 <div className="relative z-10 flex justify-between items-center">
                     <div className="text-left space-y-1">
