@@ -63,8 +63,14 @@ describe('WeatherWidget states', () => {
         expect(screen.queryByText('Previous 5 days')).toBeNull();
     });
 
-    it('shows no caution when the boundary is set', () => {
+    it('shows no caution but a verified tick when the boundary is set', () => {
         render(<WeatherWidget status="ready" data={sampleData} boundaryUnset={false} onOpenBoundary={vi.fn()} />);
         expect(screen.queryByTestId('weather-boundary-caution')).toBeNull();
+        expect(screen.getByTestId('weather-verified')).toBeInTheDocument();
+    });
+
+    it('shows no verified tick when the boundary is not set', () => {
+        render(<WeatherWidget status="ready" data={sampleData} boundaryUnset onOpenBoundary={vi.fn()} />);
+        expect(screen.queryByTestId('weather-verified')).toBeNull();
     });
 });

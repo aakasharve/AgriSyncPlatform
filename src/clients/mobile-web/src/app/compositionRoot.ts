@@ -22,12 +22,13 @@ import type { LastSavedLogSummaryItem } from './uiRuntimeTypes';
 export interface AgriLogAppConfig {
     initialCrops: CropProfile[];
     currentFarmId?: string | null;
+    currentFarmName?: string | null;
 }
 
 const GLOBAL_TOAST_EVENT = 'agrisync:toast';
 type GlobalToastDetail = { message: string; type: 'success' | 'error' };
 
-export const useAgriLogApp = ({ initialCrops, currentFarmId }: AgriLogAppConfig) => {
+export const useAgriLogApp = ({ initialCrops, currentFarmId, currentFarmName }: AgriLogAppConfig) => {
     // --- 0. UI GLOBAL STATE (Hoisted) ---
     const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
     const [lastSavedLogSummary, setLastSavedLogSummary] = useState<LastSavedLogSummaryItem[]>([]);
@@ -155,6 +156,7 @@ export const useAgriLogApp = ({ initialCrops, currentFarmId }: AgriLogAppConfig)
         provider: weatherProvider,
         farmGeography,
         getDeviceLocation,
+        farmName: currentFarmName ?? undefined,
     });
 
     // --- 7. TRUST LAYER ---

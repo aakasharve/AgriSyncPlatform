@@ -83,10 +83,13 @@ interface UseWeatherMonitorProps {
     // Consent-gated device GPS. Returns null when consent is not granted or GPS
     // is unavailable — so weather uses the device location only with consent.
     getDeviceLocation?: () => Promise<{ lat: number; lon: number } | null>;
+    // Farm name (from farm creation) — shown as the label when weather is
+    // farm-anchored, instead of the generic "Farm Center".
+    farmName?: string;
 }
 
 export const useWeatherMonitor = ({
-    farmerProfile, crops, setCrops, hasActiveLogContext, activeCropId, activePlotId, activeFarmId, setError, provider, farmGeography, getDeviceLocation
+    farmerProfile, crops, setCrops, hasActiveLogContext, activeCropId, activePlotId, activeFarmId, setError, provider, farmGeography, getDeviceLocation, farmName
 }: UseWeatherMonitorProps) => {
 
     const [weatherData, setWeatherData] = useState<DetailedWeather | undefined>(undefined);
@@ -185,7 +188,7 @@ export const useWeatherMonitor = ({
                         getWeatherForLocation(geo, provider),
                     ]);
                     if (cancelled) return;
-                    renderFetched(stamp, forecast, farmLat, farmLon, 'Farm Center', 'farm-centre', false);
+                    renderFetched(stamp, forecast, farmLat, farmLon, farmName || 'Farm Center', 'farm-centre', false);
                 } catch (err) {
                     if (cancelled) return;
                     console.error('Weather init failed', err);

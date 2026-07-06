@@ -52,7 +52,8 @@ const AppContent: React.FC<AppContentProps> = ({ crops: initialCrops, setCrops }
         handleJoinViaQr,
     } = useFarmContextState();
 
-    const app = useAgriLogApp({ initialCrops, currentFarmId });
+    const currentFarmName = myFarms?.find(f => f.farmId === currentFarmId)?.name;
+    const app = useAgriLogApp({ initialCrops, currentFarmId, currentFarmName });
     useTemplateCatalogSync();
 
     const {

@@ -4,7 +4,7 @@
 */
 
 import React, { useState } from 'react';
-import { Cloud, CloudRain, Sun, Wind, Droplets, X, MapPin, AlertTriangle } from 'lucide-react';
+import { Cloud, CloudRain, Sun, Wind, Droplets, X, MapPin, AlertTriangle, BadgeCheck } from 'lucide-react';
 import { DetailedWeather, DailyForecast } from '../../../types';
 import { formatTemperature, formatPrecipitation, formatHumidity, formatWindSpeed } from '../../../shared/utils/weatherFormatter';
 import { useLanguage } from '../../../i18n/LanguageContext';
@@ -119,6 +119,10 @@ const WeatherWidget: React.FC<WeatherWidgetProps> = ({ data, status, onRetry, on
                         <div className="flex items-center gap-1 text-blue-50 font-medium text-sm pt-1">
                             <MapPin size={14} />
                             {locationName}
+                            {/* Boundary drawn → farm-anchored: verified tick next to the farm name. */}
+                            {boundaryUnset === false && (
+                                <BadgeCheck size={15} className="text-emerald-300" aria-label="Boundary verified" data-testid="weather-verified" />
+                            )}
                         </div>
                     </div>
                     <div className="flex flex-col items-center justify-center">
