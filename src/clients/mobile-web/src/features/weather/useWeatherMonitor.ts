@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { DetailedWeather, WeatherEvent, WeatherReaction, ScheduleShiftEvent, CropProfile, FarmerProfile, LogScope, PlotGeo } from '../../types';
+import React, { useState, useEffect, useCallback } from 'react';
+import { DetailedWeather, WeatherEvent, WeatherEventType, WeatherStamp, WeatherReaction, ScheduleShiftEvent, CropProfile, FarmerProfile, LogScope, PlotGeo } from '../../types';
 import { getDateKey } from '../../core/domain/services/DateKeyService';
 import { WeatherPort } from '../../application/ports/WeatherPort';
 import type { FarmGeographyPort } from '../../application/ports/FarmGeographyPort';
@@ -7,6 +7,16 @@ import { getWeatherForLocation } from '../../application/usecases/AttachWeatherS
 import { idGenerator } from '../../core/domain/services/IdGenerator';
 import { systemClock } from '../../core/domain/services/Clock';
 import { makeFarmId } from '../../domain/farmGeography/types';
+import { isFarmCentreMissing } from '../../infrastructure/weather/WeatherFetchError';
+
+/**
+ * Header weather-widget lifecycle:
+ *  - loading:     resolving coords / fetch in flight
+ *  - ready:       weatherData populated
+ *  - no-location: no farm centre and no profile location (user-actionable)
+ *  - error:       the backend fetch failed (service down / key unset — retryable)
+ */
+export type WeatherStatus = 'loading' | 'ready' | 'no-location' | 'error';
 
 interface UseWeatherMonitorProps {
     farmerProfile: FarmerProfile;
@@ -23,13 +33,15 @@ interface UseWeatherMonitorProps {
 }
 
 export const useWeatherMonitor = ({
-    farmerProfile, crops, setCrops, logScope, hasActiveLogContext, activeCropId, activePlotId, activeFarmId, setError, provider, farmGeography
+    farmerProfile, crops, setCrops, hasActiveLogContext, activeCropId, activePlotId, activeFarmId, setError, provider, farmGeography
 }: UseWeatherMonitorProps) => {
 
     const [weatherData, setWeatherData] = useState<DetailedWeather | undefined>(undefined);
     const [weatherReactions, setWeatherReactions] = useState<WeatherReaction[]>([]);
     const [pendingWeatherEvent, setPendingWeatherEvent] = useState<WeatherEvent | null>(null);
-    const [lastWeatherStamps, setLastWeatherStamps] = useState<Record<string, any>>({});
+    const [lastWeatherStamps, setLastWeatherStamps] = useState<Record<string, WeatherStamp>>({});
+    const [weatherStatus, setWeatherStatus] = useState<WeatherStatus>('loading');
+    const [refetchNonce, setRefetchNonce] = useState(0);
 
     // Init Weather (Header Widget) - Pivot to Plot if selected
     useEffect(() => {
@@ -59,6 +71,7 @@ export const useWeatherMonitor = ({
             }
 
             if (typeof targetLat === 'number' && typeof targetLon === 'number') {
+                setWeatherStatus('loading');
                 try {
                     const geo: PlotGeo = { lat: targetLat, lon: targetLon, source: 'approx' };
 
@@ -128,13 +141,28 @@ export const useWeatherMonitor = ({
                         }
                     }
 
+                    setWeatherStatus('ready');
                 } catch (err) {
                     console.error("Weather init failed", err);
+                    // The backend reports a missing farm centre as a distinct
+                    // signal (400 FarmCentreMissing); treat that as the
+                    // actionable no-location state, everything else as a
+                    // retryable service error.
+                    setWeatherStatus(isFarmCentreMissing(err) ? 'no-location' : 'error');
                 }
+            } else {
+                setWeatherStatus('no-location');
             }
         };
         fetchW();
-    }, [farmerProfile.location, hasActiveLogContext, activePlotId, activeCropId, activeFarmId, crops, provider, farmGeography]); // Expanded deps for safety
+        // lastWeatherStamps is read for change-detection but deliberately excluded:
+        // the effect itself updates it via setLastWeatherStamps, so including it
+        // would re-fire the fetch in a loop.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [farmerProfile.location, hasActiveLogContext, activePlotId, activeCropId, activeFarmId, crops, provider, farmGeography, refetchNonce]); // Expanded deps for safety
+
+    // Re-trigger the fetch effect (used by the widget's "retry" action).
+    const refetchWeather = useCallback(() => setRefetchNonce(n => n + 1), []);
 
     const handleWeatherReaction = (reaction: WeatherReaction) => {
         setWeatherReactions(prev => [reaction, ...prev]);
@@ -173,7 +201,7 @@ export const useWeatherMonitor = ({
         }
     };
 
-    const handleDebugTrigger = (type: any) => {
+    const handleDebugTrigger = (type: WeatherEventType) => {
         if (!activePlotId) {
             setError("Select a plot first to simulate events.");
             return;
@@ -193,6 +221,8 @@ export const useWeatherMonitor = ({
 
     return {
         weatherData,
+        weatherStatus,
+        refetchWeather,
         pendingWeatherEvent,
         setPendingWeatherEvent,
         weatherReactions,
