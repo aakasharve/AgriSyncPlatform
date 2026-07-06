@@ -4,14 +4,19 @@
 */
 
 import React, { useState } from 'react';
-import { Cloud, CloudRain, Sun, Wind, Droplets, ChevronRight, X, CalendarDays, MapPin } from 'lucide-react';
+import { Cloud, CloudRain, Sun, Wind, Droplets, X, MapPin } from 'lucide-react';
 import { DetailedWeather, DailyForecast } from '../../../types';
 import { formatTemperature, formatPrecipitation, formatHumidity, formatWindSpeed } from '../../../shared/utils/weatherFormatter';
+import WeatherFallbackCard from './WeatherFallbackCard';
+import type { WeatherStatus } from '../useWeatherMonitor';
 
 
 interface WeatherWidgetProps {
     data?: DetailedWeather;
     isLoading?: boolean;
+    status?: WeatherStatus;
+    onRetry?: () => void;
+    onAddLocation?: () => void;
 }
 
 const MiniCard: React.FC<{ day: DailyForecast }> = ({ day }) => {
@@ -44,10 +49,18 @@ const MiniCard: React.FC<{ day: DailyForecast }> = ({ day }) => {
     );
 };
 
-const WeatherWidget: React.FC<WeatherWidgetProps> = ({ data, isLoading }) => {
+const WeatherWidget: React.FC<WeatherWidgetProps> = ({ data, isLoading, status, onRetry, onAddLocation }) => {
     const [isOpen, setIsOpen] = useState(false);
     const [activeTab, setActiveTab] = useState<'prev' | 'next'>('next');
 
+    // Cause-aware states first: a missing farm centre is user-actionable, a
+    // failed fetch is retryable. Both replace the old silent gray skeleton.
+    if (status === 'no-location') {
+        return <WeatherFallbackCard variant="no-location" onAction={() => onAddLocation?.()} />;
+    }
+    if (status === 'error') {
+        return <WeatherFallbackCard variant="error" onAction={() => onRetry?.()} />;
+    }
     if (isLoading || !data) {
         return (
             <div className="w-full h-24 bg-stone-200 animate-pulse rounded-3xl mb-6"></div>
