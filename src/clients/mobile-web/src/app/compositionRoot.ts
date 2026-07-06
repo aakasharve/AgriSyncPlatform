@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { CropProfile, InputMode } from '../types';
 
 // Feature Controllers
@@ -10,6 +10,7 @@ import { useLogCommands } from './hooks/useLogCommands';
 // Existing Hooks (Preserved)
 import { useVoiceRecorder } from '../features/voice/useVoiceRecorder';
 import { useWeatherMonitor } from '../features/weather/useWeatherMonitor';
+import { useLocationCapture } from '../features/location/hooks/useLocationCapture';
 import { useLogContext } from './context/LogContext';
 import { BackendAiClient } from '../infrastructure/ai/BackendAiClient';
 import { BackendFarmGeographyClient } from '../infrastructure/farmGeography';
@@ -133,6 +134,15 @@ export const useAgriLogApp = ({ initialCrops, currentFarmId }: AgriLogAppConfig)
     }, []);
 
     // --- 6. WEATHER ---
+    // Consent-gated device GPS for weather when a farm has no drawn centre.
+    // captureLocation() self-gates on the recorded gps_consent (returns null
+    // unless granted), so device weather is DPDP-consent respecting.
+    const { captureLocation } = useLocationCapture();
+    const getDeviceLocation = useCallback(async (): Promise<{ lat: number; lon: number } | null> => {
+        const loc = await captureLocation();
+        return loc ? { lat: loc.latitude, lon: loc.longitude } : null;
+    }, [captureLocation]);
+
     const weather = useWeatherMonitor({
         farmerProfile: appData.farmerProfile,
         crops: appData.crops,
@@ -144,6 +154,7 @@ export const useAgriLogApp = ({ initialCrops, currentFarmId }: AgriLogAppConfig)
         setError: voice.setError,
         provider: weatherProvider,
         farmGeography,
+        getDeviceLocation,
     });
 
     // --- 7. TRUST LAYER ---

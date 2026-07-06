@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { DetailedWeather, WeatherEvent, WeatherEventType, WeatherStamp, WeatherReaction, ScheduleShiftEvent, CropProfile, FarmerProfile, PlotGeo } from '../../types';
+import { DetailedWeather, DailyForecast, WeatherEvent, WeatherEventType, WeatherStamp, WeatherReaction, ScheduleShiftEvent, CropProfile, FarmerProfile, PlotGeo } from '../../types';
 import { getDateKey } from '../../core/domain/services/DateKeyService';
 import { WeatherPort } from '../../application/ports/WeatherPort';
 import type { FarmGeographyPort } from '../../application/ports/FarmGeographyPort';
@@ -18,6 +18,57 @@ import { isFarmCentreMissing } from '../../infrastructure/weather/WeatherFetchEr
  */
 export type WeatherStatus = 'loading' | 'ready' | 'no-location' | 'error';
 
+/** Where the shown weather is anchored. 'device'/'profile' => boundary not drawn. */
+export type WeatherSource = 'farm-centre' | 'profile' | 'device' | null;
+
+interface CoordFallback {
+    lat: number;
+    lon: number;
+    label: string;
+    source: 'profile' | 'device';
+}
+
+/** Build the legacy DetailedWeather UI shape from a stamp + forecast (shared by the farm and coord paths). */
+const buildDisplayData = (
+    stamp: WeatherStamp,
+    forecast: DailyForecast[],
+    lat: number,
+    lon: number,
+    sourceLabel: string,
+): DetailedWeather => ({
+    locationName: sourceLabel,
+    current: {
+        fetchedAt: stamp.timestampLocal,
+        lat, lon,
+        provider: stamp.provider,
+        current: {
+            tempC: stamp.tempC,
+            humidity: stamp.humidity,
+            windKph: stamp.windKph,
+            precipMm: stamp.precipMm,
+            conditionText: stamp.conditionText,
+            iconCode: stamp.iconCode,
+        },
+        forecast: { rainProb: stamp.rainProbNext6h },
+    },
+    forecast: forecast.map(f => ({
+        date: f.date,
+        tempMin: f.tempMin,
+        tempMax: f.tempMax,
+        rainMm: f.rainMm,
+        windSpeed: f.windSpeed,
+        humidity: f.humidity,
+        condition: f.condition,
+    })),
+    history: [],
+    advisory: {
+        title: 'Weather Advisory',
+        content: stamp.rainProbNext6h > 60
+            ? 'Rain expected. Plan indoor activities or drainage checks.'
+            : 'Conditions tailored for groundwork.',
+    },
+});
+
 interface UseWeatherMonitorProps {
     farmerProfile: FarmerProfile;
     crops: CropProfile[];
@@ -29,10 +80,13 @@ interface UseWeatherMonitorProps {
     setError: (msg: string | null) => void;
     provider: WeatherPort;
     farmGeography?: FarmGeographyPort;
+    // Consent-gated device GPS. Returns null when consent is not granted or GPS
+    // is unavailable — so weather uses the device location only with consent.
+    getDeviceLocation?: () => Promise<{ lat: number; lon: number } | null>;
 }
 
 export const useWeatherMonitor = ({
-    farmerProfile, crops, setCrops, hasActiveLogContext, activeCropId, activePlotId, activeFarmId, setError, provider, farmGeography
+    farmerProfile, crops, setCrops, hasActiveLogContext, activeCropId, activePlotId, activeFarmId, setError, provider, farmGeography, getDeviceLocation
 }: UseWeatherMonitorProps) => {
 
     const [weatherData, setWeatherData] = useState<DetailedWeather | undefined>(undefined);
@@ -40,140 +94,139 @@ export const useWeatherMonitor = ({
     const [pendingWeatherEvent, setPendingWeatherEvent] = useState<WeatherEvent | null>(null);
     const [lastWeatherStamps, setLastWeatherStamps] = useState<Record<string, WeatherStamp>>({});
     const [weatherStatus, setWeatherStatus] = useState<WeatherStatus>('loading');
+    const [boundaryUnset, setBoundaryUnset] = useState(false);
+    const [weatherSource, setWeatherSource] = useState<WeatherSource>(null);
     const [refetchNonce, setRefetchNonce] = useState(0);
 
-    // Init Weather (Header Widget) - Pivot to Plot if selected
+    // Init Weather (Header Widget). Resolution order: farm centre (weather
+    // truth) → saved profile location → consent-gated device GPS → no-location.
     useEffect(() => {
         // Stale-response guard: if the effect re-runs (farm switch / retry)
         // before this fetch resolves, the cleanup flips `cancelled` so the
         // losing request cannot overwrite the newer one's state.
         let cancelled = false;
-        const fetchW = async () => {
-            // Weather is anchored to the canonical farm centre. Plot/device
-            // coordinates are fallback context only, not weather truth.
-            let targetLat: number | undefined;
-            let targetLon: number | undefined;
-            let sourceLabel = 'Farm Center';
 
+        // Populate weatherData + status from a fetched stamp/forecast. Isolated
+        // change-detection so a throw there can't demote the already-'ready' status.
+        const renderFetched = (
+            stamp: WeatherStamp,
+            forecast: DailyForecast[],
+            lat: number,
+            lon: number,
+            sourceLabel: string,
+            source: WeatherSource,
+            boundaryMissing: boolean,
+        ) => {
+            if (cancelled) return;
+            setWeatherData(buildDisplayData(stamp, forecast, lat, lon, sourceLabel));
+            setWeatherSource(source);
+            setBoundaryUnset(boundaryMissing);
+            setWeatherStatus('ready');
+            try {
+                const weatherContextId = activePlotId || activeFarmId || 'farm_center';
+                const prev = lastWeatherStamps[weatherContextId];
+                const contextualStamp = { ...stamp, plotId: weatherContextId };
+                const event = provider.detectWeatherChanges?.(contextualStamp, prev);
+                setLastWeatherStamps(prevStamps => ({ ...prevStamps, [weatherContextId]: contextualStamp }));
+                if (event) {
+                    console.log('Weather Event Detected:', event);
+                    setPendingWeatherEvent(event);
+                }
+            } catch (detectErr) {
+                console.error('Weather change-detection failed', detectErr);
+            }
+        };
+
+        // No farm centre: try the saved profile location, then (consent-gated) device GPS.
+        const resolveCoordFallback = async (): Promise<CoordFallback | null> => {
+            const pLat = farmerProfile.location?.lat;
+            const pLon = farmerProfile.location?.lon;
+            if (typeof pLat === 'number' && typeof pLon === 'number' && !(pLat === 0 && pLon === 0)) {
+                return { lat: pLat, lon: pLon, label: 'Farm Location', source: 'profile' };
+            }
+            if (getDeviceLocation) {
+                const dev = await getDeviceLocation();
+                if (dev) return { lat: dev.lat, lon: dev.lon, label: 'Your Location', source: 'device' };
+            }
+            return null;
+        };
+
+        const fetchW = async () => {
+            // 1. Farm-anchored weather (canonical centre) — weather truth.
+            let farmLat: number | undefined;
+            let farmLon: number | undefined;
             if (farmGeography && activeFarmId) {
                 try {
                     const centre = await farmGeography.getFarmCentre(makeFarmId(activeFarmId));
                     if (centre) {
-                        targetLat = centre.lat;
-                        targetLon = centre.lng;
+                        farmLat = centre.lat;
+                        farmLon = centre.lng;
                     }
                 } catch {
-                    /* fallback below */
+                    /* fall through to coord fallback */
                 }
             }
-
-            if (targetLat === undefined || targetLon === undefined) {
-                targetLat = farmerProfile.location?.lat;
-                targetLon = farmerProfile.location?.lon;
-                sourceLabel = 'Farm Location';
-            }
-
             if (cancelled) return;
 
-            if (typeof targetLat === 'number' && typeof targetLon === 'number') {
+            if (typeof farmLat === 'number' && typeof farmLon === 'number') {
                 setWeatherStatus('loading');
                 try {
-                    const geo: PlotGeo = { lat: targetLat, lon: targetLon, source: 'approx' };
-
-                    // Parallel: Fetch Forecast AND Current
+                    const geo: PlotGeo = { lat: farmLat, lon: farmLon, source: 'approx' };
                     const [forecast, stamp] = await Promise.all([
                         provider.getForecast(geo),
-                        getWeatherForLocation(geo, provider)
+                        getWeatherForLocation(geo, provider),
                     ]);
                     if (cancelled) return;
-
-                    // Adapt for UI Widget (Legacy Shape)
-                    const displayData: DetailedWeather = {
-                        locationName: sourceLabel,
-                        current: {
-                            fetchedAt: stamp.timestampLocal,
-                            lat: targetLat, lon: targetLon,
-                            provider: stamp.provider,
-                            current: {
-                                tempC: stamp.tempC,
-                                humidity: stamp.humidity,
-                                windKph: stamp.windKph,
-                                precipMm: stamp.precipMm,
-                                conditionText: stamp.conditionText,
-                                iconCode: stamp.iconCode
-                            },
-                            forecast: { rainProb: stamp.rainProbNext6h }
-                        },
-                        forecast: forecast.map(f => ({
-                            date: f.date,
-                            tempMin: f.tempMin,
-                            tempMax: f.tempMax,
-                            rainMm: f.rainMm,
-                            windSpeed: f.windSpeed,
-                            humidity: f.humidity,
-                            condition: f.condition
-                        })),
-                        history: [], // Not yet implemented
-                        advisory: {
-                            title: "Weather Advisory",
-                            content: stamp.rainProbNext6h > 60
-                                ? "Rain expected. Plan indoor activities or drainage checks."
-                                : "Conditions tailored for groundwork."
-                        }
-                    };
-
-                    setWeatherData(displayData);
-                    // Mark ready as soon as data lands — BEFORE the best-effort
-                    // change-detection below, so a throw there can't demote a
-                    // successful fetch to the error/no-location fallback.
-                    setWeatherStatus('ready');
-
-                    // RUN CHANGE DETECTION — best-effort, isolated in its own
-                    // try so a throw here cannot reach the fetch catch and
-                    // demote the already-'ready' status.
-                    try {
-                        const weatherContextId = activePlotId || activeFarmId || 'farm_center';
-                        if (weatherContextId) {
-                            const prev = lastWeatherStamps[weatherContextId];
-                            // Inject Context (Plot ID)
-                            const contextualStamp = {
-                                ...stamp,
-                                plotId: weatherContextId
-                            };
-
-                            const event = provider.detectWeatherChanges?.(contextualStamp, prev);
-
-                            // Update cache
-                            setLastWeatherStamps(prev => ({ ...prev, [weatherContextId]: contextualStamp }));
-
-                            if (event) {
-                                // Only trigger if we haven't already reacted to this event ID (mock check)
-                                // In real app, check DB for eventId
-                                console.log("Weather Event Detected:", event);
-                                setPendingWeatherEvent(event);
-                            }
-                        }
-                    } catch (detectErr) {
-                        console.error("Weather change-detection failed", detectErr);
-                    }
+                    renderFetched(stamp, forecast, farmLat, farmLon, 'Farm Center', 'farm-centre', false);
                 } catch (err) {
                     if (cancelled) return;
-                    console.error("Weather init failed", err);
-                    // The backend reports a missing farm centre as a distinct
-                    // signal (400 FarmCentreMissing); treat that as the
-                    // actionable no-location state, everything else as a
-                    // retryable service error.
-                    setWeatherStatus(isFarmCentreMissing(err) ? 'no-location' : 'error');
+                    console.error('Weather init failed', err);
+                    // Missing farm centre is a distinct backend signal (400) — but
+                    // rather than dead-ending, fall through to the coord fallback.
+                    if (isFarmCentreMissing(err)) {
+                        await fetchCoordFallback();
+                    } else {
+                        setWeatherStatus('error');
+                    }
                 }
-            } else {
-                setWeatherStatus('no-location');
+                return;
             }
+
+            // 2. No farm centre → boundary not drawn.
+            await fetchCoordFallback();
         };
+
+        const fetchCoordFallback = async () => {
+            const fallback = await resolveCoordFallback();
+            if (cancelled) return;
+
+            if (fallback && provider.getCurrentWeatherByCoords && provider.getForecastByCoords) {
+                setWeatherStatus('loading');
+                try {
+                    const [forecast, stamp] = await Promise.all([
+                        provider.getForecastByCoords(fallback.lat, fallback.lon, 7),
+                        provider.getCurrentWeatherByCoords(fallback.lat, fallback.lon),
+                    ]);
+                    if (cancelled) return;
+                    renderFetched(stamp, forecast, fallback.lat, fallback.lon, fallback.label, fallback.source, true);
+                } catch (err) {
+                    if (cancelled) return;
+                    console.error('Device weather fetch failed', err);
+                    setBoundaryUnset(true);
+                    setWeatherStatus('error');
+                }
+                return;
+            }
+
+            setBoundaryUnset(true);
+            setWeatherStatus('no-location');
+        };
+
         fetchW();
         return () => { cancelled = true; };
         // lastWeatherStamps is read for change-detection but deliberately excluded:
         // the effect itself updates it via setLastWeatherStamps, so including it
-        // would re-fire the fetch in a loop.
+        // would re-fire the fetch in a loop. getDeviceLocation is a stable callback.
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [farmerProfile.location, hasActiveLogContext, activePlotId, activeCropId, activeFarmId, crops, provider, farmGeography, refetchNonce]); // Expanded deps for safety
 
@@ -238,6 +291,8 @@ export const useWeatherMonitor = ({
     return {
         weatherData,
         weatherStatus,
+        boundaryUnset,
+        weatherSource,
         refetchWeather,
         pendingWeatherEvent,
         setPendingWeatherEvent,
