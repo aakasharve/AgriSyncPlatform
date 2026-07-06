@@ -128,6 +128,44 @@ public static class FarmEndpoints
         })
         .WithName("GetFarmWeatherForecast");
 
+        // Coordinate-based weather (no farm anchor) — used by the client when a
+        // farm has no drawn centre, to show weather from the device's GPS.
+        // Auth-required (group.RequireAuthorization); NO farm read / membership.
+        group.MapGet("/weather/current", async (
+            double lat,
+            double lon,
+            ClaimsPrincipal user,
+            GetCoordinateWeatherHandler handler,
+            CancellationToken ct) =>
+        {
+            if (!EndpointActorContext.TryGetUserId(user, out _))
+            {
+                return Results.Unauthorized();
+            }
+
+            var result = await handler.HandleAsync(new GetCoordinateWeatherCommand(lat, lon), ct);
+            return result.IsSuccess ? Results.Ok(result.Value) : ToErrorResult(result.Error);
+        })
+        .WithName("GetCoordinateWeatherCurrent");
+
+        group.MapGet("/weather/forecast", async (
+            double lat,
+            double lon,
+            int? days,
+            ClaimsPrincipal user,
+            GetCoordinateWeatherHandler handler,
+            CancellationToken ct) =>
+        {
+            if (!EndpointActorContext.TryGetUserId(user, out _))
+            {
+                return Results.Unauthorized();
+            }
+
+            var result = await handler.HandleAsync(new GetCoordinateForecastCommand(lat, lon, days ?? 5), ct);
+            return result.IsSuccess ? Results.Ok(result.Value) : ToErrorResult(result.Error);
+        })
+        .WithName("GetCoordinateWeatherForecast");
+
         group.MapPut("/farms/{farmId:guid}/boundary", async (
             Guid farmId,
             UpdateFarmBoundaryRequest request,
