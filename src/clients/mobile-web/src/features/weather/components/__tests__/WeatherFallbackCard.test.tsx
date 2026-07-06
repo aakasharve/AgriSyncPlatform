@@ -5,19 +5,12 @@ import { render, screen, cleanup } from '@testing-library/react';
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import WeatherFallbackCard from '../WeatherFallbackCard';
 
-const STRINGS: Record<string, string> = {
-    'weatherWidget.addLocationTitle': 'Add your farm location to see weather',
-    'weatherWidget.addLocationCta': 'Set farm location',
-    'weatherWidget.unavailableTitle': 'Weather unavailable right now',
-    'weatherWidget.unavailableBody': 'We could not load the latest weather.',
-    'weatherWidget.retryCta': 'Retry',
-};
-
+// The component selects its own strings by `language`; the mock only needs to
+// supply that (English here) so assertions read the en copy.
 vi.mock('../../../../i18n/LanguageContext', () => ({
     useLanguage: () => ({
         language: 'en',
         setLanguage: vi.fn(),
-        t: (k: string): string => STRINGS[k] ?? k,
     }),
 }));
 

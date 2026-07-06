@@ -51,6 +51,18 @@ describe('useWeatherMonitor status', () => {
         await waitFor(() => expect(result.current.weatherStatus).toBe('error'));
     });
 
+    it('stays "ready" when change-detection throws after data loads', async () => {
+        const throwing = {
+            ...okProvider(),
+            detectWeatherChanges: vi.fn(() => { throw new Error('detect boom'); }),
+        } as unknown as Props['provider'];
+        const { result } = renderHook(() => useWeatherMonitor(props({
+            farmerProfile: baseProfile({ lat: 20.1, lon: 73.7 }), provider: throwing,
+        })));
+        await waitFor(() => expect(result.current.weatherStatus).toBe('ready'));
+        expect(result.current.weatherData).toBeDefined();
+    });
+
     it('exposes a refetchWeather function', () => {
         const { result } = renderHook(() => useWeatherMonitor(props({})));
         expect(typeof result.current.refetchWeather).toBe('function');

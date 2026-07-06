@@ -32,3 +32,14 @@ describe('BackendWeatherClient error surfacing', () => {
         expect(err.status).toBe(503);
     });
 });
+
+describe('isFarmCentreMissing', () => {
+    it('keys off the FarmCentreMissing code, not the 400 status', () => {
+        expect(isFarmCentreMissing(new WeatherFetchError(400, 'ShramSafal.FarmCentreMissing'))).toBe(true);
+        // A non-centre 400 (the backend maps many errors to 400) must NOT be
+        // treated as a missing farm centre.
+        expect(isFarmCentreMissing(new WeatherFetchError(400, 'ShramSafal.InvalidCommand'))).toBe(false);
+        expect(isFarmCentreMissing(new WeatherFetchError(503, 'ShramSafal.WeatherProviderNotConfigured'))).toBe(false);
+        expect(isFarmCentreMissing(new Error('network down'))).toBe(false);
+    });
+});

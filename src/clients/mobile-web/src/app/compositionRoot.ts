@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { CropProfile, InputMode } from '../types';
 
 // Feature Controllers
@@ -137,7 +137,6 @@ export const useAgriLogApp = ({ initialCrops, currentFarmId }: AgriLogAppConfig)
         farmerProfile: appData.farmerProfile,
         crops: appData.crops,
         setCrops: appData.setCrops,
-        logScope,
         hasActiveLogContext,
         activeCropId: activeCropId ?? null,
         activePlotId: activePlotId ?? null,
@@ -165,6 +164,9 @@ export const useAgriLogApp = ({ initialCrops, currentFarmId }: AgriLogAppConfig)
             return () => window.clearTimeout(resetModeHandle);
         }
         return undefined;
+        // Intentionally keyed on hasActiveLogContext only; `voice` is a fresh
+        // object each render and would re-fire this reset every render.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [hasActiveLogContext]);
 
     return {

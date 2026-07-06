@@ -13,7 +13,6 @@ import type { WeatherStatus } from '../useWeatherMonitor';
 
 interface WeatherWidgetProps {
     data?: DetailedWeather;
-    isLoading?: boolean;
     status?: WeatherStatus;
     onRetry?: () => void;
     onAddLocation?: () => void;
@@ -49,7 +48,7 @@ const MiniCard: React.FC<{ day: DailyForecast }> = ({ day }) => {
     );
 };
 
-const WeatherWidget: React.FC<WeatherWidgetProps> = ({ data, isLoading, status, onRetry, onAddLocation }) => {
+const WeatherWidget: React.FC<WeatherWidgetProps> = ({ data, status, onRetry, onAddLocation }) => {
     const [isOpen, setIsOpen] = useState(false);
     const [activeTab, setActiveTab] = useState<'prev' | 'next'>('next');
 
@@ -61,7 +60,7 @@ const WeatherWidget: React.FC<WeatherWidgetProps> = ({ data, isLoading, status, 
     if (status === 'error') {
         return <WeatherFallbackCard variant="error" onAction={() => onRetry?.()} />;
     }
-    if (isLoading || !data) {
+    if (!data) {
         return (
             <div className="w-full h-24 bg-stone-200 animate-pulse rounded-3xl mb-6"></div>
         );

@@ -35,6 +35,9 @@ const STRINGS = {
 const WeatherFallbackCard: React.FC<WeatherFallbackCardProps> = ({ variant, onAction }) => {
     const { language } = useLanguage();
     const s = STRINGS[language] ?? STRINGS.en;
+    // Font rules: Marathi body text → Noto Sans Devanagari; English → DM Sans.
+    // Set explicitly (like DwcReminderChip) rather than relying on inheritance.
+    const fontFamily = language === 'mr' ? "'Noto Sans Devanagari', sans-serif" : "'DM Sans', sans-serif";
     const isNoLocation = variant === 'no-location';
 
     const title = isNoLocation ? s.addLocationTitle : s.unavailableTitle;
@@ -45,6 +48,7 @@ const WeatherFallbackCard: React.FC<WeatherFallbackCardProps> = ({ variant, onAc
         <div
             data-testid="weather-fallback"
             data-variant={variant}
+            style={{ fontFamily }}
             className="w-full rounded-3xl mb-6 p-5 bg-stone-50 border border-stone-200 flex items-center justify-between gap-3"
         >
             <div className="flex items-center gap-3 min-w-0">

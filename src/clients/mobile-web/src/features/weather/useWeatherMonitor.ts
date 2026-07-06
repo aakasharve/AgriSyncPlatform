@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { DetailedWeather, WeatherEvent, WeatherEventType, WeatherStamp, WeatherReaction, ScheduleShiftEvent, CropProfile, FarmerProfile, LogScope, PlotGeo } from '../../types';
+import { DetailedWeather, WeatherEvent, WeatherEventType, WeatherStamp, WeatherReaction, ScheduleShiftEvent, CropProfile, FarmerProfile, PlotGeo } from '../../types';
 import { getDateKey } from '../../core/domain/services/DateKeyService';
 import { WeatherPort } from '../../application/ports/WeatherPort';
 import type { FarmGeographyPort } from '../../application/ports/FarmGeographyPort';
@@ -22,7 +22,6 @@ interface UseWeatherMonitorProps {
     farmerProfile: FarmerProfile;
     crops: CropProfile[];
     setCrops: React.Dispatch<React.SetStateAction<CropProfile[]>>;
-    logScope: LogScope;
     hasActiveLogContext: boolean;
     activeCropId: string | null;
     activePlotId: string | null;
@@ -45,6 +44,10 @@ export const useWeatherMonitor = ({
 
     // Init Weather (Header Widget) - Pivot to Plot if selected
     useEffect(() => {
+        // Stale-response guard: if the effect re-runs (farm switch / retry)
+        // before this fetch resolves, the cleanup flips `cancelled` so the
+        // losing request cannot overwrite the newer one's state.
+        let cancelled = false;
         const fetchW = async () => {
             // Weather is anchored to the canonical farm centre. Plot/device
             // coordinates are fallback context only, not weather truth.
@@ -70,6 +73,8 @@ export const useWeatherMonitor = ({
                 sourceLabel = 'Farm Location';
             }
 
+            if (cancelled) return;
+
             if (typeof targetLat === 'number' && typeof targetLon === 'number') {
                 setWeatherStatus('loading');
                 try {
@@ -80,6 +85,7 @@ export const useWeatherMonitor = ({
                         provider.getForecast(geo),
                         getWeatherForLocation(geo, provider)
                     ]);
+                    if (cancelled) return;
 
                     // Adapt for UI Widget (Legacy Shape)
                     const displayData: DetailedWeather = {
@@ -117,32 +123,41 @@ export const useWeatherMonitor = ({
                     };
 
                     setWeatherData(displayData);
-
-                    // RUN CHANGE DETECTION
-                    const weatherContextId = activePlotId || activeFarmId || 'farm_center';
-                    if (weatherContextId) {
-                        const prev = lastWeatherStamps[weatherContextId];
-                        // Inject Context (Plot ID)
-                        const contextualStamp = {
-                            ...stamp,
-                            plotId: weatherContextId
-                        };
-
-                        const event = provider.detectWeatherChanges?.(contextualStamp, prev);
-
-                        // Update cache
-                        setLastWeatherStamps(prev => ({ ...prev, [weatherContextId]: contextualStamp }));
-
-                        if (event) {
-                            // Only trigger if we haven't already reacted to this event ID (mock check)
-                            // In real app, check DB for eventId
-                            console.log("Weather Event Detected:", event);
-                            setPendingWeatherEvent(event);
-                        }
-                    }
-
+                    // Mark ready as soon as data lands — BEFORE the best-effort
+                    // change-detection below, so a throw there can't demote a
+                    // successful fetch to the error/no-location fallback.
                     setWeatherStatus('ready');
+
+                    // RUN CHANGE DETECTION — best-effort, isolated in its own
+                    // try so a throw here cannot reach the fetch catch and
+                    // demote the already-'ready' status.
+                    try {
+                        const weatherContextId = activePlotId || activeFarmId || 'farm_center';
+                        if (weatherContextId) {
+                            const prev = lastWeatherStamps[weatherContextId];
+                            // Inject Context (Plot ID)
+                            const contextualStamp = {
+                                ...stamp,
+                                plotId: weatherContextId
+                            };
+
+                            const event = provider.detectWeatherChanges?.(contextualStamp, prev);
+
+                            // Update cache
+                            setLastWeatherStamps(prev => ({ ...prev, [weatherContextId]: contextualStamp }));
+
+                            if (event) {
+                                // Only trigger if we haven't already reacted to this event ID (mock check)
+                                // In real app, check DB for eventId
+                                console.log("Weather Event Detected:", event);
+                                setPendingWeatherEvent(event);
+                            }
+                        }
+                    } catch (detectErr) {
+                        console.error("Weather change-detection failed", detectErr);
+                    }
                 } catch (err) {
+                    if (cancelled) return;
                     console.error("Weather init failed", err);
                     // The backend reports a missing farm centre as a distinct
                     // signal (400 FarmCentreMissing); treat that as the
@@ -155,6 +170,7 @@ export const useWeatherMonitor = ({
             }
         };
         fetchW();
+        return () => { cancelled = true; };
         // lastWeatherStamps is read for change-detection but deliberately excluded:
         // the effect itself updates it via setLastWeatherStamps, so including it
         // would re-fire the fetch in a loop.

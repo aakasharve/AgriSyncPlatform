@@ -129,7 +129,7 @@ export const renderLogView = (ctx: AppRouterContext): React.ReactNode => {
                                 data={weatherData}
                                 status={weatherStatus}
                                 onRetry={refetchWeather}
-                                onAddLocation={() => setCurrentRoute('farm-boundary')}
+                                onAddLocation={() => setCurrentRoute('profile')}
                             />
 
                             <div className="flex items-center justify-between px-1">
