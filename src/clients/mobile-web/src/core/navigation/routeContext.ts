@@ -106,6 +106,8 @@ export interface AppRouterContext {
 
     // weather
     weatherData: WeatherState['weatherData'];
+    weatherStatus: WeatherState['weatherStatus'];
+    refetchWeather: WeatherState['refetchWeather'];
 
     // commands / trust
     handleManualSubmit: CommandsState['handleManualSubmit'];
