@@ -4,18 +4,28 @@
 */
 
 import React, { useState } from 'react';
-import { Cloud, CloudRain, Sun, Wind, Droplets, X, MapPin } from 'lucide-react';
+import { Cloud, CloudRain, Sun, Wind, Droplets, X, MapPin, AlertTriangle } from 'lucide-react';
 import { DetailedWeather, DailyForecast } from '../../../types';
 import { formatTemperature, formatPrecipitation, formatHumidity, formatWindSpeed } from '../../../shared/utils/weatherFormatter';
+import { useLanguage } from '../../../i18n/LanguageContext';
 import WeatherFallbackCard from './WeatherFallbackCard';
 import type { WeatherStatus } from '../useWeatherMonitor';
 
+// Feature-local strings (like WeatherFallbackCard) — not the translations.ts cap.
+const CAUTION_STRINGS = {
+    en: { text: 'Boundary not set — set it for accurate weather', cta: 'Set' },
+    mr: { text: 'सीमा आखलेली नाही — अचूक हवामानासाठी आखा', cta: 'आखा' },
+} as const;
 
 interface WeatherWidgetProps {
     data?: DetailedWeather;
     status?: WeatherStatus;
     onRetry?: () => void;
     onAddLocation?: () => void;
+    // Weather is showing from device/profile location, not the farm centre —
+    // render a red caution that taps through to draw the boundary.
+    boundaryUnset?: boolean;
+    onOpenBoundary?: () => void;
 }
 
 const MiniCard: React.FC<{ day: DailyForecast }> = ({ day }) => {
@@ -48,9 +58,12 @@ const MiniCard: React.FC<{ day: DailyForecast }> = ({ day }) => {
     );
 };
 
-const WeatherWidget: React.FC<WeatherWidgetProps> = ({ data, status, onRetry, onAddLocation }) => {
+const WeatherWidget: React.FC<WeatherWidgetProps> = ({ data, status, onRetry, onAddLocation, boundaryUnset, onOpenBoundary }) => {
     const [isOpen, setIsOpen] = useState(false);
     const [activeTab, setActiveTab] = useState<'prev' | 'next'>('next');
+    const { language } = useLanguage();
+    const caution = CAUTION_STRINGS[language] ?? CAUTION_STRINGS.en;
+    const cautionFont = language === 'mr' ? "'Noto Sans Devanagari', sans-serif" : "'DM Sans', sans-serif";
 
     // Cause-aware states first: a missing farm centre is user-actionable, a
     // failed fetch is retryable. Both replace the old silent gray skeleton.
@@ -108,6 +121,25 @@ const WeatherWidget: React.FC<WeatherWidgetProps> = ({ data, status, onRetry, on
                         <p className="text-xs font-medium mt-1">{current.current.conditionText}</p>
                     </div>
                 </div>
+
+                {/* Red caution — weather is from device/profile, not the farm centre.
+                    role=button (not <button>) to avoid nesting inside the card button;
+                    stopPropagation so the tap opens the boundary drawer, not the modal. */}
+                {boundaryUnset && (
+                    <div
+                        role="button"
+                        tabIndex={0}
+                        data-testid="weather-boundary-caution"
+                        style={{ fontFamily: cautionFont }}
+                        onClick={(e) => { e.stopPropagation(); onOpenBoundary?.(); }}
+                        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.stopPropagation(); onOpenBoundary?.(); } }}
+                        className="relative z-10 mt-3 flex items-center gap-2 rounded-2xl bg-red-500/95 px-3 py-2 text-left cursor-pointer"
+                    >
+                        <AlertTriangle size={16} className="shrink-0 text-white" />
+                        <span className="min-w-0 flex-1 text-[11px] font-bold leading-snug text-white">{caution.text}</span>
+                        <span className="shrink-0 rounded-full bg-white px-2.5 py-1 text-[11px] font-extrabold text-red-600">{caution.cta} ›</span>
+                    </div>
+                )}
             </button>
 
             {/* EXPANDED MODAL (Overlay) */}

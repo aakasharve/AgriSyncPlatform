@@ -98,7 +98,7 @@ export const renderLogView = (ctx: AppRouterContext): React.ReactNode => {
 
     const {
         status, mode, recordingSegment,
-        weatherData, weatherStatus, refetchWeather, setCurrentRoute,
+        weatherData, weatherStatus, boundaryUnset, refetchWeather, setCurrentRoute,
         ownerDisplayName, todayDayState, yesterdayDayState,
         showCloseDaySummary, setShowCloseDaySummary,
         showCloseYesterdaySummary, setShowCloseYesterdaySummary,
@@ -128,8 +128,10 @@ export const renderLogView = (ctx: AppRouterContext): React.ReactNode => {
                             <WeatherWidget
                                 data={weatherData}
                                 status={weatherStatus}
+                                boundaryUnset={boundaryUnset}
                                 onRetry={refetchWeather}
-                                onAddLocation={() => setCurrentRoute('profile')}
+                                onAddLocation={() => { window.sessionStorage.setItem('open_farm_boundary', '1'); setCurrentRoute('profile'); }}
+                                onOpenBoundary={() => { window.sessionStorage.setItem('open_farm_boundary', '1'); setCurrentRoute('profile'); }}
                             />
 
                             <div className="flex items-center justify-between px-1">

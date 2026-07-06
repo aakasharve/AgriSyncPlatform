@@ -16,6 +16,18 @@ vi.mock('../../../../i18n/LanguageContext', () => ({
 
 afterEach(cleanup);
 
+const sampleData = {
+    locationName: 'Your Location',
+    current: {
+        fetchedAt: '', lat: 20, lon: 73, provider: 'tomorrow.io',
+        current: { tempC: 28, humidity: 50, windKph: 5, precipMm: 0, conditionText: 'Partly Cloudy', iconCode: '1000' },
+        forecast: { rainProb: 0 },
+    },
+    forecast: [],
+    history: [],
+    advisory: { title: 'x', content: 'y' },
+} as unknown as React.ComponentProps<typeof WeatherWidget>['data'];
+
 describe('WeatherWidget states', () => {
     it('renders the add-location fallback and fires onAddLocation', () => {
         const onAddLocation = vi.fn();
@@ -38,5 +50,21 @@ describe('WeatherWidget states', () => {
         const { container } = render(<WeatherWidget status="loading" />);
         expect(container.querySelector('.animate-pulse')).not.toBeNull();
         expect(screen.queryByTestId('weather-fallback')).toBeNull();
+    });
+
+    it('shows the red caution when boundaryUnset and fires onOpenBoundary (not the modal)', () => {
+        const onOpenBoundary = vi.fn();
+        render(<WeatherWidget status="ready" data={sampleData} boundaryUnset onOpenBoundary={onOpenBoundary} />);
+        const caution = screen.getByTestId('weather-boundary-caution');
+        expect(caution).toBeInTheDocument();
+        caution.click();
+        expect(onOpenBoundary).toHaveBeenCalledTimes(1);
+        // stopPropagation means the weather modal did NOT open
+        expect(screen.queryByText('Previous 5 days')).toBeNull();
+    });
+
+    it('shows no caution when the boundary is set', () => {
+        render(<WeatherWidget status="ready" data={sampleData} boundaryUnset={false} onOpenBoundary={vi.fn()} />);
+        expect(screen.queryByTestId('weather-boundary-caution')).toBeNull();
     });
 });
