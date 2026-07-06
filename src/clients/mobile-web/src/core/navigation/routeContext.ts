@@ -108,7 +108,6 @@ export interface AppRouterContext {
     weatherData: WeatherState['weatherData'];
     weatherStatus: WeatherState['weatherStatus'];
     boundaryUnset: WeatherState['boundaryUnset'];
-    weatherSource: WeatherState['weatherSource'];
     refetchWeather: WeatherState['refetchWeather'];
 
     // commands / trust

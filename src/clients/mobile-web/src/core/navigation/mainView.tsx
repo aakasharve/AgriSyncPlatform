@@ -118,6 +118,9 @@ export const renderLogView = (ctx: AppRouterContext): React.ReactNode => {
         lastSavedLogSummary, lastSavedLogIds, mockHistory, handleReset
     } = ctx;
 
+    // Single boundary handoff: flag it + route to Profile, where the drawer auto-opens.
+    const openBoundary = () => { window.sessionStorage.setItem('open_farm_boundary', '1'); setCurrentRoute('profile'); };
+
     return (
         <>
             {/* IDLE / RECORDING STATE */}
@@ -130,8 +133,8 @@ export const renderLogView = (ctx: AppRouterContext): React.ReactNode => {
                                 status={weatherStatus}
                                 boundaryUnset={boundaryUnset}
                                 onRetry={refetchWeather}
-                                onAddLocation={() => { window.sessionStorage.setItem('open_farm_boundary', '1'); setCurrentRoute('profile'); }}
-                                onOpenBoundary={() => { window.sessionStorage.setItem('open_farm_boundary', '1'); setCurrentRoute('profile'); }}
+                                onAddLocation={openBoundary}
+                                onOpenBoundary={openBoundary}
                             />
 
                             <div className="flex items-center justify-between px-1">

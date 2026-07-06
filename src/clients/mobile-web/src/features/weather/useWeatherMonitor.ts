@@ -95,7 +95,6 @@ export const useWeatherMonitor = ({
     const [lastWeatherStamps, setLastWeatherStamps] = useState<Record<string, WeatherStamp>>({});
     const [weatherStatus, setWeatherStatus] = useState<WeatherStatus>('loading');
     const [boundaryUnset, setBoundaryUnset] = useState(false);
-    const [weatherSource, setWeatherSource] = useState<WeatherSource>(null);
     const [refetchNonce, setRefetchNonce] = useState(0);
 
     // Init Weather (Header Widget). Resolution order: farm centre (weather
@@ -119,9 +118,13 @@ export const useWeatherMonitor = ({
         ) => {
             if (cancelled) return;
             setWeatherData(buildDisplayData(stamp, forecast, lat, lon, sourceLabel));
-            setWeatherSource(source);
             setBoundaryUnset(boundaryMissing);
             setWeatherStatus('ready');
+            // Change-detection is meaningful only for the farm's own weather
+            // (farm centre). A transient device/profile-location stamp must NOT be
+            // diffed against the farm-id-keyed cache — that produces spurious
+            // cross-location weather-change events.
+            if (source !== 'farm-centre') return;
             try {
                 const weatherContextId = activePlotId || activeFarmId || 'farm_center';
                 const prev = lastWeatherStamps[weatherContextId];
@@ -146,7 +149,10 @@ export const useWeatherMonitor = ({
             }
             if (getDeviceLocation) {
                 const dev = await getDeviceLocation();
-                if (dev) return { lat: dev.lat, lon: dev.lon, label: 'Your Location', source: 'device' };
+                // Reject the null-island sentinel (0,0), same as the profile path.
+                if (dev && !(dev.lat === 0 && dev.lon === 0)) {
+                    return { lat: dev.lat, lon: dev.lon, label: 'Your Location', source: 'device' };
+                }
             }
             return null;
         };
@@ -168,7 +174,9 @@ export const useWeatherMonitor = ({
             }
             if (cancelled) return;
 
-            if (typeof farmLat === 'number' && typeof farmLon === 'number') {
+            // Treat a (0,0) centre as unset (defaulted-but-not-null) so it falls
+            // through to the coord fallback instead of showing Gulf-of-Guinea weather.
+            if (typeof farmLat === 'number' && typeof farmLon === 'number' && !(farmLat === 0 && farmLon === 0)) {
                 setWeatherStatus('loading');
                 try {
                     const geo: PlotGeo = { lat: farmLat, lon: farmLon, source: 'approx' };
@@ -224,11 +232,12 @@ export const useWeatherMonitor = ({
 
         fetchW();
         return () => { cancelled = true; };
-        // lastWeatherStamps is read for change-detection but deliberately excluded:
-        // the effect itself updates it via setLastWeatherStamps, so including it
-        // would re-fire the fetch in a loop. getDeviceLocation is a stable callback.
+        // getDeviceLocation IS a dep (its identity tracks gps_consent, so granting
+        // consent re-runs the fetch → device weather appears). lastWeatherStamps is
+        // read for change-detection but deliberately excluded: the effect updates it
+        // via setLastWeatherStamps, so including it would re-fire the fetch in a loop.
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [farmerProfile.location, hasActiveLogContext, activePlotId, activeCropId, activeFarmId, crops, provider, farmGeography, refetchNonce]); // Expanded deps for safety
+    }, [farmerProfile.location, hasActiveLogContext, activePlotId, activeCropId, activeFarmId, crops, provider, farmGeography, refetchNonce, getDeviceLocation]);
 
     // Re-trigger the fetch effect (used by the widget's "retry" action).
     const refetchWeather = useCallback(() => setRefetchNonce(n => n + 1), []);
@@ -292,7 +301,6 @@ export const useWeatherMonitor = ({
         weatherData,
         weatherStatus,
         boundaryUnset,
-        weatherSource,
         refetchWeather,
         pendingWeatherEvent,
         setPendingWeatherEvent,

@@ -96,10 +96,15 @@ const WeatherWidget: React.FC<WeatherWidgetProps> = ({ data, status, onRetry, on
 
     return (
         <>
-            {/* COLLAPSED WIDGET (Main View) */}
-            <button
+            {/* COLLAPSED WIDGET (Main View). role=button div (not <button>) so the
+                caution's own interactive control isn't nested inside a <button>. */}
+            <div
+                role="button"
+                tabIndex={0}
+                aria-label="Weather details"
                 onClick={() => setIsOpen(true)}
-                className="w-full bg-gradient-to-br from-blue-500 to-blue-400 rounded-3xl p-5 text-white shadow-lg shadow-blue-200 mb-6 relative overflow-hidden group transition-all active:scale-[0.99]"
+                onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setIsOpen(true); } }}
+                className="w-full text-left bg-gradient-to-br from-blue-500 to-blue-400 rounded-3xl p-5 text-white shadow-lg shadow-blue-200 mb-6 relative overflow-hidden group transition-all active:scale-[0.99] cursor-pointer"
             >
                 {/* Decorative Circle */}
                 <div className="absolute -top-10 -right-10 w-40 h-40 bg-white/10 rounded-full blur-2xl"></div>
@@ -123,16 +128,17 @@ const WeatherWidget: React.FC<WeatherWidgetProps> = ({ data, status, onRetry, on
                 </div>
 
                 {/* Red caution — weather is from device/profile, not the farm centre.
-                    role=button (not <button>) to avoid nesting inside the card button;
-                    stopPropagation so the tap opens the boundary drawer, not the modal. */}
+                    Own role=button (sibling control inside the card div); stop + prevent
+                    default so activating it opens the drawer, not the weather modal. */}
                 {boundaryUnset && (
                     <div
                         role="button"
                         tabIndex={0}
+                        aria-label={caution.text}
                         data-testid="weather-boundary-caution"
                         style={{ fontFamily: cautionFont }}
                         onClick={(e) => { e.stopPropagation(); onOpenBoundary?.(); }}
-                        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.stopPropagation(); onOpenBoundary?.(); } }}
+                        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); onOpenBoundary?.(); } }}
                         className="relative z-10 mt-3 flex items-center gap-2 rounded-2xl bg-red-500/95 px-3 py-2 text-left cursor-pointer"
                     >
                         <AlertTriangle size={16} className="shrink-0 text-white" />
@@ -140,7 +146,7 @@ const WeatherWidget: React.FC<WeatherWidgetProps> = ({ data, status, onRetry, on
                         <span className="shrink-0 rounded-full bg-white px-2.5 py-1 text-[11px] font-extrabold text-red-600">{caution.cta} ›</span>
                     </div>
                 )}
-            </button>
+            </div>
 
             {/* EXPANDED MODAL (Overlay) */}
             {isOpen && (

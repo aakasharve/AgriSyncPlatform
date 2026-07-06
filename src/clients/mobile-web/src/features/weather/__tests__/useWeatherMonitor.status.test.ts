@@ -46,7 +46,6 @@ describe('useWeatherMonitor status', () => {
         })));
         await waitFor(() => expect(result.current.weatherStatus).toBe('ready'));
         expect(result.current.boundaryUnset).toBe(false);
-        expect(result.current.weatherSource).toBe('farm-centre');
         expect(result.current.weatherData).toBeDefined();
     });
 
@@ -56,7 +55,6 @@ describe('useWeatherMonitor status', () => {
         })));
         await waitFor(() => expect(result.current.weatherStatus).toBe('ready'));
         expect(result.current.boundaryUnset).toBe(true);
-        expect(result.current.weatherSource).toBe('profile');
     });
 
     it('no centre + no profile + consented device GPS → device weather with boundaryUnset', async () => {
@@ -64,7 +62,6 @@ describe('useWeatherMonitor status', () => {
         const { result } = renderHook(() => useWeatherMonitor(props({ getDeviceLocation })));
         await waitFor(() => expect(result.current.weatherStatus).toBe('ready'));
         expect(result.current.boundaryUnset).toBe(true);
-        expect(result.current.weatherSource).toBe('device');
         expect(getDeviceLocation).toHaveBeenCalled();
     });
 
