@@ -4,7 +4,7 @@
 */
 
 import React, { useState } from 'react';
-import { Cloud, CloudRain, Sun, Wind, Droplets, X, MapPin, AlertTriangle, BadgeCheck } from 'lucide-react';
+import { Cloud, CloudRain, Sun, Wind, Droplets, X, MapPin, AlertTriangle, Check } from 'lucide-react';
 import { DetailedWeather, DailyForecast } from '../../../types';
 import { formatTemperature, formatPrecipitation, formatHumidity, formatWindSpeed } from '../../../shared/utils/weatherFormatter';
 import { useLanguage } from '../../../i18n/LanguageContext';
@@ -119,15 +119,15 @@ const WeatherWidget: React.FC<WeatherWidgetProps> = ({ data, status, onRetry, on
                         <div className="flex items-center gap-1 text-blue-50 font-medium text-sm pt-1">
                             <MapPin size={14} />
                             {locationName}
-                            {/* Boundary drawn → farm-anchored: prominent green "Verified" badge. */}
+                            {/* Boundary drawn → farm-anchored: symbol-only verified mark
+                                (bright filled green check circle, no text). */}
                             {boundaryUnset === false && (
                                 <span
                                     data-testid="weather-verified"
                                     aria-label="Boundary verified"
-                                    className="ml-1.5 inline-flex items-center gap-1 rounded-full bg-emerald-400 px-2 py-0.5 text-[10px] font-extrabold uppercase tracking-wide text-white shadow-md ring-1 ring-white/60"
+                                    className="ml-1.5 inline-flex h-5 w-5 items-center justify-center rounded-full bg-emerald-400 shadow-md ring-2 ring-white/70"
                                 >
-                                    <BadgeCheck size={12} className="text-white" strokeWidth={2.5} />
-                                    Verified
+                                    <Check size={13} className="text-white" strokeWidth={4} />
                                 </span>
                             )}
                         </div>
