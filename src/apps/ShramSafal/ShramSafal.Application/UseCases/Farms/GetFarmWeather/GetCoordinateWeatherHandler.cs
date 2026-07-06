@@ -27,8 +27,16 @@ public sealed class GetCoordinateWeatherHandler(IWeatherProvider weatherProvider
             return Result.Failure<WeatherSnapshotDto>(ShramSafalErrors.WeatherProviderNotConfigured);
         }
 
-        var snapshot = await weatherProvider.GetCurrentAsync(command.Latitude, command.Longitude, ct);
-        return Result.Success(snapshot);
+        try
+        {
+            var snapshot = await weatherProvider.GetCurrentAsync(command.Latitude, command.Longitude, ct);
+            return Result.Success(snapshot);
+        }
+        catch (Exception ex) when (ex is HttpRequestException or InvalidOperationException or TaskCanceledException)
+        {
+            // Upstream provider failure (quota/timeout/bad payload) → 503, not a 500.
+            return Result.Failure<WeatherSnapshotDto>(ShramSafalErrors.WeatherProviderUnavailable);
+        }
     }
 
     public async Task<Result<IReadOnlyList<DailyForecastDto>>> HandleAsync(
@@ -46,8 +54,15 @@ public sealed class GetCoordinateWeatherHandler(IWeatherProvider weatherProvider
         }
 
         var days = command.Days <= 0 ? 5 : Math.Min(command.Days, 7);
-        var forecast = await weatherProvider.GetForecastAsync(command.Latitude, command.Longitude, days, ct);
-        return Result.Success(forecast);
+        try
+        {
+            var forecast = await weatherProvider.GetForecastAsync(command.Latitude, command.Longitude, days, ct);
+            return Result.Success(forecast);
+        }
+        catch (Exception ex) when (ex is HttpRequestException or InvalidOperationException or TaskCanceledException)
+        {
+            return Result.Failure<IReadOnlyList<DailyForecastDto>>(ShramSafalErrors.WeatherProviderUnavailable);
+        }
     }
 
     private static bool IsValidCoordinate(double latitude, double longitude) =>

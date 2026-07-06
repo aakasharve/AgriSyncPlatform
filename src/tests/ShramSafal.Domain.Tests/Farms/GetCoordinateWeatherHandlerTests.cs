@@ -58,6 +58,24 @@ public sealed class GetCoordinateWeatherHandlerTests
         result.Error.Code.Should().Be("ShramSafal.WeatherProviderNotConfigured");
     }
 
+    private sealed class ThrowingWeatherProvider : IWeatherProvider
+    {
+        public bool IsConfigured => true;
+        public Task<WeatherSnapshotDto> GetCurrentAsync(double latitude, double longitude, CancellationToken ct = default)
+            => throw new HttpRequestException("upstream 429");
+        public Task<IReadOnlyList<DailyForecastDto>> GetForecastAsync(double latitude, double longitude, int days, CancellationToken ct = default)
+            => throw new HttpRequestException("upstream 429");
+    }
+
+    [Fact]
+    public async Task Current_upstream_failure_returns_provider_unavailable()
+    {
+        var handler = new GetCoordinateWeatherHandler(new ThrowingWeatherProvider());
+        var result = await handler.HandleAsync(new GetCoordinateWeatherCommand(20.1, 73.7));
+        result.IsSuccess.Should().BeFalse();
+        result.Error.Code.Should().Be("ShramSafal.WeatherProviderUnavailable");
+    }
+
     [Fact]
     public async Task Forecast_clamps_days_to_max_7()
     {

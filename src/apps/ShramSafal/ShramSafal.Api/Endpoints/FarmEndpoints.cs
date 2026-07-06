@@ -146,7 +146,8 @@ public static class FarmEndpoints
             var result = await handler.HandleAsync(new GetCoordinateWeatherCommand(lat, lon), ct);
             return result.IsSuccess ? Results.Ok(result.Value) : ToErrorResult(result.Error);
         })
-        .WithName("GetCoordinateWeatherCurrent");
+        .WithName("GetCoordinateWeatherCurrent")
+        .RequireRateLimiting("ai");
 
         group.MapGet("/weather/forecast", async (
             double lat,
@@ -164,7 +165,8 @@ public static class FarmEndpoints
             var result = await handler.HandleAsync(new GetCoordinateForecastCommand(lat, lon, days ?? 5), ct);
             return result.IsSuccess ? Results.Ok(result.Value) : ToErrorResult(result.Error);
         })
-        .WithName("GetCoordinateWeatherForecast");
+        .WithName("GetCoordinateWeatherForecast")
+        .RequireRateLimiting("ai");
 
         group.MapPut("/farms/{farmId:guid}/boundary", async (
             Guid farmId,
@@ -281,7 +283,7 @@ public static class FarmEndpoints
             return Results.Forbid();
         }
 
-        if (error.Code == "ShramSafal.WeatherProviderNotConfigured")
+        if (error.Code is "ShramSafal.WeatherProviderNotConfigured" or "ShramSafal.WeatherProviderUnavailable")
         {
             return Results.Json(
                 new { error = error.Code, message = error.Description },
