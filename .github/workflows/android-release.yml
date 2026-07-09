@@ -46,6 +46,13 @@ jobs:
       - name: Build web assets
         working-directory: src/clients/mobile-web
         env:
+          # Backend API base URL — baked into the bundle so the packaged APK
+          # talks to prod (not https://localhost). Capacitor serves the app from
+          # https://localhost with NO server.url, so without this resolveApiBaseUrl()
+          # returns '' → all API calls hit the WebView origin and fail (no login,
+          # no sync). .env.production carries this for web builds but is gitignored
+          # / absent in CI, so CI must set it explicitly. Public URL, not a secret.
+          VITE_AGRISYNC_API_URL: "https://api.shramsafal.in"
           # Google Maps JS key — baked into the bundle at build time so the
           # farm-boundary map + GPS render inside the APK. Public client key
           # (protected by HTTP-referrer restrictions, not secrecy); stored as a
