@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { CropProfile, InputMode } from '../types';
 
 // Feature Controllers
@@ -10,6 +10,7 @@ import { useLogCommands } from './hooks/useLogCommands';
 // Existing Hooks (Preserved)
 import { useVoiceRecorder } from '../features/voice/useVoiceRecorder';
 import { useWeatherMonitor } from '../features/weather/useWeatherMonitor';
+import { useLocationCapture } from '../features/location/hooks/useLocationCapture';
 import { useLogContext } from './context/LogContext';
 import { BackendAiClient } from '../infrastructure/ai/BackendAiClient';
 import { BackendFarmGeographyClient } from '../infrastructure/farmGeography';
@@ -21,12 +22,13 @@ import type { LastSavedLogSummaryItem } from './uiRuntimeTypes';
 export interface AgriLogAppConfig {
     initialCrops: CropProfile[];
     currentFarmId?: string | null;
+    currentFarmName?: string | null;
 }
 
 const GLOBAL_TOAST_EVENT = 'agrisync:toast';
 type GlobalToastDetail = { message: string; type: 'success' | 'error' };
 
-export const useAgriLogApp = ({ initialCrops, currentFarmId }: AgriLogAppConfig) => {
+export const useAgriLogApp = ({ initialCrops, currentFarmId, currentFarmName }: AgriLogAppConfig) => {
     // --- 0. UI GLOBAL STATE (Hoisted) ---
     const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
     const [lastSavedLogSummary, setLastSavedLogSummary] = useState<LastSavedLogSummaryItem[]>([]);
@@ -133,11 +135,19 @@ export const useAgriLogApp = ({ initialCrops, currentFarmId }: AgriLogAppConfig)
     }, []);
 
     // --- 6. WEATHER ---
+    // Consent-gated device GPS for weather when a farm has no drawn centre.
+    // captureLocation() self-gates on the recorded gps_consent (returns null
+    // unless granted), so device weather is DPDP-consent respecting.
+    const { captureLocation } = useLocationCapture();
+    const getDeviceLocation = useCallback(async (): Promise<{ lat: number; lon: number } | null> => {
+        const loc = await captureLocation();
+        return loc ? { lat: loc.latitude, lon: loc.longitude } : null;
+    }, [captureLocation]);
+
     const weather = useWeatherMonitor({
         farmerProfile: appData.farmerProfile,
         crops: appData.crops,
         setCrops: appData.setCrops,
-        logScope,
         hasActiveLogContext,
         activeCropId: activeCropId ?? null,
         activePlotId: activePlotId ?? null,
@@ -145,6 +155,8 @@ export const useAgriLogApp = ({ initialCrops, currentFarmId }: AgriLogAppConfig)
         setError: voice.setError,
         provider: weatherProvider,
         farmGeography,
+        getDeviceLocation,
+        farmName: currentFarmName ?? undefined,
     });
 
     // --- 7. TRUST LAYER ---
@@ -165,6 +177,9 @@ export const useAgriLogApp = ({ initialCrops, currentFarmId }: AgriLogAppConfig)
             return () => window.clearTimeout(resetModeHandle);
         }
         return undefined;
+        // Intentionally keyed on hasActiveLogContext only; `voice` is a fresh
+        // object each render and would re-fire this reset every render.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [hasActiveLogContext]);
 
     return {

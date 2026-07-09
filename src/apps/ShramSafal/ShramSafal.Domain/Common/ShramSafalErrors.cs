@@ -91,6 +91,7 @@ public static class ShramSafalErrors
     // --- Farm Geo / Weather Anchor ---------------------------------------------------------
     public static readonly Error FarmCentreMissing = Error.Conflict("ShramSafal.FarmCentreMissing", "Farm has no canonical centre; draw the farm boundary before requesting weather.");
     public static readonly Error WeatherProviderNotConfigured = Error.Internal("ShramSafal.WeatherProviderNotConfigured", "Weather provider is not configured on this server.");
+    public static readonly Error WeatherProviderUnavailable = Error.Internal("ShramSafal.WeatherProviderUnavailable", "Weather service is temporarily unavailable. Please try again.");
 
     // --- Memberships / ClaimJoin (T-IGH-03-PIPELINE-ROLLOUT) -------------------------------
     // Codes preserved verbatim (frontend + endpoint status switch depend

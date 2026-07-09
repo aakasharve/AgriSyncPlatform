@@ -119,6 +119,7 @@ public static class DependencyInjection
         services.AddScoped<CreateFarmHandler>();
         services.AddScoped<GetFarmDetailsHandler>();
         services.AddScoped<GetFarmWeatherHandler>();
+        services.AddScoped<GetCoordinateWeatherHandler>();
         services.AddScoped<UpdateFarmBoundaryHandler>();
         services.AddScoped<CreatePlotHandler>();
         services.AddScoped<CreateCropCycleHandler>();

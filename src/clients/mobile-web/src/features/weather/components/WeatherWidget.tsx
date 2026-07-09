@@ -4,14 +4,28 @@
 */
 
 import React, { useState } from 'react';
-import { Cloud, CloudRain, Sun, Wind, Droplets, ChevronRight, X, CalendarDays, MapPin } from 'lucide-react';
+import { Cloud, CloudRain, Sun, Wind, Droplets, X, MapPin, AlertTriangle, Check } from 'lucide-react';
 import { DetailedWeather, DailyForecast } from '../../../types';
 import { formatTemperature, formatPrecipitation, formatHumidity, formatWindSpeed } from '../../../shared/utils/weatherFormatter';
+import { useLanguage } from '../../../i18n/LanguageContext';
+import WeatherFallbackCard from './WeatherFallbackCard';
+import type { WeatherStatus } from '../useWeatherMonitor';
 
+// Feature-local strings (like WeatherFallbackCard) — not the translations.ts cap.
+const CAUTION_STRINGS = {
+    en: { text: 'Boundary not set — set it for accurate weather', cta: 'Set' },
+    mr: { text: 'सीमा आखलेली नाही — अचूक हवामानासाठी आखा', cta: 'आखा' },
+} as const;
 
 interface WeatherWidgetProps {
     data?: DetailedWeather;
-    isLoading?: boolean;
+    status?: WeatherStatus;
+    onRetry?: () => void;
+    onAddLocation?: () => void;
+    // Weather is showing from device/profile location, not the farm centre —
+    // render a red caution that taps through to draw the boundary.
+    boundaryUnset?: boolean;
+    onOpenBoundary?: () => void;
 }
 
 const MiniCard: React.FC<{ day: DailyForecast }> = ({ day }) => {
@@ -44,11 +58,22 @@ const MiniCard: React.FC<{ day: DailyForecast }> = ({ day }) => {
     );
 };
 
-const WeatherWidget: React.FC<WeatherWidgetProps> = ({ data, isLoading }) => {
+const WeatherWidget: React.FC<WeatherWidgetProps> = ({ data, status, onRetry, onAddLocation, boundaryUnset, onOpenBoundary }) => {
     const [isOpen, setIsOpen] = useState(false);
     const [activeTab, setActiveTab] = useState<'prev' | 'next'>('next');
+    const { language } = useLanguage();
+    const caution = CAUTION_STRINGS[language] ?? CAUTION_STRINGS.en;
+    const cautionFont = language === 'mr' ? "'Noto Sans Devanagari', sans-serif" : "'DM Sans', sans-serif";
 
-    if (isLoading || !data) {
+    // Cause-aware states first: a missing farm centre is user-actionable, a
+    // failed fetch is retryable. Both replace the old silent gray skeleton.
+    if (status === 'no-location') {
+        return <WeatherFallbackCard variant="no-location" onAction={() => onAddLocation?.()} />;
+    }
+    if (status === 'error') {
+        return <WeatherFallbackCard variant="error" onAction={() => onRetry?.()} />;
+    }
+    if (!data) {
         return (
             <div className="w-full h-24 bg-stone-200 animate-pulse rounded-3xl mb-6"></div>
         );
@@ -71,13 +96,18 @@ const WeatherWidget: React.FC<WeatherWidgetProps> = ({ data, isLoading }) => {
 
     return (
         <>
-            {/* COLLAPSED WIDGET (Main View) */}
-            <button
+            {/* COLLAPSED WIDGET (Main View). role=button div (not <button>) so the
+                caution's own interactive control isn't nested inside a <button>. */}
+            <div
+                role="button"
+                tabIndex={0}
+                aria-label="Weather details"
                 onClick={() => setIsOpen(true)}
-                className="w-full bg-gradient-to-br from-blue-500 to-blue-400 rounded-3xl p-5 text-white shadow-lg shadow-blue-200 mb-6 relative overflow-hidden group transition-all active:scale-[0.99]"
+                onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setIsOpen(true); } }}
+                className="w-full text-left bg-gradient-to-br from-blue-500 to-blue-400 rounded-3xl p-5 text-white shadow-[0_14px_30px_-8px_rgba(59,130,246,0.5)] mb-6 relative overflow-hidden group transition-all active:scale-[0.99] cursor-pointer"
             >
                 {/* Decorative Circle */}
-                <div className="absolute -top-10 -right-10 w-40 h-40 bg-white/10 rounded-full blur-2xl"></div>
+                <div className="absolute -top-10 -right-10 w-40 h-40 bg-white/15 rounded-full blur-2xl"></div>
 
                 <div className="relative z-10 flex justify-between items-center">
                     <div className="text-left space-y-1">
@@ -89,6 +119,17 @@ const WeatherWidget: React.FC<WeatherWidgetProps> = ({ data, isLoading }) => {
                         <div className="flex items-center gap-1 text-blue-50 font-medium text-sm pt-1">
                             <MapPin size={14} />
                             {locationName}
+                            {/* Boundary drawn → farm-anchored: symbol-only verified mark
+                                (bright filled green check circle, no text). */}
+                            {boundaryUnset === false && (
+                                <span
+                                    data-testid="weather-verified"
+                                    aria-label="Boundary verified"
+                                    className="ml-1.5 inline-flex h-5 w-5 items-center justify-center rounded-full bg-emerald-400 shadow-md ring-2 ring-white/70"
+                                >
+                                    <Check size={13} className="text-white" strokeWidth={4} />
+                                </span>
+                            )}
                         </div>
                     </div>
                     <div className="flex flex-col items-center justify-center">
@@ -96,7 +137,27 @@ const WeatherWidget: React.FC<WeatherWidgetProps> = ({ data, isLoading }) => {
                         <p className="text-xs font-medium mt-1">{current.current.conditionText}</p>
                     </div>
                 </div>
-            </button>
+
+                {/* Red caution — weather is from device/profile, not the farm centre.
+                    Own role=button (sibling control inside the card div); stop + prevent
+                    default so activating it opens the drawer, not the weather modal. */}
+                {boundaryUnset && (
+                    <div
+                        role="button"
+                        tabIndex={0}
+                        aria-label={caution.text}
+                        data-testid="weather-boundary-caution"
+                        style={{ fontFamily: cautionFont }}
+                        onClick={(e) => { e.stopPropagation(); onOpenBoundary?.(); }}
+                        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); onOpenBoundary?.(); } }}
+                        className="relative z-10 mt-3 flex items-center gap-2 rounded-2xl bg-red-500/95 px-3 py-2 text-left cursor-pointer"
+                    >
+                        <AlertTriangle size={16} className="shrink-0 text-white" />
+                        <span className="min-w-0 flex-1 text-[11px] font-bold leading-snug text-white">{caution.text}</span>
+                        <span className="shrink-0 rounded-full bg-white px-2.5 py-1 text-[11px] font-extrabold text-red-600">{caution.cta} ›</span>
+                    </div>
+                )}
+            </div>
 
             {/* EXPANDED MODAL (Overlay) */}
             {isOpen && (

@@ -2,6 +2,7 @@ import { WeatherPort } from '../../application/ports/WeatherPort';
 import { PlotGeo } from '../../domain/types';
 import { WeatherStamp, DailyForecast } from '../../features/weather/weather.types';
 import { getAuthSession } from '../storage/AuthTokenStore';
+import { WeatherFetchError } from './WeatherFetchError';
 import { idGenerator } from '../../core/domain/services/IdGenerator';
 import { systemClock } from '../../core/domain/services/Clock';
 
@@ -76,6 +77,19 @@ export class BackendWeatherClient implements WeatherPort {
 
     constructor(private readonly getActiveFarmId: () => string | null | undefined) {}
 
+    private async throwFromResponse(response: Response): Promise<never> {
+        let code: string | undefined;
+        let message: string | undefined;
+        try {
+            const body = await response.json() as { error?: string; message?: string };
+            code = body?.error;
+            message = body?.message;
+        } catch {
+            /* non-JSON body — status alone is enough */
+        }
+        throw new WeatherFetchError(response.status, code, message);
+    }
+
     async getCurrentWeather(_geo: PlotGeo): Promise<WeatherStamp> {
         const farmId = this.getActiveFarmId();
         if (!farmId) throw new Error('No active farm selected; cannot fetch weather.');
@@ -90,7 +104,7 @@ export class BackendWeatherClient implements WeatherPort {
             headers: authHeaders(),
         });
         if (!response.ok) {
-            throw new Error(`Weather request failed with HTTP ${response.status}.`);
+            await this.throwFromResponse(response);
         }
         const dto = await response.json() as WeatherSnapshotDto;
         const stamp: WeatherStamp = {
@@ -129,7 +143,7 @@ export class BackendWeatherClient implements WeatherPort {
             headers: authHeaders(),
         });
         if (!response.ok) {
-            throw new Error(`Forecast request failed with HTTP ${response.status}.`);
+            await this.throwFromResponse(response);
         }
         const dtos = await response.json() as DailyForecastDto[];
         const forecast: DailyForecast[] = dtos.map(d => ({
@@ -142,6 +156,73 @@ export class BackendWeatherClient implements WeatherPort {
             condition: coerceForecastCondition(d.condition),
         }));
         this.forecastCache.set(farmId, { forecast, expiresAt: now + FORECAST_TTL_MS });
+        return forecast;
+    }
+
+    // Coordinate-based weather (no active farm) — hits the coord endpoint so the
+    // client can show weather from the device's GPS when no farm centre exists.
+    async getCurrentWeatherByCoords(lat: number, lon: number): Promise<WeatherStamp> {
+        const key = `coord:${lat.toFixed(4)},${lon.toFixed(4)}`;
+        const now = systemClock.nowEpoch();
+        const cached = this.currentCache.get(key);
+        if (cached && cached.expiresAt > now) return cached.stamp;
+
+        const base = resolveBaseUrl();
+        const response = await fetch(`${base}/shramsafal/weather/current?lat=${lat}&lon=${lon}`, {
+            method: 'GET',
+            headers: authHeaders(),
+        });
+        if (!response.ok) {
+            await this.throwFromResponse(response);
+        }
+        const dto = await response.json() as WeatherSnapshotDto;
+        const stamp: WeatherStamp = {
+            id: `wx_${idGenerator.generate()}`,
+            plotId: 'device',
+            timestampLocal: systemClock.nowISO(),
+            timestampProvider: dto.observedAtUtc,
+            provider: coerceProvider(dto.provider),
+            tempC: dto.tempC,
+            humidity: dto.humidity,
+            windKph: dto.windKph,
+            precipMm: dto.precipMm,
+            cloudCoverPct: dto.cloudCoverPct,
+            conditionText: dto.conditionText,
+            iconCode: dto.iconCode,
+            rainProbNext6h: dto.rainProbNext6h,
+            windGustKph: dto.windGustKph ?? undefined,
+            uvIndex: dto.uvIndex ?? undefined,
+            soilMoistureVolumetric0To10: dto.soilMoistureVolumetric0To10 ?? undefined,
+        };
+        this.currentCache.set(key, { stamp, expiresAt: now + CURRENT_TTL_MS });
+        return stamp;
+    }
+
+    async getForecastByCoords(lat: number, lon: number, days: number): Promise<DailyForecast[]> {
+        const key = `coord:${lat.toFixed(4)},${lon.toFixed(4)}:${days}`;
+        const now = systemClock.nowEpoch();
+        const cached = this.forecastCache.get(key);
+        if (cached && cached.expiresAt > now) return cached.forecast;
+
+        const base = resolveBaseUrl();
+        const response = await fetch(`${base}/shramsafal/weather/forecast?lat=${lat}&lon=${lon}&days=${days}`, {
+            method: 'GET',
+            headers: authHeaders(),
+        });
+        if (!response.ok) {
+            await this.throwFromResponse(response);
+        }
+        const dtos = await response.json() as DailyForecastDto[];
+        const forecast: DailyForecast[] = dtos.map(d => ({
+            date: d.date,
+            tempMin: d.tempMinC,
+            tempMax: d.tempMaxC,
+            rainMm: d.rainMm,
+            windSpeed: d.windSpeedKph,
+            humidity: d.humidity,
+            condition: coerceForecastCondition(d.condition),
+        }));
+        this.forecastCache.set(key, { forecast, expiresAt: now + FORECAST_TTL_MS });
         return forecast;
     }
 

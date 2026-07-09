@@ -9,10 +9,9 @@
  * useFarmAdminState). Sidebar + boundary modals live in ./components.
  */
 
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { idGenerator } from '../../core/domain/services/IdGenerator';
 import { useUiPref } from '../../shared/hooks/useUiPref';
-import { useLanguage } from '../../i18n/LanguageContext';
 import { useAuth } from '../../app/providers/AuthProvider';
 import { useFarmContext } from '../../core/session/FarmContext';
 import { useWorkerProfile } from '../work/hooks/useWorkerProfile';
@@ -82,6 +81,27 @@ const ProfilePage: React.FC<ProfilePageProps> = ({
 
     const cropPlot = useCropPlotState({ crops, onUpdateCrops });
     const farmAdmin = useFarmAdminState();
+
+    // Deep-link handoff: a "set boundary" tap elsewhere (e.g. the weather
+    // caution) sets sessionStorage 'open_farm_boundary'. Consume it once here to
+    // open the Draw-Farm-Boundary drawer on the Identity tab. Two effects so the
+    // drawer only opens after the lazily-loaded farm resolves.
+    const { myFarm: adminMyFarm, setShowFarmBoundary: adminSetShowFarmBoundary } = farmAdmin;
+    const pendingOpenBoundary = useRef(false);
+    useEffect(() => {
+        if (typeof window === 'undefined') return;
+        if (window.sessionStorage.getItem('open_farm_boundary')) {
+            window.sessionStorage.removeItem('open_farm_boundary');
+            setActiveTab('identity');
+            pendingOpenBoundary.current = true;
+        }
+    }, []);
+    useEffect(() => {
+        if (pendingOpenBoundary.current && adminMyFarm) {
+            pendingOpenBoundary.current = false;
+            adminSetShowFarmBoundary(true);
+        }
+    }, [adminMyFarm, adminSetShowFarmBoundary]);
 
     const [showMemberWizard, setShowMemberWizard] = useState(false);
     const handleAddMember = (member: Partial<FarmOperator>) => {

@@ -71,6 +71,9 @@ const AppRouter: React.FC = () => {
     } = voice;
 
     const weatherData = weather.weatherData;
+    const weatherStatus = weather.weatherStatus;
+    const boundaryUnset = weather.boundaryUnset;
+    const refetchWeather = weather.refetchWeather;
     const handleManualSubmit = commands.handleManualSubmit;
     const handleUpdateNote = commands.handleUpdateNote;
     const handleVerifyLog = trust.handleVerifyLog;
@@ -170,6 +173,9 @@ const AppRouter: React.FC = () => {
         draftLog, setDraftLog, provenance,
         voiceStreamingPhase, liveCaption,
         weatherData,
+        weatherStatus,
+        boundaryUnset,
+        refetchWeather,
         handleManualSubmit, handleUpdateNote, handleVerifyLog,
         handleReset, lastSavedLogSummary, lastSavedLogIds,
         getTodayCounts, getContextColorIndicator,

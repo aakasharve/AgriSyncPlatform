@@ -100,7 +100,8 @@ export const renderLogView = (ctx: AppRouterContext): React.ReactNode => {
 
     const {
         status, mode, recordingSegment,
-        weatherData, ownerDisplayName, todayDayState, yesterdayDayState,
+        weatherData, weatherStatus, boundaryUnset, refetchWeather, setCurrentRoute,
+        ownerDisplayName, todayDayState, yesterdayDayState,
         showCloseDaySummary, setShowCloseDaySummary,
         showCloseYesterdaySummary, setShowCloseYesterdaySummary,
         setShowReviewInbox, setMainView,
@@ -119,6 +120,9 @@ export const renderLogView = (ctx: AppRouterContext): React.ReactNode => {
         lastSavedLogSummary, lastSavedLogIds, mockHistory, handleReset
     } = ctx;
 
+    // Single boundary handoff: flag it + route to Profile, where the drawer auto-opens.
+    const openBoundary = () => { window.sessionStorage.setItem('open_farm_boundary', '1'); setCurrentRoute('profile'); };
+
     return (
         <>
             {/* IDLE / RECORDING STATE */}
@@ -126,7 +130,14 @@ export const renderLogView = (ctx: AppRouterContext): React.ReactNode => {
                 <>
                     {!recordingSegment && (
                         <div className="mb-4 animate-in slide-in-from-top-4 duration-300 delay-100 space-y-3">
-                            <WeatherWidget data={weatherData} isLoading={!weatherData} />
+                            <WeatherWidget
+                                data={weatherData}
+                                status={weatherStatus}
+                                boundaryUnset={boundaryUnset}
+                                onRetry={refetchWeather}
+                                onAddLocation={openBoundary}
+                                onOpenBoundary={openBoundary}
+                            />
 
                             <div className="flex items-center justify-between px-1">
                                 <p className="text-base font-black tracking-tight text-stone-800">Daily Log</p>

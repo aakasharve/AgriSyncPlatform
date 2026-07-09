@@ -45,6 +45,13 @@ jobs:
 
       - name: Build web assets
         working-directory: src/clients/mobile-web
+        env:
+          # Google Maps JS key — baked into the bundle at build time so the
+          # farm-boundary map + GPS render inside the APK. Public client key
+          # (protected by HTTP-referrer restrictions, not secrecy); stored as a
+          # repo secret so CI builds carry it (.env.local is gitignored / absent
+          # in CI). See src/clients/mobile-web/.env.production.example.
+          VITE_GOOGLE_MAPS_API_KEY: ${{ secrets.VITE_GOOGLE_MAPS_API_KEY }}
         run: npm run build
 
       - name: Cap sync android
