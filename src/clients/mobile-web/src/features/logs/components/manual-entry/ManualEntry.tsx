@@ -38,6 +38,11 @@ const ManualEntry: React.FC<ManualEntryProps> = ({ context, crops, defaults, pro
     // mountedAtRef is the form-open timestamp used for durationMs.
     const { currentFarmId } = useFarmContext();
     const mountedAtRef = React.useRef(Date.now());
+    // Voice-parse polish: when a spoken draft lands, gently bring the sorted log
+    // (LabourReview + ActivityLedger) into view with a slight animation — no manual
+    // scroll. The transcript (in the header) shows first, then this reveals below it.
+    const parsedRef = React.useRef<HTMLDivElement>(null);
+    const [justParsed, setJustParsed] = useState(false);
     // Voice-vs-manual is determined by provenance.source at submit time.
     const [cropActivities, setCropActivities] = useState<CropActivityEvent[]>([]);
     const [expenses, setExpenses] = useState<ActivityExpenseEvent[]>([]);
@@ -162,6 +167,25 @@ const ManualEntry: React.FC<ManualEntryProps> = ({ context, crops, defaults, pro
             })));
         }
     }, [initialData]);
+
+    // Auto-reveal the sorted log after a VOICE draft FIRST lands (provenance = ai):
+    // let the transcript register for a beat, then smooth-scroll the parsed result into
+    // view + slight slide-up. Uses a first-arrival guard (NOT an effect cleanup) so the
+    // timers still fire even though onDataConsumed clears initialData a moment later —
+    // a cleanup here would cancel the scroll before it runs. Guard resets when the draft
+    // clears, so a second spoken log reveals again.
+    const sawAiDraftRef = React.useRef(false);
+    useEffect(() => {
+        const hasAiDraft = !!(initialData && provenance?.source === 'ai');
+        if (hasAiDraft && !sawAiDraftRef.current) {
+            setJustParsed(true);
+            window.setTimeout(() => {
+                parsedRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }, 650);
+            window.setTimeout(() => setJustParsed(false), 1600);
+        }
+        sawAiDraftRef.current = hasAiDraft;
+    }, [initialData, provenance]);
 
     const handleDismissUnclear = (id: string) => {
         setUnclearSegments(prev => prev.filter(s => s.id !== id));
@@ -462,6 +486,18 @@ const ManualEntry: React.FC<ManualEntryProps> = ({ context, crops, defaults, pro
                 }
             />
 
+            <div
+                ref={parsedRef}
+                style={{
+                    scrollMarginTop: '72px',
+                    borderRadius: '18px',
+                    transition: 'box-shadow .6s ease',
+                    boxShadow: justParsed
+                        ? '0 0 0 2px rgba(16,185,129,.45), 0 10px 30px rgba(16,185,129,.16)'
+                        : '0 0 0 0 rgba(16,185,129,0)',
+                }}
+                className={justParsed ? 'animate-slide-up' : ''}
+            >
             <LabourReview
                 labourEntries={labourEntries}
                 totalWorkerCount={totalWorkerCount}
@@ -493,6 +529,7 @@ const ManualEntry: React.FC<ManualEntryProps> = ({ context, crops, defaults, pro
                 onRefineWorkType={handleRefineWorkType}
                 onUpdateIssue={updateIssue}
             />
+            </div>
 
 
             {/* TODO CEI §4.4: Wire ExecutionStatusSelector here for each ActivityCard.

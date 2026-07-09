@@ -34,16 +34,24 @@ console.log(`%c[ShramSafal] ${BUILD_TAG}`, 'color:#16a34a;font-weight:bold;font-
 // the full app lifecycle. No-op when VITE_SENTRY_DSN is not set.
 initSentry();
 
-// Register Service Worker for Push Notifications
-NotificationService.registerSW();
-NotificationService.scheduleDisciplineNudges();
+// Register Service Worker for Push Notifications.
+// DEV PREVIEW GUARD: never register/keep a service worker on /dev/* preview
+// routes — a cached SW serves stale UI and hides live design iterations.
+const __isDevPreview = import.meta.env.DEV && window.location.pathname.startsWith('/dev/');
+if (__isDevPreview && 'serviceWorker' in navigator) {
+    navigator.serviceWorker.getRegistrations().then((rs) => rs.forEach((r) => r.unregister())).catch(() => {});
+    if (typeof caches !== 'undefined') caches.keys().then((ks) => ks.forEach((k) => caches.delete(k))).catch(() => {});
+} else {
+    NotificationService.registerSW();
+    NotificationService.scheduleDisciplineNudges();
+}
 
 // login-cache-ghost fix (2026-06-11): when a NEW service worker takes control
 // (after an app update OR the stale-shell-cache migration), reload ONCE so the
 // fresh app shell renders immediately. Without this, the first open after an
 // update can briefly show the previously-cached screen (the "old login UI"
 // ghost) until the user manually relaunches. Guarded so it never loops.
-if ('serviceWorker' in navigator) {
+if (!__isDevPreview && 'serviceWorker' in navigator) {
     let swReloaded = false;
     navigator.serviceWorker.addEventListener('controllerchange', () => {
         if (swReloaded) return;
@@ -76,11 +84,34 @@ const root = ReactDOM.createRoot(rootElement);
 // false in production builds, so Vite tree-shakes this branch + the lazy import
 // entirely out of the prod bundle. NEVER merged/deployed (branch
 // feat/shram-sathi-local-preview). See src/features/logs/dev/ShramSathiPreviewPage.tsx.
-if (import.meta.env.DEV && window.location.pathname.startsWith('/dev/shram-sathi')) {
+// Dev-only preview routes (import.meta.env.DEV → tree-shaken out of prod builds;
+// NEVER merged/deployed). The FINAL, locked Shram Sathi understanding design lives
+// in production at features/logs/components/shramsathi/ShramSathiUnderstanding.tsx
+// and is shown in the REAL voice flow via mainView (status === 'processing').
+// Only two reference previews are kept after the design was locked:
+if (import.meta.env.DEV && window.location.pathname.startsWith('/dev/board')) {
+  // /dev/board — standalone preview of the locked understanding design (character
+  // + green→blue waveform + chalkboard with random rotating quotes).
+  import('./features/logs/dev/ShramSathiBoard').then(({ ShramSathiBoard }) => {
+    root.render(<React.StrictMode><ShramSathiBoard /></React.StrictMode>);
+  });
+} else if (import.meta.env.DEV && window.location.pathname.startsWith('/dev/reveal')) {
+  // /dev/reveal — preview of the after-parse "sorted log" reveal (scroll + slide-up
+  // + green highlight) that ManualEntry now does when a voice draft lands.
+  import('./features/logs/dev/AfterParseRevealDemo').then(({ AfterParseRevealDemo }) => {
+    root.render(<React.StrictMode><AfterParseRevealDemo /></React.StrictMode>);
+  });
+} else if (import.meta.env.DEV && window.location.pathname.startsWith('/dev/meter')) {
+  // /dev/meter — the "20 rich logs" Understanding Meter idea: as the farmer records
+  // 20 logs the AI genuinely understood (score > 50), the meter fills and the Shram
+  // Sathi character/face is revealed (arriving silhouette → arrived). Committed feature.
+  // Wrapped in a fixed scroll container because global body/#root are overflow:hidden.
   import('./features/logs/dev/ShramSathiPreviewPage').then(({ ShramSathiPreviewPage }) => {
     root.render(
       <React.StrictMode>
-        <ShramSathiPreviewPage />
+        <div style={{ position: 'fixed', inset: 0, overflowY: 'auto', overflowX: 'hidden', WebkitOverflowScrolling: 'touch', background: '#FCFCFC' }}>
+          <ShramSathiPreviewPage />
+        </div>
       </React.StrictMode>
     );
   });

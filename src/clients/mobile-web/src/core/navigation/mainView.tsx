@@ -25,7 +25,7 @@ import { formatCurrencyINR } from '../../shared/utils/dayState';
 import { getCropTheme } from '../../shared/utils/colorTheme';
 import { FEATURE_FLAGS } from '../../app/featureFlags';
 import { MeterDisplay } from '../../features/logs/components/MeterDisplay';
-import ProcessingCompanion from '../../features/logs/components/shramsathi/ProcessingCompanion';
+import ShramSathiUnderstanding from '../../features/logs/components/shramsathi/ShramSathiUnderstanding';
 
 import { AppRouterContext } from './routeContext';
 import { ReflectPage, ComparePage } from './lazyComponents';
@@ -515,34 +515,12 @@ export const renderLogView = (ctx: AppRouterContext): React.ReactNode => {
                 </>
             )}
 
-            {/* PROCESSING / CONFIRM / SUCCESS */}
-            {status === 'processing' && (
-                /* ProcessingCompanion — the ALIVE buffering screen. The Shram Sathi
-                   character blinks (natural, randomized) over a warm glossy-granular
-                   ambient field, "speaks" a Marathi line in a typewriter bubble, and a
-                   4-step trail (आवाज मिळाला → काम ओळखतोय → नीट लावतोय → नोंद तयार) lights
-                   up in sequence — so the farmer never feels the app froze. The existing
-                   heading + live transcript are passed through as children unchanged. */
-                <ProcessingCompanion>
-                    <h3 className="mb-3 font-serif text-xl font-bold leading-snug text-stone-800">
-                        Your Shram sathi is trying to understand what work you did today...
-                    </h3>
-                    {/* SARVAM_PRIMARY_VOICE_PIPELINE — live transcript, placed right below the
-                        heading so the farmer sees their words appear as Sarvam transcribes
-                        the clip (post-Stop, cost-safe: reuses the single transcribe-stream that
-                        runTranscribeStage already opened; no extra Sarvam call). Self-hides when
-                        empty; the static placeholder below shows only until the first words land. */}
-                    <LiveCaption
-                        text={liveCaption}
-                        isTranscribing={voiceStreamingPhase === 'transcribing'}
-                    />
-                    {!liveCaption && voiceStreamingPhase !== 'transcribing' && (
-                        <div className="mx-auto mt-2 max-w-xs font-sans text-sm italic text-stone-500">
-                            मी नीट ऐकतोय, थोडा वेळ थांबा…
-                        </div>
-                    )}
-                </ProcessingCompanion>
-            )}
+            {/* PROCESSING — founder-approved ShramSathi "understanding" screen (character +
+                green→blue waveform + rotating chalkboard quotes). Shown while the voice
+                pipeline transcribes (Sarvam) and parses (Gemini). Replaces the old
+                ProcessingCompanion; live transcript is intentionally omitted per the
+                approved design. */}
+            {status === 'processing' && <ShramSathiUnderstanding />}
 
             {status === 'success' && (
                 <div data-testid="saved-to-ledger" className="animate-in fade-in duration-500 bg-gradient-to-br from-emerald-50 to-white rounded-3xl shadow-xl border border-emerald-100 p-8 text-center relative overflow-hidden">
