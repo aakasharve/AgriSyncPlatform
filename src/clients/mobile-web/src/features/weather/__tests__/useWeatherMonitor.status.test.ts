@@ -1,7 +1,11 @@
 // @vitest-environment jsdom
-import { describe, it, expect, vi } from 'vitest';
-import { renderHook, waitFor } from '@testing-library/react';
+import { describe, it, expect, vi, afterEach } from 'vitest';
+import { renderHook, waitFor, cleanup } from '@testing-library/react';
 import { useWeatherMonitor } from '../useWeatherMonitor';
+
+// Unmount the hook after each test so its stale-response cleanup fires — otherwise
+// a slow async fetch resolves after jsdom teardown ("window is not defined").
+afterEach(cleanup);
 
 type Props = Parameters<typeof useWeatherMonitor>[0];
 
