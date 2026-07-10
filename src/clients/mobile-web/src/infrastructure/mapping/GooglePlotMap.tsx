@@ -1,7 +1,7 @@
 import React, { useCallback, useRef, useState, useEffect } from 'react';
-import { GoogleMap, useJsApiLoader, DrawingManager, Polygon } from '@react-google-maps/api';
+import { GoogleMap, useJsApiLoader, Polygon, Polyline, Marker } from '@react-google-maps/api';
 import { PlotGeoData, GeoPoint } from '../../types';
-import { MapPin, Eraser, Navigation, Undo, Check, X, MousePointerClick, Hand, PenTool, MousePointer2, GripHorizontal, BarChart3 } from 'lucide-react';
+import { Eraser, Navigation, Undo, Check, X, MousePointerClick, Hand, PenTool, MousePointer2, GripHorizontal, BarChart3 } from 'lucide-react';
 import { getGoogleMapsApiKey, GOOGLE_MAPS_LIBRARIES, GOOGLE_MAPS_SCRIPT_ID } from './googleMapsConfig';
 
 interface PlotMapProps {
@@ -48,6 +48,11 @@ const PlotMapWithGoogleMaps: React.FC<PlotMapProps & { mapsApiKey: string }> = (
     const [map, setMap] = useState<google.maps.Map | null>(null);
     const [polygonPath, setPolygonPath] = useState<GeoPoint[]>(existingGeoData?.boundary || []);
 
+    // Tap-to-draw corners in progress. Replaces google.maps.drawing.DrawingManager,
+    // which Google removed from the Maps JS API in v3.65. The user taps each corner
+    // of the field, then presses Finish to close the polygon.
+    const [drawPoints, setDrawPoints] = useState<GeoPoint[]>([]);
+
     // UI States
     const [isDrawingActive, setIsDrawingActive] = useState(false);
     const [activeTool, setActiveTool] = useState<'pointer' | 'hand' | 'draw'>('hand'); // Default to hand (pan)
@@ -60,7 +65,6 @@ const PlotMapWithGoogleMaps: React.FC<PlotMapProps & { mapsApiKey: string }> = (
     const initialPosRef = useRef({ x: 0, y: 0 });
 
     const polygonRef = useRef<google.maps.Polygon | null>(null);
-    const drawingManagerRef = useRef<google.maps.drawing.DrawingManager | null>(null);
 
     // Initial Load
     const onLoad = useCallback((map: google.maps.Map) => {
@@ -71,7 +75,9 @@ const PlotMapWithGoogleMaps: React.FC<PlotMapProps & { mapsApiKey: string }> = (
         } else {
             locateUser(map);
         }
-    }, [existingGeoData]);
+        // locateUser reads the live map/geolocation at call time (not closure state),
+        // so it is intentionally not a dependency here.
+    }, [existingGeoData]); // eslint-disable-line react-hooks/exhaustive-deps
 
     const onUnmount = useCallback(() => {
         setMap(null);
@@ -134,26 +140,28 @@ const PlotMapWithGoogleMaps: React.FC<PlotMapProps & { mapsApiKey: string }> = (
         }
     };
 
-    const handlePolygonComplete = (poly: google.maps.Polygon) => {
-        const path = poly.getPath();
-        const newPath: GeoPoint[] = [];
-        for (let i = 0; i < path.getLength(); i++) {
-            const point = path.getAt(i);
-            newPath.push({ lat: point.lat(), lng: point.lng() });
-        }
+    // Tap-to-draw: append the tapped corner while the Draw tool is active.
+    const handleMapClick = (e: google.maps.MapMouseEvent) => {
+        if (isReadOnly || activeTool !== 'draw' || !e.latLng) return;
+        const point = { lat: e.latLng.lat(), lng: e.latLng.lng() };
+        setDrawPoints(prev => [...prev, point]);
+    };
 
-        setPolygonPath(newPath);
-        poly.setMap(null); // Remove original drawn poly, replace with our controlled one
+    const undoLastPoint = () => {
+        setDrawPoints(prev => prev.slice(0, -1));
+    };
 
-        // Stop drawing mode but keep 'Draw' tool active conceptually
-        if (drawingManagerRef.current) {
-            drawingManagerRef.current.setDrawingMode(null);
-        }
-        setActiveTool('pointer'); // Auto switch to pointer after drawing shape
+    const finishDrawing = () => {
+        if (drawPoints.length < 3) return;
+        const newPath = drawPoints;
 
         const areas = calculateArea(newPath);
         const center = computeCenter(newPath);
+
+        setPolygonPath(newPath);
         setAreaInfo(areas);
+        setDrawPoints([]);
+        setActiveTool('pointer'); // Auto switch to edit after finishing
 
         onPlotComplete({
             boundary: newPath,
@@ -163,12 +171,20 @@ const PlotMapWithGoogleMaps: React.FC<PlotMapProps & { mapsApiKey: string }> = (
         });
     };
 
+    const cancelDrawing = () => {
+        setDrawPoints([]);
+        if (polygonPath.length > 0) {
+            setActiveTool('pointer');
+        } else {
+            setActiveTool('hand');
+            setIsDrawingActive(false);
+        }
+    };
+
     const clearMap = () => {
         setPolygonPath([]);
+        setDrawPoints([]);
         setAreaInfo({ acres: 0, gunthas: 0 });
-        if (drawingManagerRef.current) {
-            drawingManagerRef.current.setDrawingMode(null);
-        }
         setIsDrawingActive(false);
         setActiveTool('hand');
 
@@ -182,6 +198,7 @@ const PlotMapWithGoogleMaps: React.FC<PlotMapProps & { mapsApiKey: string }> = (
 
     const startDrawingFlow = () => {
         setPolygonPath([]); // Clear existing
+        setDrawPoints([]);
         setIsDrawingActive(true);
         setActiveTool('draw'); // Default to draw tool
     };
@@ -212,19 +229,17 @@ const PlotMapWithGoogleMaps: React.FC<PlotMapProps & { mapsApiKey: string }> = (
     };
 
 
-    // Effect to Sync Active Tool with Google Maps
+    // Effect to Sync Active Tool with the map's cursor + gesture behaviour.
     useEffect(() => {
-        if (!map || !drawingManagerRef.current) return;
+        if (!map) return;
 
         if (activeTool === 'draw') {
-            drawingManagerRef.current.setDrawingMode(window.google.maps.drawing.OverlayType.POLYGON);
             map.setOptions({
                 draggable: true,
-                gestureHandling: 'cooperative',
-                draggableCursor: 'crosshair', // Distinct cursor for drawing
+                gestureHandling: 'greedy', // one-finger pan; a tap (no drag) drops a corner
+                draggableCursor: 'crosshair',
             });
         } else if (activeTool === 'hand') {
-            drawingManagerRef.current.setDrawingMode(null);
             map.setOptions({
                 draggable: true,
                 gestureHandling: 'greedy',
@@ -232,12 +247,11 @@ const PlotMapWithGoogleMaps: React.FC<PlotMapProps & { mapsApiKey: string }> = (
                 draggingCursor: 'grabbing'
             }); // Pan mode
         } else if (activeTool === 'pointer') {
-            drawingManagerRef.current.setDrawingMode(null);
             map.setOptions({
                 draggable: true,
                 gestureHandling: 'cooperative',
                 draggableCursor: 'default'
-            }); // Select mode
+            }); // Select / edit mode
         }
 
     }, [activeTool, map]);
@@ -270,6 +284,15 @@ const PlotMapWithGoogleMaps: React.FC<PlotMapProps & { mapsApiKey: string }> = (
     }
 
     const hasPolygon = polygonPath.length > 0;
+    const isDrawing = activeTool === 'draw';
+    const vertexIcon: google.maps.Symbol = {
+        path: window.google.maps.SymbolPath.CIRCLE,
+        scale: 6,
+        fillColor: '#ffffff',
+        fillOpacity: 1,
+        strokeColor: '#10B981',
+        strokeWeight: 3,
+    };
 
     return (
         <div className="flex flex-col h-full bg-slate-50 relative overflow-hidden">
@@ -282,6 +305,7 @@ const PlotMapWithGoogleMaps: React.FC<PlotMapProps & { mapsApiKey: string }> = (
                     zoom={18}
                     onLoad={onLoad}
                     onUnmount={onUnmount}
+                    onClick={handleMapClick}
                     options={{
                         mapTypeId: 'hybrid',
                         disableDefaultUI: true, // We want custom clean UI
@@ -291,6 +315,7 @@ const PlotMapWithGoogleMaps: React.FC<PlotMapProps & { mapsApiKey: string }> = (
                         gestureHandling: 'greedy'
                     }}
                 >
+                    {/* Finished / editable boundary */}
                     {polygonPath.length > 0 && (
                         <Polygon
                             paths={polygonPath}
@@ -333,25 +358,41 @@ const PlotMapWithGoogleMaps: React.FC<PlotMapProps & { mapsApiKey: string }> = (
                         />
                     )}
 
-                    {!isReadOnly && (
-                        <DrawingManager
-                            onLoad={manager => drawingManagerRef.current = manager}
-                            onPolygonComplete={handlePolygonComplete}
-                            drawingMode={activeTool === 'draw' ? window.google.maps.drawing.OverlayType.POLYGON : null}
+                    {/* In-progress tap-to-draw preview */}
+                    {!isReadOnly && isDrawing && drawPoints.length >= 3 && (
+                        <Polygon
+                            paths={drawPoints}
                             options={{
-                                drawingControl: false, // Custom toolbar
-                                polygonOptions: {
-                                    fillColor: "#10B981",
-                                    fillOpacity: 0.45,
-                                    strokeColor: "#ffffff", // White Stroke
-                                    strokeWeight: 4,        // Thicker
-                                    clickable: true,
-                                    editable: true,
-                                    zIndex: 10,
-                                },
+                                fillColor: "#10B981",
+                                fillOpacity: 0.30,
+                                strokeColor: "#ffffff",
+                                strokeWeight: 3,
+                                clickable: false,
+                                editable: false,
+                                zIndex: 8,
                             }}
                         />
                     )}
+                    {!isReadOnly && isDrawing && drawPoints.length === 2 && (
+                        <Polyline
+                            path={drawPoints}
+                            options={{
+                                strokeColor: "#ffffff",
+                                strokeWeight: 3,
+                                clickable: false,
+                                zIndex: 8,
+                            }}
+                        />
+                    )}
+                    {!isReadOnly && isDrawing && drawPoints.map((pt, i) => (
+                        <Marker
+                            key={`vtx-${i}`}
+                            position={pt}
+                            icon={vertexIcon}
+                            clickable={false}
+                            zIndex={12}
+                        />
+                    ))}
                 </GoogleMap>
 
                 {/* --- CUSTOM DRAGGABLE TOOLBAR --- */}
@@ -398,9 +439,11 @@ const PlotMapWithGoogleMaps: React.FC<PlotMapProps & { mapsApiKey: string }> = (
                                     if (polygonPath.length > 0 && activeTool !== 'draw') {
                                         if (confirm("Start new shape? This will clear current boundary.")) {
                                             setPolygonPath([]);
+                                            setDrawPoints([]);
                                             setActiveTool('draw');
                                         }
                                     } else {
+                                        setDrawPoints([]);
                                         setActiveTool('draw');
                                     }
                                 }}
@@ -410,6 +453,15 @@ const PlotMapWithGoogleMaps: React.FC<PlotMapProps & { mapsApiKey: string }> = (
                                 <PenTool size={20} />
                             </button>
                         </div>
+                    </div>
+                )}
+
+                {/* Drawing hint banner */}
+                {isDrawing && !isReadOnly && (
+                    <div className="absolute top-4 left-1/2 -translate-x-1/2 z-20 bg-slate-900/90 text-white text-xs font-semibold px-4 py-2 rounded-full shadow-lg pointer-events-none whitespace-nowrap">
+                        {drawPoints.length === 0
+                            ? 'Tap each corner of your farm'
+                            : `${drawPoints.length} corner${drawPoints.length > 1 ? 's' : ''} — tap more, then Finish`}
                     </div>
                 )}
 
@@ -453,12 +505,35 @@ const PlotMapWithGoogleMaps: React.FC<PlotMapProps & { mapsApiKey: string }> = (
                     className="flex-shrink-0 bg-white border-t border-slate-100 px-4 pt-3"
                     style={{ paddingBottom: 'max(12px, env(safe-area-inset-bottom))' }}
                 >
-                    {!hasPolygon ? (
+                    {isDrawing ? (
+                        <div className="grid grid-cols-3 gap-3">
+                            <button
+                                onClick={undoLastPoint}
+                                disabled={drawPoints.length === 0}
+                                className="h-12 bg-white border-2 border-slate-200 text-slate-700 font-bold rounded-xl flex items-center justify-center gap-2 hover:bg-slate-50 active:scale-95 transition-all text-sm disabled:opacity-40 disabled:cursor-not-allowed"
+                            >
+                                <Undo size={18} /> Undo
+                            </button>
+                            <button
+                                onClick={cancelDrawing}
+                                className="h-12 bg-white border-2 border-slate-200 text-slate-500 font-bold rounded-xl flex items-center justify-center gap-2 hover:bg-slate-50 active:scale-95 transition-all text-sm"
+                            >
+                                <X size={18} /> Cancel
+                            </button>
+                            <button
+                                onClick={finishDrawing}
+                                disabled={drawPoints.length < 3}
+                                className="h-12 bg-emerald-600 text-white font-bold rounded-xl flex items-center justify-center gap-2 shadow-lg shadow-emerald-600/30 hover:bg-emerald-700 active:scale-95 transition-all text-sm disabled:opacity-40 disabled:cursor-not-allowed disabled:shadow-none"
+                            >
+                                <Check size={18} /> Finish
+                            </button>
+                        </div>
+                    ) : !hasPolygon ? (
                         <button
                             onClick={startDrawingFlow}
                             className="w-full h-12 bg-slate-900 text-white font-bold rounded-xl flex items-center justify-center gap-2 shadow-lg hover:bg-slate-800 active:scale-95 transition-all text-base"
                         >
-                            <MousePointerClick size={20} /> {isDrawingActive ? 'Tap map to draw…' : 'Start drawing'}
+                            <MousePointerClick size={20} /> Start drawing
                         </button>
                     ) : (
                         <div className="grid grid-cols-2 gap-3">
