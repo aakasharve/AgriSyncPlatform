@@ -61,7 +61,6 @@ const MembershipsList: React.FC<MembershipsListProps> = ({ farms, nonExitableFar
                         const roleLabel = getRoleLabel(farm.role);
                         const canExit = !(nonExitableFarmIds?.has(farm.farmId));
                         const trialing = farm.subscription?.statusCode === 1;
-                        const active = farm.subscription?.statusCode === 2;
                         const paused = farm.subscription
                             ? !farm.subscription.allowsOwnerWrites
                             : false;
@@ -76,18 +75,20 @@ const MembershipsList: React.FC<MembershipsListProps> = ({ farms, nonExitableFar
                                 </div>
 
                                 <div className="min-w-0 flex-1">
-                                    <div className="flex items-center gap-1.5">
+                                    <div className="flex items-center gap-1.5 min-w-0">
                                         <div className="truncate font-bold text-slate-900">{farm.name}</div>
-                                        {trialing && (
-                                            <span className="inline-flex items-center rounded-full bg-emerald-100 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-emerald-800">
-                                                Trial
-                                            </span>
-                                        )}
-                                        {paused && (
-                                            <span className="inline-flex items-center rounded-full bg-rose-100 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-rose-800">
-                                                Paid
-                                            </span>
-                                        )}
+                                        <div className="flex shrink-0 items-center gap-1.5">
+                                            {trialing && (
+                                                <span className="inline-flex items-center rounded-full bg-emerald-100 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-emerald-800">
+                                                    Trial
+                                                </span>
+                                            )}
+                                            {paused && (
+                                                <span className="inline-flex items-center rounded-full bg-rose-100 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-rose-800">
+                                                    Paid
+                                                </span>
+                                            )}
+                                        </div>
                                     </div>
                                     <div className="mt-0.5 flex items-center gap-1.5">
                                         <span className={`inline-flex items-center rounded-md border px-1.5 py-0.5 text-[10px] font-bold ${roleLabel.badge}`}>
