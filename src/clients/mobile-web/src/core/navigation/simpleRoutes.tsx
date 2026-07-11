@@ -59,6 +59,7 @@ export const renderProfileRoute = (ctx: AppRouterContext): React.ReactNode => {
                 onOpenFinanceManager={() => ctx.setCurrentRoute('finance-manager')}
                 onOpenReferrals={() => ctx.setCurrentRoute('referrals')}
                 onOpenQrDemo={() => ctx.setCurrentRoute('qr-demo')}
+                onExit={() => ctx.setCurrentRoute('main')}
             />
         </div>
     );

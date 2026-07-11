@@ -13,15 +13,16 @@
 
 import React from 'react';
 import {
-    MapPin, Plus, Trash2, Clock,
+    MapPin, Plus, Clock,
     ChevronRight, CheckCircle2, ShieldCheck, Check, Users, Phone, AlertTriangle, FileText, Upload, Eye, LogOut,
     Cloud, QrCode, Medal
 } from 'lucide-react';
-import { FarmerProfile, OperatorCapability, VerificationStatus } from '../../../types';
+import { FarmerProfile, VerificationStatus } from '../../../types';
 import EntitlementBanner, { type SubscriptionSnapshotView } from '../../admin/billing/EntitlementBanner';
 import MembershipsList from '../../people/components/MembershipsList';
 import type { MyFarmDto, FarmDetailsDto } from '../../onboarding/qr/inviteApi';
 import ReliabilityScoreCard from '../../work/components/ReliabilityScoreCard';
+import { TeamMemberCard } from '../components/TeamMemberCard';
 import { useLanguage } from '../../../i18n/LanguageContext';
 
 // Identity verification status for farmer ID
@@ -53,6 +54,7 @@ interface IdentitySectionProps {
     nonExitableFarmIds: Set<string>;
     handleExitMembership: (farmId: string, farmName: string) => Promise<void>;
     isWorkerOnAnyFarm: boolean;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     workerProfile: { reliability: any } | null;
 }
 
@@ -88,11 +90,11 @@ const IdentitySection: React.FC<IdentitySectionProps> = ({
                     const identityStatus = getIdentityStatus(profile);
                     if (identityStatus === 'PENDING') {
                         return (
-                            <div className="bg-red-500 text-white px-6 py-3 flex items-center gap-3">
-                                <AlertTriangle size={20} />
+                            <div className="bg-amber-500 text-white px-6 py-3 flex items-center gap-3">
+                                <Clock size={20} />
                                 <div>
-                                    <p className="font-bold text-sm">⚠️ Farmer ID Pending</p>
-                                    <p className="text-xs opacity-90">Complete verification to unlock trusted records</p>
+                                    <p className="font-bold text-sm">ओळख तपासली जात आहे · ID under review</p>
+                                    <p className="text-xs opacity-90">पडताळणी पूर्ण झाल्यावर विश्वासू नोंदी सुरू होतील · Trusted records unlock once verified</p>
                                 </div>
                             </div>
                         );
@@ -123,8 +125,8 @@ const IdentitySection: React.FC<IdentitySectionProps> = ({
                         <div className="bg-emerald-500 text-white px-6 py-3 flex items-center gap-3">
                             <ShieldCheck size={20} />
                             <div>
-                                <p className="font-bold text-sm">✓ Verified Farmer</p>
-                                <p className="text-xs opacity-90">Government verified identity</p>
+                                <p className="font-bold text-sm">✓ पडताळणी झालेला शेतकरी · Verified Farmer</p>
+                                <p className="text-xs opacity-90">सरकारी ओळख पडताळली · Government-verified identity</p>
                             </div>
                         </div>
                     );
@@ -146,7 +148,7 @@ const IdentitySection: React.FC<IdentitySectionProps> = ({
                                 </div>
                             )}
                             {getIdentityStatus(profile) === 'PENDING' && (
-                                <div className="absolute -bottom-1 -right-1 bg-red-500 text-white p-1.5 rounded-full border-2 border-white shadow-sm" title="Pending">
+                                <div className="absolute -bottom-1 -right-1 bg-amber-500 text-white p-1.5 rounded-full border-2 border-white shadow-sm" title="Under review">
                                     <Clock size={16} />
                                 </div>
                             )}
@@ -180,29 +182,29 @@ const IdentitySection: React.FC<IdentitySectionProps> = ({
 
                     {/* DETAILED FIELDS - Always visible */}
                     <div className="mt-6 pt-6 border-t border-slate-100">
-                        <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wide mb-4">Identity Details</h4>
+                        <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wide mb-4">ओळख तपशील · Identity Details</h4>
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                             <div className="bg-slate-50 rounded-xl p-3">
-                                <p className="text-[10px] font-bold text-slate-400 uppercase">Full Name</p>
+                                <p className="text-[10px] font-bold text-slate-400 uppercase">पूर्ण नाव · Full Name</p>
                                 <p className="text-sm font-bold text-slate-700">{profile.name || '—'}</p>
                             </div>
                             <div className="bg-slate-50 rounded-xl p-3">
-                                <p className="text-[10px] font-bold text-slate-400 uppercase">Mobile Number</p>
+                                <p className="text-[10px] font-bold text-slate-400 uppercase">मोबाईल नंबर · Mobile Number</p>
                                 <p className="text-sm font-bold text-slate-700">{profile.phone || '—'}</p>
                             </div>
                             <div className="bg-slate-50 rounded-xl p-3">
-                                <p className="text-[10px] font-bold text-slate-400 uppercase">Village / Taluka / District</p>
+                                <p className="text-[10px] font-bold text-slate-400 uppercase">गाव / तालुका / जिल्हा · Village / Taluka / District</p>
                                 <p className="text-sm font-bold text-slate-700">{profile.village || '—'}</p>
                             </div>
 
                             <div className="bg-slate-50 rounded-xl p-3">
-                                <p className="text-[10px] font-bold text-slate-400 uppercase">Land Record (7/12)</p>
-                                <p className="text-sm font-bold text-slate-500 italic">Not uploaded</p>
+                                <p className="text-[10px] font-bold text-slate-400 uppercase">सातबारा (7/12) · Land Record</p>
+                                <p className="text-sm font-bold text-slate-500">अजून जोडलेले नाही · Not added yet</p>
                             </div>
                             <div className="bg-slate-50 rounded-xl p-3">
-                                <p className="text-[10px] font-bold text-slate-400 uppercase">Identity Document</p>
-                                <p className="text-sm font-bold text-red-600 flex items-center gap-1">
-                                    <AlertTriangle size={12} /> Pending Upload
+                                <p className="text-[10px] font-bold text-slate-400 uppercase">ओळखपत्र · Identity Document</p>
+                                <p className="text-sm font-bold text-amber-600 flex items-center gap-1">
+                                    <Clock size={12} /> जोडायचे बाकी · Yet to add
                                 </p>
                             </div>
                         </div>
@@ -235,7 +237,7 @@ const IdentitySection: React.FC<IdentitySectionProps> = ({
                             }
                             return (
                                 <button className="w-full py-3 bg-slate-100 text-slate-600 font-bold rounded-xl flex items-center justify-center gap-2 hover:bg-slate-200 transition-colors">
-                                    <Eye size={18} /> View Verified Identity
+                                    <Eye size={18} /> पडताळलेली ओळख पहा · View Verified Identity
                                 </button>
                             );
                         })()}
@@ -303,19 +305,27 @@ const IdentitySection: React.FC<IdentitySectionProps> = ({
                                         <ChevronRight size={18} className="text-emerald-400 flex-shrink-0" />
                                     </button>
 
-                                    <div className="rounded-2xl border border-sky-200 bg-gradient-to-br from-sky-50 to-white p-3">
+                                    <div className="rounded-2xl border border-emerald-200 bg-gradient-to-br from-emerald-50 via-emerald-50/40 to-white p-4 shadow-sm">
+                                        <div className="flex items-start gap-3">
+                                            <div className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-2xl bg-emerald-600 text-white shadow-md shadow-emerald-200/70">
+                                                <Cloud size={24} />
+                                            </div>
+                                            <div className="min-w-0 flex-1">
+                                                <p className="text-sm font-bold text-emerald-900">हवामान जोडा · Connect weather</p>
+                                                <p className="mt-0.5 text-[11px] leading-relaxed text-emerald-800/70">
+                                                    थेट पाऊस, तापमान आणि ५ दिवसांचा अंदाज तुमच्या रोजच्या नोंदीत दिसेल · Live rain, temperature &amp; a 5-day forecast on your daily log.
+                                                </p>
+                                            </div>
+                                        </div>
                                         <button
                                             type="button"
                                             onClick={() => { void handleConnectWeather(); }}
                                             disabled={connectingWeather}
-                                            className="w-full py-3 bg-sky-600 text-white font-bold rounded-xl flex items-center justify-center gap-2 hover:bg-sky-700 disabled:opacity-60 disabled:cursor-not-allowed transition-colors shadow-md"
+                                            className="mt-3 w-full py-3.5 bg-gradient-to-b from-emerald-500 to-emerald-600 text-white font-bold rounded-xl flex items-center justify-center gap-2 hover:from-emerald-600 hover:to-emerald-700 active:scale-[0.98] active:from-emerald-700 active:to-emerald-800 disabled:opacity-60 disabled:cursor-not-allowed transition-all shadow-lg shadow-emerald-200/60"
                                         >
                                             <Cloud size={18} />
-                                            {connectingWeather ? 'Connecting…' : 'Connect Farm to Weather · हवामान जोडा'}
+                                            {connectingWeather ? 'जोडत आहे… · Connecting…' : 'आता जोडा · Connect now'}
                                         </button>
-                                        <p className="mt-2 text-[11px] text-sky-900/70 text-center px-2">
-                                            We'll use your farm's location to fetch live rainfall, temperature, and a 5-day forecast for your daily log.
-                                        </p>
                                         {connectError && (
                                             <div className="mt-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-[11px] text-red-700">
                                                 {connectError}
@@ -404,24 +414,24 @@ const IdentitySection: React.FC<IdentitySectionProps> = ({
 
             {/* 2. FARM TEAM HIERARCHY (LAYERS 2 & 3) */}
             <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100">
-                <div className="flex items-center justify-between mb-6">
-                    <div>
+                <div className="mb-5">
+                    <div className="mb-3">
                         <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2">
                             <Users size={20} className="text-emerald-600" />
                             {t('profile.myFarmTeam')}
                         </h3>
                         <p className="text-xs text-slate-400 mt-1">{t('profile.manageAccess')}</p>
                     </div>
-                    <div className="flex items-center gap-2">
+                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                         <button
                             onClick={handleOpenInviteQr}
-                            className="bg-emerald-600 text-white px-4 py-2 rounded-xl text-sm font-bold shadow-lg shadow-emerald-200 active:scale-95 transition-all flex items-center gap-2"
+                            className="flex min-h-[44px] w-full items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 py-3 text-sm font-bold text-white shadow-lg shadow-emerald-200 active:scale-95 transition-all"
                         >
                             <QrCode size={16} /> Share farm QR
                         </button>
                         <button
                             onClick={() => setShowMemberWizard(true)}
-                            className="bg-white text-slate-900 border border-slate-200 px-4 py-2 rounded-xl text-sm font-bold shadow-sm active:scale-95 transition-all flex items-center gap-2"
+                            className="flex min-h-[44px] w-full items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-900 shadow-sm active:scale-95 transition-all"
                         >
                             <Plus size={16} /> {t('profile.addMember')}
                         </button>
@@ -450,54 +460,21 @@ const IdentitySection: React.FC<IdentitySectionProps> = ({
                     {/* Existing People or Dummies if none */}
                     {(profile.operators && profile.operators.length > 0) ? (
                         profile.operators.map(person => {
-                            const canLog = person.capabilities?.includes(OperatorCapability.LOG_DATA);
                             return (
-                                <div key={person.id} className="flex items-center gap-4 p-4 bg-white rounded-2xl border border-slate-100 shadow-sm hover:border-emerald-100 transition-all group">
-
-                                    {/* Avatar */}
-                                    <div className={`w-12 h-12 rounded-2xl flex items-center justify-center font-black text-lg shadow-inner ${person.role === 'SECONDARY_OWNER' ? 'bg-blue-100 text-blue-600' : 'bg-orange-100 text-orange-600'}`}>
-                                        {person.name.charAt(0)}
-                                    </div>
-
-                                    {/* Info */}
-                                    <div className="flex-1 min-w-0">
-                                        <h4 className="font-bold text-slate-800 text-base truncate">{person.name}</h4>
-                                        <div className="flex items-center gap-2 mt-1">
-                                            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-lg uppercase tracking-wide border ${person.role === 'SECONDARY_OWNER' ? 'bg-blue-50 text-blue-700 border-blue-100' : 'bg-orange-50 text-orange-700 border-orange-100'}`}>
-                                                {person.role === 'SECONDARY_OWNER' ? t('profile.partner') : t('profile.worker')}
-                                            </span>
-                                            {person.phone && <span className="text-[10px] text-slate-400 font-medium">{person.phone}</span>}
-                                        </div>
-                                    </div>
-
-                                    {/* Toggle Actions */}
-                                    <div className="flex items-center gap-3">
-                                        {/* Allow Log Toggle */}
-                                        <div
-                                            onClick={(e) => {
-                                                e.stopPropagation();
-                                                const newCaps = canLog
-                                                    ? (person.capabilities || []).filter(c => c !== OperatorCapability.LOG_DATA)
-                                                    : [...(person.capabilities || []), OperatorCapability.LOG_DATA];
-                                                const updatedPeople = profile.operators!.map(p => p.id === person.id ? { ...p, capabilities: newCaps } as any : p);
-                                                onUpdateProfile({ ...profile, people: updatedPeople });
-                                            }}
-                                            className={`cursor-pointer flex items-center gap-2 px-3 py-2 rounded-xl border transition-all select-none ${canLog ? 'bg-emerald-50 border-emerald-200' : 'bg-slate-50 border-slate-200 hover:bg-slate-100'}`}
-                                        >
-                                            <span className={`text-[10px] font-bold uppercase ${canLog ? 'text-emerald-700' : 'text-slate-400'}`}>{t('profile.allowLog')}</span>
-                                            <div className={`w-8 h-4 rounded-full relative transition-colors ${canLog ? 'bg-emerald-500' : 'bg-slate-300'}`}>
-                                                <div className={`absolute top-0.5 left-0.5 w-3 h-3 bg-white rounded-full shadow-sm transition-transform ${canLog ? 'translate-x-4' : ''}`} />
-                                            </div>
-                                        </div>
-
-                                        <button
-                                            onClick={(e) => { e.stopPropagation(); onDeletePerson && onDeletePerson(person.id); }}
-                                            className="p-2 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-xl transition-colors"
-                                        >
-                                            <Trash2 size={18} />
-                                        </button>
-                                    </div>
-                                </div>
+                                <TeamMemberCard
+                                    key={person.id}
+                                    member={person as never}
+                                    onToggleCap={(cap) => {
+                                        const has = person.capabilities?.includes(cap);
+                                        const newCaps = has
+                                            ? (person.capabilities || []).filter(c => c !== cap)
+                                            : [...(person.capabilities || []), cap];
+                                        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                                        const updatedPeople = profile.operators!.map(p => p.id === person.id ? { ...p, capabilities: newCaps } as any : p);
+                                        onUpdateProfile({ ...profile, people: updatedPeople });
+                                    }}
+                                    onDelete={() => onDeletePerson && onDeletePerson(person.id)}
+                                />
                             );
                         })
                     ) : (
