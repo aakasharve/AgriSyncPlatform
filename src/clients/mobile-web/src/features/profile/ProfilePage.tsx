@@ -152,8 +152,11 @@ const ProfilePage: React.FC<ProfilePageProps> = ({
         const s = new Set<ProfileTab>();
         if (profile.name && profile.village) s.add('identity');
         if (crops.length > 0) s.add('structure');
+        if ((profile.waterResources?.length ?? 0) > 0) s.add('utils');
+        if ((profile.machineries?.length ?? 0) > 0) s.add('machines');
+        // 'health' (soil reports) has no persisted done-signal yet — stays pending.
         return s;
-    }, [profile.name, profile.village, crops.length]);
+    }, [profile.name, profile.village, profile.waterResources, profile.machineries, crops.length]);
 
     return (
         <div className="max-w-4xl mx-auto px-4 sm:px-6 pt-4 pb-[calc(8rem+env(safe-area-inset-bottom))]">
@@ -280,7 +283,26 @@ const ProfilePage: React.FC<ProfilePageProps> = ({
                     if (id === 'health') return 'माती अहवाल · Soil reports';
                     return '';
                 };
-                const menuItems: HubMenuItem[] = sections.map(s => ({ id: s.id, label: s.label, icon: s.icon, subtitle: subtitleFor(s.id), done: doneIds.has(s.id) }));
+                const SETUP_HELP: Partial<Record<ProfileTab, { what: string; do: string; why: string }>> = {
+                    identity: { what: 'तुमची ओळख — तुम्ही कोण आणि कुठले शेतकरी.', do: 'तुमचं पूर्ण नाव आणि गाव भरा. पुढे Farmer ID जोडलं की ७/१२ आपोआप येईल.', why: 'पडताळलेली ओळख असली की तुमच्या नोंदींवर विश्वास वाढतो.' },
+                    structure: { what: 'तुम्ही काय पिकवता आणि कुठे — पिके व जमिनीचे तुकडे (प्लॉट).', do: 'पीक निवडा, किती प्लॉट सांगा, प्रत्येकाची सीमा नकाशावर काढा.', why: 'प्रत्येक प्लॉटची रोजची नोंद, हवामान व खर्च वेगळे कळतात.' },
+                    utils: { what: 'तुमच्या शेतातील पाण्याचे स्रोत आणि वीज जोडणी.', do: 'विहीर किंवा बोअर, मोटर किती HP, आणि वीज जोडणी भरा.', why: 'पाणी व वीज खर्चाचं नियोजन नीट करता येतं.' },
+                    machines: { what: 'तुमची स्वतःची किंवा भाड्याची शेती-यंत्रे.', do: 'प्रत्येक यंत्र जोडा — ट्रॅक्टर, पंप, फवारणी यंत्र वगैरे.', why: 'यंत्रांचा वापर आणि खर्च नोंदवता येतो.' },
+                    health: { what: 'तुमच्या मातीची तपासणी आणि पिकाचं आरोग्य.', do: 'माती अहवाल जोडा — अहवालाचा फोटो काढा किंवा मूल्ये भरा.', why: 'योग्य खत आणि औषधाचा नेमका सल्ला मिळतो.' },
+                };
+                const menuItems: HubMenuItem[] = sections.map(s => ({ id: s.id, label: s.label, icon: s.icon, subtitle: subtitleFor(s.id), done: doneIds.has(s.id), help: SETUP_HELP[s.id] }));
+
+                // Farm-setup progress — one honest count over the setup sections.
+                const setupOrder = sections.map(s => s.id);
+                const doneCount = setupOrder.filter(id => doneIds.has(id)).length;
+                const nextId = setupOrder.find(id => !doneIds.has(id));
+                const setupProgress = {
+                    done: doneCount,
+                    total: setupOrder.length,
+                    percent: Math.round((doneCount / setupOrder.length) * 100),
+                    nextId,
+                    nextLabel: nextId ? sections.find(s => s.id === nextId)?.label.split('·')[0].trim() : undefined,
+                };
 
                 const langLabel = language === 'mr' ? 'मराठी' : 'English';
                 const settingsItems = [
@@ -291,7 +313,7 @@ const ProfilePage: React.FC<ProfilePageProps> = ({
 
                 // shared compact header with a clearly-labelled back button
                 const header = (title: string, onBack: () => void) => (
-                    <div className="sticky top-0 z-10 -mx-4 mb-3 flex items-center gap-3 bg-gradient-to-b from-[#f6f7f5] via-[#f6f7f5]/95 to-[#f6f7f5]/0 px-4 pb-4 pt-1 sm:-mx-6 sm:px-6">
+                    <div className="sticky top-0 z-20 -mx-4 mb-3 flex items-center gap-3 bg-[#f6f7f5] px-4 pb-3 pt-2 shadow-[0_8px_14px_-12px_rgba(20,40,30,0.35)] sm:-mx-6 sm:px-6">
                         <button type="button" onClick={onBack} className="flex items-center gap-1.5 rounded-full bg-white py-2 pl-2.5 pr-3.5 text-[13px] font-bold text-slate-700 shadow-sm ring-1 ring-slate-100 transition-all active:scale-95">
                             <ArrowLeft size={16} /> मागे
                         </button>
@@ -344,6 +366,7 @@ const ProfilePage: React.FC<ProfilePageProps> = ({
                             familyName={profile.name ? `${profile.name.split(' ')[0]} कुटुंब` : undefined}
                             onOpenFarm={handleOpenFarm}
                             language={language}
+                            setupProgress={setupProgress}
                             items={menuItems}
                             onSelect={setActiveTab}
                             onExit={onExit}
