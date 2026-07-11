@@ -470,8 +470,8 @@ const IdentitySection: React.FC<IdentitySectionProps> = ({
                                             ? (person.capabilities || []).filter(c => c !== cap)
                                             : [...(person.capabilities || []), cap];
                                         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                                        const updatedPeople = profile.operators!.map(p => p.id === person.id ? { ...p, capabilities: newCaps } as any : p);
-                                        onUpdateProfile({ ...profile, people: updatedPeople });
+                                        const updatedOperators = profile.operators!.map(p => p.id === person.id ? { ...p, capabilities: newCaps } as any : p);
+                                        onUpdateProfile({ ...profile, operators: updatedOperators });
                                     }}
                                     onDelete={() => onDeletePerson && onDeletePerson(person.id)}
                                 />

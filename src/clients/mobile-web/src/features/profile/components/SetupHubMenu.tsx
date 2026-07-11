@@ -2,16 +2,23 @@
  * @license
  * SPDX-License-Identifier: Apache-2.0
  *
- * SetupHubMenu — the Profile as a simple account-style menu (variation of the
- * accordion). A profile summary + soft rounded row-cards; each row opens its
- * own section page (handled by ProfilePage). A labelled back exits Profile.
- * Built for a semi-literate farmer: one clear list, big rows, status hints.
+ * SetupHubMenu — the Profile as a simple account-style menu. A profile
+ * summary, a farm-setup progress card (real % from the farmer's data), the
+ * farms list, and the setup sections as clean rows — each with a status
+ * badge and a discreet "?" that opens a short, plain-language guide.
+ * Built for a semi-literate farmer: one clear list, big rows, plain words.
  */
-import React from 'react';
-import { ChevronRight, ArrowLeft, CheckCircle2, MapPin, LogOut, BarChart3, Medal } from 'lucide-react';
+import React, { useState } from 'react';
+import { ChevronRight, ArrowLeft, CheckCircle2, Check, MapPin, LogOut, BarChart3, Medal } from 'lucide-react';
 import type { ProfileTab } from '../ProfilePage';
 import type { MyFarmDto } from '../../onboarding/qr/inviteApi';
 import FarmsSection from './FarmsSection';
+
+export interface SetupHelp {
+    what: string;
+    do: string;
+    why: string;
+}
 
 export interface HubMenuItem {
     id: ProfileTab;
@@ -19,6 +26,15 @@ export interface HubMenuItem {
     icon: React.ReactNode;
     subtitle?: string;
     done?: boolean;
+    help?: SetupHelp;
+}
+
+export interface SetupProgressData {
+    done: number;
+    total: number;
+    percent: number;
+    nextId?: ProfileTab;
+    nextLabel?: string;
 }
 
 interface SetupHubMenuProps {
@@ -30,6 +46,7 @@ interface SetupHubMenuProps {
     onOpenFarm?: (farmId: string) => void;
     onAddFarm?: () => void;
     language?: 'mr' | 'en';
+    setupProgress?: SetupProgressData;
     items: HubMenuItem[];
     onSelect: (id: ProfileTab) => void;
     onExit?: () => void;
@@ -43,6 +60,72 @@ interface SetupHubMenuProps {
 const GroupLabel: React.FC<{ children: React.ReactNode }> = ({ children }) => (
     <div className="mb-2.5 mt-5 px-1 text-[11px] font-bold uppercase tracking-[0.08em] text-slate-400">{children}</div>
 );
+
+/** Farm-setup progress card — one honest bar over the setup sections. */
+const ProgressHero: React.FC<{ p: SetupProgressData; onNext: () => void }> = ({ p, onNext }) => (
+    <div className="relative mt-2 overflow-hidden rounded-[26px] border border-emerald-100 bg-gradient-to-br from-emerald-50 via-white to-white p-5 shadow-[0_16px_32px_-22px_rgba(5,150,105,0.4)]">
+        <div className="text-[11px] font-extrabold uppercase tracking-[0.14em] text-emerald-600">शेती तयारी · Farm setup</div>
+        <div className="mt-1.5 flex items-end gap-2.5">
+            <div className="text-[44px] font-black leading-[0.9] tracking-tight text-emerald-700 [font-variant-numeric:tabular-nums]">{p.percent}%</div>
+            <div className="pb-1.5 text-[12px] font-bold leading-tight text-slate-500">{p.done} पैकी {p.total} पूर्ण<br />{p.done} of {p.total} complete</div>
+        </div>
+        <div className="relative mt-3.5 h-2.5 overflow-hidden rounded-full bg-emerald-100">
+            <span className="absolute inset-y-0 left-0 rounded-full bg-gradient-to-r from-emerald-600 to-emerald-400 transition-[width] duration-500" style={{ width: `${p.percent}%` }} />
+        </div>
+        {p.done < p.total && p.nextLabel ? (
+            <div className="mt-3.5 flex items-center gap-2 text-[12.5px] text-slate-600">
+                <span className="truncate">पुढे · Next: <b className="font-extrabold text-emerald-800">{p.nextLabel}</b></span>
+                <button type="button" onClick={onNext} className="ml-auto flex flex-shrink-0 items-center gap-1.5 rounded-full bg-emerald-600 px-3.5 py-1.5 text-[11.5px] font-extrabold text-white shadow-[0_6px_14px_-6px_rgba(5,150,105,0.6)] transition-transform active:scale-95">
+                    सुरू करा <ChevronRight size={13} />
+                </button>
+            </div>
+        ) : (
+            <div className="mt-3.5 flex items-center gap-1.5 text-[12.5px] font-bold text-emerald-700"><CheckCircle2 size={15} /> सर्व पूर्ण! छान काम.</div>
+        )}
+    </div>
+);
+
+/** One setup section: clean row + status badge + a "?" that opens simple help. */
+const SetupRow: React.FC<{ item: HubMenuItem; isNext: boolean; onSelect: () => void }> = ({ item, isNext, onSelect }) => {
+    const [open, setOpen] = useState(false);
+    const done = !!item.done;
+    const tile = done ? 'bg-emerald-50 text-emerald-600'
+        : isNext ? 'bg-emerald-600 text-white shadow-[0_8px_16px_-8px_rgba(5,150,105,0.6)]'
+            : 'bg-slate-50 text-slate-400 ring-1 ring-slate-100';
+    return (
+        <div className={`overflow-hidden rounded-[18px] border bg-white shadow-[0_1px_2px_rgba(20,40,30,0.05)] ${isNext ? 'border-emerald-200 border-l-[3px] border-l-emerald-600 shadow-[0_14px_26px_-18px_rgba(5,150,105,0.4)]' : 'border-slate-100'}`}>
+            <div className="flex items-center gap-3 p-3.5">
+                <button type="button" onClick={onSelect} className="flex min-w-0 flex-1 items-center gap-3.5 text-left transition-transform active:scale-[0.99]">
+                    <span className={`relative flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-[13px] ${tile}`}>
+                        {item.icon}
+                        {done && <span className="absolute -bottom-1 -right-1 flex h-[19px] w-[19px] items-center justify-center rounded-full border-2 border-white bg-emerald-600 text-white"><Check size={11} strokeWidth={3} /></span>}
+                    </span>
+                    <span className="min-w-0 flex-1">
+                        <span className="block truncate text-[15px] font-bold text-slate-800">{item.label}</span>
+                        {item.subtitle && <span className={`mt-0.5 block truncate text-[11.5px] ${isNext ? 'font-semibold text-emerald-700' : 'text-slate-400'}`}>{item.subtitle}</span>}
+                    </span>
+                </button>
+                <span className={`flex-shrink-0 rounded-lg px-2.5 py-1 text-[10px] font-extrabold tracking-wide ${done ? 'bg-emerald-50 text-emerald-800' : 'bg-slate-100 text-slate-500'}`}>{done ? 'पूर्ण' : 'बाकी'}</span>
+                {item.help && (
+                    <button type="button" aria-label="मदत · help" aria-expanded={open} onClick={() => setOpen(o => !o)}
+                        className={`flex h-[30px] w-[30px] flex-shrink-0 items-center justify-center rounded-full border font-serif text-[14px] font-bold transition-all active:scale-90 ${open ? 'border-emerald-600 bg-emerald-600 text-white' : 'border-slate-200 bg-white text-slate-500'}`}>?</button>
+                )}
+            </div>
+            {open && item.help && (
+                <div className="px-3.5 pb-3.5 pl-[73px]">
+                    <div className="rounded-[13px] border border-emerald-100 bg-emerald-50 p-3">
+                        {([['काय आहे', item.help.what], ['काय करायचं', item.help.do], ['का?', item.help.why]] as [string, string][]).map(([k, v], i) => (
+                            <div key={k} className={`flex gap-2.5 ${i > 0 ? 'mt-2.5 border-t border-emerald-100 pt-2.5' : ''}`}>
+                                <span className="w-[76px] flex-shrink-0 pt-px text-[11px] font-extrabold leading-snug text-emerald-700">{k}</span>
+                                <span className="flex-1 text-[12.5px] font-semibold leading-snug text-slate-700">{v}</span>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            )}
+        </div>
+    );
+};
 
 interface RowCardProps {
     icon: React.ReactNode;
@@ -73,12 +156,12 @@ const RowCard: React.FC<RowCardProps> = ({ icon, label, subtitle, tone = 'muted'
 };
 
 export const SetupHubMenu: React.FC<SetupHubMenuProps> = ({
-    farmerName, verified, farmName, farms, familyName, onOpenFarm, onAddFarm, language, items, onSelect, onExit, onOpenFinance, onOpenReferrals, settingsItems, onSelectExtra, logout,
+    farmerName, verified, farmName, farms, familyName, onOpenFarm, onAddFarm, language, setupProgress, items, onSelect, onExit, onOpenFinance, onOpenReferrals, settingsItems, onSelectExtra, logout,
 }) => {
     return (
         <div>
-            {/* header — light, blended into the page (no hard white banner) */}
-            <div className="sticky top-0 z-10 -mx-4 mb-2 flex items-center gap-3 bg-gradient-to-b from-[#f6f7f5] via-[#f6f7f5]/95 to-[#f6f7f5]/0 px-4 pb-4 pt-1 sm:-mx-6 sm:px-6">
+            {/* header — solid band so nothing shows through behind the back button */}
+            <div className="sticky top-0 z-20 -mx-4 mb-2 flex items-center gap-3 bg-[#f6f7f5] px-4 pb-3 pt-2 shadow-[0_8px_14px_-12px_rgba(20,40,30,0.35)] sm:-mx-6 sm:px-6">
                 {onExit && (
                     <button
                         type="button"
@@ -116,6 +199,11 @@ export const SetupHubMenu: React.FC<SetupHubMenuProps> = ({
                 </div>
             </div>
 
+            {/* farm-setup progress — real % from the farmer's data */}
+            {setupProgress && (
+                <ProgressHero p={setupProgress} onNext={() => setupProgress.nextId && onSelect(setupProgress.nextId)} />
+            )}
+
             {/* your farms — each a 7/12 holding; tap to open its own page */}
             {farms && farms.length > 0 && onOpenFarm && (
                 <FarmsSection
@@ -127,11 +215,11 @@ export const SetupHubMenu: React.FC<SetupHubMenuProps> = ({
                 />
             )}
 
-            {/* farm-setup sections */}
+            {/* farm-setup sections — clean rows with status + "?" help */}
             <GroupLabel>शेती सेटअप · Farm setup</GroupLabel>
             <div className="space-y-2.5">
                 {items.map(it => (
-                    <RowCard key={it.id} icon={it.icon} label={it.label} subtitle={it.subtitle} tone={it.done ? 'emerald' : 'muted'} onClick={() => onSelect(it.id)} />
+                    <SetupRow key={it.id} item={it} isNext={setupProgress?.nextId === it.id} onSelect={() => onSelect(it.id)} />
                 ))}
             </div>
 
