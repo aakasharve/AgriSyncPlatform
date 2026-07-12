@@ -136,8 +136,13 @@ async function deleteDb(): Promise<void> {
 // ============================================================================
 
 describe('W1.P2 — Dexie v22: DATABASE_VERSION constant', () => {
-    it('DATABASE_VERSION is 22', () => {
-        expect(DATABASE_VERSION).toBe(22);
+    // dfes-companion-2026-07-11 (Phase 4, Task 2) bumped the shared
+    // DATABASE_VERSION constant 22 -> 23 (pendingInterpretations store).
+    // This assertion tracks the CURRENT constant, not a version-22-specific
+    // fact; v22's own store shape/upgrade behavior is unchanged and still
+    // covered by the tests below.
+    it('DATABASE_VERSION is 23', () => {
+        expect(DATABASE_VERSION).toBe(23);
     });
 });
 
