@@ -57,6 +57,10 @@ export interface Translations {
         tapToStop: string;
         selectPlotAbove: string;
         startLogging: string;
+        savedTitle: string;
+        savedTranscriptBody: string;
+        savedAudioBody: string;
+        savedReassure: string;
     };
 
     // Reflect Page
@@ -320,6 +324,10 @@ export const translations: Record<Language, Translations> = {
             tapToStop: 'Tap icon to stop',
             selectPlotAbove: 'Select a plot using the pills above',
             startLogging: 'Start Logging',
+            savedTitle: 'Your voice is saved',
+            savedTranscriptBody: 'I heard your words and kept them safely. I will finish understanding them soon.',
+            savedAudioBody: 'I saved your recording safely. I will listen again and understand it soon.',
+            savedReassure: 'Your day is counted. Nothing is lost.',
         },
         reflectPage: {
             timeline: 'Timeline',
@@ -570,6 +578,10 @@ export const translations: Record<Language, Translations> = {
             tapToStop: 'थांबवण्यासाठी दाबा',
             selectPlotAbove: 'वरील गोळ्या वापरून प्लॉट निवडा',
             startLogging: 'नोंद सुरू करा',
+            savedTitle: 'तुमचा आवाज जपून ठेवला आहे',
+            savedTranscriptBody: 'तुमचे शब्द मी ऐकले आणि सुरक्षित ठेवले. लवकरच ते पूर्णपणे समजून घेईन.',
+            savedAudioBody: 'तुमची नोंद मी सुरक्षित ठेवली आहे. पुन्हा ऐकून लवकरच समजून घेईन.',
+            savedReassure: 'तुमचा आजचा दिवस मोजला गेला आहे. काहीही हरवलेले नाही.',
         },
         reflectPage: {
             timeline: 'टाइमलाइन',
@@ -786,11 +798,11 @@ export const translations: Record<Language, Translations> = {
  */
 export function t(key: string, lang: Language = 'en'): string {
     const keys = key.split('.');
-    let value: any = translations[lang];
+    let value: unknown = translations[lang];
 
     for (const k of keys) {
-        value = value?.[k];
+        value = (value as Record<string, unknown> | undefined)?.[k];
     }
 
-    return value || key;
+    return (value as string) || key;
 }

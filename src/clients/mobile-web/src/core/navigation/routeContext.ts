@@ -104,6 +104,10 @@ export interface AppRouterContext {
     voiceStreamingPhase: VoiceState['voiceStreamingPhase'];
     liveCaption: VoiceState['liveCaption'];
 
+    // dfes-companion Phase 4 — voice-continuity ladder outcome.
+    continuityLevel: VoiceState['continuityLevel'];
+    savedPendingCaptureId: VoiceState['savedPendingCaptureId'];
+
     // weather
     weatherData: WeatherState['weatherData'];
 

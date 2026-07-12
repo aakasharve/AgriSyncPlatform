@@ -25,6 +25,8 @@ import { formatCurrencyINR } from '../../shared/utils/dayState';
 import { getCropTheme } from '../../shared/utils/colorTheme';
 import { LedgerRecognitionPanel } from '../../features/logs/components/LedgerRecognitionPanel';
 import ShramSathiUnderstanding from '../../features/logs/components/shramsathi/ShramSathiUnderstanding';
+import VoiceSavedReassurance from '../../features/logs/components/shramsathi/VoiceSavedReassurance';
+import { FEATURE_FLAGS } from '../../app/featureFlags';
 
 import { AppRouterContext } from './routeContext';
 import { ReflectPage, ComparePage } from './lazyComponents';
@@ -111,6 +113,7 @@ export const renderLogView = (ctx: AppRouterContext): React.ReactNode => {
         draftLog, setDraftLog, provenance,
         // SARVAM_PRIMARY_VOICE_PIPELINE_2026-05-28 — LiveCaption Way-2.
         voiceStreamingPhase, liveCaption,
+        continuityLevel, savedPendingCaptureId,
         getTodayCounts, getContextColorIndicator,
         history, todayLogs, operatorNameById,
         getLogContextSnapshot, handleEditLog,
@@ -520,6 +523,26 @@ export const renderLogView = (ctx: AppRouterContext): React.ReactNode => {
                 ProcessingCompanion; live transcript is intentionally omitted per the
                 approved design. */}
             {status === 'processing' && <ShramSathiUnderstanding />}
+
+            {/* dfes-companion Phase 4 — voice-continuity degraded terminal surface.
+                Renders only when the ladder produced a durable-but-unstructured
+                capture (transcript-only / audio-only); reuses the SAME literal
+                "Add Another Log" button + handleReset used by the success card
+                below (no new i18n key). */}
+            {FEATURE_FLAGS.voiceContinuity
+                && status !== 'processing'
+                && savedPendingCaptureId
+                && (continuityLevel === 'transcript-only' || continuityLevel === 'audio-only') && (
+                <div className="mt-4">
+                    <VoiceSavedReassurance level={continuityLevel} />
+                    <button
+                        onClick={handleReset}
+                        className="mt-4 w-full rounded-xl bg-stone-900 py-4 text-lg font-bold text-white transition-colors hover:bg-emerald-800"
+                    >
+                        Add Another Log
+                    </button>
+                </div>
+            )}
 
             {status === 'success' && (
                 <div data-testid="saved-to-ledger" className="animate-in fade-in duration-500 bg-gradient-to-br from-emerald-50 to-white rounded-3xl shadow-xl border border-emerald-100 p-8 text-center relative overflow-hidden">
