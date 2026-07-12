@@ -301,6 +301,17 @@ internal sealed class ShramSafalRepository(ShramSafalDbContext db) : IShramSafal
         await db.DailyRichnessAggregates.AddAsync(aggregate, ct);
     }
 
+    public async Task AddQuestionEventAsync(ShramSafal.Domain.Dfes.QuestionEvent e, CancellationToken ct = default)
+        => await db.QuestionEvents.AddAsync(e, ct);
+
+    public async Task<IReadOnlyList<ShramSafal.Domain.Dfes.QuestionEvent>> GetRecentQuestionEventsForFarmAsync(
+        Guid farmId, DateTime sinceUtc, CancellationToken ct = default)
+        => await db.QuestionEvents
+            .AsNoTracking()
+            .Where(q => q.FarmId == farmId && q.CreatedAtUtc >= sinceUtc)
+            .OrderByDescending(q => q.CreatedAtUtc)
+            .ToListAsync(ct);
+
     public async Task AddAttachmentAsync(Attachment attachment, CancellationToken ct = default)
     {
         await db.Attachments.AddAsync(attachment, ct);

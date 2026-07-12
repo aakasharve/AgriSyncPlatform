@@ -102,4 +102,8 @@ public class FakeShramSafalRepository : IShramSafalRepository
     public virtual Task<IReadOnlyList<ObservationEvent>> GetObservationEventsForDailyLogsAsync(IReadOnlyCollection<Guid> dailyLogIds, CancellationToken ct = default) => throw NotStubbed();
     public virtual Task<DailyRichnessAggregate?> GetDailyRichnessAggregateAsync(Guid farmId, DateOnly localDate, CancellationToken ct = default) => throw NotStubbed();
     public virtual Task AddDailyRichnessAggregateAsync(DailyRichnessAggregate aggregate, CancellationToken ct = default) => throw NotStubbed();
+
+    // ── DFES Phase 5 — question-engine telemetry ──
+    public virtual Task AddQuestionEventAsync(QuestionEvent e, CancellationToken ct = default) => throw NotStubbed();
+    public virtual Task<IReadOnlyList<QuestionEvent>> GetRecentQuestionEventsForFarmAsync(Guid farmId, DateTime sinceUtc, CancellationToken ct = default) => throw NotStubbed();
 }

@@ -598,4 +598,22 @@ public interface IShramSafalRepository
     Task AddDailyRichnessAggregateAsync(
         ShramSafal.Domain.Dfes.DailyRichnessAggregate aggregate, CancellationToken ct = default)
         => Task.CompletedTask;
+
+    // ── DFES Phase 5 — question-engine telemetry (append-only ssf.question_events) ──
+    /// <summary>
+    /// Stage an append-only <see cref="ShramSafal.Domain.Dfes.QuestionEvent"/> row.
+    /// No SaveChanges — the handler owns the commit. Default no-op keeps existing
+    /// in-tree test doubles compiling (mirrors AddWeatherStampAsync, L69).
+    /// </summary>
+    Task AddQuestionEventAsync(ShramSafal.Domain.Dfes.QuestionEvent e, CancellationToken ct = default)
+        => Task.CompletedTask;
+
+    /// <summary>
+    /// Read recent question_events for a farm (anti-repeat / cooldown feed). RLS
+    /// already scopes rows to the tenant; the app layer additionally membership-checks.
+    /// Default empty so test doubles compile.
+    /// </summary>
+    Task<IReadOnlyList<ShramSafal.Domain.Dfes.QuestionEvent>> GetRecentQuestionEventsForFarmAsync(
+        Guid farmId, DateTime sinceUtc, CancellationToken ct = default)
+        => Task.FromResult<IReadOnlyList<ShramSafal.Domain.Dfes.QuestionEvent>>(Array.Empty<ShramSafal.Domain.Dfes.QuestionEvent>());
 }
