@@ -31,6 +31,7 @@ import { rankMeterGaps } from '../services/meterGaps';
 import { computeMeterArrival } from '../services/meterArrival';
 import type { VlogScore } from '../../../domain/types/log.types';
 import type { FarmerEngagementDto } from '../../../infrastructure/api/resources/DfesResource';
+import type { SelectedQuestion } from '../services/dfesQuestionEngine';
 import ShramSathiMeter, { type ShramSathiGap } from './shramsathi/ShramSathiMeter';
 
 export interface MeterDisplayProps {
@@ -40,6 +41,10 @@ export interface MeterDisplayProps {
     allLogs?: Array<{ understanding?: VlogScore }>;
     /** Server-folded engagement projection; when present it is the source of the arrival gate. */
     engagement?: FarmerEngagementDto | null;
+    /** Phase 5: the combined D8 question for today (null when none). Gated by stageQuestions. */
+    dfesQuestion?: SelectedQuestion | null;
+    /** Phase 5: fired when the farmer taps the combined question card. */
+    onQuestionInteract?: () => void;
     /** Optional passthrough for layout tweaks (dev preview grid, etc.). */
     className?: string;
 }
@@ -67,6 +72,8 @@ export function MeterDisplay({
     score,
     allLogs = [],
     engagement,
+    dfesQuestion,
+    onQuestionInteract,
     className = '',
 }: MeterDisplayProps): React.ReactElement | null {
     // Flag gate: inert in production until the meter is calibrated + founder-approved.
@@ -79,13 +86,20 @@ export function MeterDisplay({
         : computeMeterArrival(allLogs);
     const gaps = toVisualGaps(score);
 
+    // Phase 5: when stageQuestions is ON and a combined question is available,
+    // surface it as the single top card (approved copy) ahead of raw gap cards.
+    const combined = FEATURE_FLAGS.stageQuestions && dfesQuestion
+        ? [{ id: dfesQuestion.question.questionKey, question: dfesQuestion.resolvedPromptMr }]
+        : null;
+
     return (
         <div data-testid="meter-display" className={className}>
             <ShramSathiMeter
                 arrived={arrival.arrived}
                 arrivingProgress={arrival.richLogCount}
                 score={{ value: toTenScale(score) }}
-                gaps={gaps}
+                gaps={combined ?? gaps}
+                onGapClick={combined ? () => onQuestionInteract?.() : undefined}
             />
         </div>
     );

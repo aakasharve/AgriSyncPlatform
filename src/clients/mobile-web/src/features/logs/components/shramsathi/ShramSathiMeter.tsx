@@ -33,6 +33,8 @@ interface ShramSathiMeterProps {
     arrivingProgress: number;
     score?: MeterScore;
     gaps?: ShramSathiGap[];
+    /** Phase 5: makes the gap/question card tappable (e.g. the combined D8 question). */
+    onGapClick?: (id: string) => void;
     className?: string;
 }
 
@@ -181,6 +183,7 @@ const ShramSathiMeter: React.FC<ShramSathiMeterProps> = ({
     arrivingProgress,
     score,
     gaps = [],
+    onGapClick,
     className = '',
 }) => {
     const safeScore = clampScore(score?.value);
@@ -245,6 +248,9 @@ const ShramSathiMeter: React.FC<ShramSathiMeterProps> = ({
                                             <div
                                                 key={gap.id}
                                                 data-testid="shramsathi-gap-question"
+                                                role={onGapClick ? 'button' : undefined}
+                                                tabIndex={onGapClick ? 0 : undefined}
+                                                onClick={onGapClick ? () => onGapClick(gap.id) : undefined}
                                                 className="rounded-xl bg-white px-3 py-2 font-['Noto_Sans_Devanagari'] text-sm font-bold text-[#334155] shadow-sm ring-1 ring-[#E2ECF3]"
                                             >
                                                 {gap.question}
