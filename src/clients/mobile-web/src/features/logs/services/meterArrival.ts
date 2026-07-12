@@ -5,19 +5,21 @@
  * meterArrival — Understanding Meter arrival-gate service (1d-infra, no UI)
  *
  * Computes whether a farmer has "arrived" at the Understanding Meter milestone:
- * 20 rich logs (logs where the AI genuinely comprehended the day, score > 50).
+ * `DFES_TUNING.richDayThreshold` rich days (days where the AI genuinely
+ * comprehended the day, score > 50).
  *
  * Hard rules:
  * - No React, no DOM, no network, no Dexie, no styling, no asset refs, no flag.
  * - No `any`.
  * - "Rich log" = score is a number AND score > 50 (UNKNOWN/null and ≤50 excluded).
- * - Arrived = richLogCount >= target (default 20).
+ * - Arrived = richLogCount >= target (default `DFES_TUNING.richDayThreshold`).
  * - Progress = Math.min(richLogCount / target, 1).
  *
  * spec: ai-intelligence-plan-2026-06-25
  */
 
 import type { VlogScore } from '../../../domain/types/log.types';
+import { DFES_TUNING } from './dfesTuning';
 
 // =============================================================================
 // OUTPUT TYPE
@@ -27,7 +29,7 @@ import type { VlogScore } from '../../../domain/types/log.types';
  * The result of computeMeterArrival.
  *
  * - richLogCount : number of logs that qualify as "rich" (score > 50)
- * - target       : the arrival threshold (default 20)
+ * - target       : the arrival threshold (default `DFES_TUNING.richDayThreshold`)
  * - arrived      : true when richLogCount >= target
  * - progress     : richLogCount / target, clamped to [0, 1]
  */
@@ -67,12 +69,12 @@ export function isRichLog(log: { understanding?: VlogScore }): boolean {
  *
  * @param logs    Array of objects that may carry a VlogScore under `understanding`.
  *                Typically `DailyLog[]`, but typed loosely for testability.
- * @param target  Arrival threshold (default 20).
+ * @param target  Arrival threshold (default `DFES_TUNING.richDayThreshold`).
  * @returns       MeterArrival with richLogCount, target, arrived flag, progress.
  */
 export function computeMeterArrival(
     logs: Array<{ understanding?: VlogScore }>,
-    target = 20,
+    target: number = DFES_TUNING.richDayThreshold,
 ): MeterArrival {
     const richLogCount = logs.filter(isRichLog).length;
     const arrived = richLogCount >= target;

@@ -22,6 +22,7 @@ import { render, cleanup } from '@testing-library/react';
 import '@testing-library/jest-dom/vitest';
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import type { VlogScoreDimension, VlogScore } from '../../../../domain/types/log.types';
+import { DFES_TUNING } from '../../services/dfesTuning';
 
 // =============================================================================
 // HELPERS
@@ -106,8 +107,8 @@ describe('MeterDisplay', () => {
             makeDim('WHAT', true, 1, 20),   // fully covered → no gap
         ]);
 
-        // 20 rich logs → arrived, so the arrived branch (score + gaps) renders.
-        const arrivedLogs = Array.from({ length: 20 }, () => ({
+        // richDayThreshold rich logs → arrived, so the arrived branch (score + gaps) renders.
+        const arrivedLogs = Array.from({ length: DFES_TUNING.richDayThreshold }, () => ({
             understanding: makeScore(90, 'SCORED', []),
         }));
 
@@ -137,7 +138,7 @@ describe('MeterDisplay', () => {
         ]);
 
         // Arrived so the gap region can render — proves gaps stay empty on UNKNOWN.
-        const arrivedLogs = Array.from({ length: 20 }, () => ({
+        const arrivedLogs = Array.from({ length: DFES_TUNING.richDayThreshold }, () => ({
             understanding: makeScore(90, 'SCORED', []),
         }));
 
@@ -153,10 +154,10 @@ describe('MeterDisplay', () => {
     // -------------------------------------------------------------------------
     // 4. Flag ON + few rich logs → NOT arrived → arriving silhouette + ticks
     // -------------------------------------------------------------------------
-    it('shows the arriving silhouette (not arrived) with 20 progress ticks below the threshold', async () => {
+    it('shows the arriving silhouette (not arrived) with threshold progress ticks below the threshold', async () => {
         const { MeterDisplay } = await loadComponent(true);
 
-        // Rich log = score > 50. Build 5 rich + 2 non-rich → 5/20, not arrived.
+        // Rich log = score > 50. Build 5 rich + 2 non-rich → 5/threshold, not arrived.
         const richScore = makeScore(80, 'SCORED', []);
         const poorScore = makeScore(30, 'SCORED', []);
         const unknownScore = makeScore(null, 'UNKNOWN', []);
@@ -173,9 +174,9 @@ describe('MeterDisplay', () => {
 
         const { getByTestId, getAllByTestId } = render(<MeterDisplay allLogs={allLogs} />);
 
-        // Not arrived → the face renders as the silhouette.
-        expect(getByTestId('shramsathi-face')).toHaveAttribute('data-band', 'silhouette');
-        // Arrival gate renders 20 progress ticks (5 filled of 20).
-        expect(getAllByTestId('shramsathi-arriving-tick')).toHaveLength(20);
+        // Not arrived → the re-skinned figure renders with data-arrived="0".
+        expect(getByTestId('shramsathi-figure')).toHaveAttribute('data-arrived', '0');
+        // Arrival gate renders threshold progress ticks (5 filled of threshold).
+        expect(getAllByTestId('shramsathi-arriving-tick')).toHaveLength(DFES_TUNING.richDayThreshold);
     });
 });

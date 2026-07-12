@@ -5,6 +5,7 @@ import { cleanup, render, screen } from '@testing-library/react';
 import '@testing-library/jest-dom/vitest';
 import { afterEach, describe, expect, it } from 'vitest';
 import ShramSathiMeter from '../ShramSathiMeter';
+import { DFES_TUNING } from '../../../services/dfesTuning';
 
 afterEach(() => {
     cleanup();
@@ -22,9 +23,9 @@ describe('ShramSathiMeter', () => {
         );
 
         expect(screen.getByTestId('shramsathi-meter')).toBeInTheDocument();
-        expect(screen.getByTestId('shramsathi-face')).toHaveAttribute('data-band', 'silhouette');
+        expect(screen.getByTestId('shramsathi-figure')).toHaveAttribute('data-arrived', '0');
         expect(screen.queryByTestId('shramsathi-score')).not.toBeInTheDocument();
-        expect(screen.getAllByTestId('shramsathi-arriving-tick')).toHaveLength(20);
+        expect(screen.getAllByTestId('shramsathi-arriving-tick')).toHaveLength(DFES_TUNING.richDayThreshold);
     });
 
     it('shows the Devanagari /10 score and warm expression after arrival', () => {
@@ -42,7 +43,7 @@ describe('ShramSathiMeter', () => {
             />
         );
 
-        expect(screen.getByTestId('shramsathi-face')).toHaveAttribute('data-band', 'delighted');
+        expect(screen.getByTestId('shramsathi-figure')).toHaveAttribute('data-arrived', '1');
         expect(screen.getByTestId('shramsathi-score')).toHaveTextContent('१० पैकी ९');
         expect(screen.getAllByTestId('shramsathi-gap-question')).toHaveLength(3);
         expect(screen.getByTestId('shramsathi-meter').className).not.toMatch(/red-/);
