@@ -23,8 +23,7 @@ import { buildTimelineEntries } from '../../services/transcriptTimelineService';
 import WeatherWidget from '../../features/weather/components/WeatherWidget';
 import { formatCurrencyINR } from '../../shared/utils/dayState';
 import { getCropTheme } from '../../shared/utils/colorTheme';
-import { FEATURE_FLAGS } from '../../app/featureFlags';
-import { MeterDisplay } from '../../features/logs/components/MeterDisplay';
+import { LedgerRecognitionPanel } from '../../features/logs/components/LedgerRecognitionPanel';
 import ShramSathiUnderstanding from '../../features/logs/components/shramsathi/ShramSathiUnderstanding';
 
 import { AppRouterContext } from './routeContext';
@@ -590,12 +589,12 @@ export const renderLogView = (ctx: AppRouterContext): React.ReactNode => {
                             <p className="text-stone-500 mb-8">Your activity has been logged successfully.</p>
                         )}
 
-                        {/* Understanding Meter scaffold (1d-infra, flag-gated, OFF by default).
-                            WP-4 data-wiring (Task 10): pass the just-saved log's `understanding`
-                            VlogScore (looked up by lastSavedLogIds in history) + the farmer's full
-                            logs list for the arrival gate. Logic only — visual polish deferred to
-                            founder art assets (build-infra-now-defer-ui-polish-until-assets). */}
-                        {FEATURE_FLAGS.understandingMeter && (() => {
+                        {/* DFES recognition surface (dfes-companion-2026-07-11). The panel
+                            renders unconditionally; each child self-gates on its flag
+                            (understandingMeter for the bar, disciplineSystem for the strip),
+                            and the useFarmerEngagement fetch self-gates on those flags, so it
+                            stays inert AND network-silent in production until a flag is on. */}
+                        {(() => {
                             const savedLogId = lastSavedLogIds && lastSavedLogIds.length > 0
                                 ? lastSavedLogIds[0]
                                 : undefined;
@@ -603,8 +602,9 @@ export const renderLogView = (ctx: AppRouterContext): React.ReactNode => {
                                 ? history.find(l => l.id === savedLogId)
                                 : undefined;
                             return (
-                                <MeterDisplay
-                                    score={savedLog?.understanding}
+                                <LedgerRecognitionPanel
+                                    farmId={savedLog?.context?.selection?.[0]?.farmId ?? null}
+                                    savedLog={savedLog}
                                     allLogs={history}
                                 />
                             );

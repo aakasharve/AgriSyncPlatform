@@ -30,6 +30,7 @@ import { FEATURE_FLAGS } from '../../../app/featureFlags';
 import { rankMeterGaps } from '../services/meterGaps';
 import { computeMeterArrival } from '../services/meterArrival';
 import type { VlogScore } from '../../../domain/types/log.types';
+import type { FarmerEngagementDto } from '../../../infrastructure/api/resources/DfesResource';
 import ShramSathiMeter, { type ShramSathiGap } from './shramsathi/ShramSathiMeter';
 
 export interface MeterDisplayProps {
@@ -37,6 +38,8 @@ export interface MeterDisplayProps {
     score?: VlogScore;
     /** All of the farmer's logs (each may carry an `understanding` VlogScore) — drives the arrival gate. */
     allLogs?: Array<{ understanding?: VlogScore }>;
+    /** Server-folded engagement projection; when present it is the source of the arrival gate. */
+    engagement?: FarmerEngagementDto | null;
     /** Optional passthrough for layout tweaks (dev preview grid, etc.). */
     className?: string;
 }
@@ -63,6 +66,7 @@ function toVisualGaps(score?: VlogScore): ShramSathiGap[] {
 export function MeterDisplay({
     score,
     allLogs = [],
+    engagement,
     className = '',
 }: MeterDisplayProps): React.ReactElement | null {
     // Flag gate: inert in production until the meter is calibrated + founder-approved.
@@ -70,7 +74,9 @@ export function MeterDisplay({
         return null;
     }
 
-    const arrival = computeMeterArrival(allLogs);
+    const arrival = engagement
+        ? { arrived: engagement.unlockStatus === 'unlocked', richLogCount: engagement.totalRichDays }
+        : computeMeterArrival(allLogs);
     const gaps = toVisualGaps(score);
 
     return (

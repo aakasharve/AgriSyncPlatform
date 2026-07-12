@@ -179,4 +179,23 @@ describe('MeterDisplay', () => {
         // Arrival gate renders threshold progress ticks (5 filled of threshold).
         expect(getAllByTestId('shramsathi-arriving-tick')).toHaveLength(DFES_TUNING.richDayThreshold);
     });
+
+    // -------------------------------------------------------------------------
+    // 5. Flag ON + engagement provided → engagement is the arrival source
+    // -------------------------------------------------------------------------
+    it('uses the engagement projection as the arrival source when provided', async () => {
+        const { MeterDisplay } = await loadComponent(true);
+        const engagement = {
+            currentStreak: 4,
+            longestStreak: 4,
+            totalShramPoints: 40,
+            lastAccountedDate: '2026-07-11',
+            totalRichDays: DFES_TUNING.richDayThreshold, // == threshold → unlocked
+            unlockStatus: 'unlocked' as const,
+        };
+        const score = makeScore(90, 'SCORED', []);
+        const { getByTestId } = render(<MeterDisplay score={score} engagement={engagement} allLogs={[]} />);
+        // Arrived branch renders the /10 score even though allLogs is empty.
+        expect(getByTestId('shramsathi-score')).toBeTruthy();
+    });
 });
