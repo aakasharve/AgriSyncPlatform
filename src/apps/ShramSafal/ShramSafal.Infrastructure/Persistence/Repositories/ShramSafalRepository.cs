@@ -250,6 +250,20 @@ internal sealed class ShramSafalRepository(ShramSafalDbContext db) : IShramSafal
             .ToListAsync(ct);
     }
 
+    /// <summary>
+    /// DFES (dfes-companion-2026-07-11) — the ONE locked aggregate read. Filters to the
+    /// caller's farm (RLS + this Where) and orders by local_date for the Phase-3 fold.
+    /// </summary>
+    public async Task<IReadOnlyList<ShramSafal.Domain.Dfes.DailyRichnessAggregate>> GetDailyRichnessAggregatesForFarmAsync(
+        Guid farmId, CancellationToken ct = default)
+    {
+        return await db.DailyRichnessAggregates
+            .AsNoTracking()
+            .Where(x => x.FarmId == farmId)
+            .OrderBy(x => x.LocalDate)
+            .ToListAsync(ct);
+    }
+
     public async Task AddAttachmentAsync(Attachment attachment, CancellationToken ct = default)
     {
         await db.Attachments.AddAsync(attachment, ct);

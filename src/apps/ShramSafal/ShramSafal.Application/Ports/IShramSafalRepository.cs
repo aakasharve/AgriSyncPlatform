@@ -570,4 +570,14 @@ public interface IShramSafalRepository
     /// <summary>Stage a brand-new <see cref="RoutinePattern"/> (first confirmed sighting).</summary>
     Task AddRoutinePatternAsync(RoutinePattern p, CancellationToken ct = default)
         => Task.CompletedTask;
+
+    /// <summary>
+    /// DFES (dfes-companion-2026-07-11) — all <see cref="ShramSafal.Domain.Dfes.DailyRichnessAggregate"/>
+    /// rows for a farm (the Phase-3 engagement fold reads these). Default impl returns empty so the
+    /// in-tree IShramSafalRepository test doubles keep compiling; production overrides.
+    /// </summary>
+    Task<IReadOnlyList<ShramSafal.Domain.Dfes.DailyRichnessAggregate>> GetDailyRichnessAggregatesForFarmAsync(
+        Guid farmId, CancellationToken ct = default)
+        => Task.FromResult<IReadOnlyList<ShramSafal.Domain.Dfes.DailyRichnessAggregate>>(
+            Array.Empty<ShramSafal.Domain.Dfes.DailyRichnessAggregate>());
 }
