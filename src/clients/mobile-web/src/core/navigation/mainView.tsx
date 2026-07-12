@@ -624,9 +624,17 @@ export const renderLogView = (ctx: AppRouterContext): React.ReactNode => {
                             const savedLog = savedLogId
                                 ? history.find(l => l.id === savedLogId)
                                 : undefined;
+                            // Phase 5 (dfes-companion-2026-07-11): derive the farm/plot/crop
+                            // context the D8 question engine needs from the saved log's own
+                            // context selection — SelectedCropContext already carries cropName
+                            // inline (domain/types/log.types.ts), so no separate crops[] lookup.
+                            const selection = savedLog?.context?.selection?.[0];
                             return (
                                 <LedgerRecognitionPanel
-                                    farmId={savedLog?.context?.selection?.[0]?.farmId ?? null}
+                                    farmId={selection?.farmId ?? null}
+                                    plotId={selection?.selectedPlotIds?.[0] ?? null}
+                                    crop={selection?.cropName ?? ''}
+                                    todayLocalDate={savedLog?.date}
                                     savedLog={savedLog}
                                     allLogs={history}
                                 />
