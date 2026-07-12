@@ -1,6 +1,7 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi, afterEach } from 'vitest';
 import { selectDailyQuestion, type DailyQuestionInputs } from '../dfesQuestionEngine';
 import type { VlogScore } from '../../../../domain/types/log.types';
+import type { DfesQuestion } from '../dfesQuestionBank';
 
 const scoreWithGap = (dim: string): VlogScore => ({
     score: 40, outcome: 'SCORED',
@@ -70,5 +71,71 @@ describe('selectDailyQuestion (Phase 5)', () => {
         }));
         expect(r!.resolvedPromptMr).toContain('grapes');
         expect(r!.question.questionKey).toBe('stage.confirm_current');
+    });
+});
+
+// spec: dfes-companion-2026-07-11 (Phase 5, Task 5.10) — CRITICAL acceptance
+// gate. The real bank (dfesQuestionBank.ts) can only ever hold approved
+// entries — every literal entry is spread with `...APPROVED`, and
+// dfesQuestionBank.test.ts asserts that invariant — so exercising this gate
+// against the real bank alone would never prove the SELECTOR itself enforces
+// it (it could pass by construction alone). To isolate the engine's own
+// `approved()` check, this substitutes one controlled, otherwise-identical
+// DfesQuestion via the bank module's lookup functions (findGapQuestion),
+// following the vi.doMock + vi.resetModules() + dynamic-import pattern
+// already used by dfesTuning.test.ts / AppRouter.feature-gate.test.tsx /
+// MeterDisplay.test.tsx to control a mocked module deterministically per test.
+describe('selectDailyQuestion — hard AgronomistApproved && MarathiApproved gate (CRITICAL)', () => {
+    afterEach(() => {
+        vi.doUnmock('../dfesQuestionBank');
+        vi.resetModules();
+    });
+
+    /** Same shape as the real gap.dose bank entry, minus the approval flags —
+     *  the ONLY variable across the three tests below is agronomistApproved /
+     *  marathiApproved, so a pass/fail difference can only be attributed to
+     *  the gate, not to some other property of the substituted question. */
+    const questionShape = {
+        questionKey: 'gap.dose', crop: '*', triggerType: 'Gap', questionType: 'gap_fill',
+        lens: 'Execution', depthLevel: 1, priority: 4, cooldownDays: 3, answerModes: 'voice',
+        safetyClass: 'informational', anchorDateType: 'log_date',
+        promptMr: 'किती मात्रा (डोस) वापरली?',
+    } as const;
+
+    /** Mounts a `dfesQuestionBank` mock whose `findGapQuestion('DOSE')` returns
+     *  `question` (all other exports pass through untouched), then runs
+     *  `selectDailyQuestion` with a context that would otherwise select the
+     *  DOSE gap (single-gap score, no higher-priority trigger, no cooldown). */
+    async function selectWithSubstitutedDoseQuestion(question: DfesQuestion) {
+        vi.resetModules();
+        vi.doMock('../dfesQuestionBank', async () => {
+            const actual = await vi.importActual<typeof import('../dfesQuestionBank')>('../dfesQuestionBank');
+            return {
+                ...actual,
+                findGapQuestion: (dimension: string) =>
+                    dimension === 'DOSE' ? question : actual.findGapQuestion(dimension),
+            };
+        });
+        const { selectDailyQuestion: selectMocked } = await import('../dfesQuestionEngine');
+        return selectMocked(base({ score: scoreWithGap('DOSE') }));
+    }
+
+    it('never surfaces a question with agronomistApproved: false, even when it would otherwise be selected', async () => {
+        const unapproved: DfesQuestion = { ...questionShape, agronomistApproved: false, marathiApproved: true };
+        const result = await selectWithSubstitutedDoseQuestion(unapproved);
+        expect(result).toBeNull();
+    });
+
+    it('never surfaces a question with marathiApproved: false, even when it would otherwise be selected', async () => {
+        const unapproved: DfesQuestion = { ...questionShape, agronomistApproved: true, marathiApproved: false };
+        const result = await selectWithSubstitutedDoseQuestion(unapproved);
+        expect(result).toBeNull();
+    });
+
+    it('companion positive case: the SAME question shape with both flags true IS eligible', async () => {
+        const approvedQuestion: DfesQuestion = { ...questionShape, agronomistApproved: true, marathiApproved: true };
+        const result = await selectWithSubstitutedDoseQuestion(approvedQuestion);
+        expect(result).not.toBeNull();
+        expect(result!.question.questionKey).toBe('gap.dose');
     });
 });
