@@ -45,4 +45,14 @@ export const FEATURE_FLAGS = {
      * Full ±8 calibration deferred (needs W1.P2 provenance + calibration fixtures).
      */
     understandingMeter: isEnabled('VITE_UNDERSTANDING_METER'),
+
+    // DFES companion (spec: dfes-companion-2026-07-11). All default OFF;
+    // enabled only via VITE_* env in a preview build. Phase 3 does NOT flip
+    // understandingMeter on by default.
+    /** Phase 3 DisciplineStrip. */
+    disciplineSystem: isEnabled('VITE_DISCIPLINE_SYSTEM'),
+    /** Phase 4 voice-first continuity. */
+    voiceContinuity: isEnabled('VITE_VOICE_CONTINUITY'),
+    /** Phase 5 stage/D8 question engine. */
+    stageQuestions: isEnabled('VITE_STAGE_QUESTIONS'),
 } as const;
