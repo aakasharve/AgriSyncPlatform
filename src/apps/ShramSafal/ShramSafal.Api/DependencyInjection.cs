@@ -10,6 +10,7 @@ using ShramSafal.Application.UseCases.AI.CoVeReverify;
 using ShramSafal.Application.UseCases.AI.CreateDocumentSession;
 using ShramSafal.Application.UseCases.Consent.GetConsent;
 using ShramSafal.Application.UseCases.Consent.UpdateConsent;
+using ShramSafal.Application.UseCases.Dfes.GetFarmerEngagement;
 using ShramSafal.Application.UseCases.VoiceDiary.GetVoiceDiaryByRange;
 using ShramSafal.Application.UseCases.VoiceDiary.PersistVoiceClipRetained;
 using ShramSafal.Application.UseCases.Privacy.IssueTenantDek;
@@ -137,6 +138,7 @@ public static class DependencyInjection
         services.AddScoped<AllocateGlobalExpenseHandler>();
         services.AddScoped<CorrectCostEntryHandler>();
         services.AddScoped<GetFinanceSummaryHandler>();
+        services.AddScoped<GetFarmerEngagementHandler>();
         services.AddScoped<CreateAttachmentHandler>();
         services.AddScoped<UploadAttachmentHandler>();
         services.AddScoped<GetAttachmentMetadataHandler>();
