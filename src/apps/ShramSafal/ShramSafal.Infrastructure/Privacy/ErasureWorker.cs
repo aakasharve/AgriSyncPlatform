@@ -130,6 +130,10 @@
 //     already-scrubbed parent daily_logs.operator_user_id (→ ErasedFarmer); the observation CONTENT
 //     SURVIVES. Rare embedded third-party PII is handled by a future surgical-redaction pass (B-FT1),
 //     never a blanket scrub. KEEP — conscious gate-4 disposition. No scrub action.
+//     The Phase-1 DFES InsightEntry facet columns (observation/change/comparison/challenge/
+//     uncertainty/hypothesis/evidence/learning/next_action/crop_stage/farmer_confirmed_summary/
+//     source_question_id) are additional PRESERVED free-text/structured knowledge on this same
+//     row — covered by this KEEP disposition, never scrubbed.
 //   - ssf.disturbance_events — Track B daily_logs-child (ADR 0023 §2 / D-FREETEXT-PRESERVE-2026-06-29).
 //     HAS free-text (reason) — the farmer's words for why the day's work was disrupted. Same disposition
 //     as observation_events: FARM-co-owned knowledge, PRESERVED on erasure (a single member's erasure must
@@ -137,6 +141,18 @@
 //     parent daily_logs.operator_user_id (→ ErasedFarmer); the reason CONTENT SURVIVES. Rare embedded
 //     third-party PII → future surgical-redaction pass (B-FT1), never a blanket scrub. KEEP — conscious
 //     gate-4 disposition. No scrub action.
+//   - ssf.daily_richness_aggregates — DFES (dfes-companion-2026-07-11) DIRECT-farm_id derived
+//     aggregate (one row per farm per local day; scores/classification/reward/streak/bar).
+//     Like routine_patterns / weather_events: NO user_id column, NO farmer free-text, NO PII —
+//     a per-day derived farm fact. A single member's erasure must NOT delete the farm's richness
+//     history. KEEP (survives, DPDP §12 de-identified operational retention). No scrub action;
+//     conscious gate-4 disposition.
+//   - ssf.question_events — DFES (dfes-companion-2026-07-11) append-only D8 question telemetry
+//     keyed on farm_id (nullable daily_log_id). REVOKE UPDATE/DELETE (append-only by privilege).
+//     Carries an optional free-text `response` (farmer's words) → same disposition as
+//     observation_events: FARM-co-owned knowledge, PRESERVED on erasure. There is no user_id to
+//     scrub; the WHO is de-attributed via the already-scrubbed parent daily_logs.operator_user_id
+//     when daily_log_id is set. KEEP — conscious gate-4 disposition. No scrub action.
 //   - ssf.consent_audit / ssf.audit_events — append-only by
 //     privilege; flagged "redacted" at the column level, never
 //     deleted.
