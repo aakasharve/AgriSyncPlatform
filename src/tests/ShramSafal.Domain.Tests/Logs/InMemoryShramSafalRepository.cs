@@ -5,6 +5,7 @@ using ShramSafal.Application.Ports;
 using ShramSafal.Domain.Attachments;
 using ShramSafal.Domain.Audit;
 using ShramSafal.Domain.Crops;
+using ShramSafal.Domain.Dfes;
 using ShramSafal.Domain.Farms;
 using ShramSafal.Domain.Finance;
 using ShramSafal.Domain.Logs;
@@ -144,6 +145,19 @@ internal sealed class InMemoryShramSafalRepository : IShramSafalRepository
 
     public Task<bool> IsUserMemberOfFarmAsync(Guid farmId, Guid userId, CancellationToken ct = default)
         => Task.FromResult(_memberships.ContainsKey((farmId, userId)));
+
+    // DFES (dfes-companion-2026-07-11) Phase 3 — seam for GetFarmerEngagementHandlerTests.
+    // IShramSafalRepository.GetDailyRichnessAggregatesForFarmAsync is default-bodied
+    // (returns empty) on the port; this override lets tests seed farm-scoped rows.
+    public List<DailyRichnessAggregate> SeededRichnessAggregates { get; } = [];
+
+    public Task<IReadOnlyList<DailyRichnessAggregate>> GetDailyRichnessAggregatesForFarmAsync(
+        Guid farmId, CancellationToken ct = default)
+        => Task.FromResult<IReadOnlyList<DailyRichnessAggregate>>(
+            SeededRichnessAggregates
+                .Where(a => a.FarmId == farmId)
+                .OrderBy(a => a.LocalDate)
+                .ToList());
 
     public Task<AppRole?> GetUserRoleForFarmAsync(Guid farmId, Guid userId, CancellationToken ct = default)
         => Task.FromResult<AppRole?>(
