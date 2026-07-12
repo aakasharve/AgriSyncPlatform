@@ -580,4 +580,22 @@ public interface IShramSafalRepository
         Guid farmId, CancellationToken ct = default)
         => Task.FromResult<IReadOnlyList<ShramSafal.Domain.Dfes.DailyRichnessAggregate>>(
             Array.Empty<ShramSafal.Domain.Dfes.DailyRichnessAggregate>());
+
+    // ── DFES (dfes-companion-2026-07-11) daily richness derivation ─────────────
+    Task<IReadOnlyList<DailyLog>> GetDailyLogsForFarmDateAsync(
+        Guid farmId, DateOnly localDate, CancellationToken ct = default)
+        => Task.FromResult<IReadOnlyList<DailyLog>>(Array.Empty<DailyLog>());
+
+    Task<IReadOnlyList<ShramSafal.Domain.Farms.ObservationEvent>> GetObservationEventsForDailyLogsAsync(
+        IReadOnlyCollection<Guid> dailyLogIds, CancellationToken ct = default)
+        => Task.FromResult<IReadOnlyList<ShramSafal.Domain.Farms.ObservationEvent>>(
+            Array.Empty<ShramSafal.Domain.Farms.ObservationEvent>());
+
+    Task<ShramSafal.Domain.Dfes.DailyRichnessAggregate?> GetDailyRichnessAggregateAsync(
+        Guid farmId, DateOnly localDate, CancellationToken ct = default)
+        => Task.FromResult<ShramSafal.Domain.Dfes.DailyRichnessAggregate?>(null);
+
+    Task AddDailyRichnessAggregateAsync(
+        ShramSafal.Domain.Dfes.DailyRichnessAggregate aggregate, CancellationToken ct = default)
+        => Task.CompletedTask;
 }

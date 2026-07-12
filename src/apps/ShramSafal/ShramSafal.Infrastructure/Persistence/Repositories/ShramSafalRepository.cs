@@ -264,6 +264,43 @@ internal sealed class ShramSafalRepository(ShramSafalDbContext db) : IShramSafal
             .ToListAsync(ct);
     }
 
+    // ── DFES (dfes-companion-2026-07-11) daily richness derivation ─────────────
+    public async Task<IReadOnlyList<DailyLog>> GetDailyLogsForFarmDateAsync(
+        Guid farmId, DateOnly localDate, CancellationToken ct = default)
+    {
+        var typedFarmId = new FarmId(farmId);
+        return await db.DailyLogs
+            .AsNoTracking()
+            .Where(l => l.FarmId == typedFarmId && l.LogDate == localDate)
+            .OrderBy(l => l.Id)
+            .ToListAsync(ct);
+    }
+
+    public async Task<IReadOnlyList<Domain.Farms.ObservationEvent>> GetObservationEventsForDailyLogsAsync(
+        IReadOnlyCollection<Guid> dailyLogIds, CancellationToken ct = default)
+    {
+        if (dailyLogIds.Count == 0)
+        {
+            return Array.Empty<Domain.Farms.ObservationEvent>();
+        }
+
+        return await db.ObservationEvents
+            .AsNoTracking()
+            .Where(o => dailyLogIds.Contains(o.DailyLogId))
+            .ToListAsync(ct);
+    }
+
+    public async Task<Domain.Dfes.DailyRichnessAggregate?> GetDailyRichnessAggregateAsync(
+        Guid farmId, DateOnly localDate, CancellationToken ct = default)
+        => await db.DailyRichnessAggregates
+            .FirstOrDefaultAsync(a => a.FarmId == farmId && a.LocalDate == localDate, ct);
+
+    public async Task AddDailyRichnessAggregateAsync(
+        Domain.Dfes.DailyRichnessAggregate aggregate, CancellationToken ct = default)
+    {
+        await db.DailyRichnessAggregates.AddAsync(aggregate, ct);
+    }
+
     public async Task AddAttachmentAsync(Attachment attachment, CancellationToken ct = default)
     {
         await db.Attachments.AddAsync(attachment, ct);

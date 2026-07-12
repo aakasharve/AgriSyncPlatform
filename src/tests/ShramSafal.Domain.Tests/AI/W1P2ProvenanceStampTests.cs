@@ -465,7 +465,8 @@ public sealed class W1P2ProvenanceStampTests
             new NoopAnalyticsWriter(),
             aiJobRepo,
             Microsoft.Extensions.Logging.Abstractions.NullLogger<CreateDailyLogHandler>.Instance,
-            new LedgerDerivationService(repo));
+            new LedgerDerivationService(repo),
+            new Common.NullDailyRichnessDerivationService());
 
         var command = new CreateDailyLogCommand(
             FarmId: TestFarmGuid,

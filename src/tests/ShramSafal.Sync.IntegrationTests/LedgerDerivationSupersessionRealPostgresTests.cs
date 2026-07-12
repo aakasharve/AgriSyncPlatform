@@ -494,6 +494,7 @@ public sealed class LedgerDerivationSupersessionRealPostgresTests(Xunit.Abstract
             sp.GetRequiredService<IAiJobRepository>(),
             sp.GetRequiredService<Microsoft.Extensions.Logging.ILogger<CreateDailyLogHandler>>(),
             sp.GetRequiredService<ILedgerDerivationService>(),
+            sp.GetRequiredService<IDailyRichnessDerivationService>(),
             ctx);
 
         var command = new CreateDailyLogCommand(

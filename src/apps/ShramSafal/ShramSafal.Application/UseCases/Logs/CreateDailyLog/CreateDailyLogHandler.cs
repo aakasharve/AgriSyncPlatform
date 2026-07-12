@@ -48,6 +48,7 @@ public sealed class CreateDailyLogHandler(
     IAiJobRepository aiJobRepository,
     ILogger<CreateDailyLogHandler> logger,
     ILedgerDerivationService ledgerDerivation,
+    IDailyRichnessDerivationService dailyRichnessDerivation,
     // Fix F1 — optional so unit tests that exercise the handler against an
     // in-memory repository (no EF) can pass null. When resolved through DI the
     // scoped DbContext is injected (registered in Infrastructure DI as
@@ -288,14 +289,10 @@ public sealed class CreateDailyLogHandler(
         Domain.AI.AiJob? sourceJobForEvidence,
         CancellationToken ct)
     {
-        // Nothing to persist → skip (avoids an empty SaveChanges / transaction).
-        var hasWeather = command.WeatherStamp is not null;
-        var hasDerivation = command.SourceAiJobId is { } && sourceJobForEvidence is not null;
-        if (!hasWeather && !hasDerivation)
-        {
-            return;
-        }
-
+        // Phase 2 (dfes-companion-2026-07-11): the daily richness aggregate is
+        // recomputed for EVERY confirmed log, so the side-car always runs (even
+        // when there is no weather stamp and no voice derivation) — no more
+        // early-return gate on hasWeather/hasDerivation.
         var relational = dbContext?.Database.IsRelational() == true;
         var ambientTx = relational ? dbContext!.Database.CurrentTransaction : null;
 
@@ -391,6 +388,13 @@ public sealed class CreateDailyLogHandler(
             await ledgerDerivation.DeriveAsync(log, sourceJobForEvidence, idGenerator, clock, ct);
         }
 
+        await repository.SaveChangesAsync(ct);
+
+        // Phase 2 — recompute the daily richness aggregate from the now-persisted
+        // spine. Runs inside the same savepoint/transaction isolation as the rest
+        // of the side-car, so a recompute failure rolls back to the savepoint and
+        // never discards the already-durable DailyLog (Fix F1 contract).
+        await dailyRichnessDerivation.RecomputeAsync(log.FarmId.Value, log.LogDate, ct);
         await repository.SaveChangesAsync(ct);
     }
 

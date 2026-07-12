@@ -127,6 +127,7 @@ public static class DependencyInjection
         // (parses AiJob.NormalizedResultJson into typed ssf rows inside
         // CreateDailyLogHandler's unit of work). spec: ai-intelligence-plan-2026-06-25
         services.AddScoped<ILedgerDerivationService, LedgerDerivationService>();
+        services.AddScoped<IDailyRichnessDerivationService, DailyRichnessDerivationService>();
         services.AddScoped<CreateDailyLogHandler>();
         services.AddScoped<AddLogTaskHandler>();
         services.AddScoped<VerifyLogHandler>();
