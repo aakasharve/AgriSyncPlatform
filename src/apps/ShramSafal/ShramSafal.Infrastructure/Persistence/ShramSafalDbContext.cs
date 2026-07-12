@@ -140,6 +140,16 @@ public sealed class ShramSafalDbContext(DbContextOptions<ShramSafalDbContext> op
     public DbSet<RoutinePattern> RoutinePatterns => Set<RoutinePattern>();
     public DbSet<WeatherStamp> WeatherStamps => Set<WeatherStamp>();
     public DbSet<EventLink> EventLinks => Set<EventLink>();
+
+    /// <summary>DFES (dfes-companion-2026-07-11) — per-farm per-day richness aggregate.
+    /// Mapped to <c>ssf.daily_richness_aggregates</c>. Direct-farm_id RLS.</summary>
+    public DbSet<ShramSafal.Domain.Dfes.DailyRichnessAggregate> DailyRichnessAggregates =>
+        Set<ShramSafal.Domain.Dfes.DailyRichnessAggregate>();
+
+    /// <summary>DFES (dfes-companion-2026-07-11) — append-only D8 question telemetry.
+    /// Mapped to <c>ssf.question_events</c>; migration REVOKEs UPDATE/DELETE.</summary>
+    public DbSet<ShramSafal.Domain.Dfes.QuestionEvent> QuestionEvents =>
+        Set<ShramSafal.Domain.Dfes.QuestionEvent>();
     public DbSet<JobCard> JobCards => Set<JobCard>();
     public DbSet<Organization> Organizations => Set<Organization>();
     public DbSet<OrganizationMembership> OrganizationMemberships => Set<OrganizationMembership>();
