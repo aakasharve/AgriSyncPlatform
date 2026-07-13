@@ -3,19 +3,26 @@
  * @license
  * SPDX-License-Identifier: Apache-2.0
  *
- * MeterDisplay — unit tests (1d-infra flag-gate scaffold)
+ * MeterDisplay — unit tests (dfes-companion-2026-07-11 Slice 3b).
  *
- * Follows the vi.doMock + vi.resetModules + dynamic-import pattern used in
- * AppRouter.feature-gate.test.tsx (the established repo convention for toggling
- * FEATURE_FLAGS between test cases without leaking module state).
+ * The DISPLAYED farmer number is now the server /10 Day Understanding Score
+ * (from useDayUnderstanding), NOT the client-side scoreVlog /100. These tests
+ * assert:
+ *   - score present  → "X / १०" in Devanagari, under the Sathi framing line,
+ *   - score null      → NO number, a gentle Marathi pending state,
+ *   - fetch fail/offline → NO number, gentle pending — and NEVER the client /100,
+ *   - the 3 internal lenses are never rendered (client only ever sees `score`),
+ *   - the flag-gate, arrival gate, and question-gap ranking still behave.
  *
- * spec: ai-intelligence-plan-2026-06-25
+ * Follows the vi.doMock + vi.resetModules + dynamic-import pattern used across
+ * the DFES suite for toggling FEATURE_FLAGS without leaking module state.
  */
 import React from 'react';
 import { render, cleanup } from '@testing-library/react';
-import { describe, it, expect, vi, afterEach } from 'vitest';
+import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
 import type { VlogScoreDimension, VlogScore } from '../../../../domain/types/log.types';
 import { DFES_TUNING } from '../../services/dfesTuning';
+import { t as translate } from '../../../../i18n/translations';
 
 // =============================================================================
 // HELPERS
@@ -47,15 +54,20 @@ function makeScore(
     return { score, outcome, dimensions: dims };
 }
 
+// Controllable useDayUnderstanding mock — set per test.
+const dayUnderstandingMock = vi.fn();
+
 /**
- * Load MeterDisplay with FEATURE_FLAGS.understandingMeter forced to a known value.
- * Mirrors the loadRoutesWithFlag pattern in AppRouter.feature-gate.test.tsx.
+ * Load MeterDisplay with FEATURE_FLAGS.understandingMeter forced, the server
+ * Day-Understanding hook mocked, and useLanguage bound to the REAL Marathi
+ * translations (so the framing/pending copy assertions are meaningful).
  */
 async function loadComponent(understandingMeter: boolean) {
     vi.resetModules();
     vi.doMock('../../../../app/featureFlags', () => ({
         FEATURE_FLAGS: {
             understandingMeter,
+            stageQuestions: false,
             DwcChip: false,
         },
         isFarmGeographyV2Enabled: () => false,
@@ -65,12 +77,29 @@ async function loadComponent(understandingMeter: boolean) {
         isE2EHarnessEnabled: () => false,
         isEnabled: () => understandingMeter,
     }));
+    vi.doMock('../../hooks/useDayUnderstanding', () => ({
+        useDayUnderstanding: (...args: unknown[]) => dayUnderstandingMock(...args),
+    }));
+    vi.doMock('../../../../i18n/LanguageContext', () => ({
+        useLanguage: () => ({ language: 'mr', setLanguage: () => undefined, t: (k: string) => translate(k, 'mr') }),
+    }));
     return import('../MeterDisplay');
 }
+
+function mockDayScore(score: number | null, error: string | null = null) {
+    dayUnderstandingMock.mockReturnValue({ score, isLoading: false, error, refresh: vi.fn() });
+}
+
+beforeEach(() => {
+    dayUnderstandingMock.mockReset();
+    mockDayScore(null);
+});
 
 afterEach(() => {
     cleanup();
     vi.doUnmock('../../../../app/featureFlags');
+    vi.doUnmock('../../hooks/useDayUnderstanding');
+    vi.doUnmock('../../../../i18n/LanguageContext');
     vi.resetModules();
 });
 
@@ -78,20 +107,22 @@ afterEach(() => {
 // TESTS
 // =============================================================================
 
-describe('MeterDisplay', () => {
+describe('MeterDisplay (Slice 3b — server /10 Day Understanding Score)', () => {
     // -------------------------------------------------------------------------
     // 1. Flag OFF → renders nothing
     // -------------------------------------------------------------------------
     it('renders nothing when FEATURE_FLAGS.understandingMeter is OFF', async () => {
+        mockDayScore(9);
         const { MeterDisplay } = await loadComponent(false);
-        const { container } = render(<MeterDisplay />);
+        const { container } = render(<MeterDisplay farmId="farm-1" dayDate="2026-07-11" />);
         expect(container.firstChild).toBeNull();
     });
 
     // -------------------------------------------------------------------------
-    // 2. Flag ON + SCORED VlogScore → score shown + gaps non-empty
+    // 2. Score present → "X / १०" in Devanagari + framing line; gaps still ranked
     // -------------------------------------------------------------------------
-    it('shows score and gaps for a SCORED VlogScore when flag is ON', async () => {
+    it('shows the server score as "X / १०" with the Marathi framing line, plus question gaps', async () => {
+        mockDayScore(8);
         const { MeterDisplay } = await loadComponent(true);
 
         const score = makeScore(78, 'SCORED', [
@@ -100,28 +131,83 @@ describe('MeterDisplay', () => {
             makeDim('WHAT', true, 1, 20),   // fully covered → no gap
         ]);
 
-        const { getByTestId } = render(<MeterDisplay score={score} allLogs={[]} />);
+        const { getByTestId } = render(
+            <MeterDisplay score={score} allLogs={[]} farmId="farm-1" dayDate="2026-07-11" />,
+        );
 
-        const scoreEl = getByTestId('meter-score');
-        expect(scoreEl.textContent).toContain('78/100');
-        expect(scoreEl.textContent).toContain('SCORED');
+        expect(getByTestId('day-understanding-value').textContent).toBe('८ / १०');
+        // Framing = Sathi's understanding of the day, not a grade of the farmer.
+        expect(getByTestId('day-understanding-intro').textContent).toContain('समजून');
 
+        // The scoreVlog VlogScore still drives question-gap ranking...
         const gapsEl = getByTestId('meter-gaps');
         expect(gapsEl.children.length).toBeGreaterThan(0);
     });
 
     // -------------------------------------------------------------------------
-    // 3. Flag ON + UNKNOWN VlogScore → meter-display shown, NO meter-gaps
+    // 3. Score null → NO number, gentle pending, no /100 anywhere
     // -------------------------------------------------------------------------
-    it('renders meter-display but no meter-gaps for an UNKNOWN VlogScore', async () => {
+    it('shows a gentle pending state (NO number) when the server score is null', async () => {
+        mockDayScore(null);
         const { MeterDisplay } = await loadComponent(true);
 
-        const score = makeScore(null, 'UNKNOWN', [
-            makeDim('DOSE', true, 0, 20),
-        ]);
+        const { getByTestId, queryByTestId, container } = render(
+            <MeterDisplay farmId="farm-1" dayDate="2026-07-11" />,
+        );
+
+        expect(getByTestId('day-understanding-pending').textContent).toBe('अजून समजतंय…');
+        expect(queryByTestId('day-understanding-value')).toBeNull();
+        // never a 0, never a client /100
+        expect(container.textContent).not.toContain('/100');
+        expect(container.textContent).not.toMatch(/०\s*\/\s*१०/);
+    });
+
+    // -------------------------------------------------------------------------
+    // 4. Fetch failed/offline → NO number, pending — NOT the client scoreVlog /100
+    // -------------------------------------------------------------------------
+    it('on a failed/offline fetch shows pending and NEVER the client /100 fallback', async () => {
+        mockDayScore(null, 'offline'); // hook already collapsed the error to score null
+        const { MeterDisplay } = await loadComponent(true);
+
+        // A rich VlogScore is present (score 78) — it must NOT leak as a farmer number.
+        const clientScore = makeScore(78, 'SCORED', [makeDim('DOSE', true, 0, 20)]);
+
+        const { getByTestId, queryByTestId, container } = render(
+            <MeterDisplay score={clientScore} farmId="farm-1" dayDate="2026-07-11" />,
+        );
+
+        expect(getByTestId('day-understanding-pending')).toBeTruthy();
+        expect(queryByTestId('day-understanding-value')).toBeNull();
+        expect(container.textContent).not.toContain('/100');
+        expect(container.textContent).not.toContain('78');
+    });
+
+    // -------------------------------------------------------------------------
+    // 5. The 3 internal lenses are never rendered — only the /10 surfaces
+    // -------------------------------------------------------------------------
+    it('never renders the internal lenses — only the single /10 score', async () => {
+        mockDayScore(7);
+        const { MeterDisplay } = await loadComponent(true);
+
+        const { getByTestId } = render(<MeterDisplay farmId="farm-1" dayDate="2026-07-11" />);
+
+        const surface = getByTestId('day-understanding');
+        // The only Devanagari numerals present are the score + denominator "७ / १०".
+        const digits = (surface.textContent ?? '').match(/[०-९]+/g) ?? [];
+        expect(digits).toEqual(['७', '१०']);
+    });
+
+    // -------------------------------------------------------------------------
+    // 6. UNKNOWN VlogScore → meter-display shown, NO meter-gaps
+    // -------------------------------------------------------------------------
+    it('renders meter-display but no meter-gaps for an UNKNOWN VlogScore', async () => {
+        mockDayScore(5);
+        const { MeterDisplay } = await loadComponent(true);
+
+        const score = makeScore(null, 'UNKNOWN', [makeDim('DOSE', true, 0, 20)]);
 
         const { getByTestId, queryByTestId } = render(
-            <MeterDisplay score={score} allLogs={[]} />,
+            <MeterDisplay score={score} allLogs={[]} farmId="farm-1" dayDate="2026-07-11" />,
         );
 
         expect(getByTestId('meter-display')).toBeTruthy();
@@ -129,12 +215,12 @@ describe('MeterDisplay', () => {
     });
 
     // -------------------------------------------------------------------------
-    // 4. Flag ON + allLogs with several rich logs → arrival reflects rich count
+    // 7. Arrival gate still reflects the rich-log count
     // -------------------------------------------------------------------------
     it('reflects the correct rich-log count in meter-arrival', async () => {
+        mockDayScore(6);
         const { MeterDisplay } = await loadComponent(true);
 
-        // Rich log = score > 50. Build 5 rich + 2 non-rich.
         const richScore = makeScore(80, 'SCORED', []);
         const poorScore = makeScore(30, 'SCORED', []);
         const unknownScore = makeScore(null, 'UNKNOWN', []);
@@ -149,11 +235,9 @@ describe('MeterDisplay', () => {
             { understanding: unknownScore },
         ];
 
-        const { getByTestId } = render(<MeterDisplay allLogs={allLogs} />);
+        const { getByTestId } = render(<MeterDisplay allLogs={allLogs} farmId="farm-1" dayDate="2026-07-11" />);
 
         const arrivalEl = getByTestId('meter-arrival');
-        // meterArrival now derives its target from DFES_TUNING.richDayThreshold
-        // (the single client-side DFES tunable) instead of a hardcoded 20.
         expect(arrivalEl.textContent).toContain(`5/${DFES_TUNING.richDayThreshold}`);
     });
 });

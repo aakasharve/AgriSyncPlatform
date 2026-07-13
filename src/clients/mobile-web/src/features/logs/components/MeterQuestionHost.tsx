@@ -45,6 +45,8 @@ export function MeterQuestionHost({
             score={score}
             allLogs={allLogs}
             engagement={engagement}
+            farmId={farmId}
+            dayDate={questionInputs.todayLocalDate}
             dfesQuestion={selected}
             onQuestionInteract={() => { void recordOutcome({ skipped: false }); }}
         />

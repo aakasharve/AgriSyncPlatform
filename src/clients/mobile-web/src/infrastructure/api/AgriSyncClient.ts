@@ -482,6 +482,10 @@ export class AgriSyncClient implements HttpTransport {
         return Dfes.getFarmerEngagement(this, farmId);
     }
 
+    getDayUnderstanding(farmId: string, date?: string): Promise<import('./resources/DfesResource').DayUnderstandingDto> {
+        return Dfes.getDayUnderstanding(this, farmId, date);
+    }
+
     // --- Internal: auth interceptor + 401 retry ---------------------------
 
     private attachAccessToken(config: InternalAxiosRequestConfig): InternalAxiosRequestConfig {

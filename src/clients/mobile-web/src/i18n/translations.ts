@@ -280,6 +280,11 @@ export interface Translations {
 
         // Batch 5
         clickToClose: string;
+
+        // Day Understanding Score (dfes-companion Slice 3b) — Sathi's framing of
+        // its OWN understanding of the farmer's day (X/10). NOT a grade of the farmer.
+        dayUnderstandingIntro: string;
+        dayUnderstandingPending: string;
     };
 }
 
@@ -535,6 +540,10 @@ export const translations: Record<Language, Translations> = {
 
             // Batch 5
             clickToClose: 'Click to close the day',
+
+            // Day Understanding Score (dfes-companion Slice 3b)
+            dayUnderstandingIntro: 'I understood your day today',
+            dayUnderstandingPending: 'Still understanding…',
         },
     },
 
@@ -789,6 +798,11 @@ export const translations: Record<Language, Translations> = {
 
             // Batch 5
             clickToClose: 'दिवस बंद करण्यासाठी क्लिक करा',
+
+            // Day Understanding Score (dfes-companion Slice 3b) — Sathi's own
+            // understanding of the day, never a grade of the farmer.
+            dayUnderstandingIntro: 'मी तुमचा आजचा दिवस समजून घेतला',
+            dayUnderstandingPending: 'अजून समजतंय…',
         },
     },
 };

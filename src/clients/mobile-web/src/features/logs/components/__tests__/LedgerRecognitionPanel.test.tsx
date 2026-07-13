@@ -31,6 +31,15 @@ vi.mock('../../hooks/useFarmerEngagement', () => ({
 vi.mock('../../hooks/useDfesQuestion', () => ({
     useDfesQuestion: (...args: unknown[]) => useDfesQuestionMock(...args),
 }));
+// The panel renders the real MeterDisplay (Slice 3b), which fetches the server
+// /10 via useDayUnderstanding and reads copy via useLanguage. Mock both so these
+// engagement/question wiring tests stay network-silent and provider-free.
+vi.mock('../../hooks/useDayUnderstanding', () => ({
+    useDayUnderstanding: () => ({ score: null, isLoading: false, error: null, refresh: vi.fn() }),
+}));
+vi.mock('../../../../i18n/LanguageContext', () => ({
+    useLanguage: () => ({ language: 'en', setLanguage: () => undefined, t: (k: string) => k }),
+}));
 
 const engagementDto = {
     currentStreak: 3, longestStreak: 5, totalShramPoints: 40,

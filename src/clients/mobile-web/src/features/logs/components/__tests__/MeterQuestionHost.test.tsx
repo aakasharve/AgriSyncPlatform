@@ -32,6 +32,17 @@ vi.mock('../../hooks/useDfesQuestion', () => ({
     useDfesQuestion: (...args: unknown[]) => useDfesQuestionMock(...args),
 }));
 
+// MeterQuestionHost renders the real MeterDisplay, which (Slice 3b) fetches the
+// server /10 via useDayUnderstanding and reads copy via useLanguage. Mock both so
+// these wiring tests stay network-silent and provider-free; the /10 display is
+// covered by MeterDisplay.test.tsx.
+vi.mock('../../hooks/useDayUnderstanding', () => ({
+    useDayUnderstanding: () => ({ score: null, isLoading: false, error: null, refresh: vi.fn() }),
+}));
+vi.mock('../../../../i18n/LanguageContext', () => ({
+    useLanguage: () => ({ language: 'en', setLanguage: () => undefined, t: (k: string) => k }),
+}));
+
 const score: VlogScore = {
     score: 78,
     outcome: 'SCORED',
