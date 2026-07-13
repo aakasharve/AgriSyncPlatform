@@ -310,6 +310,13 @@ export interface Translations {
         // (done / left), never a grade, never points, never scolding.
         // {done} = todayDayState.completedCount, {left} = .pendingCount.
         dailyLoopClarity: string;
+
+        // Task 7 (spec: dfes-companion-2026-07-11) — daily 7am native local
+        // notification title ("see today's tasks"). Static text only, no
+        // dynamic count (pendingCount isn't persisted; a stale number in a
+        // scheduled notification would be worse than none). Flag-gated by
+        // VITE_MORNING_NOTIFICATION, default OFF.
+        morningNotificationTitle: string;
     };
 }
 
@@ -582,6 +589,9 @@ export const translations: Record<Language, Translations> = {
 
             // Daily Clarity Loop v1 REWARD line (dfes-companion-2026-07-11)
             dailyLoopClarity: '{done} done, {left} left',
+
+            // Task 7 (spec: dfes-companion-2026-07-11) — morning notification title
+            morningNotificationTitle: 'See today\'s tasks',
         },
     },
 
@@ -860,6 +870,10 @@ export const translations: Record<Language, Translations> = {
             // FOUNDER-CONFIRM: the "you're in control" reward on the saved card.
             // Plain fact ({done} done, {left} left), no adjectives, no score.
             dailyLoopClarity: '{done} पूर्ण, {left} बाकी',
+
+            // Task 7 (spec: dfes-companion-2026-07-11) — morning notification title.
+            // Static Marathi copy: "see today's tasks".
+            morningNotificationTitle: 'आजची कामे पाहा',
         },
     },
 };

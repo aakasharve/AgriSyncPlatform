@@ -249,9 +249,10 @@ describe('navigationMachine — type guards', () => {
         expect(isKnownRoute('')).toBe(false);
     });
 
-    it('isKnownNudge accepts only close-day and review-summary', () => {
+    it('isKnownNudge accepts close-day, review-summary, and open-today', () => {
         expect(isKnownNudge('close-day')).toBe(true);
         expect(isKnownNudge('review-summary')).toBe(true);
+        expect(isKnownNudge('open-today')).toBe(true);
         expect(isKnownNudge('something-else')).toBe(false);
     });
 });

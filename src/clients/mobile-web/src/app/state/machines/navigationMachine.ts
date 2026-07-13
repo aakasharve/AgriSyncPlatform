@@ -30,7 +30,7 @@ import { setup, assign, type ActorRefFrom } from 'xstate';
 import type { AppRoute, PageView } from '../../../domain/types/farm.types';
 
 /** URL nudge codes accepted via `?nudge=…` deep-link replay. */
-export type NavNudge = 'close-day' | 'review-summary';
+export type NavNudge = 'close-day' | 'review-summary' | 'open-today';
 
 export interface NavigationContext {
     /** Back stack for browser-back / history.back support. Newest at end. */
@@ -98,7 +98,7 @@ export function isKnownRoute(value: string): value is AppRoute {
     return (KNOWN_ROUTES as readonly string[]).includes(value);
 }
 
-const KNOWN_NUDGES: readonly NavNudge[] = ['close-day', 'review-summary'];
+const KNOWN_NUDGES: readonly NavNudge[] = ['close-day', 'review-summary', 'open-today'];
 
 export function isKnownNudge(value: string): value is NavNudge {
     return (KNOWN_NUDGES as readonly string[]).includes(value);

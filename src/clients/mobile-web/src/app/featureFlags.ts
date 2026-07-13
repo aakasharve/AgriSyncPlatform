@@ -92,4 +92,16 @@ export const FEATURE_FLAGS = {
      * Default OFF (env VITE_TASK_CLOSE_CONFIRM absent -> false).
      */
     taskCloseConfirm: isEnabled('VITE_TASK_CLOSE_CONFIRM'),
+
+    /**
+     * Task 7 (spec: dfes-companion-2026-07-11) — daily 7am "आजची कामे पाहा"
+     * native local notification (Capacitor `@capacitor/local-notifications`)
+     * that opens the app to today's tasks (`/?nudge=open-today`). Gates BOTH
+     * the permission request AND the schedule call — OFF means no permission
+     * prompt and no scheduled notification is ever created. Default OFF (env
+     * VITE_MORNING_NOTIFICATION absent -> false); when OFF this is a
+     * byte-equivalent no-op (native rebuild + real-device verification is a
+     * separate founder gate before this can be flipped on).
+     */
+    morningNotification: isEnabled('VITE_MORNING_NOTIFICATION'),
 } as const;
