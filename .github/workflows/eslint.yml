@@ -60,14 +60,13 @@ jobs:
           node-version: "20"
           cache: npm
           cache-dependency-path: src/clients/admin-web/package-lock.json
-      # `--omit=optional` skips platform-specific native optional deps
-      # (e.g. lightningcss's @emnapi/core/@emnapi/runtime native bindings).
-      # The lockfile is generated on developer Windows machines and CI is
-      # Linux; the platform-specific optional deps don't round-trip across
-      # the two without WSL/Docker. Admin-web doesn't use WebAssembly
-      # bindings at runtime — these deps are optional native fast-paths
-      # that fall back to the JS implementation cleanly. Closes the
-      # 2026-05-15 admin-web-lint failure surfaced by Codex Phase 01
-      # cross-verification (Missing: @emnapi/core@1.10.0 from lock file).
-      - run: npm ci --omit=optional
+      # The lockfile is generated on developer Windows machines; CI is Linux,
+      # and the platform-specific @emnapi optional native deps (lightningcss
+      # fast-path) don't round-trip across the two without WSL/Docker. `npm ci`
+      # (even with `--omit=optional`) fails because it validates the lockfile is
+      # in sync BEFORE omitting. Tolerant `npm install` — the pattern already
+      # used for sync-contract in android-release/ci-gate/frontend-ci — installs
+      # cleanly; these are optional native fast-paths that fall back to the JS
+      # implementation. Closes the recurring admin-web-lint @emnapi drift failure.
+      - run: npm install --no-audit --no-fund
       - run: npx eslint --max-warnings 9999 .
