@@ -34,8 +34,17 @@
  *
  * PURE: no Date.now(), no network, no React. `todayLocalDate` is passed in
  * by the caller (mirrors dfesScheduleWindow.ts's contract).
+ *
+ * FIX [CRITICAL, mirrors features/logs/intelligence/insights.ts's FIX 1]:
+ * an activity is only match EVIDENCE for "this task got done" when the
+ * farmer's own record actually says so. `activity.status === 'completed'`
+ * or `status == null` (legacy log written before status existed — no
+ * explicit signal either way, treated as recorded-done) count; a
+ * `'pending'` (not yet done), `'gap_recorded'` (explicit miss), or
+ * `'partial'` (not fully done) activity must NEVER trigger a "did this
+ * task get done?" close-confirm — see `isDoneEvidence` below.
  */
-import type { DailyLog, PlannedTask } from '../../../types';
+import type { CropActivityEvent, DailyLog, PlannedTask } from '../../../types';
 
 export interface TaskCloseCandidate {
     task: PlannedTask;
@@ -68,6 +77,16 @@ const daysBetween = (fromDateKey: string, toDateKey: string): number => {
 const normalizeTitle = (value: string): string => value.trim().toLowerCase().replace(/\s+/g, ' ');
 
 /**
+ * Match-evidence gate — mirrors insights.ts's `isFullyDone`. Only a
+ * genuinely-done activity may be used as evidence that an open task got
+ * done: `'completed'` or legacy-undefined (no signal either way, treated
+ * as recorded-done). `'pending'`, `'gap_recorded'`, and `'partial'` are
+ * excluded — none of them mean the farmer actually finished the work.
+ */
+const isDoneEvidence = (activity: CropActivityEvent): boolean =>
+    activity.status === 'completed' || activity.status == null;
+
+/**
  * Tier-1 containment ONLY — mirrors plotComparisonService.ts's matchItems()
  * name-based match (`execName.includes(planName) || planName.includes(execName)`
  * after `.toLowerCase()`). No positional/date-order fallback (see module doc).
@@ -98,6 +117,7 @@ export function findConfirmableTaskCloses(
     if (loggedPlotIds.size === 0) return [];
 
     const activityTitles = (savedLog.cropActivities || [])
+        .filter(isDoneEvidence)
         .map(activity => activity.title)
         .filter((title): title is string => Boolean(title && title.trim()));
     if (activityTitles.length === 0) return [];

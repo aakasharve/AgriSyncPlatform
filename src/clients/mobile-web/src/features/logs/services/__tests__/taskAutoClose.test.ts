@@ -39,7 +39,7 @@ function makeLog(overrides: Partial<DailyLog> = {}): DailyLog {
         date: TODAY,
         context: { selection: [{ cropId: 'crop-1', cropName: 'Grapes', selectedPlotIds: ['plot-a'], selectedPlotNames: ['Plot A'] }] },
         dayOutcome: 'WORK_RECORDED',
-        cropActivities: [makeActivity('Pruning done today')],
+        cropActivities: [makeActivity('Pruning done today', { status: 'completed' })],
         irrigation: [],
         labour: [],
         inputs: [],
@@ -152,7 +152,7 @@ describe('findConfirmableTaskCloses', () => {
 
     it('case/whitespace-insensitive containment match', () => {
         const task = makeTask({ title: '  PRUNING  ' });
-        const log = makeLog({ cropActivities: [makeActivity('pruning')] });
+        const log = makeLog({ cropActivities: [makeActivity('pruning', { status: 'completed' })] });
 
         expect(findConfirmableTaskCloses([task], log, TODAY)).toHaveLength(1);
     });
@@ -163,7 +163,10 @@ describe('findConfirmableTaskCloses', () => {
             makeTask({ id: 'task-early', title: 'Fertilizer', dueDate: '2026-07-05' }),
         ];
         const log = makeLog({
-            cropActivities: [makeActivity('Weeding done'), makeActivity('Fertilizer done')],
+            cropActivities: [
+                makeActivity('Weeding done', { status: 'completed' }),
+                makeActivity('Fertilizer done', { status: 'completed' }),
+            ],
         });
 
         const result = findConfirmableTaskCloses(tasks, log, TODAY);
@@ -178,5 +181,65 @@ describe('findConfirmableTaskCloses', () => {
         const result = findConfirmableTaskCloses([task, task], log, TODAY);
 
         expect(result).toHaveLength(1);
+    });
+
+    // FIX [CRITICAL, mirrors insights.ts FIX 1]: a task must never be
+    // suggested as "confirmable-closed" off an activity the farmer's own
+    // record says was NOT done. Only 'completed' or legacy-undefined status
+    // count as match evidence; 'pending' / 'gap_recorded' / 'partial' must
+    // never trigger a close-confirm.
+    describe('status gate (never confirm a close off an unfinished/missed activity)', () => {
+        it("activity status 'gap_recorded' (explicit miss) → NO candidate", () => {
+            const task = makeTask();
+            const log = makeLog({ cropActivities: [makeActivity('Pruning', { status: 'gap_recorded' })] });
+
+            expect(findConfirmableTaskCloses([task], log, TODAY)).toHaveLength(0);
+        });
+
+        it("activity status 'pending' (not yet done) → NO candidate", () => {
+            const task = makeTask();
+            const log = makeLog({ cropActivities: [makeActivity('Pruning', { status: 'pending' })] });
+
+            expect(findConfirmableTaskCloses([task], log, TODAY)).toHaveLength(0);
+        });
+
+        it("activity status 'partial' (not fully done) → NO candidate", () => {
+            const task = makeTask();
+            const log = makeLog({ cropActivities: [makeActivity('Pruning', { status: 'partial' })] });
+
+            expect(findConfirmableTaskCloses([task], log, TODAY)).toHaveLength(0);
+        });
+
+        it("activity status 'completed' → still a candidate", () => {
+            const task = makeTask();
+            const log = makeLog({ cropActivities: [makeActivity('Pruning', { status: 'completed' })] });
+
+            expect(findConfirmableTaskCloses([task], log, TODAY)).toHaveLength(1);
+        });
+
+        it('activity status undefined (legacy log, no signal either way) → still a candidate, not over-suppressed', () => {
+            const task = makeTask();
+            const log = makeLog({ cropActivities: [makeActivity('Pruning', { status: undefined })] });
+
+            expect(findConfirmableTaskCloses([task], log, TODAY)).toHaveLength(1);
+        });
+
+        it('mixed activities: gap_recorded activity is ignored, completed activity still confirms its own task', () => {
+            const tasks = [
+                makeTask({ id: 'task-pruning', title: 'Pruning' }),
+                makeTask({ id: 'task-weeding', title: 'Weeding' }),
+            ];
+            const log = makeLog({
+                cropActivities: [
+                    makeActivity('Pruning', { status: 'gap_recorded' }),
+                    makeActivity('Weeding', { status: 'completed' }),
+                ],
+            });
+
+            const result = findConfirmableTaskCloses(tasks, log, TODAY);
+
+            expect(result).toHaveLength(1);
+            expect(result[0].task.id).toBe('task-weeding');
+        });
     });
 });
