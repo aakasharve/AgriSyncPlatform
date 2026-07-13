@@ -28,6 +28,7 @@ import { LedgerRecognitionPanel } from '../../features/logs/components/LedgerRec
 import VoiceSavedReassurance from '../../features/logs/components/shramsathi/VoiceSavedReassurance';
 import DailyLoopHero from '../../features/logs/components/shramsathi/DailyLoopHero';
 import DailyLoopClarity from '../../features/logs/components/shramsathi/DailyLoopClarity';
+import { ShramSathiUnderstanding } from '../../features/logs/components/shramsathi/ShramSathiUnderstanding';
 
 import { AppRouterContext } from './routeContext';
 import { ReflectPage, ComparePage } from './lazyComponents';
@@ -571,6 +572,13 @@ export const renderLogView = (ctx: AppRouterContext): React.ReactNode => {
 
             {/* PROCESSING / CONFIRM / SUCCESS */}
             {status === 'processing' && (
+                FEATURE_FLAGS.dailyLoop ? (
+                    /* dfes-companion loop v1 (spec: dfes-companion-2026-07-11) —
+                       founder-approved श्रम साथी video-character processing screen.
+                       Flag-gated: dailyLoop OFF renders the exact legacy spinner
+                       below (byte-equivalent no-op). */
+                    <ShramSathiUnderstanding />
+                ) : (
                 <div className="bg-white rounded-3xl shadow-xl shadow-stone-200/50 border border-stone-100 p-16 text-center">
                     <div className="flex justify-center mb-8">
                         <div className="relative">
@@ -592,6 +600,7 @@ export const renderLogView = (ctx: AppRouterContext): React.ReactNode => {
                         <div className="text-sm text-stone-400 max-w-xs mx-auto mt-2 italic">Listening carefully to your log...</div>
                     )}
                 </div>
+                )
             )}
 
             {/* dfes-companion Phase 4 — voice-continuity degraded terminal surface.

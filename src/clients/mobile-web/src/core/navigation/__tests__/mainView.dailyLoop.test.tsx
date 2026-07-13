@@ -254,3 +254,29 @@ describe('renderLogView — Daily Clarity Loop v1 gate', () => {
         expect(carried).not.toHaveTextContent('dfes.dailyLoopCarriedMany');
     });
 });
+
+// ---- loop v1 Task 5: processing-screen gate ----
+//
+// While `status === 'processing'` the loop swaps the legacy English spinner
+// ("Your Shram sathi is trying to understand…") for the founder-approved
+// श्रम साथी video-character screen (ShramSathiUnderstanding). Flag OFF must
+// keep the exact legacy spinner (byte-equivalent no-op). We assert on the
+// brand title (श्रम साथी) vs the spinner's English heading.
+describe('renderLogView — Daily Clarity Loop v1 processing screen gate', () => {
+    const SPINNER_HEADING = /Your Shram sathi is trying to understand/;
+    const BRAND = 'श्रम साथी';
+
+    it('OFF: the legacy spinner shows and ShramSathiUnderstanding is absent', async () => {
+        const renderLogView = await loadRenderLogView(false);
+        render(<>{renderLogView(makeCtx({ status: 'processing' }))}</>);
+        expect(screen.getByText(SPINNER_HEADING)).toBeInTheDocument();
+        expect(screen.queryByText(BRAND)).toBeNull();
+    });
+
+    it('ON: ShramSathiUnderstanding shows (brand श्रम साथी) and the legacy spinner is gone', async () => {
+        const renderLogView = await loadRenderLogView(true);
+        render(<>{renderLogView(makeCtx({ status: 'processing' }))}</>);
+        expect(screen.getByText(BRAND)).toBeInTheDocument();
+        expect(screen.queryByText(SPINNER_HEADING)).toBeNull();
+    });
+});
