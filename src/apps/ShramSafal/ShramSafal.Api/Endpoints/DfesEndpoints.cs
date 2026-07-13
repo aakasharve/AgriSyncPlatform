@@ -22,11 +22,24 @@ public static class DfesEndpoints
             Guid farmId,
             ClaimsPrincipal user,
             [FromServices] GetFarmerEngagementHandler handler,
+            [FromServices] ShramSafal.Application.Ports.ICallerFarmTenantScope scope,
             CancellationToken ct) =>
         {
             if (!EndpointActorContext.TryGetUserId(user, out var actorUserId))
             {
                 return Results.Unauthorized();
+            }
+
+            // spec: dfes-companion-2026-07-11 — establish the membership-validated
+            // single-farm tenant scope BEFORE the handler's first DbCommand so the
+            // read passes under prod FORCE-RLS (the DFES handlers self-authorize via
+            // the repository and never set the tenant claim, so without this the
+            // TenantConnectionInterceptor fail-closes on "no tenant claim set").
+            // A forged/non-member farmId returns Forbidden here → 403.
+            var scopeResult = await scope.EstablishForCallerAsync(farmId, actorUserId, ct);
+            if (!scopeResult.IsSuccess)
+            {
+                return ToErrorResult(scopeResult.Error);
             }
 
             var result = await handler.HandleAsync(
@@ -48,11 +61,21 @@ public static class DfesEndpoints
             ClaimsPrincipal user,
             [FromServices] GetDayUnderstandingHandler handler,
             [FromServices] IClock clock,
+            [FromServices] ShramSafal.Application.Ports.ICallerFarmTenantScope scope,
             CancellationToken ct) =>
         {
             if (!EndpointActorContext.TryGetUserId(user, out var actorUserId))
             {
                 return Results.Unauthorized();
+            }
+
+            // spec: dfes-companion-2026-07-11 — establish the membership-validated
+            // single-farm tenant scope BEFORE the handler's first DbCommand so the
+            // per-day read passes under prod FORCE-RLS. Forged/non-member farmId → 403.
+            var scopeResult = await scope.EstablishForCallerAsync(farmId, actorUserId, ct);
+            if (!scopeResult.IsSuccess)
+            {
+                return ToErrorResult(scopeResult.Error);
             }
 
             var localDate = date ?? DateOnly.FromDateTime(clock.UtcNow + IstOffset);

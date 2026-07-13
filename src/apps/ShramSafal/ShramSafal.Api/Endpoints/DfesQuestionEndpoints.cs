@@ -19,10 +19,19 @@ public static class DfesQuestionEndpoints
             RecordQuestionEventRequest request,
             ClaimsPrincipal user,
             RecordQuestionEventHandler handler,
+            ShramSafal.Application.Ports.ICallerFarmTenantScope scope,
             CancellationToken ct) =>
         {
             if (!EndpointActorContext.TryGetUserId(user, out var actorUserId))
                 return Results.Unauthorized();
+
+            // spec: dfes-companion-2026-07-11 — establish the membership-validated
+            // single-farm tenant scope BEFORE the handler runs so the ssf.question_events
+            // INSERT passes the farm_id WITH CHECK under prod FORCE-RLS (sets the
+            // agrisync.farm_id GUC). Forged/non-member farmId → 403, no row written.
+            var scopeResult = await scope.EstablishForCallerAsync(request.FarmId, actorUserId, ct);
+            if (!scopeResult.IsSuccess)
+                return ToErrorResult(scopeResult.Error);
 
             var cmd = new RecordQuestionEventCommand(
                 actorUserId, request.FarmId, request.PlotId, request.DailyLogId,
@@ -42,10 +51,18 @@ public static class DfesQuestionEndpoints
             Guid farmId, int? sinceDays,
             ClaimsPrincipal user,
             GetRecentQuestionEventsHandler handler,
+            ShramSafal.Application.Ports.ICallerFarmTenantScope scope,
             CancellationToken ct) =>
         {
             if (!EndpointActorContext.TryGetUserId(user, out var actorUserId))
                 return Results.Unauthorized();
+
+            // spec: dfes-companion-2026-07-11 — establish the membership-validated
+            // single-farm tenant scope BEFORE the handler's first DbCommand so the
+            // cooldown-feed read passes under prod FORCE-RLS. Forged/non-member farmId → 403.
+            var scopeResult = await scope.EstablishForCallerAsync(farmId, actorUserId, ct);
+            if (!scopeResult.IsSuccess)
+                return ToErrorResult(scopeResult.Error);
 
             var result = await handler.HandleAsync(
                 new GetRecentQuestionEventsQuery(actorUserId, farmId, sinceDays ?? 14), ct);
