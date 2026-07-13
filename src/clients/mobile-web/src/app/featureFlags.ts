@@ -61,4 +61,14 @@ export const FEATURE_FLAGS = {
     disciplineSystem: isEnabled('VITE_DISCIPLINE_SYSTEM'),
     /** Phase 4 voice-first continuity. */
     voiceContinuity: isEnabled('VITE_VOICE_CONTINUITY'),
+    /**
+     * Daily Clarity Loop v1 — the morning TRIGGER. Surfaces the single calm
+     * "आज {N} कामं बाकी" hero at the top of the home idle view and folds the
+     * carried-work ("काल राहिलं") signal in beside it, replacing the buried
+     * English task line + the separate "Yesterday not fully closed" banner.
+     * Reuses todayDayState.pendingCount — computes nothing new. Default OFF
+     * (env VITE_DAILY_LOOP absent → false); when OFF the home view is a
+     * byte-equivalent no-op.
+     */
+    dailyLoop: isEnabled('VITE_DAILY_LOOP'),
 } as const;

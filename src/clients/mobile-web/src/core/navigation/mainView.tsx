@@ -26,6 +26,7 @@ import { getCropTheme } from '../../shared/utils/colorTheme';
 import { FEATURE_FLAGS } from '../../app/featureFlags';
 import { LedgerRecognitionPanel } from '../../features/logs/components/LedgerRecognitionPanel';
 import VoiceSavedReassurance from '../../features/logs/components/shramsathi/VoiceSavedReassurance';
+import DailyLoopHero from '../../features/logs/components/shramsathi/DailyLoopHero';
 
 import { AppRouterContext } from './routeContext';
 import { ReflectPage, ComparePage } from './lazyComponents';
@@ -125,6 +126,18 @@ export const renderLogView = (ctx: AppRouterContext): React.ReactNode => {
     // Single boundary handoff: flag it + route to Profile, where the drawer auto-opens.
     const openBoundary = () => { window.sessionStorage.setItem('open_farm_boundary', '1'); setCurrentRoute('profile'); };
 
+    // Focus the existing recorder by scrolling to (and briefly ringing) the
+    // crop selector. Shared by the daily-loop hero tap and the recorder's own
+    // "select a context first" nudge (DRY — same scroll+ring pattern).
+    const focusRecorder = () => {
+        const el = document.getElementById('crop-selector-container');
+        if (el) {
+            el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            el.classList.add('ring-4', 'ring-emerald-200', 'rounded-xl');
+            setTimeout(() => el.classList.remove('ring-4', 'ring-emerald-200', 'rounded-xl'), 1500);
+        }
+    };
+
     return (
         <>
             {/* IDLE / RECORDING STATE */}
@@ -132,6 +145,18 @@ export const renderLogView = (ctx: AppRouterContext): React.ReactNode => {
                 <>
                     {!recordingSegment && (
                         <div className="mb-4 animate-in slide-in-from-top-4 duration-300 delay-100 space-y-3">
+                            {/* Daily Clarity Loop v1 — morning trigger. The FIRST calm line the
+                                farmer sees: "आज {N} कामं बाकी" (or the empty-day invite), with the
+                                carried "काल राहिलं" signal folded in beside it. Flag-gated OFF by
+                                default, so this is a byte-equivalent no-op in production. */}
+                            {FEATURE_FLAGS.dailyLoop && (
+                                <DailyLoopHero
+                                    pendingCount={todayDayState.pendingCount}
+                                    carriedCount={yesterdayDayState.pendingCount}
+                                    closurePercent={todayDayState.closurePercent}
+                                    onFocusRecorder={focusRecorder}
+                                />
+                            )}
                             <WeatherWidget
                                 data={weatherData}
                                 status={weatherStatus}
@@ -206,7 +231,10 @@ export const renderLogView = (ctx: AppRouterContext): React.ReactNode => {
                                     </div>
                                 )}
 
-                                {(!yesterdayDayState.isClosed || showCloseYesterdaySummary) && (
+                                {/* Daily Clarity Loop v1: when the loop is ON, yesterday's leftover
+                                    is carried into the hero above ("काल राहिलं"), so this separate
+                                    banner is suppressed. When OFF it renders exactly as before. */}
+                                {!FEATURE_FLAGS.dailyLoop && (!yesterdayDayState.isClosed || showCloseYesterdaySummary) && (
                                     <div className="pt-1">
                                         <button
                                             onClick={() => setShowCloseYesterdaySummary(prev => !prev)}
@@ -351,14 +379,7 @@ export const renderLogView = (ctx: AppRouterContext): React.ReactNode => {
                                             externalError={error}
                                             transcript={errorTranscript}
                                             suggestInteraction={isContextReady}
-                                            onRequestContextSelection={() => {
-                                                const el = document.getElementById('crop-selector-container');
-                                                if (el) {
-                                                    el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                                                    el.classList.add('ring-4', 'ring-emerald-200', 'rounded-xl');
-                                                    setTimeout(() => el.classList.remove('ring-4', 'ring-emerald-200', 'rounded-xl'), 1500);
-                                                }
-                                            }}
+                                            onRequestContextSelection={focusRecorder}
                                         />
                                     ) : (
                                         <AudioRecorder
@@ -368,14 +389,7 @@ export const renderLogView = (ctx: AppRouterContext): React.ReactNode => {
                                             externalError={error}
                                             transcript={errorTranscript}
                                             suggestInteraction={isContextReady}
-                                            onRequestContextSelection={() => {
-                                                const el = document.getElementById('crop-selector-container');
-                                                if (el) {
-                                                    el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                                                    el.classList.add('ring-4', 'ring-emerald-200', 'rounded-xl');
-                                                    setTimeout(() => el.classList.remove('ring-4', 'ring-emerald-200', 'rounded-xl'), 1500);
-                                                }
-                                            }}
+                                            onRequestContextSelection={focusRecorder}
                                         />
                                     )}
                                     {/* SARVAM_PRIMARY_VOICE_PIPELINE_2026-05-28 — LiveCaption Way-2.

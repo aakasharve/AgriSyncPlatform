@@ -293,6 +293,14 @@ export interface Translations {
         // arrived line is appended (leading " — ") only once the milestone lands.
         meterArrivalProgress: string;
         meterArrivalArrived: string;
+
+        // Daily Clarity Loop v1 (dfes-companion-2026-07-11) — the morning
+        // "trigger" hero at the top of home, answering "काय राहिलं" in one calm
+        // line. Reuses todayDayState.pendingCount. Reward = clarity/control,
+        // never points, never scolding. {count} = a plain task count.
+        dailyLoopTasksLeft: string;   // N > 0: today's remaining work
+        dailyLoopDayFree: string;     // N === 0: empty-day, invite to record
+        dailyLoopCarried: string;     // carried/overdue leftover from yesterday
     };
 }
 
@@ -556,6 +564,11 @@ export const translations: Record<Language, Translations> = {
             // Understanding-Meter arrival/transition line (dfes-companion Slice 5b)
             meterArrivalProgress: 'Understood days: {count}/{target}',
             meterArrivalArrived: ' — now I have come to know your farm',
+
+            // Daily Clarity Loop v1 (dfes-companion-2026-07-11)
+            dailyLoopTasksLeft: '{count} tasks left today',
+            dailyLoopDayFree: 'Today is clear — just speak to record',
+            dailyLoopCarried: '{count} left from yesterday',
         },
     },
 
@@ -821,6 +834,13 @@ export const translations: Record<Language, Translations> = {
             // shame). Not a grade of the farmer — Sathi's own growing familiarity.
             meterArrivalProgress: 'समजून घेतलेले दिवस: {count}/{target}',
             meterArrivalArrived: ' — आता मी तुमचं शेत ओळखू लागलो',
+
+            // Daily Clarity Loop v1 (dfes-companion-2026-07-11) — FOUNDER-CONFIRM:
+            // calm morning trigger. Dignity, no scolding, no points. The count
+            // is a plain fact ("what's left"), not a grade of the farmer.
+            dailyLoopTasksLeft: 'आज {count} कामं बाकी',
+            dailyLoopDayFree: 'आजचा दिवस मोकळा — बोलून नोंदवा',
+            dailyLoopCarried: 'काल {count} कामं राहिली होती',
         },
     },
 };
