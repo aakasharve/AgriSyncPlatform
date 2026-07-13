@@ -9,6 +9,7 @@ import {
 import type { ObservationNoteDraft, ScoreContext } from '../../domain/types/log.types';
 import { getPhaseAndDay } from '../../shared/utils/timelineUtils';
 import { getDateKey } from './services/DateKeyService';
+import { resolveDueDate } from './dueDateResolver';
 import { isCompletedIrrigationEvent } from './services/IrrigationCompletionService';
 // import { AgriLogResponse } from '../../domain/ai/contracts/AgriLogResponseSchema'; // REMOVED
 import { LogProvenance } from '../../domain/ai/LogProvenance';
@@ -456,6 +457,9 @@ export class LogFactory {
         const targetPlotIds = logScope.selectedPlotIds;
         const newLogs: DailyLog[] = [];
         const nowISO = clock.nowISO();
+        // "Today" for due-date resolution — derived from the SAME clock as
+        // nowISO (no new clock). Spoken hints like 'उद्या' resolve relative to it.
+        const today = getDateKey(nowISO);
 
         // Shared Costs
         const laborCostGlobal = response.labour?.reduce((s: number, x: LabourEvent) => s + (x.totalCost || 0), 0) || 0;
@@ -560,6 +564,9 @@ export class LogFactory {
                 priority: 'normal',
                 createdAt: nowISO,
                 dueHint: pt.dueHint,
+                // Resolve the free-text hint to a concrete due date so the task
+                // carries forward in day-state counts; null for vague hints.
+                dueDate: resolveDueDate(pt.dueHint ?? undefined, today) ?? undefined,
                 sourceType: 'ai_extracted',
                 plotId: plotId,
                 cropId: crop.id
@@ -683,6 +690,9 @@ export class LogFactory {
         const autoApprove = profile.trust?.reviewPolicy === 'AUTO_APPROVE_ALL' ||
             (profile.trust?.reviewPolicy === 'AUTO_APPROVE_OWNER' && isOwner);
 
+        // "Today" for due-date resolution — from the SAME clock as nowISO.
+        const today = getDateKey(nowISO);
+
         const mirroredTasks: PlannedTask[] = response.plannedTasks?.map((pt: AgriLogPlannedTask) => ({
             id: idGen.generate(),
             title: pt.title,
@@ -690,6 +700,9 @@ export class LogFactory {
             priority: 'normal',
             createdAt: nowISO,
             dueHint: pt.dueHint,
+            // Resolve the free-text hint to a concrete due date so the task
+            // carries forward in day-state counts; null for vague hints.
+            dueDate: resolveDueDate(pt.dueHint ?? undefined, today) ?? undefined,
             sourceType: 'ai_extracted',
             plotId: FARM_GLOBAL_ID,
             cropId: FARM_GLOBAL_ID

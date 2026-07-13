@@ -393,7 +393,8 @@ export interface PlannedTask {
     description?: string;
 
     // Temporal bounds (future)
-    dueDate?: string;          // YYYY-MM-DD
+    dueHint?: string | null;   // Raw spoken/typed temporal cue ('उद्या', '३ दिवसांनी') — provenance for dueDate
+    dueDate?: string;          // YYYY-MM-DD (resolved from dueHint via dueDateResolver for CLEAR cues)
     dueWindow?: { start: string; end: string };
 
     // Context binding
