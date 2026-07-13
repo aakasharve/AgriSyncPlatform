@@ -740,7 +740,10 @@ export const renderLogView = (ctx: AppRouterContext): React.ReactNode => {
                             // Phase 5 (dfes-companion-2026-07-11): derive the farm/plot/crop
                             // context the D8 question engine needs from the saved log's own
                             // context selection — SelectedCropContext carries cropName inline
-                            // (domain/types/log.types.ts), so no separate crops[] lookup.
+                            // (domain/types/log.types.ts), so no separate crops[] lookup for
+                            // the {crop} placeholder. `crops` IS threaded through separately
+                            // (Task 3B) for the panel's schedule-gap lookup, which needs the
+                            // plot's schedule/template — not derivable from the log alone.
                             const selection = savedLog?.context?.selection?.[0];
                             return (
                                 <LedgerRecognitionPanel
@@ -748,6 +751,7 @@ export const renderLogView = (ctx: AppRouterContext): React.ReactNode => {
                                     plotId={selection?.selectedPlotIds?.[0] ?? null}
                                     crop={selection?.cropName ?? ''}
                                     todayLocalDate={savedLog?.date}
+                                    crops={crops}
                                     savedLog={savedLog}
                                     allLogs={history}
                                 />

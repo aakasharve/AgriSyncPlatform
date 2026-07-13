@@ -146,7 +146,7 @@ export function selectDailyQuestion(inputs: DailyQuestionInputs): SelectedQuesti
         if (eligible(q, recent)) return pack(q, inputs, `stage window open (expected=${inputs.stageContext?.expectedStage})`);
     }
 
-    // P3.5 Schedule — category-scoped "was today's planned {category} work done?"
+    // P4 Schedule — category-scoped "was today's planned {category} work done?"
     // (Task 3A). Category-level only — never a fabricated precise task claim.
     if (inputs.scheduleContext) {
         const q = findQuestion('schedule.category_planned_not_done');

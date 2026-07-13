@@ -45,7 +45,7 @@ export interface DfesQuestion {
     questionType: string;                // -> QuestionType ('gap_fill'|'stage_confirm'|'weather_check'|'observation'|'experiment')
     lens: QuestionLens;                  // -> Lens
     depthLevel: number;                  // -> DepthLevel (1 notice .. 4 experiment)
-    priority: number;                    // -> Priority (1 highest .. 6 lowest)
+    priority: number;                    // -> Priority (1 highest .. 7 lowest)
     cooldownDays: number;                // -> Cooldown
     answerModes: string;                 // -> AnswerModes ('voice'|'voice,photo'|'choice,voice')
     safetyClass: string;                 // -> SafetyClass ('informational'|'advisory'|'safety_critical')

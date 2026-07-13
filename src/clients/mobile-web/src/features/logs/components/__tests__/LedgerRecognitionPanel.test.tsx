@@ -15,21 +15,39 @@
  * (2) plotId/crop/todayLocalDate reach useDfesQuestion unchanged;
  * (3) a missing todayLocalDate falls back to "today".
  *
+ * Task 3B adds: this panel is the call site for computeScheduleGap (mocked
+ * here — the pure function's own behaviour is covered by
+ * dfesScheduleWindow.test.ts), so these additional tests assert the panel
+ * (a) calls it with (crops, allLogs, plotId, resolvedDate) and threads a real
+ * result through as questionInputs.scheduleContext, (b) leaves scheduleContext
+ * undefined when there's no gap, and (c) never calls it at all when the
+ * stageQuestions+farmId gate is closed (flag OFF or no farm) — zero extra work
+ * in that state.
+ *
  * spec: dfes-companion-2026-07-11
  */
 import React from 'react';
 import { render, cleanup } from '@testing-library/react';
 import '@testing-library/jest-dom/vitest';
 import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
+import type { CropProfile, DailyLog } from '../../../../types';
+import type { ScheduleGapContext } from '../../services/dfesScheduleWindow';
 
 const useFarmerEngagementMock = vi.fn();
 const useDfesQuestionMock = vi.fn();
+const computeScheduleGapMock = vi.fn();
 
 vi.mock('../../hooks/useFarmerEngagement', () => ({
     useFarmerEngagement: (...args: unknown[]) => useFarmerEngagementMock(...args),
 }));
 vi.mock('../../hooks/useDfesQuestion', () => ({
     useDfesQuestion: (...args: unknown[]) => useDfesQuestionMock(...args),
+}));
+// Task 3B: mock the pure signal so these wiring tests stay focused on the
+// panel's own call-site behaviour (gate + arg-threading), not schedule-gap
+// arithmetic (covered separately by dfesScheduleWindow.test.ts).
+vi.mock('../../services/dfesScheduleWindow', () => ({
+    computeScheduleGap: (...args: unknown[]) => computeScheduleGapMock(...args),
 }));
 // The panel renders the real MeterDisplay (Slice 3b), which fetches the server
 // /10 via useDayUnderstanding and reads copy via useLanguage. Mock both so these
@@ -46,12 +64,12 @@ const engagementDto = {
     lastAccountedDate: '2026-07-10', totalRichDays: 12, unlockStatus: 'unlocked' as const,
 };
 
-async function loadComponent() {
+async function loadComponent(stageQuestions = true) {
     vi.resetModules();
     vi.doMock('../../../../app/featureFlags', () => ({
         FEATURE_FLAGS: {
             understandingMeter: true,
-            stageQuestions: true,
+            stageQuestions,
             disciplineSystem: false,
             DwcChip: false,
             voiceContinuity: false,
@@ -69,8 +87,10 @@ async function loadComponent() {
 beforeEach(() => {
     useFarmerEngagementMock.mockReset();
     useDfesQuestionMock.mockReset();
+    computeScheduleGapMock.mockReset();
     useFarmerEngagementMock.mockReturnValue({ engagement: engagementDto, isLoading: false, error: null, refresh: vi.fn() });
     useDfesQuestionMock.mockReturnValue({ selected: null, loading: false, recordOutcome: vi.fn() });
+    computeScheduleGapMock.mockReturnValue(null);
 });
 
 afterEach(() => {
@@ -136,5 +156,64 @@ describe('LedgerRecognitionPanel (Phase 5, Task 5.9)', () => {
         const { LedgerRecognitionPanel } = await loadComponent();
         const { getByTestId } = render(<LedgerRecognitionPanel farmId="farm-1" allLogs={[]} />);
         expect(getByTestId('ledger-recognition-panel')).toBeTruthy();
+    });
+});
+
+describe('LedgerRecognitionPanel — schedule-gap wiring (Task 3B, spec: dfes-companion-2026-07-11)', () => {
+    const crops: CropProfile[] = [];
+    const history: DailyLog[] = [];
+
+    it('calls computeScheduleGap with (crops, allLogs, plotId, resolvedDate) and threads a real gap through as questionInputs.scheduleContext', async () => {
+        const gap: ScheduleGapContext = {
+            category: 'FOLIAR_SPRAY',
+            categoryLabelMr: 'फवारणी',
+            plannedItemName: 'Spray A',
+        };
+        computeScheduleGapMock.mockReturnValue(gap);
+        const { LedgerRecognitionPanel } = await loadComponent();
+        render(
+            <LedgerRecognitionPanel
+                farmId="farm-1"
+                plotId="plot-9"
+                todayLocalDate="2026-07-11"
+                crops={crops}
+                allLogs={history}
+            />,
+        );
+
+        expect(computeScheduleGapMock).toHaveBeenCalledWith(crops, history, 'plot-9', '2026-07-11');
+        const [, , questionInputs] = useDfesQuestionMock.mock.calls[0];
+        expect(questionInputs.scheduleContext).toEqual(gap);
+    });
+
+    it('leaves questionInputs.scheduleContext undefined when computeScheduleGap finds no gap', async () => {
+        computeScheduleGapMock.mockReturnValue(null);
+        const { LedgerRecognitionPanel } = await loadComponent();
+        render(
+            <LedgerRecognitionPanel farmId="farm-1" plotId="plot-9" crops={crops} allLogs={history} />,
+        );
+
+        const [, , questionInputs] = useDfesQuestionMock.mock.calls[0];
+        expect(questionInputs.scheduleContext).toBeUndefined();
+    });
+
+    it('never calls computeScheduleGap when stageQuestions is OFF — zero extra work in a flag-off production build', async () => {
+        const { LedgerRecognitionPanel } = await loadComponent(false);
+        render(
+            <LedgerRecognitionPanel farmId="farm-1" plotId="plot-9" crops={crops} allLogs={history} />,
+        );
+
+        expect(computeScheduleGapMock).not.toHaveBeenCalled();
+        const [, , questionInputs] = useDfesQuestionMock.mock.calls[0];
+        expect(questionInputs.scheduleContext).toBeUndefined();
+    });
+
+    it('never calls computeScheduleGap when farmId is null, even with stageQuestions ON', async () => {
+        const { LedgerRecognitionPanel } = await loadComponent(true);
+        render(
+            <LedgerRecognitionPanel farmId={null} plotId="plot-9" crops={crops} allLogs={history} />,
+        );
+
+        expect(computeScheduleGapMock).not.toHaveBeenCalled();
     });
 });
