@@ -744,6 +744,9 @@ export const renderLogView = (ctx: AppRouterContext): React.ReactNode => {
                             // the {crop} placeholder. `crops` IS threaded through separately
                             // (Task 3B) for the panel's schedule-gap lookup, which needs the
                             // plot's schedule/template — not derivable from the log alone.
+                            // `weatherData` (Task 4A) is threaded the same way — same live
+                            // object the WeatherWidget above already renders — so the panel
+                            // can wake the P1/P2 forward-looking safety/weather questions.
                             const selection = savedLog?.context?.selection?.[0];
                             return (
                                 <LedgerRecognitionPanel
@@ -754,6 +757,7 @@ export const renderLogView = (ctx: AppRouterContext): React.ReactNode => {
                                     crops={crops}
                                     savedLog={savedLog}
                                     allLogs={history}
+                                    weather={weatherData}
                                 />
                             );
                         })()}

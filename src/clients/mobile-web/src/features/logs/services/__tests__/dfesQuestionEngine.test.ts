@@ -34,6 +34,26 @@ describe('selectDailyQuestion (Phase 5)', () => {
         expect(selectDailyQuestion(inputs)!.question.questionKey).toBe('safety.spray_wind_high');
     });
 
+    // spec: dfes-companion-2026-07-11 (Task 4A) — the live weather context
+    // wakes P1/P2 against the REAL bank (both entries ship `...APPROVED`,
+    // asserted by dfesQuestionBank.test.ts), ahead of the P4 Schedule tier
+    // even when a schedule gap is ALSO present in the same day's inputs.
+    it('Task 4A: high windKph selects the safety question at P1, ahead of a same-day Schedule gap', () => {
+        const inputs = base({
+            weather: { windKph: 30 },
+            scheduleContext: { category: 'FOLIAR_SPRAY', categoryLabelMr: 'फवारणी' },
+        });
+        expect(selectDailyQuestion(inputs)!.question.questionKey).toBe('safety.spray_wind_high');
+    });
+
+    it('Task 4A: high rainProbNext6h (no wind trigger) selects the weather question at P2, ahead of a same-day Schedule gap', () => {
+        const inputs = base({
+            weather: { rainProbNext6h: 70 },
+            scheduleContext: { category: 'FOLIAR_SPRAY', categoryLabelMr: 'फवारणी' },
+        });
+        expect(selectDailyQuestion(inputs)!.question.questionKey).toBe('weather.rain_before_spray');
+    });
+
     it('falls to the top Gap question when no trigger fires', () => {
         const r = selectDailyQuestion(base({ score: scoreWithGap('DOSE') }));
         expect(r!.question.questionKey).toBe('gap.dose');

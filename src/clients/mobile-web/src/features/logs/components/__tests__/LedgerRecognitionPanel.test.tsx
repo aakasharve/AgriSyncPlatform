@@ -24,6 +24,16 @@
  * stageQuestions+farmId gate is closed (flag OFF or no farm) — zero extra work
  * in that state.
  *
+ * Task 4A adds: this panel is also the call site for buildWeatherContext
+ * (the pure DetailedWeather -> WeatherTriggerContext projection), so these
+ * additional tests assert the panel (a) threads a weather context with the
+ * live windKph/rainProbNext6h/conditionText through as
+ * questionInputs.weather when a `weather` prop is present, (b) leaves
+ * questionInputs.weather undefined when no `weather` prop is given, and
+ * (c) never builds one at all when the stageQuestions+farmId gate is closed
+ * (flag OFF or no farm) — zero extra work in that state, same as
+ * scheduleContext.
+ *
  * spec: dfes-companion-2026-07-11
  */
 import React from 'react';
@@ -32,6 +42,7 @@ import '@testing-library/jest-dom/vitest';
 import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
 import type { CropProfile, DailyLog } from '../../../../types';
 import type { ScheduleGapContext } from '../../services/dfesScheduleWindow';
+import type { DetailedWeather } from '../../../../domain/types/weather.types';
 
 const useFarmerEngagementMock = vi.fn();
 const useDfesQuestionMock = vi.fn();
@@ -215,5 +226,71 @@ describe('LedgerRecognitionPanel — schedule-gap wiring (Task 3B, spec: dfes-co
         );
 
         expect(computeScheduleGapMock).not.toHaveBeenCalled();
+    });
+});
+
+describe('LedgerRecognitionPanel — weather-trigger wiring (Task 4A, spec: dfes-companion-2026-07-11)', () => {
+    const highWindWeather: DetailedWeather = {
+        locationName: 'Farm Center',
+        current: {
+            fetchedAt: '2026-07-11T06:00:00Z',
+            lat: 19.1, lon: 74.7, provider: 'tomorrow.io',
+            current: {
+                tempC: 30, humidity: 55, windKph: 30, precipMm: 0,
+                conditionText: 'Windy', iconCode: '1000',
+            },
+            forecast: { rainProb: 70 },
+        },
+        forecast: [],
+        history: [],
+        advisory: { title: 'Weather Advisory', content: 'Conditions tailored for groundwork.' },
+    };
+
+    it('threads windKph/rainProbNext6h/conditionText from the live weather prop into questionInputs.weather', async () => {
+        const { LedgerRecognitionPanel } = await loadComponent();
+        render(
+            <LedgerRecognitionPanel
+                farmId="farm-1"
+                plotId="plot-9"
+                todayLocalDate="2026-07-11"
+                allLogs={[]}
+                weather={highWindWeather}
+            />,
+        );
+
+        const [, , questionInputs] = useDfesQuestionMock.mock.calls[0];
+        expect(questionInputs.weather).toEqual({
+            windKph: 30,
+            rainProbNext6h: 70,
+            conditionText: 'Windy',
+        });
+    });
+
+    it('leaves questionInputs.weather undefined when no weather prop is given', async () => {
+        const { LedgerRecognitionPanel } = await loadComponent();
+        render(<LedgerRecognitionPanel farmId="farm-1" allLogs={[]} />);
+
+        const [, , questionInputs] = useDfesQuestionMock.mock.calls[0];
+        expect(questionInputs.weather).toBeUndefined();
+    });
+
+    it('never builds a weather context when stageQuestions is OFF — zero extra work in a flag-off production build', async () => {
+        const { LedgerRecognitionPanel } = await loadComponent(false);
+        render(
+            <LedgerRecognitionPanel farmId="farm-1" allLogs={[]} weather={highWindWeather} />,
+        );
+
+        const [, , questionInputs] = useDfesQuestionMock.mock.calls[0];
+        expect(questionInputs.weather).toBeUndefined();
+    });
+
+    it('never builds a weather context when farmId is null, even with stageQuestions ON', async () => {
+        const { LedgerRecognitionPanel } = await loadComponent(true);
+        render(
+            <LedgerRecognitionPanel farmId={null} allLogs={[]} weather={highWindWeather} />,
+        );
+
+        const [, , questionInputs] = useDfesQuestionMock.mock.calls[0];
+        expect(questionInputs.weather).toBeUndefined();
     });
 });
