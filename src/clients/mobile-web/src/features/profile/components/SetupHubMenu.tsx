@@ -101,7 +101,7 @@ const SetupRow: React.FC<{ item: HubMenuItem; isNext: boolean; onSelect: () => v
                         {done && <span className="absolute -bottom-1 -right-1 flex h-[19px] w-[19px] items-center justify-center rounded-full border-2 border-white bg-emerald-600 text-white"><Check size={11} strokeWidth={3} /></span>}
                     </span>
                     <span className="min-w-0 flex-1">
-                        <span className="block truncate text-[15px] font-bold text-slate-800">{item.label}</span>
+                        <span className="block line-clamp-2 text-[15px] font-bold leading-tight text-slate-800">{item.label}</span>
                         {item.subtitle && <span className={`mt-0.5 block truncate text-[11.5px] ${isNext ? 'font-semibold text-emerald-700' : 'text-slate-400'}`}>{item.subtitle}</span>}
                     </span>
                 </button>

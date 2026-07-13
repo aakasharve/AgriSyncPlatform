@@ -68,13 +68,15 @@ const MembershipsList: React.FC<MembershipsListProps> = ({ farms, nonExitableFar
                         return (
                             <li
                                 key={farm.farmId}
-                                className="flex items-center gap-3 rounded-2xl border border-slate-100 bg-white px-3.5 py-3 transition-colors hover:border-slate-200"
+                                className="flex items-start gap-3 rounded-2xl border border-slate-100 bg-white px-3.5 py-3 transition-colors hover:border-slate-200"
                             >
-                                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-emerald-100 text-emerald-700">
+                                <div className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-emerald-100 text-emerald-700">
                                     <Sprout size={18} strokeWidth={2} />
                                 </div>
 
                                 <div className="min-w-0 flex-1">
+                                    {/* Name gets the whole first row (only the tiny status badge
+                                        shares it) so it isn't chopped to "पु…" on a phone. */}
                                     <div className="flex items-center gap-1.5 min-w-0">
                                         <div className="truncate font-bold text-slate-900">{farm.name}</div>
                                         <div className="flex shrink-0 items-center gap-1.5">
@@ -90,7 +92,8 @@ const MembershipsList: React.FC<MembershipsListProps> = ({ farms, nonExitableFar
                                             )}
                                         </div>
                                     </div>
-                                    <div className="mt-0.5 flex items-center gap-1.5">
+                                    {/* Role · code · sole-owner status wrap on a meta line. */}
+                                    <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1">
                                         <span className={`inline-flex items-center rounded-md border px-1.5 py-0.5 text-[10px] font-bold ${roleLabel.badge}`}>
                                             {roleLabel.display}
                                         </span>
@@ -99,23 +102,26 @@ const MembershipsList: React.FC<MembershipsListProps> = ({ farms, nonExitableFar
                                                 {farm.farmCode}
                                             </span>
                                         )}
+                                        {!canExit && (
+                                            <span className="inline-flex items-center text-[10px] font-semibold text-slate-500">
+                                                <Dot size={13} className="-ml-1 text-emerald-500" />
+                                                एकमेव मालक
+                                            </span>
+                                        )}
                                     </div>
                                 </div>
 
-                                {canExit ? (
+                                {/* Exit is the only right-side element, and only when it's a
+                                    real action (an exitable membership). */}
+                                {canExit && (
                                     <button
                                         type="button"
                                         onClick={() => setConfirmFarm(farm)}
-                                        className="inline-flex shrink-0 items-center gap-1 rounded-lg border border-rose-200 bg-white px-2 py-1 text-[11px] font-bold text-rose-700 hover:border-rose-300 hover:bg-rose-50"
+                                        className="mt-0.5 inline-flex shrink-0 items-center gap-1 rounded-lg border border-rose-200 bg-white px-2 py-1 text-[11px] font-bold text-rose-700 hover:border-rose-300 hover:bg-rose-50"
                                     >
                                         <LogOut size={11} />
                                         बाहेर
                                     </button>
-                                ) : (
-                                    <span className="inline-flex shrink-0 items-center rounded-lg border border-slate-200 bg-slate-50 px-2 py-1 text-[10px] font-semibold text-slate-500">
-                                        <Dot size={14} className="-ml-1 text-emerald-500" />
-                                        एकमेव मालक
-                                    </span>
                                 )}
                             </li>
                         );
