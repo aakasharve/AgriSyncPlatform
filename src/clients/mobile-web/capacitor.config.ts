@@ -30,7 +30,8 @@ const config: CapacitorConfig & {
       style: 'DARK',
       hidden: false
     },
-    Keyboard: { resize: 'body', resizeOnFullScreen: true }
+    Keyboard: { resize: 'body', resizeOnFullScreen: true },
+    SpeechRecognition: {}
   }
 };
 

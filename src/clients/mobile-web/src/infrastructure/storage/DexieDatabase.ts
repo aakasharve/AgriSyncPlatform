@@ -47,6 +47,7 @@ import { applyV19 } from './dexie/versions/v19';
 import { applyV20 } from './dexie/versions/v20';
 import { applyV21 } from './dexie/versions/v21';
 import { applyV22 } from './dexie/versions/v22';
+import { applyV23 } from './dexie/versions/v23';
 
 // =============================================================================
 // OUTBOX (Pending sync events)
@@ -611,12 +612,34 @@ export interface AnalyticsOutboxRow {
     attempts: number;
 }
 
+/**
+ * dfes-companion-2026-07-11 (Phase 4) — durable voice captures that could not
+ * be structured at record time (transcript-only / audio-only ladder levels).
+ * Client-side ONLY (IndexedDB); never a Postgres `ssf` table.
+ */
+export interface PendingInterpretationDexieRow {
+    captureId: string;
+    farmId: string;
+    createdAtUtc: number;
+    status: 'pending' | 'interpreting' | 'resolved' | 'failed';
+    ladderLevel: 'transcript-only' | 'audio-only';
+    transcript: string | null;
+    audioBase64: string | null;
+    audioMimeType: string | null;
+    logScopeJson: string;
+    recordedAtUtc: string;
+    attempts: number;
+    lastAttemptAtUtc: number | null;
+}
+
 // =============================================================================
 // SCHEMA VERSION CONSTANTS
 // =============================================================================
 
 /** Current Dexie schema version — bump this when adding version(N).stores(). */
-export const DATABASE_VERSION = 22; // ai-intelligence-plan-2026-06-25 (W1.P2) — per-field FieldProvenance carry-through; no new index (provenance is a nested JSON field).
+export const DATABASE_VERSION = 23; // dfes-companion-2026-07-11 (Phase 4) — pendingInterpretations store (voice-continuity captures).
+/** dfes-companion-2026-07-11 (Phase 4) — voice-continuity pending captures. */
+export const DFES_VOICE_CONTINUITY_SCHEMA_VERSION = 23;
 /** CEI Phase 1 schema version (now active — applied by Task 5.1.1). */
 export const CEI_PHASE1_SCHEMA_VERSION = 7;
 /** CEI Phase 2 schema version — adds test stack (protocols/instances/recs). */
@@ -702,6 +725,9 @@ export class AgriLogDatabase extends Dexie {
     /** DWC v2 §2.6 — analytics outbox; drained by `AnalyticsEventBus`. */
     analyticsOutbox!: Table<AnalyticsOutboxRow, number>;
 
+    /** dfes-companion-2026-07-11 (Phase 4) — durable voice captures pending AI interpretation. */
+    pendingInterpretations!: Table<PendingInterpretationDexieRow, string>;
+
     constructor() {
         super('AgriLogDB');
 
@@ -730,6 +756,7 @@ export class AgriLogDatabase extends Dexie {
         applyV20(this);
         applyV21(this);
         applyV22(this);
+        applyV23(this);
     }
 }
 

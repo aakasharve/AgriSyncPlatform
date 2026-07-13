@@ -45,4 +45,20 @@ export const FEATURE_FLAGS = {
      * Full ±8 calibration deferred (needs W1.P2 provenance + calibration fixtures).
      */
     understandingMeter: isEnabled('VITE_UNDERSTANDING_METER'),
+
+    /**
+     * DFES D8 question engine (Phase 5). Gates the combined daily-question card in
+     * the Shram Sathi meter. Default OFF — enable via VITE_STAGE_QUESTIONS=1 in a
+     * preview build. The question card lives INSIDE the meter's arrived surface, so
+     * it only shows when understandingMeter is ON too.
+     */
+    stageQuestions: isEnabled('VITE_STAGE_QUESTIONS'),
+
+    // DFES companion (spec: dfes-companion-2026-07-11). All default OFF;
+    // enabled only via VITE_* env in a preview build. Phase 3 does NOT flip
+    // understandingMeter on by default.
+    /** Phase 3 DisciplineStrip. */
+    disciplineSystem: isEnabled('VITE_DISCIPLINE_SYSTEM'),
+    /** Phase 4 voice-first continuity. */
+    voiceContinuity: isEnabled('VITE_VOICE_CONTINUITY'),
 } as const;

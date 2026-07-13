@@ -16,6 +16,7 @@
 
 import { describe, it, expect } from 'vitest';
 import { computeMeterArrival, isRichLog } from '../meterArrival';
+import { DFES_TUNING } from '../dfesTuning';
 import type { VlogScore } from '../../../../domain/types/log.types';
 
 // =============================================================================
@@ -97,20 +98,20 @@ describe('computeMeterArrival', () => {
         const result = computeMeterArrival(logs);
 
         expect(result.richLogCount).toBe(19);
-        expect(result.target).toBe(20);
+        expect(result.target).toBe(DFES_TUNING.richDayThreshold);
         expect(result.arrived).toBe(false);
-        expect(result.progress).toBeCloseTo(19 / 20);
+        expect(result.progress).toBeCloseTo(19 / DFES_TUNING.richDayThreshold);
     });
 
     // -------------------------------------------------------------------------
     // 2. 20 rich logs → arrived=true, progress=1
     // -------------------------------------------------------------------------
     it('20 rich logs → arrived=true, progress=1', () => {
-        const logs = Array.from({ length: 20 }, () => richLog(80));
+        const logs = Array.from({ length: DFES_TUNING.richDayThreshold }, () => richLog(80));
 
         const result = computeMeterArrival(logs);
 
-        expect(result.richLogCount).toBe(20);
+        expect(result.richLogCount).toBe(DFES_TUNING.richDayThreshold);
         expect(result.arrived).toBe(true);
         expect(result.progress).toBe(1);
     });
@@ -151,7 +152,7 @@ describe('computeMeterArrival', () => {
         const result = computeMeterArrival([]);
 
         expect(result.richLogCount).toBe(0);
-        expect(result.target).toBe(20);
+        expect(result.target).toBe(DFES_TUNING.richDayThreshold);
         expect(result.arrived).toBe(false);
         expect(result.progress).toBe(0);
     });

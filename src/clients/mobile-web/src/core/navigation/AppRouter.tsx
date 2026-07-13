@@ -68,6 +68,7 @@ const AppRouter: React.FC = () => {
         draftLog, setDraftLog, provenance,
         // SARVAM_PRIMARY_VOICE_PIPELINE_2026-05-28 — LiveCaption Way-2.
         voiceStreamingPhase, liveCaption,
+        continuityLevel, savedPendingCaptureId,
     } = voice;
 
     const weatherData = weather.weatherData;
@@ -172,6 +173,7 @@ const AppRouter: React.FC = () => {
         error, errorTranscript,
         draftLog, setDraftLog, provenance,
         voiceStreamingPhase, liveCaption,
+        continuityLevel, savedPendingCaptureId,
         weatherData,
         weatherStatus,
         boundaryUnset,

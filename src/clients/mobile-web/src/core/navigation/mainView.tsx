@@ -24,7 +24,8 @@ import WeatherWidget from '../../features/weather/components/WeatherWidget';
 import { formatCurrencyINR } from '../../shared/utils/dayState';
 import { getCropTheme } from '../../shared/utils/colorTheme';
 import { FEATURE_FLAGS } from '../../app/featureFlags';
-import { MeterDisplay } from '../../features/logs/components/MeterDisplay';
+import { LedgerRecognitionPanel } from '../../features/logs/components/LedgerRecognitionPanel';
+import VoiceSavedReassurance from '../../features/logs/components/shramsathi/VoiceSavedReassurance';
 
 import { AppRouterContext } from './routeContext';
 import { ReflectPage, ComparePage } from './lazyComponents';
@@ -112,6 +113,7 @@ export const renderLogView = (ctx: AppRouterContext): React.ReactNode => {
         draftLog, setDraftLog, provenance,
         // SARVAM_PRIMARY_VOICE_PIPELINE_2026-05-28 — LiveCaption Way-2.
         voiceStreamingPhase, liveCaption,
+        continuityLevel, savedPendingCaptureId,
         getTodayCounts, getContextColorIndicator,
         history, todayLogs, operatorNameById,
         getLogContextSnapshot, handleEditLog,
@@ -550,6 +552,26 @@ export const renderLogView = (ctx: AppRouterContext): React.ReactNode => {
                 </div>
             )}
 
+            {/* dfes-companion Phase 4 — voice-continuity degraded terminal surface.
+                Renders only when the ladder produced a durable-but-unstructured
+                capture (transcript-only / audio-only); reuses the SAME literal
+                "Add Another Log" button + handleReset used by the success card
+                below (no new i18n key). Flag-gated OFF by default. */}
+            {FEATURE_FLAGS.voiceContinuity
+                && status !== 'processing'
+                && savedPendingCaptureId
+                && (continuityLevel === 'transcript-only' || continuityLevel === 'audio-only') && (
+                <div className="mt-4">
+                    <VoiceSavedReassurance level={continuityLevel} />
+                    <button
+                        onClick={handleReset}
+                        className="mt-4 w-full rounded-xl bg-stone-900 py-4 text-lg font-bold text-white transition-colors hover:bg-emerald-800"
+                    >
+                        Add Another Log
+                    </button>
+                </div>
+            )}
+
             {status === 'success' && (
                 <div data-testid="saved-to-ledger" className="animate-in fade-in duration-500 bg-gradient-to-br from-emerald-50 to-white rounded-3xl shadow-xl border border-emerald-100 p-8 text-center relative overflow-hidden">
                     {/* Decorative Background Elements */}
@@ -618,21 +640,30 @@ export const renderLogView = (ctx: AppRouterContext): React.ReactNode => {
                             <p className="text-stone-500 mb-8">Your activity has been logged successfully.</p>
                         )}
 
-                        {/* Understanding Meter scaffold (1d-infra, flag-gated, OFF by default).
-                            WP-4 data-wiring (Task 10): pass the just-saved log's `understanding`
-                            VlogScore (looked up by lastSavedLogIds in history) + the farmer's full
-                            logs list for the arrival gate. Logic only — visual polish deferred to
-                            founder art assets (build-infra-now-defer-ui-polish-until-assets). */}
-                        {FEATURE_FLAGS.understandingMeter && (() => {
+                        {/* DFES recognition surface (dfes-companion-2026-07-11). The panel
+                            renders unconditionally; each child self-gates on its flag
+                            (understandingMeter for the bar, disciplineSystem for the strip),
+                            and the useFarmerEngagement fetch self-gates on those flags, so it
+                            stays inert AND network-silent in production until a flag is on. */}
+                        {(() => {
                             const savedLogId = lastSavedLogIds && lastSavedLogIds.length > 0
                                 ? lastSavedLogIds[0]
                                 : undefined;
                             const savedLog = savedLogId
                                 ? history.find(l => l.id === savedLogId)
                                 : undefined;
+                            // Phase 5 (dfes-companion-2026-07-11): derive the farm/plot/crop
+                            // context the D8 question engine needs from the saved log's own
+                            // context selection — SelectedCropContext carries cropName inline
+                            // (domain/types/log.types.ts), so no separate crops[] lookup.
+                            const selection = savedLog?.context?.selection?.[0];
                             return (
-                                <MeterDisplay
-                                    score={savedLog?.understanding}
+                                <LedgerRecognitionPanel
+                                    farmId={selection?.farmId ?? null}
+                                    plotId={selection?.selectedPlotIds?.[0] ?? null}
+                                    crop={selection?.cropName ?? ''}
+                                    todayLocalDate={savedLog?.date}
+                                    savedLog={savedLog}
                                     allLogs={history}
                                 />
                             );

@@ -15,6 +15,7 @@ import React from 'react';
 import { render, cleanup } from '@testing-library/react';
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import type { VlogScoreDimension, VlogScore } from '../../../../domain/types/log.types';
+import { DFES_TUNING } from '../../services/dfesTuning';
 
 // =============================================================================
 // HELPERS
@@ -151,6 +152,8 @@ describe('MeterDisplay', () => {
         const { getByTestId } = render(<MeterDisplay allLogs={allLogs} />);
 
         const arrivalEl = getByTestId('meter-arrival');
-        expect(arrivalEl.textContent).toContain('5/20');
+        // meterArrival now derives its target from DFES_TUNING.richDayThreshold
+        // (the single client-side DFES tunable) instead of a hardcoded 20.
+        expect(arrivalEl.textContent).toContain(`5/${DFES_TUNING.richDayThreshold}`);
     });
 });
