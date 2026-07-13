@@ -21,7 +21,7 @@ import { getSegmentVisual } from '../../shared/utils/uiUtils';
 import { getDateKey } from '../domain/services/DateKeyService';
 import { buildTimelineEntries } from '../../services/transcriptTimelineService';
 import WeatherWidget from '../../features/weather/components/WeatherWidget';
-import { formatCurrencyINR } from '../../shared/utils/dayState';
+import { formatCurrencyINR, getCarriedTasks } from '../../shared/utils/dayState';
 import { getCropTheme } from '../../shared/utils/colorTheme';
 import { FEATURE_FLAGS } from '../../app/featureFlags';
 import { LedgerRecognitionPanel } from '../../features/logs/components/LedgerRecognitionPanel';
@@ -117,6 +117,7 @@ export const renderLogView = (ctx: AppRouterContext): React.ReactNode => {
         voiceStreamingPhase, liveCaption,
         continuityLevel, savedPendingCaptureId,
         getTodayCounts, getContextColorIndicator,
+        plannedTasks,
         history, todayLogs, operatorNameById,
         getLogContextSnapshot, handleEditLog,
         costSnapshot, yesterdayCost,
@@ -139,6 +140,20 @@ export const renderLogView = (ctx: AppRouterContext): React.ReactNode => {
         }
     };
 
+    // Daily Clarity Loop v1 — Fix 1 coherence. Derive the carried element from
+    // the SAME today-pending set the hero's N comes from (its overdue subset),
+    // using the same tasks + scope todayDayState uses, so carriedCount ≤ N
+    // ALWAYS — never a second, divergent count. Computed only when the loop is
+    // on so the flag-off home stays a pure no-op.
+    const carriedTasks = FEATURE_FLAGS.dailyLoop
+        ? getCarriedTasks({
+            tasks: plannedTasks ?? [],
+            date: getDateKey(),
+            selectedCropIds: logScope.selectedCropIds,
+            selectedPlotIds: logScope.selectedPlotIds,
+        })
+        : [];
+
     return (
         <>
             {/* IDLE / RECORDING STATE */}
@@ -153,7 +168,8 @@ export const renderLogView = (ctx: AppRouterContext): React.ReactNode => {
                             {FEATURE_FLAGS.dailyLoop && (
                                 <DailyLoopHero
                                     pendingCount={todayDayState.pendingCount}
-                                    carriedCount={yesterdayDayState.pendingCount}
+                                    carriedCount={carriedTasks.length}
+                                    carriedTitle={carriedTasks.length === 1 ? carriedTasks[0].title : undefined}
                                     closurePercent={todayDayState.closurePercent}
                                     onFocusRecorder={focusRecorder}
                                 />
@@ -180,16 +196,22 @@ export const renderLogView = (ctx: AppRouterContext): React.ReactNode => {
                             <div className="bg-white border border-stone-200 rounded-2xl p-3.5 shadow-sm space-y-2">
                                 <div className="flex items-center justify-between gap-3">
                                     <div className="flex items-center gap-3">
-                                        <div
-                                            className="w-14 h-14 rounded-full p-1"
-                                            style={{
-                                                background: `conic-gradient(#059669 ${todayDayState.closurePercent * 3.6}deg, #e7e5e4 0deg)`
-                                            }}
-                                        >
-                                            <div className="w-full h-full rounded-full bg-white flex items-center justify-center text-[11px] font-black text-stone-700">
-                                                {todayDayState.closurePercent}%
+                                        {/* Daily Clarity Loop v1 (Fix 2): the hero above already
+                                            carries this closure ring, so suppress this duplicate
+                                            when the loop is ON — one ring only. OFF renders it
+                                            exactly as before (byte-equivalent no-op). */}
+                                        {!FEATURE_FLAGS.dailyLoop && (
+                                            <div
+                                                className="w-14 h-14 rounded-full p-1"
+                                                style={{
+                                                    background: `conic-gradient(#059669 ${todayDayState.closurePercent * 3.6}deg, #e7e5e4 0deg)`
+                                                }}
+                                            >
+                                                <div className="w-full h-full rounded-full bg-white flex items-center justify-center text-[11px] font-black text-stone-700">
+                                                    {todayDayState.closurePercent}%
+                                                </div>
                                             </div>
-                                        </div>
+                                        )}
                                         <div>
                                             <p className="text-xs uppercase tracking-wide font-bold text-stone-400">Daily Closure</p>
                                             <p className={`text-sm font-bold ${todayDayState.isClosed ? 'text-emerald-700' : 'text-amber-700'}`}>
@@ -205,9 +227,14 @@ export const renderLogView = (ctx: AppRouterContext): React.ReactNode => {
                                     </button>
                                 </div>
 
-                                <p className="text-sm font-semibold text-stone-700">
-                                    Tasks: Done {todayDayState.completedCount} / Planned {todayDayState.plannedCount}
-                                </p>
+                                {/* Daily Clarity Loop v1 (Fix 2): the hero replaces this buried
+                                    English tasks line as the single calm opener. Suppress it when
+                                    the loop is ON; OFF keeps it exactly as before. */}
+                                {!FEATURE_FLAGS.dailyLoop && (
+                                    <p className="text-sm font-semibold text-stone-700">
+                                        Tasks: Done {todayDayState.completedCount} / Planned {todayDayState.plannedCount}
+                                    </p>
+                                )}
                                 {todayDayState.unverifiedCount > 0 && (
                                     <p className="text-xs font-semibold text-amber-700">
                                         Pending approvals: {todayDayState.unverifiedCount}

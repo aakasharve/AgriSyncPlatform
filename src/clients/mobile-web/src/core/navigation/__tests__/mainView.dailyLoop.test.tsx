@@ -20,9 +20,31 @@ import { afterEach, describe, it, expect, vi } from 'vitest';
 import { cleanup, render, screen } from '@testing-library/react';
 import '@testing-library/jest-dom/vitest';
 import type { AppRouterContext } from '../routeContext';
+import type { PlannedTask } from '../../../types';
+import { getDateKey } from '../../domain/services/DateKeyService';
 
 const stub = (label: string) => ({
     default: () => React.createElement('div', { 'data-stub': label }),
+});
+
+// Real "today" (IST) and helpers to make genuinely-carried past due-dates, so
+// getCarriedTasks (NOT mocked — runs for real) treats them as overdue.
+const TODAY_KEY = getDateKey();
+const daysAgoKey = (n: number): string => {
+    const d = new Date(`${TODAY_KEY}T12:00:00`);
+    d.setDate(d.getDate() - n);
+    return getDateKey(d);
+};
+const makeTask = (id: string, dueDate: string, status: PlannedTask['status']): PlannedTask => ({
+    id,
+    title: `task-${id}`,
+    plotId: 'plot-a',
+    cropId: 'crop-a',
+    priority: 'normal',
+    status,
+    sourceType: 'ai_extracted',
+    createdAt: `${daysAgoKey(3)}T06:00:00.000Z`,
+    dueDate,
 });
 
 async function loadRenderLogView(dailyLoop: boolean) {
@@ -151,5 +173,84 @@ describe('renderLogView — Daily Clarity Loop v1 gate', () => {
         render(<>{renderLogView(makeCtx())}</>);
         expect(screen.getByTestId('daily-loop-hero')).toBeInTheDocument();
         expect(screen.queryByText('Yesterday not fully closed')).toBeNull();
+    });
+
+    // ---- Fix 2: one calm opener — hide the leftover duplicates when ON ----
+
+    it('OFF: the buried English "Tasks: Done/Planned" line and the closure ring both render', async () => {
+        const renderLogView = await loadRenderLogView(false);
+        render(<>{renderLogView(makeCtx())}</>);
+        expect(screen.getByText(/Tasks: Done 1 \/ Planned 6/)).toBeInTheDocument();
+        // No hero → the ONLY closure ring is the card's own (one "40%").
+        expect(screen.getAllByText('40%')).toHaveLength(1);
+    });
+
+    it('ON: the old "Tasks: Done/Planned" line is hidden and the DUPLICATE ring is gone (only the hero ring)', async () => {
+        const renderLogView = await loadRenderLogView(true);
+        render(<>{renderLogView(makeCtx())}</>);
+        // The buried English tasks line is suppressed — hero is the single opener.
+        expect(screen.queryByText(/Tasks: Done/)).toBeNull();
+        // Exactly one closure ring survives: the hero's. If the card ring were
+        // still shown, "40%" would appear twice (hero + card).
+        expect(screen.getAllByText('40%')).toHaveLength(1);
+        // And that one ring belongs to the hero.
+        expect(screen.getByTestId('daily-loop-hero')).toHaveTextContent('40%');
+    });
+
+    // ---- Fix 1: carry-forward coherence — carried k <= today's N, never divergent ----
+
+    it('ON: hero shows today N=3 and the carried sub-line k=3 (drawn from today\'s pending), never yesterday\'s "5"', async () => {
+        const renderLogView = await loadRenderLogView(true);
+        // Yesterday had 5 pending; 2 have since been closed, 3 genuinely remain.
+        // Old code showed a standalone "काल 5 …" from yesterdayDayState; new code
+        // derives the carried element from TODAY's pending subset ⇒ shows 3.
+        const plannedTasks: PlannedTask[] = [
+            makeTask('t1', daysAgoKey(1), 'pending'),
+            makeTask('t2', daysAgoKey(2), 'pending'),
+            makeTask('t3', daysAgoKey(1), 'in_progress'),
+            makeTask('t4', daysAgoKey(2), 'done'),
+            makeTask('t5', daysAgoKey(1), 'done'),
+        ];
+        const ctx = makeCtx({
+            plannedTasks,
+            todayDayState: {
+                closurePercent: 40, isClosed: false,
+                completedCount: 2, plannedCount: 3, pendingCount: 3, unverifiedCount: 0,
+            },
+            // "Yesterday had 5 pending" — proves the hero does NOT surface this number.
+            yesterdayDayState: {
+                closurePercent: 0, isClosed: false,
+                completedCount: 0, plannedCount: 5, pendingCount: 5, unverifiedCount: 0,
+            },
+        } as unknown as Partial<AppRouterContext>);
+        render(<>{renderLogView(ctx)}</>);
+
+        const heroLine = screen.getByTestId('daily-loop-hero-line');
+        const carried = screen.getByTestId('daily-loop-hero-carried');
+        // Today's number N = 3.
+        expect(heroLine).toHaveTextContent('3');
+        // Carried qualifier k = 3, drawn from the SAME pending set (k <= N).
+        expect(carried).toHaveTextContent('3');
+        // Crucially: the divergent standalone "5" never appears in the carried line.
+        expect(carried).not.toHaveTextContent('5');
+    });
+
+    it('ON: a SINGLE carried task names itself (no bare count), staying within N', async () => {
+        const renderLogView = await loadRenderLogView(true);
+        const plannedTasks: PlannedTask[] = [makeTask('solo', daysAgoKey(1), 'pending')];
+        const ctx = makeCtx({
+            plannedTasks,
+            todayDayState: {
+                closurePercent: 20, isClosed: false,
+                completedCount: 0, plannedCount: 1, pendingCount: 1, unverifiedCount: 0,
+            },
+        } as unknown as Partial<AppRouterContext>);
+        render(<>{renderLogView(ctx)}</>);
+
+        // The carried sub-line renders (names the one task via the "…One" key).
+        const carried = screen.getByTestId('daily-loop-hero-carried');
+        expect(carried).toHaveTextContent('dfes.dailyLoopCarriedOne');
+        // Single carried task ⇒ no "(यातील k …)" many-count form.
+        expect(carried).not.toHaveTextContent('dfes.dailyLoopCarriedMany');
     });
 });

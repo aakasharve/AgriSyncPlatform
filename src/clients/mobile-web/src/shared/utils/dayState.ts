@@ -277,15 +277,23 @@ const getOverdueStageSignal = (
     return null;
 };
 
+// Shared crop/plot scope predicate for tasks. Extracted so getTaskCompletion and
+// getCarriedTasks filter by IDENTICAL rules — the carried subset MUST stay a
+// strict subset of a day's pending, or the Daily Clarity Loop hero could show a
+// carried count that exceeds today's number (the exact incoherence Fix 1 kills).
+const taskInScope = (task: PlannedTask, scope?: ScopeOptions): boolean => {
+    if (scope?.selectedCropIds?.length && task.cropId && !scope.selectedCropIds.includes(task.cropId)) {
+        return false;
+    }
+    if (scope?.selectedPlotIds?.length && !scope.selectedPlotIds.includes(task.plotId)) {
+        return false;
+    }
+    return true;
+};
+
 const getTaskCompletion = (tasks: PlannedTask[], dateKey: string, scope?: ScopeOptions) => {
     const scopedTasks = tasks.filter(task => {
-        if (scope?.selectedCropIds?.length && task.cropId && !scope.selectedCropIds.includes(task.cropId)) {
-            return false;
-        }
-        if (scope?.selectedPlotIds?.length && !scope.selectedPlotIds.includes(task.plotId)) {
-            return false;
-        }
-
+        if (!taskInScope(task, scope)) return false;
         if (!task.dueDate) return false;
         return task.dueDate <= dateKey;
     }).filter(task => task.status !== 'cancelled');
@@ -296,6 +304,36 @@ const getTaskCompletion = (tasks: PlannedTask[], dateKey: string, scope?: ScopeO
         completed,
         pending: Math.max(0, scopedTasks.length - completed)
     };
+};
+
+/**
+ * The genuinely-CARRIED subset of a date's open tasks: tasks whose `dueDate` is
+ * STRICTLY BEFORE `date` and are still open (not done, not cancelled), within the
+ * same crop/plot scope. Because getTaskCompletion counts `dueDate <= date` for
+ * pending, this set is always a strict subset of that day's pending tasks — so
+ * `getCarriedTasks(...).length <= computeDayState(...).pendingCount` ALWAYS. The
+ * Daily Clarity Loop hero uses it to name the carried work as a soft qualifier of
+ * TODAY's number, never as a second standalone count that could diverge above it.
+ */
+export const getCarriedTasks = ({
+    tasks,
+    date = getDateKey(),
+    selectedCropIds,
+    selectedPlotIds
+}: {
+    tasks: PlannedTask[];
+    date?: string;
+    selectedCropIds?: string[];
+    selectedPlotIds?: string[];
+}): PlannedTask[] => {
+    const dateKey = normalizeDateKey(date);
+    const scope: ScopeOptions = { selectedCropIds, selectedPlotIds };
+    return tasks.filter(task => {
+        if (!taskInScope(task, scope)) return false;
+        if (task.status === 'done' || task.status === 'cancelled') return false;
+        if (!task.dueDate) return false;
+        return task.dueDate < dateKey;
+    });
 };
 
 const clampPercent = (value: number): number => {

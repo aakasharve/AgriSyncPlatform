@@ -88,7 +88,12 @@ function makeVoiceResponseWithTask(dueHint: string | undefined): AgriLogResponse
     } as AgriLogResponse;
 }
 
-describe('LogFactory voice path — spoken due-date hint becomes a concrete dueDate', () => {
+// The Daily Clarity Loop gate: the 9th positional arg to createFromVoiceResult.
+// TRUE = loop on ⇒ resolver active. Arg 8 (idGen) passed as undefined so it
+// keeps its default (idGenerator).
+const RESOLVE_DUE_ON = true;
+
+describe('LogFactory voice path — spoken due-date hint becomes a concrete dueDate (loop ON)', () => {
     it("'उद्या' → mirrored PlannedTask.dueDate === tomorrow (and dueHint preserved)", () => {
         const logs = LogFactory.createFromVoiceResult(
             makeVoiceResponseWithTask('उद्या'),
@@ -98,6 +103,8 @@ describe('LogFactory voice path — spoken due-date hint becomes a concrete dueD
             undefined,
             undefined,
             fixedClock,
+            undefined,
+            RESOLVE_DUE_ON,
         );
         expect(logs).toHaveLength(1);
 
@@ -117,6 +124,8 @@ describe('LogFactory voice path — spoken due-date hint becomes a concrete dueD
             undefined,
             undefined,
             fixedClock,
+            undefined,
+            RESOLVE_DUE_ON,
         );
         const crops = makeCrops();
         const tasks = logs[0].plannedTasks ?? [];
@@ -144,6 +153,8 @@ describe('LogFactory voice path — spoken due-date hint becomes a concrete dueD
             undefined,
             undefined,
             fixedClock,
+            undefined,
+            RESOLVE_DUE_ON,
         );
         const task = logs[0].plannedTasks?.find(t => t.title === 'फवारणी');
         expect(task).toBeDefined();
@@ -156,5 +167,51 @@ describe('LogFactory voice path — spoken due-date hint becomes a concrete dueD
             date: TOMORROW,
         });
         expect(state.pendingCount).toBe(0);
+    });
+});
+
+describe('LogFactory voice path — resolver is GATED behind the loop (Fix 3)', () => {
+    it("loop OFF (resolveDue=false): 'उद्या' gets NO dueDate — pre-feature no-op, hint still kept", () => {
+        const logs = LogFactory.createFromVoiceResult(
+            makeVoiceResponseWithTask('उद्या'),
+            makeSinglePlotScope(),
+            makeCrops(),
+            makeProfile(),
+            undefined,
+            undefined,
+            fixedClock,
+            undefined,
+            false, // resolveDue OFF — the whole loop (data path) stays inert
+        );
+        const task = logs[0].plannedTasks?.find(t => t.title === 'फवारणी');
+        expect(task).toBeDefined();
+        // Resolver inert: the clear 'उद्या' hint is NOT turned into a date.
+        expect(task!.dueDate).toBeUndefined();
+        // dueHint provenance is still copied (exactly as pre-feature).
+        expect(task!.dueHint).toBe('उद्या');
+
+        // And with no dueDate, day-state math drops it — spoken task uncounted.
+        const tomorrow = computeDayState({
+            logs,
+            crops: makeCrops(),
+            tasks: logs[0].plannedTasks ?? [],
+            date: TOMORROW,
+        });
+        expect(tomorrow.pendingCount).toBe(0);
+    });
+
+    it('default (no resolveDue arg) is OFF — resolver inert unless a caller opts in', () => {
+        const logs = LogFactory.createFromVoiceResult(
+            makeVoiceResponseWithTask('उद्या'),
+            makeSinglePlotScope(),
+            makeCrops(),
+            makeProfile(),
+            undefined,
+            undefined,
+            fixedClock,
+        );
+        const task = logs[0].plannedTasks?.find(t => t.title === 'फवारणी');
+        expect(task!.dueDate).toBeUndefined();
+        expect(task!.dueHint).toBe('उद्या');
     });
 });

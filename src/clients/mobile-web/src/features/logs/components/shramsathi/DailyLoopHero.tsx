@@ -9,10 +9,14 @@
  *   आजचा दिवस मोकळा — बोलून नोंदवा (day free, just speak) — when N === 0
  *
  * It REUSES a count the app already computes (todayDayState.pendingCount) —
- * nothing new is calculated here. The carried/overdue signal ("काल राहिलं") is
- * folded in BESIDE it, replacing the separate "Yesterday not fully closed"
- * banner. Tapping the hero focuses the existing recorder (no new navigation).
- * Reward here is clarity/control — never points, never scolding.
+ * nothing new is calculated here. The carried signal is derived from the SAME
+ * today-pending set (its overdue subset), so it can only ever QUALIFY the N above
+ * — never contradict it (Fix 1). It shows as a soft sub-line: for one carried
+ * task, its title ("काल पासून: …"); for several, "(यातील {k} काल पासून)" with
+ * k ≤ N always. This replaces the old standalone "काल {M} …" count that could
+ * diverge above N, and the separate "Yesterday not fully closed" banner. Tapping
+ * the hero focuses the existing recorder (no new navigation). Reward here is
+ * clarity/control — never points, never scolding.
  */
 import React from 'react';
 import { useLanguage } from '../../../../i18n/LanguageContext';
@@ -20,8 +24,14 @@ import { useLanguage } from '../../../../i18n/LanguageContext';
 interface DailyLoopHeroProps {
     /** Tasks left today (todayDayState.pendingCount) — already folds in carry-forward. */
     pendingCount: number;
-    /** Yesterday's leftover (yesterdayDayState.pendingCount); 0 hides the carried line. */
+    /**
+     * How many of TODAY's pending tasks genuinely carried over (dueDate < today).
+     * A strict subset of pendingCount, so 0 ≤ carriedCount ≤ pendingCount ALWAYS.
+     * 0 hides the carried sub-line.
+     */
     carriedCount: number;
+    /** Title of the single carried task, when carriedCount === 1 — names it instead of a bare count. */
+    carriedTitle?: string;
     /** Day-closure ring fill, 0–100 (todayDayState.closurePercent). */
     closurePercent: number;
     /** Focus the existing recorder — reuses the crop-selector focus pattern. */
@@ -48,6 +58,7 @@ const withCount = (template: string, count: number): React.ReactNode => {
 const DailyLoopHero: React.FC<DailyLoopHeroProps> = ({
     pendingCount,
     carriedCount,
+    carriedTitle,
     closurePercent,
     onFocusRecorder,
 }) => {
@@ -92,7 +103,9 @@ const DailyLoopHero: React.FC<DailyLoopHeroProps> = ({
                         className="mt-0.5 text-sm font-semibold text-amber-700"
                         style={{ fontFamily: MARATHI_BODY }}
                     >
-                        {withCount(t('dfes.dailyLoopCarried'), carriedCount)}
+                        {carriedCount === 1 && carriedTitle
+                            ? t('dfes.dailyLoopCarriedOne').replace('{title}', carriedTitle)
+                            : withCount(t('dfes.dailyLoopCarriedMany'), carriedCount)}
                     </p>
                 )}
             </div>

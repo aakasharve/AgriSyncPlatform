@@ -452,7 +452,14 @@ export class LogFactory {
         weatherStamps?: Record<string, WeatherStamp>,
         provenance?: LogProvenance,
         clock: Clock = systemClock,
-        idGen: IdGenerator = idGenerator
+        idGen: IdGenerator = idGenerator,
+        // Daily Clarity Loop gate (spec: dfes-companion-2026-07-11). Domain is
+        // flag-agnostic — the app-layer caller (useLogCommands, reading
+        // FEATURE_FLAGS.dailyLoop) passes this in. When FALSE the spoken-task
+        // due-date resolver is inert and the mirrored task behaves exactly as
+        // pre-feature (dueHint copied, dueDate left unset). Default FALSE so any
+        // caller that omits it stays a byte-equivalent no-op.
+        resolveDue: boolean = false
     ): DailyLog[] {
         const targetPlotIds = logScope.selectedPlotIds;
         const newLogs: DailyLog[] = [];
@@ -494,7 +501,8 @@ export class LogFactory {
                 weatherStamps,
                 provenance,
                 nowISO,
-                idGen
+                idGen,
+                resolveDue
             );
             // Stamp understanding (always, silent — display gated by flag separately)
             const globalVoiceCtx: ScoreContext = { farm: { plotCount: 1 } };
@@ -564,9 +572,10 @@ export class LogFactory {
                 priority: 'normal',
                 createdAt: nowISO,
                 dueHint: pt.dueHint,
-                // Resolve the free-text hint to a concrete due date so the task
-                // carries forward in day-state counts; null for vague hints.
-                dueDate: resolveDueDate(pt.dueHint ?? undefined, today) ?? undefined,
+                // Loop-gated: resolve the free-text hint to a concrete due date so
+                // the task carries forward in day-state counts (null for vague
+                // hints). When the loop is off, leave dueDate unset — pre-feature.
+                dueDate: resolveDue ? (resolveDueDate(pt.dueHint ?? undefined, today) ?? undefined) : undefined,
                 sourceType: 'ai_extracted',
                 plotId: plotId,
                 cropId: crop.id
@@ -684,7 +693,9 @@ export class LogFactory {
         weatherStamps: Record<string, WeatherStamp> | undefined,
         provenance: LogProvenance | undefined,
         nowISO: string,
-        idGen: IdGenerator
+        idGen: IdGenerator,
+        // Daily Clarity Loop gate — see createFromVoiceResult. Off ⇒ resolver inert.
+        resolveDue: boolean
     ): DailyLog {
         const isOwner = profile.activeOperatorId === 'owner';
         const autoApprove = profile.trust?.reviewPolicy === 'AUTO_APPROVE_ALL' ||
@@ -700,9 +711,9 @@ export class LogFactory {
             priority: 'normal',
             createdAt: nowISO,
             dueHint: pt.dueHint,
-            // Resolve the free-text hint to a concrete due date so the task
-            // carries forward in day-state counts; null for vague hints.
-            dueDate: resolveDueDate(pt.dueHint ?? undefined, today) ?? undefined,
+            // Loop-gated: resolve the hint only when the loop is on; otherwise
+            // leave dueDate unset so this path is a pre-feature no-op.
+            dueDate: resolveDue ? (resolveDueDate(pt.dueHint ?? undefined, today) ?? undefined) : undefined,
             sourceType: 'ai_extracted',
             plotId: FARM_GLOBAL_ID,
             cropId: FARM_GLOBAL_ID

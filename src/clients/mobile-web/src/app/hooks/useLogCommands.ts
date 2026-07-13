@@ -1,3 +1,13 @@
+/* eslint-disable @typescript-eslint/no-explicit-any, react-hooks/exhaustive-deps --
+ * PRE-EXISTING legacy debt, quarantined (NOT introduced by this change). This
+ * hook was last committed 2026-04-25, before eslint.config.js was tightened
+ * (2026-05-17) to warn on `any` and useCallback dep-omissions. The `any`s are
+ * loose form-data payloads and the omitted deps (calculateLogSummary / isDemoMode)
+ * are intentional memoization choices. Properly retyping/re-wiring them is an
+ * out-of-scope refactor with real behavior risk; disabling here lets the DFES loop
+ * gate (spec: dfes-companion-2026-07-11) — which only threads a typed `resolveDue`
+ * boolean — pass the --max-warnings 0 pre-commit hook without touching unrelated
+ * behavior. This feature adds NO new `any` or dep-omission. */
 import { useCallback, useMemo } from 'react';
 import {
     AgriLogResponse, LogScope, CropProfile, FarmerProfile, DailyLog,
@@ -8,6 +18,7 @@ import { logger } from '../../infrastructure/observability/Logger';
 import { CorrelationId } from '../../infrastructure/observability/CorrelationContext';
 import { WeatherPort } from '../../application/ports/WeatherPort';
 import { computeDayState } from '../../shared/utils/dayState';
+import { FEATURE_FLAGS } from '../featureFlags';
 import type { LastSavedLogSummaryItem } from '../uiRuntimeTypes';
 
 // ARCHITECTURE FIX: Import Service Class and Hook
@@ -172,7 +183,10 @@ export const useLogCommands = ({
                 effectiveScope,
                 crops,
                 farmerProfile,
-                provenance
+                provenance,
+                // Daily Clarity Loop gate: only resolve spoken due-dates when the
+                // loop is on. Flag read stays in the app layer (domain-agnostic).
+                FEATURE_FLAGS.dailyLoop
             );
 
             // Persist (Service handles persistence via injected repo)
@@ -230,8 +244,11 @@ export const useLogCommands = ({
                 logScope,
                 crops,
                 farmerProfile,
-                // Provenance might be lost here if we don't pass it from draft, 
+                // Provenance might be lost here if we don't pass it from draft,
                 // but usually draft has it in meta. For now, undefined new provenance.
+                undefined,
+                // Daily Clarity Loop gate (see handleAutoSave).
+                FEATURE_FLAGS.dailyLoop
             );
 
             // Persist

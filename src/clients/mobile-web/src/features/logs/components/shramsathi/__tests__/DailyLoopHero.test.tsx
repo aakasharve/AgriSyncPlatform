@@ -5,7 +5,9 @@
 // Daily Clarity Loop v1 — morning-trigger hero. These tests bind the hero to
 // Marathi (via a mocked useLanguage → real translations) so we assert the exact
 // farmer-facing copy: "आज {N} कामं बाकी", the empty-day invite, and the folded
-// carried line. No async Dexie-backed LanguageProvider needed.
+// carried qualifier (Fix 1: a subset of TODAY's N, never a divergent count —
+// naming a single carried task, or "(यातील {k} काल पासून)" for several). No
+// async Dexie-backed LanguageProvider needed.
 import { afterEach, describe, it, expect, vi } from 'vitest';
 import { cleanup, render, screen, fireEvent } from '@testing-library/react';
 import '@testing-library/jest-dom/vitest';
@@ -40,14 +42,22 @@ describe('DailyLoopHero (Daily Clarity Loop v1 morning trigger)', () => {
         expect(screen.queryByTestId('daily-loop-hero-carried')).not.toBeInTheDocument();
     });
 
-    it('folds in a dignified carried line when yesterday had leftover work', () => {
+    it('names the single carried task (no bare count) when exactly one carried over', () => {
+        render(
+            <DailyLoopHero pendingCount={3} carriedCount={1} carriedTitle="फवारणी" closurePercent={40} onFocusRecorder={() => {}} />,
+        );
+        expect(screen.getByTestId('daily-loop-hero-carried')).toHaveTextContent('काल पासून: फवारणी');
+    });
+
+    it('folds in a soft carried QUALIFIER of the same N when several carried over (k <= N)', () => {
+        // pendingCount = N (today's number); carriedCount = k is a subset of it.
         render(
             <DailyLoopHero pendingCount={5} carriedCount={2} closurePercent={40} onFocusRecorder={() => {}} />,
         );
-        expect(screen.getByTestId('daily-loop-hero-carried')).toHaveTextContent('काल 2 कामं राहिली होती');
+        expect(screen.getByTestId('daily-loop-hero-carried')).toHaveTextContent('(यातील 2 काल पासून)');
     });
 
-    it('hides the carried line on an empty day even if yesterday had leftover', () => {
+    it('hides the carried line on an empty day even if something carried over', () => {
         render(
             <DailyLoopHero pendingCount={0} carriedCount={3} closurePercent={100} onFocusRecorder={() => {}} />,
         );

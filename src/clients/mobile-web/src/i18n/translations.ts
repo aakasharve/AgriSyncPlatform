@@ -298,9 +298,11 @@ export interface Translations {
         // "trigger" hero at the top of home, answering "काय राहिलं" in one calm
         // line. Reuses todayDayState.pendingCount. Reward = clarity/control,
         // never points, never scolding. {count} = a plain task count.
-        dailyLoopTasksLeft: string;   // N > 0: today's remaining work
-        dailyLoopDayFree: string;     // N === 0: empty-day, invite to record
-        dailyLoopCarried: string;     // carried/overdue leftover from yesterday
+        dailyLoopTasksLeft: string;      // N > 0: today's remaining work
+        dailyLoopDayFree: string;        // N === 0: empty-day, invite to record
+        // Carried-over qualifier of the SAME N (its overdue subset, k ≤ N):
+        dailyLoopCarriedOne: string;     // exactly 1 carried → names it ("काल पासून: {title}")
+        dailyLoopCarriedMany: string;    // k > 1 carried → soft count ("(यातील {count} काल पासून)")
 
         // Daily Clarity Loop v1 REWARD line (dfes-companion-2026-07-11) — the
         // calm "you're in control" line on the "Saved to Ledger" success card,
@@ -575,7 +577,8 @@ export const translations: Record<Language, Translations> = {
             // Daily Clarity Loop v1 (dfes-companion-2026-07-11)
             dailyLoopTasksLeft: '{count} tasks left today',
             dailyLoopDayFree: 'Today is clear — just speak to record',
-            dailyLoopCarried: '{count} left from yesterday',
+            dailyLoopCarriedOne: 'From yesterday: {title}',
+            dailyLoopCarriedMany: '({count} of these carried over)',
 
             // Daily Clarity Loop v1 REWARD line (dfes-companion-2026-07-11)
             dailyLoopClarity: '{done} done, {left} left',
@@ -850,7 +853,8 @@ export const translations: Record<Language, Translations> = {
             // is a plain fact ("what's left"), not a grade of the farmer.
             dailyLoopTasksLeft: 'आज {count} कामं बाकी',
             dailyLoopDayFree: 'आजचा दिवस मोकळा — बोलून नोंदवा',
-            dailyLoopCarried: 'काल {count} कामं राहिली होती',
+            dailyLoopCarriedOne: 'काल पासून: {title}',
+            dailyLoopCarriedMany: '(यातील {count} काल पासून)',
 
             // Daily Clarity Loop v1 REWARD line (dfes-companion-2026-07-11) —
             // FOUNDER-CONFIRM: the "you're in control" reward on the saved card.

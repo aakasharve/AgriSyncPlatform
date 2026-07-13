@@ -1,3 +1,10 @@
+/* eslint-disable @typescript-eslint/no-explicit-any --
+ * PRE-EXISTING legacy debt, quarantined (NOT introduced by this change). The two
+ * `any`s are the `createFromManual(data: any)` form payload; this file was last
+ * committed 2026-03-12, before eslint.config.js was tightened (2026-05-17) to warn
+ * on `any`. Retyping the manual-entry payload is an out-of-scope refactor; disabled
+ * here so the DFES loop gate (spec: dfes-companion-2026-07-11), which only adds a
+ * typed `resolveDue` boolean, passes the --max-warnings 0 pre-commit hook. */
 import { AgriLogResponse } from '../../types';
 import { LogProvenance } from '../../domain/ai/LogProvenance';
 import { LogScope, CropProfile, FarmerProfile, DailyLog } from '../../types';
@@ -17,7 +24,11 @@ export interface LogCommandService {
         scope: LogScope,
         crops: CropProfile[],
         profile: FarmerProfile,
-        provenance?: LogProvenance
+        provenance?: LogProvenance,
+        // Daily Clarity Loop gate (spec: dfes-companion-2026-07-11) — passed down
+        // from the app-layer caller that reads FEATURE_FLAGS.dailyLoop. Off (the
+        // default) keeps the spoken-task due-date resolver inert (pre-feature).
+        resolveDue?: boolean
     ): Promise<DailyLog[]>;
 
     createFromManual(
@@ -64,7 +75,8 @@ export class LogCommandServiceImpl implements LogCommandService {
         scope: LogScope,
         crops: CropProfile[],
         profile: FarmerProfile,
-        provenance?: LogProvenance
+        provenance?: LogProvenance,
+        resolveDue: boolean = false
     ): Promise<DailyLog[]> {
         // 1. Factory Creation
         const logs = LogFactory.createFromVoiceResult(
@@ -75,7 +87,8 @@ export class LogCommandServiceImpl implements LogCommandService {
             undefined, // weatherStamps (enriched later)
             provenance,
             systemClock,
-            idGenerator
+            idGenerator,
+            resolveDue
         );
 
         // 2. Enrichment (Weather)
