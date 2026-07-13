@@ -37,10 +37,11 @@ export async function reconcileLogs(
     plotLookup: Map<string, PlotLookupEntry>,
     pendingLogIds: Set<string>,
 ): Promise<number> {
-    const logs = payload.dailyLogs.map(log => toDailyLog(log, plotLookup));
+    const dailyLogs = payload.dailyLogs ?? [];
+    const logs = dailyLogs.map(log => toDailyLog(log, plotLookup));
 
     const serverModifiedByLogId = new Map<string, string>();
-    for (const dto of payload.dailyLogs) {
+    for (const dto of dailyLogs) {
         if (dto.modifiedAtUtc) {
             serverModifiedByLogId.set(dto.id, dto.modifiedAtUtc);
         }
@@ -89,7 +90,9 @@ function toDailyLog(
     const plotContext = plotLookup.get(source.plotId);
     const selectedCropName = normalizeMojibakeText(plotContext?.cropName ?? 'Farm');
     const selectedPlotName = normalizeMojibakeText(plotContext?.plotName ?? 'Unknown Plot');
-    const latestVerification = [...source.verificationEvents]
+    
+    const verificationEvents = source.verificationEvents ?? [];
+    const latestVerification = [...verificationEvents]
         .sort((left, right) => Date.parse(right.occurredAtUtc) - Date.parse(left.occurredAtUtc))[0];
 
     const verificationStatus = mapVerificationStatus(
@@ -99,7 +102,8 @@ function toDailyLog(
     const inputs: DailyLog['inputs'] = [];
     const observations: DailyLog['observations'] = [];
 
-    source.tasks.forEach(task => {
+    const tasks = source.tasks ?? [];
+    tasks.forEach(task => {
         const activityType = normalizeMojibakeText(task.activityType);
         const taskNotes = task.notes ? normalizeMojibakeText(task.notes) : undefined;
         const normalizedActivity = normalizeTaskActivityType(activityType);
