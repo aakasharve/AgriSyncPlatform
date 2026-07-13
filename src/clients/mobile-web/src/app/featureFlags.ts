@@ -81,4 +81,15 @@ export const FEATURE_FLAGS = {
      * absent -> false); when OFF this is a byte-equivalent no-op.
      */
     intelligenceInsights: isEnabled('VITE_INTELLIGENCE_INSIGHTS'),
+
+    /**
+     * Task 5 (spec: dfes-companion-2026-07-11) — "राहिलं → झालं" suggest-and-
+     * confirm task close. Gates BOTH the `findConfirmableTaskCloses` matcher
+     * call AND the `TaskCloseConfirm` card on the Saved-to-Ledger success
+     * card. OFF is a genuine no-op: the matcher is never invoked (not just
+     * hidden), so there is zero extra computation. Only the farmer's own
+     * होय tap ever closes a task — this flag never enables a silent close.
+     * Default OFF (env VITE_TASK_CLOSE_CONFIRM absent -> false).
+     */
+    taskCloseConfirm: isEnabled('VITE_TASK_CLOSE_CONFIRM'),
 } as const;

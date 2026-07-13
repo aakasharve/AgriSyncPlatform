@@ -31,6 +31,9 @@ import DailyLoopClarity from '../../features/logs/components/shramsathi/DailyLoo
 import DailyLoopInsight from '../../features/logs/components/shramsathi/DailyLoopInsight';
 import { buildDailyInsight } from '../../features/logs/intelligence/buildDailyInsight';
 import { ShramSathiUnderstanding } from '../../features/logs/components/shramsathi/ShramSathiUnderstanding';
+import { findConfirmableTaskCloses, type TaskCloseCandidate } from '../../features/logs/services/taskAutoClose';
+import TaskCloseConfirm from '../../features/logs/components/shramsathi/TaskCloseConfirm';
+import { logger } from '../../infrastructure/observability/Logger';
 
 import { AppRouterContext } from './routeContext';
 import { ReflectPage, ComparePage } from './lazyComponents';
@@ -40,6 +43,28 @@ import {
     getSummaryLines,
     getVerificationPresentation
 } from './helpers';
+
+// Task 5 (spec: dfes-companion-2026-07-11) — thin per-candidate wrapper so
+// नाही ("hide it for this render") can use real React state. `renderLogView`
+// below is a plain function invoked directly inside AppRouter's JSX (see
+// AppRouter.tsx `{renderLogView(ctx)}`), not mounted as its own component, so
+// a hook can't live directly in its body — this small component gives the
+// dismiss toggle its own fiber. Keyed by candidate.task.id at the call site
+// so switching to a different top candidate resets the dismissal.
+const TaskCloseConfirmSlot: React.FC<{
+    candidate: TaskCloseCandidate;
+    onConfirm: (candidate: TaskCloseCandidate) => void;
+}> = ({ candidate, onConfirm }) => {
+    const [dismissed, setDismissed] = React.useState(false);
+    if (dismissed) return null;
+    return (
+        <TaskCloseConfirm
+            candidate={candidate}
+            onConfirm={() => onConfirm(candidate)}
+            onDismiss={() => setDismissed(true)}
+        />
+    );
+};
 
 export const renderReflectView = (ctx: AppRouterContext): React.ReactNode => {
     if (ctx.currentRoute !== 'main' || ctx.mainView !== 'reflect') return null;
@@ -120,7 +145,7 @@ export const renderLogView = (ctx: AppRouterContext): React.ReactNode => {
         voiceStreamingPhase, liveCaption,
         continuityLevel, savedPendingCaptureId,
         getTodayCounts, getContextColorIndicator,
-        plannedTasks,
+        plannedTasks, handleUpdateTask,
         history, todayLogs, operatorNameById,
         getLogContextSnapshot, handleEditLog,
         costSnapshot, yesterdayCost,
@@ -758,6 +783,56 @@ export const renderLogView = (ctx: AppRouterContext): React.ReactNode => {
                                     savedLog={savedLog}
                                     allLogs={history}
                                     weather={weatherData}
+                                />
+                            );
+                        })()}
+
+                        {/* Task 5 (spec: dfes-companion-2026-07-11) — "राहिलं → झालं"
+                            suggest-and-confirm task close. Flag-gated: OFF means
+                            findConfirmableTaskCloses is never even called (the whole
+                            block short-circuits on FEATURE_FLAGS.taskCloseConfirm), so
+                            there is zero extra computation, not just a hidden render.
+                            ON: the single top conservative candidate (same plot + due
+                            window + title containment — see taskAutoClose.ts) surfaces
+                            below the recognition panel. Only the farmer's own होय tap
+                            calls handleUpdateTask (the SAME reversible mutation
+                            ToDoTasksBlock's toggle uses) — नाही only hides the card for
+                            this render and leaves the task pending, no penalty. */}
+                        {FEATURE_FLAGS.taskCloseConfirm && (() => {
+                            const savedLogId = lastSavedLogIds && lastSavedLogIds.length > 0
+                                ? lastSavedLogIds[0]
+                                : undefined;
+                            const savedLog = savedLogId
+                                ? history.find(l => l.id === savedLogId)
+                                : undefined;
+                            const todayLocalDate = savedLog?.date ?? getDateKey();
+                            const topCandidate = findConfirmableTaskCloses(
+                                plannedTasks ?? [],
+                                savedLog,
+                                todayLocalDate,
+                            )[0];
+                            if (!topCandidate) return null;
+
+                            return (
+                                <TaskCloseConfirmSlot
+                                    key={topCandidate.task.id}
+                                    candidate={topCandidate}
+                                    onConfirm={(candidate) => {
+                                        // Reuses the SAME mutation ToDoTasksBlock's toggle
+                                        // uses — reversible by re-opening the task there.
+                                        handleUpdateTask(candidate.task.id, {
+                                            status: 'done',
+                                            completedAt: new Date().toISOString(),
+                                        });
+                                        // Traceability: a wrong close must be traceable.
+                                        logger.info('task_close.confirmed', {
+                                            component: 'TaskCloseConfirm',
+                                            action: 'task_close_confirmed',
+                                            taskId: candidate.task.id,
+                                            plotId: candidate.task.plotId,
+                                            matchedActivityTitle: candidate.matchedActivityTitle,
+                                        });
+                                    }}
                                 />
                             );
                         })()}
