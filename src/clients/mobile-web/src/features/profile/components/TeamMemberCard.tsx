@@ -47,24 +47,32 @@ export const TeamMemberCard: React.FC<TeamMemberCardProps> = ({ member, onToggle
                 type="button"
                 onClick={() => setOpen(o => !o)}
                 aria-expanded={open}
-                className="flex w-full items-center gap-3 p-3.5 text-left transition-all active:scale-[0.99] active:bg-slate-50"
+                className="flex w-full items-start gap-3 p-3.5 text-left transition-all active:scale-[0.99] active:bg-slate-50"
             >
-                <div className={`flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-2xl text-base font-black shadow-inner ${isPartner ? 'bg-blue-100 text-blue-600' : 'bg-orange-100 text-orange-600'}`}>
+                <div className={`mt-0.5 flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-2xl text-base font-black shadow-inner ${isPartner ? 'bg-blue-100 text-blue-600' : 'bg-orange-100 text-orange-600'}`}>
                     {member.name.charAt(0)}
                 </div>
                 <div className="min-w-0 flex-1">
                     <h4 className="truncate text-[15px] font-bold leading-tight text-slate-800">{member.name}</h4>
-                    <div className="mt-1 flex min-w-0 items-center gap-2">
-                        <span className={`flex-shrink-0 rounded-lg border px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide ${isPartner ? 'border-blue-100 bg-blue-50 text-blue-700' : 'border-orange-100 bg-orange-50 text-orange-700'}`}>
+                    {/* Tags wrap to a second line on narrow phones so the access
+                        summary can never clip off the right edge. */}
+                    <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+                        <span className={`rounded-lg border px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide ${isPartner ? 'border-blue-100 bg-blue-50 text-blue-700' : 'border-orange-100 bg-orange-50 text-orange-700'}`}>
                             {isPartner ? 'भागीदार · Partner' : 'कामगार · Worker'}
                         </span>
-                        <span className={`flex-shrink-0 rounded-lg px-2 py-0.5 text-[10px] font-bold ${granted > 0 ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-400'}`}>
+                        <span className={`rounded-lg px-2 py-0.5 text-[10px] font-bold ${granted > 0 ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-400'}`}>
                             {granted}/{ACCESS.length} प्रवेश
                         </span>
                     </div>
                 </div>
-                <span className="flex-shrink-0 text-[11px] font-bold text-emerald-700">{open ? 'बंद करा' : 'प्रवेश ठरवा'}</span>
-                <ChevronDown size={18} className={`flex-shrink-0 text-slate-300 transition-transform ${open ? 'rotate-180 text-emerald-600' : ''}`} />
+                {/* Chevron + label stacked in a compact right column so they
+                    don't compete with the name for horizontal space. */}
+                <div className="flex flex-shrink-0 flex-col items-center gap-1 pl-1">
+                    <span className={`flex h-8 w-8 items-center justify-center rounded-full transition-colors ${open ? 'bg-emerald-600 text-white' : 'bg-slate-100 text-slate-400'}`}>
+                        <ChevronDown size={18} className={`transition-transform ${open ? 'rotate-180' : ''}`} />
+                    </span>
+                    <span className="whitespace-nowrap text-[9.5px] font-bold leading-none text-emerald-700">{open ? 'बंद करा' : 'प्रवेश ठरवा'}</span>
+                </div>
             </button>
 
             {open && (
