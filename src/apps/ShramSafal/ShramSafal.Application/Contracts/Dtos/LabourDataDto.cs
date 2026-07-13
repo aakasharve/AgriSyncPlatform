@@ -30,7 +30,7 @@ public sealed record LabourPersonDto(
     int? DaysThisWeek,
     IReadOnlyList<string>? MemberIds,
     int? Trust,
-    string Access,
+    string? Access,
     int? DaysActive,
     bool? CleanRecord);
 
