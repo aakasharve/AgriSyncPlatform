@@ -11,8 +11,10 @@ namespace ShramSafal.Application.UseCases.Logs.CreateDailyLog;
 /// logs get confidenceFactor 1.0 (per-field provenance governor is deferred).</summary>
 internal static class DfesLensExtractor
 {
-    // Dimension weights (mirror scoreVlog.ts BASE_WEIGHTS — engine constants, not DfesTuning).
-    private const int W_WHAT = 20, W_DOSE = 20, W_SCOPE = 12, W_CARRIER = 10, W_COST = 12, W_WEATHER = 8;
+    // Dimension weights (engine constants, not DfesTuning). Mirror scoreVlog.ts BASE_WEIGHTS
+    // EXCEPT SCOPE: the plot is context-selected up front, so "did you name the plot" must NOT
+    // count toward the farmer-facing /10 — the SCOPE dimension is removed from server scoring.
+    private const int W_WHAT = 20, W_DOSE = 20, W_CARRIER = 10, W_COST = 12, W_WEATHER = 8;
     private const int W_OBS_FACET = 15, W_LEARN_FACET = 15; // structured-noticing pseudo-dims
     private const double Cf = 1.0;
 
@@ -26,7 +28,6 @@ internal static class DfesLensExtractor
         var execution = new List<ScoredDimension>
         {
             Dim("WHAT", W_WHAT, CoverWhat(roots)),
-            Dim("SCOPE", W_SCOPE, CoverScope(roots, data.PlotCount)),
             Dim("COST", W_COST, CoverCost(roots)),
         };
         AddIfApplicable(execution, "DOSE", W_DOSE, CoverDose(roots));      // input-op only
@@ -99,20 +100,6 @@ internal static class DfesLensExtractor
         if (!hasProduct) return new Cover(true, 0.0);
         var hasDose = inputs.Any(i => Arr(i, "mix").Any(m => Num(m, "dose") is not null));
         return new Cover(true, hasDose ? 1.0 : 0.5);
-    }
-
-    private static double CoverScope(IReadOnlyList<JsonElement> roots, int plotCount)
-    {
-        if (plotCount <= 1) return 1.0; // solo-farm waiver
-        if (roots.Any(r => string.Equals(Str(Obj(r, "disturbance"), "scope"), "FULL_DAY", StringComparison.OrdinalIgnoreCase)))
-            return 1.0;
-        var events = roots.SelectMany(r =>
-            Arr(r, "cropActivities").Concat(Arr(r, "inputs")).Concat(Arr(r, "labour"))
-                .Concat(Arr(r, "machinery")).Concat(Arr(r, "activityExpenses"))).ToList();
-        if (events.Count == 0) return 0.0;
-        var named = events.Count(e => !string.IsNullOrWhiteSpace(Str(e, "targetPlotName")));
-        if (named == 0) return 0.0;
-        return named == events.Count ? 1.0 : 0.5;
     }
 
     private static Cover CoverCarrier(IReadOnlyList<JsonElement> roots)

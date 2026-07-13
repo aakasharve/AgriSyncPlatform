@@ -5,10 +5,12 @@ namespace ShramSafal.Domain.Dfes;
 public sealed record ScoredDimension(
     string Name, int Weight, bool Applicable, double Coverage, double ConfidenceFactor);
 
-/// <summary>The 8 scoreVlog dimensions re-bucketed into 3 lenses.
-/// Execution = {WHAT, DOSE, SCOPE, CARRIER, COST}. Insight = {WEATHER, PURPOSE,
+/// <summary>The scoreVlog dimensions re-bucketed into 3 lenses.
+/// Execution = {WHAT, DOSE, CARRIER, COST}. Insight = {WEATHER, PURPOSE,
 /// + structured-observation facet}. Learning = {CONTINUITY + learning facet}.
-/// A lens with no applicable dim scores null (UNKNOWN), never 0.</summary>
+/// SCOPE is intentionally absent: the plot is context-selected up front, so it
+/// does not count toward the server /10. A lens with no applicable dim scores
+/// null (UNKNOWN), never 0.</summary>
 public sealed record LensInput(
     IReadOnlyList<ScoredDimension> Execution,
     IReadOnlyList<ScoredDimension> Insight,
