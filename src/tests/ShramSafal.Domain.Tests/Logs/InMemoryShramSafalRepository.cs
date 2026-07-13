@@ -159,6 +159,15 @@ internal sealed class InMemoryShramSafalRepository : IShramSafalRepository
                 .OrderBy(a => a.LocalDate)
                 .ToList());
 
+    // DFES (dfes-companion-2026-07-11) Slice 3a — per-day seam for
+    // GetDayUnderstandingHandlerTests. Mirrors the farm+local_date lookup the
+    // production repo does under RLS; reads the same seeded list.
+    public Task<DailyRichnessAggregate?> GetDailyRichnessAggregateAsync(
+        Guid farmId, DateOnly localDate, CancellationToken ct = default)
+        => Task.FromResult(
+            SeededRichnessAggregates
+                .FirstOrDefault(a => a.FarmId == farmId && a.LocalDate == localDate));
+
     public Task<AppRole?> GetUserRoleForFarmAsync(Guid farmId, Guid userId, CancellationToken ct = default)
         => Task.FromResult<AppRole?>(
             _memberships.TryGetValue((farmId, userId), out var r) ? r : null);
