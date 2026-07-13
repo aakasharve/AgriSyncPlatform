@@ -27,6 +27,7 @@ import { FEATURE_FLAGS } from '../../app/featureFlags';
 import { LedgerRecognitionPanel } from '../../features/logs/components/LedgerRecognitionPanel';
 import VoiceSavedReassurance from '../../features/logs/components/shramsathi/VoiceSavedReassurance';
 import DailyLoopHero from '../../features/logs/components/shramsathi/DailyLoopHero';
+import DailyLoopClarity from '../../features/logs/components/shramsathi/DailyLoopClarity';
 
 import { AppRouterContext } from './routeContext';
 import { ReflectPage, ComparePage } from './lazyComponents';
@@ -652,6 +653,21 @@ export const renderLogView = (ctx: AppRouterContext): React.ReactNode => {
                             </div>
                         ) : (
                             <p className="text-stone-500 mb-8">Your activity has been logged successfully.</p>
+                        )}
+
+                        {/* Daily Clarity Loop v1 REWARD line (dfes-companion-2026-07-11).
+                            Flag-gated OFF by default, so this is a byte-equivalent no-op on
+                            the success card in production. When ON, the calm "{done} पूर्ण,
+                            {left} बाकी" control-affirming line renders directly ABOVE the
+                            recognition panel — so Sathi's ONE gentle question sits just below
+                            it (reward = clarity + one question, never points). Decision 3B: NO
+                            fact/insight fallback in v1; on a no-question day this line stands
+                            alone (the question self-gates on its own flags + content gate). */}
+                        {FEATURE_FLAGS.dailyLoop && (
+                            <DailyLoopClarity
+                                done={todayDayState.completedCount}
+                                left={todayDayState.pendingCount}
+                            />
                         )}
 
                         {/* DFES recognition surface (dfes-companion-2026-07-11). The panel

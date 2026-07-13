@@ -301,6 +301,13 @@ export interface Translations {
         dailyLoopTasksLeft: string;   // N > 0: today's remaining work
         dailyLoopDayFree: string;     // N === 0: empty-day, invite to record
         dailyLoopCarried: string;     // carried/overdue leftover from yesterday
+
+        // Daily Clarity Loop v1 REWARD line (dfes-companion-2026-07-11) — the
+        // calm "you're in control" line on the "Saved to Ledger" success card,
+        // sitting directly ABOVE Sathi's one gentle question. Plain fact
+        // (done / left), never a grade, never points, never scolding.
+        // {done} = todayDayState.completedCount, {left} = .pendingCount.
+        dailyLoopClarity: string;
     };
 }
 
@@ -569,6 +576,9 @@ export const translations: Record<Language, Translations> = {
             dailyLoopTasksLeft: '{count} tasks left today',
             dailyLoopDayFree: 'Today is clear — just speak to record',
             dailyLoopCarried: '{count} left from yesterday',
+
+            // Daily Clarity Loop v1 REWARD line (dfes-companion-2026-07-11)
+            dailyLoopClarity: '{done} done, {left} left',
         },
     },
 
@@ -841,6 +851,11 @@ export const translations: Record<Language, Translations> = {
             dailyLoopTasksLeft: 'आज {count} कामं बाकी',
             dailyLoopDayFree: 'आजचा दिवस मोकळा — बोलून नोंदवा',
             dailyLoopCarried: 'काल {count} कामं राहिली होती',
+
+            // Daily Clarity Loop v1 REWARD line (dfes-companion-2026-07-11) —
+            // FOUNDER-CONFIRM: the "you're in control" reward on the saved card.
+            // Plain fact ({done} done, {left} left), no adjectives, no score.
+            dailyLoopClarity: '{done} पूर्ण, {left} बाकी',
         },
     },
 };
