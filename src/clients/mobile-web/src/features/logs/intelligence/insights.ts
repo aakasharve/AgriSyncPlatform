@@ -13,22 +13,28 @@
  * functions over the farmer's OWN data only.
  *
  * Real-data lineage (STEP 0 discovery — see phase1a-report.md for the
- * full trail):
- * - continuityInsight / daysSinceLastOpInsight read `DailyLog.date` and
- *   `CropActivityEvent.title` / `.quantity` (domain/types/log.types.ts).
- * - costToDateInsight reads `DailyLog.financialSummary.totalLabourCost`
- *   + `.totalMachineryCost` (a REQUIRED, always-present rollup on every
- *   real DailyLog; `totalMachineryCost` already folds in
- *   `MachineryEvent.fuelCost` — see `sumMachineryCost` in
- *   core/domain/helpers/log-factory-helpers.ts).
+ * full trail; updated for the phase1a-fix-brief.md review-response
+ * fixes, spec: dfes-companion-2026-07-11):
+ * - continuityInsight / daysSinceLastOpInsight read `DailyLog.date`,
+ *   `CropActivityEvent.title` / `.quantity`, AND `.status`
+ *   (domain/types/log.types.ts, ~:69) — `status` gates both functions
+ *   so a `'pending'` or `'gap_recorded'` activity is never presented as
+ *   done work (FIX 1).
+ * - costToDateInsight reads `DailyLog.financialSummary.grandTotal` (a
+ *   REQUIRED, always-present, already-computed all-in rollup —
+ *   labour + input + machinery + activity-expenses — see its usage in
+ *   `shared/utils/dayState.ts`), not a partial labour+machinery sum
+ *   (FIX 2).
  * - stageInsight reads a farmer-confirmed-stage field shaped like
  *   `StageContext.farmerConfirmedActualStage` (features/logs/services/meterGaps.ts).
  *   STEP 0 finding: nothing in the app currently writes a value into
  *   that field on real data — it is honest, but currently unwired.
  * - rateCheckInsight reads a per-unit rate shaped like
- *   `LabourEvent.rate` / `.rateBasis`, gated on a caller-supplied
- *   `scopeConfirmed` flag (derived from `LogScope.mode === 'single'` on
- *   `DailyLog.context.selection`).
+ *   `LabourEvent.rate` / `.rateBasis`, an `opType` (the real activity
+ *   `.title` this rate belongs to — FIX 3, so "comparable" priors are
+ *   the SAME operation, not just the same rate basis), gated on a
+ *   caller-supplied `scopeConfirmed` flag (derived from
+ *   `LogScope.mode === 'single'` on `DailyLog.context.selection`).
  *
  * spec: dfes-companion-2026-07-11
  */
@@ -40,6 +46,7 @@ import type {
     FarmerCostLogEntry,
     ConfirmedStageEntry,
     RateCheckEntry,
+    ContinuityActivityEntry,
 } from './insightTypes';
 
 // =============================================================================
@@ -63,6 +70,29 @@ function daysBetweenDateKeys(fromKey: string, toKey: string): number {
 /** Case-insensitive, whitespace-trimmed exact match on activity title. */
 function matchesOpType(title: string, opType: string): boolean {
     return title.trim().toLowerCase() === opType.trim().toLowerCase();
+}
+
+/**
+ * FIX 1 gate for continuityInsight (claims "पूर्ण" — fully complete):
+ * count an activity ONLY when it is explicitly `'completed'`, or has no
+ * status at all (`undefined` = a legacy log written before `status`
+ * existed — no explicit signal either way, so it is treated as
+ * recorded-done, not as missing). `'partial'`, `'pending'`, and
+ * `'gap_recorded'` are NEVER counted toward a पूर्ण claim.
+ */
+function isFullyDone(activity: ContinuityActivityEntry): boolean {
+    return activity.status === 'completed' || activity.status == null;
+}
+
+/**
+ * FIX 1 gate for daysSinceLastOpInsight (claims "last time you DID this
+ * op"): a `'partial'` occurrence still counts as a valid anchor — the
+ * farmer did do it, at least partly. `'pending'` (not yet done) and
+ * `'gap_recorded'` (an explicit miss) must NEVER anchor a "you did this"
+ * claim.
+ */
+function wasAttempted(activity: ContinuityActivityEntry): boolean {
+    return activity.status === 'completed' || activity.status === 'partial' || activity.status == null;
 }
 
 const EMPTY_INSIGHT = (key: string, trustLabel: Insight['trustLabel']): Insight => ({
@@ -94,7 +124,13 @@ const EMPTY_INSIGHT = (key: string, trustLabel: Insight['trustLabel']): Insight 
  * caller (1B), which knows the crop vocabulary in context, supplies
  * the noun.
  *
- * render=false when the op has never been logged.
+ * FIX 1 [CRITICAL]: the line says पूर्ण (fully complete), so only
+ * activities that are actually done count — `status === 'completed'`
+ * or `status == null` (legacy, treated as recorded-done). `'partial'`,
+ * `'pending'`, and `'gap_recorded'` are excluded from the count
+ * entirely (see `isFullyDone`).
+ *
+ * render=false when the op has never been logged as fully done.
  */
 export function continuityInsight(
     logs: FarmerLogEntry[],
@@ -104,13 +140,16 @@ export function continuityInsight(
     const key = 'continuity';
     const matches = logs
         .flatMap((log) => log.cropActivities ?? [])
-        .filter((activity) => matchesOpType(activity.title, opType));
+        .filter((activity) => matchesOpType(activity.title, opType))
+        .filter(isFullyDone);
 
     if (matches.length === 0) {
         return EMPTY_INSIGHT(key, 'derived');
     }
 
-    const quantitySum = matches.reduce((sum, activity) => sum + (activity.quantity ?? 0), 0);
+    const quantitySum = Math.round(
+        matches.reduce((sum, activity) => sum + (activity.quantity ?? 0), 0),
+    );
     const done = quantitySum > 0 ? quantitySum : matches.length;
     const doneMr = toMarathiNumber(done);
 
@@ -126,22 +165,27 @@ export function continuityInsight(
 // =============================================================================
 
 /**
- * costToDateInsight — season running total of costs the farmer stated
- * (labour + machinery, which already folds in fuel). Framed as "what
- * you told me" — never a judgement on the amount. Partial-safe: sums
- * whatever `financialSummary` rollups are present on the logs passed
- * in (the caller is responsible for scoping `logs` to the season it
- * wants totalled — this function itself has no season-boundary
- * concept, since none exists on `DailyLog` directly).
+ * costToDateInsight — season running total of costs the farmer stated,
+ * using the real, already-computed `grandTotal` (labour + input +
+ * machinery + activity-expenses — see `shared/utils/dayState.ts`).
+ * Framed as "what you told me" — never a judgement on the amount.
+ * Partial-safe: sums whatever `financialSummary` rollups are present on
+ * the logs passed in (the caller is responsible for scoping `logs` to
+ * the season it wants totalled — this function itself has no
+ * season-boundary concept, since none exists on `DailyLog` directly).
  *
- * render=false when zero costs have been stated.
+ * FIX 2 [CRITICAL]: previously summed only labour+machinery, silently
+ * dropping `totalInputCost` (REQUIRED on every log) and
+ * `totalActivityExpenses` — an input-only (e.g. fertilizer) day
+ * computed a total of 0 and was hidden entirely, even though the
+ * farmer explicitly stated a cost. `grandTotal` is the honest, all-in
+ * figure the copy promises.
+ *
+ * render=false when the summed total is zero (no costs stated).
  */
 export function costToDateInsight(logs: FarmerCostLogEntry[]): Insight {
     const key = 'cost-to-date';
-    const total = logs.reduce((sum, log) => {
-        const fs = log.financialSummary;
-        return sum + (fs.totalLabourCost || 0) + (fs.totalMachineryCost || 0);
-    }, 0);
+    const total = logs.reduce((sum, log) => sum + (log.financialSummary.grandTotal || 0), 0);
 
     if (total <= 0) {
         return EMPTY_INSIGHT(key, 'derived');
@@ -166,9 +210,15 @@ export function costToDateInsight(logs: FarmerCostLogEntry[]): Insight {
  * `referenceDateKey` that contains a matching activity (a batch-recall
  * / routine flavour — "it's been N days since your last X").
  *
- * render=false when the op has no prior occurrence before the
- * reference date (including when its only occurrence IS the reference
- * date itself — that is not a "prior").
+ * FIX 1 [CRITICAL]: the anchor activity must be one the farmer actually
+ * attempted — `status === 'completed' || status === 'partial' ||
+ * status == null` (legacy, treated as recorded-done). `'pending'`
+ * (not yet done) and `'gap_recorded'` (an explicit miss) can NEVER
+ * anchor a "last time you did this" claim (see `wasAttempted`).
+ *
+ * render=false when the op has no qualifying prior occurrence before
+ * the reference date (including when its only occurrence IS the
+ * reference date itself — that is not a "prior").
  */
 export function daysSinceLastOpInsight(
     logs: FarmerLogEntry[],
@@ -179,7 +229,9 @@ export function daysSinceLastOpInsight(
 
     const priorDates = logs
         .filter((log) => log.date < referenceDateKey)
-        .filter((log) => (log.cropActivities ?? []).some((a) => matchesOpType(a.title, opType)))
+        .filter((log) =>
+            (log.cropActivities ?? []).some((a) => matchesOpType(a.title, opType) && wasAttempted(a)),
+        )
         .map((log) => log.date);
 
     if (priorDates.length === 0) {
@@ -253,8 +305,11 @@ const RATE_CHECK_THRESHOLD_MULTIPLIER = 1.2;
  * 1. `current.scopeConfirmed` is true (the rate is attributable to a
  *    single, unambiguous plot — dividing a cost across an ambiguous
  *    multi-plot scope would produce a meaningless rate).
- * 2. There are >=2 comparable priors (same `rateBasis`, also
- *    scope-confirmed).
+ * 2. There are >=2 comparable priors: same `rateBasis`, same operation
+ *    (`opType`, matched via `matchesOpType` — FIX 3 [IMPORTANT]; without
+ *    this, a harvesting rate could be judged against pruning/weeding
+ *    priors just because both happened to be quoted `per_acre`), also
+ *    scope-confirmed.
  * 3. The current rate is notably higher than the average of those
  *    priors (otherwise the gentle question itself would be a false
  *    "this seems higher" claim — see RATE_CHECK_THRESHOLD_MULTIPLIER).
@@ -267,7 +322,10 @@ export function rateCheckInsight(current: RateCheckEntry, priors: RateCheckEntry
     }
 
     const comparable = priors.filter(
-        (p) => p.scopeConfirmed && p.rateBasis === current.rateBasis,
+        (p) =>
+            p.scopeConfirmed &&
+            p.rateBasis === current.rateBasis &&
+            matchesOpType(p.opType, current.opType),
     );
 
     if (comparable.length < 2) {

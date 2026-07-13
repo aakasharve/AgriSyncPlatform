@@ -31,19 +31,16 @@ describe('pickDailyInsight', () => {
         expect(second).toEqual(first);
     });
 
-    it('rotates across the renderable set for different dates', () => {
+    it('achieves fair rotation — EVERY renderable key is picked at least once across 30 consecutive dates', () => {
         const insights = [insight('a', true), insight('b', true), insight('c', true)];
 
-        const picks = new Set(
-            ['2026-07-01', '2026-07-02', '2026-07-03', '2026-07-04', '2026-07-05'].map(
-                (d) => pickDailyInsight(insights, d)?.key,
-            ),
-        );
+        // 2026-06-01 .. 2026-06-30, computed deterministically (no
+        // Date.now()) — a weak "picks vary" check would pass even if
+        // one key were starved across an entire month's rotation.
+        const dates = Array.from({ length: 30 }, (_, i) => `2026-06-${String(i + 1).padStart(2, '0')}`);
+        const pickedKeys = new Set(dates.map((d) => pickDailyInsight(insights, d)?.key));
 
-        // Across 5 different dates and a 3-item renderable set, the pick
-        // must vary (a pure hash-of-date-string mod 3 cannot legitimately
-        // return the exact same single key for all 5 distinct inputs).
-        expect(picks.size).toBeGreaterThan(1);
+        expect(pickedKeys).toEqual(new Set(['a', 'b', 'c']));
     });
 
     it('returns null when no insight is renderable', () => {

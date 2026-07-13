@@ -61,15 +61,28 @@ export interface Insight {
 // =============================================================================
 
 /**
+ * `CropActivityEvent.status` (domain/types/log.types.ts, ~:69), mirrored
+ * locally so this module never imports the full domain graph.
+ * `undefined` means a legacy log written before `status` existed — it
+ * carries no explicit signal either way, so it is treated as
+ * recorded-done (see FIX 1 in phase1a-fix-brief.md), NOT as missing.
+ */
+export type CropActivityStatus = 'completed' | 'partial' | 'pending' | 'gap_recorded';
+
+/**
  * The subset of `CropActivityEvent` (domain/types/log.types.ts) that
  * continuityInsight / daysSinceLastOpInsight actually read.
  * - `title`: the real, open-ended activity-name field (matched against
  *   the caller's `opType`, case-insensitive, exact match).
  * - `quantity`: the real "units completed" field (was `quantityCompleted`).
+ * - `status`: the real completion-state field. `'pending'` (not yet
+ *   done) and `'gap_recorded'` (an explicit miss) must NEVER be counted
+ *   as done work — that is the exact defect this field closes.
  */
 export interface ContinuityActivityEntry {
     title: string;
     quantity?: number;
+    status?: CropActivityStatus;
 }
 
 /**
@@ -84,17 +97,21 @@ export interface FarmerLogEntry {
 
 /**
  * The subset of `DailyLog.financialSummary` (a REQUIRED, always-present
- * field on every real DailyLog — see log.types.ts) that
- * costToDateInsight reads. `totalMachineryCost` already folds in
- * `MachineryEvent.fuelCost` (see `sumMachineryCost` in
- * core/domain/helpers/log-factory-helpers.ts), so summing
- * labour + machinery covers "labour + machinery + fuel" with no extra
- * field needed.
+ * field on every real DailyLog — see log.types.ts, ~:676-682) that
+ * costToDateInsight reads.
+ *
+ * `grandTotal` is the real, already-computed all-in total
+ * (labour + input + machinery + activity-expenses — see its usage in
+ * `shared/utils/dayState.ts`). Summing only labour+machinery (the
+ * previous shape of this type) silently dropped `totalInputCost`
+ * (REQUIRED on every log) and `totalActivityExpenses`, understating —
+ * or on an input-only day, completely erasing — a cost the farmer
+ * explicitly stated. `grandTotal` is the honest, all-in figure the
+ * copy "आतापर्यंत तुम्ही सांगितलेला खर्च" promises.
  */
 export interface FarmerCostLogEntry {
     financialSummary: {
-        totalLabourCost: number;
-        totalMachineryCost: number;
+        grandTotal: number;
     };
 }
 
@@ -118,14 +135,19 @@ export interface ConfirmedStageEntry {
  * rateCheckInsight's input. One "comparable" occurrence of an op: its
  * stated per-unit rate (e.g. `LabourEvent.rate`, the one persisted
  * field in the domain types that is literally already a "rate"), the
- * basis it was expressed in (`LabourEvent.rateBasis`), and whether the
+ * basis it was expressed in (`LabourEvent.rateBasis`), whether the
  * log this rate came from resolved to a single, unambiguous plot
  * (`LogScope.mode === 'single'`, derived from `DailyLog.context.selection`
  * — computed by the caller, since scope-resolution is a farm/plot
- * concern, not a rate-comparison concern).
+ * concern, not a rate-comparison concern), and `opType` — the real
+ * activity name (`CropActivityEvent.title`) this rate belongs to.
+ * Without `opType`, "comparable" was matched on `rateBasis` alone, so a
+ * harvesting rate could be judged against pruning/weeding priors — the
+ * exact defect this field closes (see FIX 3, phase1a-fix-brief.md).
  */
 export interface RateCheckEntry {
     rate: number;
     rateBasis: string;
     scopeConfirmed: boolean;
+    opType: string;
 }
