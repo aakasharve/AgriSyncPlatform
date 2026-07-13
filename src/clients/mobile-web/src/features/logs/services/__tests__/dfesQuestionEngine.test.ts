@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { selectDailyQuestion, type DailyQuestionInputs } from '../dfesQuestionEngine';
+import { selectDailyQuestion, SKIP_COOLDOWN_DAYS, type DailyQuestionInputs } from '../dfesQuestionEngine';
 import type { VlogScore } from '../../../../domain/types/log.types';
 import type { DfesQuestion } from '../dfesQuestionBank';
 
@@ -20,7 +20,7 @@ const base = (o: Partial<DailyQuestionInputs> = {}): DailyQuestionInputs => ({
 describe('selectDailyQuestion (Phase 5)', () => {
     it('returns null when a question was already recorded today (ONE per day)', () => {
         const r = selectDailyQuestion(base({
-            recentEvents: [{ questionKey: 'gap.dose', createdAtLocalDate: '2026-07-11', ageDays: 0 }],
+            recentEvents: [{ questionKey: 'gap.dose', createdAtLocalDate: '2026-07-11', ageDays: 0, skipped: false }],
         }));
         expect(r).toBeNull();
     });
@@ -50,7 +50,7 @@ describe('selectDailyQuestion (Phase 5)', () => {
         };
         const r = selectDailyQuestion(base({
             score,
-            recentEvents: [{ questionKey: 'gap.dose', createdAtLocalDate: '2026-07-09', ageDays: 2 }], // < 3d cooldown
+            recentEvents: [{ questionKey: 'gap.dose', createdAtLocalDate: '2026-07-09', ageDays: 2, skipped: false }], // < 3d cooldown
         }));
         expect(r!.question.questionKey).toBe('gap.cost');
     });
@@ -194,5 +194,60 @@ describe('selectDailyQuestion — answerOptions threading onto SelectedQuestion 
         const withoutOptions: DfesQuestion = { ...questionShape };
         const result = await selectWithSubstitutedDoseQuestion(withoutOptions);
         expect(result!.answerOptions).toBeUndefined();
+    });
+});
+
+// spec: dfes-companion-2026-07-11 (Task 2B) — skip-aware cooldown. A SKIPPED
+// question must return sooner than an ANSWERED/acked one (SKIP_COOLDOWN_DAYS,
+// clamped to never exceed the question's own cooldownDays), while the
+// one-question-per-day gate stays exactly as-is regardless of skipped/answered.
+describe('selectDailyQuestion — skip-aware cooldown (Task 2B)', () => {
+    it('a question skipped 1 day ago is still on the (shorter) skip-cooldown — excluded, distinct from the one-per-day gate', () => {
+        // 'gap.dose' has cooldownDays 3 (== SKIP_COOLDOWN_DAYS); skipped 1 day
+        // ago (not today) means the per-day gate does NOT apply here — only
+        // the skip-cooldown does, and 1 < 3 keeps it suppressed. With only one
+        // gap dimension in the score there is no other gap to fall back to.
+        const r = selectDailyQuestion(base({
+            recentEvents: [{ questionKey: 'gap.dose', createdAtLocalDate: '2026-07-10', ageDays: 1, skipped: true }],
+        }));
+        expect(r).toBeNull();
+    });
+
+    it('a question skipped SKIP_COOLDOWN_DAYS ago is ELIGIBLE again, whereas the same question ANSWERED the same number of days ago (longer cooldownDays) is STILL suppressed', () => {
+        const noGap: VlogScore = { score: 90, outcome: 'SCORED', dimensions: [] };
+        const stageInputs = (recentEvents: DailyQuestionInputs['recentEvents']) => base({
+            score: noGap,
+            stageContext: { crop: 'grapes', expectedStage: 'flowering' },
+            lastStageConfirm: null, // stage window always open, independent of recentEvents
+            recentEvents,
+        });
+
+        // 'stage.confirm_current' cooldownDays is 7 — longer than SKIP_COOLDOWN_DAYS (3).
+        const skippedThreeDaysAgo = selectDailyQuestion(stageInputs([
+            { questionKey: 'stage.confirm_current', createdAtLocalDate: '2026-07-08', ageDays: SKIP_COOLDOWN_DAYS, skipped: true },
+        ]));
+        expect(skippedThreeDaysAgo!.question.questionKey).toBe('stage.confirm_current');
+
+        const answeredThreeDaysAgo = selectDailyQuestion(stageInputs([
+            { questionKey: 'stage.confirm_current', createdAtLocalDate: '2026-07-08', ageDays: SKIP_COOLDOWN_DAYS, skipped: false },
+        ]));
+        expect(answeredThreeDaysAgo).toBeNull(); // normal cooldownDays (7) still in effect, no other trigger fires
+    });
+
+    it('clamps the skip cooldown to the question\'s own (shorter) cooldownDays — a skip never outlasts the normal cooldown', () => {
+        // 'safety.spray_wind_high' has cooldownDays 1, shorter than SKIP_COOLDOWN_DAYS (3).
+        // Without the clamp, ageDays 1 < SKIP_COOLDOWN_DAYS(3) would wrongly suppress it.
+        const r = selectDailyQuestion(base({
+            weather: { windKph: 30 },
+            recentEvents: [{ questionKey: 'safety.spray_wind_high', createdAtLocalDate: '2026-07-10', ageDays: 1, skipped: true }],
+        }));
+        expect(r!.question.questionKey).toBe('safety.spray_wind_high');
+    });
+
+    it('one-question-per-day gate is unchanged: a SKIPPED event today still stops today\'s question (no same-day re-ask)', () => {
+        const r = selectDailyQuestion(base({
+            recentEvents: [{ questionKey: 'gap.dose', createdAtLocalDate: '2026-07-11', ageDays: 0, skipped: true }],
+        }));
+        expect(r).toBeNull();
     });
 });

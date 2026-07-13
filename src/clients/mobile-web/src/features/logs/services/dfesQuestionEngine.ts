@@ -34,6 +34,25 @@ export interface RecentQuestionEvent {
     questionKey: string;
     createdAtLocalDate: string; // 'YYYY-MM-DD'
     ageDays: number;
+    /** True when the farmer explicitly skipped (vs. answered/acked) this question. */
+    skipped: boolean;
+}
+
+/**
+ * Gentle cooldown (days) applied when the MOST RECENT event for a question was
+ * a SKIP rather than an answer/ack — closes the "skip silently hides the gap
+ * for the full normal cooldown" loop (Task 2B). Founder-tunable, same spirit
+ * as TRIGGER_CONFIG's thresholds: must stay small enough to never feel like
+ * nagging (the one-question-per-day gate already forbids a same-day re-ask,
+ * so this only controls how many days later a skipped question can resurface).
+ * Clamped per-question in `effectiveCooldownDays` so a skip NEVER outlasts the
+ * question's own normal `cooldownDays`.
+ */
+export const SKIP_COOLDOWN_DAYS = 3;
+
+/** The cooldown that actually applies to a given recent event, honouring the skip clamp. */
+function effectiveCooldownDays(q: DfesQuestion, event: RecentQuestionEvent): number {
+    return event.skipped ? Math.min(SKIP_COOLDOWN_DAYS, q.cooldownDays) : q.cooldownDays;
 }
 
 export interface DailyQuestionInputs {
@@ -64,9 +83,14 @@ function approved(q: DfesQuestion | undefined): q is DfesQuestion {
     return !!q && q.agronomistApproved && q.marathiApproved;
 }
 
-/** A question is on cooldown when the same key was shown within its cooldownDays window. */
+/**
+ * A question is on cooldown when the same key was shown within its cooldown
+ * window. A SKIPPED event uses the shorter `SKIP_COOLDOWN_DAYS` (clamped to
+ * never exceed the question's normal `cooldownDays`); an answered/acked event
+ * uses the normal `cooldownDays` unchanged (Task 2B).
+ */
 function onCooldown(q: DfesQuestion, recent: RecentQuestionEvent[]): boolean {
-    return recent.some(e => e.questionKey === q.questionKey && e.ageDays < q.cooldownDays);
+    return recent.some(e => e.questionKey === q.questionKey && e.ageDays < effectiveCooldownDays(q, e));
 }
 
 function eligible(q: DfesQuestion | undefined, recent: RecentQuestionEvent[]): q is DfesQuestion {

@@ -83,5 +83,6 @@ export async function fetchRecentQuestionEvents(farmId: string, sinceDays = 14):
         questionKey: d.questionKey,
         createdAtLocalDate: d.createdAtUtc.slice(0, 10),
         ageDays: Math.floor((now - Date.parse(d.createdAtUtc)) / 86_400_000),
+        skipped: d.skipped ?? false,
     }));
 }
