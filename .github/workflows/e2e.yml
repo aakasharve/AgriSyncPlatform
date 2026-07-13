@@ -136,8 +136,8 @@ jobs:
           dotnet restore src/AgriSync.sln
           dotnet build   src/AgriSync.sln --configuration Release --no-restore
 
-      - name: Install sync-contract deps
-        run: npm ci
+      - name: Install sync-contract deps (tolerant — lock omits Linux-only @emnapi optional deps)
+        run: npm install --no-audit --no-fund
         working-directory: sync-contract
 
       - name: Install mobile-web deps
