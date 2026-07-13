@@ -28,7 +28,6 @@ public sealed class DailyRichnessDerivationService(
         // Gather the day's persisted signals.
         var logIds = logs.Select(l => l.Id).ToList();
         var observations = await repository.GetObservationEventsForDailyLogsAsync(logIds, ct);
-        var plots = await repository.GetPlotsByFarmIdAsync(farmId, ct);
 
         var roots = new List<JsonElement>();
         var docs = new List<JsonDocument>(); // kept alive until scoring done
@@ -64,7 +63,7 @@ public sealed class DailyRichnessDerivationService(
             var serverTodayLocal = DateOnly.FromDateTime(clock.UtcNow + IstOffset);
             var plausible = ClientDateSanity.IsPlausible(localDate, serverTodayLocal);
 
-            var data = new DfesLensExtractor.DayData(roots, observations, plots.Count);
+            var data = new DfesLensExtractor.DayData(roots, observations);
             var probe = new DfesLensExtractor.LensScoresProbe();
             var (input, signals) = DfesLensExtractor.Build(data, probe, plausible);
             var scores = probe.Scores;

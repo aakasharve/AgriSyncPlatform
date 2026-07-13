@@ -18,7 +18,7 @@ internal static class DfesLensExtractor
     private const int W_OBS_FACET = 15, W_LEARN_FACET = 15; // structured-noticing pseudo-dims
     private const double Cf = 1.0;
 
-    public sealed record DayData(IReadOnlyList<JsonElement> Roots, IReadOnlyList<ObservationEvent> Observations, int PlotCount);
+    public sealed record DayData(IReadOnlyList<JsonElement> Roots, IReadOnlyList<ObservationEvent> Observations);
 
     public static (LensInput Input, ClassifierSignals Signals) Build(DayData data, LensScoresProbe probeSink, bool clientDatePlausible)
     {

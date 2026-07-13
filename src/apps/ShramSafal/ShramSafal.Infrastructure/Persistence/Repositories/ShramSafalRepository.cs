@@ -293,6 +293,7 @@ internal sealed class ShramSafalRepository(ShramSafalDbContext db) : IShramSafal
     public async Task<Domain.Dfes.DailyRichnessAggregate?> GetDailyRichnessAggregateAsync(
         Guid farmId, DateOnly localDate, CancellationToken ct = default)
         => await db.DailyRichnessAggregates
+            .AsNoTracking()
             .FirstOrDefaultAsync(a => a.FarmId == farmId && a.LocalDate == localDate, ct);
 
     public async Task AddDailyRichnessAggregateAsync(
