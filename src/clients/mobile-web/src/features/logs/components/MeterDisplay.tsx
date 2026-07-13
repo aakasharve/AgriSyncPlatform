@@ -117,8 +117,11 @@ export function MeterDisplay({
                     </p>
                 )}
             </div>
-            <div data-testid="meter-arrival" className="mt-2 text-xs text-stone-500">
-                {`Rich logs: ${arrival.richLogCount}/${arrival.target}${arrival.arrived ? ' — arrived' : ''}`}
+            <div data-testid="meter-arrival" className="mt-2 text-xs text-stone-500" style={{ fontFamily: SANS }}>
+                {t('dfes.meterArrivalProgress')
+                    .replace('{count}', String(arrival.richLogCount))
+                    .replace('{target}', String(arrival.target))}
+                {arrival.arrived ? t('dfes.meterArrivalArrived') : ''}
             </div>
             {combinedQuestion ? (
                 <button

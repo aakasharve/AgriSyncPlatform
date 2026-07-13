@@ -285,6 +285,14 @@ export interface Translations {
         // its OWN understanding of the farmer's day (X/10). NOT a grade of the farmer.
         dayUnderstandingIntro: string;
         dayUnderstandingPending: string;
+
+        // Understanding-Meter arrival/transition line (dfes-companion Slice 5b) —
+        // Sathi's progress toward "knowing" the farm (rich-days milestone).
+        // Founder-confirmable copy on a flag-gated placeholder surface.
+        // meterArrivalProgress carries {count}/{target} placeholders; the
+        // arrived line is appended (leading " — ") only once the milestone lands.
+        meterArrivalProgress: string;
+        meterArrivalArrived: string;
     };
 }
 
@@ -544,6 +552,10 @@ export const translations: Record<Language, Translations> = {
             // Day Understanding Score (dfes-companion Slice 3b)
             dayUnderstandingIntro: 'I understood your day today',
             dayUnderstandingPending: 'Still understanding…',
+
+            // Understanding-Meter arrival/transition line (dfes-companion Slice 5b)
+            meterArrivalProgress: 'Understood days: {count}/{target}',
+            meterArrivalArrived: ' — now I have come to know your farm',
         },
     },
 
@@ -803,6 +815,12 @@ export const translations: Record<Language, Translations> = {
             // understanding of the day, never a grade of the farmer.
             dayUnderstandingIntro: 'मी तुमचा आजचा दिवस समजून घेतला',
             dayUnderstandingPending: 'अजून समजतंय…',
+
+            // Understanding-Meter arrival/transition line (dfes-companion Slice 5b) —
+            // FOUNDER-CONFIRM: reasonable default in Sathi's voice (dignity, no
+            // shame). Not a grade of the farmer — Sathi's own growing familiarity.
+            meterArrivalProgress: 'समजून घेतलेले दिवस: {count}/{target}',
+            meterArrivalArrived: ' — आता मी तुमचं शेत ओळखू लागलो',
         },
     },
 };
