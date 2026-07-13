@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
-    DFES_QUESTION_BANK, BANK_VERSION, QUESTION_ENGINE_VERSION, findGapQuestion,
+    DFES_QUESTION_BANK, BANK_VERSION, QUESTION_ENGINE_VERSION, findGapQuestion, findQuestion,
 } from '../dfesQuestionBank';
 
 describe('DFES question bank v1 (Phase 5)', () => {
@@ -43,5 +43,28 @@ describe('DFES question bank v1 (Phase 5)', () => {
             expect(q.depthLevel).toBeGreaterThanOrEqual(1);
             expect(q.depthLevel).toBeLessThanOrEqual(4);
         }
+    });
+
+    // spec: dfes-companion-2026-07-11 (Task 2A) — tap-to-answer bank mechanism.
+    describe('answerOptions (Task 2A — tap-to-answer bank mechanism)', () => {
+        it('CONTENT GATE: stage.confirm_current has NO real, agronomist-approved Marathi option copy yet — answerOptions stays undefined (ack/skip-only)', () => {
+            // No canonical Marathi-labeled crop-stage list exists anywhere in the
+            // repo (StageCode enum is English-only, internal to the scheduler).
+            // Wiring it here would be fabricated agronomy content, which Task 2A
+            // explicitly forbids. This test documents that deliberate gap — it
+            // should only ever flip once real agronomist+Marathi copy lands.
+            expect(findQuestion('stage.confirm_current')?.answerOptions).toBeUndefined();
+        });
+
+        it('every option on any bank entry that DOES declare answerOptions has a non-empty value and labelMr', () => {
+            for (const q of DFES_QUESTION_BANK) {
+                if (!q.answerOptions) continue;
+                expect(q.answerOptions.length).toBeGreaterThan(0);
+                for (const opt of q.answerOptions) {
+                    expect(opt.value.trim().length, `${q.questionKey} option value`).toBeGreaterThan(0);
+                    expect(opt.labelMr.trim().length, `${q.questionKey} option labelMr`).toBeGreaterThan(0);
+                }
+            }
+        });
     });
 });

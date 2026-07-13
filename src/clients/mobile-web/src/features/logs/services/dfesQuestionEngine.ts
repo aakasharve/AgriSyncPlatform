@@ -18,7 +18,7 @@ import { rankMeterGaps } from './meterGaps';
 import { isStageConfirmationWindowOpen, type LastStageConfirm } from './dfesStageWindow';
 import {
     TRIGGER_CONFIG, MAX_QUESTIONS_PER_DAY,
-    findQuestion, findGapQuestion, type DfesQuestion,
+    findQuestion, findGapQuestion, type DfesQuestion, type DfesAnswerOption,
 } from './dfesQuestionBank';
 import { DFES_TUNING } from './dfesTuning';
 
@@ -55,6 +55,8 @@ export interface SelectedQuestion {
     weatherContext: string | null;
     expectedStage: string | null;
     actualStageApplicability: string | null;
+    /** Tap-choice options (Task 2A), resolved straight from the bank entry; undefined when the question is ack/skip-only. */
+    answerOptions?: DfesAnswerOption[];
 }
 
 /** Hard gate: unapproved questions are never selectable, even if present. */
@@ -85,6 +87,7 @@ function pack(q: DfesQuestion, inputs: DailyQuestionInputs, reason: string): Sel
         weatherContext: inputs.weather?.conditionText ?? null,
         expectedStage: inputs.stageContext?.expectedStage ?? null,
         actualStageApplicability: q.expectedStageApplicability ?? null,
+        answerOptions: q.answerOptions,
     };
 }
 

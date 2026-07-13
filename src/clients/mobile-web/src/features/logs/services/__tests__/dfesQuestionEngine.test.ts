@@ -139,3 +139,60 @@ describe('selectDailyQuestion — hard AgronomistApproved && MarathiApproved gat
         expect(result!.question.questionKey).toBe('gap.dose');
     });
 });
+
+// spec: dfes-companion-2026-07-11 (Task 2A) — tap-to-answer bank mechanism.
+// A question with `answerOptions` must resolve them verbatim onto
+// SelectedQuestion.answerOptions; a question without them (the real bank
+// today — no question yet has real, agronomist-approved option copy) must
+// resolve `answerOptions` as undefined. Uses the same substituted-question
+// pattern as the approval-gate suite above so this exercises the engine's
+// own `pack()` threading rather than relying on the real bank ever growing
+// an answerOptions entry.
+describe('selectDailyQuestion — answerOptions threading onto SelectedQuestion (Task 2A)', () => {
+    afterEach(() => {
+        vi.doUnmock('../dfesQuestionBank');
+        vi.resetModules();
+    });
+
+    const questionShape = {
+        questionKey: 'gap.dose', crop: '*', triggerType: 'Gap', questionType: 'gap_fill',
+        lens: 'Execution', depthLevel: 1, priority: 4, cooldownDays: 3, answerModes: 'choice,voice',
+        safetyClass: 'informational', anchorDateType: 'log_date',
+        promptMr: 'किती मात्रा (डोस) वापरली?', agronomistApproved: true, marathiApproved: true,
+    } as const;
+
+    async function selectWithSubstitutedDoseQuestion(question: DfesQuestion) {
+        vi.resetModules();
+        vi.doMock('../dfesQuestionBank', async () => {
+            const actual = await vi.importActual<typeof import('../dfesQuestionBank')>('../dfesQuestionBank');
+            return {
+                ...actual,
+                findGapQuestion: (dimension: string) =>
+                    dimension === 'DOSE' ? question : actual.findGapQuestion(dimension),
+            };
+        });
+        const { selectDailyQuestion: selectMocked } = await import('../dfesQuestionEngine');
+        return selectMocked(base({ score: scoreWithGap('DOSE') }));
+    }
+
+    it('resolves a question WITH answerOptions onto SelectedQuestion.answerOptions', async () => {
+        const withOptions: DfesQuestion = {
+            ...questionShape,
+            answerOptions: [
+                { value: 'low', labelMr: 'कमी' },
+                { value: 'high', labelMr: 'जास्त' },
+            ],
+        };
+        const result = await selectWithSubstitutedDoseQuestion(withOptions);
+        expect(result!.answerOptions).toEqual([
+            { value: 'low', labelMr: 'कमी' },
+            { value: 'high', labelMr: 'जास्त' },
+        ]);
+    });
+
+    it('resolves undefined answerOptions for a question that declares none (real-bank shape today)', async () => {
+        const withoutOptions: DfesQuestion = { ...questionShape };
+        const result = await selectWithSubstitutedDoseQuestion(withoutOptions);
+        expect(result!.answerOptions).toBeUndefined();
+    });
+});

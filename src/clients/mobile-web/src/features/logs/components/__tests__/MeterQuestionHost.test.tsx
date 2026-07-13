@@ -184,4 +184,109 @@ describe('MeterQuestionHost (Phase 5, Task 5.9)', () => {
         );
         expect(container.firstChild).toBeNull();
     });
+
+    // -------------------------------------------------------------------------
+    // Tap-to-answer (Task 2A, spec: dfes-companion-2026-07-11)
+    // -------------------------------------------------------------------------
+    describe('tap-to-answer', () => {
+        function selectedWithOptions() {
+            return {
+                question: {
+                    questionKey: 'stage.confirm_current', crop: 'grapes', lens: 'Execution', depthLevel: 1, priority: 3,
+                    cooldownDays: 7, questionType: 'stage_confirm', answerModes: 'choice,voice', safetyClass: 'informational',
+                    agronomistApproved: true, marathiApproved: true, promptMr: 'तुमची grapes आता कोणत्या टप्प्यात आहे?',
+                    answerOptions: [
+                        { value: 'flowering', labelMr: 'फुलोरा', stageConfirmedValue: true },
+                        { value: 'not_yet', labelMr: 'अजून नाही', stageConfirmedValue: false },
+                    ],
+                },
+                resolvedPromptMr: 'तुमची grapes आता कोणत्या टप्प्यात आहे?',
+                triggerReason: 'stage window open',
+                weatherContext: null,
+                expectedStage: 'flowering',
+                actualStageApplicability: 'current_stage',
+                answerOptions: [
+                    { value: 'flowering', labelMr: 'फुलोरा', stageConfirmedValue: true },
+                    { value: 'not_yet', labelMr: 'अजून नाही', stageConfirmedValue: false },
+                ],
+            };
+        }
+
+        it('tapping a tap-choice option records ONE event carrying {skipped:false, response, stageConfirmed} — not a bare {skipped:false}', async () => {
+            const recordOutcome = vi.fn();
+            useDfesQuestionMock.mockReturnValue({ selected: selectedWithOptions(), loading: false, recordOutcome });
+            const { MeterQuestionHost } = await loadComponent(true, true);
+            const { getAllByTestId } = render(
+                <MeterQuestionHost
+                    farmId="farm-1"
+                    plotId="plot-1"
+                    score={score}
+                    allLogs={arrivedLogs}
+                    questionInputs={{ crop: 'grapes', todayLocalDate: '2026-07-11', score, engagement: { totalRichDays: 0, unlockStatus: 'locked' } }}
+                />,
+            );
+
+            const options = getAllByTestId('shramsathi-answer-option');
+            expect(options).toHaveLength(2);
+            fireEvent.click(options[0]); // "फुलोरा" -> stageConfirmedValue: true
+
+            expect(recordOutcome).toHaveBeenCalledTimes(1);
+            expect(recordOutcome).toHaveBeenCalledWith({ skipped: false, response: 'flowering', stageConfirmed: true });
+        });
+
+        it('tapping the non-confirming option maps stageConfirmedValue:false through to stageConfirmed', async () => {
+            const recordOutcome = vi.fn();
+            useDfesQuestionMock.mockReturnValue({ selected: selectedWithOptions(), loading: false, recordOutcome });
+            const { MeterQuestionHost } = await loadComponent(true, true);
+            const { getAllByTestId } = render(
+                <MeterQuestionHost
+                    farmId="farm-1"
+                    plotId="plot-1"
+                    score={score}
+                    allLogs={arrivedLogs}
+                    questionInputs={{ crop: 'grapes', todayLocalDate: '2026-07-11', score, engagement: { totalRichDays: 0, unlockStatus: 'locked' } }}
+                />,
+            );
+
+            fireEvent.click(getAllByTestId('shramsathi-answer-option')[1]); // "अजून नाही"
+            expect(recordOutcome).toHaveBeenCalledWith({ skipped: false, response: 'not_yet', stageConfirmed: false });
+        });
+
+        it('dismissing ("नंतर") a tap-choice question records {skipped:true} — never the answer shape', async () => {
+            const recordOutcome = vi.fn();
+            useDfesQuestionMock.mockReturnValue({ selected: selectedWithOptions(), loading: false, recordOutcome });
+            const { MeterQuestionHost } = await loadComponent(true, true);
+            const { getByTestId } = render(
+                <MeterQuestionHost
+                    farmId="farm-1"
+                    plotId="plot-1"
+                    score={score}
+                    allLogs={arrivedLogs}
+                    questionInputs={{ crop: 'grapes', todayLocalDate: '2026-07-11', score, engagement: { totalRichDays: 0, unlockStatus: 'locked' } }}
+                />,
+            );
+
+            fireEvent.click(getByTestId('shramsathi-answer-dismiss'));
+            expect(recordOutcome).toHaveBeenCalledTimes(1);
+            expect(recordOutcome).toHaveBeenCalledWith({ skipped: true });
+        });
+
+        it('the host still calls recordOutcome exactly once per tap-choice click — the recordedRef one-shot guard itself is exercised at the useDfesQuestion hook level (useDfesQuestion.test.tsx)', async () => {
+            const recordOutcome = vi.fn();
+            useDfesQuestionMock.mockReturnValue({ selected: selectedWithOptions(), loading: false, recordOutcome });
+            const { MeterQuestionHost } = await loadComponent(true, true);
+            const { getAllByTestId } = render(
+                <MeterQuestionHost
+                    farmId="farm-1"
+                    plotId="plot-1"
+                    score={score}
+                    allLogs={arrivedLogs}
+                    questionInputs={{ crop: 'grapes', todayLocalDate: '2026-07-11', score, engagement: { totalRichDays: 0, unlockStatus: 'locked' } }}
+                />,
+            );
+
+            fireEvent.click(getAllByTestId('shramsathi-answer-option')[0]);
+            expect(recordOutcome).toHaveBeenCalledTimes(1);
+        });
+    });
 });

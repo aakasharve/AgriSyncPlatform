@@ -36,6 +36,7 @@ import { useLanguage } from '../../../i18n/LanguageContext';
 import type { VlogScore } from '../../../domain/types/log.types';
 import type { FarmerEngagementDto } from '../../../infrastructure/api/resources/DfesResource';
 import type { SelectedQuestion } from '../services/dfesQuestionEngine';
+import type { DfesAnswerOption } from '../services/dfesQuestionBank';
 import UnderstandingBar from './shramsathi/UnderstandingBar';
 
 // Marathi body text must render with Noto Sans Devanagari (incl. the Devanagari
@@ -58,8 +59,12 @@ export interface MeterDisplayProps {
     dayDate?: string;
     /** Phase 5: the combined D8 question for today (null when none). Gated by stageQuestions. */
     dfesQuestion?: SelectedQuestion | null;
-    /** Phase 5: fired when the farmer taps the combined question card. */
+    /** Phase 5: fired when the farmer taps the combined question card (no-options ack only — unchanged, `{skipped:false}`). */
     onQuestionInteract?: () => void;
+    /** Task 2A: fired when the farmer taps one of `dfesQuestion.answerOptions`. */
+    onAnswer?: (option: DfesAnswerOption) => void;
+    /** Task 2A: fired by the "नंतर" dismiss affordance on a tap-choice question (`{skipped:true}`). */
+    onDismiss?: () => void;
 }
 
 export function MeterDisplay({
@@ -70,6 +75,8 @@ export function MeterDisplay({
     dayDate,
     dfesQuestion,
     onQuestionInteract,
+    onAnswer,
+    onDismiss,
 }: MeterDisplayProps): React.ReactElement | null {
     const { t } = useLanguage();
     // Day Understanding Score (server /10). The hook self-gates on
@@ -128,7 +135,45 @@ export function MeterDisplay({
                     .replace('{target}', String(arrival.target))}
                 {arrival.arrived ? t('dfes.meterArrivalArrived') : ''}
             </div>
-            {combinedQuestion ? (
+            {combinedQuestion?.answerOptions?.length ? (
+                // Task 2A: tap-to-answer — a real answer choice exists for this
+                // question. The prompt renders as text (not a single ack button);
+                // tapping an option reports the real answer in ONE insert; "नंतर"
+                // is the calm dismiss/skip path. No regression for non-choice
+                // questions — see the plain ack button in the else-branch below.
+                <div data-testid="shramsathi-answer-card" className="mt-2 rounded-xl bg-stone-100 p-3 text-left">
+                    <p
+                        data-testid="shramsathi-gap-question"
+                        className="text-xs font-medium text-stone-800"
+                        style={{ fontFamily: SANS }}
+                    >
+                        {combinedQuestion.resolvedPromptMr}
+                    </p>
+                    <div className="mt-2 flex flex-wrap gap-2">
+                        {combinedQuestion.answerOptions.map((option) => (
+                            <button
+                                key={option.value}
+                                type="button"
+                                data-testid="shramsathi-answer-option"
+                                onClick={() => onAnswer?.(option)}
+                                className="rounded-lg bg-white px-3 py-1.5 text-xs font-medium text-stone-800 shadow-sm"
+                                style={{ fontFamily: SANS }}
+                            >
+                                {option.labelMr}
+                            </button>
+                        ))}
+                    </div>
+                    <button
+                        type="button"
+                        data-testid="shramsathi-answer-dismiss"
+                        onClick={() => onDismiss?.()}
+                        className="mt-2 text-[11px] text-stone-500 underline"
+                        style={{ fontFamily: SANS }}
+                    >
+                        नंतर
+                    </button>
+                </div>
+            ) : combinedQuestion ? (
                 <button
                     type="button"
                     data-testid="shramsathi-gap-question"

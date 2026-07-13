@@ -51,6 +51,25 @@ export interface DfesQuestion {
     promptMr: string;
     /** Applicability tag echoed into ActualStageApplicability for stage questions. */
     expectedStageApplicability?: string;
+    /**
+     * Tap-choice answer options (Task 2A, tap-to-answer v1). Populated ONLY once
+     * real, agronomist-approved + Marathi-approved option copy exists for this
+     * question — otherwise left undefined and the question stays ack/skip-only
+     * (honest; no fabricated agronomy). When present, each option's `value`
+     * becomes QuestionOutcome.response and an optional `stageConfirmedValue`
+     * becomes QuestionOutcome.stageConfirmed on tap.
+     */
+    answerOptions?: DfesAnswerOption[];
+}
+
+/** One tappable answer choice for an answerable question (Task 2A). */
+export interface DfesAnswerOption {
+    /** Recorded verbatim as QuestionOutcome.response (-> ssf.question_events.Response). */
+    value: string;
+    /** Marathi label rendered on the tap-choice button (Noto Sans Devanagari). */
+    labelMr: string;
+    /** For stage_confirm questions: this option's meaning for QuestionOutcome.stageConfirmed. */
+    stageConfirmedValue?: boolean;
 }
 
 // Priority tiers (1 highest). Selection walks these in order.
@@ -115,6 +134,16 @@ const TRIGGER_ENTRIES: DfesQuestion[] = [
         lens: 'Execution', depthLevel: 1, priority: P_STAGE, cooldownDays: 7, answerModes: 'choice,voice',
         safetyClass: 'informational', anchorDateType: 'stage_start', expectedStageApplicability: 'current_stage',
         promptMr: 'तुमची {crop} आता कोणत्या टप्प्यात आहे?', ...APPROVED,
+        // CONTENT GATE: answerModes says 'choice,voice' but there is no real,
+        // agronomist-approved + Marathi-labeled crop-stage option list in the
+        // repo to wire here (checked: StageCode in scheduler.types.ts /
+        // summary.types.ts is an internal scheduler enum with only English
+        // names — 'Early Stage'/'Mid Stage'/'Late Stage' etc. — no Marathi
+        // labels anywhere; stageInsight() in intelligence/insights.ts only
+        // echoes whatever free-text the farmer already confirmed, it isn't a
+        // fixed choice set). `answerOptions` is left undefined so this
+        // question stays ack/skip-only (tap-to-answer v1) until an
+        // agronomist supplies approved Marathi stage-option copy.
     },
     {
         questionKey: 'followup.observation_outcome', crop: '*', triggerType: 'Followup', questionType: 'observation',

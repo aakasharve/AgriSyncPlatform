@@ -18,11 +18,12 @@
  * the DFES suite for toggling FEATURE_FLAGS without leaking module state.
  */
 import React from 'react';
-import { render, cleanup } from '@testing-library/react';
+import { render, cleanup, fireEvent } from '@testing-library/react';
 import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
 import type { VlogScoreDimension, VlogScore } from '../../../../domain/types/log.types';
 import { DFES_TUNING } from '../../services/dfesTuning';
 import { t as translate } from '../../../../i18n/translations';
+import type { SelectedQuestion } from '../../services/dfesQuestionEngine';
 
 // =============================================================================
 // HELPERS
@@ -62,12 +63,12 @@ const dayUnderstandingMock = vi.fn();
  * Day-Understanding hook mocked, and useLanguage bound to the REAL Marathi
  * translations (so the framing/pending copy assertions are meaningful).
  */
-async function loadComponent(understandingMeter: boolean) {
+async function loadComponent(understandingMeter: boolean, stageQuestions = false) {
     vi.resetModules();
     vi.doMock('../../../../app/featureFlags', () => ({
         FEATURE_FLAGS: {
             understandingMeter,
-            stageQuestions: false,
+            stageQuestions,
             DwcChip: false,
         },
         isFarmGeographyV2Enabled: () => false,
@@ -239,5 +240,135 @@ describe('MeterDisplay (Slice 3b — server /10 Day Understanding Score)', () =>
 
         const arrivalEl = getByTestId('meter-arrival');
         expect(arrivalEl.textContent).toContain(`5/${DFES_TUNING.richDayThreshold}`);
+    });
+});
+
+// =============================================================================
+// TAP-TO-ANSWER (Task 2A, spec: dfes-companion-2026-07-11)
+// =============================================================================
+
+/** Minimal, fully-typed SelectedQuestion fixture; override per test. */
+function makeSelectedQuestion(overrides: Partial<SelectedQuestion> = {}): SelectedQuestion {
+    return {
+        question: {
+            questionKey: 'gap.dose', crop: '*', triggerType: 'Gap', questionType: 'gap_fill',
+            lens: 'Execution', depthLevel: 1, priority: 4, cooldownDays: 3, answerModes: 'voice',
+            safetyClass: 'informational', anchorDateType: 'log_date',
+            agronomistApproved: true, marathiApproved: true,
+            promptMr: 'किती मात्रा (डोस) वापरली?',
+        },
+        resolvedPromptMr: 'किती मात्रा (डोस) वापरली?',
+        triggerReason: 'test',
+        weatherContext: null,
+        expectedStage: null,
+        actualStageApplicability: null,
+        ...overrides,
+    };
+}
+
+describe('MeterDisplay — tap-to-answer (Task 2A)', () => {
+    it('a question with NO answerOptions keeps today\'s exact behaviour — single ack button fires onQuestionInteract only', async () => {
+        mockDayScore(6);
+        const { MeterDisplay } = await loadComponent(true, true);
+        const onQuestionInteract = vi.fn();
+        const onAnswer = vi.fn();
+        const onDismiss = vi.fn();
+
+        const { getByTestId, queryByTestId, queryAllByTestId } = render(
+            <MeterDisplay
+                farmId="farm-1"
+                dayDate="2026-07-11"
+                dfesQuestion={makeSelectedQuestion()}
+                onQuestionInteract={onQuestionInteract}
+                onAnswer={onAnswer}
+                onDismiss={onDismiss}
+            />,
+        );
+
+        expect(queryAllByTestId('shramsathi-answer-option')).toHaveLength(0);
+        expect(queryByTestId('shramsathi-answer-card')).toBeNull();
+
+        fireEvent.click(getByTestId('shramsathi-gap-question'));
+        expect(onQuestionInteract).toHaveBeenCalledTimes(1);
+        expect(onAnswer).not.toHaveBeenCalled();
+        expect(onDismiss).not.toHaveBeenCalled();
+    });
+
+    it('a question WITH answerOptions renders one tap-choice button per option (Marathi labelMr, Noto Sans Devanagari)', async () => {
+        mockDayScore(6);
+        const { MeterDisplay } = await loadComponent(true, true);
+
+        const dfesQuestion = makeSelectedQuestion({
+            answerOptions: [
+                { value: 'low', labelMr: 'कमी' },
+                { value: 'high', labelMr: 'जास्त', stageConfirmedValue: true },
+            ],
+        });
+
+        const { getAllByTestId, getByTestId } = render(
+            <MeterDisplay farmId="farm-1" dayDate="2026-07-11" dfesQuestion={dfesQuestion} />,
+        );
+
+        const options = getAllByTestId('shramsathi-answer-option');
+        expect(options).toHaveLength(2);
+        expect(options.map((el) => el.textContent)).toEqual(['कमी', 'जास्त']);
+        options.forEach((el) => expect(el.style.fontFamily).toContain('Noto Sans Devanagari'));
+
+        // Prompt still renders (as text, not the single ack button) alongside the choices.
+        expect(getByTestId('shramsathi-gap-question').textContent).toBe('किती मात्रा (डोस) वापरली?');
+    });
+
+    it('tapping a tap-choice option calls onAnswer with that exact option — NOT onQuestionInteract', async () => {
+        mockDayScore(6);
+        const { MeterDisplay } = await loadComponent(true, true);
+        const onAnswer = vi.fn();
+        const onQuestionInteract = vi.fn();
+
+        const lowOption = { value: 'low', labelMr: 'कमी' };
+        const highOption = { value: 'high', labelMr: 'जास्त', stageConfirmedValue: true };
+        const dfesQuestion = makeSelectedQuestion({ answerOptions: [lowOption, highOption] });
+
+        const { getAllByTestId } = render(
+            <MeterDisplay
+                farmId="farm-1"
+                dayDate="2026-07-11"
+                dfesQuestion={dfesQuestion}
+                onAnswer={onAnswer}
+                onQuestionInteract={onQuestionInteract}
+            />,
+        );
+
+        const options = getAllByTestId('shramsathi-answer-option');
+        fireEvent.click(options[1]);
+
+        expect(onAnswer).toHaveBeenCalledTimes(1);
+        expect(onAnswer).toHaveBeenCalledWith(highOption);
+        expect(onQuestionInteract).not.toHaveBeenCalled();
+    });
+
+    it('the "नंतर" dismiss affordance on a tap-choice question calls onDismiss — NOT onQuestionInteract/onAnswer', async () => {
+        mockDayScore(6);
+        const { MeterDisplay } = await loadComponent(true, true);
+        const onDismiss = vi.fn();
+        const onQuestionInteract = vi.fn();
+        const onAnswer = vi.fn();
+
+        const dfesQuestion = makeSelectedQuestion({ answerOptions: [{ value: 'low', labelMr: 'कमी' }] });
+
+        const { getByTestId } = render(
+            <MeterDisplay
+                farmId="farm-1"
+                dayDate="2026-07-11"
+                dfesQuestion={dfesQuestion}
+                onDismiss={onDismiss}
+                onQuestionInteract={onQuestionInteract}
+                onAnswer={onAnswer}
+            />,
+        );
+
+        fireEvent.click(getByTestId('shramsathi-answer-dismiss'));
+        expect(onDismiss).toHaveBeenCalledTimes(1);
+        expect(onQuestionInteract).not.toHaveBeenCalled();
+        expect(onAnswer).not.toHaveBeenCalled();
     });
 });

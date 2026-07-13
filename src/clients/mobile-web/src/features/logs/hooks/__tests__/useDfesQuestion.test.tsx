@@ -39,4 +39,24 @@ describe('useDfesQuestion (Phase 5)', () => {
         expect(api.fetchRecentQuestionEvents).not.toHaveBeenCalled();
         expect(result.current.selected).toBeNull();
     });
+
+    // spec: dfes-companion-2026-07-11 (Task 2A) — question_events is APPEND-ONLY
+    // (UPDATE/DELETE revoked at the DB), so the answer must ride the SAME single
+    // INSERT recorded at answer-time; recordedRef must guarantee exactly one
+    // event even if the farmer taps a tap-choice option (or the ack/dismiss
+    // path) more than once.
+    it('records exactly ONE event even when recordOutcome is called twice for the same shown question (recordedRef guard)', async () => {
+        const { result } = renderHook(() => useDfesQuestion('farm-1', null, inputs(), true));
+        await waitFor(() => expect(result.current.selected).not.toBeNull());
+
+        await act(async () => { await result.current.recordOutcome({ skipped: false, response: 'low', stageConfirmed: null }); });
+        await act(async () => { await result.current.recordOutcome({ skipped: true }); });
+
+        expect(api.recordQuestionEvent).toHaveBeenCalledTimes(1);
+        expect(api.recordQuestionEvent).toHaveBeenCalledWith(
+            'farm-1', null, expect.anything(),
+            { skipped: false, response: 'low', stageConfirmed: null },
+            expect.any(String),
+        );
+    });
 });
