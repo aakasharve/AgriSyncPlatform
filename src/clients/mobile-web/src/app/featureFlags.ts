@@ -71,4 +71,14 @@ export const FEATURE_FLAGS = {
      * byte-equivalent no-op.
      */
     dailyLoop: isEnabled('VITE_DAILY_LOOP'),
+
+    /**
+     * Task 1B (spec: dfes-companion-2026-07-11) — ONE Task 1A intelligence
+     * fact rendered below the clarity line on the Saved-to-Ledger success
+     * card. SEPARATE from `dailyLoop` on purpose (Decision 3B deferred the
+     * fact/insight fallback): the founder can turn the daily-loop reward on
+     * WITHOUT the facts. Default OFF (env VITE_INTELLIGENCE_INSIGHTS
+     * absent -> false); when OFF this is a byte-equivalent no-op.
+     */
+    intelligenceInsights: isEnabled('VITE_INTELLIGENCE_INSIGHTS'),
 } as const;

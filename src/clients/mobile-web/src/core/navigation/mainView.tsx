@@ -28,6 +28,8 @@ import { LedgerRecognitionPanel } from '../../features/logs/components/LedgerRec
 import VoiceSavedReassurance from '../../features/logs/components/shramsathi/VoiceSavedReassurance';
 import DailyLoopHero from '../../features/logs/components/shramsathi/DailyLoopHero';
 import DailyLoopClarity from '../../features/logs/components/shramsathi/DailyLoopClarity';
+import DailyLoopInsight from '../../features/logs/components/shramsathi/DailyLoopInsight';
+import { buildDailyInsight } from '../../features/logs/intelligence/buildDailyInsight';
 import { ShramSathiUnderstanding } from '../../features/logs/components/shramsathi/ShramSathiUnderstanding';
 
 import { AppRouterContext } from './routeContext';
@@ -705,6 +707,23 @@ export const renderLogView = (ctx: AppRouterContext): React.ReactNode => {
                                 left={todayDayState.pendingCount}
                             />
                         )}
+
+                        {/* Task 1B (spec: dfes-companion-2026-07-11) — ONE daily
+                            intelligence fact from the farmer's own history,
+                            sitting directly BELOW the clarity line. Flag-gated
+                            OFF by default (byte-equivalent no-op). savedLog is
+                            derived the same way the recognition panel below
+                            derives it (from lastSavedLogIds[0] via history.find). */}
+                        {FEATURE_FLAGS.intelligenceInsights && (() => {
+                            const savedLogId = lastSavedLogIds && lastSavedLogIds.length > 0
+                                ? lastSavedLogIds[0]
+                                : undefined;
+                            const savedLog = savedLogId
+                                ? history.find(l => l.id === savedLogId)
+                                : undefined;
+                            const insight = buildDailyInsight(history, savedLog, savedLog?.date ?? '');
+                            return insight && insight.render ? <DailyLoopInsight insight={insight} /> : null;
+                        })()}
 
                         {/* DFES recognition surface (dfes-companion-2026-07-11). The panel
                             renders unconditionally; each child self-gates on its flag
