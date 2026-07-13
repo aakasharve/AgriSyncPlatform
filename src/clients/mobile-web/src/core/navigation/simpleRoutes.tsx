@@ -33,6 +33,7 @@ import {
     JobCardsPage,
     JobCardDetailPage,
     WorkerProfilePage,
+    LabourFeaturePage,
     ConsentScreen,
     ErasureRequestScreen,
     ExportRequestScreen,
@@ -57,6 +58,7 @@ export const renderProfileRoute = (ctx: AppRouterContext): React.ReactNode => {
                     ctx.setCurrentRoute('schedule');
                 }}
                 onOpenFinanceManager={() => ctx.setCurrentRoute('finance-manager')}
+                onOpenLabour={() => ctx.setCurrentRoute('labour')}
                 onOpenReferrals={() => ctx.setCurrentRoute('referrals')}
                 onOpenConsent={() => ctx.setCurrentRoute('consent')}
                 onOpenExport={() => ctx.setCurrentRoute('dataRights/export')}
@@ -64,6 +66,15 @@ export const renderProfileRoute = (ctx: AppRouterContext): React.ReactNode => {
                 onOpenQrDemo={() => ctx.setCurrentRoute('qr-demo')}
                 onExit={() => ctx.setCurrentRoute('main')}
             />
+        </div>
+    );
+};
+
+export const renderLabourRoute = (ctx: AppRouterContext): React.ReactNode => {
+    if (ctx.currentRoute !== 'labour') return null;
+    return (
+        <div className="animate-in fade-in slide-in-from-right-4 duration-300">
+            <LabourFeaturePage onExit={() => ctx.setCurrentRoute('profile')} />
         </div>
     );
 };
@@ -436,6 +447,7 @@ export const SIMPLE_ROUTE_RENDERERS: Array<(ctx: AppRouterContext) => React.Reac
     renderJobsRoute,
     renderJobDetailRoute,
     renderWorkerProfileRoute,
+    renderLabourRoute,
     renderConsentRoute,
     renderErasureRequestRoute,
     renderExportRequestRoute,

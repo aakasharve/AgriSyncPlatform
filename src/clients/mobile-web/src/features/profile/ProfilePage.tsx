@@ -63,6 +63,7 @@ interface ProfilePageProps {
     onDeletePerson?: (id: string) => void;
     onOpenScheduleLibrary?: (cropId?: string) => void;
     onOpenFinanceManager?: () => void;
+    onOpenLabour?: () => void;
     onOpenReferrals?: () => void;
     onOpenConsent?: () => void;
     onOpenExport?: () => void;
@@ -82,7 +83,7 @@ interface ProfilePageProps {
 const ProfilePage: React.FC<ProfilePageProps> = ({
     profile, crops, onUpdateProfile, onUpdateCrops,
     onAddPerson, onDeletePerson,
-    onOpenScheduleLibrary, onOpenFinanceManager, onOpenReferrals,
+    onOpenScheduleLibrary, onOpenFinanceManager, onOpenLabour, onOpenReferrals,
     onOpenConsent, onOpenExport, onOpenErasure,
     onExit,
     initialTab,
@@ -393,6 +394,7 @@ const ProfilePage: React.FC<ProfilePageProps> = ({
                             onSelect={setActiveTab}
                             onExit={onExit}
                             onOpenFinance={onOpenFinanceManager}
+                            onOpenLabour={onOpenLabour}
                             onOpenReferrals={onOpenReferrals}
                             settingsItems={settingsItems}
                             onSelectExtra={handleSelectExtra}

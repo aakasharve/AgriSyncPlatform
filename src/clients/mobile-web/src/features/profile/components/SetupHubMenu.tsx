@@ -9,7 +9,7 @@
  * Built for a semi-literate farmer: one clear list, big rows, plain words.
  */
 import React, { useState } from 'react';
-import { ChevronRight, ArrowLeft, CheckCircle2, Check, MapPin, LogOut, BarChart3, Medal } from 'lucide-react';
+import { ChevronRight, ArrowLeft, CheckCircle2, Check, MapPin, LogOut, BarChart3, Medal, Users } from 'lucide-react';
 import type { ProfileTab } from '../ProfilePage';
 import type { MyFarmDto } from '../../onboarding/qr/inviteApi';
 import FarmsSection from './FarmsSection';
@@ -51,6 +51,7 @@ interface SetupHubMenuProps {
     onSelect: (id: ProfileTab) => void;
     onExit?: () => void;
     onOpenFinance?: () => void;
+    onOpenLabour?: () => void;
     onOpenReferrals?: () => void;
     settingsItems?: { id: string; label: string; icon: React.ReactNode; subtitle?: string }[];
     onSelectExtra?: (id: string) => void;
@@ -156,7 +157,7 @@ const RowCard: React.FC<RowCardProps> = ({ icon, label, subtitle, tone = 'muted'
 };
 
 export const SetupHubMenu: React.FC<SetupHubMenuProps> = ({
-    farmerName, verified, farmName, farms, familyName, onOpenFarm, onAddFarm, language, setupProgress, items, onSelect, onExit, onOpenFinance, onOpenReferrals, settingsItems, onSelectExtra, logout,
+    farmerName, verified, farmName, farms, familyName, onOpenFarm, onAddFarm, language, setupProgress, items, onSelect, onExit, onOpenFinance, onOpenLabour, onOpenReferrals, settingsItems, onSelectExtra, logout,
 }) => {
     return (
         <div>
@@ -226,6 +227,7 @@ export const SetupHubMenu: React.FC<SetupHubMenuProps> = ({
             {/* more */}
             <GroupLabel>अधिक · More</GroupLabel>
             <div className="space-y-2.5">
+                {onOpenLabour && <RowCard icon={<Users size={20} />} label="कामगार व्यवस्थापन · Labour" subtitle="हजेरी · मजुरी · उचल" tone="emerald" onClick={onOpenLabour} />}
                 <RowCard icon={<BarChart3 size={20} />} label="पैसे व हिशोब · Finance" onClick={onOpenFinance} />
                 {onOpenReferrals && <RowCard icon={<Medal size={20} />} label="रेफरल्स · Referrals" onClick={onOpenReferrals} />}
             </div>

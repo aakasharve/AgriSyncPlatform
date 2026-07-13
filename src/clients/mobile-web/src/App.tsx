@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { installGlobalErrorHandlers } from './infrastructure/telemetry/ClientErrorReporter';
 import { AdminOpsPreview } from './features/admin/ops/AdminOpsPreview';
+import { LabourPreview } from './features/labour/LabourPreview';
 import { BrowserRouter } from 'react-router-dom';
 import { Capacitor, SystemBars, SystemBarsStyle } from '@capacitor/core';
 import { StatusBar, Style } from '@capacitor/status-bar';
@@ -74,6 +75,10 @@ const AppFrame: React.FC<{
 const DEV_PREVIEW = typeof window !== 'undefined'
     && new URLSearchParams(window.location.search).get('preview') === 'ops-admin';
 
+// DEV-ONLY: ?preview=labour — Labour Management UI (mock data, no auth/backend)
+const LABOUR_PREVIEW = typeof window !== 'undefined'
+    && new URLSearchParams(window.location.search).get('preview') === 'labour';
+
 const App: React.FC = () => {
     const [crops, setCrops] = useState<CropProfile[]>([]);
     const [showSplash, setShowSplash] = useState(true);
@@ -117,6 +122,7 @@ const App: React.FC = () => {
 
     // Dev preview bypass: rendered before any auth providers mount.
     if (DEV_PREVIEW) return <AdminOpsPreview />;
+    if (LABOUR_PREVIEW) return <LabourPreview />;
 
     return (
         <BrowserRouter>
