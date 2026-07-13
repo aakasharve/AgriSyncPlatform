@@ -10,6 +10,9 @@ using ShramSafal.Application.UseCases.AI.CoVeReverify;
 using ShramSafal.Application.UseCases.AI.CreateDocumentSession;
 using ShramSafal.Application.UseCases.Consent.GetConsent;
 using ShramSafal.Application.UseCases.Consent.UpdateConsent;
+using ShramSafal.Application.UseCases.Dfes.GetFarmerEngagement;
+using ShramSafal.Application.UseCases.Dfes.GetRecentQuestionEvents;
+using ShramSafal.Application.UseCases.Dfes.RecordQuestionEvent;
 using ShramSafal.Application.UseCases.VoiceDiary.GetVoiceDiaryByRange;
 using ShramSafal.Application.UseCases.VoiceDiary.PersistVoiceClipRetained;
 using ShramSafal.Application.UseCases.Privacy.IssueTenantDek;
@@ -128,6 +131,7 @@ public static class DependencyInjection
         // (parses AiJob.NormalizedResultJson into typed ssf rows inside
         // CreateDailyLogHandler's unit of work). spec: ai-intelligence-plan-2026-06-25
         services.AddScoped<ILedgerDerivationService, LedgerDerivationService>();
+        services.AddScoped<IDailyRichnessDerivationService, DailyRichnessDerivationService>();
         services.AddScoped<CreateDailyLogHandler>();
         services.AddScoped<AddLogTaskHandler>();
         services.AddScoped<VerifyLogHandler>();
@@ -137,6 +141,9 @@ public static class DependencyInjection
         services.AddScoped<AllocateGlobalExpenseHandler>();
         services.AddScoped<CorrectCostEntryHandler>();
         services.AddScoped<GetFinanceSummaryHandler>();
+        services.AddScoped<GetFarmerEngagementHandler>();
+        services.AddScoped<RecordQuestionEventHandler>();
+        services.AddScoped<GetRecentQuestionEventsHandler>();
         services.AddScoped<CreateAttachmentHandler>();
         services.AddScoped<UploadAttachmentHandler>();
         services.AddScoped<GetAttachmentMetadataHandler>();

@@ -282,7 +282,8 @@ public sealed class CreateDailyLogPipelineTests
             analytics,
             new Common.NullAiJobRepository(),
             Microsoft.Extensions.Logging.Abstractions.NullLogger<CreateDailyLogHandler>.Instance,
-            new LedgerDerivationService(repo));
+            new LedgerDerivationService(repo),
+            new Common.NullDailyRichnessDerivationService());
 
         var validator = new CreateDailyLogValidator();
         var authorizer = new CreateDailyLogAuthorizer(repo);

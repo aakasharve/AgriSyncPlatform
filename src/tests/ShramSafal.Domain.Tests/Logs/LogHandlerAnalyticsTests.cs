@@ -62,7 +62,8 @@ public sealed class LogHandlerAnalyticsTests
             analytics,
             new Common.NullAiJobRepository(),
             Microsoft.Extensions.Logging.Abstractions.NullLogger<CreateDailyLogHandler>.Instance,
-            new LedgerDerivationService(repo));
+            new LedgerDerivationService(repo),
+            new Common.NullDailyRichnessDerivationService());
 
         var command = new CreateDailyLogCommand(
             FarmId: farmGuid,

@@ -570,4 +570,50 @@ public interface IShramSafalRepository
     /// <summary>Stage a brand-new <see cref="RoutinePattern"/> (first confirmed sighting).</summary>
     Task AddRoutinePatternAsync(RoutinePattern p, CancellationToken ct = default)
         => Task.CompletedTask;
+
+    /// <summary>
+    /// DFES (dfes-companion-2026-07-11) — all <see cref="ShramSafal.Domain.Dfes.DailyRichnessAggregate"/>
+    /// rows for a farm (the Phase-3 engagement fold reads these). Default impl returns empty so the
+    /// in-tree IShramSafalRepository test doubles keep compiling; production overrides.
+    /// </summary>
+    Task<IReadOnlyList<ShramSafal.Domain.Dfes.DailyRichnessAggregate>> GetDailyRichnessAggregatesForFarmAsync(
+        Guid farmId, CancellationToken ct = default)
+        => Task.FromResult<IReadOnlyList<ShramSafal.Domain.Dfes.DailyRichnessAggregate>>(
+            Array.Empty<ShramSafal.Domain.Dfes.DailyRichnessAggregate>());
+
+    // ── DFES (dfes-companion-2026-07-11) daily richness derivation ─────────────
+    Task<IReadOnlyList<DailyLog>> GetDailyLogsForFarmDateAsync(
+        Guid farmId, DateOnly localDate, CancellationToken ct = default)
+        => Task.FromResult<IReadOnlyList<DailyLog>>(Array.Empty<DailyLog>());
+
+    Task<IReadOnlyList<ShramSafal.Domain.Farms.ObservationEvent>> GetObservationEventsForDailyLogsAsync(
+        IReadOnlyCollection<Guid> dailyLogIds, CancellationToken ct = default)
+        => Task.FromResult<IReadOnlyList<ShramSafal.Domain.Farms.ObservationEvent>>(
+            Array.Empty<ShramSafal.Domain.Farms.ObservationEvent>());
+
+    Task<ShramSafal.Domain.Dfes.DailyRichnessAggregate?> GetDailyRichnessAggregateAsync(
+        Guid farmId, DateOnly localDate, CancellationToken ct = default)
+        => Task.FromResult<ShramSafal.Domain.Dfes.DailyRichnessAggregate?>(null);
+
+    Task AddDailyRichnessAggregateAsync(
+        ShramSafal.Domain.Dfes.DailyRichnessAggregate aggregate, CancellationToken ct = default)
+        => Task.CompletedTask;
+
+    // ── DFES Phase 5 — question-engine telemetry (append-only ssf.question_events) ──
+    /// <summary>
+    /// Stage an append-only <see cref="ShramSafal.Domain.Dfes.QuestionEvent"/> row.
+    /// No SaveChanges — the handler owns the commit. Default no-op keeps existing
+    /// in-tree test doubles compiling (mirrors AddWeatherStampAsync, L69).
+    /// </summary>
+    Task AddQuestionEventAsync(ShramSafal.Domain.Dfes.QuestionEvent e, CancellationToken ct = default)
+        => Task.CompletedTask;
+
+    /// <summary>
+    /// Read recent question_events for a farm (anti-repeat / cooldown feed). RLS
+    /// already scopes rows to the tenant; the app layer additionally membership-checks.
+    /// Default empty so test doubles compile.
+    /// </summary>
+    Task<IReadOnlyList<ShramSafal.Domain.Dfes.QuestionEvent>> GetRecentQuestionEventsForFarmAsync(
+        Guid farmId, DateTime sinceUtc, CancellationToken ct = default)
+        => Task.FromResult<IReadOnlyList<ShramSafal.Domain.Dfes.QuestionEvent>>(Array.Empty<ShramSafal.Domain.Dfes.QuestionEvent>());
 }

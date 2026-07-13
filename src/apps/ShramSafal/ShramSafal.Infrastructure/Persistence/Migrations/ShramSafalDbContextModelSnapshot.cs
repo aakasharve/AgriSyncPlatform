@@ -1340,6 +1340,287 @@ namespace ShramSafal.Infrastructure.Persistence.Migrations
                     b.ToTable("crop_cycles", "ssf");
                 });
 
+            modelBuilder.Entity("ShramSafal.Domain.Dfes.DailyRichnessAggregate", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid");
+
+                    b.Property<bool>("AdvancesBar")
+                        .HasColumnType("boolean")
+                        .HasColumnName("advances_bar");
+
+                    b.Property<bool>("AdvancesStreak")
+                        .HasColumnType("boolean")
+                        .HasColumnName("advances_streak");
+
+                    b.Property<string>("ComponentsJson")
+                        .IsRequired()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("components_json");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at_utc");
+
+                    b.Property<string>("DayClassification")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)")
+                        .HasColumnName("day_classification");
+
+                    b.Property<int?>("ExecutionScore")
+                        .HasColumnType("integer")
+                        .HasColumnName("execution_score");
+
+                    b.Property<string>("ExpectedStage")
+                        .HasMaxLength(60)
+                        .HasColumnType("character varying(60)")
+                        .HasColumnName("expected_stage");
+
+                    b.Property<Guid>("FarmId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("farm_id");
+
+                    b.Property<string>("FarmerConfirmedActualStage")
+                        .HasMaxLength(60)
+                        .HasColumnType("character varying(60)")
+                        .HasColumnName("farmer_confirmed_actual_stage");
+
+                    b.Property<bool>("HasDeclaredNoWorkReason")
+                        .HasColumnType("boolean")
+                        .HasColumnName("has_declared_no_work_reason");
+
+                    b.Property<bool>("HasDisturbance")
+                        .HasColumnType("boolean")
+                        .HasColumnName("has_disturbance");
+
+                    b.Property<bool>("HasExperimentOutcome")
+                        .HasColumnType("boolean")
+                        .HasColumnName("has_experiment_outcome");
+
+                    b.Property<bool>("HasLearning")
+                        .HasColumnType("boolean")
+                        .HasColumnName("has_learning");
+
+                    b.Property<bool>("HasMeaningfulObservation")
+                        .HasColumnType("boolean")
+                        .HasColumnName("has_meaningful_observation");
+
+                    b.Property<bool>("HasWork")
+                        .HasColumnType("boolean")
+                        .HasColumnName("has_work");
+
+                    b.Property<int?>("InsightScore")
+                        .HasColumnType("integer")
+                        .HasColumnName("insight_score");
+
+                    b.Property<int?>("LearningScore")
+                        .HasColumnType("integer")
+                        .HasColumnName("learning_score");
+
+                    b.Property<DateOnly>("LocalDate")
+                        .HasColumnType("date")
+                        .HasColumnName("local_date");
+
+                    b.Property<string>("NoWorkReasonCode")
+                        .HasMaxLength(60)
+                        .HasColumnType("character varying(60)")
+                        .HasColumnName("no_work_reason_code");
+
+                    b.Property<string>("RewardReasonsJson")
+                        .IsRequired()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("reward_reasons");
+
+                    b.Property<string>("ScoreEngineVersion")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)")
+                        .HasColumnName("score_engine_version");
+
+                    b.Property<int>("ShramPointsEarned")
+                        .HasColumnType("integer")
+                        .HasColumnName("shram_points_earned");
+
+                    b.Property<int?>("StageVarianceDays")
+                        .HasColumnType("integer")
+                        .HasColumnName("stage_variance_days");
+
+                    b.Property<string>("TimeZone")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)")
+                        .HasDefaultValue("Asia/Kolkata")
+                        .HasColumnName("time_zone");
+
+                    b.Property<DateTime>("UpdatedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at_utc");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("FarmId", "LocalDate")
+                        .IsUnique()
+                        .HasDatabaseName("ux_daily_richness_farm_local_date");
+
+                    b.ToTable("daily_richness_aggregates", "ssf");
+                });
+
+            modelBuilder.Entity("ShramSafal.Domain.Dfes.QuestionEvent", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ActualStageApplicability")
+                        .HasMaxLength(60)
+                        .HasColumnType("character varying(60)")
+                        .HasColumnName("actual_stage_applicability");
+
+                    b.Property<bool>("AgronomistApproved")
+                        .HasColumnType("boolean")
+                        .HasColumnName("agronomist_approved");
+
+                    b.Property<string>("AnchorDateType")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)")
+                        .HasColumnName("anchor_date_type");
+
+                    b.Property<string>("AnswerModes")
+                        .IsRequired()
+                        .HasMaxLength(60)
+                        .HasColumnType("character varying(60)")
+                        .HasColumnName("answer_modes");
+
+                    b.Property<Guid?>("AnswerObservationId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("answer_observation_id");
+
+                    b.Property<string>("BankVersion")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)")
+                        .HasColumnName("bank_version");
+
+                    b.Property<int>("Cooldown")
+                        .HasColumnType("integer")
+                        .HasColumnName("cooldown");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at_utc");
+
+                    b.Property<string>("Crop")
+                        .IsRequired()
+                        .HasMaxLength(60)
+                        .HasColumnType("character varying(60)")
+                        .HasColumnName("crop");
+
+                    b.Property<Guid?>("DailyLogId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("daily_log_id");
+
+                    b.Property<int>("DepthLevel")
+                        .HasColumnType("integer")
+                        .HasColumnName("depth_level");
+
+                    b.Property<string>("ExpectedStage")
+                        .HasMaxLength(60)
+                        .HasColumnType("character varying(60)")
+                        .HasColumnName("expected_stage");
+
+                    b.Property<Guid>("FarmId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("farm_id");
+
+                    b.Property<string>("Lens")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("lens");
+
+                    b.Property<bool>("MarathiApproved")
+                        .HasColumnType("boolean")
+                        .HasColumnName("marathi_approved");
+
+                    b.Property<bool?>("PhotoSubmitted")
+                        .HasColumnType("boolean")
+                        .HasColumnName("photo_submitted");
+
+                    b.Property<Guid?>("PlotId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("plot_id");
+
+                    b.Property<int>("Priority")
+                        .HasColumnType("integer")
+                        .HasColumnName("priority");
+
+                    b.Property<string>("QuestionEngineVersion")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)")
+                        .HasColumnName("question_engine_version");
+
+                    b.Property<string>("QuestionKey")
+                        .IsRequired()
+                        .HasMaxLength(120)
+                        .HasColumnType("character varying(120)")
+                        .HasColumnName("question_key");
+
+                    b.Property<string>("QuestionType")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)")
+                        .HasColumnName("question_type");
+
+                    b.Property<string>("Response")
+                        .HasColumnType("text")
+                        .HasColumnName("response");
+
+                    b.Property<string>("SafetyClass")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("safety_class");
+
+                    b.Property<DateTime?>("ShownAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("shown_at_utc");
+
+                    b.Property<bool?>("Skipped")
+                        .HasColumnType("boolean")
+                        .HasColumnName("skipped");
+
+                    b.Property<bool?>("StageConfirmed")
+                        .HasColumnType("boolean")
+                        .HasColumnName("stage_confirmed");
+
+                    b.Property<string>("TriggerReason")
+                        .HasColumnType("text")
+                        .HasColumnName("trigger_reason");
+
+                    b.Property<string>("TriggerType")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)")
+                        .HasColumnName("trigger_type");
+
+                    b.Property<string>("WeatherContext")
+                        .HasColumnType("text")
+                        .HasColumnName("weather_context");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("DailyLogId")
+                        .HasDatabaseName("ix_question_events_daily_log_id");
+
+                    b.HasIndex("FarmId")
+                        .HasDatabaseName("ix_question_events_farm_id");
+
+                    b.ToTable("question_events", "ssf");
+                });
+
             modelBuilder.Entity("ShramSafal.Domain.Farms.ApplicationInputItem", b =>
                 {
                     b.Property<Guid>("Id")
@@ -2106,23 +2387,64 @@ namespace ShramSafal.Infrastructure.Persistence.Migrations
                     b.Property<Guid>("Id")
                         .HasColumnType("uuid");
 
+                    b.Property<string>("Challenge")
+                        .HasColumnType("text")
+                        .HasColumnName("challenge");
+
+                    b.Property<string>("Change")
+                        .HasColumnType("text")
+                        .HasColumnName("change");
+
+                    b.Property<string>("Comparison")
+                        .HasColumnType("text")
+                        .HasColumnName("comparison");
+
                     b.Property<DateTime>("CreatedAtUtc")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at_utc");
+
+                    b.Property<string>("CropStage")
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)")
+                        .HasColumnName("crop_stage");
 
                     b.Property<Guid>("DailyLogId")
                         .HasColumnType("uuid")
                         .HasColumnName("daily_log_id");
 
+                    b.Property<string>("Evidence")
+                        .HasColumnType("text")
+                        .HasColumnName("evidence");
+
+                    b.Property<string>("FarmerConfirmedSummary")
+                        .HasColumnType("text")
+                        .HasColumnName("farmer_confirmed_summary");
+
+                    b.Property<string>("Hypothesis")
+                        .HasColumnType("text")
+                        .HasColumnName("hypothesis");
+
+                    b.Property<string>("Learning")
+                        .HasColumnType("text")
+                        .HasColumnName("learning");
+
                     b.Property<Guid?>("LinkedActivityId")
                         .HasColumnType("uuid")
                         .HasColumnName("linked_activity_id");
+
+                    b.Property<string>("NextAction")
+                        .HasColumnType("text")
+                        .HasColumnName("next_action");
 
                     b.Property<string>("NoteType")
                         .IsRequired()
                         .HasMaxLength(20)
                         .HasColumnType("character varying(20)")
                         .HasColumnName("note_type");
+
+                    b.Property<string>("Observation")
+                        .HasColumnType("text")
+                        .HasColumnName("observation");
 
                     b.Property<Guid?>("PlotId")
                         .HasColumnType("uuid")
@@ -2140,6 +2462,10 @@ namespace ShramSafal.Infrastructure.Persistence.Migrations
                         .HasColumnType("character varying(10)")
                         .HasColumnName("source");
 
+                    b.Property<Guid?>("SourceQuestionId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("source_question_id");
+
                     b.Property<string>("TagsJson")
                         .HasColumnType("jsonb")
                         .HasColumnName("tags");
@@ -2152,6 +2478,10 @@ namespace ShramSafal.Infrastructure.Persistence.Migrations
                         .IsRequired()
                         .HasColumnType("text")
                         .HasColumnName("text_raw");
+
+                    b.Property<string>("Uncertainty")
+                        .HasColumnType("text")
+                        .HasColumnName("uncertainty");
 
                     b.HasKey("Id");
 

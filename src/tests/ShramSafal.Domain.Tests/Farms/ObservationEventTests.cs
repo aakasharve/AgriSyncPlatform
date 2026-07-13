@@ -96,4 +96,26 @@ public sealed class ObservationEventTests
 
         Assert.Equal("leaf curl", obs.TextRaw);
     }
+
+    [Fact]
+    public void ApplyInsightEntry_sets_facet_fields_and_is_idempotent_overwrite()
+    {
+        var ev = ObservationEvent.Create(
+            Guid.NewGuid(), Guid.NewGuid(), null,
+            ObservationNoteType.Observation, ObservationSeverity.Normal, ObservationSource.Voice,
+            textRaw: "leaves yellowing on the east row", textCleaned: null,
+            tagsJson: null, linkedActivityId: null, createdAtUtc: DateTime.UtcNow);
+
+        ev.ApplyInsightEntry(
+            observation: "yellowing", change: "worse since yesterday", comparison: "east vs west",
+            challenge: "unsure if nitrogen", uncertainty: "maybe water", hypothesis: "nitrogen deficit",
+            evidence: "pale veins", learning: "check soil next", nextAction: "soil test",
+            cropStage: "flowering", farmerConfirmedSummary: "yellowing, will soil-test",
+            sourceQuestionId: Guid.NewGuid());
+
+        Assert.Equal("yellowing", ev.Observation);
+        Assert.Equal("nitrogen deficit", ev.Hypothesis);
+        Assert.Equal("flowering", ev.CropStage);
+        Assert.NotNull(ev.SourceQuestionId);
+    }
 }

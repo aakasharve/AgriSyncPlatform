@@ -41,6 +41,11 @@ public static class ModuleEndpoints
         group.MapReportEndpoints();
         group.MapAdminEndpoints();
         group.MapAttentionEndpoints();
+        // DFES companion (dfes-companion-2026-07-11) — read-only farmer
+        // engagement projection (streak / points / rich-day unlock bar).
+        group.MapDfesEndpoints();
+        // DFES Phase 5 — D8 question-engine telemetry (record + cooldown feed).
+        group.MapDfesQuestionEndpoints();
         group.MapReferenceDataEndpoints();
         group.MapAuditEndpoints();
         group.MapExportEndpoints();

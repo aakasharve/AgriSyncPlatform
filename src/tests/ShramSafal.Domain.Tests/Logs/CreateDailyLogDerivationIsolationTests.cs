@@ -166,6 +166,7 @@ public sealed class CreateDailyLogDerivationIsolationTests
             aiJobs,
             Microsoft.Extensions.Logging.Abstractions.NullLogger<CreateDailyLogHandler>.Instance,
             new LedgerDerivationService(repo),
+            new Common.NullDailyRichnessDerivationService(),
             dbContext: null);
 
     private sealed class SeededAiJobRepository(AiJob seededJob) : IAiJobRepository
