@@ -4,8 +4,10 @@
  *
  * useFarmerEngagement — read-only hook over GET /shramsafal/engagement.
  * Fetches the server-folded DFES engagement projection for one farm. The FETCH
- * is gated on the DFES feature flags (disciplineSystem OR understandingMeter):
- * with both OFF — the production default — this hook issues ZERO network calls.
+ * is gated on the DFES feature flags (disciplineSystem OR understandingMeter OR
+ * spokenUnlockReward — Task 8's spoken unlock reward reads `engagement.unlockStatus`
+ * from this same hook, so it needs the fetch too): with all three OFF — the
+ * production default — this hook issues ZERO network calls.
  * Returns null (no fetch) when farmId is absent. spec: dfes-companion-2026-07-11
  */
 import { useCallback, useEffect, useState } from 'react';
@@ -29,7 +31,9 @@ export function useFarmerEngagement(
 
     const refresh = useCallback(async () => {
         const dfesEnabled =
-            FEATURE_FLAGS.disciplineSystem || FEATURE_FLAGS.understandingMeter;
+            FEATURE_FLAGS.disciplineSystem ||
+            FEATURE_FLAGS.understandingMeter ||
+            FEATURE_FLAGS.spokenUnlockReward;
         if (!farmId || !dfesEnabled) {
             setEngagement(null);
             setError(null);

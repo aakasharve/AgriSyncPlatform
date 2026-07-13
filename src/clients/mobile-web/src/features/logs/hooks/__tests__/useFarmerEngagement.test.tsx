@@ -13,7 +13,10 @@ const dto = {
     unlockStatus: 'locked' as const,
 };
 
-async function loadHook(dfesEnabled: boolean) {
+async function loadHook(
+    dfesEnabled: boolean,
+    flagOverrides: { spokenUnlockReward?: boolean; understandingMeter?: boolean } = {},
+) {
     vi.resetModules();
     vi.doMock('../../../../infrastructure/api/AgriSyncClient', () => ({
         agriSyncClient: { getFarmerEngagement },
@@ -21,7 +24,8 @@ async function loadHook(dfesEnabled: boolean) {
     vi.doMock('../../../../app/featureFlags', () => ({
         FEATURE_FLAGS: {
             disciplineSystem: dfesEnabled,
-            understandingMeter: false,
+            understandingMeter: flagOverrides.understandingMeter ?? false,
+            spokenUnlockReward: flagOverrides.spokenUnlockReward ?? false,
             DwcChip: false,
         },
     }));
@@ -54,6 +58,15 @@ describe('useFarmerEngagement', () => {
         await waitFor(() => expect(result.current.isLoading).toBe(false));
         expect(getFarmerEngagement).not.toHaveBeenCalled();
         expect(result.current.engagement).toBeNull();
+    });
+
+    it('still fetches engagement when ONLY spokenUnlockReward is ON (understandingMeter + disciplineSystem OFF)', async () => {
+        getFarmerEngagement.mockResolvedValue(dto);
+        const useFarmerEngagement = await loadHook(false, { spokenUnlockReward: true });
+        const { result } = renderHook(() => useFarmerEngagement('farm-1'));
+
+        await waitFor(() => expect(result.current.engagement).toEqual(dto));
+        expect(getFarmerEngagement).toHaveBeenCalledWith('farm-1');
     });
 
     it('stays null and does not fetch when farmId is null', async () => {

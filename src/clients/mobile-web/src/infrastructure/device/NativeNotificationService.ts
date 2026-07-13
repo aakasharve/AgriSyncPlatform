@@ -1,4 +1,4 @@
-import { Capacitor } from '@capacitor/core';
+import { Capacitor, type PluginListenerHandle } from '@capacitor/core';
 import { LocalNotifications } from '@capacitor/local-notifications';
 
 /**
@@ -94,13 +94,18 @@ export class NativeNotificationService {
      * `/?nudge=open-today` URL to the caller's `navigate` (e.g.
      * `(url) => { window.location.href = url; }`) so the existing nudge
      * machinery routes it — no new routing path. No-op on web.
+     *
+     * Returns the `PluginListenerHandle` (or `null` on web / on a plugin
+     * failure) so the caller can `handle?.remove()` on effect cleanup —
+     * otherwise re-running the registering effect (language toggle,
+     * logout/login, dev double-invoke) stacks a new listener on every run.
      */
-    registerTapHandler(navigate: (url: string) => void): void {
+    async registerTapHandler(navigate: (url: string) => void): Promise<PluginListenerHandle | null> {
         if (!Capacitor.isNativePlatform()) {
-            return;
+            return null;
         }
-        void LocalNotifications.addListener('localNotificationActionPerformed', () => {
+        return LocalNotifications.addListener('localNotificationActionPerformed', () => {
             navigate(OPEN_TODAY_URL);
-        }).catch(() => undefined);
+        }).catch(() => null);
     }
 }

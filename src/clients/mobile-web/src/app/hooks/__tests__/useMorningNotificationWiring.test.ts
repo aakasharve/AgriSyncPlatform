@@ -44,6 +44,16 @@ describe('useMorningNotificationWiring — flag OFF (default)', () => {
         expect(service.scheduleDailyMorning).not.toHaveBeenCalled();
         expect(service.registerTapHandler).not.toHaveBeenCalled();
     });
+
+    it('unmounting is a no-op (nothing was ever registered, so there is nothing to remove)', () => {
+        const service = makeService();
+        const { unmount } = renderHook(() =>
+            useMorningNotificationWiring(true, 'आजची कामे पाहा', service as never),
+        );
+
+        expect(() => unmount()).not.toThrow();
+        expect(service.registerTapHandler).not.toHaveBeenCalled();
+    });
 });
 
 describe('useMorningNotificationWiring — flag ON', () => {
@@ -79,6 +89,27 @@ describe('useMorningNotificationWiring — flag ON', () => {
 
         await vi.waitFor(() => expect(service.requestPermission).toHaveBeenCalledTimes(1));
         expect(service.scheduleDailyMorning).not.toHaveBeenCalled();
+    });
+
+    it('removes the tap listener handle on unmount (no listener stacking across effect re-runs)', async () => {
+        const service = makeService();
+        const remove = vi.fn().mockResolvedValue(undefined);
+        service.requestPermission.mockResolvedValue(true);
+        service.scheduleDailyMorning.mockResolvedValue(undefined);
+        service.registerTapHandler.mockResolvedValue({ remove });
+
+        const { unmount } = renderHook(() =>
+            useMorningNotificationWiring(true, 'आजची कामे पाहा', service as never),
+        );
+
+        await vi.waitFor(() => expect(service.registerTapHandler).toHaveBeenCalledTimes(1));
+        // Let the async registerTapHandler() call resolve and assign the
+        // handle before unmounting, otherwise cleanup would race the assignment.
+        await new Promise((resolve) => setTimeout(resolve, 0));
+
+        unmount();
+
+        expect(remove).toHaveBeenCalledTimes(1);
     });
 
     it('the registered tap handler navigates to /?nudge=open-today', () => {

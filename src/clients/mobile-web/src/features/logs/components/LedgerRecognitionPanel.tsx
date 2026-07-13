@@ -24,10 +24,11 @@
  * because `weather` was never populated on DailyQuestionInputs. Forward-
  * looking planning caution ("wind's high / rain likely before your spray"),
  * never a judgement of past work. `hasActiveAlert` is deliberately omitted —
- * the saved log's own weatherStamp (which carries `alerts`) is not in this
- * panel's `savedLog` prop shape, and threading more of it in is out of scope
- * here (KISS); `hasActiveAlert` is optional on WeatherTriggerContext so
- * omitting it is honest, not a fabrication.
+ * threading the saved log's own weatherStamp `alerts` into this context is
+ * out of scope here (KISS), even though Task 4B below widens `savedLog` to
+ * the full `DailyLog` (so weatherStamp IS reachable from this panel now);
+ * `hasActiveAlert` is optional on WeatherTriggerContext so omitting it is
+ * honest, not a fabrication.
  *
  * Task 4B (spec: dfes-companion-2026-07-11): `savedLog` is widened from
  * `{ understanding? }` to the full `DailyLog` (mainView already passes the
