@@ -36,6 +36,7 @@ import { useLanguage } from '../../../i18n/LanguageContext';
 import type { VlogScore } from '../../../domain/types/log.types';
 import type { FarmerEngagementDto } from '../../../infrastructure/api/resources/DfesResource';
 import type { SelectedQuestion } from '../services/dfesQuestionEngine';
+import UnderstandingBar from './shramsathi/UnderstandingBar';
 
 // Marathi body text must render with Noto Sans Devanagari (incl. the Devanagari
 // numerals ०-९) — never system-ui / generic fallbacks. See CHARTER §Font rules.
@@ -108,6 +109,10 @@ export function MeterDisplay({
                         <p data-testid="day-understanding-value" className="mt-1 text-3xl font-bold text-stone-800">
                             {`${toMarathiNumber(dayUnderstandingScore)} / ${toMarathiNumber(UNDERSTANDING_MAX)}`}
                         </p>
+                        {/* Simple green→blue bar (colour borrowed from the waveform) under the number. */}
+                        <div className="mt-3">
+                            <UnderstandingBar score={dayUnderstandingScore} max={UNDERSTANDING_MAX} />
+                        </div>
                     </div>
                 ) : (
                     // score null OR fetch failed/offline → NO number, gentle pending.
