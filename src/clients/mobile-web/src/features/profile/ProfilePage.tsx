@@ -10,7 +10,7 @@
  */
 
 import React, { useState, useEffect, useRef } from 'react';
-import { User, Sprout, Zap, Tractor, FlaskConical, ArrowLeft, Globe, Shield, Mic } from 'lucide-react';
+import { User, Sprout, Zap, Tractor, FlaskConical, ArrowLeft, Globe, Shield, Download, Trash2, CreditCard } from 'lucide-react';
 import { idGenerator } from '../../core/domain/services/IdGenerator';
 import { useLanguage } from '../../i18n/LanguageContext';
 import { useAuth } from '../../app/providers/AuthProvider';
@@ -26,10 +26,11 @@ import MachinesSection from './sections/MachinesSection';
 import HealthSection from './sections/HealthSection';
 import AddPlotWizard from './components/AddPlotWizard';
 import { BoundaryMapModal } from './components/BoundaryMapModal';
-import type { HubSection } from './components/SetupHubAccordion';
 import { SetupHubMenu, type HubMenuItem } from './components/SetupHubMenu';
 import { useCropPlotState } from './hooks/useCropPlotState';
 import { useFarmAdminState } from './hooks/useFarmAdminState';
+import SubscriptionCard from '../admin/billing/SubscriptionCard';
+import { buildSettingsExtraIds } from './settingsItems';
 
 import type { CropProfile, FarmerProfile, FarmOperator, Person } from '../../types';
 
@@ -48,6 +49,9 @@ export type ProfileTab =
     | 'intelligence'
     | 'people';
 
+/** Local Hub section type (was imported from the now-removed SetupHubAccordion). */
+type HubSection = { id: ProfileTab; label: string; icon: React.ReactNode; body: React.ReactNode };
+
 interface ProfilePageProps {
     profile: FarmerProfile;
     crops: CropProfile[];
@@ -60,6 +64,9 @@ interface ProfilePageProps {
     onOpenScheduleLibrary?: (cropId?: string) => void;
     onOpenFinanceManager?: () => void;
     onOpenReferrals?: () => void;
+    onOpenConsent?: () => void;
+    onOpenExport?: () => void;
+    onOpenErasure?: () => void;
     onOpenQrDemo?: () => void;
     /** Leave the Profile screen (back to the main app / daily log). */
     onExit?: () => void;
@@ -76,6 +83,7 @@ const ProfilePage: React.FC<ProfilePageProps> = ({
     profile, crops, onUpdateProfile, onUpdateCrops,
     onAddPerson, onDeletePerson,
     onOpenScheduleLibrary, onOpenFinanceManager, onOpenReferrals,
+    onOpenConsent, onOpenExport, onOpenErasure,
     onExit,
     initialTab,
 }) => {
@@ -305,11 +313,24 @@ const ProfilePage: React.FC<ProfilePageProps> = ({
                 };
 
                 const langLabel = language === 'mr' ? 'मराठी' : 'English';
-                const settingsItems = [
-                    { id: 'language', label: 'भाषा · Language', icon: <Globe size={20} />, subtitle: langLabel },
-                    { id: 'permissions', label: 'अ‍ॅप परवानग्या · App permissions', icon: <Shield size={20} />, subtitle: 'GPS · Mic · Camera' },
-                    { id: 'voice', label: 'आवाज डायरी · Voice diary', icon: <Mic size={20} /> },
-                ];
+                // Billing farm = the app's current farm (or first membership) — MyFarmDto carries the subscription.
+                const billingFarm = farmAdmin.myMemberships.find(m => m.farmId === profileFarmId) ?? farmAdmin.myMemberships[0];
+                const isOwner = billingFarm?.role === 'PrimaryOwner';
+                const settingsMeta: Record<string, { label: string; icon: React.ReactNode; subtitle?: string }> = {
+                    language: { label: 'भाषा · Language', icon: <Globe size={20} />, subtitle: langLabel },
+                    consent: { label: 'गोपनीयता · Consent', icon: <Shield size={20} />, subtitle: 'तुमच्या परवानग्या · Your permissions' },
+                    export: { label: 'डेटा डाउनलोड · Export my data', icon: <Download size={20} />, subtitle: 'सर्व डेटाची प्रत · A copy of your data' },
+                    erase: { label: 'डेटा पुसा · Erase my data', icon: <Trash2 size={20} />, subtitle: 'कायमचा पुसा · Permanent' },
+                    billing: { label: 'बिलिंग · Billing', icon: <CreditCard size={20} />, subtitle: 'तुमचा प्लॅन · Your plan' },
+                };
+                const settingsItems = buildSettingsExtraIds(isOwner).map(id => ({ id, ...settingsMeta[id] }));
+
+                const handleSelectExtra = (id: string) => {
+                    if (id === 'consent') { onOpenConsent?.(); return; }
+                    if (id === 'export') { onOpenExport?.(); return; }
+                    if (id === 'erase') { onOpenErasure?.(); return; }
+                    setActiveExtra(id); // 'language' | 'billing' — folded sub-screens
+                };
 
                 // shared compact header with a clearly-labelled back button
                 const header = (title: string, onBack: () => void) => (
@@ -343,14 +364,15 @@ const ProfilePage: React.FC<ProfilePageProps> = ({
                         </div>
                     );
                 }
-                if (activeExtra) {
-                    const extraTitle = activeExtra === 'permissions' ? 'अ‍ॅप परवानग्या · App permissions' : 'आवाज डायरी · Voice diary';
+                if (activeExtra === 'billing') {
                     return (
                         <div>
-                            {header(extraTitle, () => setActiveExtra(null))}
-                            <div className="rounded-2xl border-2 border-dashed border-slate-200 bg-slate-50 p-10 text-center">
-                                <p className="text-sm font-semibold text-slate-400">लवकरच येत आहे · Coming soon</p>
-                            </div>
+                            {header('बिलिंग · Billing', () => setActiveExtra(null))}
+                            <SubscriptionCard
+                                subscription={billingFarm?.subscription}
+                                role={billingFarm?.role ?? ''}
+                                onManageBilling={() => window.alert('Billing portal coming soon. Contact support@shramsafal.in.')}
+                            />
                         </div>
                     );
                 }
@@ -373,7 +395,7 @@ const ProfilePage: React.FC<ProfilePageProps> = ({
                             onOpenFinance={onOpenFinanceManager}
                             onOpenReferrals={onOpenReferrals}
                             settingsItems={settingsItems}
-                            onSelectExtra={setActiveExtra}
+                            onSelectExtra={handleSelectExtra}
                             logout={logout}
                         />
                     );
