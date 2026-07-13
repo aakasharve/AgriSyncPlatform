@@ -199,6 +199,7 @@ const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ onContinue }) => {
 
                     <button
                         data-ws-anim
+                        data-testid="welcome-continue"
                         type="button"
                         onClick={onContinue}
                         className="group flex w-full items-center justify-center gap-2.5 rounded-full bg-gradient-to-r from-emerald-700 via-emerald-600 to-emerald-500 py-[17px] font-sans text-[17px] font-black text-white shadow-[0_16px_38px_-10px_rgba(4,120,87,0.6)] ring-1 ring-white/25 transition-transform active:scale-[0.98]"
