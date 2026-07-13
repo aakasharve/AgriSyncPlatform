@@ -251,3 +251,76 @@ describe('selectDailyQuestion — skip-aware cooldown (Task 2B)', () => {
         expect(r).toBeNull();
     });
 });
+
+// spec: dfes-companion-2026-07-11 (Task 3A) — Schedule tier, inserted BETWEEN
+// P3 StageWindow and P5 Gap. The real bank entry ships CONTENT-GATED
+// (agronomistApproved:false, marathiApproved:false — see dfesQuestionBank.ts),
+// so exercising SELECTION needs a substituted APPROVED fixture copy (same
+// vi.doMock + vi.resetModules() + dynamic-import isolation pattern as the
+// gap.dose approval-gate suite above), while the "stays inert" case is
+// proven against the REAL bank entry directly.
+describe('selectDailyQuestion — Schedule tier (Task 3A)', () => {
+    afterEach(() => {
+        vi.doUnmock('../dfesQuestionBank');
+        vi.resetModules();
+    });
+
+    /** Same shape as the real schedule.category_planned_not_done bank entry, minus the approval flags. */
+    const scheduleQuestionShape = {
+        questionKey: 'schedule.category_planned_not_done', crop: '*', triggerType: 'Schedule', questionType: 'gap_fill',
+        lens: 'Execution', depthLevel: 1, priority: 4, cooldownDays: 3, answerModes: 'choice,voice',
+        safetyClass: 'informational', anchorDateType: 'log_date',
+        promptMr: 'आज ठरलेलं {category} काम झालं का?',
+    } as const;
+
+    /** Mounts a `dfesQuestionBank` mock whose `findQuestion('schedule.category_planned_not_done')`
+     *  returns `question` (all other keys pass through to the REAL bank untouched). */
+    async function selectWithSubstitutedScheduleQuestion(question: DfesQuestion, extra: Partial<DailyQuestionInputs> = {}) {
+        vi.resetModules();
+        vi.doMock('../dfesQuestionBank', async () => {
+            const actual = await vi.importActual<typeof import('../dfesQuestionBank')>('../dfesQuestionBank');
+            return {
+                ...actual,
+                findQuestion: (key: string) =>
+                    key === 'schedule.category_planned_not_done' ? question : actual.findQuestion(key),
+            };
+        });
+        const { selectDailyQuestion: selectMocked } = await import('../dfesQuestionEngine');
+        return selectMocked(base(extra));
+    }
+
+    it('selects the schedule question (APPROVED fixture) ahead of Gap when no higher-priority trigger fires', async () => {
+        const approvedSchedule: DfesQuestion = { ...scheduleQuestionShape, agronomistApproved: true, marathiApproved: true };
+        const result = await selectWithSubstitutedScheduleQuestion(approvedSchedule, {
+            scheduleContext: { category: 'FOLIAR_SPRAY', categoryLabelMr: 'फवारणी' },
+        });
+        expect(result!.question.questionKey).toBe('schedule.category_planned_not_done');
+    });
+
+    it('a firing StageWindow still wins over Schedule (StageWindow=P3 is checked before Schedule=P4)', async () => {
+        const approvedSchedule: DfesQuestion = { ...scheduleQuestionShape, agronomistApproved: true, marathiApproved: true };
+        const result = await selectWithSubstitutedScheduleQuestion(approvedSchedule, {
+            stageContext: { crop: 'grapes', expectedStage: 'flowering' },
+            lastStageConfirm: null, // stage window open
+            scheduleContext: { category: 'FOLIAR_SPRAY', categoryLabelMr: 'फवारणी' },
+        });
+        expect(result!.question.questionKey).toBe('stage.confirm_current');
+    });
+
+    it('resolves {category} into resolvedPromptMr using scheduleContext.categoryLabelMr', async () => {
+        const approvedSchedule: DfesQuestion = { ...scheduleQuestionShape, agronomistApproved: true, marathiApproved: true };
+        const result = await selectWithSubstitutedScheduleQuestion(approvedSchedule, {
+            scheduleContext: { category: 'IRRIGATION', categoryLabelMr: 'सिंचन' },
+        });
+        expect(result!.resolvedPromptMr).toBe('आज ठरलेलं सिंचन काम झालं का?');
+    });
+
+    it('CONTENT GATE: with the REAL (unapproved) bank entry, the schedule question is never selected even when scheduleContext fires', () => {
+        const noGap: VlogScore = { score: 90, outcome: 'SCORED', dimensions: [] };
+        const result = selectDailyQuestion(base({
+            score: noGap,
+            scheduleContext: { category: 'FOLIAR_SPRAY', categoryLabelMr: 'फवारणी' },
+        }));
+        expect(result).toBeNull();
+    });
+});

@@ -15,7 +15,11 @@ import {
 } from '../../features/scheduler/planning/ClientPlanEngine';
 import { getDateKey } from '../../core/domain/services/DateKeyService';
 
-type OperationCategory = 'IRRIGATION' | 'FERTIGATION' | 'FOLIAR_SPRAY' | 'ACTIVITY';
+// spec: dfes-companion-2026-07-11 (Task 3A) — exported minimally so
+// dfesScheduleWindow.ts can reuse the SAME 4-bucket category union and
+// execution-counting primitive computeDayState/getOverdueStageSignal already
+// use, instead of re-implementing plan-vs-done arithmetic.
+export type OperationCategory = 'IRRIGATION' | 'FERTIGATION' | 'FOLIAR_SPRAY' | 'ACTIVITY';
 
 export type DayRiskStatus = 'stable' | 'risk_rising';
 
@@ -143,7 +147,11 @@ const getScopePlots = (crops: CropProfile[], scope?: ScopeOptions) => {
     });
 };
 
-const getExecutionCountByCategory = (logs: DailyLog[], category: OperationCategory): number => {
+// spec: dfes-companion-2026-07-11 (Task 3A) — exported minimally (was
+// module-private) so dfesScheduleWindow.ts can reuse the exact same
+// executed-count logic getOverdueStageSignal already relies on, rather than
+// duplicating its body.
+export const getExecutionCountByCategory = (logs: DailyLog[], category: OperationCategory): number => {
     if (category === 'IRRIGATION') {
         return logs.reduce((sum, log) => sum + (log.irrigation?.length || 0), 0);
     }

@@ -4,8 +4,8 @@
  *
  * dfesQuestionEngine — combined daily-question selector (Phase 5).
  *
- * Produces ONE question per farmer per local day using a 6-level priority ladder:
- *   1 Safety  2 Weather  3 StageWindow  4 Gap  5 Followup  6 Learning
+ * Produces ONE question per farmer per local day using a 7-level priority ladder:
+ *   1 Safety  2 Weather  3 StageWindow  4 Schedule  5 Gap  6 Followup  7 Learning
  * Applies per-question anti-repeat cooldowns (from recent question_events),
  * enforces the hard AgronomistApproved && MarathiApproved gate, and gates the
  * Learning tier behind DFES_TUNING.richDayThreshold. Pure: no React/DOM/network.
@@ -16,6 +16,7 @@ import type { VlogScore } from '../../../domain/types/log.types';
 import type { StageContext } from './meterGaps';
 import { rankMeterGaps } from './meterGaps';
 import { isStageConfirmationWindowOpen, type LastStageConfirm } from './dfesStageWindow';
+import type { ScheduleGapContext } from './dfesScheduleWindow';
 import {
     TRIGGER_CONFIG, MAX_QUESTIONS_PER_DAY,
     findQuestion, findGapQuestion, type DfesQuestion, type DfesAnswerOption,
@@ -62,6 +63,8 @@ export interface DailyQuestionInputs {
     stageContext?: StageContext;
     lastStageConfirm?: LastStageConfirm | null;
     weather?: WeatherTriggerContext;
+    /** Task 3A — category-scoped "planned but not done today" signal (dfesScheduleWindow.ts). */
+    scheduleContext?: ScheduleGapContext;
     engagement: { totalRichDays: number; unlockStatus: 'locked' | 'unlocked' };
     recentEvents: RecentQuestionEvent[];
     openObservation?: { summary: string };
@@ -100,7 +103,8 @@ function eligible(q: DfesQuestion | undefined, recent: RecentQuestionEvent[]): q
 function resolvePrompt(promptMr: string, inputs: DailyQuestionInputs): string {
     return promptMr
         .replace('{crop}', inputs.crop)
-        .replace('{observation}', inputs.openObservation?.summary ?? '');
+        .replace('{observation}', inputs.openObservation?.summary ?? '')
+        .replace('{category}', inputs.scheduleContext?.categoryLabelMr ?? '');
 }
 
 function pack(q: DfesQuestion, inputs: DailyQuestionInputs, reason: string): SelectedQuestion {
@@ -142,7 +146,14 @@ export function selectDailyQuestion(inputs: DailyQuestionInputs): SelectedQuesti
         if (eligible(q, recent)) return pack(q, inputs, `stage window open (expected=${inputs.stageContext?.expectedStage})`);
     }
 
-    // P4 Gap — biggest comprehension gap from the (stage-aware) ranker.
+    // P3.5 Schedule — category-scoped "was today's planned {category} work done?"
+    // (Task 3A). Category-level only — never a fabricated precise task claim.
+    if (inputs.scheduleContext) {
+        const q = findQuestion('schedule.category_planned_not_done');
+        if (eligible(q, recent)) return pack(q, inputs, `schedule gap: ${inputs.scheduleContext.category} planned, 0 done today`);
+    }
+
+    // P5 Gap — biggest comprehension gap from the (stage-aware) ranker.
     if (inputs.score) {
         for (const gap of rankMeterGaps(inputs.score, inputs.stageContext, 8)) {
             const q = findGapQuestion(gap.dimension);
@@ -150,13 +161,13 @@ export function selectDailyQuestion(inputs: DailyQuestionInputs): SelectedQuesti
         }
     }
 
-    // P5 Followup — an open observation awaiting an outcome.
+    // P6 Followup — an open observation awaiting an outcome.
     if (inputs.openObservation) {
         const q = findQuestion('followup.observation_outcome');
         if (eligible(q, recent)) return pack(q, inputs, 'open observation outcome');
     }
 
-    // P6 Learning — deepen once the farmer has EARNED it (>= richDayThreshold rich days).
+    // P7 Learning — deepen once the farmer has EARNED it (>= richDayThreshold rich days).
     if (inputs.engagement.totalRichDays >= DFES_TUNING.richDayThreshold) {
         for (const key of ['learning.deepen_hypothesis', 'learning.next_experiment']) {
             const q = findQuestion(key);

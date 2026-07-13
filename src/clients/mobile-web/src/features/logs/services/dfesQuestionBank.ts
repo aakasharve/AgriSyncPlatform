@@ -4,10 +4,15 @@
  *
  * dfesQuestionBank — versioned, code-reviewed D8 question bank (Phase 5).
  *
- * HARD GATE: every entry MUST be agronomistApproved && marathiApproved — an
- * unapproved question can never physically live in this array (asserted by
- * dfesQuestionBank.test.ts). Copy is FINAL Marathi (promotes the placeholder
- * strings that meterGaps.ts flagged as "polish-pass" debt).
+ * HARD GATE: every entry MUST be agronomistApproved && marathiApproved UNLESS
+ * explicitly marked with a `// CONTENT GATE:` comment — a deliberately-inert
+ * entry pending agronomist + Marathi review (today: only
+ * 'schedule.category_planned_not_done', Task 3A). The engine's `approved()`
+ * gate in dfesQuestionEngine.ts means a content-gated entry can physically
+ * exist in this array yet can NEVER be selected in production until its
+ * flags flip — asserted by dfesQuestionBank.test.ts. Copy is FINAL Marathi
+ * everywhere else (promotes the placeholder strings that meterGaps.ts
+ * flagged as "polish-pass" debt).
  *
  * Column parity: each field maps 1:1 onto an ssf.question_events column so the
  * telemetry row is a straight projection of the selected entry.
@@ -30,7 +35,7 @@ export const TRIGGER_CONFIG = {
 } as const;
 
 export type QuestionLens = 'Execution' | 'Insight' | 'Learning';
-export type QuestionTriggerType = 'Safety' | 'Weather' | 'StageWindow' | 'Gap' | 'Followup' | 'Learning';
+export type QuestionTriggerType = 'Safety' | 'Weather' | 'StageWindow' | 'Schedule' | 'Gap' | 'Followup' | 'Learning';
 export type QuestionAnchorDateType = 'log_date' | 'stage_start' | 'weather_event' | 'none';
 
 export interface DfesQuestion {
@@ -72,8 +77,12 @@ export interface DfesAnswerOption {
     stageConfirmedValue?: boolean;
 }
 
-// Priority tiers (1 highest). Selection walks these in order.
-const P_SAFETY = 1, P_WEATHER = 2, P_STAGE = 3, P_GAP = 4, P_FOLLOWUP = 5, P_LEARNING = 6;
+// Priority tiers (1 highest). Selection walks these in order. Renumbered for
+// Task 3A to make room for P_SCHEDULE between StageWindow and Gap — Priority
+// is persisted to ssf.question_events.Priority, an `int` column
+// (ShramSafal.Domain/Dfes/QuestionEvent.cs), so a fractional in-between value
+// is not schema-safe; whole-tier renumbering is the honest fix.
+const P_SAFETY = 1, P_WEATHER = 2, P_STAGE = 3, P_SCHEDULE = 4, P_GAP = 5, P_FOLLOWUP = 6, P_LEARNING = 7;
 
 const APPROVED = { agronomistApproved: true, marathiApproved: true } as const;
 
@@ -144,6 +153,21 @@ const TRIGGER_ENTRIES: DfesQuestion[] = [
         // fixed choice set). `answerOptions` is left undefined so this
         // question stays ack/skip-only (tap-to-answer v1) until an
         // agronomist supplies approved Marathi stage-option copy.
+    },
+    {
+        questionKey: 'schedule.category_planned_not_done', crop: '*', triggerType: 'Schedule', questionType: 'gap_fill',
+        lens: 'Execution', depthLevel: 1, priority: P_SCHEDULE, cooldownDays: 3, answerModes: 'choice,voice',
+        safetyClass: 'informational', anchorDateType: 'log_date', expectedStageApplicability: 'current_stage',
+        // DRAFT Marathi — CONTENT GATE: this entry is mechanism-only (Task
+        // 3A). The plan data behind it is real (every plot has a live
+        // schedule) but only trustworthy at the CATEGORY level, so the
+        // prompt only ever asks about a category, never a fabricated
+        // precise task name. It needs agronomist + Marathi sign-off before
+        // it can fire — inert until agronomistApproved/marathiApproved flip
+        // true (dfesQuestionEngine.ts's approved() hard gate keeps it out of
+        // production selection regardless of the stageQuestions flag).
+        promptMr: 'आज ठरलेलं {category} काम झालं का?',
+        agronomistApproved: false, marathiApproved: false,
     },
     {
         questionKey: 'followup.observation_outcome', crop: '*', triggerType: 'Followup', questionType: 'observation',

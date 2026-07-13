@@ -3,12 +3,30 @@ import {
     DFES_QUESTION_BANK, BANK_VERSION, QUESTION_ENGINE_VERSION, findGapQuestion, findQuestion,
 } from '../dfesQuestionBank';
 
+// spec: dfes-companion-2026-07-11 (Task 3A) — the ONLY documented content-gate
+// exception to the hard AgronomistApproved && MarathiApproved invariant below.
+const CONTENT_GATED_KEYS = new Set(['schedule.category_planned_not_done']);
+
 describe('DFES question bank v1 (Phase 5)', () => {
-    it('every bank entry passes the hard AgronomistApproved && MarathiApproved gate', () => {
+    it('every bank entry passes the hard AgronomistApproved && MarathiApproved gate, except documented content-gated entries', () => {
         for (const q of DFES_QUESTION_BANK) {
+            if (CONTENT_GATED_KEYS.has(q.questionKey)) continue;
             expect(q.agronomistApproved, `${q.questionKey} agronomistApproved`).toBe(true);
             expect(q.marathiApproved, `${q.questionKey} marathiApproved`).toBe(true);
         }
+    });
+
+    // spec: dfes-companion-2026-07-11 (Task 3A) — the schedule question ships as
+    // mechanism-only: present in the bank, keyed and typed correctly, but
+    // deliberately INERT (both approval flags false) until an agronomist +
+    // Marathi reviewer signs off. This is the honest content-gate lock the
+    // engine's approved() gate enforces even with stageQuestions flag ON.
+    it('CONTENT GATE: schedule.category_planned_not_done is present but inert (agronomistApproved:false) pending review', () => {
+        const q = findQuestion('schedule.category_planned_not_done');
+        expect(q).toBeDefined();
+        expect(q!.triggerType).toBe('Schedule');
+        expect(q!.agronomistApproved).toBe(false);
+        expect(q!.marathiApproved).toBe(false);
     });
 
     it('stamps a stable BANK_VERSION and QUESTION_ENGINE_VERSION', () => {
@@ -36,10 +54,10 @@ describe('DFES question bank v1 (Phase 5)', () => {
         expect(new Set(keys).size).toBe(keys.length);
     });
 
-    it('assigns a valid 1..6 priority and a 1..4 depthLevel to every entry', () => {
+    it('assigns a valid 1..7 priority and a 1..4 depthLevel to every entry', () => {
         for (const q of DFES_QUESTION_BANK) {
             expect(q.priority).toBeGreaterThanOrEqual(1);
-            expect(q.priority).toBeLessThanOrEqual(6);
+            expect(q.priority).toBeLessThanOrEqual(7);
             expect(q.depthLevel).toBeGreaterThanOrEqual(1);
             expect(q.depthLevel).toBeLessThanOrEqual(4);
         }
