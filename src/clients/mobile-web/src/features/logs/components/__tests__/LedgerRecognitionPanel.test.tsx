@@ -47,6 +47,7 @@ import type { DetailedWeather } from '../../../../domain/types/weather.types';
 const useFarmerEngagementMock = vi.fn();
 const useDfesQuestionMock = vi.fn();
 const computeScheduleGapMock = vi.fn();
+const reconcileWeatherMock = vi.fn();
 
 vi.mock('../../hooks/useFarmerEngagement', () => ({
     useFarmerEngagement: (...args: unknown[]) => useFarmerEngagementMock(...args),
@@ -59,6 +60,12 @@ vi.mock('../../hooks/useDfesQuestion', () => ({
 // arithmetic (covered separately by dfesScheduleWindow.test.ts).
 vi.mock('../../services/dfesScheduleWindow', () => ({
     computeScheduleGap: (...args: unknown[]) => computeScheduleGapMock(...args),
+}));
+// Task 4B: mock the pure signal so these wiring tests stay focused on the
+// panel's own call-site behaviour (gate + arg-threading), not severe-weather
+// threshold arithmetic (covered separately by dfesWeatherReconcile.test.ts).
+vi.mock('../../services/dfesWeatherReconcile', () => ({
+    reconcileWeather: (...args: unknown[]) => reconcileWeatherMock(...args),
 }));
 // The panel renders the real MeterDisplay (Slice 3b), which fetches the server
 // /10 via useDayUnderstanding and reads copy via useLanguage. Mock both so these
@@ -74,6 +81,18 @@ const engagementDto = {
     currentStreak: 3, longestStreak: 5, totalShramPoints: 40,
     lastAccountedDate: '2026-07-10', totalRichDays: 12, unlockStatus: 'unlocked' as const,
 };
+
+/** Minimal valid DailyLog fixture (Task 4B widened `savedLog` to the full DailyLog type). */
+function makeSavedLog(overrides: Partial<DailyLog> = {}): DailyLog {
+    return {
+        id: 'log-1', date: '2026-07-11',
+        context: { selection: [] },
+        dayOutcome: 'WORK_RECORDED',
+        cropActivities: [], irrigation: [], labour: [], inputs: [], machinery: [],
+        financialSummary: { totalLabourCost: 0, totalInputCost: 0, totalMachineryCost: 0, grandTotal: 0 },
+        ...overrides,
+    };
+}
 
 async function loadComponent(stageQuestions = true) {
     vi.resetModules();
@@ -99,9 +118,11 @@ beforeEach(() => {
     useFarmerEngagementMock.mockReset();
     useDfesQuestionMock.mockReset();
     computeScheduleGapMock.mockReset();
+    reconcileWeatherMock.mockReset();
     useFarmerEngagementMock.mockReturnValue({ engagement: engagementDto, isLoading: false, error: null, refresh: vi.fn() });
     useDfesQuestionMock.mockReturnValue({ selected: null, loading: false, recordOutcome: vi.fn() });
     computeScheduleGapMock.mockReturnValue(null);
+    reconcileWeatherMock.mockReturnValue(null);
 });
 
 afterEach(() => {
@@ -119,7 +140,7 @@ describe('LedgerRecognitionPanel (Phase 5, Task 5.9)', () => {
                 plotId="plot-9"
                 crop="grapes"
                 todayLocalDate="2026-07-11"
-                savedLog={{ understanding: { score: 78, outcome: 'SCORED', dimensions: [] } }}
+                savedLog={makeSavedLog({ understanding: { score: 78, outcome: 'SCORED', dimensions: [] } })}
                 allLogs={[]}
             />,
         );
@@ -292,5 +313,66 @@ describe('LedgerRecognitionPanel — weather-trigger wiring (Task 4A, spec: dfes
 
         const [, , questionInputs] = useDfesQuestionMock.mock.calls[0];
         expect(questionInputs.weather).toBeUndefined();
+    });
+});
+
+describe('LedgerRecognitionPanel — weather-reconcile wiring (Task 4B, spec: dfes-companion-2026-07-11)', () => {
+    const severeWeatherSavedLog: DailyLog = makeSavedLog({
+        weatherStamp: {
+            id: 'ws-1', plotId: 'plot-9', timestampLocal: '2026-07-11T06:00:00', timestampProvider: '2026-07-11T06:00:00Z',
+            provider: 'tomorrow.io', tempC: 26, humidity: 80, windKph: 20, precipMm: 25, cloudCoverPct: 90,
+            conditionText: 'Heavy rain', iconCode: '1000', rainProbNext6h: 90,
+        },
+        // no disturbance logged — the "no logged impact" half of the signal.
+    });
+
+    it('threads a real weatherReconcileContext from a severe-weather savedLog with no disturbance', async () => {
+        const context = { severity: 'severe' as const, reason: 'precipMm 25 >= 15' };
+        reconcileWeatherMock.mockReturnValue(context);
+        const { LedgerRecognitionPanel } = await loadComponent();
+        render(
+            <LedgerRecognitionPanel
+                farmId="farm-1"
+                plotId="plot-9"
+                todayLocalDate="2026-07-11"
+                allLogs={[]}
+                savedLog={severeWeatherSavedLog}
+            />,
+        );
+
+        expect(reconcileWeatherMock).toHaveBeenCalledWith(severeWeatherSavedLog);
+        const [, , questionInputs] = useDfesQuestionMock.mock.calls[0];
+        expect(questionInputs.weatherReconcileContext).toEqual(context);
+    });
+
+    it('leaves questionInputs.weatherReconcileContext undefined when reconcileWeather finds nothing', async () => {
+        reconcileWeatherMock.mockReturnValue(null);
+        const { LedgerRecognitionPanel } = await loadComponent();
+        render(
+            <LedgerRecognitionPanel farmId="farm-1" plotId="plot-9" allLogs={[]} savedLog={severeWeatherSavedLog} />,
+        );
+
+        const [, , questionInputs] = useDfesQuestionMock.mock.calls[0];
+        expect(questionInputs.weatherReconcileContext).toBeUndefined();
+    });
+
+    it('never calls reconcileWeather when stageQuestions is OFF — zero extra work in a flag-off production build', async () => {
+        const { LedgerRecognitionPanel } = await loadComponent(false);
+        render(
+            <LedgerRecognitionPanel farmId="farm-1" allLogs={[]} savedLog={severeWeatherSavedLog} />,
+        );
+
+        expect(reconcileWeatherMock).not.toHaveBeenCalled();
+        const [, , questionInputs] = useDfesQuestionMock.mock.calls[0];
+        expect(questionInputs.weatherReconcileContext).toBeUndefined();
+    });
+
+    it('never calls reconcileWeather when farmId is null, even with stageQuestions ON', async () => {
+        const { LedgerRecognitionPanel } = await loadComponent(true);
+        render(
+            <LedgerRecognitionPanel farmId={null} allLogs={[]} savedLog={severeWeatherSavedLog} />,
+        );
+
+        expect(reconcileWeatherMock).not.toHaveBeenCalled();
     });
 });

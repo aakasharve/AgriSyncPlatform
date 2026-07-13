@@ -4,8 +4,9 @@
  *
  * dfesQuestionEngine — combined daily-question selector (Phase 5).
  *
- * Produces ONE question per farmer per local day using a 7-level priority ladder:
- *   1 Safety  2 Weather  3 StageWindow  4 Schedule  5 Gap  6 Followup  7 Learning
+ * Produces ONE question per farmer per local day using an 8-level priority ladder:
+ *   1 Safety  2 Weather  3 StageWindow  4 Schedule  5 WeatherReconcile  6 Gap
+ *   7 Followup  8 Learning
  * Applies per-question anti-repeat cooldowns (from recent question_events),
  * enforces the hard AgronomistApproved && MarathiApproved gate, and gates the
  * Learning tier behind DFES_TUNING.richDayThreshold. Pure: no React/DOM/network.
@@ -17,6 +18,7 @@ import type { StageContext } from './meterGaps';
 import { rankMeterGaps } from './meterGaps';
 import { isStageConfirmationWindowOpen, type LastStageConfirm } from './dfesStageWindow';
 import type { ScheduleGapContext } from './dfesScheduleWindow';
+import type { WeatherReconcileContext } from './dfesWeatherReconcile';
 import {
     TRIGGER_CONFIG, MAX_QUESTIONS_PER_DAY,
     findQuestion, findGapQuestion, type DfesQuestion, type DfesAnswerOption,
@@ -65,6 +67,8 @@ export interface DailyQuestionInputs {
     weather?: WeatherTriggerContext;
     /** Task 3A — category-scoped "planned but not done today" signal (dfesScheduleWindow.ts). */
     scheduleContext?: ScheduleGapContext;
+    /** Task 4B — severe-weather-with-no-logged-impact care-check signal (dfesWeatherReconcile.ts). */
+    weatherReconcileContext?: WeatherReconcileContext;
     engagement: { totalRichDays: number; unlockStatus: 'locked' | 'unlocked' };
     recentEvents: RecentQuestionEvent[];
     openObservation?: { summary: string };
@@ -153,7 +157,15 @@ export function selectDailyQuestion(inputs: DailyQuestionInputs): SelectedQuesti
         if (eligible(q, recent)) return pack(q, inputs, `schedule gap: ${inputs.scheduleContext.category} planned, 0 done today`);
     }
 
-    // P5 Gap — biggest comprehension gap from the (stage-aware) ranker.
+    // P5 WeatherReconcile — severe weather recorded, no logged impact (Task
+    // 4B). A warm care-check, never a doubt of the farmer's account — more
+    // relevant than a generic gap, so it sits ahead of Gap.
+    if (inputs.weatherReconcileContext) {
+        const q = findQuestion('weather.severe_care_check');
+        if (eligible(q, recent)) return pack(q, inputs, `weather reconcile: ${inputs.weatherReconcileContext.reason}`);
+    }
+
+    // P6 Gap — biggest comprehension gap from the (stage-aware) ranker.
     if (inputs.score) {
         for (const gap of rankMeterGaps(inputs.score, inputs.stageContext, 8)) {
             const q = findGapQuestion(gap.dimension);
@@ -161,13 +173,13 @@ export function selectDailyQuestion(inputs: DailyQuestionInputs): SelectedQuesti
         }
     }
 
-    // P6 Followup — an open observation awaiting an outcome.
+    // P7 Followup — an open observation awaiting an outcome.
     if (inputs.openObservation) {
         const q = findQuestion('followup.observation_outcome');
         if (eligible(q, recent)) return pack(q, inputs, 'open observation outcome');
     }
 
-    // P7 Learning — deepen once the farmer has EARNED it (>= richDayThreshold rich days).
+    // P8 Learning — deepen once the farmer has EARNED it (>= richDayThreshold rich days).
     if (inputs.engagement.totalRichDays >= DFES_TUNING.richDayThreshold) {
         for (const key of ['learning.deepen_hypothesis', 'learning.next_experiment']) {
             const q = findQuestion(key);

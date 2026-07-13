@@ -344,3 +344,90 @@ describe('selectDailyQuestion — Schedule tier (Task 3A)', () => {
         expect(result).toBeNull();
     });
 });
+
+// spec: dfes-companion-2026-07-11 (Task 4B) — WeatherReconcile tier, inserted
+// BETWEEN P4 Schedule and P6 Gap. The real bank entry ships CONTENT-GATED
+// (agronomistApproved:false, marathiApproved:false — see dfesQuestionBank.ts),
+// so exercising SELECTION needs a substituted APPROVED fixture copy (same
+// vi.doMock + vi.resetModules() + dynamic-import isolation pattern as the
+// Schedule tier suite above), while the "stays inert" case is proven against
+// the REAL bank entry directly.
+describe('selectDailyQuestion — WeatherReconcile tier (Task 4B)', () => {
+    afterEach(() => {
+        vi.doUnmock('../dfesQuestionBank');
+        vi.resetModules();
+    });
+
+    /** Same shape as the real weather.severe_care_check bank entry, minus the approval flags. */
+    const weatherReconcileQuestionShape = {
+        questionKey: 'weather.severe_care_check', crop: '*', triggerType: 'WeatherReconcile', questionType: 'observation',
+        lens: 'Execution', depthLevel: 1, priority: 5, cooldownDays: 1, answerModes: 'choice,voice',
+        safetyClass: 'informational', anchorDateType: 'log_date',
+        promptMr: 'आज हवामान बरंच खराब होतं — सगळं ठीक होतं ना?',
+    } as const;
+
+    /** Mounts a `dfesQuestionBank` mock whose `findQuestion('weather.severe_care_check')`
+     *  returns `question` (all other keys pass through to the REAL bank untouched). */
+    async function selectWithSubstitutedWeatherReconcileQuestion(question: DfesQuestion, extra: Partial<DailyQuestionInputs> = {}) {
+        vi.resetModules();
+        vi.doMock('../dfesQuestionBank', async () => {
+            const actual = await vi.importActual<typeof import('../dfesQuestionBank')>('../dfesQuestionBank');
+            return {
+                ...actual,
+                findQuestion: (key: string) =>
+                    key === 'weather.severe_care_check' ? question : actual.findQuestion(key),
+            };
+        });
+        const { selectDailyQuestion: selectMocked } = await import('../dfesQuestionEngine');
+        return selectMocked(base(extra));
+    }
+
+    it('selects the weather-reconcile question (APPROVED fixture) ahead of Gap when no higher-priority trigger fires', async () => {
+        const approvedReconcile: DfesQuestion = { ...weatherReconcileQuestionShape, agronomistApproved: true, marathiApproved: true };
+        const noGap: VlogScore = { score: 90, outcome: 'SCORED', dimensions: [] };
+        const result = await selectWithSubstitutedWeatherReconcileQuestion(approvedReconcile, {
+            score: noGap,
+            weatherReconcileContext: { severity: 'severe', reason: 'precipMm 20 >= 15' },
+        });
+        expect(result!.question.questionKey).toBe('weather.severe_care_check');
+    });
+
+    it('a firing Schedule still wins over WeatherReconcile (Schedule=P4 is checked before WeatherReconcile=P5)', async () => {
+        const approvedReconcile: DfesQuestion = { ...weatherReconcileQuestionShape, agronomistApproved: true, marathiApproved: true };
+        vi.resetModules();
+        vi.doMock('../dfesQuestionBank', async () => {
+            const actual = await vi.importActual<typeof import('../dfesQuestionBank')>('../dfesQuestionBank');
+            const approvedSchedule: DfesQuestion = {
+                questionKey: 'schedule.category_planned_not_done', crop: '*', triggerType: 'Schedule', questionType: 'gap_fill',
+                lens: 'Execution', depthLevel: 1, priority: 4, cooldownDays: 3, answerModes: 'choice,voice',
+                safetyClass: 'informational', anchorDateType: 'log_date',
+                promptMr: 'आज ठरलेलं {category} काम झालं का?', agronomistApproved: true, marathiApproved: true,
+            };
+            return {
+                ...actual,
+                findQuestion: (key: string) => {
+                    if (key === 'weather.severe_care_check') return approvedReconcile;
+                    if (key === 'schedule.category_planned_not_done') return approvedSchedule;
+                    return actual.findQuestion(key);
+                },
+            };
+        });
+        const { selectDailyQuestion: selectMocked } = await import('../dfesQuestionEngine');
+        const noGap: VlogScore = { score: 90, outcome: 'SCORED', dimensions: [] };
+        const result = selectMocked(base({
+            score: noGap,
+            scheduleContext: { category: 'FOLIAR_SPRAY', categoryLabelMr: 'फवारणी' },
+            weatherReconcileContext: { severity: 'severe', reason: 'precipMm 20 >= 15' },
+        }));
+        expect(result!.question.questionKey).toBe('schedule.category_planned_not_done');
+    });
+
+    it('CONTENT GATE: with the REAL (unapproved) bank entry, the weather-reconcile question is never selected even when weatherReconcileContext fires', () => {
+        const noGap: VlogScore = { score: 90, outcome: 'SCORED', dimensions: [] };
+        const result = selectDailyQuestion(base({
+            score: noGap,
+            weatherReconcileContext: { severity: 'severe', reason: 'precipMm 20 >= 15' },
+        }));
+        expect(result).toBeNull();
+    });
+});

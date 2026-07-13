@@ -6,13 +6,13 @@
  *
  * HARD GATE: every entry MUST be agronomistApproved && marathiApproved UNLESS
  * explicitly marked with a `// CONTENT GATE:` comment — a deliberately-inert
- * entry pending agronomist + Marathi review (today: only
- * 'schedule.category_planned_not_done', Task 3A). The engine's `approved()`
- * gate in dfesQuestionEngine.ts means a content-gated entry can physically
- * exist in this array yet can NEVER be selected in production until its
- * flags flip — asserted by dfesQuestionBank.test.ts. Copy is FINAL Marathi
- * everywhere else (promotes the placeholder strings that meterGaps.ts
- * flagged as "polish-pass" debt).
+ * entry pending agronomist + Marathi review (today:
+ * 'schedule.category_planned_not_done' Task 3A, and 'weather.severe_care_check'
+ * Task 4B). The engine's `approved()` gate in dfesQuestionEngine.ts means a
+ * content-gated entry can physically exist in this array yet can NEVER be
+ * selected in production until its flags flip — asserted by
+ * dfesQuestionBank.test.ts. Copy is FINAL Marathi everywhere else (promotes
+ * the placeholder strings that meterGaps.ts flagged as "polish-pass" debt).
  *
  * Column parity: each field maps 1:1 onto an ssf.question_events column so the
  * telemetry row is a straight projection of the selected entry.
@@ -35,7 +35,7 @@ export const TRIGGER_CONFIG = {
 } as const;
 
 export type QuestionLens = 'Execution' | 'Insight' | 'Learning';
-export type QuestionTriggerType = 'Safety' | 'Weather' | 'StageWindow' | 'Schedule' | 'Gap' | 'Followup' | 'Learning';
+export type QuestionTriggerType = 'Safety' | 'Weather' | 'StageWindow' | 'Schedule' | 'WeatherReconcile' | 'Gap' | 'Followup' | 'Learning';
 export type QuestionAnchorDateType = 'log_date' | 'stage_start' | 'weather_event' | 'none';
 
 export interface DfesQuestion {
@@ -45,7 +45,7 @@ export interface DfesQuestion {
     questionType: string;                // -> QuestionType ('gap_fill'|'stage_confirm'|'weather_check'|'observation'|'experiment')
     lens: QuestionLens;                  // -> Lens
     depthLevel: number;                  // -> DepthLevel (1 notice .. 4 experiment)
-    priority: number;                    // -> Priority (1 highest .. 7 lowest)
+    priority: number;                    // -> Priority (1 highest .. 8 lowest)
     cooldownDays: number;                // -> Cooldown
     answerModes: string;                 // -> AnswerModes ('voice'|'voice,photo'|'choice,voice')
     safetyClass: string;                 // -> SafetyClass ('informational'|'advisory'|'safety_critical')
@@ -78,11 +78,13 @@ export interface DfesAnswerOption {
 }
 
 // Priority tiers (1 highest). Selection walks these in order. Renumbered for
-// Task 3A to make room for P_SCHEDULE between StageWindow and Gap — Priority
-// is persisted to ssf.question_events.Priority, an `int` column
+// Task 3A to make room for P_SCHEDULE between StageWindow and Gap, and again
+// for Task 4B to make room for P_WEATHER_RECONCILE between Schedule and Gap —
+// Priority is persisted to ssf.question_events.Priority, an `int` column
 // (ShramSafal.Domain/Dfes/QuestionEvent.cs), so a fractional in-between value
-// is not schema-safe; whole-tier renumbering is the honest fix.
-const P_SAFETY = 1, P_WEATHER = 2, P_STAGE = 3, P_SCHEDULE = 4, P_GAP = 5, P_FOLLOWUP = 6, P_LEARNING = 7;
+// is not schema-safe; whole-tier renumbering is the honest fix (same safe
+// renumber the Task 3A review validated).
+const P_SAFETY = 1, P_WEATHER = 2, P_STAGE = 3, P_SCHEDULE = 4, P_WEATHER_RECONCILE = 5, P_GAP = 6, P_FOLLOWUP = 7, P_LEARNING = 8;
 
 const APPROVED = { agronomistApproved: true, marathiApproved: true } as const;
 
@@ -167,6 +169,22 @@ const TRIGGER_ENTRIES: DfesQuestion[] = [
         // true (dfesQuestionEngine.ts's approved() hard gate keeps it out of
         // production selection regardless of the stageQuestions flag).
         promptMr: 'आज ठरलेलं {category} काम झालं का?',
+        agronomistApproved: false, marathiApproved: false,
+    },
+    {
+        questionKey: 'weather.severe_care_check', crop: '*', triggerType: 'WeatherReconcile', questionType: 'observation',
+        lens: 'Execution', depthLevel: 1, priority: P_WEATHER_RECONCILE, cooldownDays: 1, answerModes: 'choice,voice',
+        safetyClass: 'informational', anchorDateType: 'log_date', expectedStageApplicability: 'any',
+        // DRAFT Marathi — CONTENT GATE: this entry is mechanism-only (Task
+        // 4B). It fires only when the recorded weatherStamp was genuinely
+        // SEVERE (dfesWeatherReconcile.ts's conservative thresholds) AND the
+        // farmer logged no weather disturbance — a warm care-check, never a
+        // doubt of the farmer's account. It needs agronomist + Marathi
+        // sign-off before it can fire — inert until agronomistApproved/
+        // marathiApproved flip true (dfesQuestionEngine.ts's approved() hard
+        // gate keeps it out of production selection regardless of the
+        // stageQuestions flag).
+        promptMr: 'आज हवामान बरंच खराब होतं — सगळं ठीक होतं ना?',
         agronomistApproved: false, marathiApproved: false,
     },
     {

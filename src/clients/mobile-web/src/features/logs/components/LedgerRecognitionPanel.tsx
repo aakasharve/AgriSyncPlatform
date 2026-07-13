@@ -28,14 +28,22 @@
  * panel's `savedLog` prop shape, and threading more of it in is out of scope
  * here (KISS); `hasActiveAlert` is optional on WeatherTriggerContext so
  * omitting it is honest, not a fabrication.
+ *
+ * Task 4B (spec: dfes-companion-2026-07-11): `savedLog` is widened from
+ * `{ understanding? }` to the full `DailyLog` (mainView already passes the
+ * full saved-log object — backward-compatible, same widening 3B already did
+ * for `allLogs`), so this call site can also run reconcileWeather (the pure
+ * "severe weather, no logged impact" care-check signal) under the SAME
+ * questionsEnabled gate as scheduleContext/weatherContext.
  */
 import React from 'react';
-import type { VlogScore } from '../../../domain/types/log.types';
-import type { CropProfile, DailyLog } from '../../../types';
+import type { DailyLog } from '../../../domain/types/log.types';
+import type { CropProfile } from '../../../types';
 import type { DetailedWeather } from '../../../domain/types/weather.types';
 import { FEATURE_FLAGS } from '../../../app/featureFlags';
 import { useFarmerEngagement } from '../hooks/useFarmerEngagement';
 import { computeScheduleGap } from '../services/dfesScheduleWindow';
+import { reconcileWeather } from '../services/dfesWeatherReconcile';
 import type { WeatherTriggerContext } from '../services/dfesQuestionEngine';
 import { MeterQuestionHost } from './MeterQuestionHost';
 import { DisciplineStrip } from './DisciplineStrip';
@@ -72,7 +80,12 @@ export interface LedgerRecognitionPanelProps {
      * everywhere it's already mounted without crops in scope.
      */
     crops?: CropProfile[];
-    savedLog?: { understanding?: VlogScore };
+    /**
+     * Task 4B: widened from `{ understanding? }` to the full DailyLog so this
+     * panel can also read `weatherStamp`/`disturbance` for reconcileWeather.
+     * mainView already passes the full saved-log object here (backward-compatible).
+     */
+    savedLog?: DailyLog;
     allLogs?: DailyLog[];
     /**
      * Task 4A: the live WeatherWidget data (mainView's `weatherData`, same
@@ -108,6 +121,9 @@ export function LedgerRecognitionPanel({
     // Task 4A: SAME gate — a flag-OFF (or farm-less) render builds no weather
     // context either, zero extra work.
     const weatherContext = questionsEnabled ? buildWeatherContext(weather) : undefined;
+    // Task 4B: SAME gate — a flag-OFF (or farm-less) render never runs the
+    // severe-weather-reconciliation check either, zero extra work.
+    const weatherReconcileContext = questionsEnabled ? reconcileWeather(savedLog) ?? undefined : undefined;
 
     return (
         <div data-testid="ledger-recognition-panel" className="space-y-4">
@@ -123,6 +139,7 @@ export function LedgerRecognitionPanel({
                     score: savedLog?.understanding,
                     scheduleContext,
                     weather: weatherContext,
+                    weatherReconcileContext,
                     engagement: {
                         totalRichDays: engagement?.totalRichDays ?? 0,
                         unlockStatus: engagement?.unlockStatus ?? 'locked',

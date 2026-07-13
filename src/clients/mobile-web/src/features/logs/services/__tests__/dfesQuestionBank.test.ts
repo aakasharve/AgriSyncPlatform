@@ -3,9 +3,10 @@ import {
     DFES_QUESTION_BANK, BANK_VERSION, QUESTION_ENGINE_VERSION, findGapQuestion, findQuestion,
 } from '../dfesQuestionBank';
 
-// spec: dfes-companion-2026-07-11 (Task 3A) — the ONLY documented content-gate
-// exception to the hard AgronomistApproved && MarathiApproved invariant below.
-const CONTENT_GATED_KEYS = new Set(['schedule.category_planned_not_done']);
+// spec: dfes-companion-2026-07-11 (Task 3A, extended Task 4B) — the ONLY
+// documented content-gate exceptions to the hard AgronomistApproved &&
+// MarathiApproved invariant below.
+const CONTENT_GATED_KEYS = new Set(['schedule.category_planned_not_done', 'weather.severe_care_check']);
 
 describe('DFES question bank v1 (Phase 5)', () => {
     it('every bank entry passes the hard AgronomistApproved && MarathiApproved gate, except documented content-gated entries', () => {
@@ -25,6 +26,17 @@ describe('DFES question bank v1 (Phase 5)', () => {
         const q = findQuestion('schedule.category_planned_not_done');
         expect(q).toBeDefined();
         expect(q!.triggerType).toBe('Schedule');
+        expect(q!.agronomistApproved).toBe(false);
+        expect(q!.marathiApproved).toBe(false);
+    });
+
+    // spec: dfes-companion-2026-07-11 (Task 4B) — same content-gate pattern as
+    // the schedule question above: present, correctly keyed/typed, but
+    // deliberately INERT pending agronomist + Marathi sign-off.
+    it('CONTENT GATE: weather.severe_care_check is present but inert (agronomistApproved:false) pending review', () => {
+        const q = findQuestion('weather.severe_care_check');
+        expect(q).toBeDefined();
+        expect(q!.triggerType).toBe('WeatherReconcile');
         expect(q!.agronomistApproved).toBe(false);
         expect(q!.marathiApproved).toBe(false);
     });
@@ -54,10 +66,10 @@ describe('DFES question bank v1 (Phase 5)', () => {
         expect(new Set(keys).size).toBe(keys.length);
     });
 
-    it('assigns a valid 1..7 priority and a 1..4 depthLevel to every entry', () => {
+    it('assigns a valid 1..8 priority and a 1..4 depthLevel to every entry', () => {
         for (const q of DFES_QUESTION_BANK) {
             expect(q.priority).toBeGreaterThanOrEqual(1);
-            expect(q.priority).toBeLessThanOrEqual(7);
+            expect(q.priority).toBeLessThanOrEqual(8);
             expect(q.depthLevel).toBeGreaterThanOrEqual(1);
             expect(q.depthLevel).toBeLessThanOrEqual(4);
         }
