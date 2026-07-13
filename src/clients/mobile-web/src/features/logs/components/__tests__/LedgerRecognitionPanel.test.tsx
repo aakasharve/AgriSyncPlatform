@@ -34,6 +34,12 @@
  * (flag OFF or no farm) — zero extra work in that state, same as
  * scheduleContext.
  *
+ * Task 8 adds: this panel is the fire-once wire for "Sathi talks back" —
+ * these additional tests assert (a) flag ON + unlocked + not-yet-spoken
+ * speaks once and marks the farm, (b) a second render after marking never
+ * speaks again, (c) `locked` never speaks, (d) flag OFF never speaks (and
+ * never even checks/marks the store).
+ *
  * spec: dfes-companion-2026-07-11
  */
 import React from 'react';
@@ -48,6 +54,9 @@ const useFarmerEngagementMock = vi.fn();
 const useDfesQuestionMock = vi.fn();
 const computeScheduleGapMock = vi.fn();
 const reconcileWeatherMock = vi.fn();
+const speakUnlockRewardMock = vi.fn();
+const wasUnlockSpokenMock = vi.fn();
+const markUnlockSpokenMock = vi.fn();
 
 vi.mock('../../hooks/useFarmerEngagement', () => ({
     useFarmerEngagement: (...args: unknown[]) => useFarmerEngagementMock(...args),
@@ -66,6 +75,17 @@ vi.mock('../../services/dfesScheduleWindow', () => ({
 // threshold arithmetic (covered separately by dfesWeatherReconcile.test.ts).
 vi.mock('../../services/dfesWeatherReconcile', () => ({
     reconcileWeather: (...args: unknown[]) => reconcileWeatherMock(...args),
+}));
+// Task 8: mock the speaker + once-ever store so these wiring tests stay
+// focused on the panel's own fire-once gating, not the speechSynthesis
+// guard (covered by speakUnlockReward.test.ts) or the localStorage
+// mechanics (covered by unlockSpeechStore.test.ts).
+vi.mock('../../../../infrastructure/voice/speakUnlockReward', () => ({
+    speakUnlockReward: (...args: unknown[]) => speakUnlockRewardMock(...args),
+}));
+vi.mock('../../../../infrastructure/storage/unlockSpeechStore', () => ({
+    wasUnlockSpoken: (...args: unknown[]) => wasUnlockSpokenMock(...args),
+    markUnlockSpoken: (...args: unknown[]) => markUnlockSpokenMock(...args),
 }));
 // The panel renders the real MeterDisplay (Slice 3b), which fetches the server
 // /10 via useDayUnderstanding and reads copy via useLanguage. Mock both so these
@@ -94,7 +114,7 @@ function makeSavedLog(overrides: Partial<DailyLog> = {}): DailyLog {
     };
 }
 
-async function loadComponent(stageQuestions = true) {
+async function loadComponent(stageQuestions = true, spokenUnlockReward = false) {
     vi.resetModules();
     vi.doMock('../../../../app/featureFlags', () => ({
         FEATURE_FLAGS: {
@@ -103,6 +123,7 @@ async function loadComponent(stageQuestions = true) {
             disciplineSystem: false,
             DwcChip: false,
             voiceContinuity: false,
+            spokenUnlockReward,
         },
         isFarmGeographyV2Enabled: () => false,
         isWeatherBackendFetchEnabled: () => false,
@@ -119,10 +140,14 @@ beforeEach(() => {
     useDfesQuestionMock.mockReset();
     computeScheduleGapMock.mockReset();
     reconcileWeatherMock.mockReset();
+    speakUnlockRewardMock.mockReset();
+    wasUnlockSpokenMock.mockReset();
+    markUnlockSpokenMock.mockReset();
     useFarmerEngagementMock.mockReturnValue({ engagement: engagementDto, isLoading: false, error: null, refresh: vi.fn() });
     useDfesQuestionMock.mockReturnValue({ selected: null, loading: false, recordOutcome: vi.fn() });
     computeScheduleGapMock.mockReturnValue(null);
     reconcileWeatherMock.mockReturnValue(null);
+    wasUnlockSpokenMock.mockReturnValue(false);
 });
 
 afterEach(() => {
@@ -374,5 +399,75 @@ describe('LedgerRecognitionPanel — weather-reconcile wiring (Task 4B, spec: df
         );
 
         expect(reconcileWeatherMock).not.toHaveBeenCalled();
+    });
+});
+
+describe('LedgerRecognitionPanel — spoken unlock reward (Task 8, spec: dfes-companion-2026-07-11)', () => {
+    it('speaks once and marks the farm when flag ON + unlocked + not yet spoken', async () => {
+        useFarmerEngagementMock.mockReturnValue({
+            engagement: { ...engagementDto, unlockStatus: 'unlocked' as const },
+            isLoading: false, error: null, refresh: vi.fn(),
+        });
+        wasUnlockSpokenMock.mockReturnValue(false);
+        const { LedgerRecognitionPanel } = await loadComponent(true, true);
+        render(<LedgerRecognitionPanel farmId="farm-1" allLogs={[]} />);
+
+        expect(wasUnlockSpokenMock).toHaveBeenCalledWith('farm-1');
+        expect(speakUnlockRewardMock).toHaveBeenCalledTimes(1);
+        expect(typeof speakUnlockRewardMock.mock.calls[0][0]).toBe('string');
+        expect(markUnlockSpokenMock).toHaveBeenCalledWith('farm-1');
+    });
+
+    it('never speaks again once the farm is already marked as spoken (remount-safe)', async () => {
+        useFarmerEngagementMock.mockReturnValue({
+            engagement: { ...engagementDto, unlockStatus: 'unlocked' as const },
+            isLoading: false, error: null, refresh: vi.fn(),
+        });
+        wasUnlockSpokenMock.mockReturnValue(true);
+        const { LedgerRecognitionPanel } = await loadComponent(true, true);
+        render(<LedgerRecognitionPanel farmId="farm-1" allLogs={[]} />);
+
+        expect(speakUnlockRewardMock).not.toHaveBeenCalled();
+        expect(markUnlockSpokenMock).not.toHaveBeenCalled();
+    });
+
+    it('never speaks while locked', async () => {
+        useFarmerEngagementMock.mockReturnValue({
+            engagement: { ...engagementDto, unlockStatus: 'locked' as const },
+            isLoading: false, error: null, refresh: vi.fn(),
+        });
+        wasUnlockSpokenMock.mockReturnValue(false);
+        const { LedgerRecognitionPanel } = await loadComponent(true, true);
+        render(<LedgerRecognitionPanel farmId="farm-1" allLogs={[]} />);
+
+        expect(speakUnlockRewardMock).not.toHaveBeenCalled();
+        expect(markUnlockSpokenMock).not.toHaveBeenCalled();
+    });
+
+    it('never speaks when the flag is OFF, even if unlocked and not yet spoken — byte-equivalent no-op', async () => {
+        useFarmerEngagementMock.mockReturnValue({
+            engagement: { ...engagementDto, unlockStatus: 'unlocked' as const },
+            isLoading: false, error: null, refresh: vi.fn(),
+        });
+        wasUnlockSpokenMock.mockReturnValue(false);
+        const { LedgerRecognitionPanel } = await loadComponent(true, false);
+        render(<LedgerRecognitionPanel farmId="farm-1" allLogs={[]} />);
+
+        expect(wasUnlockSpokenMock).not.toHaveBeenCalled();
+        expect(speakUnlockRewardMock).not.toHaveBeenCalled();
+        expect(markUnlockSpokenMock).not.toHaveBeenCalled();
+    });
+
+    it('never speaks when farmId is null, even with the flag ON and unlocked', async () => {
+        useFarmerEngagementMock.mockReturnValue({
+            engagement: { ...engagementDto, unlockStatus: 'unlocked' as const },
+            isLoading: false, error: null, refresh: vi.fn(),
+        });
+        wasUnlockSpokenMock.mockReturnValue(false);
+        const { LedgerRecognitionPanel } = await loadComponent(true, true);
+        render(<LedgerRecognitionPanel farmId={null} allLogs={[]} />);
+
+        expect(wasUnlockSpokenMock).not.toHaveBeenCalled();
+        expect(speakUnlockRewardMock).not.toHaveBeenCalled();
     });
 });

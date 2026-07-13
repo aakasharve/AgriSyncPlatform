@@ -104,4 +104,17 @@ export const FEATURE_FLAGS = {
      * separate founder gate before this can be flipped on).
      */
     morningNotification: isEnabled('VITE_MORNING_NOTIFICATION'),
+
+    /**
+     * Task 8 (spec: dfes-companion-2026-07-11) — "Sathi talks back": ONE
+     * short warm Marathi line, spoken once ever per farm, when the farmer
+     * reaches the 25-rich-days unlock. Web `speechSynthesis` only, no
+     * native dependency. Default OFF (env VITE_SPOKEN_UNLOCK_REWARD absent
+     * -> false); when OFF the speak effect returns immediately (no speak,
+     * no localStorage write) — byte-equivalent no-op. `mr-IN` voice
+     * availability is device-dependent on cheap Android (the build
+     * degrades to silence, never throws/blocks) — real-device verification
+     * of an audible Marathi voice is a separate gate before flipping this on.
+     */
+    spokenUnlockReward: isEnabled('VITE_SPOKEN_UNLOCK_REWARD'),
 } as const;

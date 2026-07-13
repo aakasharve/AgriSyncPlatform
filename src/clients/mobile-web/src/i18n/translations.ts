@@ -317,6 +317,16 @@ export interface Translations {
         // scheduled notification would be worse than none). Flag-gated by
         // VITE_MORNING_NOTIFICATION, default OFF.
         morningNotificationTitle: string;
+
+        // Task 8 (spec: dfes-companion-2026-07-11) — "Sathi talks back":
+        // the one warm celebration line spoken (web speechSynthesis) once
+        // ever per farm at the 25-rich-days unlock. Sathi's SPOKEN persona
+        // is always Marathi regardless of the UI language, so the `mr`
+        // value is what's actually read aloud — the `en` value here exists
+        // only as a readable reference for non-Marathi-speaking reviewers.
+        // CONTENT GATE: final line is founder+agronomist-approved; this is
+        // a reasonable draft.
+        unlockSpokenLine: string;
     };
 }
 
@@ -592,6 +602,11 @@ export const translations: Record<Language, Translations> = {
 
             // Task 7 (spec: dfes-companion-2026-07-11) — morning notification title
             morningNotificationTitle: 'See today\'s tasks',
+
+            // Task 8 (spec: dfes-companion-2026-07-11) — reference translation
+            // only; the spoken utterance always uses the `mr` value below.
+            // CONTENT GATE: founder+agronomist-approved final copy pending.
+            unlockSpokenLine: 'Well done! Now I have truly come to know your farm.',
         },
     },
 
@@ -874,6 +889,14 @@ export const translations: Record<Language, Translations> = {
             // Task 7 (spec: dfes-companion-2026-07-11) — morning notification title.
             // Static Marathi copy: "see today's tasks".
             morningNotificationTitle: 'आजची कामे पाहा',
+
+            // Task 8 (spec: dfes-companion-2026-07-11) — the line Sathi
+            // actually SPEAKS (web speechSynthesis, lang='mr-IN') once ever
+            // per farm at the 25-rich-days unlock. Warm, celebratory,
+            // dignity — never a grade of the farmer.
+            // CONTENT GATE: founder+agronomist-approved final copy pending;
+            // this is a reasonable draft.
+            unlockSpokenLine: 'शाब्बास! आता मी तुमचं शेत खरंच ओळखू लागलो आहे.',
         },
     },
 };

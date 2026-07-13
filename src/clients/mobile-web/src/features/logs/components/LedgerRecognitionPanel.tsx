@@ -35,16 +35,28 @@
  * for `allLogs`), so this call site can also run reconcileWeather (the pure
  * "severe weather, no logged impact" care-check signal) under the SAME
  * questionsEnabled gate as scheduleContext/weatherContext.
+ *
+ * Task 8 (spec: dfes-companion-2026-07-11): this is also the fire-once
+ * wire for "Sathi talks back" — the same live `engagement` this panel
+ * already fetches carries `unlockStatus`, so a `useEffect` here speaks the
+ * one warm Marathi unlock line (web speechSynthesis) the FIRST time this
+ * panel observes `unlocked` for a given farm. Because this panel remounts
+ * on every save (per Slice 3b's own doc above), the guard is a durable
+ * localStorage flag (unlockSpeechStore), not a ref — a ref would reset on
+ * every remount and re-speak on every subsequent save.
  */
-import React from 'react';
+import React, { useEffect } from 'react';
 import type { DailyLog } from '../../../domain/types/log.types';
 import type { CropProfile } from '../../../types';
 import type { DetailedWeather } from '../../../domain/types/weather.types';
 import { FEATURE_FLAGS } from '../../../app/featureFlags';
+import { t as translateForced } from '../../../i18n/translations';
 import { useFarmerEngagement } from '../hooks/useFarmerEngagement';
 import { computeScheduleGap } from '../services/dfesScheduleWindow';
 import { reconcileWeather } from '../services/dfesWeatherReconcile';
 import type { WeatherTriggerContext } from '../services/dfesQuestionEngine';
+import { speakUnlockReward } from '../../../infrastructure/voice/speakUnlockReward';
+import { wasUnlockSpoken, markUnlockSpoken } from '../../../infrastructure/storage/unlockSpeechStore';
 import { MeterQuestionHost } from './MeterQuestionHost';
 import { DisciplineStrip } from './DisciplineStrip';
 
@@ -124,6 +136,21 @@ export function LedgerRecognitionPanel({
     // Task 4B: SAME gate — a flag-OFF (or farm-less) render never runs the
     // severe-weather-reconciliation check either, zero extra work.
     const weatherReconcileContext = questionsEnabled ? reconcileWeather(savedLog) ?? undefined : undefined;
+
+    // Task 8: "Sathi talks back" — fires the spoken unlock reward EXACTLY
+    // ONCE ever per farm. Flag OFF returns immediately: no speak, no
+    // localStorage write, byte-equivalent no-op. The line is read from the
+    // `mr` translation directly (translateForced(..., 'mr')), never the
+    // UI-language-bound `t()` — Sathi's SPOKEN persona is always Marathi,
+    // regardless of what language the farmer reads the app in.
+    useEffect(() => {
+        if (!FEATURE_FLAGS.spokenUnlockReward) return;
+        if (!farmId) return;
+        if (engagement?.unlockStatus !== 'unlocked') return;
+        if (wasUnlockSpoken(farmId)) return;
+        speakUnlockReward(translateForced('dfes.unlockSpokenLine', 'mr'));
+        markUnlockSpoken(farmId);
+    }, [engagement?.unlockStatus, farmId]);
 
     return (
         <div data-testid="ledger-recognition-panel" className="space-y-4">
