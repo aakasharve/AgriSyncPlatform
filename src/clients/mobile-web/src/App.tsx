@@ -9,7 +9,7 @@ import { CropProfile } from './types';
 import { LogProvider } from './app/context/LogContext';
 import { AppErrorBoundary } from './app/components/common/AppErrorBoundary';
 import AppContent from './AppContent';
-import { LanguageProvider } from './i18n/LanguageContext';
+import { LanguageProvider, useLanguage } from './i18n/LanguageContext';
 import SplashScreen from './shared/components/ui/SplashScreen';
 import { DataSourceProvider } from './app/providers/DataSourceProvider';
 import { SelectionProvider } from './app/context/SelectionContext';
@@ -21,6 +21,7 @@ import { setAiTestModeEnabled, clearAiTestMode } from './infrastructure/storage/
 import AppShell from './app/components/AppShell';
 import LoginPage from './pages/LoginPage';
 import JoinFarmLandingPage from './pages/JoinFarmLandingPage';
+import { useMorningNotificationWiring } from './app/hooks/useMorningNotificationWiring';
 
 const hasJoinDeepLink = (): boolean => {
     if (typeof window === 'undefined') return false;
@@ -41,6 +42,12 @@ const AppFrame: React.FC<{
     // shell during 'checking' and never flash LoginPage before boot validation.
     const { isAuthenticated, authStatus } = useAuth();
     const [joinActive, setJoinActive] = useState<boolean>(hasJoinDeepLink);
+    const { t } = useLanguage();
+
+    // Task 7 (spec: dfes-companion-2026-07-11) — daily 7am "आजची कामे पाहा"
+    // native local notification. Flag-off / non-native no-op is guaranteed
+    // inside the hook — see useMorningNotificationWiring.ts.
+    useMorningNotificationWiring(isAuthenticated, t('dfes.morningNotificationTitle'));
 
     // The QR deep-link wins over login. Semi-literate workers must never
     // see a generic password screen when they scan a farm QR.
