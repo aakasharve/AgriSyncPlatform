@@ -686,6 +686,19 @@ public static class DependencyInjection
         services.AddScoped<GetWorkerProfileHandler>();
         services.AddScoped<OnLogVerifiedAutoVerifyJobCard>();
 
+        // Task 1.3 (spec: 2026-07-13-labour-attendance-approval-design) —
+        // GetLabourDataHandler is a plain self-authorizing read (the caller-
+        // farm-scope gate lives in the endpoint via ICallerFarmTenantScope,
+        // and the handler itself re-checks membership as defense-in-depth).
+        // No IAuthorizationCheck<>/IValidator<> exist for GetLabourDataQuery
+        // (none needed), so it's registered directly against IHandler<,>
+        // rather than wrapped in HandlerPipeline.Build.
+        services.AddScoped<
+            AgriSync.BuildingBlocks.Application.IHandler<
+                ShramSafal.Application.UseCases.Labour.GetLabourData.GetLabourDataQuery,
+                ShramSafal.Application.Contracts.Dtos.LabourDataDto>,
+            ShramSafal.Application.UseCases.Labour.GetLabourData.GetLabourDataHandler>();
+
         // T-IGH-03-PIPELINE-ROLLOUT (CompleteJobCard): caller-shape
         // validation + job-card-existence + farm-membership authorization.
         // The endpoint (POST /job-cards/{id}/complete) AND the sync entry

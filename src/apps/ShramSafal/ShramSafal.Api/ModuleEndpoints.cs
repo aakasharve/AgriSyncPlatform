@@ -23,6 +23,9 @@ public static class ModuleEndpoints
         group.MapMembershipEndpoints();
         group.MapLogsEndpoints();
         group.MapFinanceEndpoints();
+        // Task 1.3 (spec: 2026-07-13-labour-attendance-approval-design) —
+        // GET /shramsafal/farms/{farmId}/labour read-model.
+        group.MapLabourEndpoints();
         group.MapAiEndpoints();
         group.MapAiStreamingEndpoints();
         // SARVAM_PRIMARY_VOICE_PIPELINE_2026-05-21 Task 2.3 — SSE endpoint
