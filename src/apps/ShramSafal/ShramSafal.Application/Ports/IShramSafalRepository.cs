@@ -570,4 +570,50 @@ public interface IShramSafalRepository
     /// <summary>Stage a brand-new <see cref="RoutinePattern"/> (first confirmed sighting).</summary>
     Task AddRoutinePatternAsync(RoutinePattern p, CancellationToken ct = default)
         => Task.CompletedTask;
+
+    // --- Labour Management read-model (Task 1.2, spec: 2026-07-13-labour-attendance-approval-design) ---
+
+    /// <summary>
+    /// All <see cref="FarmMembership"/> rows for a farm (any status) — the
+    /// source for <c>GetLabourDataHandler</c>'s People assembly. Unlike
+    /// <see cref="GetFarmMembershipAsync"/> (single user) this returns the
+    /// whole roster. Default impl returns empty so the many in-tree
+    /// <see cref="IShramSafalRepository"/> test doubles keep compiling;
+    /// production <c>ShramSafalRepository</c> overrides.
+    /// </summary>
+    Task<List<FarmMembership>> GetFarmMembershipsAsync(FarmId farmId, CancellationToken ct = default)
+        => Task.FromResult(new List<FarmMembership>());
+
+    /// <summary>
+    /// The farm's <c>labour_payout</c> <see cref="CostEntry"/> rows, each
+    /// paired with the linked <see cref="JobCard.AssignedWorkerUserId"/>
+    /// (read at the repo layer via <c>CostEntry.JobCardId → JobCard</c>,
+    /// since <c>CostEntryDto</c> does not expose <c>JobCardId</c>).
+    /// <para>
+    /// MONEY-CONSISTENCY INVARIANT — these are the EXACT SAME rows
+    /// <c>GetFinanceSummaryHandler</c> sums for
+    /// <c>CategoryId=="labour_payout"</c>. The caller (handler) applies the
+    /// latest <see cref="FinanceCorrection"/> and rounding identically to
+    /// that handler so the labour "Paid" figure equals the finance page.
+    /// </para>
+    /// Default impl returns empty so in-tree test doubles keep compiling;
+    /// production <c>ShramSafalRepository</c> overrides.
+    /// </summary>
+    Task<List<(CostEntry CostEntry, Guid? AssignedWorkerUserId)>> GetLabourPayoutCostEntriesWithJobCardAsync(
+        FarmId farmId, CancellationToken ct = default)
+        => Task.FromResult(new List<(CostEntry, Guid?)>());
+
+    /// <summary>
+    /// <see cref="LabourAssignment"/> rows (voice-derived, NO-MULTIPLY
+    /// descriptive attendance — count/shift/task/names only) for daily logs
+    /// on this farm dated on/after <paramref name="weekStart"/>. Interim
+    /// source for <c>Dashboard.ManDays</c> (sum of
+    /// <see cref="LabourAssignment.WorkerCount"/>) until the Stage 5
+    /// per-worker attendance ledger lands — <c>Ledger.Rows</c> stays empty
+    /// until then. Default impl returns empty so in-tree test doubles keep
+    /// compiling; production <c>ShramSafalRepository</c> overrides.
+    /// </summary>
+    Task<List<LabourAssignment>> GetLabourAssignmentsForFarmSinceAsync(
+        FarmId farmId, DateOnly weekStart, CancellationToken ct = default)
+        => Task.FromResult(new List<LabourAssignment>());
 }

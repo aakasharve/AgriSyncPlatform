@@ -24,8 +24,17 @@ public sealed record LabourPersonDto(
     bool Temporary,
     string? TaskScope,
     string? AppointedById,
+    // Option-3 wage-book (spec: 2026-07-13-labour-attendance-approval-design):
+    // three DISTINCT numbers, never merged. RecordedWages (काम झालं) = sum of
+    // JobCard.EstimatedTotal for Completed/VerifiedForPayout/PaidOut cards —
+    // the plan/agreed value. Paid (दिलं) = the labour_payout CostEntry slice,
+    // the SAME rows/method the finance page reads (money-consistency
+    // invariant — see GetLabourDataHandler). Advance (उचल) = 0 until Stage 4
+    // (LabourAdvance). Owed/बाकी = RecordedWages − Paid − Advance is DERIVED
+    // by the client/handler, never stored here (no stale copy).
+    decimal RecordedWages,
+    decimal Paid,
     decimal Advance,
-    decimal Earned,
     string? TodayStatus,
     int? DaysThisWeek,
     IReadOnlyList<string>? MemberIds,
@@ -53,6 +62,7 @@ public sealed record LabourPlotBarDto(
     int Pct);
 
 public sealed record LabourMoneyDto(
+    decimal Recorded,
     decimal Paid,
     decimal Advance,
     decimal Owed);

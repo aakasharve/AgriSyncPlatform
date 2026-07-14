@@ -1057,6 +1057,64 @@ internal sealed class ShramSafalRepository(ShramSafalDbContext db) : IShramSafal
         return Task.FromResult(new WorkerMetricsDto(0, 0, 0, 0, 0, 0, 0));
     }
 
+    // --- Labour Management read-model (Task 1.2, spec: 2026-07-13-labour-attendance-approval-design) ---
+
+    public async Task<List<FarmMembership>> GetFarmMembershipsAsync(FarmId farmId, CancellationToken ct = default)
+    {
+        return await db.FarmMemberships
+            .AsNoTracking()
+            .Where(m => m.FarmId == farmId)
+            .OrderBy(m => m.GrantedAtUtc)
+            .ToListAsync(ct);
+    }
+
+    public async Task<List<(CostEntry CostEntry, Guid? AssignedWorkerUserId)>> GetLabourPayoutCostEntriesWithJobCardAsync(
+        FarmId farmId, CancellationToken ct = default)
+    {
+        var entries = await db.CostEntries
+            .Where(c => c.FarmId == farmId && c.CategoryId == "labour_payout")
+            .OrderBy(c => c.EntryDate)
+            .ToListAsync(ct);
+
+        if (entries.Count == 0)
+        {
+            return [];
+        }
+
+        var jobCardIds = entries
+            .Where(e => e.JobCardId.HasValue)
+            .Select(e => e.JobCardId!.Value)
+            .Distinct()
+            .ToList();
+
+        var workerByJobCardId = jobCardIds.Count == 0
+            ? []
+            : await db.JobCards
+                .Where(j => jobCardIds.Contains(j.Id))
+                .Select(j => new { j.Id, j.AssignedWorkerUserId })
+                .ToDictionaryAsync(
+                    x => x.Id,
+                    x => x.AssignedWorkerUserId.HasValue ? (Guid?)x.AssignedWorkerUserId.Value.Value : null,
+                    ct);
+
+        return entries
+            .Select(e => (
+                e,
+                e.JobCardId.HasValue && workerByJobCardId.TryGetValue(e.JobCardId.Value, out var w) ? w : null))
+            .ToList();
+    }
+
+    public async Task<List<LabourAssignment>> GetLabourAssignmentsForFarmSinceAsync(
+        FarmId farmId, DateOnly weekStart, CancellationToken ct = default)
+    {
+        return await (
+            from la in db.LabourAssignments
+            join log in db.DailyLogs on la.DailyLogId equals log.Id
+            where log.FarmId == farmId && log.LogDate >= weekStart
+            select la)
+            .ToListAsync(ct);
+    }
+
     // --- DATA_PRINCIPLE_SPINE sub-phase 02.3 (warm-tier transcripts) ------
     public Task AddTranscriptAsync(Transcript transcript, CancellationToken ct = default)
     {
