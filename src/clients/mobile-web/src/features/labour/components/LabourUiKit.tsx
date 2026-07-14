@@ -113,20 +113,32 @@ export const BackHeader: React.FC<{ title: string; onBack: () => void }> = ({ ti
     </div>
 );
 
-/** The running-balance card used on person / mukadam detail. Net = earned − advance. */
+/**
+ * The running-balance card used on person / mukadam detail — Option-3
+ * wage-book: THREE distinct figures, never merged into one "earned":
+ * काम झालं (recorded) · दिलं (paid) · बाकी (owed = recorded − paid − advance).
+ * उचल (advance) is shown as a fourth tile only when it is > 0.
+ */
 export const BalanceCard: React.FC<{ balance: LabourBalance; why?: string; settleLabel: string; onAdvance: () => void; onSettle: () => void }> = ({ balance, why, settleLabel, onAdvance, onSettle }) => {
     const { owe, amount } = netBalance(balance);
+    const tiles: [string, string][] = [
+        ['काम झालं', inr(balance.recorded)],
+        ['दिलं', inr(balance.paid)],
+    ];
+    if (balance.advance > 0) tiles.push(['उचल', inr(balance.advance)]);
+    tiles.push([owe ? 'बाकी' : 'उचल बाकी', inr(amount)]);
+
     return (
         <div className={`rounded-[24px] border p-4 shadow-[0_1px_3px_rgba(20,40,30,0.05)] ${owe ? 'border-emerald-100 bg-gradient-to-br from-emerald-50 to-white' : 'border-amber-200 bg-gradient-to-br from-amber-50 to-white'}`}>
             <div className="flex items-baseline justify-between gap-2">
                 <span className={`font-black leading-none tracking-tight [font-variant-numeric:tabular-nums] text-[36px] ${owe ? 'text-emerald-700' : 'text-amber-700'}`}>{inr(amount)}</span>
                 <span className="text-right text-[13px] font-bold text-slate-600">{owe ? 'द्यायचे' : 'उचल बाकी'}</span>
             </div>
-            <div className="mt-3 grid grid-cols-3 gap-2">
-                {[['उचल', inr(balance.advance)], ['कमावले', inr(balance.earned)], [owe ? 'देय' : 'बाकी', inr(amount)]].map(([l, v]) => (
+            <div className={`mt-3 grid gap-2 ${tiles.length === 4 ? 'grid-cols-4' : 'grid-cols-3'}`}>
+                {tiles.map(([l, v]) => (
                     <div key={l} className="rounded-xl border border-slate-100 bg-slate-50 p-2 text-center">
-                        <div className="text-[13px] font-black text-slate-700 [font-variant-numeric:tabular-nums]">{v}</div>
-                        <div className="mt-0.5 text-[9.5px] font-semibold text-slate-400">{l}</div>
+                        <div className="text-[12px] font-black text-slate-700 [font-variant-numeric:tabular-nums]">{v}</div>
+                        <div className="mt-0.5 text-[9px] font-semibold text-slate-400">{l}</div>
                     </div>
                 ))}
             </div>

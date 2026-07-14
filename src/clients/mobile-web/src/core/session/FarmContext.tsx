@@ -80,7 +80,7 @@ export const FarmContextProvider: React.FC<{ children: React.ReactNode }> = ({ c
         SessionStore.setCurrentFarmId(farmId);
     }, []);
 
-    const farms = meContext?.farms ?? [];
+    const farms = useMemo(() => meContext?.farms ?? [], [meContext]);
     const currentFarm = useMemo(
         () => farms.find(f => f.farmId === currentFarmId) ?? farms[0] ?? null,
         [farms, currentFarmId],
@@ -103,4 +103,22 @@ export function useFarmContext(): FarmContextValue {
     const ctx = useContext(FarmCtx);
     if (!ctx) throw new Error('useFarmContext must be used inside FarmContextProvider');
     return ctx;
+}
+
+/**
+ * The raw context object, exposed for consumers that need the non-throwing
+ * accessor below (or their own `useContext(FarmContext)` call).
+ */
+export { FarmCtx as FarmContext };
+
+/**
+ * SAFE optional accessor — returns `null` instead of throwing when there is
+ * no `FarmContextProvider` in the tree (e.g. a dev preview mounted directly
+ * into `#root`, like `?preview=labour` → `LabourPreview`, which is rendered
+ * BEFORE any provider — see App.tsx's `LABOUR_PREVIEW` branch). Use this from
+ * any hook that must also work in an unprovisioned preview shell; use
+ * `useFarmContext()` everywhere else in the real app.
+ */
+export function useOptionalFarmContext(): FarmContextValue | null {
+    return useContext(FarmCtx);
 }

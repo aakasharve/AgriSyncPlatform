@@ -43,7 +43,7 @@ const PersonDetail: React.FC<Props> = ({ data, personId, onAdvance, onSettle, on
                 settleLabel="पैसे द्या"
                 onAdvance={onAdvance}
                 onSettle={onSettle}
-                why={`काम केलं ${inr(w.balance.earned)} − उचल ${inr(w.balance.advance)} · आपोआप वजा`}
+                why={`काम झालं ${inr(w.balance.recorded)} − दिलं ${inr(w.balance.paid)} − उचल ${inr(w.balance.advance)} · आपोआप वजा`}
             />
 
             <GroupLabel>विश्वास · trust</GroupLabel>

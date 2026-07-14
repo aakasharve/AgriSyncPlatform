@@ -53,13 +53,17 @@ const WeeklyDashboard: React.FC<Props> = ({ data, onReview, onLedger, onToast })
 
             <GroupLabel>पैसे · money</GroupLabel>
             <div className="rounded-[20px] border border-slate-100 bg-white p-3.5 shadow-[0_1px_3px_rgba(20,40,30,0.05)]">
+                <div className="mb-2.5 flex items-baseline justify-between">
+                    <span className="text-[11.5px] font-semibold text-slate-500">काम झालं · एकूण नोंदवलं</span>
+                    <span className="text-[16px] font-black text-slate-800 [font-variant-numeric:tabular-nums]">{inr(d.money.recorded)}</span>
+                </div>
                 <div className="flex h-7 gap-0.5 overflow-hidden rounded-lg">
                     <span className="flex items-center justify-center bg-emerald-600 text-[11px] font-extrabold text-white" style={{ flexGrow: d.money.paid }}>{inr(d.money.paid)}</span>
-                    <span className="flex items-center justify-center bg-amber-500 text-[11px] font-extrabold text-white" style={{ flexGrow: d.money.advance }}>उचल</span>
+                    <span className="flex items-center justify-center bg-amber-500 text-[11px] font-extrabold text-white" style={{ flexGrow: d.money.advance }}>{inr(d.money.advance)}</span>
                     <span className="flex items-center justify-center bg-slate-300 text-[11px] font-extrabold text-slate-600" style={{ flexGrow: d.money.owed }}>{inr(d.money.owed)}</span>
                 </div>
                 <div className="mt-2.5 flex flex-wrap gap-3.5">
-                    {([['मजुरी दिली', 'bg-emerald-600'], ['उचल', 'bg-amber-500'], ['बाकी देणं', 'bg-slate-300']] as [string, string][]).map(([l, c]) => (
+                    {([['दिलं', 'bg-emerald-600'], ['उचल', 'bg-amber-500'], ['बाकी', 'bg-slate-300']] as [string, string][]).map(([l, c]) => (
                         <span key={l} className="flex items-center gap-1.5 text-[11.5px] font-semibold text-slate-600"><span className={`inline-block h-2.5 w-2.5 rounded-sm ${c}`} />{l}</span>
                     ))}
                 </div>
