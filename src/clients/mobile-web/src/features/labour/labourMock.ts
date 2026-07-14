@@ -68,6 +68,36 @@ const PEOPLE: Record<string, LabourPerson> = {
 
 const p = (s: 'present' | 'half' | 'absent') => s;
 
+/**
+ * MONEY-SAFETY — the honest empty state for a REAL farm.
+ *
+ * Used by `useLabourState` whenever a real `farmId` is present: while the
+ * fetch is in flight, and again if it fails. It must NEVER be confused with
+ * `LABOUR_MOCK` — no fake people, no fake ₹ balances. A real farmer who hits
+ * a backend outage sees zeros + an honest error state, never रोकडे/रमेश/सुनीता
+ * and their mock money as if it were their own farm's data.
+ */
+export const EMPTY_LABOUR_DATA: LabourData = {
+    topLevelIds: [],
+    people: {},
+    dashboard: {
+        weekLabel: '',
+        insight: '',
+        manDays: 0,
+        manDaysTrend: 0,
+        wages: 0,
+        advances: 0,
+        owed: 0,
+        logs: 0,
+        pending: 0,
+        plots: [],
+        money: { recorded: 0, paid: 0, advance: 0, owed: 0 },
+    },
+    ledger: { weekLabel: '', days: [], rows: [], dailyTotals: [], weekTotal: 0 },
+    review: [],
+    attendance: { plot: '', headcount: 0, rows: [] },
+};
+
 export const LABOUR_MOCK: LabourData = {
     topLevelIds: ['rokade', 'ramesh', 'sunita', 'vilas'],
     people: PEOPLE,
