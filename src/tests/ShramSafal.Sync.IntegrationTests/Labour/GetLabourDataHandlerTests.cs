@@ -179,6 +179,70 @@ public sealed class GetLabourDataHandlerTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task Dashboard_owed_never_goes_negative_when_a_paid_worker_departs()
+    {
+        // Regression for the money bug found in code review: totalRecorded was
+        // summed over `people` (Active-roster only) while totalPaid was summed
+        // over the raw paidByWorker dictionary (ALL workers with payouts, no
+        // membership filter). A worker who is paid, then exits/suspends, used
+        // to drop out of Recorded but stay in Paid — driving
+        // Dashboard.Money.Owed negative even though every row shown on screen
+        // still reconciled. Both totals must now come from the SAME `people`
+        // population.
+        var farmId = new FarmId(Guid.NewGuid());
+        var ownerUserId = new UserId(Guid.NewGuid());
+        var workerId = new UserId(Guid.NewGuid());
+        var now = DateTime.UtcNow;
+        var today = DateOnly.FromDateTime(now);
+
+        var farm = Farm.Create(farmId, "Task 1.2 Departed-Worker Regression Farm", ownerUserId, now);
+        farm.AttachToOwnerAccount(new OwnerAccountId(Guid.NewGuid()), now);
+        await _repository.AddFarmAsync(farm);
+
+        var membership = FarmMembership.Create(Guid.NewGuid(), farmId, workerId, AppRole.Worker, now);
+        await _repository.AddFarmMembershipAsync(membership);
+        await _repository.SaveChangesAsync();
+
+        // Worker is paid out while still Active: PaidOut JobCard (EstimatedTotal
+        // 300) + matching labour_payout CostEntry (300).
+        var jobCard = JobCard.CreateDraft(
+            Guid.NewGuid(), farmId, Guid.NewGuid(), null, ownerUserId, today,
+            [new JobCardLineItem("spray", 2m, new Money(150m, Currency.Inr), null)],
+            now);
+        jobCard.Assign(workerId, ownerUserId, AppRole.PrimaryOwner, now);
+        jobCard.Start(workerId, now);
+        jobCard.CompleteWithLog(Guid.NewGuid(), workerId, now);
+        jobCard.MarkVerifiedForPayout(VerificationStatus.Verified, ownerUserId, AppRole.PrimaryOwner, now);
+        var costEntryId = Guid.NewGuid();
+        jobCard.MarkPaidOut(costEntryId, new Money(300m, Currency.Inr), now);
+        await _repository.AddJobCardAsync(jobCard);
+
+        var costEntry = CostEntry.CreateLabourPayout(
+            costEntryId, jobCard.Id, farmId, plotId: null, cropCycleId: null,
+            amount: 300m, currencyCode: "INR", entryDate: today,
+            createdByUserId: ownerUserId, createdAtUtc: now);
+        await _repository.AddCostEntryAsync(costEntry);
+        await _repository.SaveChangesAsync();
+
+        // Worker then leaves the farm (real domain transition, not a raw
+        // status flip) — a paid-then-departed worker is out of Stage-1 scope
+        // but must not corrupt the dashboard aggregate.
+        membership.Exit(now, isLastActivePrimaryOwner: false);
+        await _repository.SaveChangesAsync();
+
+        var handler = new GetLabourDataHandler(_repository, new FixedClock(now));
+        var result = await handler.HandleAsync(new GetLabourDataQuery(farmId, ownerUserId));
+
+        result.IsSuccess.Should().BeTrue();
+        var data = result.Value!;
+
+        data.Dashboard.Money.Owed.Should().BeGreaterThanOrEqualTo(0m,
+            "a paid-then-departed worker must never drive the dashboard Owed negative");
+        data.Dashboard.Money.Paid.Should().Be(data.People.Sum(p => p.Paid),
+            "Dashboard.Money.Paid must reconcile with the SAME population as the People rows displayed beneath it");
+    }
+
+    [Fact]
     public async Task Verified_log_never_appears_in_review()
     {
         var farmId = new FarmId(Guid.NewGuid());

@@ -19,12 +19,20 @@ namespace ShramSafal.Application.UseCases.Labour.GetLabourData;
 /// <para>
 /// <b>MONEY-CONSISTENCY INVARIANT (binding — founder's #1 concern).</b>
 /// <c>Paid</c> (per worker and in <c>Dashboard.Money</c>) is sourced from the
-/// EXACT SAME rows and method <c>GetFinanceSummaryHandler</c> uses:
-/// <c>sum(CostEntry.Amount WHERE CategoryId=="labour_payout")</c>, with the
-/// latest <see cref="ShramSafal.Domain.Finance.FinanceCorrection.CorrectedAmount"/>
-/// applied when present, rounded <c>decimal.Round(x, 2, MidpointRounding.AwayFromZero)</c>
-/// per-entry AND on the sum. This guarantees the labour page's "दिलं" figure
+/// EXACT SAME rows and correction resolution <c>GetFinanceSummaryHandler</c>
+/// uses: <c>sum(CostEntry.Amount WHERE CategoryId=="labour_payout")</c>, with
+/// the latest <see cref="ShramSafal.Domain.Finance.FinanceCorrection.CorrectedAmount"/>
+/// applied when present. This guarantees the labour page's "दिलं" figure
 /// equals the finance page for the same work — never re-derived.
+/// <c>CostEntry.Amount</c> / <c>FinanceCorrection.CorrectedAmount</c> are
+/// already 2dp at domain construction, so the <c>decimal.Round</c> calls in
+/// this handler (including the per-entry one) are a defensive no-op, not a
+/// source of truth — <c>GetFinanceSummaryHandler</c> itself only rounds the
+/// per-category group sum and the grand total, never per-entry, so "mirrors
+/// finance" here refers to the ROWS and correction resolution, not the
+/// rounding step. This labour <c>Paid</c> is also all-time: unlike
+/// <c>GetFinanceSummaryHandler</c>, which accepts an optional date-range
+/// filter, there is no period scoping here (Stage-1 scope).
 /// </para>
 /// <para>
 /// <c>RecordedWages</c> ("काम झालं") is a DISTINCT number: the sum of
@@ -58,6 +66,7 @@ public sealed class GetLabourDataHandler(IShramSafalRepository repository, ICloc
         {
             return Result.Failure<LabourDataDto>(ShramSafalErrors.Forbidden);
         }
+        var resolvedCallerRole = callerRole.Value;
 
         // ── 1. Memberships → labour People (Worker / Mukadam only — owners
         //       and other roles are not "labour"). ──────────────────────────
@@ -78,8 +87,15 @@ public sealed class GetLabourDataHandler(IShramSafalRepository repository, ICloc
                 g => decimal.Round(g.Sum(jc => jc.EstimatedTotal.Amount), 2, MidpointRounding.AwayFromZero));
 
         // ── 3. labour_payout CostEntries (finance-consistent Paid — दिलं). ──
-        // Mirrors GetFinanceSummaryHandler EXACTLY: same rows, same latest-
-        // correction resolution, same per-entry + per-sum rounding.
+        // Mirrors GetFinanceSummaryHandler's ROWS and latest-correction
+        // resolution — that's what keeps this page and the finance page
+        // agreeing. It does NOT mirror that handler's rounding: values are
+        // already 2dp at domain construction (CostEntry.Amount /
+        // FinanceCorrection.CorrectedAmount), so the decimal.Round calls
+        // below are a defensive no-op. GetFinanceSummaryHandler itself only
+        // rounds its group sum + grand total, never per-entry. This labour
+        // Paid is also all-time — no date-range filter, unlike the finance
+        // summary's optional period scoping.
         var payoutRows = await repository.GetLabourPayoutCostEntriesWithJobCardAsync(query.FarmId, ct);
         var corrections = await repository.GetCorrectionsForEntriesAsync(payoutRows.Select(r => r.CostEntry.Id), ct);
         var latestCorrections = corrections
@@ -163,10 +179,21 @@ public sealed class GetLabourDataHandler(IShramSafalRepository repository, ICloc
                 CleanRecord: null));
         }
 
-        // ── 6. Dashboard rollups (aggregate, rounded — never re-derive Paid). ──
+        // ── 6. Dashboard rollups — SAME population as the People rows below. ──
+        // All three totals are summed over `people` (the Active-roster list
+        // assembled in step 5), NOT over the raw `recordedWagesByWorker` /
+        // `paidByWorker` dictionaries. Those dictionaries can hold a worker
+        // who was paid and then suspended/exited — summing them directly
+        // would let totalPaid include money for someone totalRecorded no
+        // longer counts, driving Owed negative even though every row shown
+        // on screen reconciles. This dashboard reflects the ACTIVE roster;
+        // a paid-then-departed worker's historical pay is out of Stage-1
+        // scope (a former-workers view is a later stage). Each per-person
+        // Paid/RecordedWages value is still sourced exactly as in step 5 —
+        // only the aggregation population changes here.
         var totalRecorded = decimal.Round(people.Sum(p => p.RecordedWages), 2, MidpointRounding.AwayFromZero);
-        var totalPaid = decimal.Round(paidByWorker.Values.Sum(), 2, MidpointRounding.AwayFromZero);
-        const decimal totalAdvance = 0m;
+        var totalPaid = decimal.Round(people.Sum(p => p.Paid), 2, MidpointRounding.AwayFromZero);
+        var totalAdvance = decimal.Round(people.Sum(p => p.Advance), 2, MidpointRounding.AwayFromZero);
         var totalOwed = decimal.Round(totalRecorded - totalPaid - totalAdvance, 2, MidpointRounding.AwayFromZero);
 
         // ── 7. This-week man-days (interim, from LabourAssignment.WorkerCount — NO-MULTIPLY descriptive only). ──
@@ -179,7 +206,7 @@ public sealed class GetLabourDataHandler(IShramSafalRepository repository, ICloc
         // ── 8. Review — Draft/Confirmed logs still awaiting the owner. ─────
         var reviewLogs = farmLogs
             .Where(l => l.CurrentVerificationStatus is VerificationStatus.Draft or VerificationStatus.Confirmed
-                && VerificationStateMachine.GetAvailableTransitions(l.CurrentVerificationStatus, AppRole.PrimaryOwner).Length > 0)
+                && VerificationStateMachine.GetAvailableTransitions(l.CurrentVerificationStatus, resolvedCallerRole).Length > 0)
             .OrderByDescending(l => l.ModifiedAtUtc)
             .ToList();
 
