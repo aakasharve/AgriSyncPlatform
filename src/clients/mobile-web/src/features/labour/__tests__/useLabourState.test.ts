@@ -39,8 +39,24 @@ describe('useLabourState — money safety', () => {
 
         const { result } = renderHook(() => useLabourState());
 
+        // Preview is defined strictly as the null-provider case (no FarmContext at all).
+        expect(mockUseOptionalFarmContext()).toBe(null);
         expect(result.current.data).toBe(LABOUR_MOCK);
         expect(result.current.error).toBe(false);
+        expect(mockFetchLabourData).not.toHaveBeenCalled();
+    });
+
+    it('provider present but farm still loading (currentFarmId null, isLoading true) → EMPTY_LABOUR_DATA, never mock', () => {
+        mockUseOptionalFarmContext.mockReturnValue({ currentFarmId: null, isLoading: true });
+
+        const { result } = renderHook(() => useLabourState());
+
+        expect(result.current.data).toBe(EMPTY_LABOUR_DATA);
+        expect(result.current.data).not.toBe(LABOUR_MOCK);
+        expect(Object.keys(result.current.data.people)).toHaveLength(0);
+        expect(result.current.data.dashboard.money).toEqual({ recorded: 0, paid: 0, advance: 0, owed: 0 });
+        expect(result.current.error).toBe(false);
+        expect(result.current.loading).toBe(true);
         expect(mockFetchLabourData).not.toHaveBeenCalled();
     });
 

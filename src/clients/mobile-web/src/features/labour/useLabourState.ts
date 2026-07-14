@@ -13,16 +13,17 @@
  * `LabourPreview`) BEFORE any provider tree — see App.tsx's `LABOUR_PREVIEW`
  * branch, which returns before `<FarmContextProvider>` mounts. Calling the
  * throwing `useFarmContext()` there would crash the preview, so this hook
- * uses the non-throwing `useOptionalFarmContext()` instead. When there is no
- * farm context (preview) or no current farm yet, it falls back to
- * `LABOUR_MOCK` — the same contract shape the real fetch produces. This is
- * the ONLY path allowed to show `LABOUR_MOCK`.
+ * uses the non-throwing `useOptionalFarmContext()` instead, which returns
+ * `null` ONLY when there is no provider at all (preview). `LABOUR_MOCK` is
+ * gated on that `null` — it is NOT used just because `currentFarmId` happens
+ * to be null. This is the ONLY path allowed to show `LABOUR_MOCK`.
  *
- * MONEY-SAFETY (binding): a REAL farm (`farmId` present) must NEVER render
- * `LABOUR_MOCK` — not on first load, not on a fetch error. During a backend
- * outage a real farmer must see an honest empty state (`EMPTY_LABOUR_DATA`,
- * `error: true`), never रोकडे/रमेश/सुनीता and their mock ₹ balances mistaken
- * for their own farm's real data.
+ * MONEY-SAFETY (binding): a REAL farm (provider present) must NEVER render
+ * `LABOUR_MOCK` — not on first load, not while `currentFarmId` is still
+ * resolving (FarmContext loading), not on a fetch error. In every one of
+ * those real-app cases the farmer must see an honest empty state
+ * (`EMPTY_LABOUR_DATA`), never रोकडे/रमेश/सुनीता and their mock ₹ balances
+ * mistaken for their own farm's real data.
  */
 import { useCallback, useEffect, useState } from 'react';
 import { LABOUR_MOCK, EMPTY_LABOUR_DATA, type LabourData } from './labourMock';
@@ -40,21 +41,34 @@ export interface UseLabourStateResult {
 
 export const useLabourState = (): UseLabourStateResult => {
     const farmCtx = useOptionalFarmContext();
+    const isPreview = farmCtx === null; // no provider at all — the ONLY mock case
     const farmId = farmCtx?.currentFarmId ?? null;
+    const farmCtxLoading = farmCtx?.isLoading ?? false;
 
-    // Lazy initializer: a real farm's FIRST render already shows the honest
-    // empty state, not the mock — no one-frame flash of fake data.
-    const [data, setData] = useState<LabourData>(() => (farmId ? EMPTY_LABOUR_DATA : LABOUR_MOCK));
+    // Lazy initializer: preview is the ONLY case that starts with the mock.
+    // A real app (provider present) always starts honest, even before its
+    // farm has resolved — no one-frame flash of fake data.
+    const [data, setData] = useState<LabourData>(() => (isPreview ? LABOUR_MOCK : EMPTY_LABOUR_DATA));
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState(false);
     const [retryToken, setRetryToken] = useState(0);
 
     useEffect(() => {
-        if (!farmId) {
-            // Preview mode (no provider) or no farm resolved yet — mock fallback.
+        if (isPreview) {
+            // No provider at all (preview) — mock fallback.
             // This is the ONLY branch that may show LABOUR_MOCK.
             setData(LABOUR_MOCK);
             setLoading(false);
+            setError(false);
+            return;
+        }
+
+        if (!farmId) {
+            // Real app, but no farm resolved yet — FarmContext may still be
+            // loading, or the farmer genuinely has no farm. Either way: the
+            // honest empty state, NEVER the mock.
+            setData(EMPTY_LABOUR_DATA);
+            setLoading(farmCtxLoading);
             setError(false);
             return;
         }
@@ -87,7 +101,7 @@ export const useLabourState = (): UseLabourStateResult => {
         })();
 
         return () => { cancelled = true; };
-    }, [farmId, retryToken]);
+    }, [isPreview, farmId, farmCtxLoading, retryToken]);
 
     const refresh = useCallback(() => setRetryToken((t) => t + 1), []);
 
