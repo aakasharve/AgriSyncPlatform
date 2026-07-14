@@ -9,7 +9,7 @@
  */
 import React, { useCallback, useRef, useState } from 'react';
 import { useLabourState } from '../useLabourState';
-import { BackHeader } from './LabourUiKit';
+import { BackHeader, LoadErrorBanner } from './LabourUiKit';
 import LabourHub from './LabourHub';
 import MukadamDetail from './MukadamDetail';
 import PersonDetail from './PersonDetail';
@@ -31,7 +31,7 @@ const TITLES: Record<ScreenName, string> = {
 };
 
 export const LabourFeature: React.FC<{ onExit: () => void }> = ({ onExit }) => {
-    const { data } = useLabourState();
+    const { data, error, refresh } = useLabourState();
     const [stack, setStack] = useState<ScreenState[]>([{ name: 'hub' }]);
     const [reviewOpen, setReviewOpen] = useState(false);
     const [toast, setToast] = useState<string | null>(null);
@@ -54,6 +54,7 @@ export const LabourFeature: React.FC<{ onExit: () => void }> = ({ onExit }) => {
     return (
         <div className="relative flex min-h-screen flex-col bg-[#f6f7f5]">
             <BackHeader title={title} onBack={handleBack} />
+            {error && <LoadErrorBanner onRetry={refresh} />}
             <div className="flex-1">
                 {cur.name === 'hub' && (
                     <LabourHub

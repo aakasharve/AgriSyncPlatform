@@ -8,7 +8,7 @@
  * strings are inline per the app's farmer-facing convention.
  */
 import React, { useState } from 'react';
-import { ChevronRight, ChevronDown, Wallet, IndianRupee, ArrowLeft, Check } from 'lucide-react';
+import { ChevronRight, ChevronDown, Wallet, IndianRupee, ArrowLeft, Check, CloudOff, RefreshCw } from 'lucide-react';
 import type { AvatarTone, LabourBalance, LabourPerson } from '../labourMock';
 import { netBalance, inr } from '../labourMock';
 
@@ -27,6 +27,26 @@ export const Avatar: React.FC<{ tone: AvatarTone; initial: string; size?: 'sm' |
         <span className={`flex flex-shrink-0 items-center justify-center rounded-2xl font-black ${dim} ${TONE[tone]}`}>{initial}</span>
     );
 };
+
+/**
+ * Honest load-failure banner for a REAL farm. Shown when `useLabourState`'s
+ * fetch failed, so the farmer knows it's a LOAD FAILURE — not "you have no
+ * workers / no money" (the data underneath is EMPTY_LABOUR_DATA, never
+ * LABOUR_MOCK). Money-safety companion to the hook's `error` flag.
+ */
+export const LoadErrorBanner: React.FC<{ onRetry: () => void }> = ({ onRetry }) => (
+    <div className="mx-4 mt-2 flex items-center justify-between gap-3 rounded-[18px] border border-rose-100 bg-rose-50 px-3.5 py-3">
+        <div className="flex min-w-0 items-center gap-2.5">
+            <span className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full bg-white text-rose-500 ring-1 ring-rose-100">
+                <CloudOff size={17} />
+            </span>
+            <span className="min-w-0 text-[12.5px] font-bold leading-snug text-rose-700">माहिती आणता आली नाही</span>
+        </div>
+        <button type="button" onClick={onRetry} className="flex flex-shrink-0 items-center gap-1.5 rounded-full bg-rose-600 px-3.5 py-2 text-[12px] font-extrabold text-white transition-transform active:scale-95">
+            <RefreshCw size={13} /> पुन्हा प्रयत्न करा
+        </button>
+    </div>
+);
 
 export const GroupLabel: React.FC<{ children: React.ReactNode }> = ({ children }) => (
     <div className="mb-1 mt-3 px-1 text-[11px] font-bold uppercase tracking-[0.08em] text-slate-400">{children}</div>
