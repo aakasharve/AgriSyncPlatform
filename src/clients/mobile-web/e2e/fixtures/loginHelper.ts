@@ -72,7 +72,13 @@ export async function loginViaPassword(
     const submitButton = page.locator('button[type="submit"]').first();
     await submitButton.click();
 
-    const landing = await waitForLoginLanding(page);
+    let landing = await waitForLoginLanding(page);
+    // First-run WelcomeScreen (shramsafal_welcome_seen) renders once after login,
+    // before the permission gate. Click through it, then re-evaluate the landing.
+    if (landing === 'welcome') {
+        await page.getByTestId('welcome-continue').click();
+        landing = await waitForLoginLanding(page);
+    }
     if (landing === 'permissions') {
         await page.getByTestId('onboarding-skip').click();
     }
@@ -82,15 +88,20 @@ export async function loginViaPassword(
     await expect(page.getByTestId('home-greeting')).toBeVisible({ timeout: 30_000 });
 }
 
-async function waitForLoginLanding(page: Page): Promise<'home' | 'permissions'> {
+async function waitForLoginLanding(page: Page): Promise<'home' | 'permissions' | 'welcome'> {
     const deadline = Date.now() + 30_000;
     const homeGreeting = page.getByTestId('home-greeting');
+    const welcomeContinue = page.getByTestId('welcome-continue');
     const skipBtn = page.getByTestId('onboarding-skip');
     const alert = page.getByRole('alert').first();
 
     while (Date.now() < deadline) {
         if (await homeGreeting.isVisible().catch(() => false)) {
             return 'home';
+        }
+
+        if (await welcomeContinue.isVisible().catch(() => false)) {
+            return 'welcome';
         }
 
         if (await skipBtn.isVisible().catch(() => false)) {
