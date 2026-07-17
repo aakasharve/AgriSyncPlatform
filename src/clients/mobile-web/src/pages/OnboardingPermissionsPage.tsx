@@ -123,8 +123,10 @@ const OnboardingPermissionsPage: React.FC<OnboardingPermissionsPageProps> = ({ o
                 </div>
             </div>
 
-            {/* PERMISSION ROWS */}
-            <div className="relative z-10 mx-auto w-full max-w-[440px] flex-1 space-y-2.5 overflow-y-auto px-6 py-6 scrollbar-hide">
+            {/* PERMISSION ROWS — directly under the header (natural reading order),
+                scrollable on short screens. */}
+            <div className="relative z-10 min-h-0 flex-1 overflow-y-auto scrollbar-hide">
+              <div className="mx-auto flex w-full max-w-[440px] flex-col space-y-3 px-6 py-5">
                 {CARDS.map((c, idx) => (
                     <div
                         key={c.id}
@@ -152,12 +154,15 @@ const OnboardingPermissionsPage: React.FC<OnboardingPermissionsPageProps> = ({ o
                         </span>
                     </div>
                 ))}
+              </div>
             </div>
 
-            {/* pointing farmer — grounded in the field, gesturing at the CTA */}
+            {/* pointing farmer — gestures at the CTA. Sized by viewport WIDTH and
+                anchored fully inside the frame, so he is never clipped by the
+                root's overflow-hidden on narrow phones / the APK webview. */}
             <div
                 data-cs-anim
-                className="pointer-events-none absolute -right-3 bottom-[112px] z-[5]"
+                className="pointer-events-none absolute bottom-[96px] right-0 z-[5] w-[52%] max-w-[212px]"
                 style={anim('cs-rise', '.8s', '.3s')}
             >
                 {!imgFailed && (
@@ -166,11 +171,11 @@ const OnboardingPermissionsPage: React.FC<OnboardingPermissionsPageProps> = ({ o
                         alt=""
                         aria-hidden="true"
                         onError={() => setImgFailed(true)}
-                        className="h-44 w-auto object-contain object-bottom"
+                        className="h-auto w-full object-contain object-bottom"
                         style={{
                             filter: 'drop-shadow(0 14px 20px rgba(6,78,59,.22))',
-                            WebkitMaskImage: 'linear-gradient(180deg,#000 66%,transparent 96%)',
-                            maskImage: 'linear-gradient(180deg,#000 66%,transparent 96%)',
+                            WebkitMaskImage: 'linear-gradient(180deg,#000 70%,transparent 97%)',
+                            maskImage: 'linear-gradient(180deg,#000 70%,transparent 97%)',
                         }}
                     />
                 )}
