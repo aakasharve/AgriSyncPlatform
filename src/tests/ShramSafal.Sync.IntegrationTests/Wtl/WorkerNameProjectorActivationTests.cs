@@ -129,13 +129,19 @@ public sealed class WorkerNameProjectorActivationTests : IAsyncLifetime
         var logId = Guid.NewGuid();
 
         // "रमेश आणि विलास आले" — matches RegexWorkerNameExtractor's
-        // PairWithVerb pattern (name + आणि + name + आले). Only "रमेश" is in
-        // the heuristic worker-name dictionary and "विलास" carries no
-        // marker word, so HeuristicWorkerNameDetector would score this
-        // transcript at the discard threshold (Clean) rather than redact
-        // it — i.e. this is a transcript that genuinely survives the real
-        // write-path's PII gate unredacted. See DailyLogTranscriptStore's
-        // remarks for the two-name case that does NOT survive.
+        // PairWithVerb pattern (name + आणि + name + आले), which captures
+        // BOTH group(1) "रमेश" and group(2) "विलास" — neither is filtered
+        // by the extractor's stopword list, so WorkerNameProjector creates
+        // TWO Worker rows (and two WorkerAssignments) for this transcript,
+        // same shape as the domain-level
+        // Creates_workers_and_assignments_for_two_extracted_names test.
+        // Separately: only "रमेश" is in the heuristic worker-name
+        // dictionary and "विलास" carries no marker word, so
+        // HeuristicWorkerNameDetector would score this transcript at the
+        // discard threshold (Clean) rather than redact it — i.e. this is a
+        // transcript that genuinely survives the real write-path's PII
+        // gate unredacted. See DailyLogTranscriptStore's remarks for the
+        // two-name case that does NOT survive.
         const string transcript = "रमेश आणि विलास आले";
 
         await using (var writeDb = NewWriteDbContext())
@@ -184,14 +190,18 @@ public sealed class WorkerNameProjectorActivationTests : IAsyncLifetime
         processed.Should().Be(1, "the DailyLog.Create outbox row is the only pending message");
 
         await using var readDb = NewPlainDbContext();
-        var worker = await readDb.Workers.SingleOrDefaultAsync(w => w.FarmId == farmId);
-        worker.Should().NotBeNull("the projector must have found \"रमेश\" via RegexWorkerNameExtractor and created a Worker");
-        worker!.Name.Raw.Should().Be("रमेश");
+        var workers = await readDb.Workers.Where(w => w.FarmId == farmId).ToListAsync();
+        workers.Should().HaveCount(2, "PairWithVerb captures BOTH names in \"रमेश आणि विलास आले\" and neither is stopword-filtered");
+        workers.Select(w => w.Name.Raw).Should().BeEquivalentTo(new[] { "रमेश", "विलास" });
 
-        var assignments = await readDb.WorkerAssignments
-            .Where(a => a.WorkerId == worker.Id)
-            .ToListAsync();
-        assignments.Should().ContainSingle(a => a.DailyLogId == logId);
+        foreach (var worker in workers)
+        {
+            var assignments = await readDb.WorkerAssignments
+                .Where(a => a.WorkerId == worker.Id)
+                .ToListAsync();
+            assignments.Should().ContainSingle(a => a.DailyLogId == logId,
+                $"the projector must link a WorkerAssignment to the seeded DailyLog for {worker.Name.Raw}");
+        }
     }
 
     [Fact]
