@@ -233,7 +233,11 @@ public sealed class LedgerDerivationService(IShramSafalRepository repository) : 
                     // NO-MULTIPLY (D3): only an EXPLICIT stated total — never rate × count.
                     totalCost: ReadDecimal(item, "totalCost"),
                     linkedActivityId: ReadGuid(item, "linkedActivityId"),
-                    createdAtUtc: now);
+                    createdAtUtc: now,
+                    // Descriptive only (Task 2.3) — never touch money above.
+                    shift: MapLabourShift(ReadString(item, "shift")),
+                    task: ReadTrimmedString(item, "activity"),
+                    workerNames: ReadStringArray(item, "whoWorked"));
                 await repository.AddLabourAssignmentAsync(assignment, ct);
                 children++;
             }
@@ -403,6 +407,41 @@ public sealed class LedgerDerivationService(IShramSafalRepository repository) : 
             ? v.GetRawText()
             : null;
 
+    // Like ReadString, but trims and normalizes blank-after-trim to null
+    // (e.g. labour "activity" — the spoken task). Case/script preserved
+    // (Devanagari), unlike Norm() which lowercases for enum matching.
+    private static string? ReadTrimmedString(JsonElement el, string prop)
+    {
+        var s = ReadString(el, prop);
+        return string.IsNullOrWhiteSpace(s) ? null : s!.Trim();
+    }
+
+    // Reads a JSON array of strings (labour "whoWorked" — names as stated) into
+    // a plain list; blank entries dropped, null when absent/empty so
+    // LabourAssignment.Create's own "[]" default applies.
+    private static IReadOnlyList<string>? ReadStringArray(JsonElement el, string prop)
+    {
+        if (!el.TryGetProperty(prop, out var v) || v.ValueKind != JsonValueKind.Array)
+        {
+            return null;
+        }
+
+        var names = new List<string>();
+        foreach (var entry in v.EnumerateArray())
+        {
+            if (entry.ValueKind == JsonValueKind.String)
+            {
+                var name = entry.GetString();
+                if (!string.IsNullOrWhiteSpace(name))
+                {
+                    names.Add(name!);
+                }
+            }
+        }
+
+        return names.Count == 0 ? null : names;
+    }
+
     // ── tolerant string → enum maps (safe default; never throw) ────────────────
     private static IrrigationRole MapIrrigationRole(string? s) => Norm(s) switch
     {
@@ -432,6 +471,16 @@ public sealed class LedgerDerivationService(IShramSafalRepository repository) : 
             _ => LabourEngagementType.Hired,
         };
     }
+
+    // Descriptive only (Task 2.3) — unknown/garbage shift values (e.g. a model
+    // hallucination) fall through to null rather than throwing; never guess.
+    private static LabourShift? MapLabourShift(string? s) => Norm(s) switch
+    {
+        "full" => LabourShift.Full,
+        "half" => LabourShift.Half,
+        "night" => LabourShift.Night,
+        _ => null,
+    };
 
     private static ContractUnit? MapContractUnit(string? s) => Norm(s) switch
     {
