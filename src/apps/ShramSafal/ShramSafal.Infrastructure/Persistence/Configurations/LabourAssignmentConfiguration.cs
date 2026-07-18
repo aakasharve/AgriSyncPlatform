@@ -30,6 +30,19 @@ internal sealed class LabourAssignmentConfiguration : IEntityTypeConfiguration<L
         builder.Property(x => x.LinkedActivityId).HasColumnName("linked_activity_id");
         builder.Property(x => x.CreatedAtUtc).HasColumnName("created_at_utc").IsRequired();
 
+        builder.Property(x => x.Shift)
+            .HasColumnName("shift").HasConversion<string>().HasMaxLength(20); // nullable enum -> stores "Full"/"Half"/"Night"
+
+        builder.Property(x => x.Task).HasColumnName("task");                          // nullable free text
+
+        // Task 2.2 — mirrors DailyLogConfiguration.EvidenceSourcesJson: ships NOT NULL
+        // with default '[]'::jsonb so the column never needs NULL handling downstream.
+        builder.Property(x => x.WorkerNamesJson)
+            .HasColumnName("worker_names_json")
+            .HasColumnType("jsonb")
+            .HasDefaultValueSql("'[]'::jsonb")
+            .IsRequired();
+
         builder.HasIndex(x => x.DailyLogId).HasDatabaseName("ix_labour_assignments_daily_log_id");
         builder.Ignore(x => x.DomainEvents);
     }
