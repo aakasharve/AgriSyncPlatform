@@ -6,6 +6,14 @@
  * ('labour'); all sub-navigation is LOCAL here (a small screen stack) so the
  * shipped nav machine is untouched. `onExit` returns to Profile. Data comes
  * from useLabourState() (mock now, real backend later behind the same hook).
+ *
+ * `onGoToLog` is the single doorway every labour mic (hub voice card,
+ * attendance mic) uses to reach the app's ONE canonical voice-capture
+ * surface — the log page. It is optional: the real app always supplies it
+ * (`simpleRoutes.tsx` wires it to `setCurrentRoute('main')`), but the
+ * `?preview=labour` mount (`LabourPreview.tsx`) has no router at all, so it
+ * omits the prop on purpose — the fallback below surfaces the feature's own
+ * existing toast instead of crashing or attempting to navigate.
  */
 import React, { useCallback, useRef, useState } from 'react';
 import { useLabourState } from '../useLabourState';
@@ -30,7 +38,7 @@ const TITLES: Record<ScreenName, string> = {
     ledger: 'हजेरी वही',
 };
 
-export const LabourFeature: React.FC<{ onExit: () => void }> = ({ onExit }) => {
+export const LabourFeature: React.FC<{ onExit: () => void; onGoToLog?: () => void }> = ({ onExit, onGoToLog }) => {
     const { data, error, refresh } = useLabourState();
     const [stack, setStack] = useState<ScreenState[]>([{ name: 'hub' }]);
     const [reviewOpen, setReviewOpen] = useState(false);
@@ -46,6 +54,9 @@ export const LabourFeature: React.FC<{ onExit: () => void }> = ({ onExit }) => {
         window.clearTimeout(toastTimer.current);
         toastTimer.current = window.setTimeout(() => setToast(null), 2000);
     }, []);
+    // No router available (e.g. bare `?preview=labour` mount) → surface the
+    // existing toast instead of navigating or crashing.
+    const goToLog = onGoToLog ?? (() => showToast('🎙 आवाज नोंद लॉग स्क्रीनवर होते'));
 
     const title = cur.name === 'mukadam' && cur.id ? (data.people[cur.id]?.name ?? 'मुकादम')
         : cur.name === 'person' && cur.id ? (data.people[cur.id]?.name ?? 'कामगार')
@@ -65,6 +76,7 @@ export const LabourFeature: React.FC<{ onExit: () => void }> = ({ onExit }) => {
                         onDashboard={() => push({ name: 'dashboard' })}
                         onLedger={() => push({ name: 'ledger' })}
                         onReview={() => setReviewOpen(true)}
+                        onGoToLog={goToLog}
                     />
                 )}
                 {cur.name === 'mukadam' && cur.id && (
@@ -87,7 +99,7 @@ export const LabourFeature: React.FC<{ onExit: () => void }> = ({ onExit }) => {
                     />
                 )}
                 {cur.name === 'attendance' && (
-                    <Attendance data={data} onSave={() => { back(); showToast('जतन झाले → मंजुरीसाठी'); }} onToast={showToast} />
+                    <Attendance data={data} onSave={() => { back(); showToast('जतन झाले → मंजुरीसाठी'); }} onToast={showToast} onGoToLog={goToLog} />
                 )}
                 {cur.name === 'dashboard' && (
                     <WeeklyDashboard data={data} onReview={() => setReviewOpen(true)} onLedger={() => push({ name: 'ledger' })} onToast={showToast} />

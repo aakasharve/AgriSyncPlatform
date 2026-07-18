@@ -20,6 +20,8 @@ interface Props {
     onDashboard: () => void;
     onLedger: () => void;
     onReview: () => void;
+    /** Voice input lives only on the canonical log page — the voice card navigates there. */
+    onGoToLog: () => void;
 }
 
 const QuickTile: React.FC<{ icon: React.ReactNode; chip: string; label: string; sub: string; badge?: number; onClick: () => void }> = ({ icon, chip, label, sub, badge, onClick }) => (
@@ -32,9 +34,9 @@ const QuickTile: React.FC<{ icon: React.ReactNode; chip: string; label: string; 
     </button>
 );
 
-const LabourHub: React.FC<Props> = ({ data, onOpenMukadam, onOpenPerson, onAttendance, onDashboard, onLedger, onReview }) => (
+const LabourHub: React.FC<Props> = ({ data, onOpenMukadam, onOpenPerson, onAttendance, onDashboard, onLedger, onReview, onGoToLog }) => (
     <div className="flex flex-col gap-2.5 px-4 pb-24 pt-2">
-        <button type="button" onClick={onAttendance} className="relative flex w-full items-center gap-3.5 overflow-hidden rounded-[24px] bg-gradient-to-br from-emerald-500 to-emerald-700 p-4 text-left shadow-[0_16px_32px_-12px_rgba(5,150,105,0.65)] transition-transform active:scale-[0.99]">
+        <button type="button" onClick={onGoToLog} className="relative flex w-full items-center gap-3.5 overflow-hidden rounded-[24px] bg-gradient-to-br from-emerald-500 to-emerald-700 p-4 text-left shadow-[0_16px_32px_-12px_rgba(5,150,105,0.65)] transition-transform active:scale-[0.99]">
             <span className="relative flex h-14 w-14 flex-shrink-0 items-center justify-center rounded-2xl bg-white/20 text-white">
                 <span className="absolute inset-0 animate-ping rounded-2xl bg-white/25" />
                 <Mic size={26} strokeWidth={2.4} />

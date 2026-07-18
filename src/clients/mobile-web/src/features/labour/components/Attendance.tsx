@@ -2,9 +2,11 @@
  * @license
  * SPDX-License-Identifier: Apache-2.0
  *
- * Attendance — voice-first: the mic fills who came; the owner corrects. The
- * "4 people" headcount stays; ≥1 named worker is required. Present/Half/Absent
- * per worker. Approval happens after (rides the log-approval flow).
+ * Attendance — the mic here is a doorway to the log page (voice is captured
+ * there, then flows back into this feature's real data). The owner sets the
+ * "how many people" headcount and shift here directly; ≥1 named worker is
+ * required. Present/Half/Absent per worker. Approval happens after (rides
+ * the log-approval flow).
  */
 import React, { useState } from 'react';
 import { Plus, Check, ArrowUp } from 'lucide-react';
@@ -13,10 +15,9 @@ import { Avatar } from './LabourUiKit';
 import LabourMic from './LabourMic';
 import CropSelector from '../../context/components/CropSelector';
 import type { CropProfile } from '../../../types';
-import { parseLabour, SHIFT_LABEL, type LabourShift, type LabourEntry } from '../labourParse';
-import LabourDataPoints from './LabourDataPoints';
+import { SHIFT_LABEL, type LabourShift } from '../labourParse';
 
-interface Props { data: LabourData; onSave: () => void; onToast: (m: string) => void }
+interface Props { data: LabourData; onSave: () => void; onToast: (m: string) => void; onGoToLog: () => void }
 
 const SEG: { k: PresenceStatus; label: string }[] = [
     { k: 'present', label: 'आला' },
@@ -34,9 +35,8 @@ const MOCK_CROPS = [
     { id: 'cane', name: 'ऊस', iconName: 'Sugarcane', color: 'bg-emerald-500', plots: [{ id: 'c1', name: 'ऊस-१' }, { id: 'c2', name: 'ऊस-२' }] },
 ] as unknown as CropProfile[];
 
-const Attendance: React.FC<Props> = ({ data, onSave, onToast }) => {
+const Attendance: React.FC<Props> = ({ data, onSave, onToast, onGoToLog }) => {
     const [count, setCount] = useState(data.attendance.headcount);
-    const [heard, setHeard] = useState('');
     const [selCrops, setSelCrops] = useState<string[]>(['grapes']);
     const [selPlots, setSelPlots] = useState<Record<string, string[]>>({ grapes: ['g2'] });
     const selectedPlotNames = MOCK_CROPS.flatMap((cr) => (selPlots[cr.id] || []).map((pid) => cr.plots.find((pl) => pl.id === pid)?.name).filter(Boolean));
@@ -44,8 +44,6 @@ const Attendance: React.FC<Props> = ({ data, onSave, onToast }) => {
     // No context (no plot picked) → no mic, like the log screen. Pick a plot first.
     const hasContext = selectedPlotNames.length > 0;
     const [shift, setShift] = useState<LabourShift>('full');
-    const [parsed, setParsed] = useState<LabourEntry | null>(null);
-    const [offLabour, setOffLabour] = useState(false);
     const [status, setStatus] = useState<Record<string, PresenceStatus>>(() => {
         const init: Record<string, PresenceStatus> = {};
         data.attendance.rows.forEach((r) => { init[r.personId] = r.status; });
@@ -55,26 +53,6 @@ const Attendance: React.FC<Props> = ({ data, onSave, onToast }) => {
     const segClass = (on: boolean, k: PresenceStatus) => {
         if (!on) return 'text-slate-400';
         return k === 'present' ? 'bg-white text-emerald-700 shadow-sm' : k === 'half' ? 'bg-white text-amber-700 shadow-sm' : 'bg-white text-rose-600 shadow-sm';
-    };
-
-    const handleTranscript = (t: string) => {
-        setHeard(t);
-        const roster = data.attendance.rows.map((r) => data.people[r.personId].name.split(' ')[0]);
-        const entry = parseLabour(t, roster);
-        if (!entry.relevant) { setOffLabour(true); setParsed(null); onToast('⚠ हे labour शी संबंधित नाही'); return; }
-        setOffLabour(false);
-        setParsed(entry);
-        if (entry.count != null) setCount(entry.count);
-        if (entry.shift) setShift(entry.shift);
-        if (entry.names.length) {
-            const next: Record<string, PresenceStatus> = { ...status };
-            data.attendance.rows.forEach((r) => {
-                const first = data.people[r.personId].name.split(' ')[0];
-                if (entry.names.includes(first)) next[r.personId] = 'present';
-            });
-            setStatus(next);
-        }
-        onToast('ऐकलं ✓');
     };
 
     return (
@@ -91,25 +69,7 @@ const Attendance: React.FC<Props> = ({ data, onSave, onToast }) => {
             />
 
             {hasContext ? (
-                <>
-                    <LabourMic
-                        onTranscript={handleTranscript}
-                        onError={onToast}
-                    />
-
-                    {offLabour && (
-                        <div className="flex items-start gap-2.5 rounded-2xl border border-amber-200 bg-amber-50 p-3">
-                            <span className="text-[18px] leading-none">⚠</span>
-                            <div className="text-[12.5px] font-bold leading-snug text-amber-800">हे labour शी संबंधित नाही. फक्त <b>कामगार संख्या · शिफ्ट · नावं · मजुरी</b> नोंदवली जातात.</div>
-                        </div>
-                    )}
-                    {parsed && (
-                        <div className="rounded-2xl border border-emerald-100 bg-emerald-50/60 p-3">
-                            <div className="mb-1.5 text-[11px] font-extrabold uppercase tracking-wide text-emerald-700">हे समजलं · captured</div>
-                            <LabourDataPoints entry={parsed} />
-                        </div>
-                    )}
-                </>
+                <LabourMic onGoToLog={onGoToLog} />
             ) : (
                 <div className="flex flex-col items-center gap-1.5 rounded-[28px] border border-dashed border-emerald-200 bg-emerald-50/50 px-5 py-8 text-center">
                     <ArrowUp className="animate-bounce text-emerald-500" size={28} strokeWidth={2.5} />
@@ -125,11 +85,7 @@ const Attendance: React.FC<Props> = ({ data, onSave, onToast }) => {
                     <b className="text-[24px] font-black text-emerald-700 [font-variant-numeric:tabular-nums]">{toMr(count)} लोक</b>
                     <button type="button" onClick={() => setCount((c) => c + 1)} className="flex h-9 w-9 items-center justify-center rounded-lg border border-emerald-100 bg-white text-[20px] font-bold text-emerald-700 active:scale-90">+</button>
                 </div>
-                {heard ? (
-                    <div className="mt-2 flex items-center gap-1.5 rounded-lg bg-emerald-50 px-2.5 py-1.5 text-[11px] font-semibold text-emerald-800">🎙 आवाजातून भरलं: "{heard}"</div>
-                ) : (
-                    <div className="mt-2 text-[10.5px] text-slate-400">🎙 "आज ४ लोक कामाला आली" — व्हॉइस लॉगमधून</div>
-                )}
+                <div className="mt-2 text-[10.5px] text-slate-400">🎙 "आज ४ लोक कामाला आली" — व्हॉइस लॉगमधून</div>
             </div>
 
             <div className="rounded-2xl border border-slate-100 bg-white p-3.5 shadow-[0_1px_3px_rgba(20,40,30,0.05)]">

@@ -74,7 +74,7 @@ export const renderLabourRoute = (ctx: AppRouterContext): React.ReactNode => {
     if (ctx.currentRoute !== 'labour') return null;
     return (
         <div className="animate-in fade-in slide-in-from-right-4 duration-300">
-            <LabourFeaturePage onExit={() => ctx.setCurrentRoute('profile')} />
+            <LabourFeaturePage onExit={() => ctx.setCurrentRoute('profile')} onGoToLog={() => ctx.setCurrentRoute('main')} />
         </div>
     );
 };
