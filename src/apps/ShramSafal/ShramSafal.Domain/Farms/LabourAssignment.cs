@@ -71,6 +71,11 @@ public sealed class LabourAssignment : Entity<Guid>
     /// <c>"[]"</c> when the farmer named no one. Purely descriptive; plays no part
     /// in the NO-MULTIPLY money invariant above.
     /// </summary>
+    /// <remarks>
+    /// WARNING: Serialized with <see cref="JavaScriptEncoder.UnsafeRelaxedJsonEscaping"/>
+    /// for readable Devanagari in jsonb, but NOT HTML-safe. Never embed raw JSON in HTML,
+    /// &lt;script&gt;, Html.Raw, or dangerouslySetInnerHTML — deserialize and render as text only.
+    /// </remarks>
     public string WorkerNamesJson { get; private set; } = "[]";
 
     public static LabourAssignment Create(

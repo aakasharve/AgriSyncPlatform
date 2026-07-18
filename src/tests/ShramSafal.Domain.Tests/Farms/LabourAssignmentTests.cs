@@ -106,11 +106,11 @@ public sealed class LabourAssignmentTests
 
         var withStatedTotal = LabourAssignment.Create(Guid.NewGuid(), Log, LabourEngagementType.Hired,
             maleCount: 3, femaleCount: 2, workerCount: 5, wagePerPerson: 350m,
-            contractUnit: null, contractQuantity: null, totalCost: 1750m, linkedActivityId: null,
+            contractUnit: null, contractQuantity: null, totalCost: 1800m, linkedActivityId: null,
             createdAtUtc: DateTime.UtcNow,
             shift: LabourShift.Night, task: null, workerNames: null);
 
-        Assert.Equal(1750m, withStatedTotal.TotalCost);    // stated total preserved exactly
+        Assert.Equal(1800m, withStatedTotal.TotalCost);    // stated total preserved exactly
         Assert.Equal(350m, withStatedTotal.WagePerPerson);
     }
 }
