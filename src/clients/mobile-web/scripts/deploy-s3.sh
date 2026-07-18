@@ -81,14 +81,49 @@ to_aws_path() {
 
 log() { printf '\n\033[1m==> %s\033[0m\n' "$*"; }
 
+# Is this filename content-hashed by Vite (e.g. index-BPf9AmjT.js)?
+#
+# `immutable` is only ever safe for a hashed name, because a change produces a NEW
+# url. Classifying on the `assets/` PREFIX instead was a real bug: assets/ also holds
+# hand-named files (assets/rupee_gold.png, assets/icons/icon-192.webp) that are
+# referenced by fixed path from manifest.webmanifest and the shell bundle. Those were
+# silently pinned for a year — the exact failure this policy exists to prevent — and,
+# being baked into the classifier, were re-pinned on every run.
+#
+# Unsure => NOT hashed. A wrongly-short cache costs a little bandwidth; a wrongly
+# `immutable` one strands the file in browsers for a year with no way to reach them.
+is_content_hashed() {
+  case "$(basename "$1")" in
+    *-????????.*) return 0 ;;   # Vite's 8-char hash suffix
+    *)            return 1 ;;
+  esac
+}
+
 # Which Cache-Control a given dist-relative path must be served with.
 # Single source of truth: both the upload passes and the verify pass read this.
 policy_for() {
   case "$1" in
-    assets/*)            printf '%s' "$IMMUTABLE" ;;
-    index.html|sw.js)    printf '%s' "$REVALIDATE" ;;
-    consent/*)           printf '%s' "$REVALIDATE" ;;
-    *)                   printf '%s' "$SHORT" ;;
+    index.html|sw.js)    printf '%s' "$REVALIDATE"; return ;;
+    consent/*)           printf '%s' "$REVALIDATE"; return ;;
+  esac
+  if is_content_hashed "$1"; then printf '%s' "$IMMUTABLE"; else printf '%s' "$SHORT"; fi
+}
+
+# Expected Content-Type per extension. Asserting "not text/html" is NOT enough: a .md
+# degrading to application/octet-stream would make browsers DOWNLOAD the consent
+# agreement instead of rendering it, and that check would pass it.
+expected_ctype() {
+  case "$1" in
+    *.html) printf 'text/html' ;;
+    *.js)   printf 'javascript' ;;      # substring match: text/ or application/javascript
+    *.css)  printf 'text/css' ;;
+    *.md)   printf 'text/' ;;           # text/markdown or text/plain
+    *.json|*.webmanifest) printf 'json' ;;
+    *.webp) printf 'image/webp' ;;
+    *.png)  printf 'image/png' ;;
+    *.jpg|*.jpeg) printf 'image/jpeg' ;;
+    *.svg)  printf 'image/svg' ;;
+    *)      printf '' ;;                # unknown extension: skip the assertion
   esac
 }
 
@@ -111,8 +146,12 @@ sync_class() {
   # is the exact mechanism that can silently clobber Content-Type; on a local->S3
   # upload the metadata is set from the request, and sync derives Content-Type from
   # the file extension (which is how the correct types got there originally).
+  #
+  # Each caller passes its OWN filters, including any leading --exclude "*". Do not
+  # hardcode one here: the catch-all pass works by excluding the other classes from a
+  # default-include, and a hardcoded --exclude "*" would make it upload nothing.
   aws s3 sync "$AWS_DIST" "s3://$BUCKET/" \
-    --exclude "*" "$@" \
+    "$@" \
     --cache-control "$cache" \
     $DRY_RUN
 }
@@ -128,19 +167,24 @@ if [ "$VERIFY_ONLY" -eq 0 ]; then
     find "$DIST" -type f -exec touch {} +
   fi
 
-  sync_class "hashed assets (safe to cache forever)" "$IMMUTABLE" \
-    --include "assets/*"
+  # Only CONTENT-HASHED names get the 1-year pin. The `?` glob matches exactly one
+  # character, so *-????????.* selects Vite's 8-char hash suffix and nothing else —
+  # hand-named files under assets/ correctly fall through to the 7-day class below.
+  sync_class "content-hashed assets (safe to cache forever)" "$IMMUTABLE" \
+    --exclude "*" --include "assets/*-????????.*"
 
+  # Everything not hashed, not the shell, not legal text. Expressed as exclusions so a
+  # NEW unhashed file added later lands here automatically rather than being missed —
+  # the previous include-list version silently skipped whatever nobody remembered to add.
   sync_class "unhashed static (stable filenames — bounded staleness)" "$SHORT" \
-    --include "brand/*" --include "images/*" --include "demo-photos/*" \
-    --include "logo.png" --include "manifest.webmanifest" \
-    --include "streaming-pcm-processor.worklet.js"
+    --exclude "assets/*-????????.*" \
+    --exclude "index.html" --exclude "sw.js" --exclude "consent/*"
 
   sync_class "consent legal text (must always revalidate)" "$REVALIDATE" \
-    --include "consent/*"
+    --exclude "*" --include "consent/*"
 
   sync_class "app shell (must always revalidate)" "$REVALIDATE" \
-    --include "index.html" --include "sw.js"
+    --exclude "*" --include "index.html" --include "sw.js"
 
   if [ "$PRUNE" -eq 1 ]; then
     # Delete superseded objects. Runs LAST so the header passes above have already
@@ -160,9 +204,19 @@ if [ "$VERIFY_ONLY" -eq 0 ]; then
   fi
 
   log "invalidating CloudFront $DISTRIBUTION_ID"
+  # Uses --invalidation-batch file:// rather than --paths '/*'. Under MSYS/Git-Bash on
+  # Windows, a bare '/*' gets path-mangled into something like C:/Program Files/*, and
+  # the invalidation silently covers the wrong paths. The batch file sidesteps the
+  # argument conversion entirely and needs no MSYS2_ARG_CONV_EXCL workaround.
+  _batch="$(mktemp)"
+  cat > "$_batch" <<JSON
+{"Paths":{"Quantity":1,"Items":["/*"]},"CallerReference":"deploy-s3-$(date -u +%Y%m%dT%H%M%SZ)"}
+JSON
   INVALIDATION_ID="$(aws cloudfront create-invalidation \
-    --distribution-id "$DISTRIBUTION_ID" --paths '/*' \
+    --distribution-id "$DISTRIBUTION_ID" \
+    --invalidation-batch "file://$(to_aws_path "$_batch")" \
     --query 'Invalidation.Id' --output text)"
+  rm -f "$_batch"
   echo "    invalidation: $INVALIDATION_ID"
 
   # Verifying before the invalidation completes would read the OLD headers from the
@@ -207,15 +261,18 @@ while IFS= read -r file; do
     echo "  FAIL  $rel — Cache-Control '${got:-<missing>}' (expected '$want')"
     fail=$((fail + 1)); continue
   fi
-  # A missing object returns the SPA fallback: HTTP 200 + text/html. Status alone is
-  # therefore not proof of existence — assert the type too, or 404s read as green.
-  case "$rel" in
-    *.html) ;;
-    *) if [ "$ctype" = "text/html" ]; then
-         echo "  FAIL  $rel — served as text/html (missing object hitting SPA fallback?)"
-         fail=$((fail + 1))
-       fi ;;
-  esac
+  # Assert the EXPECTED Content-Type, not merely "not text/html".
+  # Two distinct hazards, and the weaker check only caught the first:
+  #   a) a missing object returns the SPA fallback (HTTP 200 + text/html), so status
+  #      alone is never proof of existence on this distribution;
+  #   b) a correct-status object can still carry the WRONG type — a .md served as
+  #      application/octet-stream would make browsers download the consent agreement
+  #      instead of rendering it, and "not text/html" passes that happily.
+  want_ctype="$(expected_ctype "$rel")"
+  if [ -n "$want_ctype" ] && ! printf '%s' "$ctype" | grep -qi "$want_ctype"; then
+    echo "  FAIL  $rel — Content-Type '${ctype:-<none>}' (expected to contain '$want_ctype')"
+    fail=$((fail + 1))
+  fi
 done < <(find "$DIST" -type f | sort)
 
 echo
