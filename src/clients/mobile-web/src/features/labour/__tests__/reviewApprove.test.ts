@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 /**
  * @license
  * SPDX-License-Identifier: Apache-2.0
@@ -19,8 +20,19 @@
  *     for a Disputed transition.
  *   - A rejected `enqueue()` propagates — the caller must not fabricate
  *     success on a failed mutation.
+ *
+ * Task 3.2 adds a second describe block below: the confirm-animation + 3s
+ * undo-before-send wiring around `sendVerification` (ReviewSheet itself,
+ * rendered with fake timers). The file is `.ts` (not `.tsx`) so component
+ * rendering uses `React.createElement` rather than JSX. `@vitest-environment
+ * jsdom` (default is `node` per vitest.config.ts) is required for both
+ * blocks now that one of them renders a component — this does not change
+ * behaviour for the Task 3.1 pure-function tests.
  */
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import '@testing-library/jest-dom/vitest';
+import React from 'react';
+import { render, screen, fireEvent, cleanup, act } from '@testing-library/react';
 
 const mockEnqueue = vi.fn();
 vi.mock('../../../application/usecases/sync/VerifyLogCommand', () => ({
@@ -32,7 +44,9 @@ vi.mock('../../../infrastructure/sync/BackgroundSyncWorker', () => ({
     backgroundSyncWorker: { triggerNow: (...args: unknown[]) => mockTriggerNow(...args) },
 }));
 
-import { sendVerification } from '../components/ReviewSheet';
+import ReviewSheet, { sendVerification } from '../components/ReviewSheet';
+import { EMPTY_LABOUR_DATA } from '../labourMock';
+import type { LabourData, ReviewItem } from '../labourMock';
 
 describe('sendVerification — तपासणी approve/query drives real verify_log', () => {
     beforeEach(() => {
@@ -108,5 +122,151 @@ describe('sendVerification — तपासणी approve/query drives real veri
 
         await expect(sendVerification('r8', 'Draft', 'verified')).rejects.toThrow('boom');
         expect(mockEnqueue).toHaveBeenCalledTimes(1);
+    });
+});
+
+// ---------------------------------------------------------------------------
+// Task 3.2 — confirm animation + 3s undo-before-send (ReviewSheet itself)
+// ---------------------------------------------------------------------------
+
+function makeItem(id: string, status: ReviewItem['status'] = 'Confirmed'): ReviewItem {
+    return { id, who: `who-${id}`, initial: 'र', tone: 'or', detail: `detail-${id}`, status, points: {} };
+}
+
+function dataWith(review: ReviewItem[]): LabourData {
+    return { ...EMPTY_LABOUR_DATA, review };
+}
+
+// A little past CONFIRM_ANIM_MS (380ms) — puts the batch into the
+// undo-bar-visible "pending" stage without yet elapsing the 3s window.
+const PAST_ANIM_MS = 450;
+// A little past UNDO_WINDOW_MS (3000ms) from the pending stage.
+const PAST_UNDO_WINDOW_MS = 3100;
+
+describe('ReviewSheet — confirm animation + 3s undo-before-send (Task 3.2)', () => {
+    beforeEach(() => {
+        vi.useFakeTimers();
+        mockEnqueue.mockReset();
+        mockEnqueue.mockResolvedValue('client-request-id');
+        mockTriggerNow.mockReset();
+        mockTriggerNow.mockResolvedValue(undefined);
+    });
+
+    afterEach(() => {
+        cleanup();
+        vi.useRealTimers();
+    });
+
+    it('undo tapped within the window enqueues ZERO mutations and restores the card', async () => {
+        const onToast = vi.fn();
+        render(React.createElement(ReviewSheet, {
+            open: true, data: dataWith([makeItem('r1', 'Confirmed')]), onClose: vi.fn(), onToast,
+        }));
+
+        fireEvent.click(screen.getByTestId('review-approve-r1'));
+        await act(async () => { await vi.advanceTimersByTimeAsync(PAST_ANIM_MS); });
+
+        // Card has collapsed out of the list; undo bar is up. Nothing sent yet.
+        expect(screen.queryByTestId('review-card-r1')).toBeNull();
+        expect(screen.getByTestId('review-undo-bar')).toBeInTheDocument();
+        expect(mockEnqueue).not.toHaveBeenCalled();
+
+        fireEvent.click(screen.getByTestId('review-undo-button'));
+
+        // Let the window that WOULD have elapsed pass — undo must have
+        // cancelled the timer, so nothing fires.
+        await act(async () => { await vi.advanceTimersByTimeAsync(PAST_UNDO_WINDOW_MS); });
+
+        expect(mockEnqueue).not.toHaveBeenCalled();
+        expect(mockTriggerNow).not.toHaveBeenCalled();
+        expect(screen.getByTestId('review-card-r1')).toBeInTheDocument();
+        expect(screen.queryByTestId('review-undo-bar')).toBeNull();
+    });
+
+    it('window elapses untouched -> enqueues the correct mutation(s) (Draft: confirmed then verified)', async () => {
+        const onToast = vi.fn();
+        render(React.createElement(ReviewSheet, {
+            open: true, data: dataWith([makeItem('r2', 'Draft')]), onClose: vi.fn(), onToast,
+        }));
+
+        fireEvent.click(screen.getByTestId('review-approve-r2'));
+        await act(async () => { await vi.advanceTimersByTimeAsync(PAST_ANIM_MS); });
+        expect(mockEnqueue).not.toHaveBeenCalled(); // still just sitting in the undo window
+
+        await act(async () => { await vi.advanceTimersByTimeAsync(PAST_UNDO_WINDOW_MS); });
+
+        expect(mockEnqueue).toHaveBeenCalledTimes(2);
+        expect(mockEnqueue.mock.calls[0][0]).toEqual({ dailyLogId: 'r2', verificationStatus: 'confirmed' });
+        expect(mockEnqueue.mock.calls[1][0]).toEqual({ dailyLogId: 'r2', verificationStatus: 'verified', reason: undefined });
+        expect(onToast).toHaveBeenCalledWith('मंजूर ✓ — हजेरीही निश्चित');
+        expect(screen.queryByTestId('review-undo-bar')).toBeNull();
+    });
+
+    it('unmounting with a pending send FLUSHES it immediately — the mutation is still enqueued, not dropped', async () => {
+        const onToast = vi.fn();
+        const { unmount } = render(React.createElement(ReviewSheet, {
+            open: true, data: dataWith([makeItem('r3', 'Confirmed')]), onClose: vi.fn(), onToast,
+        }));
+
+        fireEvent.click(screen.getByTestId('review-approve-r3'));
+        await act(async () => { await vi.advanceTimersByTimeAsync(PAST_ANIM_MS); }); // now inside the undo window, NOT elapsed
+
+        expect(mockEnqueue).not.toHaveBeenCalled();
+
+        unmount();
+        // Flush the fire-and-forget send's microtasks (no more timers are
+        // scheduled at this point — the flush already cleared the undo
+        // timer and called finalizeBatch directly).
+        await act(async () => { await vi.advanceTimersByTimeAsync(0); });
+
+        expect(mockEnqueue).toHaveBeenCalledTimes(1);
+        expect(mockEnqueue).toHaveBeenCalledWith({ dailyLogId: 'r3', verificationStatus: 'verified', reason: undefined });
+        expect(mockTriggerNow).toHaveBeenCalledTimes(1);
+        // Guarded by mountedRef — no toast fires for a truly unmounted sheet.
+        expect(onToast).not.toHaveBeenCalled();
+    });
+
+    it('सगळं मंजूर then undo cancels the WHOLE batch — zero mutations, every card restored', async () => {
+        const onToast = vi.fn();
+        render(React.createElement(ReviewSheet, {
+            open: true, data: dataWith([makeItem('r4', 'Confirmed'), makeItem('r5', 'Confirmed')]), onClose: vi.fn(), onToast,
+        }));
+
+        fireEvent.click(screen.getByTestId('review-approve-all'));
+        await act(async () => { await vi.advanceTimersByTimeAsync(PAST_ANIM_MS); });
+
+        expect(screen.queryByTestId('review-card-r4')).toBeNull();
+        expect(screen.queryByTestId('review-card-r5')).toBeNull();
+        expect(screen.getByTestId('review-undo-bar')).toBeInTheDocument();
+
+        fireEvent.click(screen.getByTestId('review-undo-button'));
+        await act(async () => { await vi.advanceTimersByTimeAsync(PAST_UNDO_WINDOW_MS); });
+
+        expect(mockEnqueue).not.toHaveBeenCalled();
+        expect(screen.getByTestId('review-card-r4')).toBeInTheDocument();
+        expect(screen.getByTestId('review-card-r5')).toBeInTheDocument();
+    });
+
+    it('closing the sheet (open -> false) while a send is pending also flushes it', async () => {
+        const onToast = vi.fn();
+        const { rerender } = render(React.createElement(ReviewSheet, {
+            open: true, data: dataWith([makeItem('r6', 'Confirmed')]), onClose: vi.fn(), onToast,
+        }));
+
+        fireEvent.click(screen.getByTestId('review-approve-r6'));
+        await act(async () => { await vi.advanceTimersByTimeAsync(PAST_ANIM_MS); });
+        expect(mockEnqueue).not.toHaveBeenCalled();
+
+        await act(async () => {
+            rerender(React.createElement(ReviewSheet, {
+                open: false, data: dataWith([makeItem('r6', 'Confirmed')]), onClose: vi.fn(), onToast,
+            }));
+            await vi.advanceTimersByTimeAsync(0);
+        });
+
+        expect(mockEnqueue).toHaveBeenCalledTimes(1);
+        expect(mockEnqueue).toHaveBeenCalledWith({ dailyLogId: 'r6', verificationStatus: 'verified', reason: undefined });
+        // The component is still mounted (just visually closed) — toast IS expected.
+        expect(onToast).toHaveBeenCalledWith('मंजूर ✓ — हजेरीही निश्चित');
     });
 });
