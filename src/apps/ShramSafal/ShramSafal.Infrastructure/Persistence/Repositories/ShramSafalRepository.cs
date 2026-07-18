@@ -265,12 +265,18 @@ internal sealed class ShramSafalRepository(ShramSafalDbContext db) : IShramSafal
     }
 
     // ── DFES (dfes-companion-2026-07-11) daily richness derivation ─────────────
+    // spec: dfes-companion-2026-07-11 — .Include(l => l.Tasks) so
+    // DailyRichnessDerivationService's persisted-work fallback (a log with no
+    // usable AI-job JSON root) can see the log's real LogTask rows instead of
+    // an empty navigation. Mirrors the existing .Include(l => l.Tasks) pattern
+    // already used by GetDailyLogByIdAsync / GetDailyLogsChangedSinceAsync above.
     public async Task<IReadOnlyList<DailyLog>> GetDailyLogsForFarmDateAsync(
         Guid farmId, DateOnly localDate, CancellationToken ct = default)
     {
         var typedFarmId = new FarmId(farmId);
         return await db.DailyLogs
             .AsNoTracking()
+            .Include(l => l.Tasks)
             .Where(l => l.FarmId == typedFarmId && l.LogDate == localDate)
             .OrderBy(l => l.Id)
             .ToListAsync(ct);

@@ -88,6 +88,86 @@ public sealed class DailyRichnessDerivationServiceTests
         agg.ShramPointsEarned.Should().Be(0);
     }
 
+    // ── scorer bug repro (spec: dfes-companion-2026-07-11) ─────────────────────
+    // A farmer logged a real day of work (spray + fertilizer + hired-worker
+    // pruning) via LogTask rows (AddLogTaskHandler), but the log has NO
+    // SourceAiJobId (manual entry / offline sync / a dropped voice provenance
+    // link). Before the fix, DailyRichnessDerivationService only ever looked at
+    // AI-job NormalizedResultJson, so this genuinely-recorded day scored
+    // UnaccountedDay / HasWork=false — "nothing happened" for a farmer who
+    // worked all day. The fix must fall back to the log's real persisted
+    // LogTask rows so HasWork becomes true and the day is no longer
+    // UnaccountedDay.
+    [Fact]
+    public async Task ManualLog_withRealPersistedTasks_butNoAiJobLink_isNeverUnaccountedDay()
+    {
+        var log = DailyLog.Create(
+            Guid.NewGuid(), new FarmId(Farm), Plot, Cycle, new UserId(Op), Day,
+            idempotencyKey: null, location: null, createdAtUtc: Now,
+            provenance: Provenance.Manual("test"), sourceAiJobId: null); // no AI-job link
+        log.AddTask(Guid.NewGuid(), "Ethrel spray", notes: "4ml", occurredAtUtc: Now);
+        log.AddTask(Guid.NewGuid(), "0-52-34 fertilizer application", notes: "10g", occurredAtUtc: Now);
+        log.AddTask(Guid.NewGuid(), "Pruning (4 hired workers)", notes: null, occurredAtUtc: Now);
+
+        var repo = new RichnessRepo(logs: [log], observations: [], plotCount: 1);
+        var sut = new DailyRichnessDerivationService(repo, new SingleAiJob(null), new SeqIds(), new FixedClock(Now));
+
+        await sut.RecomputeAsync(Farm, Day);
+
+        var agg = repo.Aggregates.Single();
+        agg.HasWork.Should().BeTrue();
+        agg.DayClassification.Should().NotBe(DayClassification.UnaccountedDay);
+    }
+
+    [Fact]
+    public async Task ManualLog_withOnlySkippedTasks_staysUnaccountedDay_noFabrication()
+    {
+        // Skipped/Delayed tasks explicitly mean the work did NOT happen — the
+        // fallback must NOT fabricate a "work happened" signal from them.
+        var log = DailyLog.Create(
+            Guid.NewGuid(), new FarmId(Farm), Plot, Cycle, new UserId(Op), Day,
+            idempotencyKey: null, location: null, createdAtUtc: Now,
+            provenance: Provenance.Manual("test"), sourceAiJobId: null);
+        log.AddTask(Guid.NewGuid(), "spray", notes: null, occurredAtUtc: Now,
+            executionStatus: ExecutionStatus.Skipped, deviationReasonCode: "rain");
+
+        var repo = new RichnessRepo(logs: [log], observations: [], plotCount: 1);
+        var sut = new DailyRichnessDerivationService(repo, new SingleAiJob(null), new SeqIds(), new FixedClock(Now));
+
+        await sut.RecomputeAsync(Farm, Day);
+
+        var agg = repo.Aggregates.Single();
+        agg.HasWork.Should().BeFalse();
+        agg.DayClassification.Should().Be(DayClassification.UnaccountedDay);
+    }
+
+    [Fact]
+    public async Task RichDay_withAiJobLink_ignoresPersistedTasks_AiJsonPathUnchanged()
+    {
+        // The AI-JSON path must stay authoritative when present — the fallback
+        // must never run (and never be needed) when a usable root was already
+        // contributed from the AiJob's NormalizedResultJson.
+        var job = MakeVoiceJob(RichJson);
+        var log = DailyLog.Create(
+            Guid.NewGuid(), new FarmId(Farm), Plot, Cycle, new UserId(Op), Day,
+            idempotencyKey: null, location: null, createdAtUtc: Now,
+            provenance: Provenance.Manual("test"), sourceAiJobId: JobId);
+        // No LogTask rows at all — the AI JSON alone must still drive RichWorkDay.
+        var obs = ObservationEvent.Create(
+            Guid.NewGuid(), log.Id, Plot,
+            ObservationNoteType.Observation, ObservationSeverity.Normal, ObservationSource.Voice,
+            textRaw: "leaf curl on north block", textCleaned: null, tagsJson: null,
+            linkedActivityId: null, createdAtUtc: Now);
+        var repo = new RichnessRepo(logs: [log], observations: [obs], plotCount: 1);
+        var sut = new DailyRichnessDerivationService(repo, new SingleAiJob(job), new SeqIds(), new FixedClock(Now));
+
+        await sut.RecomputeAsync(Farm, Day);
+
+        var agg = repo.Aggregates.Single();
+        agg.HasWork.Should().BeTrue();
+        agg.DayClassification.Should().Be(DayClassification.RichWorkDay);
+    }
+
     // ── helpers ──────────────────────────────────────────────────────────────
 
     private static AiJob MakeVoiceJob(string? normalizedJson)
