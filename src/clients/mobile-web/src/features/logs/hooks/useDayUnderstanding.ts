@@ -14,6 +14,15 @@
  * /100 engine: that number is a DIFFERENT scorer than the server lenses and would
  * diverge, so a gentle "still understanding" pending state is shown instead —
  * consistency over immediacy. spec: dfes-companion-2026-07-11
+ *
+ * BUGFIX_2026-07-19: the score is computed server-side as part of saving the
+ * log, so a fetch fired at mount time can race that save and land on a
+ * not-yet-updated score — with only a `[farmId, date]`-keyed effect (both
+ * commonly unchanged across saves on the same day), that first fetch was the
+ * ONLY attempt ever made. `refreshKey` is an optional extra dependency (e.g.
+ * the just-saved log's id) the caller can bump to re-run the SAME fetch after
+ * a save completes, without introducing any polling loop. Omitting it keeps
+ * this hook byte-equivalent to before.
  */
 import { useCallback, useEffect, useState } from 'react';
 import { agriSyncClient } from '../../../infrastructure/api/AgriSyncClient';
@@ -30,6 +39,10 @@ export interface UseDayUnderstandingState {
 export function useDayUnderstanding(
     farmId: string | null | undefined,
     date?: string,
+    // BUGFIX_2026-07-19 — bump this (e.g. to the newly-saved log's id) to force
+    // a refetch after a save, even when farmId/date are unchanged. Optional;
+    // undefined is a no-op extra dependency.
+    refreshKey?: string | null,
 ): UseDayUnderstandingState {
     const [score, setScore] = useState<number | null>(null);
     const [isLoading, setIsLoading] = useState(false);
@@ -56,7 +69,11 @@ export function useDayUnderstanding(
         } finally {
             setIsLoading(false);
         }
-    }, [farmId, date]);
+        // refreshKey is intentionally in the deps (not read inside the callback
+        // body) — it exists solely to force this callback's identity to change,
+        // which re-runs the effect below.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [farmId, date, refreshKey]);
 
     useEffect(() => { void refresh(); }, [refresh]);
 

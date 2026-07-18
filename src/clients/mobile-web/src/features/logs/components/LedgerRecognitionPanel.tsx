@@ -161,6 +161,7 @@ export function LedgerRecognitionPanel({
                 score={savedLog?.understanding}
                 allLogs={allLogs}
                 engagement={engagement}
+                savedLogId={savedLog?.id ?? null}
                 questionInputs={{
                     crop,
                     todayLocalDate: resolvedDate,

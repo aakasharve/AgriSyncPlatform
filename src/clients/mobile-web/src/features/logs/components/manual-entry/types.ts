@@ -55,6 +55,14 @@ export interface ManualEntryProps {
         manualTotalCost?: number;
         fullTranscript?: string;
         originalLogId?: string; // NEW: ID of the log being edited
+        /**
+         * BUGFIX_2026-07-19 (spec: dfes-companion-2026-07-11) — carries the
+         * REAL voice-parse provenance (source: 'ai' + sourceAiJobId) through
+         * to the persisted log when this NEW-log submission originated from a
+         * voice draft. Omitted (never fabricated) when editing an existing
+         * log or when the entry is genuinely manual.
+         */
+        provenance?: LogProvenance | null;
     }) => void;
     disabled?: boolean;
     initialData?: AgriLogResponse | null;

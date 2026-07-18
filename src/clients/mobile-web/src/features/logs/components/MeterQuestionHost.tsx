@@ -34,10 +34,16 @@ export interface MeterQuestionHostProps {
      */
     engagement?: FarmerEngagementDto | null;
     questionInputs: Omit<DailyQuestionInputs, 'recentEvents'>;
+    /**
+     * BUGFIX_2026-07-19 (spec: dfes-companion-2026-07-11) — the just-saved
+     * log's id, threaded straight to MeterDisplay so its Day Understanding
+     * Score fetch retriggers on every new save (see MeterDisplay's doc).
+     */
+    savedLogId?: string | null;
 }
 
 export function MeterQuestionHost({
-    farmId, plotId, score, allLogs, engagement, questionInputs,
+    farmId, plotId, score, allLogs, engagement, questionInputs, savedLogId,
 }: MeterQuestionHostProps): React.ReactElement | null {
     const enabled = FEATURE_FLAGS.stageQuestions && !!farmId;
     const { selected, recordOutcome } = useDfesQuestion(farmId ?? '', plotId, questionInputs, enabled);
@@ -56,6 +62,7 @@ export function MeterQuestionHost({
             engagement={engagement}
             farmId={farmId}
             dayDate={questionInputs.todayLocalDate}
+            savedLogId={savedLogId}
             dfesQuestion={selected}
             // No-options ack path — UNCHANGED from pre-Task-2A behaviour ({skipped:false}).
             onQuestionInteract={() => { void recordOutcome({ skipped: false }); }}

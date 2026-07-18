@@ -278,7 +278,16 @@ const ManualEntry: React.FC<ManualEntryProps> = ({ context, crops, defaults, pro
             date: getDateKey(),
             manualTotalCost,
             fullTranscript: transcript,
-            originalLogId: selectedLogId || undefined // Pass the ID if we are editing
+            originalLogId: selectedLogId || undefined, // Pass the ID if we are editing
+            // BUGFIX_2026-07-19 (spec: dfes-companion-2026-07-11) — thread the
+            // REAL AI provenance through on a NEW-log save so a voice log
+            // persists with source='ai' + sourceAiJobId (previously dropped:
+            // this screen always saved via the "manual" factory branch
+            // regardless of where the draft came from). Never attached when
+            // editing an existing log (selectedLogId set) — an edit's
+            // in-session `provenance` state can be stale from an unrelated
+            // earlier parse and must not be misattributed to a different log.
+            provenance: selectedLogId ? undefined : (provenance ?? undefined)
         };
 
         if (initialAiDataRef.current && provenance?.source === 'ai') {

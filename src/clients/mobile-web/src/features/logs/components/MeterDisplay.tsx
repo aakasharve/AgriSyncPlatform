@@ -57,6 +57,15 @@ export interface MeterDisplayProps {
     farmId?: string | null;
     /** Local date ('YYYY-MM-DD') the score is for; omitted → server defaults to today. */
     dayDate?: string;
+    /**
+     * BUGFIX_2026-07-19 (spec: dfes-companion-2026-07-11) — the just-saved
+     * log's id. The server computes the Day Understanding Score as part of
+     * saving the log, so a fetch fired at mount can race that save and land
+     * on a stale/absent score with nothing to retrigger it. Passing the
+     * saved log's id here forces useDayUnderstanding to refetch whenever a
+     * NEW log is saved, even when farmId/dayDate are unchanged (same day).
+     */
+    savedLogId?: string | null;
     /** Phase 5: the combined D8 question for today (null when none). Gated by stageQuestions. */
     dfesQuestion?: SelectedQuestion | null;
     /** Phase 5: fired when the farmer taps the combined question card (no-options ack only — unchanged, `{skipped:false}`). */
@@ -73,6 +82,7 @@ export function MeterDisplay({
     engagement,
     farmId,
     dayDate,
+    savedLogId,
     dfesQuestion,
     onQuestionInteract,
     onAnswer,
@@ -81,8 +91,10 @@ export function MeterDisplay({
     const { t } = useLanguage();
     // Day Understanding Score (server /10). The hook self-gates on
     // understandingMeter, so with the flag OFF this issues ZERO network calls —
-    // safe to call above the flag early-return below.
-    const { score: dayUnderstandingScore } = useDayUnderstanding(farmId ?? null, dayDate);
+    // safe to call above the flag early-return below. savedLogId (BUGFIX_2026-07-19)
+    // forces a refetch whenever a NEW log is saved, so the score/bar actually
+    // appear instead of racing the save and never retrying.
+    const { score: dayUnderstandingScore } = useDayUnderstanding(farmId ?? null, dayDate, savedLogId);
 
     // Flag gate: inert in production until the meter is calibrated + founder-approved.
     if (!FEATURE_FLAGS.understandingMeter) {

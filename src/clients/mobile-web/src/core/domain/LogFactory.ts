@@ -60,6 +60,18 @@ interface ManualEntryData {
     disturbance?: DisturbanceEvent;
     fullTranscript?: string;
     manualTotalCost?: number;
+    /**
+     * BUGFIX_2026-07-19 (spec: dfes-companion-2026-07-11) — the confirm screen
+     * (ManualEntry) is the SINGLE submission surface for both genuinely-manual
+     * entries AND voice-drafted logs under review, and always submits through
+     * this "manual" factory branch. Without threading the real AI provenance
+     * through here, a voice-originated log silently lost its `source: 'ai'` /
+     * `sourceAiJobId` and was persisted as a plain manual entry — the backend
+     * DFES scorer then skips it entirely (0/UnaccountedDay) even though the
+     * voice parse succeeded. `undefined` for genuinely-manual submissions
+     * (byte-equivalent no-op — see `meta.provenance` below).
+     */
+    provenance?: LogProvenance;
 }
 
 /** Inline type for a single element of AgriLogResponse.plannedTasks. */
@@ -295,7 +307,9 @@ export class LogFactory {
                 meta: {
                     createdAtISO: nowISO,
                     createdByOperatorId: profile.activeOperatorId,
-                    appVersion: VersionRegistry.APP_VERSION
+                    appVersion: VersionRegistry.APP_VERSION,
+                    // BUGFIX_2026-07-19 — see ManualEntryData.provenance doc comment.
+                    provenance: data.provenance
                 },
                 verification: {
                     status: verificationStatus,
@@ -430,7 +444,9 @@ export class LogFactory {
             meta: {
                 createdAtISO: nowISO,
                 createdByOperatorId: profile.activeOperatorId,
-                appVersion: VersionRegistry.APP_VERSION
+                appVersion: VersionRegistry.APP_VERSION,
+                // BUGFIX_2026-07-19 — see ManualEntryData.provenance doc comment.
+                provenance: data.provenance
             },
             verification: {
                 status: verificationStatus,
