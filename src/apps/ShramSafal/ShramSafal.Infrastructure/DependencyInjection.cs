@@ -433,13 +433,15 @@ public static class DependencyInjection
 
         // DWC v2 §2.10 — Work Trust Ledger projector. Subscribes to
         // DailyLogCreatedEvent via the outbox dispatcher and passively
-        // captures worker names from voice transcripts. The default
-        // transcript store returns null (transcripts are not yet
-        // persisted on the DailyLog aggregate); the projector treats
-        // null as "no work" and no-ops, so registering the subscriber
-        // is safe in production today and activates automatically once
-        // a real IDailyLogTranscriptStore implementation lands.
-        services.AddScoped<IDailyLogTranscriptStore, NullDailyLogTranscriptStore>();
+        // captures worker names from voice transcripts.
+        //
+        // Task 2.4 (spec: 2026-07-13-labour-attendance-approval-design)
+        // activates the real store: DailyLogTranscriptStore resolves the
+        // log's SourceAiJobId to the warm-tier Transcript row for that AI
+        // job. NullDailyLogTranscriptStore stays in the codebase (unused
+        // here) as a documented fallback shape — see its own remarks — but
+        // is no longer the bound implementation.
+        services.AddScoped<IDailyLogTranscriptStore, DailyLogTranscriptStore>();
         services.AddScoped<WorkerNameProjector>();
         services.AddScoped<IWorkerNameProjector>(sp => sp.GetRequiredService<WorkerNameProjector>());
         services.AddScoped<IDomainEventHandler<DailyLogCreatedEvent>>(

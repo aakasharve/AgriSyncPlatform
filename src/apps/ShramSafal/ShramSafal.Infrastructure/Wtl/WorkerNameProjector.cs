@@ -30,13 +30,18 @@ namespace ShramSafal.Infrastructure.Wtl;
 /// pipeline is untouched.
 /// </para>
 /// <para>
-/// <b>Transcript availability.</b> Transcripts are not yet persisted in
-/// the <see cref="Domain.Logs.DailyLog"/> aggregate. The projector
-/// fetches them via <see cref="IDailyLogTranscriptStore"/>; the default
-/// infrastructure implementation returns null today, so the projector
-/// gracefully no-ops on every event until the transcript-persistence
-/// work lands. The contract is wired so a single seam swap activates
-/// the full path.
+/// <b>Transcript availability.</b> Transcripts are not persisted directly
+/// on the <see cref="Domain.Logs.DailyLog"/> aggregate; the projector
+/// fetches them via <see cref="IDailyLogTranscriptStore"/>, which (as of
+/// Task 2.4, spec 2026-07-13-labour-attendance-approval-design) resolves
+/// the log's <c>SourceAiJobId</c> to the warm-tier
+/// <see cref="Domain.AI.Transcript"/> row for that AI job
+/// (<c>DailyLogTranscriptStore</c>). Manual logs (no <c>SourceAiJobId</c>)
+/// or logs whose transcript was never persisted still resolve to null, and
+/// the projector gracefully no-ops in that case — see
+/// <c>DailyLogTranscriptStore</c>'s remarks for why some voice transcripts
+/// legitimately still resolve to null-or-redacted text (a separate
+/// third-party PII control, not a gap in this store).
 /// </para>
 /// <para>
 /// <b>Idempotency.</b> The outbox dispatcher delivers at-least-once.
