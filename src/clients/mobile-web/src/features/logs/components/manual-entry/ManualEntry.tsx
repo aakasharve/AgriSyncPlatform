@@ -149,6 +149,33 @@ const ManualEntry: React.FC<ManualEntryProps> = ({ context, crops, defaults, pro
         setTranscript,
     });
 
+    // FOUNDER FIX (spec: dfes-companion-2026-07-11) — bring "what Sathi
+    // heard/understood" into view the instant a fresh voice draft lands, so
+    // the farmer sees it FIRST without manual scrolling (founder: "after
+    // voice log the user must see directly the transcript part, not he
+    // suppose to scroll down"). Scoped to a genuinely fresh voice draft
+    // only: provenance.source === 'ai' (never fires for a typed/manual
+    // entry, which has no AI provenance and no transcript) AND not editing
+    // a past log (handleLogSelect above already owns its own scroll-to-top
+    // for the edit flow — this must not fight it). Fires once per mount via
+    // the ref guard; the dependency array re-checks after hydration commits
+    // the transcript/activities so the DOM target actually exists.
+    const hasScrolledToPostVoiceRef = React.useRef(false);
+    useEffect(() => {
+        if (provenance?.source !== 'ai') return;
+        if (selectedLogId) return;
+        if (hasScrolledToPostVoiceRef.current) return;
+        if (!transcript && cropActivities.length === 0) return;
+
+        hasScrolledToPostVoiceRef.current = true;
+        const anchor = document.getElementById('post-voice-transcript-anchor');
+        if (!anchor) return;
+        const prefersReducedMotion = typeof window !== 'undefined'
+            && typeof window.matchMedia === 'function'
+            && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+        anchor.scrollIntoView({ behavior: prefersReducedMotion ? 'auto' : 'smooth', block: 'start' });
+    }, [provenance, selectedLogId, transcript, cropActivities]);
+
     // Phase 7: Load Unclear Segments
     useEffect(() => {
         if (initialData?.unclearSegments) {

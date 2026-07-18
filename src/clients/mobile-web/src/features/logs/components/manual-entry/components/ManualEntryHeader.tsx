@@ -8,16 +8,23 @@ import { Users, Edit3, StickyNote } from 'lucide-react';
 import ContextBanner from '../../../../context/components/ContextBanner';
 import TranscriptTimeline from '../../TranscriptTimeline';
 import MultiTargetDestinationCard from './MultiTargetDestinationCard';
+import { t as translateForced } from '../../../../../i18n/translations';
 import {
-    FarmContext, CropProfile, FarmerProfile, LogTimelineEntry, DailyLog
+    FarmContext, CropProfile, FarmerProfile, LogTimelineEntry, DailyLog, TodayCounts
 } from '../../../../../types';
 import type { TargetSelectionGroup } from '../types';
+
+// Font rule (CHARTER): Marathi body text -> Noto Sans Devanagari. The
+// transcript card renders the farmer's own spoken words (real Marathi text
+// from the AI parse), so it must set this explicitly rather than fall back
+// to the app's default DM-Sans-first font stack.
+const MARATHI_BODY = "'Noto Sans Devanagari', sans-serif";
 
 interface ManualEntryHeaderProps {
     context: FarmContext;
     activeCrop: CropProfile | undefined;
     selectedPlotSummary: string;
-    currentCounts: any;
+    currentCounts: TodayCounts;
     selectedPlotIds: string[];
     selectedTargetGroups: TargetSelectionGroup[];
     profile: FarmerProfile;
@@ -55,6 +62,41 @@ const ManualEntryHeader: React.FC<ManualEntryHeaderProps> = ({
 }) => {
     return (
         <>
+            {/* FOUNDER FIX (spec: dfes-companion-2026-07-11) — "what Sathi
+                heard" is now the FIRST thing rendered on the post-voice
+                review screen. It used to sit as the LAST item inside the
+                header's space-y-4 block below the context banner, operator
+                attribution bar, past-logs timeline, and unclear-segments
+                stack — exactly the "must scroll down to see the transcript"
+                gap the founder flagged. The anchor div is always present
+                (even when transcript is empty) so ManualEntry.tsx's
+                scroll-on-arrival effect always has a stable target — the
+                backend always emits a `fullTranscript` key but it CAN be an
+                empty string on a poor parse (see AiResponseNormalizer.cs
+                EnsureString default), so this must not depend on transcript
+                being non-empty to exist. */}
+            <div id="post-voice-transcript-anchor" />
+            {transcript && (
+                <div className={`mb-4 bg-white border rounded-2xl p-4 shadow-sm relative group transition-colors ${selectedLogId ? 'border-amber-200 bg-amber-50/10' : 'border-emerald-100'}`}>
+                    <div className={`flex items-center gap-2 mb-2 ${selectedLogId ? 'text-amber-700' : 'text-emerald-700'}`}>
+                        <StickyNote size={14} />
+                        <span className="text-xs font-bold uppercase tracking-wider" style={{ fontFamily: MARATHI_BODY }}>
+                            {translateForced('voice.transcriptHeardLabel', 'mr')}
+                        </span>
+                    </div>
+                    <textarea
+                        value={transcript}
+                        onChange={(e) => setTranscript(e.target.value)}
+                        className="w-full text-lg font-medium text-stone-700 bg-transparent border-none outline-none resize-none p-0 leading-relaxed placeholder:text-stone-300 focus:ring-0"
+                        style={{ fontFamily: MARATHI_BODY }}
+                        rows={Math.max(2, Math.ceil(transcript.length / 40))}
+                    />
+                    <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <span className="text-[10px] bg-stone-100 text-stone-500 px-2 py-1 rounded-full font-bold">Editable</span>
+                    </div>
+                </div>
+            )}
+
             {/* CONTEXT BANNER */}
             {/* HEADER CONTEXT BANNER */}
             <ContextBanner
@@ -62,7 +104,7 @@ const ManualEntryHeader: React.FC<ManualEntryHeaderProps> = ({
                 context={context}
                 activeCrop={activeCrop}
                 activePlotName={selectedPlotSummary}
-                todayCounts={currentCounts as any}
+                todayCounts={currentCounts}
             />
 
             {selectedPlotIds.length > 1 && (
@@ -128,24 +170,9 @@ const ManualEntryHeader: React.FC<ManualEntryHeaderProps> = ({
                     </div>
                 )}
 
-                {/* TRANSCRIPT EDITOR (If present) */}
-                {transcript && (
-                    <div className={`bg-white border rounded-2xl p-4 shadow-sm relative group transition-colors ${selectedLogId ? 'border-amber-200 bg-amber-50/10' : 'border-emerald-100'}`}>
-                        <div className={`flex items-center gap-2 mb-2 ${selectedLogId ? 'text-amber-700' : 'text-emerald-700'}`}>
-                            <StickyNote size={14} />
-                            <span className="text-xs font-bold uppercase tracking-wider">Voice Transcript</span>
-                        </div>
-                        <textarea
-                            value={transcript}
-                            onChange={(e) => setTranscript(e.target.value)}
-                            className="w-full text-lg font-medium text-stone-700 bg-transparent border-none outline-none resize-none p-0 leading-relaxed placeholder:text-stone-300 focus:ring-0"
-                            rows={Math.max(2, Math.ceil(transcript.length / 40))}
-                        />
-                        <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                            <span className="text-[10px] bg-stone-100 text-stone-500 px-2 py-1 rounded-full font-bold">Editable</span>
-                        </div>
-                    </div>
-                )}
+                {/* TRANSCRIPT EDITOR moved to the top of this component
+                    (spec: dfes-companion-2026-07-11) — see the
+                    #post-voice-transcript-anchor block above render. */}
             </div>
         </>
     );

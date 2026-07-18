@@ -61,6 +61,11 @@ export interface Translations {
         savedTranscriptBody: string;
         savedAudioBody: string;
         savedReassure: string;
+        /** Label above the editable "what you said" card on the post-voice
+         * review screen (spec: dfes-companion-2026-07-11). Always read via
+         * forced 'mr' — Sathi's transcript of the farmer's own words is
+         * always shown in Marathi regardless of UI language. */
+        transcriptHeardLabel: string;
     };
 
     // Reflect Page
@@ -375,6 +380,7 @@ export const translations: Record<Language, Translations> = {
             savedTranscriptBody: 'I heard your words and kept them safely. I will finish understanding them soon.',
             savedAudioBody: 'I saved your recording safely. I will listen again and understand it soon.',
             savedReassure: 'Your day is counted. Nothing is lost.',
+            transcriptHeardLabel: 'You said:',
         },
         reflectPage: {
             timeline: 'Timeline',
@@ -654,6 +660,7 @@ export const translations: Record<Language, Translations> = {
             savedTranscriptBody: 'तुमचे शब्द मी ऐकले आणि सुरक्षित ठेवले. लवकरच ते पूर्णपणे समजून घेईन.',
             savedAudioBody: 'तुमची नोंद मी सुरक्षित ठेवली आहे. पुन्हा ऐकून लवकरच समजून घेईन.',
             savedReassure: 'तुमचा आजचा दिवस मोजला गेला आहे. काहीही हरवलेले नाही.',
+            transcriptHeardLabel: 'तुम्ही सांगितलं:',
         },
         reflectPage: {
             timeline: 'टाइमलाइन',
