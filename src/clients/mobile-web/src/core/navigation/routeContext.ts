@@ -53,6 +53,10 @@ export interface AppRouterContext {
     setCurrentRoute: Navigation['setCurrentRoute'];
     mainView: Navigation['mainView'];
     setMainView: Navigation['setMainView'];
+    // spec: 2026-07-13-labour-attendance-approval-design (Task 3.4) — "why am
+    // I here" hint carried from the labour feature into the log page.
+    logIntent: Navigation['logIntent'];
+    setLogIntent: Navigation['setLogIntent'];
 
     // log/context
     logScope: LogContext['logScope'];

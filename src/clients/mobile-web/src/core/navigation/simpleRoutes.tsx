@@ -74,7 +74,16 @@ export const renderLabourRoute = (ctx: AppRouterContext): React.ReactNode => {
     if (ctx.currentRoute !== 'labour') return null;
     return (
         <div className="animate-in fade-in slide-in-from-right-4 duration-300">
-            <LabourFeaturePage onExit={() => ctx.setCurrentRoute('profile')} onGoToLog={() => ctx.setCurrentRoute('main')} />
+            <LabourFeaturePage
+                onExit={() => ctx.setCurrentRoute('profile')}
+                onGoToLog={() => {
+                    // spec: 2026-07-13-labour-attendance-approval-design (Task 3.4) —
+                    // tag the intent BEFORE navigating so mainView can show a
+                    // "why am I here" hint on arrival.
+                    ctx.setLogIntent('labour');
+                    ctx.setCurrentRoute('main');
+                }}
+            />
         </div>
     );
 };

@@ -117,7 +117,8 @@ export const renderLogView = (ctx: AppRouterContext): React.ReactNode => {
         getLogContextSnapshot, handleEditLog,
         costSnapshot, yesterdayCost,
         setRecordingSegment,
-        lastSavedLogSummary, lastSavedLogIds, mockHistory, handleReset
+        lastSavedLogSummary, lastSavedLogIds, mockHistory, handleReset,
+        logIntent, setLogIntent
     } = ctx;
 
     // Single boundary handoff: flag it + route to Profile, where the drawer auto-opens.
@@ -269,6 +270,27 @@ export const renderLogView = (ctx: AppRouterContext): React.ReactNode => {
                                     </button>
                                 )}
                             </div>
+                        </div>
+                    )}
+
+                    {/* spec: 2026-07-13-labour-attendance-approval-design (Task 3.4) —
+                        "why am I here" hint when voice was launched from the
+                        labour feature. Purely presentational + a null-check on
+                        logIntent; no effect on capture/parsing/submission. */}
+                    {!recordingSegment && logIntent === 'labour' && (
+                        <div className="mb-3 flex items-center justify-between gap-3 rounded-2xl border border-emerald-200 bg-emerald-50 px-3.5 py-2.5 animate-in fade-in slide-in-from-top-2 duration-300">
+                            <div className="min-w-0">
+                                <p className="text-xs font-bold text-emerald-800">कामगार व्यवस्थापनासाठी नोंद</p>
+                                <p className="mt-0.5 text-[11px] font-medium text-emerald-600">मजूर · हजेरी · मजुरी बोला</p>
+                            </div>
+                            <button
+                                type="button"
+                                onClick={() => setLogIntent(null)}
+                                aria-label="Dismiss"
+                                className="shrink-0 rounded-full p-1.5 text-emerald-500 transition-colors hover:bg-emerald-100"
+                            >
+                                ✕
+                            </button>
                         </div>
                     )}
 
