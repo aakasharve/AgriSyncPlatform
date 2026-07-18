@@ -20,6 +20,7 @@ export type {
     LabourPerson,
     LedgerRow,
     ReviewItem,
+    ReviewVerificationStatus,
     PlotBar,
     DashboardData,
     LabourData,
@@ -125,10 +126,14 @@ export const LABOUR_MOCK: LabourData = {
         dailyTotals: [3, 4, 4, 4, 4, 2, 1],
         weekTotal: 28,
     },
+    // ids are GUID-shaped (not literal "r1"/"r2"/"r3") so मंजूर/शंका in preview
+    // exercise the SAME `VerifyLogPayload.dailyLogId` zod shape (`ZGuid`) a
+    // real backend id has — a non-GUID id would fail client-side wire
+    // validation and always show the honest failure toast in preview too.
     review: [
-        { id: 'r1', who: 'रमेश', initial: 'र', tone: 'or', detail: 'द्राक्ष-२ · आज', points: { count: 4, shift: 'full', task: 'फवारणी', names: ['रमेश'] } },
-        { id: 'r2', who: 'धनाजी (मुकादम)', initial: 'ध', tone: 'bl', detail: 'छाटणी टीम · आज', points: { count: 4, shift: 'full', task: 'छाटणी' } },
-        { id: 'r3', who: 'रोकडे', initial: 'रो', tone: 'vi', detail: 'शेतात होता ✓ · आज', points: { count: 1, shift: 'night', amount: 200 } },
+        { id: 'aaaaaaaa-0000-4000-8000-000000000001', who: 'रमेश', initial: 'र', tone: 'or', detail: 'द्राक्ष-२ · आज', status: 'Confirmed', points: { count: 4, shift: 'full', task: 'फवारणी', names: ['रमेश'] } },
+        { id: 'aaaaaaaa-0000-4000-8000-000000000002', who: 'धनाजी (मुकादम)', initial: 'ध', tone: 'bl', detail: 'छाटणी टीम · आज', status: 'Draft', points: { count: 4, shift: 'full', task: 'छाटणी' } },
+        { id: 'aaaaaaaa-0000-4000-8000-000000000003', who: 'रोकडे', initial: 'रो', tone: 'vi', detail: 'शेतात होता ✓ · आज', status: 'Draft', points: { count: 1, shift: 'night', amount: 200 } },
     ],
     attendance: {
         plot: 'द्राक्ष-२',

@@ -113,6 +113,7 @@ function buildDto(): LabourDataDto {
                 initial: 'र',
                 tone: 'or',
                 detail: 'द्राक्ष-२ · आज',
+                status: 'Draft',
                 points: { count: 4, shift: 'full', task: 'फवारणी', amount: null, names: ['रमेश'] },
             },
         ],
@@ -179,12 +180,13 @@ describe('labourClient.fetchLabourData', () => {
         expect(data.dashboard.owed).toBe(5400);
     });
 
-    it('populates review[].points from the DTO points object', async () => {
+    it('populates review[].points and review[].status from the DTO', async () => {
         mockFetch.mockResolvedValueOnce(mockOkResponse(buildDto()));
 
         const data = await fetchLabourData('farm-123');
 
         expect(data.review).toHaveLength(1);
+        expect(data.review[0].status).toBe('Draft');
         expect(data.review[0].points).toEqual({
             count: 4,
             shift: 'full',

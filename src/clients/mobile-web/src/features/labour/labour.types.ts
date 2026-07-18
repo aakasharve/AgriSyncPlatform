@@ -73,12 +73,24 @@ export interface LedgerRow {
     total: number;
 }
 
+/**
+ * Mirrors `ShramSafal.Domain.Logs.VerificationStatus.ToString()` exactly
+ * (spec: 2026-07-13-labour-attendance-approval-design, Task 3.1). Drives
+ * which `verify_log` transition(s) मंजूर/शंका must send:
+ * `VerificationStateMachine` forbids a one-hop Draft→Verified/Disputed, so
+ * a `'Draft'` item needs a Draft→Confirmed step before Confirmed→
+ * {Verified|Disputed}; a `'Confirmed'` item reaches either target directly.
+ */
+export type ReviewVerificationStatus = 'Draft' | 'Confirmed' | 'Verified' | 'Disputed' | 'CorrectionPending';
+
 export interface ReviewItem {
     id: string;
     who: string;
     initial: string;
     tone: AvatarTone;
     detail: string;
+    /** The log's current server-side verification status — see `ReviewVerificationStatus`. */
+    status: ReviewVerificationStatus;
     /** The canonical labour data points (shown consistently everywhere). */
     points: Partial<LabourEntry>;
 }

@@ -9,17 +9,106 @@
  */
 import React, { useState } from 'react';
 import { X, Check, MessageSquare } from 'lucide-react';
-import type { LabourData } from '../labourMock';
+import type { LabourData, ReviewVerificationStatus } from '../labourMock';
 import { Avatar, HelpNote } from './LabourUiKit';
 import LabourDataPoints from './LabourDataPoints';
+import { VerifyLogCommand } from '../../../application/usecases/sync/VerifyLogCommand';
+import { backgroundSyncWorker } from '../../../infrastructure/sync/BackgroundSyncWorker';
 
 interface Props { open: boolean; data: LabourData; onClose: () => void; onToast: (m: string) => void }
+
+const DISPUTE_REASON = 'मालकाने या नोंदीवर शंका घेतली आहे — कामगाराला विचारायचं आहे.';
+
+async function triggerSyncBestEffort(): Promise<void> {
+    try {
+        await backgroundSyncWorker.triggerNow();
+    } catch {
+        // Queue persistence is the durable path; the periodic worker retries regardless.
+    }
+}
+
+/**
+ * Sends the `verify_log` transition(s) needed to reach `finalStatus` from
+ * the review item's CURRENT server status. `VerificationStateMachine`
+ * (ShramSafal.Domain.Logs) forbids a one-hop Draft→Verified/Disputed: a
+ * `Draft` item needs Draft→Confirmed first (any farm role may do that),
+ * THEN Confirmed→{Verified|Disputed} (owner-tier roles). A `Confirmed` (or
+ * already-`Verified`, for the शंका/dispute case) item reaches the target in
+ * one hop.
+ *
+ * The two mutations are enqueued in order, each `await`ed before the next —
+ * `BackgroundSyncWorker.pushPendingMutations` batches ALL pending rows by
+ * ascending queue id (insertion order) into one `/sync/push` call, and
+ * `PushSyncBatchHandler` applies a batch's mutations sequentially, each in
+ * its own committed transaction, so the Confirmed step is durable on the
+ * server before the Verified/Disputed step is evaluated against it — even
+ * if the two end up split across sync cycles.
+ *
+ * Exported for `reviewApprove.test.ts` — it is the actual "does तपासणी
+ * reach the real approval engine" contract, independent of the button
+ * wiring around it.
+ */
+export async function sendVerification(
+    dailyLogId: string,
+    currentStatus: ReviewVerificationStatus | undefined,
+    finalStatus: 'verified' | 'disputed',
+    reason?: string
+): Promise<void> {
+    const canGoDirectly = currentStatus === 'Confirmed' || currentStatus === 'Verified';
+    if (!canGoDirectly) {
+        await VerifyLogCommand.enqueue({ dailyLogId, verificationStatus: 'confirmed' });
+    }
+    await VerifyLogCommand.enqueue({ dailyLogId, verificationStatus: finalStatus, reason });
+    await triggerSyncBestEffort();
+}
 
 const ReviewSheet: React.FC<Props> = ({ open, data, onClose, onToast }) => {
     const [gone, setGone] = useState<Record<string, boolean>>({});
     const items = data.review.filter((i) => !gone[i.id]);
-    const approve = (id: string) => { setGone((g) => ({ ...g, [id]: true })); onToast('मंजूर ✓ — हजेरीही निश्चित'); };
-    const approveAll = () => { const g: Record<string, boolean> = {}; data.review.forEach((i) => { g[i.id] = true; }); setGone(g); onToast('सगळं मंजूर ✓'); };
+
+    const approve = async (id: string) => {
+        const item = data.review.find((i) => i.id === id);
+        try {
+            await sendVerification(id, item?.status, 'verified');
+            setGone((g) => ({ ...g, [id]: true }));
+            onToast('मंजूर ✓ — हजेरीही निश्चित');
+        } catch {
+            // Do NOT fabricate success — the card stays put so the farmer
+            // can retry; enqueue() failed locally (before any network call).
+            onToast('मंजूर करता आलं नाही — पुन्हा प्रयत्न करा');
+        }
+    };
+
+    const query = async (id: string) => {
+        const item = data.review.find((i) => i.id === id);
+        try {
+            await sendVerification(id, item?.status, 'disputed', DISPUTE_REASON);
+            setGone((g) => ({ ...g, [id]: true }));
+            onToast('शंका नोंदवा — कामगाराला विचारता येईल');
+        } catch {
+            onToast('शंका नोंदवता आली नाही — पुन्हा प्रयत्न करा');
+        }
+    };
+
+    const approveAll = async () => {
+        const targets = items;
+        const failedIds = new Set<string>();
+        for (const it of targets) {
+            try {
+                await sendVerification(it.id, it.status, 'verified');
+            } catch {
+                failedIds.add(it.id);
+            }
+        }
+        setGone((g) => {
+            const next = { ...g };
+            targets.forEach((it) => { if (!failedIds.has(it.id)) next[it.id] = true; });
+            return next;
+        });
+        onToast(failedIds.size === 0
+            ? 'सगळं मंजूर ✓'
+            : `${failedIds.size} नोंदी मंजूर करता आल्या नाहीत — पुन्हा प्रयत्न करा`);
+    };
 
     return (
         <>
@@ -41,7 +130,7 @@ const ReviewSheet: React.FC<Props> = ({ open, data, onClose, onToast }) => {
                         label="तपासणी म्हणजे काय?"
                     />
                     {items.length > 1 && (
-                        <button type="button" onClick={approveAll} className="flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 py-2.5 text-[13px] font-bold text-white shadow-lg shadow-emerald-200 active:scale-[0.98]"><Check size={17} strokeWidth={2.5} /> सगळं मंजूर ({items.length})</button>
+                        <button type="button" onClick={() => approveAll()} className="flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 py-2.5 text-[13px] font-bold text-white shadow-lg shadow-emerald-200 active:scale-[0.98]"><Check size={17} strokeWidth={2.5} /> सगळं मंजूर ({items.length})</button>
                     )}
                     {items.map((it) => (
                         <div key={it.id} className="rounded-2xl border border-slate-200 bg-white p-2.5 shadow-[0_1px_3px_rgba(20,40,30,0.05)]">
@@ -55,7 +144,7 @@ const ReviewSheet: React.FC<Props> = ({ open, data, onClose, onToast }) => {
                             <div className="mt-2"><LabourDataPoints entry={it.points} /></div>
                             <div className="mt-2 flex gap-2">
                                 <button type="button" onClick={() => approve(it.id)} className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-emerald-600 py-2 text-[12.5px] font-extrabold text-white active:scale-[0.98]"><Check size={15} strokeWidth={2.6} /> मंजूर</button>
-                                <button type="button" onClick={() => onToast('शंका नोंदवा — कामगाराला विचारता येईल')} className="flex items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-[12.5px] font-bold text-slate-600 active:scale-[0.98]"><MessageSquare size={15} /> शंका</button>
+                                <button type="button" onClick={() => query(it.id)} className="flex items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-[12.5px] font-bold text-slate-600 active:scale-[0.98]"><MessageSquare size={15} /> शंका</button>
                             </div>
                         </div>
                     ))}

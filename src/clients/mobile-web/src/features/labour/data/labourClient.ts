@@ -115,6 +115,8 @@ export interface LabourReviewItemDto {
     initial: string;
     tone: string;
     detail: string;
+    /** `ShramSafal.Domain.Logs.VerificationStatus.ToString()` — "Draft" | "Confirmed" | "Verified" | "Disputed" | "CorrectionPending". */
+    status: string;
     points: LabourPointsDto;
 }
 
@@ -222,6 +224,7 @@ const mapReview = (r: LabourReviewItemDto): ReviewItem => ({
     initial: r.initial,
     tone: r.tone as ReviewItem['tone'],
     detail: r.detail,
+    status: r.status as ReviewItem['status'],
     points: {
         count: r.points.count ?? undefined,
         shift: (r.points.shift as ReviewItem['points']['shift']) ?? undefined,

@@ -220,6 +220,7 @@ public sealed class GetLabourDataHandler(IShramSafalRepository repository, ICloc
                     Initial: who.Length > 0 ? who[..1] : "?",
                     Tone: AvatarTones[0],
                     Detail: l.LogDate.ToString("yyyy-MM-dd"),
+                    Status: l.CurrentVerificationStatus.ToString(),
                     Points: new LabourPointsDto(null, null, null, null, []));
             })
             .ToList();

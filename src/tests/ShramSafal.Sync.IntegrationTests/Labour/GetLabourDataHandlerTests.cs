@@ -279,6 +279,9 @@ public sealed class GetLabourDataHandlerTests : IAsyncLifetime
             "a Draft log is still awaiting the owner and must surface in Review");
         result.Value!.Review.Should().NotContain(r => r.Id == verifiedLog.Id.ToString(),
             "a Verified log has already been actioned by the owner and must NEVER appear in Review");
+        result.Value!.Review.Should().Contain(r => r.Id == draftLog.Id.ToString() && r.Status == "Draft",
+            "Task 3.1 (Stage 3): the client needs the log's real status to know whether it must " +
+            "send a Draft->Confirmed step before Confirmed->{Verified|Disputed}");
     }
 
     private sealed class FixedClock(DateTime utcNow) : IClock

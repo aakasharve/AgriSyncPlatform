@@ -83,12 +83,21 @@ public sealed record LabourLedgerRowDto(
     IReadOnlyList<string> Cells,
     int Total);
 
+/// <summary>
+/// <c>Status</c> is the log's real <see cref="ShramSafal.Domain.Logs.VerificationStatus"/>
+/// (`ToString()` — "Draft"/"Confirmed"/"Verified"/"Disputed"/"CorrectionPending").
+/// The client needs this to know which <c>verify_log</c> transition(s) to
+/// send: <c>VerificationStateMachine</c> forbids a one-hop Draft→Verified/
+/// Disputed, so a Draft item requires Draft→Confirmed first, then
+/// Confirmed→{Verified|Disputed} (spec: 2026-07-13-labour-attendance-approval-design, Stage 3).
+/// </summary>
 public sealed record LabourReviewItemDto(
     string Id,
     string Who,
     string Initial,
     string Tone,
     string Detail,
+    string Status,
     LabourPointsDto Points);
 
 public sealed record LabourPointsDto(
