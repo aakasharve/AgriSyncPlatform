@@ -20,6 +20,7 @@ import { SIMPLE_ROUTE_RENDERERS } from './simpleRoutes';
 import { renderReflectView, renderCompareView, renderLogView } from './mainView';
 import { renderGlobalSheets } from './globalSheets';
 import { useUiPref } from '../../shared/hooks/useUiPref';
+import { useFarmContext } from '../session/FarmContext';
 import { useAppRouterDerivations } from './hooks/useAppRouterDerivations';
 import { useNudgeRouteEffect } from './hooks/useNudgeRouteEffect';
 
@@ -47,6 +48,9 @@ const AppRouter: React.FC = () => {
         typeof window === 'undefined',
     );
     const { getTodayCounts, getContextColorIndicator } = useAppViewHelpers();
+    // Session's active farm — threaded into ctx so the hook-free route render
+    // functions (mainView) can reach it. See AppRouterContext.activeFarmId.
+    const { currentFarmId } = useFarmContext();
 
     const { currentRoute, setCurrentRoute, mainView, setMainView } = navigation;
     const { logScope, setLogScope, currentLogContext, hasActiveLogContext, isContextReady } = context;
@@ -157,6 +161,7 @@ const AppRouter: React.FC = () => {
     // modules free of hook calls (which would violate rules-of-hooks if
     // invoked conditionally).
     const ctx: AppRouterContext = {
+        activeFarmId: currentFarmId,
         currentRoute, setCurrentRoute, mainView, setMainView,
         logScope, setLogScope, currentLogContext, hasActiveLogContext, isContextReady,
         isDemoMode, setIsDemoMode,

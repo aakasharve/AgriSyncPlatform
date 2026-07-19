@@ -775,7 +775,12 @@ export const renderLogView = (ctx: AppRouterContext): React.ReactNode => {
                             const selection = savedLog?.context?.selection?.[0];
                             return (
                                 <LedgerRecognitionPanel
-                                    farmId={selection?.farmId ?? null}
+                                    // BUGFIX_2026-07-19: prefer the session's ACTIVE farm.
+                                    // `selection.farmId` is optional on SelectedCropContext and
+                                    // nothing ever populates it, so this was always null — which
+                                    // made useDayUnderstanding skip its fetch entirely and pinned
+                                    // the understanding bar to its pending state permanently.
+                                    farmId={ctx.activeFarmId ?? selection?.farmId ?? null}
                                     plotId={selection?.selectedPlotIds?.[0] ?? null}
                                     crop={selection?.cropName ?? ''}
                                     todayLocalDate={savedLog?.date}

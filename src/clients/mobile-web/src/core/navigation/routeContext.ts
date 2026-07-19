@@ -48,6 +48,21 @@ export interface CostSnapshot {
 }
 
 export interface AppRouterContext {
+    /**
+     * The session's ACTIVE farm (FarmContext.currentFarmId), threaded through
+     * so hook-free route render functions can reach it.
+     *
+     * BUGFIX_2026-07-19: the DFES understanding bar previously sourced its farm
+     * from the saved log's own `context.selection[0].farmId`, which is OPTIONAL
+     * (log.types.ts, "Phase 7 - needed for finance tracking") and is never
+     * populated by LogContext/useLogCommands. So it was ALWAYS undefined,
+     * useDayUnderstanding short-circuited on `!farmId` before issuing any
+     * request, and the bar sat on its "अजून समजतंय…" pending state forever —
+     * for every farmer, no matter what the server had scored. Verified live:
+     * zero GET /shramsafal/day-understanding calls ever reached the backend.
+     */
+    activeFarmId: string | null;
+
     // navigation
     currentRoute: Navigation['currentRoute'];
     setCurrentRoute: Navigation['setCurrentRoute'];
