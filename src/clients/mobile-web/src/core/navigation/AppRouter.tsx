@@ -22,6 +22,7 @@ import { renderGlobalSheets } from './globalSheets';
 import { useUiPref } from '../../shared/hooks/useUiPref';
 import { useAppRouterDerivations } from './hooks/useAppRouterDerivations';
 import { useNudgeRouteEffect } from './hooks/useNudgeRouteEffect';
+import { useLabourLogArrivalScroll } from './hooks/useLabourLogArrivalScroll';
 
 // Sub-plan 04 Task 8 — Routes-as-data decomposition.
 // AppRouter is a thin orchestrator that wires hooks, builds an
@@ -143,6 +144,12 @@ const AppRouter: React.FC = () => {
         setShowReviewInbox,
         todayUnverifiedCount: derivations.todayDayState.unverifiedCount,
     });
+
+    // spec: 2026-07-13-labour-attendance-approval-design (Task 3.6) —
+    // arriving at the log page with logIntent === 'labour' auto-scrolls the
+    // labour banner + crop/plot picker into view. See
+    // ./hooks/useLabourLogArrivalScroll.ts for the full rationale.
+    useLabourLogArrivalScroll({ currentRoute, mainView, logIntent });
 
     if (!permissionsGranted) {
         return (
