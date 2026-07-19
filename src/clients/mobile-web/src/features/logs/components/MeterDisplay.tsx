@@ -105,13 +105,20 @@ export function MeterDisplay({
     // The server-folded engagement projection is the arrival source of truth
     // when present; otherwise fall back to the client-side computeMeterArrival
     // gate over the local logs.
-    const arrival = engagement
+    const serverArrival = engagement
         ? {
             richLogCount: engagement.totalRichDays,
             target: DFES_TUNING.richDayThreshold,
             arrived: engagement.unlockStatus === 'unlocked',
         }
         : computeMeterArrival(allLogs);
+
+    // DEV test ground: exercise the post-unlock experience without waiting 25
+    // real days. Display-only — nothing is written back and no rich day is
+    // fabricated. See FEATURE_FLAGS.simulateUnlock.
+    const arrival = FEATURE_FLAGS.simulateUnlock
+        ? { ...serverArrival, richLogCount: DFES_TUNING.richDayThreshold, arrived: true }
+        : serverArrival;
 
     // Phase 5: when stageQuestions is ON and a combined question is available,
     // surface it as the single tappable card ahead of the raw placeholder gaps.
@@ -141,12 +148,18 @@ export function MeterDisplay({
                     </p>
                 )}
             </div>
-            <div data-testid="meter-arrival" className="mt-2 text-xs text-stone-500" style={{ fontFamily: SANS }}>
-                {t('dfes.meterArrivalProgress')
-                    .replace('{count}', String(arrival.richLogCount))
-                    .replace('{target}', String(arrival.target))}
-                {arrival.arrived ? t('dfes.meterArrivalArrived') : ''}
-            </div>
+            {/* The rich-day counter is PAUSED by founder decision (2026-07-19):
+                it only ever gated the deferred spoken-unlock reward, and a
+                counter frozen at 0/25 reads as failure. The bar above is
+                deliberately NOT gated on this. */}
+            {!FEATURE_FLAGS.unlockCounterPaused && (
+                <div data-testid="meter-arrival" className="mt-2 text-xs text-stone-500" style={{ fontFamily: SANS }}>
+                    {t('dfes.meterArrivalProgress')
+                        .replace('{count}', String(arrival.richLogCount))
+                        .replace('{target}', String(arrival.target))}
+                    {arrival.arrived ? t('dfes.meterArrivalArrived') : ''}
+                </div>
+            )}
             {combinedQuestion?.answerOptions?.length ? (
                 // Task 2A: tap-to-answer — a real answer choice exists for this
                 // question. The prompt renders as text (not a single ack button);

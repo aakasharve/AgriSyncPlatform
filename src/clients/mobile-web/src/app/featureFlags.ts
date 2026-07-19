@@ -117,4 +117,33 @@ export const FEATURE_FLAGS = {
      * of an audible Marathi voice is a separate gate before flipping this on.
      */
     spokenUnlockReward: isEnabled('VITE_SPOKEN_UNLOCK_REWARD'),
+
+    /**
+     * Founder decision 2026-07-19 — PAUSE the rich-day unlock counter.
+     *
+     * The "x/25" progress line is the ONLY farmer-facing surface of the
+     * 25-rich-day milestone, and that milestone exists solely to unlock the
+     * spoken "Sathi talks back" reward, which is deferred to a later session.
+     * Showing a counter that cannot move (a BasicWorkDay has advancesBar=false)
+     * reads as "you made no progress" — the exact shame the dignity contract
+     * forbids. Pausing HIDES the counter line only.
+     *
+     * The Understanding Bar itself is NOT gated by this: the day's score is
+     * always shown when the server returns one. Unlock gates talk-back, never
+     * the bar. Default OFF (env VITE_UNLOCK_COUNTER_PAUSED absent -> false),
+     * so production behaviour is unchanged until the flag is set.
+     */
+    unlockCounterPaused: isEnabled('VITE_UNLOCK_COUNTER_PAUSED'),
+
+    /**
+     * DEV TEST GROUND — force the post-25-rich-days unlocked state without
+     * waiting 25 real days, so the after-unlock experience (and later the
+     * spoken reward) can be exercised locally.
+     *
+     * Simulation ONLY: it overrides the DISPLAYED arrival state; it never
+     * writes to the server, never fabricates rich days, and never changes
+     * what the engine scored. Default OFF (env VITE_SIMULATE_UNLOCK absent
+     * -> false) and it must stay OFF in production.
+     */
+    simulateUnlock: isEnabled('VITE_SIMULATE_UNLOCK'),
 } as const;
