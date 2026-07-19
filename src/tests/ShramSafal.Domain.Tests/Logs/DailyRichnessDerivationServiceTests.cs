@@ -209,6 +209,13 @@ public sealed class DailyRichnessDerivationServiceTests
         public override Task<DailyRichnessAggregate?> GetDailyRichnessAggregateAsync(Guid farmId, DateOnly localDate, CancellationToken ct = default)
             => Task.FromResult(Aggregates.FirstOrDefault(a => a.FarmId == farmId && a.LocalDate == localDate));
 
+        // FIX (dfes-companion-2026-07-11) — RecomputeAsync now uses the TRACKED accessor.
+        // The in-memory list already returns the live mutable object, so this delegates to
+        // the same store. NOTE: that equivalence means this double CANNOT detect the
+        // detached-write bug; the real-EF proof lives in ShramSafal.Sync.IntegrationTests/Dfes.
+        public override Task<DailyRichnessAggregate?> GetDailyRichnessAggregateForUpdateAsync(Guid farmId, DateOnly localDate, CancellationToken ct = default)
+            => GetDailyRichnessAggregateAsync(farmId, localDate, ct);
+
         public override Task AddDailyRichnessAggregateAsync(DailyRichnessAggregate aggregate, CancellationToken ct = default)
         {
             Aggregates.Add(aggregate);

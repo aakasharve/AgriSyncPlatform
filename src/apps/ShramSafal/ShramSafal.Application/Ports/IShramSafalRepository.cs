@@ -591,7 +591,33 @@ public interface IShramSafalRepository
         => Task.FromResult<IReadOnlyList<ShramSafal.Domain.Farms.ObservationEvent>>(
             Array.Empty<ShramSafal.Domain.Farms.ObservationEvent>());
 
+    /// <summary>
+    /// READ-ONLY lookup of the day's aggregate. The production implementation is
+    /// <b>NO-TRACKING</b> — the returned entity is DETACHED, so mutating it (e.g.
+    /// <c>ApplyDerivation</c>) and then calling <see cref="SaveChangesAsync"/> emits
+    /// <b>NO UPDATE AT ALL</b>: a silent, exception-free no-op.
+    /// <para><b>Do NOT use this overload when the caller intends to mutate the entity.</b>
+    /// Use <see cref="GetDailyRichnessAggregateForUpdateAsync"/> for any read-modify-write.</para>
+    /// </summary>
     Task<ShramSafal.Domain.Dfes.DailyRichnessAggregate?> GetDailyRichnessAggregateAsync(
+        Guid farmId, DateOnly localDate, CancellationToken ct = default)
+        => Task.FromResult<ShramSafal.Domain.Dfes.DailyRichnessAggregate?>(null);
+
+    /// <summary>
+    /// FIX (dfes-companion-2026-07-11) — read the day's aggregate as a
+    /// <b>CHANGE-TRACKED</b> entity, for the read-modify-write recompute path
+    /// (<c>DailyRichnessDerivationService.RecomputeAsync</c>). Because the entity is
+    /// attached to the DbContext, a subsequent <c>ApplyDerivation</c> +
+    /// <see cref="SaveChangesAsync"/> actually emits the UPDATE.
+    /// <para>This exists SPECIFICALLY because <see cref="GetDailyRichnessAggregateAsync"/>
+    /// is no-tracking: mutating its detached result persisted NOTHING and froze the farmer's
+    /// day score at whatever the first log of the day produced. Read-only callers
+    /// (e.g. <c>GetDayUnderstandingHandler</c>) must keep using the no-tracking overload —
+    /// do not collapse these two into one tracked method.</para>
+    /// Default returns null so in-tree <c>IShramSafalRepository</c> test doubles keep
+    /// compiling; production overrides.
+    /// </summary>
+    Task<ShramSafal.Domain.Dfes.DailyRichnessAggregate?> GetDailyRichnessAggregateForUpdateAsync(
         Guid farmId, DateOnly localDate, CancellationToken ct = default)
         => Task.FromResult<ShramSafal.Domain.Dfes.DailyRichnessAggregate?>(null);
 

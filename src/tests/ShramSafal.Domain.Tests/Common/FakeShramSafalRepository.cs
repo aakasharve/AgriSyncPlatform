@@ -101,6 +101,10 @@ public class FakeShramSafalRepository : IShramSafalRepository
     public virtual Task<IReadOnlyList<DailyLog>> GetDailyLogsForFarmDateAsync(Guid farmId, DateOnly localDate, CancellationToken ct = default) => throw NotStubbed();
     public virtual Task<IReadOnlyList<ObservationEvent>> GetObservationEventsForDailyLogsAsync(IReadOnlyCollection<Guid> dailyLogIds, CancellationToken ct = default) => throw NotStubbed();
     public virtual Task<DailyRichnessAggregate?> GetDailyRichnessAggregateAsync(Guid farmId, DateOnly localDate, CancellationToken ct = default) => throw NotStubbed();
+    // NOTE: in-memory doubles hand back MUTABLE objects, so tracked vs no-tracking is
+    // indistinguishable here — that is exactly why the detached-write bug was invisible to
+    // this suite. The real proof lives in ShramSafal.Sync.IntegrationTests/Dfes.
+    public virtual Task<DailyRichnessAggregate?> GetDailyRichnessAggregateForUpdateAsync(Guid farmId, DateOnly localDate, CancellationToken ct = default) => throw NotStubbed();
     public virtual Task AddDailyRichnessAggregateAsync(DailyRichnessAggregate aggregate, CancellationToken ct = default) => throw NotStubbed();
 
     // ── DFES Phase 5 — question-engine telemetry ──

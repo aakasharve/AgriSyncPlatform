@@ -299,7 +299,19 @@ internal sealed class ShramSafalRepository(ShramSafalDbContext db) : IShramSafal
     public async Task<Domain.Dfes.DailyRichnessAggregate?> GetDailyRichnessAggregateAsync(
         Guid farmId, DateOnly localDate, CancellationToken ct = default)
         => await db.DailyRichnessAggregates
+            // READ-ONLY. The result is DETACHED — mutating it (ApplyDerivation) and
+            // calling SaveChangesAsync emits NO UPDATE, silently and without error.
+            // Any read-modify-write caller must use
+            // GetDailyRichnessAggregateForUpdateAsync below instead.
             .AsNoTracking()
+            .FirstOrDefaultAsync(a => a.FarmId == farmId && a.LocalDate == localDate, ct);
+
+    // FIX (dfes-companion-2026-07-11) — TRACKED twin of the read above, for the
+    // recompute read-modify-write path. Identical query, deliberately WITHOUT
+    // .AsNoTracking() so ApplyDerivation + SaveChangesAsync actually persists.
+    public async Task<Domain.Dfes.DailyRichnessAggregate?> GetDailyRichnessAggregateForUpdateAsync(
+        Guid farmId, DateOnly localDate, CancellationToken ct = default)
+        => await db.DailyRichnessAggregates
             .FirstOrDefaultAsync(a => a.FarmId == farmId && a.LocalDate == localDate, ct);
 
     public async Task AddDailyRichnessAggregateAsync(

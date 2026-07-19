@@ -107,7 +107,15 @@ public sealed class DailyRichnessDerivationService(
                 signals.HasWork, signals.HasMeaningfulObservation, signals.HasLearning,
                 signals.HasExperimentOutcome, signals.HasDisturbance, signals.HasDeclaredNoWorkReason);
 
-            var existing = await repository.GetDailyRichnessAggregateAsync(farmId, localDate, ct);
+            // FIX (dfes-companion-2026-07-11) — MUST be the TRACKED accessor. This is a
+            // read-modify-write: the ApplyDerivation call below mutates `existing` and the
+            // caller's SaveChangesAsync is expected to flush it. The sibling
+            // GetDailyRichnessAggregateAsync is .AsNoTracking(), so it returned a DETACHED
+            // entity and EF emitted NO UPDATE — silently, with no exception. Effect: only
+            // the FIRST log of a day (the Create path below) ever wrote the aggregate, and
+            // every recompute after it was discarded, freezing the farmer's day at
+            // has_work=false / score 0 / "UnaccountedDay" on a day of real work.
+            var existing = await repository.GetDailyRichnessAggregateForUpdateAsync(farmId, localDate, ct);
             if (existing is not null)
             {
                 existing.ApplyDerivation(

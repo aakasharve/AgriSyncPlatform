@@ -168,6 +168,15 @@ internal sealed class InMemoryShramSafalRepository : IShramSafalRepository
             SeededRichnessAggregates
                 .FirstOrDefault(a => a.FarmId == farmId && a.LocalDate == localDate));
 
+    // FIX (dfes-companion-2026-07-11) — the recompute write path now asks for a TRACKED
+    // aggregate. In-memory there is no change tracker: the list already hands back the
+    // live mutable object, so this delegates to the SAME backing store. That equivalence
+    // is precisely why no fake-repository test can catch the detached-write bug — the
+    // real-EF proof is in ShramSafal.Sync.IntegrationTests/Dfes.
+    public Task<DailyRichnessAggregate?> GetDailyRichnessAggregateForUpdateAsync(
+        Guid farmId, DateOnly localDate, CancellationToken ct = default)
+        => GetDailyRichnessAggregateAsync(farmId, localDate, ct);
+
     // FIX (dfes-companion-2026-07-11) — the interface default no-ops these two
     // members, which is exactly wrong for a test that needs a REAL round-trip
     // (RecomputeAsync reads the day's logs, then writes the aggregate back).
