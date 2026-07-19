@@ -31,7 +31,13 @@ export interface FieldConfidence {
 export type FieldConfidenceMap = Record<string, FieldConfidence>;
 
 export type RawFieldConfidenceMap = Record<string, {
-    level: string;
+    /**
+     * String label ('HIGH'|'MEDIUM'|'LOW') OR the backend enum ordinal
+     * (0|1|2) — the API serializes ConfidenceScore numerically today, and
+     * previously-stored Dexie logs hold the numeric form. Normalized by
+     * annotateFieldConfidencesWithBuckets; never read this raw.
+     */
+    level: string | number;
     score: number;
     reason?: string;
     bucketId?: VisibleBucketId;
@@ -77,7 +83,38 @@ export const CRITICAL_FIELDS = new Set([
     'targetPlotName',
 ]) as ReadonlySet<string>;
 
-function normalizeConfidenceLevel(level: string): ConfidenceLevel {
+/**
+ * Backend enum ordinals for ShramSafal.Domain.AI.ConfidenceScore.
+ * The API has no JsonStringEnumConverter registered, so `level` arrives on the
+ * wire as a NUMBER (High=0, Medium=1, Low=2) even though the contract types it
+ * as a string. Logs already persisted in Dexie carry that numeric form too, so
+ * this mapping stays regardless of what the server emits going forward.
+ */
+const CONFIDENCE_ORDINALS: Record<number, ConfidenceLevel> = {
+    0: 'HIGH',
+    1: 'MEDIUM',
+    2: 'LOW',
+};
+
+/**
+ * BUGFIX_2026-07-19: this took `level: string` and called `.trim()` on it
+ * unguarded, so a numeric level crashed the whole render with
+ * "level.trim is not a function". It stayed latent while AI responses were
+ * coming back empty (no entries to iterate); once parsing actually worked and
+ * real fieldConfidences arrived, every render hit it.
+ *
+ * Accepts unknown and degrades to MEDIUM rather than throwing — an
+ * unrecognisable confidence label must never take down the log view.
+ */
+function normalizeConfidenceLevel(level: unknown): ConfidenceLevel {
+    if (typeof level === 'number' && Number.isFinite(level)) {
+        return CONFIDENCE_ORDINALS[level] ?? 'MEDIUM';
+    }
+
+    if (typeof level !== 'string') {
+        return 'MEDIUM';
+    }
+
     const normalized = level.trim().toUpperCase();
     if (normalized === 'HIGH' || normalized === 'MEDIUM' || normalized === 'LOW') {
         return normalized;
