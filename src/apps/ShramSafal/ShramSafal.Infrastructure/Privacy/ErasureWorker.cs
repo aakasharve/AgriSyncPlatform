@@ -97,11 +97,57 @@
 //     manifest), severing re-attribution. KEEP (survives, DPDP §12 de-identified
 //     operational retention). No scrub action; conscious gate-4 disposition.
 //   - ssf.labour_assignments — Track B daily_logs-child (ADR 0023 §2 / D-T5-ERASURE).
-//     NO user_id/PII column: gendered worker counts, engagement type, wage/rate and
-//     the (nullable, never-fabricated) total_cost are de-identified farm operational
-//     facts; the free-text notes field was deliberately EXCLUDED. The parent
-//     daily_logs.operator_user_id is already scrubbed to ErasedFarmer, severing
-//     re-attribution. KEEP (survives, DPDP §12). No scrub action; conscious gate-4 disposition.
+//     CORRECTED 2026-07-19 (founder Decision 5, spec
+//     2026-07-13-labour-attendance-approval-design) — this bullet previously said
+//     the table has "NO user_id/PII column" and takes "No scrub action." That
+//     became FALSE the moment migration 20260718132540_AddLabourAssignmentShiftTaskNames
+//     added worker_names_json: it holds the farmer's own spoken free-text naming a
+//     third-party worker, verbatim, in a jsonb array — real PII, not a de-identified
+//     operational fact. The rest of the row (engagement_type, gendered worker counts,
+//     wage/rate, shift, task, and the nullable never-fabricated total_cost) is still
+//     de-identified and still KEEPs, exactly as before. worker_names_json is now
+//     ANONYMIZE'd (see AnonymizeLabourAssignmentWorkerNamesAsync below): scrubbed to
+//     '[]'::jsonb whenever the parent daily_log's operator_user_id matches the erased
+//     user — same scope as every other daily_logs-child in this file. A knowingly
+//     false statement in a compliance artifact is worse than a tracked gap; do not
+//     revert this bullet to the old text.
+//   - ssf.workers — ADDED 2026-07-19 (founder Decision 5, "5b: ship names, but do the
+//     erasure work first" — spec 2026-07-13-labour-attendance-approval-design). WTL v0
+//     Worker aggregate (ADR 2026-05-04 wtl-v0-entity-shape): a third-party (non-user)
+//     worker identity captured passively from voice transcripts by WorkerNameProjector.
+//     Previously ABSENT from this manifest entirely. HAS PII: name_raw / name_normalized
+//     hold an actual person's name — unlike every de-identified Track B table above,
+//     this is not a de-identified operational fact, so it cannot get a bare KEEP
+//     disposition. ANONYMIZE, not DELETE (see AnonymizeWorkersDerivedFromUserLogsAsync
+//     below): scrub name_raw/name_normalized to a redaction sentinel while KEEPING
+//     farm_id/assignment_count/first_seen_utc and the row itself intact —
+//     worker_assignments.worker_id carries ON DELETE CASCADE, so hard-deleting the
+//     Worker row would silently destroy every WorkerAssignment link row (and the
+//     assignment_count history the admin Mode A drilldown reads); sentinel-replace
+//     avoids that orphaning. Scope: a Worker is reached via
+//     ssf.worker_assignments -> ssf.daily_logs.operator_user_id — i.e. any Worker whose
+//     name was extracted from a transcript belonging to a log THIS erased user
+//     authored. Must run BEFORE AnonymizeDailyLogsAsync scrubs operator_user_id (the
+//     join needs the ORIGINAL value) — same ordering rule as NullLogTaskNotesAsync.
+//     DISCLOSED LIMIT: a Worker who ALSO has assignments from a DIFFERENT operator on
+//     the same farm is still scrubbed here — a name touched by the erased user's own
+//     voice log is redacted regardless of who else later mentioned the same Worker
+//     row. The alternative (skip scrubbing because someone else also named them) would
+//     let one operator's erasure fail to remove PII their own log produced, which is
+//     the worse failure mode. Workers cannot self-initiate an erasure request — no
+//     login, no user_id column, no consent capture today — so this disposition is a
+//     cascade FROM the registered farmer's own erasure, not a first-class DPDP right
+//     exercised BY the worker; see the phase-5 privacy report for what this covers and
+//     does not, and the still-open LEGAL_REVIEW_PENDING note on third-party worker
+//     notice/consent.
+//   - ssf.worker_assignments — ADDED 2026-07-19 alongside ssf.workers above. WTL v0 link
+//     entity (ADR 2026-05-04 wtl-v0-entity-shape) tying a Worker to the DailyLog its
+//     name was extracted from. NO PII column of its own: worker_id/daily_log_id/
+//     confidence/occurred_at_utc are structural references — the identifying text lives
+//     entirely on the referenced ssf.workers row, scrubbed above. KEEP the link row
+//     unchanged; do NOT delete it — that is exactly the orphaning the sentinel-replace
+//     choice on ssf.workers exists to avoid. No independent scrub action on this table;
+//     conscious gate-4 disposition.
 //   - ssf.machinery_usages — Track B daily_logs-child (ADR 0023 §2 / D-T6-ERASURE).
 //     NO user_id/PII column: machine type/ownership, hours/costs, and the structured
 //     equipment config (implement, nozzles_active, fan_state, fuel) are de-identified
@@ -273,6 +319,20 @@ public sealed class ErasureWorker(
         //     user_id), then scrub the parent daily_logs row.
         perTableCounts["log_tasks"] = await NullLogTaskNotesAsync(admin, targetUserId, ct).ConfigureAwait(false);
         totalAnonymized += perTableCounts["log_tasks"];
+
+        // 2026-07-19 additions (founder Decision 5, spec
+        // 2026-07-13-labour-attendance-approval-design) — ssf.workers and
+        // ssf.labour_assignments.worker_names_json both hold a third party's
+        // real name and are both reached via the parent daily_log's
+        // operator_user_id, so BOTH must run here, alongside
+        // NullLogTaskNotesAsync, BEFORE AnonymizeDailyLogsAsync scrubs that
+        // column to the sentinel. See the ssf.workers / ssf.labour_assignments
+        // manifest comments above for the full disposition + disclosed limits.
+        perTableCounts["workers"] = await AnonymizeWorkersDerivedFromUserLogsAsync(admin, targetUserId, ct).ConfigureAwait(false);
+        totalAnonymized += perTableCounts["workers"];
+
+        perTableCounts["labour_assignments"] = await AnonymizeLabourAssignmentWorkerNamesAsync(admin, targetUserId, ct).ConfigureAwait(false);
+        totalAnonymized += perTableCounts["labour_assignments"];
 
         perTableCounts["daily_logs"] = await AnonymizeDailyLogsAsync(admin, targetUserId, sentinel, ct).ConfigureAwait(false);
         totalAnonymized += perTableCounts["daily_logs"];
@@ -477,6 +537,63 @@ UPDATE ssf.log_tasks AS t
             .ConfigureAwait(false);
     }
 
+    /// <summary>
+    /// 2026-07-19 addition (founder Decision 5, spec
+    /// 2026-07-13-labour-attendance-approval-design). Sentinel-replaces
+    /// <c>ssf.workers.name_raw</c> / <c>name_normalized</c> — never a hard
+    /// DELETE, since <c>worker_assignments.worker_id</c> carries
+    /// <c>ON DELETE CASCADE</c> and deleting the Worker row would silently
+    /// orphan-destroy every WorkerAssignment link row plus the
+    /// assignment_count history the admin Mode A drilldown reads. Scope: any
+    /// Worker reached via a WorkerAssignment on a daily_log THIS erased user
+    /// authored — see the ssf.workers manifest comment above for the
+    /// disclosed limit (a Worker with assignments from a different operator
+    /// too is still scrubbed). MUST run before <see cref="AnonymizeDailyLogsAsync"/>
+    /// — the join needs the original operator_user_id.
+    /// </summary>
+    private static async Task<int> AnonymizeWorkersDerivedFromUserLogsAsync(
+        ShramSafalDbContext db, Guid userId, CancellationToken ct)
+    {
+        const string sql = @"
+UPDATE ssf.workers AS w
+   SET name_raw = 'Erased worker',
+       name_normalized = 'erased worker'
+  FROM ssf.worker_assignments AS wa
+  JOIN ssf.daily_logs AS dl ON dl.""Id"" = wa.daily_log_id
+ WHERE w.""Id"" = wa.worker_id
+   AND dl.operator_user_id = {0}
+   AND w.name_raw <> 'Erased worker';";
+        return await db.Database.ExecuteSqlRawAsync(sql, new object[] { userId }, ct)
+            .ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// 2026-07-19 addition (founder Decision 5). <c>worker_names_json</c> was
+    /// added to <c>ssf.labour_assignments</c> by migration
+    /// <c>20260718132540_AddLabourAssignmentShiftTaskNames</c> and holds the
+    /// farmer's own spoken free-text naming a third-party worker — unlike the
+    /// rest of that row, this is embedded PII, not a de-identified
+    /// operational fact (see the corrected manifest comment above). Scrubbed
+    /// to <c>'[]'::jsonb</c> whenever the parent daily_log's operator_user_id
+    /// matches the erased user. MUST run before
+    /// <see cref="AnonymizeDailyLogsAsync"/> for the same reason as
+    /// <see cref="NullLogTaskNotesAsync"/> — the join needs the original
+    /// operator_user_id.
+    /// </summary>
+    private static async Task<int> AnonymizeLabourAssignmentWorkerNamesAsync(
+        ShramSafalDbContext db, Guid userId, CancellationToken ct)
+    {
+        const string sql = @"
+UPDATE ssf.labour_assignments AS la
+   SET worker_names_json = '[]'::jsonb
+  FROM ssf.daily_logs AS dl
+ WHERE la.daily_log_id = dl.""Id""
+   AND dl.operator_user_id = {0}
+   AND la.worker_names_json <> '[]'::jsonb;";
+        return await db.Database.ExecuteSqlRawAsync(sql, new object[] { userId }, ct)
+            .ConfigureAwait(false);
+    }
+
     private static async Task<int> AnonymizeCostEntriesAsync(
         ShramSafalDbContext db, Guid userId, Guid sentinel, CancellationToken ct)
     {
@@ -591,6 +708,10 @@ UPDATE ssf.farm_operations
         "correction_events" => new[] { "user_id" },
         "finance_corrections" => new[] { "corrected_by_user_id", "reason" },
         "farm_operations" => new[] { "created_by_user_id" },
+        // 2026-07-19 additions (founder Decision 5) — see the ssf.workers /
+        // ssf.labour_assignments manifest comments above.
+        "workers" => new[] { "name_raw", "name_normalized" },
+        "labour_assignments" => new[] { "worker_names_json" },
         // SARVAM_PRIMARY_VOICE_PIPELINE Task 3.4 — voice-spine tables
         // follow a DELETE manifest. The audit payload records "deleted"
         // as the scrubbed-columns sentinel so the audit row's shape

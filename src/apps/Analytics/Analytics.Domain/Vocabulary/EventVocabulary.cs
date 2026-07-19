@@ -79,8 +79,16 @@ public static class EventVocabulary
                 RequiredProps: ["message"],
                 Optional: ["farmId", "stack"]),
 
+            // 2026-07-19 correction (founder Decision 5, spec
+            // 2026-07-13-labour-attendance-approval-design): this entry
+            // documented "logId"/"workerName", which never matched what
+            // WorkerNameProjector actually emits ("dailyLogId", no raw name
+            // field). The name field was removed entirely — analytics.events
+            // is append-only (DO INSTEAD NOTHING on UPDATE/DELETE), so a raw
+            // worker name written there could never be scrubbed. Restated to
+            // match WorkerNameProjector.cs's real PropsJson shape.
             ["worker.named"] = new(
-                RequiredProps: ["farmId", "logId", "workerName", "confidence"],
+                RequiredProps: ["farmId", "dailyLogId", "workerId", "confidence"],
                 Optional: []),
 
             ["admin.farmer_lookup"] = new(

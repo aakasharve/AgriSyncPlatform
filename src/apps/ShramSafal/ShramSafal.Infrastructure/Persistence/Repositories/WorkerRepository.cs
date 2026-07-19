@@ -14,15 +14,6 @@ namespace ShramSafal.Infrastructure.Persistence.Repositories;
 /// </remarks>
 internal sealed class WorkerRepository(ShramSafalDbContext context) : IWorkerRepository
 {
-    public Task<Worker?> FindByNormalizedNameAsync(FarmId farmId, string normalized, CancellationToken ct = default)
-    {
-        ArgumentException.ThrowIfNullOrWhiteSpace(normalized);
-
-        return context.Workers
-            .Where(w => w.FarmId == farmId && w.Name.Normalized == normalized)
-            .FirstOrDefaultAsync(ct);
-    }
-
     public void Add(Worker worker)
     {
         ArgumentNullException.ThrowIfNull(worker);
