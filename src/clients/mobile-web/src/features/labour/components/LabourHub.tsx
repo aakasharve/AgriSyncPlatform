@@ -2,10 +2,15 @@
  * @license
  * SPDX-License-Identifier: Apache-2.0
  *
- * LabourHub — the "कामगार व पैसे" landing: voice capture, a 2×2 quick grid
- * (हजेरी घ्या · हजेरी वही · तपासा · आढावा — all one tap), and the people list
- * (मुकादम shown as one line, drill-in optional). Simple for a semi-literate
- * farmer, in the app's design.
+ * LabourHub — the "कामगार व पैसे" landing: voice capture, a quick grid
+ * (तपासा · आढावा — one tap each), and the people list (मुकादम shown as one
+ * line, drill-in optional). Simple for a semi-literate farmer, in the app's
+ * design.
+ *
+ * Decision 4b (2026-07-19, screen honesty): हजेरी घ्या's save button and
+ * हजेरी वही both wired to nothing real for a production farm — see
+ * `SHOW_ATTENDANCE_TILE` / `SHOW_LEDGER_TILE` below. Hidden (not deleted)
+ * from this grid so a farmer can't reach either dead end.
  */
 import React from 'react';
 import { Mic, ClipboardCheck, Inbox, LayoutDashboard, BookText, Users } from 'lucide-react';
@@ -13,7 +18,24 @@ import type { LabourData } from '../labourMock';
 import type { DailyLog, LedgerDefaults } from '../../../types';
 import { generateDayWorkSummary } from '../../analysis/dayWorkSummary';
 import { formatCurrency } from '../../../shared/utils/currency';
-import { GroupLabel, PersonRow, HelpNote } from './LabourUiKit';
+import { GroupLabel, PersonRow, HelpNote, EmptyState } from './LabourUiKit';
+
+/**
+ * हजेरी घ्या's "जतन करा" claims "जतन झाले" (saved) but writes nothing
+ * anywhere — the screen it opens is a dead end. Hide the tile itself (not
+ * just the save button) rather than let a farmer fill in a form that goes
+ * nowhere. Flip to `true` once attendance actually persists.
+ */
+const SHOW_ATTENDANCE_TILE = false;
+
+/**
+ * हजेरी वही IS wired to a real endpoint, but the backend's per-worker
+ * attendance ledger (Stage 5) isn't built yet — `GetLabourDataHandler`
+ * returns `Rows: []` / `Days: []` unconditionally for every real farm today,
+ * so the screen is structurally empty regardless of real data. Hidden until
+ * Stage 5 ships; flip to `true` then.
+ */
+const SHOW_LEDGER_TILE = false;
 
 interface Props {
     data: LabourData;
@@ -25,6 +47,13 @@ interface Props {
     onReview: () => void;
     /** Voice input lives only on the canonical log page — the voice card navigates there. */
     onGoToLog: () => void;
+    /**
+     * Opens the real "share farm QR" sheet (`FarmInviteQrSheet`) so the
+     * honest empty people-state has a genuine next step, not a decorative
+     * button. Undefined when there is no real farm to invite into (preview,
+     * or farm context still resolving) — the CTA hides itself in that case.
+     */
+    onInviteWorker?: () => void;
     /**
      * Task 3.5 — "just logged" labour summary threading. `LabourData` (above)
      * carries no log history, so this is additive and entirely optional:
@@ -110,7 +139,7 @@ const LabourJustLogged: React.FC<{ logs: DailyLog[]; defaults: LedgerDefaults }>
     );
 };
 
-const LabourHub: React.FC<Props> = ({ data, onOpenMukadam, onOpenPerson, onAttendance, onDashboard, onLedger, onReview, onGoToLog, history, ledgerDefaults, lastLabourLogIds }) => {
+const LabourHub: React.FC<Props> = ({ data, onOpenMukadam, onOpenPerson, onAttendance, onDashboard, onLedger, onReview, onGoToLog, onInviteWorker, history, ledgerDefaults, lastLabourLogIds }) => {
     const justLoggedLogs = (history && ledgerDefaults && lastLabourLogIds && lastLabourLogIds.length > 0)
         ? lastLabourLogIds
             .map((id) => history.find((log) => log.id === id))
@@ -132,8 +161,12 @@ const LabourHub: React.FC<Props> = ({ data, onOpenMukadam, onOpenPerson, onAtten
         </button>
 
         <div className="grid grid-cols-2 gap-2.5">
-            <QuickTile icon={<ClipboardCheck size={20} />} chip="bg-emerald-50 text-emerald-600 ring-1 ring-emerald-100" label="हजेरी घ्या" sub="आज कोण आलं" onClick={onAttendance} />
-            <QuickTile icon={<BookText size={20} />} chip="bg-blue-100 text-blue-600" label="हजेरी वही" sub="सर्व दिवस" onClick={onLedger} />
+            {SHOW_ATTENDANCE_TILE && (
+                <QuickTile icon={<ClipboardCheck size={20} />} chip="bg-emerald-50 text-emerald-600 ring-1 ring-emerald-100" label="हजेरी घ्या" sub="आज कोण आलं" onClick={onAttendance} />
+            )}
+            {SHOW_LEDGER_TILE && (
+                <QuickTile icon={<BookText size={20} />} chip="bg-blue-100 text-blue-600" label="हजेरी वही" sub="सर्व दिवस" onClick={onLedger} />
+            )}
             <QuickTile icon={<Inbox size={20} />} chip="bg-amber-100 text-amber-700" label="तपासा" sub="मंजूर करा" badge={data.dashboard.pending} onClick={onReview} />
             <QuickTile icon={<LayoutDashboard size={20} />} chip="bg-violet-100 text-violet-600" label="आढावा" sub="या आठवड्याचा" onClick={onDashboard} />
         </div>
@@ -150,18 +183,35 @@ const LabourHub: React.FC<Props> = ({ data, onOpenMukadam, onOpenPerson, onAtten
         />
 
         <GroupLabel>माणसं · people</GroupLabel>
-        {data.topLevelIds.map((id) => {
-            const person = data.people[id];
-            const isMukadam = person.role !== 'worker';
-            return (
-                <PersonRow
-                    key={id}
-                    person={person}
-                    teamCount={person.memberIds?.length}
-                    onOpen={() => (isMukadam ? onOpenMukadam(id) : onOpenPerson(id))}
-                />
-            );
-        })}
+        {data.topLevelIds.length === 0 ? (
+            <EmptyState
+                icon={<Users size={22} />}
+                title="अजून कोणी कामगार जोडलेला नाही"
+                subtitle="कामगार अ‍ॅपमध्ये फक्त QR कोड स्कॅन करून व फोन नंबर + OTP टाकून सामील होतात. खाली QR दाखवून पहिला कामगार जोडा."
+                action={onInviteWorker ? (
+                    <button
+                        type="button"
+                        onClick={onInviteWorker}
+                        className="mt-1 flex items-center justify-center gap-2 rounded-[14px] bg-emerald-600 px-4 py-2.5 text-[13px] font-extrabold text-white transition-transform active:scale-[0.98]"
+                    >
+                        <Users size={16} /> QR दाखवा — कामगार जोडा
+                    </button>
+                ) : undefined}
+            />
+        ) : (
+            data.topLevelIds.map((id) => {
+                const person = data.people[id];
+                const isMukadam = person.role !== 'worker';
+                return (
+                    <PersonRow
+                        key={id}
+                        person={person}
+                        teamCount={person.memberIds?.length}
+                        onOpen={() => (isMukadam ? onOpenMukadam(id) : onOpenPerson(id))}
+                    />
+                );
+            })
+        )}
     </div>
     );
 };

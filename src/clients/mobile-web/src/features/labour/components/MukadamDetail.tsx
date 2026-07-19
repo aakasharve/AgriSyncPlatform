@@ -5,10 +5,18 @@
  * MukadamDetail — a मुकादम (head or task-scoped/temporary sub-मुकादम): their
  * running उचल balance + the people they manage (a sub-मुकादम appears as one
  * row, drill-in optional). The delegation tree, kept simple.
+ *
+ * Decision 4b (2026-07-19, screen honesty): `onAdvance`/`onSettle` both fire a
+ * "— नमुना" placeholder toast only (no server write) — same underlying issue
+ * as `PersonDetail`'s worker page, so the same fix applies here: the actions
+ * are hidden (not deleted) via `BalanceCard`'s `showActions` prop until a
+ * real advance/settle endpoint exists.
  */
 import React from 'react';
 import type { LabourData } from '../labourMock';
 import { Avatar, BalanceCard, GroupLabel, MukadamBadge, TaskBadge, TempBadge, PersonRow } from './LabourUiKit';
+
+const SHOW_MONEY_ACTIONS = false;
 
 interface Props {
     data: LabourData;
@@ -44,6 +52,7 @@ const MukadamDetail: React.FC<Props> = ({ data, personId, onOpenPerson, onOpenMu
                 settleLabel="सेटल"
                 onAdvance={onAdvance}
                 onSettle={onSettle}
+                showActions={SHOW_MONEY_ACTIONS}
                 why={sub ? 'फक्त छाटणीसाठी · काम संपलं की बंद' : `तुम्ही ${'₹'}${m.balance.advance.toLocaleString('en-IN')} उचल दिली`}
             />
 

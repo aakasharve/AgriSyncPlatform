@@ -10,11 +10,11 @@
 // optional (LabourPreview.tsx's bare `?preview=labour` mount supplies none
 // of them) — the "renders nothing, doesn't crash" cases guard that.
 import React from 'react';
-import { describe, it, expect, afterEach } from 'vitest';
-import { render, screen, cleanup } from '@testing-library/react';
+import { describe, it, expect, afterEach, vi } from 'vitest';
+import { render, screen, cleanup, fireEvent } from '@testing-library/react';
 import '@testing-library/jest-dom/vitest';
 import LabourHub from '../LabourHub';
-import { EMPTY_LABOUR_DATA } from '../../labourMock';
+import { EMPTY_LABOUR_DATA, LABOUR_MOCK } from '../../labourMock';
 import type { DailyLog, LedgerDefaults } from '../../../../types';
 
 const noop = () => {};
@@ -101,5 +101,48 @@ describe('LabourHub — "just logged" labour summary (Task 3.5)', () => {
             />
         );
         expect(screen.queryByTestId('labour-just-logged-card')).toBeNull();
+    });
+});
+
+// ---------------------------------------------------------------------------
+// Decision 4b (2026-07-19, screen honesty) — honest empty people-state with a
+// real QR "add a worker" CTA, and the हजेरी घ्या / हजेरी वही tiles hidden.
+// ---------------------------------------------------------------------------
+
+describe('LabourHub — screen honesty (Decision 4b)', () => {
+    afterEach(() => cleanup());
+
+    it('shows an honest empty state (not a heading over nothing) when topLevelIds is empty', () => {
+        render(<LabourHub {...baseProps()} />);
+
+        expect(screen.getByText('अजून कोणी कामगार जोडलेला नाही')).toBeInTheDocument();
+        expect(screen.getByText(/QR कोड स्कॅन करून/)).toBeInTheDocument();
+    });
+
+    it('renders the real QR "add a worker" CTA when onInviteWorker is supplied, and calls it on tap', () => {
+        const onInviteWorker = vi.fn();
+        render(<LabourHub {...baseProps()} onInviteWorker={onInviteWorker} />);
+
+        const cta = screen.getByText('QR दाखवा — कामगार जोडा');
+        fireEvent.click(cta);
+        expect(onInviteWorker).toHaveBeenCalledTimes(1);
+    });
+
+    it('hides the QR CTA entirely when onInviteWorker is undefined (no real farm to invite into yet)', () => {
+        render(<LabourHub {...baseProps()} />);
+        expect(screen.queryByText('QR दाखवा — कामगार जोडा')).toBeNull();
+    });
+
+    it('does NOT show the empty state once real people exist', () => {
+        render(<LabourHub {...baseProps()} data={LABOUR_MOCK} />);
+        expect(screen.queryByText('अजून कोणी कामगार जोडलेला नाही')).toBeNull();
+    });
+
+    it('hides हजेरी घ्या and हजेरी वही — both wired to nothing real for a production farm', () => {
+        render(<LabourHub {...baseProps()} data={LABOUR_MOCK} />);
+        expect(screen.queryByText('हजेरी घ्या')).toBeNull();
+        expect(screen.queryByText('हजेरी वही')).toBeNull();
+        // The tile that DOES work stays reachable.
+        expect(screen.getByText('आढावा')).toBeInTheDocument();
     });
 });

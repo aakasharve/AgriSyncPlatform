@@ -26,8 +26,25 @@ import { Avatar, HelpNote } from './LabourUiKit';
 import LabourDataPoints from './LabourDataPoints';
 import { VerifyLogCommand } from '../../../application/usecases/sync/VerifyLogCommand';
 import { backgroundSyncWorker } from '../../../infrastructure/sync/BackgroundSyncWorker';
+import { formatReviewDetail, isReviewDetailWithinDays } from '../reviewDetailDate';
 
-interface Props { open: boolean; data: LabourData; onClose: () => void; onToast: (m: string) => void }
+/** Decision 4b (2026-07-19) — bounds the तपासणी queue so it cannot grow forever. */
+const REVIEW_QUEUE_MAX_AGE_DAYS = 14;
+
+interface Props {
+    open: boolean;
+    data: LabourData;
+    onClose: () => void;
+    onToast: (m: string) => void;
+    /**
+     * Fired once after a batch finishes with at least one successful send —
+     * lets the caller `refresh()` the farm's labour data so the "तपासा N"
+     * hub badge (and this sheet, next time it opens) reflect the CURRENT
+     * server count instead of the stale one from page load (Decision 4b:
+     * the badge must not still say 76 after the queue is cleared).
+     */
+    onApproved?: () => void;
+}
 
 const DISPUTE_REASON = 'मालकाने या नोंदीवर शंका घेतली आहे — कामगाराला विचारायचं आहे.';
 
@@ -55,29 +72,19 @@ async function triggerSyncBestEffort(): Promise<void> {
 }
 
 /**
- * Sends the `verify_log` transition(s) needed to reach `finalStatus` from
- * the review item's CURRENT server status. `VerificationStateMachine`
- * (ShramSafal.Domain.Logs) forbids a one-hop Draft→Verified/Disputed: a
- * `Draft` item needs Draft→Confirmed first (any farm role may do that),
- * THEN Confirmed→{Verified|Disputed} (owner-tier roles). A `Confirmed` (or
- * already-`Verified`, for the शंका/dispute case) item reaches the target in
- * one hop.
+ * Enqueues the `verify_log` transition(s) needed to reach `finalStatus` from
+ * the review item's CURRENT server status, WITHOUT triggering a sync push —
+ * see `sendVerification` (which wraps this with exactly one trigger) for the
+ * single-item path, and `finalizeBatch`'s bulk branch below for why a
+ * multi-item batch needs the enqueue/trigger split out.
  *
- * The two mutations are enqueued in order, each `await`ed before the next —
- * `BackgroundSyncWorker.pushPendingMutations` batches ALL pending rows by
- * ascending queue id (insertion order) into one `/sync/push` call, and
- * `PushSyncBatchHandler` applies a batch's mutations sequentially, each in
- * its own committed transaction, so the Confirmed step is durable on the
- * server before the Verified/Disputed step is evaluated against it — even
- * if the two end up split across sync cycles.
- *
- * Exported for `reviewApprove.test.ts` — it is the actual "does तपासणी
- * reach the real approval engine" contract, independent of the button
- * wiring around it. Callers (below) ALWAYS route through the confirm+undo
- * window first — this function itself has no knowledge of that UX and must
- * not change.
+ * `VerificationStateMachine` (ShramSafal.Domain.Logs) forbids a one-hop
+ * Draft→Verified/Disputed: a `Draft` item needs Draft→Confirmed first (any
+ * farm role may do that), THEN Confirmed→{Verified|Disputed} (owner-tier
+ * roles). A `Confirmed` (or already-`Verified`, for the शंका/dispute case)
+ * item reaches the target in one hop.
  */
-export async function sendVerification(
+async function enqueueVerificationSteps(
     dailyLogId: string,
     currentStatus: ReviewVerificationStatus | undefined,
     finalStatus: 'verified' | 'disputed',
@@ -88,6 +95,34 @@ export async function sendVerification(
         await VerifyLogCommand.enqueue({ dailyLogId, verificationStatus: 'confirmed' });
     }
     await VerifyLogCommand.enqueue({ dailyLogId, verificationStatus: finalStatus, reason });
+}
+
+/**
+ * Enqueues (see `enqueueVerificationSteps` above), THEN triggers ONE
+ * best-effort sync push — `BackgroundSyncWorker.pushPendingMutations`
+ * batches ALL pending rows by ascending queue id (insertion order) into one
+ * `/sync/push` call, and `PushSyncBatchHandler` applies a batch's mutations
+ * sequentially, each in its own committed transaction, so the Confirmed step
+ * is durable on the server before the Verified/Disputed step is evaluated
+ * against it — even if the two end up split across sync cycles.
+ *
+ * Exported for `reviewApprove.test.ts` — it is the actual "does तपासणी
+ * reach the real approval engine" contract, independent of the button
+ * wiring around it. Callers (below) ALWAYS route through the confirm+undo
+ * window first — this function itself has no knowledge of that UX and must
+ * not change. Used as-is for a SINGLE-item batch (मंजूर / शंका); a
+ * multi-item सगळं मंजूर batch calls `enqueueVerificationSteps` per item and
+ * triggers sync ONCE for the whole batch instead (see `finalizeBatch`) —
+ * Decision 4b (2026-07-19): approving 76 items used to fire ~76 sequential
+ * sync round-trips one per item, well after the farmer was told it was done.
+ */
+export async function sendVerification(
+    dailyLogId: string,
+    currentStatus: ReviewVerificationStatus | undefined,
+    finalStatus: 'verified' | 'disputed',
+    reason?: string
+): Promise<void> {
+    await enqueueVerificationSteps(dailyLogId, currentStatus, finalStatus, reason);
     await triggerSyncBestEffort();
 }
 
@@ -147,7 +182,7 @@ const ConfirmOverlay: React.FC<{ kind: ConfirmKind }> = ({ kind }) => (
     </div>
 );
 
-const ReviewSheet: React.FC<Props> = ({ open, data, onClose, onToast }) => {
+const ReviewSheet: React.FC<Props> = ({ open, data, onClose, onToast, onApproved }) => {
     const [gone, setGone] = useState<Record<string, boolean>>({});
     const [confirming, setConfirming] = useState<Record<string, ConfirmKind>>({});
     const [undoQueue, setUndoQueue] = useState<UndoEntry[]>([]);
@@ -159,7 +194,10 @@ const ReviewSheet: React.FC<Props> = ({ open, data, onClose, onToast }) => {
     const batchSeqRef = useRef(0);
     const mountedRef = useRef(true);
 
-    const items = data.review.filter((i) => !gone[i.id]);
+    // Decision 4b (2026-07-19) 14-day bound — a real farm's `detail` is a
+    // bare ISO date; anything unparseable (mock/preview) passes through.
+    const boundedReview = data.review.filter((i) => isReviewDetailWithinDays(i.detail, REVIEW_QUEUE_MAX_AGE_DAYS));
+    const items = boundedReview.filter((i) => !gone[i.id]);
     // Excludes cards still mid-confirm-animation from THIS render's bulk
     // target — otherwise a fast मंजूर-then-सगळं-मंजूर double-tap could fold
     // the same card into two independent pending batches (double-send).
@@ -195,11 +233,30 @@ const ReviewSheet: React.FC<Props> = ({ open, data, onClose, onToast }) => {
         }
 
         const failedIds = new Set<string>();
-        for (const it of batch.items) {
-            try {
-                await sendVerification(it.id, it.status, batch.finalStatus, batch.reason);
-            } catch {
-                failedIds.add(it.id);
+        if (batch.items.length > 1) {
+            // Bulk path (सगळं मंजूर) — Decision 4b: approving 76 items used to
+            // enqueue+trigger-sync per item, i.e. ~76 sequential network
+            // round-trips fired AFTER the farmer was already told it was
+            // done. Enqueue every item's mutation(s) locally first, THEN
+            // trigger sync ONCE for the whole batch —
+            // `BackgroundSyncWorker.pushPendingMutations` already batches
+            // every pending row into one `/sync/push` call, so nothing here
+            // needs more than one trigger.
+            for (const it of batch.items) {
+                try {
+                    await enqueueVerificationSteps(it.id, it.status, batch.finalStatus, batch.reason);
+                } catch {
+                    failedIds.add(it.id);
+                }
+            }
+            await triggerSyncBestEffort();
+        } else {
+            for (const it of batch.items) {
+                try {
+                    await sendVerification(it.id, it.status, batch.finalStatus, batch.reason);
+                } catch {
+                    failedIds.add(it.id);
+                }
             }
         }
 
@@ -216,6 +273,14 @@ const ReviewSheet: React.FC<Props> = ({ open, data, onClose, onToast }) => {
             });
         }
         onToast(toastFor(batch.kind, failedIds.size));
+
+        // At least one item in this batch actually reached the server —
+        // refresh the farm's labour data so the "तपासा N" badge (and this
+        // sheet, next open) reflect the CURRENT count instead of the stale
+        // one from page load (Decision 4b).
+        if (failedIds.size < batch.items.length) {
+            onApproved?.();
+        }
     };
 
     /** Sends every still-pending batch RIGHT NOW instead of waiting out its
@@ -349,13 +414,18 @@ const ReviewSheet: React.FC<Props> = ({ open, data, onClose, onToast }) => {
                 <div className="flex items-center justify-between border-b border-slate-200 px-4 pb-2.5 pt-1.5">
                     <div>
                         <h2 className="text-[17px] font-bold text-slate-800">तपासणी</h2>
-                        <p className="text-[11.5px] text-slate-500">{items.length ? `टीमच्या ${items.length} नोंदी — मंजूर करा` : 'सगळं झालं ✓'}</p>
+                        {/* Decision 4b (2026-07-19): this queue can hold the owner's OWN
+                            logs too (e.g. his own voice entries awaiting confirmation), not
+                            only a team's — "टीमच्या नोंदी" (your team's entries) claimed
+                            something not always true. Neutral phrasing that doesn't assert
+                            whose entries they are. */}
+                        <p className="text-[11.5px] text-slate-500">{items.length ? `${items.length} नोंदी — मंजूर करा` : 'सगळं झालं ✓'}</p>
                     </div>
                     <button type="button" onClick={onClose} className="flex h-9 w-9 items-center justify-center rounded-full bg-slate-100 text-slate-500"><X size={18} /></button>
                 </div>
                 <div className={`flex flex-col gap-2 overflow-y-auto p-3 ${topUndo ? 'pb-24' : ''}`}>
                     <HelpNote
-                        what="तुमच्या टीमने केलेल्या रोजच्या नोंदी इथे तुम्ही मंजूर करता."
+                        what="रोजच्या नोंदी इथे तुम्ही मंजूर करता — तुमच्या स्वतःच्या असोत वा तुमच्या माणसांच्या."
                         act="बरोबर असेल तर 'मंजूर', काही चुकलं असेल तर 'शंका' — नंतर विचारता येतं."
                         why="चुका आधीच पकडल्या जातात व हिशोब बरोबर राहतो. ज्याच्यावर विश्वास दिला, त्याच्या नोंदी इथे येत नाहीत — आपोआप मंजूर."
                         label="तपासणी म्हणजे काय?"
@@ -371,8 +441,15 @@ const ReviewSheet: React.FC<Props> = ({ open, data, onClose, onToast }) => {
                                     <div className="flex items-center gap-2.5">
                                         <Avatar tone={it.tone} initial={it.initial} size="sm" />
                                         <div className="min-w-0 flex-1">
-                                            <div className="flex items-center gap-2 text-[14px] font-bold text-slate-800">{it.who} <span className="rounded-md bg-slate-100 px-1.5 py-0.5 text-[9px] font-bold text-slate-500">आज</span></div>
-                                            <div className="truncate text-[11.5px] text-slate-500">{it.detail}</div>
+                                            <div className="flex items-center gap-2 text-[14px] font-bold text-slate-800">{it.who}</div>
+                                            {/* Decision 4b: a real farm's `detail` is a bare ISO date
+                                                (`yyyy-MM-dd`) — reformat it (आज/काल/"१९ जुलै") instead of
+                                                leaking a raw, English-formatted date onto this Marathi
+                                                screen. A hardcoded "आज" badge used to sit next to the name
+                                                regardless of the log's actual date — removed so the two
+                                                never contradict each other; this line is now the single
+                                                source of the date shown. */}
+                                            <div className="truncate text-[11.5px] text-slate-500">{formatReviewDetail(it.detail)}</div>
                                         </div>
                                     </div>
                                     <div className="mt-2"><LabourDataPoints entry={it.points} /></div>

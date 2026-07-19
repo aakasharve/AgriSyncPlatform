@@ -270,3 +270,134 @@ describe('ReviewSheet — confirm animation + 3s undo-before-send (Task 3.2)', (
         expect(onToast).toHaveBeenCalledWith('मंजूर ✓ — हजेरीही निश्चित');
     });
 });
+
+// ---------------------------------------------------------------------------
+// Decision 4b (2026-07-19, screen honesty) — तपासणी wording, 14-day bound,
+// bulk-approve single-sync-trigger, and badge-refresh (`onApproved`).
+// ---------------------------------------------------------------------------
+
+// `parseReviewDetailDate` (source) interprets a `detail` string as a LOCAL
+// yyyy-MM-dd date (`new Date(detail + 'T00:00:00')`, no 'Z') — these tests
+// must build fixture strings the same way, NOT via `toISOString()` (UTC),
+// which can land on the wrong calendar day depending on the runner's TZ.
+const toLocalIsoDate = (d: Date): string => {
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+};
+
+describe('ReviewSheet — screen honesty (Decision 4b)', () => {
+    beforeEach(() => {
+        vi.useFakeTimers();
+        mockEnqueue.mockReset();
+        mockEnqueue.mockResolvedValue('client-request-id');
+        mockTriggerNow.mockReset();
+        mockTriggerNow.mockResolvedValue(undefined);
+    });
+
+    afterEach(() => {
+        cleanup();
+        vi.useRealTimers();
+    });
+
+    it('never claims the queue is "टीमच्या" (your team\'s) entries — the owner\'s own logs can be in it too', () => {
+        render(React.createElement(ReviewSheet, {
+            open: true, data: dataWith([makeItem('t1', 'Confirmed'), makeItem('t2', 'Confirmed')]), onClose: vi.fn(), onToast: vi.fn(),
+        }));
+
+        expect(screen.getByText('2 नोंदी — मंजूर करा')).toBeInTheDocument();
+        expect(screen.queryByText(/टीमच्या/)).toBeNull();
+    });
+
+    it('bounds the queue to the last 14 days — an older item (a real backend ISO-date detail) never appears', () => {
+        const today = new Date();
+        const recentIso = toLocalIsoDate(today);
+        const oldDate = new Date(today.getTime() - 30 * 86_400_000);
+        const oldIso = toLocalIsoDate(oldDate);
+
+        const recent: ReviewItem = { id: 'recent-1', who: 'रमेश', initial: 'र', tone: 'or', detail: recentIso, status: 'Confirmed', points: {} };
+        const old: ReviewItem = { id: 'old-1', who: 'सुनीता', initial: 'सु', tone: 'em', detail: oldIso, status: 'Confirmed', points: {} };
+
+        render(React.createElement(ReviewSheet, {
+            open: true, data: dataWith([recent, old]), onClose: vi.fn(), onToast: vi.fn(),
+        }));
+
+        expect(screen.getByTestId('review-card-recent-1')).toBeInTheDocument();
+        expect(screen.queryByTestId('review-card-old-1')).toBeNull();
+        // The header count reflects the BOUNDED list, not the raw total (would say "2" if unbounded).
+        expect(screen.getByText('1 नोंदी — मंजूर करा')).toBeInTheDocument();
+    });
+
+    it('reformats a real backend ISO-date detail (आज) instead of leaking the raw yyyy-MM-dd string', () => {
+        const todayIso = toLocalIsoDate(new Date());
+        const item: ReviewItem = { id: 'd1', who: 'रमेश', initial: 'र', tone: 'or', detail: todayIso, status: 'Confirmed', points: {} };
+
+        render(React.createElement(ReviewSheet, {
+            open: true, data: dataWith([item]), onClose: vi.fn(), onToast: vi.fn(),
+        }));
+
+        expect(screen.getByText('आज')).toBeInTheDocument();
+        expect(screen.queryByText(todayIso)).toBeNull();
+    });
+
+    it('सगळं मंजूर on 3 items triggers sync ONCE for the whole batch, not once per item', async () => {
+        const onToast = vi.fn();
+        render(React.createElement(ReviewSheet, {
+            open: true,
+            data: dataWith([makeItem('b1', 'Confirmed'), makeItem('b2', 'Confirmed'), makeItem('b3', 'Confirmed')]),
+            onClose: vi.fn(), onToast,
+        }));
+
+        fireEvent.click(screen.getByTestId('review-approve-all'));
+        await act(async () => { await vi.advanceTimersByTimeAsync(PAST_ANIM_MS); });
+        await act(async () => { await vi.advanceTimersByTimeAsync(PAST_UNDO_WINDOW_MS); });
+
+        expect(mockEnqueue).toHaveBeenCalledTimes(3); // one per item (each Confirmed -> one-hop)
+        expect(mockTriggerNow).toHaveBeenCalledTimes(1); // NOT 3 — the actual fix
+        expect(onToast).toHaveBeenCalledWith('सगळं मंजूर ✓');
+    });
+
+    it('calls onApproved after a successful single approve, so the caller can refresh the stale "तपासा N" badge', async () => {
+        const onApproved = vi.fn();
+        render(React.createElement(ReviewSheet, {
+            open: true, data: dataWith([makeItem('a1', 'Confirmed')]), onClose: vi.fn(), onToast: vi.fn(), onApproved,
+        }));
+
+        fireEvent.click(screen.getByTestId('review-approve-a1'));
+        await act(async () => { await vi.advanceTimersByTimeAsync(PAST_ANIM_MS); });
+        expect(onApproved).not.toHaveBeenCalled(); // still inside the undo window — nothing sent yet
+
+        await act(async () => { await vi.advanceTimersByTimeAsync(PAST_UNDO_WINDOW_MS); });
+        expect(onApproved).toHaveBeenCalledTimes(1);
+    });
+
+    it('calls onApproved after a bulk सगळं मंजूर batch completes', async () => {
+        const onApproved = vi.fn();
+        render(React.createElement(ReviewSheet, {
+            open: true,
+            data: dataWith([makeItem('c1', 'Confirmed'), makeItem('c2', 'Confirmed')]),
+            onClose: vi.fn(), onToast: vi.fn(), onApproved,
+        }));
+
+        fireEvent.click(screen.getByTestId('review-approve-all'));
+        await act(async () => { await vi.advanceTimersByTimeAsync(PAST_ANIM_MS); });
+        await act(async () => { await vi.advanceTimersByTimeAsync(PAST_UNDO_WINDOW_MS); });
+
+        expect(onApproved).toHaveBeenCalledTimes(1);
+    });
+
+    it('does NOT call onApproved when every item in the batch fails to send', async () => {
+        mockEnqueue.mockRejectedValue(new Error('boom'));
+        const onApproved = vi.fn();
+        render(React.createElement(ReviewSheet, {
+            open: true, data: dataWith([makeItem('f1', 'Confirmed')]), onClose: vi.fn(), onToast: vi.fn(), onApproved,
+        }));
+
+        fireEvent.click(screen.getByTestId('review-approve-f1'));
+        await act(async () => { await vi.advanceTimersByTimeAsync(PAST_ANIM_MS); });
+        await act(async () => { await vi.advanceTimersByTimeAsync(PAST_UNDO_WINDOW_MS); });
+
+        expect(onApproved).not.toHaveBeenCalled();
+    });
+});

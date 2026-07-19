@@ -15,10 +15,11 @@
  * omits the prop on purpose — the fallback below surfaces the feature's own
  * existing toast instead of crashing or attempting to navigate.
  */
-import React, { useCallback, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useLabourState } from '../useLabourState';
+import { useOptionalFarmContext } from '../../../core/session/FarmContext';
 import type { DailyLog, LedgerDefaults } from '../../../types';
-import { BackHeader, LoadErrorBanner } from './LabourUiKit';
+import { BackHeader, LoadErrorBanner, LoadingState } from './LabourUiKit';
 import LabourHub from './LabourHub';
 import MukadamDetail from './MukadamDetail';
 import PersonDetail from './PersonDetail';
@@ -26,6 +27,7 @@ import Attendance from './Attendance';
 import WeeklyDashboard from './WeeklyDashboard';
 import HajeriLedger from './HajeriLedger';
 import ReviewSheet from './ReviewSheet';
+import FarmInviteQrSheet from '../../onboarding/qr/FarmInviteQrSheet';
 
 type ScreenName = 'hub' | 'mukadam' | 'person' | 'attendance' | 'dashboard' | 'ledger';
 interface ScreenState { name: ScreenName; id?: string }
@@ -53,11 +55,31 @@ export const LabourFeature: React.FC<{
     ledgerDefaults?: LedgerDefaults;
     lastLabourLogIds?: string[];
 }> = ({ onExit, onGoToLog, history, ledgerDefaults, lastLabourLogIds }) => {
-    const { data, error, refresh } = useLabourState();
+    const { data, loading, error, refresh } = useLabourState();
+    // Safe (non-throwing) outside a provider (`?preview=labour` mounts with
+    // none) — `farm` stays `null` there, and the QR-invite CTA below hides
+    // itself accordingly.
+    const farmCtx = useOptionalFarmContext();
+    const farm = farmCtx?.currentFarm ?? null;
+    const [inviteOpen, setInviteOpen] = useState(false);
     const [stack, setStack] = useState<ScreenState[]>([{ name: 'hub' }]);
     const [reviewOpen, setReviewOpen] = useState(false);
     const [toast, setToast] = useState<string | null>(null);
     const toastTimer = useRef<number | undefined>(undefined);
+
+    /**
+     * Screen honesty (Decision 4b, 2026-07-19) — a money screen must never
+     * show a confident ₹0 it hasn't verified. `loading` stays true for every
+     * `refresh()` too (approving in ReviewSheet triggers one — see below),
+     * not just the first fetch, so this only gates the VERY FIRST load: once
+     * `loading` has gone false once, `hasLoadedOnceRef` latches and later
+     * background refreshes update the screen in place instead of blanking it.
+     */
+    const hasLoadedOnceRef = useRef(false);
+    useEffect(() => {
+        if (!loading) hasLoadedOnceRef.current = true;
+    }, [loading]);
+    const showInitialLoading = loading && !hasLoadedOnceRef.current;
 
     const cur = stack[stack.length - 1];
     const push = useCallback((s: ScreenState) => setStack((st) => [...st, s]), []);
@@ -81,50 +103,66 @@ export const LabourFeature: React.FC<{
             <BackHeader title={title} onBack={handleBack} />
             {error && <LoadErrorBanner onRetry={refresh} />}
             <div className="flex-1">
-                {cur.name === 'hub' && (
-                    <LabourHub
-                        data={data}
-                        onOpenMukadam={(id) => push({ name: 'mukadam', id })}
-                        onOpenPerson={(id) => push({ name: 'person', id })}
-                        onAttendance={() => push({ name: 'attendance' })}
-                        onDashboard={() => push({ name: 'dashboard' })}
-                        onLedger={() => push({ name: 'ledger' })}
-                        onReview={() => setReviewOpen(true)}
-                        onGoToLog={goToLog}
-                        history={history}
-                        ledgerDefaults={ledgerDefaults}
-                        lastLabourLogIds={lastLabourLogIds}
-                    />
+                {showInitialLoading ? (
+                    <LoadingState />
+                ) : (
+                    <>
+                        {cur.name === 'hub' && (
+                            <LabourHub
+                                data={data}
+                                onOpenMukadam={(id) => push({ name: 'mukadam', id })}
+                                onOpenPerson={(id) => push({ name: 'person', id })}
+                                onAttendance={() => push({ name: 'attendance' })}
+                                onDashboard={() => push({ name: 'dashboard' })}
+                                onLedger={() => push({ name: 'ledger' })}
+                                onReview={() => setReviewOpen(true)}
+                                onGoToLog={goToLog}
+                                onInviteWorker={farm ? () => setInviteOpen(true) : undefined}
+                                history={history}
+                                ledgerDefaults={ledgerDefaults}
+                                lastLabourLogIds={lastLabourLogIds}
+                            />
+                        )}
+                        {cur.name === 'mukadam' && cur.id && (
+                            <MukadamDetail
+                                data={data}
+                                personId={cur.id}
+                                onOpenPerson={(id) => push({ name: 'person', id })}
+                                onOpenMukadam={(id) => push({ name: 'mukadam', id })}
+                                onAdvance={() => showToast('उचल — नमुना')}
+                                onSettle={() => showToast('सेटल — नमुना')}
+                            />
+                        )}
+                        {cur.name === 'person' && cur.id && (
+                            <PersonDetail
+                                data={data}
+                                personId={cur.id}
+                                onAdvance={() => showToast('उचल — नमुना')}
+                                onSettle={() => showToast('पैसे दिले ✓ — नमुना')}
+                                onToast={showToast}
+                            />
+                        )}
+                        {cur.name === 'attendance' && (
+                            <Attendance data={data} onSave={() => { back(); showToast('जतन झाले → मंजुरीसाठी'); }} onToast={showToast} onGoToLog={goToLog} />
+                        )}
+                        {cur.name === 'dashboard' && (
+                            <WeeklyDashboard data={data} onReview={() => setReviewOpen(true)} onLedger={() => push({ name: 'ledger' })} onToast={showToast} />
+                        )}
+                        {cur.name === 'ledger' && <HajeriLedger data={data} onToast={showToast} />}
+                    </>
                 )}
-                {cur.name === 'mukadam' && cur.id && (
-                    <MukadamDetail
-                        data={data}
-                        personId={cur.id}
-                        onOpenPerson={(id) => push({ name: 'person', id })}
-                        onOpenMukadam={(id) => push({ name: 'mukadam', id })}
-                        onAdvance={() => showToast('उचल — नमुना')}
-                        onSettle={() => showToast('सेटल — नमुना')}
-                    />
-                )}
-                {cur.name === 'person' && cur.id && (
-                    <PersonDetail
-                        data={data}
-                        personId={cur.id}
-                        onAdvance={() => showToast('उचल — नमुना')}
-                        onSettle={() => showToast('पैसे दिले ✓ — नमुना')}
-                        onToast={showToast}
-                    />
-                )}
-                {cur.name === 'attendance' && (
-                    <Attendance data={data} onSave={() => { back(); showToast('जतन झाले → मंजुरीसाठी'); }} onToast={showToast} onGoToLog={goToLog} />
-                )}
-                {cur.name === 'dashboard' && (
-                    <WeeklyDashboard data={data} onReview={() => setReviewOpen(true)} onLedger={() => push({ name: 'ledger' })} onToast={showToast} />
-                )}
-                {cur.name === 'ledger' && <HajeriLedger data={data} onToast={showToast} />}
             </div>
 
-            <ReviewSheet open={reviewOpen} data={data} onClose={() => setReviewOpen(false)} onToast={showToast} />
+            <ReviewSheet open={reviewOpen} data={data} onClose={() => setReviewOpen(false)} onToast={showToast} onApproved={refresh} />
+
+            {farm && (
+                <FarmInviteQrSheet
+                    isOpen={inviteOpen}
+                    onClose={() => setInviteOpen(false)}
+                    farmId={farm.farmId}
+                    farmName={farm.name}
+                />
+            )}
 
             {toast && (
                 <div className="fixed bottom-8 left-1/2 z-50 -translate-x-1/2 whitespace-nowrap rounded-full bg-slate-800 px-4 py-2.5 text-[13px] font-bold text-white shadow-lg">{toast}</div>

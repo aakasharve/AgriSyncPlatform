@@ -8,7 +8,7 @@
  * strings are inline per the app's farmer-facing convention.
  */
 import React, { useState } from 'react';
-import { ChevronRight, ChevronDown, Wallet, IndianRupee, ArrowLeft, Check, CloudOff, RefreshCw } from 'lucide-react';
+import { ChevronRight, ChevronDown, Wallet, IndianRupee, ArrowLeft, Check, CloudOff, RefreshCw, Loader2 } from 'lucide-react';
 import type { AvatarTone, LabourBalance, LabourPerson } from '../labourMock';
 import { netBalance, inr } from '../labourMock';
 
@@ -50,6 +50,33 @@ export const LoadErrorBanner: React.FC<{ onRetry: () => void }> = ({ onRetry }) 
 
 export const GroupLabel: React.FC<{ children: React.ReactNode }> = ({ children }) => (
     <div className="mb-1 mt-3 px-1 text-[11px] font-bold uppercase tracking-[0.08em] text-slate-400">{children}</div>
+);
+
+/**
+ * Screen-honesty primitive (Decision 4b, 2026-07-19) — a full-screen "still
+ * fetching" state for the Labour feature's FIRST load. Money screens must
+ * never show a confident ₹0 they haven't verified against the server; this
+ * is what stands in its place until the real numbers arrive.
+ */
+export const LoadingState: React.FC<{ label?: string }> = ({ label = 'माहिती आणत आहोत…' }) => (
+    <div className="flex flex-col items-center justify-center gap-3 px-6 py-24 text-center">
+        <Loader2 size={28} className="animate-spin text-emerald-600" />
+        <p className="text-[13px] font-bold text-slate-500">{label}</p>
+    </div>
+);
+
+/**
+ * Honest "nothing here yet" card — replaces a heading floating over an empty
+ * list with a plain explanation (and an optional real action), per Decision
+ * 4b: an honest empty screen is recoverable, a heading over nothing is not.
+ */
+export const EmptyState: React.FC<{ icon: React.ReactNode; title: string; subtitle: string; action?: React.ReactNode }> = ({ icon, title, subtitle, action }) => (
+    <div className="flex flex-col items-center gap-2 rounded-[20px] border border-dashed border-slate-200 bg-white px-5 py-8 text-center">
+        <span className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-full bg-slate-100 text-slate-400">{icon}</span>
+        <p className="text-[14px] font-bold text-slate-700">{title}</p>
+        <p className="text-[12px] leading-relaxed text-slate-500">{subtitle}</p>
+        {action}
+    </div>
 );
 
 /**
@@ -153,8 +180,16 @@ export const BackHeader: React.FC<{ title: string; onBack: () => void }> = ({ ti
  * wage-book: THREE distinct figures, never merged into one "earned":
  * काम झालं (recorded) · दिलं (paid) · बाकी (owed = recorded − paid − advance).
  * उचल (advance) is shown as a fourth tile only when it is > 0.
+ *
+ * `showActions` (Decision 4b, 2026-07-19) — defaults to `true` for API
+ * stability, but BOTH real callers (`PersonDetail`, `MukadamDetail`) pass
+ * `false`: neither "उचल द्या" nor "पैसे द्या/सेटल" is wired to anything real
+ * yet (both fire a "— नमुना" placeholder toast, no server write at all), so
+ * showing them would let a farmer believe cash was recorded when it wasn't.
+ * Hidden, not deleted — flip back to `true` once these post to a real
+ * endpoint.
  */
-export const BalanceCard: React.FC<{ balance: LabourBalance; why?: string; settleLabel: string; onAdvance: () => void; onSettle: () => void }> = ({ balance, why, settleLabel, onAdvance, onSettle }) => {
+export const BalanceCard: React.FC<{ balance: LabourBalance; why?: string; settleLabel: string; onAdvance: () => void; onSettle: () => void; showActions?: boolean }> = ({ balance, why, settleLabel, onAdvance, onSettle, showActions = true }) => {
     const { owe, amount, isAdvance } = netBalance(balance);
     const tiles: [string, string][] = [
         ['काम झालं', inr(balance.recorded)],
@@ -178,14 +213,16 @@ export const BalanceCard: React.FC<{ balance: LabourBalance; why?: string; settl
                 ))}
             </div>
             {why && <div className="mt-2.5 text-center text-[11px] text-slate-400">{why}</div>}
-            <div className="mt-3 grid grid-cols-2 gap-2.5">
-                <button type="button" onClick={onAdvance} className="flex items-center justify-center gap-2 rounded-[14px] bg-amber-600 py-3 text-[13px] font-extrabold text-white transition-transform active:scale-[0.97]">
-                    <Wallet size={16} /> उचल द्या
-                </button>
-                <button type="button" onClick={onSettle} className="flex items-center justify-center gap-2 rounded-[14px] bg-emerald-600 py-3 text-[13px] font-extrabold text-white transition-transform active:scale-[0.97]">
-                    <Check size={16} /> {settleLabel}
-                </button>
-            </div>
+            {showActions && (
+                <div className="mt-3 grid grid-cols-2 gap-2.5">
+                    <button type="button" onClick={onAdvance} className="flex items-center justify-center gap-2 rounded-[14px] bg-amber-600 py-3 text-[13px] font-extrabold text-white transition-transform active:scale-[0.97]">
+                        <Wallet size={16} /> उचल द्या
+                    </button>
+                    <button type="button" onClick={onSettle} className="flex items-center justify-center gap-2 rounded-[14px] bg-emerald-600 py-3 text-[13px] font-extrabold text-white transition-transform active:scale-[0.97]">
+                        <Check size={16} /> {settleLabel}
+                    </button>
+                </div>
+            )}
         </div>
     );
 };

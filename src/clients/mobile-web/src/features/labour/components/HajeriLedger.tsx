@@ -7,21 +7,39 @@
  * per worker and a week total. Reads like the paper register they know.
  */
 import React from 'react';
-import { ChevronLeft, ChevronRight, Check } from 'lucide-react';
+import { Check, BookText } from 'lucide-react';
 import type { LabourData, PresenceStatus } from '../labourMock';
-import { Avatar } from './LabourUiKit';
+import { Avatar, EmptyState } from './LabourUiKit';
 
 const cellClass = (s: PresenceStatus) => s === 'present' ? 'bg-emerald-50 text-emerald-700' : s === 'half' ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-slate-300';
 const cellGlyph = (s: PresenceStatus): React.ReactNode => s === 'present' ? <Check size={13} strokeWidth={3.2} /> : s === 'half' ? '½' : '–';
 
-const HajeriLedger: React.FC<{ data: LabourData; onToast: (m: string) => void }> = ({ data, onToast }) => {
+/**
+ * Screen currently unreachable from the hub/dashboard (`SHOW_LEDGER_TILE` /
+ * `SHOW_LEDGER_BUTTON` in `LabourHub.tsx` / `WeeklyDashboard.tsx` — the
+ * backend's per-worker attendance ledger, Stage 5, isn't built yet, so real
+ * data is always empty). Kept honest here too so re-enabling those entry
+ * points needs no further work on this screen.
+ */
+const HajeriLedger: React.FC<{ data: LabourData; onToast: (m: string) => void }> = ({ data }) => {
     const L = data.ledger;
+
+    if (L.rows.length === 0) {
+        return (
+            <div className="flex flex-col gap-2.5 px-4 pb-24 pt-2">
+                <EmptyState
+                    icon={<BookText size={22} />}
+                    title="अजून हजेरी नोंदवली नाही"
+                    subtitle="बोलून किंवा नोंद करून हजेरी घेतल्यावर ती इथे दिवसागणिक दिसेल."
+                />
+            </div>
+        );
+    }
+
     return (
         <div className="flex flex-col gap-2.5 px-4 pb-24 pt-2">
-            <div className="flex items-center justify-between rounded-2xl border border-slate-100 bg-white p-2 shadow-[0_1px_3px_rgba(20,40,30,0.05)]">
-                <button type="button" onClick={() => onToast('मागचा आठवडा')} className="flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 text-slate-500 active:scale-90"><ChevronLeft size={18} /></button>
+            <div className="flex items-center justify-center rounded-2xl border border-slate-100 bg-white p-2 shadow-[0_1px_3px_rgba(20,40,30,0.05)]">
                 <span className="text-[13px] font-extrabold text-slate-800">{L.weekLabel} · हजेरी वही</span>
-                <button type="button" onClick={() => onToast('पुढचा आठवडा')} className="flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 text-slate-500 active:scale-90"><ChevronRight size={18} /></button>
             </div>
 
             <div className="flex justify-center gap-4 p-1">

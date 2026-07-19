@@ -2,14 +2,19 @@
  * @license
  * SPDX-License-Identifier: Apache-2.0
  *
- * PersonDetail — a worker: one big net number (देय / उचल), two actions, the
- * उचल "why" kept small, AND the finalized Access & Trust-graduation control:
- * their logs are owner-reviewed until the owner grants full access (~25 days +
- * clean record → owner-confirmed → own logs auto-accept).
+ * PersonDetail — a worker: one big net number (देय / उचल) and, when a
+ * worker's real trust score exists, an info card for it.
+ *
+ * Decision 4b (2026-07-19, screen honesty): the "उचल द्या"/"पैसे द्या" actions,
+ * the विश्वास (trust-graduation) section, and a hardcoded "दैनिक ₹300" line
+ * were all pre-backend demo content wired to nothing real — see
+ * `SHOW_MONEY_ACTIONS` / `SHOW_TRUST_GRADUATION` below. Hidden via a flag
+ * (not deleted) so re-enabling is cheap once each has a real server-side
+ * counterpart (advance/settle endpoints; trust-graduation engine).
  */
 import React, { useState } from 'react';
-import { CalendarCheck, Star, ShieldCheck, Clock } from 'lucide-react';
-import type { LabourData } from '../labourMock';
+import { Star, ShieldCheck, Clock } from 'lucide-react';
+import type { LabourData, LabourPerson } from '../labourMock';
 import { inr } from '../labourMock';
 import { Avatar, BalanceCard, GroupLabel, NameOnlyBadge, HelpNote } from './LabourUiKit';
 
@@ -21,31 +26,29 @@ interface Props {
     onToast: (m: string) => void;
 }
 
-const PersonDetail: React.FC<Props> = ({ data, personId, onAdvance, onSettle, onToast }) => {
-    const w = data.people[personId];
+/**
+ * "उचल द्या" / "पैसे द्या" — both fire a "— नमुना" placeholder toast only;
+ * neither writes anything to the server. Showing them lets a farmer believe
+ * real cash was recorded when it wasn't — hidden until a real endpoint backs
+ * them (mirrors the same fix on `MukadamDetail`).
+ */
+const SHOW_MONEY_ACTIONS = false;
+
+/**
+ * विश्वास द्या (trust-graduation) — promises "25 clean days → auto-approve",
+ * but no server-side trust-graduation engine exists yet; granting it here is
+ * purely local `useState` that resets on next visit and never actually
+ * changes what gets auto-approved. Hidden until that engine ships.
+ */
+const SHOW_TRUST_GRADUATION = false;
+
+/** Preserved unchanged behind `SHOW_TRUST_GRADUATION` — see the flag's doc comment. */
+const TrustGraduationSection: React.FC<{ w: LabourPerson; onToast: (m: string) => void }> = ({ w, onToast }) => {
     const [granted, setGranted] = useState(w.access === 'trusted');
     const eligible = (w.daysActive ?? 0) >= 25 && !!w.cleanRecord;
 
     return (
-        <div className="flex flex-col gap-2.5 px-4 pb-24 pt-2">
-            <div className="flex items-center gap-3.5 rounded-[26px] border border-slate-100 bg-gradient-to-br from-white to-slate-50 p-4 shadow-[0_1px_3px_rgba(20,40,30,0.05)]">
-                <Avatar tone={w.tone} initial={w.initial} size="lg" />
-                <div className="min-w-0">
-                    <div className="flex items-center gap-2 text-[19px] font-black leading-tight text-slate-800">{w.name} {!w.verified && <NameOnlyBadge />}</div>
-                    <div className="mt-1 text-[11px] text-slate-500">
-                        {w.daysActive != null && `${w.daysActive} दिवस काम`}{w.trust ? ' · विश्वासार्ह' : ''}
-                    </div>
-                </div>
-            </div>
-
-            <BalanceCard
-                balance={w.balance}
-                settleLabel="पैसे द्या"
-                onAdvance={onAdvance}
-                onSettle={onSettle}
-                why={`काम झालं ${inr(w.balance.recorded)} − दिलं ${inr(w.balance.paid)} − उचल ${inr(w.balance.advance)} · आपोआप वजा`}
-            />
-
+        <>
             <GroupLabel>विश्वास · trust</GroupLabel>
             {granted ? (
                 <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-3.5">
@@ -83,12 +86,38 @@ const PersonDetail: React.FC<Props> = ({ data, personId, onAdvance, onSettle, on
                 act="सुरुवातीचे दिवस तुम्ही तपासा. २५ दिवस चांगलं काम व वाद नसेल, तेव्हा 'विश्वास द्या'."
                 why="टीम सेटअपमध्ये 'कोण नोंद करू शकतो' ठरतं. इथे 'त्याच्या नोंदींवर विश्वास' ठरतो — या दोन वेगळ्या गोष्टी आहेत."
             />
+        </>
+    );
+};
 
-            <GroupLabel>माहिती</GroupLabel>
-            <div className="flex items-center gap-3 rounded-2xl border border-slate-100 bg-white p-3 shadow-[0_1px_3px_rgba(20,40,30,0.05)]">
-                <span className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl bg-emerald-50 text-emerald-700"><CalendarCheck size={18} /></span>
-                <span className="text-[13.5px] font-bold text-slate-700">दैनिक <span className="text-slate-800">₹300</span> · उक्त 40 वेल × ₹15</span>
+const PersonDetail: React.FC<Props> = ({ data, personId, onAdvance, onSettle, onToast }) => {
+    const w = data.people[personId];
+
+    return (
+        <div className="flex flex-col gap-2.5 px-4 pb-24 pt-2">
+            <div className="flex items-center gap-3.5 rounded-[26px] border border-slate-100 bg-gradient-to-br from-white to-slate-50 p-4 shadow-[0_1px_3px_rgba(20,40,30,0.05)]">
+                <Avatar tone={w.tone} initial={w.initial} size="lg" />
+                <div className="min-w-0">
+                    <div className="flex items-center gap-2 text-[19px] font-black leading-tight text-slate-800">{w.name} {!w.verified && <NameOnlyBadge />}</div>
+                    <div className="mt-1 text-[11px] text-slate-500">
+                        {w.daysActive != null && `${w.daysActive} दिवस काम`}{w.trust ? ' · विश्वासार्ह' : ''}
+                    </div>
+                </div>
             </div>
+
+            <BalanceCard
+                balance={w.balance}
+                settleLabel="पैसे द्या"
+                onAdvance={onAdvance}
+                onSettle={onSettle}
+                showActions={SHOW_MONEY_ACTIONS}
+                why={`काम झालं ${inr(w.balance.recorded)} − दिलं ${inr(w.balance.paid)} − उचल ${inr(w.balance.advance)} · आपोआप वजा`}
+            />
+
+            {SHOW_TRUST_GRADUATION && (
+                <TrustGraduationSection w={w} onToast={onToast} />
+            )}
+
             {w.trust != null && (
                 <div className="flex items-center gap-3 rounded-2xl border border-slate-100 bg-white p-3 shadow-[0_1px_3px_rgba(20,40,30,0.05)]">
                     <span className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl bg-violet-100 text-violet-600"><Star size={18} /></span>
