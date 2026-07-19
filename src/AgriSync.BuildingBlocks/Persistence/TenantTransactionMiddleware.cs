@@ -228,8 +228,11 @@ public sealed class TenantTransactionMiddleware
         // the whole request inside the per-context transaction(s) so the
         // tx-scoped SET LOCAL agrisync.user_id reaches every read, including the
         // sub-handlers that share the request-scoped ShramSafalDbContext.
-        // Scoped to /sync/pull ONLY: /sync/push is a WRITE path and stays on the
-        // admin-elevated skip-list below (user-scoped mode is read-only).
+        // Scoped to /sync/pull ONLY: /sync/push is a multi-farm WRITE surface
+        // whose per-mutation handlers touch farm-scoped tables (RLS keyed on
+        // agrisync.farm_id, which user-scoped mode never sets), so it stays on
+        // the admin-elevated skip-list below with its own per-handler
+        // IsUserMemberOfFarmAsync checks instead.
         if (path.StartsWith("/sync/pull", StringComparison.OrdinalIgnoreCase))
         {
             if (!TryGetAuthenticatedUserId(context, out var syncUserId))

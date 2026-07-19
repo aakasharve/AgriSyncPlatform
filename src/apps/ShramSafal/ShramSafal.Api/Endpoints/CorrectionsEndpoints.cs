@@ -1,7 +1,9 @@
 // spec: correctionevent-server-persistence
+// spec: dfes-companion-2026-07-11 — tenant-scope prelude fix.
 using System.Security.Claims;
 using AgriSync.BuildingBlocks.Results;
 using Microsoft.AspNetCore.Http.HttpResults;
+using ShramSafal.Application.Ports;
 using ShramSafal.Application.UseCases.Corrections;
 using ShramSafal.Domain.Corrections;
 
@@ -22,11 +24,31 @@ public static class CorrectionsEndpoints
         RecordCorrectionRequest request,
         ClaimsPrincipal user,
         IRecordCorrectionEventHandler handler,
+        ICallerUserTenantScope scope,
         CancellationToken ct)
     {
         if (!EndpointActorContext.TryGetUserId(user, out var userId))
         {
             return Results.Unauthorized();
+        }
+
+        // spec: dfes-companion-2026-07-11 — establish the user-scoped tenant
+        // claim (agrisync.user_id GUC) BEFORE the handler's first DbCommand.
+        // ssf.correction_events' RLS policy p_user_correction_events
+        // (20260517010000_AddDeferredAuditRls) is keyed entirely on that GUC;
+        // without this prelude the write fail-closes in
+        // TenantConnectionInterceptor ("no tenant claim set and not in admin
+        // scope") exactly as founder testing hit on 2026-07-19. See
+        // ICallerUserTenantScope for why this is a distinct, farm-less port
+        // from the DFES endpoints' ICallerFarmTenantScope.
+        var scopeResult = await scope.EstablishForCallerAsync(userId, ct);
+        if (!scopeResult.IsSuccess)
+        {
+            return Results.BadRequest(new
+            {
+                error = scopeResult.Error?.Code,
+                description = scopeResult.Error?.Description,
+            });
         }
 
         var command = new RecordCorrectionEventCommand(

@@ -12,15 +12,26 @@ internal sealed class CorrectionEventConfiguration : IEntityTypeConfiguration<Co
         builder.ToTable("correction_events", "ssf");
         builder.HasKey(x => x.Id);
 
-        builder.Property(x => x.UserId).IsRequired();
-        builder.Property(x => x.OriginalParseId).IsRequired();
-        builder.Property(x => x.OriginalParseRaw).IsRequired().HasColumnType("jsonb");
-        builder.Property(x => x.CorrectedParse).IsRequired().HasColumnType("jsonb");
-        builder.Property(x => x.PromptVersion).IsRequired().HasMaxLength(20);
-        builder.Property(x => x.Locale).IsRequired().HasMaxLength(10);
+        // spec: dfes-companion-2026-07-11 — explicit snake_case column mappings.
+        // 20260504010000_AddCorrectionEvent creates ssf.correction_events with
+        // unquoted (lowercase, snake_case) column identifiers except "Id"; this
+        // codebase has no global snake_case naming convention (unlike some EF
+        // setups), so every property needs its own HasColumnName — the previous
+        // absence of these calls left EF defaulting to the quoted PascalCase
+        // property name (e.g. "CapturedAtUtc"), which Postgres rejects with
+        // 42703 "column does not exist" because the physical column is
+        // captured_at_utc. This was masked in production because the tenant-
+        // scope fail-closed 500 (fixed alongside this) always short-circuited
+        // the request before SaveChangesAsync ever ran the INSERT.
+        builder.Property(x => x.UserId).IsRequired().HasColumnName("user_id");
+        builder.Property(x => x.OriginalParseId).IsRequired().HasColumnName("original_parse_id");
+        builder.Property(x => x.OriginalParseRaw).IsRequired().HasColumnType("jsonb").HasColumnName("original_parse_raw");
+        builder.Property(x => x.CorrectedParse).IsRequired().HasColumnType("jsonb").HasColumnName("corrected_parse");
+        builder.Property(x => x.PromptVersion).IsRequired().HasMaxLength(20).HasColumnName("prompt_version");
+        builder.Property(x => x.Locale).IsRequired().HasMaxLength(10).HasColumnName("locale");
         builder.Property(x => x.Trigger).IsRequired()
-            .HasConversion<string>().HasMaxLength(30);
-        builder.Property(x => x.CapturedAtUtc).IsRequired();
+            .HasConversion<string>().HasMaxLength(30).HasColumnName("trigger");
+        builder.Property(x => x.CapturedAtUtc).IsRequired().HasColumnName("captured_at_utc");
 
         builder.HasIndex(x => x.UserId);
         builder.HasIndex(x => x.PromptVersion);
