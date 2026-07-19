@@ -22,6 +22,36 @@ internal sealed class AiResponseNormalizer
         "UNKNOWN"
     ];
 
+    // dfes-companion-2026-07-11 — provenance guardrail.
+    //
+    // LIVE BUG this exists to catch: the model concatenated a real phrase
+    // from the transcript with an INVENTED phrase inside a single
+    // `sourceText` field, then extracted a whole fabricated operation
+    // (pruning) from its own invention. `sourceText` is the provenance
+    // field — Prompts/core/systemBase.md says "Keep sourceText as the
+    // exact phrase that caused extraction" — but nothing verified that
+    // promise. This is a MECHANICAL (non-AI) check: every array below that
+    // carries a `sourceText` per outputContract.md gets a boolean
+    // `provenanceVerified` stamped on each item. We never delete anything —
+    // a strict text match has false negatives (paraphrase, transcription
+    // noise), so deleting would silently destroy real farmer work.
+    private static readonly string[] ProvenanceCheckedArrayNames =
+    [
+        "cropActivities",
+        "irrigation",
+        "labour",
+        "inputs",
+        "machinery",
+        "activityExpenses",
+        "observations",
+        "plannedTasks"
+    ];
+
+    // "A small character threshold" per spec — segments shorter than this
+    // (after normalization) are noise (a stray "OK"/"हो") and are ignored
+    // rather than being allowed to flag a whole item on their own.
+    private const int ProvenanceMinSegmentLength = 4;
+
     public string NormalizeVoiceJson(
         string rawJson,
         string schemaVersion = "1.0.0",
@@ -60,6 +90,8 @@ internal sealed class AiResponseNormalizer
         }
 
         root["dayOutcome"] = dayOutcome;
+
+        ApplyProvenanceVerification(root);
 
         root["_meta"] = new JsonObject
         {
@@ -281,6 +313,119 @@ internal sealed class AiResponseNormalizer
     private static bool HasAnyArrayItems(JsonObject root, string propertyName)
     {
         return root[propertyName] is JsonArray array && array.Count > 0;
+    }
+
+    /// <summary>
+    /// Mechanically verifies that every extracted item's <c>sourceText</c> is
+    /// genuinely present in the parse's <c>fullTranscript</c>, and stamps a
+    /// boolean <c>provenanceVerified</c> flag on the item. Never deletes or
+    /// otherwise mutates the item — only adds the flag — so a false negative
+    /// (paraphrase, transcription variance) never destroys real farmer work;
+    /// it only surfaces a signal for downstream/UI to act on.
+    /// </summary>
+    private static void ApplyProvenanceVerification(JsonObject root)
+    {
+        var transcript = ReadNullableString(root["fullTranscript"]);
+        var hasTranscript = !string.IsNullOrWhiteSpace(transcript);
+
+        // No transcript ⇒ nothing is verifiable. This is exactly the
+        // failure mode (STT provider down, model goes audio→structure
+        // directly) under which the live fabrication happened — trust
+        // nothing rather than trusting the model's unverifiable claims.
+        var normalizedTranscript = hasTranscript
+            ? NormalizeProvenanceText(transcript!)
+            : string.Empty;
+
+        foreach (var arrayName in ProvenanceCheckedArrayNames)
+        {
+            if (root[arrayName] is not JsonArray array)
+            {
+                continue;
+            }
+
+            foreach (var node in array)
+            {
+                if (node is not JsonObject item)
+                {
+                    continue;
+                }
+
+                item["provenanceVerified"] = hasTranscript &&
+                    IsSourceTextVerified(item["sourceText"], normalizedTranscript);
+            }
+        }
+    }
+
+    private static bool IsSourceTextVerified(JsonNode? sourceTextNode, string normalizedTranscript)
+    {
+        var sourceText = ReadNullableString(sourceTextNode);
+        if (string.IsNullOrWhiteSpace(sourceText))
+        {
+            // No sourceText ⇒ no provenance claim was made on this item —
+            // there is nothing to falsify, so it is not flagged. (Chosen
+            // behaviour, documented: absence of sourceText is not treated
+            // the same as a failed verification — that would flood the UI
+            // with false "unverified" flags on items that never claimed a
+            // verbatim quote, or on legacy parses that predate this field.)
+            return true;
+        }
+
+        var meaningfulSegments = SplitProvenanceSegments(sourceText)
+            .Select(NormalizeProvenanceText)
+            .Where(segment => segment.Length >= ProvenanceMinSegmentLength)
+            .ToList();
+
+        if (meaningfulSegments.Count == 0)
+        {
+            // Every segment was noise/too short to meaningfully check
+            // (e.g. a single short word) — nothing checkable, don't flag.
+            return true;
+        }
+
+        // Segment-wise AND: every non-trivial segment must independently
+        // appear in the transcript. This is what catches a real phrase
+        // concatenated with an invented one — the invented segment fails
+        // even though the real segment (if verbatim) would pass.
+        return meaningfulSegments.All(segment =>
+            normalizedTranscript.Contains(segment, StringComparison.Ordinal));
+    }
+
+    private static IEnumerable<string> SplitProvenanceSegments(string sourceText)
+    {
+        return System.Text.RegularExpressions.Regex
+            .Split(sourceText, @"[।.!?\n]+")
+            .Where(segment => !string.IsNullOrWhiteSpace(segment));
+    }
+
+    /// <summary>
+    /// Tolerant normalization ONLY: trim, collapse internal whitespace,
+    /// strip punctuation (including danda ।/॥), case-fold Latin text.
+    /// Deliberately does NOT transliterate or fuzzy/semantically match
+    /// Devanagari against Latin transcription variants (e.g. "thrill" vs
+    /// "इथरेल") — that would re-introduce the guessing this check exists
+    /// to remove. Comparison happens purely on these normalized forms.
+    /// </summary>
+    private static string NormalizeProvenanceText(string value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return string.Empty;
+        }
+
+        // Keep letters, digits (any script), and whitespace only — this
+        // strips ASCII punctuation and Devanagari danda/double-danda
+        // (।/॥, Unicode category Po) alike without special-casing them.
+        var lettersAndDigitsOnly = System.Text.RegularExpressions.Regex.Replace(
+            value,
+            @"[^\p{L}\p{Nd}\s]",
+            " ");
+
+        var collapsedWhitespace = System.Text.RegularExpressions.Regex.Replace(
+            lettersAndDigitsOnly,
+            @"\s+",
+            " ").Trim();
+
+        return collapsedWhitespace.ToLowerInvariant();
     }
 
     private static string NormalizeDayOutcome(string? dayOutcome)
