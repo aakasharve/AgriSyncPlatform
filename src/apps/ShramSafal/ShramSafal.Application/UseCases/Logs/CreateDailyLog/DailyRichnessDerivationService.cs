@@ -124,6 +124,11 @@ public sealed class DailyRichnessDerivationService(
                     stamp.AdvancesStreak, stamp.AdvancesBar, stamp.ShramPointsEarned,
                     stamp.RewardReasonsJson, signals.NoWorkReasonCode,
                     DfesTuning.ScoreEngineVersion, componentsJson);
+                // ApplyDerivation takes no timestamp by contract — the write path owns it.
+                // Without this the row's scores changed while UpdatedAtUtc still reported
+                // the original creation time, which is exactly what made this recompute
+                // look like it had never run during the 2026-07-19 investigation.
+                existing.MarkUpdated(clock.UtcNow);
             }
             else
             {

@@ -71,6 +71,43 @@ public sealed class DailyRichnessDerivationServiceTests
     }
 
     [Fact]
+    public async Task Recompute_of_an_existing_aggregate_advances_UpdatedAtUtc()
+    {
+        // BUGFIX_2026-07-19: ApplyDerivation takes no timestamp by contract
+        // ("UpdatedAtUtc is owned by the Phase-2 write path"), but the write path
+        // never stamped it. A row whose scores had just been rewritten still
+        // reported its ORIGINAL creation time — and UpdatedAtUtc was the very
+        // signal used to decide whether a recompute had run, so it lied in the
+        // one place it mattered.
+        var job = MakeVoiceJob(RichJson);
+        var log = DailyLog.Create(
+            Guid.NewGuid(), new FarmId(Farm), Plot, Cycle, new UserId(Op), Day,
+            idempotencyKey: null, location: null, createdAtUtc: Now,
+            provenance: Provenance.Manual("test"), sourceAiJobId: JobId);
+
+        var repo = new RichnessRepo(logs: [log], observations: [], plotCount: 2);
+        var jobs = new SingleAiJob(job);
+
+        // First run CREATES the aggregate, stamped at Now.
+        await new DailyRichnessDerivationService(repo, jobs, new SeqIds(), new FixedClock(Now))
+            .RecomputeAsync(Farm, Day);
+
+        var created = repo.Aggregates.Single();
+        created.UpdatedAtUtc.Should().Be(Now);
+
+        // Second run REWRITES the same aggregate an hour later — the update must
+        // be visible in the timestamp, not just in the scores.
+        var later = Now.AddHours(1);
+        await new DailyRichnessDerivationService(repo, jobs, new SeqIds(), new FixedClock(later))
+            .RecomputeAsync(Farm, Day);
+
+        repo.Aggregates.Should().HaveCount(1);
+        var agg = repo.Aggregates.Single();
+        agg.UpdatedAtUtc.Should().Be(later);
+        agg.CreatedAtUtc.Should().Be(Now, "the creation time must NOT be rewritten");
+    }
+
+    [Fact]
     public async Task SilentDay_writes_UnaccountedDay_neutral()
     {
         var log = DailyLog.Create(

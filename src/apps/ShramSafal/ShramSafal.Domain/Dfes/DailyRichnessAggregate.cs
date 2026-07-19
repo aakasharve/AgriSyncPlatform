@@ -126,6 +126,16 @@ public sealed class DailyRichnessAggregate : Entity<Guid>
         ComponentsJson = componentsJson ?? "{}";
     }
 
+    /// <summary>DFES — stamp the recompute time. <see cref="ApplyDerivation"/> takes no
+    /// timestamp by contract ("UpdatedAtUtc is owned by the Phase-2 write path"), but that
+    /// write path never actually stamped it, so a row whose scores had just been rewritten
+    /// still reported its ORIGINAL creation time. That made UpdatedAtUtc a silent liar: it
+    /// was the very signal used to diagnose whether a recompute had run, and it said "never"
+    /// for rows that had in fact been updated. Call this from the write path alongside
+    /// ApplyDerivation whenever an EXISTING aggregate is rewritten (a freshly Created one
+    /// already carries nowUtc).</summary>
+    public void MarkUpdated(DateTime nowUtc) => UpdatedAtUtc = nowUtc;
+
     /// <summary>DFES — stamp the planned-vs-actual stage confirmation (D8).</summary>
     public void ConfirmStage(string expectedStage, string actualStage, int? varianceDays)
     {
