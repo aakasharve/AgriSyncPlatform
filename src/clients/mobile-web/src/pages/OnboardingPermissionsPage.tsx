@@ -1,183 +1,211 @@
+/**
+ * @license
+ * SPDX-License-Identifier: Apache-2.0
+ *
+ * OnboardingPermissionsPage — the consent screen, shown after the Welcome and
+ * before the app. Themed to match the Welcome + Login screens (light white /
+ * pale-mint, green field band, stone text, emerald accents, serif heading /
+ * sans body) so onboarding reads as one product. The real permission logic
+ * (query + request + skip, writing shramsafal_permissions_granted) is unchanged.
+ */
 import React, { useState, useEffect } from 'react';
-import { Shield, MapPin, Mic, Camera, HardDrive, CheckCircle2 } from 'lucide-react';
-import Button from '../shared/components/ui/Button';
+import { Shield, MapPin, Mic, Camera, HardDrive, Check, ChevronRight, Lock } from 'lucide-react';
 import { useUiPref } from '../shared/hooks/useUiPref';
+import DawnScene from './onboarding/DawnScene';
 
 interface OnboardingPermissionsPageProps {
-     onComplete: () => void;
+    onComplete: () => void;
 }
 
 const OnboardingPermissionsPage: React.FC<OnboardingPermissionsPageProps> = ({ onComplete }) => {
-     // Sub-plan 04 Task 3 — `shramsafal_permissions_granted` flag now lives
-     // in Dexie's uiPrefs via useUiPref. Only writes happen in this view.
-     const [, setPermissionsGranted] = useUiPref<boolean>('shramsafal_permissions_granted', false);
+    // Sub-plan 04 Task 3 — persisted in Dexie's uiPrefs via useUiPref.
+    const [, setPermissionsGranted] = useUiPref<boolean>('shramsafal_permissions_granted', false);
+    const [imgFailed, setImgFailed] = useState(false);
+    const [mounted, setMounted] = useState(false);
 
-     const [permissions, setPermissions] = useState({
-          location: false,
-          microphone: false,
-          camera: false,
-          /* Notification/storage mapping if needed, skipping granular for standard web flow */
-     });
+    const [permissions, setPermissions] = useState({
+        location: false,
+        microphone: false,
+        camera: false,
+    });
 
-     const checkPermissions = async () => {
-          try {
-               const loc = await navigator.permissions.query({ name: 'geolocation' as PermissionName });
-               const mic = await navigator.permissions.query({ name: 'microphone' as PermissionName });
-               const cam = await navigator.permissions.query({ name: 'camera' as PermissionName });
+    const checkPermissions = async () => {
+        try {
+            const loc = await navigator.permissions.query({ name: 'geolocation' as PermissionName });
+            const mic = await navigator.permissions.query({ name: 'microphone' as PermissionName });
+            const cam = await navigator.permissions.query({ name: 'camera' as PermissionName });
+            setPermissions({
+                location: loc.state === 'granted',
+                microphone: mic.state === 'granted',
+                camera: cam.state === 'granted',
+            });
+        } catch (e) {
+            console.warn('Permissions query not fully supported', e);
+        }
+    };
 
-               setPermissions({
-                    location: loc.state === 'granted',
-                    microphone: mic.state === 'granted',
-                    camera: cam.state === 'granted',
-               });
-          } catch (e) {
-               console.warn('Permissions query not fully supported', e);
-          }
-     };
+    useEffect(() => {
+        checkPermissions();
+        const t = setTimeout(() => setMounted(true), 40);
+        return () => clearTimeout(t);
+    }, []);
 
-     useEffect(() => {
-          checkPermissions();
-     }, []);
+    const requestAllPermissions = async () => {
+        try {
+            // Stop tracks immediately after the grant — onboarding only needs the
+            // PERMISSION, not the live device (leaving the mic open broke the later
+            // AudioRecorder getUserMedia with a false "mic not granted").
+            try {
+                const micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                micStream.getTracks().forEach((track) => track.stop());
+            } catch (e) {
+                console.warn('Microphone permission denied', e);
+            }
+            try {
+                const camStream = await navigator.mediaDevices.getUserMedia({ video: true });
+                camStream.getTracks().forEach((track) => track.stop());
+            } catch (e) {
+                console.warn('Camera permission denied', e);
+            }
+            try {
+                if ('geolocation' in navigator) {
+                    await new Promise((resolve) => {
+                        navigator.geolocation.getCurrentPosition(resolve, resolve);
+                    });
+                }
+            } catch (e) {
+                console.warn('Location permission denied', e);
+            }
+            setPermissionsGranted(true);
+            onComplete();
+        } catch (error) {
+            console.error('Error requesting permissions', error);
+            setPermissionsGranted(true);
+            onComplete();
+        }
+    };
 
-     const requestAllPermissions = async () => {
-          try {
-               // Sequential requesting is more reliable in browsers than Promise.all for permissions.
-               // IMPORTANT: stop the tracks immediately after the grant — onboarding only needs the
-               // PERMISSION, not the live device. Leaving the mic stream open here held the microphone
-               // so the AudioRecorder's later getUserMedia() failed with a false "mic not granted".
-               try {
-                    const micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-                    micStream.getTracks().forEach((track) => track.stop());
-               } catch (e) {
-                    console.warn('Microphone permission denied', e);
-               }
-               try {
-                    const camStream = await navigator.mediaDevices.getUserMedia({ video: true });
-                    camStream.getTracks().forEach((track) => track.stop());
-               } catch (e) {
-                    console.warn('Camera permission denied', e);
-               }
-               try {
-                    if ('geolocation' in navigator) {
-                         await new Promise((resolve) => {
-                              navigator.geolocation.getCurrentPosition(resolve, resolve);
-                         });
-                    }
-               } catch (e) {
-                    console.warn('Location permission denied', e);
-               }
+    const skipOrSave = () => {
+        setPermissionsGranted(true);
+        onComplete();
+    };
 
-               // Regardless of actual browser grant (since we can't force user), we record the flow completion
-               setPermissionsGranted(true);
-               onComplete();
-          } catch (error) {
-               console.error('Error requesting permissions', error);
-               // Default to advance anyway to avoid hard block, since this is web
-               setPermissionsGranted(true);
-               onComplete();
-          }
-     };
+    const CARDS = [
+        { id: 'location', icon: <MapPin size={19} />, mr: 'स्थान', en: 'Location', desc: 'शेत नकाशावर दाखवण्यासाठी आणि GPS पुरावा जोडण्यासाठी.', granted: permissions.location },
+        { id: 'microphone', icon: <Mic size={19} />, mr: 'मायक्रोफोन', en: 'Microphone', desc: 'बोलून रोजच्या कामाची नोंद करण्यासाठी.', granted: permissions.microphone },
+        { id: 'camera', icon: <Camera size={19} />, mr: 'कॅमेरा', en: 'Camera', desc: 'पावत्या आणि कीड-रोगाचे फोटो घेण्यासाठी.', granted: permissions.camera },
+        { id: 'storage', icon: <HardDrive size={19} />, mr: 'साठवण', en: 'Storage', desc: 'नोंदी फोनमध्ये सुरक्षित ठेवण्यासाठी.', granted: true },
+    ];
 
-     const skipOrSave = () => {
-          setPermissionsGranted(true);
-          onComplete();
-     };
+    const anim = (name: string, dur: string, delay: string): React.CSSProperties =>
+        mounted ? { animation: `${name} ${dur} cubic-bezier(.16,1,.3,1) ${delay} both` } : { opacity: 0 };
 
-     return (
-          <div className="fixed inset-0 z-[60] bg-slate-50 flex flex-col items-center justify-center p-6 pt-safe-area pb-safe-area pl-safe-area pr-safe-area animate-in fade-in">
-               <div className="w-full max-w-[480px] flex flex-col h-full max-h-full bg-white rounded-3xl shadow-xl border border-slate-100 overflow-hidden relative">
+    return (
+        <div className="fixed inset-0 z-[100] flex flex-col overflow-hidden bg-[#F4FCF8] pb-[env(safe-area-inset-bottom)] pt-[env(safe-area-inset-top)] select-none">
+            <style>{`
+                @keyframes cs-rise { from{transform:translateY(30px);opacity:0} to{transform:translateY(0);opacity:1} }
+                @keyframes cs-up { from{transform:translateY(14px);opacity:0} to{transform:translateY(0);opacity:1} }
+                @media (prefers-reduced-motion:reduce){ [data-cs-anim]{animation-duration:.01ms!important;animation-delay:0ms!important} }
+            `}</style>
 
-                    {/* Header Decoration */}
-                    <div className="absolute top-0 left-0 right-0 h-32 bg-emerald-500 rounded-b-[40px] opacity-10 pointer-events-none"></div>
+            <DawnScene lit={mounted} />
 
-                    <div className="flex-1 flex flex-col items-center p-8 text-center pt-12 relative z-10 overflow-y-auto">
-                         <div className="w-20 h-20 bg-emerald-100 rounded-full flex items-center justify-center mb-6 shadow-inner text-emerald-600">
-                              <Shield size={40} strokeWidth={2} />
-                         </div>
-
-                         <h2 className="text-2xl font-black text-slate-800 tracking-tight leading-tight">
-                              App Permissions <br />
-                              <span className="text-lg text-slate-500 font-medium">For best experience</span>
-                         </h2>
-
-                         <p className="text-sm text-slate-500 mt-4 leading-relaxed px-2">
-                              ShramSafal requires access to standard device features to operate smoothly and safely.
-                         </p>
-
-                         <div className="mt-8 space-y-4 w-full text-left">
-                              {/* Location */}
-                              <div className="flex items-start gap-4 p-3 rounded-2xl border border-slate-100 bg-slate-50">
-                                   <div className={`p-2 rounded-xl text-white shadow-sm ${permissions.location ? 'bg-emerald-500' : 'bg-slate-300'}`}>
-                                        <MapPin size={20} />
-                                   </div>
-                                   <div className="flex-1">
-                                        <p className="font-bold text-slate-800 text-sm flex items-center gap-2">
-                                             Location
-                                             {permissions.location && <CheckCircle2 size={14} className="text-emerald-500" />}
-                                        </p>
-                                        <p className="text-[10px] text-slate-500 font-medium leading-snug mt-1">Required to map plot polygons and attach GPS proof to logs.</p>
-                                   </div>
-                              </div>
-
-                              {/* Microphone */}
-                              <div className="flex items-start gap-4 p-3 rounded-2xl border border-slate-100 bg-slate-50">
-                                   <div className={`p-2 rounded-xl text-white shadow-sm ${permissions.microphone ? 'bg-emerald-500' : 'bg-slate-300'}`}>
-                                        <Mic size={20} />
-                                   </div>
-                                   <div className="flex-1">
-                                        <p className="font-bold text-slate-800 text-sm flex items-center gap-2">
-                                             Microphone
-                                             {permissions.microphone && <CheckCircle2 size={14} className="text-emerald-500" />}
-                                        </p>
-                                        <p className="text-[10px] text-slate-500 font-medium leading-snug mt-1">Required for AI Sathi voice logs and voice commands.</p>
-                                   </div>
-                              </div>
-
-                              {/* Camera */}
-                              <div className="flex items-start gap-4 p-3 rounded-2xl border border-slate-100 bg-slate-50">
-                                   <div className={`p-2 rounded-xl text-white shadow-sm ${permissions.camera ? 'bg-emerald-500' : 'bg-slate-300'}`}>
-                                        <Camera size={20} />
-                                   </div>
-                                   <div className="flex-1">
-                                        <p className="font-bold text-slate-800 text-sm flex items-center gap-2">
-                                             Camera
-                                             {permissions.camera && <CheckCircle2 size={14} className="text-emerald-500" />}
-                                        </p>
-                                        <p className="text-[10px] text-slate-500 font-medium leading-snug mt-1">Required to take photos of receipts and pests.</p>
-                                   </div>
-                              </div>
-
-                              {/* Storage */}
-                              <div className="flex items-start gap-4 p-3 rounded-2xl border border-slate-100 bg-slate-50">
-                                   <div className="p-2 rounded-xl text-white shadow-sm bg-slate-300">
-                                        <HardDrive size={20} />
-                                   </div>
-                                   <div className="flex-1">
-                                        <p className="font-bold text-slate-800 text-sm">Storage</p>
-                                        <p className="text-[10px] text-slate-500 font-medium leading-snug mt-1">Required to save offline records safely on device.</p>
-                                   </div>
-                              </div>
-                         </div>
+            {/* HEADER */}
+            <div data-cs-anim className="relative z-10 mx-auto w-full max-w-[440px] px-6 pt-8" style={anim('cs-up', '.5s', '.05s')}>
+                <div className="flex items-center gap-3">
+                    <span className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-600 ring-1 ring-emerald-600/15">
+                        <Shield size={22} strokeWidth={2} />
+                    </span>
+                    <div>
+                        <h1 className="font-serif text-[21px] font-bold leading-tight text-stone-800">खालील गोष्टींची संमती द्या</h1>
+                        <p className="mt-0.5 font-sans text-[12.5px] font-medium text-stone-500">श्रम साथी नीट चालण्यासाठी</p>
                     </div>
+                </div>
+            </div>
 
-                    <div className="p-5 border-t border-slate-100 bg-white space-y-3 shrink-0">
-                         <Button
-                              onClick={requestAllPermissions}
-                              className="w-full py-4 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-sm shadow-lg shadow-emerald-600/20 active:scale-[0.98] transition-all"
-                         >
-                              Allow All Permissions
-                         </Button>
-                         <button
-                              data-testid="onboarding-skip"
-                              onClick={skipOrSave}
-                              className="w-full py-2.5 text-xs font-bold text-slate-400 hover:text-slate-600 transition-colors"
-                         >
-                              Skip for now
-                         </button>
+            {/* PERMISSION ROWS — directly under the header (natural reading order),
+                scrollable on short screens. */}
+            <div className="relative z-10 min-h-0 flex-1 overflow-y-auto scrollbar-hide">
+              <div className="mx-auto flex w-full max-w-[440px] flex-col space-y-3 px-6 py-5">
+                {CARDS.map((c, idx) => (
+                    <div
+                        key={c.id}
+                        data-cs-anim
+                        className="flex items-center gap-3.5 rounded-[18px] border border-stone-200/70 bg-white/80 p-3.5 shadow-[0_6px_18px_-12px_rgba(6,78,59,0.25)] backdrop-blur-sm"
+                        style={anim('cs-up', '.5s', `${0.15 + idx * 0.08}s`)}
+                    >
+                        <span className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-[14px] bg-emerald-50 text-emerald-600 ring-1 ring-emerald-600/12">
+                            {c.icon}
+                        </span>
+                        <div className="min-w-0 flex-1">
+                            <p className="font-sans text-[14.5px] font-bold text-stone-800">
+                                {c.mr} <span className="text-[11px] font-semibold text-stone-400">({c.en})</span>
+                            </p>
+                            <p className="mt-0.5 font-sans text-[11.5px] font-medium leading-snug text-stone-500">{c.desc}</p>
+                        </div>
+                        <span className="flex-shrink-0 pl-1">
+                            {c.granted ? (
+                                <span className="flex h-6 w-6 items-center justify-center rounded-full bg-emerald-100 text-emerald-600">
+                                    <Check size={15} strokeWidth={3} />
+                                </span>
+                            ) : (
+                                <ChevronRight size={18} className="text-stone-300" />
+                            )}
+                        </span>
                     </div>
-               </div>
-          </div>
-     );
+                ))}
+              </div>
+            </div>
+
+            {/* pointing farmer — gestures at the CTA. Sized by viewport WIDTH and
+                anchored fully inside the frame, so he is never clipped by the
+                root's overflow-hidden on narrow phones / the APK webview. */}
+            <div
+                data-cs-anim
+                className="pointer-events-none absolute bottom-[96px] right-0 z-[5] w-[52%] max-w-[212px]"
+                style={anim('cs-rise', '.8s', '.3s')}
+            >
+                {!imgFailed && (
+                    <img
+                        src="/brand/farmer-point.webp"
+                        alt=""
+                        aria-hidden="true"
+                        onError={() => setImgFailed(true)}
+                        className="h-auto w-full object-contain object-bottom"
+                        style={{
+                            filter: 'drop-shadow(0 14px 20px rgba(6,78,59,.22))',
+                            WebkitMaskImage: 'linear-gradient(180deg,#000 70%,transparent 97%)',
+                            maskImage: 'linear-gradient(180deg,#000 70%,transparent 97%)',
+                        }}
+                    />
+                )}
+            </div>
+
+            {/* CTA DOCK */}
+            <div className="relative z-20 mt-auto w-full">
+                <div className="pointer-events-none absolute inset-x-0 bottom-0 h-52 bg-gradient-to-t from-[#F5FCF8] via-[#F5FCF8]/80 to-transparent" />
+                <div data-cs-anim className="relative mx-auto w-full max-w-[440px] px-6 pb-6 pt-2" style={anim('cs-up', '.5s', '.5s')}>
+                    <button
+                        type="button"
+                        onClick={requestAllPermissions}
+                        className="flex w-full items-center justify-center gap-2.5 rounded-full bg-gradient-to-r from-emerald-700 via-emerald-600 to-emerald-500 py-[16px] font-sans text-[16px] font-black text-white shadow-[0_16px_34px_-10px_rgba(4,120,87,0.55)] ring-1 ring-white/25 transition-transform active:scale-[0.98]"
+                    >
+                        <Shield size={18} /> सर्व परवानग्या द्या
+                    </button>
+                    <button
+                        data-testid="onboarding-skip"
+                        onClick={skipOrSave}
+                        className="mt-2 w-full py-2 font-sans text-[13px] font-bold text-stone-400 transition-colors hover:text-stone-600"
+                    >
+                        नंतर देईन
+                    </button>
+                    <p className="mt-1 flex items-center justify-center gap-1.5 text-center font-sans text-[10.5px] font-semibold leading-normal text-stone-400">
+                        <Lock size={10} /> तुमची माहिती सुरक्षित आहे — फक्त गरजेपुरतीच वापरतो.
+                    </p>
+                </div>
+            </div>
+        </div>
+    );
 };
 
 export default OnboardingPermissionsPage;
