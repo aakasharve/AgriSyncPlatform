@@ -1,13 +1,15 @@
 # DEPLOY-READY HANDOFF — Labour Management (शेतमजूर) → Production
 
-**Branch:** `feat/labour-management-ui` @ `38552ba9`
+**Branch:** `feat/labour-management-ui` @ `38552ba9` (original) → **now `3c7066ce`** (Phases 0–6 applied)
 **Session baseline:** `26991940` · **This session's work:** 24 commits, `26f7e761..38552ba9`
-**Branch vs production trunk:** 30 commits ahead of `origin/main`, **11 commits behind**
-**Prod backend today:** `/version` = `5e65d32b` (compute **hibernated** — down by design)
+**Branch vs production trunk:** 30 commits ahead of `origin/main`, **11 commits behind** (original) → **now 39 ahead, 0 behind** (Phase 0 merged `origin/main` in)
+**Prod backend today:** `/version` = `5e65d32b` (compute was **hibernated** by design; re-checked live just now during Phase 7 — currently responding `GET /health` 200 / `GET /version` = `5e65d32b`, so it may already be awake — re-verify at deploy time, do not assume)
 **Prod frontend today:** bundle `index-BPf9AmjT.js`, built from `cb538602`, APK v1.0.7
 **Written:** 2026-07-19 · **Audience:** founder, plus the next session that will execute the deploy
-**Full engineering ledger:** `e:/APPS/Running App Versions/AgriSyncPlatform/.superpowers/sdd/labour-progress.md`
-**Plan:** `e:/APPS/Running App Versions/AgriSyncPlatform/docs/superpowers/plans/2026-07-13-labour-management-backend-integration.md`
+
+> ## ⚠️ STATUS UPDATE — 2026-07-19, Phase 7 (release paperwork + accuracy pass)
+>
+> Phases 0–6 ran since this handoff was written and closed **8 of the 11 blockers** below. Phase 7 (this pass) closed the 2 remaining paperwork blockers (8, 10) by rewriting the plan's Founder Acceptance Gate/Change Surface, creating the branch manifest, adding the `DEPLOYMENT_TRACKER` row, and promoting the spec. **3 items remain genuinely OPEN and need a human or a live prod session, not more local work:** Blocker 3 (branch still not pushed — CI has never run on this SHA), Blocker 6 (prod's actual migration history has never been read), and Blocker 9 (founder decision on the approval-backlog flush, still outstanding). Each blocker section below now carries a **STATUS** line with the closing commit. See `.superpowers/sdd/phase0-merge-report.md` through `phase6-db-rehearsal-report.md` for full detail, and `.superpowers/sdd/phase7-release-paperwork-report.md` for this pass. Every other section of this document (blocker analysis, deploy path, smoke tests, rollback) is left as originally written except where a phase changed a stated fact — those edits are marked inline.
 
 ---
 
@@ -90,7 +92,9 @@ This is systemic, not labour-specific: the same gap exists on `create_plot`, `cr
 
 ## 3. IS IT DEPLOY-READY?
 
-**No. Not today. But it is close, and the gap is measurable — not vague.**
+> **STATUS UPDATE (Phase 7, 2026-07-19):** the assessment below was written before Phases 0–6 ran. All 5 items in "what makes it not-ready" have since closed (see the STATUS line on each numbered blocker in section 4). **Code is now genuinely deploy-ready** — the remaining gap is CI (branch never pushed, Blocker 3) and 2 outstanding founder decisions (Blocker 9's backlog-flush choice; ticking the now-satisfiable Acceptance Gate, Blocker 8), not code quality. The original reasoning is left below for the historical record.
+
+**No. Not today. But it is close, and the gap is measurable — not vague.** *(as of 2026-07-19, before Phases 0–6; see the status update above for where this stands now)*
 
 Straight reasoning, no softening:
 
@@ -118,6 +122,8 @@ Eleven. Each says what it is, why it matters, exactly what closes it, and who do
 
 ### 🔴 BLOCKER 1 — Approvals will fail in production, silently
 
+> **STATUS: ✅ CLOSED — Phase 1, commit `31b6cffd` ("fix(sync): establish tenant scope for every /sync/push mutation").** The founder-decision alternative below was resolved by default (fix the handler, keep offline-capable approvals — per Decision 1c "fix ALL of it"), not left open. Phase 1 went WIDER than this one bug: it audited and enumerated the full 27-case `/sync/push` dispatch switch and found **19 mutations genuinely broken** the same way (not just `verify_log`) — 18 fixed, 1 (`create_farm`) documented as latent/unreachable (no live producer). A second, independent crash (`TenantContext.SetTenant` throwing under admin-elevation) was found and fixed only by driving `verify_log` against real Postgres — no in-memory test could have caught it. Proven by 9 new tests in `SyncPushTenantScopeRealPostgresTests.cs` against real Postgres as `agrisync_app`, including the exact positive (genuine member succeeds) and negative (non-member fails closed) pairs for every one of the 6 distinct scope-establishment shapes. Full detail: `.superpowers/sdd/phase1-tenant-scope-report.md`.
+
 **What it is.** The तपासणी approve flow sends `verify_log` through `/sync/push`. That route is deliberately excluded from the tenant middleware, so no tenant variable is set. Production's row-level security therefore matches nothing, the daily-log lookup returns zero rows, and the handler returns `ShramSafal.DailyLogNotFound`. Same bug class as Fix 1 (`2b360f6e`), which patched only `create_daily_log`.
 
 **Why it matters.** This is the branch's headline feature. It works perfectly on this laptop and fails 100% of the time in production. And because we added the optimistic 3-second confirm animation, the farmer is shown a successful approval that never happened. Money-adjacent: `verify_log` drives the verification state machine, which feeds job-card payout eligibility.
@@ -137,6 +143,8 @@ Preserve the empty-GUID sentinel from the Fix-1 helper. Prove it with `SyncPushL
 ---
 
 ### 🔴 BLOCKER 2 — Deploying from this branch would un-ship live production features
+
+> **STATUS: ✅ CLOSED — Phase 0, merge commit `7d919912` ("Merge origin/main (v1.0.7) into feat/labour-management-ui").** `git rev-list --left-right --count origin/main...HEAD` now reads `0 39` (was `11 behind, 30 ahead`) — the branch is a genuine superset of `main` again, not a subset. All 4 conflicts resolved (`AppRouter.tsx` — labour arrival-scroll hook kept ABOVE both the welcome-screen and permissions early-returns, no conditionally-invoked hooks; `ProfilePage.tsx` — kept the 3-line `onOpenLabour` addition; 2 snapshot files regenerated, not hand-merged). The 4 untracked onboarding files that collided with `main`'s tracked versions were verified byte-identical (diff/cmp) and backed up before removal — nothing lost. `scripts/deploy-s3.sh` confirmed present post-merge. Full regression re-run: frontend 562/562, Domain 1077/1077, Architecture 77/77, `tsc`/eslint clean. Full detail: `.superpowers/sdd/phase0-merge-report.md`. **Residual, not a re-open:** the version bump this handoff recommends ("take main's 1.0.7, then bump to 1.0.8") was done separately in Phase 7 — see the branch manifest and the version-bump section of `.superpowers/sdd/phase7-release-paperwork-report.md`.
 
 **What it is.** 11 commits behind `origin/main`. `git cherry` confirms none of them exist on this branch in any form. Missing, and currently live for your users:
 
@@ -165,6 +173,8 @@ After the merge: commit or discard the uncommitted `OnboardingPermissionsPage.ts
 
 ### 🔴 BLOCKER 3 — CI has never run on this code
 
+> **STATUS: 🔴 STILL OPEN — genuinely needs a push + PR, not more local work.** `git rev-parse --abbrev-ref --symbolic-full-name @{u}` still errors "no upstream configured"; `git ls-remote --heads origin` still returns only `main`. As of Phase 7, HEAD is `3c7066ce`, 39 commits ahead / 0 behind `origin/main` — CI has run **zero times** across all of them. What phases 0–6 DID close is the reason CI would have been misleading even if run: Phase 2 fixed the exact silent-pass mechanism this blocker's own §"Bonus" paragraph worried about — see the CLOSED note on Blocker 4 below. Closing this blocker for real is Phase 3 of the deploy path (push, open PR, wait for `gate` green on the exact SHA) — unstarted.
+
 **What it is.** `git rev-parse @{u}` → "no upstream configured". `git ls-remote --heads origin` returns exactly one branch: `main`. No PR exists at any state. The required `gate` check has run **zero times** across all 30 commits.
 
 **Why it matters.** Repo law is explicit: *"never claim CI green from local output."* The gate supplies signal we have never obtained — a full-solution Release build with warnings-as-errors, plus **seven test projects that never ran this session** (Accounts.Domain, BuildingBlocks, Analytics ×2, ShramSafal.Admin.Integration, User.Api, User.Domain). That matters because this diff touches shared seams: `ShramSafal.Infrastructure/DependencyInjection.cs`, `IShramSafalRepository.cs`, `LedgerDerivationService.cs`, the DB model snapshot.
@@ -178,6 +188,8 @@ After the merge: commit or discard the uncommitted `OnboardingPermissionsPage.ts
 ---
 
 ### 🔴 BLOCKER 4 — Four test files have never executed anywhere, and the CI job they claim to run in does not exist
+
+> **STATUS: ✅ CLOSED — Phase 2, commit `d8f8d38c` ("fix(ci): stop RequiresPostgres tests from silently passing in CI").** The `RequiresPostgres` suites' `_skip`/`Assert.True(true, _skipReason)` silent-pass pattern was reproduced on demand (pointed the DB connection at an unreachable port — all 13 tests "passed" in 1–4ms) then inverted: `InitializeAsync` now throws loudly instead of skipping, so an unreachable DB fails every test in the class instead of green-lighting it. `ci-gate.yml`/`dotnet-ci.yml` now provision a real reachable Postgres via a new `REQUIRES_POSTGRES_ROOT_CONN` env var. The 4 false "runs under a RequiresDocker sweep" doc comments were deleted and replaced with accurate ones. The 4 money assertions were ported into a new `LabourMoneyInvariantsRealPostgresTests.cs`, which genuinely executes in CI (verified: `RequiresPostgres` category now 16/16, later 18/18 after Phase 5's addition). `LabourEndpointTests` (the non-Docker-gated endpoint test from Task 1.3) already ran and passed in an earlier session (member→200, non-member→403, unknown→403) — nothing new needed there. Full detail: `.superpowers/sdd/phase2-ci-truthfulness-report.md`.
 
 **What it is.** Four of the five integration test files written this session carry `[Trait("Category","RequiresDocker")]`. Every workflow in the repo **excludes** that category — a repo-wide grep of `.github/workflows/` returns only exclusions. There is **no `RequiresDocker` sweep anywhere.** Worse: all four files contain a doc comment asserting *"the GitHub Actions RequiresDocker sweep runs it against a real postgres:16-alpine container."* That sweep does not exist. This is a false coverage claim checked into the codebase that will mislead the next reader.
 
@@ -194,6 +206,8 @@ Affected (~976 lines): the money-consistency invariant, the jsonb round-trip, th
 ---
 
 ### 🔴 BLOCKER 5 — The migration has never been applied by EF, and prod fails closed
+
+> **STATUS: ✅ CLOSED for the rehearsal (Phase 6, no commit — environment-only work, see `.superpowers/sdd/phase6-db-rehearsal-report.md`); the deploy-time G2/G4 gate steps below still run for real at deploy time.** A brand-new database (`agrisync_dev_v2`) was built from empty and the full 100-migration chain — including BOTH labour migrations (`20260718132540` and Phase 1's `20260719074300`) — applied cleanly via `dotnet ef database update`, in prod's exact boot order, **as the restricted `agrisync_app` runtime role** (not superuser) with zero manual intervention and zero history-row hand-editing. RLS was then proven to fail-closed with no tenant GUC set and to succeed correctly for a genuine farm member vs a non-member, at both the raw-SQL layer and through the real running HTTP endpoint (200 member / 403 non-member — the exact positive/negative pair the prod smoke tests below call for). **This closes "will the migration apply / does the app work under the real security posture" as a local question — it does NOT replace the deploy-time G2 clone-rehearsal or G4 prod-apply gates**, which still run against the real prod RDS at deploy time (see Blocker 6, still open). One disclosed, non-bypassing parity step was needed: `GRANT agrisync_owner TO agrisync_app` locally, to match a fact this very blocker already asserts must be true in prod (Phase 4 step 32 below) — not a new privilege invented to force the chain through.
 
 **What it is.** Migration `20260718132540` was written and committed but **never executed by Entity Framework anywhere**. The three columns exist on local dev because raw `ALTER TABLE` was run by hand and the migration ID was hand-inserted into the history table. Locally `dotnet ef database update` is **broken** — the history table has 3 rows against 76 tables, so EF tries to replay from February and dies with `42703: column date_key does not exist`.
 
@@ -221,6 +235,8 @@ classify-migration.py 20260718132540_AddLabourAssignmentShiftTaskNames.cs
 
 ### 🟠 BLOCKER 6 — Production's migration history has never been read
 
+> **STATUS: 🔴 STILL OPEN — by design, this needs live prod access, not local work.** Phase 6 rehearsed the migration chain against a **local** clean database, not prod's actual `ssf.__ef_migrations` table (see Blocker 5 above — that closes a different, local question). Reading prod's real migration history still requires `bash aws/hibernate/wake.sh` + `_COFOUNDER/plugins/agrisync-deploy/scripts/validator/prod_db_read.py`, run at deploy time (Phase 4 step 30 below), pinned explicitly to the correct `agrisync` vs `agrisync_dev`-equivalent prod database name. Unstarted.
+
 **What it is.** We have never actually looked at prod's `ssf.__ef_migrations`. `DEPLOYMENT_TRACKER` says prod's head is `20260703210908_RevertChildTableRlsWriteCheckToTrue` and our migration is exactly one behind — a clean, falsifiable expectation. But that is a written claim, not a read.
 
 **Why it matters.** Local proved this drift is real and does break EF. If prod's history is similarly sparse, the boot-time migrate will try to replay ~25 migrations against an already-populated schema — and that is incident #1 all over again.
@@ -234,6 +250,8 @@ classify-migration.py 20260718132540_AddLabourAssignmentShiftTaskNames.cs
 ---
 
 ### 🔴 BLOCKER 7 — Worker names, privacy, and a table that cannot be un-written [**FOUNDER DECISION**]
+
+> **STATUS: ✅ CLOSED — founder chose Option 2 ("ship it, with the erasure work first"), recorded in `docs/superpowers/handoffs/2026-07-19-LOCKED-DECISIONS.md` Decision 5 = 5b. Closed by Phase 5, commit `3c7066ce` ("fix(privacy): close worker-name erasure gaps before shipping names (5b)").** `analytics.events`' `worker.named` payload no longer carries a raw name — it now carries `workerId` (a Guid), so the un-scrubbable append-only table holds nothing identifying going forward. The same-name-merge flaw was closed by GATING, not "smarter" matching, per the locked decision's own fallback: `WorkerNameProjector` no longer performs any cross-log lookup (`IWorkerRepository.FindByNormalizedNameAsync` removed from the interface entirely), so two people named रमेश on one farm can never collapse into one record again — at the disclosed cost of the admin "top workers by assignment count" panel now under-counting repeat workers (deferred to WTL v1). `ssf.workers` and `ssf.worker_assignments` both got real scrub dispositions in `ErasureWorker.cs` (previously absent from the manifest entirely); the false "no PII column" claim about `ssf.labour_assignments` was corrected. `ErasureWorkerAnonymizationTest` was extended to actually seed a real name and grep for it post-erasure (previously it asserted only a row count) — reproduced failing before the fix, passing after, on a new `RequiresPostgres` twin since Docker isn't installed on this machine. **Still open, correctly out of scope for engineering — flagged, not silently carried:** notice/consent wording for third-party workers and the DPDP lawful-basis question need the founder's own legal sign-off, not code. Full detail: `.superpowers/sdd/phase5-privacy-report.md`.
 
 **What it is.** Two separate things landed in this branch that both cause worker names — real names of third parties who are not our users — to be stored in production for the first time ever.
 
@@ -264,6 +282,8 @@ It reads names straight from the raw Marathi transcript by regex, so it is compl
 
 ### 🟠 BLOCKER 8 — The Founder Acceptance Gate is unticked **and unsatisfiable as written**
 
+> **STATUS: ✅ CLOSED (the amendment half) — Phase 7 (this pass), uncommitted at write-time, see `.superpowers/sdd/phase7-release-paperwork-report.md`.** The plan's Founder Acceptance Gate (`docs/superpowers/plans/2026-07-13-labour-management-backend-integration.md`) has been rewritten to a slice covering only what Stages 1–3 + hardening actually built — the impossible `ssf.attendance_days`/`ssf.labour_advances` SELECTs, the server-parsed-chips ask, and the उचल/सेटल-balance ask were removed and relocated as "NOT BUILT" acceptance criteria under Stage 4/5/6 for when those stages ship. Every Stage 1–3 task (1.1–1.5, 2.1–2.4, 3.1–3.2) was individually back-filled `[x]` against its own phase/task report — not bulk-ticked — and the plan-vs-ledger "Task 3.2" naming collision this blocker named is now documented inline at that task (plan's Task 3.2 = review-queue filtering, built inside Task 1.2; ledger's "Task 3.2" = the unrelated confirm-animation UX feature, commit `3c3ba12d`). The Change Surface section was also corrected to the real DB surface (see Blocker 10 below). **Still requires the founder's own action** — the gate box itself is still unticked; only the founder can tick it, after running the localhost verification it now asks for.
+
 **What it is.** Your acceptance gate sits at plan lines 391-395, all three boxes `[ ]`. Repo law (`CLAUDE.md` line 60) makes it a hard block on **any deployment step** — so it gates your very first intended action, not the merge.
 
 **But do not just tick it.** The gate was written for the full 6-stage plan; only Stages 1-3 were built. Line 394 asks you to run `SELECT` counts on `ssf.attendance_days` and `ssf.labour_advances`. **Those tables do not exist** — they are Stage 4/5 deliverables, never built. That SELECT will error. Line 393 also asks for server-parsed chips (Stage 6, unbuilt) and उचल/सेटल balance updates (Stage 4, unbuilt).
@@ -280,6 +300,8 @@ Ticking it as written would launder a 3-of-6-stage slice as your acceptance of t
 
 ### 🟠 BLOCKER 9 — The approval backlog will flush the moment users get the fix [**FOUNDER DECISION**]
 
+> **STATUS: 🔴 STILL OPEN — genuinely a founder decision, not touched by phases 0–6.** None of the phase reports (0 through 6) mention counting, age-gating, or otherwise handling the queued-approval backlog. `docs/superpowers/handoffs/2026-07-19-LOCKED-DECISIONS.md` (Decisions 1–7, locked 2026-07-19) does not resolve this one either — it is not among the 7 decisions there. The recommendation stands: **(c) then (a)** — count the queue during the backend-only deploy phase (Phase 4), then decide whether to let it flush. Needs the founder's reply (a/b/c) before Phase 5 (frontend deploy) ships the `verificationStatus`→`status` fix to real devices.
+
 **What it is.** The `verificationStatus` → `status` fix is not just a bug fix — it is a **prod-data event**. Every `verify_log` the app has ever sent was rejected by the server's field allow-list, and was **not** classified as a permanent rejection — so it stayed in each phone's outbox and kept retrying, forever. This affected the Finance approval path too, not only labour.
 
 The first time a real user's phone loads the fixed bundle, its accumulated backlog **flushes and succeeds.** Every one drives the verification state machine, writes a `verification_events` row, and can advance job-card payout eligibility. On a device with months of retries, that is a burst of state transitions against historical logs — money-adjacent.
@@ -294,6 +316,8 @@ Practical note: prod cannot onboard real farmers today (dev-stub SMS), so the re
 
 ### 🟡 BLOCKER 10 — Missing paperwork that the rules require
 
+> **STATUS: ✅ CLOSED — Phase 7 (this pass).** All four items done: branch manifest at `_COFOUNDER/Projects/AgriSync/Operations/BranchLibrary/feat-labour-management-ui.md` (`Merge verdict: NO`, held until prod-proven, per the founder's deploy-then-merge sequence); `DEPLOYMENT_TRACKER.md` Section 1 row `D7` added (snapshot floor YES, migration-moves-with-binary YES, requires-wake YES with a live `/health`/`/version` check recorded, rollback ref, `Verified-live` cell left empty pending the actual deploy); spec promoted to `_COFOUNDER/specs/_active/2026-07-13-labour-attendance-approval-design.md` (a tracked copy — the original at `docs/superpowers/specs/` is left in place since phase reports point at that path directly); Change Surface in the plan corrected to the real DB surface (0 new tables — 3 columns on the existing `ssf.labour_assignments` + 3 RLS policies on 3 existing tables; the Stage 4/5 tables were never built). Full detail: `.superpowers/sdd/phase7-release-paperwork-report.md`.
+
 Four items, all mine, all quick:
 
 1. **Branch manifest absent.** RULEBOOK §3 requires `_COFOUNDER/Projects/AgriSync/Operations/BranchLibrary/feat-labour-management-ui.md` with a `Merge verdict`. Three sibling branches have one. Blocking for **merge**, not for deploy. `Merge verdict` stays NO until prod-proven.
@@ -304,6 +328,8 @@ Four items, all mine, all quick:
 ---
 
 ### 🟡 BLOCKER 11 — Dirty working tree
+
+> **STATUS: 🟡 PARTIALLY CLOSED — the collision that could regress silently is resolved; harmless scratch files remain, by design not urgency.** Phase 0 resolved the tracked-file conflict (`OnboardingPermissionsPage.tsx`, folded into the merge) and the 4 untracked onboarding files that collided with `main`'s now-tracked versions (verified byte-identical, backed up, removed). The ~40 loose screenshots/scratch files (`h1`/`h2`/`h3`, `MARKETING_HANDOVER_ShramSafal.md`, demo harnesses, etc.) were deliberately left untouched across every phase, per each phase's own git-hygiene rule of staging only explicit paths — they were never staged or committed by any phase, including this one. This is safe for deploy specifically because the runbook's own Phase 5 step 37 requires building **from a clean worktree at the pushed SHA, never from the working tree** — so these files cannot leak into a build regardless. `src/AgriSync.Bootstrapper/appsettings.Development.json` is now also modified (Phase 6, local-dev-only connection strings, deliberately left uncommitted per that phase's own report — no prod secret). Recommend a cleanup pass before the PR is opened (Phase 3), but it is not deploy-blocking given the clean-worktree build rule.
 
 **What it is.** One tracked file modified (`OnboardingPermissionsPage.tsx`) plus ~40 untracked files: 25+ screenshots at repo root, `MARKETING_HANDOVER_ShramSafal.md`, `h1`/`h2`/`h3`, `old.body`, several demo harnesses, and the four untracked onboarding files that will collide with `main`'s tracked versions.
 
@@ -329,43 +355,45 @@ One honesty note to record on the chart: the full lane's G0 ancestry check is pa
 
 ---
 
-### PHASE 0 — Clean the room *(me, ~20 min)*
+> **✅ PHASES 0–2 BELOW ARE DONE** (2026-07-19). Note these are the deploy-path's own phase numbers, distinct from the `.superpowers/sdd/phaseN-*.md` engineering-session report numbers referenced throughout this document's STATUS lines — the mapping: this doc's Phase 0+1 ≈ `phase0-merge-report.md`; Phase 2 steps 12–14 ≈ `phase1-tenant-scope-report.md`; steps 15–16 ≈ `phase5-privacy-report.md`; step 17 ≈ `phase2-ci-truthfulness-report.md`; step 18 ≈ `phase6-db-rehearsal-report.md`; steps 19–20 ≈ this session's `phase7-release-paperwork-report.md`. (Money/screen-honesty hardening — `phase3-money-report.md`/`phase4-screen-honesty-report.md` — happened alongside this work per the founder's locked decisions and is folded into the "code-complete" state below; it wasn't an explicit numbered step in this original plan.)
 
-1. Stop the running `AgriSync.Bootstrapper` dev-server process (it holds a file lock that blocks the backend test build).
-2. Commit or discard `src/clients/mobile-web/src/pages/OnboardingPermissionsPage.tsx`.
-3. Resolve the 4 untracked onboarding files (`WelcomeScreen.tsx`, `onboarding/DawnScene.tsx`, 2 brand `.webp`) — they collide with `main`'s tracked versions.
-4. Move or gitignore the ~40 loose screenshots / scratch files.
-5. `git status --porcelain` returns clean (or only intentional, explicitly-staged paths).
+### PHASE 0 — Clean the room *(me, ~20 min)* — ✅ DONE
 
-### PHASE 1 — Integrate `main` into the branch *(me, ~45 min — this is the un-regression step)*
+1. ✅ Stopped the running `AgriSync.Bootstrapper` dev-server process (it holds a file lock that blocks the backend test build).
+2. ✅ `src/clients/mobile-web/src/pages/OnboardingPermissionsPage.tsx` resolved via the merge (Phase 1 below).
+3. ✅ Resolved the 4 untracked onboarding files (`WelcomeScreen.tsx`, `onboarding/DawnScene.tsx`, 2 brand `.webp`) — they collide with `main`'s tracked versions.
+4. **Not done, correctly deferred** — the ~40 loose screenshots/scratch files were left as-is (see Blocker 11 STATUS above): they don't block a deploy because Phase 5 step 37 builds from a clean worktree, not the working tree. Recommend a cleanup pass before opening the PR (Phase 3).
+5. `git status --porcelain` is **not** clean (see item 4) but contains no path that would leak into a build.
 
-6. `git merge origin/main` into `feat/labour-management-ui`. Expect **4 conflicts**.
-7. Resolve `AppRouter.tsx` **by hand**: keep BOTH the labour arrival-scroll hook + `logIntent`/`lastLabourLogIds` context fields AND `main`'s `welcomeSeen` gate. **The welcome early-return must come AFTER the labour hook call** — no conditionally-invoked hooks.
-8. Resolve `ProfilePage.tsx`: prefer `main`'s version (already live and prod-proven). Regenerate the 2 snapshot files, don't hand-merge.
-9. Confirm present after merge: `scripts/deploy-s3.sh`, `.gitattributes` (`*.sh text eol=lf` — without it the script lands CRLF and dies on Linux with "bad interpreter"), `WelcomeScreen.tsx` **wired into** `AppRouter` and `lazyComponents`, `e2e/fixtures/loginHelper.ts` (main's version clicks through the welcome gate).
-10. Version: take `main`'s 1.0.7, then bump to **1.0.8** in all four places — `buildInfo.ts`, `android/app/build.gradle` (versionCode **16** + versionName), `marketing-static/index.html`.
-11. Re-run everything: frontend suite (562/562 is stale), `tsc`, eslint, domain tests, architecture tests.
+### PHASE 1 — Integrate `main` into the branch *(me, ~45 min — this is the un-regression step)* — ✅ DONE
 
-### PHASE 2 — Close the code blockers *(me, ~2 h)*
+6. ✅ `git merge origin/main` into `feat/labour-management-ui` — merge commit `7d919912`. Exactly the 4 conflicts predicted.
+7. ✅ Resolved `AppRouter.tsx` **by hand**: kept BOTH the labour arrival-scroll hook + `logIntent` context field AND `main`'s `welcomeSeen` gate, hook call placed above both early returns.
+8. ✅ Resolved `ProfilePage.tsx`: kept the 3-line `onOpenLabour` addition (verified this branch had already inherited `main`'s Setup-Hub-Settings migration from a common ancestor, so "keep both" reduced to this). 2 snapshot files regenerated via `vitest -u`, not hand-merged.
+9. ✅ Confirmed present after merge: `scripts/deploy-s3.sh`, `WelcomeScreen.tsx` wired into `AppRouter`/`lazyComponents`, `e2e/fixtures/loginHelper.ts` clicking through the welcome gate.
+10. ✅ Version bumped to **1.0.8** in all four places (`buildInfo.ts`, `android/app/build.gradle` versionCode **16** + versionName, `marketing-static/index.html`) — done in Phase 7 (this pass), not at merge time; grep-verified no `1.0.7`/`versionCode 15` remains in any app-version location.
+11. ✅ Re-ran everything post-merge: frontend 562/562, `tsc`/eslint clean, Domain 1077/1077, Architecture 77/77.
 
-12. **Fix `verify_log` tenant scope** (Blocker 1), two-phase, with the empty-GUID sentinel preserved.
-13. **Prove it** with `SyncPushLedgerDerivationRealPostgresTests` on native Postgres :5433 as `agrisync_app`. Not in-memory.
-14. **Audit the sibling handlers** (`create_plot`, `create_crop_cycle`, `add_log_task`, `add_cost_entry`, `correct_cost_entry`, `create_attachment`, test-instance) — same bug, decide fix-now vs. tracked-separately.
-15. **Correct the `ErasureWorker` manifest** at `ErasureWorker.cs:99-104` — it is factually wrong regardless of your Blocker 7 answer.
-16. **Execute your Blocker 7 decision** (revert the DI line, or add the erasure dispositions).
-17. **Run `LabourEndpointTests` locally** and capture the pass output. Port the four money assertions to a suite that runs against CI's existing Postgres service. Delete the four false "RequiresDocker sweep" doc comments.
-18. **Prove the migration on a clean database** — throwaway DB, `dotnet ef database update` from zero, as the runtime role, then labour endpoint → 200.
-19. **Paperwork** (Blocker 10): branch manifest, promote the spec, reconcile the Change Surface, draft the tracker row.
-20. **Amend the acceptance gate** to the built scope (Blocker 8); back-fill Stage 1-3 ticks per task.
+### PHASE 2 — Close the code blockers *(me, ~2 h)* — ✅ DONE
 
-### PHASE 3 — CI and your gate *(me + you, ~1 h wall clock)*
+12. ✅ **Fixed `verify_log` tenant scope** (Blocker 1), two-phase, empty-GUID sentinel preserved — plus 17 sibling mutations with the same bug, not just this one.
+13. ✅ **Proved it** — 9 new tests in `SyncPushTenantScopeRealPostgresTests.cs` on native Postgres as `agrisync_app`. Not in-memory.
+14. ✅ **Audited the sibling handlers** — all 19 genuinely-broken cases found and fixed (18), 1 (`create_farm`) documented as latent/unreachable rather than silently left.
+15. ✅ **Corrected the `ErasureWorker` manifest** at the `ssf.labour_assignments` entry.
+16. ✅ **Executed the Blocker 7 decision** — founder chose Option 2 (ship with erasure work first); erasure dispositions added, projector gated against cross-log merging, `analytics.events` payload changed to non-identifying.
+17. ✅ **Ran `LabourEndpointTests`** (already passing from an earlier session). Ported the four money assertions into a suite that runs in CI (`LabourMoneyInvariantsRealPostgresTests`). Deleted the four false "RequiresDocker sweep" doc comments.
+18. ✅ **Proved the migration on a clean database** — `agrisync_dev_v2`, full 100-migration chain from zero, as the runtime role, labour endpoint → 200 for a member / 403 for a non-member.
+19. ✅ **Paperwork** (Blocker 10) — branch manifest, spec promotion, Change Surface reconciliation, tracker row — this session (Phase 7).
+20. ✅ **Amended the acceptance gate** to the built scope (Blocker 8) — Stage 1-3 ticks back-filled per task, individually verified — this session (Phase 7).
+
+### PHASE 3 — CI and your gate *(me + you, ~1 h wall clock)* — 🔴 NOT STARTED
 
 21. Push the branch. Open the PR. **This does not merge anything.**
 22. Wait for `gate` green **on the exact SHA**. If red, fix and re-push; do not proceed on a red gate.
 23. **You** run the localhost verification against the seeded Purvesh farm (8888888888 / Testuser@123) and tick the amended gate. Evidence is an HTTP 200 and row counts — not a log line.
 24. **You** answer Blocker 9 (backlog flush). Recommended: `(c)` — we count the queue during Phase 4 and then decide.
 
-### PHASE 4 — Backend + database deploy *(the risky-but-additive half — deploy plugin, ~60-90 min)*
+### PHASE 4 — Backend + database deploy *(the risky-but-additive half — deploy plugin, ~60-90 min)* — 🔴 NOT STARTED
 
 **Split the surfaces deliberately.** The new endpoint is a brand-new route with no existing consumer — additive, no blast radius on live users. The frontend is the risky half. Backend first, proven, then frontend.
 
@@ -382,14 +410,14 @@ One honesty note to record on the chart: the full lane's G0 ancestry check is pa
 35. **G5** — backend smokes (section 6, tests 0-4). **Watch for a restart loop**, not just an error return.
 36. **G6** — close out. Fill the `DEPLOYMENT_TRACKER` row with real prod evidence.
 
-### PHASE 5 — Frontend deploy *(after backend is proven, ~20 min)*
+### PHASE 5 — Frontend deploy *(after backend is proven, ~20 min)* — 🔴 NOT STARTED
 
 37. Build **once**, from a **clean worktree** at the pushed SHA — never from the working tree, never rebuilt per environment.
 38. Deploy with **`scripts/deploy-s3.sh`** (present as of Phase 1). `--dry-run` first. Do **not** hand-roll `aws s3 sync` — that method drift caused the 2026-07-18 DPDP exposure.
 39. Verify from the edge that `consent/**` is `no-cache` and the hashed bundle is immutable. Confirm the shell flipped to a new `index-*.js` hash.
 40. Run smoke tests 5-8.
 
-### PHASE 6 — Merge, only now *(you approve)*
+### PHASE 6 — Merge, only now *(you approve)* — 🔴 NOT STARTED (blocked behind Phases 3–5)
 
 41. Prod is green and you have verified the wage-book numbers on the real farm.
 42. Merge the PR (GitHub squash — this is also what signs the commit; local feature commits being unsigned is the established repo pattern, not new drift).
