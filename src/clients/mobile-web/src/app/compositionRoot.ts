@@ -111,7 +111,11 @@ export const useAgriLogApp = ({ initialCrops, currentFarmId, currentFarmName }: 
         setMode,
         setMainView: navigation.setMainView,
         setStatus: voice.setStatus,
-        weatherProvider
+        weatherProvider,
+        // spec: 2026-07-13-labour-attendance-approval-design (Task 3.5)
+        logIntent: navigation.logIntent,
+        setCurrentRoute: navigation.setCurrentRoute,
+        setLastLabourLogIds: navigation.setLastLabourLogIds
     });
     useEffect(() => {
         const handleGlobalToast = (event: Event) => {

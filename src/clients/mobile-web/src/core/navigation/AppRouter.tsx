@@ -48,7 +48,7 @@ const AppRouter: React.FC = () => {
     );
     const { getTodayCounts, getContextColorIndicator } = useAppViewHelpers();
 
-    const { currentRoute, setCurrentRoute, mainView, setMainView, logIntent, setLogIntent } = navigation;
+    const { currentRoute, setCurrentRoute, mainView, setMainView, logIntent, setLogIntent, lastLabourLogIds } = navigation;
     const { logScope, setLogScope, currentLogContext, hasActiveLogContext, isContextReady } = context;
     const {
         isDemoMode, setIsDemoMode,
@@ -157,7 +157,7 @@ const AppRouter: React.FC = () => {
     // invoked conditionally).
     const ctx: AppRouterContext = {
         currentRoute, setCurrentRoute, mainView, setMainView,
-        logIntent, setLogIntent,
+        logIntent, setLogIntent, lastLabourLogIds,
         logScope, setLogScope, currentLogContext, hasActiveLogContext, isContextReady,
         isDemoMode, setIsDemoMode,
         farmerProfile, setFarmerProfile,

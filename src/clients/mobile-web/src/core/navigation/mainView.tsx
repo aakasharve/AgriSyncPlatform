@@ -16,7 +16,7 @@ import LiveCaption from '../../features/voice/components/LiveCaption';
 import { DEFAULT_VOICE_CONFIG } from '../../infrastructure/voice/types';
 import ManualEntry from '../../features/logs/components/ManualEntry';
 import DailyLogCard from '../../features/logs/components/DailyLogCard';
-import { Leaf, Droplets, Users, Package, Tractor, Sprout } from 'lucide-react';
+import { Leaf, Droplets, Users, Package, Tractor, Sprout, ArrowLeft } from 'lucide-react';
 import { getSegmentVisual } from '../../shared/utils/uiUtils';
 import { getDateKey } from '../domain/services/DateKeyService';
 import { buildTimelineEntries } from '../../services/transcriptTimelineService';
@@ -34,6 +34,41 @@ import {
     getSummaryLines,
     getVerificationPresentation
 } from './helpers';
+
+/**
+ * spec: 2026-07-13-labour-attendance-approval-design (Task 3.5)
+ *
+ * Replaces the Task-3.4 dismissible hint. Founder ask #1 (more visible,
+ * matching the app's established aesthetic) + ask #2 (the ✕ becomes a "back
+ * to Labour Management" action, not a dismiss — there is no dismiss any
+ * more). Styling borrows the labour hub's own voice-card treatment
+ * (LabourHub.tsx: rounded-[24px], emerald gradient, white/20 icon tile,
+ * font-black white title, trailing white/20 pill) so the farmer reads this
+ * as the SAME feature continuing onto this screen — while carrying no
+ * neutral grays of its own, so it doesn't clash with mainView's stone
+ * chrome even though the labour feature itself is built on slate.
+ */
+export const LabourLogBanner: React.FC<{ onBackToLabour: () => void }> = ({ onBackToLabour }) => (
+    <button
+        type="button"
+        onClick={onBackToLabour}
+        data-testid="labour-log-banner"
+        aria-label="कामगार व्यवस्थापनाकडे परत जा — back to Labour Management"
+        className="relative mb-3 flex w-full items-center gap-3 overflow-hidden rounded-[20px] bg-gradient-to-br from-emerald-500 to-emerald-700 p-3.5 text-left shadow-[0_14px_28px_-12px_rgba(5,150,105,0.6)] transition-transform active:scale-[0.99] animate-in fade-in slide-in-from-top-2 duration-300"
+    >
+        <span className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-2xl bg-white/20 text-white">
+            <Users size={22} strokeWidth={2.4} />
+        </span>
+        <span className="min-w-0 flex-1">
+            <span className="block text-[14.5px] font-black text-white">कामगार व्यवस्थापनासाठी नोंद</span>
+            <span className="block truncate text-[11.5px] font-semibold text-emerald-50/90">मजूर · हजेरी · मजुरी बोला</span>
+        </span>
+        <span className="flex flex-shrink-0 items-center gap-1 rounded-full bg-white/20 px-3 py-1.5 text-[11px] font-extrabold text-white">
+            <ArrowLeft size={13} strokeWidth={2.6} />
+            कामगार व्यवस्थापन
+        </span>
+    </button>
+);
 
 export const renderReflectView = (ctx: AppRouterContext): React.ReactNode => {
     if (ctx.currentRoute !== 'main' || ctx.mainView !== 'reflect') return null;
@@ -118,7 +153,7 @@ export const renderLogView = (ctx: AppRouterContext): React.ReactNode => {
         costSnapshot, yesterdayCost,
         setRecordingSegment,
         lastSavedLogSummary, lastSavedLogIds, mockHistory, handleReset,
-        logIntent, setLogIntent
+        logIntent
     } = ctx;
 
     // Single boundary handoff: flag it + route to Profile, where the drawer auto-opens.
@@ -273,25 +308,15 @@ export const renderLogView = (ctx: AppRouterContext): React.ReactNode => {
                         </div>
                     )}
 
-                    {/* spec: 2026-07-13-labour-attendance-approval-design (Task 3.4) —
-                        "why am I here" hint when voice was launched from the
-                        labour feature. Purely presentational + a null-check on
-                        logIntent; no effect on capture/parsing/submission. */}
+                    {/* spec: 2026-07-13-labour-attendance-approval-design (Task 3.5) —
+                        promoted from the Task-3.4 dismissible hint to a full
+                        banner (founder ask #1). Purely presentational + a
+                        null-check on logIntent; no effect on capture/parsing/
+                        submission. Tapping it navigates straight back to
+                        Labour Management (founder ask #2) — there is no ✕
+                        dismiss any more. */}
                     {!recordingSegment && logIntent === 'labour' && (
-                        <div className="mb-3 flex items-center justify-between gap-3 rounded-2xl border border-emerald-200 bg-emerald-50 px-3.5 py-2.5 animate-in fade-in slide-in-from-top-2 duration-300">
-                            <div className="min-w-0">
-                                <p className="text-xs font-bold text-emerald-800">कामगार व्यवस्थापनासाठी नोंद</p>
-                                <p className="mt-0.5 text-[11px] font-medium text-emerald-600">मजूर · हजेरी · मजुरी बोला</p>
-                            </div>
-                            <button
-                                type="button"
-                                onClick={() => setLogIntent(null)}
-                                aria-label="Dismiss"
-                                className="shrink-0 rounded-full p-1.5 text-emerald-500 transition-colors hover:bg-emerald-100"
-                            >
-                                ✕
-                            </button>
-                        </div>
+                        <LabourLogBanner onBackToLabour={() => setCurrentRoute('labour')} />
                     )}
 
                     {!recordingSegment && (

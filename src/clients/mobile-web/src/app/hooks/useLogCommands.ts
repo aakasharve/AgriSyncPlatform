@@ -1,7 +1,7 @@
 import { useCallback, useMemo } from 'react';
 import {
     AgriLogResponse, LogScope, CropProfile, FarmerProfile, DailyLog,
-    InputMode, PageView, AppStatus, PlannedTask
+    InputMode, PageView, AppStatus, AppRoute, PlannedTask
 } from '../../types';
 import { LogProvenance } from '../../domain/ai/LogProvenance';
 import { logger } from '../../infrastructure/observability/Logger';
@@ -9,6 +9,7 @@ import { CorrelationId } from '../../infrastructure/observability/CorrelationCon
 import { WeatherPort } from '../../application/ports/WeatherPort';
 import { computeDayState } from '../../shared/utils/dayState';
 import type { LastSavedLogSummaryItem } from '../uiRuntimeTypes';
+import type { LogIntent } from './useAppNavigation';
 
 // ARCHITECTURE FIX: Import Service Class and Hook
 import { LogCommandServiceImpl } from '../../application/services/LogCommandService';
@@ -19,8 +20,14 @@ import { countCompletedIrrigationEvents } from '../../features/logs/services/irr
 export interface UseLogCommandsResult {
     handleAutoSave: (logData: AgriLogResponse, provenance?: LogProvenance) => Promise<void>;
     handleFinalConfirm: (editedData: AgriLogResponse | null, draftLog: AgriLogResponse | null) => Promise<void>;
+    // Pre-existing `any` (predates Task 3.5; tracked project-wide by
+    // Sub-plan 04 Task 10 per eslint.config.js) — not introduced by this
+    // change, left as-is to avoid retyping the ManualEntry payload contract
+    // out of scope.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     handleManualSubmit: (data: any) => Promise<void>;
     handleWizardSubmit: (logs: DailyLog[]) => Promise<void>;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     handleUpdateNote: (logId: string, noteId: string, updates: any) => void;
     // Exposed for testing/advanced usage
     service: LogCommandServiceImpl;
@@ -39,13 +46,18 @@ interface UseLogCommandsProps {
     setHistory: React.Dispatch<React.SetStateAction<DailyLog[]>>;
 
     // Deprecated setters (ignored in new logic but kept for prop compatibility if not updated in parent)
+    // Pre-existing `any` (predates Task 3.5) — see note on handleManualSubmit above.
+    /* eslint-disable @typescript-eslint/no-explicit-any */
     setMockHistory?: any;
     setRealHistory?: any;
+    /* eslint-enable @typescript-eslint/no-explicit-any */
 
     setPlannedTasks: React.Dispatch<React.SetStateAction<PlannedTask[]>>;
     setToast: (toast: { message: string; type: 'success' | 'error' } | null) => void;
     setError: (msg: string | null) => void;
     setDraftLog: (log: AgriLogResponse | null) => void;
+    // Pre-existing `any` (predates Task 3.5) — see note on handleManualSubmit above.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     setRecordingSegment: (seg: any) => void;
     setMode: (mode: InputMode) => void;
     setMainView: (view: PageView) => void;
@@ -53,6 +65,15 @@ interface UseLogCommandsProps {
     setLastSavedLogSummary: React.Dispatch<React.SetStateAction<LastSavedLogSummaryItem[]>>;
     setLastSavedLogIds: React.Dispatch<React.SetStateAction<string[]>>;
     weatherProvider?: WeatherPort;
+
+    // spec: 2026-07-13-labour-attendance-approval-design (Task 3.5) — when a
+    // log is saved while the farmer arrived via the labour mic, route them
+    // back to Labour Management instead of the generic "Saved to Ledger"
+    // screen, and record which log(s) were saved so that page can show a
+    // labour-only summary of what was just logged.
+    logIntent: LogIntent;
+    setCurrentRoute: (route: AppRoute) => void;
+    setLastLabourLogIds: (ids: string[]) => void;
 }
 
 export const useLogCommands = ({
@@ -75,7 +96,10 @@ export const useLogCommands = ({
     setStatus,
     setLastSavedLogSummary,
     setLastSavedLogIds,
-    weatherProvider
+    weatherProvider,
+    logIntent,
+    setCurrentRoute,
+    setLastLabourLogIds
 }: UseLogCommandsProps): UseLogCommandsResult => {
 
     // --- DATA SOURCE & SERVICE ---
@@ -213,6 +237,11 @@ export const useLogCommands = ({
             setToast({ message: "Failed to auto-save", type: 'error' });
             setError("Failed to auto-save. Please check your connection.");
         }
+        // Pre-existing exhaustive-deps gap (predates Task 3.5; calculateLogSummary
+        // and isDemoMode are used but not listed) — not introduced by this
+        // change; not touched to avoid altering this callback's memoization
+        // behavior for handleAutoSave, which has no caller in the app today.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [hasActiveLogContext, logScope, crops, farmerProfile, logCommandService, setHistory, setPlannedTasks, setToast, setStatus, setMode, setLastSavedLogSummary, setLastSavedLogIds, setError, computeClosureDelta, history, setLogScope]);
 
     // --- FINAL CONFIRM ---
@@ -276,12 +305,21 @@ export const useLogCommands = ({
             logger.error("Final confirm error", e, { correlationId });
             setError("Failed to save logs. Please try again.");
         }
+        // Pre-existing exhaustive-deps gap (predates Task 3.5) — see note on
+        // handleAutoSave above; handleFinalConfirm also has no caller in the
+        // app today.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [hasActiveLogContext, logScope, crops, farmerProfile, logCommandService, setHistory, setPlannedTasks, setDraftLog, setRecordingSegment, setMode, setMainView, setStatus, setError, setLastSavedLogSummary, setLastSavedLogIds, computeClosureDelta, history, setToast]);
 
     // --- MANUAL SUBMIT ---
+    // Pre-existing `any` (predates Task 3.5) — see note on handleManualSubmit
+    // in UseLogCommandsResult above.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const handleManualSubmit = useCallback(async (data: any) => {
         if (!hasActiveLogContext) return; // SAFE GUARD
         try {
+            let savedLogIds: string[];
+
             if (data.originalLogId) {
                 // --- SECURE UPDATE ---
                 // SINGLE WRITE PATH: Delegate to Service
@@ -309,6 +347,7 @@ export const useLogCommands = ({
                     message: `Logged. Day closure: ${beforePercent}% -> ${afterPercent}%`,
                     type: 'success'
                 });
+                savedLogIds = [(result.log as DailyLog).id];
 
             } else {
                 // --- CREATE NEW ---
@@ -343,14 +382,37 @@ export const useLogCommands = ({
                     message: `Logged. Day closure: ${beforePercent}% -> ${afterPercent}%`,
                     type: 'success'
                 });
+                savedLogIds = newLogs.map(l => l.id);
             }
 
-            setStatus('success');
+            // spec: 2026-07-13-labour-attendance-approval-design (Task 3.5) —
+            // a log saved while the farmer arrived via the labour mic
+            // (logIntent === 'labour') returns them straight to Labour
+            // Management instead of the generic "Saved to Ledger" screen.
+            // lastLabourLogIds lets that page render a labour-only summary
+            // of what was just logged — computed there via the SAME
+            // generateDayWorkSummary(...).labour the reflect page uses, so
+            // the numbers can never fork between the two screens.
+            if (logIntent === 'labour') {
+                setLastLabourLogIds(savedLogIds);
+                setStatus('idle');
+                setCurrentRoute('labour');
+            } else {
+                setStatus('success');
+            }
         } catch (e) {
             console.error("Critical error in handleManualSubmit:", e);
             setError("Failed to save logs. Please try again.");
         }
-    }, [hasActiveLogContext, logScope, crops, farmerProfile, logCommandService, setHistory, setPlannedTasks, setStatus, setError, setLastSavedLogSummary, setLastSavedLogIds, computeClosureDelta, history, setToast]);
+        // Pre-existing exhaustive-deps gap (predates Task 3.5; calculateLogSummary
+        // and isDemoMode were already missing before this change) — Task 3.5
+        // only added logIntent/setCurrentRoute/setLastLabourLogIds to this
+        // array. Not widened further: calculateLogSummary is a plain,
+        // unmemoized closure recreated every render, so adding it here would
+        // make this callback lose its memoization on every render — a
+        // separate, deliberate fix, not a byproduct of this task.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [hasActiveLogContext, logScope, crops, farmerProfile, logCommandService, setHistory, setPlannedTasks, setStatus, setError, setLastSavedLogSummary, setLastSavedLogIds, computeClosureDelta, history, setToast, logIntent, setCurrentRoute, setLastLabourLogIds]);
 
     const handleWizardSubmit = useCallback(async (logs: DailyLog[]) => {
         if (logs.length === 0) {
@@ -384,11 +446,18 @@ export const useLogCommands = ({
             console.error('Critical error in handleWizardSubmit:', error);
             setError('Failed to save wizard logs. Please try again.');
         }
+        // Pre-existing exhaustive-deps gap (predates Task 3.5) — see note on
+        // handleAutoSave above; handleWizardSubmit also has no caller in the
+        // app today.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [computeClosureDelta, history, logCommandService, setError, setHistory, setLastSavedLogIds, setLastSavedLogSummary, setPlannedTasks, setStatus, setToast]);
 
     // Note Updating - Simplified
     // This should also use Service if possible, but keeping lightweight update logic
     // Just ensure it updates the current 'history' state
+    // Pre-existing `any` (predates Task 3.5) — see note on handleManualSubmit
+    // in UseLogCommandsResult above.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const handleUpdateNote = useCallback((logId: string, noteId: string, updates: any) => {
         const updater = (prevInfo: DailyLog[]) => prevInfo.map(log => {
             if (log.id !== logId) return log;

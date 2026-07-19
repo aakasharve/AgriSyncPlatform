@@ -17,6 +17,7 @@
  */
 import React, { useCallback, useRef, useState } from 'react';
 import { useLabourState } from '../useLabourState';
+import type { DailyLog, LedgerDefaults } from '../../../types';
 import { BackHeader, LoadErrorBanner } from './LabourUiKit';
 import LabourHub from './LabourHub';
 import MukadamDetail from './MukadamDetail';
@@ -38,7 +39,20 @@ const TITLES: Record<ScreenName, string> = {
     ledger: 'हजेरी वही',
 };
 
-export const LabourFeature: React.FC<{ onExit: () => void; onGoToLog?: () => void }> = ({ onExit, onGoToLog }) => {
+export const LabourFeature: React.FC<{
+    onExit: () => void;
+    onGoToLog?: () => void;
+    /**
+     * Task 3.5 — optional log-history threading so the hub can show a
+     * labour-only "just logged" summary after an auto-return from the log
+     * page. All three are optional together: `LabourPreview.tsx`'s bare
+     * `?preview=labour` mount has no app history or ledger settings to
+     * offer, and must stay crash-free (renders the hub exactly as before).
+     */
+    history?: DailyLog[];
+    ledgerDefaults?: LedgerDefaults;
+    lastLabourLogIds?: string[];
+}> = ({ onExit, onGoToLog, history, ledgerDefaults, lastLabourLogIds }) => {
     const { data, error, refresh } = useLabourState();
     const [stack, setStack] = useState<ScreenState[]>([{ name: 'hub' }]);
     const [reviewOpen, setReviewOpen] = useState(false);
@@ -77,6 +91,9 @@ export const LabourFeature: React.FC<{ onExit: () => void; onGoToLog?: () => voi
                         onLedger={() => push({ name: 'ledger' })}
                         onReview={() => setReviewOpen(true)}
                         onGoToLog={goToLog}
+                        history={history}
+                        ledgerDefaults={ledgerDefaults}
+                        lastLabourLogIds={lastLabourLogIds}
                     />
                 )}
                 {cur.name === 'mukadam' && cur.id && (

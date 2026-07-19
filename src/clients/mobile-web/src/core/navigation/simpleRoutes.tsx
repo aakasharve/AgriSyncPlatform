@@ -83,6 +83,16 @@ export const renderLabourRoute = (ctx: AppRouterContext): React.ReactNode => {
                     ctx.setLogIntent('labour');
                     ctx.setCurrentRoute('main');
                 }}
+                // spec: 2026-07-13-labour-attendance-approval-design (Task 3.5) —
+                // history + ledgerDefaults let the hub render a labour-only
+                // "just logged" summary via the SAME generateDayWorkSummary
+                // the reflect page uses; lastLabourLogIds says WHICH log(s)
+                // to show. All three are optional on LabourFeaturePage so
+                // the bare `?preview=labour` mount (no router, no ctx) stays
+                // crash-free.
+                history={ctx.history}
+                ledgerDefaults={ctx.ledgerDefaults}
+                lastLabourLogIds={ctx.lastLabourLogIds}
             />
         </div>
     );

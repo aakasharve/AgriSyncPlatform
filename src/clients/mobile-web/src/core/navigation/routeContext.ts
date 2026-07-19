@@ -57,6 +57,10 @@ export interface AppRouterContext {
     // I here" hint carried from the labour feature into the log page.
     logIntent: Navigation['logIntent'];
     setLogIntent: Navigation['setLogIntent'];
+    // spec: 2026-07-13-labour-attendance-approval-design (Task 3.5) — ids of
+    // the log(s) saved while logIntent === 'labour'; threaded to the labour
+    // route so it can render a "just logged" labour-only summary.
+    lastLabourLogIds: Navigation['lastLabourLogIds'];
 
     // log/context
     logScope: LogContext['logScope'];
