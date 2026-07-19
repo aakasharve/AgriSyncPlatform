@@ -14,7 +14,7 @@ import {
     useAppWeatherState,
 } from '../../app/context/AppFeatureContexts';
 
-import { OnboardingPermissionsPage, RouteLoader } from './lazyComponents';
+import { OnboardingPermissionsPage, WelcomeScreen, RouteLoader } from './lazyComponents';
 import { AppRouterContext } from './routeContext';
 import { SIMPLE_ROUTE_RENDERERS } from './simpleRoutes';
 import { renderReflectView, renderCompareView, renderLogView } from './mainView';
@@ -45,6 +45,11 @@ const AppRouter: React.FC = () => {
 
     const [permissionsGranted, setPermissionsGranted] = useUiPref<boolean>(
         'shramsafal_permissions_granted',
+        typeof window === 'undefined',
+    );
+    // First-run welcome, shown once after login and before the consent screen.
+    const [welcomeSeen, setWelcomeSeen] = useUiPref<boolean>(
+        'shramsafal_welcome_seen',
         typeof window === 'undefined',
     );
     const { getTodayCounts, getContextColorIndicator } = useAppViewHelpers();
@@ -149,7 +154,17 @@ const AppRouter: React.FC = () => {
     // arriving at the log page with logIntent === 'labour' auto-scrolls the
     // labour banner + crop/plot picker into view. See
     // ./hooks/useLabourLogArrivalScroll.ts for the full rationale.
+    // NOTE: this hook call must stay ABOVE every conditional return below —
+    // React hooks must run unconditionally on every render.
     useLabourLogArrivalScroll({ currentRoute, mainView, logIntent });
+
+    if (!welcomeSeen) {
+        return (
+            <React.Suspense fallback={<RouteLoader />}>
+                <WelcomeScreen onContinue={() => setWelcomeSeen(true)} />
+            </React.Suspense>
+        );
+    }
 
     if (!permissionsGranted) {
         return (

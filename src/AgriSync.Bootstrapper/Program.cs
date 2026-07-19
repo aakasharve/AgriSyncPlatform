@@ -72,6 +72,17 @@ try
     builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
     builder.Services.AddProblemDetails();
     builder.Services.AddEndpointsApiExplorer();
+    // E2E CI runs the whole Playwright suite against one backend from a single
+    // IP, so the per-IP fixed-window auth/ai limits (10/30 per minute) trip and
+    // login starts returning 429 mid-suite. When the E2E harness is enabled
+    // (ALLOW_E2E_SEED=true — never set in prod), relax the limits so the suite
+    // does not self-throttle. Prod (flag absent) keeps the secure 10/30 limits.
+    var e2eHarnessEnabled = string.Equals(
+        Environment.GetEnvironmentVariable("ALLOW_E2E_SEED"),
+        "true",
+        StringComparison.OrdinalIgnoreCase);
+    var authPermitLimit = e2eHarnessEnabled ? 100_000 : 10;
+    var aiPermitLimit = e2eHarnessEnabled ? 100_000 : 30;
     builder.Services.AddRateLimiter(options =>
     {
         options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
@@ -86,7 +97,7 @@ try
                 partitionKey: ResolveRemoteIpRateLimitPartitionKey(httpContext),
                 factory: _ => new FixedWindowRateLimiterOptions
                 {
-                    PermitLimit = 10,
+                    PermitLimit = authPermitLimit,
                     Window = TimeSpan.FromMinutes(1),
                     QueueLimit = 0,
                     AutoReplenishment = true
@@ -97,7 +108,7 @@ try
                 partitionKey: ResolveAiRateLimitPartitionKey(httpContext),
                 factory: _ => new FixedWindowRateLimiterOptions
                 {
-                    PermitLimit = 30,
+                    PermitLimit = aiPermitLimit,
                     Window = TimeSpan.FromMinutes(1),
                     QueueLimit = 0,
                     AutoReplenishment = true
