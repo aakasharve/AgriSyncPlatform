@@ -91,6 +91,12 @@ public sealed class PushSyncBatchHandler(
     RecordTestCollectedHandler recordTestCollectedHandler,
     RecordTestResultHandler recordTestResultHandler,
     ITestInstanceRepository testInstanceRepository,
+    // Phase 1 tenant-scope fix (2026-07-19 labour deploy hardening) — needed so
+    // HandleComplianceAcknowledgeAsync / HandleComplianceResolveAsync can read
+    // ssf.compliance_signals under the new user-scoped SELECT policy to learn
+    // the signal's FarmId before establishing scope. See
+    // EstablishFarmScopeForOwnedEntityAsync.
+    IComplianceSignalRepository complianceSignalRepository,
     AcknowledgeSignalHandler acknowledgeSignalHandler,
     ResolveSignalHandler resolveSignalHandler,
     CreateJobCardHandler createJobCardHandler,
@@ -506,7 +512,14 @@ public sealed class PushSyncBatchHandler(
             return MutationExecutionOutcome.Failure("ShramSafal.SyncInvalidPayload", "Invalid payload for create_plot.");
         }
 
-        var isMember = await repository.IsUserMemberOfFarmAsync(request.FarmId, actorUserId, ct);
+        // Phase 1 tenant-scope fix (2026-07-19) — /sync/push is admin-elevated
+        // with no GUC set, so the naked IsUserMemberOfFarmAsync this used to
+        // call would ALWAYS return false under prod's FORCE-RLS (the read
+        // matches zero rows). Establish scope via the known-farmId helper
+        // (farmId is on the wire) BEFORE calling the handler, so both this
+        // membership gate AND the handler's own internal re-checks
+        // (GetFarmByIdAsync / GetUserRoleForFarmAsync) succeed.
+        var (isMember, _) = await EstablishFarmScopeForDerivationAsync(request.FarmId, actorUserId, ct);
         if (!isMember)
         {
             return MutationExecutionOutcome.Failure("ShramSafal.Forbidden", "User is not a member of the target farm.");
@@ -546,7 +559,8 @@ public sealed class PushSyncBatchHandler(
             return MutationExecutionOutcome.Failure("ShramSafal.SyncInvalidPayload", "Invalid payload for create_crop_cycle.");
         }
 
-        var isMember = await repository.IsUserMemberOfFarmAsync(request.FarmId, actorUserId, ct);
+        // Phase 1 tenant-scope fix (2026-07-19) — see HandleCreatePlotAsync.
+        var (isMember, _) = await EstablishFarmScopeForDerivationAsync(request.FarmId, actorUserId, ct);
         if (!isMember)
         {
             return MutationExecutionOutcome.Failure("ShramSafal.Forbidden", "User is not a member of the target farm.");
@@ -663,6 +677,21 @@ public sealed class PushSyncBatchHandler(
     /// so the typed-ledger writes (<c>ssf.farm_operations</c> WITH CHECK) pass.
     /// GUCs are transaction-local (<c>is_local=true</c>) on the ambient
     /// per-mutation tx, so a multi-farm batch cannot leak scope.
+    ///
+    /// <para>
+    /// Phase 1 tenant-scope fix (2026-07-19 labour deploy hardening) — this is
+    /// now the SHARED "known farmId" scope-establishment helper reused by every
+    /// <c>/sync/push</c> mutation whose payload carries the target farmId
+    /// up-front: create_daily_log (original Fix 1 caller), create_plot,
+    /// create_crop_cycle, add_cost_entry, create_attachment, jobcard.create. See
+    /// <see cref="EstablishFarmScopeForOwnedEntityAsync{TEntity}"/> for the
+    /// sibling "unknown farmId" two-phase variant (verify_log, add_log_task,
+    /// correct_cost_entry, allocate_global_expense, testinstance.*,
+    /// compliance.*, jobcard.assign/start/complete/settle/cancel) used when the
+    /// wire only carries a child entity id and the farm must be discovered via
+    /// a user-scoped read first. Both share <see cref="SetUserScopedReadGucsAsync"/>
+    /// / <see cref="SetFarmScopeGucsAsync"/> — one GUC mechanism, not two.
+    /// </para>
     /// </summary>
     private async Task<(bool IsMember, Guid OwnerAccountId)> EstablishFarmScopeForDerivationAsync(
         Guid farmId, Guid actorUserId, CancellationToken ct)
@@ -682,17 +711,7 @@ public sealed class PushSyncBatchHandler(
         // Set the caller's user_id GUC so the user-scoped PERMISSIVE SELECT
         // policies (p_user_select_farms / p_user_select_memberships) surface ONLY
         // the caller's own farms/memberships for the membership read below.
-        await dbContext.Database.ExecuteSqlInterpolatedAsync(
-            $"SELECT set_config('agrisync.user_id', {actorUserId.ToString()}, true)", ct);
-
-        // Neutralise agrisync.farm_id to the all-zeros sentinel BEFORE the read.
-        // The ORIGINAL 03.3 tenant policies on ssf.farms / ssf.farm_memberships
-        // cast current_setting('agrisync.farm_id', true)::uuid with a BARE cast
-        // (no NULLIF wrap); an empty-string GUC would throw 22P02. The zero-UUID
-        // matches no real farm, so the tenant policy contributes nothing and the
-        // user-scoped policies (keyed on user_id) remain the sole read gate.
-        await dbContext.Database.ExecuteSqlInterpolatedAsync(
-            $"SELECT set_config('agrisync.farm_id', {Guid.Empty.ToString()}, true)", ct);
+        await SetUserScopedReadGucsAsync(actorUserId, ct);
 
         // The isolation gate: reads ssf.farms (owner shortcut) + ssf.farm_memberships
         // under the user-scoped policies. A forged/cross-farm farmId resolves to no
@@ -707,12 +726,135 @@ public sealed class PushSyncBatchHandler(
 
         // Member: establish the single-farm scope so the typed-ledger derivation
         // writes (ssf.farm_operations + children) pass their tenant WITH CHECK.
+        await SetFarmScopeGucsAsync(farmId, ownerAccountId, ct);
+
+        return (true, ownerAccountId);
+    }
+
+    /// <summary>
+    /// Phase 1 tenant-scope fix (2026-07-19 labour deploy hardening) — the
+    /// "unknown farmId" sibling of <see cref="EstablishFarmScopeForDerivationAsync"/>.
+    ///
+    /// <para>
+    /// Several <c>/sync/push</c> mutations carry only a CHILD entity id on the
+    /// wire (dailyLogId / costEntryId / testInstanceId / signalId / jobCardId),
+    /// never the farmId itself — the headline example is <c>verify_log</c>
+    /// (payload: <c>{verificationEventId, dailyLogId, status, reason,
+    /// verifiedByUserId}</c>, no farmId). The obvious single-phase fix does not
+    /// work: we cannot set <c>agrisync.farm_id</c> before knowing which farm the
+    /// entity belongs to, and we cannot learn that without a read that FORCE-RLS
+    /// itself blocks when no GUC is set at all.
+    /// </para>
+    /// <para>
+    /// Three phases, reusing the exact same GUC primitives as the known-farmId
+    /// helper:
+    /// (a) <see cref="SetUserScopedReadGucsAsync"/> — set <c>agrisync.user_id</c>
+    /// ALONE (+ neutralise farm_id to the empty-GUID sentinel) so the entity's
+    /// OWN user-scoped PERMISSIVE SELECT policy (20260607120000 for daily_logs
+    /// / cost_entries; this session's new migration for job_cards /
+    /// compliance_signals / test_instances) makes the row visible ONLY if the
+    /// caller owns or is an active member of its farm.
+    /// (b) Read the entity via <paramref name="lookupUnderUserScopeAsync"/>. A
+    /// null result means EITHER the row genuinely does not exist OR the caller
+    /// is not a member of its farm (RLS hid it) — both map to
+    /// <paramref name="notFoundError"/>, exactly the not-found-vs-forbidden
+    /// conflation the entity's own pre-fix code already used (no new
+    /// information is leaked; if anything this closes a latent hole for the
+    /// compliance mutations, which had no farm-membership check at all before).
+    /// (c) Re-confirm membership via <c>GetFarmMembershipForTenantAsync</c>
+    /// (defense-in-depth, mirrors the known-farmId helper — also yields
+    /// OwnerAccountId) and <see cref="SetFarmScopeGucsAsync"/> so the caller's
+    /// handler can WRITE (the parent's <c>p_tenant_{t}</c> WITH CHECK needs the
+    /// real farm_id, not the sentinel).
+    /// </para>
+    /// <para>
+    /// Under a NON-relational provider (EF InMemory), same fallback contract as
+    /// <see cref="EstablishFarmScopeForDerivationAsync"/>: just read the entity
+    /// directly (no RLS to satisfy) and let the caller's own defense-in-depth
+    /// membership check run as before.
+    /// </para>
+    /// </summary>
+    private async Task<Result<TEntity>> EstablishFarmScopeForOwnedEntityAsync<TEntity>(
+        Guid actorUserId,
+        Func<CancellationToken, Task<TEntity?>> lookupUnderUserScopeAsync,
+        Func<TEntity, Guid> resolveFarmId,
+        Error notFoundError,
+        CancellationToken ct)
+        where TEntity : class
+    {
+        // Under a NON-relational provider (EF InMemory), mirror the exact
+        // membership-gating the pre-fix code performed inline in each
+        // dispatcher case: look the entity up directly (no RLS to satisfy),
+        // then check membership via the provider-agnostic LINQ helper.
+        // Compliance signals had NO such check before this fix (see the class
+        // remark); adding one here keeps InMemory and real-Postgres behaviour
+        // consistent rather than leaving a provider-dependent gap.
+        if (!dbContext.Database.IsRelational())
+        {
+            var entity = await lookupUnderUserScopeAsync(ct);
+            if (entity is null)
+            {
+                return Result.Failure<TEntity>(notFoundError);
+            }
+
+            var inMemoryIsMember = await repository.IsUserMemberOfFarmAsync(resolveFarmId(entity), actorUserId, ct);
+            return inMemoryIsMember
+                ? Result.Success(entity)
+                : Result.Failure<TEntity>(Domain.Common.ShramSafalErrors.Forbidden);
+        }
+
+        await SetUserScopedReadGucsAsync(actorUserId, ct);
+
+        var found = await lookupUnderUserScopeAsync(ct);
+        if (found is null)
+        {
+            return Result.Failure<TEntity>(notFoundError);
+        }
+
+        var farmId = resolveFarmId(found);
+        var (isMember, ownerAccountId) = await repository
+            .GetFarmMembershipForTenantAsync(farmId, actorUserId, ct);
+        if (!isMember)
+        {
+            return Result.Failure<TEntity>(Domain.Common.ShramSafalErrors.Forbidden);
+        }
+
+        await SetFarmScopeGucsAsync(farmId, ownerAccountId, ct);
+
+        return Result.Success(found);
+    }
+
+    /// <summary>
+    /// Phase (a) of both scope-establishment helpers above — set the caller's
+    /// user_id GUC so the user-scoped PERMISSIVE SELECT policies surface ONLY
+    /// the caller's own rows, and neutralise agrisync.farm_id to the all-zeros
+    /// sentinel BEFORE any read. The ORIGINAL 03.3 tenant policies cast
+    /// <c>current_setting('agrisync.farm_id', true)::uuid</c> — even though
+    /// a15aae65 NULLIF-hardened every ssf policy, an UNSET (never assigned)
+    /// GUC still reads as NULL either way, so pre-seeding the zero-UUID keeps
+    /// the tenant policy's contribution deterministic (matches no real farm)
+    /// rather than relying on NULL-propagation semantics.
+    /// </summary>
+    private async Task SetUserScopedReadGucsAsync(Guid actorUserId, CancellationToken ct)
+    {
+        await dbContext.Database.ExecuteSqlInterpolatedAsync(
+            $"SELECT set_config('agrisync.user_id', {actorUserId.ToString()}, true)", ct);
+        await dbContext.Database.ExecuteSqlInterpolatedAsync(
+            $"SELECT set_config('agrisync.farm_id', {Guid.Empty.ToString()}, true)", ct);
+    }
+
+    /// <summary>
+    /// Phase (c) of both scope-establishment helpers above — the caller has
+    /// been membership-validated; establish the single-farm scope so every
+    /// subsequent farm-scoped read AND write (parent <c>p_tenant_{t}</c> WITH
+    /// CHECK) passes for the rest of this mutation's transaction.
+    /// </summary>
+    private async Task SetFarmScopeGucsAsync(Guid farmId, Guid ownerAccountId, CancellationToken ct)
+    {
         await dbContext.Database.ExecuteSqlInterpolatedAsync(
             $"SELECT set_config('agrisync.farm_id', {farmId.ToString()}, true)", ct);
         await dbContext.Database.ExecuteSqlInterpolatedAsync(
             $"SELECT set_config('agrisync.owner_account_id', {ownerAccountId.ToString()}, true)", ct);
-
-        return (true, ownerAccountId);
     }
 
     private async Task<MutationExecutionOutcome> HandleAddLogTaskAsync(
@@ -735,16 +877,19 @@ public sealed class PushSyncBatchHandler(
             return MutationExecutionOutcome.Failure("ShramSafal.SyncInvalidPayload", "Invalid payload for add_log_task.");
         }
 
-        var dailyLog = await repository.GetDailyLogByIdAsync(request.DailyLogId, ct);
-        if (dailyLog is null)
+        // Phase 1 tenant-scope fix (2026-07-19) — add_log_task carries only a
+        // dailyLogId, not the farmId, so the farmId must be DISCOVERED via a
+        // user-scoped read before scope can be established (same two-phase
+        // trap as verify_log — see EstablishFarmScopeForOwnedEntityAsync).
+        var dailyLogScope = await EstablishFarmScopeForOwnedEntityAsync(
+            actorUserId,
+            c => repository.GetDailyLogByIdAsync(request.DailyLogId, c),
+            log => (Guid)log.FarmId,
+            Domain.Common.ShramSafalErrors.DailyLogNotFound,
+            ct);
+        if (!dailyLogScope.IsSuccess)
         {
-            return MutationExecutionOutcome.Failure("ShramSafal.DailyLogNotFound", "Daily log was not found.");
-        }
-
-        var isMember = await repository.IsUserMemberOfFarmAsync(dailyLog.FarmId, actorUserId, ct);
-        if (!isMember)
-        {
-            return MutationExecutionOutcome.Failure("ShramSafal.Forbidden", "User is not a member of the target farm.");
+            return MutationExecutionOutcome.Failure(dailyLogScope.Error.Code, dailyLogScope.Error.Description);
         }
 
         var result = await addLogTaskHandler.HandleAsync(
@@ -789,16 +934,25 @@ public sealed class PushSyncBatchHandler(
                 "Status must be one of Approved, Rejected, Draft, Confirmed, Verified, Disputed, CorrectionPending.");
         }
 
-        var dailyLog = await repository.GetDailyLogByIdAsync(request.DailyLogId, ct);
-        if (dailyLog is null)
+        // Phase 1 tenant-scope fix (2026-07-19) — THE verify_log trap. There is
+        // no farmId on the wire (payload allow-list above is {verificationEventId,
+        // dailyLogId, status, reason, verifiedByUserId}), and the log's farm
+        // cannot be learned without the very read FORCE-RLS blocks when no GUC
+        // is set at all. Two-phase discovery via EstablishFarmScopeForOwnedEntityAsync:
+        // (a) set agrisync.user_id alone → activates the user-scoped daily_logs
+        // read policy so this GetDailyLogByIdAsync call is no longer blind;
+        // (b) derive FarmId from the log, validate membership;
+        // (c) THEN set agrisync.farm_id + agrisync.owner_account_id, because the
+        // verifyLogHandler's writes (verification_events, daily_logs) need them.
+        var dailyLogScope = await EstablishFarmScopeForOwnedEntityAsync(
+            actorUserId,
+            c => repository.GetDailyLogByIdAsync(request.DailyLogId, c),
+            log => (Guid)log.FarmId,
+            Domain.Common.ShramSafalErrors.DailyLogNotFound,
+            ct);
+        if (!dailyLogScope.IsSuccess)
         {
-            return MutationExecutionOutcome.Failure("ShramSafal.DailyLogNotFound", "Daily log was not found.");
-        }
-
-        var isMember = await repository.IsUserMemberOfFarmAsync(dailyLog.FarmId, actorUserId, ct);
-        if (!isMember)
-        {
-            return MutationExecutionOutcome.Failure("ShramSafal.Forbidden", "User is not a member of the target farm.");
+            return MutationExecutionOutcome.Failure(dailyLogScope.Error.Code, dailyLogScope.Error.Description);
         }
 
         var result = await verifyLogHandler.HandleAsync(
@@ -847,7 +1001,8 @@ public sealed class PushSyncBatchHandler(
         // the prior wire behavior exactly.
         Guid? costEntryId = request.CostEntryId == Guid.Empty ? null : request.CostEntryId;
 
-        var isMember = await repository.IsUserMemberOfFarmAsync(request.FarmId, actorUserId, ct);
+        // Phase 1 tenant-scope fix (2026-07-19) — see HandleCreatePlotAsync.
+        var (isMember, _) = await EstablishFarmScopeForDerivationAsync(request.FarmId, actorUserId, ct);
         if (!isMember)
         {
             return MutationExecutionOutcome.Failure("ShramSafal.Forbidden", "User is not a member of the target farm.");
@@ -896,6 +1051,22 @@ public sealed class PushSyncBatchHandler(
         if (request is null || request.CostEntryId == Guid.Empty || string.IsNullOrWhiteSpace(request.AllocationBasis))
         {
             return MutationExecutionOutcome.Failure("ShramSafal.SyncInvalidPayload", "Invalid payload for allocate_global_expense.");
+        }
+
+        // Phase 1 tenant-scope fix (2026-07-19) — this dispatch case had NO
+        // membership check at all (AllocateGlobalExpenseHandler does its own
+        // GetCostEntryByIdAsync + IsUserMemberOfFarmAsync internally, but both
+        // are RLS-protected reads that need scope established first — same
+        // unknown-farmId trap as correct_cost_entry, via ssf.cost_entries).
+        var costEntryScope = await EstablishFarmScopeForOwnedEntityAsync(
+            actorUserId,
+            c => repository.GetCostEntryByIdAsync(request.CostEntryId, c),
+            entry => (Guid)entry.FarmId,
+            Domain.Common.ShramSafalErrors.CostEntryNotFound,
+            ct);
+        if (!costEntryScope.IsSuccess)
+        {
+            return MutationExecutionOutcome.Failure(costEntryScope.Error.Code, costEntryScope.Error.Description);
         }
 
         var mappedAllocations = (request.Allocations ?? [])
@@ -955,16 +1126,18 @@ public sealed class PushSyncBatchHandler(
             return MutationExecutionOutcome.Failure("ShramSafal.SyncInvalidPayload", "Invalid payload for correct_cost_entry.");
         }
 
-        var costEntry = await repository.GetCostEntryByIdAsync(request.CostEntryId, ct);
-        if (costEntry is null)
+        // Phase 1 tenant-scope fix (2026-07-19) — correct_cost_entry carries
+        // only a costEntryId, not the farmId; same unknown-farmId two-phase
+        // trap as verify_log, via ssf.cost_entries.
+        var costEntryScope = await EstablishFarmScopeForOwnedEntityAsync(
+            actorUserId,
+            c => repository.GetCostEntryByIdAsync(request.CostEntryId, c),
+            entry => (Guid)entry.FarmId,
+            Domain.Common.ShramSafalErrors.CostEntryNotFound,
+            ct);
+        if (!costEntryScope.IsSuccess)
         {
-            return MutationExecutionOutcome.Failure("ShramSafal.CostEntryNotFound", "Cost entry was not found.");
-        }
-
-        var isMember = await repository.IsUserMemberOfFarmAsync(costEntry.FarmId, actorUserId, ct);
-        if (!isMember)
-        {
-            return MutationExecutionOutcome.Failure("ShramSafal.Forbidden", "User is not a member of the target farm.");
+            return MutationExecutionOutcome.Failure(costEntryScope.Error.Code, costEntryScope.Error.Description);
         }
 
         var result = await correctCostEntryHandler.HandleAsync(
@@ -1000,6 +1173,16 @@ public sealed class PushSyncBatchHandler(
         if (request is null)
         {
             return MutationExecutionOutcome.Failure("ShramSafal.SyncInvalidPayload", "Invalid payload for set_price_config.");
+        }
+
+        // Phase 1 tenant-scope fix (2026-07-19) — GetFarmIdsForUserAsync reads
+        // ssf.farms + ssf.farm_memberships filtered by userId; under FORCE-RLS
+        // with no GUC set at all it always returns empty (fail-closed). Only
+        // phase (a) is needed here — PriceConfig is a global (non-farm-scoped)
+        // lookup, so there is no known/derived farmId to scope a write to.
+        if (dbContext.Database.IsRelational())
+        {
+            await SetUserScopedReadGucsAsync(actorUserId, ct);
         }
 
         var farmIds = await repository.GetFarmIdsForUserAsync(actorUserId, ct);
@@ -1055,7 +1238,11 @@ public sealed class PushSyncBatchHandler(
         // the prior wire behavior exactly.
         Guid? attachmentId = request.AttachmentId == Guid.Empty ? null : request.AttachmentId;
 
-        var isMember = await repository.IsUserMemberOfFarmAsync(request.FarmId, actorUserId, ct);
+        // Phase 1 tenant-scope fix (2026-07-19) — see HandleCreatePlotAsync.
+        // Photo/attachment upload has been dead in production since May for
+        // exactly this reason (the naked IsUserMemberOfFarmAsync always
+        // returned false under FORCE-RLS with no GUC set).
+        var (isMember, _) = await EstablishFarmScopeForDerivationAsync(request.FarmId, actorUserId, ct);
         if (!isMember)
         {
             return MutationExecutionOutcome.Failure("ShramSafal.Forbidden", "User is not a member of the target farm.");
@@ -1106,21 +1293,20 @@ public sealed class PushSyncBatchHandler(
                 $"Unknown actorRole '{actorRole}' for testInstance.collected.");
         }
 
-        // Farm-membership check — resolve the instance's farm first.
-        var instance = await testInstanceRepository.GetByIdAsync(request.TestInstanceId, ct);
-        if (instance is null)
+        // Phase 1 tenant-scope fix (2026-07-19) — testInstanceId carries no
+        // farmId; ssf.test_instances also had NO user-scoped read policy until
+        // this session's migration (job_cards / compliance_signals /
+        // test_instances), so this read was blind under FORCE-RLS regardless.
+        // Two-phase discovery via EstablishFarmScopeForOwnedEntityAsync.
+        var instanceScope = await EstablishFarmScopeForOwnedEntityAsync(
+            actorUserId,
+            c => testInstanceRepository.GetByIdAsync(request.TestInstanceId, c),
+            instance => instance.FarmId.Value,
+            Domain.Common.ShramSafalErrors.TestInstanceNotFound,
+            ct);
+        if (!instanceScope.IsSuccess)
         {
-            return MutationExecutionOutcome.Failure(
-                "ShramSafal.TestInstanceNotFound",
-                "Test instance was not found.");
-        }
-
-        var isMember = await repository.IsUserMemberOfFarmAsync(instance.FarmId.Value, actorUserId, ct);
-        if (!isMember)
-        {
-            return MutationExecutionOutcome.Failure(
-                "ShramSafal.Forbidden",
-                "User is not a member of the target farm.");
+            return MutationExecutionOutcome.Failure(instanceScope.Error.Code, instanceScope.Error.Description);
         }
 
         var result = await recordTestCollectedHandler.HandleAsync(
@@ -1165,21 +1351,19 @@ public sealed class PushSyncBatchHandler(
                 $"Unknown actorRole '{actorRole}' for testInstance.reported.");
         }
 
-        var instance = await testInstanceRepository.GetByIdAsync(request.TestInstanceId, ct);
-        if (instance is null)
+        // Phase 1 tenant-scope fix (2026-07-19) — see HandleTestInstanceCollectedAsync.
+        var instanceScope = await EstablishFarmScopeForOwnedEntityAsync(
+            actorUserId,
+            c => testInstanceRepository.GetByIdAsync(request.TestInstanceId, c),
+            instance => instance.FarmId.Value,
+            Domain.Common.ShramSafalErrors.TestInstanceNotFound,
+            ct);
+        if (!instanceScope.IsSuccess)
         {
-            return MutationExecutionOutcome.Failure(
-                "ShramSafal.TestInstanceNotFound",
-                "Test instance was not found.");
+            return MutationExecutionOutcome.Failure(instanceScope.Error.Code, instanceScope.Error.Description);
         }
 
-        var isMember = await repository.IsUserMemberOfFarmAsync(instance.FarmId.Value, actorUserId, ct);
-        if (!isMember)
-        {
-            return MutationExecutionOutcome.Failure(
-                "ShramSafal.Forbidden",
-                "User is not a member of the target farm.");
-        }
+        var instance = instanceScope.Value;
 
         List<TestResult> results;
         try
@@ -1378,6 +1562,25 @@ public sealed class PushSyncBatchHandler(
         if (!Enum.TryParse<AppRole>(actorRole, ignoreCase: true, out var role))
             role = AppRole.Worker;
 
+        // Phase 1 tenant-scope fix (2026-07-19) — this dispatch case had NO
+        // farm-membership check at all (AcknowledgeSignalHandler only role-
+        // gates + reads ssf.compliance_signals, which is farm_id-keyed FORCE-RLS
+        // with no user-scoped read policy until this session's new migration).
+        // Establishing scope here is a two-fold fix: it makes the read visible
+        // AND — as a side effect of the RLS membership-EXISTS clause — closes a
+        // pre-existing gap where any caller who knew a SignalId could acknowledge
+        // a signal on a farm they do not belong to.
+        var signalScope = await EstablishFarmScopeForOwnedEntityAsync(
+            actorUserId,
+            c => complianceSignalRepository.GetByIdAsync(request.SignalId, c),
+            signal => (Guid)signal.FarmId,
+            Domain.Common.ShramSafalErrors.ComplianceSignalNotFound,
+            ct);
+        if (!signalScope.IsSuccess)
+        {
+            return MutationExecutionOutcome.Failure(signalScope.Error.Code, signalScope.Error.Description);
+        }
+
         var command = new AcknowledgeSignalCommand(
             SignalId: request.SignalId,
             CallerUserId: new UserId(actorUserId),
@@ -1407,6 +1610,18 @@ public sealed class PushSyncBatchHandler(
         if (!Enum.TryParse<AppRole>(actorRole, ignoreCase: true, out var role))
             role = AppRole.Worker;
 
+        // Phase 1 tenant-scope fix (2026-07-19) — see HandleComplianceAcknowledgeAsync.
+        var signalScope = await EstablishFarmScopeForOwnedEntityAsync(
+            actorUserId,
+            c => complianceSignalRepository.GetByIdAsync(request.SignalId, c),
+            signal => (Guid)signal.FarmId,
+            Domain.Common.ShramSafalErrors.ComplianceSignalNotFound,
+            ct);
+        if (!signalScope.IsSuccess)
+        {
+            return MutationExecutionOutcome.Failure(signalScope.Error.Code, signalScope.Error.Description);
+        }
+
         var command = new ResolveSignalCommand(
             SignalId: request.SignalId,
             CallerUserId: new UserId(actorUserId),
@@ -1432,6 +1647,16 @@ public sealed class PushSyncBatchHandler(
         }
 
         if (!Enum.TryParse<AppRole>(actorRole, ignoreCase: true, out var role)) role = AppRole.Worker;
+
+        // Phase 1 tenant-scope fix (2026-07-19) — farmId is known up-front on
+        // this payload, so use the known-farmId helper (same as
+        // HandleCreatePlotAsync) before calling createJobCardHandler, whose
+        // internal GetUserRoleForFarmAsync read is farm_id-keyed FORCE-RLS.
+        var (isMember, _) = await EstablishFarmScopeForDerivationAsync(request.FarmId, actorUserId, ct);
+        if (!isMember)
+        {
+            return MutationExecutionOutcome.Failure("ShramSafal.Forbidden", "User is not a member of the target farm.");
+        }
 
         // The generated JobCardCreatePayload exposes line items as the
         // generator's nested LineItemsItem record; CreateJobCardCommand expects
@@ -1467,6 +1692,20 @@ public sealed class PushSyncBatchHandler(
         if (request is null || request.JobCardId == Guid.Empty || request.WorkerUserId == Guid.Empty)
             return MutationExecutionOutcome.Failure("ShramSafal.SyncInvalidPayload", "Invalid payload for jobcard.assign.");
 
+        // Phase 1 tenant-scope fix (2026-07-19) — only a jobCardId is on the
+        // wire; same unknown-farmId two-phase trap as verify_log, via
+        // ssf.job_cards (needs this session's new user-scoped read policy).
+        var jobCardScope = await EstablishFarmScopeForOwnedEntityAsync(
+            actorUserId,
+            c => repository.GetJobCardByIdAsync(request.JobCardId, c),
+            jobCard => jobCard.FarmId.Value,
+            Domain.Common.ShramSafalErrors.JobCardNotFound,
+            ct);
+        if (!jobCardScope.IsSuccess)
+        {
+            return MutationExecutionOutcome.Failure(jobCardScope.Error.Code, jobCardScope.Error.Description);
+        }
+
         var result = await assignJobCardHandler.HandleAsync(
             new AssignJobCardCommand(
                 JobCardId: request.JobCardId,
@@ -1484,6 +1723,18 @@ public sealed class PushSyncBatchHandler(
         if (request is null || request.JobCardId == Guid.Empty)
             return MutationExecutionOutcome.Failure("ShramSafal.SyncInvalidPayload", "Invalid payload for jobcard.start.");
 
+        // Phase 1 tenant-scope fix (2026-07-19) — see HandleJobCardAssignAsync.
+        var jobCardScope = await EstablishFarmScopeForOwnedEntityAsync(
+            actorUserId,
+            c => repository.GetJobCardByIdAsync(request.JobCardId, c),
+            jobCard => jobCard.FarmId.Value,
+            Domain.Common.ShramSafalErrors.JobCardNotFound,
+            ct);
+        if (!jobCardScope.IsSuccess)
+        {
+            return MutationExecutionOutcome.Failure(jobCardScope.Error.Code, jobCardScope.Error.Description);
+        }
+
         var result = await startJobCardHandler.HandleAsync(
             new StartJobCardCommand(
                 JobCardId: request.JobCardId,
@@ -1499,6 +1750,24 @@ public sealed class PushSyncBatchHandler(
         var request = DeserializePayload<JobCardCompletePayload>(payload);
         if (request is null || request.JobCardId == Guid.Empty || request.DailyLogId == Guid.Empty)
             return MutationExecutionOutcome.Failure("ShramSafal.SyncInvalidPayload", "Invalid payload for jobcard.complete.");
+
+        // Phase 1 tenant-scope fix (2026-07-19) — see HandleJobCardAssignAsync.
+        // Once farm_id is set to the job card's farm, CompleteJobCardHandler's
+        // internal GetDailyLogByIdAsync(command.DailyLogId) is also farm_id-
+        // gated: a DailyLogId belonging to a DIFFERENT farm is now invisible
+        // under RLS and surfaces as DailyLogNotFound rather than the
+        // (dev-only, non-RLS) JobCardDailyLogMismatch — strictly more secure,
+        // not a regression.
+        var jobCardScope = await EstablishFarmScopeForOwnedEntityAsync(
+            actorUserId,
+            c => repository.GetJobCardByIdAsync(request.JobCardId, c),
+            jobCard => jobCard.FarmId.Value,
+            Domain.Common.ShramSafalErrors.JobCardNotFound,
+            ct);
+        if (!jobCardScope.IsSuccess)
+        {
+            return MutationExecutionOutcome.Failure(jobCardScope.Error.Code, jobCardScope.Error.Description);
+        }
 
         var result = await completeJobCardHandler.HandleAsync(
             new CompleteJobCardCommand(
@@ -1518,6 +1787,18 @@ public sealed class PushSyncBatchHandler(
             string.IsNullOrWhiteSpace(request.ActualPayoutCurrencyCode))
         {
             return MutationExecutionOutcome.Failure("ShramSafal.SyncInvalidPayload", "Invalid payload for jobcard.settle.");
+        }
+
+        // Phase 1 tenant-scope fix (2026-07-19) — see HandleJobCardAssignAsync.
+        var jobCardScope = await EstablishFarmScopeForOwnedEntityAsync(
+            actorUserId,
+            c => repository.GetJobCardByIdAsync(request.JobCardId, c),
+            jobCard => jobCard.FarmId.Value,
+            Domain.Common.ShramSafalErrors.JobCardNotFound,
+            ct);
+        if (!jobCardScope.IsSuccess)
+        {
+            return MutationExecutionOutcome.Failure(jobCardScope.Error.Code, jobCardScope.Error.Description);
         }
 
         // DATA_PRINCIPLE_SPINE sub-phase 01.4 — propagate batch-level AppVersion
@@ -1543,6 +1824,18 @@ public sealed class PushSyncBatchHandler(
         var request = DeserializePayload<JobCardCancelPayload>(payload);
         if (request is null || request.JobCardId == Guid.Empty || string.IsNullOrWhiteSpace(request.Reason))
             return MutationExecutionOutcome.Failure("ShramSafal.SyncInvalidPayload", "Invalid payload for jobcard.cancel.");
+
+        // Phase 1 tenant-scope fix (2026-07-19) — see HandleJobCardAssignAsync.
+        var jobCardScope = await EstablishFarmScopeForOwnedEntityAsync(
+            actorUserId,
+            c => repository.GetJobCardByIdAsync(request.JobCardId, c),
+            jobCard => jobCard.FarmId.Value,
+            Domain.Common.ShramSafalErrors.JobCardNotFound,
+            ct);
+        if (!jobCardScope.IsSuccess)
+        {
+            return MutationExecutionOutcome.Failure(jobCardScope.Error.Code, jobCardScope.Error.Description);
+        }
 
         var result = await cancelJobCardHandler.HandleAsync(
             new CancelJobCardCommand(

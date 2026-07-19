@@ -27,6 +27,33 @@ namespace ShramSafal.Infrastructure.Auth;
 /// owner_account_id projection added by migration
 /// <c>20260516120000_AddOwnerAccountIdToFarmMemberships</c>).
 /// </para>
+///
+/// <para>
+/// Phase 1 tenant-scope fix (2026-07-19 labour deploy hardening) —
+/// cross-verification discovered a SECOND landmine behind the verify_log
+/// RLS gap: once <c>PushSyncBatchHandler.HandleVerifyLogAsync</c> actually
+/// establishes farm scope and reaches the pipeline-wrapped
+/// <c>VerifyLogHandler</c>, <see cref="AgriSync.BuildingBlocks.Application.PipelineBehaviors.AuthorizationBehavior{TCommand,TResult}"/>
+/// invokes <see cref="EnsureCanVerify"/> — and <c>/sync/push</c> runs with
+/// <see cref="TenantContext"/> already <see cref="TenantContext.IsAdminCrossTenant"/>
+/// (the skip-list posture Fix 1 established). <see cref="TenantContext.SetTenant"/>
+/// throws on ANY attempt to set a single-tenant claim once admin-elevated
+/// (by design — it catches "elevate then re-narrow" cross-tenant leaks on
+/// the ONLINE HTTP surface, where admin-elevation is otherwise never
+/// combined with a per-command authorization check). That guard was never
+/// exercised on <c>/sync/push</c>'s verify_log path before this fix because
+/// the dispatcher's own (broken) pre-check always failed FIRST with
+/// <c>DailyLogNotFound</c>, so this pipeline stage was never reached in
+/// production. Skip the (now-redundant) <c>SetTenant</c> call when already
+/// admin-elevated: the interceptor already no-ops in that mode regardless
+/// of what <c>TenantContext.FarmId</c> holds, and the real Postgres GUCs
+/// were already established directly by
+/// <c>PushSyncBatchHandler.EstablishFarmScopeForOwnedEntityAsync</c> BEFORE
+/// this authorizer runs — nothing about the actual authorization DECISION
+/// (owner-tier role / membership check, still evaluated unconditionally
+/// above) changes. Zero behavior change for the online HTTP path, where
+/// <c>IsAdminCrossTenant</c> is always false.
+/// </para>
 /// </summary>
 internal sealed class ShramSafalAuthorizationEnforcer(
     IShramSafalRepository repository,
@@ -46,7 +73,7 @@ internal sealed class ShramSafalAuthorizationEnforcer(
             .GetFarmMembershipForTenantAsync(farmId.Value, userId.Value);
         if (isMember)
         {
-            tenantContext.SetTenant(farmId.Value, ownerAccountId, userId.Value);
+            SetTenantUnlessAdminElevated(farmId.Value, ownerAccountId, userId.Value);
             return Result.Success();
         }
 
@@ -71,7 +98,7 @@ internal sealed class ShramSafalAuthorizationEnforcer(
             // a single row by primary key.
             var (_, ownerAccountId) = await repository
                 .GetFarmMembershipForTenantAsync(farmId.Value, userId.Value);
-            tenantContext.SetTenant(farmId.Value, ownerAccountId, userId.Value);
+            SetTenantUnlessAdminElevated(farmId.Value, ownerAccountId, userId.Value);
             return Result.Success();
         }
 
@@ -104,8 +131,28 @@ internal sealed class ShramSafalAuthorizationEnforcer(
 
         var (_, ownerAccountId) = await repository
             .GetFarmMembershipForTenantAsync(log.FarmId.Value, userId.Value);
-        tenantContext.SetTenant(log.FarmId.Value, ownerAccountId, userId.Value);
+        SetTenantUnlessAdminElevated(log.FarmId.Value, ownerAccountId, userId.Value);
         return Result.Success();
+    }
+
+    /// <summary>
+    /// See the class-level Phase 1 remark. When <see cref="TenantContext"/>
+    /// is already admin-elevated (the <c>/sync/push</c> skip-list posture),
+    /// <see cref="TenantContext.SetTenant"/> would throw
+    /// "cannot downgrade to single-tenant scope" — a guard designed to catch
+    /// online-HTTP-path "elevate then re-narrow" bugs, not this legitimate
+    /// admin-elevated + already-GUC-scoped combination. Skipping it here is
+    /// a pure no-op on the actual Postgres tenant scope (the interceptor
+    /// ignores TenantContext.FarmId while admin-elevated either way).
+    /// </summary>
+    private void SetTenantUnlessAdminElevated(Guid farmId, Guid ownerAccountId, Guid? userId)
+    {
+        if (tenantContext.IsAdminCrossTenant)
+        {
+            return;
+        }
+
+        tenantContext.SetTenant(farmId, ownerAccountId, userId);
     }
 
     public async Task<Result> EnsureCanEditLog(UserId userId, Guid logId)
