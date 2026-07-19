@@ -22,10 +22,23 @@
 
 ## Change Surface (CLAUDE.md Definition of Done)
 
-- **DB:** YES — new tables `ssf.attendance_days`, `ssf.attendance_marks`, `ssf.labour_advances`; new columns on `ssf.labour_assignments` (`shift`, `task`, `worker_names_json`); RLS policies + migrations for each. (Stages 2, 4, 5.)
-- **Backend:** YES — new query/handler `GetLabourData`; new endpoints `GET /shramsafal/farms/{farmId}/labour`, attendance + advance write handlers; new sync mutation types `mark_attendance`, `record_advance`; extend `LedgerDerivationService` + `LabourAssignment` mapping; activate `WorkerNameProjector` (transcript store). (Stages 1–6.)
-- **Frontend:** YES — new `features/labour/data/labourClient.ts`; rewrite `useLabourState.ts` internals (signature unchanged); wire `Attendance` save + `ReviewSheet` approve to the real sync spine; feed `CropSelector` real crops/plots; add `labour.types.ts`. (Stages 1, 3.)
-- **Cross-cutting:** YES — new sync-contract Zod payloads (`mark_attendance.zod.ts`, `record_advance.zod.ts`) + `SyncMutationCatalog` entries (client + server `mutation-types.json`); prompt-registry bump + golden-set delta if the labour prompt changes (Stage 6); analytics events; trust-graduation rule reused from `ReliabilityScore`/`GrantedAtUtc`.
+> **RECONCILED 2026-07-19 (Phase 7 release paperwork).** This section originally described the FULL 6-stage vision, written before any stage shipped. Only Stages 1–3 (plus tenant-scope/money/privacy hardening found during verification) actually shipped this release. The two subsections below separate "what is real today" from "what the plan still intends to build later" — do not read the second subsection as already-built.
+
+### As shipped this release (Stages 1–3 + hardening; branch `feat/labour-management-ui` @ `3c7066ce`)
+
+- **DB:** YES, but narrow — **no new tables.** Two migrations against EXISTING tables only:
+  - `20260718132540_AddLabourAssignmentShiftTaskNames` — 3 new columns on the EXISTING `ssf.labour_assignments` table (`shift`, `task`, `worker_names_json`). No new RLS policy needed (child table, already covered by the parent `daily_logs` EXISTS policy).
+  - `20260719074300_AddUserScopedJobCardComplianceTestReadPolicies` — 3 new user-scoped SELECT RLS policies (`p_user_select_{t}`) on 3 EXISTING tables (`job_cards`, `compliance_signals`, `test_instances`). This migration exists to fix the `/sync/push` tenant-scope bug found in Phase 1 (Blocker 1), not for a labour-specific feature — it is bundled into this release's Change Surface because it ships with the same binary.
+  - `ssf.attendance_days`, `ssf.attendance_marks`, `ssf.labour_advances` do **NOT exist**. Any SELECT against them will error.
+- **Backend:** YES — `GetLabourDataDto`/`GetLabourDataQuery`/`GetLabourDataHandler` (Stage 1); `GET /shramsafal/farms/{farmId}/labour` endpoint (Stage 1); `LedgerDerivationService` extended to map `shift`/`task`/`whoWorked` into the 3 new columns (Stage 2); `WorkerNameProjector` activated via a real `DailyLogTranscriptStore` (Stage 2); `verify_log` wired to the real sync mutation (Stage 3). Plus hardening found during verification, not in the original plan: 18 of 27 `/sync/push` mutation dispatch cases fixed to establish tenant scope under production's FORCE RLS (Phase 1); `दिलं`/headcount/expense-drop money fixes (Phase 3, Decision 3a); `ErasureWorker.cs` manifest correction + 2 new scrub dispositions (Phase 5, Decision 5b).
+- **Frontend:** YES — `features/labour/data/labourClient.ts` + `labour.types.ts` (Stage 1); `useLabourState.ts` rewritten to fetch real data with a mock-only-in-preview fallback (Stage 1); `ReviewSheet.tsx` wired to real `verify_log` + a confirm-animation/3s-undo (Stage 3, plus ledger tasks 3.3–3.6 not in this plan — see the Stage 3 note below). Unfinished surfaces (attendance save, पैसे/उचल buttons, विश्वास द्या, उचल stat tile, week-nav arrows, हजेरी वही tile) HIDDEN, not built, per Decision 4b (Phase 4).
+- **Cross-cutting:** YES, narrowly — the `analytics.events` `worker.named` payload changed from raw name to a non-identifying `workerId` (Phase 5). **No new sync-contract mutation types were added.** `mark_attendance`/`record_advance` (Stage 4/5) do **NOT exist** anywhere in the sync contract or catalogs. **No AI prompt changed** — Stage 6 is unbuilt, `_COFOUNDER/memory/prompt-registry.md` untouched, no golden-set delta owed.
+
+### Still only planned — NOT built, left below for when a future stage ships
+
+- Stage 4 (उचल advances): `ssf.labour_advances` table, `LabourAdvance` domain, `record_advance` mutation.
+- Stage 5 (attendance): `ssf.attendance_days` / `ssf.attendance_marks` tables, `AttendanceDay`/`AttendanceMark` domain, `mark_attendance` mutation.
+- Stage 6 (server voice labour intent): prompt bucket changes, prompt-registry bump + golden-set delta, `LabourEventSchema.shift`.
 
 ---
 
@@ -60,7 +73,7 @@
 
 > **OPTION-3 WAGE-BOOK MODEL (founder-chosen 2026-07-14).** Per worker the ledger carries THREE money figures, not "earned": **`RecordedWages`** (काम झालं — wage recorded for the worker's work), **`Paid`** (दिलं — settled payouts), **`Advance`** (उचल). The owed **balance (बाकी) = RecordedWages − Paid − Advance** (compute where displayed, don't store a stale copy). `LabourMoneyDto` becomes `(decimal Recorded, decimal Paid, decimal Advance, decimal Owed)`. This makes cross-surface consistency real: `Paid` is the SAME `labour_payout` CostEntry the finance page sums; `RecordedWages` is the work-logged figure the reflect per-log summary shows — shown side-by-side, never silently merged.
 
-- [ ] **Step 1: Write the failing test** — assert the DTO record exists with the exact property names the frontend consumes (compile-time contract lock).
+- [x] **Step 1: Write the failing test** — assert the DTO record exists with the exact property names the frontend consumes (compile-time contract lock).
 
 ```csharp
 public class LabourDataDtoShapeTests {
@@ -73,10 +86,12 @@ public class LabourDataDtoShapeTests {
 }
 ```
 
-- [ ] **Step 2: Run test → FAIL** (`LabourPersonDto` not defined). Run: `dotnet test src/tests/ShramSafal.Domain.Tests/ --filter LabourDataDtoShapeTests`.
-- [ ] **Step 3: Implement the records** in `LabourDataDto.cs` (all records above).
-- [ ] **Step 4: Run test → PASS.**
-- [ ] **Step 5: Commit** — `feat(labour): add LabourDataDto read-model contract`.
+- [x] **Step 2: Run test → FAIL** (`LabourPersonDto` not defined). Run: `dotnet test src/tests/ShramSafal.Domain.Tests/ --filter LabourDataDtoShapeTests`.
+- [x] **Step 3: Implement the records** in `LabourDataDto.cs` (all records above).
+- [x] **Step 4: Run test → PASS.**
+- [x] **Step 5: Commit** — `feat(labour): add LabourDataDto read-model contract`.
+
+> **Verified DONE** — `.superpowers/sdd/task-1.1-report.md` (commits `d44b1396`..`6b0ae09e`). 10 sealed records in `LabourDataDto.cs`; `LabourDataDtoShapeTests` RED→GREEN; `Access` fixed non-nullable per reviewer. Note: the DTO shown here (`Advance`/`Earned`) was superseded by Task 1.2's Option-3 rewrite (`RecordedWages`/`Paid`/`Advance`) before anything consumed it — see Task 1.2.
 
 ### Task 1.2: Application — `GetLabourDataQuery` + handler
 
@@ -99,7 +114,7 @@ public class LabourDataDtoShapeTests {
 > - `Dashboard.wages` = total `Paid` across workers; `Dashboard.advances` = total `Advance` (0 now); `Dashboard.owed` = total `Owed`.
 > - Also assert `People` ids are unique (the wire contract is a list; the client rebuilds a dict — a dup id would collide).
 
-- [ ] **Step 1: Write the failing integration test** — seed one farm + membership + one verified job card; assert `GetLabourDataHandler` returns ≥1 person with `Access` set and a non-null `Dashboard`.
+- [x] **Step 1: Write the failing integration test** — seed one farm + membership + one verified job card; assert `GetLabourDataHandler` returns ≥1 person with `Access` set and a non-null `Dashboard`.
 
 ```csharp
 [Fact] public async Task Returns_people_and_dashboard_for_caller_farm() {
@@ -111,11 +126,13 @@ public class LabourDataDtoShapeTests {
 }
 ```
 
-- [ ] **Step 2: Run → FAIL** (handler missing). Run: `dotnet test src/tests/ShramSafal.Sync.IntegrationTests/ --filter GetLabourDataHandlerTests`.
-- [ ] **Step 3: Add the port methods** to `IShramSafalRepository` and implement in `ShramSafalRepository.cs` (mirror `GetJobCardsForFarmAsync`/`GetDailyLogsChangedSinceAsync` query style; farm-scoped, RLS-safe).
-- [ ] **Step 4: Implement `GetLabourDataHandler`** (assembly logic above; no writes).
-- [ ] **Step 5: Run → PASS.**
-- [ ] **Step 6: Commit** — `feat(labour): GetLabourData query assembles read-model from existing engines`.
+- [x] **Step 2: Run → FAIL** (handler missing). Run: `dotnet test src/tests/ShramSafal.Sync.IntegrationTests/ --filter GetLabourDataHandlerTests`.
+- [x] **Step 3: Add the port methods** to `IShramSafalRepository` and implement in `ShramSafalRepository.cs` (mirror `GetJobCardsForFarmAsync`/`GetDailyLogsChangedSinceAsync` query style; farm-scoped, RLS-safe).
+- [x] **Step 4: Implement `GetLabourDataHandler`** (assembly logic above; no writes).
+- [x] **Step 5: Run → PASS.**
+- [x] **Step 6: Commit** — `feat(labour): GetLabourData query assembles read-model from existing engines`.
+
+> **Verified DONE** — `.superpowers/sdd/task-1.2-report.md` (commits `5496201d` + fix `79e611a2`). DTO rewritten to Option-3 wage-book (`RecordedWages`/`Paid`/`Advance`) per founder decision before the query was built (first step of this task, as instructed). `Paid` verified sourced identically to `GetFinanceSummaryHandler`. Review-queue filtering (plan's Task 3.2 deliverable) was ALSO built here — see the drift note at Task 3.2. Money regression `Dashboard_owed_never_goes_negative_when_a_paid_worker_departs` added after a reviewer + cross-verifier both caught the same bug. Local Domain.Tests + Arch green; the Docker-gated integration test is CI-deferred by design (no local Docker) — see Phase 2 report for how the money assertions were ported to a suite that actually runs.
 
 ### Task 1.3: Api — `GET /shramsafal/farms/{farmId}/labour`
 
@@ -128,11 +145,13 @@ public class LabourDataDtoShapeTests {
 - Consumes: `ICallerFarmTenantScope.EstablishForCallerAsync(farmId, userId, ct)` (self-authorizing read, mirrors AI endpoints), `IHandler<GetLabourDataQuery, LabourDataDto>`.
 - Produces: `GET /shramsafal/farms/{farmId:guid}/labour` → `LabourDataDto` JSON. Add route prefix to the `TenantTransactionMiddleware.SkipPathPrefixes` allowlist so it admin-elevates then farm-scopes via `CallerFarmTenantScope` (mirror `/shramsafal/farms/mine`).
 
-- [ ] **Step 1: Write failing endpoint test** — authenticated GET returns 200 + a body with `people` and `dashboard`; a non-member caller returns 403.
-- [ ] **Step 2: Run → FAIL** (404).
-- [ ] **Step 3: Implement endpoint** (`.RequireAuthorization()`, establish caller farm scope, invoke handler, `Results.Ok(dto)` / `Results.Forbid()`), register it, add the path prefix to `SkipPathPrefixes`.
-- [ ] **Step 4: Run → PASS.**
-- [ ] **Step 5: Commit** — `feat(labour): GET /farms/{id}/labour endpoint`.
+- [x] **Step 1: Write failing endpoint test** — authenticated GET returns 200 + a body with `people` and `dashboard`; a non-member caller returns 403.
+- [x] **Step 2: Run → FAIL** (404).
+- [x] **Step 3: Implement endpoint** (`.RequireAuthorization()`, establish caller farm scope, invoke handler, `Results.Ok(dto)` / `Results.Forbid()`), register it, add the path prefix to `SkipPathPrefixes`.
+- [x] **Step 4: Run → PASS.**
+- [x] **Step 5: Commit** — `feat(labour): GET /farms/{id}/labour endpoint`.
+
+> **Verified DONE** — `.superpowers/sdd/task-1.3-report.md` (commit `7c3767ad`). DEVIATION, reviewer-verified correct: did NOT add the route to `SkipPathPrefixes` (would break `CallerFarmTenantScope`'s ambient-transaction assumption) — self-authorizes via `ICallerFarmTenantScope.EstablishForCallerAsync` instead, mirroring the AI endpoints. 3 endpoint tests pass locally (member→200, non-member→403, unknown farm→403); real-Postgres RLS isolation for this route was independently proven end-to-end in Phase 6 (`GET .../labour` 200 for a member, 403 for a non-member, against the restricted `agrisync_app` role).
 
 ### Task 1.4: Frontend — `labourClient.ts` + swap `useLabourState`
 
@@ -153,16 +172,20 @@ public class LabourDataDtoShapeTests {
 > - **BalanceCard (in `components/LabourUiKit.tsx`)** and `PersonDetail`/`MukadamDetail`: show THREE figures — **काम झालं ₹recorded** · **दिलं ₹paid** · **बाकी ₹(recorded−paid−advance)** (उचल shown when advance>0) — side by side, never merged into one "earned". Use the app number style (DM Sans tabular-nums). Keep it viewport-clean at 390x844.
 > - `WeeklyDashboard` money split → recorded/paid/advance/owed.
 
-- [ ] **Step 1: Write failing test** — mock `fetch` to return a `LabourDataDto` JSON; assert `fetchLabourData` maps `people`/`dashboard`/`review[].points` into `LabourData` with `inr`-ready numbers.
-- [ ] **Step 2: Run → FAIL.** Run: `npm --prefix src/clients/mobile-web test -- labourClient`.
-- [ ] **Step 3: Implement** `labour.types.ts` (extract types), `labourMock.ts` re-export, `labourClient.ts`, and `useLabourState` async body.
-- [ ] **Step 4: Run → PASS**; `npx tsc --noEmit` clean.
-- [ ] **Step 5: Commit** — `feat(labour): real labourClient + async useLabourState (mock fallback for preview)`.
+- [x] **Step 1: Write failing test** — mock `fetch` to return a `LabourDataDto` JSON; assert `fetchLabourData` maps `people`/`dashboard`/`review[].points` into `LabourData` with `inr`-ready numbers.
+- [x] **Step 2: Run → FAIL.** Run: `npm --prefix src/clients/mobile-web test -- labourClient`.
+- [x] **Step 3: Implement** `labour.types.ts` (extract types), `labourMock.ts` re-export, `labourClient.ts`, and `useLabourState` async body.
+- [x] **Step 4: Run → PASS**; `npx tsc --noEmit` clean.
+- [x] **Step 5: Commit** — `feat(labour): real labourClient + async useLabourState (mock fallback for preview)`.
+
+> **Verified DONE** — `.superpowers/sdd/task-1.4-report.md` (commits `9179e39d` + `eed5d519` + `47c075a4` + `3397a749`). Money-safety fix folded in during this task: mock renders ONLY in true preview (`currentFarmId === null`); a real farm's load error/in-flight state shows `EMPTY_LABOUR_DATA` + a retry banner, never fabricated money. Viewport-verified at `?preview=labour`. tsc clean, 524/524 tests at the time.
 
 ### Task 1.5: Preview parity guard
 
-- [ ] **Step 1:** Confirm `?preview=labour` still renders with `LABOUR_MOCK` (currentFarmId null → fallback). Run the dev server, load `?preview=labour`, verify hub renders.
-- [ ] **Step 2: Commit** if any guard tweak needed — `chore(labour): keep preview on mock when no farm context`.
+- [x] **Step 1:** Confirm `?preview=labour` still renders with `LABOUR_MOCK` (currentFarmId null → fallback). Run the dev server, load `?preview=labour`, verify hub renders.
+- [x] **Step 2: Commit** if any guard tweak needed — `chore(labour): keep preview on mock when no farm context`.
+
+> **Verified DONE** — `.superpowers/sdd/labour-progress.md` line 34: "preview parity verified (`?preview=labour` renders `LABOUR_MOCK`; hardened by `3397a749` preview-only-mock). No separate commit needed" — folded into Task 1.4's `3397a749`.
 
 ---
 
@@ -180,11 +203,13 @@ public class LabourDataDtoShapeTests {
 **Interfaces:**
 - Produces: `LabourAssignment.Create(...)` gains trailing optional params `LabourShift? shift = null, string? task = null, IReadOnlyList<string>? workerNames = null`; new props `LabourShift? Shift`, `string? Task`, `string WorkerNamesJson` (default `"[]"`). NO-MULTIPLY unaffected.
 
-- [ ] Step 1: Failing test — `Create(..., shift: Half, task:"फवारणी", workerNames:["रमेश"])` exposes `Shift==Half`, `Task=="फवारणी"`, `WorkerNamesJson` contains `रमेश`.
-- [ ] Step 2: Run → FAIL.
-- [ ] Step 3: Add enum + props + params (append AFTER existing params to keep positional callers valid).
-- [ ] Step 4: Run → PASS.
-- [ ] Step 5: Commit — `feat(labour): shift/task/names on LabourAssignment domain`.
+- [x] Step 1: Failing test — `Create(..., shift: Half, task:"फवारणी", workerNames:["रमेश"])` exposes `Shift==Half`, `Task=="फवारणी"`, `WorkerNamesJson` contains `रमेश`.
+- [x] Step 2: Run → FAIL.
+- [x] Step 3: Add enum + props + params (append AFTER existing params to keep positional callers valid).
+- [x] Step 4: Run → PASS.
+- [x] Step 5: Commit — `feat(labour): shift/task/names on LabourAssignment domain`.
+
+> **Verified DONE** — `.superpowers/sdd/task-2.1-report.md` (commit `a82b197c` + fix `5496f84d`). Trailing optional params on `Create(...)`; sole caller uses named args, unaffected. Reviewer confirmed NO-MULTIPLY intact and money lines byte-identical. CARRY-FORWARD CONSTRAINT: `WorkerNamesJson` uses `UnsafeRelaxedJsonEscaping` (readable Devanagari) — NOT HTML-safe, consumers must deserialize-then-render as text. Domain 1077/1077, Arch 77/77.
 
 ### Task 2.2: Infrastructure — EF config + migration
 
@@ -193,11 +218,13 @@ public class LabourDataDtoShapeTests {
 - Create: migration `..._AddLabourAssignmentShiftTaskNames.cs` (`src/apps/ShramSafal/ShramSafal.Infrastructure/Persistence/Migrations/`)
 - Test: `src/tests/ShramSafal.Sync.IntegrationTests/Labour/LabourAssignmentPersistenceTests.cs`
 
-- [ ] Step 1: Failing test — persist a `LabourAssignment` with shift/task/names via DbContext, re-read, assert round-trip.
-- [ ] Step 2: Run → FAIL (columns missing).
-- [ ] Step 3: Map `shift` (string enum conversion, nullable), `task` (nullable text), `worker_names_json` (jsonb, default `'[]'`) in the config; generate migration with the design-time factory (`dotnet ef migrations add AddLabourAssignmentShiftTaskNames --project src/apps/ShramSafal/ShramSafal.Infrastructure --startup-project src/AgriSync.Bootstrapper`). `labour_assignments` is a child table (no `farm_id`) — RLS already covered by the EXISTS(daily_logs) policy; no new policy needed. Verify the migration adds only the three columns.
-- [ ] Step 4: Run → PASS.
-- [ ] Step 5: Commit — `feat(labour): persist shift/task/names columns (migration)`.
+- [x] Step 1: Failing test — persist a `LabourAssignment` with shift/task/names via DbContext, re-read, assert round-trip.
+- [x] Step 2: Run → FAIL (columns missing).
+- [x] Step 3: Map `shift` (string enum conversion, nullable), `task` (nullable text), `worker_names_json` (jsonb, default `'[]'`) in the config; generate migration with the design-time factory (`dotnet ef migrations add AddLabourAssignmentShiftTaskNames --project src/apps/ShramSafal/ShramSafal.Infrastructure --startup-project src/AgriSync.Bootstrapper`). `labour_assignments` is a child table (no `farm_id`) — RLS already covered by the EXISTS(daily_logs) policy; no new policy needed. Verify the migration adds only the three columns.
+- [x] Step 4: Run → PASS.
+- [x] Step 5: Commit — `feat(labour): persist shift/task/names columns (migration)`.
+
+> **Verified DONE** — `.superpowers/sdd/task-2.2-report.md` (commit `71ced849`). Migration `20260718132540_AddLabourAssignmentShiftTaskNames` verified minimal: exactly 3 `AddColumn`/`DropColumn` ops on `ssf.labour_assignments`, zero pre-existing model drift. No RLS policy added (correct — child table). Phase 6's clean-database rehearsal additionally proved this migration applies via EF as the restricted `agrisync_app` runtime role with zero manual intervention. Domain 1077/1077, Arch 77/77.
 
 ### Task 2.3: Derivation — map parsed labour → new columns
 
@@ -205,11 +232,13 @@ public class LabourDataDtoShapeTests {
 - Modify: `src/apps/ShramSafal/ShramSafal.Application/UseCases/Logs/CreateDailyLog/LedgerDerivationService.cs` (the `labour` block, ~L217–240)
 - Test: `src/tests/ShramSafal.Sync.IntegrationTests/Labour/LedgerDerivationLabourTests.cs`
 
-- [ ] Step 1: Failing test — given an AiJob `NormalizedResultJson` with `labour[0] = { count:6, shift:"half", activity:"फवारणी", whoWorked:["रमेश","विलास"], rate:300 }`, `DeriveAsync` creates a `LabourAssignment` with `WorkerCount==6`, `Shift==Half`, `Task=="फवारणी"`, `WorkerNamesJson` containing both names, `WagePerPerson==300`.
-- [ ] Step 2: Run → FAIL.
-- [ ] Step 3: Extend the mapping to read `shift` (`"half"→Half` etc.), `activity`→`task`, `whoWorked`→`workerNames`; pass into `LabourAssignment.Create`.
-- [ ] Step 4: Run → PASS.
-- [ ] Step 5: Commit — `feat(labour): derive shift/task/names into LabourAssignment`.
+- [x] Step 1: Failing test — given an AiJob `NormalizedResultJson` with `labour[0] = { count:6, shift:"half", activity:"फवारणी", whoWorked:["रमेश","विलास"], rate:300 }`, `DeriveAsync` creates a `LabourAssignment` with `WorkerCount==6`, `Shift==Half`, `Task=="फवारणी"`, `WorkerNamesJson` containing both names, `WagePerPerson==300`.
+- [x] Step 2: Run → FAIL.
+- [x] Step 3: Extend the mapping to read `shift` (`"half"→Half` etc.), `activity`→`task`, `whoWorked`→`workerNames`; pass into `LabourAssignment.Create`.
+- [x] Step 4: Run → PASS.
+- [x] Step 5: Commit — `feat(labour): derive shift/task/names into LabourAssignment`.
+
+> **Verified DONE** — `.superpowers/sdd/task-2.3-report.md` (commit `40e005b9`). NO-MULTIPLY verified at diff level: `wagePerPerson`/`totalCost` lines unchanged; the closing constructor call gained 3 NAMED trailing args, making shadow/reorder structurally impossible. Domain 1077/1077, Arch 77/77. The 3 new derivation tests are `RequiresDocker`-gated; Phase 2 (CI Truthfulness) subsequently ported the equivalent NO-MULTIPLY assertion into `LabourMoneyInvariantsRealPostgresTests`, which genuinely runs in CI.
 
 ### Task 2.4: Activate `WorkerNameProjector` (fix the no-op transcript store)
 
@@ -218,11 +247,13 @@ public class LabourDataDtoShapeTests {
 - Modify: `src/apps/ShramSafal/ShramSafal.Infrastructure/DependencyInjection.cs` (L432–446: bind `IDailyLogTranscriptStore` → real store instead of `NullDailyLogTranscriptStore`)
 - Test: `src/tests/ShramSafal.Sync.IntegrationTests/Wtl/WorkerNameProjectorActivationTests.cs`
 
-- [ ] Step 1: Failing test — create a voice-sourced `DailyLog` (with `SourceAiJobId` whose `Transcript` says "रमेश आणि विलास आले"); assert a `Worker`+`WorkerAssignment` row appears after the outbox dispatches `DailyLogCreatedEvent`.
-- [ ] Step 2: Run → FAIL (Null store → projector no-ops).
-- [ ] Step 3: Implement the real store (`GetTranscriptAsync(dailyLogId)` → resolve log → `SourceAiJobId` → `Transcript` by aiJobId), swap DI binding. (Do NOT touch the entitlement lines — this is Infrastructure DI only.)
-- [ ] Step 4: Run → PASS.
-- [ ] Step 5: Commit — `fix(labour): activate WorkerNameProjector via real transcript store`.
+- [x] Step 1: Failing test — create a voice-sourced `DailyLog` (with `SourceAiJobId` whose `Transcript` says "रमेश आणि विलास आले"); assert a `Worker`+`WorkerAssignment` row appears after the outbox dispatches `DailyLogCreatedEvent`.
+- [x] Step 2: Run → FAIL (Null store → projector no-ops).
+- [x] Step 3: Implement the real store (`GetTranscriptAsync(dailyLogId)` → resolve log → `SourceAiJobId` → `Transcript` by aiJobId), swap DI binding. (Do NOT touch the entitlement lines — this is Infrastructure DI only.)
+- [x] Step 4: Run → PASS.
+- [x] Step 5: Commit — `fix(labour): activate WorkerNameProjector via real transcript store`.
+
+> **Verified DONE** — `.superpowers/sdd/task-2.4-report.md` (commit `30b2a121` + test fix `47556918`). Reviewer confirmed the store correctly reads the PII-detector-gated `Transcript.Text`, not the raw pre-detector `AiJob.TranscriptCodemix`. **Superseded by Phase 5 (privacy work, Decision 5b):** the same-name-merge flaw this activation exposed was fixed (projector no longer cross-log-merges; `IWorkerRepository.FindByNormalizedNameAsync` removed), the `analytics.events` `worker.named` payload was changed from raw name to `workerId`, and `ErasureWorker.cs` gained scrub dispositions for `ssf.workers`/`ssf.worker_assignments` — all required before this activation was safe to ship. Domain 1077/1077, build clean.
 
 ---
 
@@ -237,11 +268,15 @@ public class LabourDataDtoShapeTests {
 - Reuse: existing `VerifyLog` sync command path (`OutboxAction.VERIFY_LOG` / `verify_log` mutation) — confirm the client command exists; if only `outbox` supports it, add `src/clients/mobile-web/src/application/usecases/sync/VerifyLogCommand.ts` mirroring `CreateDailyLogCommand.enqueue` with payload `{ dailyLogId, targetStatus:"approved"|"rejected", reason? }`.
 - Test: `src/clients/mobile-web/src/features/labour/__tests__/reviewApprove.test.ts`
 
-- [ ] Step 1: Failing test — approving item `r1` enqueues a `verify_log` mutation with `dailyLogId==r1` and `targetStatus=="approved"`.
-- [ ] Step 2: Run → FAIL.
-- [ ] Step 3: Implement `VerifyLogCommand.enqueue` (if missing) + call it from `approve`/`query` handlers; keep the optimistic `setGone` UI.
-- [ ] Step 4: Run → PASS; `tsc --noEmit` clean.
-- [ ] Step 5: Commit — `feat(labour): तपासणी approve/query drives real verify_log`.
+- [x] Step 1: Failing test — approving item `r1` enqueues a `verify_log` mutation with `dailyLogId==r1` and `targetStatus=="approved"`.
+- [x] Step 2: Run → FAIL.
+- [x] Step 3: Implement `VerifyLogCommand.enqueue` (if missing) + call it from `approve`/`query` handlers; keep the optimistic `setGone` UI.
+- [x] Step 4: Run → PASS; `tsc --noEmit` clean.
+- [x] Step 5: Commit — `feat(labour): तपासणी approve/query drives real verify_log`.
+
+> **Verified DONE** — `.superpowers/sdd/task-3.1-report.md` (commit `738483b4`). Transition-correct per `VerificationStateMachine` (Draft needs 2 ordered mutations, Draft→Verified is an invalid one-hop). Uses `verify_log` (v1), not the unimplemented `verify_log_v2`. Frontend 533/533 at the time, Domain 1077/1077, Arch 77/77.
+>
+> **Superseded/extended by Phase 1 (Blocker 1 fix).** This task wired the CLIENT side correctly, but the SERVER side of `verify_log` under `/sync/push` was found broken under production's FORCE RLS during Phase 1's cross-verification (no tenant GUC set → the daily-log lookup matched zero rows → every approval would have failed 100% of the time in prod, silently, behind this task's own confirm animation). Phase 1 fixed the two-phase tenant-scope establishment in `PushSyncBatchHandler.HandleVerifyLogAsync` — this task's frontend wiring did not need to change.
 
 ### Task 3.2: Read-model — Review queue reflects verification state
 
@@ -249,17 +284,23 @@ public class LabourDataDtoShapeTests {
 - Modify: `GetLabourDataHandler` (Task 1.2) — `Review` items come from logs in `Draft`/`Confirmed` awaiting owner; approved logs drop out on next pull.
 - Test: extend `GetLabourDataHandlerTests` — a `Verified` log is NOT in `Review`.
 
-- [ ] Step 1: Failing test as above.
-- [ ] Step 2: Run → FAIL.
-- [ ] Step 3: Filter `Review` by `CurrentVerificationStatus`.
-- [ ] Step 4: Run → PASS.
-- [ ] Step 5: Commit — `feat(labour): review queue reflects real verification state`.
+- [x] Step 1: Failing test as above.
+- [x] Step 2: Run → FAIL.
+- [x] Step 3: Filter `Review` by `CurrentVerificationStatus`.
+- [x] Step 4: Run → PASS.
+- [x] Step 5: Commit — `feat(labour): review queue reflects real verification state`.
+
+> **Verified DONE — but built inside Task 1.2, not as a separate later step.** `GetLabourDataHandlerTests.Verified_log_never_appears_in_review` (`.superpowers/sdd/task-1.2-report.md` §"Review-fix pass 2026-07-14") seeds a `Draft` log (must appear in Review) and a fully `Draft→Confirmed→Verified` log (must never appear), and the handler's own Review predicate filters by `CurrentVerificationStatus is Draft or Confirmed` gated by `VerificationStateMachine.GetAvailableTransitions(...).Length > 0` (`GetLabourDataHandler.cs` §"Review — Draft/Confirmed logs still awaiting the owner"). This was completed as part of Task 1.2's own work, ahead of Task 3.1.
+>
+> **⚠️ KNOWN DRIFT (per the deploy handoff, Blocker 8) — do not confuse with the ledger's "Task 3.2".** `.superpowers/sdd/labour-progress.md` line 108 records a DIFFERENT deliverable also labelled "Task 3.2" — **"तपासणी approval UX: confirm animation + 3s undo-before-send"** (commit `3c3ba12d`), a founder-requested UI addition that is not in this written plan at all. That ledger entry is unrelated to this plan task; it and 3 further ledger-only tasks (3.3 one-canonical-mic routing `07529516`, 3.4 labour-log intent hint `9cfbb834`, 3.5 labour-log round trip + summary `d078b639`, 3.6 land-on-context-selector `38552ba9`) shipped in this release as additional Decision-4b/UX hardening beyond this plan's original Stage 3 scope. They are real, tested, and included in this release — just not tracked against a plan task number here.
 
 ---
 
 ## Stage 4 — उचल Advances + real balances
 
 **Outcome:** `LabourBalance {advance, earned}` and `netBalance` are backed by real data: earned from JobCard payouts, advance from a new advance ledger. "उचल" and "सेटल" actions persist.
+
+> **NOT BUILT as of the 2026-07-19 release (Phase 7 reconciliation).** `ssf.labour_advances` does not exist; `LabourAdvance` domain does not exist; उचल/सेटल buttons are HIDDEN client-side (Decision 4b), not wired. **Acceptance criteria relocated here from the original Founder Acceptance Gate** (which wrongly asked for these before this stage was built): once this stage ships, the founder must additionally verify — उचल/सेटल actions actually persist and update बाकी on a real worker; a `SELECT count(*) FROM ssf.labour_advances` returns the expected row count (status-code/row-count evidence, never a log line).
 
 ### Task 4.1: Domain — `LabourAdvance` aggregate
 
@@ -310,6 +351,8 @@ public class LabourDataDtoShapeTests {
 
 **Outcome:** "जतन करा → मंजुरीसाठी" writes a real per-worker attendance record per plot/day; the हजेरी वही ledger and dashboard man-days come from it (not interim derivation).
 
+> **NOT BUILT as of the 2026-07-19 release (Phase 7 reconciliation).** `ssf.attendance_days`/`ssf.attendance_marks` do not exist; the हजेरी घ्या save button and हजेरी वही ledger tile are HIDDEN client-side (Decision 4b) — `HajeriLedger.tsx` renders an honest empty state instead of a structurally-empty muster table. **Acceptance criteria relocated here from the original Founder Acceptance Gate:** once this stage ships, the founder must additionally verify — speaking/recording an attendance produces server-parsed chips (count/shift/task/names/amount) that save into a real per-worker record; a `SELECT count(*) FROM ssf.attendance_days` returns the expected row count (status-code/row-count evidence, never a log line).
+
 ### Task 5.1: Domain — `AttendanceDay` + `AttendanceMark`
 
 **Files:**
@@ -359,6 +402,8 @@ public class LabourDataDtoShapeTests {
 
 **Outcome:** A farmer saying "आज ६ मजूर अर्धा दिवस फवारणी, रमेश आणि विलास, ३०० मजुरी" yields count=6, shift=half, task=फवारणी, names=[रमेश,विलास], amount=300; unrelated speech is flagged. Replaces the throwaway client `labourParse.ts` for real logs. **Prompt change → prompt-registry bump + golden-set delta required. Do NOT touch `IEntitlementPolicy` lines.**
 
+> **NOT BUILT as of the 2026-07-19 release (Phase 7 reconciliation).** No prompt module changed; `_COFOUNDER/memory/prompt-registry.md` untouched; no golden-set delta owed. `Attendance.tsx`'s mic path still only navigates to the canonical log page (Phase 4/Task 3.3) — it does not itself produce server-parsed chips. **Acceptance criteria relocated here from the original Founder Acceptance Gate:** once this stage ships, the founder must additionally verify — a spoken attendance produces server-parsed count/shift/task/names/amount chips (not the client-side `labourParse.ts` fallback) before save.
+
 ### Task 6.1: Prompt contract — add shift + names to labour bucket
 
 **Files:**
@@ -390,13 +435,24 @@ public class LabourDataDtoShapeTests {
 
 ## Founder Acceptance Gate
 
-- [ ] Founder tests the real flow on localhost against the seeded Purvesh farm: hub/dashboard/ledger show real data; speak an attendance → server-parsed chips (count/shift/task/names/amount) → save → तपासणी → मंजूर persists (verification_events row); उचल/सेटल updates balances.
-- [ ] Founder verifies via HTTP 200 on `GET /shramsafal/farms/{farmId}/labour` and a `SELECT` count on `ssf.attendance_days`/`ssf.labour_advances` (status-code/row-count evidence, per feedback rules), NOT a log line.
+> **REWRITTEN 2026-07-19 (Phase 7 release paperwork, closing deploy-handoff Blocker 8).** The gate below as originally written was **unsatisfiable**: it asked the founder to `SELECT` count `ssf.attendance_days` and `ssf.labour_advances` — tables that do not exist (Stage 4/5, never built) — and to verify server-parsed voice chips (Stage 6, never built) and उचल/सेटल balance updates (Stage 4, never built). Running it as written would have errored on the SELECT and asked the founder to sign off on features that are not on this branch. It is replaced below with a gate scoped to exactly what Stages 1–3 (plus the tenant-scope/money/screen-honesty/privacy hardening found during verification — phase reports 0–6) actually built. The removed criteria are **relocated, not deleted** — see the "NOT BUILT" callouts under Stage 4, Stage 5, and Stage 6 above; they will become that stage's own acceptance criteria once built.
+
+**What to test, on localhost, against the seeded Purvesh farm (8888888888 / Testuser@123):**
+
+- [ ] Open the labour hub (कामगार व्यवस्थापन). Confirm it loads REAL data, not mock: people list, weekly दिलं/काम झालं/बाकी figures, and the तपासणी queue all reflect the actual seeded farm — not the `?preview=labour` fixture. Evidence: the hub renders within a few seconds (not stuck on the "माहिती आणत आहोत…" loading state), and the numbers change if you check the Finance page's labour total — **दिलं must equal the Finance page's labour total for the same farm, to the rupee** (Phase 3's money invariant).
+- [ ] Confirm the surfaces that do NOT work yet are genuinely absent, not broken-looking: no हजेरी घ्या save button, no पैसे/उचल action buttons, no विश्वास द्या section, no उचल stat tile showing a fake ₹0, no हजेरी वही tile, no week-navigation arrows. Where a list would otherwise be empty, an honest Marathi empty state should show instead of a blank screen (Phase 4, Decision 4b).
+- [ ] Approve one तपासणी item (मंजूर). Confirm the green fill + checkmark animation plays, wait past the 3-second "पूर्ववत करा" undo window, then confirm the approval actually reached the server: the item does not reappear after a refresh, and (if you can check the server) a `verification_events` row exists for that log — **not just a client-side optimistic UI change**. This is the exact path Phase 1 found broken under production's row-level security and fixed; localhost alone cannot prove the production RLS behavior — that is proven separately by Phase 6's rehearsal (see the evidence line below) and must be re-confirmed against real prod after deploy (see the prod smoke tests in the deploy handoff).
+- [ ] Speak or log an ordinary voice entry mentioning labour (e.g. "चार माणसांनी फवारणी केली"). Confirm the headcount renders as 4 (not 0), and that no invented total cost appears when only a rate was spoken (Phase 3 fixes).
+- [ ] Founder verifies via **HTTP 200** on `GET /shramsafal/farms/{ownFarmId}/labour` for the logged-in farm and **HTTP 403** for a farm the caller does not belong to (status-code evidence, per feedback rules — never a log line). This positive/negative pair was already proven once, end-to-end, against the restricted `agrisync_app` runtime role in Phase 6 (`74 pending review items, ₹22,395 wages, 135 daily logs` for the member; `403 ShramSafal.Forbidden` for a random farm) — the founder's own localhost check re-confirms it on demand.
 - [ ] Founder ticks `[x]` here BEFORE any deployment step. Code-complete ≠ approved.
+
+Founder approved: [ ]
 
 ## Deployment (OUT OF SCOPE for this plan — founder-gated, LEFT UNCHECKED)
 
-- [ ] (deferred) Migrations applied to prod `ssf` via the agrisync-deploy 7-gate machine (destructive-classify the 3 new tables + 3 new columns; RDS snapshot floor).
+> Migration count corrected 2026-07-19 (Phase 7): this release adds **0 new tables** — 3 new columns on the existing `ssf.labour_assignments` (migration `20260718132540`) + 3 new user-scoped SELECT RLS policies on existing tables `job_cards`/`compliance_signals`/`test_instances` (migration `20260719074300`, additive/ephemeral per the classifier). See the reconciled Change Surface above. (Stage 4/5's `ssf.labour_advances`/`ssf.attendance_days` tables are separate, future, unbuilt work — not part of this deployment.)
+
+- [ ] (deferred) Migrations applied to prod `ssf` via the agrisync-deploy 7-gate machine (`20260718132540` classified `destructive`/`clone` per the repo's fail-safe-to-strict classifier — see deploy handoff Blocker 5; `20260719074300` classified `additive`/`ephemeral`; RDS snapshot floor before either applies).
 - [ ] (deferred) Backend deployed to EC2; `/version` SHA proves live.
 - [ ] (deferred) Web + APK rebuilt with the labour endpoint.
 - [ ] (deferred) `DEPLOYMENT_TRACKER.md` row with prod evidence.
