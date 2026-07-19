@@ -108,6 +108,34 @@ public sealed class CreateDailyLogHandler(
             var existing = await repository.GetDailyLogByIdempotencyKeyAsync(command.IdempotencyKey, ct);
             if (existing is not null)
             {
+                // FIX (dfes-companion-2026-07-11, "the derivation is never
+                // invoked" bug): this branch fires on ANY resend of an
+                // already-committed log (same device+clientRequestId) — a
+                // routine, expected occurrence on the offline-first SYNC path
+                // (at-least-once delivery: the client retries until it sees a
+                // clean ack). Before this fix it returned immediately, which
+                // meant that if the ORIGINAL attempt's non-blocking side-car
+                // (PersistSideCarAsync) never reached the richness recompute —
+                // e.g. a mid-request disconnect/cancellation between the two
+                // phases, or any other structural reason — NO later resend
+                // ever gave it a second chance. The gap was invisible because
+                // nothing here ever threw: it was a silent, non-exceptional
+                // skip, not a caught failure, so PersistSideCarAsync's
+                // "rolled back to savepoint" warning never fired either.
+                //
+                // The catch-up call re-runs ONLY the richness recompute (the
+                // log row + typed ledger already exist from the original
+                // attempt, so there is nothing else to redo). Safe to repeat
+                // any number of times: DailyRichnessDerivationService.
+                // RecomputeAsync rebuilds the WHOLE day's aggregate from
+                // scratch from every persisted log on that (farm, date), so a
+                // second/third run overwrites in place — it can never double-
+                // count or corrupt the aggregate.
+                logger.LogInformation(
+                    "CreateDailyLog idempotent resend for {LogId} (farm {FarmId}, date {LogDate}); " +
+                    "re-running the richness side-car in case the original attempt's Phase 2 never ran.",
+                    existing.Id, existing.FarmId.Value, existing.LogDate);
+                await PersistRichnessRecomputeSideCarAsync(existing.FarmId.Value, existing.LogDate, ct);
                 return Result.Success(existing.ToDto());
             }
         }
@@ -366,6 +394,77 @@ public sealed class CreateDailyLogHandler(
             logger.LogWarning(ex,
                 "Side-car (weather/derivation) skipped for daily log {LogId} (non-blocking); log is durable.",
                 log.Id);
+        }
+    }
+
+    // ── FIX (dfes-companion-2026-07-11): idempotent-resend richness catch-up ──
+    // Same non-blocking isolation contract as PersistSideCarAsync (savepoint on
+    // the SYNC path's ambient transaction / own transaction on the HTTP path /
+    // plain try-catch for non-relational unit tests), but scoped to ONLY the
+    // richness recompute — called from the idempotency-key early return above,
+    // where the log + typed ledger already exist and there is nothing else to
+    // redo. A failure here is logged and swallowed exactly like the primary
+    // side-car: it must never turn an idempotent "already applied" resend into
+    // a caller-visible failure, and it must never be silent — hence the
+    // explicit LogWarning on every failure branch (the whole point of this fix
+    // is that a skipped scorer must never again look like success).
+    private async Task PersistRichnessRecomputeSideCarAsync(Guid farmId, DateOnly logDate, CancellationToken ct)
+    {
+        var relational = dbContext?.Database.IsRelational() == true;
+        var ambientTx = relational ? dbContext!.Database.CurrentTransaction : null;
+
+        if (ambientTx is not null)
+        {
+            const string savepoint = "ssf_daily_log_sidecar_resend";
+            await ambientTx.CreateSavepointAsync(savepoint, ct);
+            try
+            {
+                await dailyRichnessDerivation.RecomputeAsync(farmId, logDate, ct);
+                await repository.SaveChangesAsync(ct);
+            }
+            catch (Exception ex)
+            {
+                logger.LogWarning(ex,
+                    "Richness recompute (idempotent-resend catch-up) rolled back to savepoint for farm {FarmId} date {LogDate} (non-blocking).",
+                    farmId, logDate);
+                await ambientTx.RollbackToSavepointAsync(savepoint, ct);
+                dbContext!.ChangeTracker.Clear();
+            }
+
+            return;
+        }
+
+        if (relational)
+        {
+            await using var sideCarTx = await dbContext!.Database.BeginTransactionAsync(ct);
+            try
+            {
+                await dailyRichnessDerivation.RecomputeAsync(farmId, logDate, ct);
+                await repository.SaveChangesAsync(ct);
+                await sideCarTx.CommitAsync(ct);
+            }
+            catch (Exception ex)
+            {
+                logger.LogWarning(ex,
+                    "Richness recompute (idempotent-resend catch-up) rolled back for farm {FarmId} date {LogDate} (non-blocking).",
+                    farmId, logDate);
+                await sideCarTx.RollbackAsync(ct);
+                dbContext!.ChangeTracker.Clear();
+            }
+
+            return;
+        }
+
+        try
+        {
+            await dailyRichnessDerivation.RecomputeAsync(farmId, logDate, ct);
+            await repository.SaveChangesAsync(ct);
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex,
+                "Richness recompute (idempotent-resend catch-up) skipped for farm {FarmId} date {LogDate} (non-blocking).",
+                farmId, logDate);
         }
     }
 

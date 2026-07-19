@@ -168,6 +168,25 @@ internal sealed class InMemoryShramSafalRepository : IShramSafalRepository
             SeededRichnessAggregates
                 .FirstOrDefault(a => a.FarmId == farmId && a.LocalDate == localDate));
 
+    // FIX (dfes-companion-2026-07-11) — the interface default no-ops these two
+    // members, which is exactly wrong for a test that needs a REAL round-trip
+    // (RecomputeAsync reads the day's logs, then writes the aggregate back).
+    // GetDailyLogsForFarmDateAsync reads from the same _logs store AddLog/
+    // AddDailyLogAsync populate; AddDailyRichnessAggregateAsync writes into the
+    // SAME SeededRichnessAggregates list GetDailyRichnessAggregateAsync reads
+    // from, so a write is visible to a later read exactly like the real table.
+    public Task<IReadOnlyList<DailyLog>> GetDailyLogsForFarmDateAsync(
+        Guid farmId, DateOnly localDate, CancellationToken ct = default)
+        => Task.FromResult<IReadOnlyList<DailyLog>>(
+            _logs.Values.Where(l => l.FarmId.Value == farmId && l.LogDate == localDate).ToList());
+
+    public Task AddDailyRichnessAggregateAsync(
+        DailyRichnessAggregate aggregate, CancellationToken ct = default)
+    {
+        SeededRichnessAggregates.Add(aggregate);
+        return Task.CompletedTask;
+    }
+
     public Task<AppRole?> GetUserRoleForFarmAsync(Guid farmId, Guid userId, CancellationToken ct = default)
         => Task.FromResult<AppRole?>(
             _memberships.TryGetValue((farmId, userId), out var r) ? r : null);
