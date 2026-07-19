@@ -105,31 +105,14 @@ public sealed class SyncPushTenantScopeRealPostgresTests(Xunit.Abstractions.ITes
     private string _scratchDbName = string.Empty;
     private string _appConn = string.Empty;
     private string _adminConn = string.Empty;
-    private bool _skip;
-    private string _skipReason = string.Empty;
     private ServiceProvider? _rootProvider;
 
     public async Task InitializeAsync()
     {
-        var baseConn = ResolveSuperuserConnectionOrNull();
-        if (baseConn is null)
-        {
-            _skip = true;
-            _skipReason = "No local ShramSafalDb connection string found in appsettings.Development.json.";
-            return;
-        }
-
-        try
-        {
-            await using var probe = new NpgsqlConnection(baseConn);
-            await probe.OpenAsync();
-        }
-        catch (Exception ex)
-        {
-            _skip = true;
-            _skipReason = $"Native Postgres :5433 unreachable ({ex.GetType().Name}); RequiresPostgres proof skipped.";
-            return;
-        }
+        // Throws (does not skip) if Postgres is unconfigured/unreachable — see
+        // RequiresPostgresConnection's doc comment for the 2026-07-19
+        // CI-truthfulness fix this enforces.
+        var baseConn = await RequiresPostgresConnection.ResolveReachableConnectionOrThrowAsync();
 
         _scratchDbName = $"ssf_tenantscope_proof_{Guid.NewGuid():N}";
         await using (var admin = new NpgsqlConnection(baseConn))
@@ -194,7 +177,7 @@ public sealed class SyncPushTenantScopeRealPostgresTests(Xunit.Abstractions.ITes
             await _rootProvider.DisposeAsync();
         }
 
-        if (!_skip && !string.IsNullOrEmpty(_scratchDbName) && !string.IsNullOrEmpty(_adminConn))
+        if (!string.IsNullOrEmpty(_scratchDbName) && !string.IsNullOrEmpty(_adminConn))
         {
             try
             {
@@ -226,8 +209,6 @@ public sealed class SyncPushTenantScopeRealPostgresTests(Xunit.Abstractions.ITes
     [Fact]
     public async Task SyncPush_FullMutationChain_SucceedsForGenuineFarmMember()
     {
-        if (_skip) { Assert.True(true, _skipReason); return; }
-
         AssertNonSuperuserAppRole();
 
         var plotId = Guid.NewGuid();
@@ -505,8 +486,6 @@ public sealed class SyncPushTenantScopeRealPostgresTests(Xunit.Abstractions.ITes
     [Fact]
     public async Task SyncPush_ComplianceAndTestInstanceMutations_SucceedForGenuineFarmMember()
     {
-        if (_skip) { Assert.True(true, _skipReason); return; }
-
         var plotId = Guid.NewGuid();
         var cropCycleId = Guid.NewGuid();
         var ackSignalId = Guid.NewGuid();
@@ -638,8 +617,6 @@ public sealed class SyncPushTenantScopeRealPostgresTests(Xunit.Abstractions.ITes
     [Fact]
     public async Task SyncPush_CreatePlot_FailsClosedForNonMember_KnownFarmIdShape()
     {
-        if (_skip) { Assert.True(true, _skipReason); return; }
-
         var result = await RunSyncPushAsync(OwnerB, "owner", "d-B", "req-forged-plot", "create_plot", new()
         {
             ["plotId"] = Guid.NewGuid(),
@@ -656,8 +633,6 @@ public sealed class SyncPushTenantScopeRealPostgresTests(Xunit.Abstractions.ITes
     [Fact]
     public async Task SyncPush_VerifyLog_FailsClosedForNonMember_DailyLogShape()
     {
-        if (_skip) { Assert.True(true, _skipReason); return; }
-
         var (plotId, cropCycleId, dailyLogId) = (Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid());
         AssertApplied(await RunSyncPushAsync(OwnerA, "owner", "d-A", "req-neg-plot", "create_plot", new()
         {
@@ -701,8 +676,6 @@ public sealed class SyncPushTenantScopeRealPostgresTests(Xunit.Abstractions.ITes
     [Fact]
     public async Task SyncPush_CorrectCostEntry_FailsClosedForNonMember_CostEntryShape()
     {
-        if (_skip) { Assert.True(true, _skipReason); return; }
-
         var costEntryId = Guid.NewGuid();
         AssertApplied(await RunSyncPushAsync(OwnerA, "owner", "d-A", "req-neg-cost", "add_cost_entry", new()
         {
@@ -731,8 +704,6 @@ public sealed class SyncPushTenantScopeRealPostgresTests(Xunit.Abstractions.ITes
     [Fact]
     public async Task SyncPush_JobCardAssign_FailsClosedForNonMember_JobCardShape()
     {
-        if (_skip) { Assert.True(true, _skipReason); return; }
-
         var plotId = Guid.NewGuid();
         await using (var raw = new NpgsqlConnection(_superuserConn))
         {
@@ -773,8 +744,6 @@ public sealed class SyncPushTenantScopeRealPostgresTests(Xunit.Abstractions.ITes
     [Fact]
     public async Task SyncPush_ComplianceAcknowledge_FailsClosedForNonMember_ComplianceSignalShape()
     {
-        if (_skip) { Assert.True(true, _skipReason); return; }
-
         var (plotId, signalId) = (Guid.NewGuid(), Guid.NewGuid());
         await using (var raw = new NpgsqlConnection(_superuserConn))
         {
@@ -807,8 +776,6 @@ public sealed class SyncPushTenantScopeRealPostgresTests(Xunit.Abstractions.ITes
     [Fact]
     public async Task SyncPush_TestInstanceCollected_FailsClosedForNonMember_TestInstanceShape()
     {
-        if (_skip) { Assert.True(true, _skipReason); return; }
-
         var (plotId, cropCycleId, protocolId, instanceId) =
             (Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid());
         await using (var raw = new NpgsqlConnection(_superuserConn))
@@ -844,8 +811,6 @@ public sealed class SyncPushTenantScopeRealPostgresTests(Xunit.Abstractions.ITes
     [Fact]
     public async Task SyncPush_SetPriceConfig_FailsClosedForUserWithNoFarmMembership()
     {
-        if (_skip) { Assert.True(true, _skipReason); return; }
-
         var result = await RunSyncPushAsync(NoFarmUser, "owner", "d-none", "req-noFarm-price", "set_price_config", new()
         {
             ["itemName"] = $"NoFarmProof-{Guid.NewGuid():N}",
@@ -924,32 +889,6 @@ public sealed class SyncPushTenantScopeRealPostgresTests(Xunit.Abstractions.ITes
     // ─────────────────────────────────────────────────────────────────────────
     // Seed helpers (mirror SyncPushLedgerDerivationRealPostgresTests).
     // ─────────────────────────────────────────────────────────────────────────
-
-    private static string? ResolveSuperuserConnectionOrNull()
-    {
-        var candidates = new[]
-        {
-            System.IO.Path.Combine(RepoRoot(), "src", "AgriSync.Bootstrapper", "appsettings.Development.json"),
-        };
-        foreach (var path in candidates)
-        {
-            if (!System.IO.File.Exists(path)) continue;
-            var cfg = new ConfigurationBuilder().AddJsonFile(path, optional: true).Build();
-            var conn = cfg.GetConnectionString("ShramSafalDb");
-            if (!string.IsNullOrWhiteSpace(conn)) return conn;
-        }
-        return null;
-    }
-
-    private static string RepoRoot()
-    {
-        var dir = new System.IO.DirectoryInfo(AppContext.BaseDirectory);
-        while (dir is not null && !System.IO.Directory.Exists(System.IO.Path.Combine(dir.FullName, "src")))
-        {
-            dir = dir.Parent;
-        }
-        return dir?.FullName ?? AppContext.BaseDirectory;
-    }
 
     private static async Task<long> ScalarLongAsync(
         NpgsqlConnection db, string sql, params (string Name, object Value)[] args)

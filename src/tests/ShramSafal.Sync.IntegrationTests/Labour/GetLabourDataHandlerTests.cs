@@ -41,9 +41,18 @@ namespace ShramSafal.Sync.IntegrationTests.Labour;
 /// <c>[Trait("Category","RequiresDocker")]</c> — the same convention as
 /// <c>RowLevelSecurityTests</c> / <c>DwcScoreMatviewTests</c>. Local
 /// Docker-less environments (project policy — see
-/// <c>feedback_avoid_docker_local_dev</c>) skip this test entirely; the
-/// GitHub Actions <c>RequiresDocker</c> sweep runs it against a real
-/// <c>postgres:16-alpine</c> container.
+/// <c>feedback_avoid_docker_local_dev</c>) skip this test entirely.
+/// <b>No CI workflow runs it (2026-07-19 correction).</b> Every workflow
+/// under <c>.github/workflows/</c> that runs the .NET suite explicitly
+/// EXCLUDES <c>Category=RequiresDocker</c> (see <c>ci-gate.yml</c> /
+/// <c>dotnet-ci.yml</c>'s test-filter step) — there is no "RequiresDocker
+/// sweep" anywhere in this repo's CI, contrary to what an earlier version of
+/// this comment claimed. Today this test runs ONLY on a machine with Docker
+/// installed that explicitly opts in with
+/// <c>dotnet test --filter Category=RequiresDocker</c>. The money-consistency
+/// invariant below is duplicated as a runnable, always-executed proof in
+/// <c>Labour/LabourMoneyInvariantsRealPostgresTests</c>
+/// (<c>[Trait("Category","RequiresPostgres")]</c>).
 /// </para>
 ///
 /// <para>

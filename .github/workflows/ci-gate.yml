@@ -36,6 +36,17 @@ jobs:
           --health-retries 10
     env:
       ADMIN_TESTS_ADMIN_ROOT_CONN: "Host=localhost;Port=5433;Database=postgres;Username=postgres;Password=akash123"
+      # RequiresPostgres category (SyncPushTenantScopeRealPostgresTests,
+      # SyncPushLedgerDerivationRealPostgresTests,
+      # LedgerDerivationSupersessionRealPostgresTests,
+      # LabourMoneyInvariantsRealPostgresTests) — these tests assert real
+      # tenant-security / money invariants against native Postgres and must
+      # never silently pass (see RequiresPostgresConnection.cs). Without this
+      # override they'd resolve appsettings.Development.json's
+      # Database=agrisync_dev, which this service container never creates
+      # (only its own POSTGRES_DB=postgres exists), and — post 2026-07-19 —
+      # would now FAIL the gate instead of the old silent skip-and-pass.
+      REQUIRES_POSTGRES_ROOT_CONN: "Host=localhost;Port=5433;Database=postgres;Username=postgres;Password=akash123"
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4

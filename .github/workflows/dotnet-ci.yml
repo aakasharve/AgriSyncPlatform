@@ -44,6 +44,15 @@ jobs:
       # Match AdminTestFixture.DefaultRootConnectionString verbatim — keeps
       # CI green even if a future test reads the env var directly.
       ADMIN_TESTS_ADMIN_ROOT_CONN: "Host=localhost;Port=5433;Database=postgres;Username=postgres;Password=akash123"
+      # RequiresPostgres category (SyncPushTenantScopeRealPostgresTests,
+      # SyncPushLedgerDerivationRealPostgresTests,
+      # LedgerDerivationSupersessionRealPostgresTests,
+      # LabourMoneyInvariantsRealPostgresTests) — same reasoning as above.
+      # Without this override these tenant-security / money-invariant tests
+      # resolve appsettings.Development.json's Database=agrisync_dev, which
+      # this service container never creates, and — post 2026-07-19 — now
+      # FAIL loudly instead of silently skipping-and-passing.
+      REQUIRES_POSTGRES_ROOT_CONN: "Host=localhost;Port=5433;Database=postgres;Username=postgres;Password=akash123"
 
     steps:
       - name: Checkout
