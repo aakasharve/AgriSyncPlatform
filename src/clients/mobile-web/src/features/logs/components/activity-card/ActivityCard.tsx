@@ -10,6 +10,7 @@ import TrustBadge from '../../../../shared/components/ui/TrustBadge';
 import ObservationHubSheet from '../ObservationHubSheet';
 import { BucketIssue } from '../../../../domain/types/log.types';
 import { buildWorkDoneTitles } from '../../services/workDoneProjection';
+import { resolveLabourHeadcount } from '../../../../domain/logs/labourHeadcount';
 import { isCompletedIrrigationEvent } from '../../services/irrigationCompletion';
 import { ActivityCardProps } from './ActivityCardProps';
 import BucketItem from './components/BucketItem';
@@ -25,7 +26,7 @@ const ActivityCard: React.FC<ActivityCardProps> = ({
     onUpdateDetails,
     onUpdateWorkTypes,
     onRefineWorkType,
-    onDeleteActivity,
+    onDeleteActivity: _onDeleteActivity, // unused — only referenced inside a commented-out JSX block below
     defaults,
     profile,
     currentPlot,
@@ -66,7 +67,10 @@ const ActivityCard: React.FC<ActivityCardProps> = ({
         let totalCost = 0;
         plotTodayLogs.forEach(l => {
             l.labour.forEach(lab => {
-                totalWorkers += (lab.count || 0);
+                // Decision 3a (2026-07-19): real headcount — count when a bare
+                // total was stated, else maleCount+femaleCount — not just
+                // 'count' alone (which under-counts a gender-split-only entry).
+                totalWorkers += resolveLabourHeadcount(lab);
                 totalCost += (lab.totalCost || 0);
             });
         });
@@ -129,8 +133,8 @@ const ActivityCard: React.FC<ActivityCardProps> = ({
 
     // Aggregation-Aware Filled States
     const dailyLabour = getDailyLabourTotal();
-    const dailyIrrigationHours = getDailyIrrigationTotal();
-    const dailyMachineryHours = getDailyMachineryTotal();
+    const _dailyIrrigationHours = getDailyIrrigationTotal();
+    const _dailyMachineryHours = getDailyMachineryTotal();
     const dailyInputCount = getDailyInputsTotal();
     const dailyExpenseTotal = getDailyExpenseTotal();
     const dailyIrrigation = getDailyIrrigationTotal();
@@ -557,7 +561,7 @@ const ActivityCard: React.FC<ActivityCardProps> = ({
                     placeholder="Outcome (e.g. 5 rows done)"
                     className="w-full pl-8 p-2 bg-slate-50 border border-slate-100 rounded-lg text-sm focus:bg-white focus:border-slate-300 outline-none transition-colors"
                     defaultValue={activity.notes}
-                    onBlur={(e) => { /* Update logic if needed */ }}
+                    onBlur={(_e) => { /* Update logic if needed */ }}
                 />
             </div>
 
@@ -716,12 +720,14 @@ const ActivityCard: React.FC<ActivityCardProps> = ({
             ) : activeSheet && (
 
                 <DetailSheet
+                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
                     type={activeSheet as any}
                     data={linkedData[activeSheet as keyof typeof linkedData]}
                     defaults={defaults}
                     profile={profile}
                     currentPlot={currentPlot}
                     cropContractUnit={cropContractUnit}
+                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
                     onSave={(d) => onUpdateDetails(activeSheet as any, d)}
                     onClose={() => setActiveSheet(null)}
                 />

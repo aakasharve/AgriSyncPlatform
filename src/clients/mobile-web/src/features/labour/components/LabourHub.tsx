@@ -59,12 +59,12 @@ const QuickTile: React.FC<{ icon: React.ReactNode; chip: string; label: string; 
  * feature's rounded-card look, but the NUMBERS and their source are
  * identical to what reflect would show for the same log.
  *
- * KNOWN PRE-EXISTING BUG (not introduced or fixed here — see task report):
- * `generateLabourSummary` sums only maleCount/femaleCount and ignores
- * `LabourEvent.count`, so a voice log that set only `count` can show 0
- * people with a non-zero cost. Reusing the shared function keeps this
- * screen consistent with reflect, which is the point — fixing the
- * underlying calculation is a separate, deliberate decision.
+ * FIXED (Decision 3a, 2026-07-19): `generateLabourSummary` used to sum
+ * only maleCount/femaleCount and ignore `LabourEvent.count`, so a voice
+ * log that set only `count` showed 0 people with a non-zero cost. It now
+ * exposes `labour.headcount` (domain/logs/labourHeadcount.ts) — reusing
+ * the shared function keeps this screen consistent with reflect, which
+ * is the point of routing both through the SAME `generateDayWorkSummary`.
  */
 const LabourJustLogged: React.FC<{ logs: DailyLog[]; defaults: LedgerDefaults }> = ({ logs, defaults }) => {
     const rows = logs

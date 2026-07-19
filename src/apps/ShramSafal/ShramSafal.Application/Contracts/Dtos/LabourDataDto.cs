@@ -27,11 +27,16 @@ public sealed record LabourPersonDto(
     // Option-3 wage-book (spec: 2026-07-13-labour-attendance-approval-design):
     // three DISTINCT numbers, never merged. RecordedWages (काम झालं) = sum of
     // JobCard.EstimatedTotal for Completed/VerifiedForPayout/PaidOut cards —
-    // the plan/agreed value. Paid (दिलं) = the labour_payout CostEntry slice,
-    // the SAME rows/method the finance page reads (money-consistency
-    // invariant — see GetLabourDataHandler). Advance (उचल) = 0 until Stage 4
-    // (LabourAdvance). Owed/बाकी = RecordedWages − Paid − Advance is DERIVED
-    // by the client/handler, never stored here (no stale copy).
+    // the plan/agreed value. Paid (दिलं, per-person) = this worker's
+    // labour_payout CostEntry slice (job-card attributed only — labour_misc
+    // has no JobCard link, so it can never attribute to a specific person).
+    // The SAME rows/method the finance page reads (money-consistency
+    // invariant — see GetLabourDataHandler), but Dashboard.Money.Paid (the
+    // farm-wide दिलं, Decision 3a 2026-07-19) additionally includes
+    // unattributable labour_misc spend that no single person's Paid carries.
+    // Advance (उचल) = 0 until Stage 4 (LabourAdvance). Owed/बाकी =
+    // RecordedWages − Paid − Advance is DERIVED by the client/handler, never
+    // stored here (no stale copy).
     decimal RecordedWages,
     decimal Paid,
     decimal Advance,

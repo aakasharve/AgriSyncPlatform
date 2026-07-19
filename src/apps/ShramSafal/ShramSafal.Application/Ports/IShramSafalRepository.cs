@@ -585,16 +585,23 @@ public interface IShramSafalRepository
         => Task.FromResult(new List<FarmMembership>());
 
     /// <summary>
-    /// The farm's <c>labour_payout</c> <see cref="CostEntry"/> rows, each
-    /// paired with the linked <see cref="JobCard.AssignedWorkerUserId"/>
+    /// The farm's labour <see cref="CostEntry"/> rows — <c>CategoryId</c>
+    /// <c>labour_payout</c> OR <c>labour_misc</c> (Decision 3a, 2026-07-19,
+    /// spec: 2026-07-13-labour-attendance-approval-design: दिलं = ALL labour
+    /// money paid out, not just job-card settlements) — each paired with the
+    /// linked <see cref="JobCard.AssignedWorkerUserId"/> when one exists
     /// (read at the repo layer via <c>CostEntry.JobCardId → JobCard</c>,
     /// since <c>CostEntryDto</c> does not expose <c>JobCardId</c>).
+    /// <c>labour_misc</c> rows are never linked to a JobCard, so their
+    /// <c>AssignedWorkerUserId</c> is always <c>null</c> — the caller counts
+    /// them at the farm-wide level only, never attributes them to a person.
     /// <para>
     /// MONEY-CONSISTENCY INVARIANT — these are the EXACT SAME rows
-    /// <c>GetFinanceSummaryHandler</c> sums for
-    /// <c>CategoryId=="labour_payout"</c>. The caller (handler) applies the
-    /// latest <see cref="FinanceCorrection"/> and rounding identically to
-    /// that handler so the labour "Paid" figure equals the finance page.
+    /// <c>GetFinanceSummaryHandler</c> sums for the "Labour" bucket
+    /// (<c>labour_payout</c> + <c>labour_misc</c>). The caller (handler)
+    /// applies the latest <see cref="FinanceCorrection"/> and rounding
+    /// identically to that handler so the labour "Paid" figure equals the
+    /// finance page.
     /// </para>
     /// Default impl returns empty so in-tree test doubles keep compiling;
     /// production <c>ShramSafalRepository</c> overrides.

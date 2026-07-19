@@ -71,7 +71,26 @@ function triggerSyncBestEffort(): void {
 
 export const financeCommandService = {
     createMoneyEventFromSource(payload: MoneySourcePayload): MoneyEvent {
-        const id = `me_${idGenerator.generate()}`;
+        // Idempotency guard: `sourceId` is deterministic per (log, entry) —
+        // e.g. `${log.id}:labour:${entry.id}` — so a re-save of the same log
+        // (double-tap, retry after a transient failure, autosave firing
+        // twice) must not double-count a day's cost. Skip re-creating and
+        // re-enqueueing when an event for this exact source already exists.
+        const existing = financeService.getMoneyEvents()
+            .find(e => e.sourceType === payload.type && e.sourceId === payload.sourceId);
+        if (existing) {
+            return existing;
+        }
+
+        // DATA_PRINCIPLE_SPINE 02.6 fix (Decision 3a, 2026-07-19): this id is
+        // sent as `costEntryId` below and MUST satisfy the sync-contract's
+        // `ZGuid` schema (a bare UUID, no prefix) — a `me_`-prefixed id fails
+        // `validatePayload` at MutationQueue.enqueue() time and throws
+        // silently (the caller never awaits/catches this promise), so the
+        // expense was saved to the local cache but never reached the
+        // outbox — the finance page showed it as "saved" while it was
+        // rejected on-device before ever touching the network.
+        const id = idGenerator.generate();
         const createdByUserId = getCurrentUserId(payload.createdByUserId);
         const amount = Number(payload.amount || 0);
         const event: MoneyEvent = {

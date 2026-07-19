@@ -75,7 +75,7 @@ const DailyWorkSummaryView: React.FC<DailyWorkSummaryViewProps> = ({ summary }) 
                     {!summary.labour.isEmpty && (
                         <div className="flex items-center gap-1.5 bg-orange-100 text-orange-800 px-3 py-1.5 rounded-lg border border-orange-200">
                             <Users size={14} strokeWidth={2.5} />
-                            <span className="text-xs font-bold">{summary.labour.maleCount + summary.labour.femaleCount} Workers</span>
+                            <span className="text-xs font-bold">{summary.labour.headcount} Workers</span>
                         </div>
                     )}
                     {!summary.inputs.isEmpty && (

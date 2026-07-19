@@ -22,6 +22,7 @@ import {
     LedgerDefaults,
     FarmOperator
 } from '../../types';
+import { sumLabourHeadcount } from '../../domain/logs/labourHeadcount';
 
 const calculateMachineryCost = (fuelCost: number, rentalCost: number): number => fuelCost + rentalCost;
 const calculateTotalDayCost = (labourCost: number, inputsCost: number, machineryCost: number): number =>
@@ -130,6 +131,7 @@ export const generateDayWorkSummary = (
             labour: {
                 maleCount: 0,
                 femaleCount: 0,
+                headcount: 0,
                 maleRate: 0,
                 femaleRate: 0,
                 hoursWorked: 0,
@@ -177,6 +179,7 @@ const generateLabourSummary = (
         return {
             maleCount: 0,
             femaleCount: 0,
+            headcount: 0,
             maleRate: settings.labour.defaultWage,
             femaleRate: settings.labour.defaultWage,
             hoursWorked: 0,
@@ -210,6 +213,11 @@ const generateLabourSummary = (
     return {
         maleCount: totalMale,
         femaleCount: totalFemale,
+        // Decision 3a (2026-07-19): the REAL headcount — `count` when a bare
+        // total was stated ("चार माणसांनी काम केलं"), not just maleCount +
+        // femaleCount (which is 0 for a count-only entry — the "0 people,
+        // real cost" bug).
+        headcount: sumLabourHeadcount(log.labour),
         maleRate,
         femaleRate,
         hoursWorked: maxHours,
@@ -248,6 +256,7 @@ const generateIrrigationSummary = (log: DailyLog): IrrigationSummary => {
     const successfulCount = countSuccessfulIrrigationEvents(log.irrigation, log.fullTranscript);
 
     return {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         method: primaryEvent.method as any || 'Drip',
         durationHours: totalDuration,
         source: primaryEvent.source || 'Unknown',

@@ -126,12 +126,24 @@ export interface LabourData {
 /**
  * बाकी (owed) = recorded − paid − advance.
  * owe=true → owner still owes the worker (देय, green); false → the worker
- * received more (paid+advance) than recorded work covers, i.e. उचल is
- * outstanding against future work (amber).
+ * received more (paid+advance) than recorded work covers.
+ *
+ * Decision 3a (2026-07-19) — the negative-net case has TWO different real
+ * causes and must not be labeled the same way:
+ *   - `isAdvance=true`: an actual उचल (advance, `b.advance > 0`) is driving
+ *     the surplus — "उचल बाकी" (advance outstanding) is honest here.
+ *   - `isAdvance=false`: दिलं widened to farm-wide labour spend (fix 1)
+ *     means Paid can exceed RecordedWages with NO advance involved at all
+ *     (job cards simply aren't in use yet) — calling this "उचल बाकी" would
+ *     tell the farmer his worker owes an advance that was never given. The
+ *     UI must present this case as an honest overpayment, not an advance.
  */
-export const netBalance = (b: LabourBalance): { owe: boolean; amount: number } => {
+export const netBalance = (b: LabourBalance): { owe: boolean; amount: number; isAdvance: boolean } => {
     const net = b.recorded - b.paid - b.advance;
-    return net >= 0 ? { owe: true, amount: net } : { owe: false, amount: -net };
+    if (net >= 0) {
+        return { owe: true, amount: net, isAdvance: false };
+    }
+    return { owe: false, amount: -net, isAdvance: b.advance > 0 };
 };
 
 export const inr = (n: number): string => '₹' + n.toLocaleString('en-IN');

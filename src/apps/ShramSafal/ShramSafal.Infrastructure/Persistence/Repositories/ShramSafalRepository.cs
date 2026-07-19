@@ -1071,8 +1071,15 @@ internal sealed class ShramSafalRepository(ShramSafalDbContext db) : IShramSafal
     public async Task<List<(CostEntry CostEntry, Guid? AssignedWorkerUserId)>> GetLabourPayoutCostEntriesWithJobCardAsync(
         FarmId farmId, CancellationToken ct = default)
     {
+        // Decision 3a (2026-07-19, spec: 2026-07-13-labour-attendance-approval-design):
+        // दिलं = ALL labour money paid out, not just job-card settlements.
+        // "labour" on the wire is exactly the two CostCategoryId codes
+        // labour_payout + labour_misc (CostCategory.ts / _shared.zod.ts) — the
+        // same pair the frontend's mapCategory() buckets into "Labour" for the
+        // finance page. Widening this filter (rather than adding a second
+        // query) keeps ONE derivation for both categories.
         var entries = await db.CostEntries
-            .Where(c => c.FarmId == farmId && c.CategoryId == "labour_payout")
+            .Where(c => c.FarmId == farmId && (c.CategoryId == "labour_payout" || c.CategoryId == "labour_misc"))
             .OrderBy(c => c.EntryDate)
             .ToListAsync(ct);
 

@@ -40,6 +40,16 @@ export interface DayWorkSummary {
 export interface LabourSummary {
     maleCount: number;
     femaleCount: number;
+    /**
+     * The REAL total headcount for the day (Decision 3a, 2026-07-19) — per
+     * `resolveLabourHeadcount`/`sumLabourHeadcount`
+     * (domain/logs/labourHeadcount.ts): `count` when a bare total was
+     * stated (e.g. "चार माणसांनी काम केलं" — no gender split), else
+     * `maleCount + femaleCount`. Use THIS for "how many people worked"
+     * displays — `maleCount + femaleCount` alone is 0 for a count-only
+     * entry and under-counts.
+     */
+    headcount: number;
     maleRate: number;
     femaleRate: number;
     hoursWorked: number;

@@ -9,6 +9,7 @@ import { systemClock } from '../../core/domain/services/Clock';
 import { getWeatherForLocation } from '../usecases/AttachWeatherSnapshot';
 import { financeCommandService } from '../../features/finance/financeCommandService';
 import { MoneyCategory } from '../../features/finance/finance.types';
+import { SessionStore } from '../../infrastructure/storage/SessionStore';
 
 // Define the Service Interface
 export interface LogCommandService {
@@ -21,6 +22,7 @@ export interface LogCommandService {
     ): Promise<DailyLog[]>;
 
     createFromManual(
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         data: any,
         scope: LogScope,
         crops: CropProfile[],
@@ -90,6 +92,7 @@ export class LogCommandServiceImpl implements LogCommandService {
      * Returns Hydrated logs.
      */
     async createFromManual(
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         data: any,
         scope: LogScope,
         crops: CropProfile[],
@@ -189,13 +192,35 @@ export class LogCommandServiceImpl implements LogCommandService {
 
     private captureMoneyEventsFromLog(log: DailyLog): void {
         const selection = log.context.selection?.[0];
+        // Phase 3 / Decision 3a (2026-07-19): `selection.farmId` is almost
+        // never populated by LogFactory, so every call below used to fall
+        // through `createMoneyEventFromSource`'s fallback chain (a STALE
+        // cached event's farmId — wrong farm for a multi-farm user who just
+        // switched — or the literal string 'farm_unknown' on a virgin
+        // cache). Both the sync-contract's `AddCostEntryPayload.farmId` AND
+        // `costEntryId` fields are `ZGuid` (bare UUID), so a non-UUID farmId
+        // fails validation exactly like the `me_<uuid>` costEntryId bug:
+        // silently, on-device, before the mutation ever reaches the outbox.
+        // `SessionStore.getCurrentFarmId()` is the same synchronous,
+        // reliably-current farm id `FarmContext`/`switchFarm` keep in sync —
+        // a real fix, not another guess.
+        const farmId = selection?.farmId ?? SessionStore.getCurrentFarmId() ?? undefined;
         const cropId = selection?.cropId && selection.cropId !== 'FARM_GLOBAL' ? selection.cropId : undefined;
         const plotId = selection?.selectedPlotIds?.[0];
         const baseDateTime = (log.meta?.createdAtISO || `${log.date}T12:00:00`);
         const createdBy = log.meta?.createdByOperatorId || 'owner';
 
         log.labour.forEach((entry) => {
-            const amount = entry.totalCost ?? ((entry.count || 0) * (entry.wagePerPerson || 0));
+            // NO-MULTIPLY (Decision 3a): only an EXPLICIT stated total ever
+            // becomes a real expense — never a fabricated rate × count. The
+            // server-side LabourAssignment governor already refuses this
+            // multiply (LedgerDerivationService); this client-side capture
+            // used to do the multiply anyway and sync the invented total as
+            // a real CostEntry the moment the costEntryId/farmId bugs above
+            // are fixed — reintroducing, in the finance ledger, the exact
+            // number the farmer never said. If no total was stated, there is
+            // nothing to record yet (voice review shows "—", not a guess).
+            const amount = entry.totalCost;
             if (!amount) return;
             financeCommandService.createMoneyEventFromSource({
                 type: 'VoiceLog',
@@ -203,6 +228,7 @@ export class LogCommandServiceImpl implements LogCommandService {
                 dateTime: baseDateTime,
                 eventType: 'Expense',
                 category: 'Labour',
+                farmId,
                 cropId,
                 plotId,
                 amount,
@@ -223,6 +249,7 @@ export class LogCommandServiceImpl implements LogCommandService {
                 dateTime: baseDateTime,
                 eventType: 'Expense',
                 category: 'Input',
+                farmId,
                 cropId,
                 plotId,
                 amount,
@@ -242,6 +269,7 @@ export class LogCommandServiceImpl implements LogCommandService {
                 dateTime: baseDateTime,
                 eventType: 'Expense',
                 category: 'Machinery',
+                farmId,
                 cropId,
                 plotId,
                 amount,
@@ -262,6 +290,7 @@ export class LogCommandServiceImpl implements LogCommandService {
                 dateTime: baseDateTime,
                 eventType: 'Expense',
                 category,
+                farmId,
                 cropId,
                 plotId,
                 amount,

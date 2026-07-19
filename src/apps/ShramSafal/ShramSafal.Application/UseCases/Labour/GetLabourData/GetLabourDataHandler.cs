@@ -20,12 +20,17 @@ namespace ShramSafal.Application.UseCases.Labour.GetLabourData;
 /// <b>MONEY-CONSISTENCY INVARIANT (binding — founder's #1 concern).</b>
 /// <c>Paid</c> (per worker and in <c>Dashboard.Money</c>) is sourced from the
 /// EXACT SAME rows and correction resolution <c>GetFinanceSummaryHandler</c>
-/// uses: <c>sum(CostEntry.Amount WHERE CategoryId=="labour_payout")</c>, with
-/// the latest <see cref="ShramSafal.Domain.Finance.FinanceCorrection.CorrectedAmount"/>
+/// uses: <c>sum(CostEntry.Amount WHERE CategoryId IN ("labour_payout",
+/// "labour_misc"))</c> — Decision 3a (2026-07-19): दिलं = ALL labour money
+/// paid out, not only job-card settlements — with the latest
+/// <see cref="ShramSafal.Domain.Finance.FinanceCorrection.CorrectedAmount"/>
 /// applied when present. This guarantees the labour page's "दिलं" figure
-/// equals the finance page for the same work — never re-derived.
-/// <c>CostEntry.Amount</c> / <c>FinanceCorrection.CorrectedAmount</c> are
-/// already 2dp at domain construction, so the <c>decimal.Round</c> calls in
+/// equals the finance page's "Labour" total for the same farm — never
+/// re-derived. Per-PERSON <c>Paid</c> stays attribution-only (labour_misc has
+/// no JobCard link, so it can never be attributed to a specific worker); the
+/// unattributable slice is added to <c>Dashboard.Money.Paid</c> only — see
+/// step 6 below. <c>CostEntry.Amount</c> / <c>FinanceCorrection.CorrectedAmount</c>
+/// are already 2dp at domain construction, so the <c>decimal.Round</c> calls in
 /// this handler (including the per-entry one) are a defensive no-op, not a
 /// source of truth — <c>GetFinanceSummaryHandler</c> itself only rounds the
 /// per-category group sum and the grand total, never per-entry, so "mirrors
@@ -39,7 +44,12 @@ namespace ShramSafal.Application.UseCases.Labour.GetLabourData;
 /// <see cref="JobCard.EstimatedTotal"/> for the worker's cards in
 /// {Completed, VerifiedForPayout, PaidOut}. <c>Advance</c> ("उचल") is 0 until
 /// Stage 4 (<c>LabourAdvance</c>). <c>Owed</c> ("बाकी") is always DERIVED as
-/// <c>RecordedWages − Paid − Advance</c> — never stored.
+/// <c>RecordedWages − Paid − Advance</c> — never stored. Now that <c>Paid</c>
+/// can include farm-wide labour_misc spend with no matching JobCard,
+/// <c>Owed</c> CAN legitimately go negative (paid more than what job cards
+/// have recorded) — that is a correct, honest number, not a bug; the client
+/// is responsible for presenting a negative Owed honestly rather than
+/// mislabeling it as an "उचल" advance (see labourMock.ts netBalance).
 /// </para>
 /// <para>
 /// <see cref="LabourAssignment.TotalCost"/> / <see cref="LabourAssignment.WagePerPerson"/>
@@ -86,7 +96,12 @@ public sealed class GetLabourDataHandler(IShramSafalRepository repository, ICloc
                 g => g.Key,
                 g => decimal.Round(g.Sum(jc => jc.EstimatedTotal.Amount), 2, MidpointRounding.AwayFromZero));
 
-        // ── 3. labour_payout CostEntries (finance-consistent Paid — दिलं). ──
+        // ── 3. Labour CostEntries — labour_payout + labour_misc (finance-consistent Paid — दिलं). ──
+        // Decision 3a (2026-07-19): दिलं = ALL labour money paid out, not just
+        // job-card settlements — labour_misc (generic voice/manual labour
+        // spend, no JobCard link) is included alongside labour_payout so this
+        // reconciles with the finance page's "Labour" bucket (same two
+        // categories the frontend's mapCategory() collapses into one).
         // Mirrors GetFinanceSummaryHandler's ROWS and latest-correction
         // resolution — that's what keeps this page and the finance page
         // agreeing. It does NOT mirror that handler's rounding: values are
@@ -103,21 +118,32 @@ public sealed class GetLabourDataHandler(IShramSafalRepository repository, ICloc
             .ToDictionary(g => g.Key, g => g.OrderByDescending(c => c.CorrectedAtUtc).First());
 
         var paidByWorker = new Dictionary<Guid, decimal>();
+        // Farm-wide money paid that CANNOT be attributed to a specific person
+        // (labour_misc has no JobCard link, so AssignedWorkerUserId is always
+        // null for it — a job-card-settled payout whose worker has since LEFT
+        // the farm is a DIFFERENT case, handled below by the `people`-only
+        // rollup, not here). Real money paid out either way — decision 3a
+        // requires it in the farm-wide दिलं total even with no person to
+        // attach it to; per-person Paid stays untouched (residual: per-person
+        // attribution stays partial until job cards are in real use).
+        decimal unattributedPaid = 0m;
         foreach (var (entry, assignedWorkerUserId) in payoutRows)
         {
-            if (assignedWorkerUserId is not { } workerId)
-            {
-                continue; // orphaned payout (no linked JobCard/worker) — not attributable to a person.
-            }
-
             var hasCorrection = latestCorrections.TryGetValue(entry.Id, out var latestCorrection);
             var effectiveAmount = decimal.Round(
                 hasCorrection ? latestCorrection!.CorrectedAmount : entry.Amount,
                 2, MidpointRounding.AwayFromZero);
 
+            if (assignedWorkerUserId is not { } workerId)
+            {
+                unattributedPaid += effectiveAmount; // orphaned payout (no linked JobCard/worker) — not attributable to a person.
+                continue;
+            }
+
             paidByWorker[workerId] = paidByWorker.GetValueOrDefault(workerId) + effectiveAmount;
         }
 
+        unattributedPaid = decimal.Round(unattributedPaid, 2, MidpointRounding.AwayFromZero);
         foreach (var workerId in paidByWorker.Keys.ToList())
         {
             paidByWorker[workerId] = decimal.Round(paidByWorker[workerId], 2, MidpointRounding.AwayFromZero);
@@ -179,20 +205,27 @@ public sealed class GetLabourDataHandler(IShramSafalRepository repository, ICloc
                 CleanRecord: null));
         }
 
-        // ── 6. Dashboard rollups — SAME population as the People rows below. ──
-        // All three totals are summed over `people` (the Active-roster list
-        // assembled in step 5), NOT over the raw `recordedWagesByWorker` /
-        // `paidByWorker` dictionaries. Those dictionaries can hold a worker
-        // who was paid and then suspended/exited — summing them directly
-        // would let totalPaid include money for someone totalRecorded no
-        // longer counts, driving Owed negative even though every row shown
-        // on screen reconciles. This dashboard reflects the ACTIVE roster;
-        // a paid-then-departed worker's historical pay is out of Stage-1
-        // scope (a former-workers view is a later stage). Each per-person
-        // Paid/RecordedWages value is still sourced exactly as in step 5 —
-        // only the aggregation population changes here.
+        // ── 6. Dashboard rollups — SAME population as the People rows below,
+        //       PLUS farm-wide unattributed labour spend (Decision 3a). ──────
+        // RecordedWages/Advance are summed over `people` (the Active-roster
+        // list assembled in step 5), NOT over the raw `recordedWagesByWorker`
+        // dictionary. That dictionary can hold a worker who was paid and then
+        // suspended/exited — summing it directly would let totalPaid include
+        // money for someone totalRecorded no longer counts, driving Owed
+        // negative even though every row shown on screen reconciles. This
+        // dashboard reflects the ACTIVE roster for THAT reason; a
+        // paid-then-departed worker's historical pay is out of Stage-1 scope
+        // (a former-workers view is a later stage).
+        //
+        // Dashboard Paid (दिलं) is DIFFERENT: `people.Sum(p => p.Paid)` PLUS
+        // `unattributedPaid` — labour_misc entries (and any orphaned
+        // labour_payout with no JobCard link) that were never attributable to
+        // an active person still ARE real money the farmer paid out, and
+        // Decision 3a requires दिलं to equal ALL labour money paid, matching
+        // the finance page. Per-person Paid is untouched (still attribution-
+        // only); only this farm-wide total absorbs the unattributed slice.
         var totalRecorded = decimal.Round(people.Sum(p => p.RecordedWages), 2, MidpointRounding.AwayFromZero);
-        var totalPaid = decimal.Round(people.Sum(p => p.Paid), 2, MidpointRounding.AwayFromZero);
+        var totalPaid = decimal.Round(people.Sum(p => p.Paid) + unattributedPaid, 2, MidpointRounding.AwayFromZero);
         var totalAdvance = decimal.Round(people.Sum(p => p.Advance), 2, MidpointRounding.AwayFromZero);
         var totalOwed = decimal.Round(totalRecorded - totalPaid - totalAdvance, 2, MidpointRounding.AwayFromZero);
 

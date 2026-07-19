@@ -9,6 +9,7 @@ using AgriSync.SharedKernel.Contracts.Roles;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
+using ShramSafal.Application.UseCases.Finance.GetFinanceSummary;
 using ShramSafal.Application.UseCases.Labour.GetLabourData;
 using ShramSafal.Domain.AI;
 using ShramSafal.Domain.Common;
@@ -291,6 +292,125 @@ public sealed class LabourMoneyInvariantsRealPostgresTests : IAsyncLifetime
             "a paid-then-departed worker must never drive the dashboard Owed negative");
         data.Dashboard.Money.Paid.Should().Be(data.People.Sum(p => p.Paid),
             "Dashboard.Money.Paid must reconcile with the SAME population as the People rows displayed beneath it");
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // MONEY ASSERTION 5 (Decision 3a, 2026-07-19) — finance-vs-wage-book
+    // reconciliation. Before this fix, दिलं summed ONLY labour_payout
+    // (job-card settlements); labour_misc (generic voice/manual labour spend
+    // with no JobCard link) was invisible to the wage book while the finance
+    // page counted it — reproducing the founder's real bug report on the
+    // seeded farm: finance "Labour" = ₹22,200, wage book दिलं = ₹0.
+    // ─────────────────────────────────────────────────────────────────────────
+    [Fact]
+    public async Task Wage_book_paid_reconciles_with_finance_page_labour_total_across_categories()
+    {
+        await using var db = NewDbContext();
+        var repository = new ShramSafalRepository(db);
+
+        var farmId = new FarmId(Guid.NewGuid());
+        var ownerUserId = new UserId(Guid.NewGuid());
+        var paidWorkerId = new UserId(Guid.NewGuid());
+        var now = DateTime.UtcNow;
+        var labourDay = DateOnly.FromDateTime(now);
+        var otherDay = labourDay.AddDays(-10);
+
+        var farm = Farm.Create(farmId, "Money-Invariant Reconciliation Proof Farm", ownerUserId, now);
+        farm.AttachToOwnerAccount(new OwnerAccountId(Guid.NewGuid()), now);
+        await repository.AddFarmAsync(farm);
+
+        await repository.AddFarmMembershipAsync(
+            FarmMembership.Create(Guid.NewGuid(), farmId, paidWorkerId, AppRole.Worker, now));
+        await repository.SaveChangesAsync();
+
+        // ── (1) Job-card-attributed labour_payout: 300, no correction. ──────
+        var jobCard = JobCard.CreateDraft(
+            Guid.NewGuid(), farmId, Guid.NewGuid(), null, ownerUserId, labourDay,
+            [new JobCardLineItem("spray", 2m, new Money(150m, Currency.Inr), null)],
+            now);
+        jobCard.Assign(paidWorkerId, ownerUserId, AppRole.PrimaryOwner, now);
+        jobCard.Start(paidWorkerId, now);
+        jobCard.CompleteWithLog(Guid.NewGuid(), paidWorkerId, now);
+        jobCard.MarkVerifiedForPayout(VerificationStatus.Verified, ownerUserId, AppRole.PrimaryOwner, now);
+        var payoutEntryId = Guid.NewGuid();
+        jobCard.MarkPaidOut(payoutEntryId, new Money(300m, Currency.Inr), now);
+        await repository.AddJobCardAsync(jobCard);
+
+        var payoutEntry = CostEntry.CreateLabourPayout(
+            payoutEntryId, jobCard.Id, farmId, plotId: null, cropCycleId: null,
+            amount: 300m, currencyCode: "INR", entryDate: labourDay,
+            createdByUserId: ownerUserId, createdAtUtc: now);
+        await repository.AddCostEntryAsync(payoutEntry);
+
+        // ── (2) Orphaned labour_misc entries — no JobCard link at all: the ──
+        //        seeded-farm-shaped bug (generic voice/manual labour spend). ─
+        var miscEntry1 = CostEntry.Create(
+            Guid.NewGuid(), farmId, plotId: null, cropCycleId: null,
+            categoryId: "labour_misc", description: "Weeding gang", amount: 1000m,
+            currencyCode: "INR", entryDate: labourDay,
+            createdByUserId: ownerUserId, location: null, createdAtUtc: now);
+        await repository.AddCostEntryAsync(miscEntry1);
+
+        var miscEntry2 = CostEntry.Create(
+            Guid.NewGuid(), farmId, plotId: null, cropCycleId: null,
+            categoryId: "labour_misc", description: "Harvest gang", amount: 500m,
+            currencyCode: "INR", entryDate: labourDay,
+            createdByUserId: ownerUserId, location: null, createdAtUtc: now);
+        await repository.AddCostEntryAsync(miscEntry2);
+        await repository.SaveChangesAsync();
+
+        // A correction on miscEntry2 (500 -> 700) proves the SAME
+        // latest-correction resolution GetFinanceSummaryHandler uses is
+        // applied identically here.
+        var correction = Domain.Finance.FinanceCorrection.Create(
+            Guid.NewGuid(), miscEntry2.Id, originalAmount: 500m, correctedAmount: 700m,
+            currencyCode: "INR", reason: "Undercounted workers", correctedByUserId: ownerUserId,
+            correctedAtUtc: now);
+        await repository.AddFinanceCorrectionAsync(correction);
+        miscEntry2.MarkCorrected(correction.Id, 700m, "INR", now);
+        await repository.SaveChangesAsync();
+
+        // ── (3) A NON-labour entry on a DIFFERENT day — must be excluded ────
+        //        from दिलं even though the finance page counts it too. ───────
+        var fertilizerEntry = CostEntry.Create(
+            Guid.NewGuid(), farmId, plotId: null, cropCycleId: null,
+            categoryId: "fertilizer", description: "Urea", amount: 999m,
+            currencyCode: "INR", entryDate: otherDay,
+            createdByUserId: ownerUserId, location: null, createdAtUtc: now);
+        await repository.AddCostEntryAsync(fertilizerEntry);
+        await repository.SaveChangesAsync();
+
+        // ── Finance page's number for labourDay: EVERY cost entry on that ───
+        //    day is labour, so GetFinanceSummaryHandler's GrandTotal for the
+        //    [labourDay, labourDay] window IS the finance page's real labour
+        //    total — correction resolution and rounding exactly as production
+        //    computes it (the fertilizer entry sits on otherDay, outside the
+        //    window, so it cannot leak into this total).
+        var financeHandler = new GetFinanceSummaryHandler(repository);
+        var financeResult = await financeHandler.HandleAsync(
+            new GetFinanceSummaryQuery(ownerUserId, "day", labourDay, labourDay));
+        financeResult.IsSuccess.Should().BeTrue();
+        var financeLabourTotal = financeResult.Value!.GrandTotal;
+
+        financeLabourTotal.Should().Be(2000m,
+            "300 (labour_payout) + 1000 (labour_misc) + 700 (labour_misc, corrected from 500) — the real finance-page number for this farm");
+
+        // ── Wage book's दिलं for the SAME farm must equal the SAME number. ──
+        var labourHandler = new GetLabourDataHandler(repository, new FixedClock(now));
+        var labourResult = await labourHandler.HandleAsync(new GetLabourDataQuery(farmId, ownerUserId));
+        labourResult.IsSuccess.Should().BeTrue();
+        var data = labourResult.Value!;
+
+        data.Dashboard.Money.Paid.Should().Be(financeLabourTotal,
+            "Decision 3a: दिलं must equal the finance page's ALL-labour total (labour_payout + labour_misc), same correction handling");
+        data.Dashboard.Money.Paid.Should().Be(2000m);
+
+        // Per-person Paid stays attribution-only: the two labour_misc
+        // entries have no JobCard link, so they can never attach to
+        // paidWorkerId — only the job-card-settled 300 does.
+        var person = data.People.Single(p => p.Id == paidWorkerId.Value.ToString());
+        person.Paid.Should().Be(300m,
+            "per-person Paid stays job-card-attributed only; the unattributed labour_misc slice reconciles at the farm level, not per person");
     }
 
     // ─────────────────────────────────────────────────────────────────────────

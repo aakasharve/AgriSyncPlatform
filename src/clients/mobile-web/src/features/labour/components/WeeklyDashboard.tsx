@@ -34,7 +34,7 @@ const WeeklyDashboard: React.FC<Props> = ({ data, onReview, onLedger, onToast })
                 <StatTile icon={<Users size={17} />} tone="em" value={String(d.manDays)} label="मजूर-दिवस" trend={d.manDaysTrend} />
                 <StatTile icon={<Wallet size={17} />} tone="em" value={inr(d.wages)} label="मजुरी" />
                 <StatTile icon={<ArrowUpRight size={17} />} tone="am" value={inr(d.advances)} label="उचल दिली" />
-                <StatTile icon={<Scale size={17} />} tone="or" value={inr(d.owed)} label="बाकी देणं" />
+                <StatTile icon={<Scale size={17} />} tone="or" value={inr(Math.abs(d.owed))} label={d.owed >= 0 ? 'बाकी देणं' : 'जास्त दिलं'} />
                 <StatTile icon={<ClipboardList size={17} />} tone="bl" value={String(d.logs)} label="नोंदी" />
                 <StatTile icon={<Inbox size={17} />} tone="or" value={String(d.pending)} label="तपासायचं" onClick={onReview} />
             </div>
@@ -58,9 +58,11 @@ const WeeklyDashboard: React.FC<Props> = ({ data, onReview, onLedger, onToast })
                     <span className="text-[16px] font-black text-slate-800 [font-variant-numeric:tabular-nums]">{inr(d.money.recorded)}</span>
                 </div>
                 <div className="flex h-7 gap-0.5 overflow-hidden rounded-lg">
-                    <span className="flex items-center justify-center bg-emerald-600 text-[11px] font-extrabold text-white" style={{ flexGrow: d.money.paid }}>{inr(d.money.paid)}</span>
-                    <span className="flex items-center justify-center bg-amber-500 text-[11px] font-extrabold text-white" style={{ flexGrow: d.money.advance }}>{inr(d.money.advance)}</span>
-                    <span className="flex items-center justify-center bg-slate-300 text-[11px] font-extrabold text-slate-600" style={{ flexGrow: d.money.owed }}>{inr(d.money.owed)}</span>
+                    <span className="flex items-center justify-center bg-emerald-600 text-[11px] font-extrabold text-white" style={{ flexGrow: Math.max(0, d.money.paid) }}>{inr(d.money.paid)}</span>
+                    <span className="flex items-center justify-center bg-amber-500 text-[11px] font-extrabold text-white" style={{ flexGrow: Math.max(0, d.money.advance) }}>{inr(d.money.advance)}</span>
+                    {d.money.owed >= 0 && (
+                        <span className="flex items-center justify-center bg-slate-300 text-[11px] font-extrabold text-slate-600" style={{ flexGrow: d.money.owed }}>{inr(d.money.owed)}</span>
+                    )}
                 </div>
                 <div className="mt-2.5 flex flex-wrap gap-3.5">
                     {([['दिलं', 'bg-emerald-600'], ['उचल', 'bg-amber-500'], ['बाकी', 'bg-slate-300']] as [string, string][]).map(([l, c]) => (

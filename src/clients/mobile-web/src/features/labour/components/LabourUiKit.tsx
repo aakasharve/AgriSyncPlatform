@@ -52,16 +52,31 @@ export const GroupLabel: React.FC<{ children: React.ReactNode }> = ({ children }
     <div className="mb-1 mt-3 px-1 text-[11px] font-bold uppercase tracking-[0.08em] text-slate-400">{children}</div>
 );
 
-/** One net-balance line: green "₹X द्यायचे" (to pay) or amber "₹X उचल" (advance out). */
+/**
+ * One net-balance line: green "₹X द्यायचे" (to pay), amber "₹X उचल" (a real
+ * advance outstanding), or — Decision 3a (2026-07-19) — a plain "₹X जास्त
+ * दिलं" when Paid exceeds Recorded with NO advance given at all (never call
+ * that an outstanding उचल — the worker was never advanced anything).
+ */
 export const MoneyLine: React.FC<{ balance: LabourBalance }> = ({ balance }) => {
-    const { owe, amount } = netBalance(balance);
-    return owe ? (
-        <span className="mt-1 flex items-center gap-1.5 text-[12.5px] font-extrabold text-emerald-700">
-            <IndianRupee size={13} /> {inr(amount)} द्यायचे
-        </span>
-    ) : (
-        <span className="mt-1 flex items-center gap-1.5 text-[12.5px] font-extrabold text-amber-700">
-            <Wallet size={13} /> {inr(amount)} उचल
+    const { owe, amount, isAdvance } = netBalance(balance);
+    if (owe) {
+        return (
+            <span className="mt-1 flex items-center gap-1.5 text-[12.5px] font-extrabold text-emerald-700">
+                <IndianRupee size={13} /> {inr(amount)} द्यायचे
+            </span>
+        );
+    }
+    if (isAdvance) {
+        return (
+            <span className="mt-1 flex items-center gap-1.5 text-[12.5px] font-extrabold text-amber-700">
+                <Wallet size={13} /> {inr(amount)} उचल
+            </span>
+        );
+    }
+    return (
+        <span className="mt-1 flex items-center gap-1.5 text-[12.5px] font-extrabold text-slate-600">
+            <IndianRupee size={13} /> {inr(amount)} जास्त दिलं
         </span>
     );
 };
@@ -140,19 +155,19 @@ export const BackHeader: React.FC<{ title: string; onBack: () => void }> = ({ ti
  * उचल (advance) is shown as a fourth tile only when it is > 0.
  */
 export const BalanceCard: React.FC<{ balance: LabourBalance; why?: string; settleLabel: string; onAdvance: () => void; onSettle: () => void }> = ({ balance, why, settleLabel, onAdvance, onSettle }) => {
-    const { owe, amount } = netBalance(balance);
+    const { owe, amount, isAdvance } = netBalance(balance);
     const tiles: [string, string][] = [
         ['काम झालं', inr(balance.recorded)],
         ['दिलं', inr(balance.paid)],
     ];
     if (balance.advance > 0) tiles.push(['उचल', inr(balance.advance)]);
-    tiles.push([owe ? 'बाकी' : 'उचल बाकी', inr(amount)]);
+    tiles.push([owe ? 'बाकी' : (isAdvance ? 'उचल बाकी' : 'जास्त दिलं'), inr(amount)]);
 
     return (
         <div className={`rounded-[24px] border p-4 shadow-[0_1px_3px_rgba(20,40,30,0.05)] ${owe ? 'border-emerald-100 bg-gradient-to-br from-emerald-50 to-white' : 'border-amber-200 bg-gradient-to-br from-amber-50 to-white'}`}>
             <div className="flex items-baseline justify-between gap-2">
                 <span className={`font-black leading-none tracking-tight [font-variant-numeric:tabular-nums] text-[36px] ${owe ? 'text-emerald-700' : 'text-amber-700'}`}>{inr(amount)}</span>
-                <span className="text-right text-[13px] font-bold text-slate-600">{owe ? 'द्यायचे' : 'उचल बाकी'}</span>
+                <span className="text-right text-[13px] font-bold text-slate-600">{owe ? 'द्यायचे' : (isAdvance ? 'उचल बाकी' : 'जास्त दिलं')}</span>
             </div>
             <div className={`mt-3 grid gap-2 ${tiles.length === 4 ? 'grid-cols-4' : 'grid-cols-3'}`}>
                 {tiles.map(([l, v]) => (
