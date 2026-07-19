@@ -29,6 +29,7 @@ import VoiceSavedReassurance from '../../features/logs/components/shramsathi/Voi
 import DailyLoopHero from '../../features/logs/components/shramsathi/DailyLoopHero';
 import DailyLoopClarity from '../../features/logs/components/shramsathi/DailyLoopClarity';
 import DailyLoopInsight from '../../features/logs/components/shramsathi/DailyLoopInsight';
+import DayUnderstandingCard from '../../features/logs/components/shramsathi/DayUnderstandingCard';
 import { buildDailyInsight } from '../../features/logs/intelligence/buildDailyInsight';
 import { ShramSathiUnderstanding } from '../../features/logs/components/shramsathi/ShramSathiUnderstanding';
 import { findConfirmableTaskCloses, type TaskCloseCandidate } from '../../features/logs/services/taskAutoClose';
@@ -661,6 +662,34 @@ export const renderLogView = (ctx: AppRouterContext): React.ReactNode => {
                                 <Leaf size={40} className="drop-shadow-sm" />
                             </div>
                         <h2 className="text-3xl font-bold text-stone-800 mb-6 tracking-tight">Saved to Ledger</h2>
+
+                        {/* Day Understanding Score X/१० + bar — FIRST thing on the
+                            saved-to-ledger surface (founder request 2026-07-19,
+                            spec: dfes-companion-2026-07-11). Moved up out of
+                            MeterDisplay/LedgerRecognitionPanel, where it sat below
+                            the crop summary, the clarity line and the fact line.
+                            Self-gates on FEATURE_FLAGS.understandingMeter (returns
+                            null when OFF) and owns the ONLY useDayUnderstanding
+                            fetch. savedLog is derived exactly as the recognition
+                            panel below derives it (lastSavedLogIds[0] via
+                            history.find), and farmId prefers the session's ACTIVE
+                            farm for the same reason (see BUGFIX_2026-07-19 there). */}
+                        {(() => {
+                            const savedLogId = lastSavedLogIds && lastSavedLogIds.length > 0
+                                ? lastSavedLogIds[0]
+                                : undefined;
+                            const savedLog = savedLogId
+                                ? history.find(l => l.id === savedLogId)
+                                : undefined;
+                            const selection = savedLog?.context?.selection?.[0];
+                            return (
+                                <DayUnderstandingCard
+                                    farmId={ctx.activeFarmId ?? selection?.farmId ?? null}
+                                    dayDate={savedLog?.date}
+                                    savedLogId={savedLog?.id ?? null}
+                                />
+                            );
+                        })()}
 
                         {/* Dynamic Feedback Summary */}
                         {lastSavedLogSummary && lastSavedLogSummary.length > 0 ? (

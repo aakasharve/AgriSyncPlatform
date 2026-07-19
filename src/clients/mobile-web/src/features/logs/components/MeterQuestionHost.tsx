@@ -8,6 +8,11 @@
  * interaction telemetry into MeterDisplay. MeterDisplay itself early-returns null
  * unless understandingMeter is ON, so the question surface needs BOTH flags.
  *
+ * 2026-07-19: the Day Understanding Score moved OUT of MeterDisplay into
+ * shramsathi/DayUnderstandingCard (rendered by mainView at the top of the success
+ * surface), so this host no longer threads farmId/dayDate/savedLogId down for the
+ * score fetch — `farmId` here now serves useDfesQuestion only.
+ *
  * spec: dfes-companion-2026-07-11
  */
 import React from 'react';
@@ -34,16 +39,10 @@ export interface MeterQuestionHostProps {
      */
     engagement?: FarmerEngagementDto | null;
     questionInputs: Omit<DailyQuestionInputs, 'recentEvents'>;
-    /**
-     * BUGFIX_2026-07-19 (spec: dfes-companion-2026-07-11) — the just-saved
-     * log's id, threaded straight to MeterDisplay so its Day Understanding
-     * Score fetch retriggers on every new save (see MeterDisplay's doc).
-     */
-    savedLogId?: string | null;
 }
 
 export function MeterQuestionHost({
-    farmId, plotId, score, allLogs, engagement, questionInputs, savedLogId,
+    farmId, plotId, score, allLogs, engagement, questionInputs,
 }: MeterQuestionHostProps): React.ReactElement | null {
     const enabled = FEATURE_FLAGS.stageQuestions && !!farmId;
     const { selected, recordOutcome } = useDfesQuestion(farmId ?? '', plotId, questionInputs, enabled);
@@ -60,9 +59,6 @@ export function MeterQuestionHost({
             score={score}
             allLogs={allLogs}
             engagement={engagement}
-            farmId={farmId}
-            dayDate={questionInputs.todayLocalDate}
-            savedLogId={savedLogId}
             dfesQuestion={selected}
             // No-options ack path — UNCHANGED from pre-Task-2A behaviour ({skipped:false}).
             onQuestionInteract={() => { void recordOutcome({ skipped: false }); }}

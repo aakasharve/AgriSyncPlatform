@@ -4,12 +4,17 @@
  *
  * LedgerRecognitionPanel — Ledger "Saved" recognition surface host. Owns the
  * single useFarmerEngagement fetch for the current farm and feeds both the
- * (understandingMeter-gated) Understanding Bar — via MeterQuestionHost, which
+ * (understandingMeter-gated) question/gap surface — via MeterQuestionHost, which
  * additionally threads the Phase 5 combined D8 question in behind the
  * stageQuestions flag — and the (disciplineSystem-gated) DisciplineStrip.
  * Each child self-gates on its flag, and the fetches self-gate on the DFES
  * flags, so this panel renders unconditionally and is inert + network-silent
  * in production while all flags are OFF.
+ *
+ * 2026-07-19 (founder request): the Day Understanding Score + UnderstandingBar
+ * are NO LONGER hosted here. They live in shramsathi/DayUnderstandingCard, which
+ * mainView renders at the TOP of the success surface, directly under "Saved to
+ * Ledger" — above the crop summary, the clarity line and this panel.
  *
  * Task 3B (spec: dfes-companion-2026-07-11): this is also where the
  * DailyQuestionInputs object is assembled, so it's the call site for
@@ -161,7 +166,6 @@ export function LedgerRecognitionPanel({
                 score={savedLog?.understanding}
                 allLogs={allLogs}
                 engagement={engagement}
-                savedLogId={savedLog?.id ?? null}
                 questionInputs={{
                     crop,
                     todayLocalDate: resolvedDate,
