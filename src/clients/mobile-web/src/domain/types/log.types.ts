@@ -101,6 +101,14 @@ export interface CropActivityEvent {
 
     // W1.P2 — per-field provenance (how was this value determined?)
     provenance?: FieldProvenance;
+
+    // ANTI-FABRICATION GUARDRAIL (spec: dfes-companion-2026-07-11) — false
+    // means the backend could not verify this item's `sourceText` actually
+    // appears in the voice transcript (see AiResponseNormalizer.cs). A
+    // MISSING key (undefined) means verified — either the item predates this
+    // field, is a manual entry, or survived a later normalization pass.
+    // NEVER treat undefined as false. Frontend never mutates this flag.
+    provenanceVerified?: boolean;
 }
 
 // =============================================================================
@@ -132,6 +140,10 @@ export interface IrrigationEvent {
 
     // W1.P2 — per-field provenance (how was this value determined?)
     provenance?: FieldProvenance;
+
+    // ANTI-FABRICATION GUARDRAIL (spec: dfes-companion-2026-07-11) — see
+    // CropActivityEvent.provenanceVerified for the contract. Missing = verified.
+    provenanceVerified?: boolean;
 }
 
 // =============================================================================
@@ -173,6 +185,10 @@ export interface LabourEvent {
 
     // W1.P2 — per-field provenance (how was this value determined?)
     provenance?: FieldProvenance;
+
+    // ANTI-FABRICATION GUARDRAIL (spec: dfes-companion-2026-07-11) — see
+    // CropActivityEvent.provenanceVerified for the contract. Missing = verified.
+    provenanceVerified?: boolean;
 }
 
 // =============================================================================
@@ -253,6 +269,10 @@ export interface InputEvent {
 
     // W1.P2 — per-field provenance (how was this value determined?)
     provenance?: FieldProvenance;
+
+    // ANTI-FABRICATION GUARDRAIL (spec: dfes-companion-2026-07-11) — see
+    // CropActivityEvent.provenanceVerified for the contract. Missing = verified.
+    provenanceVerified?: boolean;
 }
 
 // =============================================================================
@@ -287,6 +307,10 @@ export interface MachineryEvent {
 
     // W1.P2 — per-field provenance (how was this value determined?)
     provenance?: FieldProvenance;
+
+    // ANTI-FABRICATION GUARDRAIL (spec: dfes-companion-2026-07-11) — see
+    // CropActivityEvent.provenanceVerified for the contract. Missing = verified.
+    provenanceVerified?: boolean;
 }
 
 // =============================================================================
@@ -321,6 +345,10 @@ export interface ActivityExpenseEvent {
 
     // W1.P2 — per-field provenance (how was this value determined?)
     provenance?: FieldProvenance;
+
+    // ANTI-FABRICATION GUARDRAIL (spec: dfes-companion-2026-07-11) — see
+    // CropActivityEvent.provenanceVerified for the contract. Missing = verified.
+    provenanceVerified?: boolean;
 }
 
 export interface ResourceItem {
@@ -381,6 +409,10 @@ export interface ObservationNote {
     // Transparency
     sourceText?: string;
     systemInterpretation?: string;
+
+    // ANTI-FABRICATION GUARDRAIL (spec: dfes-companion-2026-07-11) — see
+    // CropActivityEvent.provenanceVerified for the contract. Missing = verified.
+    provenanceVerified?: boolean;
 }
 
 // =============================================================================
@@ -422,6 +454,10 @@ export interface PlannedTask {
     // Transparency
     sourceText?: string;
     systemInterpretation?: string;
+
+    // ANTI-FABRICATION GUARDRAIL (spec: dfes-companion-2026-07-11) — see
+    // CropActivityEvent.provenanceVerified for the contract. Missing = verified.
+    provenanceVerified?: boolean;
 }
 
 // =============================================================================
@@ -739,6 +775,9 @@ export interface AgriLogResponse {
         category: 'maintenance' | 'procurement' | 'coordination' | 'general';
         sourceText: string;
         systemInterpretation: string;
+        // ANTI-FABRICATION GUARDRAIL (spec: dfes-companion-2026-07-11) — see
+        // CropActivityEvent.provenanceVerified for the contract. Missing = verified.
+        provenanceVerified?: boolean;
     }>;
     disturbance?: DisturbanceEvent;
     missingSegments: LogSegment[];

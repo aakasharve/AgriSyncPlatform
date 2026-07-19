@@ -203,3 +203,96 @@ describe('useManualEntryHydration — single plot (regression-safe)', () => {
         expect(onDataConsumed).toHaveBeenCalledTimes(1);
     });
 });
+
+/**
+ * ANTI-FABRICATION GUARDRAIL (spec: dfes-companion-2026-07-11).
+ *
+ * Founder-caught bug: the AI fabricated a phrase inside an item's
+ * `sourceText`, then extracted a whole cropActivity from its own
+ * invention. The backend now stamps `provenanceVerified: false` on any
+ * item whose sourceText it could not verify against the transcript. These
+ * tests prove the flag survives the hydration step (which hand-builds
+ * each bucket item from the raw AI payload — a spot a new field can
+ * silently get dropped) and that a MISSING key is never coerced to false.
+ */
+describe('useManualEntryHydration — provenanceVerified guardrail (spec: dfes-companion-2026-07-11)', () => {
+    it('threads provenanceVerified:false through irrigation, labour, inputs, and machinery', () => {
+        const initialData: AgriLogResponse = {
+            ...makeInitialData(),
+            irrigation: [
+                { id: 'irr_1', method: 'drip', source: 'Well', durationHours: 3, provenanceVerified: false } as IrrigationEvent,
+            ],
+            labour: [
+                { type: 'HIRED', count: 2, activity: 'Weeding', provenanceVerified: false } as Partial<LabourEvent> as LabourEvent,
+            ],
+            inputs: [
+                { type: 'fertilizer', productName: 'Urea', quantity: 5, unit: 'kg', provenanceVerified: false } as Partial<InputEvent> as InputEvent,
+            ],
+            machinery: [
+                { id: 'mach_1', type: 'tractor', ownership: 'owned', hoursUsed: 2, provenanceVerified: false } as MachineryEvent,
+            ],
+        };
+
+        const { captured } = runHydration({ initialData, activePlot: makePlot() });
+
+        expect(captured.irrigationMap['act_global_daily'].provenanceVerified).toBe(false);
+        expect(captured.labourMap['act_global_daily'].provenanceVerified).toBe(false);
+        expect(captured.inputMap['act_global_daily'][0].provenanceVerified).toBe(false);
+        expect(captured.machineryMap['act_global_daily'].provenanceVerified).toBe(false);
+    });
+
+    it('leaves provenanceVerified undefined (verified) when the backend omits the key', () => {
+        const { captured } = runHydration({ initialData: makeInitialData(), activePlot: makePlot() });
+
+        expect(captured.irrigationMap['act_global_daily'].provenanceVerified).toBeUndefined();
+        expect(captured.labourMap['act_global_daily'].provenanceVerified).toBeUndefined();
+        expect(captured.inputMap['act_global_daily'][0].provenanceVerified).toBeUndefined();
+    });
+
+    it('flags the merged global activity card when ANY contributing cropActivity failed verification', () => {
+        const initialData: AgriLogResponse = {
+            ...makeInitialData(),
+            cropActivities: [
+                { id: 'act_1', title: 'Weeding', workTypes: ['Weeding'], sourceText: 'खरं वाक्य', provenanceVerified: true } as CropActivityEvent,
+                { id: 'act_2', title: 'Pruning', workTypes: ['Pruning'], sourceText: 'त्यांनी बाग छाटून घेतली', provenanceVerified: false } as CropActivityEvent,
+            ],
+        };
+
+        const { captured } = runHydration({ initialData, activePlot: makePlot() });
+
+        expect(captured.cropActivities[0].provenanceVerified).toBe(false);
+        expect(captured.cropActivities[0].workTypes).toEqual(expect.arrayContaining(['Weeding', 'Pruning']));
+    });
+
+    it('does not flag the global activity card when every cropActivity is verified', () => {
+        const initialData: AgriLogResponse = {
+            ...makeInitialData(),
+            cropActivities: [
+                { id: 'act_1', title: 'Weeding', workTypes: ['Weeding'], sourceText: 'खरं वाक्य', provenanceVerified: true } as CropActivityEvent,
+            ],
+        };
+
+        const { captured } = runHydration({ initialData, activePlot: makePlot() });
+
+        expect(captured.cropActivities[0].provenanceVerified).toBeUndefined();
+    });
+
+    it('threads provenanceVerified through plannedTasks', () => {
+        const initialData: AgriLogResponse = {
+            ...makeInitialData(),
+            plannedTasks: [
+                {
+                    title: 'Spray next week',
+                    category: 'maintenance',
+                    sourceText: 'पुढच्या आठवड्यात फवारणी करायची',
+                    systemInterpretation: 'Planned spray',
+                    provenanceVerified: false,
+                },
+            ],
+        };
+
+        const { captured } = runHydration({ initialData, activePlot: makePlot() });
+
+        expect(captured.plannedTasks[0].provenanceVerified).toBe(false);
+    });
+});

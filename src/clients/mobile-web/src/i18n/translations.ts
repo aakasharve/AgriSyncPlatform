@@ -66,6 +66,14 @@ export interface Translations {
          * forced 'mr' — Sathi's transcript of the farmer's own words is
          * always shown in Marathi regardless of UI language. */
         transcriptHeardLabel: string;
+        /** Gentle "please check this" flag next to an AI-extracted item whose
+         * sourceText the backend could NOT verify against the voice
+         * transcript (spec: dfes-companion-2026-07-11 anti-fabrication
+         * guardrail — see AiResponseNormalizer.cs provenanceVerified). This
+         * is NOT an error/accusation — the farmer keeps or removes the item
+         * via the existing edit/delete controls. Always read via forced
+         * 'mr', same as transcriptHeardLabel. */
+        unverifiedSourceLabel: string;
     };
 
     // Reflect Page
@@ -381,6 +389,7 @@ export const translations: Record<Language, Translations> = {
             savedAudioBody: 'I saved your recording safely. I will listen again and understand it soon.',
             savedReassure: 'Your day is counted. Nothing is lost.',
             transcriptHeardLabel: 'You said:',
+            unverifiedSourceLabel: "I'm not sure I heard this — is it right?",
         },
         reflectPage: {
             timeline: 'Timeline',
@@ -661,6 +670,7 @@ export const translations: Record<Language, Translations> = {
             savedAudioBody: 'तुमची नोंद मी सुरक्षित ठेवली आहे. पुन्हा ऐकून लवकरच समजून घेईन.',
             savedReassure: 'तुमचा आजचा दिवस मोजला गेला आहे. काहीही हरवलेले नाही.',
             transcriptHeardLabel: 'तुम्ही सांगितलं:',
+            unverifiedSourceLabel: 'हे मी नक्की ऐकलं नाही — बरोबर आहे का?',
         },
         reflectPage: {
             timeline: 'टाइमलाइन',

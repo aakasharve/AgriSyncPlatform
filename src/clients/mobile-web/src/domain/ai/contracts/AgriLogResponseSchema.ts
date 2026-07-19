@@ -298,6 +298,26 @@ const TransparencyFields = {
     systemInterpretation: z.string().optional(),
 } as const;
 
+/**
+ * ANTI-FABRICATION GUARDRAIL (spec: dfes-companion-2026-07-11).
+ *
+ * Backend `AiResponseNormalizer.NormalizeVoiceJson` stamps this on every
+ * extracted item after checking whether `sourceText` actually appears in
+ * the parse's `fullTranscript` (a real founder-caught bug: the model
+ * fabricated a phrase inside `sourceText` and extracted a whole activity
+ * from its own invention). `false` = could not verify; the item is
+ * rendered with a gentle "not certain I heard this" flag on the review
+ * screen so the farmer can confirm or remove it — never auto-deleted,
+ * never blocking save. A MISSING key (item predates this field, is a
+ * manual entry, or survived a later normalization pass) MUST be treated
+ * as verified — never coerce absence to `false`. Every nested schema
+ * below is `.passthrough()` so this would survive even unlisted, but it
+ * is declared explicitly for type-safety and documentation.
+ */
+const ProvenanceVerifiedField = {
+    provenanceVerified: z.boolean().optional(),
+} as const;
+
 const BucketIssueSchema = z.object({
     issueType: BucketIssueTypeSchema,
     reason: z.string(),
@@ -360,6 +380,7 @@ export const CropActivityEventSchema = z.object({
     // W1.P2 — per-field provenance (nested schema; .passthrough() keeps this additive)
     provenance: FieldProvenanceSchema.optional(),
     ...TransparencyFields,
+    ...ProvenanceVerifiedField,
 }).passthrough();
 
 export const IrrigationEventSchema = z.object({
@@ -380,6 +401,7 @@ export const IrrigationEventSchema = z.object({
     // W1.P2 — per-field provenance
     provenance: FieldProvenanceSchema.optional(),
     ...TransparencyFields,
+    ...ProvenanceVerifiedField,
 }).passthrough();
 
 export const LabourEventSchema = z.object({
@@ -409,6 +431,7 @@ export const LabourEventSchema = z.object({
     // W1.P2 — per-field provenance
     provenance: FieldProvenanceSchema.optional(),
     ...TransparencyFields,
+    ...ProvenanceVerifiedField,
 }).passthrough();
 
 export const InputMixItemSchema = z.object({
@@ -461,6 +484,7 @@ export const InputEventSchema = z.object({
     // W1.P2 — per-field provenance
     provenance: FieldProvenanceSchema.optional(),
     ...TransparencyFields,
+    ...ProvenanceVerifiedField,
 }).passthrough();
 
 export const MachineryEventSchema = z.object({
@@ -484,6 +508,7 @@ export const MachineryEventSchema = z.object({
     // W1.P2 — per-field provenance
     provenance: FieldProvenanceSchema.optional(),
     ...TransparencyFields,
+    ...ProvenanceVerifiedField,
 }).passthrough();
 
 export const ExpenseItemSchema = z.object({
@@ -525,6 +550,7 @@ export const ActivityExpenseEventSchema = z.object({
     // W1.P2 — per-field provenance
     provenance: FieldProvenanceSchema.optional(),
     ...TransparencyFields,
+    ...ProvenanceVerifiedField,
 }).passthrough();
 
 // `ObservationNoteDraft = Partial<ObservationNote> & { textRaw: string }`
@@ -552,6 +578,7 @@ export const ObservationNoteDraftSchema = z.object({
     resolvedAt: z.string().optional(),
 
     ...TransparencyFields,
+    ...ProvenanceVerifiedField,
 }).passthrough();
 
 // `AgriLogResponse.plannedTasks` is a narrower draft shape than the
@@ -564,6 +591,7 @@ export const PlannedTaskDraftSchema = z.object({
     category: PlannedTaskCategorySchema,
     sourceText: z.string(),
     systemInterpretation: z.string(),
+    ...ProvenanceVerifiedField,
 }).passthrough();
 
 export const DisturbanceEventSchema = z.object({

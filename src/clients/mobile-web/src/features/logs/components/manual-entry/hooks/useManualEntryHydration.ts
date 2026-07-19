@@ -193,7 +193,9 @@ export function useManualEntryHydration(params: HydrationParams): void {
                         notes: aiIrrigation.notes,
                         issue: aiIrrigation.issue,
                         sourceText: aiIrrigation.sourceText,
-                        systemInterpretation: aiIrrigation.systemInterpretation
+                        systemInterpretation: aiIrrigation.systemInterpretation,
+                        // ANTI-FABRICATION GUARDRAIL (spec: dfes-companion-2026-07-11)
+                        provenanceVerified: aiIrrigation.provenanceVerified
                     };
                 }
             }
@@ -212,7 +214,9 @@ export function useManualEntryHydration(params: HydrationParams): void {
                         activity: aiLabour.activity || `Field Work ${index + 1}`,
                         linkedActivityId: labourEntryId,
                         sourceText: aiLabour.sourceText,
-                        systemInterpretation: aiLabour.systemInterpretation
+                        systemInterpretation: aiLabour.systemInterpretation,
+                        // ANTI-FABRICATION GUARDRAIL (spec: dfes-companion-2026-07-11)
+                        provenanceVerified: aiLabour.provenanceVerified
                     };
                 });
             }
@@ -235,6 +239,13 @@ export function useManualEntryHydration(params: HydrationParams): void {
                     }
                     if (act.sourceText) globalActivity.sourceText = act.sourceText;
                     if (act.systemInterpretation) globalActivity.systemInterpretation = act.systemInterpretation;
+                    // ANTI-FABRICATION GUARDRAIL (spec: dfes-companion-2026-07-11) —
+                    // every parsed cropActivity is merged into one globalActivity
+                    // card (there is no per-item display here), so if ANY
+                    // contributing activity failed sourceText verification, the
+                    // merged card is flagged unverified. Never cleared back to
+                    // true once set by a later activity in the same parse.
+                    if (act.provenanceVerified === false) globalActivity.provenanceVerified = false;
                 });
             }
 
@@ -263,7 +274,9 @@ export function useManualEntryHydration(params: HydrationParams): void {
                             unit: inp.unit || 'unit',
                         }],
                     sourceText: inp.sourceText,
-                    systemInterpretation: inp.systemInterpretation
+                    systemInterpretation: inp.systemInterpretation,
+                    // ANTI-FABRICATION GUARDRAIL (spec: dfes-companion-2026-07-11)
+                    provenanceVerified: inp.provenanceVerified
                 }));
             }
 
@@ -280,7 +293,9 @@ export function useManualEntryHydration(params: HydrationParams): void {
                     hoursUsed: aiMach.hoursUsed || 2,
                     linkedActivityId: globalActivity.id,
                     sourceText: aiMach.sourceText,
-                    systemInterpretation: aiMach.systemInterpretation
+                    systemInterpretation: aiMach.systemInterpretation,
+                    // ANTI-FABRICATION GUARDRAIL (spec: dfes-companion-2026-07-11)
+                    provenanceVerified: aiMach.provenanceVerified
                 };
             } else if (hasSpray) {
                 newMachineryMap[globalActivity.id] = { id: `mach_${Date.now()}_auto`, type: 'tractor', ownership: 'owned', hoursUsed: 2, linkedActivityId: globalActivity.id };
@@ -318,7 +333,9 @@ export function useManualEntryHydration(params: HydrationParams): void {
                     currentTasks.push({
                         id: `task_${crypto.randomUUID()}`,
                         title: pt.title, status: 'suggested' as PlannedTask['status'], priority: 'normal' as PlannedTask['priority'], plotId: activePlot?.id || '', createdAt: new Date().toISOString(), sourceType: 'ai_extracted' as PlannedTask['sourceType'], description: pt.dueHint || undefined,
-                        sourceText: pt.sourceText, systemInterpretation: pt.systemInterpretation
+                        sourceText: pt.sourceText, systemInterpretation: pt.systemInterpretation,
+                        // ANTI-FABRICATION GUARDRAIL (spec: dfes-companion-2026-07-11)
+                        provenanceVerified: pt.provenanceVerified
                     });
                 });
             }

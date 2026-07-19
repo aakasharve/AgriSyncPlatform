@@ -4,9 +4,15 @@
 */
 
 import React from 'react';
-import { AlertTriangle, Check, Zap } from 'lucide-react';
+import { AlertTriangle, Check, HelpCircle, Zap } from 'lucide-react';
+import { t as translateForced } from '../../../../../i18n/translations';
 
-const BucketItem = ({ icon, label, sublabel, filled, theme = 'slate', onClick, sourceText, systemInterpretation, hasIssue }: {
+// Font rule (CHARTER): Marathi body text -> Noto Sans Devanagari. The
+// "not certain I heard this" flag is Marathi copy shown inline with the
+// farmer's own transcript quote, so it must set this explicitly.
+const MARATHI_BODY = "'Noto Sans Devanagari', sans-serif";
+
+const BucketItem = ({ icon, label, sublabel, filled, theme = 'slate', onClick, sourceText, systemInterpretation, hasIssue, provenanceVerified }: {
     icon: React.ReactNode,
     label: string,
     sublabel?: string,
@@ -15,7 +21,16 @@ const BucketItem = ({ icon, label, sublabel, filled, theme = 'slate', onClick, s
     onClick: () => void,
     sourceText?: string,
     systemInterpretation?: string,
-    hasIssue?: boolean
+    hasIssue?: boolean,
+    /**
+     * ANTI-FABRICATION GUARDRAIL (spec: dfes-companion-2026-07-11) — `false`
+     * means the backend could not verify `sourceText` actually appears in
+     * the voice transcript. Renders a gentle "please check this" flag next
+     * to the quote — never an error/red state, never auto-removes anything.
+     * `undefined` (the common case — manual entries, verified AI items,
+     * items that predate this field) renders nothing.
+     */
+    provenanceVerified?: boolean
 }) => {
 
     // Theme Maps
@@ -121,6 +136,7 @@ const BucketItem = ({ icon, label, sublabel, filled, theme = 'slate', onClick, s
                         ${filled ? `${t.iconBg} ${t.iconColor} shadow-sm ring-2 ring-white` : 'bg-slate-100 text-slate-400'}
                     `}
                 >
+                    {/* eslint-disable-next-line @typescript-eslint/no-explicit-any -- icon is any lucide-react element; pre-existing, not touched by this change */}
                     {React.cloneElement(icon as React.ReactElement<any>, { size: 24, strokeWidth: filled ? 2.5 : 2 })}
                 </div>
 
@@ -162,6 +178,20 @@ const BucketItem = ({ icon, label, sublabel, filled, theme = 'slate', onClick, s
             {/* NEW: Transparency Feedback (Source -> Interpretation) */}
             {filled && (sourceText || systemInterpretation) && (
                 <div className="mt-4 pt-3 border-t border-slate-100/50">
+                    {provenanceVerified === false && (
+                        <div
+                            data-testid="provenance-unverified-flag"
+                            className="mb-2 flex items-start gap-1.5 rounded-lg border border-amber-200 bg-amber-50/80 px-2.5 py-1.5"
+                        >
+                            <HelpCircle size={13} className="mt-0.5 flex-shrink-0 text-amber-500" />
+                            <span
+                                className="text-[11px] font-semibold leading-snug text-amber-700"
+                                style={{ fontFamily: MARATHI_BODY }}
+                            >
+                                {translateForced('voice.unverifiedSourceLabel', 'mr')}
+                            </span>
+                        </div>
+                    )}
                     <div className="flex flex-col gap-2">
                         {sourceText && (
                             <div className="flex items-start gap-2">
