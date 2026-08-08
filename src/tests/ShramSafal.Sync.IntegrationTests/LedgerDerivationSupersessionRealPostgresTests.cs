@@ -106,7 +106,7 @@ public sealed class LedgerDerivationSupersessionRealPostgresTests(Xunit.Abstract
     // this literal local-dev password; roles are cluster-global so it already
     // exists on the :5433 cluster.
     private const string AppRoleUser = "agrisync_app";
-    private const string AppRolePassword = "dev_app_change_me";
+    private static string AppRolePassword => TestRoleCredentials.AppRolePassword;
 
     private static readonly Guid FarmId = Guid.Parse("aaaa1111-1111-1111-1111-111111111111");
     private static readonly Guid OwnerAccountId = Guid.Parse("aaaa2222-2222-2222-2222-222222222222");

@@ -947,7 +947,7 @@ public sealed class ErasureWorkerAnonymizationTest : IAsyncLifetime
         var b = new NpgsqlConnectionStringBuilder(superuserConn)
         {
             Username = "agrisync_app",
-            Password = "dev_app_change_me",
+            Password = TestRoleCredentials.AppRolePassword,
         };
         return b.ConnectionString;
     }

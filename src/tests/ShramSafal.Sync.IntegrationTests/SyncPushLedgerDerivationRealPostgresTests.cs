@@ -70,7 +70,7 @@ public sealed class SyncPushLedgerDerivationRealPostgresTests(Xunit.Abstractions
     // this literal local-dev password; roles are cluster-global so it already
     // exists on the :5433 cluster.
     private const string AppRoleUser = "agrisync_app";
-    private const string AppRolePassword = "dev_app_change_me";
+    private static string AppRolePassword => TestRoleCredentials.AppRolePassword;
 
     // Farm A — the same-farm derivation case.
     private static readonly Guid FarmA = Guid.Parse("dddd1111-1111-1111-1111-111111111111");

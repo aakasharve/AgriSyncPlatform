@@ -83,7 +83,7 @@ public sealed class SyncPushTenantScopeRealPostgresTests(Xunit.Abstractions.ITes
     // this literal local-dev password; roles are cluster-global so it already
     // exists on the :5433 cluster.
     private const string AppRoleUser = "agrisync_app";
-    private const string AppRolePassword = "dev_app_change_me";
+    private static string AppRolePassword => TestRoleCredentials.AppRolePassword;
 
     // Farm A — the genuine-member farm every positive proof targets.
     private static readonly Guid FarmA = Guid.Parse("aaaa1111-1111-1111-1111-111111111111");

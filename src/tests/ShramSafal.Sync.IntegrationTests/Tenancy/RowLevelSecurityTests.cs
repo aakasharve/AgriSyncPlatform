@@ -206,14 +206,16 @@ public sealed class RowLevelSecurityTests : IAsyncLifetime
     }
 
     // Rewrite testcontainer's superuser connection string into one
-    // authenticated as agrisync_app. Password matches the literal in
-    // 20260515090000_BootstrapDbRoles.cs (dev_app_change_me).
+    // authenticated as agrisync_app. The credential comes from
+    // TestRoleCredentials, which defaults to the literal created by migration
+    // 20260515090000_BootstrapDbRoles and is overridable via
+    // AGRISYNC_TEST_APP_ROLE_PASSWORD on a machine whose roles were rotated.
     private static string BuildAppRoleConnectionString(string superuserConn)
     {
         var builder = new Npgsql.NpgsqlConnectionStringBuilder(superuserConn)
         {
             Username = "agrisync_app",
-            Password = "dev_app_change_me",
+            Password = TestRoleCredentials.AppRolePassword,
         };
         return builder.ConnectionString;
     }

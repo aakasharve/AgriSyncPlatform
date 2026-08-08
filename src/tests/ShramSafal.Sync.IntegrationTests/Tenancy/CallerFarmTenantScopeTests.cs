@@ -132,7 +132,7 @@ public sealed class CallerFarmTenantScopeTests : IAsyncLifetime
         var builder = new NpgsqlConnectionStringBuilder(superuserConn)
         {
             Username = "agrisync_app",
-            Password = "dev_app_change_me",
+            Password = TestRoleCredentials.AppRolePassword,
         };
         return builder.ConnectionString;
     }
