@@ -10,6 +10,8 @@
     "build:prod": "vite build --mode production",
     "clean": "rimraf dist",
     "preview": "vite preview",
+    "deploy:s3": "bash scripts/deploy-s3.sh",
+    "deploy:s3:dry-run": "bash scripts/deploy-s3.sh --dry-run",
     "deploy": "bash scripts/deploy-s3.sh",
     "deploy:dry-run": "bash scripts/deploy-s3.sh --dry-run",
     "typecheck": "tsc --noEmit",
