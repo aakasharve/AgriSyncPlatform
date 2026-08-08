@@ -17,7 +17,7 @@ The labour feature itself is well built. The problem is not the feature — it i
 **The un-regression work (must happen first, no debate)**
 1. Merge `origin/main` into the branch — otherwise deploying from here **deletes the welcome screen, the redesigned consent screen, the mascot fix and the Setup Hub legibility pass from production** and rolls the version label back to 1.0.5.
 2. Resolve the 4 merge conflicts by hand, keeping BOTH `main`'s welcome gate AND the labour arrival-scroll — with the welcome early-return placed *after* the hook call, or the app crashes.
-3. Confirm `scripts/deploy-s3.sh` and `.gitattributes` land with the merge (the codified S3 upload that exists because a hand-typed one caused the live DPDP cache exposure on 2026-07-18). Correct the wrong path recorded in the prior audit.
+3. Confirm `src/clients/mobile-web/scripts/deploy-s3.sh` and `.gitattributes` land with the merge (the codified S3 upload that exists because a hand-typed one caused the live DPDP cache exposure on 2026-07-18). Correct the wrong path recorded in the prior audit.
 4. Clean the working tree: 1 modified file, ~40 loose screenshots and scratch files, 4 untracked onboarding files that collide with `main`'s tracked versions. Build only from a clean worktree.
 5. Bump the version to 1.0.8 in all four places.
 

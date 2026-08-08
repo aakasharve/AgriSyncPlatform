@@ -73,7 +73,7 @@ You asked for this explicitly. This is the complete list of times the AgriSync b
 | 8 | 2026-06 | Unset tenant variables could produce a hard cast error instead of failing safely | Bare `::uuid` casts in RLS policies | `a15aae65` — 20 policies NULLIF-hardened, prod verified 0 remaining | ✅ Present. |
 | 9 | 2026-07-04 | **Offline** log creation failed against RLS on `/sync/push` (the `/sync/` path is admin-elevated with no tenant variable set) | `/sync/push` skips the tenant middleware, so no tenant variable exists for the RLS policies to match | `2b360f6e` ("Fix 1") — establish the farm scope inside the `create_daily_log` handler | ✅ Code present on this branch. ⚠️ **But `DEPLOYMENT_TRACKER` S10 says it was merged and NEVER DEPLOYED.** Prod may still be running without it. **Must be confirmed at deploy time.** |
 | 10 | 2026-07-17 | Deploy **refused at gate G4** (prod untouched — the system worked) | A deploy chart was adapted from a closed one, carrying stale gate attestations | Rule: fresh chart, re-probe every attestation, no carry-over | Procedural. **In our runbook (Phase 4, step 1).** |
-| 11 | 2026-07-18 | **Live DPDP exposure.** Cache headers stripped from 70 files; the consent legal text was served cached for a year | The S3 upload command was re-typed by hand every deploy, so the method drifted | `7e4e044d` + `6611c4bc` — codified `scripts/deploy-s3.sh` with content-hash cache policy and edge self-verification | ❌ **NOT ON THIS BRANCH.** The script does not exist here. This is part of Blocker 2. |
+| 11 | 2026-07-18 | **Live DPDP exposure.** Cache headers stripped from 70 files; the consent legal text was served cached for a year | The S3 upload command was re-typed by hand every deploy, so the method drifted | `7e4e044d` + `6611c4bc` — codified `src/clients/mobile-web/scripts/deploy-s3.sh` with content-hash cache policy and edge self-verification | ~~❌ **NOT ON THIS BRANCH.** The script does not exist here. This is part of Blocker 2.~~ → **CORRECTED 2026-08-08: ✅ PRESENT.** The guard is tracked on this branch at `src/clients/mobile-web/scripts/deploy-s3.sh` (285 lines, mode 755), and **both** fix commits (`7e4e044d`, `6611c4bc`) are ancestors of HEAD — verified with `git merge-base --is-ancestor`, not by reading a doc. It became present via the **Phase 0 merge (`7d919912`)**; the struck-through text was accurate when this table was written (pre-merge) and is kept so the reason for the original claim is visible rather than erased. **Path note:** the repo root also has a `scripts/` directory — it does **not** contain this script, so a bare `scripts/…` invocation from the repo root fails with "No such file or directory". Always use the full path above. |
 | 12 | ongoing | Smoke checks reported false green | This CloudFront distribution maps 403/404 → `index.html` at HTTP **200** | Rule: assert `Content-Type`, never status code alone | Procedural. **In our smoke tests, section 6.** |
 
 ### The one that is NOT yet fixed — and it is ours
@@ -144,14 +144,14 @@ Preserve the empty-GUID sentinel from the Fix-1 helper. Prove it with `SyncPushL
 
 ### 🔴 BLOCKER 2 — Deploying from this branch would un-ship live production features
 
-> **STATUS: ✅ CLOSED — Phase 0, merge commit `7d919912` ("Merge origin/main (v1.0.7) into feat/labour-management-ui").** `git rev-list --left-right --count origin/main...HEAD` now reads `0 39` (was `11 behind, 30 ahead`) — the branch is a genuine superset of `main` again, not a subset. All 4 conflicts resolved (`AppRouter.tsx` — labour arrival-scroll hook kept ABOVE both the welcome-screen and permissions early-returns, no conditionally-invoked hooks; `ProfilePage.tsx` — kept the 3-line `onOpenLabour` addition; 2 snapshot files regenerated, not hand-merged). The 4 untracked onboarding files that collided with `main`'s tracked versions were verified byte-identical (diff/cmp) and backed up before removal — nothing lost. `scripts/deploy-s3.sh` confirmed present post-merge. Full regression re-run: frontend 562/562, Domain 1077/1077, Architecture 77/77, `tsc`/eslint clean. Full detail: `.superpowers/sdd/phase0-merge-report.md`. **Residual, not a re-open:** the version bump this handoff recommends ("take main's 1.0.7, then bump to 1.0.8") was done separately in Phase 7 — see the branch manifest and the version-bump section of `.superpowers/sdd/phase7-release-paperwork-report.md`.
+> **STATUS: ✅ CLOSED — Phase 0, merge commit `7d919912` ("Merge origin/main (v1.0.7) into feat/labour-management-ui").** `git rev-list --left-right --count origin/main...HEAD` now reads `0 39` (was `11 behind, 30 ahead`) — the branch is a genuine superset of `main` again, not a subset. All 4 conflicts resolved (`AppRouter.tsx` — labour arrival-scroll hook kept ABOVE both the welcome-screen and permissions early-returns, no conditionally-invoked hooks; `ProfilePage.tsx` — kept the 3-line `onOpenLabour` addition; 2 snapshot files regenerated, not hand-merged). The 4 untracked onboarding files that collided with `main`'s tracked versions were verified byte-identical (diff/cmp) and backed up before removal — nothing lost. `src/clients/mobile-web/scripts/deploy-s3.sh` confirmed present post-merge. Full regression re-run: frontend 562/562, Domain 1077/1077, Architecture 77/77, `tsc`/eslint clean. Full detail: `.superpowers/sdd/phase0-merge-report.md`. **Residual, not a re-open:** the version bump this handoff recommends ("take main's 1.0.7, then bump to 1.0.8") was done separately in Phase 7 — see the branch manifest and the version-bump section of `.superpowers/sdd/phase7-release-paperwork-report.md`.
 
 **What it is.** 11 commits behind `origin/main`. `git cherry` confirms none of them exist on this branch in any form. Missing, and currently live for your users:
 
 - `2a212474` + `93d4f19e` + `cb538602` — first-run welcome screen and the redesigned consent screen, including the mascot-clipped-off-screen fix
 - `5ca3e09c` — mobile-legible cards across the Setup Hub
 - `10e681cf` / `78351120` / `739dfe90` — version labels, APK v1.0.6→v1.0.7, CI lockfile fix
-- `7e4e044d` + `6611c4bc` — **`scripts/deploy-s3.sh`, the codified S3 upload that exists specifically to stop the cache-header drift that caused a live DPDP exposure on 2026-07-18.** It is absent from this branch *and* absent from disk.
+- `7e4e044d` + `6611c4bc` — **`src/clients/mobile-web/scripts/deploy-s3.sh`, the codified S3 upload that exists specifically to stop the cache-header drift that caused a live DPDP exposure on 2026-07-18.** ~~It is absent from this branch *and* absent from disk.~~ → **CORRECTED 2026-08-08:** it is **present on both counts** — tracked on this branch and on disk at `src/clients/mobile-web/scripts/deploy-s3.sh` (285 lines, mode 755), with both fix commits verified ancestors of HEAD via `git merge-base --is-ancestor`. It arrived with the **Phase 0 merge (`7d919912`)** — i.e. this bullet's original claim was true of the pre-merge branch this section describes, and is left struck through rather than deleted. See the STATUS UPDATE at the top of this blocker, which already recorded the script as confirmed present post-merge; this bullet had not been reconciled with it until now.
 - `173fd5e2` — an auth rate-limit fix (backend; verified **prod-inert**, so no backend regression from this one)
 
 **Why it matters.** Deploying the frontend from here **deletes the welcome screen from production**, reverts the consent redesign, un-does the Setup Hub legibility pass, and rolls the version label back from 1.0.7 to 1.0.5 — which would then make *your own deploy verification lie to you* ("it says 1.0.5, the deploy must have failed"). And it forces a hand-rolled S3 upload, reopening a closed incident.
@@ -165,7 +165,7 @@ Preserve the empty-GUID sentinel from the Fix-1 helper. Prove it with `SyncPushL
 
 In `AppRouter.tsx`, `main` adds the `!welcomeSeen` gate at precisely the lines where this branch adds the labour arrival-scroll hook. **Both must be kept, and the welcome-screen early-return must sit *after* the labour hook call** — otherwise a React hook is invoked conditionally and the app breaks. Resolving this carelessly silently reproduces the exact regression we are guarding against.
 
-After the merge: commit or discard the uncommitted `OnboardingPermissionsPage.tsx`, decide the fate of the 4 untracked onboarding files (they collide with `main`'s tracked versions), re-run the full frontend suite (562/562 is now stale), confirm `deploy-s3.sh` is present, and re-verify `APP_VERSION` (take `main`'s 1.0.7, then bump to 1.0.8 for this release across all four places).
+After the merge: commit or discard the uncommitted `OnboardingPermissionsPage.tsx`, decide the fate of the 4 untracked onboarding files (they collide with `main`'s tracked versions), re-run the full frontend suite (562/562 is now stale), confirm `src/clients/mobile-web/scripts/deploy-s3.sh` is present, and re-verify `APP_VERSION` (take `main`'s 1.0.7, then bump to 1.0.8 for this release across all four places).
 
 **Who.** Me.
 
@@ -370,7 +370,7 @@ One honesty note to record on the chart: the full lane's G0 ancestry check is pa
 6. ✅ `git merge origin/main` into `feat/labour-management-ui` — merge commit `7d919912`. Exactly the 4 conflicts predicted.
 7. ✅ Resolved `AppRouter.tsx` **by hand**: kept BOTH the labour arrival-scroll hook + `logIntent` context field AND `main`'s `welcomeSeen` gate, hook call placed above both early returns.
 8. ✅ Resolved `ProfilePage.tsx`: kept the 3-line `onOpenLabour` addition (verified this branch had already inherited `main`'s Setup-Hub-Settings migration from a common ancestor, so "keep both" reduced to this). 2 snapshot files regenerated via `vitest -u`, not hand-merged.
-9. ✅ Confirmed present after merge: `scripts/deploy-s3.sh`, `WelcomeScreen.tsx` wired into `AppRouter`/`lazyComponents`, `e2e/fixtures/loginHelper.ts` clicking through the welcome gate.
+9. ✅ Confirmed present after merge: `src/clients/mobile-web/scripts/deploy-s3.sh`, `WelcomeScreen.tsx` wired into `AppRouter`/`lazyComponents`, `e2e/fixtures/loginHelper.ts` clicking through the welcome gate.
 10. ✅ Version bumped to **1.0.8** in all four places (`buildInfo.ts`, `android/app/build.gradle` versionCode **16** + versionName, `marketing-static/index.html`) — done in Phase 7 (this pass), not at merge time; grep-verified no `1.0.7`/`versionCode 15` remains in any app-version location.
 11. ✅ Re-ran everything post-merge: frontend 562/562, `tsc`/eslint clean, Domain 1077/1077, Architecture 77/77.
 
@@ -413,7 +413,43 @@ One honesty note to record on the chart: the full lane's G0 ancestry check is pa
 ### PHASE 5 — Frontend deploy *(after backend is proven, ~20 min)* — 🔴 NOT STARTED
 
 37. Build **once**, from a **clean worktree** at the pushed SHA — never from the working tree, never rebuilt per environment.
-38. Deploy with **`scripts/deploy-s3.sh`** (present as of Phase 1). `--dry-run` first. Do **not** hand-roll `aws s3 sync` — that method drift caused the 2026-07-18 DPDP exposure.
+38. Deploy with **`src/clients/mobile-web/scripts/deploy-s3.sh`** (present as of Phase 1). `--dry-run` first. Do **not** hand-roll `aws s3 sync` — that method drift caused the 2026-07-18 DPDP exposure.
+
+    > **⚠️ ADDED 2026-08-08 — the wrong-`dist` trap. Step 37 and this step can silently disagree, and nothing will tell you.**
+    >
+    > The script does **not** derive its upload directory from your current directory. Line 50 is
+    > `DIST="${DIST:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/dist}"` — the dist is resolved
+    > **relative to the script file you invoked**, i.e. `<that script's parent dir>/../dist`. So if you
+    > build in the clean worktree (as step 37 requires) but then run the **main checkout's** copy of the
+    > script, you will upload the **main checkout's stale `dist/`** to production.
+    >
+    > **The script cannot catch this.** Its edge self-verify loop iterates `find "$DIST"` (line ~276) —
+    > it verifies whatever dist it just uploaded, against that same dist's own expected cache policy. It
+    > will happily report `VERIFY OK: N/N objects` for the wrong build. No failure, no warning, wrong
+    > bundle live. This is the one failure in this runbook with no automated detector.
+    >
+    > **Do this — invoke the copy of the script that lives inside the worktree you built in.** Give it by
+    > full path, so the command does not depend on your current directory at all:
+    > ```bash
+    > W=/path/to/worktree-<pushed-SHA>          # the SAME worktree step 37 built in
+    > bash "$W/src/clients/mobile-web/scripts/deploy-s3.sh" --dry-run
+    > bash "$W/src/clients/mobile-web/scripts/deploy-s3.sh"
+    > ```
+    > **Or, equivalently, pass `DIST` explicitly** (the script honours a `DIST` env override, line 50) —
+    > use this form if you must invoke a script copy from somewhere else:
+    > ```bash
+    > DIST=/path/to/worktree-<pushed-SHA>/src/clients/mobile-web/dist \
+    >   bash /path/to/worktree-<pushed-SHA>/src/clients/mobile-web/scripts/deploy-s3.sh --dry-run
+    > ```
+    > **Confirm before the non-dry run:** `--dry-run` output lists the `index-*.js` hash it is about to
+    > upload. That hash must be the one the step-37 build emitted. If it is a hash you recognise from an
+    > older deploy, you are pointed at the wrong dist — stop.
+    >
+    > Also note: the **repo root** has its own unrelated `scripts/` directory (`generate_image.py`,
+    > `temp_gen.py`) and there is **no deploy script in it**. Invoking a bare `scripts/…` path from the
+    > repo root therefore fails loudly with "No such file or directory" — annoying, but the safe failure.
+    > The dangerous one is the wrong-worktree invocation above, which succeeds.
+
 39. Verify from the edge that `consent/**` is `no-cache` and the hashed bundle is immutable. Confirm the shell flipped to a new `index-*.js` hash.
 40. Run smoke tests 5-8.
 
@@ -472,7 +508,22 @@ Run in this order. Every check names its evidence. **Assert `Content-Type`, neve
 4. Confirm `/health` 200 and `/version` = `5e65d32b`, then diff `.env` against its backup.
 
 **Frontend rollback**
-5. Re-deploy the previous bundle (`index-BPf9AmjT.js` from `cb538602`) using `scripts/deploy-s3.sh`, then invalidate CloudFront. Verify from the edge that the shell points back at the old hash **and** that `consent/**` is still `no-cache`.
+5. **Rebuild `cb538602` and re-deploy its whole `dist/`.** *(Rewritten 2026-08-08. The previous wording — "re-deploy the previous bundle `index-BPf9AmjT.js`, then invalidate CloudFront" — was not executable: the script syncs a whole directory and cannot target one hashed file, there is no saved `dist/` anywhere to point it at, and it already invalidates by itself.)*
+
+   a. **Build the old commit in its own clean worktree** — you cannot upload a single file, so you must reproduce the whole bundle:
+      ```bash
+      R=/path/to/rollback-cb538602
+      git worktree add "$R" cb538602
+      cd "$R/src/clients/mobile-web" && npm ci && npm run build:prod
+      ```
+   b. **Confirm the emitted hash is `index-BPf9AmjT.js`** before uploading anything. If the build emits a different hash, it is not reproducing what is live — stop and investigate rather than pushing an unknown bundle during an incident.
+   c. **Dry-run using *that worktree's* copy of the script**, by full path (same wrong-`dist` trap as Phase 5 step 38 — the script resolves `DIST` from its own location, never from your `cwd`):
+      ```bash
+      bash "$R/src/clients/mobile-web/scripts/deploy-s3.sh" --dry-run
+      ```
+   d. **Deploy:** `bash "$R/src/clients/mobile-web/scripts/deploy-s3.sh"`. **Do not "then invalidate CloudFront"** — the script already creates the invalidation and *waits* for it to reach `Completed` (lines ~206-232) before it verifies. A hand-rolled second invalidation is redundant and is exactly the kind of freehand step this script exists to eliminate.
+   e. **Know what the default prune does.** Unless you pass `--no-prune`, the last upload pass runs `aws s3 sync --delete` (line ~195), which **removes the newer bundle from the bucket**. For a rollback that is usually what you want (the bad build stops being reachable), but it means rolling *forward* again needs another rebuild. `apk/*` and `deploy/*` are excluded, so the published APK is never touched. Use `--no-prune` only if you deliberately want the newer objects left behind.
+   f. **Verify from the edge** that the shell points back at the old hash **and** that `consent/**` is still `no-cache`. The script's own verify pass asserts Cache-Control and Content-Type for every file in the dist it uploaded and exits non-zero on mismatch — but remember it can only verify *the dist it used*, so step (b) is what actually proves you rolled back to the right bundle.
 
 **If it fails twice, stop.** The incident log's own rule from 2026-06-06, after three consecutive failed deploys: *"STOP fix-forward whack-a-mole; reproduce and fix LOCALLY (:5433 + RLS) before any further deploy."* Two attempts, then we go back to the laptop.
 
@@ -518,7 +569,7 @@ Run in this order. Every check names its evidence. **Assert `Content-Type`, neve
 - **Migration `20260718132540`: never applied by EF anywhere.** Columns hand-applied to local via raw SQL; the history row was hand-inserted.
 - **`dotnet ef database update` is broken on this machine** — 3 history rows against 76 tables.
 - **CI has never run on this branch.** Zero times, 30 commits.
-- **Branch is 11 commits behind `main`.** A frontend deploy from here regresses prod: welcome screen, consent redesign, mascot fix, Setup Hub legibility, version label, and `deploy-s3.sh`.
+- **Branch is 11 commits behind `main`.** A frontend deploy from here regresses prod: welcome screen, consent redesign, mascot fix, Setup Hub legibility, version label, and `src/clients/mobile-web/scripts/deploy-s3.sh`. *(Corrected 2026-08-08: this described the pre-Phase-0 branch — see Blocker 2's STATUS line. The merge `7d919912` closed it; the script is present.)*
 - **`ErasureWorker` manifest is factually wrong** post-migration, and `ssf.workers` / `ssf.worker_assignments` are absent from it entirely.
 - **Branch manifest absent.** No `DEPLOYMENT_TRACKER` row. Spec not in `_COFOUNDER/specs/_active/`.
 - **Founder Acceptance Gate is unticked AND unsatisfiable as written** — it names two tables that do not exist.
