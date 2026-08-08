@@ -35,7 +35,12 @@ All decisions, plans, ADRs, specs, and agent memory live under `_COFOUNDER/` (pr
 - No `dist/` in git
 - No `--no-verify`
 - No force-push to `main`
-- Signed commits required
+- **Signing:** local feature-branch commits need **not** be signed. GitHub signs the squash-merge
+  into `main`, which is where signature provenance actually carries weight for a public repo.
+  Do not claim a local commit is signed — `git log --format=%G?` returns `N` in this environment,
+  and asserting otherwise is a false claim about verification. *(Founder decision 2026-08-08,
+  replacing the previous unqualified "signed commits required", which had gone unmet since
+  2026-05-26 and was carried three times without resolution.)*
 - No `Class1.cs` placeholder files
 - Repo is the source of truth — never suggest, propose, or change anything from a superficial glance, assumption, or doc claim; verify in the actual code first (Read / Grep / confirm the path). Prevents scope drift.
 
