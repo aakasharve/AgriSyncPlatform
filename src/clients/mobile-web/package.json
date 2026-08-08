@@ -10,6 +10,8 @@
     "build:prod": "vite build --mode production",
     "clean": "rimraf dist",
     "preview": "vite preview",
+    "deploy": "bash scripts/deploy-s3.sh",
+    "deploy:dry-run": "bash scripts/deploy-s3.sh --dry-run",
     "typecheck": "tsc --noEmit",
     "lint": "eslint --max-warnings 9999 \"src/**/*.{ts,tsx}\"",
     "check:file-sizes": "node scripts/check-file-sizes.mjs",
