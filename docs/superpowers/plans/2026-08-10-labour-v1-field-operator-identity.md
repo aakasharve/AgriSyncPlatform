@@ -139,9 +139,9 @@ Verbatim structure of `CreateDailyLogHandler.HandleAsync`:
 | `AgriSync.ArchitectureTests` | 89 passed, 0 failed | Release |
 | `AgriSync.BuildingBlocks.Tests` | 98 passed, 0 failed | Release |
 | `ShramSafal.Sync.IntegrationTests --filter "Category=RequiresPostgres"` | 18 passed, 0 failed | Release |
-| mobile-web `npm test` | 612 passed, **2 failed** of 614 | — |
+| mobile-web `npm test` | 614 passed of 614, 92 files | — |
 
-- **The frontend baseline is RED** — `LabourHub.test.tsx:205` and `WeeklyDashboard.test.tsx:35` fail because `SHOW_ATTENDANCE_TILE` (`LabourHub.tsx:35`), `SHOW_LEDGER_TILE` (`LabourHub.tsx:48`) and `SHOW_LEDGER_BUTTON` (`WeeklyDashboard.tsx:38`) were flipped `true` for founder review. Task 8 restores them.
+- ~~**The frontend baseline is RED**~~ — **[CORRECTION 2026-08-11, execution session]** This bullet was measured **before** commit `032cecfe` ("labour screen honesty"), which already restored the three review flags. Re-measured at `df9ed847`: **614 passed / 614, 0 failed, 92 test files.** Verified at HEAD: `LabourHub.tsx:35 SHOW_ATTENDANCE_TILE = false`, `LabourHub.tsx:48 SHOW_LEDGER_TILE = false`, `WeeklyDashboard.tsx:38 SHOW_LEDGER_BUTTON = false`. **Consequence: Task 8.7 is already satisfied and is a no-op** — confirm the three flags read `false` and move on. The Status block at the end of this document (614/614, flags `false`) was already correct; this A12 row was the stale one.
 - **Use `--configuration Release`** for ArchitectureTests / BuildingBlocks.Tests / Sync.IntegrationTests — a running dev `AgriSync.Bootstrapper` locks its Debug output (MSB3021).
 - **No shared builders or fixtures exist** in `ShramSafal.Domain.Tests`. `FixedClock` is redefined file-privately in **34** places there (39 across `src/tests`) — name the one you use. The reusable double is `internal abstract class StubShramSafalRepository` at `Work/Handlers/StubShramSafalRepository.cs:22`; a *different*, `sealed`, identically-named class sits at `Analytics/StubShramSafalRepository.cs:22`.
 - ArchitectureTests use **no** NetArchTest. Mechanisms: `TestPathHelper.GetSolutionRoot()` / `GetAppsRoot()` / `ProjectReferenceReader` (`TestPathHelper.cs:7,24,41,43`); reflection over a hardcoded `string[]` (`EntitlementGateTests.cs:29,48,53,62`); regex source scanning via `ProductionSourceFiles()` + `StripComments()` (`RlsIdentityScopeRules.cs:251,275`). **`GetSolutionRoot()` returns `<repo>/src`** — `[InlineData]` paths are src-relative.
@@ -569,8 +569,8 @@ onChange={e => {
 - [ ] **8.4** Delete the hours lines at `DailyWorkSummaryView.tsx:165` and `LabourHub.tsx:173`.
 - [ ] **8.5** Delete `LabourEventCard.tsx`; confirm `grep -rn "LabourEventCard" src/clients/mobile-web/src` returns nothing.
 - [ ] **8.6** Remove the three unused `hoursWorked` i18n entries (`translations.ts:83,342,592`).
-- [ ] **8.7** Restore the review flags to `false`: `LabourHub.tsx:35` `SHOW_ATTENDANCE_TILE`, `LabourHub.tsx:48` `SHOW_LEDGER_TILE`, `WeeklyDashboard.tsx:38` `SHOW_LEDGER_BUTTON`. Clears the 2 known-red tests.
-- [ ] **8.8** **Verify:** `FE`. **Evidence:** baseline was 612/614 with 2 failures; expect **0 failures**; report actual totals (the count drops — `LabourEventCard` is deleted and hours assertions removed).
+- [ ] **8.7** **[CORRECTED 2026-08-11 — already satisfied, no edit required]** The three review flags are **already `false`** at the execution baseline (`LabourHub.tsx:35` `SHOW_ATTENDANCE_TILE`, `LabourHub.tsx:48` `SHOW_LEDGER_TILE`, `WeeklyDashboard.tsx:38` `SHOW_LEDGER_BUTTON`); commit `032cecfe` restored them. **Verify by reading, change nothing.** If any reads `true`, that is drift — stop and report.
+- [ ] **8.8** **Verify:** `FE`. **Evidence:** measured baseline is **614 passed / 614, 0 failed** (not the stale 612/614 in the pre-`032cecfe` A12 row). Expect **0 failures**; report actual totals — the count drops because `LabourEventCard` is deleted and the fabricated-hours assertions are removed.
 
 ---
 
@@ -873,6 +873,8 @@ Pre-existing. **Not** pulled into Labour V1; recorded so nobody mistakes them fo
 **Baseline SHA:** `032cecfeeed0c953c205ad94b993f29addaa29f2` on `feat/labour-management-ui` — *"fix(rls): centralise identity establishment + labour screen honesty"*.
 
 Every file path, line number and test baseline in this document is measured against **that commit**. All five suites were green at it: Domain 1077 · Arch 89 · BuildingBlocks 98 · RequiresPostgres 18 · mobile-web 614/614 (two consecutive runs). The three review flags are `false`. Re-measure and re-stamp if the branch moves before implementation starts.
+
+**Re-stamped 2026-08-11 at the start of the execution session, HEAD `df9ed847`** (= `032cecfe` + three doc-only commits, verified with `git log --name-only`). Independently re-measured, all five green and identical to the stamp above: **Domain 1077/0 · Arch 89/0 · BuildingBlocks 98/0 · RequiresPostgres 18/0 · mobile-web 614/614 (92 files, 0 failed)**. The only correction this produced is the stale §A12 frontend row, patched in place above (Task 8.7 is a no-op).
 
 - [x] Architecture frozen; broad review closed.
 - [ ] Gates A–D closed.
