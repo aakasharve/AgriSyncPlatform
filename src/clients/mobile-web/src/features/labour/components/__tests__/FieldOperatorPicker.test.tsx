@@ -241,6 +241,34 @@ describe('Task 13.2 — duplicate names stay distinguishable, never merged', () 
         expect(rows[0].tag).toBeUndefined();
     });
 
+    /*
+     * Fix round 1. The roster arrives ordered by CreatedAtUtc, so two बाळू
+     * created weeks apart land far apart in the list and the farmer never
+     * sees that there ARE two. A collision the farmer has to scroll to find
+     * is not a visible collision.
+     */
+    it('groups same-named people adjacently, keeping first-appearance order for everyone else', () => {
+        const rows = buildPickerRows([BALU_SHINDE, GANESH, BALU_NO_FULL, BALU_ALSO_NO_FULL]);
+
+        expect(rows.map((r) => r.operator.id)).toEqual([
+            BALU_SHINDE.id, BALU_NO_FULL.id, BALU_ALSO_NO_FULL.id, GANESH.id,
+        ]);
+    });
+
+    it('renders the grouped order in the DOM, not the order the server sent', async () => {
+        // Server order interleaves them; the picker must not.
+        mockFetch.mockResolvedValue([BALU_NO_FULL, GANESH, BALU_ALSO_NO_FULL]);
+        renderPicker();
+        await openPicker();
+
+        await waitFor(() => expect(screen.getByTestId(`fo-row-${GANESH.id}`)).toBeInTheDocument());
+        const rendered = [...screen.getByTestId('fo-picker-panel').querySelectorAll('[data-testid^="fo-row-"]')]
+            .map((el) => el.getAttribute('data-testid'));
+        expect(rendered).toEqual([
+            `fo-row-${BALU_NO_FULL.id}`, `fo-row-${BALU_ALSO_NO_FULL.id}`, `fo-row-${GANESH.id}`,
+        ]);
+    });
+
     it('renders every same-named person as its own row, with the collision spelled out on screen', async () => {
         mockFetch.mockResolvedValue([BALU_SHINDE, BALU_NO_FULL, BALU_ALSO_NO_FULL]);
         renderPicker();
@@ -310,6 +338,38 @@ describe('Task 13.1 — select an existing person', () => {
         expect(await screen.findByTestId(`fo-row-${GANESH.id}`)).toBeInTheDocument();
     });
 
+    /*
+     * Fix round 1. A live "add a person" form under a "could not load the
+     * list" banner invites the farmer to re-create someone he already has —
+     * the exact mistake the banner exists to prevent.
+     */
+    it('closes creation while the roster failed to load, and says why', async () => {
+        mockFetch.mockRejectedValueOnce(new Error('offline'));
+        renderPicker();
+        await openPicker();
+
+        await screen.findByText('माहिती आणता आली नाही');
+        expect(screen.getByTestId('fo-add-blocked')).toBeInTheDocument();
+        expect(screen.getByTestId('fo-new-name')).toBeDisabled();
+        expect(screen.getByTestId('fo-new-full-name')).toBeDisabled();
+        expect(screen.getByTestId('fo-add')).toBeDisabled();
+    });
+
+    it('re-opens creation once the retry succeeds', async () => {
+        mockFetch.mockRejectedValueOnce(new Error('offline'));
+        renderPicker();
+        await openPicker();
+
+        await screen.findByText('माहिती आणता आली नाही');
+        mockFetch.mockResolvedValueOnce([GANESH]);
+        fireEvent.click(screen.getByText('पुन्हा प्रयत्न करा'));
+
+        await screen.findByTestId(`fo-row-${GANESH.id}`);
+        expect(screen.queryByTestId('fo-add-blocked')).toBeNull();
+        expect(screen.getByTestId('fo-new-name')).not.toBeDisabled();
+        expect(screen.getByTestId('fo-new-full-name')).not.toBeDisabled();
+    });
+
     it('shows the honest empty state when the farm genuinely has no one yet', async () => {
         mockFetch.mockResolvedValue([]);
         renderPicker();
@@ -330,9 +390,74 @@ describe('Task 13.1 — add a person', () => {
         fireEvent.change(screen.getByTestId('fo-new-name'), { target: { value: '  बाळू  ' } });
         fireEvent.click(screen.getByTestId('fo-add'));
 
-        await waitFor(() => expect(mockCreate).toHaveBeenCalledWith(FARM_ID, 'बाळू'));
+        await waitFor(() => expect(mockCreate).toHaveBeenCalledWith(FARM_ID, 'बाळू', undefined));
         await waitFor(() => expect(mockAttach).toHaveBeenCalledWith(FARM_ID, BALU_NO_FULL.id, ASSIGNMENT_ID));
         await waitFor(() => expect(onToast).toHaveBeenCalledWith('बाळू ✓ जोडलं'));
+    });
+
+    /*
+     * Fix round 1. Without this field every operator the app can create has
+     * fullName = null (no rename client by design, seeder creates none), so
+     * buildPickerRows' resolve-by-full-name branch was unreachable in
+     * production and every real collision fell through to a hex fragment.
+     */
+    it('passes the optional full name / identity through when the farmer supplies one', async () => {
+        mockFetch.mockResolvedValue([]);
+        mockCreate.mockResolvedValue(BALU_SHINDE);
+        renderPicker();
+        await openPicker();
+
+        fireEvent.change(screen.getByTestId('fo-new-name'), { target: { value: 'बाळू' } });
+        fireEvent.change(screen.getByTestId('fo-new-full-name'), { target: { value: '  बाळू शिंदे  ' } });
+        fireEvent.click(screen.getByTestId('fo-add'));
+
+        await waitFor(() => expect(mockCreate).toHaveBeenCalledWith(FARM_ID, 'बाळू', 'बाळू शिंदे'));
+    });
+
+    it('keeps the identity field OPTIONAL — a name-only add is enabled and posts no full name (P9)', async () => {
+        mockFetch.mockResolvedValue([]);
+        mockCreate.mockResolvedValue(BALU_NO_FULL);
+        renderPicker();
+        await openPicker();
+
+        fireEvent.change(screen.getByTestId('fo-new-name'), { target: { value: 'बाळू' } });
+        // The button is live on the name alone — the second field never gates it.
+        expect(screen.getByTestId('fo-add')).not.toBeDisabled();
+        fireEvent.click(screen.getByTestId('fo-add'));
+
+        await waitFor(() => expect(mockCreate).toHaveBeenCalledWith(FARM_ID, 'बाळू', undefined));
+    });
+
+    it('a whitespace-only identity is no identity — not sent', async () => {
+        mockFetch.mockResolvedValue([]);
+        mockCreate.mockResolvedValue(BALU_NO_FULL);
+        renderPicker();
+        await openPicker();
+
+        fireEvent.change(screen.getByTestId('fo-new-name'), { target: { value: 'बाळू' } });
+        fireEvent.change(screen.getByTestId('fo-new-full-name'), { target: { value: '   ' } });
+        fireEvent.click(screen.getByTestId('fo-add'));
+
+        await waitFor(() => expect(mockCreate).toHaveBeenCalledWith(FARM_ID, 'बाळू', undefined));
+    });
+
+    it('a full name typed here actually resolves the collision it was typed for (rule 2, end to end)', async () => {
+        // One बाळू already exists with no full name; the farmer adds a second
+        // and gives him a surname.
+        mockFetch.mockResolvedValue([BALU_NO_FULL]);
+        mockCreate.mockResolvedValue(BALU_SHINDE);
+        renderPicker();
+        await openPicker();
+
+        fireEvent.change(screen.getByTestId('fo-new-name'), { target: { value: 'बाळू' } });
+        fireEvent.change(screen.getByTestId('fo-new-full-name'), { target: { value: 'बाळू शिंदे' } });
+        fireEvent.click(screen.getByTestId('fo-add'));
+
+        // The named one is now told apart BY HIS NAME — no hex tag on him —
+        // while the nameless one still carries the honest fallback.
+        expect(await screen.findByText('बाळू शिंदे')).toBeInTheDocument();
+        await waitFor(() => expect(screen.queryByTestId(`fo-tag-${BALU_SHINDE.id}`)).toBeNull());
+        expect(screen.getByTestId(`fo-tag-${BALU_NO_FULL.id}`)).toBeInTheDocument();
     });
 
     it('never posts an empty name', async () => {

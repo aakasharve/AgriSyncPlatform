@@ -41,6 +41,20 @@
  * means. Silently merging two people is the exact identity bug this feature
  * exists to prevent.
  *
+ * Two things make that resolvable rather than merely safe (fix round 1):
+ *   - The add form carries an OPTIONAL second field, "पूर्ण नाव / ओळख".
+ *     Without it every operator this UI can create has `fullName = null`
+ *     (there is no rename client by design, and the seeder creates none), so
+ *     the disambiguate-by-full-name branch was unreachable in production and
+ *     every real collision fell through to a Latin-script id fragment a
+ *     Marathi-reading farmer cannot use. It stays optional: a farmer who
+ *     types only "बाळू" must still succeed with zero friction (P9).
+ *   - `buildPickerRows` GROUPS same-named people adjacently. The roster
+ *     arrives ordered by `CreatedAtUtc`, so two बाळू created weeks apart
+ *     would otherwise sit far apart in the list and the collision would only
+ *     be discoverable by scrolling. A collision has to be visible at the
+ *     moment of choosing to be worth anything.
+ *
  * ── WHY NOT `PersonRow` ──────────────────────────────────────────────────
  * `LabourUiKit.PersonRow` renders a `MoneyLine` off `LabourPerson.balance`.
  * A Field Operator is a bare work identity with NO balance, so reusing it
@@ -92,14 +106,22 @@ export interface PickerRow {
 
 /**
  * Task 13.2 — turns the raw roster into rows that can never silently merge
- * two people. Pure and exported so the collision rules are testable without
- * a render.
+ * two people, ordered so a collision is impossible to miss. Pure and exported
+ * so the collision rules are testable without a render.
+ *
+ * ORDER: same-named people are emitted ADJACENTLY. Name groups keep the
+ * order in which their FIRST member appeared in the roster, and members keep
+ * roster order inside a group, so nothing jumps around unnecessarily — the
+ * only movement is a later बाळू being pulled up beside the earlier one. The
+ * server orders by `CreatedAtUtc` (`ShramSafalRepository.GetFieldOperators
+ * ForFarmAsync`), which would otherwise scatter a collision across the list.
  *
  * Rules, in order:
  *   1. A name held by exactly one person → plain row (its full name still
  *      shows if it has one; it is information, not disambiguation).
  *   2. A shared name where THIS row's full name is unique inside the group →
- *      resolved by full name; no tag, no collision note.
+ *      resolved by full name; no tag, no collision note. Reachable in
+ *      production because the add form offers an optional full-name field.
  *   3. A shared name with no full name, or a full name someone else in the
  *      group also has (B2 permits that exactly) → `ambiguous`: keep both
  *      rows, tag each with its own id fragment, and say so on screen.
@@ -113,8 +135,9 @@ export function buildPickerRows(operators: FieldOperator[]): PickerRow[] {
         else byName.set(key, [o]);
     });
 
-    return operators.map((o) => {
-        const group = byName.get(o.displayName.trim()) ?? [o];
+    // `Map` iterates in insertion order, which is what makes the grouping
+    // stable and predictable rather than a re-sort.
+    return [...byName.values()].flatMap((group) => group.map((o) => {
         const fullName = o.fullName?.trim() || undefined;
         if (group.length === 1) {
             return { operator: o, fullName, ambiguous: false };
@@ -127,7 +150,7 @@ export function buildPickerRows(operators: FieldOperator[]): PickerRow[] {
             ambiguous: !resolvedByFullName,
             tag: resolvedByFullName ? undefined : shortOperatorTag(o.id),
         };
-    });
+    }));
 }
 
 interface Props {
@@ -156,6 +179,14 @@ const FieldOperatorPicker: React.FC<Props> = ({ farmId, labourAssignmentId, onTo
     const [busyId, setBusyId] = useState<string | null>(null);
     const [adding, setAdding] = useState(false);
     const [newName, setNewName] = useState('');
+    /**
+     * OPTIONAL. The one thing a farmer can write that actually tells two
+     * बाळूs apart — a surname, a village, "मोठा बाळू", anything human. Blank
+     * is a first-class answer: `createFieldOperator` omits the field entirely
+     * rather than posting an empty string, and a name-only add is exactly as
+     * fast as it was before this field existed.
+     */
+    const [newFullName, setNewFullName] = useState('');
 
     const load = useCallback(async () => {
         setLoading(true);
@@ -207,11 +238,13 @@ const FieldOperatorPicker: React.FC<Props> = ({ farmId, labourAssignmentId, onTo
      */
     const addPerson = async () => {
         const displayName = newName.trim();
-        if (!displayName || adding) return;
+        // `loadFailed` blocks this too: creating against a roster we could not
+        // read is how a farmer ends up with a second बाळू he already had.
+        if (!displayName || adding || loadFailed) return;
         setAdding(true);
         let created: FieldOperator;
         try {
-            created = await createFieldOperator(farmId, displayName);
+            created = await createFieldOperator(farmId, displayName, newFullName.trim() || undefined);
         } catch {
             setAdding(false);
             onToast?.('नाव जोडता आलं नाही — पुन्हा प्रयत्न करा');
@@ -219,6 +252,7 @@ const FieldOperatorPicker: React.FC<Props> = ({ farmId, labourAssignmentId, onTo
         }
         setRoster((prev) => [...(prev ?? []), created]);
         setNewName('');
+        setNewFullName('');
         const outcome = await runAttach(created);
         setAdding(false);
         if (outcome === 'failed') onToast?.(`${created.displayName} ची नोंद झाली, पण या कामाला लावता आलं नाही — पुन्हा प्रयत्न करा`);
@@ -316,7 +350,18 @@ const FieldOperatorPicker: React.FC<Props> = ({ farmId, labourAssignmentId, onTo
                     })}
 
                     <GroupLabel>नवीन नाव</GroupLabel>
-                    <div className="flex gap-2">
+                    {/*
+                      * The honest-failure banner above exists to stop the
+                      * farmer re-creating someone he already has. Leaving this
+                      * form live underneath it would hand him the exact
+                      * mistake the banner warns about, so creation is closed
+                      * until the list actually loads — and it says why, rather
+                      * than going quietly grey.
+                      */}
+                    {loadFailed && (
+                        <p data-testid="fo-add-blocked" className="mb-2 text-[16px] leading-snug text-stone-500">यादी आली नाही, म्हणून नवीन नाव आत्ता जोडता येणार नाही — आधी पुन्हा प्रयत्न करा.</p>
+                    )}
+                    <div className="flex flex-col gap-2">
                         <input
                             type="text"
                             value={newName}
@@ -325,17 +370,35 @@ const FieldOperatorPicker: React.FC<Props> = ({ farmId, labourAssignmentId, onTo
                             // the field never truncates something the server would
                             // have accepted.
                             maxLength={200}
+                            disabled={loadFailed}
                             aria-label="नवीन माणसाचं नाव"
                             placeholder="नाव"
                             data-testid="fo-new-name"
-                            className="min-h-[56px] min-w-0 flex-1 rounded-xl border border-stone-200 bg-white px-3.5 text-[19px] font-bold text-stone-800 placeholder:font-normal placeholder:text-stone-400 focus:border-emerald-500 focus:outline-none"
+                            className="min-h-[56px] w-full rounded-xl border border-stone-200 bg-white px-3.5 text-[19px] font-bold text-stone-800 placeholder:font-normal placeholder:text-stone-400 focus:border-emerald-500 focus:outline-none disabled:bg-stone-100 disabled:text-stone-400"
+                        />
+                        {/*
+                          * The disambiguator, and the ONLY one a farmer can
+                          * actually read back. Optional by design (P9): the
+                          * button below is enabled on the name alone, so
+                          * "बाळू" + जोडा is still a two-tap add.
+                          */}
+                        <input
+                            type="text"
+                            value={newFullName}
+                            onChange={(e) => setNewFullName(e.target.value)}
+                            maxLength={200}
+                            disabled={loadFailed}
+                            aria-label="पूर्ण नाव किंवा ओळख — ऐच्छिक"
+                            placeholder="पूर्ण नाव / ओळख — ऐच्छिक"
+                            data-testid="fo-new-full-name"
+                            className="min-h-[56px] w-full rounded-xl border border-stone-200 bg-white px-3.5 text-[17px] font-semibold text-stone-700 placeholder:font-normal placeholder:text-stone-400 focus:border-emerald-500 focus:outline-none disabled:bg-stone-100 disabled:text-stone-400"
                         />
                         <button
                             type="button"
                             data-testid="fo-add"
-                            disabled={!newName.trim() || busy}
+                            disabled={!newName.trim() || busy || loadFailed}
                             onClick={() => void addPerson()}
-                            className="flex min-h-[56px] flex-shrink-0 items-center justify-center gap-2 rounded-xl bg-emerald-600 px-5 text-[18px] font-extrabold text-white transition-transform active:scale-[0.97] disabled:opacity-50"
+                            className="flex min-h-[56px] w-full items-center justify-center gap-2 rounded-xl bg-emerald-600 px-5 text-[18px] font-extrabold text-white transition-transform active:scale-[0.97] disabled:opacity-50"
                         >
                             <Plus size={20} strokeWidth={2.6} /> जोडा
                         </button>
