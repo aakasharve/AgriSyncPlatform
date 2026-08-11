@@ -165,18 +165,44 @@ const ActivityCard: React.FC<ActivityCardProps> = ({
     const isWorkFilled = (activity.workTypes && activity.workTypes.length > 0) || isAnySubBucketFilled;
 
     // Helper to format Labour Chip label
+    //
+    // Labour V1 final fix (C2) — EVERY NUMBER HERE IS OPTIONAL, so every number
+    // here is formatted only when it is actually there. `count`, `totalCost` and
+    // `contractQuantity` are all `?:` on LabourEvent and the AI parse schema
+    // already emits events without them, so `₹${l.totalCost}` was reachably
+    // printing the literal string "₹undefined" (measured in the L5b harness:
+    // "undefined Workers • ₹undefined", 30 chars, rendered). The C2 fix makes
+    // that case common rather than rare, because the labour sheet no longer
+    // pre-seeds zeros — a form default is not a farmer statement.
+    //
+    // Dropping the absent parts rather than printing a placeholder keeps the
+    // chip saying only what was actually recorded. When nothing at all was
+    // stated this returns undefined and BucketItem shows its existing
+    // "Completed" — "labour recorded, no figures given", which is true, where
+    // the old "0 Workers • ₹0" was not.
     const getLabourLabel = () => {
         const l = linkedData.labour;
         if (!l) return undefined; // Let component handle "Add details..."
         if (l.type === 'SELF') return 'Self • Family Labour';
-        if (l.type === 'CONTRACT') return `Contract • ${l.contractQuantity} ${l.contractUnit} • ₹${l.totalCost}`;
+
+        // A stated 0 IS data and must still show; NaN (a cleared money field)
+        // and absence must not.
+        const stated = (value?: number) => typeof value === 'number' && Number.isFinite(value);
+        const money = (value?: number) => (stated(value) ? `₹${value}` : undefined);
+
+        if (l.type === 'CONTRACT') {
+            const quantity = stated(l.contractQuantity)
+                ? `${l.contractQuantity} ${l.contractUnit || ''}`.trim()
+                : l.contractUnit;
+            return ['Contract', quantity, money(l.totalCost)].filter(Boolean).join(' • ');
+        }
 
         // HIRED: "2M + 4F • ₹1200"
         const parts = [];
         if (l.maleCount) parts.push(`${l.maleCount}M`);
         if (l.femaleCount) parts.push(`${l.femaleCount}F`);
-        const workers = parts.join(' + ') || `${l.count} Workers`;
-        return `${workers} • ₹${l.totalCost}`;
+        const workers = parts.join(' + ') || (stated(l.count) ? `${l.count} Workers` : undefined);
+        return [workers, money(l.totalCost)].filter(Boolean).join(' • ') || undefined;
     };
 
     // Helper for Work Done Sublabel (Global Summary)

@@ -322,6 +322,42 @@ describe('enqueueLogsForSync — a malformed labour number must never block the 
         expect(validatePayload(SyncMutationName.CreateDailyLog, JSON.parse(JSON.stringify(payload)))).toEqual({ ok: true });
     });
 
+    // -----------------------------------------------------------------------
+    // FINAL FIX C2 — the two halves of "silence is not data".
+    //
+    // These two tests are deliberately adjacent and deliberately opposed. The
+    // boundary CANNOT tell them apart on its own — by the time an event reaches
+    // `buildLabourPayloads`, a 0 the farmer typed and a 0 the form seeded are
+    // both just `0` — which is exactly why the fix had to land at the origin
+    // (`DetailSheet` no longer pre-seeds
+    // `maleCount/femaleCount/count/totalCost = 0`, and its auto-total effect no
+    // longer derives a total from no headcount at all). What this pair pins is
+    // that the boundary then honours the distinction the sheet now preserves:
+    // absent stays absent, and a stated 0 still travels.
+    // -----------------------------------------------------------------------
+
+    it('omits the headcounts and the total entirely for an event the farmer never touched', async () => {
+        // What the fixed sheet emits when the farmer opens labour and confirms
+        // without typing: an engagement, a shift, and no claims about quantity.
+        await enqueueLogsForSync([logWith([
+            { id: 'l1', labourAssignmentId: UUID_A, type: 'HIRED', shiftId: 'full' },
+        ])]);
+
+        const [item] = sentLabour();
+        for (const key of ['maleCount', 'femaleCount', 'workerCount', 'totalCost']) {
+            expect(Object.prototype.hasOwnProperty.call(item, key)).toBe(false);
+        }
+        // A client-sent `workerCount: 0` walks straight past the server's
+        // all-three-null guard and `LabourHeadcount.Resolve(0, null, null)`
+        // stores 0, so absence has to survive the wire, not just the literal.
+        const wire = JSON.stringify(sentLabour());
+        expect(wire).not.toContain('workerCount');
+        expect(wire).not.toContain('totalCost');
+        // The engagement itself is still recorded.
+        expect(item.engagementType).toBe('HIRED');
+        expect(item.shift).toBe('full');
+    });
+
     it('keeps a whole zero — an explicitly stated 0 is data, not a malformed value', async () => {
         await enqueueLogsForSync([logWith([
             { id: 'l1', labourAssignmentId: UUID_A, type: 'HIRED', maleCount: 0, femaleCount: 0, count: 0, totalCost: 0 },

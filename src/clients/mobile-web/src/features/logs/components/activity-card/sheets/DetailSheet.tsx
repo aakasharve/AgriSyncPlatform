@@ -47,12 +47,34 @@ const DetailSheet = ({
         // Otherwise, generate smart defaults immediately
         if (type === 'labour') {
             const defaultShift = defaults.labour.shifts.find(s => s.name === 'Full Day') || defaults.labour.shifts[0];
+            // Labour V1 final fix (C2) — NO PRE-SEEDED NUMBERS.
+            //
+            // This used to open with maleCount/femaleCount/count/totalCost all
+            // set to 0. Those were form defaults, not farmer statements, and
+            // they did not stay in the form: `buildLabourPayloads` sends any
+            // finite/integer value INCLUDING 0, the server preserves NULL only
+            // when all three headcounts are null, and `LabourAssignment`'s
+            // TotalCost is documented as "NULL when not stated… never
+            // computed". So a contract engagement where the farmer stated a
+            // quantity but never a total was recording "₹0 was stated" instead
+            // of "we were not told" — a constant wearing the costume of a
+            // measurement, in the canonical record, with no backfill job in
+            // this system to undo it.
+            //
+            // Absence is the honest initial state and it costs nothing to
+            // display: every one of these fields reaches the DOM through
+            // `value={x || ''}`, which renders 0 and undefined identically
+            // (measured: the sheet's outerHTML is byte-identical either way at
+            // 412/628/1400). The `parseFloat(...) || 0` handlers below then put
+            // a real number here the moment the farmer types one — including a
+            // genuine 0, which is data and must survive.
+            //
+            // `type` and `shiftId` are NOT the same case: both are visibly
+            // reflected in the UI (the selected tab, the highlighted shift
+            // chip), so they are shown defaults the farmer can see and change,
+            // not silent claims about a quantity.
             return {
                 type: 'HIRED',
-                maleCount: 0,
-                femaleCount: 0,
-                count: 0,
-                totalCost: 0,
                 shiftId: defaultShift?.id
             };
         }
@@ -93,7 +115,18 @@ const DetailSheet = ({
     useEffect(() => {
         if (type === 'labour' && localData.type === 'HIRED' && localData.shiftId) {
             const shift = defaults.labour.shifts.find(s => s.id === localData.shiftId);
-            if (shift) {
+            // Labour V1 final fix (C2) — DERIVE FROM A STATEMENT, NEVER FROM
+            // SILENCE. This effect fires on mount (a shift is pre-selected), so
+            // without this guard it immediately wrote `totalCost: 0, count: 0`
+            // over the initializer and put the fabricated zeros straight back —
+            // removing them above would have achieved nothing. A total derived
+            // from no headcount at all is not a cheaper total, it is a number
+            // nobody said. Once EITHER split carries a number the arithmetic is
+            // exactly as before, so the "Total Paid (Auto)" box still fills in
+            // on the first keystroke.
+            const hasStatedSplit = typeof localData.maleCount === 'number'
+                || typeof localData.femaleCount === 'number';
+            if (shift && hasStatedSplit) {
                 const mCost = (localData.maleCount || 0) * (shift.defaultRateMale || 0);
                 const fCost = (localData.femaleCount || 0) * (shift.defaultRateFemale || 0);
                 const total = mCost + fCost;
@@ -118,7 +151,13 @@ const DetailSheet = ({
         if (!localData.contractUnit) {
             // Apply Dynamic Defaults from Plot/Crop
             const unit = cropContractUnit || 'Acre';
-            let quantity = 0;
+            // Same fabrication as the initializer above, one branch further in:
+            // when the plot carries no baseline to derive a quantity from, this
+            // used to fall through to a literal 0 and record "0 acres were
+            // contracted". A quantity that can be derived from the plot is a
+            // real starting figure the farmer sees and can overwrite; when
+            // there is none, the honest value is nothing at all.
+            let quantity: number | undefined;
             if (unit === 'Tree' && currentPlot?.baseline.totalPlants) quantity = currentPlot.baseline.totalPlants;
             else if (unit === 'Acre' && currentPlot?.baseline.totalArea) quantity = currentPlot.baseline.totalArea;
 
