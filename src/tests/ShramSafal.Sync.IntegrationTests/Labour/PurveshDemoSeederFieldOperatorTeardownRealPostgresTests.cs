@@ -21,25 +21,36 @@ namespace ShramSafal.Sync.IntegrationTests.Labour;
 /// </summary>
 /// <remarks>
 /// <para>
-/// <b>Why both halves are mandatory.</b> A throw-only test proves only that
-/// SOMETHING stops an unscoped delete; it says nothing about whether the
-/// scoping RULE is right. A wrong identification rule — matching work rows by
-/// their parent operator, say, or treating every row on the farm as
-/// seeder-owned — deletes real people's identities while still passing a
-/// throw-only test. So this class proves BOTH:
+/// <b>What is provable here, and what is not.</b> The seeder creates ZERO field
+/// operators and ZERO work rows — both seed-key lists are deliberately empty
+/// (founder-gated). So the teardown's identification set is empty, and on these
+/// two tables it can only ever <i>throw or no-op</i>: there is no id it will
+/// ever delete. That is zero deletion risk BY CONSTRUCTION, and it is the point
+/// rather than a gap.
+/// </para>
+/// <para>
+/// The consequence for coverage is stated plainly rather than papered over:
+/// <b>the deletion/identification path is NOT proven here, because it is not
+/// reachable.</b> No test in this class asserts that a seeded operator is
+/// removed — writing one would require inventing a seeded row the production
+/// code can never produce, which would prove the test's fiction and not the
+/// seeder. If the founder later approves demo operators, that test becomes both
+/// possible and mandatory. What IS proven:
 /// <list type="number">
-/// <item>the THROW path — a non-seed operator on the demo farm makes
-/// <c>ClearPurveshDemoAsync</c> fail loudly and delete NOTHING; and</item>
-/// <item>the IDENTIFICATION path — a genuinely seeder-created operator IS
-/// removed, while an operator the seeder did not create survives untouched.</item>
+/// <item>a field operator on the demo farm aborts the teardown and is not
+/// deleted;</item>
+/// <item>a work row on the demo farm does the same, and is checked BEFORE
+/// operators so real attribution can never be collateral;</item>
+/// <item>FARM SCOPING — identity data on a farm the seeder does not own is
+/// neither guarded against nor touched, so an unrelated farm's workers never
+/// block or get caught up in the demo teardown.</item>
 /// </list>
 /// </para>
 /// <para>
-/// <b>The deterministic ids below are re-derived independently, on purpose.</b>
-/// They are not read back from the seeder's private seed table. If anyone
-/// changes the id-minting expression on either the creation or the teardown
-/// side, these tests fail — which is exactly the alarm you want on a code path
-/// that runs against the founder's only real farm whenever
+/// <b>The demo farm id is re-derived independently, on purpose</b> — not read
+/// back from the seeder's private tables. If anyone changes the id-minting
+/// expression, these tests fail, which is exactly the alarm you want on a code
+/// path that runs against the founder's only real farm whenever
 /// <c>CLEAR_PURVESH_DEMO=true</c>.
 /// </para>
 /// </remarks>
@@ -51,10 +62,6 @@ public sealed class PurveshDemoSeederFieldOperatorTeardownRealPostgresTests : IA
     /// <summary>The demo farm the seeder owns — same expression as the seeder's.</summary>
     private static readonly Guid DemoFarmId =
         PurveshDemoSeeder.CreateDeterministicGuid($"{SeedVersion}:farm:khardi");
-
-    /// <summary>A field operator the seeder genuinely creates (seed key "balu").</summary>
-    private static readonly Guid SeededFieldOperatorId =
-        PurveshDemoSeeder.CreateDeterministicGuid($"{SeedVersion}:field-operator:balu");
 
     private string _adminConn = string.Empty;
     private string _scratchDbName = string.Empty;
@@ -143,18 +150,25 @@ public sealed class PurveshDemoSeederFieldOperatorTeardownRealPostgresTests : IA
 
     /// <summary>
     /// THROW path, work-row variant. The seeder creates ZERO work rows, so any
-    /// work row is a real record of whose work it was. Critically, this one is
-    /// attached to a SEEDED operator — proving work rows are identified by
-    /// their OWN ids and never inherited from their parent, which is the
-    /// mistake that would delete real attribution.
+    /// work row on the demo farm is a real record of whose work it was.
     /// </summary>
+    /// <remarks>
+    /// This also pins the ORDER: work rows are checked before operators, so the
+    /// teardown aborts while both are still intact. The production rule matches
+    /// work rows on their OWN ids and never inherits "seeded" from the parent
+    /// operator — with an empty seed list that distinction cannot be exercised
+    /// end-to-end here, but the rule is what keeps a real attribution attached
+    /// to a demo operator from being deleted as seed data if operators are ever
+    /// seeded. Do not "simplify" it to a parent-id match.
+    /// </remarks>
     [Fact]
-    public async Task Clear_throws_on_a_real_work_row_even_when_its_parent_operator_was_seeder_created()
+    public async Task Clear_throws_on_a_work_row_and_leaves_both_it_and_its_operator_intact()
     {
-        await InsertFieldOperatorAsync(SeededFieldOperatorId, DemoFarmId, "बाळू");
+        var operatorId = Guid.NewGuid();
+        await InsertFieldOperatorAsync(operatorId, DemoFarmId, "बाळू RealWorker");
         var labourAssignmentId = await InsertDailyLogAndLabourAssignmentAsync(DemoFarmId);
         var workRowId = Guid.NewGuid();
-        await InsertWorkRowAsync(workRowId, SeededFieldOperatorId, labourAssignmentId, DemoFarmId);
+        await InsertWorkRowAsync(workRowId, operatorId, labourAssignmentId, DemoFarmId);
 
         var seeder = CreateSeeder(out var disposables);
         try
@@ -162,12 +176,13 @@ public sealed class PurveshDemoSeederFieldOperatorTeardownRealPostgresTests : IA
             var act = async () => await seeder.ClearPurveshDemoAsync(CancellationToken.None);
 
             (await act.Should().ThrowAsync<InvalidOperationException>(
-                    "a work row records which real person did which real work, whoever its parent is"))
+                    "a work row records which real person did which real work"))
                 .WithMessage($"*{PurveshDemoSeeder.NonSeedFieldOperatorDataMessage}*");
 
             (await CountWorkRowsAsync(workRowId)).Should().Be(1, "the real attribution survives");
-            (await CountFieldOperatorsAsync(SeededFieldOperatorId)).Should().Be(1,
-                "and the seeded parent is not deleted either — the whole teardown aborts");
+            (await CountFieldOperatorsAsync(operatorId)).Should().Be(1,
+                "and the parent identity is not deleted either — the whole teardown aborts "
+                + "before the first flush");
         }
         finally
         {
@@ -176,44 +191,40 @@ public sealed class PurveshDemoSeederFieldOperatorTeardownRealPostgresTests : IA
     }
 
     /// <summary>
-    /// IDENTIFICATION path. With the guard untripped, the operator the seeder
-    /// genuinely created IS removed — and an operator on a different farm,
-    /// which the seeder does not own, is left completely alone.
+    /// FARM SCOPING. Identity data on a farm the seeder does not own must
+    /// neither trip the guard nor be deleted: the demo teardown still completes
+    /// and removes its own farm, while the stranger's operator and work row are
+    /// untouched.
     /// </summary>
+    /// <remarks>
+    /// This is the half that keeps the guard from becoming a denial-of-service
+    /// on the whole seeder: if the check were merely "does ANY field operator
+    /// exist", one unrelated farm anywhere in the database would permanently
+    /// block the demo teardown.
+    /// </remarks>
     [Fact]
-    public async Task Clear_removes_the_seeded_operator_and_leaves_a_non_seed_operator_on_another_farm_untouched()
+    public async Task Clear_completes_and_leaves_another_farms_identity_data_untouched()
     {
-        await InsertFieldOperatorAsync(SeededFieldOperatorId, DemoFarmId, "बाळू");
-
         var strangerId = Guid.NewGuid();
         await InsertFieldOperatorAsync(strangerId, _otherFarmId, "गणपत OtherFarm");
 
-        // The sharpest farm-scoping case: an operator whose id IS in the
-        // seeded set (seed key "ganpat") but which lives on a DIFFERENT farm.
-        // Id-matching alone would delete it; the teardown must not, because the
-        // seeder only ever owns rows on its own demo farm.
-        var seedIdOnOtherFarm = await InsertFieldOperatorAsync(
-            PurveshDemoSeeder.CreateDeterministicGuid($"{SeedVersion}:field-operator:ganpat"),
-            _otherFarmId,
-            "गणपत");
+        var strangerAssignmentId = await InsertDailyLogAndLabourAssignmentAsync(_otherFarmId);
+        var strangerWorkRowId = Guid.NewGuid();
+        await InsertWorkRowAsync(strangerWorkRowId, strangerId, strangerAssignmentId, _otherFarmId);
 
         var seeder = CreateSeeder(out var disposables);
         try
         {
             await seeder.ClearPurveshDemoAsync(CancellationToken.None);
 
-            (await CountFieldOperatorsAsync(SeededFieldOperatorId)).Should().Be(0,
-                "the seeder created this operator, so the seeder removes it — otherwise the RESTRICT "
-                + "FK on originating_farm_id turns the next re-seed into an opaque 23503");
-
             (await CountFieldOperatorsAsync(strangerId)).Should().Be(1,
                 "an operator on a farm the seeder does not own must never be touched");
-            (await CountFieldOperatorsAsync(seedIdOnOtherFarm)).Should().Be(1,
-                "a seed-derived id on someone else's farm must survive — the teardown is farm-scoped "
-                + "AND id-scoped, never id-scoped alone");
+            (await CountWorkRowsAsync(strangerWorkRowId)).Should().Be(1,
+                "nor its attribution");
 
             (await CountFarmsAsync(DemoFarmId)).Should().Be(0,
-                "with no identities left blocking it, the demo farm deletes cleanly");
+                "with no identity data on the demo farm, the teardown runs to completion and the "
+                + "demo farm deletes cleanly — another farm's workers must not block it");
             (await CountFarmsAsync(_otherFarmId)).Should().Be(1,
                 "the unrelated farm survives");
         }
