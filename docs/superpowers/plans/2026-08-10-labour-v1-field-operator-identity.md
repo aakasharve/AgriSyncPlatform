@@ -469,6 +469,20 @@ public static class LabourAssignmentFactory
 }
 ```
 - [ ] **3.1** Create the factory. `FromParsed` resolves `workerCount` through `LabourHeadcount.Resolve` (leaving male/female untouched) and forwards to `LabourAssignment.Create`.
+
+  **[CORRECTED 2026-08-11 — as first written this step fabricated a headcount. PLAN defect, caught in review.]** `LabourHeadcount.Resolve` returns a non-nullable `int`, so applying it unconditionally writes `worker_count = 0` for a labour item that stated **neither** a count nor a gender split — on a column that is still `int?` and could have said `NULL`. That records *"zero people worked this engagement"* where the truth is *"the farmer did not tell us"*: a number with no evidence behind it, which is exactly `P4` ("a constant wearing the costume of a measurement") and collapses the `P8` distinction between *not stated* and *stated as zero*.
+
+  **This row shape is live, not hypothetical.** `outputContract.md:150` marks `count` **optional**; `Prompts/buckets/labour.v1.md:8` carries it as a **positive example** ("Contract ne 2 acre chhatani keli" → CONTRACT, `contractQuantity` 2, no count); `:21` instructs the model to omit rather than guess; and `LedgerDerivationService.cs:218-247` has **no** skip-if-no-headcount guard, so every array element persists a row. It is invisible today because the sole reader (`GetLabourDataHandler.cs:237`) funnels through `Resolve` — but it becomes farmer-visible at **Task 4**, where `LabourHours = WorkerCount × DurationHours` reports **0 hours for real work**. There is **no backfill job anywhere in this system**, so the write is permanent.
+
+  **Required form:**
+```csharp
+// P4/P8: nothing stated => NULL means "we were not told", never "zero people
+// worked". An explicitly stated 0 still stores 0 and stays distinguishable.
+workerCount: (workerCount ?? maleCount ?? femaleCount) is null
+    ? null
+    : LabourHeadcount.Resolve(workerCount, maleCount, femaleCount),
+```
+  **Do not change `LabourHeadcount` itself** — Task 2's `Resolve` keeps its `int` contract and the read path is unaffected. The `(null, 4, 2) → 6` case stays as-is and is correct: there the derived `6` sits beside its retained evidence (`male_count` and `female_count` are preserved untouched), so `P4` and `P8` are both satisfied. Cover both cases with a test — `LabourAssignmentTests.cs:53-62` passes only because it calls `Create` directly and bypasses the factory.
 - [ ] **3.2** Move **only** `MapLabourEngagement` (`:453`), `MapLabourShift` (`:477`) and `MapContractUnit` (`:485`) to the factory as `public static`, leaving the derivation calling them. **Do not move `Norm`** — twelve other maps in that file call it and have nothing to do with labour; add a `private static string? Norm(string? s)` to the factory as a deliberate two-line duplicate and say so in a comment. These maps are **TOTAL by design** (`LedgerDerivationService.cs:445`: *"tolerant string → enum maps (safe default; never throw)"*, `MapLabourEngagement` falls back to `LabourEngagementType.Hired`) — **keep them total.** Making them throw would convert the voice path from tolerant to fail-closed and breach Constraint 7.
 - [ ] **3.3** Replace the `LabourAssignment.Create(...)` call at `LedgerDerivationService.cs:221-240` with `LabourAssignmentFactory.FromParsed(...)`, keeping every named argument. Leave the two dead reads (`"shift"` `:238`, `"whoWorked"` `:240`) exactly as they are (§H3).
 - [ ] **3.4** **Pin 1 — single producer.** Using `ProductionSourceFiles()` + `StripComments()` reproduced from `RlsIdentityScopeRules.cs:251,275` (they are `private static`; copy, do not import), assert `LabourAssignment.Create(` appears in exactly **one** production file and that it is `apps/ShramSafal/ShramSafal.Application/UseCases/Labour/LabourAssignmentFactory.cs`. Paths are **src-relative** (A12).
@@ -476,12 +490,14 @@ public static class LabourAssignmentFactory
 
   **[CORRECTED 2026-08-11, execution session — this pin as first written was designed to fail at Task 10.]** Task 10 mandates modifying `ShramSafalDbContext.cs`, which already contains `WorkerAssignment` at `:154`; Task 9.3 sets the precedent of adding a `DbSet` there. The instant `DbSet<FieldOperatorWorkRow>` lands, `ARCH` goes red **on a test this plan wrote**. `Migrations/` is already excluded by `RlsIdentityScopeRules.cs:262`; `ShramSafalDbContext.cs` is not.
 
-  **Ruling — specify the exclusion NOW, at Task 3, not as a weakening at Task 10.** The protected property is *"the two ledgers are never joined as attribution"* (A8), not *"the two names never co-occur"*. A `DbSet` declaration and an erasure manifest are **declaration sites, not joins**. So the pin excludes exactly two files **by name, with the reason in a comment**:
+  **Ruling — specify the exclusion NOW, at Task 3, not as a weakening at Task 10.** The protected property is *"the two ledgers are never joined as attribution"* (A8), not *"the two names never co-occur"*. A `DbSet` declaration and an erasure manifest are **declaration sites, not joins**. So the pin excludes exactly two files **by path suffix** (not bare filename — otherwise any future file anywhere with that name is silently exempt), **with the reason in a comment**:
 ```
 ShramSafalDbContext.cs   — declares both DbSets; declaration is not attribution
 ErasureWorker.cs         — scrubs both ledgers; erasure is not attribution
 ```
   Everything else in production is still pinned. **An implementer may NOT add a third exclusion** — if a new file trips this pin, that is the pin working. Widening it further is a STOP condition (see the handoff), not a fix.
+
+  **[STRENGTHENED 2026-08-11, review round 1 — free today, so taken now rather than after the types exist.]** The first token is **`FieldOperator`**, not `FieldOperatorWorkRow`. A strict superset (the longer name contains the shorter), and it closes the likelier violation: a file joining the WTL ledger to the **identity** rather than the overlay — e.g. seeding field-operator names out of `WorkerNameProjector`. Verified free: **zero** production files name `FieldOperator` in any form today. Accept the snake-case form on **both** tokens (`field_operator` as well as `worker_assignments`) — the second token already had it, and raw SQL is in this codebase's vocabulary (`ShramSafalRepository.cs:742,830`), so the one-sided form let a raw-SQL join escape.
 - [ ] **3.6** **Verify:** `DOMAIN`, then `ARCH`. **Evidence:** record actual counts (arch baseline 89).
 
 ---
