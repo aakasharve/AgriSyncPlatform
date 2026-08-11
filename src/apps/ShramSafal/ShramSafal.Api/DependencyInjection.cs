@@ -724,6 +724,20 @@ public static class DependencyInjection
                 ShramSafal.Application.Contracts.Dtos.FieldOperatorDto>,
             ShramSafal.Application.UseCases.Labour.RenameFieldOperator.RenameFieldOperatorHandler>();
 
+        // Task 12 (spec: 2026-07-13-labour-attendance-approval-design) — the
+        // field-operator LIST read. Same registration shape as the three
+        // handlers directly above: no IAuthorizationCheck<>/IValidator<>
+        // exist for this query (the farm-scope gate lives in the endpoint
+        // via ICallerFarmTenantScope, mirrored by a defense-in-depth
+        // membership check inside the handler), so it is registered
+        // directly against IHandler<,> rather than wrapped in
+        // HandlerPipeline.Build.
+        services.AddScoped<
+            AgriSync.BuildingBlocks.Application.IHandler<
+                ShramSafal.Application.UseCases.Labour.GetFieldOperators.GetFieldOperatorsQuery,
+                IReadOnlyList<ShramSafal.Application.Contracts.Dtos.FieldOperatorSummaryDto>>,
+            ShramSafal.Application.UseCases.Labour.GetFieldOperators.GetFieldOperatorsHandler>();
+
         // T-IGH-03-PIPELINE-ROLLOUT (CompleteJobCard): caller-shape
         // validation + job-card-existence + farm-membership authorization.
         // The endpoint (POST /job-cards/{id}/complete) AND the sync entry

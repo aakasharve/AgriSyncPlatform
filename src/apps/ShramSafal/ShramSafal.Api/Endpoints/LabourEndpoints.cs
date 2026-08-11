@@ -6,9 +6,9 @@ using ShramSafal.Application.Contracts.Dtos;
 using ShramSafal.Application.Ports;
 using ShramSafal.Application.UseCases.Labour.AttachFieldOperator;
 using ShramSafal.Application.UseCases.Labour.CreateFieldOperator;
+using ShramSafal.Application.UseCases.Labour.GetFieldOperators;
 using ShramSafal.Application.UseCases.Labour.GetLabourData;
 using ShramSafal.Application.UseCases.Labour.RenameFieldOperator;
-using ShramSafal.Domain.Labour;
 
 namespace ShramSafal.Api.Endpoints;
 
@@ -165,14 +165,16 @@ public static class LabourEndpoints
         .WithName("RenameFieldOperator")
         .RequireAuthorization();
 
-        // Direct-repo read (no dedicated Application handler yet — Task 12
-        // owns the field-operator read PATH proper; this is the minimum
-        // authorized wiring 11.2 requires today). Mirrors AuditEndpoints'
-        // IShramSafalRepository-in-endpoint pattern.
+        // Task 12 (spec: 2026-07-13-labour-attendance-approval-design) — the
+        // field-operator read PATH proper, via GetFieldOperatorsHandler.
+        // Replaces Task 11's direct-repo-read minimum wiring ("Task 12 owns
+        // the field-operator read PATH proper" — the comment this route used
+        // to carry). Same authorization shape as every other route in this
+        // group: EstablishForCallerAsync is the sole gate.
         group.MapGet("/farms/{farmId:guid}/labour/field-operators", async Task<IResult> (
             Guid farmId,
             ClaimsPrincipal user,
-            IShramSafalRepository repository,
+            IHandler<GetFieldOperatorsQuery, IReadOnlyList<FieldOperatorSummaryDto>> handler,
             ICallerFarmTenantScope scope,
             CancellationToken ct) =>
         {
@@ -187,17 +189,17 @@ public static class LabourEndpoints
                 return ToErrorResult(scopeResult.Error);
             }
 
-            var operators = await repository.GetFieldOperatorsForFarmAsync(new FarmId(farmId), ct);
-            return Results.Ok(operators.Select(ToFieldOperatorDto).ToList());
+            var result = await handler.HandleAsync(
+                new GetFieldOperatorsQuery(new FarmId(farmId), new UserId(userId)),
+                ct);
+
+            return result.IsSuccess ? Results.Ok(result.Value) : ToErrorResult(result.Error);
         })
         .WithName("GetFieldOperatorsForFarm")
         .RequireAuthorization();
 
         return group;
     }
-
-    private static FieldOperatorDto ToFieldOperatorDto(FieldOperator o) =>
-        new(o.Id, o.DisplayName, o.FullName, o.OriginatingFarmId.Value, o.CreatedByUserId.Value, o.CreatedAtUtc, o.IsActive);
 
     /// <summary>
     /// Mirrors AiEndpoints.ToErrorResult — Forbidden/Unauthenticated keep the
