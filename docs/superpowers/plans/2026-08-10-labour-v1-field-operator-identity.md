@@ -200,7 +200,7 @@ Everything in Global Constraint 2, plus `ReportedHeadcount`, any `derived_event_
 
 ## C. Exact Change Surface
 
-**DB — 4 migrations** (Tasks 1, 4, 9, 10 — Task 5 is transport only). No backfill: `labour_assignments` is empty.
+**DB — 5 migrations** (Tasks 1, 4, 9, 10, 12b — Task 5 is transport only). No backfill: `labour_assignments` is empty.
 
 **Backend — modified**
 ```
@@ -224,7 +224,8 @@ AgriSync.Bootstrapper/Infrastructure/PurveshDemoSeeder.cs                      (
 **Backend — created**
 ```
 ShramSafal.Domain/Farms/LabourTime.cs, LabourHeadcount.cs
-ShramSafal.Domain/Labour/FieldOperator.cs, FieldOperatorWorkRow.cs
+ShramSafal.Domain/Labour/FieldOperator.cs, FieldOperatorWorkRow.cs, LabourCorrection.cs   (Task 12b — modelled on FinanceCorrection)
+ShramSafal.Application/UseCases/Labour/{CorrectLabourQuantity,CorrectLabourDuration,CorrectAttribution}/{Command,Handler}.cs
 ShramSafal.Application/UseCases/Labour/LabourAssignmentFactory.cs (+ the moved value maps)
 ShramSafal.Application/UseCases/Labour/{CreateFieldOperator,AttachFieldOperator,RenameFieldOperator,GetFieldOperators}/{Command|Query,Handler}.cs
 ShramSafal.Application/Contracts/Dtos/FieldOperatorDto.cs
@@ -267,19 +268,28 @@ Two are platform defects sitting on taps a farmer makes on day one. **Labour V1 
 | Gate | Defect | Required outcome |
 |---|---|---|
 | **A — Entire Farm sync** | "Entire Farm" is the **first card** on the log page (`CropSelector.tsx:283`). `resolveSyncTarget` returns null for it (`logSyncMutationService.ts:143`), the log lands in `skippedLogIds`, and no caller surfaces the skip. The farmer is shown success; the record never leaves the device. | Fix at the **platform transport** level. Acceptance: Entire Farm selected → log created → sync target exists → server receives DailyLog → canonical labour survives sync. |
-| **B — Edit This Log** | A labelled primary button (`LogDetailDrawer.tsx:211`, and every today-card at `mainView.tsx:550`). `UpdateLog.ts` has exactly one repo call — a **read**. The correction is React state, gone on reload. | Either make it genuinely persist, **or remove/disable the action for launch.** A truthful missing feature beats a fake working one. Never: farmer edits → UI shows corrected → reload → correction gone. |
+| **B — Labour Review & Correction** | A labelled primary "Edit This Log" button (`LogDetailDrawer.tsx:211`, and every today-card at `mainView.tsx:550`). `UpdateLog.ts` has exactly one repo call — a **read**. The correction is React state, gone on reload. | **Ship a narrow, persistent, auditable labour correction workflow — Task 12b.** Hiding the button is **withdrawn** as an option: correction is an adoption safety net, not an advanced feature. Generic universal log editing is *not* required; unsupported edit categories may stay disabled, but the **labour** portion must genuinely persist. |
 | **C — Worker-name erasure** | New columns hold a third party's real name; Decision 5 gates shipping names on the erasure capability existing. | Task 10.5 — subject-specific anonymize capability, **not** creator-triggered. |
 | **D — Stable `labourAssignmentId`** | 2 of 4 creation branches never mint one; the edit path bypasses LogFactory entirely. | Task 7.3 — one central `ensureLabourAssignmentIds` at the shared boundary. No branch may reach Phase 1 with `Guid.Empty`. |
 
 ### Frozen sequence
 
-**GO now — Tasks 1–4.** Parent integrity, canonical headcount, shared factory + pins, time truth. None depends on the unresolved launch surface.
-
-**Then close the gates** — A, B, C, D above.
-
-**Then Tasks 5–14** in order: structured labour transport → Phase-1 durability → explicit hours → FieldOperator → attribution → commands/UI → adversarial app-role verification.
+1. **GO now — Tasks 1–4.** Parent integrity, canonical headcount, shared factory + pins, time truth. None depends on the unresolved launch surface.
+2. **Gate A — Entire Farm sync**, as a **separate small platform task**. Do not absorb it into Labour architecture.
+3. **Labour transport** — Tasks 5, 6, 7 (structured transport → Phase-1 durability → explicit hours).
+4. **Identity** — Tasks 8, 9, 10, 11 (client wiring → FieldOperator → attribution → commands + RLS).
+5. **Correction** — Task 12b, the narrow persistent Labour Review & Correction workflow (Gate B).
+6. **UX and verification** — Tasks 12, 13, 14, then the launch acceptance journeys.
 
 **No design review between phases. Tests decide progression.**
+
+### The product model this protects
+
+> **Fast entry, forgiving correction, trustworthy history.**
+
+A farmer learning the app will record 8 when it was 6, forget someone, or pick the wrong worker. A system that says *"once saved you cannot correct it"* makes people afraid to log at all — fatal for a habit-forming product. The farmer should think *"पहिले नोंद करतो. चूक झाली तर तपासून दुरुस्त करता येईल."*
+
+**Record now → inspect later → correct → trust the final record.** The first record creates habit, the correction flow creates confidence, the audit trail creates trust. All three are required, and none of them is *silent mutation*: a correction states that this **was** X and, after verification, **is now** Y.
 
 ### The acceptance standard
 
@@ -488,7 +498,7 @@ LabourItem {
 - [ ] **7.3** **Mint the stable id at ONE shared boundary, not inside the plot split.** `allocateLabourForPlot` is on only **2 of the 4** LogFactory branches — `createFarmGlobalManualLog` (`LogFactory.ts:323 → :413`) and `createFarmGlobalVoiceLog` (`:755`) pass labour straight through, so a whole-farm log would reach Phase 1 with no id at all.
 
   Create `ensureLabourAssignmentIds(logs, idGen)` — assigns `labourAssignmentId = idGen.generate()` to every labour event that lacks one, idempotent by design — and call it in **`LogCommandServiceImpl.confirmAndSave` (`LogCommandService.ts:122`)**, before `this.repo.batchSave(logs)` at `:136`. Verified: all four LogFactory branches reach it via the four UI entry points (`useLogCommands.ts:203, :267, :362`, plus the wizard). One call site covers voice, manual, wizard and both farm-global cases.
-- [ ] **7.3b** **The edit path bypasses `confirmAndSave` entirely.** `useLogCommands.ts:323` returns inside the `if (data.originalLogId)` block; `confirmAndSave` is only in the `else` at `:362`. If Gate B ships edit persistence, `ensureLabourAssignmentIds` must also be called in `UpdateLog.ts:44`. If Gate B disables edit for launch, this sub-step is not needed — **decide it from Gate B's outcome, do not guess.**
+- [ ] **7.3b** **The edit path bypasses `confirmAndSave` entirely** — `useLogCommands.ts:323` returns inside the `if (data.originalLogId)` block; `confirmAndSave` is only in the `else` at `:362`. **Resolved by Gate B:** Task 12b corrects *existing* engagements, which already carry an id from 7.3, and it does **not** create new labour engagements. So no mint is required on the edit path. If a later change ever lets correction add a new engagement, `ensureLabourAssignmentIds` must be called there too — Task 6.2's `Guid.Empty` rejection is the backstop that makes that failure loud rather than silent.
 - [ ] **7.3c** Guard the receiving end: Task 6.2 rejects a missing or `Guid.Empty` `LabourAssignmentId` as a malformed payload. Prove the mint covers every enabled path — manual+plot, manual+entire-farm, voice+plot, voice+entire-farm, and edit if enabled.
 - [ ] **7.4** **The input.** In `DetailSheet.tsx`, insert a new sibling `<div>` between the counts wrapper closing at `:241` and the Auto-Calculated Total card opening at `:243`, inside the `HIRED` block. Follow the machinery-hours *layout* at `:396-413`, but **do not copy its `parseFloat` handler** — it yields `NaN` on an empty field and `0` on a "0" keystroke, and either would travel over the wire. Use a guarded parse that stores `undefined` rather than an invalid number:
 ```tsx
@@ -622,6 +632,46 @@ Task<bool> TryAddFieldOperatorWorkRowAsync(FieldOperatorWorkRow r, CancellationT
 
 ---
 
+### Task 12b — Labour Review & Correction  [GATE B · launch requirement]
+
+**Sequence position 12** — runs after Task 11, before the UX tasks. Numbered `12b` only so existing cross-references do not shift.
+
+**Scope, hard:** correct **labour quantity**, **worker attribution**, and **duration** on an existing engagement. **Not** in scope: generic DailyLog versioning, arbitrary field mutation, a correction engine for other domains, approval hierarchies, or AI auto-correction. AI may *suggest*; only a human action becomes confirmed truth.
+
+**Reuse decision — verified, not assumed.** `CorrectionEvent` (`ShramSafal.Domain/Corrections/CorrectionEvent.cs:11-51`) is **AI-parse capture** — `OriginalParseId`, `OriginalParseRaw`/`CorrectedParse` JSON, `PromptVersion`, `Locale`. A manual log has no parse id, so reuse would mean fabricating one. It does **not** fit.
+
+`FinanceCorrection` (`ShramSafal.Domain/Finance/FinanceCorrection.cs`) **is** the house pattern for correcting a domain record — `CostEntryId, OriginalAmount, CorrectedAmount, Reason, CorrectedByUserId, CorrectedAtUtc` — but is typed to cost entries and `decimal`. **Create `LabourCorrection` modelled on it**, field-for-field in spirit:
+
+```csharp
+public sealed class LabourCorrection : Entity<Guid>
+{
+    public static LabourCorrection Create(
+        Guid id, Guid labourAssignmentId, FarmId farmId,
+        string changedField,          // "WorkerCount" | "MaleCount" | "FemaleCount" | "DurationHours" | "Attribution"
+        string? originalValue, string? newValue,
+        string? reason,
+        UserId correctedByUserId, DateTime correctedAtUtc);
+}
+```
+
+- [ ] **12b.1** Create `LabourCorrection` + its EF config + migration, copying `FinanceCorrectionConfiguration.cs` and the direct-`farm_id` RLS block from Task 9. Append-only: no update path, no delete path.
+- [ ] **12b.2** **`CorrectLabourQuantityHandler`** — accepts `workerCount`, `maleCount`, `femaleCount` **together in one operation** and applies `LabourHeadcount.Resolve` (Task 2) so the row can never land in a contradictory state such as `WorkerCount=6, Male=5, Female=4`. Writes the new values onto the `LabourAssignment` **and** a `LabourCorrection` row per changed field, in **one** unit of work.
+- [ ] **12b.3** **`CorrectLabourDurationHandler`** — sets `DurationHours` + `TimeBasis = Explicit` when the reviewer states the hours. If they do not know, the existing `Assumed` value is **left untouched** — never overwritten with a guess.
+- [ ] **12b.4** **Attribution correction is auditable, not a silent delete.** Removing an attribution must leave the history explainable: *बाळू was attributed, then removed after verification.* Use the smallest auditable form — a `LabourCorrection` row with `changedField = "Attribution"` recording the removed `FieldOperatorId` — before deleting the `FieldOperatorWorkRow`. **Do not build event sourcing.** Attribution correction must **never** change `WorkerCount` (Constraint 3): removing बाळू and adding गणेश on an 8-worker engagement leaves it at 8.
+- [ ] **12b.5** **Authorization reuses the existing model.** Route under `POST /farms/{farmId:guid}/labour/assignments/{id}/corrections`, gated by `ICallerFarmTenantScope.EstablishForCallerAsync` exactly as Task 11.2, and restricted to the farm roles already trusted to approve execution (`GetUserRoleForFarmAsync`, the `Mukadam`/`Owner` shape at `GetLabourDataHandler.cs:84-87`). **Do not invent a permission system inside Labour V1.**
+- [ ] **12b.6** **Idempotent.** A retried correction request yields **one** logical correction, not two — same `ClientRequestId` discipline as Task 6.1.
+- [ ] **12b.7** **Route the client through it.** `UpdateLog.ts` currently persists nothing. Send the **labour** portion of an edit to this endpoint. Other edit categories stay disabled until their own persistence exists — a truthful missing feature beats a fake working one.
+- [ ] **12b.8** **Gate B acceptance tests** (`RequiresPostgres`, app role):
+  - *Count* — record 8, correct to 6, reload → **6**; history still shows `8 → 6`, by whom, when.
+  - *Attribution* — बाळू attached, removed, गणेश added, reload → गणेश current, and the record explains बाळू's removal. `WorkerCount` unchanged.
+  - *Hours* — `8 / Assumed` → reviewer enters 4 → `4 / Explicit`.
+  - *Retry* — one logical correction, not two.
+  - *Authorization* — an unauthorised farm worker → `Forbidden`, **zero** mutation.
+  - *Cross-farm* — Farm A reviewer correcting Farm B labour → `Forbidden`, **zero** mutation.
+- [ ] **12b.9** **Verify:** `DOMAIN`, `PG`. **Evidence:** record actual counts and quote the count-correction history row.
+
+---
+
 ### Task 13 — Minimal farmer UX
 
 - [ ] **13.1** Add-person and select-existing-person only, on the labour surface. Attribution happens **after the fact, online** — no offline Field Operator sync, no attendance wizard. The `labourAssignmentId` minted in Task 7.3 is what the UI attaches to; no lookup endpoint is required.
@@ -678,6 +728,10 @@ Copy the harness wholesale from `LedgerDerivationSupersessionRealPostgresTests.c
 | 14 — 64 labour-hours, never 64 man-days | Constraint 4 + Task 14.3 (asserts headcount only) |
 | 15 — money untouched | Section C; no task modifies `cost_entries` / `job_cards` |
 | **The phase rule** | **Task 6.4 (farmer truth is atomic) + Task 6.5 (inferred truth is best-effort)** |
+| 16 — recorded 8, verified 6, corrected without losing the 8 | Task 12b.2 + 12b.8 |
+| 17 — attribution corrected (बाळू out, गणेश in) leaves WorkerCount 8 | Task 12b.4 + 12b.8 |
+| 18 — reviewer states 4 hours → `Explicit`; silence leaves `Assumed` | Task 12b.3 |
+| 19 — unauthorised or cross-farm correction → Forbidden, zero mutation | Task 12b.5 + 12b.8 |
 
 **Founder criterion.** After V1, for any labour event the system answers: how many the farmer reported (`worker_count`, one rule), what task (`task`), which known people were attributed (`field_operator_work_rows`), how long we treated it as lasting (`duration_hours`), whether that was stated or assumed (`time_basis`), who recorded the attribution (`recorded_by_user_id`), and what name was used at the time (`display_name_at_attach`).
 
