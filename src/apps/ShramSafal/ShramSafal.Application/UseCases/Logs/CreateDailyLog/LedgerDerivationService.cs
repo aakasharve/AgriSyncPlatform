@@ -2,6 +2,7 @@ using System.Text.Json;
 using AgriSync.BuildingBlocks.Abstractions;
 using AgriSync.SharedKernel.Contracts.Ids;
 using ShramSafal.Application.Ports;
+using ShramSafal.Application.UseCases.Labour;
 using ShramSafal.Domain.AI;
 using ShramSafal.Domain.Common;
 using ShramSafal.Domain.Farms;
@@ -218,24 +219,27 @@ public sealed class LedgerDerivationService(IShramSafalRepository repository) : 
         {
             foreach (var item in labour.EnumerateArray())
             {
-                var assignment = LabourAssignment.Create(
+                // ONE shared construction site (Labour V1 Task 3) — the manual
+                // path added in Task 6 goes through the same factory so the same
+                // engagement can never be recorded two ways.
+                var assignment = LabourAssignmentFactory.FromParsed(
                     id: ids.New(),
                     dailyLogId: log.Id,
-                    engagementType: MapLabourEngagement(ReadString(item, "engagementType"), ReadString(item, "type")),
+                    engagementType: LabourAssignmentFactory.MapLabourEngagement(ReadString(item, "engagementType"), ReadString(item, "type")),
                     maleCount: ReadInt(item, "maleCount"),
                     femaleCount: ReadInt(item, "femaleCount"),
                     workerCount: ReadInt(item, "count"),
                     // rate spoken lands on WagePerPerson; new `rate` wins, legacy
                     // `wagePerPerson` is the fallback.
                     wagePerPerson: ReadDecimal(item, "rate") ?? ReadDecimal(item, "wagePerPerson"),
-                    contractUnit: MapContractUnit(ReadString(item, "contractUnit")),
+                    contractUnit: LabourAssignmentFactory.MapContractUnit(ReadString(item, "contractUnit")),
                     contractQuantity: ReadDecimal(item, "contractQuantity"),
                     // NO-MULTIPLY (D3): only an EXPLICIT stated total — never rate × count.
                     totalCost: ReadDecimal(item, "totalCost"),
                     linkedActivityId: ReadGuid(item, "linkedActivityId"),
                     createdAtUtc: now,
                     // Descriptive only (Task 2.3) — never touch money above.
-                    shift: MapLabourShift(ReadString(item, "shift")),
+                    shift: LabourAssignmentFactory.MapLabourShift(ReadString(item, "shift")),
                     task: ReadTrimmedString(item, "activity"),
                     workerNames: ReadStringArray(item, "whoWorked"));
                 await repository.AddLabourAssignmentAsync(assignment, ct);
@@ -450,46 +454,10 @@ public sealed class LedgerDerivationService(IShramSafalRepository repository) : 
         _ => IrrigationRole.Irrigation,
     };
 
-    private static LabourEngagementType MapLabourEngagement(string? engagementType, string? legacyType)
-    {
-        // Prefer the richer B2.4 engagementType; fall back to the legacy HIRED/CONTRACT/SELF.
-        var e = Norm(engagementType);
-        if (e is not null)
-        {
-            return e switch
-            {
-                "contract_piece" or "contract" => LabourEngagementType.Contract,
-                "self" or "exchange" => LabourEngagementType.Self,
-                _ => LabourEngagementType.Hired, // hired_daily + default
-            };
-        }
-
-        return Norm(legacyType) switch
-        {
-            "contract" => LabourEngagementType.Contract,
-            "self" => LabourEngagementType.Self,
-            _ => LabourEngagementType.Hired,
-        };
-    }
-
-    // Descriptive only (Task 2.3) — unknown/garbage shift values (e.g. a model
-    // hallucination) fall through to null rather than throwing; never guess.
-    private static LabourShift? MapLabourShift(string? s) => Norm(s) switch
-    {
-        "full" => LabourShift.Full,
-        "half" => LabourShift.Half,
-        "night" => LabourShift.Night,
-        _ => null,
-    };
-
-    private static ContractUnit? MapContractUnit(string? s) => Norm(s) switch
-    {
-        "tree" => ContractUnit.Tree,
-        "acre" => ContractUnit.Acre,
-        "row" => ContractUnit.Row,
-        "lump sum" or "lump_sum" or "lumpsum" => ContractUnit.LumpSum,
-        _ => null,
-    };
+    // The three labour maps (MapLabourEngagement / MapLabourShift / MapContractUnit)
+    // moved to LabourAssignmentFactory in Labour V1 Task 3 — the manual entry path
+    // needs the same wire-string → enum mapping. They are still called from the
+    // labour block above, now as LabourAssignmentFactory.Map…; behaviour unchanged.
 
     private static MachineType MapMachineType(string? s) => Norm(s) switch
     {
