@@ -1270,9 +1270,28 @@ public sealed class SyncEndpointsTests
         Assert.Equal("applied", logResult.GetProperty("status").GetString());
         Assert.True(await harness.DailyLogExistsAsync(dailyLogId));
 
-        // Task 5 is transport only — the payload is accepted and threaded onto
-        // CreateDailyLogCommand.Labour, but nothing persists it yet (Task 6).
-        Assert.Empty(await harness.GetLabourAssignmentsForDailyLogAsync(dailyLogId));
+        // Task 6 (spec 2026-07-13-labour-attendance-approval-design) turned this
+        // from transport into PERSISTENCE. Task 5's assertion here was
+        // `Assert.Empty(...)` with the comment "nothing persists it yet (Task 6)";
+        // Task 6 is that task, so the assertion inverts — this is the end-to-end
+        // proof over the REAL /sync/push wire that the structured payload reaches
+        // the canonical table, complementing the handler-level Phase-1 proofs in
+        // LabourPhaseOneDurabilityRealPostgresTests.
+        var persisted = Assert.Single(await harness.GetLabourAssignmentsForDailyLogAsync(dailyLogId));
+        Assert.Equal(labourAssignmentId, persisted.Id);
+        Assert.Equal(LabourEngagementType.Hired, persisted.EngagementType);
+        Assert.Equal(2, persisted.MaleCount);
+        Assert.Equal(3, persisted.FemaleCount);
+        // Canonical headcount resolved on the WRITE path from the gender split.
+        Assert.Equal(5, persisted.WorkerCount);
+        Assert.Equal(350m, persisted.WagePerPerson);
+        Assert.Equal("harvesting", persisted.Task);
+        // A STATED duration stays Explicit — it is never re-labelled as the
+        // server's assumption.
+        Assert.Equal(6m, persisted.DurationHours);
+        Assert.Equal(LabourTimeBasis.Explicit, persisted.TimeBasis);
+        // NO-MULTIPLY: no total was stated, so none is fabricated from rate x count.
+        Assert.Null(persisted.TotalCost);
     }
 
     [Fact]

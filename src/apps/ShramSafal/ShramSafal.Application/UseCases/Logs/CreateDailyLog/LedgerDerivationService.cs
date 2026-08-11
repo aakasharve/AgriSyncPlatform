@@ -31,7 +31,8 @@ public sealed class LedgerDerivationService(IShramSafalRepository repository) : 
     private static readonly JsonSerializerOptions ReadOptions = new(JsonSerializerDefaults.Web);
 
     public async Task<DerivationOutcome> DeriveAsync(
-        DailyLog log, AiJob sourceJob, IIdGenerator ids, IClock clock, CancellationToken ct = default)
+        DailyLog log, AiJob sourceJob, IIdGenerator ids, IClock clock,
+        bool deriveLabour = true, CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(log);
         ArgumentNullException.ThrowIfNull(sourceJob);
@@ -215,7 +216,14 @@ public sealed class LedgerDerivationService(IShramSafalRepository repository) : 
         }
 
         // ── labour → LabourAssignment (daily_logs child) ───────────────────────
-        if (root.TryGetProperty("labour", out var labour) && labour.ValueKind == JsonValueKind.Array)
+        // Labour V1 Task 6.3 — SINGLE PRODUCER. `deriveLabour` is false exactly
+        // when the confirm carried structured labour[], which the handler has
+        // already staged as CANONICAL Phase-1 rows. Deriving again here would
+        // record one real engagement twice. Note the guard is on THIS branch only:
+        // every other family below (and the inputs/irrigation above) still derives,
+        // so a voice confirm that also carries manual labour keeps its full ledger.
+        if (deriveLabour
+            && root.TryGetProperty("labour", out var labour) && labour.ValueKind == JsonValueKind.Array)
         {
             foreach (var item in labour.EnumerateArray())
             {

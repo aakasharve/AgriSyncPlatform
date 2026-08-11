@@ -30,8 +30,18 @@ public interface ILedgerDerivationService
     /// Returns a small tally for the audit / log line. A blank / unparseable blob
     /// stages nothing and returns a zeroed outcome.
     /// </summary>
+    /// <param name="deriveLabour">
+    /// Labour V1 Task 6.3 — the SINGLE-PRODUCER guard. When the confirm carried
+    /// structured <c>labour[]</c>, the handler has already staged those rows as
+    /// CANONICAL Phase-1 data, so re-deriving labour from the same voice blob here
+    /// would produce a SECOND set describing one real engagement. Passing
+    /// <c>false</c> suppresses the labour branch ONLY. Farm operations, inputs,
+    /// irrigation, machinery, observations and disturbance still derive normally —
+    /// this is a labour-shaped scalpel, never an off-switch for the side-car.
+    /// </param>
     Task<DerivationOutcome> DeriveAsync(
-        DailyLog log, AiJob sourceJob, IIdGenerator ids, IClock clock, CancellationToken ct = default);
+        DailyLog log, AiJob sourceJob, IIdGenerator ids, IClock clock,
+        bool deriveLabour = true, CancellationToken ct = default);
 }
 
 /// <summary>Small tally of what a derivation staged, for the audit / log line.</summary>

@@ -10,6 +10,7 @@ using Microsoft.Extensions.Logging;
 using ShramSafal.Application.Contracts.Dtos;
 using ShramSafal.Application.Ports;
 using ShramSafal.Application.Ports.External;
+using ShramSafal.Application.UseCases.Labour;
 using ShramSafal.Domain.Audit;
 using ShramSafal.Domain.Common;
 
@@ -59,6 +60,42 @@ public sealed class CreateDailyLogHandler(
 {
     public async Task<Result<DailyLogDto>> HandleAsync(CreateDailyLogCommand command, CancellationToken ct = default)
     {
+        // ── Labour V1 Task 6.1 — the ONLY two ways structured labour may be
+        // rejected. Both fail BEFORE any write is staged, so a rejected command
+        // leaves zero DailyLog, zero AuditEvent and zero LabourAssignment.
+        //
+        // (a) RETRY IDENTITY IS MANDATORY once labour is canonical. Labour rows
+        //     are staged in PHASE 1 (below), inside the same unit of work as the
+        //     log. A blank ClientRequestId means no idempotency key, which means
+        //     a retried submit is NOT deduped at :105 and produces a SECOND
+        //     DailyLog *and* a second canonical labour set. We deliberately do
+        //     NOT server-generate a key here: a server-minted key is unique per
+        //     attempt, so it would dedupe nothing and merely hide the duplicate.
+        //     Logs WITHOUT structured labour keep today's optional-ClientRequestId
+        //     contract exactly as it was.
+        //
+        // (b) STRUCTURALLY MALFORMED PAYLOAD — a missing / Guid.Empty
+        //     LabourAssignmentId. The id is the row's primary key and the client's
+        //     retry identity for that row; there is nothing to write without it.
+        //
+        // NOTHING ELSE MAY REJECT THE LOG (plan Constraint 7 / doctrine P9).
+        // Unrecognised engagement/shift/contract strings map tolerantly (Task 3's
+        // maps are TOTAL and never throw) and an absent/zero/negative duration
+        // falls back to LabourTime.ServerAssumed() — see the staging block below.
+        // "आज ८ मजूर होते" must complete its record with zero names, warnings or nags.
+        if (command.Labour is { Count: > 0 } incomingLabour)
+        {
+            if (string.IsNullOrWhiteSpace(command.ClientRequestId))
+            {
+                return Result.Failure<DailyLogDto>(ShramSafalErrors.InvalidCommand);
+            }
+
+            if (incomingLabour.Any(item => item.LabourAssignmentId == Guid.Empty))
+            {
+                return Result.Failure<DailyLogDto>(ShramSafalErrors.InvalidCommand);
+            }
+        }
+
         var farmId = new FarmId(command.FarmId);
 
         // Caller-shape validation (empty FarmId/PlotId/CropCycleId/
@@ -203,6 +240,73 @@ public sealed class CreateDailyLogHandler(
         }
 
         await repository.AddDailyLogAsync(log, ct);
+
+        // ── Labour V1 Task 6.2 — CANONICAL LABOUR IS PHASE-1 DATA ────────────
+        // THE PHASE RULE (doctrine P1): Phase 1 stores what the farmer CONFIRMED;
+        // Phase 2 derives what the system INFERRED. Neither may impersonate the
+        // other, and canonical data must NEVER live in a best-effort side-car.
+        //
+        // These rows are staged HERE — after AddDailyLogAsync, strictly before the
+        // Phase-1 SaveChangesAsync below — so they share the log's unit of work and
+        // are atomic with it: either the farmer's log AND their labour commit, or
+        // neither does and the submit fails loudly and is retryable.
+        //
+        // They must NEVER be moved into PersistSideCarAsync. All three of that
+        // method's isolation branches catch Exception, log a warning and return
+        // normally, so a failure there is SILENT — the log would commit, the labour
+        // rows would vanish, and the idempotency early-return above would hand back
+        // the existing log on every retry, so the side-car would never be reached
+        // again. There is no backfill job, reconciliation worker or re-derive
+        // endpoint in this system: the farmer's labour record would simply cease to
+        // exist behind a success message.
+        //
+        // LabourAssignmentFactory.FromParsed is the SOLE production construction
+        // site (pinned by LabourAnchorRules) — the voice/AI derivation path in
+        // LedgerDerivationService goes through the very same call, so the same
+        // real-world engagement can never be recorded two different ways depending
+        // only on how the farmer entered it.
+        if (command.Labour is { Count: > 0 } labour)
+        {
+            var labourCreatedAtUtc = clock.UtcNow;
+            foreach (var item in labour)
+            {
+                var assignment = LabourAssignmentFactory.FromParsed(
+                    // The client owns the row id (it is also the retry identity for
+                    // this row); the 6.1 guard above already rejected Guid.Empty.
+                    id: item.LabourAssignmentId,
+                    dailyLogId: log.Id,
+                    // TOTAL map — unrecognised strings fall back to Hired, never throw.
+                    engagementType: LabourAssignmentFactory.MapLabourEngagement(item.EngagementType, null),
+                    maleCount: item.MaleCount,
+                    femaleCount: item.FemaleCount,
+                    // Silence stays NULL — the factory resolves the canonical headcount
+                    // and preserves "we were not told" rather than asserting zero.
+                    workerCount: item.WorkerCount,
+                    wagePerPerson: item.WagePerPerson,
+                    contractUnit: LabourAssignmentFactory.MapContractUnit(item.ContractUnit),
+                    contractQuantity: item.ContractQuantity,
+                    // NO-MULTIPLY (ADR 0023 §1/§3.2d): only an EXPLICIT stated total,
+                    // stored exactly as supplied — never rate x count.
+                    totalCost: item.TotalCost,
+                    linkedActivityId: item.LinkedActivityId,
+                    createdAtUtc: labourCreatedAtUtc,
+                    // Task 4 time truth. A duration the farmer actually stated is
+                    // Explicit; anything else is honestly Assumed at the one server
+                    // default. The `> 0` arm is REQUIRED, not defensive padding:
+                    // LabourTime.Explicit throws on a non-positive value, and doctrine
+                    // P9 forbids an optional field from ever rejecting a record — an
+                    // absent, zero or negative durationHours is NOT an error, it is
+                    // simply an unstated duration.
+                    time: item.DurationHours is { } h && h > 0
+                        ? Domain.Farms.LabourTime.Explicit(h)
+                        : Domain.Farms.LabourTime.ServerAssumed(),
+                    // Descriptive only — never touches the money fields above.
+                    shift: LabourAssignmentFactory.MapLabourShift(item.Shift),
+                    task: item.Task);
+
+                await repository.AddLabourAssignmentAsync(assignment, ct);
+            }
+        }
 
         // DATA_PRINCIPLE_SPINE sub-phase 04.3b — migrate from AuditEvent.Create
         // (sentinel provenance) to AuditEventFactory.Create with the real
@@ -403,7 +507,14 @@ public sealed class CreateDailyLogHandler(
         // (Fix F1 write-ordering) so it can never raise a transient 23505.
         if (command.SourceAiJobId is { } && sourceJobForEvidence is not null)
         {
-            await ledgerDerivation.DeriveAsync(log, sourceJobForEvidence, idGenerator, clock, ct);
+            // Labour V1 Task 6.3 — suppress ONLY the labour branch when this confirm
+            // already carried structured labour[] (staged as canonical Phase-1 rows
+            // above). Everything else in the blob — farm operations, inputs,
+            // irrigation, machinery, observations, disturbance — still derives.
+            await ledgerDerivation.DeriveAsync(
+                log, sourceJobForEvidence, idGenerator, clock,
+                deriveLabour: command.Labour is not { Count: > 0 },
+                ct: ct);
         }
 
         await repository.SaveChangesAsync(ct);
