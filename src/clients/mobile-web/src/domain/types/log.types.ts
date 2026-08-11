@@ -164,6 +164,20 @@ export interface LabourEvent {
     rate?: number;                                                                     // §3.2d (per the rateBasis)
     rateBasis?: 'per_person_day' | 'per_vine' | 'per_row' | 'per_acre' | 'lump_sum';   // §3.2d
 
+    // Labour V1 Task 7 — the first REAL producer of duration. Deliberately named
+    // `durationHours`, NOT `hoursWorked`: `hoursWorked` on LabourSummary is the
+    // FABRICATED constant (`settings.labour.defaultHours || 8`) that Task 8
+    // deletes. This one is only ever set when a farmer states it. Absent means
+    // "not stated" — the server then records its own assumed default rather
+    // than treating silence as a measurement.
+    durationHours?: number;
+
+    // Labour V1 Task 7 — client-minted, stable engagement id (A9). Minted once at
+    // the single shared write boundary (`ensureLabourAssignmentIds`, called from
+    // `LogCommandServiceImpl.confirmAndSave`) so the same engagement keeps one
+    // identity across offline replay, retries and later corrections.
+    labourAssignmentId?: string;
+
     // Transparency
     sourceText?: string;
     systemInterpretation?: string;

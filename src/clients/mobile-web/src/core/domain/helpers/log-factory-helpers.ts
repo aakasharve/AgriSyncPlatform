@@ -2,6 +2,7 @@ import {
     LabourEvent, InputEvent, MachineryEvent, ActivityExpenseEvent,
     CropProfile, DailyLog, AgriLogResponse, PlannedTask, ObservationSeverity
 } from '../../../types';
+import { IdGenerator } from '../services/IdGenerator';
 
 /**
  * Pure helper functions extracted from LogFactory to keep that file under the
@@ -89,6 +90,41 @@ export function allocateLabourForPlot(
                 totalCost: allocateOptionalAmount(event.totalCost, isShared, plotIndex, plotCount)
             };
         });
+}
+
+/**
+ * Labour V1 Task 7.3 — mints the stable `labourAssignmentId` on every labour
+ * event that does not already carry one.
+ *
+ * WHY IT LIVES HERE AND NOT IN `allocateLabourForPlot`: that function runs on
+ * only 2 of LogFactory's 4 branches. `createFarmGlobalManualLog` and
+ * `createFarmGlobalVoiceLog` pass `data.labour` / `response.labour` straight
+ * through, so a whole-farm log minted inside the plot split would reach the
+ * server with no id at all. The single shared boundary that all four branches
+ * pass through is `LogCommandServiceImpl.confirmAndSave`, which is the one and
+ * only call site.
+ *
+ * MUTATION SEMANTICS — IN PLACE, AND THIS IS LOAD-BEARING, NOT AN OVERSIGHT.
+ * The function mutates each `LabourEvent` object and returns `void`.
+ * `confirmAndSave` also returns `Promise<void>`, and all four of its callers
+ * then hand *their own* `newLogs` reference to `enqueueLogsForSync`
+ * (`useLogCommands.ts:206, :271, :366, :426`). If this returned a fresh array
+ * instead of mutating, the ids would reach Dexie but never reach the wire, and
+ * the server's `Guid.Empty` rejection would then fire on every single log a
+ * farmer writes. Do not "purify" this into a copying function unless
+ * `confirmAndSave`'s signature and all four call sites change in the same edit.
+ *
+ * IDEMPOTENT: an event that already has an id keeps it untouched, so a
+ * re-entrant call can never renumber an engagement that is already on the wire.
+ */
+export function ensureLabourAssignmentIds(logs: DailyLog[], idGen: IdGenerator): void {
+    logs.forEach(log => {
+        (log.labour || []).forEach(event => {
+            if (!event.labourAssignmentId) {
+                event.labourAssignmentId = idGen.generate();
+            }
+        });
+    });
 }
 
 export function allocateInputsForPlot(

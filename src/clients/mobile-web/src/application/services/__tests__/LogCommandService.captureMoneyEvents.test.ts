@@ -124,3 +124,82 @@ describe('LogCommandServiceImpl.confirmAndSave — money capture (Decision 3a)',
         expect((pending[0].payload as { amount: number }).amount).toBe(600);
     });
 });
+
+/**
+ * Labour V1 Task 7.3 — the mint is at this ONE shared boundary, and it must
+ * land on the caller's own array. Every caller of confirmAndSave then passes
+ * that same reference to enqueueLogsForSync, so an id that only exists on some
+ * internal copy would be persisted locally and never sent, and the server
+ * rejects a missing/empty LabourAssignmentId as a malformed payload.
+ */
+describe('LogCommandServiceImpl.confirmAndSave — labourAssignmentId mint (Task 7.3)', () => {
+    beforeEach(async () => {
+        await getDatabase().mutationQueue.clear();
+        vi.clearAllMocks();
+    });
+
+    const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+    it('mints a UUID onto the CALLER\'S OWN log objects, not a copy', async () => {
+        const service = new LogCommandServiceImpl(fakeRepo);
+        const event = { id: 'l1', type: 'HIRED', count: 3 } as LabourEvent;
+        const callersOwnLogs = [makeLog([event])];
+
+        await service.confirmAndSave(callersOwnLogs);
+
+        // Read back through the caller's reference — this is exactly what
+        // enqueueLogsForSync receives.
+        const minted = callersOwnLogs[0].labour[0].labourAssignmentId;
+        expect(minted).toBeDefined();
+        expect(minted).toMatch(UUID);
+        expect(event.labourAssignmentId).toBe(minted);
+    });
+
+    it('mints for a farm-global log, whose labour never passes through the plot split', async () => {
+        // makeLog() builds a FARM_GLOBAL selection with no plots — the branch
+        // that would have had NO id at all if the mint lived inside
+        // allocateLabourForPlot.
+        const service = new LogCommandServiceImpl(fakeRepo);
+        const logs = [makeLog([{ id: 'l2', type: 'CONTRACT' } as LabourEvent])];
+
+        await service.confirmAndSave(logs);
+
+        expect(logs[0].labour[0].labourAssignmentId).toMatch(UUID);
+    });
+
+    it('gives each labour event in a multi-log batch its own distinct id', async () => {
+        const service = new LogCommandServiceImpl(fakeRepo);
+        const logs = [
+            makeLog([{ id: 'l3', type: 'HIRED' } as LabourEvent]),
+            makeLog([{ id: 'l4', type: 'HIRED' } as LabourEvent]),
+        ];
+
+        await service.confirmAndSave(logs);
+
+        const a = logs[0].labour[0].labourAssignmentId;
+        const b = logs[1].labour[0].labourAssignmentId;
+        expect(a).toMatch(UUID);
+        expect(b).toMatch(UUID);
+        expect(a).not.toBe(b);
+    });
+
+    it('does not renumber an engagement that already carries an id', async () => {
+        const service = new LogCommandServiceImpl(fakeRepo);
+        const existing = '11111111-2222-3333-4444-555555555555';
+        const logs = [makeLog([{ id: 'l5', type: 'HIRED', labourAssignmentId: existing } as LabourEvent])];
+
+        await service.confirmAndSave(logs);
+        await service.confirmAndSave(logs);
+
+        expect(logs[0].labour[0].labourAssignmentId).toBe(existing);
+    });
+
+    it('carries a stated durationHours through untouched', async () => {
+        const service = new LogCommandServiceImpl(fakeRepo);
+        const logs = [makeLog([{ id: 'l6', type: 'HIRED', count: 2, durationHours: 4 } as LabourEvent])];
+
+        await service.confirmAndSave(logs);
+
+        expect(logs[0].labour[0].durationHours).toBe(4);
+    });
+});

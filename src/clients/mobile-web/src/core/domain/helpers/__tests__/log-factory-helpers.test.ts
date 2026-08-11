@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
-import { sumMachineryCost, computeReceiptTotal } from '../log-factory-helpers';
-import type { MachineryEvent } from '../../../../types';
+import { sumMachineryCost, computeReceiptTotal, ensureLabourAssignmentIds } from '../log-factory-helpers';
+import type { MachineryEvent, DailyLog, LabourEvent } from '../../../../types';
+import type { IdGenerator } from '../../services/IdGenerator';
 
 // ---------------------------------------------------------------------------
 // W2.P4.T3 — TDD for sumMachineryCost fix and computeReceiptTotal
@@ -82,5 +83,79 @@ describe('computeReceiptTotal', () => {
             expenseCost: 0,
         });
         expect(result).toBe(250);
+    });
+});
+
+// ---------------------------------------------------------------------------
+// Labour V1 Task 7.3 — ensureLabourAssignmentIds
+// spec: 2026-07-13-labour-attendance-approval-design
+// ---------------------------------------------------------------------------
+
+function makeIdGen(): IdGenerator {
+    let n = 0;
+    return { generate: () => `minted-${++n}` };
+}
+
+function makeLog(labour: LabourEvent[]): DailyLog {
+    return { id: 'log-1', labour } as unknown as DailyLog;
+}
+
+describe('ensureLabourAssignmentIds', () => {
+    it('mints an id on every labour event that lacks one', () => {
+        const logs = [makeLog([
+            { id: 'l1', type: 'HIRED' } as LabourEvent,
+            { id: 'l2', type: 'CONTRACT' } as LabourEvent,
+        ])];
+
+        ensureLabourAssignmentIds(logs, makeIdGen());
+
+        expect(logs[0].labour[0].labourAssignmentId).toBe('minted-1');
+        expect(logs[0].labour[1].labourAssignmentId).toBe('minted-2');
+    });
+
+    it('MUTATES IN PLACE — the caller\'s own reference sees the ids', () => {
+        // This is the whole point of the helper. `confirmAndSave` returns
+        // Promise<void> and every caller then hands ITS OWN array to
+        // enqueueLogsForSync. If this ever starts returning a copy instead,
+        // ids reach Dexie but never reach the wire and the server rejects
+        // every log the farmer writes.
+        const event: LabourEvent = { id: 'l1', type: 'HIRED' } as LabourEvent;
+        const callersOwnReference = [makeLog([event])];
+
+        const returned = ensureLabourAssignmentIds(callersOwnReference, makeIdGen());
+
+        expect(returned).toBeUndefined();
+        expect(event.labourAssignmentId).toBe('minted-1');
+        expect(callersOwnReference[0].labour[0]).toBe(event);
+    });
+
+    it('is idempotent — an existing id is never renumbered', () => {
+        const logs = [makeLog([
+            { id: 'l1', type: 'HIRED', labourAssignmentId: 'already-on-the-wire' } as LabourEvent,
+            { id: 'l2', type: 'HIRED' } as LabourEvent,
+        ])];
+
+        ensureLabourAssignmentIds(logs, makeIdGen());
+        ensureLabourAssignmentIds(logs, makeIdGen());
+
+        expect(logs[0].labour[0].labourAssignmentId).toBe('already-on-the-wire');
+        expect(logs[0].labour[1].labourAssignmentId).toBe('minted-1');
+    });
+
+    it('covers every log in the batch (the plot-split fan-out)', () => {
+        const logs = [
+            makeLog([{ id: 'l1', type: 'HIRED' } as LabourEvent]),
+            makeLog([{ id: 'l2', type: 'HIRED' } as LabourEvent]),
+        ];
+
+        ensureLabourAssignmentIds(logs, makeIdGen());
+
+        expect(logs[0].labour[0].labourAssignmentId).toBe('minted-1');
+        expect(logs[1].labour[0].labourAssignmentId).toBe('minted-2');
+    });
+
+    it('tolerates logs with no labour at all', () => {
+        const logs = [makeLog([]), { id: 'log-2' } as unknown as DailyLog];
+        expect(() => ensureLabourAssignmentIds(logs, makeIdGen())).not.toThrow();
     });
 });

@@ -405,6 +405,10 @@ export const LabourEventSchema = z.object({
     engagementType: LabourEngagementTypeSchema.optional(),
     rate: z.number().optional(),
     rateBasis: LabourRateBasisSchema.optional(),
+    // Labour V1 Task 7 — stated hours (optional; absent = not stated, never a
+    // validation failure) + the client-minted stable engagement id.
+    durationHours: z.number().optional(),
+    labourAssignmentId: z.string().optional(),
     issue: BucketIssueSchema.optional(),
     // W1.P2 — per-field provenance
     provenance: FieldProvenanceSchema.optional(),

@@ -5,6 +5,7 @@ import { LogFactory } from '../../core/domain/LogFactory';
 import { LogsRepository } from '../ports';
 import { WeatherPort } from '../ports/WeatherPort';
 import { idGenerator } from '../../core/domain/services/IdGenerator';
+import { ensureLabourAssignmentIds } from '../../core/domain/helpers/log-factory-helpers';
 import { systemClock } from '../../core/domain/services/Clock';
 import { getWeatherForLocation } from '../usecases/AttachWeatherSnapshot';
 import { financeCommandService } from '../../features/finance/financeCommandService';
@@ -126,16 +127,27 @@ export class LogCommandServiceImpl implements LogCommandService {
         updateState?: React.Dispatch<React.SetStateAction<DailyLog[]>>
     ): Promise<void> {
 
-        // 1. Update UI State (Optimistic or Confirmed)
+        // 1. Labour V1 Task 7.3 — mint the stable engagement id at the ONE
+        // shared write boundary. All four LogFactory branches (manual+plot,
+        // manual+entire-farm, voice+plot, voice+entire-farm) and the wizard
+        // funnel through this method, so this single call covers every path
+        // that can create a labour engagement. It MUTATES the labour events
+        // in place: every caller passes its own `logs` reference on to
+        // `enqueueLogsForSync` afterwards, so a copying helper would put the
+        // ids in Dexie but never on the wire. Idempotent — an event that
+        // already carries an id is left alone.
+        ensureLabourAssignmentIds(logs, idGenerator);
+
+        // 2. Update UI State (Optimistic or Confirmed)
         if (updateState) {
             updateState(prev => [...logs, ...prev]);
         }
 
-        // 2. Persist to Repository (Always)
+        // 3. Persist to Repository (Always)
         // Repo implementation determines storage (Dexie vs LocalStorage)
         await this.repo.batchSave(logs);
 
-        // 3. Finance spine capture
+        // 4. Finance spine capture
         logs.forEach(log => this.captureMoneyEventsFromLog(log));
     }
 
