@@ -291,3 +291,16 @@ export const useAuth = (): AuthContextValue => {
     }
     return context;
 };
+
+/**
+ * SAFE optional accessor — returns `null` instead of throwing when there is
+ * no `AuthProvider` in the tree. Mirrors `useOptionalFarmContext()` in
+ * `core/session/FarmContext.tsx`, and exists for the same reason: dev preview
+ * shells (e.g. `?preview=labour` -> `LabourPreview`) mount a feature BEFORE
+ * any provider, so a hook that needs to know whether auth has settled must be
+ * able to ask without crashing the preview. Use `useAuth()` everywhere in the
+ * real app — it always has an `AuthProvider` above it.
+ */
+export const useOptionalAuth = (): AuthContextValue | null => {
+    return useContext(AuthContext);
+};

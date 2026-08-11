@@ -1,4 +1,5 @@
 using Accounts.Infrastructure.Persistence;
+using AgriSync.BuildingBlocks.Persistence;
 using AgriSync.SharedKernel.Contracts.Ids;
 using Microsoft.EntityFrameworkCore;
 using ShramSafal.Infrastructure.Persistence;
@@ -63,29 +64,51 @@ public sealed class FarmMembershipSnapshotReader(
 {
     public async Task<IReadOnlyList<FarmMembershipSnapshot>> GetForUserAsync(UserId userId, CancellationToken ct = default)
     {
-        var rows = await ssfDb.FarmMemberships
-            .AsNoTracking()
-            .Join(ssfDb.Farms,
-                m => m.FarmId,
-                f => f.Id,
-                (m, f) => new { m, f })
-            .Where(x =>
-                x.m.UserId == userId &&
-                x.m.RevokedAtUtc == null &&
-                x.m.ExitedAtUtc == null)
-            .Select(x => new
-            {
-                FarmId = x.f.Id,
-                FarmName = x.f.Name,
-                x.f.FarmCode,
-                OwnerAccountId = x.f.OwnerAccountId,
-                Role = x.m.Role,
-                Status = x.m.Status,
-                JoinedVia = x.m.JoinedVia,
-                x.m.GrantedAtUtc,
-                x.m.LastSeenAtUtc,
-            })
-            .ToListAsync(ct);
+        // GET /user/auth/me/context sits under the "/user/auth" prefix, which is
+        // skip-listed in TenantTransactionMiddleware (the anonymous auth surface:
+        // login/register/refresh have no tenant claim by definition). Skip-listed
+        // paths get ElevateToAdminCrossTenant, so the interceptor stops fail-closing
+        // — but it also injects NO GUC and opens NO transaction. The result was
+        // silent and expensive: the p_user_select_memberships RLS policy keys on
+        // `agrisync.user_id`, found it unset, and correctly filtered every row away.
+        // me/context then reported `farms: []` with a `no_farms_yet` alert for a
+        // farmer who demonstrably OWNS a farm, which made the frontend's FarmContext
+        // overwrite a perfectly good farm id with null and blanked the labour screens.
+        //
+        // Fix goes through RlsIdentityScope — the ONE shared helper for
+        // establishing identity outside the request pipeline. It opens the
+        // transaction `set_config(..., is_local: true)` needs (Postgres scopes
+        // the setting to the current transaction) and sets the GUC through a
+        // PARAMETERISED call. Same helper now used by
+        // ShramSafalRepository.GetMyFarmsAsync, UserRepository (the login
+        // membership claim) and ComplianceEvaluatorSweeper.
+        var rows = await RlsIdentityScope.RunAsUserAsync(
+            ssfDb,
+            userId.Value,
+            token => ssfDb.FarmMemberships
+                .AsNoTracking()
+                .Join(ssfDb.Farms,
+                    m => m.FarmId,
+                    f => f.Id,
+                    (m, f) => new { m, f })
+                .Where(x =>
+                    x.m.UserId == userId &&
+                    x.m.RevokedAtUtc == null &&
+                    x.m.ExitedAtUtc == null)
+                .Select(x => new
+                {
+                    FarmId = x.f.Id,
+                    FarmName = x.f.Name,
+                    x.f.FarmCode,
+                    OwnerAccountId = x.f.OwnerAccountId,
+                    Role = x.m.Role,
+                    Status = x.m.Status,
+                    JoinedVia = x.m.JoinedVia,
+                    x.m.GrantedAtUtc,
+                    x.m.LastSeenAtUtc,
+                })
+                .ToListAsync(token),
+            ct);
 
         if (rows.Count == 0)
         {

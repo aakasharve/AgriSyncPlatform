@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using AgriSync.BuildingBlocks.Persistence;
 using AgriSync.SharedKernel.Contracts.Ids;
 using AgriSync.SharedKernel.Contracts.Roles;
 using ShramSafal.Application.Contracts.Dtos;
@@ -674,32 +675,29 @@ internal sealed class ShramSafalRepository(ShramSafalDbContext db) : IShramSafal
     {
         // /shramsafal/farms/mine is skip-listed in TenantTransactionMiddleware →
         // admin-elevated → the interceptor injects NO GUC AND the middleware opens
-        // NO transaction. Open our own tx so `SET LOCAL agrisync.user_id` survives
-        // the SELECT (Postgres scopes SET LOCAL to the current transaction). The
-        // interceptor is in admin no-op mode here, so it does not rewrite these
-        // commands — the manual GUC below is authoritative.
-        await using var tx = await db.Database.BeginTransactionAsync(ct);
+        // NO transaction. RlsIdentityScope (the ONE shared helper) opens the
+        // transaction that `set_config(..., is_local: true)` needs — Postgres scopes
+        // the setting to the current transaction — and sets `agrisync.user_id`
+        // through a PARAMETERISED call. The interceptor is in admin no-op mode here,
+        // so it does not rewrite these commands: the helper's GUC is authoritative.
+        var (farms, memberships) = await RlsIdentityScope.RunAsUserAsync(
+            db,
+            userId,
+            async token =>
+            {
+                // RLS (p_user_select_farms) filters to the caller's owned +
+                // active-member farms — no WHERE needed.
+                var scopedFarms = await db.Farms.AsNoTracking().ToListAsync(token);
 
-        // Set the tx-local GUC the p_user_select_* policies key on, via a
-        // PARAMETERISED set_config (is_local=true ≡ SET LOCAL but injectable —
-        // avoids EF1002 on ExecuteSqlRaw + string interpolation). Run as its own
-        // command (NOT prepended to the SELECT), so the set_config result row is
-        // discarded by ExecuteNonQuery and never confuses the reader of the
-        // farms query that follows.
-        await db.Database.ExecuteSqlInterpolatedAsync(
-            $"SELECT set_config('agrisync.user_id', {userId.ToString()}, true)", ct);
+                var scopedMemberships = await db.FarmMemberships
+                    .AsNoTracking()
+                    .Where(m => (Guid)m.UserId == userId
+                        && m.Status != MembershipStatus.Revoked && m.Status != MembershipStatus.Exited)
+                    .ToListAsync(token);
 
-        // RLS (p_user_select_farms) filters to the caller's owned + active-member
-        // farms — no WHERE needed.
-        var farms = await db.Farms.AsNoTracking().ToListAsync(ct);
-
-        var memberships = await db.FarmMemberships
-            .AsNoTracking()
-            .Where(m => (Guid)m.UserId == userId
-                && m.Status != MembershipStatus.Revoked && m.Status != MembershipStatus.Exited)
-            .ToListAsync(ct);
-
-        await tx.CommitAsync(ct);
+                return (scopedFarms, scopedMemberships);
+            },
+            ct);
 
         var roleByFarm = memberships
             .GroupBy(m => (Guid)m.FarmId)

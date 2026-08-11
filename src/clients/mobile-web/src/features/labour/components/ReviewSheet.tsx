@@ -409,21 +409,31 @@ const ReviewSheet: React.FC<Props> = ({ open, data, onClose, onToast, onApproved
     return (
         <>
             <div onClick={onClose} className={`fixed inset-0 z-40 bg-black/50 transition-opacity duration-200 ${open ? 'opacity-100' : 'pointer-events-none opacity-0'}`} />
-            <div className={`fixed inset-x-0 bottom-0 z-40 flex max-h-[88%] flex-col rounded-t-3xl bg-white shadow-2xl transition-transform duration-300 ${open ? 'translate-y-0' : 'translate-y-full'}`}>
-                <div className="mx-auto mt-2 h-1 w-10 rounded-full bg-slate-300" />
-                <div className="flex items-center justify-between border-b border-slate-200 px-4 pb-2.5 pt-1.5">
+            {/*
+              * PHONE-FRAME FIX (2026-08-10). This was `fixed inset-x-0`, so on any
+              * screen wider than a phone the sheet spanned the ENTIRE browser
+              * window while the app itself stays inside AppShell's centred column
+              * (app/components/AppShell.tsx:18). The result on a desktop browser
+              * was a full-width sheet sitting under a narrow app — the layout the
+              * founder photographed. The max-widths below mirror AppShell's own
+              * breakpoints exactly, so the sheet now tracks the app frame.
+              */}
+            <div className={`fixed inset-x-0 bottom-0 z-40 mx-auto flex max-h-[88%] w-full max-w-[480px] flex-col rounded-t-3xl bg-white shadow-2xl transition-transform duration-300 md:max-w-[640px] xl:max-w-[720px] ${open ? 'translate-y-0' : 'translate-y-full'}`}>
+                <div className="mx-auto mt-2 h-1 w-10 rounded-full bg-stone-300" />
+                <div className="flex items-center justify-between border-b border-stone-200 px-4 pb-3 pt-2">
                     <div>
-                        <h2 className="text-[17px] font-bold text-slate-800">तपासणी</h2>
+                        <h2 className="text-[22px] font-bold text-stone-800">तपासणी</h2>
                         {/* Decision 4b (2026-07-19): this queue can hold the owner's OWN
                             logs too (e.g. his own voice entries awaiting confirmation), not
                             only a team's — "टीमच्या नोंदी" (your team's entries) claimed
                             something not always true. Neutral phrasing that doesn't assert
                             whose entries they are. */}
-                        <p className="text-[11.5px] text-slate-500">{items.length ? `${items.length} नोंदी — मंजूर करा` : 'सगळं झालं ✓'}</p>
+                        <p className="text-[16px] text-stone-500">{items.length ? `${items.length} नोंदी — मंजूर करा` : 'सगळं झालं ✓'}</p>
                     </div>
-                    <button type="button" onClick={onClose} className="flex h-9 w-9 items-center justify-center rounded-full bg-slate-100 text-slate-500"><X size={18} /></button>
+                    <button type="button" onClick={onClose} aria-label="बंद करा" className="flex h-14 w-14 flex-shrink-0 items-center justify-center rounded-full bg-stone-100 text-stone-500"><X size={26} /></button>
                 </div>
-                <div className={`flex flex-col gap-2 overflow-y-auto p-3 ${topUndo ? 'pb-24' : ''}`}>
+                {/* Taller undo bar (below) needs more clearance so it never covers the last card. */}
+                <div className={`flex flex-col gap-2.5 overflow-y-auto p-3.5 ${topUndo ? 'pb-44' : ''}`}>
                     <HelpNote
                         what="रोजच्या नोंदी इथे तुम्ही मंजूर करता — तुमच्या स्वतःच्या असोत वा तुमच्या माणसांच्या."
                         act="बरोबर असेल तर 'मंजूर', काही चुकलं असेल तर 'शंका' — नंतर विचारता येतं."
@@ -431,17 +441,26 @@ const ReviewSheet: React.FC<Props> = ({ open, data, onClose, onToast, onApproved
                         label="तपासणी म्हणजे काय?"
                     />
                     {actionable.length > 1 && (
-                        <button type="button" data-testid="review-approve-all" onClick={() => approveAll()} className="flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 py-2.5 text-[13px] font-bold text-white shadow-lg shadow-emerald-200 active:scale-[0.98]"><Check size={17} strokeWidth={2.5} /> सगळं मंजूर ({actionable.length})</button>
+                        <button type="button" data-testid="review-approve-all" onClick={() => approveAll()} className="flex min-h-[60px] w-full items-center justify-center gap-2.5 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 py-4 text-[19px] font-bold text-white shadow-lg shadow-emerald-200 active:scale-[0.98]"><Check size={24} strokeWidth={2.5} /> सगळं मंजूर ({actionable.length})</button>
                     )}
                     {items.map((it) => {
                         const kind = confirming[it.id];
+                        // `shrink-0` below is load-bearing, not cosmetic. This shell is a
+                        // flex item inside a `flex flex-col overflow-y-auto` parent, where
+                        // the default `flex-shrink: 1` makes children COMPRESS to fit
+                        // instead of overflowing into a scroll. Combined with the shell's
+                        // own `overflow: hidden` (needed for the collapse animation,
+                        // global-theme.css:291), the card silently clipped its own bottom:
+                        // measured 189px of content rendered inside a 77px box, cutting off
+                        // मंजूर/शंका entirely. The taller farmer-readable buttons made it
+                        // obvious, but any card that outgrew the sheet would have hit it.
                         return (
-                            <div key={it.id} data-testid={`review-card-${it.id}`} className={`review-card-shell rounded-2xl ${kind ? 'is-collapsing' : ''}`}>
-                                <div className="relative rounded-2xl border border-slate-200 bg-white p-2.5 shadow-[0_1px_3px_rgba(20,40,30,0.05)]">
-                                    <div className="flex items-center gap-2.5">
+                            <div key={it.id} data-testid={`review-card-${it.id}`} className={`review-card-shell shrink-0 rounded-2xl ${kind ? 'is-collapsing' : ''}`}>
+                                <div className="relative rounded-2xl border border-stone-200 bg-white p-3.5 shadow-[0_1px_3px_rgba(20,40,30,0.05)]">
+                                    <div className="flex items-center gap-3">
                                         <Avatar tone={it.tone} initial={it.initial} size="sm" />
                                         <div className="min-w-0 flex-1">
-                                            <div className="flex items-center gap-2 text-[14px] font-bold text-slate-800">{it.who}</div>
+                                            <div className="flex items-center gap-2 text-[20px] font-bold text-stone-800">{it.who}</div>
                                             {/* Decision 4b: a real farm's `detail` is a bare ISO date
                                                 (`yyyy-MM-dd`) — reformat it (आज/काल/"१९ जुलै") instead of
                                                 leaking a raw, English-formatted date onto this Marathi
@@ -449,13 +468,21 @@ const ReviewSheet: React.FC<Props> = ({ open, data, onClose, onToast, onApproved
                                                 regardless of the log's actual date — removed so the two
                                                 never contradict each other; this line is now the single
                                                 source of the date shown. */}
-                                            <div className="truncate text-[11.5px] text-slate-500">{formatReviewDetail(it.detail)}</div>
+                                            <div className="truncate text-[16px] text-stone-500">{formatReviewDetail(it.detail)}</div>
                                         </div>
                                     </div>
                                     <div className="mt-2"><LabourDataPoints entry={it.points} /></div>
-                                    <div className="mt-2 flex gap-2">
-                                        <button type="button" data-testid={`review-approve-${it.id}`} disabled={!!kind} onClick={() => approve(it.id)} className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-emerald-600 py-2 text-[12.5px] font-extrabold text-white active:scale-[0.98] disabled:opacity-60"><Check size={15} strokeWidth={2.6} /> मंजूर</button>
-                                        <button type="button" data-testid={`review-query-${it.id}`} disabled={!!kind} onClick={() => query(it.id)} className="flex items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-[12.5px] font-bold text-slate-600 active:scale-[0.98] disabled:opacity-60"><MessageSquare size={15} /> शंका</button>
+                                    {/*
+                                      * These two decide money, and they sat 32-36px tall
+                                      * immediately beside each other — the highest-cost
+                                      * mis-tap in the feature. Both are now 60px with a
+                                      * wider gap, and "शंका" is visually demoted (outline,
+                                      * fixed width) so the safe, common action is the big
+                                      * green one and the two can never be confused by shape.
+                                      */}
+                                    <div className="mt-3 flex gap-3">
+                                        <button type="button" data-testid={`review-approve-${it.id}`} disabled={!!kind} onClick={() => approve(it.id)} className="flex min-h-[60px] flex-1 items-center justify-center gap-2.5 rounded-xl bg-emerald-600 py-3.5 text-[19px] font-extrabold text-white active:scale-[0.98] disabled:opacity-60"><Check size={24} strokeWidth={2.6} /> मंजूर</button>
+                                        <button type="button" data-testid={`review-query-${it.id}`} disabled={!!kind} onClick={() => query(it.id)} className="flex min-h-[60px] w-[112px] flex-shrink-0 items-center justify-center gap-2 rounded-xl border-2 border-stone-200 bg-white py-3.5 text-[19px] font-bold text-stone-600 active:scale-[0.98] disabled:opacity-60"><MessageSquare size={20} /> शंका</button>
                                     </div>
                                     {kind && <ConfirmOverlay kind={kind} />}
                                 </div>
@@ -465,11 +492,11 @@ const ReviewSheet: React.FC<Props> = ({ open, data, onClose, onToast, onApproved
                     {items.length === 0 && (
                         <div className="py-8 text-center">
                             <div className="mx-auto mb-3 flex h-16 w-16 items-center justify-center rounded-full bg-emerald-100 text-emerald-600"><Check size={30} /></div>
-                            <p className="text-[15px] font-bold text-slate-800">फार्म बुक अद्ययावत आहे</p>
-                            <p className="mt-1 text-[12.5px] text-slate-500">तपासायला काही उरलं नाही.</p>
+                            <p className="text-[20px] font-bold text-stone-800">फार्म बुक अद्ययावत आहे</p>
+                            <p className="mt-1.5 text-[17px] text-stone-500">तपासायला काही उरलं नाही.</p>
                         </div>
                     )}
-                    <div className="rounded-xl border border-slate-100 bg-slate-50 p-2.5 text-[11.5px] leading-relaxed text-slate-600">मंजूर केल्यावर हजेरीही निश्चित होते. हीच स्क्रीन घरातून <b>आणि</b> कामगार व्यवस्थापनातून उघडते.</div>
+                    <div className="rounded-xl border border-stone-100 bg-stone-50 p-3.5 text-[16px] leading-relaxed text-stone-600">मंजूर केल्यावर हजेरीही निश्चित होते.</div>
                 </div>
                 {topUndo && (
                     <div
@@ -477,10 +504,18 @@ const ReviewSheet: React.FC<Props> = ({ open, data, onClose, onToast, onApproved
                         className="absolute inset-x-3 z-20 flex flex-col gap-1.5 rounded-2xl bg-slate-800 px-3.5 py-2.5 text-white shadow-xl"
                         style={{ bottom: 'calc(0.75rem + var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px)))' }}
                     >
-                        <div className="flex items-center justify-between gap-3">
-                            <span className="text-[12.5px] font-bold">{undoLabel}</span>
-                            <button type="button" data-testid="review-undo-button" onClick={() => undo(topUndo.batchId)} className="flex flex-shrink-0 items-center gap-1.5 rounded-full bg-white/15 px-3 py-1.5 text-[12px] font-extrabold active:scale-95">
-                                <Undo2 size={14} /> पूर्ववत करा
+                        {/*
+                          * This is the ONLY chance to take back an irreversible
+                          * send, and it lived on a ~26px pill with 12px text on a
+                          * 3-second timer. A farmer who reads slowly cannot find,
+                          * parse and hit that in three seconds. Now a full-width
+                          * 60px button with 19px text — impossible to miss, and
+                          * reachable by thumb without aiming.
+                          */}
+                        <div className="flex flex-col gap-2.5">
+                            <span className="text-[17px] font-bold">{undoLabel}</span>
+                            <button type="button" data-testid="review-undo-button" onClick={() => undo(topUndo.batchId)} className="flex min-h-[60px] w-full items-center justify-center gap-2.5 rounded-xl bg-white/20 px-4 py-3.5 text-[19px] font-extrabold active:scale-95">
+                                <Undo2 size={22} /> पूर्ववत करा
                             </button>
                         </div>
                         <div className="h-1 w-full overflow-hidden rounded-full bg-white/20">

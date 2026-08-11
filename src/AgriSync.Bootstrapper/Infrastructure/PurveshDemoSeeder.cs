@@ -33,6 +33,9 @@ public sealed class PurveshDemoSeeder
     // Trialing subscription row in accounts.subscriptions.
     private const string SeedVersion = "purvesh-demo-v2";
     private const string PurveshFarmName = "पुरुषोत्तमशेत, खार्डी";
+    // UserSeeds key of the farm owner — the one seat that is the PrimaryOwner
+    // on both public.memberships and ssf.farm_memberships.
+    private const string PurveshUserKey = "purvesh";
 
     // Deterministic OwnerAccountId for Purvesh's farm. v2 (2026-05-13):
     // seeder now creates the matching accounts.owner_accounts row itself
@@ -504,6 +507,17 @@ public sealed class PurveshDemoSeeder
         await _accountsContext.SaveChangesAsync(cancellationToken);
 
         var farm = await EnsureFarmAsync(purvesh.Id, nowUtc, cancellationToken);
+        // ssf.farm_memberships MUST be seeded alongside the farm. The User
+        // context's public.memberships rows created by EnsureUserAsync are a
+        // DIFFERENT thing (app-level role per user); every farm-scoped read
+        // path — /user/auth/me/context (FarmMembershipSnapshotReader), the
+        // labour wage book (GetLabourDataHandler step 1), authorization
+        // (ShramSafalAuthorizationEnforcer) — resolves the farm roster from
+        // ssf.farm_memberships. Without these rows me/context answers
+        // "farms": [] + alert no_farms_yet, the client drops its persisted
+        // farm id, and every real screen renders zeros.
+        var farmMembershipsAdded = await EnsurePurveshFarmMembershipsAsync(
+            farm.Id, usersByKey, nowUtc, cancellationToken);
         var plotContexts = await EnsurePlotsAndCropCyclesAsync(farm.Id, nowUtc, cancellationToken);
         var phase3Stats = await EnsureScheduleTemplatesAndPlannedActivitiesAsync(plotContexts, purvesh.Id, nowUtc, cancellationToken);
         var contextByPlotKey = plotContexts.ToDictionary(c => c.Seed.Key, c => c, StringComparer.Ordinal);
@@ -538,6 +552,7 @@ public sealed class PurveshDemoSeeder
         var totals = new PhaseTotals(
             UserCount: usersByKey.Count,
             FarmCount: 1,
+            FarmMembershipsAdded: farmMembershipsAdded,
             PlotCount: plotContexts.Count,
             CropCycleCount: plotContexts.Count,
             ScheduleTemplateCount: TemplateSeeds.Length,
@@ -559,7 +574,8 @@ public sealed class PurveshDemoSeeder
 
         return $"Refreshed {SeedVersion}. {refreshResult} | " +
                $"Phase 2+3+4+5+6 seeded. " +
-               $"users={totals.UserCount}, farms={totals.FarmCount}, plots={totals.PlotCount}, " +
+               $"users={totals.UserCount}, farms={totals.FarmCount}, " +
+               $"farmMembershipsAdded={totals.FarmMembershipsAdded}, plots={totals.PlotCount}, " +
                $"cropCycles={totals.CropCycleCount}, templates={totals.ScheduleTemplateCount}, " +
                $"templateActivitiesAdded={totals.TemplateActivitiesAdded}, plannedActivitiesAdded={totals.PlannedActivitiesAdded}, " +
                $"dailyLogsAdded={totals.DailyLogsAdded}, logTasksAdded={totals.LogTasksAdded}, " +
@@ -722,6 +738,21 @@ public sealed class PurveshDemoSeeder
             _ssfContext.FarmInvitations.RemoveRange(invitations);
         }
 
+        // farm_memberships BEFORE the farm. There is no DB-level FK from
+        // ssf.farm_memberships.farm_id to ssf.farms (see migration
+        // 20260418023102_AddFarmMemberships — the table has only a PK), so
+        // nothing cascades: without this the demo farm's roster would survive
+        // as orphan rows pointing at a deleted farm and deleted users, and a
+        // re-seed would then collide on the deterministic membership PK.
+        var farmMemberships = await _ssfContext.FarmMemberships
+            .Where(m => m.FarmId == farmId)
+            .ToListAsync(cancellationToken);
+        var deletedFarmMembershipsCount = farmMemberships.Count;
+        if (farmMemberships.Count > 0)
+        {
+            _ssfContext.FarmMemberships.RemoveRange(farmMemberships);
+        }
+
         var farm = await _ssfContext.Farms.FirstOrDefaultAsync(f => f.Id == farmId, cancellationToken);
         var deletedFarmCount = 0;
         if (farm is not null)
@@ -842,6 +873,7 @@ public sealed class PurveshDemoSeeder
                $"plannedActivities={deletedPlannedCount}, dailyLogs={deletedDailyLogsCount}, dayLedgers={deletedDayLedgersCount}, " +
                $"costEntries={deletedCostEntriesCount}, corrections={deletedCorrectionsCount}, attachments={deletedAttachmentsCount}, " +
                $"priceConfigs={deletedPriceConfigsCount}, memberships={deletedMembershipCount}, " +
+               $"farmMemberships={deletedFarmMembershipsCount}, " +
                $"farmInvitations={deletedFarmInvitationsCount}, farmJoinTokens={deletedFarmJoinTokensCount}, " +
                $"ownerAccounts={deletedOwnerAccountCount}, ownerMemberships={deletedOwnerMembershipsCount}, " +
                $"subscriptions={deletedSubscriptionsCount}, referralCodes={deletedReferralCodesCount}, " +
@@ -936,6 +968,87 @@ public sealed class PurveshDemoSeeder
         farm.AttachToOwnerAccount(PurveshOwnerAccountId, nowUtc);
         _ssfContext.Farms.Add(farm);
         return farm;
+    }
+
+    /// <summary>
+    /// Seeds the <c>ssf.farm_memberships</c> roster for the demo farm — the
+    /// row set the seeder never created (0 rows in ssf while public.memberships
+    /// held 5), which is what made every real screen render zeros:
+    /// <c>/user/auth/me/context</c> reads memberships only, answered
+    /// <c>"farms": []</c> + alert <c>no_farms_yet</c>, and the client then
+    /// cleared its persisted farm id so no farm-scoped endpoint was ever called.
+    ///
+    /// <para>
+    /// Roster: Purvesh as <see cref="SharedAppRole.PrimaryOwner"/> via
+    /// <see cref="JoinedVia.PrimaryOwnerBootstrap"/> (mirrors what
+    /// <c>FirstFarmBootstrapEndpoints</c> writes for a real first farm), and the
+    /// three worker users via <see cref="JoinedVia.OwnerManualAdd"/> — the demo
+    /// farm's roster was assembled by the owner, not through the QR/OTP
+    /// invitation flow, so <see cref="FarmMembership.CreateFromInvitation"/>
+    /// (which yields a Pending* status) would misrepresent provenance AND leave
+    /// the rows non-Active, i.e. still invisible to the wage book. Roles come
+    /// from the SAME <see cref="UserSeeds"/> table that drives
+    /// <c>public.memberships</c> (via <see cref="ResolveSharedRole"/>), so the
+    /// two contexts can never drift apart. All rows are
+    /// <see cref="MembershipStatus.Active"/> — the status
+    /// <c>GetLabourDataHandler</c> filters on.
+    /// </para>
+    /// <para>
+    /// <c>owner_account_id</c> is NOT set here: it is a shadow property
+    /// populated centrally in <c>ShramSafalDbContext.SaveChangesAsync</c> from
+    /// the membership's farm, which resolves to
+    /// <see cref="PurveshOwnerAccountId"/> (…c2) for the tracked demo farm.
+    /// </para>
+    /// <para>
+    /// Idempotent on two axes with a single round trip: the deterministic
+    /// membership id (PK reuse) and the partial unique index
+    /// <c>ix_farm_memberships_farm_user_nonterminal</c> on
+    /// <c>(farm_id, user_id) WHERE status NOT IN (5, 6)</c> — the latter also
+    /// covers a membership created outside the seeder (bootstrap endpoint /
+    /// ClaimJoin) with a random id.
+    /// </para>
+    /// </summary>
+    private async Task<int> EnsurePurveshFarmMembershipsAsync(
+        FarmId farmId,
+        IReadOnlyDictionary<string, User.Domain.Identity.User> usersByKey,
+        DateTime nowUtc,
+        CancellationToken cancellationToken)
+    {
+        var existing = await _ssfContext.FarmMemberships
+            .Where(m => m.FarmId == farmId)
+            .ToListAsync(cancellationToken);
+
+        var added = 0;
+
+        foreach (var seed in UserSeeds)
+        {
+            if (!usersByKey.TryGetValue(seed.Key, out var user))
+            {
+                continue;
+            }
+
+            var membershipId = CreateDeterministicGuid($"{SeedVersion}:farmMembership:{seed.Key}");
+            if (existing.Any(m => m.Id == membershipId || (m.UserId == user.Id && !m.IsTerminal)))
+            {
+                continue;
+            }
+
+            var membership = FarmMembership.Create(
+                membershipId,
+                farmId,
+                user.Id,
+                ResolveSharedRole(seed.Key),
+                nowUtc,
+                joinedVia: seed.Key == PurveshUserKey
+                    ? JoinedVia.PrimaryOwnerBootstrap
+                    : JoinedVia.OwnerManualAdd);
+
+            _ssfContext.FarmMemberships.Add(membership);
+            existing.Add(membership);
+            added++;
+        }
+
+        return added;
     }
 
     private async Task<List<PlotCycleContext>> EnsurePlotsAndCropCyclesAsync(
@@ -2442,6 +2555,7 @@ public sealed class PurveshDemoSeeder
     private sealed record PhaseTotals(
         int UserCount,
         int FarmCount,
+        int FarmMembershipsAdded,
         int PlotCount,
         int CropCycleCount,
         int ScheduleTemplateCount,

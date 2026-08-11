@@ -52,6 +52,23 @@ const labourLog = (): DailyLog => ({
     financialSummary: { totalLabourCost: 1600, totalInputCost: 0, totalMachineryCost: 0, grandTotal: 1600 },
 } as unknown as DailyLog);
 
+// BUG 2 (2026-08-10): a COUNT-ONLY entry — the farmer said "सहा मजूर", no
+// names, no gender split. The parser sets `count` and leaves
+// maleCount/femaleCount unset, which is exactly the shape
+// domain/logs/labourHeadcount.ts exists to resolve.
+const countOnlyLabourLog = (): DailyLog => ({
+    id: 'log-3',
+    date: '2026-07-19',
+    context: { selection: [{ cropId: 'c1', selectedPlotIds: ['p1'] }] },
+    dayOutcome: 'WORK_RECORDED',
+    cropActivities: [],
+    irrigation: [],
+    labour: [{ id: 'l3', type: 'HIRED', count: 6, totalCost: 1800 }],
+    inputs: [],
+    machinery: [],
+    financialSummary: { totalLabourCost: 1800, totalInputCost: 0, totalMachineryCost: 0, grandTotal: 1800 },
+} as unknown as DailyLog);
+
 const nonLabourLog = (): DailyLog => ({
     id: 'log-2',
     date: '2026-07-19',
@@ -91,6 +108,45 @@ describe('LabourHub — "just logged" labour summary (Task 3.5)', () => {
         expect(screen.queryByTestId('labour-just-logged-card')).toBeNull();
     });
 
+    // BUG 2 lock: before the fix this card printed ₹1,800 and NO people line
+    // at all — the माले/महिला rows are both 0 for a count-only entry — so the
+    // farmer saw money paid to nobody.
+    it('shows the plain headcount on a COUNT-ONLY log (no male/female split), sourced from labour.headcount', () => {
+        render(
+            <LabourHub
+                {...baseProps()}
+                history={[countOnlyLabourLog()]}
+                ledgerDefaults={ledgerDefaults}
+                lastLabourLogIds={['log-3']}
+            />
+        );
+
+        expect(screen.getByTestId('labour-just-logged-card')).toBeInTheDocument();
+        // Devanagari digits, matching LabourDataPoints' `N मजूर` chip.
+        const people = screen.getByText('६ मजूर');
+        expect(people).toBeInTheDocument();
+        // Farmer-readable sizing rule for this card: body text is 16px+.
+        expect(people.className).toContain('text-[16px]');
+        // The cost still renders, and no phantom gender rows appeared.
+        expect(screen.getByText('₹1,800')).toBeInTheDocument();
+        expect(screen.queryByText(/पुरुष:/)).toBeNull();
+        expect(screen.queryByText(/महिला:/)).toBeNull();
+    });
+
+    it('does NOT add a duplicate headcount line when the log HAS a male/female split', () => {
+        render(
+            <LabourHub
+                {...baseProps()}
+                history={[labourLog()]}
+                ledgerDefaults={ledgerDefaults}
+                lastLabourLogIds={['log-1']}
+            />
+        );
+
+        expect(screen.getByText(/पुरुष: 3 × ₹400/)).toBeInTheDocument();
+        expect(screen.queryByText(/मजूर$/)).toBeNull();
+    });
+
     it('renders nothing when the saved log has no labour content', () => {
         render(
             <LabourHub
@@ -116,21 +172,27 @@ describe('LabourHub — screen honesty (Decision 4b)', () => {
         render(<LabourHub {...baseProps()} />);
 
         expect(screen.getByText('अजून कोणी कामगार जोडलेला नाही')).toBeInTheDocument();
-        expect(screen.getByText(/QR कोड स्कॅन करून/)).toBeInTheDocument();
+        // Farmer-readability pass (2026-08-10): the subtitle used to name QR,
+        // phone number and OTP in one 12px sentence — three unfamiliar ideas
+        // before any action. It now states only the next physical step.
+        expect(screen.getByText(/QR दाखवा/)).toBeInTheDocument();
     });
 
     it('renders the real QR "add a worker" CTA when onInviteWorker is supplied, and calls it on tap', () => {
         const onInviteWorker = vi.fn();
         render(<LabourHub {...baseProps()} onInviteWorker={onInviteWorker} />);
 
-        const cta = screen.getByText('QR दाखवा — कामगार जोडा');
+        const cta = screen.getByRole('button', { name: /QR दाखवा/ });
         fireEvent.click(cta);
         expect(onInviteWorker).toHaveBeenCalledTimes(1);
     });
 
     it('hides the QR CTA entirely when onInviteWorker is undefined (no real farm to invite into yet)', () => {
         render(<LabourHub {...baseProps()} />);
-        expect(screen.queryByText('QR दाखवा — कामगार जोडा')).toBeNull();
+        // Queried as a BUTTON, not by raw text: the subtitle also contains the
+        // words "QR दाखवा", so a text query would pass even if the CTA button
+        // were wrongly rendered — a hollow assertion.
+        expect(screen.queryByRole('button', { name: /QR दाखवा/ })).toBeNull();
     });
 
     it('does NOT show the empty state once real people exist', () => {

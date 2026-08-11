@@ -7,7 +7,25 @@
  * never touch data plumbing directly.
  *
  * Real backend data loads via a cancellable `useEffect` (`fetchLabourData`),
- * keyed on the current farm.
+ * keyed on the current farm AND on auth having settled.
+ *
+ * AUTH GATE (BUG 1, 2026-08-10): `currentFarmId` is seeded from localStorage
+ * (`SessionStore.getCurrentFarmId()`), so a farm id exists on the very first
+ * render — BEFORE `AuthProvider`'s boot `refreshSession()` has put an access
+ * token back in memory (the token is in-memory only; a page load starts with
+ * none — see `infrastructure/storage/AuthTokenStore.ts`). Firing the fetch on
+ * "farm id exists" alone therefore sent an unauthenticated request that 401'd,
+ * and the hook latched `error = true` and never retried itself: the farmer
+ * landed on "माहिती आणता आली नाही" and had to tap "पुन्हा प्रयत्न करा" to see
+ * his own workers. Our target user cannot diagnose that — he concludes the app
+ * is broken. So: no fetch until auth has definitively settled AND an access
+ * token is actually available. The effect re-runs the moment that flips.
+ *
+ * A 401 that happens ANYWAY (token expired mid-session — access tokens are
+ * short-lived) self-heals one layer down: `fetchLabourData` goes through the
+ * shared `agriSyncClient.http`, whose response interceptor refreshes the
+ * session once and replays the request. This hook deliberately does NOT
+ * hand-roll a second refresh-and-retry on top of it.
  *
  * PREVIEW-SAFE FALLBACK: `?preview=labour` mounts `LabourFeature` (via
  * `LabourPreview`) BEFORE any provider tree — see App.tsx's `LABOUR_PREVIEW`
@@ -29,6 +47,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { LABOUR_MOCK, EMPTY_LABOUR_DATA, type LabourData } from './labourMock';
 import { fetchLabourData } from './data/labourClient';
 import { useOptionalFarmContext } from '../../core/session/FarmContext';
+import { useOptionalAuth } from '../../app/providers/AuthProvider';
 
 export interface UseLabourStateResult {
     data: LabourData;
@@ -44,6 +63,26 @@ export const useLabourState = (): UseLabourStateResult => {
     const isPreview = farmCtx === null; // no provider at all — the ONLY mock case
     const farmId = farmCtx?.currentFarmId ?? null;
     const farmCtxLoading = farmCtx?.isLoading ?? false;
+
+    // --- Auth gate (see the AUTH GATE note in this file's header) ----------
+    // `auth === null` means there is no AuthProvider ABOVE this hook at all.
+    // In the real app that never happens (App.tsx mounts AuthProvider above
+    // FarmContextProvider above every route), so the gate always applies where
+    // it matters. It is `null` only in an unprovisioned shell — the
+    // `?preview=labour` mount, which never fetches anyway, and this hook's own
+    // unit tests. There is nothing pending to wait for in that case, so the
+    // gate opens rather than deadlocking on a provider that will never appear.
+    const auth = useOptionalAuth();
+    /** True once auth has settled AND an access token is actually in memory. */
+    const authReady = auth === null
+        ? true
+        : auth.authStatus === 'authenticated' && Boolean(auth.session?.accessToken);
+    /** True while the boot refresh is still deciding — an honest "loading", not an error. */
+    const authPending = auth !== null
+        && (auth.authStatus === 'checking'
+            // Authenticated but the token hasn't landed in memory yet: still
+            // in flight, not a failure. Do not fetch, do not show an error.
+            || (auth.authStatus === 'authenticated' && !auth.session?.accessToken));
 
     // Lazy initializer: preview is the ONLY case that starts with the mock.
     // A real app (provider present) always starts honest, even before its
@@ -73,6 +112,23 @@ export const useLabourState = (): UseLabourStateResult => {
             return;
         }
 
+        if (!authReady) {
+            // BUG 1: a farm id exists (it is restored from localStorage on the
+            // first render) but auth has NOT settled — the in-memory access
+            // token may not have been re-minted yet. Fetching now guarantees a
+            // 401 and a dead error screen. Wait instead; this effect re-runs
+            // the instant `authReady` flips.
+            //
+            // MONEY-SAFETY: still the honest empty state, never the mock.
+            // `authPending` (boot refresh in flight) is a genuine "loading";
+            // an `anonymous` result is not an error the farmer can act on —
+            // the app routes him to the login screen for that.
+            setData(EMPTY_LABOUR_DATA);
+            setLoading(authPending);
+            setError(false);
+            return;
+        }
+
         let cancelled = false;
         // Real farm: never let a stale mock (or a previous farm's data) sit
         // on screen while this loads — show the honest empty state instead.
@@ -91,6 +147,11 @@ export const useLabourState = (): UseLabourStateResult => {
                 // LABOUR_MOCK. Keep the honest empty state and surface
                 // `error` so the UI can show a retry affordance instead of
                 // silently presenting fake workers/money as real.
+                //
+                // By the time we land here the shared client has ALREADY spent
+                // its one 401-refresh-and-replay attempt, so this is a genuine
+                // failure (server down, session truly gone) — exactly the case
+                // the manual "पुन्हा प्रयत्न करा" button is for.
                 if (!cancelled) {
                     setData(EMPTY_LABOUR_DATA);
                     setError(true);
@@ -101,7 +162,7 @@ export const useLabourState = (): UseLabourStateResult => {
         })();
 
         return () => { cancelled = true; };
-    }, [isPreview, farmId, farmCtxLoading, retryToken]);
+    }, [isPreview, farmId, farmCtxLoading, authReady, authPending, retryToken]);
 
     const refresh = useCallback(() => setRetryToken((t) => t + 1), []);
 

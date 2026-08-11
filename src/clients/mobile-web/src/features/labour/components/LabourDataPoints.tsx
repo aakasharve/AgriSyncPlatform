@@ -13,7 +13,12 @@ import type { LabourEntry } from '../labourParse';
 import { SHIFT_LABEL } from '../labourParse';
 import { inr } from '../labourMock';
 
-const toMr = (n: number) => String(n).replace(/\d/g, (d) => '०१२३४५६७८९'[Number(d)]);
+/**
+ * Latin digits -> Devanagari digits. Exported because the labour hub's "just
+ * logged" card renders the same `N मजूर` phrase and must not grow a fourth
+ * private copy of this one-liner.
+ */
+export const toMr = (n: number) => String(n).replace(/\d/g, (d) => '०१२३४५६७८९'[Number(d)]);
 
 type Tone = 'em' | 'am' | 'or' | 'bl' | 'vi';
 const TONE: Record<Tone, string> = {

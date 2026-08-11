@@ -33,6 +33,8 @@ import { inr } from '../labourMock';
 import { StatTile, GroupLabel, EmptyState } from './LabourUiKit';
 
 const SHOW_ADVANCE_STAT = false;
+// TEMPORARILY true (2026-08-10) — the SECOND doorway to हजेरी वही. Must flip back
+// with LabourHub's SHOW_LEDGER_TILE; both gate the same structurally-empty screen.
 const SHOW_LEDGER_BUTTON = false;
 
 interface Props { data: LabourData; onReview: () => void; onLedger: () => void; onToast: (m: string) => void }

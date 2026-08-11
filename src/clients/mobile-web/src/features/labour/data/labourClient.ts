@@ -6,11 +6,26 @@
  * (Task 1.3 backend read-model: `LabourDataDto`, spec:
  * 2026-07-13-labour-attendance-approval-design).
  *
- * Mirrors `features/work/data/jobCardsClient.ts`'s `resolveBaseUrl()` /
- * `authHeaders()` pattern. Maps the wire DTO (camelCase JSON, `people` as a
- * LIST) into the frontend `LabourData` contract (`people` as a
- * `Record<id, LabourPerson>` dict) — see `useLabourState.ts` for the
- * cancellable-fetch caller.
+ * TRANSPORT (binding): this goes through the app's ONE shared HTTP client,
+ * `agriSyncClient.http` — the same axios instance every other backend call
+ * uses. That is deliberate and load-bearing, not a style choice:
+ *
+ *   - Its request interceptor attaches the in-memory access token
+ *     (`attachAccessToken`), so there is no second hand-rolled `authHeaders()`
+ *     that can drift from the real session.
+ *   - Its response interceptor (`tryRefreshAndRetry`) turns a 401 into
+ *     ONE single-flight `refreshSession()` + ONE retry of the original
+ *     request. A labour fetch that races a not-yet-minted access token
+ *     therefore SELF-HEALS instead of stranding a semi-literate farmer on an
+ *     error banner he has no way to diagnose.
+ *
+ * This used to be a bare `fetch()` with its own `resolveBaseUrl()` /
+ * `authHeaders()` copy (mirroring `features/work/data/jobCardsClient.ts`),
+ * which had no 401 recovery at all — that was BUG 1.
+ *
+ * Maps the wire DTO (camelCase JSON, `people` as a LIST) into the frontend
+ * `LabourData` contract (`people` as a `Record<id, LabourPerson>` dict) — see
+ * `useLabourState.ts` for the cancellable caller.
  *
  * MONEY PASS-THROUGH (binding — Option-3 wage-book): the server has already
  * rounded every money figure to 2dp and resolved `Paid` against the same rows
@@ -20,7 +35,7 @@
  *
  * @module features/labour/data/labourClient
  */
-import { getAuthSession } from '../../../infrastructure/storage/AuthTokenStore';
+import { agriSyncClient } from '../../../infrastructure/api/AgriSyncClient';
 import type {
     LabourData,
     LabourPerson,
@@ -140,30 +155,14 @@ export interface LabourDataDto {
     attendance: LabourAttendanceDraftDto;
 }
 
-// ============================================================================
-// Helpers (mirrors jobCardsClient.ts)
-// ============================================================================
-
-interface ViteImportMeta {
-    env?: { VITE_AGRISYNC_API_URL?: unknown };
-}
-
-const resolveBaseUrl = (): string => {
-    const raw = (import.meta as ViteImportMeta).env?.VITE_AGRISYNC_API_URL;
-    if (typeof raw === 'string' && raw.trim()) {
-        return raw.trim().replace(/\/+$/, '');
-    }
-    return 'http://localhost:5048';
-};
-
-const authHeaders = (): Record<string, string> => {
-    const session = getAuthSession();
-    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-    if (session?.accessToken) {
-        headers['Authorization'] = `Bearer ${session.accessToken}`;
-    }
-    return headers;
-};
+/**
+ * The one labour read-model endpoint. Relative to `agriSyncClient.http`'s
+ * `baseURL` (resolved once from `VITE_AGRISYNC_API_URL` in
+ * `infrastructure/api/transport.ts`) so labour cannot point at a different
+ * host from the rest of the app.
+ */
+export const labourDataPath = (farmId: string): string =>
+    `/shramsafal/farms/${farmId}/labour`;
 
 // ============================================================================
 // DTO → LabourData mapping (NO re-rounding / re-computation of money)
@@ -236,14 +235,18 @@ const mapReview = (r: LabourReviewItemDto): ReviewItem => ({
 
 /**
  * Fetches the farm's Option-3 wage-book read-model and maps it into the
- * frontend `LabourData` contract. Throws on a non-OK response — callers
- * (`useLabourState`) decide the fallback behaviour.
+ * frontend `LabourData` contract.
+ *
+ * A 401 is handled BEFORE this function's caller ever sees it: the shared
+ * client refreshes the session once and replays this exact request (see the
+ * TRANSPORT note at the top of this module). Anything that still fails after
+ * that — server down, refresh genuinely rejected — throws, and
+ * `useLabourState` turns it into the honest empty state plus a retry
+ * affordance. It NEVER falls back to mock money.
  */
 export async function fetchLabourData(farmId: string): Promise<LabourData> {
-    const url = `${resolveBaseUrl()}/shramsafal/farms/${farmId}/labour`;
-    const res = await fetch(url, { headers: authHeaders() });
-    if (!res.ok) throw new Error(`fetchLabourData failed: ${res.status}`);
-    const dto = (await res.json()) as LabourDataDto;
+    const response = await agriSyncClient.http.get<LabourDataDto>(labourDataPath(farmId));
+    const dto = response.data;
 
     return {
         topLevelIds: dto.topLevelIds,

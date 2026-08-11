@@ -74,18 +74,31 @@ public sealed class FarmMembership : Entity<Guid>
         Status is MembershipStatus.Revoked or MembershipStatus.Exited;
 
     /// <summary>
-    /// Legacy bootstrap factory. Callers that created memberships before the
-    /// state machine existed assumed every membership was <see cref="MembershipStatus.Active"/>
-    /// via <see cref="JoinedVia.PrimaryOwnerBootstrap"/>; we keep this
-    /// signature so those callers (and their tests) continue to compile.
-    /// New code should use <see cref="CreateFromInvitation"/> instead.
+    /// Direct (no-invitation) factory producing an immediately
+    /// <see cref="MembershipStatus.Active"/> membership. Callers that created
+    /// memberships before the state machine existed assumed every membership
+    /// was Active via <see cref="JoinedVia.PrimaryOwnerBootstrap"/>; the
+    /// <paramref name="joinedVia"/> parameter therefore defaults to that value
+    /// so those callers (and their tests) continue to compile and behave
+    /// identically.
+    ///
+    /// <para>
+    /// Pass <see cref="JoinedVia.OwnerManualAdd"/> when the owner adds a member
+    /// directly rather than through the QR/OTP invitation flow — that path has
+    /// no <see cref="FarmInvitation"/> to reference, so
+    /// <see cref="CreateFromInvitation"/> (which requires an invitation id and
+    /// yields a Pending* status) cannot express it. <c>joinedVia</c> is an
+    /// audit-only signal, never an authorization input (spec §8.5.1), so this
+    /// widens provenance fidelity without touching the state machine.
+    /// </para>
     /// </summary>
     public static FarmMembership Create(
         Guid id,
         FarmId farmId,
         UserId userId,
         AppRole role,
-        DateTime grantedAtUtc)
+        DateTime grantedAtUtc,
+        JoinedVia joinedVia = JoinedVia.PrimaryOwnerBootstrap)
     {
         EnsureValidIds(id, farmId, userId);
 
@@ -95,7 +108,7 @@ public sealed class FarmMembership : Entity<Guid>
             userId,
             role,
             MembershipStatus.Active,
-            JoinedVia.PrimaryOwnerBootstrap,
+            joinedVia,
             invitationId: null,
             grantedAtUtc);
     }

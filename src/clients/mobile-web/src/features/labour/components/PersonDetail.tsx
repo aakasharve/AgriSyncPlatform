@@ -42,6 +42,14 @@ const SHOW_MONEY_ACTIONS = false;
  */
 const SHOW_TRUST_GRADUATION = false;
 
+/**
+ * विश्वास score — hidden 2026-08-10. See the long note at the render site below:
+ * ReliabilityScore returns 100 for every worker because its metrics source
+ * returns zeros and zero-logs is scored as a perfect ratio. Flip to `true` only
+ * when the score is computed from real work evidence a farmer could be shown.
+ */
+const SHOW_TRUST_SCORE = false;
+
 /** Preserved unchanged behind `SHOW_TRUST_GRADUATION` — see the flag's doc comment. */
 const TrustGraduationSection: React.FC<{ w: LabourPerson; onToast: (m: string) => void }> = ({ w, onToast }) => {
     const [granted, setGranted] = useState(w.access === 'trusted');
@@ -118,10 +126,32 @@ const PersonDetail: React.FC<Props> = ({ data, personId, onAdvance, onSettle, on
                 <TrustGraduationSection w={w} onToast={onToast} />
             )}
 
-            {w.trust != null && (
-                <div className="flex items-center gap-3 rounded-2xl border border-slate-100 bg-white p-3 shadow-[0_1px_3px_rgba(20,40,30,0.05)]">
+            {/*
+              * TRUST SCORE HIDDEN (2026-08-10, founder instruction).
+              *
+              * This rendered "विश्वास {n} — 30 दिवसांत वाद नाही" as if it were a
+              * measured reputation. It is not. The score is computed by
+              * ReliabilityScore over GetWorkerMetricsAsync
+              * (ShramSafalRepository.cs:1050), which returns all-zero metrics —
+              * and the scorer treats logCount30d == 0 as a perfect ratio on all
+              * three of its terms. The result is that EVERY worker scores 100,
+              * always, regardless of what they did or did not do. The claim
+              * "30 दिवसांत वाद नाही" is likewise asserted, never checked.
+              *
+              * Showing a farmer a fabricated number about a real person is the
+              * exact opposite of this product's thesis. Rule 6 of the frozen
+              * architectural invariants: no reliability / productivity / trust
+              * score may exist unless its underlying evidence exists and is
+              * explainable. It does not, so this is hidden — not deleted, so the
+              * component returns the moment the evidence is real.
+              *
+              * The sibling विश्वास-graduation block above is already gated behind
+              * SHOW_TRUST_GRADUATION for the same class of reason.
+              */}
+            {SHOW_TRUST_SCORE && w.trust != null && (
+                <div className="flex items-center gap-3 rounded-2xl border border-stone-100 bg-white p-3 shadow-[0_1px_3px_rgba(20,40,30,0.05)]">
                     <span className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl bg-violet-100 text-violet-600"><Star size={18} /></span>
-                    <span className="text-[13.5px] font-bold text-slate-700">विश्वास {w.trust} — 30 दिवसांत वाद नाही</span>
+                    <span className="text-[17px] font-bold text-stone-700">विश्वास {w.trust} — 30 दिवसांत वाद नाही</span>
                 </div>
             )}
         </div>

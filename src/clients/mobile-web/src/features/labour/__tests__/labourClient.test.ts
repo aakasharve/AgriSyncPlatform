@@ -13,25 +13,24 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 // ---------------------------------------------------------------------------
-// Mock AuthTokenStore — labourClient reads getAuthSession() for the bearer token.
+// Mock the SHARED api client. BUG 1 (2026-08-10): labourClient no longer owns
+// a private `fetch` + `authHeaders()` copy; it calls `agriSyncClient.http`,
+// the one axios instance whose interceptors attach the access token and turn
+// a 401 into refresh-once-and-replay. These tests therefore assert the CALL
+// (path + that it goes through the shared client) and the DTO mapping; the
+// auth header and the 401 retry are the shared client's own contract.
 // ---------------------------------------------------------------------------
 
-vi.mock('../../../infrastructure/storage/AuthTokenStore', () => ({
-    getAuthSession: () => ({ accessToken: 'tok-test', userId: 'user-1', expiresAtUtc: '2099-01-01T00:00:00Z' }),
+const mockGet = vi.fn();
+vi.mock('../../../infrastructure/api/AgriSyncClient', () => ({
+    agriSyncClient: { http: { get: (...args: unknown[]) => mockGet(...args) } },
 }));
-
-// ---------------------------------------------------------------------------
-// Mock global fetch
-// ---------------------------------------------------------------------------
-
-const mockFetch = vi.fn();
-global.fetch = mockFetch as typeof global.fetch;
 
 // ---------------------------------------------------------------------------
 // Import module under test AFTER mocks
 // ---------------------------------------------------------------------------
 
-import { fetchLabourData, type LabourDataDto } from '../data/labourClient';
+import { fetchLabourData, labourDataPath, type LabourDataDto } from '../data/labourClient';
 
 // ---------------------------------------------------------------------------
 // Fixture — a LabourDataDto JSON as the backend (Task 1.3) would serve it.
@@ -121,12 +120,9 @@ function buildDto(): LabourDataDto {
     };
 }
 
-function mockOkResponse(body: unknown): Response {
-    return {
-        ok: true,
-        status: 200,
-        json: () => Promise.resolve(body),
-    } as unknown as Response;
+/** An axios-shaped success envelope. */
+function mockOkResponse(body: unknown) {
+    return { status: 200, data: body };
 }
 
 // ---------------------------------------------------------------------------
@@ -135,22 +131,26 @@ function mockOkResponse(body: unknown): Response {
 
 describe('labourClient.fetchLabourData', () => {
     beforeEach(() => {
-        mockFetch.mockReset();
+        mockGet.mockReset();
     });
 
-    it('calls GET /shramsafal/farms/{farmId}/labour with a bearer auth header', async () => {
-        mockFetch.mockResolvedValueOnce(mockOkResponse(buildDto()));
+    // BUG 1 lock (2026-08-10): the request MUST go through the shared
+    // `agriSyncClient.http`. That instance is the one that attaches the
+    // in-memory access token and, on a 401, refreshes the session once and
+    // replays the request. A future hand-rolled `fetch()` here would
+    // reintroduce the dead "माहिती आणता आली नाही" screen and fail this test.
+    it('issues GET /shramsafal/farms/{farmId}/labour through the shared api client', async () => {
+        mockGet.mockResolvedValueOnce(mockOkResponse(buildDto()));
 
         await fetchLabourData('farm-123');
 
-        const call = mockFetch.mock.calls[0] as [string, RequestInit];
-        expect(call[0]).toBe('http://localhost:5048/shramsafal/farms/farm-123/labour');
-        const headers = call[1].headers as Record<string, string>;
-        expect(headers['Authorization']).toBe('Bearer tok-test');
+        expect(mockGet).toHaveBeenCalledTimes(1);
+        expect(mockGet.mock.calls[0][0]).toBe('/shramsafal/farms/farm-123/labour');
+        expect(labourDataPath('farm-123')).toBe('/shramsafal/farms/farm-123/labour');
     });
 
     it('maps the people LIST into a Record<id, LabourPerson> dict', async () => {
-        mockFetch.mockResolvedValueOnce(mockOkResponse(buildDto()));
+        mockGet.mockResolvedValueOnce(mockOkResponse(buildDto()));
 
         const data = await fetchLabourData('farm-123');
 
@@ -161,7 +161,7 @@ describe('labourClient.fetchLabourData', () => {
     });
 
     it('passes each person balance (recorded/paid/advance) through UNCHANGED', async () => {
-        mockFetch.mockResolvedValueOnce(mockOkResponse(buildDto()));
+        mockGet.mockResolvedValueOnce(mockOkResponse(buildDto()));
 
         const data = await fetchLabourData('farm-123');
 
@@ -170,7 +170,7 @@ describe('labourClient.fetchLabourData', () => {
     });
 
     it('passes dashboard.money through UNCHANGED (no re-rounding/re-derivation)', async () => {
-        mockFetch.mockResolvedValueOnce(mockOkResponse(buildDto()));
+        mockGet.mockResolvedValueOnce(mockOkResponse(buildDto()));
 
         const data = await fetchLabourData('farm-123');
 
@@ -181,7 +181,7 @@ describe('labourClient.fetchLabourData', () => {
     });
 
     it('populates review[].points and review[].status from the DTO', async () => {
-        mockFetch.mockResolvedValueOnce(mockOkResponse(buildDto()));
+        mockGet.mockResolvedValueOnce(mockOkResponse(buildDto()));
 
         const data = await fetchLabourData('farm-123');
 
@@ -196,9 +196,21 @@ describe('labourClient.fetchLabourData', () => {
         });
     });
 
-    it('throws on a non-OK response', async () => {
-        mockFetch.mockResolvedValueOnce({ ok: false, status: 403 } as Response);
+    it('propagates a non-OK response so the caller can show an honest error (never mock money)', async () => {
+        mockGet.mockRejectedValueOnce(new Error('Request failed with status code 403'));
 
         await expect(fetchLabourData('farm-123')).rejects.toThrow('403');
+    });
+
+    // BUG 1: the shared client's response interceptor turns a 401 into ONE
+    // refresh + ONE replay, so by the time the rejection surfaces here the
+    // recovery attempt is already spent. `fetchLabourData` must NOT add a
+    // second retry of its own (that would double every request on a genuinely
+    // dead session) — it just propagates.
+    it('does not re-issue the request itself when the shared client finally rejects', async () => {
+        mockGet.mockRejectedValueOnce(new Error('Request failed with status code 401'));
+
+        await expect(fetchLabourData('farm-123')).rejects.toThrow('401');
+        expect(mockGet).toHaveBeenCalledTimes(1);
     });
 });

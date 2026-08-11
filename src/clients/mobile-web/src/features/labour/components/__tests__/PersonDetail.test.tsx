@@ -60,8 +60,32 @@ describe('PersonDetail — screen honesty (Decision 4b)', () => {
         expect(screen.queryByText(/दैनिक/)).toBeNull();
     });
 
-    it('still shows a worker\'s REAL trust score when the backend actually provides one (सुनीता: trust=76)', () => {
+    /*
+     * FLIPPED 2026-08-10, on evidence — not on a change of taste.
+     *
+     * This test used to assert the opposite: that a backend-supplied trust score
+     * SHOULD still render, because hiding real data would be over-correcting.
+     * That was the right instinct under its premise — the premise was just false.
+     *
+     * The architecture review verified against the running system that
+     * ReliabilityScore ALWAYS returns 100 for every worker:
+     * GetWorkerMetricsAsync (ShramSafalRepository.cs:1050) returns all-zero
+     * metrics, and the scorer treats logCount30d == 0 as a perfect ratio on all
+     * three terms. So "a score the backend actually provides" is not evidence of
+     * anything — it is a constant wearing the costume of a measurement, attached
+     * to a named real person.
+     *
+     * The mock's trust=76 is what misled the original test: mock data made the
+     * feature look evidence-backed when production data cannot be.
+     *
+     * Frozen invariant 6 (founder, 2026-08-10): no reliability / productivity /
+     * trust score may exist unless its underlying evidence exists and is
+     * explainable. Flip SHOW_TRUST_SCORE back on — and restore this test to its
+     * original assertion — when the score is computed from real work evidence.
+     */
+    it('hides the विश्वास trust score even when one is supplied, because the backend score is fabricated (सुनीता: trust=76)', () => {
+        expect(LABOUR_MOCK.people.sunita.trust).toBe(76);
         render(<PersonDetail {...baseProps()} personId="sunita" />);
-        expect(screen.getByText(/विश्वास 76/)).toBeInTheDocument();
+        expect(screen.queryByText(/विश्वास 76/)).toBeNull();
     });
 });
