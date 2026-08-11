@@ -1,5 +1,5 @@
 import { AddLogTaskCommand } from '../../../application/usecases/sync/AddLogTaskCommand';
-import { CreateDailyLogCommand } from '../../../application/usecases/sync/CreateDailyLogCommand';
+import { CreateDailyLogCommand, type LabourItemPayload } from '../../../application/usecases/sync/CreateDailyLogCommand';
 import { idGenerator } from '../../../core/domain/services/IdGenerator';
 import { type CropCycleDto, type PlotDto } from '../../../infrastructure/api/AgriSyncClient';
 import { getDatabase } from '../../../infrastructure/storage/DexieDatabase';
@@ -80,18 +80,11 @@ function buildTaskPayloads(log: DailyLog): LogTaskMutationPayload[] {
         });
     });
 
-    log.labour.forEach(event => {
-        payloads.push({
-            logTaskId: ensureUuid(event.id),
-            activityType: event.activity || 'Labour',
-            notes: buildTaskNotes([
-                event.count ? `Workers: ${event.count}` : undefined,
-                event.totalCost ? `Cost: ₹${event.totalCost}` : undefined,
-                event.notes,
-            ]),
-            occurredAtUtc,
-        });
-    });
+    // Labour V1 Task 8.1 — labour deliberately does NOT produce a log_task here.
+    // It used to be flattened into a free-text note ("Workers: 6 • Cost: ₹3000")
+    // which discarded every structured field. It now travels as structured
+    // `labour[]` on the create_daily_log payload (see buildLabourPayloads), which
+    // the server stages as canonical Phase-1 rows atomically with the log.
 
     log.inputs.forEach(event => {
         const productName = event.productName || event.mix?.[0]?.productName || 'Input';
@@ -135,6 +128,67 @@ function buildTaskPayloads(log: DailyLog): LogTaskMutationPayload[] {
     });
 
     return payloads;
+}
+
+/**
+ * Labour V1 Task 8.1 — THE STRUCTURED LABOUR PAYLOAD.
+ *
+ * WHY THIS IS LOAD-BEARING, not a payload tweak: the server routes labour to
+ * Phase 1 (atomic with the DailyLog) only when the confirm carries structured
+ * `labour[]`. With no client producer, every confirmed labour row was written in
+ * Phase 2 — the best-effort side-car, whose failure branches catch, log a
+ * warning and return success. The log would commit, the labour rows would
+ * vanish, and the idempotency early-return would hand back the existing log on
+ * every retry. There is no backfill job in this system. Populating this array is
+ * what closes that hole.
+ *
+ * DURATION: `durationHours` is OMITTED entirely when the farmer did not state
+ * it. Absence is the client saying "not stated", and the server then records
+ * LabourTime.ServerAssumed. Sending 0 — or any number nobody said — would
+ * fabricate a measurement, which is the exact thing this plan removes.
+ */
+function buildLabourPayloads(log: DailyLog): LabourItemPayload[] {
+    return (log.labour || []).map(event => {
+        const item: LabourItemPayload = {
+            // Task 7 mints this at confirm-time on the same array we read here.
+            // `ensureUuid` is the last line of defence: Task 6.1 rejects a
+            // missing/empty id as a malformed payload, which would 400 the WHOLE
+            // log — permanently, since the farmer has no way to repair it. An
+            // event with no local id has no identity to diverge from, so minting
+            // one at the boundary loses nothing and saves the log. Ids that
+            // already exist pass through untouched.
+            labourAssignmentId: ensureUuid(event.labourAssignmentId),
+            // The server maps this string tolerantly and passes `null` for the
+            // legacy arg, so the legacy HIRED/CONTRACT/SELF must be folded in
+            // HERE or a contract engagement would silently record as Hired.
+            engagementType: event.engagementType || event.type,
+            maleCount: event.maleCount,
+            femaleCount: event.femaleCount,
+            workerCount: event.count,
+            // NO-MULTIPLY (ADR 0023): the rate is carried as stated and is never
+            // multiplied out into a total. `rate` is the newer B2.4 field the
+            // parser can emit; the voice path preferred it server-side, and that
+            // derivation is now suppressed for any log carrying this array.
+            wagePerPerson: event.wagePerPerson ?? event.rate,
+            contractUnit: event.contractUnit,
+            contractQuantity: event.contractQuantity,
+            // Only an explicitly stated total — never derived from rate × count.
+            totalCost: event.totalCost,
+            shift: event.shiftId,
+            task: event.activity,
+            notes: event.notes,
+        };
+
+        // Assigned conditionally, NOT as `durationHours: event.durationHours`,
+        // so an unstated duration leaves the key absent rather than present-and-
+        // undefined. Zero and negatives are treated as unstated too — the server
+        // records those as Assumed anyway and they are not an error (P9).
+        if (typeof event.durationHours === 'number' && event.durationHours > 0) {
+            item.durationHours = event.durationHours;
+        }
+
+        return item;
+    });
 }
 
 async function resolveSyncTarget(log: DailyLog): Promise<ResolvedLogSyncTarget | null> {
@@ -191,6 +245,8 @@ export async function enqueueLogsForSync(logs: DailyLog[]): Promise<{ queuedLogI
             continue;
         }
 
+        const labourPayloads = buildLabourPayloads(log);
+
         await CreateDailyLogCommand.enqueue({
             dailyLogId: log.id,
             farmId: target.farmId,
@@ -223,6 +279,11 @@ export async function enqueueLogsForSync(logs: DailyLog[]): Promise<{ queuedLogI
                       alerts: log.weatherStamp.alerts,
                   }
                 : undefined,
+            // Labour V1 Task 8.1 — structured labour rides on the SAME payload as
+            // the log so the server can stage it in Phase 1. Omitted (not `[]`)
+            // when there is no labour, so the server's `Count: > 0` guard reads a
+            // plainly absent array rather than an empty one.
+            labour: labourPayloads.length > 0 ? labourPayloads : undefined,
         });
 
         const taskPayloads = buildTaskPayloads(log);

@@ -80,7 +80,6 @@ export interface Translations {
         weather: string;
         maleWorkers: string;
         femaleWorkers: string;
-        hoursWorked: string;
         method: string;
         duration: string;
         type: string;
@@ -339,7 +338,6 @@ export const translations: Record<Language, Translations> = {
             weather: 'Weather',
             maleWorkers: 'Male Workers',
             femaleWorkers: 'Female Workers',
-            hoursWorked: 'Hours Worked',
             method: 'Method',
             duration: 'Duration',
             type: 'Type',
@@ -589,7 +587,6 @@ export const translations: Record<Language, Translations> = {
             weather: 'हवामान',
             maleWorkers: 'पुरुष कामगार',
             femaleWorkers: 'महिला कामगार',
-            hoursWorked: 'काम केलेले तास',
             method: 'पद्धत',
             duration: 'कालावधी',
             type: 'प्रकार',
@@ -786,11 +783,21 @@ export const translations: Record<Language, Translations> = {
  */
 export function t(key: string, lang: Language = 'en'): string {
     const keys = key.split('.');
-    let value: any = translations[lang];
+    // FORCED SCOPE (Labour V1 Task 8.6): this was `any`, the file's only ESLint
+    // warning, and the pre-commit gate runs `--max-warnings 0` — so removing the
+    // three dead `hoursWorked` entries above could not be committed until this
+    // was resolved. Narrowed rather than suppressed. Behaviour for a resolved
+    // string key is byte-identical (`value || key`); a key that resolves to a
+    // non-string — a namespace object, which the old code returned AS the
+    // "string" — now falls back to the key instead of leaking `[object Object]`
+    // into the UI.
+    let value: unknown = translations[lang];
 
     for (const k of keys) {
-        value = value?.[k];
+        value = typeof value === 'object' && value !== null
+            ? (value as Record<string, unknown>)[k]
+            : undefined;
     }
 
-    return value || key;
+    return typeof value === 'string' ? (value || key) : key;
 }

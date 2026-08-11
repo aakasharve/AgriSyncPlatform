@@ -161,9 +161,15 @@ const DailyWorkSummaryView: React.FC<DailyWorkSummaryViewProps> = ({ summary }) 
                                     <span className="font-mono text-xs">{formatCurrency(summary.labour.femaleCount * summary.labour.femaleRate)}</span>
                                 </div>
                             )}
-                            <div className="text-xs text-slate-500 mt-1">
-                                Hours worked: {summary.labour.hoursWorked}h
-                            </div>
+                            {/*
+                              * Labour V1 Task 8.4 — the "Hours worked: Nh" line was
+                              * DELETED. It rendered `settings.labour.defaultHours || 8`
+                              * — a constant with no settings UI and no persistence —
+                              * as though it were a measurement, so every farmer saw the
+                              * same 8h whatever they actually did (doctrine P4).
+                              * Nothing replaces it until a real stated duration
+                              * (LabourEvent.durationHours, Task 7) is available to show.
+                              */}
                         </div>
                     </div>
                 )}

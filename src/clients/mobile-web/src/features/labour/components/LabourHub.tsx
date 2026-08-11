@@ -170,7 +170,18 @@ const LabourJustLogged: React.FC<{ logs: DailyLog[]; defaults: LedgerDefaults }>
                             {labour.maleCount === 0 && labour.femaleCount === 0 && labour.headcount > 0 && (
                                 <div className="text-[16px] font-semibold text-stone-700">{toMr(labour.headcount)} मजूर</div>
                             )}
-                            <div className="text-[16px] font-semibold text-stone-500">तास: {labour.hoursWorked} तास</div>
+                            {/*
+                              * Labour V1 Task 8.4 — "तास: ८ तास" was DELETED. It read
+                              * `settings.labour.defaultHours || 8` maximised over a
+                              * forEach, i.e. the maximum of a constant, so it said "८
+                              * तास" to every farmer on every log regardless of the work
+                              * done. `defaultHours` has no settings UI and no
+                              * persistence: it was a constant wearing the costume of a
+                              * measurement (doctrine P4). A real stated duration lives
+                              * on LabourEvent.durationHours (Task 7) and is simply
+                              * absent when the farmer did not say it — so there is
+                              * nothing honest to render here yet.
+                              */}
                         </div>
                     </div>
                 ))}

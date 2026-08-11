@@ -134,7 +134,6 @@ export const generateDayWorkSummary = (
                 headcount: 0,
                 maleRate: 0,
                 femaleRate: 0,
-                hoursWorked: 0,
                 totalCost: 0,
                 isEmpty: true,
                 events: []
@@ -182,7 +181,6 @@ const generateLabourSummary = (
             headcount: 0,
             maleRate: settings.labour.defaultWage,
             femaleRate: settings.labour.defaultWage,
-            hoursWorked: 0,
             totalCost: 0,
             isEmpty: true,
             events: []
@@ -193,16 +191,11 @@ const generateLabourSummary = (
     let totalMale = 0;
     let totalFemale = 0;
     let totalCost = 0;
-    let maxHours = 0;
 
     log.labour.forEach(event => {
         totalMale += event.maleCount || 0;
         totalFemale += event.femaleCount || 0;
         totalCost += event.totalCost || 0;
-
-        // Estimate hours from shift or default
-        const hours = settings.labour.defaultHours || 8;
-        if (hours > maxHours) maxHours = hours;
     });
 
     // Get rates from settings (use first shift as default, or fallback)
@@ -220,7 +213,6 @@ const generateLabourSummary = (
         headcount: sumLabourHeadcount(log.labour),
         maleRate,
         femaleRate,
-        hoursWorked: maxHours,
         totalCost,
         isEmpty: false,
         events: log.labour

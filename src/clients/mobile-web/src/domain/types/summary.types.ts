@@ -52,7 +52,16 @@ export interface LabourSummary {
     headcount: number;
     maleRate: number;
     femaleRate: number;
-    hoursWorked: number;
+    /**
+     * Labour V1 Task 8.3 — `hoursWorked` USED TO LIVE HERE AND WAS DELETED.
+     * It was `settings.labour.defaultHours || 8` maximised inside a forEach,
+     * i.e. the maximum of a constant. `defaultHours` has no settings UI and no
+     * persistence, so every farmer saw the same "८ तास" whatever they did. A
+     * constant rendered as a measurement is a fabrication (doctrine P4). Real
+     * stated duration lives on `LabourEvent.durationHours` (Task 7) and is
+     * absent when the farmer said nothing. Do not reintroduce a summary-level
+     * hours field derived from defaults.
+     */
     totalCost: number;
     isEmpty: boolean;
     events: LabourEvent[];
