@@ -93,8 +93,9 @@ Verbatim structure of `CreateDailyLogHandler.HandleAsync`:
 - `ssf.farms` and `ssf.daily_logs` are keyed on the **case-sensitive quoted** column `"Id"`.
 - **`--context` is mandatory** — *three* design-time factories exist and five DbContext types are reachable from the startup project, so EF cannot disambiguate:
   ```
-  dotnet ef migrations add <Name> --project src/apps/ShramSafal/ShramSafal.Infrastructure --startup-project src/AgriSync.Bootstrapper --context ShramSafalDbContext
+  dotnet ef migrations add <Name> --project src/apps/ShramSafal/ShramSafal.Infrastructure --startup-project src/AgriSync.Bootstrapper --context ShramSafalDbContext --configuration Release
   ```
+  **`--configuration Release` is also required** whenever the dev API is running — `dotnet ef` builds the startup project in Debug, which a live `AgriSync.Bootstrapper` has locked (`MSB3021`/`MSB3027`), and the command reports only *"Build failed. Use dotnet build to see the errors."* **Verified 2026-08-11:** the Task-1 migration failed this way and succeeded unchanged with the flag. Same root cause as the test-suite note in A12.
   `docs/superpowers/plans/2026-07-13-labour-management-backend-integration.md:223` and `Makefile:23-25` omit it and are **known-broken**; `make boot` swallows the failure.
 - `ssf.workers → ssf.farms("Id")` is **CASCADE** (`20260504000000_WtlV0Entities.cs:51`), so §18's RESTRICT is a **deliberate divergence**. `Restrict` precedent: `CostEntryConfiguration.cs:41-44`, `TestInstanceConfiguration.cs:157-160`.
 - **`PurveshDemoSeeder` DELETES `ssf.daily_logs`** (`:626-636`) *and* the farm (`:756-764`) in **one** `SaveChanges` at `:764`. V4's "no code path deletes daily_logs" was **false**, and it is why V4's seeder fix was placed wrongly.
@@ -282,6 +283,46 @@ Two are platform defects sitting on taps a farmer makes on day one. **Labour V1 
 6. **UX and verification** — Tasks 12, 13, 14, then the launch acceptance journeys.
 
 **No design review between phases. Tests decide progression.**
+
+### Dependency chain — no task may start before its inputs exist
+
+```
+Baseline SHA 032cecfe  (all five suites green)
+   │
+   ├─ Task 1   FK parent integrity ───────────────┐   (independent)
+   ├─ Task 2   LabourHeadcount.Resolve ───────────┤   (independent)
+   │                                              │
+   ├─ Task 3   LabourAssignmentFactory + pins ────┤   needs Task 2 (Resolve)
+   └─ Task 4   LabourTime + columns ──────────────┘   needs Task 3 (factory takes `time`)
+                       │
+   ══ GATE A ══ Entire Farm sync  ← SEPARATE PLATFORM TASK, blocks Task 8 only
+                       │
+   Task 5   transport contract + allow-list        needs Task 4 (LabourItem carries durationHours)
+                       │
+   Task 6   Phase-1 durability + deriveLabour      needs Task 5 (command.Labour) + Task 3 (maps)
+                       │
+   Task 7   durationHours + labourAssignmentId     needs Task 5 (wire shape)
+                       │
+   Task 8   client sends structured labour         needs Task 7 (fields) + GATE A (farm-global logs sync)
+                       │
+   Task 9   FieldOperator                          independent of 5-8; needs Task 4 only for migration order
+                       │
+   Task 10  FieldOperatorWorkRow + seeder + erasure needs Task 9
+                       │
+   Task 11  commands + ports + farm-scoped routes   needs Task 10
+                       │
+   Task 12  field-operator read path                needs Task 11
+                       │
+   Task 12b Labour Review & Correction (GATE B)     needs Task 10 (work rows) + Task 2 (Resolve) + Task 4 (TimeBasis)
+                       │
+   Task 13  farmer UX picker                        needs Task 12 + Task 12b
+                       │
+   Task 14  adversarial verification as agrisync_app needs Tasks 9-12b
+                       │
+   Launch acceptance journeys
+```
+
+**The only forward reference in the plan:** Task 3's factory signature gains a `LabourTime time` parameter in Task 4.4. Task 3 is written *without* it deliberately, so Task 3 compiles and its tests pass on its own; Task 4 then adds the parameter and fixes the call sites. Nothing else depends on anything created later.
 
 ### The product model this protects
 
@@ -625,6 +666,15 @@ Task<bool> TryAddFieldOperatorWorkRowAsync(FieldOperatorWorkRow r, CancellationT
 
 ### Task 12 — Field-operator read path
 
+**Files:**
+- Create: `src/apps/ShramSafal/ShramSafal.Application/UseCases/Labour/GetFieldOperators/{Query,Handler}.cs`
+- Modify: `src/apps/ShramSafal/ShramSafal.Api/Endpoints/LabourEndpoints.cs`
+- Create: `src/clients/mobile-web/src/features/labour/data/fieldOperatorClient.ts`
+- Create: `src/clients/mobile-web/src/features/labour/__tests__/fieldOperatorClient.test.ts`
+
+**Depends on:** Task 9 (FieldOperator exists), Task 11 (port + routes + farm scope).
+**Do not touch:** `LabourDataDto.cs`, `GetLabourDataHandler.cs`, `labourClient.ts`, `labour.types.ts`, `labourMock.ts`, `LabourDataDtoShapeTests.cs` — the five `LabourPersonDto` mirrors (A11).
+
 - [ ] **12.1** `GET /farms/{farmId:guid}/labour/field-operators` returns `IReadOnlyList<FieldOperatorDto>` = `(string Id, string DisplayName, string? FullName, bool IsActive)`.
 - [ ] **12.2** **Do not** union with `farm_memberships`, and **do not** touch `LabourPersonDto`, `GetLabourDataHandler`'s roster, or any of its five mirrors (A11). A membership answers "who has access"; a Field Operator answers "whose work can be attributed".
 - [ ] **12.3** Create `features/labour/data/fieldOperatorClient.ts` + its unit test, mirroring `labourClient.ts`.
@@ -654,12 +704,50 @@ public sealed class LabourCorrection : Entity<Guid>
 }
 ```
 
-- [ ] **12b.1** Create `LabourCorrection` + its EF config + migration, copying `FinanceCorrectionConfiguration.cs` and the direct-`farm_id` RLS block from Task 9. Append-only: no update path, no delete path.
+**Current truth vs correction history — stated so the implementer never has to invent it:**
+
+| Question | Entity that answers it |
+|---|---|
+| *What is true now?* | **`LabourAssignment`** — `WorkerCount`, `MaleCount`, `FemaleCount`, `DurationHours`, `TimeBasis` are **mutated in place** to the corrected values. Every reader (`GetLabourDataHandler`, exports, future analytics) sees corrected truth without knowing corrections exist. |
+| *Who is attributed now?* | **`FieldOperatorWorkRow`** — the live set. Adding attaches a row; removing deletes one. |
+| *What was it before, who changed it, when?* | **`LabourCorrection`** — append-only, one row per changed field. Never updated, never deleted. |
+
+Worked example — recorded 8, verified 6:
+```
+ssf.labour_assignments   worker_count: 8 → 6            (current truth, in place)
+ssf.labour_corrections   +1 row: labour_assignment_id, changed_field='WorkerCount',
+                                 original_value='8', new_value='6',
+                                 corrected_by_user_id, corrected_at_utc, reason
+```
+Attribution removal — बाळू out, गणेश in:
+```
+ssf.field_operator_work_rows   DELETE बाळू's row; INSERT गणेश's row   (current truth)
+ssf.labour_corrections         +1 row changed_field='Attribution', original_value='<बाळू FieldOperatorId>', new_value=null
+                               +1 row changed_field='Attribution', original_value=null,  new_value='<गणेश FieldOperatorId>'
+ssf.labour_assignments         worker_count UNCHANGED                 (Constraint 3)
+```
+Duration — reviewer states 4 hours:
+```
+ssf.labour_assignments   duration_hours: 8 → 4, time_basis: 'Assumed' → 'Explicit'
+ssf.labour_corrections   +1 row changed_field='DurationHours', original_value='8|Assumed', new_value='4|Explicit'
+```
+If the reviewer says nothing about hours, **no row is written and `Assumed` is left alone** — silence is not a correction.
+
+- [ ] **12b.1** Create `LabourCorrection` + its EF config + migration, copying `FinanceCorrectionConfiguration.cs` and the direct-`farm_id` RLS block from Task 9. Append-only: no update path, no delete path, no `Modify`/`Delete` method on the entity.
 - [ ] **12b.2** **`CorrectLabourQuantityHandler`** — accepts `workerCount`, `maleCount`, `femaleCount` **together in one operation** and applies `LabourHeadcount.Resolve` (Task 2) so the row can never land in a contradictory state such as `WorkerCount=6, Male=5, Female=4`. Writes the new values onto the `LabourAssignment` **and** a `LabourCorrection` row per changed field, in **one** unit of work.
 - [ ] **12b.3** **`CorrectLabourDurationHandler`** — sets `DurationHours` + `TimeBasis = Explicit` when the reviewer states the hours. If they do not know, the existing `Assumed` value is **left untouched** — never overwritten with a guess.
 - [ ] **12b.4** **Attribution correction is auditable, not a silent delete.** Removing an attribution must leave the history explainable: *बाळू was attributed, then removed after verification.* Use the smallest auditable form — a `LabourCorrection` row with `changedField = "Attribution"` recording the removed `FieldOperatorId` — before deleting the `FieldOperatorWorkRow`. **Do not build event sourcing.** Attribution correction must **never** change `WorkerCount` (Constraint 3): removing बाळू and adding गणेश on an 8-worker engagement leaves it at 8.
-- [ ] **12b.5** **Authorization reuses the existing model.** Route under `POST /farms/{farmId:guid}/labour/assignments/{id}/corrections`, gated by `ICallerFarmTenantScope.EstablishForCallerAsync` exactly as Task 11.2, and restricted to the farm roles already trusted to approve execution (`GetUserRoleForFarmAsync`, the `Mukadam`/`Owner` shape at `GetLabourDataHandler.cs:84-87`). **Do not invent a permission system inside Labour V1.**
-- [ ] **12b.6** **Idempotent.** A retried correction request yields **one** logical correction, not two — same `ClientRequestId` discipline as Task 6.1.
+- [ ] **12b.5** **Authorization — exact existing mechanism, verified 2026-08-11.** Route under `POST /farms/{farmId:guid}/labour/assignments/{id}/corrections`, gated by `ICallerFarmTenantScope.EstablishForCallerAsync` exactly as Task 11.2.
+
+  Then call the **existing** `GetUserRoleForFarmAsync(farmId, userId, ct) → Task<AppRole?>` (`IShramSafalRepository.cs:48`; impl `ShramSafalRepository.cs:67-88` — returns `PrimaryOwner` when the caller is `Farms.OwnerUserId`, else the membership role excluding `Revoked`/`Exited`, else `null`). Permit correction only when the role is:
+```csharp
+role is AppRole.PrimaryOwner or AppRole.SecondaryOwner or AppRole.Mukadam
+```
+  `AppRole` (`AgriSync.SharedKernel.Contracts.Roles`): `Worker=0, Mukadam=1, SecondaryOwner=2, PrimaryOwner=3, Agronomist=4, …`. **`Worker` must not be able to rewrite labour truth.** Anything else → `ShramSafalErrors.Forbidden`, zero mutation.
+
+  **Do not use `IsUserOwnerOfFarmAsync`** (`:90-94`) — it is `PrimaryOwner or SecondaryOwner` only and would lock out the Mukadam, who is exactly the person doing field verification. **Invent no roles** (`Approver`, `Supervisor`, `Verifier` do not exist) and add no permission system.
+- [ ] **12b.6** **Idempotent — the mechanism, not a hand-wave.** A retried correction must yield **one** logical correction, not two `labour_corrections` rows. Reuse the existing sync-mutation dedupe rather than inventing one: the endpoint requires a `ClientRequestId`, and the handler calls `ISyncMutationStore.TryStoreSuccessAsync(deviceId, clientRequestId, …) → Task<bool>` (`ISyncMutationStore.cs:7-13`; impl `SyncMutationStore.cs:32-75`, `true` = first time, `false` = already applied) **before** writing. On `false`, return the prior result and write nothing. This is the same convention `PushSyncBatchHandler` already relies on (`:212-216`, `:253-258`), so no new idempotency machinery enters Labour V1.
+  **Stop condition:** if that store turns out not to be reachable from this handler's composition root, do **not** improvise — raise an `EXECUTION BLOCKER` per the handoff protocol.
 - [ ] **12b.7** **Route the client through it.** `UpdateLog.ts` currently persists nothing. Send the **labour** portion of an edit to this endpoint. Other edit categories stay disabled until their own persistence exists — a truthful missing feature beats a fake working one.
 - [ ] **12b.8** **Gate B acceptance tests** (`RequiresPostgres`, app role):
   - *Count* — record 8, correct to 6, reload → **6**; history still shows `8 → 6`, by whom, when.
@@ -673,6 +761,14 @@ public sealed class LabourCorrection : Entity<Guid>
 ---
 
 ### Task 13 — Minimal farmer UX
+
+**Files:**
+- Create: `src/clients/mobile-web/src/features/labour/components/FieldOperatorPicker.tsx`
+- Create: `src/clients/mobile-web/src/features/labour/components/__tests__/FieldOperatorPicker.test.tsx` (`// @vitest-environment jsdom` on line 1)
+- Modify: `src/clients/mobile-web/src/features/labour/components/ReviewSheet.tsx` — the host. It is the existing labour review surface (mounted by `LabourFeature.tsx`) and today renders read-only chips via `LabourDataPoints.tsx` with only मंजूर / शंका actions. **This is the first form control ever added to `features/labour/` — keep it to the picker.**
+
+**Depends on:** Task 12 (`fieldOperatorClient`), Task 11 (attach command), Task 7.3 (`labourAssignmentId` exists on the engagement being reviewed).
+**Do not touch:** the voice/recording path, `LabourMic.tsx`, or the headcount-only render path.
 
 - [ ] **13.1** Add-person and select-existing-person only, on the labour surface. Attribution happens **after the fact, online** — no offline Field Operator sync, no attendance wizard. The `labourAssignmentId` minted in Task 7.3 is what the UI attaches to; no lookup endpoint is required.
 - [ ] **13.1b** **Attach must give usable confirmation.** V1's ledger is write-only by design — no reputation dashboard, no worker history, no attribution analytics. But tapping "बाळू ✓" must visibly show that this engagement now carries बाळू, so the farmer does not attach the same person twice by accident. The minimum is the already-attached set rendered on the engagement being edited. This is implementation UX, **not** a read-model project.
@@ -700,7 +796,7 @@ Copy the harness wholesale from `LedgerDerivationSupersessionRealPostgresTests.c
 
 ## E. Migration Strategy
 
-- **Four** migrations (Tasks 1, 4, 9, 10), each with the full `dotnet ef` form including `--context ShramSafalDbContext`. Kept separate so every task stays independently gated.
+- **Five** migrations (Tasks 1, 4, 9, 10, 12b), each with the full `dotnet ef` form including `--context ShramSafalDbContext` **and `--configuration Release`** (A7). Kept separate so every task stays independently gated.
 - **Every** rehearsal runs against a throwaway DB (`ssf_<purpose>_{Guid:N}`) applied with `IntegrationMigrationChain.ApplyAsync` and dropped in teardown. `agrisync_dev_v2` is never migrated by a test, and **no farm is deleted to prove a foreign key** — Task 14.4 uses a scratch farm.
 - **Backfill: none.** `ssf.labour_assignments` is empty; both new tables are new.
 - **Reversibility:** every `Down()` drops policies before tables. The only irreversible act is the Task-4 column addition, which is additive.
