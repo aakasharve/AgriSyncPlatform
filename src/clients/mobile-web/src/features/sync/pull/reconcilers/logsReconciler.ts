@@ -70,7 +70,7 @@ export async function reconcileLogs(
         await db.logs.put({
             id: log.id,
             schemaVersion: VersionRegistry.DB_SCHEMA_VERSION,
-            log,
+            log: preserveLocalOnlyFields(log, existing?.log),
             date: log.date,
             verificationStatus: log.verification?.status,
             createdByOperatorId: log.meta?.createdByOperatorId,
@@ -80,6 +80,59 @@ export async function reconcileLogs(
     }
 
     return logs.length;
+}
+
+/**
+ * Labour V1 final fix (C1) — THE PULL MUST NOT DESTROY LOCAL DATA IT WAS NEVER
+ * GIVEN.
+ *
+ * `toDailyLog` rebuilds a whole `DailyLog` from `DailyLogDto`, and the fields
+ * the DTO has no counterpart for are filled with empty/zero literals. For most
+ * of them that is merely lossy. For `labour` it is a false statement.
+ *
+ * THE DISTINCTION THAT MATTERS: `DailyLogDto` (infrastructure/api/dtos.ts) has
+ * no `labour` property AT ALL, and no cost fields either — the server does not
+ * send an empty labour array, it sends no labour field. So "the server says
+ * this log has no labour" is not a state the wire can even express. Writing
+ * `labour: []` over an existing local record therefore asserts something
+ * nobody said, and — since `db.logs.put` is a full-record write, the
+ * pending-mutation guard only covers PENDING/SENDING/FAILED, and the freshness
+ * guard needs a `serverModifiedAtUtc` that only this reconciler ever writes —
+ * a farmer's own labour disappears from his own device the first time a log he
+ * created syncs down. There is no backfill job in this system, and Dexie is
+ * the only copy the UI reads: `ReviewSheet` resolves its engagement from
+ * `log.labour[].labourAssignmentId`, and `UpdateLog` builds its correction
+ * `before` map from the same array, so the loss takes the attribution picker
+ * and the whole correction path with it.
+ *
+ * It also cannot mask a server-side deletion, because there is no deletion
+ * signal to mask: absent-from-the-wire is not empty-on-the-wire. If the pull
+ * ever starts projecting labour, this function must be revisited — the
+ * condition to add is "the DTO carried a labour field", never "the labour
+ * array came back non-empty".
+ *
+ * `financialSummary` gets the same treatment for the same reason: the DTO
+ * carries none of the five totals, so zeroing them over a local record is the
+ * identical false assertion, and preserving only `totalLabourCost` would leave
+ * a summary whose `grandTotal` contradicts its own labour line.
+ *
+ * A genuinely NEW pulled log keeps today's empties: there is no local record to
+ * preserve, and `financialSummary` is non-optional on `DailyLog` and is
+ * dereferenced directly by display code.
+ *
+ * This is a holding measure, not a read path. Projecting labour onto
+ * `DailyLogDto` and hydrating it here is the real fix and is deferred.
+ */
+function preserveLocalOnlyFields(incoming: DailyLog, existing: DailyLog | undefined): DailyLog {
+    if (!existing) {
+        return incoming;
+    }
+
+    return {
+        ...incoming,
+        labour: existing.labour ?? incoming.labour,
+        financialSummary: existing.financialSummary ?? incoming.financialSummary,
+    };
 }
 
 function toDailyLog(
