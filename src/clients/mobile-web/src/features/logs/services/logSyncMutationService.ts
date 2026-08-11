@@ -131,6 +131,33 @@ function buildTaskPayloads(log: DailyLog): LogTaskMutationPayload[] {
 }
 
 /**
+ * A number the wire schema will actually accept, or `undefined` so the key is
+ * dropped. `Number.isFinite` rejects NaN and ±Infinity, which is not a
+ * theoretical concern: `DetailSheet` writes `totalCost` and `contractQuantity`
+ * with a bare `parseFloat(e.target.value)` and no fallback, and `parseFloat('')`
+ * is NaN, so simply CLEARING a money field produces one.
+ */
+function finiteOrOmitted(value: number | undefined): number | undefined {
+    return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
+}
+
+/**
+ * Same, for the three headcount fields, which the schema pins as
+ * `z.number().int()`. The inputs are `type="number"`, so "2.5" in Male Split is
+ * reachable in one keystroke.
+ *
+ * A fractional count is DROPPED, never rounded. Rounding would assert a
+ * headcount the farmer never stated, and the server deliberately preserves
+ * silence as NULL ("we were not told") rather than as a number — inventing 3
+ * from 2.5 would put a fabricated count into the canonical record, which is the
+ * failure this whole plan exists to remove. The log still saves either way.
+ * `Number.isInteger` is already false for NaN and ±Infinity.
+ */
+function wholeOrOmitted(value: number | undefined): number | undefined {
+    return typeof value === 'number' && Number.isInteger(value) ? value : undefined;
+}
+
+/**
  * Labour V1 Task 8.1 — THE STRUCTURED LABOUR PAYLOAD.
  *
  * WHY THIS IS LOAD-BEARING, not a payload tweak: the server routes labour to
@@ -149,45 +176,72 @@ function buildTaskPayloads(log: DailyLog): LogTaskMutationPayload[] {
  */
 function buildLabourPayloads(log: DailyLog): LabourItemPayload[] {
     return (log.labour || []).map(event => {
-        const item: LabourItemPayload = {
+        // SANITISED BEFORE THE OBJECT IS BUILT — this is a correctness boundary,
+        // not defensive padding. `MutationQueue.enqueue` validates every payload
+        // against sync-contract/schemas/payloads/create_daily_log.zod.ts and
+        // THROWS on failure, and `enqueueLogsForSync` has no try/catch, so one
+        // malformed number would propagate out of the save handler: the farmer
+        // sees "Failed to save logs", the log sits in Dexie, and NO mutation row
+        // was ever written — so there is nothing queued to retry and, on a
+        // multi-plot broadcast, every later log in the batch is abandoned too.
+        // The labour would then reach NEITHER Phase 1 nor Phase 2, which is
+        // strictly worse than the side-car this array replaced.
+        //
+        // It would also invert the doctrine the server deliberately honours:
+        // CreateDailyLogHandler is fail-OPEN on these fields (P9 / Constraint 7
+        // — no optional field may ever reject a record). The client must not be
+        // fail-closed on the very fields the server refuses to reject. The fix
+        // belongs HERE, at the boundary that introduced the validation: never
+        // loosen the schema, and never swallow the enqueue in a try/catch.
+        const maleCount = wholeOrOmitted(event.maleCount);
+        const femaleCount = wholeOrOmitted(event.femaleCount);
+        const workerCount = wholeOrOmitted(event.count);
+        // NO-MULTIPLY (ADR 0023): the rate is carried as stated and is never
+        // multiplied out into a total. `rate` is the newer B2.4 field the parser
+        // can emit; the voice path preferred it server-side, and that derivation
+        // is now suppressed for any log carrying this array.
+        const wagePerPerson = finiteOrOmitted(event.wagePerPerson ?? event.rate);
+        const contractQuantity = finiteOrOmitted(event.contractQuantity);
+        // Only an explicitly stated total — never derived from rate × count.
+        const totalCost = finiteOrOmitted(event.totalCost);
+        // Absent means "the farmer did not state hours"; the server then records
+        // Assumed. Zero and negatives are unstated too — not an error (P9).
+        const durationHours = finiteOrOmitted(event.durationHours);
+
+        // Conditional spreads, so a value we cannot send is simply NOT SENT: the
+        // key is absent rather than present-and-undefined. One uniform rule for
+        // every optional number on this payload.
+        return {
             // Task 7 mints this at confirm-time on the same array we read here.
             // `ensureUuid` is the last line of defence: Task 6.1 rejects a
             // missing/empty id as a malformed payload, which would 400 the WHOLE
             // log — permanently, since the farmer has no way to repair it. An
             // event with no local id has no identity to diverge from, so minting
             // one at the boundary loses nothing and saves the log. Ids that
-            // already exist pass through untouched.
+            // already exist pass through untouched. It also satisfies the
+            // schema's ZGuid, which is the same regex as UUID_REGEX above.
             labourAssignmentId: ensureUuid(event.labourAssignmentId),
             // The server maps this string tolerantly and passes `null` for the
             // legacy arg, so the legacy HIRED/CONTRACT/SELF must be folded in
             // HERE or a contract engagement would silently record as Hired.
-            engagementType: event.engagementType || event.type,
-            maleCount: event.maleCount,
-            femaleCount: event.femaleCount,
-            workerCount: event.count,
-            // NO-MULTIPLY (ADR 0023): the rate is carried as stated and is never
-            // multiplied out into a total. `rate` is the newer B2.4 field the
-            // parser can emit; the voice path preferred it server-side, and that
-            // derivation is now suppressed for any log carrying this array.
-            wagePerPerson: event.wagePerPerson ?? event.rate,
+            // The final fallback is not a guess: `engagementType` is the one
+            // REQUIRED string on this payload, so a legacy Dexie record with
+            // neither field would throw at the queue — and the server's total
+            // map turns an unrecognised value into Hired anyway, so this
+            // produces byte-identical server state to the absent case.
+            engagementType: event.engagementType || event.type || 'hired_daily',
+            ...(maleCount !== undefined && { maleCount }),
+            ...(femaleCount !== undefined && { femaleCount }),
+            ...(workerCount !== undefined && { workerCount }),
+            ...(wagePerPerson !== undefined && { wagePerPerson }),
+            ...(contractQuantity !== undefined && { contractQuantity }),
+            ...(totalCost !== undefined && { totalCost }),
+            ...(durationHours !== undefined && durationHours > 0 && { durationHours }),
             contractUnit: event.contractUnit,
-            contractQuantity: event.contractQuantity,
-            // Only an explicitly stated total — never derived from rate × count.
-            totalCost: event.totalCost,
             shift: event.shiftId,
             task: event.activity,
             notes: event.notes,
         };
-
-        // Assigned conditionally, NOT as `durationHours: event.durationHours`,
-        // so an unstated duration leaves the key absent rather than present-and-
-        // undefined. Zero and negatives are treated as unstated too — the server
-        // records those as Assumed anyway and they are not an error (P9).
-        if (typeof event.durationHours === 'number' && event.durationHours > 0) {
-            item.durationHours = event.durationHours;
-        }
-
-        return item;
     });
 }
 
