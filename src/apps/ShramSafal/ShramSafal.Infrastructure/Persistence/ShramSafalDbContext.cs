@@ -8,6 +8,7 @@ using ShramSafal.Domain.Compliance;
 using ShramSafal.Domain.Crops;
 using ShramSafal.Domain.Farms;
 using ShramSafal.Domain.Finance;
+using ShramSafal.Domain.Labour;
 using ShramSafal.Domain.Logs;
 using ShramSafal.Domain.Organizations;
 using ShramSafal.Domain.Planning;
@@ -133,6 +134,10 @@ public sealed class ShramSafalDbContext(DbContextOptions<ShramSafalDbContext> op
     public DbSet<ApplicationInputItem> ApplicationInputItems => Set<ApplicationInputItem>();
     public DbSet<IrrigationEntry> IrrigationEntries => Set<IrrigationEntry>();
     public DbSet<LabourAssignment> LabourAssignments => Set<LabourAssignment>();
+
+    // spec: 2026-07-13-labour-attendance-approval-design (Labour V1, Task 9) —
+    // durable human work subject. Deliberately NOT linked to UserId in V1.
+    public DbSet<FieldOperator> FieldOperators => Set<FieldOperator>();
     public DbSet<MachineryUsage> MachineryUsages => Set<MachineryUsage>();
     public DbSet<ObservationEvent> ObservationEvents => Set<ObservationEvent>();
     public DbSet<DisturbanceEvent> DisturbanceEvents => Set<DisturbanceEvent>();
