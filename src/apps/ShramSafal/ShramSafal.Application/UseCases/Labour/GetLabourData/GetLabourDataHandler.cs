@@ -234,7 +234,7 @@ public sealed class GetLabourDataHandler(IShramSafalRepository repository, ICloc
         var daysSinceMonday = ((int)today.DayOfWeek + 6) % 7; // Sunday=0..Saturday=6 -> Monday-anchored offset.
         var weekStart = today.AddDays(-daysSinceMonday);
         var weekAssignments = await repository.GetLabourAssignmentsForFarmSinceAsync(query.FarmId, weekStart, ct);
-        var manDays = weekAssignments.Sum(a => a.WorkerCount ?? 0);
+        var manDays = weekAssignments.Sum(a => LabourHeadcount.Resolve(a.WorkerCount, a.MaleCount, a.FemaleCount));
 
         // ── 8. Review — Draft/Confirmed logs still awaiting the owner. ─────
         var reviewLogs = farmLogs
