@@ -59,10 +59,10 @@ public sealed class LabourAnchorRules
     /// PIN 2 — WTL v0 (the passive worker-reuse ledger) stays out of field-operator
     /// attribution (A8). No production file may reference both ledgers.
     ///
-    /// <para><b>Two files are excluded by name, deliberately.</b> The protected
-    /// property is "the two ledgers are never JOINED as attribution", not "the two
-    /// names never co-occur" — a <c>DbSet</c> declaration and an erasure manifest
-    /// are declaration sites, not joins:</para>
+    /// <para><b>Exactly two files are excluded, by path suffix, deliberately.</b>
+    /// The protected property is "the two ledgers are never JOINED as attribution",
+    /// not "the two names never co-occur" — a <c>DbSet</c> declaration and an
+    /// erasure manifest are declaration sites, not joins:</para>
     /// <list type="bullet">
     /// <item><c>ShramSafalDbContext.cs</c> — declares both <c>DbSet</c>s;
     /// declaration is not attribution.</item>
@@ -79,15 +79,29 @@ public sealed class LabourAnchorRules
     [Fact]
     public void Wtl_v0_worker_ledger_is_never_joined_to_field_operator_attribution()
     {
-        var declarationOnlyFiles = new[] { "ShramSafalDbContext.cs", "ErasureWorker.cs" };
+        // Matched on PATH SUFFIX, not bare filename — a bare-filename match would
+        // silently exempt any future file anywhere that happened to share the name.
+        var declarationOnlyPaths = new[]
+        {
+            "apps/ShramSafal/ShramSafal.Infrastructure/Persistence/ShramSafalDbContext.cs",
+            "apps/ShramSafal/ShramSafal.Infrastructure/Privacy/ErasureWorker.cs",
+        };
 
         var offenders = ProductionSourceFiles()
-            .Where(path => !declarationOnlyFiles.Contains(
-                Path.GetFileName(path), StringComparer.OrdinalIgnoreCase))
+            .Where(path => !declarationOnlyPaths.Any(excluded =>
+                Relative(path).EndsWith(excluded, StringComparison.OrdinalIgnoreCase)))
             .Where(path =>
             {
                 var source = StripComments(File.ReadAllText(path));
-                return source.Contains("FieldOperatorWorkRow", StringComparison.Ordinal)
+
+                // First token is the IDENTITY, not just the work overlay:
+                // FieldOperatorWorkRow contains "FieldOperator", so this is a strict
+                // superset, and it also catches the likelier A8 violation — joining
+                // the WTL ledger to the operator identity itself (e.g. seeding
+                // operator names out of WorkerNameProjector). snake_case is included
+                // on BOTH tokens because raw SQL is in this codebase's vocabulary.
+                return (source.Contains("FieldOperator", StringComparison.Ordinal)
+                        || source.Contains("field_operator", StringComparison.Ordinal))
                     && (source.Contains("WorkerAssignment", StringComparison.Ordinal)
                         || source.Contains("worker_assignments", StringComparison.Ordinal));
             })
@@ -97,7 +111,7 @@ public sealed class LabourAnchorRules
 
         offenders.Should().BeEmpty(
             "WTL v0's worker ledger is a passive server-side reuse index and is NEVER farmer-facing " +
-            "attribution (A8). A file that names FieldOperatorWorkRow AND the WorkerAssignment ledger " +
+            "attribution (A8). A file that names the field operator AND the WorkerAssignment ledger " +
             $"is joining the two. Offenders: [{string.Join(", ", offenders)}]");
     }
 

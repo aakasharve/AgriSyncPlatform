@@ -36,6 +36,15 @@ public static class LabourAssignmentFactory
     /// only ever in the gender split ("५ बायका" → femaleCount=5) persists a real
     /// count instead of a null that every consumer then reads as zero.</para>
     ///
+    /// <para><b>Silence is preserved as NULL.</b> When the farmer stated no
+    /// headcount at all — a live shape on the shipping voice path, e.g.
+    /// "Contract ne 2 acre chhatani keli" (contract + quantity, no count) —
+    /// <c>WorkerCount</c> stays NULL. Resolving that to 0 would assert "zero
+    /// people worked" about real work, and from Task 4 onward it would surface
+    /// to the farmer as 0 hours. There is no backfill job in this system, so a
+    /// wrong write is permanent. An explicitly stated 0 still stores 0 and
+    /// stays distinguishable from silence.</para>
+    ///
     /// <para>NO-MULTIPLY (ADR 0023 §1 / §3.2d) is unchanged and still owned by
     /// <see cref="LabourAssignment.Create"/>: <paramref name="totalCost"/> is
     /// stored exactly as supplied and is NEVER computed from rate × count.</para>
@@ -52,7 +61,11 @@ public static class LabourAssignmentFactory
             engagementType: engagementType,
             maleCount: maleCount,
             femaleCount: femaleCount,
-            workerCount: LabourHeadcount.Resolve(workerCount, maleCount, femaleCount),
+            // P4/P8: nothing stated => NULL means "we were not told", never "zero people
+            // worked". An explicitly stated 0 still stores 0 and stays distinguishable.
+            workerCount: (workerCount ?? maleCount ?? femaleCount) is null
+                ? null
+                : LabourHeadcount.Resolve(workerCount, maleCount, femaleCount),
             wagePerPerson: wagePerPerson,
             contractUnit: contractUnit,
             contractQuantity: contractQuantity,
