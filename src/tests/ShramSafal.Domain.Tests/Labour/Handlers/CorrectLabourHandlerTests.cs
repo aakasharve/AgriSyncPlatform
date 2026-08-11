@@ -179,6 +179,62 @@ public sealed class CorrectLabourHandlerTests
         row.CorrectedAtUtc.Should().Be(Now);
     }
 
+    /// <summary>
+    /// Fix round 1 — a <c>quantity</c> section whose three values are ALL absent
+    /// says nothing about the headcount, and must therefore change nothing.
+    ///
+    /// <para>Without the fold-away in step 1 this reached
+    /// <c>CorrectHeadcount(null, null, null)</c>, which NULLed a
+    /// <c>worker_count</c> holding a real number and appended a history row
+    /// reading <c>8 -> null</c>. That is a fail-open on the canonical record:
+    /// "we were not told" written over "8 people worked", with no backfill job
+    /// anywhere in this system to undo it.</para>
+    ///
+    /// <para>Asserted at the HANDLER because that is where the invariant now
+    /// lives. It is deliberately NOT a client-side fix: a bare HTTP caller is
+    /// not bound by the client, exactly as with <c>durationHours: 0</c>.</para>
+    /// </summary>
+    [Fact]
+    public async Task An_all_null_quantity_section_leaves_a_known_headcount_alone_and_writes_no_row()
+    {
+        var (repo, store, assignment) = Scenario();
+
+        // Sent ALONGSIDE a real duration correction, so the request is not
+        // rejected wholesale by the corrects-nothing guard — this isolates the
+        // quantity section's own behaviour.
+        var result = await BuildHandler(repo, store).HandleAsync(Command(
+            assignment.Id,
+            quantity: new LabourQuantityCorrection(null, null, null),
+            durationHours: 4m));
+
+        result.IsSuccess.Should().BeTrue();
+        assignment.WorkerCount.Should().Be(8,
+            "an all-absent quantity section states nothing — it must never NULL a known headcount");
+        assignment.DurationHours.Should().Be(4m, "the duration alongside it still applies");
+
+        repo.Corrections.Should().ContainSingle("only the duration changed");
+        repo.Corrections[0].ChangedField.Should().Be("DurationHours");
+        repo.Corrections.Should().NotContain(c => c.ChangedField == "WorkerCount");
+    }
+
+    /// <summary>
+    /// A request carrying ONLY an all-absent quantity section corrects nothing at
+    /// all, so it is rejected there — not silently accepted as a no-op success.
+    /// </summary>
+    [Fact]
+    public async Task A_request_carrying_only_an_all_null_quantity_section_is_rejected()
+    {
+        var (repo, store, assignment) = Scenario();
+
+        var result = await BuildHandler(repo, store).HandleAsync(Command(
+            assignment.Id, quantity: new LabourQuantityCorrection(null, null, null)));
+
+        result.IsFailure.Should().BeTrue();
+        assignment.WorkerCount.Should().Be(8);
+        repo.Corrections.Should().BeEmpty();
+        store.Stored.Should().BeEmpty();
+    }
+
     [Fact]
     public async Task Restating_the_value_the_record_already_holds_is_not_a_correction()
     {

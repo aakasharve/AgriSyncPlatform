@@ -206,6 +206,21 @@ describe('buildLabourCorrections', () => {
         expect(buildLabourCorrections(before, after)).toHaveLength(0);
     });
 
+    it('never emits a quantity section when every headcount box was cleared', () => {
+        const before = makeLog([makeLabour({ count: 8 })]);
+        const after = makeLog([makeLabour({ count: undefined, durationHours: 4 })]);
+
+        const corrections = buildLabourCorrections(before, after);
+
+        // Clearing the count is silence, not "nobody worked". The duration still
+        // travels; the quantity section must not, or the server would be asked to
+        // NULL a known headcount. (The server refuses that anyway — this is the
+        // belt to its braces.)
+        expect(corrections).toHaveLength(1);
+        expect(corrections[0].request).not.toHaveProperty('quantity');
+        expect(corrections[0].request.durationHours).toBe(4);
+    });
+
     it('drops a fractional headcount rather than rounding it into the record', () => {
         const before = makeLog([makeLabour({ count: 8 })]);
         const after = makeLog([makeLabour({ count: 8, maleCount: 2.5 })]);

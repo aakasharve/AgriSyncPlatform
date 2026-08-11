@@ -172,6 +172,43 @@ public sealed class LabourCorrectionGateBRealPostgresTests(Xunit.Abstractions.IT
     }
 
     // ─────────────────────────────────────────────────────────────────────────
+    // 0. E3 — PROVE the role, do not merely assume it.
+    // ─────────────────────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Every other [Fact] in this class asserts that RLS and the
+    /// owner/Mukadam-only rule actually bite. All of those become VACUOUS if the
+    /// connection is a superuser or carries BYPASSRLS — the policies would simply
+    /// not be evaluated and the suite would report green while proving nothing.
+    ///
+    /// <para>Connecting AS <c>agrisync_app</c> is not the same as PROVING the
+    /// session has no way around RLS: a future local rotation, a
+    /// <c>GRANT</c> mistake, or a changed bootstrap migration could quietly hand
+    /// this role BYPASSRLS and no existing assertion would notice. This asks
+    /// Postgres directly.</para>
+    /// </summary>
+    [Fact]
+    public async Task The_connection_used_by_this_suite_is_neither_superuser_nor_bypassrls()
+    {
+        await using var app = new NpgsqlConnection(_appConn);
+        await app.OpenAsync();
+
+        var currentUser = (string)(await ScalarAsync(app, "SELECT current_user"))!;
+        var canBypass = (bool)(await ScalarAsync(app,
+            "SELECT rolsuper OR rolbypassrls FROM pg_roles WHERE rolname = current_user"))!;
+
+        currentUser.Should().Be(AppRoleUser);
+        canBypass.Should().BeFalse(
+            "every RLS and authorization assertion in this class is VACUOUS if the session can "
+            + "bypass row-level security — this is the guard that stops the suite silently "
+            + "becoming a no-op");
+
+        output.WriteLine("[EVIDENCE] === 12b.8/0 E3 role guard ===");
+        output.WriteLine($"[EVIDENCE] current_user                = {currentUser} (expect {AppRoleUser})");
+        output.WriteLine($"[EVIDENCE] rolsuper OR rolbypassrls    = {canBypass} (expect False)");
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
     // 1. COUNT — record 8, correct to 6, reload -> 6; history still shows 8 -> 6,
     //    by whom, when. THIS test's history row is the Gate B evidence.
     // ─────────────────────────────────────────────────────────────────────────
@@ -313,6 +350,53 @@ public sealed class LabourCorrectionGateBRealPostgresTests(Xunit.Abstractions.IT
         output.WriteLine("[EVIDENCE] === 12b.8/3 hours 8|Assumed -> 4|Explicit ===");
         output.WriteLine($"[EVIDENCE] duration_hours / time_basis = {hours} / {basis}");
         output.WriteLine($"[EVIDENCE]   {history[0]}");
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // 3b. SILENCE ABOUT THE HEADCOUNT (fix round 1) — an all-absent `quantity`
+    //     section must never NULL a known worker_count. Asserted against real
+    //     rows, because "the column still holds 8" is the fact that matters.
+    // ─────────────────────────────────────────────────────────────────────────
+
+    [Fact]
+    public async Task An_all_null_quantity_section_leaves_worker_count_unchanged_and_writes_no_history_row()
+    {
+        var (_, assignmentId) = await PlantEngagementAsync(FarmA, PlotA, CycleA, workerCount: 8);
+
+        var result = await RunAsync(FarmA, MukadamUserId, new CorrectLabourCommand(
+            new FarmId(FarmA), assignmentId, new UserId(MukadamUserId),
+            DeviceId: "device-gateb", ClientRequestId: "req-all-null-quantity",
+            Reason: "hours only",
+            // The section is PRESENT but says nothing. Sent alongside a real
+            // duration correction so the request is not rejected wholesale.
+            Quantity: new LabourQuantityCorrection(null, null, null),
+            DurationHours: 6m, AttributionAdds: null, AttributionRemovals: null));
+
+        result.IsSuccess.Should().BeTrue();
+
+        await using var read = new NpgsqlConnection(_superuserConn);
+        await read.OpenAsync();
+
+        var workerCount = await ScalarAsync(read,
+            "SELECT worker_count FROM ssf.labour_assignments WHERE \"Id\" = @id", ("id", assignmentId));
+        var hours = Convert.ToDecimal(await ScalarAsync(read,
+            "SELECT duration_hours FROM ssf.labour_assignments WHERE \"Id\" = @id", ("id", assignmentId)));
+
+        workerCount.Should().NotBe(DBNull.Value,
+            "'we were not told' must never be written over '8 people worked' — there is no backfill "
+            + "job in this system, so that write would be permanent");
+        Convert.ToInt32(workerCount).Should().Be(8);
+        hours.Should().Be(6m, "the duration alongside it still applies");
+
+        var history = await ReadHistoryAsync(read, assignmentId);
+        history.Should().ContainSingle("only the duration changed");
+        history[0].ChangedField.Should().Be("DurationHours");
+        history.Should().NotContain(h => h.ChangedField == "WorkerCount");
+
+        output.WriteLine("[EVIDENCE] === 12b.8/3b all-null quantity section ===");
+        output.WriteLine($"[EVIDENCE] worker_count after request  = {workerCount} (expect 8, NOT NULL)");
+        output.WriteLine($"[EVIDENCE] duration_hours              = {hours} (expect 6)");
+        output.WriteLine($"[EVIDENCE] labour_corrections rows     = {history.Count} (expect 1, DurationHours only)");
     }
 
     // ─────────────────────────────────────────────────────────────────────────

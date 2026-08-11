@@ -119,10 +119,36 @@ public sealed class CorrectLabourHandler(
             return Result.Failure<CorrectLabourResult>(ShramSafalErrors.InvalidCommand);
         }
 
+        // SILENCE IS NOT A CORRECTION — the same rule the duration branch obeys
+        // (step 7), applied to the quantity section so the two read alike.
+        //
+        // A `quantity` section whose three values are ALL absent states nothing
+        // about the headcount, so it is folded away to `null` here and the
+        // section is skipped entirely: no mutation, no history row. Passing it
+        // through would reach CorrectHeadcount(null, null, null), which NULLs a
+        // worker_count that held a real number and appends a history row reading
+        // "8 -> null" — a fail-open on the canonical record, and the exact P4
+        // violation ("we were not told" must never be written over "8 people
+        // worked") that the null-preservation logic exists to prevent.
+        //
+        // It is fixed HERE, server-side, rather than at the client, for the same
+        // reason `durationHours: 0` was: a bare HTTP caller is not bound by the
+        // client, so the server must hold the invariant itself.
+        //
+        // Skipped rather than rejected, deliberately: no caller can legitimately
+        // mean "make this headcount unknown". A correction states this WAS X and
+        // IS NOW Y; "is now unknown" is an erasure of a recorded fact, not a
+        // correction of it, and nothing in the V1 surface can express it. A
+        // request carrying ONLY such a section therefore falls through to the
+        // corrects-nothing guard below and is rejected there.
+        var quantity = command.Quantity is null or { WorkerCount: null, MaleCount: null, FemaleCount: null }
+            ? null
+            : command.Quantity;
+
         // A POST to /corrections that corrects nothing is malformed. This is NOT
         // the same as the silence rule: silence within a section (no hours
         // stated) is honoured below by leaving the value alone.
-        if (command.Quantity is null && command.DurationHours is null
+        if (quantity is null && command.DurationHours is null
             && adds.Count == 0 && removals.Count == 0)
         {
             return Result.Failure<CorrectLabourResult>(ShramSafalErrors.InvalidCommand);
@@ -199,13 +225,16 @@ public sealed class CorrectLabourHandler(
         var corrections = new List<LabourCorrection>();
 
         // ── 6. Quantity (12b.2) — all three numbers in ONE operation ─────────
-        if (command.Quantity is { } quantity)
+        // An all-absent section never reaches this block (it was folded to null
+        // in step 1), so a known headcount can never be NULLed by silence —
+        // exactly as an absent DurationHours never reaches step 7.
+        if (quantity is { } stated)
         {
             var beforeWorker = assignment.WorkerCount;
             var beforeMale = assignment.MaleCount;
             var beforeFemale = assignment.FemaleCount;
 
-            assignment.CorrectHeadcount(quantity.WorkerCount, quantity.MaleCount, quantity.FemaleCount);
+            assignment.CorrectHeadcount(stated.WorkerCount, stated.MaleCount, stated.FemaleCount);
 
             AddIfChanged(corrections, command, now, LabourCorrection.FieldWorkerCount,
                 Format(beforeWorker), Format(assignment.WorkerCount), idGenerator);

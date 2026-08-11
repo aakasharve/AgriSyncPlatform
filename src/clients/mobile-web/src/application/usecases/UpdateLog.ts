@@ -76,10 +76,18 @@ export function buildLabourCorrections(
         const workerCount = wholeOrOmitted(event.count);
         const maleCount = wholeOrOmitted(event.maleCount);
         const femaleCount = wholeOrOmitted(event.femaleCount);
+        // At least ONE number must actually be stated before a quantity section
+        // travels. Clearing every headcount box is silence, not "nobody worked" —
+        // the same rule the duration below obeys. Belt and braces only: the server
+        // holds this invariant itself (an all-absent section is skipped there),
+        // because a bare HTTP caller is not bound by this client.
+        const quantityStated =
+            workerCount !== undefined || maleCount !== undefined || femaleCount !== undefined;
         const quantityChanged =
-            workerCount !== wholeOrOmitted(original.count) ||
-            maleCount !== wholeOrOmitted(original.maleCount) ||
-            femaleCount !== wholeOrOmitted(original.femaleCount);
+            quantityStated &&
+            (workerCount !== wholeOrOmitted(original.count) ||
+                maleCount !== wholeOrOmitted(original.maleCount) ||
+                femaleCount !== wholeOrOmitted(original.femaleCount));
 
         // A duration is corrected only when the reviewer STATES a positive one.
         // Clearing the field is silence, not "zero hours worked", so it leaves
