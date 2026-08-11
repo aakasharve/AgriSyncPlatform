@@ -23,6 +23,12 @@
 
 ---
 
+## Doctrine Pointer (read before designing)
+
+**Read `docs/AGRISYNC-DOCTRINE.md` before any architecture, schema, security, trust-ledger, correction, or data-provenance work.** It carries the LOCKED product principles (the Phase Rule, no fabricated numbers, attribution never changes reported quantity, creator ≠ data subject) and the reasoning rules behind them. Its `P` rules outrank a feature plan on matters of principle. Do not copy it here — pointer only, so the two cannot diverge.
+
+For **Labour Management** work specifically, follow the reading order in that document's §6 before proposing anything.
+
 ## Cofounder OS Pointer
 
 All decisions, plans, ADRs, specs, and agent memory live under `_COFOUNDER/` (private nested git repo). Read `_COFOUNDER/CLAUDE.md` next.
