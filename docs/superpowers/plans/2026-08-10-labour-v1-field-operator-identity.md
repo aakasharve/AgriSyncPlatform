@@ -677,7 +677,21 @@ public sealed class FieldOperatorWorkRow : Entity<Guid>
 - [ ] **10.1** Create the domain type. `DisplayNameAtAttach` is a **snapshot**, copied at attach time and never updated (Scenario 7). `FullName` is **not** snapshotted (minimise duplicated PII).
 - [ ] **10.2** EF config: all **three** FKs shadow-style with `.OnDelete(DeleteBehavior.Restrict)` per `CostEntryConfiguration.cs:41-44` — including `farm_id → ssf.farms("Id")`, which B3 requires and V4 omitted; unique index `ux_field_operator_work_rows_operator_assignment` on `(FieldOperatorId, LabourAssignmentId)`; index on `FarmId`.
 - [ ] **10.3** Migration `AddFieldOperatorWorkRows` with the same direct-`farm_id` RLS block as Task 9 and all three RESTRICT FKs (`ssf.labour_assignments("Id")` quoted).
-- [ ] **10.4** **Seeder fallout (A7) — scoped, never blanket.** In `PurveshDemoSeeder`, before the `DailyLogs.RemoveRange` at `:626`, remove `field_operator_work_rows` then `field_operators` **that the seeder itself created**, identified by deterministic seed ids using the same `SeedVersion` idiom the daily-log teardown already uses at `:626-631`. Flush with its own `await _ssfContext.SaveChangesAsync(cancellationToken)` so ordering is explicit (the teardown otherwise flushes once at `:764`, where EF ordering is not guaranteed to satisfy RESTRICT).
+- [ ] **10.4** **Seeder fallout (A7) — scoped, never blanket.** In `PurveshDemoSeeder`, remove `field_operator_work_rows` then `field_operators` **that the seeder itself created**. Flush with its own `await _ssfContext.SaveChangesAsync(cancellationToken)` so ordering is explicit (the teardown otherwise flushes once at `:764`, where EF ordering is not guaranteed to satisfy RESTRICT).
+
+  **[CORRECTED 2026-08-11 — the cited idiom is the wrong one and cannot be copied.]** The daily-log teardown at `:626-631` matches on a **nullable text column**: `l.IdempotencyKey != null && l.IdempotencyKey.StartsWith($"{SeedVersion}:log:")`. Per B2/B3, **neither new table has an `IdempotencyKey` or any seed-taggable text column**, so that idiom is not available. Do **not** improvise a replacement — this code path runs against the founder's only real farm whenever `CLEAR_PURVESH_DEMO=true` (`Program.cs:1025-1046`).
+
+  **Ruling — copy the plot/crop-cycle teardown idiom instead, which is this same file's dominant pattern (~40 uses) and needs no schema support:** build the deterministic id list up front exactly as `:595` / `:598` do —
+```csharp
+var fieldOperatorIds = <seedKeys>
+    .Select(k => CreateDeterministicGuid($"{SeedVersion}:field-operator:{k}"))
+    .ToList();
+```
+  — then `RemoveRange` by that id list, the way `CropCycles` (`:701`) and `Plots` (`:710`) already do. The **creation** side must mint the same ids from the same expression, so identification is by construction rather than by inference.
+
+  **Placement:** insert **before the `var dailyLogs = …` query at `:626`** — **NOT** inside the `if (dailyLogs.Count > 0) { … }` block whose `DailyLogs.RemoveRange` sits at `:635`. Placing it inside that conditional makes field-operator cleanup silently skip whenever there are zero seeded daily logs.
+
+  **Note on 10.4b's limits:** the "throws on non-seed rows" test proves the *throw* path only. It does **not** prove the *identification* path — a wrong identification rule deletes real rows while still passing 10.4b. Add a second assertion: a seeded operator **is** removed and a non-seed operator on the same farm is **untouched** when the throw guard is not tripped.
 
   **If any NON-seed `field_operator` or `field_operator_work_row` exists on that farm, the seeder must THROW** with a named message — never delete it. Constraint 13 says deleting a farm must *fail* rather than destroy identities; an unscoped teardown would quietly do the opposite, on the founder's only real farm, whenever `CLEAR_PURVESH_DEMO=true` (`Program.cs:1025-1046`). The RESTRICT guard is the protection, not the defect.
 - [ ] **10.4b** Test: with a non-seed Field Operator present, `ClearPurveshDemoAsync` **fails loudly** and deletes nothing.
