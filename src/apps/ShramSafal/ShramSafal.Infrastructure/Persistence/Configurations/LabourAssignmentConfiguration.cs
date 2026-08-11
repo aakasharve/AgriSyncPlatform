@@ -44,6 +44,15 @@ internal sealed class LabourAssignmentConfiguration : IEntityTypeConfiguration<L
             .IsRequired();
 
         builder.HasIndex(x => x.DailyLogId).HasDatabaseName("ix_labour_assignments_daily_log_id");
+
+        // Task 1 (spec 2026-07-13-labour-attendance-approval-design) — parent
+        // integrity on the anchor. Shadow FK (neither side has a navigation
+        // property), same idiom as CostEntryConfiguration's CategoryId FK.
+        builder.HasOne<ShramSafal.Domain.Logs.DailyLog>()
+            .WithMany()
+            .HasForeignKey(x => x.DailyLogId)
+            .OnDelete(DeleteBehavior.Cascade);
+
         builder.Ignore(x => x.DomainEvents);
     }
 }
