@@ -4,6 +4,7 @@ using AgriSync.BuildingBlocks.Audit;
 using AgriSync.BuildingBlocks.Results;
 using AgriSync.SharedKernel.Contracts.Roles;
 using ShramSafal.Application.Contracts.Dtos;
+using ShramSafal.Application.Contracts.Sync.Payloads;
 using ShramSafal.Application.Ports;
 using ShramSafal.Application.UseCases.Logs.AddLogTask;
 using ShramSafal.Application.UseCases.Logs.CreateDailyLog;
@@ -70,7 +71,11 @@ public static class LogsEndpoints
                 SourceAiJobId: request.SourceAiJobId,
                 ClientAppVersion: clientAppVersion,
                 AuditDeviceId: auditDeviceId,
-                AuditIpHash: auditIpHash);
+                AuditIpHash: auditIpHash,
+                // Labour V1 Task 5 — both transports move together; pass it
+                // through here (unlike WeatherStamp, which is already stale
+                // on this HTTP path — that drift is not replicated).
+                Labour: request.Labour);
 
             var result = await handler.HandleAsync(command, ct);
             return result.IsSuccess ? Results.Ok(result.Value) : ToErrorResult(result.Error);
@@ -254,7 +259,11 @@ public sealed record CreateDailyLogRequest(
     // Confirmed a voice draft; carries the AiJob.Id from the original parse.
     // Sub-phase 01.6 wires the frontend to send it; until then this stays
     // null and the handler stamps Provenance.Manual().
-    Guid? SourceAiJobId = null);
+    Guid? SourceAiJobId = null,
+    // Labour V1 Task 5 — structured manual labour entries. Both transports
+    // (this HTTP path and /sync/push) move together; unlike WeatherStamp
+    // (already stale on this path) Labour IS threaded through below.
+    IReadOnlyList<LabourItem>? Labour = null);
 
 public sealed record AddLogTaskRequest(
     string ActivityType,

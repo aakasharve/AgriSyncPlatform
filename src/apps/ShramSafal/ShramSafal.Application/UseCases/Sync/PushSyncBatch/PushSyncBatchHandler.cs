@@ -592,7 +592,7 @@ public sealed class PushSyncBatchHandler(
         string? appVersion,
         CancellationToken ct)
     {
-        if (!PayloadHasOnly(payload, "dailyLogId", "farmId", "plotId", "cropCycleId", "operatorUserId", "logDate", "location", "weatherStamp", "sourceAiJobId"))
+        if (!PayloadHasOnly(payload, "dailyLogId", "farmId", "plotId", "cropCycleId", "operatorUserId", "logDate", "location", "weatherStamp", "sourceAiJobId", "labour"))
         {
             return MutationExecutionOutcome.Failure(
                 "ShramSafal.SyncInvalidPayload",
@@ -660,7 +660,10 @@ public sealed class PushSyncBatchHandler(
                 // ledger rows. Null on manual/offline logs (no source job).
                 SourceAiJobId: request.SourceAiJobId,
                 ClientAppVersion: string.IsNullOrWhiteSpace(appVersion) ? "unknown" : appVersion,
-                WeatherStamp: request.WeatherStamp),
+                WeatherStamp: request.WeatherStamp,
+                // Labour V1 Task 5 — transport only; CreateDailyLogHandler does not
+                // persist this yet (Task 6 adds the write path).
+                Labour: request.Labour),
             ct);
 
         return ToOutcome(result);

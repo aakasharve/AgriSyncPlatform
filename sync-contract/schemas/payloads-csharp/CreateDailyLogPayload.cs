@@ -39,6 +39,23 @@ public sealed record WeatherStampItem(
     IReadOnlyList<string>? Alerts = null
 );
 
+public sealed record LabourItem(
+    Guid LabourAssignmentId,
+    string EngagementType,
+    int? MaleCount = null,
+    int? FemaleCount = null,
+    int? WorkerCount = null,
+    decimal? WagePerPerson = null,
+    string? ContractUnit = null,
+    decimal? ContractQuantity = null,
+    decimal? TotalCost = null,
+    Guid? LinkedActivityId = null,
+    string? Shift = null,
+    string? Task = null,
+    string? Notes = null,
+    decimal? DurationHours = null
+);
+
 public sealed record CreateDailyLogPayload(
     Guid DailyLogId,
     Guid FarmId,
@@ -48,5 +65,6 @@ public sealed record CreateDailyLogPayload(
     Guid? OperatorUserId = null,
     LocationItem? Location = null,
     WeatherStampItem? WeatherStamp = null,
-    Guid? SourceAiJobId = null
+    Guid? SourceAiJobId = null,
+    IReadOnlyList<LabourItem>? Labour = null
 );

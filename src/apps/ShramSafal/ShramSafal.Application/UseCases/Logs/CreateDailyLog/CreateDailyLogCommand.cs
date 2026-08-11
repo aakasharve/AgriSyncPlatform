@@ -38,7 +38,13 @@ public sealed record CreateDailyLogCommand(
     // time. Persisted to ssf.weather_stamps by CreateDailyLogHandler on a
     // NON-BLOCKING best-effort basis (a bad/missing stamp never rejects the
     // log). Added at the END so existing callers/tests compile unchanged.
-    WeatherStampItem? WeatherStamp = null)
+    WeatherStampItem? WeatherStamp = null,
+    // Labour V1 Task 5 — structured manual labour entries carried on the
+    // create_daily_log mutation. Transport only: nothing in this task
+    // persists them (Task 6 adds the write path via LabourAssignmentFactory).
+    // Added at the END, after WeatherStamp, so existing positional
+    // construction keeps compiling.
+    IReadOnlyList<LabourItem>? Labour = null)
 {
     public string? IdempotencyKey
     {

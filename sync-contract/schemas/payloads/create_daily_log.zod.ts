@@ -52,6 +52,30 @@ const WeatherStampPayloadSchema = z.object({
     alerts: z.array(z.string()).optional(),
 });
 
+// Labour V1 Task 5 — manual labour transport. Mirrors the fields
+// `LabourAssignmentFactory.FromParsed` (Task 3) and `LabourTime` (Task 4)
+// need on the WRITE path. `labourAssignmentId` is client-minted so it stays
+// stable across replay (A9). `durationHours` is intentionally optional —
+// present means the farmer stated it (server records `Explicit`); absent
+// means the server applies its own default and records `Assumed`. The
+// client must never invent a value here just to fill the field.
+const LabourItemSchema = z.object({
+    labourAssignmentId: ZGuid,
+    engagementType: z.string(),
+    maleCount: z.number().int().optional(),
+    femaleCount: z.number().int().optional(),
+    workerCount: z.number().int().optional(),
+    wagePerPerson: z.number().optional(),
+    contractUnit: z.string().optional(),
+    contractQuantity: z.number().optional(),
+    totalCost: z.number().optional(),
+    linkedActivityId: ZGuid.optional(),
+    shift: z.string().optional(),
+    task: z.string().optional(),
+    notes: z.string().optional(),
+    durationHours: z.number().optional(),
+});
+
 export const CreateDailyLogPayload = z.object({
     dailyLogId: ZGuid,
     farmId: ZGuid,
@@ -68,6 +92,11 @@ export const CreateDailyLogPayload = z.object({
     // ZGuid (not z.string().uuid()) so the C# generator emits a `Guid?` that
     // maps 1:1 onto CreateDailyLogCommand.SourceAiJobId (Guid?).
     sourceAiJobId: ZGuid.optional(),
+    // Labour V1 Task 5 — structured manual labour entries. Task 5 is
+    // transport only: PushSyncBatchHandler widens its allow-list to accept
+    // this key and maps it onto CreateDailyLogCommand.Labour, but nothing
+    // persists it yet (Task 6).
+    labour: z.array(LabourItemSchema).optional(),
 });
 
 export type CreateDailyLogPayloadType = z.infer<typeof CreateDailyLogPayload>;

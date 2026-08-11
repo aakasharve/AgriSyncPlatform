@@ -1144,6 +1144,194 @@ public sealed class SyncEndpointsTests
         Assert.Empty(await harness.GetMachineryUsagesForDailyLogAsync(dailyLogId));
     }
 
+    // Labour V1 Task 5 (spec: 2026-07-13-labour-attendance-approval-design) —
+    // allow-list regression trio for PushSyncBatchHandler.HandleCreateDailyLogAsync's
+    // PayloadHasOnly gate (:595). PayloadHasOnly is a strict allow-list, not a
+    // tolerant deserializer: ONE unrecognised top-level key fails the ENTIRE
+    // mutation with ShramSafal.SyncInvalidPayload before any mapping code runs.
+    // Task 5 widened the list by exactly one key ("labour"); this trio is the
+    // proof, not just of the widening but that it was NOT a general loosening:
+    //   1. a payload WITHOUT labour is still accepted (existing offline logs
+    //      that never send labour must keep working);
+    //   2. a payload WITH labour is now accepted (the new key opens);
+    //   3. a payload with an UNRELATED unknown field is still REJECTED
+    //      (proves the check is still a real allow-list, not weakened wholesale).
+
+    [Fact]
+    public async Task CreateDailyLog_WithoutLabour_IsAccepted()
+    {
+        await using var harness = await TestHarness.CreateAsync();
+        var farmId = Guid.NewGuid();
+        var plotId = Guid.NewGuid();
+        var cropCycleId = Guid.NewGuid();
+        var dailyLogId = Guid.NewGuid();
+
+        await PushCreateFarmAsync(harness.Client, "device-allowlist-a", "req-farm-allowlist-a", farmId, "Allow-list Farm A");
+
+        var response = await harness.Client.PostAsJsonAsync("/sync/push", new
+        {
+            deviceId = "device-allowlist-a",
+            mutations = new object[]
+            {
+                new
+                {
+                    clientRequestId = "req-plot-allowlist-a",
+                    mutationType = "create_plot",
+                    payload = new { plotId, farmId, name = "Allow-list Plot A", areaInAcres = 1m }
+                },
+                new
+                {
+                    clientRequestId = "req-cycle-allowlist-a",
+                    mutationType = "create_crop_cycle",
+                    payload = new { cropCycleId, farmId, plotId, cropName = "Grapes", stage = "Growth", startDate = "2026-02-21" }
+                },
+                new
+                {
+                    // No `labour` key at all — the pre-Task-5 wire shape.
+                    clientRequestId = "req-log-allowlist-a",
+                    mutationType = "create_daily_log",
+                    payload = new { dailyLogId, farmId, plotId, cropCycleId, logDate = "2026-02-22" }
+                }
+            }
+        });
+
+        response.EnsureSuccessStatusCode();
+        using var doc = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        var logResult = doc.RootElement.GetProperty("results").EnumerateArray()
+            .Single(x => x.GetProperty("clientRequestId").GetString() == "req-log-allowlist-a");
+        Assert.Equal("applied", logResult.GetProperty("status").GetString());
+        Assert.True(await harness.DailyLogExistsAsync(dailyLogId));
+    }
+
+    [Fact]
+    public async Task CreateDailyLog_WithLabour_IsAccepted()
+    {
+        await using var harness = await TestHarness.CreateAsync();
+        var farmId = Guid.NewGuid();
+        var plotId = Guid.NewGuid();
+        var cropCycleId = Guid.NewGuid();
+        var dailyLogId = Guid.NewGuid();
+        var labourAssignmentId = Guid.NewGuid();
+
+        await PushCreateFarmAsync(harness.Client, "device-allowlist-b", "req-farm-allowlist-b", farmId, "Allow-list Farm B");
+
+        var response = await harness.Client.PostAsJsonAsync("/sync/push", new
+        {
+            deviceId = "device-allowlist-b",
+            mutations = new object[]
+            {
+                new
+                {
+                    clientRequestId = "req-plot-allowlist-b",
+                    mutationType = "create_plot",
+                    payload = new { plotId, farmId, name = "Allow-list Plot B", areaInAcres = 1m }
+                },
+                new
+                {
+                    clientRequestId = "req-cycle-allowlist-b",
+                    mutationType = "create_crop_cycle",
+                    payload = new { cropCycleId, farmId, plotId, cropName = "Grapes", stage = "Growth", startDate = "2026-02-21" }
+                },
+                new
+                {
+                    // Carries the new `labour` array — this is the key Task 5 added
+                    // to the allow-list.
+                    clientRequestId = "req-log-allowlist-b",
+                    mutationType = "create_daily_log",
+                    payload = new
+                    {
+                        dailyLogId,
+                        farmId,
+                        plotId,
+                        cropCycleId,
+                        logDate = "2026-02-22",
+                        labour = new object[]
+                        {
+                            new
+                            {
+                                labourAssignmentId,
+                                engagementType = "hired_daily",
+                                maleCount = 2,
+                                femaleCount = 3,
+                                wagePerPerson = 350m,
+                                task = "harvesting",
+                                durationHours = 6m
+                            }
+                        }
+                    }
+                }
+            }
+        });
+
+        response.EnsureSuccessStatusCode();
+        using var doc = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        var logResult = doc.RootElement.GetProperty("results").EnumerateArray()
+            .Single(x => x.GetProperty("clientRequestId").GetString() == "req-log-allowlist-b");
+        Assert.Equal("applied", logResult.GetProperty("status").GetString());
+        Assert.True(await harness.DailyLogExistsAsync(dailyLogId));
+
+        // Task 5 is transport only — the payload is accepted and threaded onto
+        // CreateDailyLogCommand.Labour, but nothing persists it yet (Task 6).
+        Assert.Empty(await harness.GetLabourAssignmentsForDailyLogAsync(dailyLogId));
+    }
+
+    [Fact]
+    public async Task CreateDailyLog_WithUnknownField_IsRejected()
+    {
+        await using var harness = await TestHarness.CreateAsync();
+        var farmId = Guid.NewGuid();
+        var plotId = Guid.NewGuid();
+        var cropCycleId = Guid.NewGuid();
+        var dailyLogId = Guid.NewGuid();
+
+        await PushCreateFarmAsync(harness.Client, "device-allowlist-c", "req-farm-allowlist-c", farmId, "Allow-list Farm C");
+
+        var response = await harness.Client.PostAsJsonAsync("/sync/push", new
+        {
+            deviceId = "device-allowlist-c",
+            mutations = new object[]
+            {
+                new
+                {
+                    clientRequestId = "req-plot-allowlist-c",
+                    mutationType = "create_plot",
+                    payload = new { plotId, farmId, name = "Allow-list Plot C", areaInAcres = 1m }
+                },
+                new
+                {
+                    clientRequestId = "req-cycle-allowlist-c",
+                    mutationType = "create_crop_cycle",
+                    payload = new { cropCycleId, farmId, plotId, cropName = "Grapes", stage = "Growth", startDate = "2026-02-21" }
+                },
+                new
+                {
+                    // `notARealField` is not on PayloadHasOnly's list — proves the
+                    // check still rejects truly unknown fields rather than having
+                    // been loosened wholesale to admit `labour`.
+                    clientRequestId = "req-log-allowlist-c",
+                    mutationType = "create_daily_log",
+                    payload = new
+                    {
+                        dailyLogId,
+                        farmId,
+                        plotId,
+                        cropCycleId,
+                        logDate = "2026-02-22",
+                        notARealField = "nope"
+                    }
+                }
+            }
+        });
+
+        response.EnsureSuccessStatusCode();
+        using var doc = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        var logResult = doc.RootElement.GetProperty("results").EnumerateArray()
+            .Single(x => x.GetProperty("clientRequestId").GetString() == "req-log-allowlist-c");
+        Assert.Equal("failed", logResult.GetProperty("status").GetString());
+        Assert.Equal("ShramSafal.SyncInvalidPayload", logResult.GetProperty("errorCode").GetString());
+        Assert.False(await harness.DailyLogExistsAsync(dailyLogId));
+    }
+
     [Fact]
     public async Task CreateAttachment_RejectsCrossFarmEntityLink()
     {
