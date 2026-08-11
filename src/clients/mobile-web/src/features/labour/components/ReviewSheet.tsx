@@ -19,11 +19,13 @@
  * pending batch is FLUSHED (sent immediately) rather than silently dropped
  * — see `flushAllPending`.
  */
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { X, Check, MessageSquare, Undo2 } from 'lucide-react';
 import type { LabourData, ReviewItem, ReviewVerificationStatus } from '../labourMock';
+import type { DailyLog } from '../../../types';
 import { Avatar, HelpNote } from './LabourUiKit';
 import LabourDataPoints from './LabourDataPoints';
+import FieldOperatorPicker from './FieldOperatorPicker';
 import { VerifyLogCommand } from '../../../application/usecases/sync/VerifyLogCommand';
 import { backgroundSyncWorker } from '../../../infrastructure/sync/BackgroundSyncWorker';
 import { formatReviewDetail, isReviewDetailWithinDays } from '../reviewDetailDate';
@@ -44,6 +46,22 @@ interface Props {
      * the badge must not still say 76 after the queue is cleared).
      */
     onApproved?: () => void;
+    /**
+     * Labour V1 Task 13 — the farm whose engagements are being attributed.
+     * Optional: `LabourPreview.tsx`'s bare `?preview=labour` mount has no
+     * farm context at all, and without a farm there is no Field Operator
+     * roster to pick from, so the picker simply does not render there.
+     */
+    farmId?: string;
+    /**
+     * Labour V1 Task 13 — the device's own logs, used for ONE thing: mapping
+     * a review card (a `dailyLogId`) to the `labourAssignmentId` Task 7.3
+     * minted for its engagement. The server read-model (`LabourReviewItemDto`)
+     * does not carry that id, and attach is addressed by ENGAGEMENT, not by
+     * log — see `assignmentIdByLogId` below for what happens when the mapping
+     * is absent or not unique (answer: no picker, and still no nag).
+     */
+    history?: DailyLog[];
 }
 
 const DISPUTE_REASON = 'मालकाने या नोंदीवर शंका घेतली आहे — कामगाराला विचारायचं आहे.';
@@ -182,7 +200,7 @@ const ConfirmOverlay: React.FC<{ kind: ConfirmKind }> = ({ kind }) => (
     </div>
 );
 
-const ReviewSheet: React.FC<Props> = ({ open, data, onClose, onToast, onApproved }) => {
+const ReviewSheet: React.FC<Props> = ({ open, data, onClose, onToast, onApproved, farmId, history }) => {
     const [gone, setGone] = useState<Record<string, boolean>>({});
     const [confirming, setConfirming] = useState<Record<string, ConfirmKind>>({});
     const [undoQueue, setUndoQueue] = useState<UndoEntry[]>([]);
@@ -198,6 +216,30 @@ const ReviewSheet: React.FC<Props> = ({ open, data, onClose, onToast, onApproved
     // bare ISO date; anything unparseable (mock/preview) passes through.
     const boundedReview = data.review.filter((i) => isReviewDetailWithinDays(i.detail, REVIEW_QUEUE_MAX_AGE_DAYS));
     const items = boundedReview.filter((i) => !gone[i.id]);
+    /**
+     * Labour V1 Task 13 — `dailyLogId -> labourAssignmentId`, and ONLY for a
+     * log that carries EXACTLY ONE labour engagement.
+     *
+     * Attach is addressed by engagement (`AttachFieldOperatorCommand` takes a
+     * `LabourAssignmentId`), and a log may legitimately carry several — two
+     * gangs on one day, say. Picking "the first one" for a farmer who tapped
+     * बाळू would attribute him to an engagement he was never in, which is the
+     * same class of error as merging two people with the same name. So a
+     * multi-engagement log (and a log with none) gets NO picker at all — and,
+     * per P9, no explanation, no warning and no nag either. The V1 limitation
+     * is silence, not a prompt.
+     */
+    const assignmentIdByLogId = useMemo(() => {
+        const map = new Map<string, string>();
+        (history ?? []).forEach((log) => {
+            const ids = (log.labour ?? [])
+                .map((event) => event.labourAssignmentId)
+                .filter((id): id is string => typeof id === 'string' && id.length > 0);
+            if (ids.length === 1) map.set(log.id, ids[0]);
+        });
+        return map;
+    }, [history]);
+
     // Excludes cards still mid-confirm-animation from THIS render's bulk
     // target — otherwise a fast मंजूर-then-सगळं-मंजूर double-tap could fold
     // the same card into two independent pending batches (double-send).
@@ -445,6 +487,7 @@ const ReviewSheet: React.FC<Props> = ({ open, data, onClose, onToast, onApproved
                     )}
                     {items.map((it) => {
                         const kind = confirming[it.id];
+                        const assignmentId = assignmentIdByLogId.get(it.id);
                         // `shrink-0` below is load-bearing, not cosmetic. This shell is a
                         // flex item inside a `flex flex-col overflow-y-auto` parent, where
                         // the default `flex-shrink: 1` makes children COMPRESS to fit
@@ -484,6 +527,18 @@ const ReviewSheet: React.FC<Props> = ({ open, data, onClose, onToast, onApproved
                                         <button type="button" data-testid={`review-approve-${it.id}`} disabled={!!kind} onClick={() => approve(it.id)} className="flex min-h-[60px] flex-1 items-center justify-center gap-2.5 rounded-xl bg-emerald-600 py-3.5 text-[19px] font-extrabold text-white active:scale-[0.98] disabled:opacity-60"><Check size={24} strokeWidth={2.6} /> मंजूर</button>
                                         <button type="button" data-testid={`review-query-${it.id}`} disabled={!!kind} onClick={() => query(it.id)} className="flex min-h-[60px] w-[112px] flex-shrink-0 items-center justify-center gap-2 rounded-xl border-2 border-stone-200 bg-white py-3.5 text-[19px] font-bold text-stone-600 active:scale-[0.98] disabled:opacity-60"><MessageSquare size={20} /> शंका</button>
                                     </div>
+                                    {/*
+                                      * Labour V1 Task 13 — the attribution
+                                      * overlay, BELOW मंजूर/शंका on purpose:
+                                      * approving is the card's job and stays
+                                      * first, so naming people can never read
+                                      * as a step the farmer owes before he can
+                                      * approve. See FieldOperatorPicker's
+                                      * header for the P9 guarantees it holds.
+                                      */}
+                                    {farmId && assignmentId && (
+                                        <FieldOperatorPicker farmId={farmId} labourAssignmentId={assignmentId} onToast={onToast} />
+                                    )}
                                     {kind && <ConfirmOverlay kind={kind} />}
                                 </div>
                             </div>

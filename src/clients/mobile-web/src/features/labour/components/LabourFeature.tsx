@@ -153,7 +153,12 @@ export const LabourFeature: React.FC<{
                 )}
             </div>
 
-            <ReviewSheet open={reviewOpen} data={data} onClose={() => setReviewOpen(false)} onToast={showToast} onApproved={refresh} />
+            {/* `farmId` + `history` (Labour V1 Task 13) are what let a review
+                card offer the OPTIONAL Field Operator picker: the farm the
+                roster belongs to, and the local log the engagement id was
+                minted on. Both already exist here; neither is required, and
+                without them the sheet renders exactly as it did before. */}
+            <ReviewSheet open={reviewOpen} data={data} onClose={() => setReviewOpen(false)} onToast={showToast} onApproved={refresh} farmId={farm?.farmId} history={history} />
 
             {farm && (
                 <FarmInviteQrSheet

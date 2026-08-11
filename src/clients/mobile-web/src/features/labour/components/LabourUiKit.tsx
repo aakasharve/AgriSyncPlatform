@@ -34,8 +34,12 @@ export const Avatar: React.FC<{ tone: AvatarTone; initial: string; size?: 'sm' |
  * workers / no money" (the data underneath is EMPTY_LABOUR_DATA, never
  * LABOUR_MOCK). Money-safety companion to the hook's `error` flag.
  */
-export const LoadErrorBanner: React.FC<{ onRetry: () => void }> = ({ onRetry }) => (
-    <div className="mx-4 mt-2 flex items-center justify-between gap-3 rounded-[18px] border border-rose-100 bg-rose-50 px-3.5 py-3">
+export const LoadErrorBanner: React.FC<{ onRetry: () => void; compact?: boolean }> = ({ onRetry, compact }) => (
+    // `compact` (Labour V1 Task 13) drops the SCREEN-level gutters so the same
+    // banner can sit inside a card — FieldOperatorPicker's roster fetch — rather
+    // than a second, parallel error banner being hand-rolled beside this one.
+    // Nothing else changes, so every existing caller renders byte-identically.
+    <div className={`${compact ? '' : 'mx-4 mt-2 '}flex items-center justify-between gap-3 rounded-[18px] border border-rose-100 bg-rose-50 px-3.5 py-3`}>
         <div className="flex min-w-0 items-center gap-2.5">
             <span className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full bg-white text-rose-500 ring-1 ring-rose-100">
                 <CloudOff size={17} />
@@ -61,8 +65,11 @@ export const GroupLabel: React.FC<{ children: React.ReactNode }> = ({ children }
  * never show a confident ₹0 they haven't verified against the server; this
  * is what stands in its place until the real numbers arrive.
  */
-export const LoadingState: React.FC<{ label?: string }> = ({ label = 'माहिती आणत आहोत…' }) => (
-    <div className="flex flex-col items-center justify-center gap-3 px-6 py-24 text-center">
+export const LoadingState: React.FC<{ label?: string; compact?: boolean }> = ({ label = 'माहिती आणत आहोत…', compact }) => (
+    // `compact` (Labour V1 Task 13) trades the full-screen padding for card
+    // padding so an in-card fetch (FieldOperatorPicker's roster) reuses THIS
+    // primitive instead of growing a second spinner. Default unchanged.
+    <div className={`flex flex-col items-center justify-center gap-3 text-center ${compact ? 'px-4 py-6' : 'px-6 py-24'}`}>
         <Loader2 size={28} className="animate-spin text-emerald-600" />
         <p className="text-[13px] font-bold text-slate-500">{label}</p>
     </div>
