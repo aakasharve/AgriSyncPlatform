@@ -677,4 +677,55 @@ public interface IShramSafalRepository
     /// </summary>
     Task<bool> TryAddFieldOperatorWorkRowAsync(FieldOperatorWorkRow r, CancellationToken ct = default)
         => Task.FromResult(true);
+
+    // --- Labour review & correction (Task 12b, spec: 2026-07-13-labour-attendance-approval-design) ---
+    // Same A10 rule as the Task 11 block above: every member ships a DEFAULT
+    // body. IShramSafalRepository has 28 implementors and an abstract member
+    // here produces ~135 compile errors across the test tree. Production
+    // ShramSafalRepository overrides all three.
+
+    /// <summary>
+    /// Stage an APPEND-ONLY <see cref="LabourCorrection"/> row. No SaveChanges —
+    /// the caller commits it in the SAME unit of work as the in-place mutation
+    /// of the <see cref="LabourAssignment"/> it explains. There is deliberately
+    /// no update or delete counterpart: correction history that can itself be
+    /// rewritten proves nothing.
+    /// </summary>
+    Task AddLabourCorrectionAsync(LabourCorrection c, CancellationToken ct = default)
+        => Task.CompletedTask;
+
+    /// <summary>
+    /// The LIVE attribution set for one engagement — every
+    /// <see cref="FieldOperatorWorkRow"/> currently pointing at it.
+    /// <b>NOT farm-scoped by itself</b>, for the same reason as
+    /// <see cref="GetLabourAssignmentByIdAsync"/>: <c>p_user_select_field_operator_work_rows</c>
+    /// is a PERMISSIVE RLS policy OR-ed with the tenant policy, so a multi-farm
+    /// caller can see rows outside the farm established for this request.
+    /// Callers must assert the parent engagement's farm first.
+    /// </summary>
+    Task<IReadOnlyList<FieldOperatorWorkRow>> GetFieldOperatorWorkRowsForAssignmentAsync(
+        Guid labourAssignmentId, CancellationToken ct = default)
+        => Task.FromResult<IReadOnlyList<FieldOperatorWorkRow>>([]);
+
+    /// <summary>
+    /// Stage the removal of one attribution row. No SaveChanges — the caller
+    /// commits it together with the <see cref="LabourCorrection"/> that records
+    /// WHICH operator was removed, so the deletion can never commit without its
+    /// explanation (Task 12b.4).
+    /// </summary>
+    Task RemoveFieldOperatorWorkRowAsync(FieldOperatorWorkRow r, CancellationToken ct = default)
+        => Task.CompletedTask;
+
+    /// <summary>
+    /// STAGE-ONLY sibling of <see cref="TryAddFieldOperatorWorkRowAsync"/>. That
+    /// one commits immediately (Task 11's attach route needs the real outcome
+    /// before it answers the farmer); a correction cannot use it, because the
+    /// added attribution and the <see cref="LabourCorrection"/> explaining it
+    /// must reach the database in ONE unit of work. The unique index
+    /// <c>ux_field_operator_work_rows_operator_assignment</c> remains the
+    /// backstop; the correction handler pre-filters operators that are already
+    /// attributed, so the ordinary re-add is a no-op rather than a violation.
+    /// </summary>
+    Task AddFieldOperatorWorkRowAsync(FieldOperatorWorkRow r, CancellationToken ct = default)
+        => Task.CompletedTask;
 }

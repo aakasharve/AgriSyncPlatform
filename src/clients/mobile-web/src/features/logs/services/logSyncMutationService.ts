@@ -137,7 +137,7 @@ function buildTaskPayloads(log: DailyLog): LogTaskMutationPayload[] {
  * with a bare `parseFloat(e.target.value)` and no fallback, and `parseFloat('')`
  * is NaN, so simply CLEARING a money field produces one.
  */
-function finiteOrOmitted(value: number | undefined): number | undefined {
+export function finiteOrOmitted(value: number | undefined): number | undefined {
     return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
 }
 
@@ -153,7 +153,7 @@ function finiteOrOmitted(value: number | undefined): number | undefined {
  * failure this whole plan exists to remove. The log still saves either way.
  * `Number.isInteger` is already false for NaN and ±Infinity.
  */
-function wholeOrOmitted(value: number | undefined): number | undefined {
+export function wholeOrOmitted(value: number | undefined): number | undefined {
     return typeof value === 'number' && Number.isInteger(value) ? value : undefined;
 }
 
@@ -245,20 +245,47 @@ function buildLabourPayloads(log: DailyLog): LabourItemPayload[] {
     });
 }
 
-async function resolveSyncTarget(log: DailyLog): Promise<ResolvedLogSyncTarget | null> {
-    const selection = log.context.selection?.[0];
-    const plotId = selection?.selectedPlotIds?.[0];
+/**
+ * The log's first selected plot, resolved out of Dexie. `null` when the log
+ * carries no plot selection or the plot has not synced down yet — the two
+ * reasons a log has no resolvable farm.
+ */
+async function resolveLogPlot(log: DailyLog): Promise<{ plotId: string; payload: PlotDto } | null> {
+    const plotId = log.context.selection?.[0]?.selectedPlotIds?.[0];
     if (!plotId) {
         return null;
     }
 
-    const db = getDatabase();
-    const plotRecord = await db.plots.get(plotId);
+    const plotRecord = await getDatabase().plots.get(plotId);
     if (!plotRecord) {
         return null;
     }
 
-    const plotPayload = plotRecord.payload as PlotDto;
+    return { plotId, payload: plotRecord.payload as PlotDto };
+}
+
+/**
+ * Labour V1 Task 12b.7 — the farm a log belongs to, for the farm-scoped
+ * correction route (`POST /farms/{farmId}/labour/assignments/{id}/corrections`).
+ *
+ * Deliberately narrower than `resolveSyncTarget`: a correction needs only the
+ * farm, and requiring a resolvable CROP CYCLE as well would refuse to correct a
+ * headcount on a log whose cycle has since ended.
+ */
+export async function resolveLogFarmId(log: DailyLog): Promise<string | null> {
+    const plot = await resolveLogPlot(log);
+    return plot?.payload.farmId ?? null;
+}
+
+async function resolveSyncTarget(log: DailyLog): Promise<ResolvedLogSyncTarget | null> {
+    const selection = log.context.selection?.[0];
+    const plot = await resolveLogPlot(log);
+    if (!plot) {
+        return null;
+    }
+
+    const { plotId, payload: plotPayload } = plot;
+    const db = getDatabase();
     const cropName = normalizeName(selection?.cropName);
 
     const cycleRecords = await db.cropCycles.where('plotId').equals(plotId).toArray();

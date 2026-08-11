@@ -123,4 +123,13 @@ internal abstract class StubShramSafalRepository : IShramSafalRepository
     public virtual Task<LabourAssignment?> GetLabourAssignmentByIdAsync(Guid id, CancellationToken ct = default) => Task.FromResult<LabourAssignment?>(null);
     public virtual Task<IReadOnlyList<FieldOperator>> GetFieldOperatorsForFarmAsync(FarmId farmId, CancellationToken ct = default) => Task.FromResult<IReadOnlyList<FieldOperator>>([]);
     public virtual Task<bool> TryAddFieldOperatorWorkRowAsync(FieldOperatorWorkRow r, CancellationToken ct = default) => Task.FromResult(true);
+
+    // Task 12b — restated here for the SAME reason as the Task 11 block above:
+    // an interface DEFAULT implementation is not a virtual class member, so a
+    // FakeRepo subclass could not override it and every override would silently
+    // no-op instead of failing to compile.
+    public virtual Task AddLabourCorrectionAsync(LabourCorrection c, CancellationToken ct = default) => Task.CompletedTask;
+    public virtual Task<IReadOnlyList<FieldOperatorWorkRow>> GetFieldOperatorWorkRowsForAssignmentAsync(Guid labourAssignmentId, CancellationToken ct = default) => Task.FromResult<IReadOnlyList<FieldOperatorWorkRow>>([]);
+    public virtual Task RemoveFieldOperatorWorkRowAsync(FieldOperatorWorkRow r, CancellationToken ct = default) => Task.CompletedTask;
+    public virtual Task AddFieldOperatorWorkRowAsync(FieldOperatorWorkRow r, CancellationToken ct = default) => Task.CompletedTask;
 }

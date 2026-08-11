@@ -738,6 +738,22 @@ public static class DependencyInjection
                 IReadOnlyList<ShramSafal.Application.Contracts.Dtos.FieldOperatorSummaryDto>>,
             ShramSafal.Application.UseCases.Labour.GetFieldOperators.GetFieldOperatorsHandler>();
 
+        // Task 12b (spec: 2026-07-13-labour-attendance-approval-design) — GATE B
+        // labour review & correction. Same registration shape as the four
+        // handlers above (no IAuthorizationCheck<>/IValidator<> exist for it):
+        // the farm-scope gate lives in the endpoint via ICallerFarmTenantScope,
+        // and the owner/Mukadam ROLE gate lives inside the handler so it holds
+        // on any future non-HTTP entry point. It resolves ISyncMutationStore —
+        // registered scoped in ShramSafal.Infrastructure's DependencyInjection
+        // against the SAME scoped ShramSafalDbContext this handler's repository
+        // uses, which is what lets the dedupe row and the correction land in one
+        // unit of work (Task 12b.6).
+        services.AddScoped<
+            AgriSync.BuildingBlocks.Application.IHandler<
+                ShramSafal.Application.UseCases.Labour.CorrectLabour.CorrectLabourCommand,
+                ShramSafal.Application.UseCases.Labour.CorrectLabour.CorrectLabourResult>,
+            ShramSafal.Application.UseCases.Labour.CorrectLabour.CorrectLabourHandler>();
+
         // T-IGH-03-PIPELINE-ROLLOUT (CompleteJobCard): caller-shape
         // validation + job-card-existence + farm-membership authorization.
         // The endpoint (POST /job-cards/{id}/complete) AND the sync entry

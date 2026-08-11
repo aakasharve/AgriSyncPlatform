@@ -143,6 +143,11 @@ public sealed class ShramSafalDbContext(DbContextOptions<ShramSafalDbContext> op
     // attribution overlay: WHO worked a given LabourAssignment. Never the work
     // itself, and never a source of headcount (Constraint 3).
     public DbSet<FieldOperatorWorkRow> FieldOperatorWorkRows => Set<FieldOperatorWorkRow>();
+
+    // spec: 2026-07-13-labour-attendance-approval-design (Labour V1, Task 12b) —
+    // APPEND-ONLY correction history. LabourAssignment answers "what is true
+    // now"; this answers "what did it say before, who changed it, when".
+    public DbSet<LabourCorrection> LabourCorrections => Set<LabourCorrection>();
     public DbSet<MachineryUsage> MachineryUsages => Set<MachineryUsage>();
     public DbSet<ObservationEvent> ObservationEvents => Set<ObservationEvent>();
     public DbSet<DisturbanceEvent> DisturbanceEvents => Set<DisturbanceEvent>();

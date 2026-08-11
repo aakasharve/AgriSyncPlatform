@@ -1,10 +1,12 @@
 using System.Security.Claims;
 using AgriSync.BuildingBlocks.Application;
+using AgriSync.BuildingBlocks.Audit;
 using AgriSync.BuildingBlocks.Results;
 using AgriSync.SharedKernel.Contracts.Ids;
 using ShramSafal.Application.Contracts.Dtos;
 using ShramSafal.Application.Ports;
 using ShramSafal.Application.UseCases.Labour.AttachFieldOperator;
+using ShramSafal.Application.UseCases.Labour.CorrectLabour;
 using ShramSafal.Application.UseCases.Labour.CreateFieldOperator;
 using ShramSafal.Application.UseCases.Labour.GetFieldOperators;
 using ShramSafal.Application.UseCases.Labour.GetLabourData;
@@ -198,6 +200,65 @@ public static class LabourEndpoints
         .WithName("GetFieldOperatorsForFarm")
         .RequireAuthorization();
 
+        // ── Task 12b (spec: 2026-07-13-labour-attendance-approval-design) —
+        // GATE B: labour review & correction. Farm-scoped and gated EXACTLY as
+        // every route above: ICallerFarmTenantScope.EstablishForCallerAsync is
+        // the sole gate here and is what sets the agrisync.farm_id GUC that
+        // ssf.labour_corrections' tenant policy reads. Like its siblings it is
+        // deliberately NOT added to TenantTransactionMiddleware.SkipPathPrefixes
+        // — see the banner at the top of this file for why every
+        // CallerFarmTenantScope consumer needs the ambient transaction.
+        //
+        // ROLE GATING LIVES IN THE HANDLER, not here. EstablishForCallerAsync
+        // proves membership, not authority: a Worker is a member. The
+        // owner/Mukadam-only rule is CorrectLabourHandler's, so it holds on any
+        // future non-HTTP entry point too.
+        group.MapPost("/farms/{farmId:guid}/labour/assignments/{id:guid}/corrections", async Task<IResult> (
+            Guid farmId,
+            Guid id,
+            CorrectLabourRequest request,
+            ClaimsPrincipal user,
+            HttpContext httpContext,
+            IHandler<CorrectLabourCommand, CorrectLabourResult> handler,
+            ICallerFarmTenantScope scope,
+            CancellationToken ct) =>
+        {
+            if (!EndpointActorContext.TryGetUserId(user, out var userId))
+            {
+                return Results.Unauthorized();
+            }
+
+            var scopeResult = await scope.EstablishForCallerAsync(farmId, userId, ct);
+            if (!scopeResult.IsSuccess)
+            {
+                return ToErrorResult(scopeResult.Error);
+            }
+
+            // The device half of the idempotency key comes from the X-Device-Id
+            // header the shared client already sends on every request
+            // (AuditContextMiddleware stamps it). Reusing it means a correction
+            // needs no new client-side identity plumbing, and it is the same
+            // device scope /sync/push dedupes on.
+            var (deviceId, _) = httpContext.AuditClaims();
+
+            var command = new CorrectLabourCommand(
+                new FarmId(farmId),
+                id,
+                new UserId(userId),
+                deviceId,
+                request.ClientRequestId,
+                request.Reason,
+                request.Quantity,
+                request.DurationHours,
+                request.AttributionAdds,
+                request.AttributionRemovals);
+
+            var result = await handler.HandleAsync(command, ct);
+            return result.IsSuccess ? Results.Ok(result.Value) : ToErrorResult(result.Error);
+        })
+        .WithName("CorrectLabourAssignment")
+        .RequireAuthorization();
+
         return group;
     }
 
@@ -229,3 +290,25 @@ public sealed record AttachFieldOperatorRequest(Guid LabourAssignmentId);
 
 /// <summary>Task 11 — PATCH /farms/{farmId}/labour/field-operators/{id} body.</summary>
 public sealed record RenameFieldOperatorRequest(string DisplayName);
+
+/// <summary>
+/// Task 12b — POST /farms/{farmId}/labour/assignments/{id}/corrections body.
+///
+/// <para>Every correctable section is OPTIONAL and ABSENCE MEANS SILENCE: omit
+/// <c>durationHours</c> and the engagement's existing <c>Assumed</c> hours are
+/// left untouched with no history row written. Omit <c>quantity</c> and the
+/// headcount is not touched at all. A body that corrects nothing is rejected.</para>
+///
+/// <para><c>clientRequestId</c> is REQUIRED — together with the caller's
+/// <c>X-Device-Id</c> it is the idempotency key that makes a retried correction
+/// yield ONE logical correction rather than a second set of history rows. It
+/// reuses <c>LabourQuantityCorrection</c> from the Application layer rather than
+/// mirroring it, so the wire shape cannot drift from the command.</para>
+/// </summary>
+public sealed record CorrectLabourRequest(
+    string ClientRequestId,
+    string? Reason,
+    LabourQuantityCorrection? Quantity,
+    decimal? DurationHours,
+    IReadOnlyList<Guid>? AttributionAdds,
+    IReadOnlyList<Guid>? AttributionRemovals);

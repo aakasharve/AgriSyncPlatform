@@ -118,4 +118,80 @@ public sealed class LabourAssignment : Entity<Guid>
                wagePerPerson, contractUnit, contractQuantity, totalCost, linkedActivityId, createdAtUtc, time,
                shift, task, workerNamesJson);
     }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // CORRECTION (Task 12b.1b, spec: 2026-07-13-labour-attendance-approval-design)
+    //
+    // "Mutated in place" is what makes a correction visible to every reader
+    // without any of them knowing corrections exist. Before this task the class
+    // had no mutator at all, so that was not expressible — which invites a later
+    // implementer to widen the property setters instead. These are the ONLY two
+    // mutators, they are intention-named, and there is deliberately no
+    // general-purpose Update: the correctable surface is exactly labour
+    // quantity and duration, and nothing else may move.
+    //
+    // NEITHER TRIPS THE SINGLE-PRODUCER PIN. LabourAnchorRules.
+    // LabourAssignment_is_constructed_in_exactly_one_production_file matches the
+    // literal string "LabourAssignment.Create(" — these methods call no factory
+    // and construct nothing, so the pin stays green and stays MEANINGFUL. Do not
+    // "fix" the pin to also cover correction: correction is not construction,
+    // and a pin widened to catch it would fire on this very file.
+    // ─────────────────────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Task 12b.2 — corrects the headcount, all three numbers TOGETHER in one
+    /// operation, so the row can never land in a contradictory state such as
+    /// <c>WorkerCount=6, Male=5, Female=4</c>.
+    ///
+    /// <para><b>Silence stays NULL (P4).</b> When none of the three is stated
+    /// the count is preserved as <c>null</c> — "we were not told" — rather than
+    /// resolved to a fabricated <c>0</c>. This mirrors
+    /// <c>LabourAssignmentFactory.FromParsed</c> exactly, so a corrected row and
+    /// a freshly recorded row obey the same rule. An explicitly stated 0 still
+    /// stores 0 and stays distinguishable from silence.</para>
+    /// </summary>
+    public void CorrectHeadcount(int? workerCount, int? maleCount, int? femaleCount)
+    {
+        // The split is stored exactly as stated; only the total is resolved.
+        MaleCount = maleCount;
+        FemaleCount = femaleCount;
+        WorkerCount = (workerCount ?? maleCount ?? femaleCount) is null
+            ? null
+            : LabourHeadcount.Resolve(workerCount, maleCount, femaleCount);
+    }
+
+    /// <summary>
+    /// Task 12b.3 — corrects the duration and its basis ATOMICALLY.
+    ///
+    /// <para>It takes a <see cref="LabourTime"/>, never a bare
+    /// <c>decimal</c>, precisely so <see cref="DurationHours"/> can never be
+    /// moved without <see cref="TimeBasis"/> travelling with it (P8): a
+    /// duration with no provenance is a lie about whether anyone measured
+    /// it.</para>
+    ///
+    /// <para>Validated on the SAME rules as <see cref="Create"/> — an
+    /// <see cref="LabourTimeBasis.Unspecified"/> basis or non-positive hours
+    /// throws, because <c>default(LabourTime)</c> is reachable through the
+    /// struct's implicit parameterless constructor no matter how its named
+    /// factories are locked down.</para>
+    ///
+    /// <para>A reviewer who says nothing about hours must never reach this
+    /// method: silence is not a correction, and the existing
+    /// <see cref="LabourTimeBasis.Assumed"/> value is then left exactly as it
+    /// was rather than overwritten with a guess. That decision belongs to the
+    /// caller, which is why there is no "null means leave it" overload
+    /// here.</para>
+    /// </summary>
+    public void CorrectDuration(LabourTime time)
+    {
+        if (time.Basis == LabourTimeBasis.Unspecified || time.Hours <= 0)
+        {
+            throw new ArgumentException(
+                "LabourTime must be explicitly Explicit or Assumed with positive hours — " +
+                "default(LabourTime) is not a valid duration.", nameof(time));
+        }
+
+        DurationHours = time.Hours;
+        TimeBasis = time.Basis;
+    }
 }

@@ -1175,6 +1175,38 @@ internal sealed class ShramSafalRepository(ShramSafalDbContext db) : IShramSafal
         }
     }
 
+    // --- Labour review & correction (Task 12b, spec: 2026-07-13-labour-attendance-approval-design) ---
+
+    public async Task AddLabourCorrectionAsync(LabourCorrection c, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(c);
+        await db.LabourCorrections.AddAsync(c, ct);
+    }
+
+    public async Task<IReadOnlyList<FieldOperatorWorkRow>> GetFieldOperatorWorkRowsForAssignmentAsync(
+        Guid labourAssignmentId, CancellationToken ct = default)
+    {
+        // TRACKED (no AsNoTracking): the caller removes rows from this set in
+        // the same unit of work, so EF must already be tracking them.
+        return await db.FieldOperatorWorkRows
+            .Where(r => r.LabourAssignmentId == labourAssignmentId)
+            .OrderBy(r => r.CreatedAtUtc)
+            .ToListAsync(ct);
+    }
+
+    public Task RemoveFieldOperatorWorkRowAsync(FieldOperatorWorkRow r, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(r);
+        db.FieldOperatorWorkRows.Remove(r);
+        return Task.CompletedTask;
+    }
+
+    public async Task AddFieldOperatorWorkRowAsync(FieldOperatorWorkRow r, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(r);
+        await db.FieldOperatorWorkRows.AddAsync(r, ct);
+    }
+
     // --- DATA_PRINCIPLE_SPINE sub-phase 02.3 (warm-tier transcripts) ------
     public Task AddTranscriptAsync(Transcript transcript, CancellationToken ct = default)
     {
