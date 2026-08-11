@@ -1,5 +1,6 @@
 using AgriSync.BuildingBlocks.Abstractions;
 using AgriSync.SharedKernel.Contracts.Ids;
+using AgriSync.SharedKernel.Contracts.Roles;
 using FluentAssertions;
 using ShramSafal.Application.UseCases.Labour.AttachFieldOperator;
 using ShramSafal.Domain.Farms;
@@ -52,6 +53,7 @@ public sealed class AttachFieldOperatorHandlerTests
     public async Task Nonexistent_assignment_returns_Forbidden_not_NotFound_with_zero_writes()
     {
         var repo = new FakeRepo();
+        repo.SetRole(FarmAGuid, CallerGuid, AppRole.Mukadam);
         var op = MakeOperator(Guid.NewGuid(), FarmAGuid);
         repo.SeedOperator(op);
         var handler = BuildHandler(repo);
@@ -71,6 +73,7 @@ public sealed class AttachFieldOperatorHandlerTests
         // RLS would let a multi-farm caller read it), but its parent log's
         // FarmId is FarmB while the request established FarmA.
         var repo = new FakeRepo();
+        repo.SetRole(FarmAGuid, CallerGuid, AppRole.Mukadam);
         var log = MakeLog(Guid.NewGuid(), FarmBGuid, new DateOnly(2026, 8, 10));
         var assignment = MakeAssignment(Guid.NewGuid(), log.Id);
         var op = MakeOperator(Guid.NewGuid(), FarmAGuid);
@@ -91,6 +94,7 @@ public sealed class AttachFieldOperatorHandlerTests
     public async Task Nonexistent_field_operator_returns_Forbidden_not_NotFound_with_zero_writes()
     {
         var repo = new FakeRepo();
+        repo.SetRole(FarmAGuid, CallerGuid, AppRole.Mukadam);
         var log = MakeLog(Guid.NewGuid(), FarmAGuid, new DateOnly(2026, 8, 10));
         var assignment = MakeAssignment(Guid.NewGuid(), log.Id);
         repo.SeedLog(log);
@@ -111,6 +115,7 @@ public sealed class AttachFieldOperatorHandlerTests
         // Same A11 gap on the operator side: p_user_select_field_operators
         // makes the row loadable, but OriginatingFarmId is FarmB.
         var repo = new FakeRepo();
+        repo.SetRole(FarmAGuid, CallerGuid, AppRole.Mukadam);
         var log = MakeLog(Guid.NewGuid(), FarmAGuid, new DateOnly(2026, 8, 10));
         var assignment = MakeAssignment(Guid.NewGuid(), log.Id);
         var op = MakeOperator(Guid.NewGuid(), FarmBGuid);
@@ -131,6 +136,7 @@ public sealed class AttachFieldOperatorHandlerTests
     public async Task Both_sides_on_the_same_farm_succeeds_and_snapshots_display_name_and_log_date()
     {
         var repo = new FakeRepo();
+        repo.SetRole(FarmAGuid, CallerGuid, AppRole.Mukadam);
         var logDate = new DateOnly(2026, 8, 10);
         var log = MakeLog(Guid.NewGuid(), FarmAGuid, logDate);
         var assignment = MakeAssignment(Guid.NewGuid(), log.Id);
@@ -159,6 +165,7 @@ public sealed class AttachFieldOperatorHandlerTests
     public async Task Retried_attach_is_idempotent_success_not_an_error()
     {
         var repo = new FakeRepo();
+        repo.SetRole(FarmAGuid, CallerGuid, AppRole.Mukadam);
         var log = MakeLog(Guid.NewGuid(), FarmAGuid, new DateOnly(2026, 8, 10));
         var assignment = MakeAssignment(Guid.NewGuid(), log.Id);
         var op = MakeOperator(Guid.NewGuid(), FarmAGuid);
@@ -175,6 +182,36 @@ public sealed class AttachFieldOperatorHandlerTests
         result.Value!.AlreadyAttached.Should().BeTrue();
         result.Value!.FieldOperatorId.Should().Be(op.Id);
         result.Value!.LabourAssignmentId.Should().Be(assignment.Id);
+    }
+
+    /// <summary>
+    /// Fix round 1 — the handler must be self-sufficient about the CALLER,
+    /// not just the rows. Both referenced rows are perfectly valid and on
+    /// the SAME farm as the command (they would pass every other check in
+    /// this file); the only thing missing is that the caller has no
+    /// membership on that farm at all. Constructs the handler DIRECTLY
+    /// (never through the endpoint) — bypassing ICallerFarmTenantScope is
+    /// exactly the scenario under test, e.g. a future sync-dispatched path
+    /// that is skip-listed from the tenant middleware.
+    /// </summary>
+    [Fact]
+    public async Task Caller_with_no_membership_on_the_farm_is_Forbidden_with_zero_writes()
+    {
+        var repo = new FakeRepo(); // deliberately: no SetRole call
+        var log = MakeLog(Guid.NewGuid(), FarmAGuid, new DateOnly(2026, 8, 10));
+        var assignment = MakeAssignment(Guid.NewGuid(), log.Id);
+        var op = MakeOperator(Guid.NewGuid(), FarmAGuid);
+        repo.SeedLog(log);
+        repo.SeedAssignment(assignment);
+        repo.SeedOperator(op);
+        var handler = BuildHandler(repo);
+
+        var result = await handler.HandleAsync(new AttachFieldOperatorCommand(
+            new FarmId(FarmAGuid), op.Id, assignment.Id, new UserId(CallerGuid)));
+
+        result.IsFailure.Should().BeTrue();
+        result.Error.Code.Should().Contain("Forbidden");
+        repo.WorkRowInsertAttempts.Should().Be(0);
     }
 
     // ─── Test doubles ────────────────────────────────────────────────────────
@@ -195,6 +232,7 @@ public sealed class AttachFieldOperatorHandlerTests
         private readonly Dictionary<Guid, DailyLog> _logs = new();
         private readonly Dictionary<Guid, LabourAssignment> _assignments = new();
         private readonly Dictionary<Guid, FieldOperator> _operators = new();
+        private readonly Dictionary<(Guid farmId, Guid userId), AppRole> _roles = new();
 
         public List<FieldOperatorWorkRow> InsertedRows { get; } = [];
         public int WorkRowInsertAttempts { get; private set; }
@@ -203,6 +241,10 @@ public sealed class AttachFieldOperatorHandlerTests
         public void SeedLog(DailyLog log) => _logs[log.Id] = log;
         public void SeedAssignment(LabourAssignment a) => _assignments[a.Id] = a;
         public void SeedOperator(FieldOperator o) => _operators[o.Id] = o;
+        public void SetRole(Guid farmId, Guid userId, AppRole role) => _roles[(farmId, userId)] = role;
+
+        public override Task<AppRole?> GetUserRoleForFarmAsync(Guid farmId, Guid userId, CancellationToken ct = default)
+            => Task.FromResult(_roles.TryGetValue((farmId, userId), out var role) ? (AppRole?)role : null);
 
         public override Task<DailyLog?> GetDailyLogByIdAsync(Guid dailyLogId, CancellationToken ct = default)
             => Task.FromResult(_logs.TryGetValue(dailyLogId, out var log) ? log : null);

@@ -20,6 +20,15 @@ namespace ShramSafal.Application.UseCases.Labour.RenameFieldOperator;
 /// <c>OriginatingFarmId == command.FarmId</c> explicitly before renaming —
 /// never trusts "the repository returned a row" as authorization.
 /// </para>
+/// <para>
+/// Also self-sufficient about the CALLER, not just the row: before loading
+/// the operator, it re-checks that <c>command.CallerUserId</c> is a member
+/// of <c>command.FarmId</c> at all (mirrors <c>CreateFieldOperatorHandler</c>
+/// / <c>AttachFieldOperatorHandler</c>). The HTTP route is the only
+/// construction site today, so <c>ICallerFarmTenantScope</c> already proved
+/// this — but a handler must fail closed on its own, not lean on an outer
+/// layer that may not always be there (e.g. a future sync-dispatched path).
+/// </para>
 /// </summary>
 public sealed class RenameFieldOperatorHandler(
     IShramSafalRepository repository,
@@ -33,6 +42,16 @@ public sealed class RenameFieldOperatorHandler(
             || command.CallerUserId.IsEmpty || string.IsNullOrWhiteSpace(command.DisplayName))
         {
             return Result.Failure<FieldOperatorDto>(ShramSafalErrors.InvalidCommand);
+        }
+
+        // Defense-in-depth membership re-check — mirrors CreateFieldOperatorHandler
+        // (the HTTP entry point already gates via ICallerFarmTenantScope, but
+        // a handler invoked from any other surface must still fail closed).
+        var callerRole = await repository.GetUserRoleForFarmAsync(
+            command.FarmId.Value, command.CallerUserId.Value, ct);
+        if (callerRole is null)
+        {
+            return Result.Failure<FieldOperatorDto>(ShramSafalErrors.Forbidden);
         }
 
         var fieldOperator = await repository.GetFieldOperatorByIdAsync(command.FieldOperatorId, ct);

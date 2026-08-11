@@ -50,6 +50,21 @@ namespace ShramSafal.Application.UseCases.Labour.AttachFieldOperator;
 /// exists to close, and Task 14 attacks it from both directions
 /// adversarially.
 /// </para>
+/// <para>
+/// <b>This handler is also self-sufficient about the CALLER, not just the
+/// rows.</b> Before either row-farm check, it re-checks that
+/// <c>command.CallerUserId</c> is a member of <c>command.FarmId</c> at all
+/// (mirrors <c>CreateFieldOperatorHandler</c>). The HTTP route is the only
+/// construction site today, so <c>ICallerFarmTenantScope</c> already proved
+/// this — but that is circumstance, not a guarantee this handler can lean
+/// on: <c>PushSyncBatchHandler</c> is a documented multi-farm write surface
+/// that is skip-listed from the tenant middleware (no <c>agrisync.farm_id</c>
+/// GUC, so the <c>p_tenant_field_operator_work_rows</c> WITH CHECK backstop
+/// is not in play either) and dispatches per-mutation handlers with
+/// client-supplied ids. A handler that only checked the rows would be wide
+/// open the day attribution reaches sync, with no compile-time and no
+/// test-time signal.
+/// </para>
 /// </summary>
 public sealed class AttachFieldOperatorHandler(
     IShramSafalRepository repository,
@@ -64,6 +79,16 @@ public sealed class AttachFieldOperatorHandler(
             || command.LabourAssignmentId == Guid.Empty || command.CallerUserId.IsEmpty)
         {
             return Result.Failure<AttachFieldOperatorResult>(ShramSafalErrors.InvalidCommand);
+        }
+
+        // Defense-in-depth membership re-check — mirrors CreateFieldOperatorHandler
+        // (the HTTP entry point already gates via ICallerFarmTenantScope, but
+        // a handler invoked from any other surface must still fail closed).
+        var callerRole = await repository.GetUserRoleForFarmAsync(
+            command.FarmId.Value, command.CallerUserId.Value, ct);
+        if (callerRole is null)
+        {
+            return Result.Failure<AttachFieldOperatorResult>(ShramSafalErrors.Forbidden);
         }
 
         // ── Side 1: the LabourAssignment's parent DailyLog belongs to THIS farm. ──
