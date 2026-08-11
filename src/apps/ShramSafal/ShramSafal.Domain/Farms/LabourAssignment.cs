@@ -28,7 +28,7 @@ public sealed class LabourAssignment : Entity<Guid>
         Guid id, Guid dailyLogId, LabourEngagementType engagementType,
         int? maleCount, int? femaleCount, int? workerCount, decimal? wagePerPerson,
         ContractUnit? contractUnit, decimal? contractQuantity, decimal? totalCost,
-        Guid? linkedActivityId, DateTime createdAtUtc,
+        Guid? linkedActivityId, DateTime createdAtUtc, LabourTime time,
         LabourShift? shift, string? task, string workerNamesJson)
         : base(id)
     {
@@ -43,6 +43,8 @@ public sealed class LabourAssignment : Entity<Guid>
         TotalCost = totalCost;          // NO-MULTIPLY: stored as-given, never computed
         LinkedActivityId = linkedActivityId;
         CreatedAtUtc = createdAtUtc;
+        DurationHours = time.Hours;
+        TimeBasis = time.Basis;
         Shift = shift;
         Task = task;
         WorkerNamesJson = workerNamesJson;
@@ -59,6 +61,16 @@ public sealed class LabourAssignment : Entity<Guid>
     public decimal? TotalCost { get; private set; }
     public Guid? LinkedActivityId { get; private set; }
     public DateTime CreatedAtUtc { get; private set; }
+
+    /// <summary>
+    /// Hours worked — paired with <see cref="TimeBasis"/> so it always travels with its
+    /// provenance. Alone, a duration is a lie about whether anyone measured it; see
+    /// <see cref="LabourTime"/> for why.
+    /// </summary>
+    public decimal DurationHours { get; private set; }
+
+    /// <summary>Whether <see cref="DurationHours"/> was stated by the farmer or assumed by the server.</summary>
+    public LabourTimeBasis TimeBasis { get; private set; }
 
     /// <summary>Which shift the engagement covers (पूर्ण/अर्धा/रात्रपाळी) — descriptive, not money.</summary>
     public LabourShift? Shift { get; private set; }
@@ -82,15 +94,28 @@ public sealed class LabourAssignment : Entity<Guid>
         Guid id, Guid dailyLogId, LabourEngagementType engagementType,
         int? maleCount, int? femaleCount, int? workerCount, decimal? wagePerPerson,
         ContractUnit? contractUnit, decimal? contractQuantity, decimal? totalCost,
-        Guid? linkedActivityId, DateTime createdAtUtc,
+        Guid? linkedActivityId, DateTime createdAtUtc, LabourTime time,
         LabourShift? shift = null, string? task = null, IReadOnlyList<string>? workerNames = null)
     {
+        // Closes default(LabourTime): a readonly record struct always has an implicit
+        // public parameterless constructor, so the zero value is reachable no matter how
+        // the named factories on LabourTime are locked down. Basis == Unspecified is what
+        // makes that reachable-but-never-intended state detectable; Hours <= 0 is the
+        // second half (LabourTime.Explicit/Assumed already guard it, but Create must not
+        // trust an unvalidated caller of the struct's implicit default ctor).
+        if (time.Basis == LabourTimeBasis.Unspecified || time.Hours <= 0)
+        {
+            throw new ArgumentException(
+                "LabourTime must be explicitly Explicit or Assumed with positive hours — " +
+                "default(LabourTime) is not a valid duration.", nameof(time));
+        }
+
         var workerNamesJson = workerNames is null || workerNames.Count == 0
             ? "[]"
             : JsonSerializer.Serialize(workerNames, WorkerNamesSerializerOptions);
 
         return new(id, dailyLogId, engagementType, maleCount, femaleCount, workerCount,
-               wagePerPerson, contractUnit, contractQuantity, totalCost, linkedActivityId, createdAtUtc,
+               wagePerPerson, contractUnit, contractQuantity, totalCost, linkedActivityId, createdAtUtc, time,
                shift, task, workerNamesJson);
     }
 }

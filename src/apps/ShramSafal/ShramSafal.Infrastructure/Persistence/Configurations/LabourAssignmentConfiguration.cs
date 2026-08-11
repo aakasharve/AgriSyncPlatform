@@ -30,6 +30,12 @@ internal sealed class LabourAssignmentConfiguration : IEntityTypeConfiguration<L
         builder.Property(x => x.LinkedActivityId).HasColumnName("linked_activity_id");
         builder.Property(x => x.CreatedAtUtc).HasColumnName("created_at_utc").IsRequired();
 
+        // Task 4 — duration always travels with its provenance (LabourTime). 'Unspecified'
+        // is 11 chars, hence varchar(12) not the usual (20) seen elsewhere in this file.
+        builder.Property(x => x.DurationHours).HasColumnName("duration_hours").IsRequired();
+        builder.Property(x => x.TimeBasis)
+            .HasColumnName("time_basis").HasConversion<string>().HasMaxLength(12).IsRequired();
+
         builder.Property(x => x.Shift)
             .HasColumnName("shift").HasConversion<string>().HasMaxLength(20); // nullable enum -> stores "Full"/"Half"/"Night"
 

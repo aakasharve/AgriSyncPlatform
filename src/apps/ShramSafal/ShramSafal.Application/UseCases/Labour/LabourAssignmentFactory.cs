@@ -53,7 +53,7 @@ public static class LabourAssignmentFactory
         Guid id, Guid dailyLogId, LabourEngagementType engagementType,
         int? maleCount, int? femaleCount, int? workerCount, decimal? wagePerPerson,
         ContractUnit? contractUnit, decimal? contractQuantity, decimal? totalCost,
-        Guid? linkedActivityId, DateTime createdAtUtc,
+        Guid? linkedActivityId, DateTime createdAtUtc, LabourTime time,
         LabourShift? shift = null, string? task = null, IReadOnlyList<string>? workerNames = null)
         => LabourAssignment.Create(
             id: id,
@@ -72,6 +72,7 @@ public static class LabourAssignmentFactory
             totalCost: totalCost,
             linkedActivityId: linkedActivityId,
             createdAtUtc: createdAtUtc,
+            time: time,
             shift: shift,
             task: task,
             workerNames: workerNames);

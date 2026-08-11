@@ -13,7 +13,7 @@ public sealed class LabourAssignmentTests
         var la = LabourAssignment.Create(Guid.NewGuid(), Log, LabourEngagementType.Hired,
             maleCount: 3, femaleCount: 2, workerCount: 5, wagePerPerson: 350m,
             contractUnit: null, contractQuantity: null, totalCost: 1750m, linkedActivityId: null,
-            createdAtUtc: new DateTime(2025, 10, 21, 0, 0, 0, DateTimeKind.Utc));
+            createdAtUtc: new DateTime(2025, 10, 21, 0, 0, 0, DateTimeKind.Utc), time: LabourTime.ServerAssumed());
         Assert.Equal(Log, la.DailyLogId);
         Assert.Equal(LabourEngagementType.Hired, la.EngagementType);
         Assert.Equal(3, la.MaleCount);
@@ -30,7 +30,7 @@ public sealed class LabourAssignmentTests
         var la = LabourAssignment.Create(Guid.NewGuid(), Log, LabourEngagementType.Contract,
             null, null, null, wagePerPerson: 50m,
             contractUnit: ContractUnit.Tree, contractQuantity: 120m, totalCost: null, linkedActivityId: null,
-            createdAtUtc: DateTime.UtcNow);
+            createdAtUtc: DateTime.UtcNow, time: LabourTime.ServerAssumed());
         Assert.Equal(LabourEngagementType.Contract, la.EngagementType);
         Assert.Equal(ContractUnit.Tree, la.ContractUnit);
         Assert.Equal(120m, la.ContractQuantity);
@@ -44,7 +44,7 @@ public sealed class LabourAssignmentTests
         var la = LabourAssignment.Create(Guid.NewGuid(), Log, LabourEngagementType.Contract,
             null, null, workerCount: 4, wagePerPerson: 50m,
             contractUnit: ContractUnit.Tree, contractQuantity: null, totalCost: null, linkedActivityId: null,
-            createdAtUtc: DateTime.UtcNow);
+            createdAtUtc: DateTime.UtcNow, time: LabourTime.ServerAssumed());
         Assert.Null(la.TotalCost);            // not 50*4=200 — no fabricated total
         Assert.Equal(50m, la.WagePerPerson);
         Assert.Equal(4, la.WorkerCount);
@@ -54,7 +54,7 @@ public sealed class LabourAssignmentTests
     public void Create_self_allows_all_null_counts()
     {
         var la = LabourAssignment.Create(Guid.NewGuid(), Log, LabourEngagementType.Self,
-            null, null, null, null, null, null, null, null, DateTime.UtcNow);
+            null, null, null, null, null, null, null, null, DateTime.UtcNow, LabourTime.ServerAssumed());
         Assert.Equal(LabourEngagementType.Self, la.EngagementType);
         Assert.Null(la.WorkerCount);
         Assert.Null(la.WagePerPerson);
@@ -68,7 +68,7 @@ public sealed class LabourAssignmentTests
         var la = LabourAssignment.Create(Guid.NewGuid(), Log, LabourEngagementType.Hired,
             maleCount: 2, femaleCount: 0, workerCount: 2, wagePerPerson: 300m,
             contractUnit: null, contractQuantity: null, totalCost: 600m, linkedActivityId: null,
-            createdAtUtc: DateTime.UtcNow,
+            createdAtUtc: DateTime.UtcNow, time: LabourTime.ServerAssumed(),
             shift: LabourShift.Half, task: "फवारणी", workerNames: ["रमेश", "विलास"]);
 
         Assert.Equal(LabourShift.Half, la.Shift);
@@ -83,7 +83,7 @@ public sealed class LabourAssignmentTests
         var la = LabourAssignment.Create(Guid.NewGuid(), Log, LabourEngagementType.Hired,
             maleCount: 1, femaleCount: 0, workerCount: 1, wagePerPerson: 300m,
             contractUnit: null, contractQuantity: null, totalCost: 300m, linkedActivityId: null,
-            createdAtUtc: DateTime.UtcNow);
+            createdAtUtc: DateTime.UtcNow, time: LabourTime.ServerAssumed());
 
         Assert.Null(la.Shift);
         Assert.Null(la.Task);
@@ -98,7 +98,7 @@ public sealed class LabourAssignmentTests
         var withDescriptive = LabourAssignment.Create(Guid.NewGuid(), Log, LabourEngagementType.Contract,
             null, null, workerCount: 4, wagePerPerson: 50m,
             contractUnit: ContractUnit.Tree, contractQuantity: null, totalCost: null, linkedActivityId: null,
-            createdAtUtc: DateTime.UtcNow,
+            createdAtUtc: DateTime.UtcNow, time: LabourTime.ServerAssumed(),
             shift: LabourShift.Full, task: "छाटणी", workerNames: ["सचिन"]);
 
         Assert.Null(withDescriptive.TotalCost);           // still not fabricated (50*4)
@@ -107,7 +107,7 @@ public sealed class LabourAssignmentTests
         var withStatedTotal = LabourAssignment.Create(Guid.NewGuid(), Log, LabourEngagementType.Hired,
             maleCount: 3, femaleCount: 2, workerCount: 5, wagePerPerson: 350m,
             contractUnit: null, contractQuantity: null, totalCost: 1800m, linkedActivityId: null,
-            createdAtUtc: DateTime.UtcNow,
+            createdAtUtc: DateTime.UtcNow, time: LabourTime.ServerAssumed(),
             shift: LabourShift.Night, task: null, workerNames: null);
 
         Assert.Equal(1800m, withStatedTotal.TotalCost);    // stated total preserved exactly

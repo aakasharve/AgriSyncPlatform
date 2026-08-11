@@ -238,6 +238,9 @@ public sealed class LedgerDerivationService(IShramSafalRepository repository) : 
                     totalCost: ReadDecimal(item, "totalCost"),
                     linkedActivityId: ReadGuid(item, "linkedActivityId"),
                     createdAtUtc: now,
+                    // Task 4: the model emits no duration key (A5/outputContract.md) — every
+                    // voice-derived row is honestly Assumed, never a fabricated Explicit.
+                    time: LabourTime.ServerAssumed(),
                     // Descriptive only (Task 2.3) — never touch money above.
                     shift: LabourAssignmentFactory.MapLabourShift(ReadString(item, "shift")),
                     task: ReadTrimmedString(item, "activity"),

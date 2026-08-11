@@ -38,7 +38,8 @@ public sealed class LabourAssignmentFactoryTests
             contractQuantity: null,
             totalCost: null,
             linkedActivityId: null,
-            createdAtUtc: DateTime.UtcNow);
+            createdAtUtc: DateTime.UtcNow,
+            time: LabourTime.ServerAssumed());
 
     [Fact]
     public void FromParsed_no_headcount_stated_at_all_keeps_WorkerCount_null()

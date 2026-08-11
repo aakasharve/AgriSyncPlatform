@@ -129,9 +129,9 @@ public sealed class LabourAssignmentParentIntegrityRealPostgresTests : IAsyncLif
             await using var c = db.CreateCommand();
             c.CommandText = """
                 INSERT INTO ssf.labour_assignments
-                    ("Id", daily_log_id, engagement_type, worker_count, wage_per_person, total_cost, worker_names_json, created_at_utc)
+                    ("Id", daily_log_id, engagement_type, worker_count, wage_per_person, total_cost, worker_names_json, created_at_utc, duration_hours, time_basis)
                 VALUES
-                    (@id, @dlid, 'Hired', 4, 50, NULL, '[]'::jsonb, NOW());
+                    (@id, @dlid, 'Hired', 4, 50, NULL, '[]'::jsonb, NOW(), 8, 'Assumed');
                 """;
             c.Parameters.AddWithValue("id", Guid.NewGuid());
             c.Parameters.AddWithValue("dlid", orphanDailyLogId);
@@ -149,9 +149,9 @@ public sealed class LabourAssignmentParentIntegrityRealPostgresTests : IAsyncLif
         {
             c.CommandText = """
                 INSERT INTO ssf.labour_assignments
-                    ("Id", daily_log_id, engagement_type, worker_count, wage_per_person, total_cost, worker_names_json, created_at_utc)
+                    ("Id", daily_log_id, engagement_type, worker_count, wage_per_person, total_cost, worker_names_json, created_at_utc, duration_hours, time_basis)
                 VALUES
-                    (@id, @dlid, 'Hired', 4, 50, NULL, '[]'::jsonb, NOW());
+                    (@id, @dlid, 'Hired', 4, 50, NULL, '[]'::jsonb, NOW(), 8, 'Assumed');
                 """;
             c.Parameters.AddWithValue("id", realAssignmentId);
             c.Parameters.AddWithValue("dlid", dailyLogId);

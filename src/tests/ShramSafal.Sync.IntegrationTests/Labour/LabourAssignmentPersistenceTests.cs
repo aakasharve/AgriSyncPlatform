@@ -107,7 +107,7 @@ public sealed class LabourAssignmentPersistenceTests : IAsyncLifetime
                 assignmentId, log.Id, LabourEngagementType.Hired,
                 maleCount: 2, femaleCount: 1, workerCount: 3, wagePerPerson: 300m,
                 contractUnit: null, contractQuantity: null, totalCost: 900m, linkedActivityId: null,
-                createdAtUtc: now,
+                createdAtUtc: now, time: LabourTime.ServerAssumed(),
                 shift: LabourShift.Half, task: "फवारणी", workerNames: ["रमेश", "विलास"]);
             await writeRepo.AddLabourAssignmentAsync(assignment);
 
@@ -152,7 +152,7 @@ public sealed class LabourAssignmentPersistenceTests : IAsyncLifetime
                 assignmentId, log.Id, LabourEngagementType.Hired,
                 maleCount: 1, femaleCount: 0, workerCount: 1, wagePerPerson: 300m,
                 contractUnit: null, contractQuantity: null, totalCost: 300m, linkedActivityId: null,
-                createdAtUtc: now);
+                createdAtUtc: now, time: LabourTime.ServerAssumed());
             await writeRepo.AddLabourAssignmentAsync(assignment);
 
             await writeRepo.SaveChangesAsync();
