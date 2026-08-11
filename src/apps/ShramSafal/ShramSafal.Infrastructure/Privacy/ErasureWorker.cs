@@ -148,6 +148,38 @@
 //     unchanged; do NOT delete it — that is exactly the orphaning the sentinel-replace
 //     choice on ssf.workers exists to avoid. No independent scrub action on this table;
 //     conscious gate-4 disposition.
+//   - ssf.field_operators / ssf.field_operator_work_rows — ADDED 2026-08-11
+//     (Labour V1 Task 10, spec 2026-07-13-labour-attendance-approval-design).
+//     HAS PII: field_operators.display_name / .display_name_normalized /
+//     .full_name and field_operator_work_rows.display_name_at_attach all hold a
+//     real person's name. BOTH TABLES ARE DELIBERATELY ABSENT FROM THE
+//     CREATOR-ERASURE SEQUENCE IN ProcessOneAsync, AND THAT ABSENCE IS THE
+//     DESIGN, NOT A GAP:
+//       CREATOR IS NOT THE DATA SUBJECT. The farmer who typed a worker's name
+//       is not that worker's data subject. Erasing the FARMER'S account must
+//       NOT anonymize the WORKER — the worker never asked, and their identity
+//       is co-owned work history that outlives any one account. This is exactly
+//       why these tables are NOT reached via daily_logs.operator_user_id the way
+//       ssf.workers is by AnonymizeWorkersDerivedFromUserLogsAsync above. The
+//       WTL v0 ssf.workers disposition is a cascade FROM the farmer's erasure
+//       because those names were extracted passively from that farmer's own
+//       transcripts; a FieldOperator is a durable, deliberately-created work
+//       identity, so the same cascade would be wrong.
+//       THE WORKER-SPECIFIC CAPABILITY EXISTS: AnonymizeFieldOperatorAsync
+//       below, invoked by an explicit worker-erasure decision and never by
+//       account deletion, sentinel-replaces all four name columns above.
+//       ANONYMIZE, not DELETE, and never the work: FieldOperatorId, the
+//       LabourAssignment relationship, work_date and all non-identifying
+//       execution history are PRESERVED. All three FKs on
+//       field_operator_work_rows are ON DELETE RESTRICT, so a hard delete could
+//       not orphan-cascade even if attempted — anonymize the person, never the
+//       work.
+//     DISCLOSED LIMIT: the retention/erasure POLICY — the legal trigger and the
+//     retention period — still requires founder + counsel sign-off before broad
+//     real-worker rollout. What exists today is the CAPABILITY, which is what
+//     founder Decision 5 ("5b — ship names, but do the erasure work FIRST")
+//     gates on. Stating otherwise here would be a knowingly false compliance
+//     claim, which this file holds to be worse than a tracked gap.
 //   - ssf.machinery_usages — Track B daily_logs-child (ADR 0023 §2 / D-T6-ERASURE).
 //     NO user_id/PII column: machine type/ownership, hours/costs, and the structured
 //     equipment config (implement, nozzles_active, fan_state, fuel) are de-identified
@@ -594,6 +626,73 @@ UPDATE ssf.labour_assignments AS la
             .ConfigureAwait(false);
     }
 
+    /// <summary>
+    /// Labour V1 Task 10.5 (spec: 2026-07-13-labour-attendance-approval-design).
+    /// <b>Worker-subject erasure.</b> Sentinel-replaces every name column that
+    /// identifies ONE <c>FieldOperator</c>:
+    /// <c>ssf.field_operators.display_name</c>, <c>.display_name_normalized</c>,
+    /// <c>.full_name</c>, and <c>ssf.field_operator_work_rows.display_name_at_attach</c>
+    /// on every work row attributed to that operator.
+    /// <para>
+    /// <b>Invoked by an explicit worker-erasure decision, never by account
+    /// deletion.</b> It is deliberately NOT called from
+    /// <c>ProcessOneAsync</c>'s creator-erasure sequence and takes a
+    /// <c>fieldOperatorId</c> — not a <c>userId</c> — precisely so it cannot be
+    /// wired to one by accident: the farmer who typed a worker's name is not
+    /// that worker's data subject (see the manifest comment above).
+    /// </para>
+    /// <para>
+    /// <b>Anonymize the person, never the work.</b> The row itself survives, as
+    /// do <c>Id</c> (the FieldOperatorId), <c>originating_farm_id</c>,
+    /// <c>created_at_utc</c>, and on every work row the
+    /// <c>field_operator_id</c> / <c>labour_assignment_id</c> relationship and
+    /// <c>work_date</c>. The engagement's own reported headcount is untouched —
+    /// attribution never changed the reported quantity, so erasing attribution
+    /// must not either.
+    /// </para>
+    /// <para>
+    /// Sentinels match the existing <c>ssf.workers</c> idiom
+    /// (<c>'Erased worker'</c> / <c>'erased worker'</c>). Returns the total
+    /// number of rows updated across both tables. Idempotent: the
+    /// already-scrubbed guards make a second call a no-op returning 0.
+    /// </para>
+    /// </summary>
+    public static async Task<int> AnonymizeFieldOperatorAsync(
+        ShramSafalDbContext db, Guid fieldOperatorId, CancellationToken ct)
+    {
+        // Work rows FIRST: the snapshot column is what a reader actually sees
+        // on a payout, so it must not be the last thing to disappear.
+        const string workRowSql = @"
+UPDATE ssf.field_operator_work_rows
+   SET display_name_at_attach = 'Erased worker'
+ WHERE field_operator_id = {0}
+   AND display_name_at_attach <> 'Erased worker';";
+        var workRows = await db.Database
+            .ExecuteSqlRawAsync(workRowSql, new object[] { fieldOperatorId }, ct)
+            .ConfigureAwait(false);
+
+        // All four name columns get the sentinel — full_name included rather
+        // than NULLed, so "erased" is an explicit, readable state everywhere
+        // instead of being indistinguishable from "never captured".
+        // IS DISTINCT FROM, not <>, because full_name is nullable and NULL <> x
+        // is NULL (never true) — with <> the guard would skip a row whose
+        // full_name is NULL and leave the other two columns unscrubbed.
+        const string operatorSql = @"
+UPDATE ssf.field_operators
+   SET display_name = 'Erased worker',
+       display_name_normalized = 'erased worker',
+       full_name = 'Erased worker'
+ WHERE ""Id"" = {0}
+   AND (display_name <> 'Erased worker'
+        OR display_name_normalized <> 'erased worker'
+        OR full_name IS DISTINCT FROM 'Erased worker');";
+        var operators = await db.Database
+            .ExecuteSqlRawAsync(operatorSql, new object[] { fieldOperatorId }, ct)
+            .ConfigureAwait(false);
+
+        return workRows + operators;
+    }
+
     private static async Task<int> AnonymizeCostEntriesAsync(
         ShramSafalDbContext db, Guid userId, Guid sentinel, CancellationToken ct)
     {
@@ -712,6 +811,13 @@ UPDATE ssf.farm_operations
         // ssf.labour_assignments manifest comments above.
         "workers" => new[] { "name_raw", "name_normalized" },
         "labour_assignments" => new[] { "worker_names_json" },
+        // Labour V1 Task 10.5b — WORKER-subject erasure only
+        // (AnonymizeFieldOperatorAsync), never creator/account erasure. These
+        // tables are absent from the ProcessOneAsync sequence by design; the
+        // entries exist so an explicit worker-erasure audit row names the
+        // columns it scrubbed instead of emitting an empty array.
+        "field_operators" => new[] { "display_name", "display_name_normalized", "full_name" },
+        "field_operator_work_rows" => new[] { "display_name_at_attach" },
         // SARVAM_PRIMARY_VOICE_PIPELINE Task 3.4 — voice-spine tables
         // follow a DELETE manifest. The audit payload records "deleted"
         // as the scrubbed-columns sentinel so the audit row's shape

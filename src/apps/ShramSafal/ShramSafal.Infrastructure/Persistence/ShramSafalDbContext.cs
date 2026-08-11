@@ -138,6 +138,11 @@ public sealed class ShramSafalDbContext(DbContextOptions<ShramSafalDbContext> op
     // spec: 2026-07-13-labour-attendance-approval-design (Labour V1, Task 9) —
     // durable human work subject. Deliberately NOT linked to UserId in V1.
     public DbSet<FieldOperator> FieldOperators => Set<FieldOperator>();
+
+    // spec: 2026-07-13-labour-attendance-approval-design (Labour V1, Task 10) —
+    // attribution overlay: WHO worked a given LabourAssignment. Never the work
+    // itself, and never a source of headcount (Constraint 3).
+    public DbSet<FieldOperatorWorkRow> FieldOperatorWorkRows => Set<FieldOperatorWorkRow>();
     public DbSet<MachineryUsage> MachineryUsages => Set<MachineryUsage>();
     public DbSet<ObservationEvent> ObservationEvents => Set<ObservationEvent>();
     public DbSet<DisturbanceEvent> DisturbanceEvents => Set<DisturbanceEvent>();
