@@ -699,6 +699,31 @@ public static class DependencyInjection
                 ShramSafal.Application.Contracts.Dtos.LabourDataDto>,
             ShramSafal.Application.UseCases.Labour.GetLabourData.GetLabourDataHandler>();
 
+        // Task 11 (spec: 2026-07-13-labour-attendance-approval-design) — Field
+        // Operator identity commands. Same registration shape as
+        // GetLabourDataHandler directly above: no IAuthorizationCheck<>/
+        // IValidator<> exist for these commands (none needed — the farm-scope
+        // gate lives in the endpoint via ICallerFarmTenantScope, mirrored by a
+        // defense-in-depth membership check inside Create/Rename, and by the
+        // explicit both-sides authorization inside Attach), so each is
+        // registered directly against IHandler<,> rather than wrapped in
+        // HandlerPipeline.Build.
+        services.AddScoped<
+            AgriSync.BuildingBlocks.Application.IHandler<
+                ShramSafal.Application.UseCases.Labour.CreateFieldOperator.CreateFieldOperatorCommand,
+                ShramSafal.Application.Contracts.Dtos.FieldOperatorDto>,
+            ShramSafal.Application.UseCases.Labour.CreateFieldOperator.CreateFieldOperatorHandler>();
+        services.AddScoped<
+            AgriSync.BuildingBlocks.Application.IHandler<
+                ShramSafal.Application.UseCases.Labour.AttachFieldOperator.AttachFieldOperatorCommand,
+                ShramSafal.Application.UseCases.Labour.AttachFieldOperator.AttachFieldOperatorResult>,
+            ShramSafal.Application.UseCases.Labour.AttachFieldOperator.AttachFieldOperatorHandler>();
+        services.AddScoped<
+            AgriSync.BuildingBlocks.Application.IHandler<
+                ShramSafal.Application.UseCases.Labour.RenameFieldOperator.RenameFieldOperatorCommand,
+                ShramSafal.Application.Contracts.Dtos.FieldOperatorDto>,
+            ShramSafal.Application.UseCases.Labour.RenameFieldOperator.RenameFieldOperatorHandler>();
+
         // T-IGH-03-PIPELINE-ROLLOUT (CompleteJobCard): caller-shape
         // validation + job-card-existence + farm-membership authorization.
         // The endpoint (POST /job-cards/{id}/complete) AND the sync entry

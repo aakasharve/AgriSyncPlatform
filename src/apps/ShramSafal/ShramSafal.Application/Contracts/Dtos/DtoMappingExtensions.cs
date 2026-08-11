@@ -3,6 +3,7 @@ using ShramSafal.Domain.Audit;
 using ShramSafal.Domain.Attachments;
 using ShramSafal.Domain.Farms;
 using ShramSafal.Domain.Finance;
+using ShramSafal.Domain.Labour;
 using ShramSafal.Domain.Logs;
 using ShramSafal.Domain.Location;
 using ShramSafal.Domain.Planning;
@@ -220,6 +221,16 @@ internal static class DtoMappingExtensions
             sub.MigratedToSubscriptionId?.Value,
             sub.MigrationReason?.ToString(),
             sub.StateChangedAtUtc);
+
+    public static FieldOperatorDto ToDto(this FieldOperator fieldOperator) =>
+        new(
+            fieldOperator.Id,
+            fieldOperator.DisplayName,
+            fieldOperator.FullName,
+            fieldOperator.OriginatingFarmId.Value,
+            fieldOperator.CreatedByUserId.Value,
+            fieldOperator.CreatedAtUtc,
+            fieldOperator.IsActive);
 
     public static JobCardDto ToJobCardDto(this JobCard jobCard, string? workerDisplayName = null) =>
         new(

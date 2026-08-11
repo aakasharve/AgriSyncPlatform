@@ -11,6 +11,7 @@ using ShramSafal.Application.Ports;
 using ShramSafal.Domain.Crops;
 using ShramSafal.Domain.Farms;
 using ShramSafal.Domain.Finance;
+using ShramSafal.Domain.Labour;
 using ShramSafal.Domain.Logs;
 using ShramSafal.Domain.Planning;
 using ShramSafal.Domain.Privacy;
@@ -1118,6 +1119,60 @@ internal sealed class ShramSafalRepository(ShramSafalDbContext db) : IShramSafal
             where log.FarmId == farmId && log.LogDate >= weekStart
             select la)
             .ToListAsync(ct);
+    }
+
+    // --- Field Operator identity (Task 11, spec: 2026-07-13-labour-attendance-approval-design) ---
+
+    public async Task AddFieldOperatorAsync(FieldOperator o, CancellationToken ct = default)
+    {
+        await db.FieldOperators.AddAsync(o, ct);
+    }
+
+    public async Task<FieldOperator?> GetFieldOperatorByIdAsync(Guid id, CancellationToken ct = default)
+    {
+        return await db.FieldOperators.FindAsync([id], ct);
+    }
+
+    public async Task<LabourAssignment?> GetLabourAssignmentByIdAsync(Guid id, CancellationToken ct = default)
+    {
+        return await db.LabourAssignments.FindAsync([id], ct);
+    }
+
+    public async Task<IReadOnlyList<FieldOperator>> GetFieldOperatorsForFarmAsync(FarmId farmId, CancellationToken ct = default)
+    {
+        return await db.FieldOperators
+            .AsNoTracking()
+            .Where(o => o.OriginatingFarmId == farmId)
+            .OrderBy(o => o.CreatedAtUtc)
+            .ToListAsync(ct);
+    }
+
+    /// <summary>
+    /// "ON CONFLICT DO NOTHING" semantics for the (FieldOperator,
+    /// LabourAssignment) attribution row — same shape as
+    /// <see cref="UpsertTranscriptHistoryAsync"/> above: attempt the INSERT
+    /// directly (the unique index <c>ux_field_operator_work_rows_operator_assignment</c>
+    /// is the source of truth, so no pre-check query), commit immediately so
+    /// the caller learns the real outcome before returning to the farmer, and
+    /// on a unique-violation race detach the losing entity and report `false`.
+    /// `false` is a SUCCESS outcome to the caller (Task 11.5 — attach is
+    /// idempotent by intent), never re-thrown as an error.
+    /// </summary>
+    public async Task<bool> TryAddFieldOperatorWorkRowAsync(FieldOperatorWorkRow r, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(r);
+
+        try
+        {
+            await db.FieldOperatorWorkRows.AddAsync(r, ct);
+            await db.SaveChangesAsync(ct);
+            return true;
+        }
+        catch (DbUpdateException ex) when (IsUniqueViolation(ex))
+        {
+            db.Entry(r).State = EntityState.Detached;
+            return false;
+        }
     }
 
     // --- DATA_PRINCIPLE_SPINE sub-phase 02.3 (warm-tier transcripts) ------

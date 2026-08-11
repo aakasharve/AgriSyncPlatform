@@ -7,6 +7,7 @@ using ShramSafal.Domain.Audit;
 using ShramSafal.Domain.Crops;
 using ShramSafal.Domain.Farms;
 using ShramSafal.Domain.Finance;
+using ShramSafal.Domain.Labour;
 using ShramSafal.Domain.Logs;
 using ShramSafal.Domain.Planning;
 using ShramSafal.Domain.Schedules;
@@ -104,4 +105,22 @@ internal abstract class StubShramSafalRepository : IShramSafalRepository
     // DATA_PRINCIPLE_SPINE sub-phase 02.3 — warm-tier transcript persistence;
     // not exercised by JobCard pipeline tests so a virtual no-op is sufficient.
     public virtual Task AddTranscriptAsync(ShramSafal.Domain.AI.Transcript transcript, CancellationToken ct = default) => Task.CompletedTask;
+
+    // --- Task 11 (spec: 2026-07-13-labour-attendance-approval-design) — Field
+    // Operator identity commands. These five all have DEFAULT bodies on
+    // IShramSafalRepository (A10), so this abstract class is not REQUIRED to
+    // re-declare them to compile. It does so anyway, `virtual`, matching every
+    // other member in this file — a C# class that relies on an interface's own
+    // default-interface-method body (rather than declaring its own virtual
+    // member) cannot have that member overridden by a further-derived class;
+    // dispatch through an IShramSafalRepository-typed reference would keep
+    // resolving to the interface default no matter what a FakeRepo subclass
+    // declares. Skipping this would make every FakeRepo override below
+    // silently no-op instead of failing to compile — worse than a compile
+    // error, so it is called out explicitly here.
+    public virtual Task AddFieldOperatorAsync(FieldOperator o, CancellationToken ct = default) => Task.CompletedTask;
+    public virtual Task<FieldOperator?> GetFieldOperatorByIdAsync(Guid id, CancellationToken ct = default) => Task.FromResult<FieldOperator?>(null);
+    public virtual Task<LabourAssignment?> GetLabourAssignmentByIdAsync(Guid id, CancellationToken ct = default) => Task.FromResult<LabourAssignment?>(null);
+    public virtual Task<IReadOnlyList<FieldOperator>> GetFieldOperatorsForFarmAsync(FarmId farmId, CancellationToken ct = default) => Task.FromResult<IReadOnlyList<FieldOperator>>([]);
+    public virtual Task<bool> TryAddFieldOperatorWorkRowAsync(FieldOperatorWorkRow r, CancellationToken ct = default) => Task.FromResult(true);
 }

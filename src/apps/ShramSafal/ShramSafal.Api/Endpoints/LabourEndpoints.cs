@@ -4,7 +4,11 @@ using AgriSync.BuildingBlocks.Results;
 using AgriSync.SharedKernel.Contracts.Ids;
 using ShramSafal.Application.Contracts.Dtos;
 using ShramSafal.Application.Ports;
+using ShramSafal.Application.UseCases.Labour.AttachFieldOperator;
+using ShramSafal.Application.UseCases.Labour.CreateFieldOperator;
 using ShramSafal.Application.UseCases.Labour.GetLabourData;
+using ShramSafal.Application.UseCases.Labour.RenameFieldOperator;
+using ShramSafal.Domain.Labour;
 
 namespace ShramSafal.Api.Endpoints;
 
@@ -63,8 +67,137 @@ public static class LabourEndpoints
         .WithName("GetLabourData")
         .RequireAuthorization();
 
+        // ── Task 11 (spec: 2026-07-13-labour-attendance-approval-design) —
+        // Field Operator identity commands + list read. Every route below is
+        // farm-scoped (`/farms/{farmId:guid}/labour/field-operators...`) for
+        // the SAME reason as GetLabourData above: ICallerFarmTenantScope.
+        // EstablishForCallerAsync is the sole authorization gate on this
+        // endpoint group and it is what sets the agrisync.farm_id GUC — a
+        // route with no farmId in the path cannot set it. None of these are
+        // added to TenantTransactionMiddleware.SkipPathPrefixes, for the
+        // exact reason documented in the banner above.
+
+        group.MapPost("/farms/{farmId:guid}/labour/field-operators", async Task<IResult> (
+            Guid farmId,
+            CreateFieldOperatorRequest request,
+            ClaimsPrincipal user,
+            IHandler<CreateFieldOperatorCommand, FieldOperatorDto> handler,
+            ICallerFarmTenantScope scope,
+            CancellationToken ct) =>
+        {
+            if (!EndpointActorContext.TryGetUserId(user, out var userId))
+            {
+                return Results.Unauthorized();
+            }
+
+            var scopeResult = await scope.EstablishForCallerAsync(farmId, userId, ct);
+            if (!scopeResult.IsSuccess)
+            {
+                return ToErrorResult(scopeResult.Error);
+            }
+
+            var command = new CreateFieldOperatorCommand(
+                new FarmId(farmId), request.DisplayName, request.FullName, new UserId(userId));
+
+            var result = await handler.HandleAsync(command, ct);
+            return result.IsSuccess
+                ? Results.Created($"/farms/{farmId}/labour/field-operators/{result.Value!.Id}", result.Value)
+                : ToErrorResult(result.Error);
+        })
+        .WithName("CreateFieldOperator")
+        .RequireAuthorization();
+
+        group.MapPost("/farms/{farmId:guid}/labour/field-operators/{id:guid}/attach", async Task<IResult> (
+            Guid farmId,
+            Guid id,
+            AttachFieldOperatorRequest request,
+            ClaimsPrincipal user,
+            IHandler<AttachFieldOperatorCommand, AttachFieldOperatorResult> handler,
+            ICallerFarmTenantScope scope,
+            CancellationToken ct) =>
+        {
+            if (!EndpointActorContext.TryGetUserId(user, out var userId))
+            {
+                return Results.Unauthorized();
+            }
+
+            var scopeResult = await scope.EstablishForCallerAsync(farmId, userId, ct);
+            if (!scopeResult.IsSuccess)
+            {
+                return ToErrorResult(scopeResult.Error);
+            }
+
+            var command = new AttachFieldOperatorCommand(
+                new FarmId(farmId), id, request.LabourAssignmentId, new UserId(userId));
+
+            var result = await handler.HandleAsync(command, ct);
+            return result.IsSuccess ? Results.Ok(result.Value) : ToErrorResult(result.Error);
+        })
+        .WithName("AttachFieldOperator")
+        .RequireAuthorization();
+
+        group.MapPatch("/farms/{farmId:guid}/labour/field-operators/{id:guid}", async Task<IResult> (
+            Guid farmId,
+            Guid id,
+            RenameFieldOperatorRequest request,
+            ClaimsPrincipal user,
+            IHandler<RenameFieldOperatorCommand, FieldOperatorDto> handler,
+            ICallerFarmTenantScope scope,
+            CancellationToken ct) =>
+        {
+            if (!EndpointActorContext.TryGetUserId(user, out var userId))
+            {
+                return Results.Unauthorized();
+            }
+
+            var scopeResult = await scope.EstablishForCallerAsync(farmId, userId, ct);
+            if (!scopeResult.IsSuccess)
+            {
+                return ToErrorResult(scopeResult.Error);
+            }
+
+            var command = new RenameFieldOperatorCommand(
+                new FarmId(farmId), id, request.DisplayName, new UserId(userId));
+
+            var result = await handler.HandleAsync(command, ct);
+            return result.IsSuccess ? Results.Ok(result.Value) : ToErrorResult(result.Error);
+        })
+        .WithName("RenameFieldOperator")
+        .RequireAuthorization();
+
+        // Direct-repo read (no dedicated Application handler yet — Task 12
+        // owns the field-operator read PATH proper; this is the minimum
+        // authorized wiring 11.2 requires today). Mirrors AuditEndpoints'
+        // IShramSafalRepository-in-endpoint pattern.
+        group.MapGet("/farms/{farmId:guid}/labour/field-operators", async Task<IResult> (
+            Guid farmId,
+            ClaimsPrincipal user,
+            IShramSafalRepository repository,
+            ICallerFarmTenantScope scope,
+            CancellationToken ct) =>
+        {
+            if (!EndpointActorContext.TryGetUserId(user, out var userId))
+            {
+                return Results.Unauthorized();
+            }
+
+            var scopeResult = await scope.EstablishForCallerAsync(farmId, userId, ct);
+            if (!scopeResult.IsSuccess)
+            {
+                return ToErrorResult(scopeResult.Error);
+            }
+
+            var operators = await repository.GetFieldOperatorsForFarmAsync(new FarmId(farmId), ct);
+            return Results.Ok(operators.Select(ToFieldOperatorDto).ToList());
+        })
+        .WithName("GetFieldOperatorsForFarm")
+        .RequireAuthorization();
+
         return group;
     }
+
+    private static FieldOperatorDto ToFieldOperatorDto(FieldOperator o) =>
+        new(o.Id, o.DisplayName, o.FullName, o.OriginatingFarmId.Value, o.CreatedByUserId.Value, o.CreatedAtUtc, o.IsActive);
 
     /// <summary>
     /// Mirrors AiEndpoints.ToErrorResult — Forbidden/Unauthenticated keep the
@@ -85,3 +218,12 @@ public static class LabourEndpoints
         };
     }
 }
+
+/// <summary>Task 11 — POST /farms/{farmId}/labour/field-operators body.</summary>
+public sealed record CreateFieldOperatorRequest(string DisplayName, string? FullName);
+
+/// <summary>Task 11 — POST /farms/{farmId}/labour/field-operators/{id}/attach body.</summary>
+public sealed record AttachFieldOperatorRequest(Guid LabourAssignmentId);
+
+/// <summary>Task 11 — PATCH /farms/{farmId}/labour/field-operators/{id} body.</summary>
+public sealed record RenameFieldOperatorRequest(string DisplayName);

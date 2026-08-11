@@ -4,6 +4,7 @@ using ShramSafal.Domain.Audit;
 using ShramSafal.Domain.Attachments;
 using ShramSafal.Domain.Farms;
 using ShramSafal.Domain.Finance;
+using ShramSafal.Domain.Labour;
 using ShramSafal.Domain.Logs;
 using ShramSafal.Domain.Planning;
 using ShramSafal.Domain.Privacy;
@@ -623,4 +624,57 @@ public interface IShramSafalRepository
     Task<List<LabourAssignment>> GetLabourAssignmentsForFarmSinceAsync(
         FarmId farmId, DateOnly weekStart, CancellationToken ct = default)
         => Task.FromResult(new List<LabourAssignment>());
+
+    // --- Field Operator identity (Task 11, spec: 2026-07-13-labour-attendance-approval-design) ---
+    // A10: IShramSafalRepository has 28 implementors and uses default interface
+    // implementations DELIBERATELY — an abstract member here produces ~135
+    // compile errors across the test tree. Every member below ships a default
+    // body so every existing test double keeps compiling untouched; production
+    // ShramSafalRepository overrides all five.
+
+    /// <summary>Stage a new <see cref="FieldOperator"/> identity (Task 9). No SaveChanges — the caller commits.</summary>
+    Task AddFieldOperatorAsync(FieldOperator o, CancellationToken ct = default)
+        => Task.CompletedTask;
+
+    /// <summary>
+    /// Single <see cref="FieldOperator"/> lookup by id. <b>NOT farm-scoped by
+    /// itself</b> — <c>p_user_select_field_operators</c> is a PERMISSIVE RLS
+    /// policy OR-ed with the tenant policy (A11), so under a multi-farm login
+    /// this can return a row belonging to a DIFFERENT farm than the caller's
+    /// current <c>agrisync.farm_id</c>. Every caller MUST assert
+    /// <see cref="FieldOperator.OriginatingFarmId"/> against the authorised
+    /// farm before using the result — see <c>AttachFieldOperatorHandler</c>'s
+    /// file header for the full rationale.
+    /// </summary>
+    Task<FieldOperator?> GetFieldOperatorByIdAsync(Guid id, CancellationToken ct = default)
+        => Task.FromResult<FieldOperator?>(null);
+
+    /// <summary>
+    /// Single <see cref="LabourAssignment"/> lookup by id. <b>NOT farm-scoped by
+    /// itself</b> — <c>p_user_select_labour_assignments</c> is the same kind of
+    /// PERMISSIVE, OR-ed RLS policy as <see cref="GetFieldOperatorByIdAsync"/>
+    /// above; a multi-farm caller can load a row belonging to another farm.
+    /// Callers must resolve the parent <c>DailyLog</c> and assert its
+    /// <c>FarmId</c> before trusting this result.
+    /// </summary>
+    Task<LabourAssignment?> GetLabourAssignmentByIdAsync(Guid id, CancellationToken ct = default)
+        => Task.FromResult<LabourAssignment?>(null);
+
+    /// <summary>All active-or-not <see cref="FieldOperator"/> identities originated on a farm, for the field-operator list read.</summary>
+    Task<IReadOnlyList<FieldOperator>> GetFieldOperatorsForFarmAsync(FarmId farmId, CancellationToken ct = default)
+        => Task.FromResult<IReadOnlyList<FieldOperator>>([]);
+
+    /// <summary>
+    /// "ON CONFLICT DO NOTHING" insert for the (FieldOperator, LabourAssignment)
+    /// attribution row — <c>true</c> = inserted, <c>false</c> = this pair
+    /// already existed (a retried attach; NOT an error — Task 11.5). Mirrors
+    /// <see cref="ISyncMutationStore.TryStoreSuccessAsync"/>, the one existing
+    /// outcome-returning precedent in this codebase (A10). Production
+    /// <c>ShramSafalRepository</c> commits immediately (its own SaveChanges) so
+    /// the caller learns the real outcome; PostgreSQL specifics (SQLSTATE
+    /// 23505) never leave Infrastructure — this port never throws a
+    /// provider-specific exception.
+    /// </summary>
+    Task<bool> TryAddFieldOperatorWorkRowAsync(FieldOperatorWorkRow r, CancellationToken ct = default)
+        => Task.FromResult(true);
 }
