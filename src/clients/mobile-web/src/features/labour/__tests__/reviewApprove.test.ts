@@ -198,7 +198,7 @@ describe('ReviewSheet — confirm animation + 3s undo-before-send (Task 3.2)', (
         expect(mockEnqueue).toHaveBeenCalledTimes(2);
         expect(mockEnqueue.mock.calls[0][0]).toEqual({ dailyLogId: 'r2', verificationStatus: 'confirmed' });
         expect(mockEnqueue.mock.calls[1][0]).toEqual({ dailyLogId: 'r2', verificationStatus: 'verified', reason: undefined });
-        expect(onToast).toHaveBeenCalledWith('मंजूर ✓ — हजेरीही निश्चित');
+        expect(onToast).toHaveBeenCalledWith('मंजूर केलं — फोनवर सेव्ह ✓');
         expect(screen.queryByTestId('review-undo-bar')).toBeNull();
     });
 
@@ -267,7 +267,7 @@ describe('ReviewSheet — confirm animation + 3s undo-before-send (Task 3.2)', (
         expect(mockEnqueue).toHaveBeenCalledTimes(1);
         expect(mockEnqueue).toHaveBeenCalledWith({ dailyLogId: 'r6', verificationStatus: 'verified', reason: undefined });
         // The component is still mounted (just visually closed) — toast IS expected.
-        expect(onToast).toHaveBeenCalledWith('मंजूर ✓ — हजेरीही निश्चित');
+        expect(onToast).toHaveBeenCalledWith('मंजूर केलं — फोनवर सेव्ह ✓');
     });
 });
 
@@ -355,7 +355,7 @@ describe('ReviewSheet — screen honesty (Decision 4b)', () => {
 
         expect(mockEnqueue).toHaveBeenCalledTimes(3); // one per item (each Confirmed -> one-hop)
         expect(mockTriggerNow).toHaveBeenCalledTimes(1); // NOT 3 — the actual fix
-        expect(onToast).toHaveBeenCalledWith('सगळं मंजूर ✓');
+        expect(onToast).toHaveBeenCalledWith('सगळं मंजूर केलं — फोनवर सेव्ह ✓');
     });
 
     it('calls onApproved after a successful single approve, so the caller can refresh the stale "तपासा N" badge', async () => {

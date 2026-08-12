@@ -162,19 +162,64 @@ interface PendingBatch {
 
 interface UndoEntry { batchId: string; kind: ConfirmKind; count: number }
 
+/**
+ * Labour Phase 2 -> Phase 1, Task T4.
+ *
+ * WHAT WAS WRONG
+ * --------------
+ * This toast fires from `finalizeBatch`, after the local enqueue and after a
+ * BEST-EFFORT sync trigger that nothing awaits an answer from
+ * (`triggerSyncBestEffort` swallows its own failure by design). At that instant
+ * the only thing the app can prove is that a `verify_log` mutation is sitting in
+ * `db.mutationQueue` on this handset. It said `हजेरीही निश्चित` — "attendance is
+ * settled too" — which is a claim about a durable server outcome that has not
+ * happened and may not happen for hours. `P4`/`P5`.
+ *
+ * It also used `शंका नोंदवा` — the IMPERATIVE "raise a doubt" — as a
+ * CONFIRMATION, while the confirm overlay (`ConfirmOverlay`) and the undo bar
+ * (`undoLabel`) both said `शंका नोंदवली` (past tense) for the same tap. One
+ * action, three surfaces, two tenses.
+ *
+ * WHAT IT SAYS NOW, AND WHY EXACTLY THESE WORDS
+ * ---------------------------------------------
+ * No new Marathi was invented. Every fragment below is already founder-approved
+ * and already on a screen: `मंजूर केलं` / `शंका नोंदवली` are this component's own
+ * overlay and undo-bar strings, and `फोनवर सेव्ह ✓` is `sync.onPhone` from
+ * `i18n/translations.ts` — the phrase T1 and T2 established for "this is on the
+ * phone, not yet acknowledged", which is precisely and only what has happened.
+ *
+ * The `फोनवर सेव्ह ✓` half is NOT decoration. Without it the toast would be
+ * byte-identical to the confirm overlay the farmer saw ~3.4 seconds earlier, and
+ * they would lose the one signal that the undo window has closed and the record
+ * has actually gone. Saying less is not automatically saying it more honestly.
+ *
+ * `sync.onPhone` is transcribed rather than resolved through `useLanguage` on
+ * purpose: this whole screen is hardcoded Marathi, so reading the language
+ * preference here would render `मंजूर केलं — Saved on phone ✓` for an English
+ * farmer — one fragment in a foreign script inside an otherwise Marathi sheet.
+ * If this screen is ever internationalised, this is one of the strings to route
+ * through the key.
+ *
+ * The FAILURE strings are untouched. "could not approve — try again" already
+ * claims nothing it cannot evidence, and it names a real, working remedy.
+ *
+ * THIS FUNCTION IS THE WHOLE OF T4. Ruling R7: the pre-enqueue overlay and its
+ * 3s undo window are deliberate and locked by tests. Nothing about ordering,
+ * timing or control flow changes — only what the words assert.
+ */
 function toastFor(kind: ConfirmKind, failedCount: number): string {
     if (kind === 'approveAll') {
         return failedCount === 0
-            ? 'सगळं मंजूर ✓'
+            ? 'सगळं मंजूर केलं — फोनवर सेव्ह ✓'
             : `${failedCount} नोंदी मंजूर करता आल्या नाहीत — पुन्हा प्रयत्न करा`;
     }
     if (kind === 'query') {
         return failedCount === 0
-            ? 'शंका नोंदवा — कामगाराला विचारता येईल'
+            ? 'शंका नोंदवली — फोनवर सेव्ह ✓'
             : 'शंका नोंदवता आली नाही — पुन्हा प्रयत्न करा';
     }
     return failedCount === 0
-        ? 'मंजूर ✓ — हजेरीही निश्चित'
+        ? 'मंजूर केलं — फोनवर सेव्ह ✓'
         : 'मंजूर करता आलं नाही — पुन्हा प्रयत्न करा';
 }
 
