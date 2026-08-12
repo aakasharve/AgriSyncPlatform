@@ -97,9 +97,20 @@ No endpoint returns labour attached to a log. `DailyLogDto` has 13 fields and no
 
 ### A6. The app lies about success in 11 places (7 reachable)
 
-The four `enqueueLogsForSync` call sites (`useLogCommands.ts:208, 272, 367, 426`) discard the return value and fire `Logged. Day closure: …` unconditionally; only `handleManualSubmit` has a live caller. Plus four in `ReviewSheet` (`'मंजूर ✓ — हजेरीही निश्चित'`, `'सगळं मंजूर ✓'`, `'शंका नोंदवा…'`, and a `मंजूर केलं` overlay that fires **before** the enqueue), and `'जतन झाले → मंजुरीसाठी'` which writes nothing at all.
+The four `enqueueLogsForSync` call sites (`app/hooks/useLogCommands.ts:208, 272, 367, 426` — **not** under `features/`) discard the return value and fire success unconditionally; only `handleManualSubmit` has a live caller (`mainView.tsx:443`). Plus four in `ReviewSheet` (`'मंजूर ✓ — हजेरीही निश्चित'`, `'सगळं मंजूर ✓'`, `'शंका नोंदवा — कामगाराला विचारता येईल'`, and a `मंजूर केलं` overlay that fires **before** the enqueue), and `'जतन झाले → मंजुरीसाठी'` which writes nothing at all.
 
-**Honesty UI already exists and is broken.** `OfflineBanner` and the conflict badge work. `SyncIndicator` + `SyncStatusDrawer` observe `db.outbox`, whose rows are written `PENDING` on every save and **never drained** — `markOutboxEventSent`, `markOutboxEventFailed` and `getPendingOutboxEvents` have **zero callers** — so the chip latches "Sending…" forever. It already defines `SAVED: 'Saved on Phone'` and **never emits it**.
+> **PATCHED 2026-08-12 (execution session) — four corrections of fact. Approved semantics unaffected.**
+> 1. Site 4 fires `Logged once. Saved to N plots. Day closure: …`, not `Logged. Day closure`.
+> 2. There is an unlisted **fifth** success toast at `useLogCommands.ts:346-349` — the `originalLogId` **edit** branch, which calls `logCommandService.updateLog(...)` and **never calls `enqueueLogsForSync` at all**. A fix that only touches the four `enqueueLogsForSync` sites leaves the edit path lying.
+> 3. `'जतन झाले → मंजुरीसाठी'` is **not** in `ReviewSheet.tsx` — it is `LabourFeature.tsx:146`, and it sits behind `SHOW_ATTENDANCE_TILE = false` (`LabourHub.tsx:35`), so it is currently **unreachable**. "Writes nothing" is confirmed. Do not make it reachable in order to fix it.
+> 4. The `मंजूर केलं` overlay firing before the enqueue is **deliberate** — it is a 380 ms animation plus a 3 s undo window (`ReviewSheet.tsx:75-76`, `:407-426`) so `पूर्ववत करा` can cancel before anything is enqueued, locked by 12 tests in `reviewApprove.test.ts`. **The fix is wording, never reordering** — reordering deletes the undo feature.
+
+**Honesty UI already exists and is broken.** `OfflineBanner` and the conflict badge work.
+
+> **PATCHED 2026-08-12 (execution session) — the original claim here was factually wrong.**
+> `SyncStatusDrawer` does **not** observe `db.outbox`; it reads `db.mutationQueue` (`SyncStatusDrawer.tsx:19,55`). `SyncIndicator` is a **hybrid**: its *label* comes from `db.outbox` via `SyncStatusService.ts:31-33`, while its *badge counts* already come from `db.mutationQueue` (`AppHeader.tsx:181-182`) — so the chip can render `Sending... [0]`, a permanently-amber label beside a zero badge, because its two halves disagree by construction.
+> `db.outbox` rows are written `PENDING` on every save and **never drained** — `markOutboxEventSent`, `markOutboxEventFailed` and `getPendingOutboxEvents` have **zero callers** — so the label latches `'Sending...'` (`SyncIndicator.tsx:58`, three ASCII dots) forever. It already defines `SAVED: 'Saved on Phone'` and **never emits it**.
+> **Consequence: exactly one surface reads the dead outbox — `SyncStatusService`. Phase 1 is smaller than this section originally stated.**
 
 ### A7. Three live convergence hazards
 
@@ -274,8 +285,10 @@ attributedOperators[{ fieldOperatorId, displayNameAtAttach }]
 
 Use existing conventions; build no distributed-sync framework.
 
-- **Outbox is authoritative for pending state.** The three UI states derive from `mutationQueue` — **no Dexie version bump required.**
-- **Drain the outbox.** `markOutboxEventSent` / `markOutboxEventFailed` / `getPendingOutboxEvents` have zero callers; wiring them is what makes `SyncIndicator` truthful instead of permanently "Sending…".
+> **PATCHED 2026-08-12 (execution session). The first two bullets below replace a self-contradiction in the original §E** — it said *"Outbox is authoritative for pending state"* and, in the same sentence, *"the three UI states derive from `mutationQueue`"*. Those are **two different Dexie tables** (`DexieDatabase.ts:657-658`). Repo truth decides it. **Approved semantics (§G's three states, O-1..O-5) are unaffected** — only the mechanism was wrong, so this is a `W2` PLAN DEFECT patched in place, not a reopened design.
+
+- **`mutationQueue` is authoritative for pending state.** It is the only store with a server-ack contract (`BackgroundSyncWorker.ts:224-226`). The three UI states derive from it — **no Dexie version bump required** (its index string is unchanged v2 → v22).
+- **Cut `db.outbox` out of the status path. Do NOT wire a drain for it.** `db.outbox` has **no sender at all** — nothing reads its rows except the status chip's label, which is why `markOutboxEventSent` / `markOutboxEventFailed` / `getPendingOutboxEvents` have zero callers: there is no code path that could call them. Wiring a drain would mean building a **second sync channel**, forbidden by Global Constraint 3 and by `P1`. The truthful and far smaller fix is to point `SyncStatusService` at `mutationQueue`. Retiring the `db.outbox` table itself is **deferred** (it needs a Dexie version bump; once nothing reads it, it is inert and harmless).
 - **Surface the skip.** `enqueueLogsForSync` returns `skippedLogIds`; consume it at all four call sites.
 - **Correction must reach Dexie.** `updateLog` must persist, not only `setHistory` (§A7.1).
 - **Prevent the double-tap duplicate.** An in-flight lock on Save (§A7.2). *Note: this does not fix the underlying fresh-id defect, which stays deferred — it removes the reachable path.*
@@ -350,7 +363,7 @@ No semantic backfill (§I).
 
 **Phase 0 — founder decisions (§O). No code.**
 
-**Phase 1 — Honesty backstop.** Independent, ships first, de-risks everything after: consume `skippedLogIds`, drain the outbox, wire the three states, remove premature success wording, surface the retry cap. *A farmer stops being told "saved" for a dropped log even if the rest slips.*
+**Phase 1 — Honesty backstop.** Independent, ships first, de-risks everything after: consume `skippedLogIds`, **point the status chip at `mutationQueue` and cut the dead `db.outbox` out of the status path** *(patched 2026-08-12 — see §E)*, wire the three states, remove premature success wording, surface the retry cap. *A farmer stops being told "saved" for a dropped log even if the rest slips.*
 
 **Phase 2 — Farm context durable (Plot / MultiPlot / Farm).** Migration ① + domain + conditional guards + contract regeneration + client scope intent + reader audit (§H list).
 
