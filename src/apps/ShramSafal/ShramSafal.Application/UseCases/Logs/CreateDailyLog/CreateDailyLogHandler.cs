@@ -127,16 +127,105 @@ public sealed class CreateDailyLogHandler(
             PaidFeature.WriteDailyLog, ct);
         if (gate is not null) return gate;
 
-        var plot = await repository.GetPlotByIdAsync(command.PlotId, ct);
-        if (plot is null || plot.FarmId != farmId)
+        // ── LABOUR_PHASE2 P2.2 — the spatial guard, conditional on what the
+        //    farmer actually asserted ──────────────────────────────────────────
+        //
+        // Placed HERE, after farm-existence + membership + entitlement and
+        // BEFORE the idempotency early-return below, for three reasons:
+        //   1. a scope-conditional branch can never become an authorization
+        //      bypass, because authorization has already run;
+        //   2. a rejected command still leaves zero rows staged, matching the
+        //      contract stated at the top of this method;
+        //   3. the crop-cycle check cross-checks the cycle against the PLOT, so
+        //      it belongs inside the plot-scoped branch and nowhere else.
+        //
+        // This runs on BOTH entry paths. CreateDailyLogValidator enforces the
+        // same shape on the HTTP pipeline, but /sync/push resolves this handler
+        // RAW and never executes that behaviour — so the body, not the
+        // validator, is what makes the two paths agree.
+        //
+        // It is also in the COMMITTED phase (doctrine P1). Where the farmer says
+        // the work happened is farmer-asserted truth, not something the system
+        // inferred, so it is resolved and written with its parent — never in the
+        // best-effort side-car below, which swallows every exception.
+        if (command.Scope == Domain.Logs.DailyLogScope.Plot)
         {
-            return Result.Failure<DailyLogDto>(ShramSafalErrors.PlotNotFound);
-        }
+            // A plot-scoped log without a plot or a cycle is a malformed command,
+            // not a missing row. Reaching GetPlotByIdAsync with a fabricated
+            // Guid.Empty to "keep the old error code" would be inventing a plot
+            // reference the caller never supplied.
+            if (command.PlotId is not { } plotId || command.CropCycleId is not { } cropCycleId)
+            {
+                return Result.Failure<DailyLogDto>(ShramSafalErrors.InvalidCommand);
+            }
 
-        var cropCycle = await repository.GetCropCycleByIdAsync(command.CropCycleId, ct);
-        if (cropCycle is null || cropCycle.FarmId != farmId || cropCycle.PlotId != command.PlotId)
+            // Unchanged from Labour V1, deliberately: same lookups, same farm
+            // cross-checks, same two error codes, same order. This is the
+            // regression that matters most.
+            var plot = await repository.GetPlotByIdAsync(plotId, ct);
+            if (plot is null || plot.FarmId != farmId)
+            {
+                return Result.Failure<DailyLogDto>(ShramSafalErrors.PlotNotFound);
+            }
+
+            var cropCycle = await repository.GetCropCycleByIdAsync(cropCycleId, ct);
+            if (cropCycle is null || cropCycle.FarmId != farmId || cropCycle.PlotId != plotId)
+            {
+                return Result.Failure<DailyLogDto>(ShramSafalErrors.CropCycleNotFound);
+            }
+        }
+        else
         {
-            return Result.Failure<DailyLogDto>(ShramSafalErrors.CropCycleNotFound);
+            // MultiPlot / Farm: there is no single plot and no crop cycle. If the
+            // caller sent one anyway the command contradicts itself — reject it
+            // rather than ignore the field, so a client bug can never quietly
+            // discard part of what the farmer said.
+            if (command.PlotId.HasValue || command.CropCycleId.HasValue)
+            {
+                return Result.Failure<DailyLogDto>(ShramSafalErrors.InvalidCommand);
+            }
+
+            if (command.Scope == Domain.Logs.DailyLogScope.MultiPlot)
+            {
+                var scopedPlotIds = command.PlotIds;
+                if (scopedPlotIds is not { Count: >= 2 }
+                    || scopedPlotIds.Any(id => id == Guid.Empty)
+                    || scopedPlotIds.Distinct().Count() != scopedPlotIds.Count)
+                {
+                    return Result.Failure<DailyLogDto>(ShramSafalErrors.InvalidCommand);
+                }
+
+                // Founder decision O-1: EVERY plot in the set is resolved and
+                // checked against this farm. Validating only the first would let
+                // a caller smuggle another farm's plot into the set behind a
+                // legitimate one — and would make the row assert something the
+                // server never verified. Cost is one lookup per plot the farmer
+                // selected (a handful), all before any write is staged.
+                foreach (var scopedPlotId in scopedPlotIds)
+                {
+                    var scopedPlot = await repository.GetPlotByIdAsync(scopedPlotId, ct);
+                    if (scopedPlot is null || scopedPlot.FarmId != farmId)
+                    {
+                        return Result.Failure<DailyLogDto>(ShramSafalErrors.PlotNotFound);
+                    }
+                }
+            }
+            else if (command.Scope == Domain.Logs.DailyLogScope.Farm)
+            {
+                // संपूर्ण शेत. Nothing spatial to resolve — the farm was already
+                // proven to exist and to be one this user may write to. A
+                // non-empty plot set contradicts the scope.
+                if (command.PlotIds is { Count: > 0 })
+                {
+                    return Result.Failure<DailyLogDto>(ShramSafalErrors.InvalidCommand);
+                }
+            }
+            else
+            {
+                // An out-of-range enum value (only reachable via a cast) must not
+                // fall through into any of the three real scopes.
+                return Result.Failure<DailyLogDto>(ShramSafalErrors.InvalidCommand);
+            }
         }
 
         if (!string.IsNullOrWhiteSpace(command.IdempotencyKey))
@@ -210,18 +299,54 @@ public sealed class CreateDailyLogHandler(
             provenance = Provenance.Manual(stampedAppVersion);
         }
 
-        var log = Domain.Logs.DailyLog.Create(
-            command.DailyLogId ?? idGenerator.New(),
-            command.FarmId,
-            command.PlotId,
-            command.CropCycleId,
-            command.OperatorUserId,
-            command.LogDate,
-            command.IdempotencyKey,
-            command.Location,
-            clock.UtcNow,
-            provenance: provenance,
-            sourceAiJobId: validatedSourceAiJobId);
+        // LABOUR_PHASE2 P2.2 — pick the factory that matches what the farmer
+        // asserted. P2.1 deliberately gave each scope its OWN factory rather than
+        // one Create() taking a scope: CreateForFarm has no plot or cycle
+        // parameter at all and CreateForMultiPlot has no single-plot parameter,
+        // so an invalid scope/plot pairing cannot be EXPRESSED here, let alone
+        // constructed. The guard above has already proven every id this passes.
+        var newLogId = command.DailyLogId ?? idGenerator.New();
+        var log = command.Scope switch
+        {
+            Domain.Logs.DailyLogScope.Farm => Domain.Logs.DailyLog.CreateForFarm(
+                newLogId,
+                command.FarmId,
+                command.OperatorUserId,
+                command.LogDate,
+                command.IdempotencyKey,
+                command.Location,
+                clock.UtcNow,
+                provenance: provenance,
+                sourceAiJobId: validatedSourceAiJobId),
+
+            Domain.Logs.DailyLogScope.MultiPlot => Domain.Logs.DailyLog.CreateForMultiPlot(
+                newLogId,
+                command.FarmId,
+                // Non-null and >= 2 distinct real plots: proven by the guard.
+                command.PlotIds!,
+                command.OperatorUserId,
+                command.LogDate,
+                command.IdempotencyKey,
+                command.Location,
+                clock.UtcNow,
+                provenance: provenance,
+                sourceAiJobId: validatedSourceAiJobId),
+
+            // Plot — the Labour V1 call, byte-for-byte, with the two ids the
+            // guard proved are present and real.
+            _ => Domain.Logs.DailyLog.Create(
+                newLogId,
+                command.FarmId,
+                command.PlotId!.Value,
+                command.CropCycleId!.Value,
+                command.OperatorUserId,
+                command.LogDate,
+                command.IdempotencyKey,
+                command.Location,
+                clock.UtcNow,
+                provenance: provenance,
+                sourceAiJobId: validatedSourceAiJobId),
+        };
 
         // W1.P2 T3 — persist per-field provenance into EvidenceSourcesJson.
         // The AiJob's NormalizedResultJson carries "provenance" keys on each
@@ -325,8 +450,18 @@ public sealed class CreateDailyLogHandler(
                 {
                     log.Id,
                     command.FarmId,
-                    command.PlotId,
-                    command.CropCycleId,
+                    // LABOUR_PHASE2 P2.2 — read from the LOG, not the command, and
+                    // include the scope. Without it the audit row cannot tell
+                    // "the farmer said संपूर्ण शेत" apart from "a plot was
+                    // omitted", which is the whole point of storing scope at all.
+                    // ToString() because AuditEventFactory's serializer has no
+                    // enum converter — a bare `2` in an audit row would need a
+                    // convention to read, and ssf.daily_logs.scope stores the
+                    // literal member name anyway.
+                    Scope = log.Scope.ToString(),
+                    log.PlotIds,
+                    log.PlotId,
+                    log.CropCycleId,
                     command.LogDate,
                     command.Location
                 },
@@ -368,8 +503,13 @@ public sealed class CreateDailyLogHandler(
             PropsJson: System.Text.Json.JsonSerializer.Serialize(new
             {
                 logId = log.Id,
-                plotId = command.PlotId,
-                cropCycleId = command.CropCycleId,
+                // LABOUR_PHASE2 P2.2 — plotId stays for every existing consumer
+                // and is simply NULL when the farmer named no plot; `scope` is
+                // what makes that null readable. Sourced from the log so these
+                // props can never disagree with the committed row.
+                scope = log.Scope.ToString(),
+                plotId = log.PlotId,
+                cropCycleId = log.CropCycleId,
                 // Phase 3 will populate these via IScheduleComplianceService.
                 scheduleSubscriptionId = (Guid?)null,
                 matchedTaskId = (Guid?)null,

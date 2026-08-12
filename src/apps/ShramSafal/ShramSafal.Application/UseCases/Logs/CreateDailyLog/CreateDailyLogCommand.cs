@@ -1,12 +1,19 @@
 using ShramSafal.Application.Contracts.Sync.Payloads;
 using ShramSafal.Domain.Location;
+using ShramSafal.Domain.Logs;
 
 namespace ShramSafal.Application.UseCases.Logs.CreateDailyLog;
 
 public sealed record CreateDailyLogCommand(
     Guid FarmId,
-    Guid PlotId,
-    Guid CropCycleId,
+    // LABOUR_PHASE2 P2.2 — nullable IN PLACE rather than appended, because a
+    // `MultiPlot` or `Farm` log genuinely has neither. Widening a positional
+    // parameter from Guid to Guid? is source-compatible (every existing caller
+    // still passes a Guid, which converts implicitly), so no call site moves.
+    // NULL here means "the farmer named no single plot" — it is never a stand-in
+    // for one, and nothing downstream may substitute Guid.Empty for it (P4).
+    Guid? PlotId,
+    Guid? CropCycleId,
     Guid RequestedByUserId,
     Guid OperatorUserId,
     DateOnly LogDate,
@@ -44,7 +51,22 @@ public sealed record CreateDailyLogCommand(
     // persists them (Task 6 adds the write path via LabourAssignmentFactory).
     // Added at the END, after WeatherStamp, so existing positional
     // construction keeps compiling.
-    IReadOnlyList<LabourItem>? Labour = null)
+    IReadOnlyList<LabourItem>? Labour = null,
+    // LABOUR_PHASE2 P2.2 — what the farmer asserted about WHERE the work
+    // happened. Added at the END with a default, after Labour, so existing
+    // positional construction keeps compiling and keeps meaning exactly what it
+    // meant before: DailyLogScope.Plot, the Labour V1 shape.
+    //
+    // The default is safe precisely BECAUSE it is the restrictive value — a
+    // caller who says nothing gets the plot-scoped path, which still demands a
+    // real PlotId and a real CropCycleId. There is no default that could
+    // accidentally produce a farm-wide log.
+    DailyLogScope Scope = DailyLogScope.Plot,
+    // The canonical spatial set. NULL means "not supplied": for Scope.Plot the
+    // handler derives it from PlotId, so no existing caller has to change. For
+    // Scope.MultiPlot it must carry two or more distinct real plots; for
+    // Scope.Farm it must be absent or empty.
+    IReadOnlyList<Guid>? PlotIds = null)
 {
     public string? IdempotencyKey
     {

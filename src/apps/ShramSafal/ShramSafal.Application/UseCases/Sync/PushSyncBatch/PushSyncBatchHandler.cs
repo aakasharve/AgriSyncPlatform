@@ -592,7 +592,15 @@ public sealed class PushSyncBatchHandler(
         string? appVersion,
         CancellationToken ct)
     {
-        if (!PayloadHasOnly(payload, "dailyLogId", "farmId", "plotId", "cropCycleId", "operatorUserId", "logDate", "location", "weatherStamp", "sourceAiJobId", "labour"))
+        // Doctrine F5 — this is a STRICT ALLOW-LIST and it is checked BEFORE
+        // DeserializePayload below, so an unlisted key does not merely get
+        // ignored: the whole mutation is rejected as SyncInvalidPayload and
+        // never reaches CreateDailyLogHandler at all. A farm-scoped log would
+        // then fail in a way that looks nothing like a scope problem.
+        // LABOUR_PHASE2 P2.2 adds "scope" and "plotIds" here, in lockstep with
+        // sync-contract/schemas/payloads/create_daily_log.zod.ts and the
+        // generated CreateDailyLogPayload record.
+        if (!PayloadHasOnly(payload, "dailyLogId", "farmId", "scope", "plotIds", "plotId", "cropCycleId", "operatorUserId", "logDate", "location", "weatherStamp", "sourceAiJobId", "labour"))
         {
             return MutationExecutionOutcome.Failure(
                 "ShramSafal.SyncInvalidPayload",
@@ -614,6 +622,37 @@ public sealed class PushSyncBatchHandler(
         // silently create a log with an empty id instead of a server-generated
         // one. Map Empty back to null to preserve the prior wire behavior exactly.
         Guid? dailyLogId = request.DailyLogId == Guid.Empty ? null : request.DailyLogId;
+
+        // LABOUR_PHASE2 P2.2 — the wire carries `scope` as a string (the zod
+        // enum's exact member names); map it here, TOTALLY and explicitly.
+        //
+        // Absent / empty => Plot. Every client shipped before this change omits
+        // the field, and "one plot with its crop cycle" is precisely what those
+        // payloads mean — so the legacy wire shape keeps its exact V1 behaviour.
+        //
+        // An UNRECOGNISED value is rejected, never defaulted: silently reading an
+        // unknown scope as Plot would turn a farmer's "संपूर्ण शेत" into an
+        // assertion about one plot they never named. Enum.TryParse is deliberately
+        // NOT used — it also accepts the underlying numeric values ("0", "1"),
+        // which are not part of this contract.
+        DailyLogScope scope;
+        switch (request.Scope)
+        {
+            case null or "":
+            case "Plot":
+                scope = DailyLogScope.Plot;
+                break;
+            case "MultiPlot":
+                scope = DailyLogScope.MultiPlot;
+                break;
+            case "Farm":
+                scope = DailyLogScope.Farm;
+                break;
+            default:
+                return MutationExecutionOutcome.Failure(
+                    "ShramSafal.SyncInvalidPayload",
+                    "create_daily_log payload carries an unrecognised scope.");
+        }
 
         // Fix 1 (ai-intelligence-plan-2026-06-25) — establish the membership-
         // VALIDATED single-farm tenant scope so the confirm-time typed-ledger
@@ -663,7 +702,15 @@ public sealed class PushSyncBatchHandler(
                 WeatherStamp: request.WeatherStamp,
                 // Labour V1 Task 5 — transport only; CreateDailyLogHandler does not
                 // persist this yet (Task 6 adds the write path).
-                Labour: request.Labour),
+                Labour: request.Labour,
+                // LABOUR_PHASE2 P2.2 — the farmer's spatial assertion, carried
+                // straight through. Passed RAW: this path deliberately resolves
+                // the RAW handler and skips the validator pipeline (see the
+                // header comment on CreateDailyLogHandler), so the handler body
+                // — not this mapping — is the gate that must reject an
+                // incoherent scope/plot combination.
+                Scope: scope,
+                PlotIds: request.PlotIds),
             ct);
 
         return ToOutcome(result);

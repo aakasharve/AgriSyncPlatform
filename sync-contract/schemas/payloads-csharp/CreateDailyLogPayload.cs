@@ -59,9 +59,12 @@ public sealed record LabourItem(
 public sealed record CreateDailyLogPayload(
     Guid DailyLogId,
     Guid FarmId,
-    Guid PlotId,
-    Guid CropCycleId,
     DateOnly LogDate,
+    /// <summary>Allowed values: "Plot", "MultiPlot", "Farm".</summary>
+    string? Scope = null,
+    IReadOnlyList<Guid>? PlotIds = null,
+    Guid? PlotId = null,
+    Guid? CropCycleId = null,
     Guid? OperatorUserId = null,
     LocationItem? Location = null,
     WeatherStampItem? WeatherStamp = null,

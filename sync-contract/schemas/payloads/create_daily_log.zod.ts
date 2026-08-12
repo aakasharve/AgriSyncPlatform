@@ -76,11 +76,35 @@ const LabourItemSchema = z.object({
     durationHours: z.number().optional(),
 });
 
+// LABOUR_PHASE2 P2.2 — what the farmer actually asserted about WHERE the work
+// happened. Mirrors ShramSafal.Domain.Logs.DailyLogScope member-for-member; the
+// strings are load-bearing (ck_daily_logs_scope compares against these exact
+// literals), so renaming one is a schema change, not a refactor.
+//
+// OPTIONAL on the wire, and absent means `Plot`. Every client shipped before
+// this change omits the field entirely, and the history note at the top of this
+// file is the record of what a forward-looking REQUIRED field costs: the
+// mutation is rejected at MutationQueue.enqueue and the record never leaves the
+// phone. Absent -> Plot is therefore the only backward-compatible reading, and
+// it is exactly what those clients mean.
+const ZDailyLogScope = z.enum(['Plot', 'MultiPlot', 'Farm']);
+
 export const CreateDailyLogPayload = z.object({
     dailyLogId: ZGuid,
     farmId: ZGuid,
-    plotId: ZGuid,
-    cropCycleId: ZGuid,
+    scope: ZDailyLogScope.optional(),
+    // The canonical spatial assertion as a SET: one entry for `Plot`, two or
+    // more for `MultiPlot`, and EMPTY (or absent) for `Farm` — never a sentinel
+    // and never "the first plot". Absent is read as "not supplied"; for a `Plot`
+    // payload the server derives it from plotId.
+    plotIds: z.array(ZGuid).optional(),
+    // OPTIONAL since P2.2: a `MultiPlot` or `Farm` log genuinely has no single
+    // plot and no crop cycle, and inventing one to satisfy a required field is
+    // the exact fabrication doctrine P4 forbids. For `Plot` they are still
+    // effectively required — CreateDailyLogValidator (HTTP) and
+    // CreateDailyLogHandler (both paths) reject a plot-scoped log without them.
+    plotId: ZGuid.optional(),
+    cropCycleId: ZGuid.optional(),
     operatorUserId: ZGuid.optional(),
     logDate: ZLogDate,
     location: LocationPayloadSchema.optional(),
