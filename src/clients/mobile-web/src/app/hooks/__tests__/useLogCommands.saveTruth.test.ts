@@ -29,6 +29,12 @@
 //   B4  A red toast reading `0 of 1` reads as "your record is gone", and the
 //       farmer re-records it — creating a duplicate. The record IS on the
 //       phone. Say so first.
+//   C-2  The EDIT path's `> 0` branch — the one branch B1 did not cover. It
+//       fired a GREEN tick reading "N labour corrections sent to the server."
+//       That sentence is true and evidenced. What it left out was the rest of
+//       the edit: `ManualEntry` submits the whole log, so one edit changes
+//       irrigation hours AND a headcount, and only the labour half has a server
+//       path. A green tick over a partial truth.
 //   C-1  The header chip is the surface the farmer never navigates away from.
 //       It derives its claim from `db.mutationQueue`, where a skipped log has
 //       no row — and `APPLIED` rows are never pruned, so on any device that has
@@ -632,7 +638,7 @@ describe('useLogCommands — the EDIT path may not claim a save it cannot eviden
         }
     });
 
-    it('an edit whose labour corrections the server accepted says exactly that, and no more', async () => {
+    it('an edit whose labour corrections the server accepted says exactly that, and what it cost', async () => {
         updateLog.mockResolvedValue({
             success: true,
             log: makeLog('1'),
@@ -642,8 +648,9 @@ describe('useLogCommands — the EDIT path may not claim a save it cannot eviden
         await submitEdit();
 
         expect(setToast).toHaveBeenCalledWith({
-            message: '2 labour corrections sent to the server.',
-            type: 'success',
+            message: '2 labour corrections sent to the server. '
+                + 'The rest of this edit is shown on screen only — not saved anywhere.',
+            type: 'partial',
         });
         // It does not say "saved" — nothing was written to any ledger, local or
         // otherwise. A server correction is the only thing it can evidence.
@@ -662,9 +669,95 @@ describe('useLogCommands — the EDIT path may not claim a save it cannot eviden
         await submitEdit();
 
         expect(setToast).toHaveBeenCalledWith({
-            message: '1 labour correction sent to the server.',
-            type: 'success',
+            message: '1 labour correction sent to the server. '
+                + 'The rest of this edit is shown on screen only — not saved anywhere.',
+            type: 'partial',
         });
+    });
+
+    // ------------------------------------------------------------------- C-2
+    // The zero-corrections branch was already honest. The `> 0` branch was the
+    // survivor of the B1 defect class: everything it said was true and
+    // evidenced, and everything it did NOT say was the farmer's irrigation
+    // entry. `ManualEntry` submits the whole log in one `userDraft`
+    // (`manual-entry/ManualEntry.tsx:281`), so one edit routinely changes
+    // irrigation hours AND a headcount; `updateLog` sends only the labour half
+    // and never calls `repo.save`. The farmer who fixed both read
+    // "1 labour correction sent to the server" under a green tick, and lost the
+    // irrigation change on the next reload, unmentioned.
+
+    it('C-2: a landed labour correction never implies the REST of the edit was saved', async () => {
+        updateLog.mockResolvedValue({
+            success: true,
+            log: makeLog('1'),
+            persistedLabourCorrections: 1,
+        });
+
+        await submitEdit();
+
+        const toast = setToast.mock.calls.at(-1)?.[0] as ToastCall;
+        // Both halves of the truth, in one message. The server half first,
+        // because it is the part the farmer asked for and it really happened.
+        expect(toast?.message).toContain('1 labour correction sent to the server.');
+        // And the half that used to be silence. `updateLog` calls `repo.getById`
+        // and never `repo.save`, and `setHistory` has no persist subscriber, so
+        // every non-labour category of this edit dies on the next reload.
+        expect(toast?.message).toContain('shown on screen only');
+        expect(toast?.message).toContain('not saved anywhere');
+    });
+
+    it('C-2: no green tick over a partial outcome — the icon must not say "all done"', async () => {
+        // The wording alone is not the fix. `'success'` renders emerald with a
+        // `CheckCircle` and self-destructs in 3000ms (`ActionToast.tsx:39-43,
+        // 71-84`); the tick is read before any words are, and it means "all
+        // done". Over an outcome that is partly landed and partly nowhere, the
+        // tick does the lying the sentence no longer does. `'partial'` is amber
+        // with an `AlertCircle` and stays 7000ms — notice this, do not fear it —
+        // and it is the toast type Phase 1 introduced for exactly this shape.
+        updateLog.mockResolvedValue({
+            success: true,
+            log: makeLog('1'),
+            persistedLabourCorrections: 3,
+        });
+
+        await submitEdit();
+
+        expect((setToast.mock.calls.at(-1)?.[0] as ToastCall)?.type).toBe('partial');
+        expect(setToast).not.toHaveBeenCalledWith(
+            expect.objectContaining({ type: 'success' }),
+        );
+    });
+
+    it('C-2: both edit outcomes speak ONE dialect about what is not saved', async () => {
+        // The zero branch was the model; the `> 0` branch reuses its exact
+        // vocabulary rather than inventing a third way to say the same thing. If
+        // a future edit re-words one of them, this fails and the pair is
+        // re-worded together.
+        const messages: string[] = [];
+        for (const persisted of [0, 2]) {
+            vi.clearAllMocks();
+            setToast = vi.fn<ToastSetter>();
+            updateLog.mockResolvedValue({
+                success: true,
+                log: makeLog('1'),
+                persistedLabourCorrections: persisted,
+            });
+
+            await submitEdit();
+
+            const toast = setToast.mock.calls.at(-1)?.[0] as ToastCall;
+            expect(toast?.type).toBe('partial');
+            messages.push(toast?.message ?? '');
+        }
+
+        for (const message of messages) {
+            // Lower-cased only because one of the two opens the sentence with it
+            // ("Shown on screen only — ...") and the other continues one
+            // ("The rest of this edit is shown on screen only — ..."). Same
+            // words either way, which is the whole point.
+            expect(message.toLowerCase()).toContain('shown on screen only');
+            expect(message.toLowerCase()).toContain('not saved anywhere');
+        }
     });
 
     it('an older result with no evidence field at all is treated as no evidence', async () => {

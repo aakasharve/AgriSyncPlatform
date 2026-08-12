@@ -541,26 +541,64 @@ export const useLogCommands = ({
                 // Nor does it borrow `sync.onPhone`: unlike a skipped CREATE,
                 // this edit is not on the phone either. `setHistory` is React
                 // state and nothing persists it.
+                //
+                // FINDING C-2 — THE `> 0` BRANCH HAD THE SAME DEFECT, SMALLER.
+                // It used to stop after "N labour corrections sent to the
+                // server." in GREEN, with a tick. Every word of that is true and
+                // evidenced; the lie was everything it left out. `ManualEntry`
+                // submits the WHOLE log (`manual-entry/ManualEntry.tsx:281`
+                // builds one `userDraft` carrying cropActivities, irrigation,
+                // inputs, machinery, expenses AND labour), so one edit routinely
+                // changes irrigation hours AND a headcount. `updateLog` sends
+                // only the labour half and never calls `repo.save`, so the
+                // farmer who fixed both read "1 labour correction sent to the
+                // server", saw a green tick, and lost the irrigation change on
+                // the next reload without ever being told. A green tick over a
+                // partial truth is the same defect class as finding B1 on the
+                // create path — this is the one branch B1 did not cover.
+                //
+                // So it now says BOTH true things, in the sibling branch's own
+                // vocabulary rather than a third dialect: what reached the
+                // server, then "shown on screen only" / "not saved anywhere" for
+                // the rest.
+                //
+                // STATED PLAINLY, because it is a real imprecision: when the
+                // farmer changed ONLY labour, "the rest of this edit" is an empty
+                // set and the second sentence warns about nothing. Nothing here
+                // can tell the two apart — `data` is the whole form either way,
+                // and deciding otherwise would mean re-deriving
+                // `buildLabourCorrections`'s changed-field diff for every other
+                // category, which is Phase 4's job and not a wording fix. An
+                // over-wide "some of this did not save" costs a moment's doubt;
+                // the silence it replaces cost the farmer their irrigation entry.
                 const persistedCorrections = result.persistedLabourCorrections ?? 0;
-                setToast(persistedCorrections > 0
-                    ? {
-                        message: `${persistedCorrections} labour correction${persistedCorrections === 1 ? '' : 's'} sent to the server.`,
-                        type: 'success'
-                    }
-                    : {
-                        // `'partial'`, not `'error'` — for the same reason as the
-                        // skipped-save toast, and one more: NOTHING FAILED here.
-                        // Red says "it broke, try again", and there is nothing to
-                        // try again; the edit path has no persistence yet (Phase
-                        // 4 owns that). A truthful missing feature must not be
-                        // dressed as a fault (`P5`). It also gets the longer 7s
-                        // window, because this sentence is the ONLY confirmation
-                        // the edit path has — a judgement the controller reviewed
-                        // and accepted rather than adding a confirmation panel
-                        // over a path that writes to no ledger.
-                        message: 'Shown on screen only — this edit is not saved anywhere.',
-                        type: 'partial'
-                    });
+                setToast({
+                    message: persistedCorrections > 0
+                        ? `${persistedCorrections} labour correction${persistedCorrections === 1 ? '' : 's'} sent to the server. The rest of this edit is shown on screen only — not saved anywhere.`
+                        : 'Shown on screen only — this edit is not saved anywhere.',
+                    // `'partial'` on BOTH branches, and never `'error'` or
+                    // `'success'`.
+                    //
+                    // Not `'error'`: NOTHING FAILED here. Red says "it broke, try
+                    // again", and there is nothing to try again; the edit path
+                    // has no persistence yet (Phase 4 owns that). A truthful
+                    // missing feature must not be dressed as a fault (`P5`).
+                    //
+                    // Not `'success'`: green + `CheckCircle` is read before any
+                    // words are, and it means "all done". On an outcome that is
+                    // partly landed and partly nowhere, the tick does the lying
+                    // that the sentence no longer does. `'partial'` is amber with
+                    // an `AlertCircle` (`ActionToast.tsx:39-43,73-84`) — notice
+                    // this, do not fear it — and it is the exact toast type
+                    // Phase 1 introduced for this shape of outcome.
+                    //
+                    // It also buys the reading time: `'partial'` stays up 7000ms
+                    // where `'success'` gets 3000, and this is now a two-sentence
+                    // message on the ONLY confirmation surface the edit path has
+                    // (it deliberately never enters the `'success'` full-screen
+                    // panel — see `ledgerWritten` below).
+                    type: 'partial'
+                });
                 savedLogIds = [(result.log as DailyLog).id];
                 ledgerWritten = false;
 
