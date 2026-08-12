@@ -31,6 +31,16 @@ import {
 } from '../helpers/normalizeActivityType';
 import type { PlotLookupEntry } from './profileAndCropsReconciler';
 
+/**
+ * LABOUR_PHASE2 P2.3 — the value this codebase already uses to say "farm
+ * scope, no plot and no crop": `LogFactory.ts:41` (private), `dayState.ts:78`
+ * (private), `costAnalysisHelpers.ts:107` (exported). This file previously
+ * inlined the same literal for `cropId`. It is declared locally, as its three
+ * siblings are, rather than shared — `LogFactory.ts` is frozen for Phase 2b and
+ * cannot be edited here, so a single shared constant has to wait for 2b.
+ */
+const FARM_GLOBAL_ID = 'FARM_GLOBAL';
+
 export async function reconcileLogs(
     db: AgriLogDatabase,
     payload: SyncPullResponse,
@@ -135,11 +145,18 @@ function preserveLocalOnlyFields(incoming: DailyLog, existing: DailyLog | undefi
     };
 }
 
+/**
+ * LABOUR_PHASE2 P2.3 — `DailyLogDto.plotId` is nullable, because a `Farm`-scoped
+ * log genuinely has no plot. This rebuild therefore has to answer "which plot?"
+ * with "none", never by inventing one: no first-plot, no every-plot, no
+ * `Guid.Empty`, no synthetic crop cycle (founder decision O-1).
+ */
 function toDailyLog(
     source: DailyLogDto,
     plotLookup: Map<string, PlotLookupEntry>
 ): DailyLog {
-    const plotContext = plotLookup.get(source.plotId);
+    const plotId = source.plotId ?? undefined;
+    const plotContext = plotId ? plotLookup.get(plotId) : undefined;
     const selectedCropName = normalizeMojibakeText(plotContext?.cropName ?? 'Farm');
     const selectedPlotName = normalizeMojibakeText(plotContext?.plotName ?? 'Unknown Plot');
     const latestVerification = [...source.verificationEvents]
@@ -203,7 +220,14 @@ function toDailyLog(
         if (isObservationActivity(normalizedActivity)) {
             observations.push({
                 id: task.id,
-                plotId: source.plotId,
+                // `ObservationNote.plotId` is non-optional (log.types.ts:372).
+                // A farm-scoped log has no plot, so this uses the encoding the
+                // local write path already uses for exactly this case
+                // (`LogFactory.ts:345`, `plotId: obs.plotId || FARM_GLOBAL_ID`)
+                // rather than a new sentinel or a borrowed plot id. Every
+                // plot-keyed reader — `plotLookup.get`, `selectedPlotIds
+                // .includes` — reads it as "no plot", which is the truth.
+                plotId: plotId ?? FARM_GLOBAL_ID,
                 cropId: plotContext?.cropId,
                 dateKey: source.logDate,
                 timestamp: task.occurredAtUtc,
@@ -229,11 +253,20 @@ function toDailyLog(
         id: source.id,
         date: source.logDate,
         context: {
+            // A length-1 array holding `undefined` is the worst available
+            // answer: it round-trips a farm-scoped log as plot-scoped, so
+            // `selectedPlotIds.length === 1` reads as PLOT mode
+            // (`ContextSelectors.ts:72`) and every `.includes(plotId)` reader
+            // compares against a hole. Empty is the honest shape, and it is
+            // the same shape `LogFactory.ts:405` writes for a farm-wide log
+            // created on this device. `selectedPlotNames` has to move with it,
+            // or the names would out-number the ids and 'Unknown Plot' would be
+            // shown for a plot the farmer never named.
             selection: [{
-                cropId: plotContext?.cropId ?? 'FARM_GLOBAL',
+                cropId: plotContext?.cropId ?? FARM_GLOBAL_ID,
                 cropName: selectedCropName,
-                selectedPlotIds: [source.plotId],
-                selectedPlotNames: [selectedPlotName],
+                selectedPlotIds: plotId ? [plotId] : [],
+                selectedPlotNames: plotId ? [selectedPlotName] : [],
             }],
         },
         dayOutcome: 'WORK_RECORDED',

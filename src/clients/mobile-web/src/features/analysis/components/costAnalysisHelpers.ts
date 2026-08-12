@@ -124,6 +124,18 @@ export const getUniquePlotIds = (selections: ScopeSelection[]): string[] => {
     return Array.from(new Set(selections.flatMap(selection => selection.plotIds)));
 };
 
+/**
+ * LABOUR_PHASE2 P2.3 — did the farmer record this at farm level?
+ *
+ * Both writers encode that the same way: `LogFactory.ts:402-407` and the pull
+ * reconciler (`logsReconciler.ts`) build a single selection with cropId
+ * FARM_GLOBAL and empty plot arrays. A selection with a missing/blank cropId is
+ * deliberately NOT counted — "we don't know the scope" is not the farmer
+ * asserting "the whole farm".
+ */
+const hasFarmWideSelection = (log: DailyLog): boolean =>
+    (log.context?.selection || []).some(selection => selection.cropId === FARM_GLOBAL_ID);
+
 export const getScopedLogCost = (
     log: DailyLog,
     allowedCropIds: Set<string>,
@@ -133,7 +145,23 @@ export const getScopedLogCost = (
     if (baseCost <= 0) return 0;
 
     const allSelections = getNonGlobalSelections(log);
-    if (allSelections.length === 0) return 0;
+    if (allSelections.length === 0) {
+        // LABOUR_PHASE2 P2.3 — a farm-wide log's only selection is the
+        // FARM_GLOBAL one, which `getNonGlobalSelections` strips, so this
+        // returned 0 unconditionally: a cost the farmer actually incurred
+        // vanished from cost analysis entirely, filter or no filter. That is
+        // the under-count half of the P4 failure.
+        //
+        // It belongs in the farm-level total, and ONLY there. Spreading it over
+        // the plots would invent an allocation the farmer never gave (founder
+        // decision O-2), so a crop filter or a plot filter still excludes it —
+        // a farm-wide cost genuinely is not that plot's cost. An empty filter
+        // set means "not filtered", the same convention `dayState.logInScope`
+        // (dayState.ts:119-129) already reads.
+        if (!hasFarmWideSelection(log)) return 0;
+        if (allowedCropIds.size > 0 || allowedPlotIds.size > 0) return 0;
+        return baseCost;
+    }
 
     const cropScopedSelections = allowedCropIds.size > 0
         ? allSelections.filter(selection => allowedCropIds.has(selection.cropId))

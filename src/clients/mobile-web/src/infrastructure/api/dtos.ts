@@ -127,8 +127,27 @@ export interface VerificationEventDto {
 export interface DailyLogDto {
     id: string;
     farmId: string;
-    plotId: string;
-    cropCycleId: string;
+    /**
+     * LABOUR_PHASE2 P2.3 — nullable because the server's record is
+     * (`ShramSafal.Application/Contracts/Dtos/DailyLogDto.cs:19-20`, `Guid?`),
+     * and it is nullable there because `ssf.daily_logs` can now record what the
+     * farmer actually asserted: a `Farm`-scoped log has no plot and no crop
+     * cycle. The alternative the server deliberately rejected —
+     * `log.PlotId ?? Guid.Empty` — would put a fabricated plot on the wire and
+     * from there into canonical client state (P4).
+     *
+     * This interface is a HAND-MAINTAINED twin of that C# record. Nothing
+     * compiles the two against each other, so TypeScript will never surface the
+     * drift on its own; it has to be widened deliberately. It is widened now,
+     * BEFORE any client can produce a farm-scoped log (Phase 2b), so that every
+     * reader that assumed a plot is corrected while it is still unreachable.
+     *
+     * `?: string | null` and not `?: string`, because the wire value for a null
+     * `Guid?` is JSON `null`, not an absent key — same shape as
+     * `LogTaskDto.deviationReasonCode` above.
+     */
+    plotId?: string | null;
+    cropCycleId?: string | null;
     operatorUserId: string;
     logDate: string;
     idempotencyKey?: string;
