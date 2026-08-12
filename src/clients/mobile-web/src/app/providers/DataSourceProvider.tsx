@@ -15,6 +15,7 @@ import { useAuth } from './AuthProvider';
 import { getDatabase } from '../../infrastructure/storage/DexieDatabase';
 import { runLegacyLocalStorageMigration } from '../../infrastructure/storage/LegacyLocalStorageMigrator';
 import { DemoModeStore } from '../../infrastructure/storage/DemoModeStore';
+import { activateDatabaseForUser } from '../../infrastructure/storage/activateUserDatabase';
 import { purgeExpiredProcessingVoiceClips } from '../../infrastructure/voice/VoiceClipRetention';
 
 // --- CONTEXT ---
@@ -108,78 +109,6 @@ export const DataSourceProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         // Effect will trigger switch
     };
 
-    const resetAuthenticatedUserCacheIfNeeded = async (nextUserId: string) => {
-        const previousUserId = DemoModeStore.getActiveUserId();
-        if (previousUserId === nextUserId) {
-            return;
-        }
-
-        console.info(`[DataSource] Authenticated user changed (${previousUserId ?? 'none'} -> ${nextUserId}). Resetting cached user state.`);
-
-        const db = getDatabase();
-        await db.transaction('rw', [
-            db.logs,
-            db.outbox,
-            db.mutationQueue,
-            db.attachments,
-            db.uploadQueue,
-            db.pendingAiJobs,
-            db.voiceClips,
-            db.aiCorrectionEvents,
-            db.auditEvents,
-            db.syncCursors,
-            db.appMeta,
-            db.referenceData,
-            db.dayLedgers,
-            db.plannedTasks,
-            db.farms,
-            db.plots,
-            db.cropCycles,
-            db.costEntries,
-            db.financeCorrections,
-            // T-SP04-DEXIE-CUTOVER-SYNC-BRIDGE (2026-05-01): Dexie crops +
-            // farmerProfile are now the source of truth for those surfaces.
-            // User-switch must clear them along with the rest of the
-            // per-user cache.
-            db.crops,
-            db.farmerProfile,
-        ], async () => {
-            await Promise.all([
-                db.logs.clear(),
-                db.outbox.clear(),
-                db.mutationQueue.clear(),
-                db.attachments.clear(),
-                db.uploadQueue.clear(),
-                db.pendingAiJobs.clear(),
-                db.voiceClips.clear(),
-                db.aiCorrectionEvents.clear(),
-                db.auditEvents.clear(),
-                db.syncCursors.clear(),
-                db.appMeta.clear(),
-                db.referenceData.clear(),
-                db.dayLedgers.clear(),
-                db.plannedTasks.clear(),
-                db.farms.clear(),
-                db.plots.clear(),
-                db.cropCycles.clear(),
-                db.costEntries.clear(),
-                db.financeCorrections.clear(),
-                db.crops.clear(),
-                db.farmerProfile.clear(),
-            ]);
-        });
-
-        // Defense-in-depth: clear the legacy localStorage entries too. The
-        // migrator left them in place as a safety net; on user-switch we
-        // clear them so the next user's first boot doesn't accidentally
-        // re-import the previous user's data via the migrator's once-only
-        // flag.
-        DemoModeStore.clearLegacyCrops();
-        DemoModeStore.clearLegacyFarmerProfile();
-
-        DemoModeStore.setActiveUserId(nextUserId);
-    };
-
     // Handle Mode Switching & Initialization
     useEffect(() => {
         const init = async () => {
@@ -189,6 +118,14 @@ export const DataSourceProvider: React.FC<{ children: React.ReactNode }> = ({ ch
                 backgroundSyncWorker.stop();
                 attachmentUploadWorker.stop();
                 storageNamespace.setNamespace(isDemoMode ? 'demo' : 'user');
+                // A farmer's records live in a database of their own, so that a
+                // second farmer signing in on this handset is a change of
+                // ADDRESS and not a deletion. This runs before anything reads
+                // or writes — including the two localStorage imports below,
+                // which must land in the database that owns those rows.
+                if (!isDemoMode && session?.userId) {
+                    activateDatabaseForUser(session.userId);
+                }
                 await dataSource.initialize();
                 await MigrationService.migrate();
                 // T-SP04-DEXIE-CUTOVER-SYNC-BRIDGE (2026-05-01): one-time
@@ -201,9 +138,6 @@ export const DataSourceProvider: React.FC<{ children: React.ReactNode }> = ({ ch
                 if (isDemoMode) {
                     await seedDemoDataIfNeeded();
                 } else {
-                    if (session?.userId) {
-                        await resetAuthenticatedUserCacheIfNeeded(session.userId);
-                    }
                     await purgeExpiredProcessingVoiceClips();
                     backgroundSyncWorker.start();
                     attachmentUploadWorker.start();
@@ -221,6 +155,13 @@ export const DataSourceProvider: React.FC<{ children: React.ReactNode }> = ({ ch
             backgroundSyncWorker.stop();
             attachmentUploadWorker.stop();
         };
+        // `seedDemoDataIfNeeded` is deliberately absent: it is re-created on
+        // every render, so listing it would re-run this effect in a loop — a
+        // behaviour change, and strictly worse than the lint debt. PRE-EXISTING:
+        // the file emitted this same single warning before this change (verified
+        // against the unmodified file at 16a314a6). Scoped to this one rule on
+        // this one line; nothing else is silenced.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [isAuthenticated, isDemoMode, dataSource, session?.userId]);
 
     const value: DataSourceContextValue = {
