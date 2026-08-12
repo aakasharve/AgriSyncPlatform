@@ -23,7 +23,6 @@
 import { describe, it, expect } from 'vitest';
 
 import {
-    deriveSyncBadgeCounts,
     deriveSyncHonestyState,
     EMPTY_SYNC_EVIDENCE,
     MAX_AUTO_RETRY_COUNT,
@@ -33,11 +32,62 @@ import {
     type SyncHonestyState,
     type SyncQueueRowSnapshot,
 } from '../syncHonestyState';
+import { needsFarmerAction } from '../stuckMutations';
 import type { MutationQueueStatus } from '../../../../infrastructure/storage/DexieDatabase';
 import { t } from '../../../../i18n/translations';
 
 function row(status: MutationQueueStatus, retryCount = 0): SyncQueueRowSnapshot {
     return { status, retryCount };
+}
+
+/**
+ * THE BADGE THE FARMER ACTUALLY SEES — an ORACLE, and deliberately in a test
+ * file rather than in production.
+ *
+ * This replaces the deleted `deriveSyncBadgeCounts`, which lived in the
+ * production module, claimed to "mirror `AppHeader.tsx:181-182` exactly", had
+ * zero production importers, and had silently stopped mirroring anything when
+ * T3 (ruling R12) redefined `failedCount`. A test asserting a production
+ * function against another production function in the same module proves only
+ * that the module agrees with itself.
+ *
+ * What the farmer sees is composed in exactly two places, and this reproduces
+ * both, transcribed at the time of writing:
+ *
+ *   `useSyncQueueStatus.ts:97-99`
+ *       pendingCount = PENDING + SENDING + stillRetrying
+ *       failedCount  = stuck.length            (`partitionOpenFailures`)
+ *   `AppHeader.tsx:181-182`
+ *       pendingCount = queue.pendingCount + pendingUploads + pendingAiJobs
+ *       failedCount  = queue.failedCount  + failedUploads
+ *
+ * The only part that can drift — which open-failure rows count as "stuck" — is
+ * NOT reimplemented here: it calls the production predicate
+ * `stuckMutations.needsFarmerAction`. The summation around it is `a + b + c`,
+ * copied from the two lines above.
+ */
+function badgeTheFarmerSees(snapshot: SyncEvidenceSnapshot): { pending: number; failed: number } {
+    let queuePending = 0;
+    let stuck = 0;
+
+    for (const r of snapshot.rows) {
+        if (r.status === 'PENDING' || r.status === 'SENDING') {
+            queuePending += 1;
+        } else if (needsFarmerAction(r)) {
+            stuck += 1;
+        } else if (r.status === 'FAILED') {
+            // Below the cap the worker is still trying by itself, so
+            // `useSyncQueueStatus` counts it as pending, not failed (R12).
+            queuePending += 1;
+        }
+        // REJECTED_DROPPED and APPLIED are terminal — `useSyncQueueStatus`
+        // reads neither into either number.
+    }
+
+    return {
+        pending: queuePending + snapshot.pendingUploads + snapshot.pendingAiJobs,
+        failed: stuck + snapshot.failedUploads,
+    };
 }
 
 /** A snapshot with everything at zero unless the test says otherwise. */
@@ -207,9 +257,12 @@ describe('the read filter cannot silently strengthen the claim', () => {
 });
 
 describe('the label and the badge beside it cannot contradict each other', () => {
-    // Review round 1, F2 + F5: the previous version of this block was named for
-    // the badge but touched neither count. These assert the real invariant
-    // against `deriveSyncBadgeCounts`, which mirrors `AppHeader.tsx:181-182`.
+    // Review round 1, F2 + F5: the first version of this block was named for
+    // the badge but touched neither count. The second version fixed that but
+    // measured itself against `deriveSyncBadgeCounts`, a production function
+    // with no production callers that had gone stale. These assert the claim
+    // against `badgeTheFarmerSees` — the oracle above, built from the real
+    // `needsFarmerAction` plus the two summation lines it is named after.
     const cases: Array<{ name: string; snapshot: SyncEvidenceSnapshot }> = [
         { name: 'empty + never acknowledged', snapshot: EMPTY_SYNC_EVIDENCE },
         { name: 'empty + acknowledged', snapshot: settled() },
@@ -227,7 +280,7 @@ describe('the label and the badge beside it cannot contradict each other', () =>
 
     it.each(cases)('$name — badge agrees with the claim', ({ snapshot }) => {
         const claim = deriveSyncHonestyState(snapshot);
-        const badge = deriveSyncBadgeCounts(snapshot);
+        const badge = badgeTheFarmerSees(snapshot);
 
         if (claim === 'ON_SERVER' || claim === null) {
             // A settled or unknown state must show NO badge. This is the
@@ -255,7 +308,13 @@ describe('the label and the badge beside it cannot contradict each other', () =>
         expect(states).not.toContain('SENDING');
     });
 
-    it('badge counts mirror AppHeader arithmetic exactly', () => {
+    it('a failure the worker is still retrying counts as pending, not as a red number (R12)', () => {
+        // This is the case the deleted `deriveSyncBadgeCounts` got wrong. It
+        // returned { pending: 9, failed: 4 } for this snapshot — counting the
+        // sub-cap FAILED row red — while production has counted it amber since
+        // T3 redefined `useSyncQueueStatus.failedCount` as "needs the farmer".
+        // The old test passed anyway, because it checked that function against
+        // its own arithmetic instead of against the app's.
         const snapshot = settled({
             rows: [row('PENDING'), row('SENDING'), row('FAILED', 1), row('REJECTED_USER_REVIEW', 1)],
             pendingUploads: 3,
@@ -263,9 +322,21 @@ describe('the label and the badge beside it cannot contradict each other', () =>
             pendingAiJobs: 4,
         });
 
-        // pendingCount(PENDING+SENDING)=2 + pendingUploads 3 + pendingAiJobs 4
-        // failedCount(FAILED+REJECTED_USER_REVIEW)=2 + failedUploads 2
-        expect(deriveSyncBadgeCounts(snapshot)).toEqual({ pending: 9, failed: 4 });
+        // pending: PENDING + SENDING + the sub-cap FAILED = 3, + 3 uploads + 4 AI
+        // failed:  the durable rejection = 1, + 2 permanently-failed uploads
+        expect(badgeTheFarmerSees(snapshot)).toEqual({ pending: 10, failed: 3 });
+    });
+
+    it('the same row turns red the moment the worker gives up on it', () => {
+        // One character of difference from the row above — the retryCount — and
+        // it moves from the amber number to the red one. That is what makes the
+        // red number mean "you have to do something" rather than "something once
+        // went wrong".
+        const subCap = settled({ rows: [row('FAILED', MAX_AUTO_RETRY_COUNT - 1)] });
+        const capped = settled({ rows: [row('FAILED', MAX_AUTO_RETRY_COUNT)] });
+
+        expect(badgeTheFarmerSees(subCap)).toEqual({ pending: 1, failed: 0 });
+        expect(badgeTheFarmerSees(capped)).toEqual({ pending: 0, failed: 1 });
     });
 });
 

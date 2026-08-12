@@ -46,14 +46,25 @@
  * `skippedLogIds` toast, and is exactly why T2 exists. Do not try to fix it
  * here; a global chip cannot count something that was never written.
  *
- * This module is PURE and Dexie-free — plain data in, one claim out — so every
- * branch is unit-testable without a database.
+ * Every function here is PURE — plain data in, one claim out — so every branch
+ * is unit-testable without a database. (The module now imports the retry cap
+ * from `MutationQueue`, so its import GRAPH is no longer Dexie-free; nothing it
+ * does at runtime touches a database.)
  *
  * NOT IN SCOPE: `db.outbox` keeps its writers, its table and its Dexie version.
  * This task only cuts it out of the status READ path (`R1`).
  */
 
 import type { MutationQueueStatus } from '../../../infrastructure/storage/DexieDatabase';
+// The cap is APPLIED in `MutationQueue.markFailedAsPending`, which is therefore
+// the authoritative definition. T1 shipped a duplicated literal here with a
+// note to collapse the two "when T3 lands"; T3 exported the authoritative copy
+// and left the collapse to whoever next opened this file. This is that collapse:
+// ONE literal `5` now exists in the client, and the drift class is structurally
+// impossible rather than merely tested. (`MutationRetryCap.transport.test.ts`
+// carried the drift guard; it is a tautology once the binding is shared, so it
+// was deleted rather than left standing under a title it no longer earns.)
+import { MAX_AUTO_RETRY_COUNT } from '../../../infrastructure/sync/MutationQueue';
 
 /**
  * The only three claims the app is allowed to make about a farmer's records.
@@ -171,16 +182,14 @@ export interface SyncEvidenceSnapshot {
 }
 
 /**
- * The auto-retry cap, past which a `FAILED` row is stranded permanently.
+ * The auto-retry cap, past which a `FAILED` row is stranded until the farmer
+ * acts. Re-exported, NOT redefined — see the import at the top of this file.
  *
- * MUST stay equal to the `maxRetryCount` default of
- * `MutationQueue.markFailedAsPending` (`MutationQueue.ts:233`, applied at
- * `:239`), which is a default parameter rather than an exported constant. It is
- * duplicated here rather than exported from `MutationQueue.ts` because the retry
- * path belongs to Task T3 and this task must not edit it. When T3 lands,
- * collapse these two into one exported constant.
+ * Kept on this module's surface so its four existing readers
+ * (`stuckMutations.ts` and three test files) need no churn, and so a reader of
+ * the chip's derivation can see the number it turns on without a second hop.
  */
-export const MAX_AUTO_RETRY_COUNT = 5;
+export { MAX_AUTO_RETRY_COUNT };
 
 /**
  * i18n keys for the three states. The SINGLE source of the state -> label
@@ -205,29 +214,35 @@ export const EMPTY_SYNC_EVIDENCE: SyncEvidenceSnapshot = {
     pendingAiJobs: 0,
 };
 
-/**
- * The numbers the chip's badge shows, from the SAME snapshot the label is
- * derived from — so the two halves of one control cannot contradict each other.
+/*
+ * DELETED — `deriveSyncBadgeCounts`.
  *
- * Mirrors `AppHeader.tsx:181-182` exactly, which is why `failed` counts every
- * `FAILED` row and not only capped ones.
+ * It existed to give the label/badge agreement tests an oracle, and it was
+ * written to "mirror `AppHeader.tsx:181-182` exactly". It stopped doing that
+ * the moment T3 (ruling R12) redefined `useSyncQueueStatus.failedCount` as
+ * "rows that need the farmer": a sub-cap `FAILED` row is now counted as
+ * PENDING in production and this function still counted it as FAILED. It had
+ * ZERO production importers, so nothing rendered wrong — but its test was
+ * titled *"badge counts mirror AppHeader arithmetic exactly"* while asserting
+ * the function against itself, which is precisely the "asserts the fixture,
+ * not the code" defect finding F5 was raised for.
+ *
+ * Deleted rather than repaired, for three reasons:
+ *   1. Zero production importers — it was test scaffolding wearing the costume
+ *      of production code.
+ *   2. Repairing it would create a SECOND implementation of a classification
+ *      that already exists in production (`stuckMutations.needsFarmerAction`,
+ *      consumed by `useSyncQueueStatus`). Two implementations of one rule is
+ *      the drift that caused this in the first place.
+ *   3. It could not delegate to `needsFarmerAction` anyway: `stuckMutations.ts`
+ *      imports `MAX_AUTO_RETRY_COUNT` from here, so the delegation would be a
+ *      circular import.
+ *
+ * The agreement invariant is NOT lost. It moved into
+ * `__tests__/syncHonestyState.test.ts` as an explicit oracle that composes the
+ * REAL production classifier with the literal `AppHeader` summation — a test
+ * oracle that lives in a test file and says so.
  */
-export function deriveSyncBadgeCounts(
-    snapshot: SyncEvidenceSnapshot,
-): { pending: number; failed: number } {
-    let pending = snapshot.pendingUploads + snapshot.pendingAiJobs;
-    let failed = snapshot.failedUploads;
-
-    for (const row of snapshot.rows) {
-        if (row.status === 'PENDING' || row.status === 'SENDING') {
-            pending += 1;
-        } else if (row.status === 'FAILED' || row.status === 'REJECTED_USER_REVIEW') {
-            failed += 1;
-        }
-    }
-
-    return { pending, failed };
-}
 
 /**
  * Derives the one claim the app is allowed to make — or no claim at all.

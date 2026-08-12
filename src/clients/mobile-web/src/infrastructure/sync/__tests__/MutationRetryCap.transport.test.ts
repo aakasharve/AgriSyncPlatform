@@ -61,7 +61,6 @@ Object.defineProperty(window.navigator, 'onLine', { value: true, configurable: t
 import { mutationQueue, MAX_AUTO_RETRY_COUNT } from '../MutationQueue';
 import { backgroundSyncWorker } from '../BackgroundSyncWorker';
 import { SyncMutationName } from '../SyncMutationCatalog';
-import { MAX_AUTO_RETRY_COUNT as CHIP_MAX_AUTO_RETRY_COUNT } from '../../../features/sync/status/syncHonestyState';
 
 async function freshDb() {
     const db = getDatabase();
@@ -300,13 +299,17 @@ describe('"Retry All" reaches the rows the farmer came to complain about (R2)', 
     });
 });
 
-describe('the cap has one number, however many modules read it', () => {
-    it('MutationQueue and the chip agree on where "gave up" begins', () => {
-        // syncHonestyState.ts:183 duplicates this constant because that module
-        // belongs to Task T1 and is outside this task's edit scope. Until they
-        // are collapsed into one import, this is the guard that stops them
-        // drifting — a drift would make the chip shout NEEDS_FIX at rows the
-        // worker is still retrying, or stay quiet about rows it has abandoned.
-        expect(MAX_AUTO_RETRY_COUNT).toBe(CHIP_MAX_AUTO_RETRY_COUNT);
-    });
-});
+/*
+ * DELETED — `describe('the cap has one number, however many modules read it')`.
+ *
+ * It asserted `MAX_AUTO_RETRY_COUNT === CHIP_MAX_AUTO_RETRY_COUNT` while the
+ * two were separate literals, and its own comment said so: *"Until they are
+ * collapsed into one import, this is the guard that stops them drifting."*
+ * They have now been collapsed — `syncHonestyState.ts` re-exports THIS
+ * module's constant, so the two names are one binding and the assertion is
+ * `5 === 5` under two aliases. A tautology that reads like a guard is worse
+ * than no guard: it occupies the slot where a real one would go.
+ *
+ * The invariant it protected is now structural, not tested. Everything else in
+ * this file still exercises the cap through the real queue.
+ */
