@@ -43,6 +43,21 @@ function tallyLog(counts: DailyCounts, log: DailyLog): void {
     if (log.disturbance) counts.disturbance += 1;
 }
 
+/**
+ * LABOUR_PHASE2 B1b — read EVERY selection entry, not just `[0]`.
+ *
+ * A selection is one entry per crop, so `selection[0]` answered only for the
+ * first crop and silently dropped the second crop's plots: a two-crop log
+ * reported ZERO work for every plot of its second crop. That was already
+ * reachable, and B1b makes it routine — one save across two crops is now ONE
+ * record with two entries rather than one record per plot.
+ *
+ * The farm-wide exclusion is untouched and deliberate: a farm-wide log's only
+ * entry carries an EMPTY plot list, so it matches no plot here. Its consumer
+ * chain sums these per-plot maps across the plots in context, so counting a
+ * farm-wide log for each plot would report one farm-wide record N times — see
+ * `appContentDailyCounts.farmScope.test.ts`.
+ */
 export function getTodayCounts(
     history: DailyLog[],
     plotId: string,
@@ -50,8 +65,7 @@ export function getTodayCounts(
 ): DailyCounts {
     const dayLogs = history.filter(l => {
         const isDate = l.date === dateStr;
-        const contextSel = l.context.selection[0];
-        const hasPlot = contextSel?.selectedPlotIds.includes(plotId);
+        const hasPlot = l.context.selection.some(sel => sel?.selectedPlotIds?.includes(plotId));
         return isDate && hasPlot;
     });
 
@@ -74,21 +88,25 @@ export function getTodayPlotData(
     const todayLogs = history.filter(l => l.date === todayStr);
     const plotMap: Record<string, TodayPlotEntry> = {};
 
+    // LABOUR_PHASE2 B1b — every selection entry, for the reason on
+    // `getTodayCounts`. Each entry brings its own crop, so a two-crop log now
+    // contributes both crops' plots instead of only the first crop's.
     todayLogs.forEach(log => {
-        const contextSel = log.context.selection[0];
-        const crop = crops.find(c => c.id === contextSel?.cropId);
-        if (!crop) return;
+        log.context.selection.forEach(contextSel => {
+            const crop = crops.find(c => c.id === contextSel?.cropId);
+            if (!crop) return;
 
-        contextSel.selectedPlotIds.forEach(pid => {
-            if (!plotMap[pid]) {
-                const plot = crop.plots.find(p => p.id === pid);
-                if (plot) {
-                    plotMap[pid] = { plot, crop, counts: emptyCounts() };
+            (contextSel.selectedPlotIds || []).forEach(pid => {
+                if (!plotMap[pid]) {
+                    const plot = crop.plots.find(p => p.id === pid);
+                    if (plot) {
+                        plotMap[pid] = { plot, crop, counts: emptyCounts() };
+                    }
                 }
-            }
-            if (plotMap[pid]) {
-                tallyLog(plotMap[pid].counts, log);
-            }
+                if (plotMap[pid]) {
+                    tallyLog(plotMap[pid].counts, log);
+                }
+            });
         });
     });
 

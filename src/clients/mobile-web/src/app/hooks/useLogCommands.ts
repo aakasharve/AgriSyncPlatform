@@ -9,6 +9,7 @@ import { CorrelationId } from '../../infrastructure/observability/CorrelationCon
 import { WeatherPort } from '../../application/ports/WeatherPort';
 import { computeDayState } from '../../shared/utils/dayState';
 import type { LastSavedLogSummaryItem } from '../uiRuntimeTypes';
+import { countAssertedPlots } from '../helpers/countAssertedPlots';
 import type { LogIntent } from './useAppNavigation';
 
 // ARCHITECTURE FIX: Import Service Class and Hook
@@ -160,8 +161,15 @@ type SaveToast = { message: string; type: 'success' | 'error' | 'partial' };
  * NOT COVERED, STATED PLAINLY: a log lost to a THROW out of
  * `MutationQueue.enqueue` is invisible here — `skippedLogIds` structurally
  * cannot see it, and that path already surfaces an honest "Failed to save logs"
- * through the caller's catch. Controller ruling `R4` leaves it alone; Phase 2b
- * removes multi-log batches and it self-resolves.
+ * through the caller's catch.
+ *
+ * LABOUR_PHASE2 B1b — `R4` expected this to SELF-RESOLVE here, on the reasoning
+ * that 2b removes multi-log batches. It NARROWS them; it does not remove them.
+ * A shared engagement across three plots is now one record and one enqueue, so
+ * the batch is gone for the case that created it — but a save where the farmer
+ * pinned events to particular plots still emits one record per pinned plot plus
+ * the shared one, and `enqueueLogsForSync` still has no per-log isolation, so a
+ * throw on the first still abandons the rest. Rarer, not fixed. Carried.
  */
 function skippedSyncToast(
     outcome: LogSyncEnqueueOutcome | null,
@@ -251,11 +259,19 @@ export const useLogCommands = ({
             const cropName = contextCropId === 'FARM_GLOBAL'
                 ? 'Farm'
                 : crops.find(c => c.id === contextCropId)?.name || 'Unknown Crop';
-            const plotId = selection?.selectedPlotIds?.[0];
-            const plotName = selection?.selectedPlotNames?.[0]
+
+            // LABOUR_PHASE2 B1b — "Stored In" must name every plot the record
+            // asserts, because one record can now assert several. Reading
+            // `selectedPlotNames[0]` told a farmer who logged across A, B and C
+            // that his work was stored in A — narrower than what was written,
+            // in the panel that outlives the toast. Single-plot is unchanged.
+            const assertedPlotIds = log.context.selection.flatMap(entry => entry.selectedPlotIds || []);
+            const assertedPlotNames = log.context.selection.flatMap(entry => entry.selectedPlotNames || []);
+            const plotId = assertedPlotIds.length === 1 ? assertedPlotIds[0] : undefined;
+            const plotName = (assertedPlotNames.length > 0 ? assertedPlotNames.join(', ') : '')
                 || crops
                     .find(crop => crop.id === contextCropId)
-                    ?.plots.find(plot => plot.id === plotId)
+                    ?.plots.find(plot => plot.id === assertedPlotIds[0])
                     ?.name
                 || 'Farm';
 
@@ -710,7 +726,11 @@ export const useLogCommands = ({
             // record: a fabricated number under `P4`. The count now comes off
             // the queued result. (In demo mode there is no enqueue and no server
             // claim, so the local save count stands.)
-            const queuedPlotCount = syncOutcome ? syncOutcome.queuedLogIds.length : logs.length;
+            // LABOUR_PHASE2 B1b — and it counts PLOTS, not records. One record
+            // now covers the whole selection, so counting records reported a
+            // three-plot save as "Saved to 1 plots": the same sentence, newly
+            // false, and this time an UNDER-count.
+            const queuedPlotCount = countAssertedPlots(logs, syncOutcome);
             setToast(skippedSyncToast(syncOutcome, language) ?? {
                 message: `Logged once. Saved to ${queuedPlotCount} plots. Day closure: ${beforePercent}% -> ${afterPercent}%`,
                 type: 'success'

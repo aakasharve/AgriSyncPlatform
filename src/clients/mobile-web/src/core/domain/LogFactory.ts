@@ -1,13 +1,12 @@
 import {
-    DailyLog, FarmContext, LogScope, FarmerProfile, CropProfile,
+    DailyLog, LogScope, FarmerProfile, CropProfile,
     LogVerificationStatus, WeatherStamp,
-    CropActivityEvent, IrrigationEvent,
-    LabourEvent, InputEvent, MachineryEvent, ExpenseItem,
+    IrrigationEvent,
+    LabourEvent, InputEvent, ExpenseItem,
     ActivityExpenseEvent, ObservationNote,
-    PlannedTask, AgriLogResponse, DisturbanceEvent
+    PlannedTask, AgriLogResponse
 } from '../../types';
 import type { ObservationNoteDraft, ScoreContext } from '../../domain/types/log.types';
-import { getPhaseAndDay } from '../../shared/utils/timelineUtils';
 import { getDateKey } from './services/DateKeyService';
 import { isCompletedIrrigationEvent } from './services/IrrigationCompletionService';
 // import { AgriLogResponse } from '../../domain/ai/contracts/AgriLogResponseSchema'; // REMOVED
@@ -22,83 +21,39 @@ import { VersionRegistry } from '../contracts/VersionRegistry';
 // Pure plot-allocation / cost-sum helpers extracted to keep this file under
 // the Plan 04 §DoD 800-line cap. Behavior-neutral move; see helpers file.
 import {
-    scopeChildId,
-    filterEventsForPlot,
-    allocateLabourForPlot,
-    allocateInputsForPlot,
-    allocateMachineryForPlot,
-    allocateActivityExpensesForPlot,
-    sumLabourCost,
-    sumInputCost,
+    FARM_GLOBAL_ID,
+    resolveSelectedPlots,
+    partitionSelectionByFarmerEvidence,
     sumMachineryCost,
-    sumExpenseCost,
     computeReceiptTotal,
     projectLogForScoring,
     countPlots,
     priorityToSeverity
 } from './helpers/log-factory-helpers';
+// LABOUR_PHASE2 B1b — what ONE partition of a save becomes. Lifted out for the
+// same 800-line budget, which CI enforces; a pure move, no logic changed.
+import {
+    buildManualPartitionLog,
+    buildVoicePartitionLog,
+    buildPlannedTasksFromObservationCandidates,
+    type ManualEntryData,
+    type AgriLogPlannedTask
+} from './helpers/log-partition-builders';
 
-const FARM_GLOBAL_ID = 'FARM_GLOBAL';
 const FARM_GLOBAL_NAME = 'Entire Farm';
-
-/**
- * Shape of the raw form data accepted by createFromManualEntry /
- * createFarmGlobalManualLog. All event arrays are the real domain types;
- * individual fields are optional so callers may omit unused sections.
- */
-interface ManualEntryData {
-    date: string;
-    cropActivities?: CropActivityEvent[];
-    irrigation?: IrrigationEvent[];
-    labour?: LabourEvent[];
-    inputs?: InputEvent[];
-    machinery?: MachineryEvent[];
-    activityExpenses?: ActivityExpenseEvent[];
-    observations?: ObservationNote[];
-    plannedTasks?: PlannedTask[];
-    disturbance?: DisturbanceEvent;
-    fullTranscript?: string;
-    manualTotalCost?: number;
-}
-
-/** Inline type for a single element of AgriLogResponse.plannedTasks. */
-type AgriLogPlannedTask = NonNullable<AgriLogResponse['plannedTasks']>[number];
 
 /**
  * LogFactory: Centralized creation of DailyLog entities.
  * Ensures consistent IDs, Metadata, and Trust Layer compliance.
  */
 export class LogFactory {
-    private static buildPlannedTasksFromObservationCandidates(
-        observations: ObservationNote[] | undefined,
-        plotId: string,
-        cropId: string,
-        nowISO: string,
-        idGen: IdGenerator
-    ): PlannedTask[] {
-        return (observations || [])
-            .filter(observation => observation.noteType === 'reminder' && (observation.extractedTasks?.length || 0) > 0)
-            .flatMap(observation => (observation.extractedTasks || []).map(task => ({
-                id: scopeChildId(task.id || idGen.generate(), plotId),
-                title: task.title,
-                description: task.rawText || observation.textCleaned || observation.textRaw,
-                dueDate: task.dueDate,
-                dueWindow: task.dueWindow,
-                plotId,
-                cropId,
-                priority: task.priority === 'high' ? 'high' : 'normal',
-                status: task.status === 'done' ? 'done' : 'suggested',
-                sourceType: 'observation_derived' as const,
-                sourceObservationId: observation.id,
-                aiConfidence: task.confidence || observation.aiConfidence,
-                sourceText: task.rawText || observation.sourceText || observation.textRaw,
-                systemInterpretation: observation.systemInterpretation,
-                createdAt: nowISO,
-            })));
-    }
-
     /**
-     * Creates a set of DailyLogs (one per plot) from a Manual Entry form data.
+     * Creates the DailyLogs a Manual Entry save becomes.
+     *
+     * LABOUR_PHASE2 B1b — ONE record per thing the farmer actually asserted, not
+     * one per plot. See `partitionSelectionByFarmerEvidence` for the rule and
+     * the defect it removes. A single-plot save — every log in the database
+     * today — produces exactly the record it always did.
      */
     static createFromManualEntry(
         data: ManualEntryData,
@@ -109,7 +64,6 @@ export class LogFactory {
         idGen: IdGenerator = idGenerator
     ): DailyLog[] {
         const targetPlotIds = logScope.selectedPlotIds;
-        const newLogs: DailyLog[] = [];
         const nowISO = clock.nowISO();
 
         const isFarmGlobalScope =
@@ -122,196 +76,49 @@ export class LogFactory {
             // Stamp understanding (always, silent — display gated by flag separately)
             const globalCtx: ScoreContext = { farm: { plotCount: 1 } };
             globalLog.understanding = scoreVlog(projectLogForScoring(globalLog), globalCtx);
-            newLogs.push(globalLog);
-            return newLogs;
+            return [globalLog];
         }
 
-        targetPlotIds.forEach((plotId, index) => {
-            const crop = crops.find(c => c.plots.some(p => p.id === plotId));
-            if (!crop) return;
+        const completedIrrigation = (data.irrigation as IrrigationEvent[] | undefined)
+            ?.filter(isCompletedIrrigationEvent);
 
-            const plot = crop.plots.find(p => p.id === plotId)!;
-            const timeline = getPhaseAndDay(plot, data.date);
-
-            // Context Selection
-            const specificContext: FarmContext = {
-                selection: [{
-                    cropId: crop.id,
-                    cropName: crop.name,
-                    selectedPlotIds: [plotId],
-                    selectedPlotNames: [plot.name]
-                }]
-            };
-
-            const plotCropActivities = filterEventsForPlot<CropActivityEvent>(
-                data.cropActivities as CropActivityEvent[] | undefined,
-                plot.name,
-                plotId
-            );
-            const plotIrrigation = filterEventsForPlot<IrrigationEvent>(
-                (data.irrigation as IrrigationEvent[] | undefined)?.filter(isCompletedIrrigationEvent),
-                plot.name,
-                plotId
-            );
-            const plotLabour = allocateLabourForPlot(
+        const partitions = partitionSelectionByFarmerEvidence(
+            resolveSelectedPlots(targetPlotIds, crops),
+            [
+                data.cropActivities,
+                completedIrrigation,
                 data.labour,
-                plot.name,
-                plotId,
-                index,
-                targetPlotIds.length
-            );
-            const plotInputs = allocateInputsForPlot(
                 data.inputs,
-                plot.name,
-                plotId,
-                index,
-                targetPlotIds.length
-            );
-            const plotMachinery = allocateMachineryForPlot(
                 data.machinery,
-                plot.name,
-                plotId,
-                index,
-                targetPlotIds.length
+                // `ActivityExpenseEvent` does not declare `targetPlotName`; the
+                // parser emits it and the filter has always honoured it.
+                data.activityExpenses as ReadonlyArray<{ targetPlotName?: string }> | undefined,
+            ],
+            Boolean(
+                data.disturbance
+                || data.fullTranscript
+                || data.manualTotalCost !== undefined
+                || data.observations?.length
+                || data.plannedTasks?.length
+            ),
+        );
+
+        return partitions.map(partition => {
+            const newLog = buildManualPartitionLog(
+                data,
+                completedIrrigation,
+                partition,
+                profile,
+                nowISO,
+                idGen
             );
-            const plotActivityExpenses = allocateActivityExpensesForPlot(
-                data.activityExpenses,
-                plot.name,
-                plotId,
-                index,
-                targetPlotIds.length
-            );
-
-            // Recalculate Costs for this Plot
-            const labourCost = sumLabourCost(plotLabour);
-            const machineCost = sumMachineryCost(plotMachinery);
-            const inputCost = 0;
-            const expenseCost = sumExpenseCost(plotActivityExpenses);
-            const plotGrandTotal = computeReceiptTotal({ labourCost, machineCost, inputCost, expenseCost });
-
-            // MIRROR: Handle Planned Tasks from Manual Entry
-            const mirroredTasks: PlannedTask[] = data.plannedTasks?.map((t: PlannedTask) => ({
-                ...t,
-                id: scopeChildId(t.id || idGen.generate(), plotId),
-                plotId: plotId,
-                cropId: crop.id,
-                createdAt: t.createdAt || nowISO
-            })) || [];
-
-            const normalizedObservations: ObservationNote[] = (data.observations || []).map((obs: ObservationNote) => ({
-                ...obs,
-                id: scopeChildId(obs.id || idGen.generate(), plotId),
-                plotId,
-                cropId: obs.cropId || crop.id,
-                dateKey: obs.dateKey || data.date,
-                timestamp: obs.timestamp || nowISO
-            }));
-
-            const mirroredObservations: ObservationNote[] = [
-                ...normalizedObservations,
-                ...mirroredTasks.map(t => ({
-                    id: idGen.generate(),
-                    plotId: plotId,
-                    dateKey: data.date,
-                    timestamp: nowISO,
-                    source: 'manual' as const,
-                    textRaw: t.title,
-                    textCleaned: `Planned Task: ${t.title}`,
-                    noteType: 'reminder' as const,
-                    severity: priorityToSeverity(t.priority),
-                    aiConfidence: 100,
-                    tags: ['manual_task']
-                }))
-            ];
-
-            // MIRROR: Also handle Observation (type reminder) -> Planned Task
-            const manualRemindersAsTasks: PlannedTask[] = normalizedObservations
-                .filter((obs: ObservationNote) => obs.noteType === 'reminder')
-                .map((obs: ObservationNote) => ({
-                    id: idGen.generate(),
-                    title: obs.textRaw,
-                    plotId: plotId,
-                    cropId: crop.id,
-                    status: 'pending' as const,
-                    priority: (obs.severity === 'important' || obs.severity === 'urgent') ? 'high' : 'normal',
-                    sourceType: 'observation_derived' as const,
-                    sourceObservationId: obs.id,
-                    createdAt: nowISO,
-                    dueDate: data.date
-                }));
-
-            const finalPlannedTasks = [...mirroredTasks, ...manualRemindersAsTasks];
-            const hasExecution = [
-                plotCropActivities,
-                plotIrrigation,
-                plotLabour,
-                plotInputs,
-                plotMachinery,
-                plotActivityExpenses,
-            ].some(events => events.length > 0);
-
-            // Trust & Verification Logic
-            const isOwner = profile.activeOperatorId === 'owner';
-            const autoApproveAll = profile.trust?.reviewPolicy === 'AUTO_APPROVE_ALL';
-
-            let verificationStatus = LogVerificationStatus.PENDING;
-            if (isOwner || autoApproveAll) {
-                verificationStatus = LogVerificationStatus.APPROVED;
-            }
-
-            const newLog: DailyLog = {
-                id: idGen.generate(),
-                date: data.date,
-                context: specificContext,
-                dayOutcome: data.disturbance && !hasExecution ? 'DISTURBANCE_RECORDED' : 'WORK_RECORDED',
-
-                weatherStamp: undefined,
-
-                phaseAtLogTime: timeline.phase,
-                dayNumberAtLogTime: timeline.day,
-
-                cropActivities: plotCropActivities,
-                irrigation: plotIrrigation,
-                labour: plotLabour,
-                inputs: plotInputs,
-                machinery: plotMachinery,
-                activityExpenses: plotActivityExpenses,
-                observations: mirroredObservations,
-                plannedTasks: finalPlannedTasks,
-                disturbance: data.disturbance,
-
-                fullTranscript: data.fullTranscript,
-                manualTotalCost: data.manualTotalCost,
-
-                financialSummary: {
-                    totalLabourCost: labourCost,
-                    totalInputCost: inputCost,
-                    totalMachineryCost: machineCost,
-                    totalActivityExpenses: expenseCost,
-                    grandTotal: plotGrandTotal
-                },
-
-                meta: {
-                    createdAtISO: nowISO,
-                    createdByOperatorId: profile.activeOperatorId,
-                    appVersion: VersionRegistry.APP_VERSION
-                },
-                verification: {
-                    status: verificationStatus,
-                    required: !isOwner,
-                    verifiedByOperatorId: isOwner ? 'owner' : undefined,
-                    verifiedAtISO: isOwner ? nowISO : undefined
-                }
-            };
 
             // Stamp Understanding Meter score (always, silent — display gated by flag separately)
             const scoreCtx: ScoreContext = { farm: { plotCount } };
             newLog.understanding = scoreVlog(projectLogForScoring(newLog), scoreCtx);
 
-            newLogs.push(newLog);
+            return newLog;
         });
-
-        return newLogs;
     }
 
     private static createFarmGlobalManualLog(
@@ -499,162 +306,38 @@ export class LogFactory {
             return newLogs;
         }
 
-        targetPlotIds.forEach((plotId, index) => {
-            const crop = crops.find(c => c.plots.some(p => p.id === plotId));
-            if (!crop) return;
+        const completedIrrigation = response.irrigation?.filter(isCompletedIrrigationEvent);
 
-            const plot = crop.plots.find(p => p.id === plotId)!;
-            const timeline = getPhaseAndDay(plot); // Implicit Today
-
-            const specificContext: FarmContext = {
-                selection: [{
-                    cropId: crop.id, cropName: crop.name,
-                    selectedPlotIds: [plotId], selectedPlotNames: [plot.name]
-                }]
-            };
-
-            const myLabour = allocateLabourForPlot(
+        const partitions = partitionSelectionByFarmerEvidence(
+            resolveSelectedPlots(targetPlotIds, crops),
+            [
+                response.cropActivities,
+                completedIrrigation,
                 response.labour,
-                plot.name,
-                plotId,
-                index,
-                targetPlotIds.length
-            );
-            const myInputs = allocateInputsForPlot(
                 response.inputs,
-                plot.name,
-                plotId,
-                index,
-                targetPlotIds.length
-            );
-            const myMachine = allocateMachineryForPlot(
                 response.machinery,
-                plot.name,
-                plotId,
-                index,
-                targetPlotIds.length
-            );
-            const myExpenses = allocateActivityExpensesForPlot(
+                mappedExpenses as ReadonlyArray<{ targetPlotName?: string }>,
+            ],
+            Boolean(
+                response.disturbance
+                || response.fullTranscript
+                || response.observations?.length
+                || response.plannedTasks?.length
+            ),
+        );
+
+        partitions.forEach(partition => {
+            const newLog = buildVoicePartitionLog(
+                response,
+                completedIrrigation,
                 mappedExpenses,
-                plot.name,
-                plotId,
-                index,
-                targetPlotIds.length
-            );
-
-            // Recalculate cost for this plot
-            const lCost = sumLabourCost(myLabour);
-            const iCost = sumInputCost(myInputs);
-            const mCost = sumMachineryCost(myMachine);
-            const eCost = sumExpenseCost(myExpenses);
-
-            const isOwner = profile.activeOperatorId === 'owner';
-            const autoApprove = profile.trust?.reviewPolicy === 'AUTO_APPROVE_ALL' ||
-                (profile.trust?.reviewPolicy === 'AUTO_APPROVE_OWNER' && isOwner);
-
-            // MIRROR: Handle Planned Tasks from Voice
-            const mirroredTasks: PlannedTask[] = response.plannedTasks?.map((pt: AgriLogPlannedTask) => ({
-                id: idGen.generate(),
-                title: pt.title,
-                status: 'pending',
-                priority: 'normal',
-                createdAt: nowISO,
-                dueHint: pt.dueHint,
-                sourceType: 'ai_extracted',
-                plotId: plotId,
-                cropId: crop.id
-            })) || [];
-
-            const mirroredObservations: ObservationNote[] = [
-                ...(response.observations?.map((obs: ObservationNoteDraft): ObservationNote => ({
-                    ...obs,
-                    id: scopeChildId(obs.id || idGen.generate(), plotId),
-                    plotId: plotId,
-                    cropId: obs.cropId || crop.id,
-                    dateKey: obs.dateKey || getDateKey(),
-                    timestamp: obs.timestamp || nowISO,
-                    status: obs.status || 'open',
-                    source: obs.source || 'voice',
-                    textRaw: obs.textRaw || obs.textCleaned || 'No text',
-                    textCleaned: obs.textCleaned || obs.textRaw,
-                    noteType: obs.noteType || 'observation',
-                    severity: obs.severity || 'normal',
-                    aiConfidence: obs.aiConfidence || 90,
-                    tags: obs.tags || []
-                })) || []),
-                ...mirroredTasks.map(t => ({
-                    id: idGen.generate(),
-                    plotId: plotId,
-                    dateKey: getDateKey(),
-                    timestamp: nowISO,
-                    source: 'voice' as const,
-                    textRaw: t.title,
-                    textCleaned: `Reminder: ${t.title} (Extracted from Voice)`,
-                    noteType: 'reminder' as const,
-                    severity: 'normal' as const,
-                    aiConfidence: 100,
-                    tags: ['planned_task']
-                }))
-            ];
-
-            const reminderDerivedTasks = this.buildPlannedTasksFromObservationCandidates(
-                mirroredObservations,
-                plotId,
-                crop.id,
+                partition,
+                profile,
+                weatherStamps,
+                provenance,
                 nowISO,
                 idGen
             );
-            const finalPlannedTasks = [...mirroredTasks, ...reminderDerivedTasks];
-
-            const gTotal = computeReceiptTotal({ labourCost: lCost, machineCost: mCost, inputCost: iCost, expenseCost: eCost });
-
-            const newLog: DailyLog = {
-                id: idGen.generate(),
-                date: getDateKey(),
-                context: specificContext,
-                dayOutcome: response.dayOutcome,
-
-                weatherStamp: weatherStamps ? weatherStamps[plotId] : undefined,
-                phaseAtLogTime: timeline.phase,
-                dayNumberAtLogTime: timeline.day,
-
-                cropActivities: filterEventsForPlot<CropActivityEvent>(response.cropActivities, plot.name, plotId),
-                irrigation: filterEventsForPlot<IrrigationEvent>(
-                    response.irrigation?.filter(isCompletedIrrigationEvent),
-                    plot.name,
-                    plotId
-                ),
-                labour: myLabour,
-                inputs: myInputs,
-                machinery: myMachine,
-                activityExpenses: myExpenses,
-                observations: mirroredObservations,
-                plannedTasks: finalPlannedTasks,
-                disturbance: response.disturbance,
-
-                fullTranscript: response.fullTranscript,
-
-                financialSummary: {
-                    totalLabourCost: lCost,
-                    totalInputCost: iCost,
-                    totalMachineryCost: mCost,
-                    totalActivityExpenses: eCost,
-                    grandTotal: gTotal
-                },
-
-                meta: {
-                    createdAtISO: nowISO,
-                    createdByOperatorId: profile.activeOperatorId,
-                    appVersion: VersionRegistry.APP_VERSION,
-                    provenance: provenance
-                },
-                verification: {
-                    status: autoApprove ? LogVerificationStatus.APPROVED : LogVerificationStatus.PENDING,
-                    required: !isOwner,
-                    verifiedByOperatorId: isOwner ? 'owner' : undefined,
-                    verifiedAtISO: isOwner ? nowISO : undefined
-                }
-            };
 
             // Stamp Understanding Meter score (always, silent — display gated by flag separately)
             const voiceScoreCtx: ScoreContext = { farm: { plotCount: voicePlotCount } };
@@ -726,8 +409,9 @@ export class LogFactory {
             }))
         ];
 
-        const reminderDerivedTasks = this.buildPlannedTasksFromObservationCandidates(
+        const reminderDerivedTasks = buildPlannedTasksFromObservationCandidates(
             mirroredObservations,
+            FARM_GLOBAL_ID,
             FARM_GLOBAL_ID,
             FARM_GLOBAL_ID,
             nowISO,

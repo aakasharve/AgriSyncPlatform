@@ -185,13 +185,29 @@ export class LogCommandServiceImpl implements LogCommandService {
 
     // --- PRIVATE HELPERS ---
 
+    /**
+     * LABOUR_PHASE2 B1b — enrich only a record that names exactly ONE plot.
+     *
+     * A `WeatherStamp` is a reading taken at one plot's coordinates and carries
+     * that plot's id. A record naming three plots has one weather slot and no
+     * single answer for it, so it states none: attaching the first plot's
+     * reading would present a measurement of one place as the record's own,
+     * which is the first-plot pick founder decision O-1 closed, and dropping the
+     * `plotId` off the stamp would keep the number while discarding where it
+     * came from (`P8`).
+     *
+     * KNOWN LOSS, carried deliberately: a multi-plot save no longer captures
+     * weather at all, where the per-plot split used to capture one stamp per
+     * plot. Holding several is a `DailyLog` shape change, not a Phase 2b edit.
+     */
     private async enrichWithWeather(logs: DailyLog[], crops: CropProfile[], profile: FarmerProfile) {
         const weatherProvider = this.weatherProvider;
         if (!weatherProvider) return;
 
         await Promise.all(logs.map(async (log) => {
-            if (log.context.selection[0].selectedPlotIds.length > 0) {
-                const plotId = log.context.selection[0].selectedPlotIds[0];
+            const assertedPlotIds = log.context.selection.flatMap(entry => entry.selectedPlotIds || []);
+            if (assertedPlotIds.length === 1) {
+                const plotId = assertedPlotIds[0];
                 const crop = crops.find(c => c.id === log.context.selection[0].cropId);
                 const plot = crop?.plots.find(p => p.id === plotId);
                 if (plot) {
@@ -221,8 +237,31 @@ export class LogCommandServiceImpl implements LogCommandService {
         // reliably-current farm id `FarmContext`/`switchFarm` keep in sync —
         // a real fix, not another guess.
         const farmId = selection?.farmId ?? SessionStore.getCurrentFarmId() ?? undefined;
-        const cropId = selection?.cropId && selection.cropId !== 'FARM_GLOBAL' ? selection.cropId : undefined;
-        const plotId = selection?.selectedPlotIds?.[0];
+
+        // LABOUR_PHASE2 B1b — a money event may name a plot and a crop ONLY when
+        // the record names exactly one of each.
+        //
+        // This read used to be `selection[0].cropId` and
+        // `selection[0].selectedPlotIds[0]`, which was safe only because the
+        // per-plot split guaranteed one crop and one plot per record — and it
+        // was the split that had already divided the money 3/3/2 on the way in.
+        // With the split gone, the same two lines would post the FULL amount
+        // against the first plot alone: a farm's whole shared wage bill recorded
+        // as one plot's cost, which is a worse fabrication than the one this
+        // task removes.
+        //
+        // A multi-plot amount lives at exactly the level of aggregation the
+        // farmer asserted and is excluded from every narrower filter. Splitting
+        // it across plots is a Finance decision with an explicit, farmer-visible
+        // strategy — `ExpenseAllocationPolicy` already exists for that, is
+        // wired, and is reachable. It is not a Labour edit and never an implicit
+        // default.
+        const allSelections = log.context.selection || [];
+        const assertedCropIds = new Set(allSelections.map(entry => entry.cropId).filter(Boolean));
+        const assertedPlotIds = allSelections.flatMap(entry => entry.selectedPlotIds || []);
+        const soleCropId = assertedCropIds.size === 1 ? [...assertedCropIds][0] : undefined;
+        const cropId = soleCropId && soleCropId !== 'FARM_GLOBAL' ? soleCropId : undefined;
+        const plotId = assertedPlotIds.length === 1 ? assertedPlotIds[0] : undefined;
         const baseDateTime = (log.meta?.createdAtISO || `${log.date}T12:00:00`);
         const createdBy = log.meta?.createdByOperatorId || 'owner';
 
