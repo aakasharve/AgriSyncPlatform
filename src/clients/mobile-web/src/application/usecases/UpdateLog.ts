@@ -20,10 +20,36 @@ interface UpdateLogRequest {
     reason: string;
 }
 
-interface UpdateLogResponse {
+export interface UpdateLogResponse {
     success: boolean;
     error?: string;
     log?: DailyLog;
+    /**
+     * Labour Phase 2 / T2 — how many labour corrections this call actually
+     * POSTed and had accepted by the server. PURELY ADDITIVE: nothing about
+     * what this use case persists, when, or in what order changed.
+     *
+     * It exists because the caller (`useLogCommands.handleManualSubmit`'s edit
+     * branch) fired a success toast off `success === true` alone — and
+     * `success === true` is ALSO what an edit that persisted absolutely
+     * nothing returns. Every non-labour category (crop activities, irrigation,
+     * inputs, machinery, expenses) still has no server-side persistence path,
+     * and this use case deliberately does not call `repo.save` either, so such
+     * an edit lives only in React state until the next reload. The toast had no
+     * way to tell the two apart; now it does.
+     *
+     * `> 0` is a REAL server outcome: `postLabourCorrection` throws on any
+     * non-2xx, and a throw is caught below into `success: false`. So a `true`
+     * result carrying `n > 0` means the server accepted all n. A replayed
+     * (`alreadyApplied`) correction counts — that response is documented as a
+     * success outcome that proves the retry did not double-write.
+     *
+     * `0` means NOTHING was persisted anywhere by this call.
+     *
+     * NOT a fix for the missing `repo.save` — Phase 4 owns that. This only
+     * stops the caller claiming what it cannot evidence (`P4`, `P5`).
+     */
+    persistedLabourCorrections?: number;
 }
 
 /** One engagement's worth of correction, ready to POST. */
@@ -229,7 +255,11 @@ export const updateLog = async (
             }
         }
 
-        return { success: true, log: finalLog };
+        // `corrections.length` and not a separate counter: the loop above either
+        // POSTed every one of them or threw out of this try block, so reaching
+        // here means all of them were accepted. Reporting the count is the only
+        // thing added here — no persistence behaviour was touched (T2).
+        return { success: true, log: finalLog, persistedLabourCorrections: corrections.length };
 
     } catch (e: unknown) {
         // Narrowed rather than `any` (the shape this used to carry): the pre-commit

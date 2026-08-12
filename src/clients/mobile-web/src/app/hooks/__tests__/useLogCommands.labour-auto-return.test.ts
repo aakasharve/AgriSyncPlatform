@@ -41,8 +41,23 @@ vi.mock('../../providers/DataSourceProvider', () => ({
     useDataSource: () => ({ dataSource: { logs: {} } }),
 }));
 
+// Labour Phase 2 / T2 — this used to resolve to `undefined`. The four save
+// paths now READ the enqueue result to decide whether they may claim success,
+// so the mock must return the real shape or every consumer destructures a
+// crash. (These two tests run with `isDemoMode: true`, where no enqueue is
+// attempted at all, so the value is never observed here — it is corrected
+// anyway so the next person to flip that flag does not inherit a landmine.)
 vi.mock('../../../features/logs/services/logSyncMutationService', () => ({
-    enqueueLogsForSync: vi.fn().mockResolvedValue(undefined),
+    enqueueLogsForSync: vi.fn().mockResolvedValue({ queuedLogIds: [], skippedLogIds: [] }),
+}));
+
+// T2 — the save paths now render T1's `NEEDS_FIX` label through the app's i18n,
+// so the hook calls `useLanguage()`. In the real app that resolves against
+// `<LanguageProvider>` (`App.tsx:133`, which wraps `AppContent` and therefore
+// `compositionRoot`); `renderHook` mounts no providers, and `useLanguage`
+// throws outside one by design.
+vi.mock('../../../i18n/LanguageContext', () => ({
+    useLanguage: () => ({ language: 'en', setLanguage: () => { }, t: (key: string) => key }),
 }));
 
 vi.mock('../../../application/services/LogCommandService', () => ({

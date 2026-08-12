@@ -11,6 +11,10 @@ import { getWeatherForLocation } from '../usecases/AttachWeatherSnapshot';
 import { financeCommandService } from '../../features/finance/financeCommandService';
 import { MoneyCategory } from '../../features/finance/finance.types';
 import { SessionStore } from '../../infrastructure/storage/SessionStore';
+// Labour Phase 2 / T2 — the use case's own response type, so the additive
+// `persistedLabourCorrections` evidence survives this pass-through instead of
+// being erased by a narrower inline structural type.
+import type { UpdateLogResponse } from '../usecases/UpdateLog';
 
 // Define the Service Interface
 export interface LogCommandService {
@@ -40,7 +44,7 @@ export interface LogCommandService {
         updates: Partial<DailyLog>,
         profile: FarmerProfile,
         reason: string
-    ): Promise<{ success: boolean; log?: DailyLog; error?: string }>;
+    ): Promise<UpdateLogResponse>;
 }
 
 // Define dependencies for internal use (can be injected later)
@@ -166,7 +170,7 @@ export class LogCommandServiceImpl implements LogCommandService {
         updates: Partial<DailyLog>,
         profile: FarmerProfile,
         reason: string
-    ): Promise<{ success: boolean; log?: DailyLog; error?: string }> {
+    ): Promise<UpdateLogResponse> {
         return await updateLog(
             {
                 logId,
