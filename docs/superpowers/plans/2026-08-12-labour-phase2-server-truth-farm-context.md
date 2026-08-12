@@ -328,6 +328,18 @@ Three states, derived from the outbox, no schema change:
 
 `NEEDS_FIX` deliberately folds in the currently-silent cases: `REJECTED_USER_REVIEW`, `retryCount >= 5`, and never-enqueued (`skippedLogIds`). **No success wording may fire before acknowledgement** — including the `मंजूर केलं` overlay that currently fires before the enqueue.
 
+> **PATCHED 2026-08-12 (execution session) — one of the three `NEEDS_FIX` cases was implemented differently, and this is the record of that deviation. It was found by the whole-phase review, not absorbed silently.**
+>
+> **`REJECTED_USER_REVIEW` and `retryCount >= 5` fold into `NEEDS_FIX` as written.** **Never-enqueued (`skippedLogIds`) does NOT.**
+>
+> **Why.** `अडकलं — तपासा` means *"the system is stuck and you can act."* A never-enqueued log is in **no queue at all** — `resolveSyncTarget` returns null and `enqueueLogsForSync` `continue`s before any row is written — so `BackgroundSyncWorker` will never retry it and the drawer cannot list it. Routing it to `NEEDS_FIX` would send the farmer to check a place where the record does not appear and no action exists. That is `P5` inverted: a door painted on a wall. (Same reasoning retired `तपासा` from the save toast — finding B3.)
+>
+> **What was built instead.** An unqueueable record **weakens the chip's claim** rather than strengthening its alarm: it suppresses `ON_SERVER` and falls back to `ON_PHONE`, which is true and provable (`confirmAndSave` wrote the log to `db.logs` before the enqueue was attempted) and is the **same** claim the toast and the panel badge already make about that record — so four surfaces say one thing (`features/sync/status/unqueueableLogs.ts`, commit `e290a4be`).
+>
+> **This closed a real, reachable contradiction.** `ON_SERVER` had required `acknowledgedCount > 0`, but `APPLIED` rows are **never pruned**, so on any device that has ever synced once the condition holds permanently — and `ON_SERVER` was again produced by the mere *absence* of open rows, which is exactly what a dropped record looks like. The farmer saw `पाठवलं ✓` in the sticky header directly above a badge reading `फोनवर सेव्ह ✓ — cannot be sent`, about the record they had just created.
+>
+> **KNOWN LIMIT — carried, not hidden.** The suppression is **session-scoped module state**. It is gone on reload, after which the chip again reads a queue the record was never in. Durable state needs a Dexie version bump Phase 1 is not permitted to make, and with no clearing path it would latch `ON_PHONE` forever. **Phase 2 changes the schema AND removes the dominant cause of these skips** (a farm-scoped log becomes storable), so the durable half belongs there. What is closed here is the window the farmer can actually see.
+
 ---
 
 ## H. Exact change surface
