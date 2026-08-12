@@ -651,8 +651,8 @@ public sealed class LabourCorrectionGateBRealPostgresTests(Xunit.Abstractions.IT
         await using (var log = db.CreateCommand())
         {
             log.CommandText = """
-                INSERT INTO ssf.daily_logs ("Id", farm_id, plot_id, crop_cycle_id, operator_user_id, log_date, created_at_utc, source, model_version, prompt_version)
-                VALUES (@id, @fid, @pid, @cid, @uid, DATE '2026-08-10', NOW(), 'manual', 'unknown', 'unknown');
+                INSERT INTO ssf.daily_logs ("Id", farm_id, plot_id, crop_cycle_id, plot_ids, scope, operator_user_id, log_date, created_at_utc, source, model_version, prompt_version)
+                VALUES (@id, @fid, @pid, @cid, ARRAY[@pid], 'Plot', @uid, DATE '2026-08-10', NOW(), 'manual', 'unknown', 'unknown');
                 """;
             log.Parameters.AddWithValue("id", logId);
             log.Parameters.AddWithValue("fid", farmId);

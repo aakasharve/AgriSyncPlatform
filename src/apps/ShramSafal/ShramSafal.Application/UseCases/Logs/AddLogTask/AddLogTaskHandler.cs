@@ -75,7 +75,21 @@ public sealed class AddLogTaskHandler(
             PaidFeature.WriteDailyLog, ct);
         if (gate is not null) return gate;
 
-        var cropCycle = await repository.GetCropCycleByIdAsync(log.CropCycleId, ct);
+        // LABOUR_PHASE2 P2.1 — DailyLog.CropCycleId is now nullable (a MultiPlot
+        // or Farm log carries no cycle by design; recording one wrongly is worse
+        // than recording it as absent). This handler needs a real cycle for both
+        // the lookup below and the schedule-compliance stamp at :110, so a
+        // cycle-less log FAILS CLOSED here rather than being stamped against a
+        // guessed cycle. That is not the final answer for farm-wide logs — the
+        // task path for a plot-less log is a P2.2/P2.3 decision. It changes
+        // nothing at this commit: no such log can be created until P2.2 opens
+        // the write path.
+        if (log.CropCycleId is not { } logCropCycleId)
+        {
+            return Result.Failure<DailyLogDto>(ShramSafalErrors.CropCycleNotFound);
+        }
+
+        var cropCycle = await repository.GetCropCycleByIdAsync(logCropCycleId, ct);
         if (cropCycle is null)
         {
             return Result.Failure<DailyLogDto>(ShramSafalErrors.CropCycleNotFound);
@@ -107,7 +121,7 @@ public sealed class AddLogTaskHandler(
         // Phase 3 MIS: stamp compliance on the task inside the same tx (I-17).
         var compliance = await complianceService.EvaluateAsync(
             new ScheduleComplianceQuery(
-                log.CropCycleId,
+                logCropCycleId,
                 command.ActivityType,
                 cropCycle.Stage,
                 log.LogDate),

@@ -339,12 +339,12 @@ public sealed class SelectiveDiarizationWorkerTests : IAsyncLifetime
         await using var c = db.CreateCommand();
         c.CommandText = """
             INSERT INTO ssf.daily_logs
-                (id, farm_id, plot_id, crop_cycle_id, operator_user_id,
+                (id, farm_id, plot_id, crop_cycle_id, plot_ids, scope, operator_user_id,
                  log_date, idempotency_key, created_at_utc, modified_at_utc,
                  evidence_sources_json, source, model_version, prompt_version,
                  source_ai_job_id)
             VALUES
-                (@id, @fid, @pid, @ccid, @opid,
+                (@id, @fid, @pid, @ccid, ARRAY[@pid], 'Plot', @opid,
                  CURRENT_DATE, @idem, NOW() - INTERVAL '20 minutes', NOW(),
                  '[]'::jsonb, 'ai', 'saaras:v3', 'v1.0',
                  @sjid);

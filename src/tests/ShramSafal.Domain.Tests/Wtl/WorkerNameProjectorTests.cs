@@ -6,6 +6,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using ShramSafal.Application.Ports;
 using ShramSafal.Application.Wtl;
 using ShramSafal.Domain.Events;
+using ShramSafal.Domain.Logs;
 using ShramSafal.Domain.Wtl;
 using ShramSafal.Infrastructure.Wtl;
 using Xunit;
@@ -29,14 +30,24 @@ public sealed class WorkerNameProjectorTests
 {
     private static readonly FarmId FarmA = new(Guid.Parse("11111111-1111-4111-8111-111111111111"));
 
-    private static DailyLogCreatedEvent MakeEvent(Guid? logId = null) => new(
-        eventId: Guid.NewGuid(),
-        occurredOnUtc: DateTime.UtcNow,
-        dailyLogId: logId ?? Guid.NewGuid(),
-        farmId: FarmA,
-        plotId: Guid.NewGuid(),
-        cropCycleId: Guid.NewGuid(),
-        logDate: DateOnly.FromDateTime(DateTime.UtcNow));
+    private static DailyLogCreatedEvent MakeEvent(Guid? logId = null)
+    {
+        // LABOUR_PHASE2 P2.1 — the event now carries the farmer's spatial
+        // assertion. This projector reads only DailyLogId, so the scope is
+        // irrelevant to what is under test here; a plot-scoped event keeps the
+        // fixture identical in meaning to what it was before.
+        var plotId = Guid.NewGuid();
+        return new DailyLogCreatedEvent(
+            eventId: Guid.NewGuid(),
+            occurredOnUtc: DateTime.UtcNow,
+            dailyLogId: logId ?? Guid.NewGuid(),
+            farmId: FarmA,
+            scope: DailyLogScope.Plot,
+            plotIds: [plotId],
+            plotId: plotId,
+            cropCycleId: Guid.NewGuid(),
+            logDate: DateOnly.FromDateTime(DateTime.UtcNow));
+    }
 
     private static (WorkerNameProjector projector, FakeWorkerRepo repo, FakeAnalyticsWriter analytics) Build(
         string? transcript)

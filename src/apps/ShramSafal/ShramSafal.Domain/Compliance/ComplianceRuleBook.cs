@@ -128,10 +128,23 @@ public static class ComplianceRuleBook
                 var disputed = input.DailyLogs
                     .Where(d => d.CurrentVerificationStatus == VerificationStatus.Disputed)
                     .Where(d => d.ModifiedAtUtc <= cutoff)
+                    // LABOUR_PHASE2 P2.1 — DailyLog.PlotId is now nullable.
+                    // ComplianceEvidence.PlotId is not, and it cannot be widened
+                    // here: compliance_signals.plot_id is NOT NULL and sits in the
+                    // unique index (farm_id, plot_id, rule_code, crop_cycle_id)
+                    // (20260421045922_AddComplianceSignalsTable.cs:21,60). Making
+                    // that nullable is a second schema change on a second table,
+                    // outside this task's approved surface.
+                    // So a plot-less log is SKIPPED rather than given a fabricated
+                    // plot. Behaviour at this commit is unchanged — no MultiPlot or
+                    // Farm log can be created until P2.2 opens the write path.
+                    // The plot-less compliance surface is the known L6 gap and is
+                    // owned by the compliance/ledger reader audit (P2.3).
+                    .Where(d => d.PlotId.HasValue)
                     .ToList();
 
                 return disputed.Select(d => new ComplianceEvidence(
-                    d.FarmId, d.PlotId, d.CropCycleId,
+                    d.FarmId, d.PlotId!.Value, d.CropCycleId,
                     PayloadJson: JsonSerializer.Serialize(new { dailyLogId = d.Id, disputedSince = d.ModifiedAtUtc }),
                     DescriptionEn: $"This daily log has been disputed since {d.ModifiedAtUtc:yyyy-MM-dd}.",
                     DescriptionMr: $"हा लॉग {d.ModifiedAtUtc:yyyy-MM-dd} पासून वादात आहे."

@@ -20,13 +20,46 @@ internal sealed class DailyLogConfiguration : IEntityTypeConfiguration<DailyLog>
             .HasConversion(TypedIdConverters.FarmId)
             .IsRequired();
 
-        builder.Property(x => x.PlotId)
-            .HasColumnName("plot_id")
+        // LABOUR_PHASE2 P2.1 — farm context durable.
+        //
+        // scope: the farmer's explicit spatial assertion (Plot | MultiPlot |
+        // Farm), stored as the literal enum member name. Same shape as
+        // disturbance_events.scope (DisturbanceEventConfiguration.cs:17-18):
+        // varchar(10) + HasConversion<string>(). The ck_daily_logs_scope CHECK
+        // compares against these exact strings.
+        builder.Property(x => x.Scope)
+            .HasColumnName("scope")
+            .HasConversion<string>()
+            .HasMaxLength(10)
             .IsRequired();
 
-        builder.Property(x => x.CropCycleId)
-            .HasColumnName("crop_cycle_id")
+        // plot_ids: the CANONICAL spatial assertion — a set, because one shared
+        // engagement over three plots is one engagement (founder decision O-2).
+        // PrimitiveCollection with a List<Guid> backing field, no converter and
+        // no comparer, copied from the one live uuid[] mapping in this model
+        // (TestInstanceConfiguration.cs:117-128). PrimitiveCollection is what
+        // lets both Npgsql (native uuid[]) and the EF InMemory provider (an
+        // in-process list) materialise it — the unit-test harnesses run without
+        // Npgsql. day_ledgers.global_expense_ids is NOT a usable precedent: the
+        // column exists but has had no EF mapping since Feb 2026.
+        builder.PrimitiveCollection<List<Guid>>("_plotIds")
+            .HasField("_plotIds")
+            .UsePropertyAccessMode(PropertyAccessMode.Field)
+            .HasColumnName("plot_ids")
+            .HasColumnType("uuid[]")
             .IsRequired();
+        builder.Ignore(x => x.PlotIds);
+
+        // plot_id / crop_cycle_id: NO LONGER IsRequired(). A farm-wide log has
+        // no plot and no crop cycle; the honest record of that is NULL welded to
+        // an explicit scope by the CHECK, never a fabricated id or a sentinel.
+        // plot_id is retained as a compatibility projection of the single-plot
+        // case so every existing single-plot reader keeps working untouched.
+        builder.Property(x => x.PlotId)
+            .HasColumnName("plot_id");
+
+        builder.Property(x => x.CropCycleId)
+            .HasColumnName("crop_cycle_id");
 
         builder.Property(x => x.OperatorUserId)
             .HasColumnName("operator_user_id")

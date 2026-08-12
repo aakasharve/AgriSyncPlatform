@@ -300,8 +300,8 @@ public sealed class FieldOperatorErasureRealPostgresTests : IAsyncLifetime
         await using (var c = db.CreateCommand())
         {
             c.CommandText = """
-                INSERT INTO ssf.daily_logs ("Id", farm_id, plot_id, crop_cycle_id, operator_user_id, log_date, created_at_utc, source, model_version, prompt_version)
-                VALUES (@id, @fid, @pid, @cid, @uid, CURRENT_DATE, NOW(), 'voice', 'unknown', 'unknown');
+                INSERT INTO ssf.daily_logs ("Id", farm_id, plot_id, crop_cycle_id, plot_ids, scope, operator_user_id, log_date, created_at_utc, source, model_version, prompt_version)
+                VALUES (@id, @fid, @pid, @cid, ARRAY[@pid], 'Plot', @uid, CURRENT_DATE, NOW(), 'voice', 'unknown', 'unknown');
                 """;
             c.Parameters.AddWithValue("id", _dailyLogId);
             c.Parameters.AddWithValue("fid", _farmId);

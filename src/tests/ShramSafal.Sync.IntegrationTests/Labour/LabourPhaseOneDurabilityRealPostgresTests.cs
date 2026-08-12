@@ -719,8 +719,8 @@ public sealed class LabourPhaseOneDurabilityRealPostgresTests(Xunit.Abstractions
     {
         await using var cmd = db.CreateCommand();
         cmd.CommandText = """
-            INSERT INTO ssf.daily_logs ("Id", farm_id, plot_id, crop_cycle_id, operator_user_id, log_date, created_at_utc, source, model_version, prompt_version)
-            VALUES (@id, @fid, @pid, @cid, @uid, CURRENT_DATE, NOW(), 'voice', 'unknown', 'unknown');
+            INSERT INTO ssf.daily_logs ("Id", farm_id, plot_id, crop_cycle_id, plot_ids, scope, operator_user_id, log_date, created_at_utc, source, model_version, prompt_version)
+            VALUES (@id, @fid, @pid, @cid, ARRAY[@pid], 'Plot', @uid, CURRENT_DATE, NOW(), 'voice', 'unknown', 'unknown');
             """;
         cmd.Parameters.AddWithValue("id", dailyLogId);
         cmd.Parameters.AddWithValue("fid", FarmId);

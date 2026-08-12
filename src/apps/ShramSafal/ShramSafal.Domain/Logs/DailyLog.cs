@@ -11,14 +11,17 @@ public sealed class DailyLog : Entity<Guid>
 {
     private readonly List<LogTask> _tasks = [];
     private readonly List<VerificationEvent> _verificationEvents = [];
+    private readonly List<Guid> _plotIds = [];
 
     private DailyLog() : base(Guid.Empty) { } // EF Core
 
     private DailyLog(
         Guid id,
         FarmId farmId,
-        Guid plotId,
-        Guid cropCycleId,
+        DailyLogScope scope,
+        IReadOnlyCollection<Guid> plotIds,
+        Guid? plotId,
+        Guid? cropCycleId,
         UserId operatorUserId,
         DateOnly logDate,
         string? idempotencyKey,
@@ -28,7 +31,17 @@ public sealed class DailyLog : Entity<Guid>
         Guid? sourceAiJobId)
         : base(id)
     {
+        // FIRST line of defence (LABOUR_PHASE2 P2.1). The ck_daily_logs_scope
+        // CHECK constraint is the second. This guard runs on the ONLY path that
+        // constructs a new DailyLog, so an invalid scope/plot combination is
+        // unconstructible — not merely rejected at the database boundary.
+        // EF Core materialises through the parameterless ctor above, so loading
+        // a legacy row never runs this.
+        EnsureScopeInvariant(scope, plotIds, plotId, cropCycleId);
+
         FarmId = farmId;
+        Scope = scope;
+        _plotIds.AddRange(plotIds);
         PlotId = plotId;
         CropCycleId = cropCycleId;
         OperatorUserId = operatorUserId;
@@ -42,8 +55,31 @@ public sealed class DailyLog : Entity<Guid>
     }
 
     public FarmId FarmId { get; private set; }
-    public Guid PlotId { get; private set; }
-    public Guid CropCycleId { get; private set; }
+
+    /// <summary>
+    /// What the farmer asserted about WHERE this happened. Explicit rather than
+    /// inferred from <see cref="PlotIds"/> cardinality, so a reader five years
+    /// from now never has to know a convention to interpret the row.
+    /// </summary>
+    public DailyLogScope Scope { get; private set; } = DailyLogScope.Plot;
+
+    /// <summary>
+    /// The canonical spatial assertion: exactly one plot when
+    /// <see cref="Scope"/> is <see cref="DailyLogScope.Plot"/>, two or more when
+    /// <see cref="DailyLogScope.MultiPlot"/>, and EMPTY — never a sentinel — when
+    /// <see cref="DailyLogScope.Farm"/>.
+    /// </summary>
+    public IReadOnlyCollection<Guid> PlotIds => _plotIds.AsReadOnly();
+
+    /// <summary>
+    /// Compatibility projection of the single-plot case: populated ONLY when
+    /// <see cref="Scope"/> is <see cref="DailyLogScope.Plot"/>, and then always
+    /// equal to the single member of <see cref="PlotIds"/>. Null for every other
+    /// scope — a plot-less log has no plot, and we do not invent one.
+    /// </summary>
+    public Guid? PlotId { get; private set; }
+
+    public Guid? CropCycleId { get; private set; }
     public UserId OperatorUserId { get; private set; }
     public UserId CreatedByUserId => OperatorUserId;
     public DateOnly LogDate { get; private set; }
@@ -76,6 +112,17 @@ public sealed class DailyLog : Entity<Guid>
 
     public VerificationStatus? LastVerificationStatus => CurrentVerificationStatus;
 
+    /// <summary>
+    /// Plot-scoped log: the farmer named exactly one plot and its crop cycle.
+    /// </summary>
+    /// <remarks>
+    /// The signature is UNCHANGED from Labour V1, deliberately — every existing
+    /// call site keeps compiling and keeps meaning exactly what it meant before.
+    /// <see cref="DailyLogScope"/> is not a parameter here because this factory
+    /// can only ever produce <see cref="DailyLogScope.Plot"/>; the other two
+    /// scopes have their own factories, so no caller can pair a scope with a
+    /// plot reference that contradicts it.
+    /// </remarks>
     public static DailyLog Create(
         Guid id,
         FarmId farmId,
@@ -88,12 +135,109 @@ public sealed class DailyLog : Entity<Guid>
         DateTime createdAtUtc,
         Provenance? provenance = null,
         Guid? sourceAiJobId = null)
+        => CreateCore(
+            id,
+            farmId,
+            DailyLogScope.Plot,
+            [plotId],
+            plotId,
+            cropCycleId,
+            operatorUserId,
+            logDate,
+            idempotencyKey,
+            location,
+            createdAtUtc,
+            provenance,
+            sourceAiJobId);
+
+    /// <summary>
+    /// Multi-plot log (founder decision O-2): ONE shared engagement whose context
+    /// contains several plots. Never fanned out into one row per plot — that is
+    /// what inflates headcount today.
+    /// </summary>
+    /// <remarks>
+    /// Takes no <c>plotId</c> and no <c>cropCycleId</c> parameter at all, so a
+    /// multi-plot log cannot be given a single-plot identity by mistake.
+    /// Cross-cycle attribution is deferred by decision, not by oversight.
+    /// </remarks>
+    public static DailyLog CreateForMultiPlot(
+        Guid id,
+        FarmId farmId,
+        IReadOnlyCollection<Guid> plotIds,
+        UserId operatorUserId,
+        DateOnly logDate,
+        string? idempotencyKey,
+        LocationSnapshot? location,
+        DateTime createdAtUtc,
+        Provenance? provenance = null,
+        Guid? sourceAiJobId = null)
+        => CreateCore(
+            id,
+            farmId,
+            DailyLogScope.MultiPlot,
+            plotIds,
+            plotId: null,
+            cropCycleId: null,
+            operatorUserId,
+            logDate,
+            idempotencyKey,
+            location,
+            createdAtUtc,
+            provenance,
+            sourceAiJobId);
+
+    /// <summary>
+    /// संपूर्ण शेत — a farm-wide log. The farmer named no plot, so this factory
+    /// accepts no plot reference of any kind. There is no parameter through
+    /// which a fabricated plot or crop cycle could enter.
+    /// </summary>
+    public static DailyLog CreateForFarm(
+        Guid id,
+        FarmId farmId,
+        UserId operatorUserId,
+        DateOnly logDate,
+        string? idempotencyKey,
+        LocationSnapshot? location,
+        DateTime createdAtUtc,
+        Provenance? provenance = null,
+        Guid? sourceAiJobId = null)
+        => CreateCore(
+            id,
+            farmId,
+            DailyLogScope.Farm,
+            [],
+            plotId: null,
+            cropCycleId: null,
+            operatorUserId,
+            logDate,
+            idempotencyKey,
+            location,
+            createdAtUtc,
+            provenance,
+            sourceAiJobId);
+
+    private static DailyLog CreateCore(
+        Guid id,
+        FarmId farmId,
+        DailyLogScope scope,
+        IReadOnlyCollection<Guid> plotIds,
+        Guid? plotId,
+        Guid? cropCycleId,
+        UserId operatorUserId,
+        DateOnly logDate,
+        string? idempotencyKey,
+        LocationSnapshot? location,
+        DateTime createdAtUtc,
+        Provenance? provenance,
+        Guid? sourceAiJobId)
     {
         var effectiveProvenance = provenance ?? Provenance.Manual("unknown");
 
         var log = new DailyLog(
             id,
             farmId,
+            scope,
+            plotIds,
             plotId,
             cropCycleId,
             operatorUserId,
@@ -109,11 +253,55 @@ public sealed class DailyLog : Entity<Guid>
             createdAtUtc,
             id,
             farmId,
+            scope,
+            log.PlotIds,
             plotId,
             cropCycleId,
             logDate));
 
         return log;
+    }
+
+    /// <summary>
+    /// The scope invariant, stated once. Mirrors <c>ck_daily_logs_scope</c> and
+    /// adds one coherence rule SQL is clumsy at: for a plot-scoped log the
+    /// compatibility <see cref="PlotId"/> must BE the single member of
+    /// <see cref="PlotIds"/>, not merely non-null.
+    /// </summary>
+    private static void EnsureScopeInvariant(
+        DailyLogScope scope,
+        IReadOnlyCollection<Guid> plotIds,
+        Guid? plotId,
+        Guid? cropCycleId)
+    {
+        ArgumentNullException.ThrowIfNull(plotIds);
+
+        if (plotIds.Distinct().Count() != plotIds.Count)
+        {
+            throw new ArgumentException(
+                "Plot ids must be distinct — a repeated plot is not a second plot.",
+                nameof(plotIds));
+        }
+
+        var satisfied = scope switch
+        {
+            DailyLogScope.Plot =>
+                plotIds.Count == 1 && plotId.HasValue && plotIds.First() == plotId.Value,
+            DailyLogScope.MultiPlot =>
+                plotIds.Count >= 2 && !plotId.HasValue && !cropCycleId.HasValue,
+            DailyLogScope.Farm =>
+                plotIds.Count == 0 && !plotId.HasValue && !cropCycleId.HasValue,
+            _ => false,
+        };
+
+        if (!satisfied)
+        {
+            throw new ArgumentException(
+                $"Scope '{scope}' is not consistent with {plotIds.Count} plot id(s), " +
+                $"plotId={(plotId.HasValue ? "set" : "null")}, " +
+                $"cropCycleId={(cropCycleId.HasValue ? "set" : "null")}.",
+                nameof(scope));
+        }
     }
 
     public LogTask AddTask(
