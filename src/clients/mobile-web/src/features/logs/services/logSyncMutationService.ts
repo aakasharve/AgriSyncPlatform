@@ -24,11 +24,24 @@ function ensureUuid(localId: string | undefined): string {
     return idGenerator.generate();
 }
 
-interface ResolvedLogSyncTarget {
-    farmId: string;
-    plotId: string;
-    cropCycleId: string;
-}
+/**
+ * LABOUR_PHASE2 B1a — what the farmer asserted about WHERE the work happened,
+ * resolved against the plots this device actually knows.
+ *
+ * A DISCRIMINATED UNION, not one struct with four optional fields, and that is
+ * load-bearing rather than stylistic: `ck_daily_logs_scope` and
+ * `CreateDailyLogHandler` both reject a `MultiPlot` log that carries a
+ * `plotId` or a `cropCycleId`, and reject a `Plot` log that omits either. The
+ * union makes the rejected combinations unrepresentable here, so the payload
+ * below cannot be built wrong — the same reason P2.1 gave each scope its own
+ * domain factory instead of one `Create(scope, …)`.
+ *
+ * `Farm` is deliberately ABSENT from this union. A farm-scoped log has no plot,
+ * and this module reads the farm off a plot — see `resolveSyncTarget`.
+ */
+type ResolvedLogSyncTarget =
+    | { farmId: string; scope: 'Plot'; plotIds: string[]; plotId: string; cropCycleId: string }
+    | { farmId: string; scope: 'MultiPlot'; plotIds: string[] };
 
 interface LogTaskMutationPayload {
     logTaskId: string;
@@ -246,22 +259,76 @@ function buildLabourPayloads(log: DailyLog): LabourItemPayload[] {
 }
 
 /**
- * The log's first selected plot, resolved out of Dexie. `null` when the log
- * carries no plot selection or the plot has not synced down yet — the two
- * reasons a log has no resolvable farm.
+ * LABOUR_PHASE2 B1a — the WHOLE plot set the farmer selected, in the order the
+ * selection was made, duplicates removed.
+ *
+ * WHAT THIS REPLACES. `resolveLogPlot` read `selection[0].selectedPlotIds[0]`:
+ * the first plot of the first crop. That was correct only because every log
+ * `LogFactory` could persist had exactly one plot in exactly one entry — the
+ * per-plot fan-out had already thrown the rest of the selection away before the
+ * log reached Dexie (plan §C0). Phase 2b stops that split, so from B1b onward a
+ * single log legitimately carries `{A,B,C}`, and `[0]` would silently discard
+ * B and C — the same "pick the first plot" fabrication founder decision O-1
+ * closed, moved one layer down.
+ *
+ * EVERY selection entry is read, not just `[0]`. A multi-CROP selection is one
+ * entry per crop (`LogContext.tsx`, `logsReconciler.buildSelection`), so
+ * stopping at `[0]` would drop the second crop's plots entirely.
+ *
+ * Duplicates are collapsed rather than rejected: the assertion is a SET, the
+ * same plot named twice is still one plot, and `CreateDailyLogHandler` refuses
+ * a `MultiPlot` set containing a repeat.
  */
-async function resolveLogPlot(log: DailyLog): Promise<{ plotId: string; payload: PlotDto } | null> {
-    const plotId = log.context.selection?.[0]?.selectedPlotIds?.[0];
-    if (!plotId) {
+function selectedPlotIds(log: DailyLog): string[] {
+    const seen = new Set<string>();
+    for (const entry of log.context.selection ?? []) {
+        for (const plotId of entry?.selectedPlotIds ?? []) {
+            if (plotId) {
+                seen.add(plotId);
+            }
+        }
+    }
+
+    return [...seen];
+}
+
+/**
+ * The plots, resolved out of Dexie, plus the one farm they all belong to.
+ *
+ * `null` when the log names no plot, when any named plot has not synced down to
+ * this device yet, or when the plots do not agree on a farm. The last case is
+ * not defensive padding: `farmId` is a REQUIRED, single-valued field on
+ * `create_daily_log`, cross-farm mutation is forbidden, and picking one farm
+ * out of two would attribute a farmer's work to a farm they did not name. There
+ * is no honest single answer, so the log is not queued and the honesty surfaces
+ * report it as unsendable instead of sending it somewhere plausible.
+ */
+async function resolveLogPlots(
+    log: DailyLog,
+): Promise<{ farmId: string; plotIds: string[] } | null> {
+    const plotIds = selectedPlotIds(log);
+    if (plotIds.length === 0) {
         return null;
     }
 
-    const plotRecord = await getDatabase().plots.get(plotId);
-    if (!plotRecord) {
-        return null;
+    const db = getDatabase();
+    let farmId: string | null = null;
+
+    for (const plotId of plotIds) {
+        const plotRecord = await db.plots.get(plotId);
+        if (!plotRecord) {
+            return null;
+        }
+
+        const plotFarmId = (plotRecord.payload as PlotDto).farmId;
+        if (!plotFarmId || (farmId !== null && plotFarmId !== farmId)) {
+            return null;
+        }
+
+        farmId = plotFarmId;
     }
 
-    return { plotId, payload: plotRecord.payload as PlotDto };
+    return farmId ? { farmId, plotIds } : null;
 }
 
 /**
@@ -271,20 +338,44 @@ async function resolveLogPlot(log: DailyLog): Promise<{ plotId: string; payload:
  * Deliberately narrower than `resolveSyncTarget`: a correction needs only the
  * farm, and requiring a resolvable CROP CYCLE as well would refuse to correct a
  * headcount on a log whose cycle has since ended.
+ *
+ * B1a: this shares `resolveLogPlots` with the push path, which is the point.
+ * The `[0]` pick governed BOTH, so correcting a multi-plot log would have been
+ * routed by the first plot alone — and would have started failing outright the
+ * moment `LogFactory` stopped emitting one log per plot. One choke point, both
+ * paths.
  */
 export async function resolveLogFarmId(log: DailyLog): Promise<string | null> {
-    const plot = await resolveLogPlot(log);
-    return plot?.payload.farmId ?? null;
+    const resolved = await resolveLogPlots(log);
+    return resolved?.farmId ?? null;
 }
 
 async function resolveSyncTarget(log: DailyLog): Promise<ResolvedLogSyncTarget | null> {
     const selection = log.context.selection?.[0];
-    const plot = await resolveLogPlot(log);
-    if (!plot) {
+    const resolved = await resolveLogPlots(log);
+    if (!resolved) {
+        // Includes the farm-scoped log (`selectedPlotIds: []`), which stays
+        // unsendable exactly as it was: the farm id is read off a plot and a
+        // farm-scoped log has none. Reaching for "the only farm in Dexie"
+        // would be a guess dressed as a resolution, and this device may hold
+        // several farms. The record is safe in `db.logs`, and the Phase 1
+        // honesty surfaces already say so rather than claiming it was sent.
         return null;
     }
 
-    const { plotId, payload: plotPayload } = plot;
+    const { farmId, plotIds } = resolved;
+
+    if (plotIds.length > 1) {
+        // MultiPlot. No `plotId` and no `cropCycleId`, by contract: the domain
+        // CHECK requires both to be NULL, `CreateDailyLogHandler` rejects the
+        // command if either is present, and `crop_cycle_id` is as single-valued
+        // as `plot_id` was — recording one plot's cycle for a three-plot log
+        // would assert a cycle the farmer never named. Cross-cycle attribution
+        // is explicitly deferred (plan §N), and absent beats wrong.
+        return { farmId, scope: 'MultiPlot', plotIds };
+    }
+
+    const plotId = plotIds[0];
     const db = getDatabase();
     const cropName = normalizeName(selection?.cropName);
 
@@ -309,7 +400,9 @@ async function resolveSyncTarget(log: DailyLog): Promise<ResolvedLogSyncTarget |
     }
 
     return {
-        farmId: plotPayload.farmId,
+        farmId,
+        scope: 'Plot',
+        plotIds,
         plotId,
         cropCycleId: selectedCycle.id,
     };
@@ -331,8 +424,27 @@ export async function enqueueLogsForSync(logs: DailyLog[]): Promise<{ queuedLogI
         await CreateDailyLogCommand.enqueue({
             dailyLogId: log.id,
             farmId: target.farmId,
-            plotId: target.plotId,
-            cropCycleId: target.cropCycleId,
+            // LABOUR_PHASE2 B1a — the ONE place the two shapes diverge, and the
+            // reason B1a is behaviour-neutral.
+            //
+            // `Plot` emits exactly the two keys V1 emitted, in the position V1
+            // emitted them, and states NO scope: `create_daily_log.zod.ts:90`
+            // and `PushSyncBatchHandler` both read an absent scope as `Plot`,
+            // which is precisely what every client shipped before P2.2 meant.
+            // Every log this app can persist today is single-plot, so the
+            // payload on the wire is byte-identical — asserted in
+            // `logSyncMutationService.scopeTarget.test.ts`, which was run
+            // against the unmodified module first.
+            //
+            // `MultiPlot` states the scope and the whole set instead. Emitting
+            // `scope: 'Plot'` for the single-plot case as well would be
+            // harmless server-side and is deliberately NOT done: it would
+            // rewrite the wire format of every log a farmer writes for no
+            // change in what is stored, on the same commit that changes how
+            // logs are built.
+            ...(target.scope === 'Plot'
+                ? { plotId: target.plotId, cropCycleId: target.cropCycleId }
+                : { scope: target.scope, plotIds: target.plotIds }),
             logDate: log.date,
             // AI Intelligence Plan WP-2a — thread the parse job linkage recorded on
             // the log's provenance (BackendAiClient stamps AiJob.Id there) so the
