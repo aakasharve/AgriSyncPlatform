@@ -34,6 +34,7 @@ import { activateDatabaseForUser } from '../activateUserDatabase';
 import { LEGACY_DATABASE_NAME } from '../userDatabaseName';
 import { getActiveDatabaseName } from '../activeDatabaseName';
 import { SyncMutationName } from '../../sync/SyncMutationCatalog';
+import type { SyncHonestyClaim } from '../../../features/sync/status/syncHonestyState';
 import {
     getUnqueueableLogCount,
     noteUnqueueableLogs,
@@ -61,21 +62,50 @@ async function seedMutation(status: 'PENDING' | 'APPLIED') {
 /**
  * Waits for the chip's published claim to reach `expected`.
  *
- * A `liveQuery` is asynchronous by nature — the point of the whole mechanism is
- * that it re-runs after a write, not during it — so a poll is the honest way to
- * observe it. The deadline is what turns "never arrives" into a failure with a
- * useful message instead of a hung suite.
+ * A `liveQuery` is asynchronous by nature — the whole point is that it re-runs
+ * AFTER a write, not during it — so waiting is unavoidable here. It listens on
+ * the service's own subscription rather than polling, so it reacts the instant
+ * the claim is published: under a fully parallel suite a 20ms poll plus a tight
+ * deadline was the difference between this passing and failing, and a guard on
+ * data loss that fails for reasons unrelated to data loss is worse than no
+ * guard at all.
+ *
+ * The budget still exists, because "never arrives" must become a failure with
+ * a useful message rather than a hung suite — and it is what the M5 mutation
+ * (drop the re-subscribe) trips.
  */
-async function waitForClaim(expected: string | null, budgetMs = 4000): Promise<void> {
+async function waitForClaim(expected: SyncHonestyClaim, budgetMs = 15000): Promise<void> {
     const service = SyncStatusService.getInstance();
-    const deadline = Date.now() + budgetMs;
-    while (Date.now() < deadline) {
-        if (service.getStatus() === expected) {
-            return;
-        }
-        await new Promise(resolve => setTimeout(resolve, 20));
+    if (service.getStatus() === expected) {
+        return;
     }
-    expect(service.getStatus()).toBe(expected);
+
+    let unsubscribe: (() => void) | undefined;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+
+    try {
+        await new Promise<void>((resolve, reject) => {
+            timer = setTimeout(() => {
+                reject(new Error(
+                    `the chip never reached ${String(expected)} within ${budgetMs}ms; ` +
+                    `it is still ${String(service.getStatus())}`
+                ));
+            }, budgetMs);
+            // `subscribe` invokes the listener once immediately with the current
+            // claim, which is why the early return above is not just an
+            // optimisation — it keeps that first call from racing the executor.
+            unsubscribe = service.subscribe(claim => {
+                if (claim === expected) {
+                    resolve();
+                }
+            });
+        });
+    } finally {
+        if (timer) {
+            clearTimeout(timer);
+        }
+        unsubscribe?.();
+    }
 }
 
 describe('the sync chip follows the farmer, and takes nothing with it', () => {
@@ -120,7 +150,10 @@ describe('the sync chip follows the farmer, and takes nothing with it', () => {
         // silenced: a write B makes moves the chip.
         await seedMutation('PENDING');
         await waitForClaim('ON_PHONE');
-    });
+        // Generous timeout because this test waits on TWO liveQuery round trips
+        // and runs alongside 120 other files. Vitest's 5s default was smaller
+        // than the waits themselves.
+    }, 60_000);
 
     it('and farmer A\'s acknowledged row is still sitting in A\'s database', async () => {
         activateDatabaseForUser(FARMER_A);
