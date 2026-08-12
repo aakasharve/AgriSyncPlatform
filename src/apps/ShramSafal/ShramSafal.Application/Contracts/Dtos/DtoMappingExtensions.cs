@@ -92,7 +92,25 @@ internal static class DtoMappingExtensions
             log.VerificationEvents
                 .OrderBy(v => v.OccurredAtUtc)
                 .Select(ToDto)
-                .ToList());
+                .ToList(),
+            // LABOUR_PHASE2 A2a — the farmer's spatial assertion, projected
+            // VERBATIM. Not derived, not defaulted, not reordered:
+            //
+            //   Plot      -> "Plot",      [the one plot the farmer named]
+            //   MultiPlot -> "MultiPlot", EVERY plot, in the stored order
+            //   Farm      -> "Farm",      []   (O-1: the empty set IS the record)
+            //
+            // There is no branch here and no `??` fallback, and that is the
+            // point: anything capable of inventing a plot, a cycle or a sentinel
+            // would have to be written on these two lines, and nothing is. The
+            // domain and ck_daily_logs_scope have already welded scope to the
+            // plot set, so re-deciding either here could only make them disagree.
+            //
+            // ToString() yields the enum member NAME — the exact string
+            // ssf.daily_logs.scope stores and create_daily_log.zod.ts accepts —
+            // so what the device sends is what the device reads back.
+            log.Scope.ToString(),
+            log.PlotIds.ToList());
 
     public static CostEntryDto ToDto(this CostEntry entry) =>
         new(

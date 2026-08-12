@@ -562,6 +562,170 @@ public sealed class SyncEndpointsTests
         Assert.Equal(TestUserId, latestVerification.GetProperty("verifiedByUserId").GetGuid());
     }
 
+    /// <summary>
+    /// LABOUR PHASE 2 A2a — <b>what a device actually receives on /sync/pull.</b>
+    /// <para>
+    /// This is the assertion at the WIRE: it pushes all three spatial assertions
+    /// over the real <c>/sync/push</c> endpoint, pulls them back over the real
+    /// <c>/sync/pull</c> endpoint, and reads the raw response JSON. Nothing here
+    /// constructs a <c>JsonSerializerOptions</c> — the serializer under test is
+    /// the one ASP.NET Core actually uses for a response body, which is the only
+    /// one that decides what reaches a phone.
+    /// </para>
+    /// <para>
+    /// The defect it pins: before A2a the pulled log carried no <c>scope</c> and
+    /// no <c>plotIds</c>, so a device could only rebuild a log's context from the
+    /// single <c>plotId</c> — NULL for both non-plot scopes — and the first pull
+    /// after a MultiPlot log was acknowledged silently rewrote <c>{A,B,C}</c> into
+    /// a farm-wide log on the device that made the assertion.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public async Task Pull_CarriesTheFarmersSpatialAssertion_ForEveryScope()
+    {
+        await using var harness = await TestHarness.CreateAsync();
+        var farmId = Guid.NewGuid();
+        var plotA = Guid.NewGuid();
+        var plotB = Guid.NewGuid();
+        var plotC = Guid.NewGuid();
+        var cropCycleId = Guid.NewGuid();
+        var plotLogId = Guid.NewGuid();
+        var multiPlotLogId = Guid.NewGuid();
+        var farmLogId = Guid.NewGuid();
+
+        await PushCreateFarmAsync(harness.Client, "device-scope", "req-farm-scope-readback", farmId, "Scope Read-Back Farm");
+
+        var setupResponse = await harness.Client.PostAsJsonAsync("/sync/push", new
+        {
+            deviceId = "device-scope",
+            mutations = new object[]
+            {
+                new
+                {
+                    clientRequestId = "req-plot-a-scope",
+                    mutationType = "create_plot",
+                    payload = new { plotId = plotA, farmId, name = "Scope Plot A", areaInAcres = 1m }
+                },
+                new
+                {
+                    clientRequestId = "req-plot-b-scope",
+                    mutationType = "create_plot",
+                    payload = new { plotId = plotB, farmId, name = "Scope Plot B", areaInAcres = 1m }
+                },
+                new
+                {
+                    clientRequestId = "req-plot-c-scope",
+                    mutationType = "create_plot",
+                    payload = new { plotId = plotC, farmId, name = "Scope Plot C", areaInAcres = 1m }
+                },
+                new
+                {
+                    clientRequestId = "req-cycle-scope",
+                    mutationType = "create_crop_cycle",
+                    payload = new
+                    {
+                        cropCycleId,
+                        farmId,
+                        plotId = plotA,
+                        cropName = "Grapes",
+                        stage = "Growth",
+                        startDate = "2026-08-01"
+                    }
+                },
+                // The shape every shipped client sends today: no `scope` key at all.
+                new
+                {
+                    clientRequestId = "req-log-plot-scope",
+                    mutationType = "create_daily_log",
+                    payload = new { dailyLogId = plotLogId, farmId, plotId = plotA, cropCycleId, logDate = "2026-08-12" }
+                },
+                // ONE shared engagement over THREE plots (founder decision O-2).
+                new
+                {
+                    clientRequestId = "req-log-multiplot-scope",
+                    mutationType = "create_daily_log",
+                    payload = new
+                    {
+                        dailyLogId = multiPlotLogId,
+                        farmId,
+                        scope = "MultiPlot",
+                        plotIds = new[] { plotA, plotB, plotC },
+                        logDate = "2026-08-12"
+                    }
+                },
+                // संपूर्ण शेत — the farmer named no plot at all.
+                new
+                {
+                    clientRequestId = "req-log-farm-scope",
+                    mutationType = "create_daily_log",
+                    payload = new { dailyLogId = farmLogId, farmId, scope = "Farm", logDate = "2026-08-12" }
+                }
+            }
+        });
+
+        setupResponse.EnsureSuccessStatusCode();
+        using var setupDoc = JsonDocument.Parse(await setupResponse.Content.ReadAsStringAsync());
+        var setupFailures = setupDoc.RootElement
+            .GetProperty("results")
+            .EnumerateArray()
+            .Where(x => x.GetProperty("status").GetString() == "failed")
+            .Select(x => $"{x.GetProperty("clientRequestId").GetString()}: {x.GetProperty("errorCode").GetString()}")
+            .ToList();
+        Assert.Empty(setupFailures);
+
+        var pull = await harness.Client.GetAsync($"/sync/pull?since={Uri.EscapeDataString(DateTime.UnixEpoch.ToString("O"))}");
+        pull.EnsureSuccessStatusCode();
+
+        var pullBody = await pull.Content.ReadAsStringAsync();
+        using var pullDoc = JsonDocument.Parse(pullBody);
+        var logs = pullDoc.RootElement.GetProperty("dailyLogs").EnumerateArray().ToList();
+
+        var plotLog = logs.Single(x => x.GetProperty("id").GetGuid() == plotLogId);
+        var multiPlotLog = logs.Single(x => x.GetProperty("id").GetGuid() == multiPlotLogId);
+        var farmLog = logs.Single(x => x.GetProperty("id").GetGuid() == farmLogId);
+
+        // Plot — the regression that matters most. Unchanged in every respect.
+        Assert.Equal("Plot", plotLog.GetProperty("scope").GetString());
+        Assert.Equal(new[] { plotA }, PlotIdsOf(plotLog));
+        Assert.Equal(plotA, plotLog.GetProperty("plotId").GetGuid());
+        Assert.Equal(cropCycleId, plotLog.GetProperty("cropCycleId").GetGuid());
+
+        // MultiPlot — ALL THREE plots, in the order the farmer selected them.
+        // Carrying only the first is exactly the loss that turns {A,B,C} into a
+        // farm-wide log on the originating device.
+        Assert.Equal("MultiPlot", multiPlotLog.GetProperty("scope").GetString());
+        Assert.Equal(new[] { plotA, plotB, plotC }, PlotIdsOf(multiPlotLog));
+        Assert.Equal(JsonValueKind.Null, multiPlotLog.GetProperty("plotId").ValueKind);
+        Assert.Equal(JsonValueKind.Null, multiPlotLog.GetProperty("cropCycleId").ValueKind);
+
+        // Farm — the empty set IS the record (founder decision O-1).
+        Assert.Equal("Farm", farmLog.GetProperty("scope").GetString());
+        Assert.Empty(PlotIdsOf(farmLog));
+        Assert.Equal(JsonValueKind.Null, farmLog.GetProperty("plotId").ValueKind);
+        Assert.Equal(JsonValueKind.Null, farmLog.GetProperty("cropCycleId").ValueKind);
+
+        // The scope is a NAME on the wire, never an ordinal. Asserted
+        // structurally, so a number that happens not to match a literal still
+        // fails: renumbering the enum must never re-map a durable record.
+        foreach (var log in new[] { plotLog, multiPlotLog, farmLog })
+        {
+            Assert.Equal(JsonValueKind.String, log.GetProperty("scope").ValueKind);
+            Assert.Equal(JsonValueKind.Array, log.GetProperty("plotIds").ValueKind);
+        }
+
+        // Doctrine P4 — no pulled log fabricates a plot or a cycle. Scoped to the
+        // dailyLogs array deliberately: `log.PlotId ?? Guid.Empty` is the obvious
+        // compile fix for the nullability widening and it is exactly what would
+        // put a fabricated plot into canonical client state. Other components of
+        // the pull envelope have their own (unrelated) empty-GUID conventions and
+        // are not this test's subject.
+        var dailyLogsJson = pullDoc.RootElement.GetProperty("dailyLogs").GetRawText();
+        Assert.DoesNotContain("00000000-0000-0000-0000-000000000000", dailyLogsJson);
+    }
+
+    private static Guid[] PlotIdsOf(JsonElement dailyLog) =>
+        dailyLog.GetProperty("plotIds").EnumerateArray().Select(x => x.GetGuid()).ToArray();
+
     [Fact]
     public async Task CreateAttachment_CanLinkToDailyLogAndCostEntry()
     {
