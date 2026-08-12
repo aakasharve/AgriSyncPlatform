@@ -284,7 +284,7 @@ describe('the enumeration itself', () => {
         // A guard on the guard. If someone adds a fourth reason to shout at the
         // farmer, this fails and they must come back here and prove the fourth
         // one can also be cleared. `EMPTY_SYNC_EVIDENCE` + one nudge per field.
-        const base = { rows: [], acknowledgedCount: 1, pendingUploads: 0, failedUploads: 0, pendingAiJobs: 0 };
+        const base = { rows: [], acknowledgedCount: 1, pendingUploads: 0, failedUploads: 0, pendingAiJobs: 0, unqueueableCount: 0 };
 
         const causes = [
             { name: 'failedUploads', claim: deriveSyncHonestyState({ ...base, failedUploads: 1 }) },
@@ -305,6 +305,12 @@ describe('the enumeration itself', () => {
             deriveSyncHonestyState({ ...base, rows: [{ status: 'APPLIED', retryCount: 0 }] }),
             deriveSyncHonestyState({ ...base, rows: [{ status: 'REJECTED_DROPPED', retryCount: 0 }] }),
             deriveSyncHonestyState({ ...base, rows: [{ status: 'FAILED', retryCount: MAX_AUTO_RETRY_COUNT - 1 }] }),
+            // C-1 added a new piece of evidence to the snapshot. It weakens the
+            // claim to ON_PHONE and must NOT become a fourth door into the
+            // alarm: a skipped log has no queue row, so no retry and no drawer
+            // entry could clear it, and this file's whole promise is that
+            // everything the chip shouts about is clearable.
+            deriveSyncHonestyState({ ...base, unqueueableCount: 1 }),
         ];
         expect(nonCauses).not.toContain('NEEDS_FIX');
     });

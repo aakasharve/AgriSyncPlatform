@@ -2,11 +2,16 @@ import { liveQuery, Subscription } from 'dexie';
 import { getDatabase } from './DexieDatabase';
 import {
     deriveSyncHonestyState,
+    EMPTY_SYNC_EVIDENCE,
     SYNC_HONESTY_OPEN_STATUSES,
     type SyncEvidenceSnapshot,
     type SyncHonestyClaim,
     type SyncHonestyState,
 } from '../../features/sync/status/syncHonestyState';
+import {
+    getUnqueueableLogCount,
+    subscribeToUnqueueableLogs,
+} from '../../features/sync/status/unqueueableLogs';
 
 export type { SyncHonestyState, SyncHonestyClaim };
 
@@ -77,6 +82,12 @@ export async function readSyncEvidence(): Promise<SyncEvidenceReading> {
             pendingUploads,
             failedUploads,
             pendingAiJobs,
+            // NOT a Dexie read — there is no row to read. A log
+            // `resolveSyncTarget` refused writes nothing anywhere, which is why
+            // the chip could claim `पाठवलं ✓` over it on any device that had
+            // ever synced once (finding C-1). The save path records it in
+            // memory instead; see `unqueueableLogs.ts`.
+            unqueueableCount: getUnqueueableLogCount(),
         },
         lastSyncedAt: lastSyncAt ? new Date(lastSyncAt) : undefined,
     };
@@ -95,6 +106,13 @@ export class SyncStatusService {
     private lastSyncedAt?: Date;
     private listeners: Set<StatusListener> = new Set();
     private dexieSubscription?: Subscription;
+    private unsubscribeFromUnqueueable?: () => void;
+    /**
+     * The most recent reading, kept because the claim now has TWO independent
+     * inputs — Dexie, and an in-memory registry the save path writes — and
+     * either can move without the other.
+     */
+    private evidence: SyncEvidenceSnapshot = EMPTY_SYNC_EVIDENCE;
 
     private constructor() {
         this.initializeObserver();
@@ -116,21 +134,38 @@ export class SyncStatusService {
 
         this.dexieSubscription = observable.subscribe(
             ({ evidence, lastSyncedAt }) => {
-                const newClaim = deriveSyncHonestyState(evidence);
-                const nextSyncedAtMs = lastSyncedAt?.getTime();
-                const currentSyncedAtMs = this.lastSyncedAt?.getTime();
-
-                if (newClaim === this.currentClaim && nextSyncedAtMs === currentSyncedAtMs) {
-                    return;
-                }
-
-                this.currentClaim = newClaim;
-                // Mirrored from the sync cursor, never minted here.
-                this.lastSyncedAt = lastSyncedAt;
-                this.notifyListeners();
+                this.evidence = evidence;
+                this.republish(lastSyncedAt);
             },
             error => console.error('Error observing sync status:', error)
         );
+
+        // A `liveQuery` re-fires only when a Dexie table it READ changes. A
+        // skipped log writes to none of them — no mutation row, no outbox row,
+        // nothing — so without this subscription the chip would sit on its
+        // stale `पाठवलं ✓` until some unrelated queue write happened to wake the
+        // query up. The one moment the app holds this fact is the save that
+        // dropped the record, and this is how that moment reaches the chip.
+        this.unsubscribeFromUnqueueable = subscribeToUnqueueableLogs(unqueueableCount => {
+            this.evidence = { ...this.evidence, unqueueableCount };
+            this.republish(this.lastSyncedAt);
+        });
+    }
+
+    /** Re-derives the claim from the current evidence and publishes any change. */
+    private republish(lastSyncedAt?: Date) {
+        const newClaim = deriveSyncHonestyState(this.evidence);
+        const nextSyncedAtMs = lastSyncedAt?.getTime();
+        const currentSyncedAtMs = this.lastSyncedAt?.getTime();
+
+        if (newClaim === this.currentClaim && nextSyncedAtMs === currentSyncedAtMs) {
+            return;
+        }
+
+        this.currentClaim = newClaim;
+        // Mirrored from the sync cursor, never minted here.
+        this.lastSyncedAt = lastSyncedAt;
+        this.notifyListeners();
     }
 
     public subscribe(listener: StatusListener): () => void {

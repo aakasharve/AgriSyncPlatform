@@ -38,13 +38,24 @@
  *
  * WHAT THIS MODULE STILL CANNOT SEE (state it, do not paper over it — `W6`)
  * ------------------------------------------------------------------------
- * A never-enqueued log exists in NO queue. On a device that has previously had
- * a mutation acknowledged, `acknowledgedCount > 0` holds, so a later skipped log
- * still leaves the chip on `ON_SERVER`. The chip is global and structurally
- * blind to a record that reached no queue. The only honest surface for that is
- * the save path itself, at the moment the log is dropped — which is Task T2's
- * `skippedLogIds` toast, and is exactly why T2 exists. Do not try to fix it
- * here; a global chip cannot count something that was never written.
+ * A never-enqueued log exists in NO queue. An earlier version of this comment
+ * concluded from that "a global chip cannot count something that was never
+ * written", and left the case to the save-path toast. That was half right and it
+ * left a live contradiction, because `APPLIED` rows are never pruned: on every
+ * device that has ever synced once, `acknowledgedCount > 0` holds forever, so a
+ * later skipped log left the chip on `ON_SERVER` — a green receipt sitting one
+ * sticky header above a panel badge reading `फोनवर सेव्ह ✓ — cannot be sent`,
+ * about the same record (final fix round, finding C-1).
+ *
+ * This module still cannot DISCOVER such a record — there is no row to read.
+ * What changed is that the save path now TELLS it: `enqueueLogsForSync` hands
+ * `skippedLogIds` to `useLogCommands`, which records them in
+ * `unqueueableLogs.ts`, and that count arrives here as `unqueueableCount`. It
+ * weakens the claim to `ON_PHONE` — the record really is on the handset — and it
+ * never raises `NEEDS_FIX`, because there is nothing to retry and nowhere to
+ * check. That registry is SESSION-SCOPED (see its header); after a reload the
+ * blindness returns, and the durable half belongs to Phase 2, which changes the
+ * schema and removes the dominant cause of these skips.
  *
  * This module is PURE and Dexie-free — plain data in, one claim out — so every
  * branch is unit-testable without a database. Its only value import is
@@ -181,6 +192,17 @@ export interface SyncEvidenceSnapshot {
     failedUploads: number;
     /** Voice/receipt AI jobs still queued or processing. */
     pendingAiJobs: number;
+    /**
+     * Records this session knows reached NO queue at all — `skippedLogIds` from
+     * `enqueueLogsForSync`, recorded in `unqueueableLogs.ts` by the save path.
+     *
+     * REQUIRED, not optional, and that is the whole point. The producer of this
+     * snapshot must decide what it knows; a field that could be omitted would
+     * default to zero and strengthen the claim by silence, which is the exact
+     * failure mode `SYNC_HONESTY_OPEN_STATUSES` was restructured to make
+     * impossible (finding F4).
+     */
+    unqueueableCount: number;
 }
 
 /**
@@ -215,6 +237,7 @@ export const EMPTY_SYNC_EVIDENCE: SyncEvidenceSnapshot = {
     pendingUploads: 0,
     failedUploads: 0,
     pendingAiJobs: 0,
+    unqueueableCount: 0,
 };
 
 /*
@@ -253,6 +276,7 @@ export const EMPTY_SYNC_EVIDENCE: SyncEvidenceSnapshot = {
  * Weakest claim wins, in this order:
  *   1. anything the farmer must act on            -> `NEEDS_FIX`
  *   2. anything captured but not acknowledged     -> `ON_PHONE`
+ *      (INCLUDING a record that reached no queue — `unqueueableCount`)
  *   3. nothing outstanding AND real evidence      -> `ON_SERVER`
  *   4. nothing outstanding and no evidence        -> `null` (say nothing)
  *
@@ -272,7 +296,14 @@ export function deriveSyncHonestyState(snapshot: SyncEvidenceSnapshot): SyncHone
         return 'NEEDS_FIX';
     }
 
-    let hasUnacknowledged = snapshot.pendingUploads > 0 || snapshot.pendingAiJobs > 0;
+    // A record that reached NO queue is unacknowledged in the strongest sense:
+    // nothing will ever ask the server about it. It is not `NEEDS_FIX` — there
+    // is no retry to press and no drawer that can list it (finding B3) — but it
+    // absolutely blocks `ON_SERVER`, which is the receipt this evidence
+    // contradicts (finding C-1).
+    let hasUnacknowledged = snapshot.pendingUploads > 0
+        || snapshot.pendingAiJobs > 0
+        || snapshot.unqueueableCount > 0;
 
     for (const row of snapshot.rows) {
         const statusClass = MUTATION_STATUS_CLASS[row.status];

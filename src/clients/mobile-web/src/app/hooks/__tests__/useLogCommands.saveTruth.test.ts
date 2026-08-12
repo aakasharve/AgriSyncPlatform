@@ -29,11 +29,25 @@
 //   B4  A red toast reading `0 of 1` reads as "your record is gone", and the
 //       farmer re-records it — creating a duplicate. The record IS on the
 //       phone. Say so first.
+//   C-1  The header chip is the surface the farmer never navigates away from.
+//       It derives its claim from `db.mutationQueue`, where a skipped log has
+//       no row — and `APPLIED` rows are never pruned, so on any device that has
+//       ever synced it kept rendering `पाठवलं ✓` above a panel badge reading
+//       `फोनवर सेव्ह ✓ — cannot be sent`, about the same record. The save path
+//       is the only place that holds this fact, so it now reports it.
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
 import { useLogCommands } from '../useLogCommands';
 import type { AppStatus, FarmerProfile } from '../../../types';
 import type { LastSavedLogSummaryItem } from '../../uiRuntimeTypes';
+import {
+    getUnqueueableLogCount,
+    resetUnqueueableLogs,
+} from '../../../features/sync/status/unqueueableLogs';
+import {
+    deriveSyncHonestyState,
+    EMPTY_SYNC_EVIDENCE,
+} from '../../../features/sync/status/syncHonestyState';
 
 const makeLog = (id: string) => ({
     id,
@@ -118,6 +132,9 @@ describe('useLogCommands — a save may not claim what was never queued (T2)', (
 
     beforeEach(() => {
         vi.clearAllMocks();
+        // Module state (C-1): the registry outlives a test the way it outlives
+        // a save, so it has to be cleared like a mock.
+        resetUnqueueableLogs();
         langRef.current = 'mr';
         setToast = vi.fn<ToastSetter>();
         setStatus = vi.fn<StatusSetter>();
@@ -353,6 +370,96 @@ describe('useLogCommands — a save may not claim what was never queued (T2)', (
         expect(lastSummary().map(item => item.syncQueued)).toEqual([null]);
     });
 
+    // ------------------------------------------------- C-1: the header chip
+    // The save path is the ONLY place in the app that ever holds "this record
+    // reached no queue". Everything downstream of it — including the sticky
+    // header chip, which was still rendering `पाठवलं ✓` over exactly these
+    // records — depends on it saying so.
+
+    it('C-1: a skipped save tells the chip, so the header cannot keep claiming Sent', async () => {
+        enqueueLogsForSync.mockResolvedValue({ queuedLogIds: [], skippedLogIds: ['1'] });
+
+        const { result } = renderHook(() => useLogCommands(props()));
+        await act(async () => {
+            await result.current.handleManualSubmit({ cropActivities: [] });
+        });
+
+        expect(getUnqueueableLogCount()).toBe(1);
+        // What the farmer's own device would now derive. `acknowledgedCount` is
+        // deliberately high: `APPLIED` rows are never pruned, so any device that
+        // has ever synced satisfies the old ON_SERVER condition permanently, and
+        // this is the input on which the chip used to contradict the panel
+        // directly beneath it.
+        expect(deriveSyncHonestyState({
+            ...EMPTY_SYNC_EVIDENCE,
+            acknowledgedCount: 42,
+            unqueueableCount: getUnqueueableLogCount(),
+        })).toBe('ON_PHONE');
+    });
+
+    it('C-1: a partly-skipped save reports exactly the dropped ones', async () => {
+        createFromManual.mockResolvedValue([makeLog('1'), makeLog('2'), makeLog('3')]);
+        enqueueLogsForSync.mockResolvedValue({
+            queuedLogIds: ['1'],
+            skippedLogIds: ['2', '3'],
+        });
+
+        const { result } = renderHook(() => useLogCommands(props()));
+        await act(async () => {
+            await result.current.handleManualSubmit({ cropActivities: [] });
+        });
+
+        expect(getUnqueueableLogCount()).toBe(2);
+    });
+
+    it('C-1: a fully-queued save leaves the chip alone', async () => {
+        enqueueLogsForSync.mockResolvedValue({ queuedLogIds: ['1'], skippedLogIds: [] });
+
+        const { result } = renderHook(() => useLogCommands(props()));
+        await act(async () => {
+            await result.current.handleManualSubmit({ cropActivities: [] });
+        });
+
+        expect(getUnqueueableLogCount()).toBe(0);
+        expect(deriveSyncHonestyState({
+            ...EMPTY_SYNC_EVIDENCE,
+            acknowledgedCount: 42,
+            unqueueableCount: getUnqueueableLogCount(),
+        })).toBe('ON_SERVER');
+    });
+
+    it('C-1: demo mode reports nothing, because it enqueues nothing', async () => {
+        const { result } = renderHook(() => useLogCommands(props({ isDemoMode: true })));
+        await act(async () => {
+            await result.current.handleManualSubmit({ cropActivities: [] });
+        });
+
+        expect(enqueueLogsForSync).not.toHaveBeenCalled();
+        expect(getUnqueueableLogCount()).toBe(0);
+    });
+
+    it('C-1: every save path reports, not just the one with a live caller', async () => {
+        // `handleAutoSave`, `handleFinalConfirm` and `handleWizardSubmit` have no
+        // caller today, but all four share one enqueue seam precisely so a
+        // future caller cannot inherit a silent drop.
+        const paths: Array<() => Promise<void>> = [];
+        enqueueLogsForSync.mockResolvedValue({ queuedLogIds: [], skippedLogIds: ['1'] });
+
+        const { result } = renderHook(() => useLogCommands(props()));
+        paths.push(() => result.current.handleAutoSave({ summary: 'x' } as never));
+        paths.push(() => result.current.handleFinalConfirm({ summary: 'x' } as never, null));
+        paths.push(() => result.current.handleWizardSubmit([makeLog('1')] as never));
+        paths.push(() => result.current.handleManualSubmit({ cropActivities: [] }));
+
+        for (const run of paths) {
+            resetUnqueueableLogs();
+            await act(async () => {
+                await run();
+            });
+            expect(getUnqueueableLogCount()).toBe(1);
+        }
+    });
+
     // ---------------------------------------------------------------- site 4
     // handleWizardSubmit has no caller today, but its "Saved to N plots"
     // sentence took N from the SUBMITTED set — a fabricated number the moment
@@ -439,6 +546,7 @@ describe('useLogCommands — the EDIT path may not claim a save it cannot eviden
 
     beforeEach(() => {
         vi.clearAllMocks();
+        resetUnqueueableLogs();
         langRef.current = 'mr';
         setToast = vi.fn<ToastSetter>();
         setStatus = vi.fn<StatusSetter>();

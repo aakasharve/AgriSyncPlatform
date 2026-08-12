@@ -160,6 +160,55 @@ describe('ON_SERVER requires positive evidence, not merely an absence of bad new
     });
 });
 
+describe('a record that reached NO queue still blocks the receipt (C-1)', () => {
+    // THE REGRESSION THIS BLOCK EXISTS FOR (final fix round, finding C-1).
+    //
+    // `acknowledgedCount > 0` closed the FRESH-INSTALL case and nothing else.
+    // `APPLIED` rows are never pruned, so on every device that has ever had one
+    // mutation applied that condition holds permanently — and `ON_SERVER` was
+    // once again produced by the mere absence of open rows. A farmer who had
+    // synced before, saving a log whose plot has no crop cycle yet, read
+    // `पाठवलं ✓` in the sticky header directly above a panel badge reading
+    // `फोनवर सेव्ह ✓ — cannot be sent`, about the record they had just made.
+    it('a fully acknowledged device that just dropped a record does NOT say ON_SERVER', () => {
+        const droppedOne = settled({ acknowledgedCount: 42, unqueueableCount: 1 });
+
+        expect(deriveSyncHonestyState(droppedOne)).not.toBe('ON_SERVER');
+        expect(deriveSyncHonestyState(droppedOne)).toBe('ON_PHONE');
+    });
+
+    it('the fallback is ON_PHONE, because that claim is TRUE and provable', () => {
+        // `confirmAndSave` wrote the log to `db.logs` before the enqueue was
+        // attempted, so "saved on phone" is exactly what happened — and it is
+        // the same words the toast and the panel badge already use for it.
+        expect(deriveSyncHonestyState(snap({ unqueueableCount: 1 }))).toBe('ON_PHONE');
+    });
+
+    it('it never raises the alarm, because there is nothing to retry (B3)', () => {
+        // `अडकलं — तपासा` means "the system is stuck and you can act". A skipped
+        // log has no queue row, so no worker will retry it and no drawer can
+        // list it. Sending the farmer to check would point at nothing.
+        expect(deriveSyncHonestyState(settled({ unqueueableCount: 9 }))).not.toBe('NEEDS_FIX');
+    });
+
+    it('but it never outranks a real NEEDS_FIX either — weakest claim, not weakest alarm', () => {
+        expect(deriveSyncHonestyState(settled({
+            unqueueableCount: 1,
+            rows: [row('FAILED', MAX_AUTO_RETRY_COUNT)],
+        }))).toBe('NEEDS_FIX');
+        expect(deriveSyncHonestyState(settled({
+            unqueueableCount: 1,
+            failedUploads: 1,
+        }))).toBe('NEEDS_FIX');
+    });
+
+    it('zero dropped records changes nothing at all', () => {
+        // The happy path must be byte-identical: this is the ONLY input on
+        // which the chip is allowed to say `पाठवलं ✓`.
+        expect(deriveSyncHonestyState(settled({ unqueueableCount: 0 }))).toBe('ON_SERVER');
+    });
+});
+
 describe('the retry cap', () => {
     it(`a FAILED row at the cap (${MAX_AUTO_RETRY_COUNT}) is NEEDS_FIX, not ON_PHONE`, () => {
         expect(deriveSyncHonestyState(settled({ rows: [row('FAILED', MAX_AUTO_RETRY_COUNT)] }))).toBe('NEEDS_FIX');
@@ -294,11 +343,27 @@ describe('the label and the badge beside it cannot contradict each other', () =>
             expect(badge.failed).toBeGreaterThan(0);
         }
 
-        if (claim === 'ON_PHONE') {
+        if (claim === 'ON_PHONE' && snapshot.unqueueableCount === 0) {
             // "Saved on phone" must be accompanied by SOME count — there is
             // always at least one thing outstanding for this claim to hold.
+            //
+            // Guarded on `unqueueableCount` because a record that reached no
+            // queue is countable by no badge; that case has its own test below,
+            // and every case in the list above has `unqueueableCount: 0`, so
+            // this assertion still runs on all twelve of them.
             expect(badge.pending + badge.failed).toBeGreaterThan(0);
         }
+    });
+
+    it('a dropped record shows the label with NO badge, and that is the honest rendering', () => {
+        // Nothing in any queue can count it — that absence is exactly what let
+        // the chip claim `पाठवलं ✓` over it (C-1). The label is the only surface
+        // that can carry the news, so a bare `फोनवर सेव्ह ✓` here is not a
+        // contradiction; a green receipt would have been.
+        const dropped = settled({ unqueueableCount: 1 });
+
+        expect(deriveSyncHonestyState(dropped)).toBe('ON_PHONE');
+        expect(badgeTheFarmerSees(dropped)).toEqual({ pending: 0, failed: 0 });
     });
 
     it('there is no in-flight claim, so "Sending... [0]" has no expressible form', () => {

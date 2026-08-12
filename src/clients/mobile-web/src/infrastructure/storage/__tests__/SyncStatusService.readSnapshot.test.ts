@@ -18,12 +18,16 @@
  */
 
 import 'fake-indexeddb/auto';
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, afterEach, beforeEach } from 'vitest';
 
 import { getDatabase, resetDatabase, type MutationQueueStatus } from '../DexieDatabase';
 import { readSyncEvidence } from '../SyncStatusService';
 import { SyncMutationName } from '../../sync/SyncMutationCatalog';
 import { deriveSyncHonestyState } from '../../../features/sync/status/syncHonestyState';
+import {
+    noteUnqueueableLogs,
+    resetUnqueueableLogs,
+} from '../../../features/sync/status/unqueueableLogs';
 
 const FROZEN_NOW_ISO = '2026-08-12T09:00:00.000Z';
 
@@ -204,6 +208,46 @@ describe('readSyncEvidence — uploads and AI jobs reach the claim (F2)', () => 
         expect(evidence.pendingUploads).toBe(0);
         expect(evidence.failedUploads).toBe(0);
         expect(deriveSyncHonestyState(evidence)).toBe('ON_SERVER');
+    });
+});
+
+describe('readSyncEvidence — a record that reached no queue reaches the claim (C-1)', () => {
+    beforeEach(async () => {
+        await freshDb();
+        resetUnqueueableLogs();
+    });
+
+    afterEach(() => {
+        resetUnqueueableLogs();
+    });
+
+    it('the reading carries the count, which no Dexie table holds', async () => {
+        noteUnqueueableLogs(['log-9']);
+
+        const { evidence } = await readSyncEvidence();
+
+        expect(evidence.unqueueableCount).toBe(1);
+        // Proof it is not coming from a table: nothing was written to one.
+        expect(await getDatabase().mutationQueue.count()).toBe(0);
+        expect(await getDatabase().outbox.count()).toBe(0);
+    });
+
+    it('THE BUG: a device with applied mutations stops claiming ON_SERVER once a log is dropped', async () => {
+        // The reachable case, walked through the real read path. `APPLIED` rows
+        // are never pruned, so this device satisfies `acknowledgedCount > 0`
+        // permanently — which is why the earlier guard closed only the
+        // fresh-install case.
+        await seedMutation('APPLIED');
+        await seedMutation('APPLIED');
+
+        expect(deriveSyncHonestyState((await readSyncEvidence()).evidence)).toBe('ON_SERVER');
+
+        noteUnqueueableLogs(['log-just-saved']);
+
+        const { evidence } = await readSyncEvidence();
+        expect(evidence.acknowledgedCount).toBe(2);
+        expect(deriveSyncHonestyState(evidence)).toBe('ON_PHONE');
+        expect(deriveSyncHonestyState(evidence)).not.toBe('ON_SERVER');
     });
 });
 

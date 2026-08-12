@@ -27,6 +27,14 @@ import { countCompletedIrrigationEvents } from '../../features/logs/services/irr
 // a live sync worker imported for one string constant. `SyncStatusService.ts`
 // already deep-imports this exact module for the same reason.
 import { SYNC_HONESTY_I18N_KEYS } from '../../features/sync/status/syncHonestyState';
+// Final fix round, finding C-1 — the header chip is the ONE surface that stayed
+// wrong. It derives its claim from `db.mutationQueue`, and a skipped log writes
+// no row there, so on any device that has ever had a mutation applied
+// (`APPLIED` rows are never pruned) the chip kept rendering `पाठवलं ✓` directly
+// above a panel badge reading `फोनवर सेव्ह ✓ — cannot be sent`, about the record
+// the farmer had just created. This is the only place in the app that ever holds
+// that fact, so this is the only place that can tell it.
+import { noteUnqueueableLogs } from '../../features/sync/status/unqueueableLogs';
 import { useLanguage } from '../../i18n/LanguageContext';
 import { t as translate, type Language } from '../../i18n/translations';
 
@@ -270,6 +278,36 @@ export const useLogCommands = ({
         setLastSavedLogSummary(summary);
     };
 
+    /**
+     * Enqueue, and tell the chip about anything that could not be enqueued.
+     *
+     * ONE seam instead of four (finding C-1). Every save site already had the
+     * identical `isDemoMode ? null : await enqueueLogsForSync(...)` line; folding
+     * the note into it means a fifth save path cannot be added that drops a
+     * record silently while the header still says `पाठवलं ✓`. `skippedLogIds`
+     * now has TWO consumers — the toast the farmer reads once, and the chip they
+     * see for the rest of the session.
+     *
+     * Demo mode returns `null` exactly as before: nothing is enqueued, so there
+     * is nothing skipped and no claim to weaken.
+     *
+     * `isDemoMode` is read from the enclosing render's closure, which is
+     * precisely where the four callbacks read it today (it has never been in
+     * their dependency arrays — pre-existing, documented at each one). Same
+     * closure, same value, no change in memoization behaviour.
+     */
+    const enqueueForSyncAndNoteSkips = async (
+        logs: DailyLog[],
+    ): Promise<LogSyncEnqueueOutcome | null> => {
+        if (isDemoMode) {
+            return null;
+        }
+
+        const outcome = await enqueueLogsForSync(logs);
+        noteUnqueueableLogs(outcome.skippedLogIds);
+        return outcome;
+    };
+
     const computeClosureDelta = useCallback((beforeLogs: DailyLog[], afterLogs: DailyLog[]) => {
         const beforePercent = computeDayState({
             logs: beforeLogs,
@@ -333,7 +371,7 @@ export const useLogCommands = ({
             );
             // T2 — the result is EVIDENCE, not noise. `null` in demo mode,
             // where nothing is meant to reach a server at all.
-            const syncOutcome = isDemoMode ? null : await enqueueLogsForSync(newLogs);
+            const syncOutcome = await enqueueForSyncAndNoteSkips(newLogs);
 
             // Sync: Extract and add any planned tasks from the new logs to global state
             const newTasks = newLogs.flatMap(l => l.plannedTasks || []);
@@ -396,7 +434,7 @@ export const useLogCommands = ({
                 setHistory
             );
             // T2 — see handleAutoSave: the enqueue result decides the wording.
-            const syncOutcome = isDemoMode ? null : await enqueueLogsForSync(newLogs);
+            const syncOutcome = await enqueueForSyncAndNoteSkips(newLogs);
 
             // Sync: Extract and add any planned tasks from the new logs to global state
             const newCreatedTasks = newLogs.flatMap(l => l.plannedTasks || []);
@@ -541,7 +579,7 @@ export const useLogCommands = ({
                     setHistory
                 );
                 // T2 — see handleAutoSave: the enqueue result decides the wording.
-                const syncOutcome = isDemoMode ? null : await enqueueLogsForSync(newLogs);
+                const syncOutcome = await enqueueForSyncAndNoteSkips(newLogs);
 
                 // Sync
                 const manualTasks = newLogs.flatMap(l => l.plannedTasks || []);
@@ -617,7 +655,7 @@ export const useLogCommands = ({
         try {
             await logCommandService.confirmAndSave(logs, setHistory);
             // T2 — see handleAutoSave: the enqueue result decides the wording.
-            const syncOutcome = isDemoMode ? null : await enqueueLogsForSync(logs);
+            const syncOutcome = await enqueueForSyncAndNoteSkips(logs);
 
             const wizardTasks = logs.flatMap(log => log.plannedTasks || []);
             if (wizardTasks.length > 0) {
