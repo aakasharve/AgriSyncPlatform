@@ -16,9 +16,9 @@ import { LogCommandServiceImpl } from '../../application/services/LogCommandServ
 import { useDataSource } from '../providers/DataSourceProvider';
 import { enqueueLogsForSync } from '../../features/logs/services/logSyncMutationService';
 import { countCompletedIrrigationEvents } from '../../features/logs/services/irrigationCompletion';
-// Labour Phase 2 / T2 — the wording for "this record never reached the sync
-// queue" is the SAME wording the header chip uses for the same situation
-// (T1's `NEEDS_FIX`). Two surfaces, one claim, one string.
+// Labour Phase 2 / T2 — a record that never reached the sync queue is still ON
+// THE PHONE, and it is described with the SAME words the header chip uses for
+// that situation (T1's `sync.onPhone`). Two surfaces, one claim, one string.
 //
 // Deep import rather than the `features/sync` barrel deliberately: that barrel
 // also re-exports `SyncStatusDrawer`, which pulls `lucide-react`, `getDatabase`
@@ -120,12 +120,34 @@ type SaveToast = { message: string; type: 'success' | 'error' };
  * that its own existing success wording is legitimate, so the happy path is
  * byte-identical to before.
  *
- * The failure wording ends with T1's `NEEDS_FIX` label — the same words the
- * header chip shows for the same situation (`अडकलं — तपासा` / `Stuck — check`),
- * rendered through the app's i18n so a farmer whose app is set to English is
- * not spoken to in Marathi (T1 ruling `R6`). It is deliberately reason-agnostic:
- * Phase 2 removes the dominant skip cause, and a plot-specific explanation would
- * cost a copy rewrite and a re-test for a message that is about to change.
+ * IT LEADS WITH `ON_PHONE`, NOT `NEEDS_FIX` (review round 1, findings B3+B4).
+ * The first version ended on T1's `अडकलं — तपासा` / `Stuck — check`, and that
+ * was wrong twice over:
+ *
+ *   - `तपासा` means "go and check", and there is nowhere to go. A skipped log
+ *     `continue`s before any queue row is written (`logSyncMutationService.ts:324-327`),
+ *     so `BackgroundSyncWorker` will never retry it and the sync drawer cannot
+ *     list it. Sending a farmer to look for something with no home in the state
+ *     model is a second lie stacked on the first.
+ *   - A red icon over `0 of 1` reads as "your record is GONE", so the farmer
+ *     re-records it — and now there are two. The record is genuinely safe on the
+ *     handset; `confirmAndSave` wrote it to `db.logs` before the enqueue was
+ *     even attempted. Not saying so causes the duplicate.
+ *
+ * So it leads with T1's `sync.onPhone` (`फोनवर सेव्ह ✓` / `Saved on phone`) —
+ * the reassurance, first, in the farmer's own language via the app's i18n
+ * (`R6`) — and then states the news plainly. "cannot be sent", not "not yet":
+ * as the code stands today no path will ever pick these up, and a false promise
+ * of a retry is the same class of defect this task exists to remove.
+ *
+ * THE COUNT IS `skippedLogIds.length` — read off the enqueue result, never off
+ * `logs.length`. It is the number that carries the news, and it cannot round a
+ * dropped record up into a saved one: a partial save reads `2 of 3`, never
+ * `3 of 3`.
+ *
+ * Reason-agnostic by design (architect Overlap C): `resolveSyncTarget` has two
+ * failure causes, Phase 2 removes the dominant one, and naming a cause would
+ * cost a copy rewrite and a re-test on a message that is about to change.
  *
  * NOT COVERED, STATED PLAINLY: a log lost to a THROW out of
  * `MutationQueue.enqueue` is invisible here — `skippedLogIds` structurally
@@ -143,15 +165,16 @@ function skippedSyncToast(
         return null;
     }
 
-    const queued = outcome.queuedLogIds.length;
-    const handled = queued + outcome.skippedLogIds.length;
+    const skipped = outcome.skippedLogIds.length;
+    const handled = outcome.queuedLogIds.length + skipped;
 
     return {
-        // No success verb, in either the partial or the nothing-queued case:
-        // "queued to send" is the strongest claim the caller can evidence, and
-        // queueing is not delivery. `0 of 3 queued to send.` is the honest
-        // reading of the case the plan's §A2 describes.
-        message: `${queued} of ${handled} queued to send. ${translate(SYNC_HONESTY_I18N_KEYS.NEEDS_FIX, language)}`,
+        message: `${translate(SYNC_HONESTY_I18N_KEYS.ON_PHONE, language)} — ${skipped} of ${handled} cannot be sent.`,
+        // Red, deliberately: records that will never reach the server are a real
+        // incompleteness the farmer should notice. The "your record is gone"
+        // misreading is answered by the first three words, not by softening the
+        // signal. `ActionToast` offers only success/error — a third, calmer
+        // variant is the right fix and it is a `.tsx` change (L5b batch).
         type: 'error',
     };
 }
@@ -202,7 +225,15 @@ export const useLogCommands = ({
     }, [dataSource.logs, weatherProvider]);
 
     // --- HELPER: CALCULATE SUMMARY ---
-    const calculateLogSummary = (logs: DailyLog[]) => {
+    // Labour Phase 2 / T2 (review round 1, finding B1) — the enqueue outcome now
+    // travels with the summary. This is the DURABLE half of the truth: the toast
+    // that reports a skipped log dies after 3000ms (`ActionToast.tsx:16`), while
+    // the "Saved to Ledger" screen this summary feeds (`mainView.tsx:600`)
+    // persists until the farmer navigates away. Without this, the reassuring
+    // half of the story outlives the honest half on the exact path this task
+    // exists to fix. `null` outcome (demo mode) means NO claim, not `false`.
+    const calculateLogSummary = (logs: DailyLog[], syncOutcome: LogSyncEnqueueOutcome | null) => {
+        const queuedIds = syncOutcome ? new Set(syncOutcome.queuedLogIds) : null;
         const summary: LastSavedLogSummaryItem[] = logs.map(log => {
             const selection = log.context.selection[0];
             const contextCropId = selection?.cropId;
@@ -230,6 +261,7 @@ export const useLogCommands = ({
                 plotId,
                 plotName,
                 count,
+                syncQueued: queuedIds ? queuedIds.has(log.id) : null,
             };
         });
         setLastSavedLogSummary(summary);
@@ -307,7 +339,7 @@ export const useLogCommands = ({
             }
 
             // Calculate Summary for Feedback
-            calculateLogSummary(newLogs);
+            calculateLogSummary(newLogs, syncOutcome);
             setLastSavedLogIds(newLogs.map(l => l.id));
 
             const { beforePercent, afterPercent } = computeClosureDelta(
@@ -374,7 +406,7 @@ export const useLogCommands = ({
 
             // Phase 14: Jump to Manual Ledger after confirmation
             // Calculate Summary for Feedback (re-calc for final state)
-            calculateLogSummary(newLogs);
+            calculateLogSummary(newLogs, syncOutcome);
             setLastSavedLogIds(newLogs.map(l => l.id));
 
             const { beforePercent, afterPercent } = computeClosureDelta(
@@ -410,6 +442,14 @@ export const useLogCommands = ({
         if (!hasActiveLogContext) return; // SAFE GUARD
         try {
             let savedLogIds: string[];
+            // Labour Phase 2 / T2 (review round 1, finding B1) — did this submit
+            // write anything to the LOCAL LEDGER? Only the create branch does
+            // (`confirmAndSave` -> `repo.batchSave`). The edit branch writes
+            // NOWHERE: `updateLog` calls `repo.getById` and never `repo.save`,
+            // and `setHistory` is React state with no persist subscriber. That
+            // distinction is what decides whether the full-screen
+            // "Saved to Ledger" panel (`mainView.tsx:600`) may be shown at all.
+            let ledgerWritten: boolean;
 
             if (data.originalLogId) {
                 // --- SECURE UPDATE ---
@@ -451,21 +491,27 @@ export const useLogCommands = ({
                 // means the system is stuck and the farmer can act; here there
                 // is nothing to retry and nothing to check, because the feature
                 // does not exist yet. Claiming otherwise would teach the farmer
-                // the app is broken (`P5`). So it says less instead: what is on
-                // screen is on screen, and it is not saved. Phase 4 owns the
-                // real fix (persisting the non-labour portion of an edit) and
-                // this wording should be revisited when it lands.
+                // the app is broken (`P5`). So it says less instead. It also
+                // does NOT say "not saved YET": there is no pending write and no
+                // scheduled one, and a false promise of eventual saving is the
+                // same class of defect as a false claim of saving. Phase 4 owns
+                // the real fix; revisit this wording when it lands.
+                //
+                // Nor does it borrow `sync.onPhone`: unlike a skipped CREATE,
+                // this edit is not on the phone either. `setHistory` is React
+                // state and nothing persists it.
                 const persistedCorrections = result.persistedLabourCorrections ?? 0;
                 setToast(persistedCorrections > 0
                     ? {
-                        message: `Saved: ${persistedCorrections} labour correction${persistedCorrections === 1 ? '' : 's'} sent to the server.`,
+                        message: `${persistedCorrections} labour correction${persistedCorrections === 1 ? '' : 's'} sent to the server.`,
                         type: 'success'
                     }
                     : {
-                        message: 'Shown here only — this edit is not saved yet.',
+                        message: 'Shown on screen only — this edit is not saved anywhere.',
                         type: 'error'
                     });
                 savedLogIds = [(result.log as DailyLog).id];
+                ledgerWritten = false;
 
             } else {
                 // --- CREATE NEW ---
@@ -490,7 +536,7 @@ export const useLogCommands = ({
                     setPlannedTasks(prev => mergeUniqueTasks(prev, manualTasks));
                 }
 
-                calculateLogSummary(newLogs);
+                calculateLogSummary(newLogs, syncOutcome);
                 setLastSavedLogIds(newLogs.map(l => l.id));
 
                 const nextHistory = [...newLogs, ...history];
@@ -500,6 +546,7 @@ export const useLogCommands = ({
                     type: 'success'
                 });
                 savedLogIds = newLogs.map(l => l.id);
+                ledgerWritten = true;
             }
 
             // spec: 2026-07-13-labour-attendance-approval-design (Task 3.5) —
@@ -515,7 +562,24 @@ export const useLogCommands = ({
                 setStatus('idle');
                 setCurrentRoute('labour');
             } else {
-                setStatus('success');
+                // Labour Phase 2 / T2 (review round 1, finding B1) — `'success'`
+                // is not a mood, it is the trigger for a full-screen
+                // "Saved to Ledger" panel that persists until the farmer
+                // navigates away, long after the 3000ms toast has gone
+                // (`ActionToast.tsx:16`). An EDIT wrote to no ledger at all, so
+                // entering that state would leave the longest-lived surface in
+                // the flow making the one claim that is flatly false.
+                //
+                // A skipped CREATE keeps `'success'` on purpose. Its record IS
+                // in the local ledger, so the panel's headline is true; what is
+                // false there is only the implied "and it is on its way", and
+                // the fix for that is the per-log `syncQueued` flag now carried
+                // on `lastSavedLogSummary` (rendered by `mainView.tsx`, batched
+                // into the L5b run) — NOT dropping to `'idle'`, which would
+                // return the farmer to a populated form and invite a duplicate
+                // record. Wrong trade: a soft contradiction is not worth a real
+                // double-entry.
+                setStatus(ledgerWritten ? 'success' : 'idle');
             }
         } catch (e) {
             console.error("Critical error in handleManualSubmit:", e);
@@ -547,7 +611,7 @@ export const useLogCommands = ({
                 setPlannedTasks(prev => mergeUniqueTasks(prev, wizardTasks));
             }
 
-            calculateLogSummary(logs);
+            calculateLogSummary(logs, syncOutcome);
             setLastSavedLogIds(logs.map(log => log.id));
 
             const nextHistory = [...logs, ...history];

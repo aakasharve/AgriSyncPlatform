@@ -115,6 +115,14 @@ describe('updateLog — Task 12b.7 labour corrections', () => {
         expect(result.success).toBe(true);
         expect(mockPostCorrection).toHaveBeenCalledTimes(1);
 
+        // Labour Phase 2 / T2 (review round 1, finding B2) — the caller's ONLY
+        // evidence that anything reached a server. `success: true` is returned
+        // just as readily by an edit that persisted nothing, so without this
+        // number `useLogCommands` cannot tell the two apart and tells a farmer
+        // whose correction the server ACCEPTED that it "is not saved anywhere".
+        // A false alarm on a real success is as damaging as a false success.
+        expect(result.persistedLabourCorrections).toBe(1);
+
         const [farmId, assignmentId, request] = mockPostCorrection.mock.calls[0];
         expect(farmId).toBe(FARM_ID);
         expect(assignmentId).toBe(ASSIGNMENT_ID);
@@ -184,6 +192,61 @@ describe('updateLog — Task 12b.7 labour corrections', () => {
         expect(result.success).toBe(true);
         expect(mockPostCorrection).not.toHaveBeenCalled();
         expect(mockEnqueue).not.toHaveBeenCalled();
+        // T2 / B2 — nothing was POSTed and nothing was written locally either
+        // (this use case never calls `repo.save`). Zero is what forbids the
+        // caller from claiming a save.
+        expect(result.persistedLabourCorrections).toBe(0);
+    });
+
+    it('counts every accepted correction, so the caller can name the real number', async () => {
+        // T2 / B2 — two engagements, both changed, both accepted. Locks the
+        // count to what was actually POSTed rather than to a boolean.
+        const second = '33333333-3333-3333-3333-333333333333';
+        const existing = makeLog([
+            makeLabour({ count: 8 }),
+            makeLabour({ id: 'lab-1', labourAssignmentId: second, count: 4 }),
+        ]);
+
+        const result = await updateLog(
+            {
+                logId: 'log-1',
+                updatedData: {
+                    labour: [
+                        makeLabour({ count: 6 }),
+                        makeLabour({ id: 'lab-1', labourAssignmentId: second, count: 3 }),
+                    ],
+                },
+                actorId: 'user-1',
+                reason: 'edit',
+            },
+            makeRepo(existing),
+            actor,
+        );
+
+        expect(result.success).toBe(true);
+        expect(mockPostCorrection).toHaveBeenCalledTimes(2);
+        expect(result.persistedLabourCorrections).toBe(2);
+    });
+
+    it('reports no persisted corrections when the POST failed', async () => {
+        // T2 / B2 — a rejected correction must never leave a count behind that
+        // a caller could read as evidence.
+        mockPostCorrection.mockRejectedValue(new Error('Request failed with status code 403'));
+        const existing = makeLog([makeLabour({ count: 8 })]);
+
+        const result = await updateLog(
+            {
+                logId: 'log-1',
+                updatedData: { labour: [makeLabour({ count: 6 })] },
+                actorId: 'user-1',
+                reason: 'edit',
+            },
+            makeRepo(existing),
+            actor,
+        );
+
+        expect(result.success).toBe(false);
+        expect(result.persistedLabourCorrections).toBeUndefined();
     });
 });
 
