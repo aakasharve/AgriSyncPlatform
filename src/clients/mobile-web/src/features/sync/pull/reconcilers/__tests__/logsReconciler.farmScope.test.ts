@@ -24,6 +24,14 @@
  * honest answer, and empty is how this codebase already writes it
  * (`LogFactory.ts:405`).
  *
+ * NOTE AFTER A2b (2026-08-13). The fixtures below carry NO `scope` and NO
+ * `plotIds` key, because neither existed on the wire when they were written.
+ * They are left that way ON PURPOSE: they now pin the behaviour against a
+ * server build predating A2a, where `plotId` is the only location the response
+ * carries. The wire shape shipped TODAY — `scope` + `plotIds`, including the
+ * MultiPlot case this file cannot express — is covered by
+ * `logsReconciler.multiPlotRoundTrip.test.ts`.
+ *
  * spec: 2026-08-12-labour-phase2-server-truth-farm-context
  */
 import { describe, it, expect, beforeEach } from 'vitest';

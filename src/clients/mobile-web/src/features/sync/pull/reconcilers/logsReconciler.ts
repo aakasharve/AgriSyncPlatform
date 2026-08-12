@@ -14,6 +14,7 @@
 import { VersionRegistry } from '../../../../core/contracts/VersionRegistry';
 import {
     type DailyLog,
+    type SelectedCropContext,
 } from '../../../../types';
 import type {
     DailyLogDto,
@@ -41,6 +42,22 @@ import type { PlotLookupEntry } from './profileAndCropsReconciler';
  */
 const FARM_GLOBAL_ID = 'FARM_GLOBAL';
 
+/**
+ * LABOUR_PHASE2 A2b — "did this response STATE where the work happened?"
+ *
+ * The predicate is the presence of the field, never the contents of it. An
+ * EMPTY `plotIds` is a statement — it is precisely how a `Farm`-scoped log says
+ * "the whole farm, no plot" (founder decision O-1) — while an ABSENT `plotIds`
+ * is silence from a server build that cannot express the assertion at all.
+ *
+ * Getting this backwards is the mistake that cost real farmer data once
+ * already: `preserveLocalOnlyFields` below exists because "the array came back
+ * empty" was treated as "the server says there is none". Same trap, same rule.
+ */
+function serverStatedContext(source: DailyLogDto): boolean {
+    return Array.isArray(source.plotIds);
+}
+
 export async function reconcileLogs(
     db: AgriLogDatabase,
     payload: SyncPullResponse,
@@ -50,9 +67,13 @@ export async function reconcileLogs(
     const logs = payload.dailyLogs.map(log => toDailyLog(log, plotLookup));
 
     const serverModifiedByLogId = new Map<string, string>();
+    const contextStatedLogIds = new Set<string>();
     for (const dto of payload.dailyLogs) {
         if (dto.modifiedAtUtc) {
             serverModifiedByLogId.set(dto.id, dto.modifiedAtUtc);
+        }
+        if (serverStatedContext(dto)) {
+            contextStatedLogIds.add(dto.id);
         }
     }
 
@@ -80,7 +101,7 @@ export async function reconcileLogs(
         await db.logs.put({
             id: log.id,
             schemaVersion: VersionRegistry.DB_SCHEMA_VERSION,
-            log: preserveLocalOnlyFields(log, existing?.log),
+            log: preserveLocalOnlyFields(log, existing?.log, contextStatedLogIds.has(log.id)),
             date: log.date,
             verificationStatus: log.verification?.status,
             createdByOperatorId: log.meta?.createdByOperatorId,
@@ -132,8 +153,28 @@ export async function reconcileLogs(
  *
  * This is a holding measure, not a read path. Projecting labour onto
  * `DailyLogDto` and hydrating it here is the real fix and is deferred.
+ *
+ * ---------------------------------------------------------------------------
+ * LABOUR_PHASE2 A2b — `context` joins the guard, under the SAME predicate.
+ *
+ * `context` is the farmer's spatial assertion, and it is the one field here
+ * that the wire CAN express — since `DailyLogDto` carries `scope` and
+ * `plotIds`. So it is preserved on exactly the condition that the response
+ * made no statement (`serverStatedContext === false`), and overwritten
+ * whenever the response did — INCLUDING when the statement is the empty set,
+ * which is how a genuine "this is farm-wide after all" correction arrives.
+ *
+ * "The response carried the field" is the predicate. "The value came back
+ * non-empty" is NOT, and never was: that reading would silently drop a
+ * farm-wide correction on the floor, which is the mirror image of the defect
+ * this whole guard was written for. The distinction is what makes the guard a
+ * guard rather than a policy of ignoring the server.
  */
-function preserveLocalOnlyFields(incoming: DailyLog, existing: DailyLog | undefined): DailyLog {
+function preserveLocalOnlyFields(
+    incoming: DailyLog,
+    existing: DailyLog | undefined,
+    serverStatedContext: boolean,
+): DailyLog {
     if (!existing) {
         return incoming;
     }
@@ -142,7 +183,76 @@ function preserveLocalOnlyFields(incoming: DailyLog, existing: DailyLog | undefi
         ...incoming,
         labour: existing.labour ?? incoming.labour,
         financialSummary: existing.financialSummary ?? incoming.financialSummary,
+        context: serverStatedContext ? incoming.context : (existing.context ?? incoming.context),
     };
+}
+
+/**
+ * LABOUR_PHASE2 A2b — rebuild `context.selection` from the plot set the farmer
+ * actually asserted, grouped the way this app already represents a selection.
+ *
+ * WHY GROUPED BY CROP. `LogContext.tsx:88-116` builds the live selection as ONE
+ * ENTRY PER CROP, each carrying that crop's plots — and `LogFactory` writes the
+ * same shape. A pulled log and a locally-created log describing the same work
+ * therefore land on the same shape, which is what makes the round-trip lossless
+ * rather than merely non-destructive.
+ *
+ * THE `cropId` DECISION (the field the server deliberately does NOT state for
+ * `MultiPlot` and `Farm`, sending `cropCycleId: null` as the TRUTH). A crop is
+ * read off the PLOT, from reference data this device already pulled — it is not
+ * inferred from the log and not borrowed from a sibling:
+ *
+ *   - `Farm` (empty set): `FARM_GLOBAL_ID`. There are no plots to read a crop
+ *     off, and `FARM_GLOBAL` is this codebase's existing, understood encoding
+ *     for "farm scope, no plot, no crop" (`LogFactory.ts:403`,
+ *     `costAnalysisHelpers.ts:107`, `appContentContextDisplay.tsx:29`).
+ *   - `MultiPlot`: the crop OF EACH PLOT, one selection entry per distinct crop.
+ *     `FARM_GLOBAL_ID` would be an active lie here: `hasFarmWideSelection`
+ *     (`costAnalysisHelpers.ts:136-137`) tests `cropId === FARM_GLOBAL_ID` and
+ *     `getNonGlobalSelections` (`:114`) STRIPS such a selection, so a three-plot
+ *     log would leave every crop and plot cost total and be captioned "Entire
+ *     Farm" — the very rewrite this task exists to stop, merely relocated from
+ *     `selectedPlotIds` to `cropId`. Picking the first plot's crop for the whole
+ *     set is the first-plot fabrication founder decision O-1 closed.
+ *   - A plot the lookup does not know yet keeps today's answer exactly
+ *     (`FARM_GLOBAL_ID` + 'Farm' + 'Unknown Plot'): the server named a real
+ *     plot, this device just has not pulled it. Dropping the id would lose a
+ *     real attribution.
+ *
+ * Nothing here invents a plot, a crop or a cycle: every id comes from the wire,
+ * and every name from local reference data or an explicit "unknown" literal.
+ * Order is the order the server stored, never sorted — the order IS part of the
+ * assertion.
+ */
+function buildSelection(
+    plotIds: readonly string[],
+    plotLookup: Map<string, PlotLookupEntry>,
+): SelectedCropContext[] {
+    if (plotIds.length === 0) {
+        return [{
+            cropId: FARM_GLOBAL_ID,
+            cropName: normalizeMojibakeText('Farm'),
+            selectedPlotIds: [],
+            selectedPlotNames: [],
+        }];
+    }
+
+    const byCropId = new Map<string, SelectedCropContext>();
+    for (const plotId of plotIds) {
+        const plotContext = plotLookup.get(plotId);
+        const cropId = plotContext?.cropId ?? FARM_GLOBAL_ID;
+        const entry = byCropId.get(cropId) ?? {
+            cropId,
+            cropName: normalizeMojibakeText(plotContext?.cropName ?? 'Farm'),
+            selectedPlotIds: [],
+            selectedPlotNames: [],
+        };
+        entry.selectedPlotIds.push(plotId);
+        entry.selectedPlotNames.push(normalizeMojibakeText(plotContext?.plotName ?? 'Unknown Plot'));
+        byCropId.set(cropId, entry);
+    }
+
+    return [...byCropId.values()];
 }
 
 /**
@@ -157,8 +267,6 @@ function toDailyLog(
 ): DailyLog {
     const plotId = source.plotId ?? undefined;
     const plotContext = plotId ? plotLookup.get(plotId) : undefined;
-    const selectedCropName = normalizeMojibakeText(plotContext?.cropName ?? 'Farm');
-    const selectedPlotName = normalizeMojibakeText(plotContext?.plotName ?? 'Unknown Plot');
     const latestVerification = [...source.verificationEvents]
         .sort((left, right) => Date.parse(right.occurredAtUtc) - Date.parse(left.occurredAtUtc))[0];
 
@@ -253,21 +361,35 @@ function toDailyLog(
         id: source.id,
         date: source.logDate,
         context: {
+            // LABOUR_PHASE2 A2b — the plot set comes from `source.plotIds`, the
+            // field that carries the farmer's assertion. `source.plotId` is NOT
+            // consulted here: it is null for `MultiPlot` and `Farm`, so deriving
+            // context from it rewrote a {A,B,C} log into a farm-wide one on the
+            // first pull after its own save was acknowledged.
+            //
+            // The `?? ` branch is NOT a reading of an empty set — an empty set
+            // is on-the-wire and flows through the left side. It is reached only
+            // when the response carried NO `plotIds` key at all, i.e. a server
+            // build predating A2a, which by construction has no `MultiPlot` row
+            // to mis-describe: migration ① classified every pre-existing row as
+            // `scope='Plot'` with `plot_ids = ARRAY[plot_id]`. For that server
+            // `plotId` IS the whole assertion, and this reproduces exactly what
+            // shipped before. `preserveLocalOnlyFields` additionally keeps the
+            // local context untouched in that case whenever there is one.
+            //
             // A length-1 array holding `undefined` is the worst available
             // answer: it round-trips a farm-scoped log as plot-scoped, so
             // `selectedPlotIds.length === 1` reads as PLOT mode
             // (`ContextSelectors.ts:72`) and every `.includes(plotId)` reader
             // compares against a hole. Empty is the honest shape, and it is
             // the same shape `LogFactory.ts:405` writes for a farm-wide log
-            // created on this device. `selectedPlotNames` has to move with it,
-            // or the names would out-number the ids and 'Unknown Plot' would be
-            // shown for a plot the farmer never named.
-            selection: [{
-                cropId: plotContext?.cropId ?? FARM_GLOBAL_ID,
-                cropName: selectedCropName,
-                selectedPlotIds: plotId ? [plotId] : [],
-                selectedPlotNames: plotId ? [selectedPlotName] : [],
-            }],
+            // created on this device. `selectedPlotNames` moves with the ids,
+            // or the names out-number them and 'Unknown Plot' is shown for a
+            // plot the farmer never named.
+            selection: buildSelection(
+                source.plotIds ?? (plotId ? [plotId] : []),
+                plotLookup,
+            ),
         },
         dayOutcome: 'WORK_RECORDED',
         cropActivities,

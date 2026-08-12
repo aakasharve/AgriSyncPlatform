@@ -124,6 +124,20 @@ export interface VerificationEventDto {
     occurredAtUtc: string;
 }
 
+/**
+ * LABOUR_PHASE2 A2b — what the farmer asserted about WHERE the work happened.
+ *
+ * The exact three strings `ssf.daily_logs.scope` stores, `ck_daily_logs_scope`
+ * compares against, `DailyLogScope` (ShramSafal.Domain.Logs) names, and
+ * `create_daily_log.zod.ts` accepts on the way UP. One vocabulary in both
+ * directions, so a device sends and receives one contract rather than two.
+ *
+ * Always a JSON string on the wire, never an ordinal: the server projects it
+ * as `string` precisely so that no serializer option can turn it into a number
+ * (`DailyLogDto.cs:29-39`).
+ */
+export type DailyLogScope = 'Plot' | 'MultiPlot' | 'Farm';
+
 export interface DailyLogDto {
     id: string;
     farmId: string;
@@ -157,6 +171,40 @@ export interface DailyLogDto {
     lastVerificationStatus?: string;
     tasks: LogTaskDto[];
     verificationEvents: VerificationEventDto[];
+
+    /**
+     * LABOUR_PHASE2 A2b — the farmer's spatial assertion, read back.
+     *
+     * `ShramSafal.Application/Contracts/Dtos/DailyLogDto.cs:53-82` declares both
+     * of these NON-nullable and always sends them. They are declared OPTIONAL
+     * here for one reason only, and it is not laziness: this twin is
+     * hand-maintained, so it describes what a *running* device may actually
+     * receive, and a device can outlive the server build it talks to (web,
+     * APK-with-bundled-assets and API all deploy separately, and a backend
+     * rollback puts a new client in front of an old server). Declaring them
+     * required would make `source.plotIds.map(...)` type-check and then throw a
+     * TypeError inside the pull transaction, failing the reconcile of every
+     * entity in the batch — not just logs.
+     *
+     * The consequence is a rule, enforced in `logsReconciler.toDailyLog`:
+     * ABSENT means "the response made no statement about location" and must
+     * never be read as "the empty set". Only a plot-set that is actually on the
+     * wire — INCLUDING the empty one, which is exactly how a `Farm` log states
+     * itself — is the farmer's assertion. Reading absence as empty would turn
+     * every plot-scoped log from an older server into a farm-wide log; reading
+     * empty as absence would ignore a genuine farm-wide correction.
+     *
+     * Invariants the server and a database CHECK both enforce, so readers may
+     * rely on them when the fields ARE present:
+     *   "Plot"      => plotIds.length === 1 && plotIds[0] === plotId && cropCycleId !== null
+     *   "MultiPlot" => plotIds.length >= 2  && plotId === null && cropCycleId === null
+     *   "Farm"      => plotIds.length === 0 && plotId === null && cropCycleId === null
+     *
+     * `plotIds` arrives in STORED order, not sorted — it is the order the
+     * farmer's selection was recorded in, and reordering it would restate it.
+     */
+    scope?: DailyLogScope;
+    plotIds?: string[];
 }
 
 export interface CostEntryDto {

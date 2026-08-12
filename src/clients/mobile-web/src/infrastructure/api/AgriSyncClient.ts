@@ -120,6 +120,7 @@ export type {
     CropCycleDto,
     CropScheduleTemplateDto,
     DailyLogDto,
+    DailyLogScope,
     DayLedgerAllocationDto,
     DayLedgerDto,
     ExtractionSessionDraftResponse,
