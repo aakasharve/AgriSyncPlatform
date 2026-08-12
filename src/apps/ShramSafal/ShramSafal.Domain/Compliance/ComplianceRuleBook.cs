@@ -124,22 +124,7 @@ public static class ComplianceRuleBook
             "वाद ३ दिवसांपासून सुरू",
             input =>
             {
-                var cutoff = input.AsOfUtc.AddDays(-3);
-                var disputed = input.DailyLogs
-                    .Where(d => d.CurrentVerificationStatus == VerificationStatus.Disputed)
-                    .Where(d => d.ModifiedAtUtc <= cutoff)
-                    // LABOUR_PHASE2 P2.1 — DailyLog.PlotId is now nullable.
-                    // ComplianceEvidence.PlotId is not, and it cannot be widened
-                    // here: compliance_signals.plot_id is NOT NULL and sits in the
-                    // unique index (farm_id, plot_id, rule_code, crop_cycle_id)
-                    // (20260421045922_AddComplianceSignalsTable.cs:21,60). Making
-                    // that nullable is a second schema change on a second table,
-                    // outside this task's approved surface.
-                    // So a plot-less log is SKIPPED rather than given a fabricated
-                    // plot. Behaviour at this commit is unchanged — no MultiPlot or
-                    // Farm log can be created until P2.2 opens the write path.
-                    // The plot-less compliance surface is the known L6 gap and is
-                    // owned by the compliance/ledger reader audit (P2.3).
+                var disputed = UnresolvedDisputes(input)
                     .Where(d => d.PlotId.HasValue)
                     .ToList();
 
@@ -164,4 +149,51 @@ public static class ComplianceRuleBook
                 return Array.Empty<ComplianceEvidence>();
             })
     };
+
+    /// <summary>
+    /// Every daily log that is Disputed and has stayed disputed past the 3-day
+    /// cutoff — regardless of whether a compliance signal can be written for it.
+    /// Stated once so the rule and
+    /// <see cref="UnresolvedDisputesWithNoRepresentableSignal"/> can never drift
+    /// into disagreeing about what "an unresolved dispute" is.
+    /// </summary>
+    public static IEnumerable<DailyLog> UnresolvedDisputes(ComplianceEvaluationInput input)
+    {
+        ArgumentNullException.ThrowIfNull(input);
+
+        var cutoff = input.AsOfUtc.AddDays(-3);
+        return input.DailyLogs
+            .Where(d => d.CurrentVerificationStatus == VerificationStatus.Disputed)
+            .Where(d => d.ModifiedAtUtc <= cutoff);
+    }
+
+    /// <summary>
+    /// LABOUR_PHASE2 P2.3 — the unresolved disputes this rule book CANNOT turn
+    /// into a compliance signal, named out loud instead of vanishing inside a
+    /// <c>.Where</c>.
+    ///
+    /// <para><b>Why they cannot be represented.</b>
+    /// <see cref="ComplianceEvidence.PlotId"/> is a non-nullable <c>Guid</c>
+    /// because <c>ssf.compliance_signals.plot_id</c> is <c>NOT NULL</c> and is
+    /// part of the partial unique index
+    /// <c>(farm_id, plot_id, rule_code, crop_cycle_id)</c>
+    /// (<c>20260421045922_AddComplianceSignalsTable.cs:21,60</c>). A
+    /// <c>MultiPlot</c> or <c>Farm</c> scoped log has no plot, and the two ways
+    /// of giving it one are both fabrications this project has already ruled
+    /// out (founder decision O-1): inventing a plot id, or fanning ONE dispute
+    /// out across every plot so the farmer is told he has N disputes when he
+    /// has one. Widening that column is a second schema change on a second
+    /// table and is a later, separate decision.</para>
+    ///
+    /// <para><b>What this method is for.</b> So the gap is observable rather
+    /// than silent. <c>EvaluateComplianceHandler</c> calls it and logs what it
+    /// could not represent, naming the log ids. <c>P5</c>: a truthful missing
+    /// feature beats a fake working one — but only if somebody can see that it
+    /// is missing.</para>
+    /// </summary>
+    public static IReadOnlyList<DailyLog> UnresolvedDisputesWithNoRepresentableSignal(
+        ComplianceEvaluationInput input)
+        => UnresolvedDisputes(input)
+            .Where(d => !d.PlotId.HasValue)
+            .ToList();
 }

@@ -334,12 +334,72 @@ internal sealed class ShramSafalRepository(ShramSafalDbContext db) : IShramSafal
             .ToListAsync(ct);
     }
 
+    /// <summary>
+    /// Every <see cref="LogTask"/> executed against one crop cycle.
+    ///
+    /// <para><b>LABOUR_PHASE2 P2.3 (landmine L6).</b> Until Phase 2 every daily
+    /// log named a crop cycle, so <c>log.CropCycleId == cropCycleId</c> was the
+    /// whole answer. A <c>MultiPlot</c> or <c>Farm</c> scoped log carries
+    /// <c>crop_cycle_id IS NULL</c> BY DESIGN — the farmer named no single plot,
+    /// so there is no one cycle to name — and the old filter therefore made its
+    /// tasks vanish from every consumer of this method:
+    /// <c>EvaluateComplianceHandler</c>, <c>ComputePlannedVsExecutedDeltaHandler</c>
+    /// and <c>GetAttentionBoardHandler</c>. All three feed CompareEngine, so the
+    /// farmer would be told he had failed to do work he had actually done — a
+    /// fabricated breach, `P4`, on three surfaces.</para>
+    ///
+    /// <para><b>How a plot-less log is attributed, and why that is not
+    /// over-counting.</b> A plot-less log joins a cycle when all three hold:
+    /// it belongs to the same FARM; the cycle's plot is actually covered by it
+    /// (<c>Farm</c> covers every plot; <c>MultiPlot</c> covers exactly the plots
+    /// in <c>plot_ids</c> — never "all of them"); and its <c>log_date</c> falls
+    /// inside the cycle's own window, which is what stops last season's work
+    /// being counted as this season's. The cycle id is the time bound for a
+    /// plot-scoped log; the cycle's dates are the only honest equivalent when
+    /// there is no cycle id. No plot, cycle or sentinel is invented anywhere:
+    /// the log is matched by what it already says.</para>
+    ///
+    /// <para>Quantities are unaffected: <c>CompareEngine</c> de-duplicates
+    /// executed activity types before comparing, so including a farm-wide spray
+    /// can make a planned spray MATCH, and can never make it count twice
+    /// (`P7`).</para>
+    /// </summary>
     public async Task<List<LogTask>> GetExecutedTasksByCropCycleIdAsync(Guid cropCycleId, CancellationToken ct = default)
     {
+        var cycle = await db.CropCycles
+            .AsNoTracking()
+            .FirstOrDefaultAsync(c => c.Id == cropCycleId, ct);
+
+        if (cycle is null)
+        {
+            // Unknown cycle: nothing to attribute a plot-less log to. Behaviour
+            // identical to Labour V1.
+            return await (
+                from task in db.LogTasks
+                join log in db.DailyLogs on task.DailyLogId equals log.Id
+                where log.CropCycleId == cropCycleId
+                select task)
+                .ToListAsync(ct);
+        }
+
+        var cycleFarmId = cycle.FarmId;
+        var cyclePlotId = cycle.PlotId;
+        var cycleStart = cycle.StartDate;
+        var cycleEnd = cycle.EndDate;
+
         return await (
             from task in db.LogTasks
             join log in db.DailyLogs on task.DailyLogId equals log.Id
-            where log.CropCycleId == cropCycleId
+            where
+                // (a) the log names this cycle — the Labour V1 predicate, untouched
+                log.CropCycleId == cropCycleId
+                // (b) the log names no cycle because it names no single plot
+                || (log.CropCycleId == null
+                    && log.FarmId == cycleFarmId
+                    && log.LogDate >= cycleStart
+                    && (cycleEnd == null || log.LogDate <= cycleEnd)
+                    && (log.Scope == DailyLogScope.Farm
+                        || EF.Property<List<Guid>>(log, "_plotIds").Contains(cyclePlotId)))
             select task)
             .ToListAsync(ct);
     }

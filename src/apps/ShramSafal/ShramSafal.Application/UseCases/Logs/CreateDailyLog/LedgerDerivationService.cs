@@ -65,6 +65,13 @@ public sealed class LedgerDerivationService(IShramSafalRepository repository) : 
         var operations = 0;
         var children = 0;
 
+        // LABOUR_PHASE2 P2.3 (landmine L8) — read the SCOPE once, here, instead
+        // of letting every downstream call inherit whatever `log.PlotId`
+        // happens to be. `log.PlotId` is null for BOTH MultiPlot and Farm, and
+        // the two sinks below read a null plot in opposite ways. See
+        // DerivedPlotScope / RoutineIsRepresentableForScope.
+        var derivedPlotScope = DerivedPlotScope(log);
+
         // ── inputs → FarmOperation(application) + ApplicationInputItem children ──
         if (root.TryGetProperty("inputs", out var inputs) && inputs.ValueKind == JsonValueKind.Array)
         {
@@ -76,16 +83,19 @@ public sealed class LedgerDerivationService(IShramSafalRepository repository) : 
                 // two DailyLogs for two DIFFERENT plots that share one SourceAiJobId
                 // (the mobile one-log-per-plot flow) don't collide on
                 // (farm_id, derived_event_key) and silently supersede each other.
-                // The scope is log.PlotId (stable across re-confirms of the SAME
+                // The scope is the log's plot (stable across re-confirms of the SAME
                 // plot), so a same-plot offline re-confirm still recomputes the same
-                // key and supersedes as intended.
-                var key = DerivedEventKey.Compute(sourceJob.Id, log.PlotId, span, "input");
+                // key and supersedes as intended. LABOUR_PHASE2 P2.3: for a
+                // plot-less log the scope is null and folds in as the empty
+                // string — see DerivedPlotScope for why that is a deliberate
+                // reading and what it costs.
+                var key = DerivedEventKey.Compute(sourceJob.Id, derivedPlotScope, span, "input");
 
                 var opId = ids.New();
                 var op = FarmOperation.Create(
                     id: opId,
                     farmId: log.FarmId,
-                    plotId: log.PlotId,
+                    plotId: derivedPlotScope,
                     operationType: "application",
                     operationDate: log.LogDate,
                     sourceDailyLogId: log.Id,
@@ -342,14 +352,82 @@ public sealed class LedgerDerivationService(IShramSafalRepository repository) : 
         // farm+plot+op-type → idempotent under replay (sync replay is idempotency-
         // keyed upstream, so a replayed mutation never re-enters this path and
         // won't double-count). POPULATE only — the "नेहमी प्रमाणे" read is deferred.
-        if (irrigationRoutine is RoutineSeed seed)
+        //
+        // LABOUR_PHASE2 P2.3 (L8) — NOT every scope can be written here. A
+        // MultiPlot log is skipped, deliberately and visibly; see
+        // RoutineIsRepresentableForScope.
+        if (irrigationRoutine is RoutineSeed seed && RoutineIsRepresentableForScope(log.Scope))
         {
             await UpsertRoutineAsync(
-                log.FarmId, log.PlotId, "irrigation", seed, ids, now, ct);
+                log.FarmId, derivedPlotScope, "irrigation", seed, ids, now, ct);
         }
 
         return new DerivationOutcome(operations, children);
     }
+
+    /// <summary>
+    /// LABOUR_PHASE2 P2.3 — the plot that this log's DERIVED rows are allowed to
+    /// name, decided from <see cref="DailyLog.Scope"/> rather than inherited from
+    /// a nullable <see cref="DailyLog.PlotId"/>.
+    ///
+    /// <list type="bullet">
+    /// <item><b>Plot</b> — the single plot the farmer named. Byte-identical to
+    /// the pre-Phase-2 behaviour, which matters: <c>farm_operations</c> rows
+    /// already in the database carry <see cref="DerivedEventKey"/>s computed
+    /// from this value, and changing it would stop an offline re-confirm
+    /// superseding its own earlier row.</item>
+    /// <item><b>MultiPlot</b> — null, because <c>farm_operations</c> has one
+    /// nullable <c>plot_id</c> and no plot-set column. Null here is LOSSY (the
+    /// named subset is not carried) but it is not FALSE: it says "no single
+    /// plot", not "the whole farm". The true scope stays recoverable from
+    /// <c>farm_operations.source_daily_log_id → daily_logs.plot_ids</c>.
+    /// Picking the first plot, or writing one operation per plot, are the two
+    /// fabrications founder decision O-1 closed.</item>
+    /// <item><b>Farm</b> — null, and here null is the whole truth: the farmer
+    /// named no plot.</item>
+    /// </list>
+    /// </summary>
+    private static Guid? DerivedPlotScope(DailyLog log) => log.Scope switch
+    {
+        DailyLogScope.Plot => log.PlotId,
+        DailyLogScope.MultiPlot => null,
+        DailyLogScope.Farm => null,
+        _ => null,
+    };
+
+    /// <summary>
+    /// LABOUR_PHASE2 P2.3 — whether a <c>routine_patterns</c> row may be written
+    /// for a log of this scope. This is the sink where a null plot means
+    /// something DIFFERENT from what it means everywhere else, so it gets its
+    /// own explicit rule instead of inheriting <see cref="DerivedPlotScope"/>.
+    ///
+    /// <para><c>routine_patterns.plot_id IS NULL</c> is not "unknown plot" — it
+    /// is a positive claim, spelled out at <c>RoutinePattern.cs:49</c>: <i>"null
+    /// = farm-wide pattern"</i>, and enforced as such by the partial unique
+    /// index <c>ux_routine_patterns_farm_op_no_plot</c>. So:</para>
+    ///
+    /// <list type="bullet">
+    /// <item><b>Plot</b> — write it against that plot. Unchanged.</item>
+    /// <item><b>Farm</b> — write it with a null plot. The farmer's assertion
+    /// was farm-wide and the column's null means farm-wide; the two agree.</item>
+    /// <item><b>MultiPlot</b> — SKIP. Passing null would upgrade "these two
+    /// plots" into "the whole farm" — a claim about plots the farmer never
+    /// named, on a row whose whole purpose is to be replayed back to him as
+    /// "नेहमी प्रमाणे". Fanning out to one row per plot is the other direction of
+    /// the same fault: it would take ONE stated duration and assert it
+    /// individually of each plot, and would count one log as N samples in
+    /// <see cref="RoutinePattern.SampleCount"/>. Representing a
+    /// named-subset routine needs a schema that can hold a plot SET, which is a
+    /// separate decision on a separate table.</item>
+    /// </list>
+    ///
+    /// <para>Nothing is lost that a farmer can see: <c>routine_patterns</c> is
+    /// populate-only today (the "नेहमी प्रमाणे" read is deferred), and the
+    /// underlying irrigation entries are still written for every scope by the
+    /// block above — only the derived <i>pattern</i> is withheld.</para>
+    /// </summary>
+    private static bool RoutineIsRepresentableForScope(DailyLogScope scope)
+        => scope is DailyLogScope.Plot or DailyLogScope.Farm;
 
     // Create-or-reinforce the routine_patterns row for one (farm, plot, op-type).
     private async Task UpsertRoutineAsync(

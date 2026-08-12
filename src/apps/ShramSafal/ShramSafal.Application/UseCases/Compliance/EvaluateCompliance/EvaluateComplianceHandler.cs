@@ -69,6 +69,28 @@ public sealed class EvaluateComplianceHandler(
             TestInstances: testInstances,
             Plots: plots);
 
+        // LABOUR_PHASE2 P2.3 — say out loud what this pass cannot represent.
+        //
+        // ssf.compliance_signals.plot_id is NOT NULL and is part of
+        // ix_compliance_signals_open_unique, so a disputed log whose scope is
+        // MultiPlot or Farm (plot_id IS NULL by design — the farmer named no
+        // single plot) cannot get an UnresolvedDisputeAgeHigh signal at this
+        // schema. The rule book therefore skips it. A skip nobody can see is
+        // indistinguishable from a bug, so the skip is counted and reported
+        // here rather than being an accidental silence. Inventing a plot, or
+        // fanning one dispute across every plot, are the two fabrications
+        // founder decision O-1 closed; neither is on the table.
+        var unrepresentableDisputes =
+            ComplianceRuleBook.UnresolvedDisputesWithNoRepresentableSignal(input);
+        if (unrepresentableDisputes.Count > 0)
+        {
+            logger.LogWarning(
+                "EvaluateCompliance: farm {FarmId} has {UnrepresentableDisputeCount} unresolved disputed log(s) with no plot (scope MultiPlot or Farm). No UnresolvedDisputeAgeHigh signal can be opened for them because ssf.compliance_signals.plot_id is NOT NULL and part of the open-signal unique index. They are not ignored — they are unrepresentable at this schema. Daily log ids: {UnrepresentableDisputeLogIds}.",
+                farmId,
+                unrepresentableDisputes.Count,
+                string.Join(",", unrepresentableDisputes.Select(d => d.Id)));
+        }
+
         // --- Run pure domain evaluator (all rules except ProtocolBreakInStage) ---
         var freshResults = ComplianceEvaluator.Evaluate(input);
 
