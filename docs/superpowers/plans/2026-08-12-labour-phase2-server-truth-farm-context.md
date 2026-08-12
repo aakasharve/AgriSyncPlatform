@@ -189,11 +189,37 @@ ALTER TABLE ssf.daily_logs
     ALTER COLUMN plot_ids DROP DEFAULT,
     ALTER COLUMN scope    DROP DEFAULT,
     ADD CONSTRAINT ck_daily_logs_scope CHECK (
-        (scope = 'Plot'      AND cardinality(plot_ids) = 1  AND plot_id IS NOT NULL)
+        (scope = 'Plot'      AND cardinality(plot_ids) = 1  AND plot_id IS NOT NULL
+                             AND crop_cycle_id IS NOT NULL  AND plot_ids[1] = plot_id)
      OR (scope = 'MultiPlot' AND cardinality(plot_ids) >= 2 AND plot_id IS NULL AND crop_cycle_id IS NULL)
      OR (scope = 'Farm'      AND cardinality(plot_ids) = 0  AND plot_id IS NULL AND crop_cycle_id IS NULL)
     );
 ```
+
+> **PATCHED 2026-08-12 (execution session) — the `Plot` branch gained two clauses. This is a `W2`
+> PLAN DEFECT fix: two approved artifacts contradicted each other. No approved semantic changed.**
+>
+> **`crop_cycle_id IS NOT NULL` on the `Plot` branch.** The handoff §1 intent table says a `Plot`
+> log has `crop_cycle_id` **set**, and the column was `NOT NULL` for the entire life of the table.
+> The original predicate did not restate that, so the migration would have **silently retired a
+> guarantee that already existed** — leaving `scope='Plot', crop_cycle_id=NULL` storable, which
+> `AddLogTaskHandler` then rejects as `CropCycleNotFound` forever with nothing anywhere saying the
+> row is malformed rather than the cycle deleted. One clause now; a full-table validation pass
+> after production has rows.
+>
+> **`plot_ids[1] = plot_id` on the `Plot` branch.** `plot_id` is documented as *"always equal to
+> the single member of `PlotIds`"* (`DailyLog.cs:74-79`) and the domain enforces exactly that —
+> but without this clause the database accepted `scope='Plot', plot_id=A, plot_ids={B}`, so a
+> reader using `plot_id` and a reader using `plot_ids` would return **different plots for the same
+> log**. Unreachable through EF (both columns are written from one consistent entity); reachable
+> through any raw-SQL fixture or ops backfill. This is what makes `plot_id` a genuine compatibility
+> *projection* rather than a second, independent fact.
+>
+> **Also load-bearing, recorded so nobody "simplifies" it later:** `plot_ids`'s column-level
+> `NOT NULL` is what makes this CHECK work at all. `cardinality(NULL)` is `NULL`, the branch
+> evaluates to `NULL` rather than `FALSE`, and **a CHECK treats `NULL` as satisfied** — so a future
+> `DROP NOT NULL` on `plot_ids` would silently disable the entire constraint while looking
+> harmless because "the CHECK covers it". It does not.
 
 **`uuid[]` is an established convention in this repo**, not an invention: `day_ledgers.global_expense_ids` (`FinanceV2.cs:36`), `test_instances.attachment_ids` (`AddTestStackTables.cs:59`). It also matches the client's existing `string[]` shape, so the wire needs no reshaping.
 
