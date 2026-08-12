@@ -7,7 +7,8 @@ import { getDatabase } from '../storage/DexieDatabase';
 import { AiJobWorker } from './AiJobWorker';
 import { isSyncMutationType } from './SyncMutationCatalog';
 import { getRootStore } from '../../app/state/RootStore';
-import { categorizeRejection } from './RejectionPolicy';
+import { categorizePushFailure, categorizeRejection } from './RejectionPolicy';
+import { resetFailedUploadsToPending } from './UploadQueueRetry';
 
 // Sub-plan 04 Task 4 — bridge worker → syncMachine. Wrapped so the worker
 // never crashes if the root store hasn't been instantiated (e.g., during
@@ -52,6 +53,11 @@ export class BackgroundSyncWorker {
         }
 
         this.isRunning = true;
+        // Boot-time rehydration must happen before the first cycle so a
+        // rejection that predates this launch is visible immediately rather
+        // than only after the next server round trip. Fire-and-forget: it is a
+        // Dexie read and must never delay or fail the sync loop.
+        void this.rehydrateRejectedMutations();
         this.safeRunCycle();
 
         this.timerId = window.setInterval(() => {
@@ -96,9 +102,70 @@ export class BackgroundSyncWorker {
         }
     }
 
-    async retryAllFailed(): Promise<void> {
-        await mutationQueue.markFailedAsPending();
+    /**
+     * "Retry All" in `SyncStatusDrawer` — the remedy the header chip points at
+     * when it says `अडकलं — तपासा`.
+     *
+     * Before Task T3 this called `markFailedAsPending()` with no argument, so
+     * it re-applied the `retryCount >= 5` cap and skipped **exactly** the rows
+     * the farmer had come to the drawer about, silently. It now uses the
+     * uncapped manual path, and it also re-queues terminally-failed attachment
+     * uploads — which the drawer has always counted into the same "N Failed"
+     * header (`SyncStatusDrawer.tsx:117`) while offering nothing that could
+     * clear them.
+     *
+     * `REJECTED_USER_REVIEW` rows are not touched here; see
+     * `MutationQueue.retryAllFailedByUser`. Their remedy is
+     * `OfflineConflictPage`, reached from `ConflictBadge` — which is why
+     * `rehydrateRejectedMutations()` below matters so much.
+     *
+     * @returns what was actually re-queued, so the caller can report the truth.
+     *          Re-queued uploads are picked up by `AttachmentUploadWorker`'s own
+     *          10 s cycle; `triggerNow()` only drives the mutation queue.
+     */
+    async retryAllFailed(): Promise<{ mutations: number; uploads: number }> {
+        const mutations = await mutationQueue.retryAllFailedByUser();
+        const uploads = await resetFailedUploadsToPending();
         await this.triggerNow();
+        return { mutations, uploads };
+    }
+
+    /**
+     * Re-announces durable rejections already sitting in Dexie to the sync
+     * actor, so `ConflictBadge` — and therefore the only route to
+     * `OfflineConflictPage` — survives an app restart.
+     *
+     * THE BUG THIS FIXES (Task T3, finding R3)
+     * ----------------------------------------
+     * `ConflictBadge` reads `snapshot.context.rejectedMutations`
+     * (`ConflictBadge.tsx:17-20`). That array starts `[]` (`syncMachine.ts:90`)
+     * and was appended to ONLY by a live `MUTATION_REJECTED` event emitted
+     * during the same session (`:241-245` below). Nothing read it back from
+     * Dexie. So on the SECOND launch after a rejection the header chip said
+     * "stuck, go check", the drawer showed a count above an empty list, and the
+     * badge that leads to the one screen that can fix it returned `null`.
+     * Every door was painted on.
+     *
+     * Safe to run more than once: `appendRejection` de-duplicates by
+     * `mutationId` (`syncMachine.ts:44-46`), and `MUTATION_REJECTED` is
+     * accepted from `idle`, `syncing` and `conflict` alike.
+     *
+     * Public so a test can await it — `start()` cannot, and a floating promise
+     * is not something to assert against.
+     */
+    async rehydrateRejectedMutations(): Promise<void> {
+        try {
+            const rejected = await mutationQueue.getRejectedUserReview();
+            for (const row of rejected) {
+                notifySync({
+                    type: 'MUTATION_REJECTED',
+                    mutationId: row.clientRequestId,
+                    reason: row.lastError ?? 'UNKNOWN',
+                });
+            }
+        } catch (error) {
+            console.warn('[BackgroundSyncWorker] Could not rehydrate rejected mutations', error);
+        }
     }
 
     private handleOnline = () => {
@@ -175,7 +242,13 @@ export class BackgroundSyncWorker {
         for (const mutation of pendingWithId) {
             const mutationType = toSyncMutationType(mutation.mutationType);
             if (!mutationType) {
-                await mutationQueue.markFailed(mutation.id as number, `Unsupported mutationType '${mutation.mutationType}'.`);
+                // A verdict, reached locally: this client's own catalog refuses
+                // the row. No amount of signal changes it -> charge the cap.
+                await mutationQueue.markFailed(
+                    mutation.id as number,
+                    `Unsupported mutationType '${mutation.mutationType}'.`,
+                    'REJECTION',
+                );
                 continue;
             }
 
@@ -214,10 +287,14 @@ export class BackgroundSyncWorker {
                 const result = byClientRequestId.get(mutation.clientRequestId);
 
                 if (!result) {
-                    // No-result is transient — server didn't respond for
-                    // this row. Mark FAILED so auto-retry tries again next
-                    // cycle. Do NOT churn the syncMachine for transients.
-                    await mutationQueue.markFailed(mutationId, 'No push result returned for mutation.');
+                    // The request COMPLETED and the server produced a batch
+                    // verdict — this row's absence from it is a decision the
+                    // server made, not a packet the tower dropped. Auto-retry
+                    // still tries again next cycle, but it is charged, so an
+                    // endlessly-omitting server escalates to the farmer after
+                    // five attempts instead of looping forever. No syncMachine
+                    // churn — that is reserved for permanent rejections.
+                    await mutationQueue.markFailed(mutationId, 'No push result returned for mutation.', 'REJECTION');
                     continue;
                 }
 
@@ -244,18 +321,30 @@ export class BackgroundSyncWorker {
                         reason: result.errorCode ?? errorMessage,
                     });
                 } else {
-                    await mutationQueue.markFailed(mutationId, errorMessage);
-                    // Transient — silently retries next cycle. No
-                    // syncMachine event so the badge doesn't churn.
+                    // The server read this row and refused it, just not
+                    // permanently enough to need the farmer yet. A verdict all
+                    // the same -> charged, so five refusals escalate rather
+                    // than churn forever. Retries next cycle; no syncMachine
+                    // event so the badge doesn't churn.
+                    await mutationQueue.markFailed(mutationId, errorMessage, 'REJECTION');
                 }
             }
         } catch (error) {
-            // Cycle-level failure (e.g., network error before any results
-            // returned). All in-flight mutations failed transiently —
-            // mark FAILED across the batch, no syncMachine churn.
+            // Batch-level failure: NO per-row verdict came back for anything in
+            // this batch. Whether that costs the rows a retry depends entirely
+            // on why — and until Task T3 it always did, which is how ~75 s of
+            // captive wifi, a 503, or a hibernated backend latched every record
+            // on the handset as permanently stuck (finding R1).
+            //
+            // `categorizePushFailure` splits "we never got an answer" (or "the
+            // server said not now about itself") from "the server read this and
+            // refused it". Only the latter is charged. The rows still go FAILED
+            // either way — nothing was sent, and the UI must not pretend
+            // otherwise.
             const message = error instanceof Error ? error.message : 'Unknown push error';
+            const kind = categorizePushFailure(error);
             for (const mutation of supportedMutations) {
-                await mutationQueue.markFailed(mutation.id as number, message);
+                await mutationQueue.markFailed(mutation.id as number, message, kind);
             }
         }
     }

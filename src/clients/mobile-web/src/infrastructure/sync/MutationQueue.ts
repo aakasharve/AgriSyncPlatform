@@ -4,10 +4,29 @@ import { systemClock } from '../../core/domain/services/Clock';
 import type { SyncMutationType } from '../api/AgriSyncClient';
 import { isSyncMutationType } from './SyncMutationCatalog';
 import { validatePayload } from './PayloadValidator';
+import type { MutationFailureKind } from './RejectionPolicy';
 import { readDeviceId, writeDeviceId } from '../storage/DeviceIdStore';
 
 const SYNC_SCOPE = 'shramsafal';
 const LAST_PULL_META_KEY = 'shramsafal_last_pull_payload';
+
+/**
+ * How many SERVER-ANSWERED refusals a row may collect before the worker stops
+ * retrying it by itself and the farmer is asked to act.
+ *
+ * This is the authoritative copy — the cap is applied here, in
+ * `markFailedAsPending`. `syncHonestyState.ts:183` carries a duplicate that
+ * turns the same number into the chip's `NEEDS_FIX` claim; that module belongs
+ * to Task T1 and is out of this task's edit scope, so the two are held equal by
+ * an explicit drift test rather than by an import
+ * (`__tests__/MutationRetryCap.transport.test.ts`). Collapse them into this one
+ * export when T1's module is next opened.
+ *
+ * A row past this cap is NOT abandoned: `retryAllFailedByUser()` and the
+ * per-row retry both ignore the cap, because the cap exists to stop the
+ * WORKER asking forever, not to refuse the farmer.
+ */
+export const MAX_AUTO_RETRY_COUNT = 5;
 
 function getOrCreateDeviceId(): string {
     const existing = readDeviceId();
@@ -126,13 +145,30 @@ export class MutationQueue {
         });
     }
 
-    async markFailed(id: number, error: string): Promise<void> {
+    /**
+     * Records a failed push attempt.
+     *
+     * `kind` decides whether the attempt is CHARGED to the auto-retry cap.
+     * Only a `REJECTION` — a verdict the server (or this client's own mutation
+     * catalog) reached about this row — is charged. A `TRANSPORT` failure never
+     * judged the row at all, so charging it would let 75 seconds of bad signal
+     * strand a perfectly good record permanently (Task T3, finding R1).
+     *
+     * The status still becomes `FAILED` either way: the row is genuinely not
+     * sent, and the farmer's records must never look more delivered than they
+     * are (`P4`). Only the counter changes.
+     *
+     * Defaults to `REJECTION` so a caller that says nothing gets the stricter,
+     * bounded behaviour — a silent omission can never produce an uncapped loop.
+     */
+    async markFailed(id: number, error: string, kind: MutationFailureKind = 'REJECTION'): Promise<void> {
         const db = getDatabase();
         const existing = await db.mutationQueue.get(id);
+        const chargedRetries = existing?.retryCount ?? 0;
         await db.mutationQueue.update(id, {
             status: 'FAILED',
             updatedAt: systemClock.nowISO(),
-            retryCount: (existing?.retryCount ?? 0) + 1,
+            retryCount: kind === 'REJECTION' ? chargedRetries + 1 : chargedRetries,
             lastError: error,
         });
     }
@@ -229,10 +265,48 @@ export class MutationQueue {
     /**
      * Auto-retry path. Filters strictly by status === 'FAILED' so durable
      * REJECTED_USER_REVIEW and REJECTED_DROPPED rows are NEVER auto-retried.
+     *
+     * Capped by design — see `MAX_AUTO_RETRY_COUNT`. The cap binds the WORKER
+     * only; `retryAllFailedByUser()` below is the farmer's uncapped path.
      */
-    async markFailedAsPending(maxRetryCount = 5): Promise<void> {
+    async markFailedAsPending(maxRetryCount = MAX_AUTO_RETRY_COUNT): Promise<void> {
+        await this.flipFailedToPending(maxRetryCount);
+    }
+
+    /**
+     * MANUAL retry path — "Retry All" in `SyncStatusDrawer`.
+     *
+     * Ignores `MAX_AUTO_RETRY_COUNT` deliberately. Before Task T3 this button
+     * called `markFailedAsPending()` with no argument, so it re-applied the cap
+     * and **silently skipped exactly the rows the farmer was complaining
+     * about** — the chip said "stuck, go check", the drawer offered one big
+     * obvious button, the button did nothing, and no message explained why,
+     * while the small per-row "Retry" beside it (which never checked the cap,
+     * `BackgroundSyncWorker.retryFailed`) would have worked. `P5`: make it real
+     * or make it honest. This makes it real, and the per-row path had already
+     * proved the uncapped transition is safe.
+     *
+     * There is no runaway risk: this only runs on a deliberate tap, and one tap
+     * buys exactly one attempt — a row that is refused again lands straight
+     * back over the cap.
+     *
+     * `REJECTED_USER_REVIEW` is deliberately NOT included. Those rows were
+     * refused on their merits and retrying the identical bytes is known to
+     * fail; their remedy is `OfflineConflictPage` (edit / retry / discard),
+     * reached from `ConflictBadge`. Retrying them here would be a second
+     * painted door, not a fix.
+     *
+     * @returns how many rows were moved back to PENDING, so the caller can say
+     *          something true about what just happened instead of guessing.
+     */
+    async retryAllFailedByUser(): Promise<number> {
+        return this.flipFailedToPending(Number.POSITIVE_INFINITY);
+    }
+
+    private async flipFailedToPending(maxRetryCount: number): Promise<number> {
         const db = getDatabase();
         const failed = await db.mutationQueue.where('status').equals('FAILED').toArray();
+        let flipped = 0;
 
         for (const item of failed) {
             if (!item.id) continue;
@@ -242,7 +316,10 @@ export class MutationQueue {
                 status: 'PENDING',
                 updatedAt: systemClock.nowISO(),
             });
+            flipped += 1;
         }
+
+        return flipped;
     }
 
     async resetInFlightMutations(): Promise<void> {

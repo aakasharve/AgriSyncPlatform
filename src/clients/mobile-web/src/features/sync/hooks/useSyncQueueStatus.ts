@@ -1,8 +1,13 @@
 import { useState, useEffect, useCallback } from 'react';
 import { getDatabase } from '../../../infrastructure/storage/DexieDatabase';
+import { OPEN_FAILURE_STATUSES, partitionOpenFailures, type StuckMutationView } from '../status/stuckMutations';
 
 export interface SyncQueueStatus {
-     // Mutation queue
+     /**
+      * Everything captured but not yet acknowledged, INCLUDING failures the
+      * worker is still retrying on its own. A row below the auto-retry cap is
+      * in progress, not stuck — see `failedCount`.
+      */
      pendingCount: number;
      /**
       * Rows that need the farmer, NOT just `status === 'FAILED'`.
@@ -12,8 +17,20 @@ export interface SyncQueueStatus {
       * that is deliberately never auto-retried (`MutationQueue.ts:229-231`) —
       * was invisible in the badge. The most permanent failure state in the
       * app was the one the farmer could not see.
+      *
+      * Labour Phase 2 / T3 (ruling R12): it then counted transient failures
+      * too, so a single sub-cap `FAILED` row put a RED badge beside the AMBER
+      * `फोनवर सेव्ह ✓` label. Both halves were true and neither agreed. This is
+      * now exactly `stuckMutations.length` — the set that makes the chip say
+      * `NEEDS_FIX`, and the set the drawer must list.
       */
      failedCount: number;
+     /**
+      * The rows behind `failedCount`. Same array, so the number the drawer
+      * prints and the list it renders cannot drift apart (finding R3: "1
+      * Failed" above an empty list).
+      */
+     stuckMutations: StuckMutationView[];
      syncedCount: number;
      // Upload queue
      pendingUploads: number;
@@ -29,6 +46,7 @@ export interface SyncQueueStatus {
 const EMPTY_STATUS: SyncQueueStatus = {
      pendingCount: 0,
      failedCount: 0,
+     stuckMutations: [],
      syncedCount: 0,
      pendingUploads: 0,
      failedUploads: 0,
@@ -53,9 +71,16 @@ export function useSyncQueueStatus(): SyncQueueStatus {
                // Mutation queue counts
                const pending = await db.mutationQueue.where('status').equals('PENDING').count();
                const sending = await db.mutationQueue.where('status').equals('SENDING').count();
-               const failed = await db.mutationQueue.where('status').equals('FAILED').count();
-               const rejectedUserReview = await db.mutationQueue.where('status').equals('REJECTED_USER_REVIEW').count();
                const applied = await db.mutationQueue.where('status').equals('APPLIED').count();
+
+               // ONE read of every row that could need the farmer, split by
+               // whether it actually does. The count below is this array's
+               // length, so the drawer can list precisely what it counts.
+               const openFailures = await db.mutationQueue
+                    .where('status')
+                    .anyOf(...OPEN_FAILURE_STATUSES)
+                    .toArray();
+               const { stuck, stillRetrying } = partitionOpenFailures(openFailures);
 
                // Upload queue counts
                const pendingUploads = await db.uploadQueue.where('status').anyOf('pending', 'uploading', 'retry_wait').count();
@@ -69,8 +94,9 @@ export function useSyncQueueStatus(): SyncQueueStatus {
                const lastSyncAt = cursor?.lastSyncAt ?? null;
 
                setStatus({
-                    pendingCount: pending + sending,
-                    failedCount: failed + rejectedUserReview,
+                    pendingCount: pending + sending + stillRetrying,
+                    failedCount: stuck.length,
+                    stuckMutations: stuck,
                     syncedCount: applied,
                     pendingUploads,
                     failedUploads,
