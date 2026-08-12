@@ -25,6 +25,8 @@ import { formatCurrencyINR } from '../../shared/utils/dayState';
 import { getCropTheme } from '../../shared/utils/colorTheme';
 import { FEATURE_FLAGS } from '../../app/featureFlags';
 import { MeterDisplay } from '../../features/logs/components/MeterDisplay';
+import { useLanguage } from '../../i18n/LanguageContext';
+import { SYNC_HONESTY_I18N_KEYS } from '../../features/sync/status/syncHonestyState';
 
 import { AppRouterContext } from './routeContext';
 import { ReflectPage, ComparePage } from './lazyComponents';
@@ -34,6 +36,50 @@ import {
     getSummaryLines,
     getVerificationPresentation
 } from './helpers';
+
+/**
+ * Labour Phase 2 -> Phase 1, Task T2 (review round 1, finding B1) — the DURABLE
+ * half of the skipped-save truth.
+ *
+ * The toast that reports a dropped record self-destructs; the "Saved to Ledger"
+ * panel this sits inside persists until the farmer navigates away. Without this
+ * line the reassuring half of the story outlives the honest half, on exactly the
+ * screen a farmer looks at to decide whether their day is recorded.
+ *
+ * THE THREE-VALUE RULE IS INSIDE THIS COMPONENT ON PURPOSE. `syncQueued` is
+ * `boolean | null`, and `null` means demo mode — no enqueue was attempted, so
+ * there is no evidence in either direction and we make NO claim. A caller
+ * writing `{item.syncQueued && ...}` or `{!item.syncQueued && ...}` would turn
+ * "I don't know" into "it failed", which is the same class of error pointed the
+ * other way. Keeping the `!== false` guard here means there is one place to get
+ * it right, and one place to test it.
+ *
+ * A COMPONENT rather than inline JSX because `mainView` is a table of render
+ * FUNCTIONS, not components — `routeContext.ts:1-5` keeps them free of hook
+ * calls so the cascade can call them conditionally. `useLanguage` is a hook, so
+ * it needs a real component in the tree.
+ */
+export const NotQueuedForServerBadge: React.FC<{ syncQueued: boolean | null | undefined }> = ({ syncQueued }) => {
+    const { t } = useLanguage();
+
+    if (syncQueued !== false) return null;
+
+    return (
+        <p className="mt-2 text-[11px] font-bold text-amber-700">
+            {/* AMBER, not red, and it never touches the "Saved to Ledger"
+                headline above it — that headline is TRUE for every log that
+                reaches this screen (`confirmAndSave` -> `repo.batchSave` ran
+                before the enqueue was even attempted). What is false is only the
+                IMPLIED "and it is on its way", so the fix is to state the fact,
+                not to weaken a true statement into a vaguer one.
+
+                The trailing clause is English and needs founder-supplied
+                Marathi (report item C1). It is the same clause T2 already
+                shipped in the toast for this event; it is not a new one. */}
+            {t(SYNC_HONESTY_I18N_KEYS.ON_PHONE)} — cannot be sent
+        </p>
+    );
+};
 
 /**
  * spec: 2026-07-13-labour-attendance-approval-design (Task 3.5)
@@ -631,6 +677,7 @@ export const renderLogView = (ctx: AppRouterContext): React.ReactNode => {
                                                         <p className="truncate text-base font-black text-stone-900">
                                                             {item.cropName} • {item.plotName}
                                                         </p>
+                                                        <NotQueuedForServerBadge syncQueued={item.syncQueued} />
                                                     </div>
                                                 </div>
                                                 {/* Bucket Breakdown */}

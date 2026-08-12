@@ -101,7 +101,7 @@ const ON_PHONE_EN = 'Saved on phone';
 const NEEDS_FIX_MR = 'अडकलं — तपासा';
 const NEEDS_FIX_EN = 'Stuck — check';
 
-type ToastCall = { message: string; type: 'success' | 'error' } | null;
+type ToastCall = { message: string; type: 'success' | 'error' | 'partial' } | null;
 type ToastSetter = (toast: ToastCall) => void;
 type StatusSetter = (status: AppStatus) => void;
 // Structurally `React.Dispatch<React.SetStateAction<LastSavedLogSummaryItem[]>>`,
@@ -187,7 +187,7 @@ describe('useLogCommands — a save may not claim what was never queued (T2)', (
 
         expect(lastToast()).toEqual({
             message: `${ON_PHONE_MR} — 3 of 3 cannot be sent.`,
-            type: 'error',
+            type: 'partial',
         });
         // The specific lie: the old wording, on a save that queued nothing.
         expect(everyToastMessage()).not.toContain('Logged');
@@ -237,11 +237,32 @@ describe('useLogCommands — a save may not claim what was never queued (T2)', (
 
         expect(lastToast()).toEqual({
             message: `${ON_PHONE_MR} — 2 of 3 cannot be sent.`,
-            type: 'error',
+            type: 'partial',
         });
         // Rounding two dropped records up into the saved figure is the exact
         // `P4` violation this task removes.
         expect(lastToast()?.message).not.toContain('3 of 3');
+    });
+
+    it('a partly-skipped save is never dressed as a failure', async () => {
+        // The damage this prevents: a red panel with an X over a record that IS
+        // in the local ledger. A red toast is read before its words are, and a
+        // farmer who reads "gone" records the day again — leaving two copies.
+        // `'error'` is reserved for something that actually failed; nothing
+        // failed here, some of it simply has nowhere to be sent.
+        //
+        // It also buys the message its reading time: `ActionToast` gives
+        // `'partial'` 7000ms where `'error'` and `'success'` get 3000.
+        createFromManual.mockResolvedValue([makeLog('1'), makeLog('2')]);
+        enqueueLogsForSync.mockResolvedValue({ queuedLogIds: ['1'], skippedLogIds: ['2'] });
+
+        const { result } = renderHook(() => useLogCommands(props()));
+        await act(async () => {
+            await result.current.handleManualSubmit({ cropActivities: [] });
+        });
+
+        expect(lastToast()?.type).toBe('partial');
+        expect(lastToast()?.type).not.toBe('error');
     });
 
     it('everything queued: the happy path is unchanged', async () => {
@@ -267,7 +288,7 @@ describe('useLogCommands — a save may not claim what was never queued (T2)', (
 
         expect(lastToast()).toEqual({
             message: `${ON_PHONE_EN} — 1 of 1 cannot be sent.`,
-            type: 'error',
+            type: 'partial',
         });
     });
 
@@ -352,7 +373,7 @@ describe('useLogCommands — a save may not claim what was never queued (T2)', (
 
         expect(lastToast()).toEqual({
             message: `${ON_PHONE_MR} — 3 of 3 cannot be sent.`,
-            type: 'error',
+            type: 'partial',
         });
         expect(everyToastMessage()).not.toContain('Saved to');
     });
@@ -392,7 +413,7 @@ describe('useLogCommands — a save may not claim what was never queued (T2)', (
 
         expect(lastToast()).toEqual({
             message: `${ON_PHONE_MR} — 1 of 1 cannot be sent.`,
-            type: 'error',
+            type: 'partial',
         });
     });
 
@@ -406,7 +427,7 @@ describe('useLogCommands — a save may not claim what was never queued (T2)', (
 
         expect(lastToast()).toEqual({
             message: `${ON_PHONE_MR} — 1 of 1 cannot be sent.`,
-            type: 'error',
+            type: 'partial',
         });
     });
 });
@@ -474,7 +495,7 @@ describe('useLogCommands — the EDIT path may not claim a save it cannot eviden
         // It is also what an edit with no server-side path at all returns.
         expect(setToast).toHaveBeenCalledWith({
             message: 'Shown on screen only — this edit is not saved anywhere.',
-            type: 'error',
+            type: 'partial',
         });
         expect(setToast).not.toHaveBeenCalledWith(
             expect.objectContaining({ type: 'success' }),
@@ -546,7 +567,7 @@ describe('useLogCommands — the EDIT path may not claim a save it cannot eviden
 
         expect(setToast).toHaveBeenCalledWith({
             message: 'Shown on screen only — this edit is not saved anywhere.',
-            type: 'error',
+            type: 'partial',
         });
     });
 });

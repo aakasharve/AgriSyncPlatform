@@ -66,7 +66,7 @@ interface UseLogCommandsProps {
     /* eslint-enable @typescript-eslint/no-explicit-any */
 
     setPlannedTasks: React.Dispatch<React.SetStateAction<PlannedTask[]>>;
-    setToast: (toast: { message: string; type: 'success' | 'error' } | null) => void;
+    setToast: (toast: { message: string; type: 'success' | 'error' | 'partial' } | null) => void;
     setError: (msg: string | null) => void;
     setDraftLog: (log: AgriLogResponse | null) => void;
     // Pre-existing `any` (predates Task 3.5) — see note on handleManualSubmit above.
@@ -96,7 +96,7 @@ interface UseLogCommandsProps {
  */
 type LogSyncEnqueueOutcome = Awaited<ReturnType<typeof enqueueLogsForSync>>;
 
-type SaveToast = { message: string; type: 'success' | 'error' };
+type SaveToast = { message: string; type: 'success' | 'error' | 'partial' };
 
 /**
  * Labour Phase 2 / T2 — the honest toast for a save whose records did NOT all
@@ -170,12 +170,15 @@ function skippedSyncToast(
 
     return {
         message: `${translate(SYNC_HONESTY_I18N_KEYS.ON_PHONE, language)} — ${skipped} of ${handled} cannot be sent.`,
-        // Red, deliberately: records that will never reach the server are a real
-        // incompleteness the farmer should notice. The "your record is gone"
-        // misreading is answered by the first three words, not by softening the
-        // signal. `ActionToast` offers only success/error — a third, calmer
-        // variant is the right fix and it is a `.tsx` change (L5b batch).
-        type: 'error',
+        // `'partial'`, not `'error'`. Round 0 shipped red because a record that
+        // will never reach the server is a real incompleteness, and argued that
+        // the leading `फोनवर सेव्ह ✓` answered the "it is gone" misreading. It
+        // does not answer it well enough: a red panel with an X is read before
+        // any words are, and a farmer who reads "gone" re-records — leaving two
+        // copies of one day's work in the ledger. The message is unchanged; the
+        // alarm around it is now proportionate to what actually happened, and it
+        // stays up for 7s instead of 3 because it says more than "Logged." did.
+        type: 'partial',
     };
 }
 
@@ -507,8 +510,18 @@ export const useLogCommands = ({
                         type: 'success'
                     }
                     : {
+                        // `'partial'`, not `'error'` — for the same reason as the
+                        // skipped-save toast, and one more: NOTHING FAILED here.
+                        // Red says "it broke, try again", and there is nothing to
+                        // try again; the edit path has no persistence yet (Phase
+                        // 4 owns that). A truthful missing feature must not be
+                        // dressed as a fault (`P5`). It also gets the longer 7s
+                        // window, because this sentence is the ONLY confirmation
+                        // the edit path has — a judgement the controller reviewed
+                        // and accepted rather than adding a confirmation panel
+                        // over a path that writes to no ledger.
                         message: 'Shown on screen only — this edit is not saved anywhere.',
-                        type: 'error'
+                        type: 'partial'
                     });
                 savedLogIds = [(result.log as DailyLog).id];
                 ledgerWritten = false;
