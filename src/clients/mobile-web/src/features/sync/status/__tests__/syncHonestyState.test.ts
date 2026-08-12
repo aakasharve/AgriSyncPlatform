@@ -4,133 +4,268 @@
  *
  * Labour Phase 2 -> Phase 1 (honesty backstop), Task T1.
  *
- * Locks the three claims the sync chip is allowed to make, and — more
- * importantly — locks the two claims it must NOT make:
+ * Locks the claims the sync chip is allowed to make and, more importantly, the
+ * ones it must refuse:
  *
  *   1. `ON_SERVER` must be unreachable without a real per-mutation server
- *      acknowledgement. An enqueued-but-unacked row is `ON_PHONE`, full stop
- *      (controller ruling `R5`, doctrine `P4`/`P5`).
- *   2. A row past the auto-retry cap must not read as "we are still working
- *      on it" — the app gave up on it and the farmer has to be told.
+ *      acknowledgement — including the case where the queue is simply EMPTY,
+ *      which is what a log dropped before it ever reached a queue looks like
+ *      from here (review round 1, F1).
+ *   2. A row past the auto-retry cap must not read as "still working on it".
+ *   3. Whatever the label says, the badge beside it must agree (F2).
+ *   4. A mutation status that would change the claim must be in the Dexie read
+ *      filter, or the claim silently strengthens by omission (F4).
  *
- * No Dexie here on purpose: the derivation takes plain row data, so every
- * branch is provable without a database.
+ * No Dexie here on purpose: the derivation takes plain data, so every branch is
+ * provable without a database.
  */
 
 import { describe, it, expect } from 'vitest';
 
 import {
+    deriveSyncBadgeCounts,
     deriveSyncHonestyState,
+    EMPTY_SYNC_EVIDENCE,
     MAX_AUTO_RETRY_COUNT,
     SYNC_HONESTY_I18N_KEYS,
     SYNC_HONESTY_OPEN_STATUSES,
+    type SyncEvidenceSnapshot,
     type SyncHonestyState,
     type SyncQueueRowSnapshot,
 } from '../syncHonestyState';
+import type { MutationQueueStatus } from '../../../../infrastructure/storage/DexieDatabase';
 import { t } from '../../../../i18n/translations';
 
-function row(
-    status: SyncQueueRowSnapshot['status'],
-    retryCount = 0,
-): SyncQueueRowSnapshot {
+function row(status: MutationQueueStatus, retryCount = 0): SyncQueueRowSnapshot {
     return { status, retryCount };
 }
 
-describe('deriveSyncHonestyState — one state per evidence level', () => {
-    it('ON_PHONE: a queued row that the server has not answered yet', () => {
-        expect(deriveSyncHonestyState([row('PENDING')])).toBe('ON_PHONE');
+/** A snapshot with everything at zero unless the test says otherwise. */
+function snap(over: Partial<SyncEvidenceSnapshot> = {}): SyncEvidenceSnapshot {
+    return { ...EMPTY_SYNC_EVIDENCE, ...over };
+}
+
+/** Nothing outstanding, but the server HAS acknowledged this device before. */
+function settled(over: Partial<SyncEvidenceSnapshot> = {}): SyncEvidenceSnapshot {
+    return snap({ acknowledgedCount: 3, ...over });
+}
+
+describe('deriveSyncHonestyState — one claim per evidence level', () => {
+    it('ON_PHONE: a queued row the server has not answered yet', () => {
+        expect(deriveSyncHonestyState(snap({ rows: [row('PENDING')] }))).toBe('ON_PHONE');
     });
 
-    it('ON_SERVER: nothing outstanding', () => {
-        expect(deriveSyncHonestyState([])).toBe('ON_SERVER');
+    it('ON_SERVER: nothing outstanding AND an acknowledgement on record', () => {
+        expect(deriveSyncHonestyState(settled())).toBe('ON_SERVER');
     });
 
     it('NEEDS_FIX: a durably rejected row', () => {
-        expect(deriveSyncHonestyState([row('REJECTED_USER_REVIEW')])).toBe('NEEDS_FIX');
+        expect(deriveSyncHonestyState(settled({ rows: [row('REJECTED_USER_REVIEW')] }))).toBe('NEEDS_FIX');
+    });
+
+    it('no claim at all: nothing outstanding and nothing ever acknowledged', () => {
+        expect(deriveSyncHonestyState(EMPTY_SYNC_EVIDENCE)).toBeNull();
     });
 });
 
-describe('deriveSyncHonestyState — the claims it must refuse to make', () => {
-    // The whole point of the task. `db.outbox` used to drive this label and
-    // nothing ever drained it, so the chip said "Sending..." forever. Now the
-    // absence of an acknowledgement must read as "on the phone", never as sent.
+describe('ON_SERVER requires positive evidence, not merely an absence of bad news', () => {
+    // THE REGRESSION THIS BLOCK EXISTS FOR (review round 1, F1).
+    // `resolveSyncTarget` returns null for a plot whose crop cycle has not
+    // synced down yet, so the log lands in `skippedLogIds` and NO mutation row
+    // is ever written. The queue therefore reads empty — identical input to a
+    // fully-acknowledged queue. The first version of this module rendered
+    // ON_SERVER there: a receipt for a record no code path will ever send.
+    it('an empty queue on a device that never got an acknowledgement makes NO claim', () => {
+        const neverSynced = snap({ rows: [], acknowledgedCount: 0 });
+
+        expect(deriveSyncHonestyState(neverSynced)).not.toBe('ON_SERVER');
+        expect(deriveSyncHonestyState(neverSynced)).toBeNull();
+    });
+
+    it('"nothing outstanding" and "everything acknowledged" are no longer the same answer', () => {
+        const nothingKnown = snap({ acknowledgedCount: 0 });
+        const everythingAcked = snap({ acknowledgedCount: 1 });
+
+        expect(deriveSyncHonestyState(nothingKnown)).toBeNull();
+        expect(deriveSyncHonestyState(everythingAcked)).toBe('ON_SERVER');
+        expect(deriveSyncHonestyState(nothingKnown)).not.toBe(deriveSyncHonestyState(everythingAcked));
+    });
+
     it('an enqueued-but-unacknowledged row is ON_PHONE, never ON_SERVER', () => {
-        const queue: SyncQueueRowSnapshot[] = [
-            row('PENDING'),
-            row('SENDING'),
-            row('FAILED', 1),
-        ];
+        const queue = settled({ rows: [row('PENDING'), row('SENDING'), row('FAILED', 1)] });
 
         expect(deriveSyncHonestyState(queue)).toBe('ON_PHONE');
         expect(deriveSyncHonestyState(queue)).not.toBe('ON_SERVER');
     });
 
     it('an in-flight (SENDING) row is still only ON_PHONE — the wire is not evidence', () => {
-        expect(deriveSyncHonestyState([row('SENDING')])).toBe('ON_PHONE');
-    });
-
-    it(`a FAILED row at the retry cap (${MAX_AUTO_RETRY_COUNT}) is NEEDS_FIX, not ON_PHONE`, () => {
-        expect(deriveSyncHonestyState([row('FAILED', MAX_AUTO_RETRY_COUNT)])).toBe('NEEDS_FIX');
-        expect(deriveSyncHonestyState([row('FAILED', MAX_AUTO_RETRY_COUNT + 3)])).toBe('NEEDS_FIX');
-    });
-
-    it('a FAILED row below the cap is ON_PHONE — the worker will retry it by itself', () => {
-        expect(deriveSyncHonestyState([row('FAILED', MAX_AUTO_RETRY_COUNT - 1)])).toBe('ON_PHONE');
+        expect(deriveSyncHonestyState(settled({ rows: [row('SENDING')] }))).toBe('ON_PHONE');
     });
 
     it('one applied row does not launder an unacknowledged sibling into ON_SERVER', () => {
         // The composite-log case: one save enqueues create_daily_log plus one
-        // add_log_task per planned task. Weakest state wins, or the chip
-        // claims a record is on the server while part of it is not.
-        expect(deriveSyncHonestyState([row('APPLIED'), row('PENDING')])).toBe('ON_PHONE');
-    });
-
-    it('NEEDS_FIX outranks every other state regardless of row order', () => {
-        expect(deriveSyncHonestyState([row('REJECTED_USER_REVIEW'), row('PENDING')])).toBe('NEEDS_FIX');
-        expect(deriveSyncHonestyState([row('PENDING'), row('REJECTED_USER_REVIEW')])).toBe('NEEDS_FIX');
-        expect(deriveSyncHonestyState([row('APPLIED'), row('FAILED', MAX_AUTO_RETRY_COUNT)])).toBe('NEEDS_FIX');
+        // add_log_task per planned task. Weakest claim wins, or the chip says a
+        // record is on the server while part of it is not.
+        expect(deriveSyncHonestyState(settled({ rows: [row('APPLIED'), row('PENDING')] }))).toBe('ON_PHONE');
     });
 });
 
-describe('deriveSyncHonestyState — terminal rows', () => {
+describe('the retry cap', () => {
+    it(`a FAILED row at the cap (${MAX_AUTO_RETRY_COUNT}) is NEEDS_FIX, not ON_PHONE`, () => {
+        expect(deriveSyncHonestyState(settled({ rows: [row('FAILED', MAX_AUTO_RETRY_COUNT)] }))).toBe('NEEDS_FIX');
+        expect(deriveSyncHonestyState(settled({ rows: [row('FAILED', MAX_AUTO_RETRY_COUNT + 3)] }))).toBe('NEEDS_FIX');
+    });
+
+    it('a FAILED row below the cap is ON_PHONE — the worker will retry it unaided', () => {
+        expect(deriveSyncHonestyState(settled({ rows: [row('FAILED', MAX_AUTO_RETRY_COUNT - 1)] }))).toBe('ON_PHONE');
+    });
+
+    it('NEEDS_FIX outranks every other claim regardless of row order', () => {
+        expect(deriveSyncHonestyState(settled({ rows: [row('REJECTED_USER_REVIEW'), row('PENDING')] }))).toBe('NEEDS_FIX');
+        expect(deriveSyncHonestyState(settled({ rows: [row('PENDING'), row('REJECTED_USER_REVIEW')] }))).toBe('NEEDS_FIX');
+        expect(deriveSyncHonestyState(settled({ rows: [row('APPLIED'), row('FAILED', MAX_AUTO_RETRY_COUNT)] }))).toBe('NEEDS_FIX');
+    });
+});
+
+describe('attachment uploads and AI jobs count toward the claim', () => {
+    // Review round 1, F2: the badge already counts these
+    // (`AppHeader.tsx:181-182`). A label that ignored them could render
+    // पाठवलं ✓ beside a red "2" from two permanently-failed photo uploads.
+    it('a permanently failed upload is NEEDS_FIX even with a fully acknowledged queue', () => {
+        expect(deriveSyncHonestyState(settled({ failedUploads: 2 }))).toBe('NEEDS_FIX');
+    });
+
+    it('an upload still in flight keeps the claim at ON_PHONE', () => {
+        expect(deriveSyncHonestyState(settled({ pendingUploads: 1 }))).toBe('ON_PHONE');
+    });
+
+    it('a queued AI job keeps the claim at ON_PHONE', () => {
+        expect(deriveSyncHonestyState(settled({ pendingAiJobs: 1 }))).toBe('ON_PHONE');
+    });
+
+    it('a failed upload outranks a pending one', () => {
+        expect(deriveSyncHonestyState(settled({ pendingUploads: 4, failedUploads: 1 }))).toBe('NEEDS_FIX');
+    });
+});
+
+describe('terminal rows', () => {
     it('a fully acknowledged queue is ON_SERVER', () => {
-        expect(deriveSyncHonestyState([row('APPLIED'), row('APPLIED')])).toBe('ON_SERVER');
+        expect(deriveSyncHonestyState(snap({ rows: [], acknowledgedCount: 2 }))).toBe('ON_SERVER');
     });
 
     it('a row the farmer explicitly discarded does not latch the chip on NEEDS_FIX', () => {
         // REJECTED_DROPPED is an acknowledged loss (the farmer chose it in the
         // conflict screen), not a silent one. Treating it as NEEDS_FIX would
         // re-create the permanently-stuck chip this task exists to remove.
-        expect(deriveSyncHonestyState([row('REJECTED_DROPPED')])).toBe('ON_SERVER');
+        // Upheld twice on review — ruling R10. Do not invert.
+        expect(deriveSyncHonestyState(settled({ rows: [row('REJECTED_DROPPED')] }))).toBe('ON_SERVER');
     });
 });
 
-describe('the label/badge halves cannot disagree', () => {
-    // The old chip could render "Sending... [0]": its label came from
-    // db.outbox and its badge from db.mutationQueue. Structurally, an
-    // "in flight" label beside a zero count is now impossible because there
-    // is no in-flight state at all, and ON_PHONE requires >= 1 open row.
-    it('ON_PHONE is unreachable from an empty queue', () => {
-        expect(deriveSyncHonestyState([])).not.toBe('ON_PHONE');
-    });
+describe('the read filter cannot silently strengthen the claim', () => {
+    // Independent oracle: every member of the union, written out by hand rather
+    // than read back off the module under test. If a seventh status is added,
+    // the `satisfies` below stops compiling here AND the Record in the module
+    // stops compiling there — both have to be updated deliberately.
+    const ALL_MUTATION_STATUSES = [
+        'PENDING',
+        'SENDING',
+        'APPLIED',
+        'FAILED',
+        'REJECTED_USER_REVIEW',
+        'REJECTED_DROPPED',
+    ] as const satisfies readonly MutationQueueStatus[];
 
-    it('every state ON_PHONE can be derived from implies at least one open row', () => {
-        const openOnly: SyncQueueRowSnapshot[][] = [
-            [row('PENDING')],
-            [row('SENDING')],
-            [row('FAILED', 0)],
-        ];
+    type UncoveredStatus = Exclude<MutationQueueStatus, (typeof ALL_MUTATION_STATUSES)[number]>;
+    const _everyStatusIsCovered: UncoveredStatus extends never ? true : never = true;
+    void _everyStatusIsCovered;
 
-        for (const queue of openOnly) {
-            expect(deriveSyncHonestyState(queue)).toBe('ON_PHONE');
-            expect(queue.length).toBeGreaterThan(0);
+    it.each(ALL_MUTATION_STATUSES)(
+        'if a lone %s row changes the claim, that status must be in the read filter',
+        (status) => {
+            // Baseline is ON_SERVER, so any deviation means this status matters.
+            const claim = deriveSyncHonestyState(settled({ rows: [row(status, MAX_AUTO_RETRY_COUNT)] }));
+
+            if (claim !== 'ON_SERVER') {
+                expect(SYNC_HONESTY_OPEN_STATUSES).toContain(status);
+            }
+        },
+    );
+
+    it('every status in the read filter actually matters to the claim', () => {
+        // The converse — the filter must not fetch rows it will ignore.
+        for (const status of SYNC_HONESTY_OPEN_STATUSES) {
+            const claim = deriveSyncHonestyState(settled({ rows: [row(status, MAX_AUTO_RETRY_COUNT)] }));
+            expect(claim).not.toBe('ON_SERVER');
         }
     });
 
-    it('the statuses read out of Dexie are exactly the ones that can change the claim', () => {
-        expect([...SYNC_HONESTY_OPEN_STATUSES].sort()).toEqual(
-            ['FAILED', 'PENDING', 'REJECTED_USER_REVIEW', 'SENDING'],
-        );
+    it('excludes the terminal statuses, which are never pruned and bear on nothing', () => {
+        expect(SYNC_HONESTY_OPEN_STATUSES).not.toContain('APPLIED');
+        expect(SYNC_HONESTY_OPEN_STATUSES).not.toContain('REJECTED_DROPPED');
+    });
+});
+
+describe('the label and the badge beside it cannot contradict each other', () => {
+    // Review round 1, F2 + F5: the previous version of this block was named for
+    // the badge but touched neither count. These assert the real invariant
+    // against `deriveSyncBadgeCounts`, which mirrors `AppHeader.tsx:181-182`.
+    const cases: Array<{ name: string; snapshot: SyncEvidenceSnapshot }> = [
+        { name: 'empty + never acknowledged', snapshot: EMPTY_SYNC_EVIDENCE },
+        { name: 'empty + acknowledged', snapshot: settled() },
+        { name: 'one pending mutation', snapshot: settled({ rows: [row('PENDING')] }) },
+        { name: 'one sending mutation', snapshot: settled({ rows: [row('SENDING')] }) },
+        { name: 'sub-cap failure', snapshot: settled({ rows: [row('FAILED', 1)] }) },
+        { name: 'capped failure', snapshot: settled({ rows: [row('FAILED', MAX_AUTO_RETRY_COUNT)] }) },
+        { name: 'durable rejection', snapshot: settled({ rows: [row('REJECTED_USER_REVIEW', 1)] }) },
+        { name: 'discarded row', snapshot: settled({ rows: [row('REJECTED_DROPPED')] }) },
+        { name: 'pending upload', snapshot: settled({ pendingUploads: 2 }) },
+        { name: 'failed upload', snapshot: settled({ failedUploads: 2 }) },
+        { name: 'pending AI job', snapshot: settled({ pendingAiJobs: 1 }) },
+        { name: 'mixed', snapshot: settled({ rows: [row('PENDING'), row('FAILED', 1)], pendingUploads: 1, pendingAiJobs: 2 }) },
+    ];
+
+    it.each(cases)('$name — badge agrees with the claim', ({ snapshot }) => {
+        const claim = deriveSyncHonestyState(snapshot);
+        const badge = deriveSyncBadgeCounts(snapshot);
+
+        if (claim === 'ON_SERVER' || claim === null) {
+            // A settled or unknown state must show NO badge. This is the
+            // "पाठवलं ✓ beside a red 2" defect, asserted away.
+            expect(badge.pending).toBe(0);
+            expect(badge.failed).toBe(0);
+        }
+
+        if (claim === 'NEEDS_FIX') {
+            // "Stuck — check" must be accompanied by a red count.
+            expect(badge.failed).toBeGreaterThan(0);
+        }
+
+        if (claim === 'ON_PHONE') {
+            // "Saved on phone" must be accompanied by SOME count — there is
+            // always at least one thing outstanding for this claim to hold.
+            expect(badge.pending + badge.failed).toBeGreaterThan(0);
+        }
+    });
+
+    it('there is no in-flight claim, so "Sending... [0]" has no expressible form', () => {
+        const states: Array<string | null> = cases.map(c => deriveSyncHonestyState(c.snapshot));
+
+        expect(states).not.toContain('PENDING');
+        expect(states).not.toContain('SENDING');
+    });
+
+    it('badge counts mirror AppHeader arithmetic exactly', () => {
+        const snapshot = settled({
+            rows: [row('PENDING'), row('SENDING'), row('FAILED', 1), row('REJECTED_USER_REVIEW', 1)],
+            pendingUploads: 3,
+            failedUploads: 2,
+            pendingAiJobs: 4,
+        });
+
+        // pendingCount(PENDING+SENDING)=2 + pendingUploads 3 + pendingAiJobs 4
+        // failedCount(FAILED+REJECTED_USER_REVIEW)=2 + failedUploads 2
+        expect(deriveSyncBadgeCounts(snapshot)).toEqual({ pending: 9, failed: 4 });
     });
 });
 
@@ -144,8 +279,20 @@ describe('every state in the model has a label in both languages', () => {
         expect(t(key, 'mr')).not.toBe(key);
     });
 
+    it('the three states map to three DISTINCT keys and three distinct labels', () => {
+        // Guards the pairing itself: two states sharing a key would make one of
+        // them unsayable, and the chip would confidently show the wrong claim.
+        const keys = states.map(s => SYNC_HONESTY_I18N_KEYS[s]);
+        expect(new Set(keys).size).toBe(states.length);
+
+        for (const lang of ['en', 'mr'] as const) {
+            const labels = keys.map(k => t(k, lang));
+            expect(new Set(labels).size).toBe(states.length);
+        }
+    });
+
     // Plan section G wording, field-testable. If a founder revises the Marathi
-    // this test is the place it gets revised — deliberately, not by accident.
+    // this test is where it gets revised — deliberately, not by accident.
     it('renders the approved Marathi', () => {
         expect(t(SYNC_HONESTY_I18N_KEYS.ON_PHONE, 'mr')).toBe('फोनवर सेव्ह ✓');
         expect(t(SYNC_HONESTY_I18N_KEYS.ON_SERVER, 'mr')).toBe('पाठवलं ✓');
@@ -159,9 +306,9 @@ describe('every state in the model has a label in both languages', () => {
     });
 
     it('no state claims the server without evidence in its own wording', () => {
-        // ON_PHONE must not read as "sent". Cheap guard against a future
-        // copy edit quietly promoting the weakest claim.
         expect(t(SYNC_HONESTY_I18N_KEYS.ON_PHONE, 'mr')).not.toContain('पाठवलं');
         expect(t(SYNC_HONESTY_I18N_KEYS.ON_PHONE, 'en').toLowerCase()).not.toContain('sent');
+        expect(t(SYNC_HONESTY_I18N_KEYS.NEEDS_FIX, 'mr')).not.toContain('पाठवलं');
+        expect(t(SYNC_HONESTY_I18N_KEYS.NEEDS_FIX, 'en').toLowerCase()).not.toContain('sent');
     });
 });

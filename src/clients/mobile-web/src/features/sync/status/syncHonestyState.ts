@@ -7,33 +7,50 @@
  * WHY THIS MODULE EXISTS
  * ----------------------
  * The app-header sync chip used to derive its label from `db.outbox` — a Dexie
- * table that NOTHING drains. `DexieLogsRepository` writes rows at `PENDING`
- * and the only three functions that could move a row off `PENDING`
- * (`getPendingOutboxEvents` / `markOutboxEventSent` / `markOutboxEventFailed`)
- * have zero callers. So `pendingCount > 0` was true forever and the chip
- * latched on an amber "Sending..." for every farmer, always — whether their
- * records had reached the server an hour ago or were still stranded on the
- * handset. It was not a status; it was a decoration shaped like one.
+ * table that NOTHING drains. Rows go in `PENDING` and the only three functions
+ * that could move them have zero callers. So the chip latched on an amber
+ * "Sending..." forever, for every farmer, whether their records had reached the
+ * server an hour ago or were still stranded on the handset.
  *
- * Doctrine `P4` (no fabricated numbers reach a farmer) and `P5` (a truthful
- * missing feature beats a fake working one): a status must be backed by
- * evidence, or it must not be claimed.
+ * `db.mutationQueue` is the only store carrying a real per-mutation server
+ * acknowledgement — `BackgroundSyncWorker` marks a row `APPLIED` only when that
+ * row's push result is `applied` or `duplicate` (`BackgroundSyncWorker.ts:224-226`).
+ * A 200 from `/sync/push` is NOT evidence: the batch response can reject this
+ * row or omit it entirely, and the worker treats both as failure (`R5`).
  *
- * `db.mutationQueue` is the only store in this app that carries a real
- * per-mutation server acknowledgement — `BackgroundSyncWorker` marks a row
- * `APPLIED` only when that row's push result carries `status: 'applied'` or
- * `'duplicate'` (`BackgroundSyncWorker.ts:224-226`). A 200 from `/sync/push`
- * is NOT evidence: the batch response can carry `rejected` for this row, or
- * omit it entirely, and the worker correctly treats both as failure. That is
- * why the derivation below reads the queue's rows and never a transport
- * outcome (controller ruling `R5`).
+ * THE RULE THAT SHAPES EVERYTHING BELOW
+ * -------------------------------------
+ * **Every claim needs positive evidence. Absence of bad news is not good news.**
  *
- * This module is deliberately PURE and Dexie-free — plain row data in, one
- * state out — so every branch is unit-testable without a database.
+ * Review round 1 found the first version violated this in the most damaging way
+ * possible: `ON_SERVER` was produced by the *absence* of open rows, so "I know
+ * nothing" and "everything is acknowledged" were literally the same input. A
+ * log that `resolveSyncTarget` refused to queue (an ordinary case — a plot whose
+ * crop cycle has not synced down yet, `logSyncMutationService.ts:291-309`)
+ * writes NO mutation row at all, so the queue reads empty and the farmer was
+ * shown `पाठवलं ✓` — a receipt for a record no code path will ever send. That
+ * was strictly worse than the bug this task set out to fix.
  *
- * NOT IN SCOPE HERE: `db.outbox` keeps its writers, its table and its Dexie
- * version. This task only cuts it out of the status READ path (`R1`); once
- * nothing reads it, it is inert. Retiring the table is a later phase.
+ * So `ON_SERVER` now requires `acknowledgedCount > 0`, and when there is nothing
+ * outstanding AND no acknowledgement has ever been seen, this module returns
+ * `null` — **no claim at all**. That is not a fourth record state; it is the
+ * absence of a claim, which is what `P5` demands when we have nothing to say.
+ *
+ * WHAT THIS MODULE STILL CANNOT SEE (state it, do not paper over it — `W6`)
+ * ------------------------------------------------------------------------
+ * A never-enqueued log exists in NO queue. On a device that has previously had
+ * a mutation acknowledged, `acknowledgedCount > 0` holds, so a later skipped log
+ * still leaves the chip on `ON_SERVER`. The chip is global and structurally
+ * blind to a record that reached no queue. The only honest surface for that is
+ * the save path itself, at the moment the log is dropped — which is Task T2's
+ * `skippedLogIds` toast, and is exactly why T2 exists. Do not try to fix it
+ * here; a global chip cannot count something that was never written.
+ *
+ * This module is PURE and Dexie-free — plain data in, one claim out — so every
+ * branch is unit-testable without a database.
+ *
+ * NOT IN SCOPE: `db.outbox` keeps its writers, its table and its Dexie version.
+ * This task only cuts it out of the status READ path (`R1`).
  */
 
 import type { MutationQueueStatus } from '../../../infrastructure/storage/DexieDatabase';
@@ -42,27 +59,12 @@ import type { MutationQueueStatus } from '../../../infrastructure/storage/DexieD
  * The only three claims the app is allowed to make about a farmer's records.
  *
  * - `ON_PHONE`   captured locally, NOT yet acknowledged by the server.
- *                This is the honest default: it claims only what the phone
- *                itself can prove.
- * - `ON_SERVER`  the server acknowledged every outstanding mutation
- *                (`applied` or `duplicate`). The one state that makes a claim
- *                about the server, and the one that requires real evidence.
- * - `NEEDS_FIX`  something needs the farmer. Folds in ALL three of the
- *                currently-silent failure cases:
- *                  1. `REJECTED_USER_REVIEW` — the durable rejection that is
- *                     deliberately never auto-retried (`MutationQueue.ts:229-231`),
- *                     and which the badge did not count until this task.
- *                  2. a `FAILED` row at or past the auto-retry cap
- *                     (`MutationQueue.ts:239`), which is stranded forever with
- *                     no marker distinguishing it from a retryable failure.
- *                  3. never-enqueued records — `enqueueLogsForSync`'s
- *                     `skippedLogIds`. Those rows exist in NO queue, so this
- *                     module cannot see them; the caller that can is Task T2
- *                     (`useLogCommands.ts`). T2 must reuse this state and its
- *                     wording rather than invent a fourth claim.
+ * - `ON_SERVER`  nothing is outstanding AND the server has acknowledged at
+ *                least one mutation from this device.
+ * - `NEEDS_FIX`  something needs the farmer, and they can act on it.
  *
- * The model is LOCKED at three states (plan section G). Do not add a fourth
- * without a founder ruling — a fourth state is a fourth claim.
+ * The model is LOCKED at three (plan section G). `null` below is not a fourth
+ * state — it is the refusal to make any of these three.
  */
 export type SyncHonestyState =
     | 'ON_PHONE'
@@ -70,9 +72,67 @@ export type SyncHonestyState =
     | 'NEEDS_FIX';
 
 /**
- * The minimum a caller must read out of Dexie for the derivation to work.
- * Deliberately NOT `MutationQueueItem`: the chip has no business retaining
- * whole mutation payloads, and a narrow shape keeps the tests free of Dexie.
+ * A claim, or `null` for **no claim at all**.
+ *
+ * `null` is the honest resting state of a device that has nothing outstanding
+ * and has never had anything acknowledged — a fresh install, or a device whose
+ * every log was silently dropped before reaching a queue. Rendering `ON_SERVER`
+ * there is a fabricated receipt (`P4`); rendering nothing is a truthful absence
+ * (`P5`). Callers MUST handle `null` by showing no status, never by
+ * substituting a default.
+ */
+export type SyncHonestyClaim = SyncHonestyState | null;
+
+/**
+ * How each mutation status bears on the claim. ONE classification, used both to
+ * build the Dexie read filter and to derive the state, so the two cannot drift.
+ *
+ * Being a `Record<MutationQueueStatus, ...>` makes this exhaustive at compile
+ * time: a seventh status cannot be added without classifying it here. That
+ * matters more than it looks — review round 1 found that a status which the
+ * derivation would call `NEEDS_FIX` but which was missing from the read filter
+ * would never be fetched, so the rows array would come back empty and the chip
+ * would show a green receipt. The failure mode of an unclassified status must
+ * never be "strongest claim by omission".
+ */
+type MutationStatusClass =
+    /** the farmer must act; auto-retry will not save this */
+    | 'NEEDS_FIX'
+    /** on the phone, not yet acknowledged; the system is still working on it */
+    | 'UNACKNOWLEDGED'
+    /** settled — bears on no claim */
+    | 'TERMINAL';
+
+const MUTATION_STATUS_CLASS: Record<MutationQueueStatus, MutationStatusClass> = {
+    PENDING: 'UNACKNOWLEDGED',
+    SENDING: 'UNACKNOWLEDGED',
+    // Below the retry cap the worker will try again unaided, so there is
+    // nothing for the farmer to do. Promoted to NEEDS_FIX at/over the cap.
+    FAILED: 'UNACKNOWLEDGED',
+    // Durable rejection — deliberately never auto-retried (`MutationQueue.ts:229-231`).
+    REJECTED_USER_REVIEW: 'NEEDS_FIX',
+    APPLIED: 'TERMINAL',
+    // The farmer explicitly discarded this through the conflict screen. An
+    // acknowledged loss, not a silent one. Ruling R10 — do not reopen.
+    REJECTED_DROPPED: 'TERMINAL',
+};
+
+/**
+ * The mutation statuses a caller MUST read out of Dexie.
+ *
+ * Derived from the classification above rather than hand-written, so it can
+ * never omit a status that would have changed the claim. `TERMINAL` rows are
+ * excluded because they bear on nothing and `APPLIED` rows are never pruned —
+ * fetching them would grow the query without ever changing its answer.
+ */
+export const SYNC_HONESTY_OPEN_STATUSES: readonly MutationQueueStatus[] =
+    (Object.keys(MUTATION_STATUS_CLASS) as MutationQueueStatus[])
+        .filter((status) => MUTATION_STATUS_CLASS[status] !== 'TERMINAL');
+
+/**
+ * The minimum a caller must read per mutation row. Deliberately NOT
+ * `MutationQueueItem`: the chip has no business retaining whole payloads, and a
+ * narrow shape keeps the tests free of Dexie.
  */
 export interface SyncQueueRowSnapshot {
     status: MutationQueueStatus;
@@ -80,42 +140,55 @@ export interface SyncQueueRowSnapshot {
 }
 
 /**
- * The mutation-queue statuses that can still change the chip's claim.
+ * Everything the claim depends on, in one plain object.
  *
- * `APPLIED` and `REJECTED_DROPPED` are terminal and are deliberately excluded
- * from the read: `APPLIED` rows are never pruned, so reading them would grow
- * the query without ever changing its answer. `deriveSyncHonestyState` ignores
- * both anyway, so passing them in is harmless — this constant is a read
- * optimisation, not part of the semantics.
+ * Attachment uploads and AI jobs are in here because the chip's numeric badge
+ * already counts them (`AppHeader.tsx:181-182`). Review round 1 found that if
+ * the label ignores them, `ON_SERVER` can render `पाठवलं ✓` beside a red "2"
+ * from two permanently-failed photo uploads — the label and the badge
+ * contradicting each other on the same 44x44 control. A failed upload is a real
+ * incompleteness in the farmer's record, so it belongs in the claim.
  */
-export const SYNC_HONESTY_OPEN_STATUSES: readonly MutationQueueStatus[] = [
-    'PENDING',
-    'SENDING',
-    'FAILED',
-    'REJECTED_USER_REVIEW',
-];
+export interface SyncEvidenceSnapshot {
+    /** Non-terminal mutation rows — see `SYNC_HONESTY_OPEN_STATUSES`. */
+    rows: readonly SyncQueueRowSnapshot[];
+    /**
+     * Mutations from this device the server has ACKNOWLEDGED (`APPLIED`).
+     * The one piece of positive evidence that `ON_SERVER` is allowed to rest on.
+     */
+    acknowledgedCount: number;
+    /** Attachment uploads still in flight or waiting (`pending`/`uploading`/`retry_wait`). */
+    pendingUploads: number;
+    /**
+     * Attachment uploads past their own retry cap. Terminal: the worker only
+     * ever picks up `pending`/`retry_wait` (`AttachmentUploadWorker.ts:132`),
+     * and `failed` is written only at `retryCount >= MAX_RETRY_COUNT` (`:257`).
+     * So this is the upload-side twin of a capped mutation — NEEDS_FIX.
+     */
+    failedUploads: number;
+    /** Voice/receipt AI jobs still queued or processing. */
+    pendingAiJobs: number;
+}
 
 /**
  * The auto-retry cap, past which a `FAILED` row is stranded permanently.
  *
  * MUST stay equal to the `maxRetryCount` default of
  * `MutationQueue.markFailedAsPending` (`MutationQueue.ts:233`, applied at
- * `:239`), which is a default parameter rather than an exported constant.
- * It is duplicated here rather than exported from `MutationQueue.ts` because
- * the retry path belongs to Task T3 and this task must not edit it. When T3
- * lands, collapse these two into one exported constant.
+ * `:239`), which is a default parameter rather than an exported constant. It is
+ * duplicated here rather than exported from `MutationQueue.ts` because the retry
+ * path belongs to Task T3 and this task must not edit it. When T3 lands,
+ * collapse these two into one exported constant.
  */
 export const MAX_AUTO_RETRY_COUNT = 5;
 
 /**
- * i18n keys for the three states. Kept beside the state model so that a new
- * state cannot be added without a label, and so Task T2 can render the very
- * same `NEEDS_FIX` wording for a never-enqueued log instead of coining a new
- * phrase for the same situation.
+ * i18n keys for the three states. The SINGLE source of the state -> label
+ * pairing: a renderer must index this by state, never restate the mapping.
  *
  * The chip is shared app-wide chrome whose other labels are English, so the
  * strings live in `i18n/translations.ts` and follow the farmer's language
- * preference (controller ruling `R6`) rather than being hardcoded Marathi.
+ * preference (`R6`) rather than being hardcoded Marathi.
  */
 export const SYNC_HONESTY_I18N_KEYS: Record<SyncHonestyState, string> = {
     ON_PHONE: 'sync.onPhone',
@@ -123,64 +196,96 @@ export const SYNC_HONESTY_I18N_KEYS: Record<SyncHonestyState, string> = {
     NEEDS_FIX: 'sync.needsFix',
 };
 
+/** An empty snapshot: nothing outstanding, nothing ever acknowledged. */
+export const EMPTY_SYNC_EVIDENCE: SyncEvidenceSnapshot = {
+    rows: [],
+    acknowledgedCount: 0,
+    pendingUploads: 0,
+    failedUploads: 0,
+    pendingAiJobs: 0,
+};
+
 /**
- * Derives the one claim the app is allowed to make from the queue's rows.
+ * The numbers the chip's badge shows, from the SAME snapshot the label is
+ * derived from — so the two halves of one control cannot contradict each other.
  *
- * Weakest claim wins. The order of precedence is:
- *   1. any durable rejection, or any row past the retry cap -> `NEEDS_FIX`
- *   2. any row still awaiting acknowledgement            -> `ON_PHONE`
- *   3. nothing outstanding                               -> `ON_SERVER`
- *
- * A retryable `FAILED` row (below the cap) is `ON_PHONE`, not `NEEDS_FIX`:
- * the record is safe on the handset and the worker will try again by itself,
- * so there is nothing for the farmer to do. Calling that "stuck" would be the
- * mirror-image lie — a visible failure the farmer cannot act on (`P5`).
- *
- * `REJECTED_DROPPED` is terminal-and-ignored: the farmer explicitly discarded
- * that row through the conflict screen, so it is an acknowledged loss rather
- * than a silent one. Treating it as `NEEDS_FIX` would re-create exactly the
- * permanently-latched chip this task removes.
- *
- * Note there is no "sending" / "in flight" state at all, by design. Whether a
- * request is currently on the wire is not something the farmer can act on, and
- * a spinner beside a zero count is the original defect in visual form.
- *
- * @param rows Non-terminal mutation-queue rows. An empty array means nothing
- *             is outstanding, which is `ON_SERVER`.
+ * Mirrors `AppHeader.tsx:181-182` exactly, which is why `failed` counts every
+ * `FAILED` row and not only capped ones.
  */
-export function deriveSyncHonestyState(rows: readonly SyncQueueRowSnapshot[]): SyncHonestyState {
-    let hasUnacknowledged = false;
+export function deriveSyncBadgeCounts(
+    snapshot: SyncEvidenceSnapshot,
+): { pending: number; failed: number } {
+    let pending = snapshot.pendingUploads + snapshot.pendingAiJobs;
+    let failed = snapshot.failedUploads;
 
-    for (const row of rows) {
-        switch (row.status) {
-            case 'REJECTED_USER_REVIEW':
-                return 'NEEDS_FIX';
-
-            case 'FAILED':
-                if (row.retryCount >= MAX_AUTO_RETRY_COUNT) {
-                    return 'NEEDS_FIX';
-                }
-                hasUnacknowledged = true;
-                break;
-
-            case 'PENDING':
-            case 'SENDING':
-                hasUnacknowledged = true;
-                break;
-
-            case 'APPLIED':
-            case 'REJECTED_DROPPED':
-                break;
-
-            default: {
-                // Exhaustiveness guard: a new MutationQueueStatus must be
-                // classified here deliberately, not defaulted into silence.
-                const unhandled: never = row.status;
-                void unhandled;
-                break;
-            }
+    for (const row of snapshot.rows) {
+        if (row.status === 'PENDING' || row.status === 'SENDING') {
+            pending += 1;
+        } else if (row.status === 'FAILED' || row.status === 'REJECTED_USER_REVIEW') {
+            failed += 1;
         }
     }
 
-    return hasUnacknowledged ? 'ON_PHONE' : 'ON_SERVER';
+    return { pending, failed };
+}
+
+/**
+ * Derives the one claim the app is allowed to make — or no claim at all.
+ *
+ * Weakest claim wins, in this order:
+ *   1. anything the farmer must act on            -> `NEEDS_FIX`
+ *   2. anything captured but not acknowledged     -> `ON_PHONE`
+ *   3. nothing outstanding AND real evidence      -> `ON_SERVER`
+ *   4. nothing outstanding and no evidence        -> `null` (say nothing)
+ *
+ * A retryable `FAILED` row (below the cap) is `ON_PHONE`, not `NEEDS_FIX`: the
+ * record is safe on the handset and the worker will try again by itself, so
+ * there is nothing for the farmer to do. Calling that "stuck" would swap a
+ * silent failure for a *visible* one the farmer cannot act on, which is worse —
+ * it teaches them the button does not work (`P5`).
+ *
+ * There is no "sending"/in-flight state by design. Whether a request is on the
+ * wire is not something a farmer can act on, and a spinner beside a zero count
+ * was the original defect in visual form.
+ */
+export function deriveSyncHonestyState(snapshot: SyncEvidenceSnapshot): SyncHonestyClaim {
+    // 1. Does anything need the farmer?
+    if (snapshot.failedUploads > 0) {
+        return 'NEEDS_FIX';
+    }
+
+    let hasUnacknowledged = snapshot.pendingUploads > 0 || snapshot.pendingAiJobs > 0;
+
+    for (const row of snapshot.rows) {
+        const statusClass = MUTATION_STATUS_CLASS[row.status];
+
+        if (statusClass === 'NEEDS_FIX') {
+            return 'NEEDS_FIX';
+        }
+
+        if (statusClass === 'UNACKNOWLEDGED') {
+            // The retry cap turns "we are still trying" into "we gave up".
+            if (row.status === 'FAILED' && row.retryCount >= MAX_AUTO_RETRY_COUNT) {
+                return 'NEEDS_FIX';
+            }
+            hasUnacknowledged = true;
+        }
+    }
+
+    // 2. Anything captured but not yet acknowledged?
+    if (hasUnacknowledged) {
+        return 'ON_PHONE';
+    }
+
+    // 3. Nothing outstanding. `ON_SERVER` is a claim about the SERVER, so it
+    //    needs the server to have said something. An empty queue on a device
+    //    that never successfully pushed is not proof of delivery — it is proof
+    //    of nothing, and it is exactly what a dropped-before-queueing log looks
+    //    like from here.
+    if (snapshot.acknowledgedCount > 0) {
+        return 'ON_SERVER';
+    }
+
+    // 4. No claim. We have nothing to report, so we report nothing.
+    return null;
 }
