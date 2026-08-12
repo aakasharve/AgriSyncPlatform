@@ -21,6 +21,8 @@
  */
 
 import { getDatabase, CEI_PHASE1_SCHEMA_VERSION, CEI_PHASE3_SCHEMA_VERSION } from './DexieDatabase';
+import { getActiveDatabaseName } from './activeDatabaseName';
+import { LEGACY_DATABASE_NAME } from './userDatabaseName';
 import { STORAGE_KEYS } from './schema';
 import { batchMigrateV1ToV2 } from './migrations/v1ToV2';
 import type { DailyLog } from '../../types';
@@ -57,6 +59,23 @@ export class MigrationService {
      */
     static async migrate(): Promise<MigrationResult> {
         const startTime = systemClock.nowEpoch();
+
+        // localStorage holds ONE handset's pre-Dexie logs, and its "already
+        // imported" marker lives in Dexie `appMeta` — which is per-database now
+        // that each farmer has their own. A second farmer's fresh database
+        // would therefore find the marker missing and import the FIRST
+        // farmer's logs into it: the exact cross-user leak that per-user
+        // databases exist to make impossible. Those rows belong to whoever
+        // adopted `AgriLogDB`, so only that database may receive them.
+        if (getActiveDatabaseName() !== LEGACY_DATABASE_NAME) {
+            return {
+                success: true,
+                logsMigrated: 0,
+                logsAlreadyV2: 0,
+                auditEventsMigrated: 0,
+                durationMs: systemClock.nowEpoch() - startTime,
+            };
+        }
 
         if (import.meta.env.DEV) {
             console.info(

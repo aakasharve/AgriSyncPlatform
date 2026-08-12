@@ -1,5 +1,6 @@
 import { liveQuery, Subscription } from 'dexie';
 import { getDatabase } from './DexieDatabase';
+import { onActiveDatabaseChanged } from './activeDatabaseName';
 import {
     deriveSyncHonestyState,
     EMPTY_SYNC_EVIDENCE,
@@ -10,6 +11,7 @@ import {
 } from '../../features/sync/status/syncHonestyState';
 import {
     getUnqueueableLogCount,
+    resetUnqueueableLogs,
     subscribeToUnqueueableLogs,
 } from '../../features/sync/status/unqueueableLogs';
 
@@ -126,6 +128,32 @@ export class SyncStatusService {
     }
 
     private initializeObserver() {
+        this.observeActiveDatabase();
+
+        // A `liveQuery` re-fires only when a Dexie table it READ changes. A
+        // skipped log writes to none of them — no mutation row, no outbox row,
+        // nothing — so without this subscription the chip would sit on its
+        // stale `पाठवलं ✓` until some unrelated queue write happened to wake the
+        // query up. The one moment the app holds this fact is the save that
+        // dropped the record, and this is how that moment reaches the chip.
+        this.unsubscribeFromUnqueueable = subscribeToUnqueueableLogs(unqueueableCount => {
+            this.evidence = { ...this.evidence, unqueueableCount };
+            this.republish(this.lastSyncedAt);
+        });
+
+        // A farmer signing in on this handset moves the app to THEIR database
+        // (`activateUserDatabase.ts`). This subscription is the one in the app
+        // that outlives that move: it is a process-wide singleton, never torn
+        // down, and a `liveQuery` observes the database it was built on. Left
+        // alone it would go on reporting the PREVIOUS farmer's queue to the new
+        // one — a cross-user leak into the most prominent control on the
+        // screen, and a stale one, since closing that handle also stops it
+        // ever updating again.
+        onActiveDatabaseChanged(() => this.rebindToActiveDatabase());
+    }
+
+    /** Observe the queues of whichever database is active right now. */
+    private observeActiveDatabase() {
         // Observe the MUTATION QUEUE — the only store with a server-ack
         // contract — plus the upload and AI-job queues the badge already counts.
         // `db.outbox` is deliberately not read: nothing sends it, so it can only
@@ -139,17 +167,29 @@ export class SyncStatusService {
             },
             error => console.error('Error observing sync status:', error)
         );
+    }
 
-        // A `liveQuery` re-fires only when a Dexie table it READ changes. A
-        // skipped log writes to none of them — no mutation row, no outbox row,
-        // nothing — so without this subscription the chip would sit on its
-        // stale `पाठवलं ✓` until some unrelated queue write happened to wake the
-        // query up. The one moment the app holds this fact is the save that
-        // dropped the record, and this is how that moment reaches the chip.
-        this.unsubscribeFromUnqueueable = subscribeToUnqueueableLogs(unqueueableCount => {
-            this.evidence = { ...this.evidence, unqueueableCount };
-            this.republish(this.lastSyncedAt);
-        });
+    /**
+     * Re-point the chip at the farmer who just signed in.
+     *
+     * Evidence resets to EMPTY rather than carrying over, because every part of
+     * it was a fact about someone else's records. `EMPTY_SYNC_EVIDENCE` derives
+     * to `null` — NO CLAIM — which is the honest state for a device that has
+     * not yet read this farmer's queue (`P5`), and is what `republish` will
+     * publish until the first reading of the new database arrives.
+     *
+     * The session-scoped unqueueable registry is cleared for the same reason:
+     * every id in it names a log in a database this farmer cannot see.
+     */
+    private rebindToActiveDatabase() {
+        this.dexieSubscription?.unsubscribe();
+        this.dexieSubscription = undefined;
+
+        this.evidence = EMPTY_SYNC_EVIDENCE;
+        this.republish(undefined);
+        resetUnqueueableLogs();
+
+        this.observeActiveDatabase();
     }
 
     /** Re-derives the claim from the current evidence and publishes any change. */

@@ -47,6 +47,8 @@ import { applyV19 } from './dexie/versions/v19';
 import { applyV20 } from './dexie/versions/v20';
 import { applyV21 } from './dexie/versions/v21';
 import { applyV22 } from './dexie/versions/v22';
+import { LEGACY_DATABASE_NAME } from './userDatabaseName';
+import { getActiveDatabaseName, clearResolvedDatabaseName } from './activeDatabaseName';
 
 // =============================================================================
 // OUTBOX (Pending sync events)
@@ -702,8 +704,14 @@ export class AgriLogDatabase extends Dexie {
     /** DWC v2 §2.6 — analytics outbox; drained by `AnalyticsEventBus`. */
     analyticsOutbox!: Table<AnalyticsOutboxRow, number>;
 
-    constructor() {
-        super('AgriLogDB');
+    /**
+     * @param databaseName Which IndexedDB database to open. Defaults to the one
+     * every install already has; `userDatabaseName.ts` decides the rest. The
+     * SCHEMA is identical either way — a per-farmer database is these same v22
+     * stores under another name, which is why this needed no version bump.
+     */
+    constructor(databaseName: string = LEGACY_DATABASE_NAME) {
+        super(databaseName);
 
         // Schema versions are declared in dexie/versions/v{N}.ts. Each applyVN
         // call performs `this.version(N).stores({...})` (and any `.upgrade()`
@@ -734,18 +742,21 @@ export class AgriLogDatabase extends Dexie {
 }
 
 // =============================================================================
-// SINGLETON
+// SINGLETON — one open handle, on the database the active farmer owns
 // =============================================================================
 
 let dbInstance: AgriLogDatabase | null = null;
 
 /**
  * Get the singleton database instance.
- * Creates it on first call.
+ * Creates it on first call, and re-opens on the new database after a switch of
+ * farmer — closing the handle it is leaving, never emptying it.
  */
 export function getDatabase(): AgriLogDatabase {
-    if (!dbInstance) {
-        dbInstance = new AgriLogDatabase();
+    const databaseName = getActiveDatabaseName();
+    if (!dbInstance || dbInstance.name !== databaseName) {
+        dbInstance?.close();
+        dbInstance = new AgriLogDatabase(databaseName);
     }
     return dbInstance;
 }
@@ -755,8 +766,7 @@ export function getDatabase(): AgriLogDatabase {
  * @internal
  */
 export async function resetDatabase(): Promise<void> {
-    if (dbInstance) {
-        dbInstance.close();
-        dbInstance = null;
-    }
+    dbInstance?.close();
+    dbInstance = null;
+    clearResolvedDatabaseName();
 }

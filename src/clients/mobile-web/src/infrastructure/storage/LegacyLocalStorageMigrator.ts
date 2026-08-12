@@ -25,6 +25,8 @@
  */
 
 import { getDatabase } from './DexieDatabase';
+import { getActiveDatabaseName } from './activeDatabaseName';
+import { LEGACY_DATABASE_NAME } from './userDatabaseName';
 import { storageNamespace } from './StorageNamespace';
 
 /**
@@ -56,6 +58,16 @@ const NOOP_RESULT: LegacyMigrationResult = {
 
 export async function runLegacyLocalStorageMigration(): Promise<LegacyMigrationResult> {
     if (localStorage.getItem(MIGRATED_FLAG) === '1') {
+        return { ...NOOP_RESULT };
+    }
+
+    // These localStorage entries pre-date per-farmer databases, so they belong
+    // to whoever adopted `AgriLogDB` — importing them into a second farmer's
+    // database would be a cross-user leak. The flag above is device-wide and is
+    // normally already set by the time anyone switches farmer, so this is a
+    // backstop; it returns WITHOUT setting the flag, so the import the owner is
+    // owed still happens the next time they sign in.
+    if (getActiveDatabaseName() !== LEGACY_DATABASE_NAME) {
         return { ...NOOP_RESULT };
     }
 
