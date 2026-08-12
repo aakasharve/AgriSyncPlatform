@@ -2,13 +2,16 @@ import React from 'react';
 import { StatusBadge } from './StatusBadge';
 import { SyncIndicator } from './SyncIndicator';
 import { LogVerificationStatus } from '../../../domain/types/log.types';
-import { useLanguage } from '../../../i18n/LanguageContext';
+import type { SyncHonestyState } from '../../../features/sync/status/syncHonestyState';
 
 interface LogCardProps {
     date: Date;
     summary: string;
     status: LogVerificationStatus;
-    syncStatus: 'SAVED' | 'PENDING' | 'SYNCED' | 'CONFLICT';
+    // Compile-only fix (Labour Phase 2 / T1). This component has ZERO
+    // importers — the live ledger card is features/logs/components/DailyLogCard.tsx.
+    // Kept compiling, deliberately not revived or wired up (W4/YAGNI).
+    syncStatus: SyncHonestyState;
     operatorName: string;
     onClick?: () => void;
     // Dynamic content slots
@@ -24,8 +27,9 @@ export const LogCard: React.FC<LogCardProps> = ({
     onClick,
     details
 }) => {
-    const { t } = useLanguage();
-
+    // NOTE: this component called useLanguage() and never used `t` — dropped
+    // because the staged-file lint gate runs at --max-warnings 0. It renders no
+    // translatable copy of its own today. Still zero importers; still not revived.
     return (
         <div
             onClick={onClick}

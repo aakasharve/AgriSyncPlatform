@@ -1,8 +1,11 @@
 import { useState, useEffect } from 'react';
-import { SyncStatusService, GlobalSyncStatus } from '../../infrastructure/storage/SyncStatusService';
+import { SyncStatusService, type SyncHonestyState } from '../../infrastructure/storage/SyncStatusService';
 
 export function useSyncStatus() {
-    const [status, setStatus] = useState<GlobalSyncStatus>('SYNCED');
+    // Starts at the lesser claim — see SyncStatusService.currentStatus. The
+    // service replays its current value on subscribe, so this initial value is
+    // only ever visible for the first render.
+    const [status, setStatus] = useState<SyncHonestyState>('ON_PHONE');
     const [lastSyncedAt, setLastSyncedAt] = useState<Date | undefined>();
 
     useEffect(() => {

@@ -216,6 +216,23 @@ export interface Translations {
         error: string;
         add: string;
     };
+
+    /**
+     * Sync status chip — Labour Phase 2 / Phase 1 (honesty backstop), T1.
+     *
+     * Exactly three claims, each backed by evidence. See
+     * `features/sync/status/syncHonestyState.ts` for what each one means and
+     * what proves it. The chip is shared app-wide chrome, so these follow the
+     * farmer's language preference rather than being hardcoded Marathi.
+     */
+    sync: {
+        /** Captured on the handset. Claims nothing about the server. */
+        onPhone: string;
+        /** The server acknowledged it (`applied` or `duplicate`). */
+        onServer: string;
+        /** Rejected, past the retry cap, or never queued at all. */
+        needsFix: string;
+    };
     // DFES Behavioral Layer (Anti-Ego & Habit Loop)
     dfes: {
         // Closure ritual
@@ -466,6 +483,11 @@ export const translations: Record<Language, Translations> = {
             error: 'Error',
             add: 'Add',
         },
+        sync: {
+            onPhone: 'Saved on phone',
+            onServer: 'Sent',
+            needsFix: 'Stuck — check',
+        },
         // DFES Behavioral Layer
         dfes: {
             // Closure ritual
@@ -714,6 +736,11 @@ export const translations: Record<Language, Translations> = {
             loading: 'लोड होत आहे...',
             error: 'चूक',
             add: 'जोडा',
+        },
+        sync: {
+            onPhone: 'फोनवर सेव्ह ✓',
+            onServer: 'पाठवलं ✓',
+            needsFix: 'अडकलं — तपासा',
         },
         // DFES Behavioral Layer
         dfes: {

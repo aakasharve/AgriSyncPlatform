@@ -4,6 +4,15 @@ import { getDatabase } from '../../../infrastructure/storage/DexieDatabase';
 export interface SyncQueueStatus {
      // Mutation queue
      pendingCount: number;
+     /**
+      * Rows that need the farmer, NOT just `status === 'FAILED'`.
+      *
+      * Labour Phase 2 / T1 (architect defect D6): this counted transient
+      * FAILED rows only, so `REJECTED_USER_REVIEW` — the DURABLE rejection
+      * that is deliberately never auto-retried (`MutationQueue.ts:229-231`) —
+      * was invisible in the badge. The most permanent failure state in the
+      * app was the one the farmer could not see.
+      */
      failedCount: number;
      syncedCount: number;
      // Upload queue
@@ -45,6 +54,7 @@ export function useSyncQueueStatus(): SyncQueueStatus {
                const pending = await db.mutationQueue.where('status').equals('PENDING').count();
                const sending = await db.mutationQueue.where('status').equals('SENDING').count();
                const failed = await db.mutationQueue.where('status').equals('FAILED').count();
+               const rejectedUserReview = await db.mutationQueue.where('status').equals('REJECTED_USER_REVIEW').count();
                const applied = await db.mutationQueue.where('status').equals('APPLIED').count();
 
                // Upload queue counts
@@ -60,7 +70,7 @@ export function useSyncQueueStatus(): SyncQueueStatus {
 
                setStatus({
                     pendingCount: pending + sending,
-                    failedCount: failed,
+                    failedCount: failed + rejectedUserReview,
                     syncedCount: applied,
                     pendingUploads,
                     failedUploads,
