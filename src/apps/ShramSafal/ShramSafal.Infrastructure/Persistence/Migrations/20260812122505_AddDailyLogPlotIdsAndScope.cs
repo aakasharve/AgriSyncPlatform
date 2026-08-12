@@ -26,6 +26,42 @@ namespace ShramSafal.Infrastructure.Persistence.Migrations
     /// was created through a write path that required both, so every one of them
     /// is plot-scoped by construction.
     ///
+    /// The <c>Plot</c> branch of the CHECK carries two clauses beyond the plot
+    /// count, and both exist to STOP this migration from quietly weakening a
+    /// guarantee that already held (plan §M2, patched 2026-08-12):
+    ///   • <c>crop_cycle_id IS NOT NULL</c> — <c>crop_cycle_id</c> has been
+    ///     <c>NOT NULL</c> since the table was created
+    ///     (20260222080909_AddAuditEvents:61) and every write path still
+    ///     requires it for a plot-scoped log. Dropping the column-level
+    ///     <c>NOT NULL</c> above is what lets a FARM-wide log have no cycle;
+    ///     without this clause it would ALSO have silently made
+    ///     <c>scope='Plot', crop_cycle_id=NULL</c> storable, and a row in that
+    ///     shape is rejected by <c>AddLogTaskHandler</c> as
+    ///     <c>CropCycleNotFound</c> forever with nothing anywhere saying the row
+    ///     is malformed rather than the cycle deleted.
+    ///   • <c>plot_ids[1] = plot_id</c> — <c>plot_id</c> is documented
+    ///     (<c>DailyLog.cs</c>) and enforced in the domain
+    ///     (<c>DailyLog.EnsureScopeInvariant</c>) as always EQUAL to the single
+    ///     member of <c>plot_ids</c>. Without this clause the database accepted
+    ///     <c>scope='Plot', plot_id=A, plot_ids={B}</c>, so a reader using
+    ///     <c>plot_id</c> and a reader using <c>plot_ids</c> would return
+    ///     DIFFERENT plots for the same log. Unreachable through EF (both
+    ///     columns are written from one consistent entity); reachable through
+    ///     any raw-SQL fixture or ops backfill. This clause is what makes
+    ///     <c>plot_id</c> a compatibility PROJECTION rather than a second,
+    ///     independent fact.
+    /// Neither clause can reject a pre-existing row: both columns were
+    /// <c>NOT NULL</c> until the statement above, and the classification UPDATE
+    /// sets <c>plot_ids = ARRAY[plot_id]</c> from the row's own <c>plot_id</c>.
+    ///
+    /// Load-bearing, recorded so nobody "simplifies" it later: <c>plot_ids</c>'s
+    /// column-level <c>NOT NULL</c> is what makes this CHECK work at all.
+    /// <c>cardinality(NULL)</c> is <c>NULL</c>, the branch then evaluates to
+    /// <c>NULL</c> rather than <c>FALSE</c>, and a CHECK treats <c>NULL</c> as
+    /// SATISFIED — so a future <c>DROP NOT NULL</c> on <c>plot_ids</c> would
+    /// silently disable the entire constraint while looking harmless because
+    /// "the CHECK covers it". It does not.
+    ///
     /// Hand-written rather than left as scaffolded operations, for two reasons
     /// the scaffolder cannot express:
     ///   • <c>ADD COLUMN ... NOT NULL</c> with no default fails on a populated
@@ -67,7 +103,8 @@ ALTER TABLE ssf.daily_logs
     ALTER COLUMN plot_ids DROP DEFAULT,
     ALTER COLUMN scope    DROP DEFAULT,
     ADD CONSTRAINT ck_daily_logs_scope CHECK (
-        (scope = 'Plot'      AND cardinality(plot_ids) = 1  AND plot_id IS NOT NULL)
+        (scope = 'Plot'      AND cardinality(plot_ids) = 1  AND plot_id IS NOT NULL
+                             AND crop_cycle_id IS NOT NULL  AND plot_ids[1] = plot_id)
      OR (scope = 'MultiPlot' AND cardinality(plot_ids) >= 2 AND plot_id IS NULL AND crop_cycle_id IS NULL)
      OR (scope = 'Farm'      AND cardinality(plot_ids) = 0  AND plot_id IS NULL AND crop_cycle_id IS NULL)
     );

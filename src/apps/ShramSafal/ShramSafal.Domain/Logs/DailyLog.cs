@@ -263,11 +263,30 @@ public sealed class DailyLog : Entity<Guid>
     }
 
     /// <summary>
-    /// The scope invariant, stated once. Mirrors <c>ck_daily_logs_scope</c> and
-    /// adds one coherence rule SQL is clumsy at: for a plot-scoped log the
-    /// compatibility <see cref="PlotId"/> must BE the single member of
-    /// <see cref="PlotIds"/>, not merely non-null.
+    /// The scope invariant, stated once. A FULL mirror of
+    /// <c>ck_daily_logs_scope</c> — every clause the database enforces is
+    /// enforced here first, so an invalid combination is unconstructible rather
+    /// than merely rejected at the database boundary.
     /// </summary>
+    /// <remarks>
+    /// Two clauses are worth naming because losing either re-opens a real hole:
+    /// <list type="bullet">
+    /// <item>a plot-scoped log's <see cref="CropCycleId"/> must be SET — the
+    /// column was <c>NOT NULL</c> for the whole life of the table and only the
+    /// FARM-wide case needed that relaxed, so <c>ck_daily_logs_scope</c> restates
+    /// it per-scope and this mirrors it;</item>
+    /// <item>a plot-scoped log's compatibility <see cref="PlotId"/> must BE the
+    /// single member of <see cref="PlotIds"/>, not merely non-null — otherwise a
+    /// reader using one and a reader using the other return different plots for
+    /// the same log.</item>
+    /// </list>
+    /// One rule here is still domain-ONLY and has no SQL counterpart:
+    /// distinctness of <paramref name="plotIds"/>. <c>cardinality(plot_ids) >= 2</c>
+    /// is satisfied by <c>{A,A}</c>, which is one plot written twice, not two
+    /// plots. Stating that in the CHECK would need an ARRAY-to-set subquery; the
+    /// domain is the cheaper and clearer place for it, so this guard is the ONLY
+    /// thing standing between a raw-SQL fixture and a duplicate-plot MultiPlot row.
+    /// </remarks>
     private static void EnsureScopeInvariant(
         DailyLogScope scope,
         IReadOnlyCollection<Guid> plotIds,
@@ -286,7 +305,8 @@ public sealed class DailyLog : Entity<Guid>
         var satisfied = scope switch
         {
             DailyLogScope.Plot =>
-                plotIds.Count == 1 && plotId.HasValue && plotIds.First() == plotId.Value,
+                plotIds.Count == 1 && plotId.HasValue && plotIds.First() == plotId.Value
+                && cropCycleId.HasValue,
             DailyLogScope.MultiPlot =>
                 plotIds.Count >= 2 && !plotId.HasValue && !cropCycleId.HasValue,
             DailyLogScope.Farm =>
