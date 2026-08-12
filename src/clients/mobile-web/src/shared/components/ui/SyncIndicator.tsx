@@ -66,25 +66,30 @@ export const SyncIndicator: React.FC<SyncIndicatorProps> = ({
         ON_PHONE: {
             color: 'text-amber-600',
             bg: 'bg-amber-50',
-            Icon: Icons.OnPhone,
-            labelKey: SYNC_HONESTY_I18N_KEYS.ON_PHONE
+            Icon: Icons.OnPhone
         },
         ON_SERVER: {
             color: 'text-stone-400',
             bg: 'bg-transparent',
-            Icon: Icons.OnServer,
-            labelKey: SYNC_HONESTY_I18N_KEYS.ON_SERVER
+            Icon: Icons.OnServer
         },
         NEEDS_FIX: {
             color: 'text-red-600',
             bg: 'bg-red-50',
-            Icon: Icons.NeedsFix,
-            labelKey: SYNC_HONESTY_I18N_KEYS.NEEDS_FIX
+            Icon: Icons.NeedsFix
         }
     }[status];
 
-    const { Icon, color, bg, labelKey } = config;
-    const label = t(labelKey);
+    const { Icon, color, bg } = config;
+
+    // Review round 1, finding F3. The table above USED to carry a `labelKey`
+    // per state, which restated a pairing that already has exactly one home.
+    // `ON_PHONE: { labelKey: SYNC_HONESTY_I18N_KEYS.ON_SERVER }` is a one-token
+    // edit that compiles, type-checks, renders a perfectly valid Marathi label,
+    // and tells a farmer holding an unsent record that it was sent. Indexing the
+    // record by the state makes that edit inexpressible here: this component
+    // can now get the colour wrong, but it can no longer get the CLAIM wrong.
+    const label = t(SYNC_HONESTY_I18N_KEYS[status]);
 
     return (
         <button

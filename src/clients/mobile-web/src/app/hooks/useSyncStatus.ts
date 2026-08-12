@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { SyncStatusService } from '../../infrastructure/storage/SyncStatusService';
-import type { SyncHonestyClaim, SyncHonestyState } from '../../features/sync/status/syncHonestyState';
+import type { SyncHonestyClaim } from '../../features/sync/status/syncHonestyState';
 
 export function useSyncStatus() {
     // Starts at NO CLAIM — see SyncStatusService.currentClaim. The service
@@ -24,25 +24,16 @@ export function useSyncStatus() {
 
     return {
         /**
-         * The truthful value: a claim, or `null` for "we have nothing to
-         * report". Render NOTHING when this is null. New callers use this.
+         * A claim, or `null` for "we have nothing to report".
+         *
+         * There is no non-null projection any more. T1 shipped one as an
+         * explicit stopgap so `AppHeader` kept compiling while the UI gate was
+         * stale, and marked it DELETE THIS; both consumers now handle `null` by
+         * rendering no chip at all, which is what `P5` asked for in the first
+         * place. Do not reintroduce a default — every default is a claim, and
+         * the whole point of this value is that sometimes we have none.
          */
         claim,
-        /**
-         * INTERIM, non-null projection for `SyncIndicator`, which cannot yet
-         * render an absent claim — that needs a `.tsx` edit and this round is
-         * `.ts`-only (the UI/UX gate token is stale while HEAD moves).
-         *
-         * `null` falls back to the WEAKEST claim, never the strongest: a device
-         * with nothing to report is described as "on the phone", which
-         * understates delivery and can never fabricate a receipt. It is wrong
-         * in the safe direction, and it is strictly better than the
-         * `ON_SERVER` this code shipped before review round 1.
-         *
-         * DELETE THIS the moment `AppHeader` handles `claim === null` by
-         * hiding the chip.
-         */
-        status: (claim ?? 'ON_PHONE') satisfies SyncHonestyState,
         lastSyncedAt,
     };
 }

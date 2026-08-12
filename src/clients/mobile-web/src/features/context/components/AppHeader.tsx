@@ -62,7 +62,11 @@ const AppHeader: React.FC<AppHeaderProps> = ({
 }) => {
   const { t } = useLanguage();
   const [isSyncDrawerOpen, setIsSyncDrawerOpen] = React.useState(false);
-  const { status: syncStatus, lastSyncedAt } = useSyncStatus();
+  // `null` = the app has nothing it can prove about this device's records:
+  // nothing outstanding, and no mutation ever acknowledged. Rendering the chip
+  // there means picking one of three claims we cannot back, so we render no
+  // chip. An absent chip is not a fourth state; it is the absence of a claim.
+  const { claim: syncClaim, lastSyncedAt } = useSyncStatus();
   const queueStatus = useSyncQueueStatus();
 
   const userColorClass = activeOperator ? getUserColor(activeOperator.name) : 'border-stone-200 text-stone-500 bg-stone-50';
@@ -175,19 +179,28 @@ const AppHeader: React.FC<AppHeaderProps> = ({
             onJoinViaQr={farmContext.onJoinViaQr}
             compact
           />
-          <SyncIndicator
-            status={syncStatus}
-            lastSyncedAt={lastSyncedAt}
-            pendingCount={queueStatus.pendingCount + queueStatus.pendingUploads + queueStatus.pendingAiJobs}
-            failedCount={queueStatus.failedCount + queueStatus.failedUploads}
-            onClick={() => setIsSyncDrawerOpen(true)}
-            testId="sync-status-indicator"
-          />
+          {syncClaim && (
+            <SyncIndicator
+              status={syncClaim}
+              lastSyncedAt={lastSyncedAt}
+              pendingCount={queueStatus.pendingCount + queueStatus.pendingUploads + queueStatus.pendingAiJobs}
+              failedCount={queueStatus.failedCount + queueStatus.failedUploads}
+              onClick={() => setIsSyncDrawerOpen(true)}
+              testId="sync-status-indicator"
+            />
+          )}
         </div>
       )}
       <SyncStatusDrawer
         isOpen={isSyncDrawerOpen}
         onClose={() => setIsSyncDrawerOpen(false)}
+        onOpenConflicts={() => {
+          // A durable rejection cannot be re-sent unchanged; the only surface
+          // that can clear it is OfflineConflictPage. Close the sheet first, or
+          // the farmer lands on the fix screen behind a black overlay.
+          setIsSyncDrawerOpen(false);
+          onNavigate('offline-conflicts');
+        }}
       />
     </header>
   );

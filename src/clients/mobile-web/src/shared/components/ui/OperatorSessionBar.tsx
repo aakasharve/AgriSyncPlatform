@@ -41,7 +41,8 @@ export const OperatorSessionBar: React.FC<OperatorSessionBarProps> = ({
         WORKER: { bg: 'bg-gray-100', text: 'text-gray-900', border: 'border-gray-200' }
     }[currentOperator.role] || { bg: 'bg-gray-100', text: 'text-gray-900', border: 'border-gray-200' };
 
-    const { status, lastSyncedAt } = useSyncStatus();
+    // See AppHeader: `null` means we can prove nothing, so we claim nothing.
+    const { claim, lastSyncedAt } = useSyncStatus();
     const queueStatus = useSyncQueueStatus();
 
     return (
@@ -58,13 +59,15 @@ export const OperatorSessionBar: React.FC<OperatorSessionBarProps> = ({
                         <p className={`text-[11px] font-semibold ${roleConfig.text}`}>
                             Logged in as: {currentOperator.name}
                         </p>
-                        <SyncIndicator
-                            status={status}
-                            lastSyncedAt={lastSyncedAt}
-                            pendingCount={queueStatus.pendingCount + queueStatus.pendingUploads + queueStatus.pendingAiJobs}
-                            failedCount={queueStatus.failedCount + queueStatus.failedUploads}
-                            onClick={() => setIsDrawerOpen(true)}
-                        />
+                        {claim && (
+                            <SyncIndicator
+                                status={claim}
+                                lastSyncedAt={lastSyncedAt}
+                                pendingCount={queueStatus.pendingCount + queueStatus.pendingUploads + queueStatus.pendingAiJobs}
+                                failedCount={queueStatus.failedCount + queueStatus.failedUploads}
+                                onClick={() => setIsDrawerOpen(true)}
+                            />
+                        )}
                     </div>
                     <p className="text-[10px] opacity-70 uppercase tracking-wide mt-0.5">
                         {roleLabel}
@@ -72,6 +75,11 @@ export const OperatorSessionBar: React.FC<OperatorSessionBarProps> = ({
                 </div>
             </div>
 
+            {/* No `onOpenConflicts`: this component has no navigation and, per
+                ruling R9, zero importers — it is unreachable in the shipping UI
+                (`W4`), so the drawer's rejected rows simply explain themselves
+                here instead of offering a button that would go nowhere. If this
+                bar is ever revived, thread a navigation callback in. */}
             <SyncStatusDrawer
                 isOpen={isDrawerOpen}
                 onClose={() => setIsDrawerOpen(false)}

@@ -6,6 +6,7 @@ import { isSyncMutationType } from './SyncMutationCatalog';
 import { validatePayload } from './PayloadValidator';
 import type { MutationFailureKind } from './RejectionPolicy';
 import { readDeviceId, writeDeviceId } from '../storage/DeviceIdStore';
+import { MAX_AUTO_RETRY_COUNT } from './retryCap';
 
 const SYNC_SCOPE = 'shramsafal';
 const LAST_PULL_META_KEY = 'shramsafal_last_pull_payload';
@@ -14,19 +15,13 @@ const LAST_PULL_META_KEY = 'shramsafal_last_pull_payload';
  * How many SERVER-ANSWERED refusals a row may collect before the worker stops
  * retrying it by itself and the farmer is asked to act.
  *
- * This is the authoritative copy — the cap is applied here, in
- * `markFailedAsPending`. `syncHonestyState.ts:183` carries a duplicate that
- * turns the same number into the chip's `NEEDS_FIX` claim; that module belongs
- * to Task T1 and is out of this task's edit scope, so the two are held equal by
- * an explicit drift test rather than by an import
- * (`__tests__/MutationRetryCap.transport.test.ts`). Collapse them into this one
- * export when T1's module is next opened.
- *
- * A row past this cap is NOT abandoned: `retryAllFailedByUser()` and the
- * per-row retry both ignore the cap, because the cap exists to stop the
- * WORKER asking forever, not to refuse the farmer.
+ * The cap is APPLIED here, in `markFailedAsPending`, but it is DEFINED in
+ * `retryCap.ts` — a leaf with no imports — because the chip's derivation
+ * (`syncHonestyState.ts`) needs the same number and must stay Dexie-free. It is
+ * re-exported here so every existing reader of `MutationQueue`'s copy keeps
+ * working. There is now exactly one literal in the client.
  */
-export const MAX_AUTO_RETRY_COUNT = 5;
+export { MAX_AUTO_RETRY_COUNT };
 
 function getOrCreateDeviceId(): string {
     const existing = readDeviceId();

@@ -46,25 +46,27 @@
  * `skippedLogIds` toast, and is exactly why T2 exists. Do not try to fix it
  * here; a global chip cannot count something that was never written.
  *
- * Every function here is PURE — plain data in, one claim out — so every branch
- * is unit-testable without a database. (The module now imports the retry cap
- * from `MutationQueue`, so its import GRAPH is no longer Dexie-free; nothing it
- * does at runtime touches a database.)
+ * This module is PURE and Dexie-free — plain data in, one claim out — so every
+ * branch is unit-testable without a database. Its only value import is
+ * `retryCap.ts`, a leaf with no imports of its own, chosen precisely so that
+ * collapsing the duplicated cap did not cost this property. Keep it that way:
+ * the day this file needs a database is the day the chip starts making claims
+ * it cannot show its working for.
  *
  * NOT IN SCOPE: `db.outbox` keeps its writers, its table and its Dexie version.
  * This task only cuts it out of the status READ path (`R1`).
  */
 
 import type { MutationQueueStatus } from '../../../infrastructure/storage/DexieDatabase';
-// The cap is APPLIED in `MutationQueue.markFailedAsPending`, which is therefore
-// the authoritative definition. T1 shipped a duplicated literal here with a
-// note to collapse the two "when T3 lands"; T3 exported the authoritative copy
-// and left the collapse to whoever next opened this file. This is that collapse:
-// ONE literal `5` now exists in the client, and the drift class is structurally
-// impossible rather than merely tested. (`MutationRetryCap.transport.test.ts`
-// carried the drift guard; it is a tautology once the binding is shared, so it
-// was deleted rather than left standing under a title it no longer earns.)
-import { MAX_AUTO_RETRY_COUNT } from '../../../infrastructure/sync/MutationQueue';
+// ONE definition of the cap, in a module with zero imports. T1 shipped a
+// duplicate literal here with a note to collapse it "when T3 lands"; T3
+// exported an authoritative copy from `MutationQueue` and left the collapse to
+// whoever next opened this file. This is that collapse — via a leaf rather than
+// via `MutationQueue`, because importing the queue would have dragged Dexie into
+// the graph of a module that advertises itself as free of it. The drift class is
+// now structurally impossible rather than merely tested, so the guard that used
+// to assert the two literals were equal has been deleted with them.
+import { MAX_AUTO_RETRY_COUNT } from '../../../infrastructure/sync/retryCap';
 
 /**
  * The only three claims the app is allowed to make about a farmer's records.
@@ -183,7 +185,8 @@ export interface SyncEvidenceSnapshot {
 
 /**
  * The auto-retry cap, past which a `FAILED` row is stranded until the farmer
- * acts. Re-exported, NOT redefined — see the import at the top of this file.
+ * acts. Re-exported from `infrastructure/sync/retryCap`, NOT redefined — see
+ * the import at the top of this file.
  *
  * Kept on this module's surface so its four existing readers
  * (`stuckMutations.ts` and three test files) need no churn, and so a reader of
