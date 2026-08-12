@@ -240,13 +240,29 @@ export const updateLog = async (
         //    (`useLogCommands.handleManualSubmit`) throws on `success: false`, so
         //    the farmer learns the correction did not land instead of seeing a
         //    success toast over an unchanged record.
+        //
+        //    LABOUR_PHASE2 B1c — this route is now REACHABLE FOR A FARM-WIDE LOG.
+        //    `resolveLogFarmId` used to answer `null` for every संपूर्ण शेत
+        //    record, because it read the farm off a plot and such a log has
+        //    none, so the guard below refused every correction on one. It now
+        //    resolves from the farm the record carries, so correcting a headcount
+        //    on a farm-wide engagement reaches the same
+        //    `/farms/{farmId}/labour/assignments/{id}/corrections` route a
+        //    plot-scoped one does. Nothing in this file changed to allow it —
+        //    that is the point of a single choke point.
         const corrections = buildLabourCorrections(existingLog, finalLog, request.reason);
         if (corrections.length > 0) {
             const farmId = await resolveLogFarmId(existingLog);
             if (!farmId) {
+                // Wording widened with the resolver: "no synced plot" named only
+                // one of the reasons and is no longer the only one that reaches
+                // here. A farm-wide log created before the farm was recorded on
+                // it, or naming a farm this device has not pulled, lands here
+                // too — and the farmer is owed a true sentence, not a
+                // plausible one.
                 return {
                     success: false,
-                    error: 'Cannot correct labour: this log has no synced plot, so its farm is unknown.',
+                    error: 'Cannot correct labour: this log’s farm could not be confirmed on this device.',
                 };
             }
 

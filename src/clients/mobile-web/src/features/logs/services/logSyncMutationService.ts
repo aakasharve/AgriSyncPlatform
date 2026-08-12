@@ -36,12 +36,19 @@ function ensureUuid(localId: string | undefined): string {
  * below cannot be built wrong — the same reason P2.1 gave each scope its own
  * domain factory instead of one `Create(scope, …)`.
  *
- * `Farm` is deliberately ABSENT from this union. A farm-scoped log has no plot,
- * and this module reads the farm off a plot — see `resolveSyncTarget`.
+ * LABOUR_PHASE2 B1c — `Farm` JOINS THE UNION. It was absent because this module
+ * could only read a farm off a plot and a farm-scoped log has none; it now has a
+ * non-plot source (`log.meta.farmId`, stamped at save time) so the assertion is
+ * finally expressible. Its plot set is the EMPTY TUPLE, not `string[]`: an empty
+ * set is the whole content of the assertion (founder decision O-1), and
+ * `ck_daily_logs_scope`, `CreateDailyLogValidator` and `CreateDailyLogHandler`
+ * all reject a `Farm` row carrying any plot, so a non-empty one must be
+ * unrepresentable here rather than merely unlikely.
  */
 type ResolvedLogSyncTarget =
     | { farmId: string; scope: 'Plot'; plotIds: string[]; plotId: string; cropCycleId: string }
-    | { farmId: string; scope: 'MultiPlot'; plotIds: string[] };
+    | { farmId: string; scope: 'MultiPlot'; plotIds: string[] }
+    | { farmId: string; scope: 'Farm'; plotIds: [] };
 
 interface LogTaskMutationPayload {
     logTaskId: string;
@@ -332,6 +339,64 @@ async function resolveLogPlots(
 }
 
 /**
+ * LABOUR_PHASE2 B1c — the farm of a log that names NO plot, and only such a log.
+ *
+ * THE ANSWER IS THE RECORD'S OWN, NOT THIS MOMENT'S. It reads `meta.farmId`,
+ * stamped by `LogCommandServiceImpl.confirmAndSave` from the farm context the
+ * app was displaying when the farmer saved (see `LogMeta.farmId`). It
+ * deliberately does NOT read `SessionStore` here: the push runs whenever
+ * `BackgroundSyncWorker` next fires, which may be after the farmer has switched
+ * farms, and answering a question about the past with the present is exactly how
+ * one farm's labour lands in another's ledger.
+ *
+ * THEN IT IS CROSS-CHECKED AGAINST DATA THIS DEVICE RECEIVED FROM THE SERVER.
+ * `db.farms` is written only by the pull (`farmsPlotsCyclesReconciler`) into the
+ * per-user database, so requiring the farm to be present there means the id on
+ * the wire is one the server has already told THIS user about — an independent
+ * witness to a value that otherwise rests entirely on local state. That matters
+ * because `SessionStore` is a single localStorage key shared across logins,
+ * while the Dexie database changes address on a user switch: without this check,
+ * a log created in the window between logging in as B and B's farm context
+ * loading could carry A's farm id, which is a cross-tenant write. The server
+ * enforces tenancy too; that is a second line, not the argument (`E4`).
+ *
+ * THE COST IS STATED, NOT HIDDEN: a device that has a farm context but has not
+ * completed a `/sync/pull` yet will refuse to send a farm-scoped log. That is
+ * the SAME rule `resolveLogPlots` already applies one function above — a plot
+ * the pull has not delivered makes a plot-scoped log unsendable too — so this
+ * adds no new class of failure, and it fails the safe way: the record stays on
+ * the phone and the honesty surfaces report it, rather than being posted to a
+ * farm nobody has confirmed.
+ *
+ * `null` whenever the record does not say. Never "the only farm in Dexie",
+ * never `farms[0]`, never a sentinel (founder decision O-1, `P4`).
+ */
+async function resolveRecordedFarmId(log: DailyLog): Promise<string | null> {
+    const farmId = log.meta?.farmId;
+    if (!farmId) {
+        return null;
+    }
+
+    const farmRecord = await getDatabase().farms.get(farmId);
+    return farmRecord ? farmId : null;
+}
+
+/**
+ * "Did this record name no plot at all?" — the ONE condition under which the
+ * recorded farm may be used.
+ *
+ * `resolveLogPlots` returns `null` for three different reasons, and only this
+ * one is farm scope. The other two — a named plot this device has not pulled,
+ * and named plots that disagree about their farm — are cases where plot evidence
+ * exists but is unusable, and falling back to the stamp there would route a
+ * PLOT-scoped log by a value that was never checked against its plots. Both must
+ * keep refusing.
+ */
+function namesNoPlot(log: DailyLog): boolean {
+    return selectedPlotIds(log).length === 0;
+}
+
+/**
  * Labour V1 Task 12b.7 — the farm a log belongs to, for the farm-scoped
  * correction route (`POST /farms/{farmId}/labour/assignments/{id}/corrections`).
  *
@@ -344,22 +409,49 @@ async function resolveLogPlots(
  * routed by the first plot alone — and would have started failing outright the
  * moment `LogFactory` stopped emitting one log per plot. One choke point, both
  * paths.
+ *
+ * B1c: the same choke point is why farm-wide CORRECTION becomes reachable in the
+ * same edit that makes the farm-wide PUSH work. Until now a संपूर्ण शेत log
+ * resolved to `null` here, so `UpdateLog` refused every correction on one —
+ * which was the honest answer while there was no farm to route to, and is no
+ * longer the only answer available.
+ *
+ * PLOT EVIDENCE STILL WINS where it exists. A plot's farm comes from
+ * server-issued reference data (`db.plots[].payload.farmId`) and is the value
+ * the server itself will check the write against; the stamp is a client capture
+ * of screen state. The stamp is consulted only when there is no plot to ask.
  */
 export async function resolveLogFarmId(log: DailyLog): Promise<string | null> {
     const resolved = await resolveLogPlots(log);
-    return resolved?.farmId ?? null;
+    if (resolved) {
+        return resolved.farmId;
+    }
+
+    return namesNoPlot(log) ? await resolveRecordedFarmId(log) : null;
 }
 
 async function resolveSyncTarget(log: DailyLog): Promise<ResolvedLogSyncTarget | null> {
     const selection = log.context.selection?.[0];
     const resolved = await resolveLogPlots(log);
     if (!resolved) {
-        // Includes the farm-scoped log (`selectedPlotIds: []`), which stays
-        // unsendable exactly as it was: the farm id is read off a plot and a
-        // farm-scoped log has none. Reaching for "the only farm in Dexie"
-        // would be a guess dressed as a resolution, and this device may hold
-        // several farms. The record is safe in `db.logs`, and the Phase 1
-        // honesty surfaces already say so rather than claiming it was sent.
+        // LABOUR_PHASE2 B1c — the farm-scoped log (`selectedPlotIds: []`) is no
+        // longer stranded here. It carries its own farm, recorded when the
+        // farmer saved it, and that farm is verified against the farms this
+        // device has actually pulled — see `resolveRecordedFarmId`.
+        //
+        // Every OTHER reason `resolveLogPlots` refused still refuses: a plot
+        // this device has not pulled, and plots that disagree about their farm.
+        // Those are plot-scoped logs whose plot evidence is missing or
+        // contradictory, and the recorded farm is not a substitute for it.
+        if (namesNoPlot(log)) {
+            const recordedFarmId = await resolveRecordedFarmId(log);
+            // `plotIds: []` is the assertion itself, not a gap: संपूर्ण शेत
+            // means no plot was named. `plotId` and `cropCycleId` are absent
+            // rather than null — the CHECK, the validator and the handler all
+            // reject a `Farm` row that carries either.
+            return recordedFarmId ? { farmId: recordedFarmId, scope: 'Farm', plotIds: [] } : null;
+        }
+
         return null;
     }
 
@@ -442,6 +534,13 @@ export async function enqueueLogsForSync(logs: DailyLog[]): Promise<{ queuedLogI
             // rewrite the wire format of every log a farmer writes for no
             // change in what is stored, on the same commit that changes how
             // logs are built.
+            //
+            // B1c — `Farm` takes the SAME branch as `MultiPlot` and needs no
+            // code of its own: `scope: 'Farm'` with `plotIds: []`, and neither
+            // `plotId` nor `cropCycleId` present. That is exactly what
+            // `CreateDailyLogValidator` requires of a `Farm` command
+            // (`PlotId is null && CropCycleId is null && PlotIds is null or
+            // {Count: 0}`) and what `ck_daily_logs_scope` welds into the row.
             ...(target.scope === 'Plot'
                 ? { plotId: target.plotId, cropCycleId: target.cropCycleId }
                 : { scope: target.scope, plotIds: target.plotIds }),

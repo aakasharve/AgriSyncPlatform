@@ -177,6 +177,85 @@ export function ensureLabourAssignmentIds(logs: DailyLog[], idGen: IdGenerator):
 }
 
 /**
+ * LABOUR_PHASE2 B1c — records WHICH FARM the farmer was working in, on the log
+ * itself, at the moment the log is saved.
+ *
+ * WHY THE RECORD HAS TO CARRY IT. Every other log answers "which farm?" through
+ * its plots: `logSyncMutationService.resolveLogPlots` reads
+ * `db.plots[].payload.farmId`. A `Farm`-scoped log (संपूर्ण शेत) has no plot BY
+ * DEFINITION, so that route cannot answer for it — the record fell into
+ * `skippedLogIds` and never left the phone. This is the non-plot answer.
+ *
+ * WHY CAPTURED HERE AND NOT RESOLVED AT PUSH TIME. The push runs whenever
+ * `BackgroundSyncWorker` next fires, which may be minutes or days later, on a
+ * phone whose farm context has since been switched. Reading "the current farm"
+ * then answers a question about the PAST with a fact about the PRESENT — and on
+ * this product multi-farm-per-login is a CORE use case, not an edge case. That
+ * is precisely how one farm's labour lands in another's ledger. Stamped at the
+ * save boundary, the value records what was true when the farmer spoke.
+ *
+ * WHY `meta` AND NOT `SelectedCropContext.farmId`, which already exists. A log
+ * has exactly ONE farm: `create_daily_log.farmId` is single-valued,
+ * `resolveLogPlots` refuses a plot set spanning two farms, and cross-farm
+ * mutation is forbidden. Hanging it off the per-crop selection entries admits a
+ * shape where two entries name two farms — an invalid state made representable,
+ * the same failure `ResolvedLogSyncTarget` is a discriminated union to avoid.
+ * `meta` is where this codebase already records creation-time facts about a
+ * record (who, when, which build, which parse job), which is exactly what this
+ * is. `SelectedCropContext.farmId` is left untouched and unpopulated, so the
+ * finance capture that reads it behaves identically to before.
+ *
+ * IT LIVES BESIDE `ensureLabourAssignmentIds`, AND FOR THE SAME REASON. The one
+ * boundary every log-creating path passes through is
+ * `LogCommandServiceImpl.confirmAndSave` — all four `LogFactory` branches
+ * (manual+plot, manual+entire-farm, voice+plot, voice+entire-farm) AND the
+ * wizard, which builds its `DailyLog[]` itself and never touches `LogFactory`.
+ * Stamping inside `LogFactory` would silently miss the wizard.
+ *
+ * MUTATES IN PLACE, RETURNS `void` — load-bearing, exactly as its sibling
+ * documents: every caller of `confirmAndSave` hands its OWN `logs` reference on
+ * to `enqueueLogsForSync` afterwards, so a copying version would put the farm in
+ * Dexie and never on the wire, which is the whole point of the field.
+ *
+ * PURE, and the farm id is a PARAMETER. The value is read from `SessionStore`
+ * (infrastructure) by the application service; `core/domain` acquires no
+ * infrastructure import for it.
+ *
+ * `null` / empty is a NO-OP, not a placeholder. If the app cannot say which farm
+ * it is in, the record says nothing — an unstamped farm-scoped log is refused at
+ * the push boundary and reported, which is the honest outcome. Writing a
+ * sentinel, an empty string, or a guessed farm here would turn "we do not know"
+ * into a cross-farm write.
+ *
+ * IDEMPOTENT AND NEVER OVERWRITES. A log that already names a farm keeps it —
+ * including one that came back from the server on a pull, where the value is the
+ * server's own record and outranks anything this device can assert.
+ */
+export function stampCreationFarmId(logs: DailyLog[], farmId: string | null | undefined): void {
+    if (!farmId) {
+        return;
+    }
+
+    logs.forEach(log => {
+        if (log.meta?.farmId) {
+            return;
+        }
+
+        if (log.meta) {
+            log.meta.farmId = farmId;
+            return;
+        }
+
+        // `meta` is optional on `DailyLog`, and the wizard path builds its own
+        // records — so it can genuinely be absent. `createdAtISO` is required on
+        // `LogMeta`; the log's own date at midday is the only non-invented value
+        // available, and it is the same fallback `captureMoneyEventsFromLog`
+        // already uses when `meta.createdAtISO` is missing.
+        log.meta = { createdAtISO: `${log.date}T12:00:00`, farmId };
+    });
+}
+
+/**
  * LABOUR_PHASE2 B1b — `selectInputsForPlot` / `selectActivityExpensesForPlot`
  * are what is LEFT of `allocateInputsForPlot` / `allocateActivityExpensesForPlot`
  * once the invented per-plot division is gone: select the events that belong to

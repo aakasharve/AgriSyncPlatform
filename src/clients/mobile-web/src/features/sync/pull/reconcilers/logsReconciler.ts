@@ -404,6 +404,24 @@ function toDailyLog(
             createdAtISO: source.createdAtUtc,
             createdByOperatorId: source.operatorUserId,
             schemaVersion: VersionRegistry.DB_SCHEMA_VERSION,
+            // LABOUR_PHASE2 B1c — the farm, read back from the SERVER'S OWN
+            // record of it (`DailyLogDto.farmId`, non-nullable and always sent).
+            //
+            // This is not decoration. `preserveLocalOnlyFields` keeps only
+            // `labour`, `financialSummary` and (conditionally) `context` from
+            // the local row; `meta` is replaced wholesale by this rebuild. So
+            // without this line, the farm stamped at save time would be erased
+            // by the first pull that acknowledged the log — and
+            // `resolveLogFarmId` would go back to answering `null` for a
+            // farm-scoped log, taking farm-wide CORRECTION down with it for
+            // exactly the records that had successfully reached the server. A
+            // feature that works until the first sync and then silently stops
+            // is the class of half-truth this phase exists to remove.
+            //
+            // The value comes off the wire; nothing here infers, defaults or
+            // fills it. A response that somehow omitted it leaves the field
+            // absent, which reads as "not stated" everywhere downstream.
+            ...(source.farmId ? { farmId: source.farmId } : {}),
         },
         verification: {
             required: true,

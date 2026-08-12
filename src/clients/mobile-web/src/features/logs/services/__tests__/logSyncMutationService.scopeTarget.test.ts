@@ -197,12 +197,18 @@ describe('B1a — a single-plot log emits a byte-identical payload', () => {
         expect(result.skippedLogIds).toEqual([LOG_UUID]);
     });
 
-    it('still skips a farm-wide log, exactly as before — B1a invents no farm id', async () => {
-        // `resolveSyncTarget` reads the farm off the plot, and a farm-scoped log
-        // has no plot. Making this enqueueable needs a farm id from somewhere
-        // that is NOT a plot, which no `.ts` on this path has. Guessing one
+    it('still skips a farm-wide log that names NO farm — nothing here invents one', async () => {
+        // WHAT THIS ASSERTS TODAY (B1c). `farmWideLog()` above carries no
+        // `meta.farmId`, so this device holds no record of which farm the work
+        // was for. B1c gave the push path a non-plot source for that question,
+        // but not a licence to answer it when the record is silent: guessing
         // ("the only farm in Dexie") is the fabrication O-1 closed, so the log
         // stays skipped and the honesty surfaces keep saying so.
+        //
+        // A farm-wide log that DOES name a farm is now queued — that is JOURNEY
+        // 1, asserted in `logSyncMutationService.farmScope.test.ts` and
+        // end-to-end in `entireFarmJourney.test.ts`. The assertion below is
+        // unchanged from B1a; only the reason it holds has narrowed.
         const result = await enqueueLogsForSync([farmWideLog()]);
 
         expect(result.queuedLogIds).toEqual([]);
@@ -310,7 +316,10 @@ describe('B1a — resolveLogFarmId, the correction route, moves with the push pa
         await expect(resolveLogFarmId(multiPlotLog([PLOT_A, PLOT_B, PLOT_C]))).resolves.toBe(FARM_UUID);
     });
 
-    it('no plots: null, so a farm-wide correction is refused rather than mis-routed', async () => {
+    it('no plots and no recorded farm: null, so a correction is refused rather than mis-routed', async () => {
+        // B1c: a farm-wide log that DOES record its farm now resolves, which is
+        // what makes farm-wide correction reachable — see
+        // `logSyncMutationService.farmScope.test.ts`. This fixture records none.
         await expect(resolveLogFarmId(farmWideLog())).resolves.toBeNull();
     });
 

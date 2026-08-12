@@ -5,7 +5,7 @@ import { LogFactory } from '../../core/domain/LogFactory';
 import { LogsRepository } from '../ports';
 import { WeatherPort } from '../ports/WeatherPort';
 import { idGenerator } from '../../core/domain/services/IdGenerator';
-import { ensureLabourAssignmentIds } from '../../core/domain/helpers/log-factory-helpers';
+import { ensureLabourAssignmentIds, stampCreationFarmId } from '../../core/domain/helpers/log-factory-helpers';
 import { systemClock } from '../../core/domain/services/Clock';
 import { getWeatherForLocation } from '../usecases/AttachWeatherSnapshot';
 import { financeCommandService } from '../../features/finance/financeCommandService';
@@ -142,16 +142,50 @@ export class LogCommandServiceImpl implements LogCommandService {
         // already carries an id is left alone.
         ensureLabourAssignmentIds(logs, idGenerator);
 
-        // 2. Update UI State (Optimistic or Confirmed)
+        // 2. LABOUR_PHASE2 B1c — record WHICH FARM this work belongs to, now,
+        //    while the answer is still a fact rather than an inference.
+        //
+        //    THE DEFECT THIS CLOSES. `logSyncMutationService.resolveLogFarmId`
+        //    reads the farm off a PLOT. A संपूर्ण शेत log has no plot by
+        //    definition, so it resolved to nothing, was never queued, and never
+        //    left the handset — the farmer's eight workers stayed on the phone.
+        //    The push path had no honest non-plot source to reach for, and
+        //    guessing "the only farm in Dexie" on a product where multi-farm-
+        //    per-login is a CORE use case is the first-plot fabrication founder
+        //    decision O-1 closed, moved up a layer.
+        //
+        //    THE SOURCE. `SessionStore.getCurrentFarmId()` — the same
+        //    synchronous, localStorage-backed farm id `FarmContext` and
+        //    `switchFarm` keep in sync, and the id rendered in the
+        //    `FarmContextSwitcher` pill that `AppHeader` shows on every screen.
+        //    It is not a guess about the farmer's intent: it is the farm the app
+        //    was displaying as the working context at the instant they saved.
+        //    It is also the SAME accessor `captureMoneyEventsFromLog` below
+        //    already relies on for exactly this question (Decision 3a,
+        //    2026-07-19) — one answer to "which farm", not two.
+        //
+        //    WHY HERE. This method is the single write boundary every creating
+        //    path funnels through — all four `LogFactory` branches and the
+        //    wizard, which builds its own records. It runs BEFORE
+        //    `repo.batchSave`, so the farm is persisted with the log, and it
+        //    mutates in place, so the caller's array (which goes straight on to
+        //    `enqueueLogsForSync`) carries it to the wire.
+        //
+        //    NOT A CAPTURE-PATH CHANGE (`P9`): no new field is asked of the
+        //    farmer, nothing is prompted, and nothing blocks. A null farm
+        //    context stamps nothing and the save proceeds unchanged.
+        stampCreationFarmId(logs, SessionStore.getCurrentFarmId());
+
+        // 3. Update UI State (Optimistic or Confirmed)
         if (updateState) {
             updateState(prev => [...logs, ...prev]);
         }
 
-        // 3. Persist to Repository (Always)
+        // 4. Persist to Repository (Always)
         // Repo implementation determines storage (Dexie vs LocalStorage)
         await this.repo.batchSave(logs);
 
-        // 4. Finance spine capture
+        // 5. Finance spine capture
         logs.forEach(log => this.captureMoneyEventsFromLog(log));
     }
 

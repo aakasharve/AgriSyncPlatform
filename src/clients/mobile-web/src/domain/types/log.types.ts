@@ -580,6 +580,13 @@ export interface LogMeta {
     appVersion?: string;
     schemaVersion?: number; // 1 = V1, 2 = V2 (DFES)
     provenance?: LogProvenance;
+    /**
+     * LABOUR_PHASE2 B1c — the farm the farmer was working in when this record was
+     * created; the only non-plot answer to "which farm is this log for". Written by
+     * `stampCreationFarmId`, read by `logSyncMutationService` — rationale lives
+     * there. Absent means "not recorded", and never licenses a guess (O-1, P4).
+     */
+    farmId?: string;
 }
 
 /**

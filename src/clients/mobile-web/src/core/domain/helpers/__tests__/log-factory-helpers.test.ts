@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { sumMachineryCost, computeReceiptTotal, ensureLabourAssignmentIds } from '../log-factory-helpers';
+import { sumMachineryCost, computeReceiptTotal, ensureLabourAssignmentIds, stampCreationFarmId } from '../log-factory-helpers';
 import type { MachineryEvent, DailyLog, LabourEvent } from '../../../../types';
 import type { IdGenerator } from '../../services/IdGenerator';
 
@@ -157,5 +157,77 @@ describe('ensureLabourAssignmentIds', () => {
     it('tolerates logs with no labour at all', () => {
         const logs = [makeLog([]), { id: 'log-2' } as unknown as DailyLog];
         expect(() => ensureLabourAssignmentIds(logs, makeIdGen())).not.toThrow();
+    });
+});
+
+// ---------------------------------------------------------------------------
+// LABOUR_PHASE2 B1c — stampCreationFarmId
+// spec: 2026-08-12-labour-phase2-server-truth-farm-context
+// ---------------------------------------------------------------------------
+
+function makeFarmScopedLog(meta?: DailyLog['meta']): DailyLog {
+    return {
+        id: 'log-1',
+        date: '2026-08-13',
+        labour: [],
+        context: { selection: [{ cropId: 'FARM_GLOBAL', cropName: 'Entire Farm', selectedPlotIds: [], selectedPlotNames: [] }] },
+        ...(meta ? { meta } : {}),
+    } as unknown as DailyLog;
+}
+
+describe('stampCreationFarmId', () => {
+    it('records the farm the app was in, on every log in the batch', () => {
+        const logs = [makeFarmScopedLog({ createdAtISO: 'T' }), makeFarmScopedLog({ createdAtISO: 'T' })];
+
+        stampCreationFarmId(logs, 'farm-1');
+
+        expect(logs[0].meta?.farmId).toBe('farm-1');
+        expect(logs[1].meta?.farmId).toBe('farm-1');
+    });
+
+    it('MUTATES IN PLACE — the caller\'s own reference sees the farm', () => {
+        // Same reason as its sibling above: every caller of `confirmAndSave`
+        // hands ITS OWN array on to `enqueueLogsForSync`. A copying version
+        // would put the farm in Dexie and never on the wire, which is the entire
+        // purpose of the field.
+        const callersOwnLog = makeFarmScopedLog({ createdAtISO: 'T' });
+
+        const returned = stampCreationFarmId([callersOwnLog], 'farm-1');
+
+        expect(returned).toBeUndefined();
+        expect(callersOwnLog.meta?.farmId).toBe('farm-1');
+    });
+
+    it('NEVER OVERWRITES a farm the record already names', () => {
+        // The value already there may be the SERVER'S own (`logsReconciler`
+        // writes it back off `DailyLogDto.farmId` on every pull), and that
+        // outranks anything this device can assert about where it thinks it is.
+        const logs = [makeFarmScopedLog({ createdAtISO: 'T', farmId: 'farm-from-server' })];
+
+        stampCreationFarmId(logs, 'farm-the-app-is-in-now');
+
+        expect(logs[0].meta?.farmId).toBe('farm-from-server');
+    });
+
+    it('writes NOTHING when the app cannot say which farm it is in', () => {
+        // No sentinel, no empty string, no "the only farm in Dexie". An
+        // unstamped record is refused at the push boundary and reported — a
+        // guessed one is a cross-farm write (founder decision O-1, `P4`).
+        const logs = [makeFarmScopedLog({ createdAtISO: 'T' })];
+
+        stampCreationFarmId(logs, null);
+        stampCreationFarmId(logs, undefined);
+        stampCreationFarmId(logs, '');
+
+        expect(logs[0].meta?.farmId).toBeUndefined();
+    });
+
+    it('creates `meta` when a log has none — the wizard builds its own records', () => {
+        const logs = [makeFarmScopedLog()];
+
+        stampCreationFarmId(logs, 'farm-1');
+
+        expect(logs[0].meta?.farmId).toBe('farm-1');
+        expect(logs[0].meta?.createdAtISO).toBe('2026-08-13T12:00:00');
     });
 });
