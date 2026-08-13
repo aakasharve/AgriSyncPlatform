@@ -193,6 +193,12 @@ public static class MembershipEndpoints
                 {
                     "exit.no_membership" => 404,
                     "exit.last_primary_owner" => 409,
+                    // The handler could not establish this request's farm scope,
+                    // so the exit could not be written. It must NOT read as a
+                    // success — the whole point of the 2026-08-13 fix is that a
+                    // request which cannot change the row does not answer 200
+                    // and does not leave a MemberExited line behind it.
+                    "exit.forbidden" => 403,
                     _ => 400,
                 };
                 return Results.Json(

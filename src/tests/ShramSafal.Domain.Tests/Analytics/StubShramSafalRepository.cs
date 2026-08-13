@@ -29,6 +29,8 @@ internal sealed class StubShramSafalRepository : IShramSafalRepository
 
     public int SaveCalls { get; private set; }
     public IReadOnlyList<FarmBoundary> Boundaries => _boundaries;
+    public IReadOnlyList<AuditEvent> AuditEvents => _auditEvents;
+    public IReadOnlyList<FarmMembership> Memberships => _memberships;
 
     public void SeedFarm(Farm farm) => _farms[farm.Id.Value] = farm;
     public void SeedBoundary(FarmBoundary boundary) => _boundaries.Add(boundary);
@@ -65,7 +67,26 @@ internal sealed class StubShramSafalRepository : IShramSafalRepository
 
     public Task<FarmMembership?> GetFarmMembershipAsync(Guid farmId, Guid userId, CancellationToken ct = default)
     {
-        var m = _memberships.FirstOrDefault(x => x.FarmId.Value == farmId && x.UserId.Value == userId);
+        var m = _memberships.FirstOrDefault(x => x.FarmId.Value == farmId && x.UserId.Value == userId
+            && !x.IsTerminal);
+        return Task.FromResult(m);
+    }
+
+    /// <summary>
+    /// Mirrors the production repository's exit-path read: status-blind, live row
+    /// first. The seeded objects ARE the store here, so a mutation applied to what
+    /// this returns is visible to a later read — which is precisely the property
+    /// the real <c>AsNoTracking()</c> sibling did NOT have, and why the persistence
+    /// half of this fix is proven against real Postgres and not here.
+    /// </summary>
+    public Task<FarmMembership?> GetTrackedFarmMembershipIncludingTerminalAsync(
+        Guid farmId, Guid userId, CancellationToken ct = default)
+    {
+        var m = _memberships
+            .Where(x => x.FarmId.Value == farmId && x.UserId.Value == userId)
+            .OrderBy(x => x.IsTerminal ? 1 : 0)
+            .ThenByDescending(x => x.ModifiedAtUtc)
+            .FirstOrDefault();
         return Task.FromResult(m);
     }
 

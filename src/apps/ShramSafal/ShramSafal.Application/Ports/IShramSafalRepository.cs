@@ -824,4 +824,36 @@ public interface IShramSafalRepository
     /// </summary>
     Task<FarmMembership?> GetTrackedFarmMembershipAsync(Guid farmId, Guid userId, CancellationToken ct = default)
         => Task.FromResult<FarmMembership?>(null);
+
+    /// <summary>
+    /// The caller's <see cref="FarmMembership"/> on a farm <b>whatever its
+    /// status</b>, <b>TRACKED</b> — for the exit write path only.
+    ///
+    /// <para><b>Why the terminal rows have to come back.</b>
+    /// <c>ExitMembershipHandler</c> answers "you have already left" as an
+    /// idempotent success rather than an error, because a farmer on a rural
+    /// connection re-sending the same request must converge instead of being
+    /// told something went wrong. That branch reads
+    /// <c>membership.IsTerminal</c> — and every other membership read in this
+    /// port filters <c>Revoked</c>/<c>Exited</c> out, so with any of them the
+    /// branch is unreachable and a repeat exit answers "you are not a member of
+    /// this farm" about a farm the caller demonstrably was a member of.</para>
+    ///
+    /// <para><b>Deterministic when several rows exist.</b>
+    /// <c>ix_farm_memberships_farm_user_nonterminal</c> permits at most ONE
+    /// non-terminal row per (farm, user) but any number of terminal ones (a
+    /// worker may rejoin by QR after leaving). The live row wins; otherwise the
+    /// most recently modified terminal row, so the answer does not depend on
+    /// scan order.</para>
+    ///
+    /// <para><b>Default is the narrower sibling, deliberately.</b> Falling back
+    /// to <see cref="GetTrackedFarmMembershipAsync"/> leaves every in-tree test
+    /// double on the behaviour it has today (non-terminal only) instead of on
+    /// <c>null</c>, so a double that has not overridden this member degrades to
+    /// "not a member" — the answer it already gave — rather than to a new,
+    /// silently wrong one.</para>
+    /// </summary>
+    Task<FarmMembership?> GetTrackedFarmMembershipIncludingTerminalAsync(
+        Guid farmId, Guid userId, CancellationToken ct = default)
+        => GetTrackedFarmMembershipAsync(farmId, userId, ct);
 }

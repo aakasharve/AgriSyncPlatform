@@ -1349,6 +1349,30 @@ internal sealed class ShramSafalRepository(ShramSafalDbContext db) : IShramSafal
                 && m.Status != MembershipStatus.Exited, ct);
     }
 
+    /// <summary>
+    /// TRACKED and status-blind — the exit write path. See the port docs: every
+    /// other membership read here filters the terminal statuses out, which makes
+    /// <c>ExitMembershipHandler</c>'s already-exited branch unreachable and turns
+    /// a retried exit into "you are not a member of this farm".
+    /// <para>The ordering is load-bearing, not cosmetic: a (farm, user) pair may
+    /// hold one live row plus any number of terminal ones (leave, rejoin by QR,
+    /// leave again). Live first, then most-recently-modified, so the row this
+    /// returns never depends on scan order.</para>
+    /// </summary>
+    public async Task<FarmMembership?> GetTrackedFarmMembershipIncludingTerminalAsync(
+        Guid farmId, Guid userId, CancellationToken ct = default)
+    {
+        var typedFarmId = new FarmId(farmId);
+        var typedUserId = new UserId(userId);
+
+        return await db.FarmMemberships
+            .Where(m => m.FarmId == typedFarmId && m.UserId == typedUserId)
+            .OrderBy(m => m.Status == MembershipStatus.Revoked
+                || m.Status == MembershipStatus.Exited ? 1 : 0)
+            .ThenByDescending(m => m.ModifiedAtUtc)
+            .FirstOrDefaultAsync(ct);
+    }
+
     // --- DATA_PRINCIPLE_SPINE sub-phase 02.3 (warm-tier transcripts) ------
     public Task AddTranscriptAsync(Transcript transcript, CancellationToken ct = default)
     {
