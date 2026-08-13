@@ -65,6 +65,7 @@ import { speakUnlockReward } from '../../../infrastructure/voice/speakUnlockRewa
 import { wasUnlockSpoken, markUnlockSpoken } from '../../../infrastructure/storage/unlockSpeechStore';
 import { MeterQuestionHost } from './MeterQuestionHost';
 import { DisciplineStrip } from './DisciplineStrip';
+import SurfaceSection from './shramsathi/SurfaceSection';
 
 /**
  * Task 4A: project the live WeatherWidget data (DetailedWeather) onto the
@@ -158,28 +159,46 @@ export function LedgerRecognitionPanel({
         markUnlockSpoken(farmId);
     }, [engagement?.unlockStatus, farmId]);
 
+    // REDESIGN 2026-08-13 — the two children are different KINDS of thing and now
+    // say so. The question is marigold ("साथीला अजून हवं आहे" — it needs the farmer);
+    // the streak is emerald ("तुमचं सातत्य" — it is a reward). Each child still
+    // self-gates on its own flag and returns null when off, so the section wrapper
+    // is gated on the same flag — otherwise an empty coloured box would render.
+    const question = (
+        <MeterQuestionHost
+            farmId={farmId}
+            plotId={plotId}
+            score={savedLog?.understanding}
+            allLogs={allLogs}
+            engagement={engagement}
+            questionInputs={{
+                crop,
+                todayLocalDate: resolvedDate,
+                score: savedLog?.understanding,
+                scheduleContext,
+                weather: weatherContext,
+                weatherReconcileContext,
+                engagement: {
+                    totalRichDays: engagement?.totalRichDays ?? 0,
+                    unlockStatus: engagement?.unlockStatus ?? 'locked',
+                },
+            }}
+        />
+    );
+
     return (
-        <div data-testid="ledger-recognition-panel" className="space-y-4">
-            <MeterQuestionHost
-                farmId={farmId}
-                plotId={plotId}
-                score={savedLog?.understanding}
-                allLogs={allLogs}
-                engagement={engagement}
-                questionInputs={{
-                    crop,
-                    todayLocalDate: resolvedDate,
-                    score: savedLog?.understanding,
-                    scheduleContext,
-                    weather: weatherContext,
-                    weatherReconcileContext,
-                    engagement: {
-                        totalRichDays: engagement?.totalRichDays ?? 0,
-                        unlockStatus: engagement?.unlockStatus ?? 'locked',
-                    },
-                }}
-            />
-            <DisciplineStrip engagement={engagement} />
+        <div data-testid="ledger-recognition-panel">
+            {FEATURE_FLAGS.understandingMeter ? (
+                <SurfaceSection tone="ask" labelKey="dfes.sectionAsk" noteKey="dfes.askRaisesScore" testId="section-ask">
+                    {question}
+                </SurfaceSection>
+            ) : question}
+
+            {FEATURE_FLAGS.disciplineSystem && engagement ? (
+                <SurfaceSection tone="streak" labelKey="dfes.sectionStreak" testId="section-streak">
+                    <DisciplineStrip engagement={engagement} />
+                </SurfaceSection>
+            ) : <DisciplineStrip engagement={engagement} />}
         </div>
     );
 }

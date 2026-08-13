@@ -299,6 +299,30 @@ export interface Translations {
         dayUnderstandingIntro: string;
         dayUnderstandingPending: string;
 
+        // Post-save surface redesign (founder, 2026-08-13). The character SPEAKS
+        // instead of the system announcing "Saved to Ledger", and each zone of the
+        // surface names itself so the screen reads as one clear reply.
+        sathiSaidLine: string;
+        sectionWork: string;
+        sectionGrasp: string;
+        sectionAsk: string;
+        sectionStreak: string;
+        dayUnderstandingMeaning: string;
+
+        // Semi-literate redesign (founder, 2026-08-13). A bare "७ / १०" reads as a
+        // SCHOOL MARK to a tier-3/4 farmer — "I lost 3 marks" — which is the exact
+        // opposite of the intended meaning. The band word leads; the numeral is
+        // demoted to a quiet secondary.
+        graspBandLow: string;
+        graspBandSome: string;
+        graspBandGood: string;
+        graspBandFull: string;
+        streakDaysUnit: string;
+        streakTomorrow: string;
+        graspTarget: string;
+        graspTargetHit: string;
+        askRaisesScore: string;
+
         // Understanding-Meter arrival/transition line (dfes-companion Slice 5b) —
         // Sathi's progress toward "knowing" the farm (rich-days milestone).
         // Founder-confirmable copy on a flag-gated placeholder surface.
@@ -602,6 +626,23 @@ export const translations: Record<Language, Translations> = {
             dayUnderstandingIntro: 'I understood your day today',
             dayUnderstandingPending: 'Still understanding…',
 
+            // Post-save surface redesign (2026-08-13)
+            sathiSaidLine: 'Shram Safal is understanding the work you did today',
+            sectionWork: 'WHAT YOU DID TODAY',
+            sectionGrasp: 'HOW MUCH I UNDERSTOOD',
+            sectionAsk: 'SATHI STILL NEEDS',
+            sectionStreak: 'YOUR CONSISTENCY',
+            dayUnderstandingMeaning: 'Tell me more and I understand more.',
+            graspBandLow: 'I understood a little',
+            graspBandSome: 'I understood a fair amount',
+            graspBandGood: 'I understood a lot',
+            graspBandFull: 'I understood everything',
+            streakDaysUnit: 'days in a row',
+            streakTomorrow: 'Come again tomorrow — keep it going',
+            graspTarget: 'Aim for {target}',
+            graspTargetHit: 'You reached the mark',
+            askRaisesScore: 'Tell me this and the number goes up',
+
             // Understanding-Meter arrival/transition line (dfes-companion Slice 5b)
             meterArrivalProgress: 'Understood days: {count}/{target}',
             meterArrivalArrived: ' — now I have come to know your farm',
@@ -883,6 +924,28 @@ export const translations: Record<Language, Translations> = {
             // understanding of the day, never a grade of the farmer.
             dayUnderstandingIntro: 'मी तुमचा आजचा दिवस समजून घेतला',
             dayUnderstandingPending: 'अजून समजतंय…',
+
+            // Post-save surface redesign (2026-08-13). sathiSaidLine is the
+            // FOUNDER'S OWN wording, used verbatim — do not paraphrase it.
+            sathiSaidLine: 'श्रम सफल मध्ये तुम्ही आज केलेले काम समजून घेत आहे',
+            sectionWork: 'आज तुम्ही काय केलं',
+            sectionGrasp: 'मला किती समजलं',
+            sectionAsk: 'साथीला अजून हवं आहे',
+            sectionStreak: 'तुमचं सातत्य',
+            // Shortened for a semi-literate reader — one short clause, no fraction.
+            dayUnderstandingMeaning: 'जेवढं सांगाल, तेवढं मला समजतं.',
+            // The BAND is what the farmer reads; the numeral is secondary.
+            graspBandLow: 'थोडं समजलं',
+            graspBandSome: 'बऱ्यापैकी समजलं',
+            graspBandGood: 'बरंच समजलं',
+            graspBandFull: 'सगळं समजलं',
+            streakDaysUnit: 'दिवस सलग',
+            streakTomorrow: 'उद्या पुन्हा सांगा — मालिका चालू ठेवा',
+            // The number is a TARGET to chase, never a mark. {target} is the notch
+            // drawn on the bar, so the goal is visible as well as stated.
+            graspTarget: '{target} पर्यंत पोहोचायचंय',
+            graspTargetHit: 'तुम्ही खूण गाठली!',
+            askRaisesScore: 'हे सांगितलं तर आकडा वाढेल',
 
             // Understanding-Meter arrival/transition line (dfes-companion Slice 5b) —
             // FOUNDER-CONFIRM: reasonable default in Sathi's voice (dignity, no

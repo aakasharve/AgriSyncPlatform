@@ -30,6 +30,8 @@ import DailyLoopHero from '../../features/logs/components/shramsathi/DailyLoopHe
 import DailyLoopClarity from '../../features/logs/components/shramsathi/DailyLoopClarity';
 import DailyLoopInsight from '../../features/logs/components/shramsathi/DailyLoopInsight';
 import DayUnderstandingCard from '../../features/logs/components/shramsathi/DayUnderstandingCard';
+import SathiSaidCard from '../../features/logs/components/shramsathi/SathiSaidCard';
+import SurfaceSection from '../../features/logs/components/shramsathi/SurfaceSection';
 import { buildDailyInsight } from '../../features/logs/intelligence/buildDailyInsight';
 import { ShramSathiUnderstanding } from '../../features/logs/components/shramsathi/ShramSathiUnderstanding';
 import { findConfirmableTaskCloses, type TaskCloseCandidate } from '../../features/logs/services/taskAutoClose';
@@ -646,34 +648,36 @@ export const renderLogView = (ctx: AppRouterContext): React.ReactNode => {
                         onClick={handleReset}
                         className="mt-4 w-full rounded-xl bg-stone-900 py-4 text-lg font-bold text-white transition-colors hover:bg-emerald-800"
                     >
-                        Add Another Log
+                        आणखी नोंद करा
                     </button>
                 </div>
             )}
 
             {status === 'success' && (
-                <div data-testid="saved-to-ledger" className="animate-in fade-in duration-500 bg-gradient-to-br from-emerald-50 to-white rounded-3xl shadow-xl border border-emerald-100 p-8 text-center relative overflow-hidden">
-                    {/* Decorative Background Elements */}
-                    <div className="absolute top-0 left-0 w-full h-2 bg-emerald-500/20"></div>
-                    <div className="absolute -top-10 -right-10 w-40 h-40 bg-emerald-100 rounded-full blur-3xl opacity-50"></div>
+                <div data-testid="saved-to-ledger" className="animate-in fade-in duration-500 bg-white rounded-3xl shadow-xl border border-stone-100 p-4 text-center relative overflow-hidden">
+                    {/* REDESIGN 2026-08-13 (founder). Was: a 3xl English "Saved to
+                        Ledger" headline under a leaf, on an emerald gradient, with
+                        eight equally-weighted white cards stacked beneath it. The
+                        system announced a storage outcome; the companion the farmer
+                        had just been talking to disappeared.
 
+                        Now the character SPEAKS (SathiSaidCard), and every block
+                        below sits in a SurfaceSection that names itself and carries
+                        a tone colour: green = what you did, blue = what I
+                        understood, marigold = what I still need, emerald = your
+                        consistency. The card ground is plain white so those four
+                        tints are the only colour on the surface and the eye can
+                        sort the screen at a glance. */}
                     <div className="relative z-10">
-                            <div className="w-20 h-20 bg-white rounded-full flex items-center justify-center mx-auto mb-6 text-emerald-600 shadow-sm border border-emerald-50">
-                                <Leaf size={40} className="drop-shadow-sm" />
-                            </div>
-                        <h2 className="text-3xl font-bold text-stone-800 mb-6 tracking-tight">Saved to Ledger</h2>
+                        <SathiSaidCard />
 
-                        {/* Day Understanding Score X/१० + bar — FIRST thing on the
-                            saved-to-ledger surface (founder request 2026-07-19,
-                            spec: dfes-companion-2026-07-11). Moved up out of
-                            MeterDisplay/LedgerRecognitionPanel, where it sat below
-                            the crop summary, the clarity line and the fact line.
-                            Self-gates on FEATURE_FLAGS.understandingMeter (returns
-                            null when OFF) and owns the ONLY useDayUnderstanding
-                            fetch. savedLog is derived exactly as the recognition
-                            panel below derives it (lastSavedLogIds[0] via
-                            history.find), and farmId prefers the session's ACTIVE
-                            farm for the same reason (see BUGFIX_2026-07-19 there). */}
+                        {/* WHAT I UNDERSTOOD — the /10, its bar, and one line saying
+                            what the number measures. Self-gates on
+                            FEATURE_FLAGS.understandingMeter (renders null when OFF),
+                            so the section wrapper must gate too or an empty blue box
+                            would show in production. savedLog is derived exactly as
+                            the recognition panel below derives it (lastSavedLogIds[0]
+                            via history.find). */}
                         {(() => {
                             const savedLogId = lastSavedLogIds && lastSavedLogIds.length > 0
                                 ? lastSavedLogIds[0]
@@ -682,18 +686,28 @@ export const renderLogView = (ctx: AppRouterContext): React.ReactNode => {
                                 ? history.find(l => l.id === savedLogId)
                                 : undefined;
                             const selection = savedLog?.context?.selection?.[0];
-                            return (
+                            const card = (
                                 <DayUnderstandingCard
                                     farmId={ctx.activeFarmId ?? selection?.farmId ?? null}
                                     dayDate={savedLog?.date}
                                     savedLogId={savedLog?.id ?? null}
                                 />
                             );
+                            return FEATURE_FLAGS.understandingMeter ? (
+                                <div className="mt-4">
+                                    <SurfaceSection tone="grasp" labelKey="dfes.sectionGrasp" testId="section-grasp">
+                                        {card}
+                                    </SurfaceSection>
+                                </div>
+                            ) : card;
                         })()}
 
-                        {/* Dynamic Feedback Summary */}
+                        {/* WHAT YOU DID — the crop/bucket breakdown, now behind a green
+                            "आज तुम्ही काय केलं" label so it reads as the farmer's OWN
+                            record rather than another anonymous card. */}
                         {lastSavedLogSummary && lastSavedLogSummary.length > 0 ? (
-                            <div className="mb-8 space-y-3">
+                            <SurfaceSection tone="work" labelKey="dfes.sectionWork" testId="section-work">
+                            <div className="space-y-3">
                                 {lastSavedLogSummary.map((item, idx) => {
                                     const crop = item.cropId ? crops.find(entry => entry.id === item.cropId) : undefined;
                                     const theme = getCropTheme(crop?.color || 'bg-emerald-500');
@@ -709,7 +723,7 @@ export const renderLogView = (ctx: AppRouterContext): React.ReactNode => {
                                                         {crop ? <CropSymbol name={crop.iconName} size="md" /> : <Leaf size={22} className="text-emerald-600" />}
                                                     </div>
                                                     <div className="min-w-0 flex-1">
-                                                        <p className="text-[10px] font-black uppercase tracking-[0.18em] text-stone-500">Stored In</p>
+                                                        <p className="text-[10px] font-black uppercase tracking-[0.18em] text-stone-500">कुठे</p>
                                                         <p className="truncate text-base font-black text-stone-900">
                                                             {item.cropName} • {item.plotName}
                                                         </p>
@@ -720,11 +734,11 @@ export const renderLogView = (ctx: AppRouterContext): React.ReactNode => {
                                                     const savedLog = history.find(l => l.id === item.logId);
                                                     if (!savedLog) return null;
                                                     const buckets = [
-                                                        { key: 'irrigation', count: (savedLog.irrigation || []).filter(e => (e.durationHours || 0) > 0 || (e.waterVolumeLitres || 0) > 0 || e.method || e.source).length, icon: <Droplets size={13} />, label: 'Irrigation', color: 'bg-blue-100 text-blue-700' },
-                                                        { key: 'labour', count: (savedLog.labour || []).length, icon: <Users size={13} />, label: 'Labour', color: 'bg-amber-100 text-amber-700' },
-                                                        { key: 'inputs', count: (savedLog.inputs || []).length, icon: <Package size={13} />, label: 'Inputs', color: 'bg-purple-100 text-purple-700' },
-                                                        { key: 'machinery', count: (savedLog.machinery || []).length, icon: <Tractor size={13} />, label: 'Machinery', color: 'bg-stone-100 text-stone-700' },
-                                                        { key: 'crop', count: (savedLog.cropActivities || []).length, icon: <Sprout size={13} />, label: 'Crop Work', color: 'bg-emerald-100 text-emerald-700' },
+                                                        { key: 'irrigation', count: (savedLog.irrigation || []).filter(e => (e.durationHours || 0) > 0 || (e.waterVolumeLitres || 0) > 0 || e.method || e.source).length, icon: <Droplets size={13} />, label: 'पाणी', color: 'bg-blue-100 text-blue-700' },
+                                                        { key: 'labour', count: (savedLog.labour || []).length, icon: <Users size={13} />, label: 'मजूर', color: 'bg-amber-100 text-amber-700' },
+                                                        { key: 'inputs', count: (savedLog.inputs || []).length, icon: <Package size={13} />, label: 'औषध/खत', color: 'bg-purple-100 text-purple-700' },
+                                                        { key: 'machinery', count: (savedLog.machinery || []).length, icon: <Tractor size={13} />, label: 'यंत्र', color: 'bg-stone-100 text-stone-700' },
+                                                        { key: 'crop', count: (savedLog.cropActivities || []).length, icon: <Sprout size={13} />, label: 'पीक काम', color: 'bg-emerald-100 text-emerald-700' },
                                                     ].filter(b => b.count > 0);
                                                     if (buckets.length === 0) return null;
                                                     return (
@@ -743,9 +757,8 @@ export const renderLogView = (ctx: AppRouterContext): React.ReactNode => {
                                     );
                                 })}
                             </div>
-                        ) : (
-                            <p className="text-stone-500 mb-8">Your activity has been logged successfully.</p>
-                        )}
+                            </SurfaceSection>
+                        ) : null}
 
                         {/* Daily Clarity Loop v1 REWARD line (dfes-companion-2026-07-11).
                             Flag-gated OFF by default, so this is a byte-equivalent no-op on
@@ -802,6 +815,12 @@ export const renderLogView = (ctx: AppRouterContext): React.ReactNode => {
                             // object the WeatherWidget above already renders — so the panel
                             // can wake the P1/P2 forward-looking safety/weather questions.
                             const selection = savedLog?.context?.selection?.[0];
+                            // The panel hosts BOTH the marigold "साथीला अजून हवं आहे"
+                            // question and the emerald streak strip. It owns the single
+                            // shared useFarmerEngagement fetch, so it must stay ONE
+                            // element — splitting it into two SurfaceSections here would
+                            // duplicate that fetch. It therefore labels its own two
+                            // zones internally (see LedgerRecognitionPanel).
                             return (
                                 <LedgerRecognitionPanel
                                     // BUGFIX_2026-07-19: prefer the session's ACTIVE farm.
@@ -891,15 +910,15 @@ export const renderLogView = (ctx: AppRouterContext): React.ReactNode => {
                                     }}
                                     className="w-full bg-white text-emerald-700 border border-emerald-200 py-4 rounded-xl font-bold text-lg hover:bg-emerald-50 transition-colors mb-1"
                                 >
-                                    {lastSavedLogIds.length > 1 ? 'Review Saved Targets' : 'Review Details'}
+                                    {lastSavedLogIds.length > 1 ? 'सर्व नोंदी पाहा' : 'नोंद पाहा'}
                                 </button>
                             )}
 
                             <button onClick={() => setMainView('reflect')} className="w-full bg-stone-100 text-stone-700 py-4 rounded-xl font-bold text-lg hover:bg-stone-200 transition-colors">
-                                View Activity Heatmap
+                                कामाचा नकाशा
                             </button>
                             <button onClick={handleReset} className="w-full bg-stone-900 text-white py-4 rounded-xl font-bold text-lg hover:bg-emerald-800 transition-colors shadow-lg shadow-emerald-900/20">
-                                Add Another Log
+                                आणखी नोंद करा
                             </button>
                         </div>
                     </div>

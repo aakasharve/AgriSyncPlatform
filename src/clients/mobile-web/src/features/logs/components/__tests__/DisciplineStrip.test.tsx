@@ -2,6 +2,7 @@
 import { render, cleanup } from '@testing-library/react';
 import '@testing-library/jest-dom/vitest';
 import { describe, it, expect, vi, afterEach } from 'vitest';
+import { t as translate } from '../../../../i18n/translations';
 
 const engagement = {
     currentStreak: 5,
@@ -16,6 +17,17 @@ async function loadStrip(disciplineSystem: boolean) {
     vi.resetModules();
     vi.doMock('../../../../app/featureFlags', () => ({
         FEATURE_FLAGS: { disciplineSystem, understandingMeter: false, DwcChip: false },
+    }));
+    // The 2026-08-13 redesign gave the strip real copy ("दिवस सलग", the
+    // come-back-tomorrow line), so it now reads from i18n like every other
+    // DFES component. Same mock DayUnderstandingCard.test.tsx uses — real
+    // Marathi strings, no provider needed.
+    vi.doMock('../../../../i18n/LanguageContext', () => ({
+        useLanguage: () => ({
+            language: 'mr',
+            setLanguage: () => {},
+            t: (k: string) => translate(k, 'mr'),
+        }),
     }));
     return import('../DisciplineStrip');
 }

@@ -181,11 +181,15 @@ describe('renderLogView — Day Understanding Score leads the saved-to-ledger su
         const renderLogView = await loadRenderLogView(true, 8);
         render(<>{renderLogView(makeCtx())}</>);
 
-        const heading = screen.getByText('Saved to Ledger');
+        // REDESIGN 2026-08-13 — the English "Saved to Ledger" heading is gone. The
+        // surface now opens with the character SPEAKING (SathiSaidCard), so the
+        // ordering anchor is that element. The guarantee under test is unchanged:
+        // the score leads, above the crop summary and the recognition panel.
+        const heading = screen.getByTestId('sathi-said');
         const understanding = screen.getByTestId('day-understanding');
         // The crop-summary block has no testid of its own; its "Stored In" label is
         // the stable, unique marker for it (see mainView's Dynamic Feedback Summary).
-        const cropSummary = screen.getByText('Stored In');
+        const cropSummary = screen.getByText('कुठे');
         const panel = screen.getByTestId('ledger-recognition-panel');
 
         // The founder's actual requirement: score FIRST on the success surface.
@@ -203,7 +207,7 @@ describe('renderLogView — Day Understanding Score leads the saved-to-ledger su
         render(<>{renderLogView(makeCtx())}</>);
 
         const pending = screen.getByTestId('day-understanding-pending');
-        expectPrecedes(pending, screen.getByText('Stored In'));
+        expectPrecedes(pending, screen.getByText('कुठे'));
         expect(pending.textContent).toBe('अजून समजतंय…');
     });
 
@@ -233,6 +237,6 @@ describe('renderLogView — Day Understanding Score leads the saved-to-ledger su
         expect(screen.getAllByTestId('day-understanding')).toHaveLength(1);
         expect(screen.getAllByTestId('understanding-bar')).toHaveLength(1);
         // ...and the surviving one is the leading card, above the crop summary.
-        expectPrecedes(screen.getByTestId('day-understanding'), screen.getByText('Stored In'));
+        expectPrecedes(screen.getByTestId('day-understanding'), screen.getByText('कुठे'));
     });
 });

@@ -32,6 +32,17 @@ const NUMBER_FONT = "'DM Sans', sans-serif";
 // text (Noto Sans Devanagari), honouring both font rules in one line.
 const DailyLoopClarity: React.FC<DailyLoopClarityProps> = ({ done, left }) => {
     const { t } = useLanguage();
+
+    // SEMI-LITERATE REDESIGN 2026-08-13 — when there is no planned work at all,
+    // this rendered "० पूर्ण, ० बाकी" in 18px black, directly under the farmer's
+    // just-saved log. Two zeroes read as "you did nothing" at the exact moment the
+    // screen is supposed to be telling him he did something. A farmer with no
+    // schedule set up sees that on EVERY log. Absence is the honest render here:
+    // with nothing planned, there is no completion to report.
+    if (done === 0 && left === 0) {
+        return null;
+    }
+
     const parts = t('dfes.dailyLoopClarity').split(/(\{done\}|\{left\})/);
 
     return (

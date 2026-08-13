@@ -115,12 +115,19 @@ export function ShramSathiUnderstanding(): React.ReactElement {
                     box-shadow:inset 0 0 26px rgba(0,0,0,.6), inset 0 0 0 1px rgba(255,255,255,.045); }
                 .su-inner::before{ content:''; position:absolute; inset:0; border-radius:8px; pointer-events:none;
                     background-image:${GRAIN}; background-size:120px 120px; opacity:.05; mix-blend-mode:screen; }
-                .su-qmark{ position:absolute; font-family:${SERIF}; font-weight:700; font-size:12.5cqw; line-height:.82; color:rgba(242,241,234,.94); pointer-events:none; }
-                .su-qmark.qt{ top:4.5cqw; left:7.5cqw; }
-                .su-qmark.qb{ bottom:3.5cqw; right:7.5cqw; transform:rotate(180deg); }
-                .su-quotearea{ position:relative; height:39cqw; max-height:178px; display:flex; align-items:center; justify-content:center; overflow:hidden; }
-                .su-quote{ position:relative; font-family:${SANS}; font-weight:700; color:#f2f1ea; text-align:center;
-                    font-size:clamp(15px, 5cqw, 20px); line-height:1.68; letter-spacing:.3px; max-width:26ch;
+                /* Quote marks are decoration BEHIND the text, never on top of it.
+                   Previously they sat at the same stacking level with ~94% opacity
+                   and the Devanagari line ran straight through them, which made
+                   longer quotes unreadable. Now: pushed to the very corners, muted,
+                   and z-indexed under the text. */
+                .su-qmark{ position:absolute; z-index:0; font-family:${SERIF}; font-weight:700; font-size:12.5cqw; line-height:.82; color:rgba(242,241,234,.30); pointer-events:none; }
+                .su-qmark.qt{ top:1.5cqw; left:2.5cqw; }
+                .su-qmark.qb{ bottom:0.5cqw; right:2.5cqw; transform:rotate(180deg); }
+                /* Horizontal padding keeps the text clear of the corner glyphs even
+                   on the longest line; height grows with content so nothing clips. */
+                .su-quotearea{ position:relative; z-index:1; min-height:39cqw; padding:0 5cqw; display:flex; align-items:center; justify-content:center; }
+                .su-quote{ position:relative; z-index:1; font-family:${SANS}; font-weight:700; color:#f2f1ea; text-align:center;
+                    font-size:clamp(15px, 4.6cqw, 19px); line-height:1.72; letter-spacing:.3px; max-width:24ch;
                     text-shadow:0 0 1px rgba(255,255,255,.4), 0 1px 1px rgba(0,0,0,.35); animation:suQuoteIn .6s ease; }
                 .su-chalk{ position:absolute; bottom:2.4cqw; height:2cqw; max-height:9px; width:8cqw; max-width:34px; border-radius:3px;
                     background:linear-gradient(180deg,#fdfdfb,#d9d8d1); box-shadow:0 1px 2px rgba(0,0,0,.35); }

@@ -21,7 +21,7 @@
  * the DFES suite for toggling FEATURE_FLAGS without leaking module state.
  */
 import React from 'react';
-import { render, cleanup } from '@testing-library/react';
+import { render, cleanup, act } from '@testing-library/react';
 import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
 import { t as translate } from '../../../../../i18n/translations';
 
@@ -99,10 +99,21 @@ describe('DayUnderstandingCard (server /10 Day Understanding Score)', () => {
 
         expect(getByTestId('day-understanding-value').textContent).toBe('८ / १०');
         // Framing = Sathi's understanding of the day, not a grade of the farmer.
-        expect(getByTestId('day-understanding-intro').textContent).toContain('समजून');
+        // REDESIGN 2026-08-13 — `day-understanding-intro` is gone (the framing line
+        // is now the SurfaceSection eyebrow "मला किती समजलं" that wraps this card in
+        // mainView), and the compaction pass merged the target line and the
+        // how-to-move-it line into ONE row: `day-understanding-target`. Asserting
+        // that row keeps the real guarantee — the score is never an unlabelled bare
+        // number, and the farmer is always told what he is chasing.
+        const targetLine = getByTestId('day-understanding-target').textContent ?? '';
+        expect(targetLine).toContain('समज');   // "…तेवढं मला समजतं" — how to move it
+        expect(targetLine).toContain('९');     // the mark he is chasing
         // The founder-approved bar renders under the number.
         expect(getByTestId('understanding-bar')).toBeTruthy();
-        expect(getByTestId('understanding-bar').getAttribute('aria-label')).toBe('8 / 10');
+        // The bar now also announces the chase target (2026-08-13), so the label
+        // is '8 / 10, target 8'. Assert the score is present rather than pinning the
+        // whole string — the score reaching the reader is the real guarantee.
+        expect(getByTestId('understanding-bar').getAttribute('aria-label')).toContain('8 / 10');
     });
 
     // -------------------------------------------------------------------------
@@ -149,24 +160,64 @@ describe('DayUnderstandingCard (server /10 Day Understanding Score)', () => {
 
         const { getByTestId } = render(<DayUnderstandingCard farmId="farm-1" dayDate="2026-07-11" />);
 
-        const surface = getByTestId('day-understanding');
-        // The only Devanagari numerals present are the score + denominator "७ / १०".
-        const digits = (surface.textContent ?? '').match(/[०-९]+/g) ?? [];
+        // Scoped to the score element: the surface now also carries the chase
+        // target ("८ पर्यंत पोहोचायचंय"), which is a legitimate second numeral. The
+        // guarantee under test is that the three internal LENS scores never surface,
+        // so assert on the number block itself.
+        const value = getByTestId('day-understanding-value');
+        const digits = (value.textContent ?? '').match(/[०-९]+/g) ?? [];
         expect(digits).toEqual(['७', '१०']);
+
+        // ...and no lens score (0-100) leaks anywhere on the surface.
+        const surface = getByTestId('day-understanding');
+        expect(surface.textContent ?? '').not.toMatch(/(4[0-9]|[5-9][0-9]|100)/);
     });
 
     // -------------------------------------------------------------------------
-    // 6. This component owns the fetch — farmId/dayDate/savedLogId go straight in.
-    //    savedLogId is BUGFIX_2026-07-19's refetch key: without it the score
-    //    fetch races the save and never retries on the same day.
+    // 6. This component owns the fetch. farmId/dayDate go straight in; the third
+    //    argument is a COMPOSITE refetch key.
+    //
+    //    BUGFIX_2026-08-12: it used to be savedLogId alone (BUGFIX_2026-07-19),
+    //    and the score never appeared at all. "Saved to Ledger" fires on the LOCAL
+    //    Dexie write, but the log only reaches the server on the next
+    //    BackgroundSyncWorker tick (~15 s). The savedLogId-keyed fetch therefore
+    //    ran while the server had no such log, got null, and NOTHING re-ran it —
+    //    savedLogId/farmId/dayDate are all unchanged by the sync that follows.
+    //    Verified against a live server holding {"score":7} while the card stayed
+    //    on "अजून समजतंय…". The key now also carries syncMachine's lastSyncAtMs,
+    //    so a completed sync triggers exactly one more fetch (no polling loop).
     // -------------------------------------------------------------------------
-    it('passes farmId, dayDate and savedLogId (the refetch key) into useDayUnderstanding', async () => {
+    it('passes farmId, dayDate and a refetch key carrying savedLogId into useDayUnderstanding', async () => {
         mockDayScore(6);
         const { DayUnderstandingCard } = await loadComponent(true);
 
         render(<DayUnderstandingCard farmId="farm-1" dayDate="2026-07-11" savedLogId="log-42" />);
 
-        expect(dayUnderstandingMock).toHaveBeenCalledWith('farm-1', '2026-07-11', 'log-42');
+        const [farmArg, dateArg, refreshKey] = dayUnderstandingMock.mock.calls.at(-1) as [
+            string | null, string | undefined, string,
+        ];
+        expect(farmArg).toBe('farm-1');
+        expect(dateArg).toBe('2026-07-11');
+        expect(refreshKey).toContain('log-42');
+    });
+
+    it('changes the refetch key when a sync completes, so a late-arriving log is picked up', async () => {
+        mockDayScore(null);
+        const { DayUnderstandingCard } = await loadComponent(true);
+        const { getRootStore } = await import('../../../../../app/state/RootStore');
+
+        const { rerender } = render(<DayUnderstandingCard farmId="farm-1" savedLogId="log-42" />);
+        const keyBeforeSync = (dayUnderstandingMock.mock.calls.at(-1) as unknown[])[2];
+
+        // The real signal BackgroundSyncWorker emits once a push round-trips.
+        await act(async () => {
+            getRootStore().sync.send({ type: 'TRIGGER' });
+            getRootStore().sync.send({ type: 'SYNC_DONE' });
+        });
+        rerender(<DayUnderstandingCard farmId="farm-1" savedLogId="log-42" />);
+
+        const keyAfterSync = (dayUnderstandingMock.mock.calls.at(-1) as unknown[])[2];
+        expect(keyAfterSync).not.toBe(keyBeforeSync);
     });
 
     it('normalises a missing farm to null rather than skipping the hook call', async () => {
@@ -175,6 +226,8 @@ describe('DayUnderstandingCard (server /10 Day Understanding Score)', () => {
 
         render(<DayUnderstandingCard farmId={null} />);
 
-        expect(dayUnderstandingMock).toHaveBeenCalledWith(null, undefined, undefined);
+        const [farmArg, dateArg] = dayUnderstandingMock.mock.calls.at(-1) as [string | null, string | undefined];
+        expect(farmArg).toBeNull();
+        expect(dateArg).toBeUndefined();
     });
 });
