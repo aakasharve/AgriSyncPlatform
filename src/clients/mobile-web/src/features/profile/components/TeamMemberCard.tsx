@@ -2,14 +2,17 @@
  * @license
  * SPDX-License-Identifier: Apache-2.0
  *
- * TeamMemberCard — a farm-team member with a clear, accessible access panel.
- * Collapsed: avatar · name · role · "N/4 access" summary. Expanded: one big
- * labelled toggle per capability (bilingual, icon + one-line "what it means"),
- * plus Remove. Replaces the single hidden "Allow Log" toggle so an owner can
- * grant/revoke every access type per member.
+ * TeamMemberCard — a farm-team member, and the access an owner can ACTUALLY
+ * grant them. Collapsed: avatar · name · role. Expanded: the labour-records
+ * control, which is the one thing here with a server behind it, plus Remove.
+ *
+ * FINAL REVIEW F-3 — this used to render four MORE switches, in the same visual
+ * language, immediately above the real one, and to summarise them as "N/4
+ * access" on the collapsed card. See the block below `Member` for what they
+ * claimed and why none of it was true.
  */
 import React, { useState } from 'react';
-import { ChevronDown, Trash2, ClipboardList, BarChart3, CheckCircle2, Users } from 'lucide-react';
+import { ChevronDown, Trash2, ClipboardList, CheckCircle2 } from 'lucide-react';
 import { OperatorCapability } from '../../../types';
 
 interface Member {
@@ -20,14 +23,27 @@ interface Member {
     capabilities?: OperatorCapability[];
 }
 
-// The access types an owner can grant, in plain Marathi + English with a
-// one-line "what it means". Maps 1:1 to real OperatorCapability values.
-const ACCESS: { cap: OperatorCapability; icon: React.ReactNode; mr: string; en: string; desc: string }[] = [
-    { cap: OperatorCapability.LOG_DATA, icon: <ClipboardList size={18} />, mr: 'रोजची नोंद', en: 'Log daily work', desc: 'मजुरी, पाणी, फवारणी नोंदवू शकतो' },
-    { cap: OperatorCapability.VIEW_ALL, icon: <BarChart3 size={18} />, mr: 'अहवाल पाहणे', en: 'View reports', desc: 'पैसे व सारांश पाहू शकतो' },
-    { cap: OperatorCapability.APPROVE_LOGS, icon: <CheckCircle2 size={18} />, mr: 'नोंदी मंजूर करणे', en: 'Approve entries', desc: 'कामगारांच्या नोंदी तपासू शकतो' },
-    { cap: OperatorCapability.MANAGE_PEOPLE, icon: <Users size={18} />, mr: 'टीम सांभाळणे', en: 'Manage team', desc: 'सदस्य जोडू किंवा काढू शकतो' },
-];
+/*
+ * DELETED — `ACCESS`, the four capability switches.
+ *
+ * They were pure theatre, in the same visual language as the one real control
+ * and sitting immediately above it. Two of the labels were active false claims:
+ * **"नोंदी मंजूर करणे · Approve entries"** granted nothing — approve/verify is
+ * gated by `can_manage_labour_records` — and none of the four gates anything
+ * anywhere. The ONLY readers of `capabilities` in this codebase are display
+ * (`TeamMemberCard` itself and `IdentitySection.tsx:502`); no guard consults
+ * them.
+ *
+ * And they could not persist even if something did read them:
+ * `profileAndCropsReconciler.ts:150` recomputes `capabilities` from role via
+ * `capabilitiesForRole`, so every pull discards whatever the owner set.
+ * `onToggleCap` (`IdentitySection.tsx:501-509`) writes local profile state and
+ * stops there.
+ *
+ * `labourAccess` below is the one control with a server behind it and a `409`
+ * when the server refuses — which is why it renders as a static state rather
+ * than a switch when it is not editable.
+ */
 
 /**
  * LABOUR_PHASE2 Phase 5 — the ONE capability on this card that reaches a
@@ -59,15 +75,17 @@ interface LabourAccessView {
 
 interface TeamMemberCardProps {
     member: Member;
-    onToggleCap: (cap: OperatorCapability) => void;
+    /**
+     * @deprecated Wired to nothing. Kept so `IdentitySection` needs no change in
+     * a `.tsx`-frozen round; delete the prop and its caller together.
+     */
+    onToggleCap?: (cap: OperatorCapability) => void;
     onDelete: () => void;
     labourAccess?: LabourAccessView;
 }
 
-export const TeamMemberCard: React.FC<TeamMemberCardProps> = ({ member, onToggleCap, onDelete, labourAccess }) => {
+export const TeamMemberCard: React.FC<TeamMemberCardProps> = ({ member, onDelete, labourAccess }) => {
     const [open, setOpen] = useState(false);
-    const caps = member.capabilities || [];
-    const granted = ACCESS.filter(a => caps.includes(a.cap)).length;
     const isPartner = member.role === 'SECONDARY_OWNER';
 
     return (
@@ -89,9 +107,6 @@ export const TeamMemberCard: React.FC<TeamMemberCardProps> = ({ member, onToggle
                         <span className={`rounded-lg border px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide ${isPartner ? 'border-blue-100 bg-blue-50 text-blue-700' : 'border-orange-100 bg-orange-50 text-orange-700'}`}>
                             {isPartner ? 'भागीदार · Partner' : 'कामगार · Worker'}
                         </span>
-                        <span className={`rounded-lg px-2 py-0.5 text-[10px] font-bold ${granted > 0 ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-400'}`}>
-                            {granted}/{ACCESS.length} प्रवेश
-                        </span>
                     </div>
                 </div>
                 {/* Chevron + label stacked in a compact right column so they
@@ -106,43 +121,19 @@ export const TeamMemberCard: React.FC<TeamMemberCardProps> = ({ member, onToggle
 
             {open && (
                 <div className="animate-in fade-in slide-in-from-top-1 border-t border-slate-100 bg-slate-50/50 px-3 py-3 duration-200">
-                    <p className="mb-2 px-1 text-[11px] font-bold uppercase tracking-wide text-slate-400">
-                        हा सदस्य काय करू शकतो? · What can they do?
-                    </p>
-                    <div className="space-y-2">
-                        {ACCESS.map(a => {
-                            const on = caps.includes(a.cap);
-                            return (
-                                <button
-                                    key={a.cap}
-                                    type="button"
-                                    onClick={() => onToggleCap(a.cap)}
-                                    aria-pressed={on}
-                                    className={`flex w-full items-center gap-3 rounded-xl border p-3 text-left transition-all active:scale-[0.98] ${on ? 'border-emerald-200 bg-emerald-50/70 shadow-sm shadow-emerald-100' : 'border-slate-200 bg-white'}`}
-                                >
-                                    <span className={`flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl transition-colors ${on ? 'bg-emerald-600 text-white' : 'bg-slate-100 text-slate-400'}`}>
-                                        {a.icon}
-                                    </span>
-                                    <span className="min-w-0 flex-1">
-                                        <span className="block text-sm font-bold text-slate-800">{a.mr} · {a.en}</span>
-                                        <span className="block text-[11px] leading-snug text-slate-400">{a.desc}</span>
-                                    </span>
-                                    <span className={`relative h-6 w-11 flex-shrink-0 rounded-full transition-colors ${on ? 'bg-emerald-500' : 'bg-slate-300'}`}>
-                                        <span className={`absolute left-0.5 top-0.5 h-5 w-5 rounded-full bg-white shadow-sm transition-transform ${on ? 'translate-x-5' : ''}`} />
-                                    </span>
-                                </button>
-                            );
-                        })}
-                    </div>
+                    {labourAccess && (
+                        <p className="mb-2 px-1 text-[11px] font-bold uppercase tracking-wide text-slate-400">
+                            हा सदस्य काय करू शकतो? · What can they do?
+                        </p>
+                    )}
+                    {/* LABOUR_PHASE2 Phase 5 — the real one, and now the only one.
 
-                    {/* LABOUR_PHASE2 Phase 5 — the real one.
-
-                        Rendered BELOW the four above and visually separated,
-                        because they are not the same kind of control. Those
-                        four are local state that the next pull OVERWRITES
+                        FINAL REVIEW F-3 deleted the four switches that used to
+                        sit above this: local state the next pull overwrote
                         (`profileAndCropsReconciler.ts:150` recomputes
-                        capabilities from role via `capabilitiesForRole`); this
-                        one is the server's own answer.
+                        capabilities from role via `capabilitiesForRole`), and
+                        gating nothing anywhere in the first place. The divider
+                        that separated them from this control went with them.
 
                         ENGLISH ONLY, by founder ruling — no approved Marathi
                         exists for these three labels and no agent may invent
@@ -154,7 +145,7 @@ export const TeamMemberCard: React.FC<TeamMemberCardProps> = ({ member, onToggle
                         so anything switch-shaped would be a control that looks
                         functional and does nothing (`P5`). */}
                     {labourAccess && (
-                        <div className="mt-3 border-t border-slate-200 pt-3">
+                        <div>
                             {labourAccess.isEditable ? (
                                 <button
                                     type="button"
