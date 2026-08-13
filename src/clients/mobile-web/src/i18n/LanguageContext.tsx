@@ -4,7 +4,15 @@
  */
 
 import React, { createContext, useContext, ReactNode } from 'react';
-import { Language, translations, t as translate } from './translations';
+// `Language` is re-exported by `translations.ts` from the `language.ts` leaf, so
+// it is a TYPE here and must be imported as one — `isolatedModules` is on and a
+// value-shaped import of a type-only re-export is the kind of thing that
+// compiles today and breaks the day a bundler stops guessing.
+// `translations` was imported here and never used — a pre-existing dead import
+// this file's lint debt had never surfaced, because the file had never been
+// staged (the pre-commit gate runs `--max-warnings 0` on STAGED files only).
+// Dropped rather than suppressed. Zero rendered-output change: nothing read it.
+import { t as translate, type Language } from './translations';
 import { LanguageSyncFromServer } from './LanguageSyncFromServer';
 import { useUiPref } from '../shared/hooks/useUiPref';
 
