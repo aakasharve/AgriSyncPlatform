@@ -31,6 +31,7 @@ import DailyLoopClarity from '../../features/logs/components/shramsathi/DailyLoo
 import DailyLoopInsight from '../../features/logs/components/shramsathi/DailyLoopInsight';
 import DayUnderstandingCard from '../../features/logs/components/shramsathi/DayUnderstandingCard';
 import SathiSaidCard from '../../features/logs/components/shramsathi/SathiSaidCard';
+import SavedScreenBack from '../../features/logs/components/shramsathi/SavedScreenBack';
 import SurfaceSection from '../../features/logs/components/shramsathi/SurfaceSection';
 import { buildDailyInsight } from '../../features/logs/intelligence/buildDailyInsight';
 import { ShramSathiUnderstanding } from '../../features/logs/components/shramsathi/ShramSathiUnderstanding';
@@ -654,6 +655,17 @@ export const renderLogView = (ctx: AppRouterContext): React.ReactNode => {
             )}
 
             {status === 'success' && (
+                <>
+                {/* BUG-2 2026-08-14 (founder: "there is no going back screen after
+                    this screen"). The back control lives OUTSIDE the card because
+                    the card is `overflow-hidden`, which would kill `position:
+                    sticky` inside it. Out here it sticks to the top of the
+                    scrolling <main>, so it stays reachable however far the farmer
+                    has scrolled. It also owns the hardware-back handling — see
+                    SavedScreenBack. `handleReset` is the same safe reset the
+                    bottom "आणखी नोंद करा" button uses: it clears DRAFT state only
+                    and never touches the already-saved log. */}
+                <SavedScreenBack onBack={handleReset} />
                 <div data-testid="saved-to-ledger" className="animate-in fade-in duration-500 bg-white rounded-3xl shadow-xl border border-stone-100 p-4 text-center relative overflow-hidden">
                     {/* REDESIGN 2026-08-13 (founder). Was: a 3xl English "Saved to
                         Ledger" headline under a leaf, on an emerald gradient, with
@@ -923,6 +935,7 @@ export const renderLogView = (ctx: AppRouterContext): React.ReactNode => {
                         </div>
                     </div>
                 </div>
+                </>
             )}
 
 

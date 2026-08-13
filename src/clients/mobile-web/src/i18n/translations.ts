@@ -233,11 +233,26 @@ export interface Translations {
         loading: string;
         error: string;
         add: string;
+        /** "Today". DailySummaryCard already referenced `common.today`; the key
+         *  never existed, so the card rendered the literal string
+         *  "COMMON.TODAY" (uppercased) at the head of the farmer's day. */
+        today: string;
+        /** Universal "go back" affordance label. `profile.back` already carried
+         *  the same word for the setup wizard; this is its home for surfaces
+         *  outside Profile (e.g. the post-save screen's back control). */
+        back: string;
     };
     // DFES Behavioral Layer (Anti-Ego & Habit Loop)
     dfes: {
         // Closure ritual
+        /**
+         * Sathi's own first-person sentence, founder-locked 2026-08-14. It is a
+         * SENTENCE, not a control label — it heads the confirm panel. The pill
+         * that opens that panel uses `closeTodayAction`.
+         */
         closeToday: string;
+        /** SHORT label for the control that opens the closeToday panel. */
+        closeTodayAction: string;
         todayClosed: string;
         closeTodayQuestion: string;
 
@@ -561,11 +576,14 @@ export const translations: Record<Language, Translations> = {
             loading: 'Loading...',
             error: 'Error',
             add: 'Add',
+            today: 'Today',
+            back: 'Back',
         },
         // DFES Behavioral Layer
         dfes: {
             // Closure ritual
             closeToday: 'Close today',
+            closeTodayAction: 'Check today',
             todayClosed: 'Today closed. Everything recorded.',
             closeTodayQuestion: 'Want to close today\'s farm?',
 
@@ -859,11 +877,23 @@ export const translations: Record<Language, Translations> = {
             loading: 'लोड होत आहे...',
             error: 'चूक',
             add: 'जोडा',
+            // AGENT-DRAFTED 2026-08-14 — needs founder approval. One word, and
+            // it is the same आज the founder's own dfes strings already open with
+            // ("आजची सगळी कामे…", "आजचं सगळं सांगून झालं का?").
+            today: 'आज',
+            // Same word already shipping at profile.back and rendered today by
+            // ProfilePage / SetupHubMenu / FirstFarmWizard — not a new phrasing.
+            back: 'मागे',
         },
         // DFES Behavioral Layer
         dfes: {
             // Closure ritual
             closeToday: 'आजची सगळी कामे माझ्यापर्यंत पोहोचली का याची खात्री करा',
+            // AGENT-DRAFTED 2026-08-14 — needs founder approval. Lifted verbatim
+            // from the closing verb phrase of the founder's own closeToday
+            // sentence above, so the pill and the panel it opens speak the same
+            // words. No new vocabulary was invented.
+            closeTodayAction: 'खात्री करा',
             todayClosed: 'आजचं आटपलं. सगळी कामे आणि गोष्टी समजल्या',
             closeTodayQuestion: 'आजचं सगळं सांगून झालं का?',
 
