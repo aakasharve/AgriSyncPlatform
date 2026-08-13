@@ -20,16 +20,17 @@
  * bytes BEFORE the split — so this test compares the new arrangement against
  * the old file, which is the only comparison that means anything here.
  *
- * TEN `mr` STRINGS AND ONE `en` STRING ARE NO LONGER THOSE BYTES, ON PURPOSE.
- * Across two founder review rounds on 2026-08-13 he rewrote `closeToday`,
- * `todayClosed`, `todaySummary`, `farmBookUpToDate`, `doesThisMatch`,
- * `updated`, `waitingForConfirmation`, `onboardingWelcome`,
- * `firstLogCelebration` and `entries`; `onboardingWelcome` also changed in `en`
- * because it quoted a time cost his rule forbids. Each was re-transcribed here
- * from his worksheet, character for character, in the same commit that changed
- * the module — the deliberate two-file edit this file exists to force.
- * Everything else below is still the pre-split transcription, so the split
- * guard still holds for the other 28 `mr` strings and 37 `en`.
+ * THIRTEEN `mr` STRINGS AND ONE `en` STRING ARE NO LONGER THOSE BYTES, ON
+ * PURPOSE. Across his 2026-08-13 review the founder rewrote `closeToday`,
+ * `todayClosed`, `closeTodayQuestion`, `todaySummary`, `farmBookUpToDate`,
+ * `doesThisMatch`, `updated`, `waitingForConfirmation`, `onboardingWelcome`,
+ * `firstLogCelebration`, `reviewAndClose`, `entries` and `clickToClose`;
+ * `onboardingWelcome` also changed in `en` because it quoted a time cost his
+ * rule forbids. Each was re-transcribed here from his worksheet, character for
+ * character, in the same commit that changed the module — the deliberate
+ * two-file edit this file exists to force. Everything else below is still the
+ * pre-split transcription, so the split guard still holds for the other 25
+ * `mr` strings and 37 `en`.
  *
  * It also pins the two properties the split exists to create: `Language` is
  * still reachable from `translations.ts` (40-odd call sites import it there),
@@ -89,9 +90,9 @@ const DFES_APPROVED_COPY = {
         clickToClose: 'Click to close the day',
     },
     mr: {
-        closeToday: 'आजच्या सर्व नोंदी माझ्यापर्यंत पोहोचल्या का याची खात्री करा',
+        closeToday: 'आजची सगळी कामे माझ्यापर्यंत पोहोचली का याची खात्री करा',
         todayClosed: 'आजचं आटपलं. सगळी कामे आणि गोष्टी समजल्या',
-        closeTodayQuestion: 'आजचं शेत बंद करायचं?',
+        closeTodayQuestion: 'आजचं सगळं सांगून झालं का?',
         todaySummary: 'आजची {activities} कामे, खर्च रु. {cost}',
         weekSummary: 'या आठवड्यात: {entries} नोंदी, Rs. {cost} खर्च.',
         farmBookUpToDate: 'शेतातील कामे आणि मी समजून घेतलेले कामे बरोबर आहेत',
@@ -115,7 +116,7 @@ const DFES_APPROVED_COPY = {
         firstLogCelebration: 'तुमचे पहिले काम मला समजले',
         comeBackTomorrow: 'उद्या संध्याकाळी या.',
         weeklyReviewPrompt: 'तुमच्या शेतनोंदीत नवीन नोंदी आहेत. तपासा.',
-        reviewAndClose: 'तपासा आणि बंद करा',
+        reviewAndClose: 'तपासा आणि खात्री करा',
         farmBookOpen: 'या आठवड्याची शेतनोंद उघडी आहे.',
         trustedTotal: 'खात्रीशीर एकूण',
         loggedTotal: 'नोंदवलेला एकूण',
@@ -126,7 +127,7 @@ const DFES_APPROVED_COPY = {
         entries: 'कामे',
         unknown: 'अज्ञात',
         verify: 'खात्री करा',
-        clickToClose: 'दिवस बंद करण्यासाठी क्लिक करा',
+        clickToClose: 'दिवस पूर्ण करण्यासाठी क्लिक करा',
     },
 } as const;
 
@@ -158,7 +159,7 @@ describe('translations.ts split — the copy moved, and only the copy', () => {
     it('`t()` still resolves a DFES key rather than echoing it back', () => {
         // `t()` returns the KEY when a lookup misses, so a broken composition
         // would render `dfes.closeToday` on a button instead of throwing.
-        expect(t('dfes.closeToday', 'mr')).toBe('आजच्या सर्व नोंदी माझ्यापर्यंत पोहोचल्या का याची खात्री करा');
+        expect(t('dfes.closeToday', 'mr')).toBe('आजची सगळी कामे माझ्यापर्यंत पोहोचली का याची खात्री करा');
         expect(t('dfes.closeToday', 'en')).toBe('Close today');
         expect(t('dfes.clickToClose', 'mr')).not.toBe('dfes.clickToClose');
     });

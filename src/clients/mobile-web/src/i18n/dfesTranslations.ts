@@ -24,14 +24,25 @@
  * `__tests__/translationsSplit.test.ts` pins that against a hand-transcribed
  * oracle rather than against this file.
  *
- * SINCE THEN, TWO ROUNDS OF FOUNDER REVISION (2026-08-13). 10 of the 38 `mr`
- * strings are now his rather than the pre-split bytes: `closeToday`,
- * `todayClosed`, `todaySummary`, `farmBookUpToDate`, `doesThisMatch`,
+ * SINCE THEN, FOUNDER REVISION (2026-08-13). 13 of the 38 `mr` strings are now
+ * his rather than the pre-split bytes: `closeToday`, `todayClosed`,
+ * `closeTodayQuestion`, `todaySummary`, `farmBookUpToDate`, `doesThisMatch`,
  * `updated`, `waitingForConfirmation`, `onboardingWelcome`,
- * `firstLogCelebration`, `entries`. The other 28 are untouched. He is the
- * Marathi authority: these are copied verbatim from his worksheet and are not
- * an agent's to spell-correct, reword or re-punctuate — round 2 is where his
- * own slips got fixed (`तपसणी` -> `तपासणी`), by him.
+ * `firstLogCelebration`, `reviewAndClose`, `entries`, `clickToClose`. The
+ * other 25 are untouched. He is the Marathi authority: these are copied
+ * verbatim from his worksheet and are not an agent's to spell-correct, reword
+ * or re-punctuate — the later rounds are where his own slips got fixed
+ * (`तपसणी` -> `तपासणी`), by him.
+ *
+ * TWO RULINGS EXPLAIN MOST OF THE REWRITES, AND BOTH ARE EASY TO UNDO BY
+ * ACCIDENT. `बंद` ("close the day") is REMOVED EVERYWHERE — a day is finished
+ * by telling Sathi everything, not by closing a book — which is why
+ * `closeTodayQuestion`, `reviewAndClose` and `clickToClose` no longer say it.
+ * And `नोंद`/`नोंदी` is banned from ANY LINE SATHI SPEAKS (`sathi-only`): it
+ * remains legitimate in UI chrome, which is why `weekSummary`,
+ * `daysLoggedThisWeek` and `ownerHasQuestion` still carry it, but `closeToday`
+ * is Sathi in the first person and now says `कामे`. Re-introducing either word
+ * into one of his lines undoes a founder decision.
  *
  * ONE `en` STRING CHANGED, AND ONLY BECAUSE THE MARATHI FORCED IT.
  * `onboardingWelcome` promised "Just 30 seconds", and the founder's standing
@@ -40,12 +51,6 @@
  * other `en` string is the pre-split byte; where an `mr` rewrite moved a
  * string's meaning, the English was left alone deliberately, because he ruled
  * on Marathi and English is a separate pass.
- *
- * THREE STRINGS ARE DELIBERATELY NOT REVISED, PENDING A CLASH.
- * `closeTodayQuestion`, `reviewAndClose` and `clickToClose` all carry the `बंद`
- * ("close the day") metaphor. One ruling keeps `बंद` everywhere; a second
- * removes it everywhere. They are held at their shipped wording until that is
- * settled, so nobody reads their absence from the list above as an oversight.
  *
  * The oracle test is updated in the same commit, which is the two-file edit it
  * exists to force.
@@ -175,9 +180,9 @@ export const dfesTranslations: Record<Language, DfesTranslations> = {
 
     mr: {
         // Closure ritual
-        closeToday: 'आजच्या सर्व नोंदी माझ्यापर्यंत पोहोचल्या का याची खात्री करा',
+        closeToday: 'आजची सगळी कामे माझ्यापर्यंत पोहोचली का याची खात्री करा',
         todayClosed: 'आजचं आटपलं. सगळी कामे आणि गोष्टी समजल्या',
-        closeTodayQuestion: 'आजचं शेत बंद करायचं?',
+        closeTodayQuestion: 'आजचं सगळं सांगून झालं का?',
 
         // Day summary
         todaySummary: 'आजची {activities} कामे, खर्च रु. {cost}',
@@ -213,7 +218,7 @@ export const dfesTranslations: Record<Language, DfesTranslations> = {
 
         // Owner verification trigger
         weeklyReviewPrompt: 'तुमच्या शेतनोंदीत नवीन नोंदी आहेत. तपासा.',
-        reviewAndClose: 'तपासा आणि बंद करा',
+        reviewAndClose: 'तपासा आणि खात्री करा',
         farmBookOpen: 'या आठवड्याची शेतनोंद उघडी आहे.',
 
         // Trust
@@ -230,6 +235,6 @@ export const dfesTranslations: Record<Language, DfesTranslations> = {
         verify: 'खात्री करा',
 
         // Batch 5
-        clickToClose: 'दिवस बंद करण्यासाठी क्लिक करा',
+        clickToClose: 'दिवस पूर्ण करण्यासाठी क्लिक करा',
     },
 };
