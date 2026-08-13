@@ -63,6 +63,7 @@ import {
     deriveSyncHonestyState,
     EMPTY_SYNC_EVIDENCE,
 } from '../../../features/sync/status/syncHonestyState';
+import { tf as translateFormat, type Language } from '../../../i18n/translations';
 
 const makeLog = (id: string) => ({
     id,
@@ -126,6 +127,33 @@ vi.mock('../../../application/services/LogCommandService', () => ({
 /** The exact strings shipped in `i18n/translations.ts` under the `sync` namespace. */
 const ON_PHONE_MR = 'फोनवर सेव्ह ✓';
 const ON_PHONE_EN = 'Saved on phone';
+
+/*
+ * THE TAILS ARE RESOLVED, NOT TRANSCRIBED — and that is deliberate.
+ *
+ * The tail used to be a hardcoded English fragment concatenated in the hook, so
+ * a Marathi farmer read one sentence in two scripts. It is i18n now, which
+ * means the thing worth asserting HERE is the SHAPE of the sentence — that the
+ * phone claim comes first, that both counts come off the enqueue result, that
+ * the farmer's language selects the template — and not the wording, which a
+ * founder may revise.
+ *
+ * The wording itself is pinned by hand-written literals in
+ * `src/i18n/__tests__/shramSathiVoice.test.ts`, exactly as the three chip
+ * labels already are. Pinning it in both places would mean a founder copy edit
+ * breaks a dozen behavioural tests that have nothing to say about copy.
+ */
+const notFiledTail = (language: Language, skipped: number, handled: number): string =>
+    translateFormat('sync.notFiledCountTail', language, { skipped, handled });
+
+
+/** The corrections tail, same reasoning as `notFiledTail`. */
+const correctionsTail = (language: Language, count: number): string =>
+    translateFormat(
+        count === 1 ? 'sync.correctionsFiledTailOne' : 'sync.correctionsFiledTailMany',
+        language,
+        { count },
+    );
 /** T1's NEEDS_FIX label. It must NOT appear on this surface — see B3. */
 const NEEDS_FIX_MR = 'अडकलं — तपासा';
 const NEEDS_FIX_EN = 'Stuck — check';
@@ -218,7 +246,7 @@ describe('useLogCommands — a save may not claim what was never queued (T2)', (
         });
 
         expect(lastToast()).toEqual({
-            message: `${ON_PHONE_MR} — 3 of 3 cannot be sent.`,
+            message: `${ON_PHONE_MR} — ${notFiledTail('mr', 3, 3)}`,
             type: 'partial',
         });
         // The specific lie: the old wording, on a save that queued nothing.
@@ -268,7 +296,7 @@ describe('useLogCommands — a save may not claim what was never queued (T2)', (
         });
 
         expect(lastToast()).toEqual({
-            message: `${ON_PHONE_MR} — 2 of 3 cannot be sent.`,
+            message: `${ON_PHONE_MR} — ${notFiledTail('mr', 2, 3)}`,
             type: 'partial',
         });
         // Rounding two dropped records up into the saved figure is the exact
@@ -319,7 +347,7 @@ describe('useLogCommands — a save may not claim what was never queued (T2)', (
         });
 
         expect(lastToast()).toEqual({
-            message: `${ON_PHONE_EN} — 1 of 1 cannot be sent.`,
+            message: `${ON_PHONE_EN} — ${notFiledTail('en', 1, 1)}`,
             type: 'partial',
         });
     });
@@ -494,7 +522,7 @@ describe('useLogCommands — a save may not claim what was never queued (T2)', (
         });
 
         expect(lastToast()).toEqual({
-            message: `${ON_PHONE_MR} — 3 of 3 cannot be sent.`,
+            message: `${ON_PHONE_MR} — ${notFiledTail('mr', 3, 3)}`,
             type: 'partial',
         });
         expect(everyToastMessage()).not.toContain('Saved to');
@@ -534,7 +562,7 @@ describe('useLogCommands — a save may not claim what was never queued (T2)', (
         });
 
         expect(lastToast()).toEqual({
-            message: `${ON_PHONE_MR} — 1 of 1 cannot be sent.`,
+            message: `${ON_PHONE_MR} — ${notFiledTail('mr', 1, 1)}`,
             type: 'partial',
         });
     });
@@ -548,7 +576,7 @@ describe('useLogCommands — a save may not claim what was never queued (T2)', (
         });
 
         expect(lastToast()).toEqual({
-            message: `${ON_PHONE_MR} — 1 of 1 cannot be sent.`,
+            message: `${ON_PHONE_MR} — ${notFiledTail('mr', 1, 1)}`,
             type: 'partial',
         });
     });
@@ -716,7 +744,7 @@ describe('useLogCommands — the EDIT path may not claim a save it cannot eviden
         await submitEdit();
 
         expect(setToast).toHaveBeenCalledWith({
-            message: `${ON_PHONE_MR} — 2 labour corrections sent to the server.`,
+            message: `${ON_PHONE_MR} — ${correctionsTail('mr', 2)}`,
             type: 'success',
         });
     });
@@ -731,7 +759,7 @@ describe('useLogCommands — the EDIT path may not claim a save it cannot eviden
         await submitEdit();
 
         expect(setToast).toHaveBeenCalledWith({
-            message: `${ON_PHONE_MR} — 1 labour correction sent to the server.`,
+            message: `${ON_PHONE_MR} — ${correctionsTail('mr', 1)}`,
             type: 'success',
         });
     });

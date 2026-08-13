@@ -240,6 +240,64 @@ export interface Translations {
         onServer: string;
         /** Rejected, past the retry cap, or never queued at all. */
         needsFix: string;
+
+        /*
+         * ── The TAILS ────────────────────────────────────────────────────────
+         *
+         * PROPOSED COPY, PENDING FOUNDER CONFIRMATION. Wording taken from the
+         * CTO ruling of 2026-08-13 (`cto-rulings.md` §1.3). The founder is the
+         * Marathi authority; nothing here is a string any agent invented.
+         *
+         * These exist because the app was speaking half a sentence in each
+         * language. `useLogCommands` composed a Marathi `sync.onPhone` with a
+         * HARDCODED English tail — a farmer on the Marathi preference read
+         * `फोनवर सेव्ह ✓ — 3 of 3 cannot be sent.`, one sentence, two scripts.
+         * The claim was honest and the presentation was not.
+         *
+         * They are TAILS rather than whole sentences on purpose: the reassuring
+         * half must come FIRST and must be the SAME string the chip uses
+         * (T2/B4 — a farmer scanning a red toast who reads "gone" re-records,
+         * and now the ledger holds the day twice). Composing
+         * `${t(sync.onPhone)} — ${tail}` keeps `startsWith(onPhone)` true and
+         * keeps ONE definition of the phone claim.
+         */
+
+        /**
+         * "…of the records in this save, N will never reach the server."
+         *
+         * `{skipped}` and `{handled}` are read off the enqueue RESULT, never
+         * off the submitted set, so the sentence cannot round a dropped record
+         * up into a saved one.
+         *
+         * WORD ORDER IS NOT A TRANSLATION OF THE ENGLISH. Marathi `X पैकी Y`
+         * means "Y out of X", so the TOTAL binds before `पैकी` and the SUBSET
+         * after — the mirror of the English order. Verified against this file's
+         * own precedent, `dfes.daysLoggedThisWeek`, which is
+         * `'{logged} of {count} days'` in English and
+         * `'{count} पैकी {logged} दिवस'` in Marathi. Getting this backwards
+         * would report the wrong number in the language most farmers read.
+         */
+        notFiledCountTail: string;
+        /**
+         * The same fact with no counts, for the per-record badge on the
+         * success card, where the count is already implied by the card itself.
+         */
+        notFiledBadgeTail: string;
+
+        /**
+         * "N labour corrections reached your farm records." — the ONE
+         * server-evidenced claim the edit path is allowed to make
+         * (`persistedLabourCorrections`, and `postLabourCorrection` throws on
+         * any non-2xx).
+         *
+         * MARATHI HAS ONE FORM HERE, NOT TWO. The CTO's approved clause is the
+         * plural `{count} दुरुस्त्या शेतनोंदीत गेल्या.`; no singular was
+         * supplied and no agent may inflect one, so the approved plural is used
+         * at every count and is listed for the founder. English keeps the
+         * singular/plural split the shipped code already had.
+         */
+        correctionsFiledTailOne: string;
+        correctionsFiledTailMany: string;
     };
     // DFES Behavioral Layer (Anti-Ego & Habit Loop) — see `dfesTranslations.ts`
     dfes: DfesTranslations;
@@ -437,6 +495,10 @@ export const translations: Record<Language, Translations> = {
             onPhone: 'Saved on phone',
             onServer: 'Sent',
             needsFix: 'Stuck — check',
+            notFiledCountTail: '{skipped} of {handled} will not reach your farm records.',
+            notFiledBadgeTail: 'will not reach your farm records',
+            correctionsFiledTailOne: '{count} labour correction reached your farm records.',
+            correctionsFiledTailMany: '{count} labour corrections reached your farm records.',
         },
         // DFES Behavioral Layer
         dfes: dfesTranslations.en,
@@ -633,6 +695,10 @@ export const translations: Record<Language, Translations> = {
             onPhone: 'फोनवर सेव्ह ✓',
             onServer: 'पाठवलं ✓',
             needsFix: 'अडकलं — तपासा',
+            notFiledCountTail: '{handled} पैकी {skipped} शेतनोंदीत जाणार नाहीत.',
+            notFiledBadgeTail: 'शेतनोंदीत जाणार नाही',
+            correctionsFiledTailOne: '{count} दुरुस्त्या शेतनोंदीत गेल्या.',
+            correctionsFiledTailMany: '{count} दुरुस्त्या शेतनोंदीत गेल्या.',
         },
         // DFES Behavioral Layer
         dfes: dfesTranslations.mr,
@@ -661,4 +727,41 @@ export function t(key: string, lang: Language = 'en'): string {
     }
 
     return typeof value === 'string' ? (value || key) : key;
+}
+
+/**
+ * `t()` plus `{placeholder}` substitution.
+ *
+ * WHY IT EXISTS. Counted sentences were being built by concatenation in the
+ * caller — `` `${t('sync.onPhone', lang)} — ${skipped} of ${handled} cannot be
+ * sent.` `` — which forced the numbers' POSITION to be English word order in
+ * every language. Marathi puts the total before `पैकी` and the subset after,
+ * the mirror of English, so a concatenated sentence is not translatable at all:
+ * it is English grammar wearing Marathi words. A template per language is the
+ * only shape that lets the two orders differ.
+ *
+ * This file already shipped ~8 `{placeholder}` strings (`dfes.todaySummary`,
+ * `dfes.daysLoggedThisWeek`, `dfes.ownerHasQuestion`, …) with NO substituter
+ * anywhere in the client, so every one of them could only ever have rendered
+ * its braces raw. This is the missing half of a convention that was already
+ * here, not a new one.
+ *
+ * AN UNKNOWN PLACEHOLDER IS LEFT STANDING, deliberately. Replacing it with an
+ * empty string would turn "3 of 5 will not reach…" into "3 of will not reach…"
+ * — a sentence that still reads like a sentence while having lost a number.
+ * A visible `{handled}` is a bug report; a silent gap is a wrong statement to a
+ * farmer (`P4`).
+ */
+export function tf(
+    key: string,
+    lang: Language = 'en',
+    vars: Record<string, string | number> = {},
+): string {
+    return t(key, lang).replace(
+        /\{(\w+)\}/g,
+        (placeholder, name: string) =>
+            Object.prototype.hasOwnProperty.call(vars, name)
+                ? String(vars[name])
+                : placeholder,
+    );
 }

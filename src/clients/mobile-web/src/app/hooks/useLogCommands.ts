@@ -21,14 +21,12 @@ import { countCompletedIrrigationEvents } from '../../features/logs/services/irr
 // Labour Phase 2 / T2 — a record that never reached the sync queue is still ON
 // THE PHONE, and it is described with the SAME words the header chip uses for
 // that situation (T1's `sync.onPhone`). Two surfaces, one claim, one string.
+// That lookup now happens inside `saveToastMessages`, which is why this hook no
+// longer imports `SYNC_HONESTY_I18N_KEYS` itself — the reason for the deep
+// import (the `features/sync` barrel drags `lucide-react`, `getDatabase` and the
+// module-scope `backgroundSyncWorker` singleton into the graph for one string
+// constant) moved there with it and is restated in that file.
 //
-// Deep import rather than the `features/sync` barrel deliberately: that barrel
-// also re-exports `SyncStatusDrawer`, which pulls `lucide-react`, `getDatabase`
-// and the `backgroundSyncWorker` singleton (instantiated at module scope,
-// `BackgroundSyncWorker.ts:274`) into this hook's module graph — a UI drawer and
-// a live sync worker imported for one string constant. `SyncStatusService.ts`
-// already deep-imports this exact module for the same reason.
-import { SYNC_HONESTY_I18N_KEYS } from '../../features/sync/status/syncHonestyState';
 // Final fix round, finding C-1 — the header chip is the ONE surface that stayed
 // wrong. It derives its claim from `db.mutationQueue`, and a skipped log writes
 // no row there, so on any device that has ever had a mutation applied
@@ -38,7 +36,7 @@ import { SYNC_HONESTY_I18N_KEYS } from '../../features/sync/status/syncHonestySt
 // that fact, so this is the only place that can tell it.
 import { noteUnqueueableLogs } from '../../features/sync/status/unqueueableLogs';
 import { useLanguage } from '../../i18n/LanguageContext';
-import { t as translate, type Language } from '../../i18n/translations';
+import { buildEditSavedMessage, buildSkippedSyncToast } from '../helpers/saveToastMessages';
 
 export interface UseLogCommandsResult {
     handleAutoSave: (logData: AgriLogResponse, provenance?: LogProvenance) => Promise<void>;
@@ -106,98 +104,25 @@ interface UseLogCommandsProps {
  */
 type LogSyncEnqueueOutcome = Awaited<ReturnType<typeof enqueueLogsForSync>>;
 
-type SaveToast = { message: string; type: 'success' | 'error' | 'partial' };
-
-/**
- * Labour Phase 2 / T2 — the honest toast for a save whose records did NOT all
- * reach the sync queue.
+/*
+ * The two save sentences moved to `app/helpers/saveToastMessages.ts`.
  *
- * WHY THIS EXISTS. `enqueueLogsForSync` has always returned `skippedLogIds` —
- * the logs it could not queue, because `resolveSyncTarget` found no plot or no
- * crop cycle for them. Until this task that array had zero production
- * consumers: all four call sites discarded the whole result and fired a success
- * toast unconditionally. So the exact records the app already KNEW it had
- * dropped were the records the farmer was told were saved. A farmer picking
- * "संपूर्ण शेत" recorded eight workers, read `Logged.`, and the record never
- * left the handset. Doctrine `P4` (no fabricated figure reaches a farmer) and
- * `P5` (a truthful missing feature beats a fake working one).
+ * WHY: this hook sat at 797 of the 800 lines `check:file-sizes` allows, and the
+ * wording work could not land without splitting something. They were the right
+ * thing to move — pure, and the only part of this hook a wording test needs, so
+ * asserting a sentence used to cost a `renderHook` plus four mocked services.
  *
- * THE COUNTS COME FROM THE QUEUED RESULT, NEVER FROM THE SUBMITTED SET. Both
- * the numerator and the denominator are read off the outcome object, so a
- * message can never round a skipped log up into a saved one.
+ * WHAT DID NOT MOVE: every decision about WHEN they fire, which branch a save
+ * takes, and how long a toast stays up. Those stay here, with the flow.
  *
- * Returns `null` when there is nothing to confess — that is the caller's signal
- * that its own existing success wording is legitimate, so the happy path is
- * byte-identical to before.
- *
- * IT LEADS WITH `ON_PHONE`, NOT `NEEDS_FIX` (review round 1, findings B3+B4).
- * The first version ended on T1's `अडकलं — तपासा` / `Stuck — check`, and that
- * was wrong twice over:
- *
- *   - `तपासा` means "go and check", and there is nowhere to go. A skipped log
- *     `continue`s before any queue row is written (`logSyncMutationService.ts:324-327`),
- *     so `BackgroundSyncWorker` will never retry it and the sync drawer cannot
- *     list it. Sending a farmer to look for something with no home in the state
- *     model is a second lie stacked on the first.
- *   - A red icon over `0 of 1` reads as "your record is GONE", so the farmer
- *     re-records it — and now there are two. The record is genuinely safe on the
- *     handset; `confirmAndSave` wrote it to `db.logs` before the enqueue was
- *     even attempted. Not saying so causes the duplicate.
- *
- * So it leads with T1's `sync.onPhone` (`फोनवर सेव्ह ✓` / `Saved on phone`) —
- * the reassurance, first, in the farmer's own language via the app's i18n
- * (`R6`) — and then states the news plainly. "cannot be sent", not "not yet":
- * as the code stands today no path will ever pick these up, and a false promise
- * of a retry is the same class of defect this task exists to remove.
- *
- * THE COUNT IS `skippedLogIds.length` — read off the enqueue result, never off
- * `logs.length`. It is the number that carries the news, and it cannot round a
- * dropped record up into a saved one: a partial save reads `2 of 3`, never
- * `3 of 3`.
- *
- * Reason-agnostic by design (architect Overlap C): `resolveSyncTarget` has two
- * failure causes, Phase 2 removes the dominant one, and naming a cause would
- * cost a copy rewrite and a re-test on a message that is about to change.
- *
- * NOT COVERED, STATED PLAINLY: a log lost to a THROW out of
- * `MutationQueue.enqueue` is invisible here — `skippedLogIds` structurally
- * cannot see it, and that path already surfaces an honest "Failed to save logs"
- * through the caller's catch.
- *
- * LABOUR_PHASE2 B1b — `R4` expected this to SELF-RESOLVE here, on the reasoning
- * that 2b removes multi-log batches. It NARROWS them; it does not remove them.
- * A shared engagement across three plots is now one record and one enqueue, so
+ * LABOUR_PHASE2 B1b — `R4` expected the partial-save case to SELF-RESOLVE once
+ * 2b removed multi-log batches. It NARROWS them; it does not remove them. A
+ * shared engagement across three plots is now one record and one enqueue, so
  * the batch is gone for the case that created it — but a save where the farmer
  * pinned events to particular plots still emits one record per pinned plot plus
  * the shared one, and `enqueueLogsForSync` still has no per-log isolation, so a
  * throw on the first still abandons the rest. Rarer, not fixed. Carried.
  */
-function skippedSyncToast(
-    outcome: LogSyncEnqueueOutcome | null,
-    language: Language,
-): SaveToast | null {
-    // `null` = no enqueue was attempted at all (demo mode), so there is no
-    // sync claim to make either way and the local save wording stands.
-    if (!outcome || outcome.skippedLogIds.length === 0) {
-        return null;
-    }
-
-    const skipped = outcome.skippedLogIds.length;
-    const handled = outcome.queuedLogIds.length + skipped;
-
-    return {
-        message: `${translate(SYNC_HONESTY_I18N_KEYS.ON_PHONE, language)} — ${skipped} of ${handled} cannot be sent.`,
-        // `'partial'`, not `'error'`. Round 0 shipped red because a record that
-        // will never reach the server is a real incompleteness, and argued that
-        // the leading `फोनवर सेव्ह ✓` answered the "it is gone" misreading. It
-        // does not answer it well enough: a red panel with an X is read before
-        // any words are, and a farmer who reads "gone" re-records — leaving two
-        // copies of one day's work in the ledger. The message is unchanged; the
-        // alarm around it is now proportionate to what actually happened, and it
-        // stays up for 7s instead of 3 because it says more than "Logged." did.
-        type: 'partial',
-    };
-}
 
 export const useLogCommands = ({
     hasActiveLogContext,
@@ -413,7 +338,7 @@ export const useLogCommands = ({
             );
 
             // AUTO-SAVE SUCCESS: Show the success screen instead of just a toast
-            setToast(skippedSyncToast(syncOutcome, language) ?? {
+            setToast(buildSkippedSyncToast(syncOutcome, language) ?? {
                 message: `Logged. Day closure: ${beforePercent}% -> ${afterPercent}%`,
                 type: 'success'
             });
@@ -478,7 +403,7 @@ export const useLogCommands = ({
                 history,
                 [...newLogs, ...history]
             );
-            setToast(skippedSyncToast(syncOutcome, language) ?? {
+            setToast(buildSkippedSyncToast(syncOutcome, language) ?? {
                 message: `Logged. Day closure: ${beforePercent}% -> ${afterPercent}%`,
                 type: 'success'
             });
@@ -565,48 +490,18 @@ export const useLogCommands = ({
                 });
 
                 // LABOUR_PHASE2 PHASE 4 — R19 EXECUTED: THE OLD SENTENCE IS
-                // DELETED, NOT SOFTENED.
+                // DELETED, NOT SOFTENED. The wording and its reasoning now live
+                // in `saveToastMessages.buildEditSavedMessage`; what stays here
+                // is the decision to say it at all, and in which tone.
                 //
-                // Both branches used to end in "shown on screen only — not saved
-                // anywhere". That was TRUE, and it was a truthful description of
-                // a missing feature: `updateLog` called `repo.getById` and never
-                // `repo.save`, and `setHistory` is React state with no persist
-                // subscriber, so the edit really did die on the next reload.
-                //
-                // `updateLog` now persists (§A7.1). The moment it did, that
-                // sentence became FALSE in the other direction — telling a
-                // farmer their saved record was not saved, which would teach
-                // them to distrust a correction that worked and re-enter it.
-                // Editing the wording to keep the sentence alive was the wrong
-                // move; it is gone, and so are the tests that pinned it.
-                //
-                // WHAT REPLACES IT SAYS TWO TRUE THINGS AND NO MORE:
-                //
-                //   1. The record is on the phone. That is now evidenced —
-                //      `updateLog` returned success only after `repo.save`
-                //      resolved — and it is said in the app's OWN existing
-                //      vocabulary, `sync.onPhone` (`फोनवर सेव्ह ✓` /
-                //      `Saved on phone`), the same string T1 gave the chip and
-                //      T2 gave the skipped-create toast. Three surfaces, one
-                //      claim, no fourth dialect (`R6`).
-                //   2. What reached the SERVER, and only when something did.
-                //      `persistedLabourCorrections` is the only server evidence
-                //      in scope: `postLabourCorrection` throws on any non-2xx and
-                //      the throw becomes `success: false`.
-                //
-                // AND THE ZERO BRANCH STOPS SHORT. "Nothing was sent" is true but
-                // it is also the normal, uninteresting case — a farmer who fixed
-                // an irrigation figure sent nothing because there was nothing
-                // labour-shaped to send. Announcing an absence there would be a
-                // nag on the correction path (`P9`), so it makes no server claim
-                // at all rather than a negative one. `P4`'s rule cuts both ways:
-                // no claim beats a claim without a use.
+                // THE ENGLISH TAIL IS GONE FROM THE CODE. It used to be
+                // concatenated here — `${onPhone} — N labour corrections sent to
+                // the server.` — so a farmer on the Marathi preference read one
+                // sentence in two scripts, and no translator could ever have
+                // reached the second half. Both halves are i18n now.
                 const persistedCorrections = result.persistedLabourCorrections ?? 0;
-                const onPhone = translate(SYNC_HONESTY_I18N_KEYS.ON_PHONE, language);
                 setToast({
-                    message: persistedCorrections > 0
-                        ? `${onPhone} — ${persistedCorrections} labour correction${persistedCorrections === 1 ? '' : 's'} sent to the server.`
-                        : onPhone,
+                    message: buildEditSavedMessage(persistedCorrections, language),
                     // `'success'` now, where C-2 correctly used `'partial'`.
                     //
                     // `'partial'` was right for an outcome that was partly landed
@@ -654,7 +549,7 @@ export const useLogCommands = ({
 
                 const nextHistory = [...newLogs, ...history];
                 const { beforePercent, afterPercent } = computeClosureDelta(history, nextHistory);
-                setToast(skippedSyncToast(syncOutcome, language) ?? {
+                setToast(buildSkippedSyncToast(syncOutcome, language) ?? {
                     message: `Logged. Day closure: ${beforePercent}% -> ${afterPercent}%`,
                     type: 'success'
                 });
@@ -742,7 +637,7 @@ export const useLogCommands = ({
             // three-plot save as "Saved to 1 plots": the same sentence, newly
             // false, and this time an UNDER-count.
             const queuedPlotCount = countAssertedPlots(logs, syncOutcome);
-            setToast(skippedSyncToast(syncOutcome, language) ?? {
+            setToast(buildSkippedSyncToast(syncOutcome, language) ?? {
                 message: `Logged once. Saved to ${queuedPlotCount} plots. Day closure: ${beforePercent}% -> ${afterPercent}%`,
                 type: 'success'
             });
