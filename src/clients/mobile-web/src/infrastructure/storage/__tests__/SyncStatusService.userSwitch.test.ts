@@ -71,10 +71,44 @@ async function seedMutation(status: 'PENDING' | 'APPLIED') {
  * guard at all.
  *
  * The budget still exists, because "never arrives" must become a failure with
- * a useful message rather than a hung suite — and it is what the M5 mutation
- * (drop the re-subscribe) trips.
+ * a useful message rather than a hung suite.
+ *
+ * WHICH MUTATION ACTUALLY TRIPS IT — MEASURED, NOT ASSUMED. This comment used
+ * to say "drop the re-subscribe". That was checked and is not right: removing
+ * `onActiveDatabaseChanged(...)` fails in 104ms on the SYNCHRONOUS assertion
+ * below (`getStatus()` is still `ON_PHONE` where `null` is required), and never
+ * reaches this function at all. Good — the cheap guard catches it first. The
+ * mutation that genuinely lands here is the narrower one: withdraw the claim
+ * but never re-observe (delete `this.observeActiveDatabase()` from
+ * `rebindToActiveDatabase`). Every earlier assertion then passes — the chip
+ * IS null — and only this budget notices that it stays null forever. Measured
+ * at 45 329ms with the message below.
+ *
+ * ── WHY 45s AND NOT 15s ─────────────────────────────────────────────────────
+ *
+ * THIS IS NOT A TIMEOUT RAISED TO SILENCE A FAILURE. It is a diagnostic ceiling
+ * that had been set FOUR TIMES BELOW the real one, so it fired first and turned
+ * load into a red gate.
+ *
+ * The two numbers do different jobs. The test's own 60s timeout is the
+ * CORRECTNESS boundary — past it, the claim genuinely never arrived. This inner
+ * budget only exists to replace a silent hang with a sentence naming the claim
+ * that never came. At 15s it was doing a third job nobody asked it to do:
+ * failing correct runs. Measured on this branch — the suite green 2/2 at
+ * `4451aa4e`, then fail/fail/pass at `53534be6` after four React renders were
+ * added to an unrelated file. Nothing in this test's import graph reaches the
+ * changed code (no drawer, no card, no `useSyncQueueStatus`); what moved was
+ * scheduling across 147 parallel files.
+ *
+ * THE GUARD IS NOT WEAKENED, and that is checked rather than argued — see the
+ * measured mutation above. A never-re-observed chip stays null FOREVER, so the
+ * budget still fails it; it simply takes 45s to say so instead of 15s. A budget
+ * can only be too small, never too large, for a case that never resolves.
+ *
+ * It stays BELOW the 60s test timeout on purpose: the useful sentence must beat
+ * Vitest's bare "test timed out".
  */
-async function waitForClaim(expected: SyncHonestyClaim, budgetMs = 15000): Promise<void> {
+async function waitForClaim(expected: SyncHonestyClaim, budgetMs = 45_000): Promise<void> {
     const service = SyncStatusService.getInstance();
     if (service.getStatus() === expected) {
         return;
