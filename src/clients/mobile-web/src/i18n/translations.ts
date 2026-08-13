@@ -15,6 +15,12 @@
 
 import type { Language } from './language';
 import { dfesTranslations, type DfesTranslations } from './dfesTranslations';
+import {
+    shramSathiTranslations,
+    syncTranslations,
+    type ShramSathiTranslations,
+    type SyncTranslations,
+} from './syncTranslations';
 
 export type { Language };
 
@@ -226,79 +232,13 @@ export interface Translations {
     };
 
     /**
-     * Sync status chip — Labour Phase 2 / Phase 1 (honesty backstop), T1.
-     *
-     * Exactly three claims, each backed by evidence. See
-     * `features/sync/status/syncHonestyState.ts` for what each one means and
-     * what proves it. The chip is shared app-wide chrome, so these follow the
-     * farmer's language preference rather than being hardcoded Marathi.
+     * The Shram Sathi voice — the claims the app may make about a farmer's
+     * records, and the sentences it says while making them. See
+     * `syncTranslations.ts`, which carries the reasoning for every string.
      */
-    sync: {
-        /** Captured on the handset. Claims nothing about the server. */
-        onPhone: string;
-        /** The server acknowledged it (`applied` or `duplicate`). */
-        onServer: string;
-        /** Rejected, past the retry cap, or never queued at all. */
-        needsFix: string;
+    sync: SyncTranslations;
+    shramSathi: ShramSathiTranslations;
 
-        /*
-         * ── The TAILS ────────────────────────────────────────────────────────
-         *
-         * PROPOSED COPY, PENDING FOUNDER CONFIRMATION. Wording taken from the
-         * CTO ruling of 2026-08-13 (`cto-rulings.md` §1.3). The founder is the
-         * Marathi authority; nothing here is a string any agent invented.
-         *
-         * These exist because the app was speaking half a sentence in each
-         * language. `useLogCommands` composed a Marathi `sync.onPhone` with a
-         * HARDCODED English tail — a farmer on the Marathi preference read
-         * `फोनवर सेव्ह ✓ — 3 of 3 cannot be sent.`, one sentence, two scripts.
-         * The claim was honest and the presentation was not.
-         *
-         * They are TAILS rather than whole sentences on purpose: the reassuring
-         * half must come FIRST and must be the SAME string the chip uses
-         * (T2/B4 — a farmer scanning a red toast who reads "gone" re-records,
-         * and now the ledger holds the day twice). Composing
-         * `${t(sync.onPhone)} — ${tail}` keeps `startsWith(onPhone)` true and
-         * keeps ONE definition of the phone claim.
-         */
-
-        /**
-         * "…of the records in this save, N will never reach the server."
-         *
-         * `{skipped}` and `{handled}` are read off the enqueue RESULT, never
-         * off the submitted set, so the sentence cannot round a dropped record
-         * up into a saved one.
-         *
-         * WORD ORDER IS NOT A TRANSLATION OF THE ENGLISH. Marathi `X पैकी Y`
-         * means "Y out of X", so the TOTAL binds before `पैकी` and the SUBSET
-         * after — the mirror of the English order. Verified against this file's
-         * own precedent, `dfes.daysLoggedThisWeek`, which is
-         * `'{logged} of {count} days'` in English and
-         * `'{count} पैकी {logged} दिवस'` in Marathi. Getting this backwards
-         * would report the wrong number in the language most farmers read.
-         */
-        notFiledCountTail: string;
-        /**
-         * The same fact with no counts, for the per-record badge on the
-         * success card, where the count is already implied by the card itself.
-         */
-        notFiledBadgeTail: string;
-
-        /**
-         * "N labour corrections reached your farm records." — the ONE
-         * server-evidenced claim the edit path is allowed to make
-         * (`persistedLabourCorrections`, and `postLabourCorrection` throws on
-         * any non-2xx).
-         *
-         * MARATHI HAS ONE FORM HERE, NOT TWO. The CTO's approved clause is the
-         * plural `{count} दुरुस्त्या शेतनोंदीत गेल्या.`; no singular was
-         * supplied and no agent may inflect one, so the approved plural is used
-         * at every count and is listed for the founder. English keeps the
-         * singular/plural split the shipped code already had.
-         */
-        correctionsFiledTailOne: string;
-        correctionsFiledTailMany: string;
-    };
     // DFES Behavioral Layer (Anti-Ego & Habit Loop) — see `dfesTranslations.ts`
     dfes: DfesTranslations;
 }
@@ -491,15 +431,8 @@ export const translations: Record<Language, Translations> = {
             error: 'Error',
             add: 'Add',
         },
-        sync: {
-            onPhone: 'Saved on phone',
-            onServer: 'Sent',
-            needsFix: 'Stuck — check',
-            notFiledCountTail: '{skipped} of {handled} will not reach your farm records.',
-            notFiledBadgeTail: 'will not reach your farm records',
-            correctionsFiledTailOne: '{count} labour correction reached your farm records.',
-            correctionsFiledTailMany: '{count} labour corrections reached your farm records.',
-        },
+        sync: syncTranslations.en,
+        shramSathi: shramSathiTranslations.en,
         // DFES Behavioral Layer
         dfes: dfesTranslations.en,
     },
@@ -691,15 +624,8 @@ export const translations: Record<Language, Translations> = {
             error: 'चूक',
             add: 'जोडा',
         },
-        sync: {
-            onPhone: 'फोनवर सेव्ह ✓',
-            onServer: 'पाठवलं ✓',
-            needsFix: 'अडकलं — तपासा',
-            notFiledCountTail: '{handled} पैकी {skipped} शेतनोंदीत जाणार नाहीत.',
-            notFiledBadgeTail: 'शेतनोंदीत जाणार नाही',
-            correctionsFiledTailOne: '{count} दुरुस्त्या शेतनोंदीत गेल्या.',
-            correctionsFiledTailMany: '{count} दुरुस्त्या शेतनोंदीत गेल्या.',
-        },
+        sync: syncTranslations.mr,
+        shramSathi: shramSathiTranslations.mr,
         // DFES Behavioral Layer
         dfes: dfesTranslations.mr,
     },

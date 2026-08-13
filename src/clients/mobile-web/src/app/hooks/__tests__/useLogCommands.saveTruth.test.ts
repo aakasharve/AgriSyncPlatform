@@ -125,8 +125,8 @@ vi.mock('../../../application/services/LogCommandService', () => ({
 }));
 
 /** The exact strings shipped in `i18n/translations.ts` under the `sync` namespace. */
-const ON_PHONE_MR = 'फोनवर सेव्ह ✓';
-const ON_PHONE_EN = 'Saved on phone';
+const ON_PHONE_MR = 'मी लिहून घेतलं ✓';
+const ON_PHONE_EN = 'Shram Sathi has it';
 
 /*
  * THE TAILS ARE RESOLVED, NOT TRANSCRIBED — and that is deliberate.

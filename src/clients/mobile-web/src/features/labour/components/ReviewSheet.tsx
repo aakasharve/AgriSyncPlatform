@@ -29,6 +29,8 @@ import FieldOperatorPicker from './FieldOperatorPicker';
 import { VerifyLogCommand } from '../../../application/usecases/sync/VerifyLogCommand';
 import { backgroundSyncWorker } from '../../../infrastructure/sync/BackgroundSyncWorker';
 import { formatReviewDetail, isReviewDetailWithinDays } from '../reviewDetailDate';
+import { t as translate } from '../../../i18n/translations';
+import { SYNC_HONESTY_I18N_KEYS } from '../../sync/status/syncHonestyState';
 
 /** Decision 4b (2026-07-19) — bounds the तपासणी queue so it cannot grow forever. */
 const REVIEW_QUEUE_MAX_AGE_DAYS = 14;
@@ -207,19 +209,35 @@ interface UndoEntry { batchId: string; kind: ConfirmKind; count: number }
  * 3s undo window are deliberate and locked by tests. Nothing about ordering,
  * timing or control flow changes — only what the words assert.
  */
+/**
+ * THE STALE-LITERAL TRAP, CLOSED STRUCTURALLY.
+ *
+ * `फोनवर सेव्ह ✓` used to be TRANSCRIBED here rather than resolved, so this
+ * screen and the header chip could drift apart silently — and the moment
+ * `sync.onPhone` was reframed, they did.
+ *
+ * The original reason for transcribing it still holds and is respected:
+ * resolving through `useLanguage` would render `मंजूर केलं — Saved on phone ✓`
+ * for an English-preference farmer — one fragment in a foreign script inside an
+ * otherwise all-Marathi sheet. So the fix is not to follow the preference; it
+ * is to resolve the SAME key at the SAME pinned language. One source, no mixed
+ * script, and a founder copy edit now reaches this screen automatically.
+ */
+const ON_PHONE_MR = translate(SYNC_HONESTY_I18N_KEYS.ON_PHONE, 'mr');
+
 function toastFor(kind: ConfirmKind, failedCount: number): string {
     if (kind === 'approveAll') {
         return failedCount === 0
-            ? 'सगळं मंजूर केलं — फोनवर सेव्ह ✓'
+            ? `सगळं मंजूर केलं — ${ON_PHONE_MR}`
             : `${failedCount} नोंदी मंजूर करता आल्या नाहीत — पुन्हा प्रयत्न करा`;
     }
     if (kind === 'query') {
         return failedCount === 0
-            ? 'शंका नोंदवली — फोनवर सेव्ह ✓'
+            ? `शंका नोंदवली — ${ON_PHONE_MR}`
             : 'शंका नोंदवता आली नाही — पुन्हा प्रयत्न करा';
     }
     return failedCount === 0
-        ? 'मंजूर केलं — फोनवर सेव्ह ✓'
+        ? `मंजूर केलं — ${ON_PHONE_MR}`
         : 'मंजूर करता आलं नाही — पुन्हा प्रयत्न करा';
 }
 

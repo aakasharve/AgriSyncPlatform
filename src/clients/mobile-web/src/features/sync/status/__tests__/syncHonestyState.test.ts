@@ -430,21 +430,56 @@ describe('every state in the model has a label in both languages', () => {
     // Plan section G wording, field-testable. If a founder revises the Marathi
     // this test is where it gets revised — deliberately, not by accident.
     it('renders the approved Marathi', () => {
-        expect(t(SYNC_HONESTY_I18N_KEYS.ON_PHONE, 'mr')).toBe('फोनवर सेव्ह ✓');
-        expect(t(SYNC_HONESTY_I18N_KEYS.ON_SERVER, 'mr')).toBe('पाठवलं ✓');
+        expect(t(SYNC_HONESTY_I18N_KEYS.ON_PHONE, 'mr')).toBe('मी लिहून घेतलं ✓');
+        expect(t(SYNC_HONESTY_I18N_KEYS.ON_SERVER, 'mr')).toBe('शेतनोंदीत जमा ✓');
+        // UNCHANGED, deliberately. The founder's complaint named "saved on
+        // phone" and "cannot be sent"; it did not name this string. It is
+        // already L5b-measured, and T3 proved by enumeration that all three of
+        // its producers have a reachable clearing action.
         expect(t(SYNC_HONESTY_I18N_KEYS.NEEDS_FIX, 'mr')).toBe('अडकलं — तपासा');
     });
 
     it('renders the approved English', () => {
-        expect(t(SYNC_HONESTY_I18N_KEYS.ON_PHONE, 'en')).toBe('Saved on phone');
-        expect(t(SYNC_HONESTY_I18N_KEYS.ON_SERVER, 'en')).toBe('Sent');
+        expect(t(SYNC_HONESTY_I18N_KEYS.ON_PHONE, 'en')).toBe('Shram Sathi has it');
+        expect(t(SYNC_HONESTY_I18N_KEYS.ON_SERVER, 'en')).toBe('In your farm records');
         expect(t(SYNC_HONESTY_I18N_KEYS.NEEDS_FIX, 'en')).toBe('Stuck — check');
     });
 
-    it('no state claims the server without evidence in its own wording', () => {
-        expect(t(SYNC_HONESTY_I18N_KEYS.ON_PHONE, 'mr')).not.toContain('पाठवलं');
-        expect(t(SYNC_HONESTY_I18N_KEYS.ON_PHONE, 'en').toLowerCase()).not.toContain('sent');
-        expect(t(SYNC_HONESTY_I18N_KEYS.NEEDS_FIX, 'mr')).not.toContain('पाठवलं');
-        expect(t(SYNC_HONESTY_I18N_KEYS.NEEDS_FIX, 'en').toLowerCase()).not.toContain('sent');
+    it('only ON_SERVER makes the durability promise', () => {
+        // The whole point of the reframe. "Kept in your farm records" is a
+        // claim that the record is SAFE, so it may appear only where a real
+        // server acknowledgement backs it. Saying it over a handset-only
+        // record is the false reassurance Phase 1 exists to destroy (`B5`).
+        //
+        // This replaces the old "must not contain पाठवलं / sent" guard. That
+        // guard was written against the retired vocabulary and would now pass
+        // vacuously — none of the three strings says "sent" any more, so it
+        // could no longer catch anything.
+        expect(t(SYNC_HONESTY_I18N_KEYS.ON_PHONE, 'mr')).not.toContain('शेतनोंदीत');
+        expect(t(SYNC_HONESTY_I18N_KEYS.ON_PHONE, 'en').toLowerCase()).not.toContain('farm records');
+        expect(t(SYNC_HONESTY_I18N_KEYS.NEEDS_FIX, 'mr')).not.toContain('शेतनोंदीत');
+        expect(t(SYNC_HONESTY_I18N_KEYS.NEEDS_FIX, 'en').toLowerCase()).not.toContain('farm records');
+
+        expect(t(SYNC_HONESTY_I18N_KEYS.ON_SERVER, 'mr')).toContain('शेतनोंदीत');
+        expect(t(SYNC_HONESTY_I18N_KEYS.ON_SERVER, 'en').toLowerCase()).toContain('farm records');
+    });
+
+    it('the full ON_PHONE form claims the phone and never the farm records', () => {
+        // Correct copy with NO SURFACE today: it was drafted for the post-save
+        // headline, and L5b ruled the short form there instead. Pinned anyway,
+        // so the day it does get a surface it is already the right sentence.
+        expect(t('sync.onPhoneFull', 'mr')).toBe('मी समजून घेतलं — नोंद माझ्याकडे आहे');
+        expect(t('sync.onPhoneFull', 'en')).toBe('Shram Sathi understood — the record is with me');
+        expect(t('sync.onPhoneFull', 'mr')).not.toContain('शेतनोंदीत');
+        expect(t('sync.onPhoneFull', 'en').toLowerCase()).not.toContain('farm records');
+    });
+
+    it('Shram Sathi speaks in the first person in Marathi', () => {
+        // `WelcomeScreen.tsx:148` already ships `मी श्रम साथी…`. Same
+        // character, same voice — the rule the Understanding-Meter design
+        // states verbatim.
+        expect(t(SYNC_HONESTY_I18N_KEYS.ON_PHONE, 'mr').startsWith('मी')).toBe(true);
+        expect(t('sync.onPhoneFull', 'mr').startsWith('मी')).toBe(true);
+        expect(t('shramSathi.understanding', 'mr').startsWith('मी')).toBe(true);
     });
 });
