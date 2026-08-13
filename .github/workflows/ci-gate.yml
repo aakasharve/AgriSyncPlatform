@@ -25,7 +25,7 @@ jobs:
         image: postgres:16
         env:
           POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: akash123
+          POSTGRES_PASSWORD: ci_throwaway_pw
           POSTGRES_DB: postgres
         ports:
           - 5433:5432
@@ -35,7 +35,7 @@ jobs:
           --health-timeout 5s
           --health-retries 10
     env:
-      ADMIN_TESTS_ADMIN_ROOT_CONN: "Host=localhost;Port=5433;Database=postgres;Username=postgres;Password=akash123"
+      ADMIN_TESTS_ADMIN_ROOT_CONN: "Host=localhost;Port=5433;Database=postgres;Username=postgres;Password=ci_throwaway_pw"
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4
