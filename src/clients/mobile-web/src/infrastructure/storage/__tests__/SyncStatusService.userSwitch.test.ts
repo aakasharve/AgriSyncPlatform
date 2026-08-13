@@ -196,4 +196,40 @@ describe('the sync chip follows the farmer, and takes nothing with it', () => {
         expect(rows).toHaveLength(1);
         expect(rows[0].status).toBe('APPLIED');
     });
+
+    /**
+     * SUBSCRIBING IS NOT LISTENING, AND THE DIFFERENCE IS A DROPPED RECORD.
+     *
+     * `liveQuery` starts watching for writes only after its first query has
+     * come back — it attaches its change listener in that query's resolve
+     * handler. Until then nothing is listening, and Dexie does not replay what
+     * it missed. So a write that commits while the chip is still binding to the
+     * new farmer's database fires its notification into an empty room, and the
+     * chip goes on reporting the queue as it was BEFORE that farmer's record
+     * went into it, until some later unrelated write happens to wake the query.
+     *
+     * The gap is the time to build and open a database — twenty-two schema
+     * versions — and it is at its widest exactly here, on the switch, where the
+     * database is brand new. Measured before the fix: a write landing 2–46ms
+     * after a switch never reached the chip on an idle machine, and the gap ran
+     * to ~220ms under a full parallel suite.
+     *
+     * SEVERAL OFFSETS, ON PURPOSE. The gap's width is a property of the
+     * machine, so one hard-coded delay would quietly stop testing anything on a
+     * faster box while still passing. Every offset here must be caught; on a
+     * slower or busier machine they simply all fall inside it.
+     */
+    it('catches a write that lands while it is still binding to the new farmer', async () => {
+        for (const offsetMs of [2, 8, 16, 32, 64]) {
+            // A farmer this test has not used before, so the database is new and
+            // empty and the chip has nothing to claim until the write below.
+            activateDatabaseForUser(`switch-user-gap-${offsetMs}`);
+            expect(SyncStatusService.getInstance().getStatus()).toBeNull();
+
+            await new Promise(resolve => setTimeout(resolve, offsetMs));
+            await seedMutation('PENDING');
+
+            await waitForClaim('ON_PHONE', 30_000);
+        }
+    }, 180_000);
 });
