@@ -3,7 +3,7 @@ import React, { useState, useEffect } from 'react';
 // warning (proven against 30d3654f) that only surfaced now because this file is
 // staged for the first time. Removed; nothing rendered them.
 import { X, RefreshCw, Wifi, WifiOff, Cpu, Upload, AlertCircle, CheckCircle, Clock } from 'lucide-react';
-import { useSyncQueueStatus } from '../hooks/useSyncQueueStatus';
+import { useSyncQueueStatus, useUnqueueableLogCount } from '../hooks/useSyncQueueStatus';
 import { backgroundSyncWorker } from '../../../infrastructure/sync/BackgroundSyncWorker';
 import { getDatabase } from '../../../infrastructure/storage/DexieDatabase';
 
@@ -27,6 +27,14 @@ interface Props {
  */
 const SyncStatusDrawer: React.FC<Props> = ({ isOpen, onClose, onOpenConflicts }) => {
      const status = useSyncQueueStatus();
+     /**
+      * FINAL REVIEW F-2 — records this session knows reached NO queue.
+      *
+      * A second hook, not a field on `SyncQueueStatus`: this is not a Dexie
+      * table count and cannot be — the record leaves no row anywhere, which is
+      * precisely why this sheet could not see it.
+      */
+     const unqueueableCount = useUnqueueableLogCount();
      const [aiJobStatusCounts, setAiJobStatusCounts] = useState<{ pending: number; processing: number }>({
           pending: 0,
           processing: 0,
@@ -148,6 +156,21 @@ const SyncStatusDrawer: React.FC<Props> = ({ isOpen, onClose, onOpenConflicts })
 
      const totalPending = status.pendingCount + status.pendingUploads + status.pendingAiJobs;
      const totalFailed = status.failedCount + status.failedUploads;
+     /**
+      * FINAL REVIEW F-2 — "All synced" needs POSITIVE EVIDENCE, exactly as the
+      * chip does. `totalPending === 0 && totalFailed === 0` is the ABSENCE of
+      * rows — and a log `resolveSyncTarget` refused writes no row anywhere, so
+      * this sheet answered "All synced" about the record the farmer had just
+      * created, ONE TAP behind a chip that had correctly weakened to
+      * `मी लिहून घेतलं ✓` on the same event. `syncHonestyState.ts:21-37`:
+      * absence of bad news is not good news.
+      *
+      * Three outcomes now, mirroring `deriveSyncHonestyState` exactly:
+      *   something dropped          -> say so (not stuck: there is nothing to tap)
+      *   nothing out + an ack       -> "All synced"
+      *   nothing out + no ack ever  -> SAY NOTHING (the chip's `null`)
+      */
+     const nothingOutstanding = totalPending === 0 && totalFailed === 0 && unqueueableCount === 0;
      const aiStatusParts = [
           aiJobStatusCounts.pending > 0 ? `${aiJobStatusCounts.pending} voice recording${aiJobStatusCounts.pending > 1 ? 's' : ''} pending` : null,
           aiJobStatusCounts.processing > 0 ? `${aiJobStatusCounts.processing} voice recording${aiJobStatusCounts.processing > 1 ? 's' : ''} processing` : null,
@@ -330,8 +353,29 @@ const SyncStatusDrawer: React.FC<Props> = ({ isOpen, onClose, onOpenConflicts })
                               </div>
                          )}
 
-                         {/* 6. All Clear */}
-                         {totalPending === 0 && totalFailed === 0 && (
+                         {/* 6. Records that reached no queue at all (F-2) */}
+                         {unqueueableCount > 0 && (
+                              <div className="flex items-start gap-3 p-3 rounded-xl bg-amber-50 border border-amber-200">
+                                   <AlertCircle size={14} className="mt-0.5 shrink-0 text-amber-600" />
+                                   <div className="min-w-0">
+                                        <p className="text-sm font-bold text-amber-700">
+                                             {unqueueableCount} record{unqueueableCount > 1 ? 's' : ''} will not reach your farm records
+                                        </p>
+                                        {/* NO BUTTON, deliberately. There is no queue row, no
+                                            worker and no retry behind these, so any control here
+                                            would be a painted door beside three that work — the
+                                            same reason the toast stopped saying `तपासा`
+                                            (finding B3). "Sync Now" below does not reach them
+                                            either, and does not claim to. */}
+                                        <p className="text-[10px] font-medium text-amber-600">
+                                             Saved on this phone. Nothing will send {unqueueableCount > 1 ? 'them' : 'it'}.
+                                        </p>
+                                   </div>
+                              </div>
+                         )}
+
+                         {/* 7. All Clear — only on evidence the server answered */}
+                         {nothingOutstanding && status.syncedCount > 0 && (
                               <div className="flex items-center gap-3 p-3 rounded-xl bg-emerald-50 border border-emerald-200">
                                    <CheckCircle size={14} className="text-emerald-600" />
                                    <span className="text-sm font-bold text-emerald-700">All synced</span>

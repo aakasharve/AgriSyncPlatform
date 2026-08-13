@@ -42,8 +42,19 @@ const queueStatus: { current: SyncQueueStatus } = {
     },
 };
 
+/**
+ * FINAL REVIEW F-2 — the count of records that reached NO queue.
+ *
+ * A second hook rather than a field on `SyncQueueStatus`, because this number is
+ * not in Dexie and cannot be: the record leaves no row anywhere, which is
+ * exactly why this sheet could not see it. It must be mocked here or the
+ * component's call resolves to `undefined` and throws.
+ */
+const unqueueableCount = { current: 0 };
+
 vi.mock('../../hooks/useSyncQueueStatus', () => ({
     useSyncQueueStatus: () => queueStatus.current,
+    useUnqueueableLogCount: () => unqueueableCount.current,
 }));
 
 const retryFailed = vi.fn();
@@ -98,6 +109,7 @@ beforeEach(() => {
     retryAllFailed.mockResolvedValue({ mutations: 0, uploads: 0 });
     triggerNow.mockResolvedValue(undefined);
     setQueue({ stuckMutations: [], pendingUploads: 0, failedUploads: 0, pendingAiJobs: 0, pendingCount: 0 });
+    unqueueableCount.current = 0;
 });
 
 afterEach(cleanup);
@@ -270,13 +282,71 @@ describe('per-row retry — unchanged behaviour, minus the double-tap window', (
 });
 
 describe('the sheet as a whole', () => {
-    it('says everything is clear only when there is nothing in either queue', () => {
-        setQueue({ stuckMutations: [], pendingCount: 0, pendingUploads: 0, pendingAiJobs: 0, failedUploads: 0 });
+    it('claims everything is clear only on evidence the server answered', () => {
+        // RETITLED, AND THE ASSERTION CHANGED WITH IT (final review F-2). The
+        // old title — "…only when there is nothing in either queue" — endorsed
+        // the exact rule this sheet had to stop obeying. An empty queue is the
+        // ABSENCE of bad news: a device that has never pushed anything
+        // successfully has one, and so does a device whose records were dropped
+        // before reaching a queue. `syncedCount` is the only positive evidence
+        // in this shape, so the claim now rests on it — the same thing
+        // `deriveSyncHonestyState` demands of `ON_SERVER`.
+        setQueue({
+            stuckMutations: [], pendingCount: 0, pendingUploads: 0,
+            pendingAiJobs: 0, failedUploads: 0, syncedCount: 1,
+        });
 
         render(<SyncStatusDrawer isOpen onClose={vi.fn()} onOpenConflicts={vi.fn()} />);
 
         expect(screen.getByText('All synced')).toBeInTheDocument();
         expect(screen.queryByTestId('sync-retry-all')).toBeNull();
+    });
+
+    it('says NOTHING when the queue is empty and nothing was ever acknowledged', () => {
+        // A fresh install and a device whose every log was silently dropped look
+        // identical from here. The chip answers `null` — no claim at all — and
+        // this sheet must not answer "All synced" in its place (`P5`).
+        setQueue({
+            stuckMutations: [], pendingCount: 0, pendingUploads: 0,
+            pendingAiJobs: 0, failedUploads: 0, syncedCount: 0,
+        });
+
+        render(<SyncStatusDrawer isOpen onClose={vi.fn()} onOpenConflicts={vi.fn()} />);
+
+        expect(screen.queryByText('All synced')).toBeNull();
+    });
+
+    it('never says "All synced" over a record that reached no queue', () => {
+        // THE DEFECT, one tap from the chip. `resolveSyncTarget` refused the log,
+        // so no row exists in any table this sheet reads — and that emptiness was
+        // read as success about the record the farmer had just created, while the
+        // chip one tap above had correctly weakened to `मी लिहून घेतलं ✓`.
+        unqueueableCount.current = 1;
+        setQueue({
+            stuckMutations: [], pendingCount: 0, pendingUploads: 0,
+            pendingAiJobs: 0, failedUploads: 0, syncedCount: 3,
+        });
+
+        render(<SyncStatusDrawer isOpen onClose={vi.fn()} onOpenConflicts={vi.fn()} />);
+
+        expect(screen.queryByText('All synced')).toBeNull();
+        expect(screen.getByText(/1 record will not reach your farm records/)).toBeInTheDocument();
+    });
+
+    it('offers no button for a dropped record, because there is nothing to tap', () => {
+        // Not NEEDS_FIX: no queue row, no worker, no retry. A control here would
+        // be a painted door beside three that work — the same reason the chip
+        // stays on `ON_PHONE` for these and the toast stopped saying `तपासा`.
+        unqueueableCount.current = 2;
+        setQueue({
+            stuckMutations: [], pendingCount: 0, pendingUploads: 0,
+            pendingAiJobs: 0, failedUploads: 0, syncedCount: 3,
+        });
+
+        render(<SyncStatusDrawer isOpen onClose={vi.fn()} onOpenConflicts={vi.fn()} />);
+
+        expect(screen.queryByTestId('sync-retry-all')).toBeNull();
+        expect(screen.getByText(/2 records will not reach your farm records/)).toBeInTheDocument();
     });
 
     it('renders nothing at all when closed', () => {
