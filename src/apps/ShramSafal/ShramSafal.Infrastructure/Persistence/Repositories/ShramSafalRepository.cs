@@ -1303,6 +1303,52 @@ internal sealed class ShramSafalRepository(ShramSafalDbContext db) : IShramSafal
             .ToListAsync(ct);
     }
 
+    // --- Labour capability (LABOUR_PHASE2 Phase 5, migration ②) ------------
+
+    /// <summary>
+    /// Projected to a bare <c>bool</c> on purpose: this runs on the hot path of
+    /// five governed actions and never needs the entity. It is also reached
+    /// ONLY for roles that do not already carry the capability
+    /// (<c>LabourManagementGate</c> short-circuits owner-tier and Mukadam), so
+    /// in practice it is one extra round trip on the rarest branch.
+    /// <para>The non-terminal filter matches <see cref="GetUserRoleForFarmAsync"/>
+    /// exactly, so the grant and the role can never disagree about whether the
+    /// membership counts.</para>
+    /// </summary>
+    public async Task<bool> GetLabourManagementGrantAsync(
+        Guid farmId, Guid userId, CancellationToken ct = default)
+    {
+        var typedFarmId = new FarmId(farmId);
+        var typedUserId = new UserId(userId);
+
+        return await db.FarmMemberships
+            .AsNoTracking()
+            .AnyAsync(m => m.FarmId == typedFarmId
+                && m.UserId == typedUserId
+                && m.Status != MembershipStatus.Revoked
+                && m.Status != MembershipStatus.Exited
+                && m.CanManageLabourRecords, ct);
+    }
+
+    /// <summary>
+    /// TRACKED, deliberately — the grant/revoke handler mutates what this
+    /// returns and relies on <c>SaveChangesAsync</c> to persist it. The sibling
+    /// <see cref="GetFarmMembershipAsync"/> is <c>AsNoTracking()</c> and would
+    /// throw the mutation away in silence.
+    /// </summary>
+    public async Task<FarmMembership?> GetTrackedFarmMembershipAsync(
+        Guid farmId, Guid userId, CancellationToken ct = default)
+    {
+        var typedFarmId = new FarmId(farmId);
+        var typedUserId = new UserId(userId);
+
+        return await db.FarmMemberships
+            .FirstOrDefaultAsync(m => m.FarmId == typedFarmId
+                && m.UserId == typedUserId
+                && m.Status != MembershipStatus.Revoked
+                && m.Status != MembershipStatus.Exited, ct);
+    }
+
     // --- DATA_PRINCIPLE_SPINE sub-phase 02.3 (warm-tier transcripts) ------
     public Task AddTranscriptAsync(Transcript transcript, CancellationToken ct = default)
     {

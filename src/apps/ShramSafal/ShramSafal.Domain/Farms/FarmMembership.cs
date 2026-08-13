@@ -61,6 +61,26 @@ public sealed class FarmMembership : Entity<Guid>
     public DateTime? ExitedAtUtc { get; private set; }
 
     /// <summary>
+    /// LABOUR_PHASE2 Phase 5 (founder decision O-4) — the owner's EXPLICIT
+    /// grant of labour-record management to a member whose role does not
+    /// already carry it.
+    ///
+    /// <para><b>This is not the whole rule and must never be read as if it
+    /// were.</b> The effective decision is
+    /// <see cref="LabourManagementPermission.IsAllowed"/>: owner-tier is always
+    /// allowed and a <see cref="AppRole.Mukadam"/> is allowed by default, so
+    /// for those roles this flag is IRRELEVANT and stays <c>false</c>. Reading
+    /// this property alone would deny the two roles that are always permitted.
+    /// </para>
+    ///
+    /// <para>Default <c>false</c>: a member gains nothing until an owner says
+    /// so. That is also why the column ships <c>NOT NULL DEFAULT false</c> —
+    /// every pre-existing row means "never granted", which is exactly true.
+    /// </para>
+    /// </summary>
+    public bool CanManageLabourRecords { get; private set; }
+
+    /// <summary>
     /// Legacy surface preserved for pre-Phase 2 callers. Returns <c>true</c>
     /// for any terminal status (<see cref="MembershipStatus.Revoked"/> or
     /// <see cref="MembershipStatus.Exited"/>).
@@ -257,6 +277,47 @@ public sealed class FarmMembership : Entity<Guid>
 
         Role = newRole;
         ModifiedAtUtc = utcNow;
+    }
+
+    /// <summary>
+    /// LABOUR_PHASE2 Phase 5 — grant or withdraw the explicit labour-record
+    /// capability. Returns <c>true</c> when the stored value ACTUALLY moved.
+    ///
+    /// <para><b>Why it returns whether anything changed.</b> The caller writes
+    /// an <c>AuditEvent</c> only on a real change. Re-sending the state the row
+    /// already held is not a decision and must not appear in history as one —
+    /// the same rule <c>CorrectLabourHandler.AddIfChanged</c> applies to labour
+    /// corrections (P3: history stays explainable, and a no-op is not an
+    /// event). It is also what makes the endpoint safely idempotent for a
+    /// farmer on a flaky connection re-sending the same toggle.</para>
+    ///
+    /// <para><b>Terminal memberships are refused, not silently ignored.</b>
+    /// Granting a capability to someone who has been revoked or has exited is
+    /// meaningless, and writing it would leave a row claiming a live permission
+    /// on a dead membership. Mirrors <see cref="ChangeRole"/>.</para>
+    ///
+    /// <para><b>Roles that already carry the capability are NOT filtered
+    /// here.</b> This entity records the owner's explicit decision; whether the
+    /// decision is redundant is a use-case question, answered by
+    /// <see cref="LabourManagementPermission.IsRedundantGrantTarget"/> at the
+    /// handler so the caller can be told rather than silently no-op'd.</para>
+    /// </summary>
+    public bool SetLabourRecordManagement(bool allowed, DateTime utcNow)
+    {
+        if (IsTerminal)
+        {
+            throw new InvalidOperationException(
+                $"Cannot change labour-record management on a {Status} membership.");
+        }
+
+        if (CanManageLabourRecords == allowed)
+        {
+            return false;
+        }
+
+        CanManageLabourRecords = allowed;
+        ModifiedAtUtc = utcNow;
+        return true;
     }
 
     public void RecordActivity(DateTime utcNow)

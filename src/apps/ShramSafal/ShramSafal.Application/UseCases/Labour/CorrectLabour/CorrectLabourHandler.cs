@@ -3,9 +3,9 @@ using System.Text.Json;
 using AgriSync.BuildingBlocks.Abstractions;
 using AgriSync.BuildingBlocks.Application;
 using AgriSync.BuildingBlocks.Results;
-using AgriSync.SharedKernel.Contracts.Roles;
 using Microsoft.Extensions.Logging;
 using ShramSafal.Application.Ports;
+using ShramSafal.Application.Services;
 using ShramSafal.Domain.Common;
 using ShramSafal.Domain.Farms;
 using ShramSafal.Domain.Labour;
@@ -45,15 +45,15 @@ namespace ShramSafal.Application.UseCases.Labour.CorrectLabour;
 ///
 /// <para><b>Authorization is the EXISTING mechanism, not a new one.</b> The
 /// route gates on <c>ICallerFarmTenantScope.EstablishForCallerAsync</c> exactly
-/// as Task 11's routes do; this handler then re-reads the caller's role through
-/// the existing <see cref="IShramSafalRepository.GetUserRoleForFarmAsync"/> and
-/// permits only <see cref="AppRole.PrimaryOwner"/>,
-/// <see cref="AppRole.SecondaryOwner"/> and <see cref="AppRole.Mukadam"/>.
-/// <see cref="AppRole.Worker"/> must not rewrite labour truth.
-/// <c>IsUserOwnerOfFarmAsync</c> is deliberately NOT used — it is
-/// PrimaryOwner-or-SecondaryOwner only and would lock out the Mukadam, who is
-/// exactly the person doing field verification. No roles are invented and no
-/// permission system is added.</para>
+/// as Task 11's routes do; this handler then resolves the caller's authority
+/// through <see cref="LabourManagementGate"/> — owner-tier always, Mukadam by
+/// default, any other role only when the owner has explicitly granted it
+/// (LABOUR_PHASE2 Phase 5, founder decision O-4). <c>Worker</c> must not rewrite
+/// labour truth unless the owner said so. <c>IsUserOwnerOfFarmAsync</c> is
+/// deliberately NOT used — it is PrimaryOwner-or-SecondaryOwner only and would
+/// lock out the Mukadam, who is exactly the person doing field verification. No
+/// roles are invented and no second permission system is added; the gate is the
+/// SAME one the field-operator handlers and the approve/verify path use.</para>
 ///
 /// <para><b>Cross-farm defence, same as <c>AttachFieldOperatorHandler</c>.</b>
 /// <c>p_user_select_labour_assignments</c> and
@@ -154,10 +154,14 @@ public sealed class CorrectLabourHandler(
             return Result.Failure<CorrectLabourResult>(ShramSafalErrors.InvalidCommand);
         }
 
-        // ── 2. Authorization — the existing role read, three roles, no more ───
-        var role = await repository.GetUserRoleForFarmAsync(
-            command.FarmId.Value, command.CallerUserId.Value, ct);
-        if (role is not (AppRole.PrimaryOwner or AppRole.SecondaryOwner or AppRole.Mukadam))
+        // ── 2. Authorization — ONE predicate, shared by all five actions ─────
+        // LABOUR_PHASE2 Phase 5: the inline three-role list that used to live
+        // here is now LabourManagementGate, so this handler, the three
+        // field-operator handlers and EnsureCanVerify cannot drift apart again.
+        // Owner-tier and Mukadam are unchanged; what is new is that any OTHER
+        // role the owner has explicitly granted (O-4) is now allowed here too.
+        if (!await LabourManagementGate.IsAllowedAsync(
+                repository, command.FarmId.Value, command.CallerUserId.Value, ct))
         {
             return Result.Failure<CorrectLabourResult>(ShramSafalErrors.Forbidden);
         }

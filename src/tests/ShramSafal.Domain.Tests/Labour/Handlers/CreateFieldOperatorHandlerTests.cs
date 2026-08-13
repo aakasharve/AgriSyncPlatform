@@ -81,13 +81,25 @@ public sealed class CreateFieldOperatorHandlerTests
     /// TWO farms. OriginatingFarmId must be the farm established for THIS
     /// request (FarmB), never silently the other farm the caller also
     /// belongs to.
+    ///
+    /// <para><b>LABOUR_PHASE2 Phase 5 — the caller's role on Farm B changed from
+    /// <c>Worker</c> to <c>Mukadam</c>, and the reason is a founder decision, not
+    /// a convenience.</b> Until O-4 (2026-08-12) this handler admitted ANY member
+    /// ("<c>callerRole is null</c>"), so a Worker could mint a work identity. The
+    /// five governed labour actions now share one predicate — owner-tier always,
+    /// Mukadam by default, any other role only when the owner has explicitly
+    /// granted it — so a bare Worker is Forbidden here. The claim this test
+    /// exists for is untouched: the caller still holds TWO memberships with
+    /// DIFFERENT roles, and the operator must still originate on the farm the
+    /// REQUEST named. (A Worker who HAS been granted is covered separately in
+    /// <c>LabourCapabilityGateTests</c>.)</para>
     /// </summary>
     [Fact]
     public async Task Multi_farm_caller_gets_the_requested_farm_not_the_other_one_they_also_belong_to()
     {
         var repo = new FakeRepo();
         repo.SetRole(FarmAGuid, CallerGuid, AppRole.PrimaryOwner);
-        repo.SetRole(FarmBGuid, CallerGuid, AppRole.Worker);
+        repo.SetRole(FarmBGuid, CallerGuid, AppRole.Mukadam);
         var handler = BuildHandler(repo);
 
         var result = await handler.HandleAsync(new CreateFieldOperatorCommand(

@@ -2,8 +2,8 @@ using AgriSync.BuildingBlocks.Auth;
 using AgriSync.BuildingBlocks.Persistence;
 using AgriSync.BuildingBlocks.Results;
 using AgriSync.SharedKernel.Contracts.Ids;
-using AgriSync.SharedKernel.Contracts.Roles;
 using ShramSafal.Application.Ports;
+using ShramSafal.Application.Services;
 using ShramSafal.Domain.Common;
 
 namespace ShramSafal.Infrastructure.Auth;
@@ -54,13 +54,24 @@ namespace ShramSafal.Infrastructure.Auth;
 /// above) changes. Zero behavior change for the online HTTP path, where
 /// <c>IsAdminCrossTenant</c> is always false.
 /// </para>
+///
+/// <para>
+/// LABOUR_PHASE2 Phase 5 (2026-08-13, founder decision O-4) —
+/// <see cref="EnsureCanVerify"/> no longer keeps its own private owner-tier
+/// role list. It asks <see cref="LabourManagementGate"/>, the single predicate
+/// shared with the four labour handlers, which <b>restores the Mukadam's
+/// ability to approve and verify</b> — previously the Mukadam could correct the
+/// labour on a log but not verify that same log.
+/// <see cref="EnsureIsOwner"/> and <see cref="EnsureCanEditLog"/> are
+/// deliberately UNCHANGED: owning a farm and editing a log are not
+/// labour-record management, and widening them would be scope this decision did
+/// not authorise.
+/// </para>
 /// </summary>
 internal sealed class ShramSafalAuthorizationEnforcer(
     IShramSafalRepository repository,
     TenantContext tenantContext) : IAuthorizationEnforcer
 {
-    private static readonly HashSet<AppRole> OwnerRoles = [AppRole.PrimaryOwner, AppRole.SecondaryOwner];
-
     public async Task<Result> EnsureIsFarmMember(UserId userId, FarmId farmId)
     {
         var validation = ValidateIds(userId, farmId);
@@ -123,8 +134,21 @@ internal sealed class ShramSafalAuthorizationEnforcer(
             return Result.Failure(ShramSafalErrors.DailyLogNotFound);
         }
 
-        var membershipRole = await repository.GetUserRoleForFarmAsync(log.FarmId.Value, userId.Value);
-        if (membershipRole is null || !OwnerRoles.Contains(membershipRole.Value))
+        // ── LABOUR_PHASE2 Phase 5 — THE BEHAVIOUR CHANGE, founder-approved ──
+        // This was `OwnerRoles.Contains(role)` with
+        // OwnerRoles = [PrimaryOwner, SecondaryOwner] — which EXCLUDED the
+        // Mukadam from approving and verifying the very logs they are the
+        // person in the field to check, while the same Mukadam was already
+        // permitted to CORRECT the labour on those logs. Founder decision O-4
+        // (2026-08-12) makes all five governed labour actions obey ONE
+        // predicate, and doing so restores the Mukadam's ability to verify.
+        // The identical gate now also admits any other role the owner has
+        // explicitly granted.
+        //
+        // Nothing else about this method moved: a missing log is still
+        // DailyLogNotFound, a non-member is still Forbidden, and the tenant
+        // claim is still published only after the decision is Success.
+        if (!await LabourManagementGate.IsAllowedAsync(repository, log.FarmId.Value, userId.Value))
         {
             return Result.Failure(ShramSafalErrors.Forbidden);
         }

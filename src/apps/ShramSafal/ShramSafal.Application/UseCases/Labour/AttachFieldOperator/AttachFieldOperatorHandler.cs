@@ -2,6 +2,7 @@ using AgriSync.BuildingBlocks.Abstractions;
 using AgriSync.BuildingBlocks.Application;
 using AgriSync.BuildingBlocks.Results;
 using ShramSafal.Application.Ports;
+using ShramSafal.Application.Services;
 using ShramSafal.Domain.Common;
 using ShramSafal.Domain.Labour;
 
@@ -81,12 +82,16 @@ public sealed class AttachFieldOperatorHandler(
             return Result.Failure<AttachFieldOperatorResult>(ShramSafalErrors.InvalidCommand);
         }
 
-        // Defense-in-depth membership re-check — mirrors CreateFieldOperatorHandler
-        // (the HTTP entry point already gates via ICallerFarmTenantScope, but
-        // a handler invoked from any other surface must still fail closed).
-        var callerRole = await repository.GetUserRoleForFarmAsync(
-            command.FarmId.Value, command.CallerUserId.Value, ct);
-        if (callerRole is null)
+        // LABOUR_PHASE2 Phase 5 — the SHARED labour predicate (see
+        // CreateFieldOperatorHandler for the full note). Attaching a named
+        // person to an engagement IS changing attribution, one of the five
+        // governed actions, so it obeys the same rule: owner-tier always,
+        // Mukadam by default, any other role only when explicitly granted
+        // (O-4). Still fails closed for a non-member, which is the property
+        // this block was originally added for — see the class remarks on
+        // PushSyncBatchHandler as a future non-HTTP entry point.
+        if (!await LabourManagementGate.IsAllowedAsync(
+                repository, command.FarmId.Value, command.CallerUserId.Value, ct))
         {
             return Result.Failure<AttachFieldOperatorResult>(ShramSafalErrors.Forbidden);
         }

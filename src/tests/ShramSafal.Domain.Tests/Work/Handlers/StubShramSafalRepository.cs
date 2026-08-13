@@ -132,4 +132,20 @@ internal abstract class StubShramSafalRepository : IShramSafalRepository
     public virtual Task<IReadOnlyList<FieldOperatorWorkRow>> GetFieldOperatorWorkRowsForAssignmentAsync(Guid labourAssignmentId, CancellationToken ct = default) => Task.FromResult<IReadOnlyList<FieldOperatorWorkRow>>([]);
     public virtual Task RemoveFieldOperatorWorkRowAsync(FieldOperatorWorkRow r, CancellationToken ct = default) => Task.CompletedTask;
     public virtual Task AddFieldOperatorWorkRowAsync(FieldOperatorWorkRow r, CancellationToken ct = default) => Task.CompletedTask;
+
+    // LABOUR_PHASE2 Phase 5 (migration ②) — restated `virtual` for the SAME
+    // reason as the two blocks above, and it matters more here than anywhere
+    // else in this file: GetLabourManagementGrantAsync is the input to an
+    // AUTHORIZATION decision. Left as the interface default, a FakeRepo that
+    // "grants" the capability would be silently ignored, every allow-case test
+    // would fail, and — far worse — every DENY-case test would still pass while
+    // proving nothing about the grant path.
+    public virtual Task<bool> GetLabourManagementGrantAsync(Guid farmId, Guid userId, CancellationToken ct = default) => Task.FromResult(false);
+    public virtual Task<FarmMembership?> GetTrackedFarmMembershipAsync(Guid farmId, Guid userId, CancellationToken ct = default) => Task.FromResult<FarmMembership?>(null);
+
+    // Task 1.2's roster read, restated `virtual` for the third time for the same
+    // reason. Same default (empty) as the interface body, so nothing that relied
+    // on it changes — it simply becomes overridable, which the Phase 5
+    // labour-permission roster read needs.
+    public virtual Task<List<FarmMembership>> GetFarmMembershipsAsync(FarmId farmId, CancellationToken ct = default) => Task.FromResult(new List<FarmMembership>());
 }

@@ -55,6 +55,17 @@ public static class ShramSafalErrors
         "ShramSafal.ConsentRequired",
         "Full History Journal consent is required to retain voice notes beyond 30 days.");
 
+    // LABOUR_PHASE2 Phase 5 (founder decision O-4) — the owner tried to toggle
+    // the explicit labour-record grant on a member whose ROLE already carries
+    // it (owner-tier or Mukadam). Storing the flag would have changed nothing
+    // and left the owner looking at a switch that does not work, so the request
+    // is refused with a code the UI can branch on (doctrine P5). Conflict, not
+    // Forbidden: the caller IS allowed to manage access — this particular
+    // member's capability simply is not a grant to give or take.
+    public static readonly Error LabourManagementCarriedByRole = Error.Conflict(
+        "ShramSafal.LabourManagementCarriedByRole",
+        "This member's role already allows managing labour records, so the grant cannot be changed. Change their role instead.");
+
     // --- Validation (bad caller input) -----------------------------------------------------
     public static readonly Error InvalidAmount = Error.Validation("ShramSafal.InvalidAmount", "Amount must be greater than zero.");
     public static readonly Error InvalidVerificationReason = Error.Validation("ShramSafal.InvalidVerificationReason", "Reason is required for disputed verification.");

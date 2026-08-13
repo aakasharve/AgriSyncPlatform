@@ -774,4 +774,54 @@ public interface IShramSafalRepository
     Task<IReadOnlyList<FieldOperatorWorkRow>> GetFieldOperatorWorkRowsForAssignmentsAsync(
         IReadOnlyCollection<Guid> labourAssignmentIds, CancellationToken ct = default)
         => Task.FromResult<IReadOnlyList<FieldOperatorWorkRow>>([]);
+
+    // --- Labour capability (LABOUR_PHASE2 Phase 5, migration ②) ---------------
+    // Same A10/F7 rule as every block above, and it is LOAD-BEARING here:
+    // IShramSafalRepository has 28 implementors and an ABSTRACT member on this
+    // interface produces ~135 compile errors across the test tree. Both members
+    // below therefore ship a DEFAULT body. Production ShramSafalRepository
+    // overrides both.
+    //
+    // ⚠ KNOWN CONSEQUENCE, stated rather than discovered later: because the
+    // default for GetLabourManagementGrantAsync is `false`, EVERY in-tree test
+    // double silently reports "not granted". That is the correct fail-closed
+    // direction, and it is what keeps the pre-existing Worker-denial baselines
+    // (FarmMembershipAuthorizationBaselineTests) passing untouched — but it also
+    // means a FUTURE test that asserts a denial can pass for the wrong reason:
+    // it would pass identically against a repository that never consulted the
+    // grant at all. Any test that means to prove the GRANT path must override
+    // this member (see LabourCapabilityGateTests, which uses a double that
+    // returns true, and the real-Postgres suite, which uses the real row).
+
+    /// <summary>
+    /// Does this user hold the EXPLICIT <c>can_manage_labour_records</c> grant
+    /// on this farm? Non-terminal memberships only — a grant cannot outlive the
+    /// membership that carries it.
+    ///
+    /// <para><b>This is one INPUT to the decision, never the decision.</b>
+    /// Owner-tier and Mukadam are allowed with this flag <c>false</c>; the
+    /// effective rule is <see cref="ShramSafal.Domain.Farms.LabourManagementPermission.IsAllowed"/>,
+    /// resolved once in <c>LabourManagementGate</c>. Do not call this member
+    /// directly from a handler.</para>
+    /// </summary>
+    Task<bool> GetLabourManagementGrantAsync(Guid farmId, Guid userId, CancellationToken ct = default)
+        => Task.FromResult(false);
+
+    /// <summary>
+    /// The caller's non-terminal <see cref="FarmMembership"/> on a farm,
+    /// <b>TRACKED</b> — for the grant/revoke write path only.
+    ///
+    /// <para><b>Why this exists next to <see cref="GetFarmMembershipAsync"/>
+    /// rather than reusing it.</b> That method is <c>AsNoTracking()</c>, so a
+    /// domain mutation applied to what it returns is never persisted by
+    /// <c>SaveChangesAsync</c> — the change is made on a detached POCO and
+    /// silently discarded. (<c>ExitMembershipHandler</c> does exactly that
+    /// today; see the Phase 5 report. Reusing the no-tracking read here would
+    /// have shipped a grant endpoint that answers 200 and writes nothing.)
+    /// Widening <c>GetFarmMembershipAsync</c> to tracked would change behaviour
+    /// for every existing caller, so the write path gets its own read that says
+    /// what it is.</para>
+    /// </summary>
+    Task<FarmMembership?> GetTrackedFarmMembershipAsync(Guid farmId, Guid userId, CancellationToken ct = default)
+        => Task.FromResult<FarmMembership?>(null);
 }

@@ -3,11 +3,14 @@ using AgriSync.BuildingBlocks.Application;
 using AgriSync.BuildingBlocks.Audit;
 using AgriSync.BuildingBlocks.Results;
 using AgriSync.SharedKernel.Contracts.Ids;
+using ShramSafal.Application.Contracts.Dtos;
 using ShramSafal.Application.UseCases.Memberships.ClaimJoin;
 using ShramSafal.Application.UseCases.Memberships.ExitMembership;
+using ShramSafal.Application.UseCases.Memberships.GetLabourPermissions;
 using ShramSafal.Application.UseCases.Memberships.GetMyFarms;
 using ShramSafal.Application.UseCases.Memberships.IssueFarmInvite;
 using ShramSafal.Application.UseCases.Memberships.RotateFarmInvite;
+using ShramSafal.Application.UseCases.Memberships.SetLabourPermission;
 
 namespace ShramSafal.Api.Endpoints;
 
@@ -205,6 +208,80 @@ public static class MembershipEndpoints
         })
         .WithName("ExitMembership");
 
+        // ── LABOUR_PHASE2 Phase 5 (founder decision O-4) — labour-capability
+        // access management. Two routes, one resource:
+        //
+        //   GET /shramsafal/farms/{farmId}/labour-permissions
+        //   PUT /shramsafal/farms/{farmId}/labour-permissions/{userId}
+        //
+        // OWNER-ONLY, enforced by the pipeline's SetLabourPermissionAuthorizer /
+        // GetLabourPermissionsAuthorizer (EnsureIsOwner) and re-checked inside
+        // each handler. That authorizer is ALSO what publishes the tenant claim
+        // these routes are scoped by — see its remarks before removing it.
+        //
+        // Deliberately NOT added to TenantTransactionMiddleware.SkipPathPrefixes.
+        // The skip list holds routes that legitimately span several farms
+        // (/shramsafal/farms/mine, /sync/push); these are single-farm and MUST
+        // run inside the ambient per-request transaction so the interceptor's
+        // SET LOCAL agrisync.farm_id reaches ssf.farm_memberships' tenant policy.
+        //
+        // PUT, not POST, and it carries the DESIRED STATE rather than a "toggle"
+        // verb: a farmer on a rural connection re-sending the same request must
+        // land on the same state. That is what makes it idempotent without an
+        // Idempotency-Key (ADR 0004 exists for requests that are NOT).
+        group.MapGet("/farms/{farmId:guid}/labour-permissions", async (
+            Guid farmId,
+            ClaimsPrincipal user,
+            IHandler<GetLabourPermissionsQuery, IReadOnlyList<LabourPermissionDto>> handler,
+            CancellationToken ct) =>
+        {
+            if (!EndpointActorContext.TryGetUserId(user, out var userId))
+            {
+                return Results.Unauthorized();
+            }
+
+            var result = await handler.HandleAsync(
+                new GetLabourPermissionsQuery(new FarmId(farmId), new UserId(userId)), ct);
+
+            return result.IsSuccess ? Results.Ok(result.Value) : ToErrorResult(result.Error);
+        })
+        .WithName("GetFarmLabourPermissions");
+
+        group.MapPut("/farms/{farmId:guid}/labour-permissions/{targetUserId:guid}", async (
+            Guid farmId,
+            Guid targetUserId,
+            SetLabourPermissionRequest request,
+            HttpContext httpContext,
+            ClaimsPrincipal user,
+            IHandler<SetLabourPermissionCommand, LabourPermissionDto> handler,
+            CancellationToken ct) =>
+        {
+            if (!EndpointActorContext.TryGetUserId(user, out var userId))
+            {
+                return Results.Unauthorized();
+            }
+
+            // The acting owner comes from the validated JWT subject, never from
+            // the body or the path — a caller must not be able to name who they
+            // are acting as.
+            var (auditDeviceId, auditIpHash) = httpContext.AuditClaims();
+            var clientAppVersion = ResolveClientAppVersion(httpContext);
+
+            var result = await handler.HandleAsync(
+                new SetLabourPermissionCommand(
+                    new FarmId(farmId),
+                    new UserId(targetUserId),
+                    request?.CanManageLabourRecords ?? false,
+                    new UserId(userId),
+                    clientAppVersion,
+                    auditDeviceId,
+                    auditIpHash),
+                ct);
+
+            return result.IsSuccess ? Results.Ok(result.Value) : ToErrorResult(result.Error);
+        })
+        .WithName("SetFarmLabourPermission");
+
         // Minimal "my farms" list so the frontend can resolve the real farmId.
         group.MapGet("/farms/mine", async (
             ClaimsPrincipal user,
@@ -289,3 +366,15 @@ public static class MembershipEndpoints
 }
 
 public sealed record ClaimJoinRequest(string? Token, string? FarmCode);
+
+/// <summary>
+/// LABOUR_PHASE2 Phase 5 — body of
+/// <c>PUT /shramsafal/farms/{farmId}/labour-permissions/{targetUserId}</c>.
+///
+/// <para>One field, and it is the DESIRED STATE, not a toggle: the caller says
+/// what it wants to be true, so a retry on a bad connection converges instead of
+/// oscillating. An absent/`null` body is read as <c>false</c> (revoke) — the
+/// fail-closed direction, since the alternative would let a malformed request
+/// hand out a capability.</para>
+/// </summary>
+public sealed record SetLabourPermissionRequest(bool CanManageLabourRecords);
