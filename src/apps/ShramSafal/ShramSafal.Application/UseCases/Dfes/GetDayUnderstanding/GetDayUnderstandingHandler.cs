@@ -70,8 +70,19 @@ public sealed class GetDayUnderstandingHandler(IShramSafalRepository repository)
         {
             return JsonSerializer.Deserialize<LensInput>(componentsJson) ?? NothingScorable;
         }
-        catch (JsonException)
+        catch (JsonException ex)
         {
+            // An unreadable breakdown means the farmer is shown NO number for a day
+            // he did log. Falling back is right — a guessed score would be a
+            // fabricated one — but it must never be SILENT, or "no number" looks
+            // like "nothing to score" instead of "the row is corrupt".
+            System.Diagnostics.Activity.Current?.AddEvent(new System.Diagnostics.ActivityEvent(
+                "GetDayUnderstanding.MalformedComponentsJson",
+                tags: new System.Diagnostics.ActivityTagsCollection
+                {
+                    ["exception.type"] = ex.GetType().Name,
+                    ["exception.message"] = ex.Message,
+                }));
             return NothingScorable;
         }
     }
