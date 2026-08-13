@@ -29,7 +29,7 @@ public sealed class LabourAssignment : Entity<Guid>
         int? maleCount, int? femaleCount, int? workerCount, decimal? wagePerPerson,
         ContractUnit? contractUnit, decimal? contractQuantity, decimal? totalCost,
         Guid? linkedActivityId, DateTime createdAtUtc, LabourTime time,
-        LabourShift? shift, string? task, string workerNamesJson)
+        LabourShift? shift, string? task, string workerNamesJson, string? notes)
         : base(id)
     {
         DailyLogId = dailyLogId;
@@ -48,6 +48,7 @@ public sealed class LabourAssignment : Entity<Guid>
         Shift = shift;
         Task = task;
         WorkerNamesJson = workerNamesJson;
+        Notes = notes;
     }
 
     public Guid DailyLogId { get; private set; }
@@ -90,12 +91,35 @@ public sealed class LabourAssignment : Entity<Guid>
     /// </remarks>
     public string WorkerNamesJson { get; private set; } = "[]";
 
+    /// <summary>
+    /// LABOUR_PHASE2 migration ③ (founder decision O-3) — the farmer's own note
+    /// about this engagement, stored exactly as typed.
+    /// </summary>
+    /// <remarks>
+    /// <para>Before this column the note reached the server on every
+    /// <c>create_daily_log</c> mutation (<c>LabourItem.Notes</c>, generated from
+    /// <c>create_daily_log.zod.ts</c>) and was DISCARDED — there was nowhere to
+    /// put it. O-3: <i>"if the product lets a farmer enter a note, it must survive
+    /// capture → write → read-back → clean-device reconstruction."</i></para>
+    /// <para><b>NULL means "no note", never an empty note.</b> A whitespace-only
+    /// value is not a note, so it is normalised to <c>null</c> rather than stored
+    /// as <c>""</c> — otherwise a reader cannot tell "the farmer wrote nothing"
+    /// from "the farmer wrote a space". Everything else is stored verbatim
+    /// (trimmed at the edges only): this is the farmer's own words, not a
+    /// derived value, and nothing here parses, classifies or shortens them.</para>
+    /// <para>Descriptive only. It participates in NO money rule, NO headcount
+    /// and NO attribution — like <see cref="Task"/> and <see cref="Shift"/>.
+    /// This is a column on the engagement, deliberately NOT a notes subsystem.</para>
+    /// </remarks>
+    public string? Notes { get; private set; }
+
     public static LabourAssignment Create(
         Guid id, Guid dailyLogId, LabourEngagementType engagementType,
         int? maleCount, int? femaleCount, int? workerCount, decimal? wagePerPerson,
         ContractUnit? contractUnit, decimal? contractQuantity, decimal? totalCost,
         Guid? linkedActivityId, DateTime createdAtUtc, LabourTime time,
-        LabourShift? shift = null, string? task = null, IReadOnlyList<string>? workerNames = null)
+        LabourShift? shift = null, string? task = null, IReadOnlyList<string>? workerNames = null,
+        string? notes = null)
     {
         // Closes default(LabourTime): a readonly record struct always has an implicit
         // public parameterless constructor, so the zero value is reachable no matter how
@@ -116,7 +140,10 @@ public sealed class LabourAssignment : Entity<Guid>
 
         return new(id, dailyLogId, engagementType, maleCount, femaleCount, workerCount,
                wagePerPerson, contractUnit, contractQuantity, totalCost, linkedActivityId, createdAtUtc, time,
-               shift, task, workerNamesJson);
+               shift, task, workerNamesJson,
+               // "   " is not a note (see the Notes remarks). Trim the edges and
+               // keep the farmer's words; blank becomes the honest null.
+               string.IsNullOrWhiteSpace(notes) ? null : notes.Trim());
     }
 
     // ─────────────────────────────────────────────────────────────────────────

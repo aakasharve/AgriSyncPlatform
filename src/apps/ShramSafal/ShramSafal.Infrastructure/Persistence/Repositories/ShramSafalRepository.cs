@@ -1267,6 +1267,42 @@ internal sealed class ShramSafalRepository(ShramSafalDbContext db) : IShramSafal
         await db.FieldOperatorWorkRows.AddAsync(r, ct);
     }
 
+    // --- Labour read-back on /sync/pull (LABOUR_PHASE2 Phase 3) ---------------
+
+    public async Task<IReadOnlyList<LabourAssignment>> GetLabourAssignmentsForDailyLogsAsync(
+        IReadOnlyCollection<Guid> dailyLogIds, CancellationToken ct = default)
+    {
+        if (dailyLogIds is null || dailyLogIds.Count == 0)
+        {
+            return [];
+        }
+
+        // AsNoTracking: a pull is a pure read, and tracking hundreds of engagements
+        // would put them in the same ChangeTracker the push path saves through.
+        var ids = dailyLogIds as IList<Guid> ?? dailyLogIds.ToList();
+        return await db.LabourAssignments
+            .AsNoTracking()
+            .Where(a => ids.Contains(a.DailyLogId))
+            .OrderBy(a => a.CreatedAtUtc)
+            .ToListAsync(ct);
+    }
+
+    public async Task<IReadOnlyList<FieldOperatorWorkRow>> GetFieldOperatorWorkRowsForAssignmentsAsync(
+        IReadOnlyCollection<Guid> labourAssignmentIds, CancellationToken ct = default)
+    {
+        if (labourAssignmentIds is null || labourAssignmentIds.Count == 0)
+        {
+            return [];
+        }
+
+        var ids = labourAssignmentIds as IList<Guid> ?? labourAssignmentIds.ToList();
+        return await db.FieldOperatorWorkRows
+            .AsNoTracking()
+            .Where(r => ids.Contains(r.LabourAssignmentId))
+            .OrderBy(r => r.CreatedAtUtc)
+            .ToListAsync(ct);
+    }
+
     // --- DATA_PRINCIPLE_SPINE sub-phase 02.3 (warm-tier transcripts) ------
     public Task AddTranscriptAsync(Transcript transcript, CancellationToken ct = default)
     {

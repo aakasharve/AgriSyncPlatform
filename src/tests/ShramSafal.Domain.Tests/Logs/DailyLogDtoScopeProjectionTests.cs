@@ -149,14 +149,23 @@ public sealed class DailyLogDtoScopeProjectionTests
 
     /// <summary>
     /// The regression that matters most: single-plot logging is untouched. The
-    /// two new members are APPENDED, so a plot log's response body is
-    /// byte-for-byte yesterday's document up to its closing brace, then the two
-    /// new members. Compared against a shadow record carrying exactly the
-    /// pre-A2a field list in the pre-A2a order, so a rename, a reorder, a
-    /// changed value or an inserted field all fail here.
+    /// new members are APPENDED, so a plot log's response body is byte-for-byte
+    /// yesterday's document up to its closing brace, then the new members.
+    /// Compared against a shadow record carrying exactly the pre-A2a field list
+    /// in the pre-A2a order, so a rename, a reorder, a changed value or an
+    /// inserted field all fail here.
+    ///
+    /// <para><b>Updated for LABOUR_PHASE2 Phase 3, which appends a THIRD member.</b>
+    /// <c>labour</c> serialises as <c>null</c> here on purpose: this DTO was built
+    /// by the parameterless <c>ToDto()</c>, i.e. by a caller that never loaded the
+    /// engagements. <c>null</c> is that caller saying nothing about labour. Only
+    /// the pull, which fetches them, sends an array — and an EMPTY array there is a
+    /// real statement. If this assertion ever reads <c>"labour":[]</c>, a caller
+    /// that did not look has started claiming a log has no labour, which is the
+    /// V1 data-loss bug rebuilt.</para>
     /// </summary>
     [Fact]
-    public void A_plot_logs_wire_shape_is_yesterdays_bytes_plus_the_two_new_members()
+    public void A_plot_logs_wire_shape_is_yesterdays_bytes_plus_the_new_members()
     {
         var dto = MakeLog(DailyLogScope.Plot).ToDto();
 
@@ -180,9 +189,9 @@ public sealed class DailyLogDtoScopeProjectionTests
         var actualJson = JsonSerializer.Serialize(dto, WireOptions);
 
         actualJson.Should().Be(
-            $"{legacyJson[..^1]},\"scope\":\"Plot\",\"plotIds\":[\"{PlotA}\"]}}",
+            $"{legacyJson[..^1]},\"scope\":\"Plot\",\"plotIds\":[\"{PlotA}\"],\"labour\":null}}",
             "additive and inert: every field that shipped before A2a keeps its exact position, name and value, and " +
-            "the only difference a shipped client can observe is two members it does not yet read");
+            "the only difference a shipped client can observe is members it does not yet read");
     }
 
     // ─────────────────────────────────────────────────────────────────────

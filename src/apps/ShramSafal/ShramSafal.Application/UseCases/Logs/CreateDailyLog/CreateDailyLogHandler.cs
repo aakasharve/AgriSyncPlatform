@@ -427,7 +427,15 @@ public sealed class CreateDailyLogHandler(
                         : Domain.Farms.LabourTime.ServerAssumed(),
                     // Descriptive only — never touches the money fields above.
                     shift: LabourAssignmentFactory.MapLabourShift(item.Shift),
-                    task: item.Task);
+                    task: item.Task,
+                    // LABOUR_PHASE2 migration ③ (founder decision O-3). `notes`
+                    // has been on the wire since Labour V1 Task 5
+                    // (create_daily_log.zod.ts) and was DROPPED HERE, on this
+                    // exact line, because no column existed to hold it. The
+                    // farmer typed it, the phone sent it, the server threw it
+                    // away. It now reaches ssf.labour_assignments.notes and
+                    // comes back on /sync/pull.
+                    notes: item.Notes);
 
                 await repository.AddLabourAssignmentAsync(assignment, ct);
             }

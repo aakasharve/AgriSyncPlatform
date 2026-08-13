@@ -37,10 +37,17 @@ public sealed class CorrectLabourHandlerTests
     private static CorrectLabourHandler BuildHandler(FakeRepo repo, FakeMutationStore store) =>
         new(repo, store, new GuidIds(), new FixedClock(Now), NullLogger<CorrectLabourHandler>.Instance);
 
+    /// <summary>
+    /// The log is created BEFORE the correction clock — the only realistic
+    /// ordering, and what makes the LABOUR_PHASE2 Phase 3 parent-clock bump
+    /// observable rather than an accidental no-op against a fixed clock.
+    /// </summary>
+    private static readonly DateTime LogCreatedAtUtc = Now.AddMinutes(-30);
+
     private static DailyLog MakeLog(Guid id, Guid farmGuid) =>
         DailyLog.Create(
             id, new FarmId(farmGuid), Guid.NewGuid(), Guid.NewGuid(),
-            new UserId(CallerGuid), new DateOnly(2026, 8, 10), null, (LocationSnapshot?)null, Now);
+            new UserId(CallerGuid), new DateOnly(2026, 8, 10), null, (LocationSnapshot?)null, LogCreatedAtUtc);
 
     private static LabourAssignment MakeAssignment(Guid id, Guid dailyLogId, int? workerCount = 8) =>
         LabourAssignment.Create(
@@ -415,6 +422,80 @@ public sealed class CorrectLabourHandlerTests
         result.IsFailure.Should().BeTrue(
             "without a retry identity a retried correction writes a second set of history rows");
         assignment.WorkerCount.Should().Be(8);
+    }
+
+    // ─── LABOUR_PHASE2 Phase 3 — THE DELTA TRAP ──────────────────────────────
+    //
+    // `ssf.labour_assignments` has NO modified_at_utc and this handler mutates the
+    // row IN PLACE, while /sync/pull is a delta on daily_logs.modified_at_utc. So
+    // without the parent bump a correction persists perfectly, answers 200, writes
+    // its history row — and NEVER reaches the farmer's second phone, with every
+    // other test in this file green. These four are that guard.
+    // ─────────────────────────────────────────────────────────────────────────
+
+    [Fact]
+    public async Task A_correction_moves_the_parent_logs_clock_so_a_delta_pull_can_see_it()
+    {
+        var (repo, store, assignment) = Scenario();
+        var logBefore = await repo.GetDailyLogByIdAsync(assignment.DailyLogId);
+        logBefore!.ModifiedAtUtc.Should().Be(LogCreatedAtUtc, "precondition: nothing has touched the log yet");
+
+        var result = await BuildHandler(repo, store).HandleAsync(
+            Command(assignment.Id, quantity: new LabourQuantityCorrection(6, null, null)));
+
+        result.IsSuccess.Should().BeTrue();
+        var log = await repo.GetDailyLogByIdAsync(assignment.DailyLogId);
+        log!.ModifiedAtUtc.Should().Be(Now,
+            "the engagement carries no modified timestamp of its own, so the PARENT's clock is the only thing a " +
+            "delta pull can key on — leave it and the correction is invisible to every other device forever");
+    }
+
+    [Fact]
+    public async Task An_attribution_only_correction_also_moves_the_parent_clock()
+    {
+        var (repo, store, assignment) = Scenario();
+        var fieldOperator = FieldOperator.Create(
+            Guid.NewGuid(), "बाळू", null, new FarmId(FarmAGuid), new UserId(CallerGuid), Now);
+        repo.SeedOperator(fieldOperator);
+
+        var result = await BuildHandler(repo, store).HandleAsync(
+            Command(assignment.Id, adds: [fieldOperator.Id]));
+
+        result.IsSuccess.Should().BeTrue();
+        var log = await repo.GetDailyLogByIdAsync(assignment.DailyLogId);
+        log!.ModifiedAtUtc.Should().Be(Now,
+            "who is attributed is part of what a second device must reconstruct — an attribution that never " +
+            "propagates is the same defect as a headcount that never propagates");
+    }
+
+    [Fact]
+    public async Task A_correction_that_changes_nothing_leaves_the_parent_clock_alone()
+    {
+        var (repo, store, assignment) = Scenario(workerCount: 8);
+
+        var result = await BuildHandler(repo, store).HandleAsync(
+            Command(assignment.Id, quantity: new LabourQuantityCorrection(8, null, null)));
+
+        result.IsSuccess.Should().BeTrue("re-stating a value is accepted, it simply corrects nothing");
+        repo.Corrections.Should().BeEmpty("nothing moved, so there is nothing to explain");
+        var log = await repo.GetDailyLogByIdAsync(assignment.DailyLogId);
+        log!.ModifiedAtUtc.Should().Be(LogCreatedAtUtc,
+            "pushing an unchanged log to every device claims a change that did not happen");
+    }
+
+    [Fact]
+    public async Task A_rejected_correction_never_moves_the_parent_clock()
+    {
+        var (repo, store, assignment) = Scenario(AppRole.Worker);
+
+        var result = await BuildHandler(repo, store).HandleAsync(
+            Command(assignment.Id, quantity: new LabourQuantityCorrection(6, null, null)));
+
+        result.IsFailure.Should().BeTrue();
+        var log = await repo.GetDailyLogByIdAsync(assignment.DailyLogId);
+        log!.ModifiedAtUtc.Should().Be(LogCreatedAtUtc,
+            "the ambient transaction COMMITS on a 403, so a bump staged before the authorization check would " +
+            "durably advertise a change that was refused");
     }
 
     // ─── Test doubles ────────────────────────────────────────────────────────

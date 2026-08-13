@@ -728,4 +728,50 @@ public interface IShramSafalRepository
     /// </summary>
     Task AddFieldOperatorWorkRowAsync(FieldOperatorWorkRow r, CancellationToken ct = default)
         => Task.CompletedTask;
+
+    // --- Labour read-back on /sync/pull (LABOUR_PHASE2 Phase 3) ---------------
+    // Same A10/F7 rule as the two blocks above: BOTH members ship a DEFAULT body,
+    // because an abstract member on this interface produces ~135 compile errors
+    // across the 28 in-tree implementors. Production ShramSafalRepository
+    // overrides both.
+    //
+    // Read-only, no farm parameter, and that is deliberate: the caller passes the
+    // ids of daily logs it has ALREADY farm-scoped, so these can only widen to
+    // children of rows the caller was entitled to. They are not a farm-scoped
+    // entry point and must not be used as one.
+
+    /// <summary>
+    /// Every <see cref="LabourAssignment"/> whose parent <c>DailyLog</c> is in
+    /// <paramref name="dailyLogIds"/> — the labour half of a <c>/sync/pull</c>
+    /// delta, fetched in ONE round trip rather than per log.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>There is no "changed since" here, and that is not an oversight.</b>
+    /// <c>ssf.labour_assignments</c> has NO <c>modified_at_utc</c> and corrections
+    /// mutate the row IN PLACE, so a delta keyed on this table could not see a
+    /// correction at all. The delta is the PARENT log's <c>ModifiedAtUtc</c>, which
+    /// <c>CorrectLabourHandler</c> bumps; this method then returns current truth for
+    /// whatever logs that delta selected. Adding a timestamp filter here would
+    /// silently hide every correction.</para>
+    /// <para>Ordered by <c>created_at_utc</c> so a device sees engagements in the
+    /// order they were recorded.</para>
+    /// </remarks>
+    Task<IReadOnlyList<LabourAssignment>> GetLabourAssignmentsForDailyLogsAsync(
+        IReadOnlyCollection<Guid> dailyLogIds, CancellationToken ct = default)
+        => Task.FromResult<IReadOnlyList<LabourAssignment>>([]);
+
+    /// <summary>
+    /// The LIVE attribution rows for a set of engagements — the bulk sibling of
+    /// <see cref="GetFieldOperatorWorkRowsForAssignmentAsync"/>.
+    /// </summary>
+    /// <remarks>
+    /// <b>NOT farm-scoped by itself</b>, exactly like its single-assignment
+    /// sibling: <c>p_user_select_field_operator_work_rows</c> is a PERMISSIVE
+    /// policy OR-ed with the tenant policy, and Postgres FK checks bypass RLS
+    /// entirely, so a row here can carry a <c>farm_id</c> other than its parent
+    /// log's. The caller must assert that itself (doctrine E4 — both sides).
+    /// </remarks>
+    Task<IReadOnlyList<FieldOperatorWorkRow>> GetFieldOperatorWorkRowsForAssignmentsAsync(
+        IReadOnlyCollection<Guid> labourAssignmentIds, CancellationToken ct = default)
+        => Task.FromResult<IReadOnlyList<FieldOperatorWorkRow>>([]);
 }

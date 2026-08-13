@@ -30,6 +30,7 @@ using ShramSafal.Application.Ports.External;
 using ShramSafal.Domain.AI;
 using ShramSafal.Domain.Common;
 using ShramSafal.Domain.Farms;
+using ShramSafal.Domain.Labour;
 using ShramSafal.Domain.Tests;
 using ShramSafal.Infrastructure.Persistence;
 using AgriSync.SharedKernel.Contracts.Ids;
@@ -2475,6 +2476,41 @@ public sealed class SyncEndpointsTests
                 new FarmId(farmId),
                 new UserId(userId),
                 role,
+                DateTime.UtcNow));
+            await db.SaveChangesAsync();
+        }
+
+        /// <summary>
+        /// LABOUR_PHASE2 Phase 3 — writes an attribution row DIRECTLY, bypassing
+        /// <c>AttachFieldOperatorHandler</c>.
+        /// </summary>
+        /// <remarks>
+        /// The handler refuses to attach an operator across farms, so a row whose
+        /// <c>farm_id</c> disagrees with its engagement's parent log is
+        /// unreachable through the API — which is exactly why the pull's E4
+        /// cross-check needs a seam like this to be tested at all. Postgres FK
+        /// checks bypass RLS and <c>p_user_select_field_operator_work_rows</c> is
+        /// PERMISSIVE and OR-ed, so such a row IS readable by a multi-farm login;
+        /// this seeds that shape deliberately. Not a production path.
+        /// </remarks>
+        public async Task SeedFieldOperatorWorkRowAsync(
+            Guid fieldOperatorId,
+            Guid labourAssignmentId,
+            Guid farmId,
+            DateOnly workDate,
+            string displayNameAtAttach,
+            Guid recordedByUserId)
+        {
+            await using var scope = app.Services.CreateAsyncScope();
+            var db = scope.ServiceProvider.GetRequiredService<ShramSafalDbContext>();
+            db.FieldOperatorWorkRows.Add(FieldOperatorWorkRow.Create(
+                Guid.NewGuid(),
+                fieldOperatorId,
+                labourAssignmentId,
+                new FarmId(farmId),
+                workDate,
+                displayNameAtAttach,
+                new UserId(recordedByUserId),
                 DateTime.UtcNow));
             await db.SaveChangesAsync();
         }

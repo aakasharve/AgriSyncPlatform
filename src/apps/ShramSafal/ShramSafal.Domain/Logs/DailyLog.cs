@@ -344,6 +344,39 @@ public sealed class DailyLog : Entity<Guid>
         return task;
     }
 
+    /// <summary>
+    /// LABOUR_PHASE2 Phase 3 — a labour engagement anchored to this log was
+    /// corrected in place, so THIS log's modification clock moves.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>Without this, a correction is invisible to a second device and
+    /// every test still passes.</b> <c>ssf.labour_assignments</c> has no
+    /// <c>modified_at_utc</c> and <c>CorrectLabourHandler</c> mutates the row IN
+    /// PLACE — that in-place mutation is what lets every reader see corrected truth
+    /// without knowing corrections exist. But <c>/sync/pull</c> is a delta on
+    /// <c>daily_logs.modified_at_utc</c>. So a correction would persist perfectly on
+    /// the server, be reported as applied, and never reach Phone B.</para>
+    ///
+    /// <para><b>It records nothing about labour.</b> There is no labour state on
+    /// this aggregate and none is added here: the method moves one timestamp, which
+    /// is precisely what "something about this log changed" means to the sync
+    /// cursor. Named for the event rather than the field so it can never become the
+    /// general <c>Update</c>/<c>SetModifiedAt</c> this class deliberately does not
+    /// have — and so a reader of the correction handler can see WHY the clock moved.</para>
+    ///
+    /// <para><b>Monotonic.</b> The clock only ever moves FORWARD. Assigning a
+    /// smaller value would drop the log below a device's existing cursor and hide
+    /// the very correction this exists to deliver, so a stale or skewed timestamp
+    /// is ignored rather than obeyed.</para>
+    /// </remarks>
+    public void MarkLabourCorrected(DateTime correctedAtUtc)
+    {
+        if (correctedAtUtc > ModifiedAtUtc)
+        {
+            ModifiedAtUtc = correctedAtUtc;
+        }
+    }
+
     public void AttachLocation(LocationSnapshot location)
     {
         if (Location is not null)

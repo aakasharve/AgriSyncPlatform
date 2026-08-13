@@ -49,12 +49,19 @@ public static class LabourAssignmentFactory
     /// <see cref="LabourAssignment.Create"/>: <paramref name="totalCost"/> is
     /// stored exactly as supplied and is NEVER computed from rate × count.</para>
     /// </summary>
+    /// <param name="notes">
+    /// LABOUR_PHASE2 O-3 — the farmer's own note, carried through verbatim.
+    /// Added LAST with a default so every existing call site compiles and keeps
+    /// meaning exactly what it meant. <see cref="LabourAssignment.Create"/> owns
+    /// the blank → <c>null</c> normalisation; nothing is normalised twice.
+    /// </param>
     public static LabourAssignment FromParsed(
         Guid id, Guid dailyLogId, LabourEngagementType engagementType,
         int? maleCount, int? femaleCount, int? workerCount, decimal? wagePerPerson,
         ContractUnit? contractUnit, decimal? contractQuantity, decimal? totalCost,
         Guid? linkedActivityId, DateTime createdAtUtc, LabourTime time,
-        LabourShift? shift = null, string? task = null, IReadOnlyList<string>? workerNames = null)
+        LabourShift? shift = null, string? task = null, IReadOnlyList<string>? workerNames = null,
+        string? notes = null)
         => LabourAssignment.Create(
             id: id,
             dailyLogId: dailyLogId,
@@ -75,7 +82,8 @@ public static class LabourAssignmentFactory
             time: time,
             shift: shift,
             task: task,
-            workerNames: workerNames);
+            workerNames: workerNames,
+            notes: notes);
 
     // ── tolerant string → enum maps (safe default; never throw) ────────────────
     // Moved verbatim from LedgerDerivationService so the manual path can map wire

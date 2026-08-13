@@ -41,6 +41,12 @@ internal sealed class LabourAssignmentConfiguration : IEntityTypeConfiguration<L
 
         builder.Property(x => x.Task).HasColumnName("task");                          // nullable free text
 
+        // LABOUR_PHASE2 migration ③ (founder decision O-3) — the farmer's own note.
+        // No max length, exactly like `task` above: this is the farmer's words, and
+        // a length cap here would silently truncate them. NULL = no note (the domain
+        // normalises blank to null), never an empty string.
+        builder.Property(x => x.Notes).HasColumnName("notes");
+
         // Task 2.2 — mirrors DailyLogConfiguration.EvidenceSourcesJson: ships NOT NULL
         // with default '[]'::jsonb so the column never needs NULL handling downstream.
         builder.Property(x => x.WorkerNamesJson)

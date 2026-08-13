@@ -332,6 +332,31 @@ public sealed class CorrectLabourHandler(
             await repository.AddLabourCorrectionAsync(correction, ct);
         }
 
+        // ── 8b. LABOUR_PHASE2 Phase 3 — MAKE THE CORRECTION REACHABLE ────────
+        // Everything above is now correct on the server and STILL invisible to
+        // the farmer's other phone. `ssf.labour_assignments` has no
+        // `modified_at_utc` and this handler mutates the row in place, while
+        // `/sync/pull` is a delta on `daily_logs.modified_at_utc`. Without this
+        // line the correction persists perfectly, answers 200, writes its history
+        // row — and Phone B keeps showing 8 forever, with every test green.
+        //
+        // Bumped only when something ACTUALLY moved. `corrections.Count > 0` is
+        // exactly that condition: every attribution add and remove appends a row
+        // unconditionally, and the quantity/duration rows go through AddIfChanged,
+        // which appends nothing when a value is merely restated. So a no-op
+        // correction (a retried removal, a headcount re-entered unchanged) does
+        // not push this log to every device claiming a change that did not happen.
+        //
+        // Staged, not saved: it rides the same SaveChanges as the corrected
+        // engagement and its history at step 9, so the correction and its
+        // reachability commit together or not at all. `dailyLog` is TRACKED —
+        // `GetDailyLogByIdAsync` does not AsNoTracking — which is what makes that
+        // true; a no-tracking read here would silently no-op.
+        if (corrections.Count > 0)
+        {
+            dailyLog.MarkLabourCorrected(now);
+        }
+
         var result = new CorrectLabourResult(
             assignment.Id,
             assignment.WorkerCount,

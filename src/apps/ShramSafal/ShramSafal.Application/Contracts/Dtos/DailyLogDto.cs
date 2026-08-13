@@ -44,10 +44,39 @@ namespace ShramSafal.Application.Contracts.Dtos;
 /// (founder decision O-1) — never a sentinel, never "the first plot", never an
 /// invented cycle.</para>
 ///
-/// <para><b>Appended, never inserted.</b> The two new members sit at the END of
-/// the record so every field that shipped before them keeps its exact position,
-/// name and value. A <c>Plot</c> log's JSON is byte-identical to yesterday's up
-/// to its closing brace, with the two new members after it — pinned by
+/// <para><b><see cref="Labour"/> (LABOUR_PHASE2 Phase 3).</b> Labour was written
+/// and never read back: a farmer recorded 8 workers on Phone A and Phone B, freshly
+/// installed, saw the log with NO labour on it at all. This member is the read-back,
+/// nested here as a sibling of <see cref="Tasks"/> and
+/// <see cref="VerificationEvents"/> so it rides the existing pull rather than a
+/// second channel.</para>
+///
+/// <para><b>Its three states are three different statements, and the difference is
+/// load-bearing.</b>
+/// <list type="bullet">
+/// <item><c>null</c> — <b>this response makes no statement about labour.</b> Every
+/// endpoint that returns a <c>DailyLogDto</c> without loading the engagements
+/// (<c>POST /logs</c>, verify, add-task) says exactly this, because saying anything
+/// else would be a claim it has not checked.</item>
+/// <item><c>[]</c> — the server states this log has NO labour.</item>
+/// <item>non-empty — the engagements, as current truth.</item>
+/// </list>
+/// The client's reconciler guard turns on precisely that distinction — "the
+/// response CARRIED the field", never "the array came back non-empty" — which is
+/// the same predicate <see cref="PlotIds"/> already uses
+/// (<c>logsReconciler.serverStatedContext</c>). Reading an absent field as an empty
+/// one is what deleted a farmer's labour from his own device in Labour V1; reading
+/// an empty one as absent would silently drop a genuine "there is no labour here"
+/// correction. Both readings are wrong in opposite directions.</para>
+///
+/// <para><b>Current truth only.</b> <c>ssf.labour_corrections</c> — the append-only
+/// history — is NEVER projected here. It is fetched on demand from its own route.
+/// The everyday labour view must not consume an audit ledger.</para>
+///
+/// <para><b>Appended, never inserted.</b> The new members sit at the END of the
+/// record so every field that shipped before them keeps its exact position, name
+/// and value. A <c>Plot</c> log's JSON is byte-identical to yesterday's up to its
+/// closing brace, with the new members after it — pinned by
 /// <c>DailyLogDtoScopeProjectionTests</c>, which fails on a reorder.</para>
 /// </remarks>
 public sealed record DailyLogDto(
@@ -79,4 +108,12 @@ public sealed record DailyLogDto(
     /// <see cref="PlotId"/>), two or more when <c>"MultiPlot"</c>, and EMPTY
     /// when <c>"Farm"</c>. Never null, never a sentinel.
     /// </summary>
-    IReadOnlyList<Guid> PlotIds);
+    IReadOnlyList<Guid> PlotIds,
+
+    /// <summary>
+    /// The labour engagements recorded against this log, as CURRENT truth.
+    /// <c>null</c> = this response makes no statement about labour;
+    /// <c>[]</c> = the server states there is none; non-empty = the engagements.
+    /// See the record-level remarks — the three states are not interchangeable.
+    /// </summary>
+    IReadOnlyList<LabourEngagementDto>? Labour = null);
