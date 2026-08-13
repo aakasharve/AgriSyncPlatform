@@ -7,8 +7,11 @@
  * HARD GATE: every entry MUST be agronomistApproved && marathiApproved UNLESS
  * explicitly marked with a `// CONTENT GATE:` comment — a deliberately-inert
  * entry pending agronomist + Marathi review (today:
- * 'schedule.category_planned_not_done' Task 3A, and 'weather.severe_care_check'
- * Task 4B). The engine's `approved()` gate in dfesQuestionEngine.ts means a
+ * 'schedule.category_planned_not_done' Task 3A, 'weather.severe_care_check'
+ * Task 4B, and — founder ruling 2026-08-13 — the two spray-advice entries
+ * 'safety.spray_wind_high' and 'weather.rain_before_spray', which had only
+ * ever inherited approval from the `APPROVED` developer constant and were
+ * never seen by an agronomist). The `approved()` gate in dfesQuestionEngine.ts means a
  * content-gated entry can physically exist in this array yet can NEVER be
  * selected in production until its flags flip — asserted by
  * dfesQuestionBank.test.ts. Copy is FINAL Marathi everywhere else (promotes
@@ -132,13 +135,27 @@ const TRIGGER_ENTRIES: DfesQuestion[] = [
         questionKey: 'safety.spray_wind_high', crop: '*', triggerType: 'Safety', questionType: 'weather_check',
         lens: 'Insight', depthLevel: 2, priority: P_SAFETY, cooldownDays: 1, answerModes: 'voice',
         safetyClass: 'safety_critical', anchorDateType: 'weather_event',
-        promptMr: 'आज वारा जास्त आहे — फवारणी टाळणं सुरक्षित. तुम्ही काय ठरवलं?', ...APPROVED,
+        // CONTENT GATE (founder ruling 2026-08-13, `flip-now`): this question
+        // tells a farmer whether it is safe to spray — safetyClass is
+        // 'safety_critical'. It has never been reviewed by an agronomist; it
+        // only ever carried `...APPROVED`, a developer constant, which is not
+        // agronomist sign-off. Written as explicit flags rather than a spread
+        // so nothing can silently re-approve it by spread ordering. Inert
+        // until a real agronomist signs it off (dfesQuestionEngine.ts's
+        // approved() gate keeps it out of selection meanwhile). The Marathi
+        // copy IS founder-reviewed, so marathiApproved stays true.
+        promptMr: 'आज वारा जास्त आहे — फवारणी टाळणं सुरक्षित. तुम्ही काय ठरवलं?',
+        agronomistApproved: false, marathiApproved: true,
     },
     {
         questionKey: 'weather.rain_before_spray', crop: '*', triggerType: 'Weather', questionType: 'weather_check',
         lens: 'Insight', depthLevel: 2, priority: P_WEATHER, cooldownDays: 2, answerModes: 'voice',
         safetyClass: 'advisory', anchorDateType: 'weather_event',
-        promptMr: 'पुढच्या काही तासांत पाऊस येऊ शकतो. फवारणी पुढे ढकलणार का?', ...APPROVED,
+        // CONTENT GATE (founder ruling 2026-08-13, `flip-now`): same reason as
+        // safety.spray_wind_high above — this advises a farmer on whether to
+        // spray, and no agronomist has reviewed it. Explicit flags, no spread.
+        promptMr: 'पुढच्या काही तासांत पाऊस येऊ शकतो. फवारणी पुढे ढकलणार का?',
+        agronomistApproved: false, marathiApproved: true,
     },
     {
         questionKey: 'stage.confirm_current', crop: '*', triggerType: 'StageWindow', questionType: 'stage_confirm',

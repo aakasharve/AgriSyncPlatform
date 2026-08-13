@@ -25,33 +25,34 @@ describe('selectDailyQuestion (Phase 5)', () => {
         expect(r).toBeNull();
     });
 
-    it('Safety beats Weather beats StageWindow beats Gap (priority order)', () => {
+    // Founder ruling 2026-08-13 (`flip-now`): the P1/P2 spray-advice entries
+    // are agronomist-gated in the REAL bank, so the day's question now falls
+    // through them to the next eligible tier. The priority ORDER itself is
+    // still proven, against substituted APPROVED fixtures, in the
+    // "Safety / Weather tiers" suite below.
+    it('AGRONOMIST GATE: the real safety + weather entries never fire — a severe-weather day falls through to the next eligible tier', () => {
         const inputs = base({
             weather: { rainProbNext6h: 80, windKph: 30, hasActiveAlert: true },
             stageContext: { crop: 'grapes', expectedStage: 'flowering' },
             lastStageConfirm: null,
         });
-        expect(selectDailyQuestion(inputs)!.question.questionKey).toBe('safety.spray_wind_high');
+        expect(selectDailyQuestion(inputs)!.question.questionKey).toBe('stage.confirm_current');
     });
 
-    // spec: dfes-companion-2026-07-11 (Task 4A) — the live weather context
-    // wakes P1/P2 against the REAL bank (both entries ship `...APPROVED`,
-    // asserted by dfesQuestionBank.test.ts), ahead of the P4 Schedule tier
-    // even when a schedule gap is ALSO present in the same day's inputs.
-    it('Task 4A: high windKph selects the safety question at P1, ahead of a same-day Schedule gap', () => {
+    it('AGRONOMIST GATE: high windKph alone selects no spray question — it falls through to the top Gap', () => {
         const inputs = base({
             weather: { windKph: 30 },
             scheduleContext: { category: 'FOLIAR_SPRAY', categoryLabelMr: 'फवारणी' },
         });
-        expect(selectDailyQuestion(inputs)!.question.questionKey).toBe('safety.spray_wind_high');
+        expect(selectDailyQuestion(inputs)!.question.questionKey).toBe('gap.dose');
     });
 
-    it('Task 4A: high rainProbNext6h (no wind trigger) selects the weather question at P2, ahead of a same-day Schedule gap', () => {
+    it('AGRONOMIST GATE: high rainProbNext6h alone selects no spray question — it falls through to the top Gap', () => {
         const inputs = base({
             weather: { rainProbNext6h: 70 },
             scheduleContext: { category: 'FOLIAR_SPRAY', categoryLabelMr: 'फवारणी' },
         });
-        expect(selectDailyQuestion(inputs)!.question.questionKey).toBe('weather.rain_before_spray');
+        expect(selectDailyQuestion(inputs)!.question.questionKey).toBe('gap.dose');
     });
 
     it('falls to the top Gap question when no trigger fires', () => {
@@ -91,6 +92,65 @@ describe('selectDailyQuestion (Phase 5)', () => {
         }));
         expect(r!.resolvedPromptMr).toContain('grapes');
         expect(r!.question.questionKey).toBe('stage.confirm_current');
+    });
+});
+
+// Founder ruling 2026-08-13 (`flip-now`) — the P1 Safety and P2 Weather
+// spray-advice entries are agronomist-gated in the REAL bank, so their
+// SELECTION order can only be exercised against substituted APPROVED fixture
+// copies (same vi.doMock + vi.resetModules() + dynamic-import isolation the
+// Schedule and WeatherReconcile tier suites already use). The "stays inert"
+// half is proven against the real bank in the suite above.
+describe('selectDailyQuestion — Safety / Weather tiers (agronomist-gated in the real bank)', () => {
+    afterEach(() => {
+        vi.doUnmock('../dfesQuestionBank');
+        vi.resetModules();
+    });
+
+    /** Approves the real bank's own safety/weather entries — the ONLY difference
+     *  from production is agronomistApproved, so ordering results can only be
+     *  attributed to priority, not to some other substituted property. */
+    async function selectWithApprovedSprayQuestions(extra: Partial<DailyQuestionInputs> = {}) {
+        vi.resetModules();
+        vi.doMock('../dfesQuestionBank', async () => {
+            const actual = await vi.importActual<typeof import('../dfesQuestionBank')>('../dfesQuestionBank');
+            const approve = (key: string): DfesQuestion => ({ ...actual.findQuestion(key)!, agronomistApproved: true, marathiApproved: true });
+            const approved: Record<string, DfesQuestion> = {
+                'safety.spray_wind_high': approve('safety.spray_wind_high'),
+                'weather.rain_before_spray': approve('weather.rain_before_spray'),
+            };
+            return {
+                ...actual,
+                findQuestion: (key: string) => approved[key] ?? actual.findQuestion(key),
+            };
+        });
+        const { selectDailyQuestion: selectMocked } = await import('../dfesQuestionEngine');
+        return selectMocked(base(extra));
+    }
+
+    it('Safety beats Weather beats StageWindow beats Gap (priority order)', async () => {
+        const result = await selectWithApprovedSprayQuestions({
+            weather: { rainProbNext6h: 80, windKph: 30, hasActiveAlert: true },
+            stageContext: { crop: 'grapes', expectedStage: 'flowering' },
+            lastStageConfirm: null,
+        });
+        expect(result!.question.questionKey).toBe('safety.spray_wind_high');
+    });
+
+    it('Task 4A: high windKph selects the safety question at P1, ahead of a same-day Schedule gap', async () => {
+        const result = await selectWithApprovedSprayQuestions({
+            weather: { windKph: 30 },
+            scheduleContext: { category: 'FOLIAR_SPRAY', categoryLabelMr: 'फवारणी' },
+        });
+        expect(result!.question.questionKey).toBe('safety.spray_wind_high');
+    });
+
+    it('Task 4A: high rainProbNext6h (no wind trigger) selects the weather question at P2, ahead of a same-day Schedule gap', async () => {
+        const result = await selectWithApprovedSprayQuestions({
+            weather: { rainProbNext6h: 70 },
+            scheduleContext: { category: 'FOLIAR_SPRAY', categoryLabelMr: 'फवारणी' },
+        });
+        expect(result!.question.questionKey).toBe('weather.rain_before_spray');
     });
 });
 
@@ -222,6 +282,11 @@ describe('selectDailyQuestion — answerOptions threading onto SelectedQuestion 
 // clamped to never exceed the question's own cooldownDays), while the
 // one-question-per-day gate stays exactly as-is regardless of skipped/answered.
 describe('selectDailyQuestion — skip-aware cooldown (Task 2B)', () => {
+    afterEach(() => {
+        vi.doUnmock('../dfesQuestionBank');
+        vi.resetModules();
+    });
+
     it('a question skipped 1 day ago is still on the (shorter) skip-cooldown — excluded, distinct from the one-per-day gate', () => {
         // 'gap.dose' has cooldownDays 3 (== SKIP_COOLDOWN_DAYS); skipped 1 day
         // ago (not today) means the per-day gate does NOT apply here — only
@@ -254,10 +319,28 @@ describe('selectDailyQuestion — skip-aware cooldown (Task 2B)', () => {
         expect(answeredThreeDaysAgo).toBeNull(); // normal cooldownDays (7) still in effect, no other trigger fires
     });
 
-    it('clamps the skip cooldown to the question\'s own (shorter) cooldownDays — a skip never outlasts the normal cooldown', () => {
+    it('clamps the skip cooldown to the question\'s own (shorter) cooldownDays — a skip never outlasts the normal cooldown', async () => {
         // 'safety.spray_wind_high' has cooldownDays 1, shorter than SKIP_COOLDOWN_DAYS (3).
         // Without the clamp, ageDays 1 < SKIP_COOLDOWN_DAYS(3) would wrongly suppress it.
-        const r = selectDailyQuestion(base({
+        // It is the only bank shape with a sub-SKIP_COOLDOWN_DAYS cooldown, and
+        // the real entry is agronomist-gated since 2026-08-13, so the clamp is
+        // exercised against a substituted APPROVED copy of that same shape —
+        // the clamp is a cooldown property, independent of the approval gate.
+        vi.resetModules();
+        vi.doMock('../dfesQuestionBank', async () => {
+            const actual = await vi.importActual<typeof import('../dfesQuestionBank')>('../dfesQuestionBank');
+            const approvedSafety: DfesQuestion = {
+                ...actual.findQuestion('safety.spray_wind_high')!,
+                agronomistApproved: true, marathiApproved: true,
+            };
+            return {
+                ...actual,
+                findQuestion: (key: string) =>
+                    key === 'safety.spray_wind_high' ? approvedSafety : actual.findQuestion(key),
+            };
+        });
+        const { selectDailyQuestion: selectMocked } = await import('../dfesQuestionEngine');
+        const r = selectMocked(base({
             weather: { windKph: 30 },
             recentEvents: [{ questionKey: 'safety.spray_wind_high', createdAtLocalDate: '2026-07-10', ageDays: 1, skipped: true }],
         }));

@@ -8,14 +8,43 @@ import {
 // MarathiApproved invariant below.
 const CONTENT_GATED_KEYS = new Set(['schedule.category_planned_not_done', 'weather.severe_care_check']);
 
+// Founder ruling 2026-08-13 (`flip-now`): the two spray-advice entries are
+// agronomist-gated but Marathi-approved — the Marathi copy is founder-reviewed,
+// the AGRONOMY is not. Kept as a separate set from CONTENT_GATED_KEYS so the
+// invariant below still holds each entry to marathiApproved: true.
+const AGRONOMIST_GATED_KEYS = new Set(['safety.spray_wind_high', 'weather.rain_before_spray']);
+
 describe('DFES question bank v1 (Phase 5)', () => {
     it('every bank entry passes the hard AgronomistApproved && MarathiApproved gate, except documented content-gated entries', () => {
         for (const q of DFES_QUESTION_BANK) {
             if (CONTENT_GATED_KEYS.has(q.questionKey)) continue;
-            expect(q.agronomistApproved, `${q.questionKey} agronomistApproved`).toBe(true);
+            if (!AGRONOMIST_GATED_KEYS.has(q.questionKey)) {
+                expect(q.agronomistApproved, `${q.questionKey} agronomistApproved`).toBe(true);
+            }
             expect(q.marathiApproved, `${q.questionKey} marathiApproved`).toBe(true);
         }
     });
+
+    // Founder ruling 2026-08-13 (`flip-now`). These two are the only bank
+    // entries that tell a farmer whether it is SAFE to spray. They carried
+    // `...APPROVED` — a developer constant — and no agronomist ever reviewed
+    // them. This asserts the RESOLVED object at runtime, not the source text,
+    // because the previous shape spread `...APPROVED` last and any property
+    // written before that spread would have been silently overwritten.
+    it.each([...AGRONOMIST_GATED_KEYS])(
+        'AGRONOMIST GATE: %s resolves to agronomistApproved:false at runtime (spread order cannot re-approve it)',
+        (key) => {
+            const q = findQuestion(key);
+            expect(q).toBeDefined();
+            expect(q!.agronomistApproved).toBe(false);
+            // Marathi copy is founder-reviewed; only the agronomy is gated.
+            expect(q!.marathiApproved).toBe(true);
+            // Belt-and-braces: the merged object really carries the own-property,
+            // whatever the literal's spread order happens to be.
+            expect(Object.prototype.hasOwnProperty.call(q!, 'agronomistApproved')).toBe(true);
+            expect(DFES_QUESTION_BANK.find(e => e.questionKey === key)!.agronomistApproved).toBe(false);
+        },
+    );
 
     // spec: dfes-companion-2026-07-11 (Task 3A) — the schedule question ships as
     // mechanism-only: present in the bank, keyed and typed correctly, but
