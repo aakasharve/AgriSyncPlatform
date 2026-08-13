@@ -86,6 +86,7 @@ public sealed class GetDayUnderstandingHandlerTests
         var result = await handler.HandleAsync(new GetDayUnderstandingQuery(FarmId, Day, UserId));
 
         result.IsSuccess.Should().BeTrue();
+        result.Value.Should().NotBeNull("a successful result must carry a DTO");
         result.Value.Score.Should().BeNull(); // nothing logged → no number, not a failure
     }
 
@@ -100,6 +101,7 @@ public sealed class GetDayUnderstandingHandlerTests
         var result = await handler.HandleAsync(new GetDayUnderstandingQuery(FarmId, Day, UserId));
 
         result.IsSuccess.Should().BeTrue();
+        result.Value.Should().NotBeNull("a successful result must carry a DTO");
         result.Value.Score.Should().Be(6);
     }
 
@@ -114,6 +116,7 @@ public sealed class GetDayUnderstandingHandlerTests
         var result = await handler.HandleAsync(new GetDayUnderstandingQuery(FarmId, Day, UserId));
 
         result.IsSuccess.Should().BeTrue();
+        result.Value.Should().NotBeNull("a successful result must carry a DTO");
         result.Value.Score.Should().BeNull();
     }
 
@@ -129,6 +132,7 @@ public sealed class GetDayUnderstandingHandlerTests
             new GetDayUnderstandingQuery(FarmId, Day.AddDays(-1), UserId));
 
         result.IsSuccess.Should().BeTrue();
+        result.Value.Should().NotBeNull("a successful result must carry a DTO");
         result.Value.Score.Should().BeNull();
     }
 
