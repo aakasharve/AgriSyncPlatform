@@ -47,25 +47,79 @@ describe('DFES feature flags', () => {
 });
 
 // spec: dfes-companion-2026-07-11 (Phase 0) — mirror must equal the backend
-// DfesTuning contract (ShramSafal.Domain.Dfes.DfesTuning). Same numbers, both
-// sides value-locked. If this drifts from DfesTuningTests.cs, one side is wrong.
-describe('DFES_TUNING mirror', () => {
-  it('matches the locked backend contract', () => {
-    expect(DFES_TUNING).toEqual({
-      richDayThreshold: 25,
-      unlockThreshold: 25,
-      scoreEngineVersion: 'dfes-1',
-      dailyPointCap: 15,
-      shramPointValues: {
-        noWork: 2, basic: 5, rich: 10,
-        observationBonus: 3, learningBonus: 5, followupBonus: 2,
-      },
-      streakRules: {
-        advanceOnDeclaredNoWork: true,
-        neutralOnRestDay: true,
-        graceDaysBeforeBreak: 1,
-      },
-    });
+// DfesTuning contract (ShramSafal.Domain.Dfes.DfesTuning). This does NOT
+// restate the backend's numbers as a second hardcoded literal — a test that
+// does that passes even when the two sides disagree, because each assertion
+// only ever checks its own side (this happened for real: scoreEngineVersion
+// drifted to 'dfes-2' on the backend while this file kept asserting 'dfes-1',
+// and both test suites stayed green). Instead this test READS AND PARSES the
+// actual C# source files at test time, so the "expected" value always tracks
+// whatever the backend currently says — the only way this test can fail is
+// if DFES_TUNING genuinely disagrees with the backend.
+describe('DFES_TUNING mirror is value-locked against the backend C# source', () => {
+  const dfesTuningCs = readFileSync(
+    resolve(__dirname, '../../../../../../../apps/ShramSafal/ShramSafal.Domain/Dfes/DfesTuning.cs'),
+    'utf8',
+  );
+  const shramPointValuesCs = readFileSync(
+    resolve(__dirname, '../../../../../../../apps/ShramSafal/ShramSafal.Domain/Dfes/ShramPointValues.cs'),
+    'utf8',
+  );
+  const streakRulesCs = readFileSync(
+    resolve(__dirname, '../../../../../../../apps/ShramSafal/ShramSafal.Domain/Dfes/StreakRules.cs'),
+    'utf8',
+  );
+
+  /** Pulls a single named C# literal out of backend source, or fails loudly
+   *  naming the file and pattern — so a renamed/reshaped backend field breaks
+   *  this test with a clear cause instead of silently comparing `undefined`. */
+  function extract(src: string, file: string, pattern: RegExp): string {
+    const match = src.match(pattern);
+    if (!match) {
+      throw new Error(
+        `dfesTuning.test.ts: could not find ${pattern} in ${file}. ` +
+        `The backend field was likely renamed or reshaped — update this ` +
+        `test's parser regex (and re-check dfesTuning.ts) to match.`,
+      );
+    }
+    return match[1];
+  }
+
+  const backendTuning = {
+    richDayThreshold: Number(
+      extract(dfesTuningCs, 'DfesTuning.cs', /RichDayThreshold\s*=\s*(\d+);/)),
+    unlockThreshold: Number(
+      extract(dfesTuningCs, 'DfesTuning.cs', /UnlockThreshold\s*=\s*(\d+);/)),
+    scoreEngineVersion:
+      extract(dfesTuningCs, 'DfesTuning.cs', /ScoreEngineVersion\s*=\s*"([^"]+)";/),
+    dailyPointCap: Number(
+      extract(dfesTuningCs, 'DfesTuning.cs', /DailyPointCap\s*=\s*(\d+);/)),
+    shramPointValues: {
+      noWork: Number(
+        extract(shramPointValuesCs, 'ShramPointValues.cs', /NoWork:\s*(\d+)/)),
+      basic: Number(
+        extract(shramPointValuesCs, 'ShramPointValues.cs', /Basic:\s*(\d+)/)),
+      rich: Number(
+        extract(shramPointValuesCs, 'ShramPointValues.cs', /Rich:\s*(\d+)/)),
+      observationBonus: Number(
+        extract(shramPointValuesCs, 'ShramPointValues.cs', /ObservationBonus:\s*(\d+)/)),
+      learningBonus: Number(
+        extract(shramPointValuesCs, 'ShramPointValues.cs', /LearningBonus:\s*(\d+)/)),
+      followupBonus: Number(
+        extract(shramPointValuesCs, 'ShramPointValues.cs', /FollowupBonus:\s*(\d+)/)),
+    },
+    streakRules: {
+      advanceOnDeclaredNoWork:
+        extract(streakRulesCs, 'StreakRules.cs', /AdvanceOnDeclaredNoWork:\s*(true|false)/) === 'true',
+      neutralOnRestDay:
+        extract(streakRulesCs, 'StreakRules.cs', /NeutralOnRestDay:\s*(true|false)/) === 'true',
+      graceDaysBeforeBreak: Number(
+        extract(streakRulesCs, 'StreakRules.cs', /GraceDaysBeforeBreak:\s*(\d+)/)),
+    },
+  };
+
+  it('matches DfesTuning.cs / ShramPointValues.cs / StreakRules.cs, parsed live', () => {
+    expect(DFES_TUNING).toEqual(backendTuning);
   });
 });
 

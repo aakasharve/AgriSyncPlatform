@@ -6,8 +6,11 @@ namespace ShramSafal.Domain.Dfes;
 /// fold + Understanding Bar, 5 question engine) READS from here — no phase may
 /// hardcode any of these values. Pure static Domain type, zero dependencies
 /// (safe under the Domain layering + architecture tests). The frontend mirror
-/// is <c>src/clients/mobile-web/src/features/logs/services/dfesTuning.ts</c>;
-/// both are value-lock tested against the same contract.
+/// is <c>src/clients/mobile-web/src/features/logs/services/dfesTuning.ts</c>.
+/// That mirror's test (<c>dfesTuning.test.ts</c>) parses THIS file (and
+/// ShramPointValues.cs / StreakRules.cs) at test time and asserts the TS
+/// mirror against the parsed values — so if you change a number here, update
+/// <c>dfesTuning.ts</c> too, or the frontend test fails on the next run.
 /// </summary>
 public static class DfesTuning
 {

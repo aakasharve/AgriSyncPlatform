@@ -6,8 +6,11 @@
  *
  * THE SINGLE SOURCE of every DFES tunable on the client. Phases 2/3/5 read
  * from here — no component, hook, or service may hardcode any of these
- * numbers. Kept value-locked against the backend via dfesTuning.test.ts and
- * DfesTuningTests.cs (identical numbers, both sides).
+ * numbers. Kept value-locked against the backend: dfesTuning.test.ts parses
+ * the actual DfesTuning.cs / ShramPointValues.cs / StreakRules.cs source at
+ * test time and asserts DFES_TUNING against those parsed values — it does
+ * NOT restate the backend's numbers as a second hardcoded literal, so it
+ * actually fails when this file and the backend disagree.
  *
  * spec: dfes-companion-2026-07-11
  */
@@ -16,8 +19,9 @@ export const DFES_TUNING = {
   richDayThreshold: 25,
   /** count(advancesBar) at which unlockStatus flips to "unlocked" (set-once). */
   unlockThreshold: 25,
-  /** Stamped onto every aggregate row (ScoreEngineVersion). */
-  scoreEngineVersion: 'dfes-1',
+  /** Stamped onto every aggregate row (ScoreEngineVersion). Backend source of
+   *  truth: ShramSafal.Domain.Dfes.DfesTuning.ScoreEngineVersion. */
+  scoreEngineVersion: 'dfes-2',
   /** Max Shram points a single local date can earn after bonuses. */
   dailyPointCap: 15,
   /** Reward point values. */
