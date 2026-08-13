@@ -7,8 +7,6 @@ import { getHarvestSessions, getOtherIncomeEntries } from '../../../services/har
 import { CropSymbol } from '../../context/components/CropSelector';
 // Sub-plan 04 Task 9 — chart palette + geometry + date + scope-filter helpers extracted.
 import {
-    CHART_COLORS,
-    BAR_GRADIENTS,
     getPaletteColor,
     getBarGradient,
     darkenHex,
@@ -27,7 +25,7 @@ import {
     getNonGlobalSelections,
     getUniquePlotIds,
     getScopedLogCost,
-    type ScopeSelection,
+    isWholeFarmSelection,
 } from './costAnalysisHelpers';
 
 type CalendarMode = 'week' | 'month';
@@ -473,6 +471,42 @@ const CostAnalysisSection: React.FC<CostAnalysisSectionProps> = ({
     const scopedCropIds = useMemo(() => new Set(cropIdList), [cropIdList]);
     const scopedPlotIds = useMemo(() => new Set(scopedPlotRefs.map(ref => ref.plotId)), [scopedPlotRefs]);
 
+    /*
+     * LABOUR_PHASE2 P2.4 — the farm-wide cost stops reading ₹0.
+     *
+     * `getScopedLogCost` has always known what to do with a farm-wide cost: an
+     * EMPTY filter set means "not filtered", so the cost lands in the farm
+     * total and in no narrower one. It was UNREACHABLE, because the two memos
+     * above resolve "nothing selected" into "every crop, every plot" — so the
+     * sets were always populated, the empty-set branch was dead code, and money
+     * the farmer really paid reported as ₹0. `P4` cuts both ways: a figure that
+     * silently drops the farmer's own spend is as false as an invented one.
+     *
+     * The resolution STAYS. Chart labels, the per-crop series, the per-plot
+     * comparison and the harvest/income joins all need the concrete lists;
+     * un-resolving them would fix the total and break five other things. What
+     * is restored is the ONE question resolution destroyed — did the farmer ask
+     * for EVERYTHING, or for something?
+     *
+     * These feed the FARM TOTAL ONLY. The crop and plot series below keep the
+     * resolved sets, so a farm-wide amount is never attributed to a plot:
+     * guessing a split would invent an allocation the farmer never gave
+     * (`O-2`), and that split belongs to Finance (`DayLedger` /
+     * `ExpenseAllocationPolicy`), never to a labour edit.
+     */
+    const isWholeFarmView = useMemo(
+        () => isWholeFarmSelection(crops, selectedCropIds, selectedPlotsByCrop),
+        [crops, selectedCropIds, selectedPlotsByCrop]
+    );
+    const farmTotalCropIds = useMemo(
+        () => (isWholeFarmView ? new Set<string>() : scopedCropIds),
+        [isWholeFarmView, scopedCropIds]
+    );
+    const farmTotalPlotIds = useMemo(
+        () => (isWholeFarmView ? new Set<string>() : scopedPlotIds),
+        [isWholeFarmView, scopedPlotIds]
+    );
+
     const periodLogs = useMemo(() => {
         return logs.filter(log => {
             const dateKey = normalizeDateKey(log.date);
@@ -484,9 +518,9 @@ const CostAnalysisSection: React.FC<CostAnalysisSectionProps> = ({
         return buildTimelinePoints(
             periodLogs,
             analysisRange,
-            log => getScopedLogCost(log, scopedCropIds, scopedPlotIds)
+            log => getScopedLogCost(log, farmTotalCropIds, farmTotalPlotIds)
         );
-    }, [periodLogs, analysisRange, scopedCropIds, scopedPlotIds]);
+    }, [periodLogs, analysisRange, farmTotalCropIds, farmTotalPlotIds]);
 
     const cropSpendPoints = useMemo(() => {
         if (cropIdList.length <= 1) {
@@ -521,7 +555,7 @@ const CostAnalysisSection: React.FC<CostAnalysisSectionProps> = ({
 
     const snapshot = useMemo(() => {
         const totalCost = periodLogs.reduce(
-            (sum, log) => sum + getScopedLogCost(log, scopedCropIds, scopedPlotIds),
+            (sum, log) => sum + getScopedLogCost(log, farmTotalCropIds, farmTotalPlotIds),
             0
         );
 
@@ -574,7 +608,10 @@ const CostAnalysisSection: React.FC<CostAnalysisSectionProps> = ({
             net,
             harvestEntryCount
         };
-    }, [periodLogs, scopedPlotRefs, analysisRange, scopedCropIds, scopedPlotIds]);
+        // `scopedCropIds` / `scopedPlotIds` stay in the deps: the `otherIncome`
+        // filter above still uses them. Income scoping is out of scope for this
+        // wave and is deliberately untouched.
+    }, [periodLogs, scopedPlotRefs, analysisRange, scopedCropIds, scopedPlotIds, farmTotalCropIds, farmTotalPlotIds]);
 
     const maxValue = useMemo(() => {
         return activePoints.reduce((max, point) => Math.max(max, point.value), 0);
