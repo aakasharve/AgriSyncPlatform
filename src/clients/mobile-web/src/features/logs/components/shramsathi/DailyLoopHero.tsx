@@ -5,8 +5,9 @@
  * Daily Clarity Loop v1 — the morning TRIGGER (spec: dfes-companion-2026-07-11).
  *
  * One calm line at the very top of the home idle view, answering "काय राहिलं":
- *   आज {N} कामं बाकी              (today N tasks left)   — when N > 0
- *   आजचा दिवस मोकळा — बोलून नोंदवा (day free, just speak) — when N === 0
+ *   आज {N} कामं बाकी   (today N tasks left) — when N > 0
+ *   आज काहीच सांगितलं नाही. काम झालं नसेल तर कारण सांगा — किंवा "आज काम नाही" एवढं सांगा.
+ *     (nothing told today; give a reason, or just say "no work today") — when N === 0
  *
  * It REUSES a count the app already computes (todayDayState.pendingCount) —
  * nothing new is calculated here. The carried signal is derived from the SAME

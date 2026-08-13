@@ -446,7 +446,7 @@ describe('selectDailyQuestion — WeatherReconcile tier (Task 4B)', () => {
         questionKey: 'weather.severe_care_check', crop: '*', triggerType: 'WeatherReconcile', questionType: 'observation',
         lens: 'Execution', depthLevel: 1, priority: 5, cooldownDays: 1, answerModes: 'choice,voice',
         safetyClass: 'informational', anchorDateType: 'log_date',
-        promptMr: 'आज हवामान बरंच खराब होतं — सगळं ठीक होतं ना?',
+        promptMr: 'आज हवा बरीच खराब होती — सगळं ठीक होतं ना?',
     } as const;
 
     /** Mounts a `dfesQuestionBank` mock whose `findQuestion('weather.severe_care_check')`

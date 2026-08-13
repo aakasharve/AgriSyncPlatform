@@ -863,22 +863,22 @@ export const translations: Record<Language, Translations> = {
         // DFES Behavioral Layer
         dfes: {
             // Closure ritual
-            closeToday: 'आज बंद करा',
-            todayClosed: 'आज बंद. सगळं नोंद झालं.',
-            closeTodayQuestion: 'आजचं शेत बंद करायचं?',
+            closeToday: 'आजची सगळी कामे माझ्यापर्यंत पोहोचली का याची खात्री करा',
+            todayClosed: 'आजचं आटपलं. सगळी कामे आणि गोष्टी समजल्या',
+            closeTodayQuestion: 'आजचं सगळं सांगून झालं का?',
 
             // Day summary
-            todaySummary: 'आज: {activities} कामं, Rs. {cost} खर्च.',
+            todaySummary: 'आजची {activities} कामे, खर्च रु. {cost}',
             weekSummary: 'या आठवड्यात: {entries} नोंदी, Rs. {cost} खर्च.',
-            farmBookUpToDate: 'शेतनोंद अद्ययावत आहे.',
+            farmBookUpToDate: 'शेतातील कामे आणि मी समजून घेतलेले कामे बरोबर आहेत',
 
             // Verification (anti-ego)
-            doesThisMatch: 'हे जुळतं का?',
+            doesThisMatch: 'हे बरोबर आहे ना?',
             allLooksCorrect: 'सगळं बरोबर दिसतंय',
             somethingNeedsFixing: 'काहीतरी सुधारायला हवं',
             ownerHasQuestion: '{owner} यांना या नोंदीबद्दल शंका आहे',
-            updated: 'सुधारणा: {field} {oldValue} होतं, {newValue} आहे',
-            waitingForConfirmation: 'खात्रीची वाट पाहत आहे',
+            updated: 'बदल: {field} — आधी {oldValue}, आता {newValue}',
+            waitingForConfirmation: 'तपासणी बाकी आहे',
             confirmed: 'खात्री झाली',
 
             // Missed day
@@ -892,16 +892,16 @@ export const translations: Record<Language, Translations> = {
 
             // Onboarding
             shramSathi: 'श्रम साथी',
-            onboardingWelcome: 'शेताची रोजची नोंद ठेवा. फक्त 30 सेकंद.',
+            onboardingWelcome: 'शेतातली कामं श्रम साथीला सांगा — तो तुमची शेती आणि तुमच्या कामाची पद्धत समजून घेईल.',
             letsStart: 'चला सुरू करूया',
             whichCropToday: 'आज कोणत्या पिकावर काम?',
             whatWorkToday: 'आज काय काम झालं?',
-            firstLogCelebration: 'झालं! तुमची पहिली शेतनोंद जतन झाली.',
+            firstLogCelebration: 'तुमचे पहिले काम मला समजले',
             comeBackTomorrow: 'उद्या संध्याकाळी या.',
 
             // Owner verification trigger
-            weeklyReviewPrompt: 'तुमच्या शेतनोंदीत नवीन नोंदी आहेत. तपासा.',
-            reviewAndClose: 'तपासा आणि बंद करा',
+            weeklyReviewPrompt: 'तुमच्या शेतात नवीन कामे आहेत. तपासा.',
+            reviewAndClose: 'तपासा आणि खात्री करा',
             farmBookOpen: 'या आठवड्याची शेतनोंद उघडी आहे.',
 
             // Trust
@@ -913,12 +913,12 @@ export const translations: Record<Language, Translations> = {
             activitiesLogged: 'कामे नोंदवली',
             needsReview: 'तपासायचे आहे',
             allVerified: 'सर्व खात्री झाली',
-            entries: 'नोंदी',
+            entries: 'कामे',
             unknown: 'अज्ञात',
             verify: 'खात्री करा',
 
             // Batch 5
-            clickToClose: 'दिवस बंद करण्यासाठी क्लिक करा',
+            clickToClose: 'दिवस पूर्ण करण्यासाठी क्लिक करा',
 
             // Day Understanding Score (dfes-companion Slice 3b) — Sathi's own
             // understanding of the day, never a grade of the farmer.
@@ -940,7 +940,7 @@ export const translations: Record<Language, Translations> = {
             graspBandGood: 'बरंच समजलं',
             graspBandFull: 'सगळं समजलं',
             streakDaysUnit: 'दिवस सलग',
-            streakTomorrow: 'उद्या पुन्हा सांगा — मालिका चालू ठेवा',
+            streakTomorrow: 'उद्या पण सांगा — दररोज बोलत रहा.',
             // The number is a TARGET to chase, never a mark. {target} is the notch
             // drawn on the bar, so the goal is visible as well as stated.
             graspTarget: '{target} पर्यंत पोहोचायचंय',
@@ -948,16 +948,18 @@ export const translations: Record<Language, Translations> = {
             askRaisesScore: 'हे सांगितलं तर आकडा वाढेल',
 
             // Understanding-Meter arrival/transition line (dfes-companion Slice 5b) —
-            // FOUNDER-CONFIRM: reasonable default in Sathi's voice (dignity, no
-            // shame). Not a grade of the farmer — Sathi's own growing familiarity.
-            meterArrivalProgress: 'समजून घेतलेले दिवस: {count}/{target}',
+            // founder-reviewed 2026-08-13, no longer a placeholder. Not a grade of
+            // the farmer — Sathi's own growing familiarity. meterArrivalArrived is
+            // CONCATENATED onto the progress line, so its leading space is load-
+            // bearing (MeterDisplay.tsx) — do not trim it.
+            meterArrivalProgress: '{count}/{target} दिवसांची कामे समजली',
             meterArrivalArrived: ' — आता मी तुमचं शेत ओळखू लागलो',
 
             // Daily Clarity Loop v1 (dfes-companion-2026-07-11) — FOUNDER-CONFIRM:
             // calm morning trigger. Dignity, no scolding, no points. The count
             // is a plain fact ("what's left"), not a grade of the farmer.
             dailyLoopTasksLeft: 'आज {count} कामं बाकी',
-            dailyLoopDayFree: 'आजचा दिवस मोकळा — बोलून नोंदवा',
+            dailyLoopDayFree: 'आज काहीच सांगितलं नाही. काम झालं नसेल तर कारण सांगा — किंवा "आज काम नाही" एवढं सांगा.',
             dailyLoopCarriedOne: 'काल पासून: {title}',
             dailyLoopCarriedMany: '(यातील {count} काल पासून)',
 
@@ -974,9 +976,9 @@ export const translations: Record<Language, Translations> = {
             // actually SPEAKS (web speechSynthesis, lang='mr-IN') once ever
             // per farm at the 25-rich-days unlock. Warm, celebratory,
             // dignity — never a grade of the farmer.
-            // CONTENT GATE: founder+agronomist-approved final copy pending;
-            // this is a reasonable draft.
-            unlockSpokenLine: 'शाब्बास! आता मी तुमचं शेत खरंच ओळखू लागलो आहे.',
+            // No longer a draft: this is the founder's own FINAL wording from
+            // the 2026-08-13 reviewed string set (two review rounds closed).
+            unlockSpokenLine: 'शाब्बास !!! आता मला तुमचं शेत आणि तुमची काम करण्याची पद्धत सविस्तर समजू लागली आहे',
         },
     },
 };

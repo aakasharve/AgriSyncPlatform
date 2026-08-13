@@ -38,7 +38,7 @@ describe('DailyLoopHero (Daily Clarity Loop v1 morning trigger)', () => {
         render(
             <DailyLoopHero pendingCount={0} carriedCount={0} closurePercent={100} onFocusRecorder={() => {}} />,
         );
-        expect(screen.getByTestId('daily-loop-hero-line')).toHaveTextContent('आजचा दिवस मोकळा — बोलून नोंदवा');
+        expect(screen.getByTestId('daily-loop-hero-line')).toHaveTextContent('आज काहीच सांगितलं नाही. काम झालं नसेल तर कारण सांगा — किंवा "आज काम नाही" एवढं सांगा.');
         expect(screen.queryByTestId('daily-loop-hero-carried')).not.toBeInTheDocument();
     });
 

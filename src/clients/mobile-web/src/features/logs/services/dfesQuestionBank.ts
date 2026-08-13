@@ -104,10 +104,10 @@ const GAP_PROMPT: Readonly<Record<string, string>> = {
     DOSE: 'किती मात्रा (डोस) वापरली?',
     SCOPE: 'हे काम कोणत्या प्लॉटवर केलं?',
     CARRIER: 'फवारणीसाठी किती पाणी वापरलं?',
-    COST: 'यासाठी किती खर्च झाला?',
-    PURPOSE: 'हे काम आज का करावं लागलं?',
+    COST: 'खर्च उलगडून सांगू शकाल का?',
+    PURPOSE: 'हे काम आज कशासाठी केलं?',
     WEATHER: 'आज हवामान कसं होतं?',
-    CONTINUITY: 'हे काम किती टक्के पूर्ण झालं?',
+    CONTINUITY: 'हे काम पूर्ण झालं का, की अजून बाकी आहे?',
 } as const;
 
 function gapEntry(dim: string): DfesQuestion {
@@ -144,7 +144,7 @@ const TRIGGER_ENTRIES: DfesQuestion[] = [
         // until a real agronomist signs it off (dfesQuestionEngine.ts's
         // approved() gate keeps it out of selection meanwhile). The Marathi
         // copy IS founder-reviewed, so marathiApproved stays true.
-        promptMr: 'आज वारा जास्त आहे — फवारणी टाळणं सुरक्षित. तुम्ही काय ठरवलं?',
+        promptMr: 'आज वारा जास्त आहे. अशा वेळी फवारणी लांबवलेली बरी. तुम्ही काय ठरवताय?',
         agronomistApproved: false, marathiApproved: true,
     },
     {
@@ -154,14 +154,14 @@ const TRIGGER_ENTRIES: DfesQuestion[] = [
         // CONTENT GATE (founder ruling 2026-08-13, `flip-now`): same reason as
         // safety.spray_wind_high above — this advises a farmer on whether to
         // spray, and no agronomist has reviewed it. Explicit flags, no spread.
-        promptMr: 'पुढच्या काही तासांत पाऊस येऊ शकतो. फवारणी पुढे ढकलणार का?',
+        promptMr: 'थोड्या वेळात पाऊस येऊ शकतो. फवारणी उद्यावर टाकायची का?',
         agronomistApproved: false, marathiApproved: true,
     },
     {
         questionKey: 'stage.confirm_current', crop: '*', triggerType: 'StageWindow', questionType: 'stage_confirm',
         lens: 'Execution', depthLevel: 1, priority: P_STAGE, cooldownDays: 7, answerModes: 'choice,voice',
         safetyClass: 'informational', anchorDateType: 'stage_start', expectedStageApplicability: 'current_stage',
-        promptMr: 'तुमची {crop} आता कोणत्या टप्प्यात आहे?', ...APPROVED,
+        promptMr: '{crop} आता कोणत्या टप्प्यात आहे?', ...APPROVED,
         // CONTENT GATE: answerModes says 'choice,voice' but there is no real,
         // agronomist-approved + Marathi-labeled crop-stage option list in the
         // repo to wire here (checked: StageCode in scheduler.types.ts /
@@ -192,8 +192,12 @@ const TRIGGER_ENTRIES: DfesQuestion[] = [
         questionKey: 'weather.severe_care_check', crop: '*', triggerType: 'WeatherReconcile', questionType: 'observation',
         lens: 'Execution', depthLevel: 1, priority: P_WEATHER_RECONCILE, cooldownDays: 1, answerModes: 'choice,voice',
         safetyClass: 'informational', anchorDateType: 'log_date', expectedStageApplicability: 'any',
-        // DRAFT Marathi — CONTENT GATE: this entry is mechanism-only (Task
-        // 4B). It fires only when the recorded weatherStamp was genuinely
+        // CONTENT GATE: this entry is mechanism-only (Task 4B). Its Marathi
+        // was refreshed from the founder's FINAL reviewed string set on
+        // 2026-08-13; the approval FLAGS are deliberately left untouched —
+        // flipping marathiApproved is a separate founder call, and this entry
+        // still has no agronomist sign-off either way.
+        // It fires only when the recorded weatherStamp was genuinely
         // SEVERE (dfesWeatherReconcile.ts's conservative thresholds) AND the
         // farmer logged no weather disturbance — a warm care-check, never a
         // doubt of the farmer's account. It needs agronomist + Marathi
@@ -201,14 +205,14 @@ const TRIGGER_ENTRIES: DfesQuestion[] = [
         // marathiApproved flip true (dfesQuestionEngine.ts's approved() hard
         // gate keeps it out of production selection regardless of the
         // stageQuestions flag).
-        promptMr: 'आज हवामान बरंच खराब होतं — सगळं ठीक होतं ना?',
+        promptMr: 'आज हवा बरीच खराब होती — सगळं ठीक होतं ना?',
         agronomistApproved: false, marathiApproved: false,
     },
     {
         questionKey: 'followup.observation_outcome', crop: '*', triggerType: 'Followup', questionType: 'observation',
         lens: 'Learning', depthLevel: 3, priority: P_FOLLOWUP, cooldownDays: 3, answerModes: 'voice,photo',
         safetyClass: 'informational', anchorDateType: 'log_date',
-        promptMr: 'मागच्या वेळी तुम्ही "{observation}" पाहिलं होतं — आता काय दिसतंय?', ...APPROVED,
+        promptMr: 'मागच्या वेळी तुम्ही "{observation}" असं सांगितलं होतं — आता काय दिसतंय?', ...APPROVED,
     },
     {
         questionKey: 'learning.deepen_hypothesis', crop: '*', triggerType: 'Learning', questionType: 'observation',
@@ -220,7 +224,7 @@ const TRIGGER_ENTRIES: DfesQuestion[] = [
         questionKey: 'learning.next_experiment', crop: '*', triggerType: 'Learning', questionType: 'experiment',
         lens: 'Learning', depthLevel: 4, priority: P_LEARNING, cooldownDays: 7, answerModes: 'voice',
         safetyClass: 'informational', anchorDateType: 'log_date',
-        promptMr: 'पुढच्या वेळी वेगळं काही करून बघणार का? काय करून बघाल?', ...APPROVED,
+        promptMr: 'पुढच्या वेळी काही वेगळं करून बघणार का?', ...APPROVED,
     },
 ];
 

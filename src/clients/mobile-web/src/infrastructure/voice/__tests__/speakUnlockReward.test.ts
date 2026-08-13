@@ -41,12 +41,12 @@ describe('speakUnlockReward', () => {
         const speak = vi.fn();
         (window as unknown as { speechSynthesis: { speak: typeof speak } }).speechSynthesis = { speak };
 
-        speakUnlockReward('शाब्बास! आता मी तुमचं शेत खरंच ओळखू लागलो आहे.');
+        speakUnlockReward('शाब्बास !!! आता मला तुमचं शेत आणि तुमची काम करण्याची पद्धत सविस्तर समजू लागली आहे');
 
         expect(speak).toHaveBeenCalledTimes(1);
         const utterance = speak.mock.calls[0][0] as FakeSpeechSynthesisUtterance;
         expect(utterance.lang).toBe('mr-IN');
-        expect(utterance.text).toBe('शाब्बास! आता मी तुमचं शेत खरंच ओळखू लागलो आहे.');
+        expect(utterance.text).toBe('शाब्बास !!! आता मला तुमचं शेत आणि तुमची काम करण्याची पद्धत सविस्तर समजू लागली आहे');
         expect(utterance.rate).toBeLessThan(1);
     });
 
