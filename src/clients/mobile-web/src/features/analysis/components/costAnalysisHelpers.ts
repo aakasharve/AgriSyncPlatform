@@ -11,7 +11,7 @@
  */
 
 import { getDateKey } from '../../../core/domain/services/DateKeyService';
-import type { DailyLog } from '../../../types';
+import type { CropProfile, DailyLog } from '../../../types';
 
 // ---------------- Chart palette ----------------
 
@@ -135,6 +135,70 @@ export const getUniquePlotIds = (selections: ScopeSelection[]): string[] => {
  */
 const hasFarmWideSelection = (log: DailyLog): boolean =>
     (log.context?.selection || []).some(selection => selection.cropId === FARM_GLOBAL_ID);
+
+/**
+ * LABOUR_PHASE2 P2.4 — has the farmer narrowed the view to anything at all?
+ *
+ * ── THE BUG THIS EXISTS TO REACH ─────────────────────────────────────────────
+ * `getScopedLogCost` below already knows what to do with a farm-wide cost: an
+ * EMPTY filter set means "not filtered", so the cost lands in the farm total and
+ * is excluded from every narrower one. That branch was shipped and tested at
+ * `16a314a6` — and it was UNREACHABLE from the farmer's screen.
+ *
+ * Both callers resolve "nothing selected" into "every crop, every plot" before
+ * calling it (`CostAnalysisSection` for the crop list and the per-crop plot
+ * list, `ReflectPage` by seeding both to all on mount). So the filter sets are
+ * ALWAYS populated, the empty-set branch can never be entered, and a farm-wide
+ * cost the farmer really incurred reported ₹0 — a fabricated number reaching a
+ * farmer (`P4`), in the direction that under-reports what he spent.
+ *
+ * ── WHY A PREDICATE AND NOT "JUST DON'T RESOLVE" ─────────────────────────────
+ * The resolution is load-bearing everywhere else: chart labels, per-crop series,
+ * per-plot comparison and the harvest/income joins all need the concrete lists.
+ * Un-resolving them would fix the total and break five other things. So the
+ * resolved lists stay exactly as they are, and this answers the ONE question
+ * they destroyed — *did the farmer ask for everything, or for something?*
+ *
+ * "Everything" is the honest reading of both an empty selection and an explicit
+ * select-all: a farmer who ticks every plot has narrowed nothing, and his farm
+ * total should not depend on which of the two routes he took to say so.
+ *
+ * ── WHAT IT DOES NOT DO (founder ruling, and `P1`) ───────────────────────────
+ * It never causes a farm-wide amount to be attributed to a plot. It only widens
+ * the FARM TOTAL. Splitting a farm-wide cost across plots would invent an
+ * allocation the farmer never gave (founder decision `O-2`); that split has a
+ * home already — `DayLedger` / `ExpenseAllocationPolicy` — and it is a Finance
+ * ticket, never a Labour edit.
+ */
+export const isWholeFarmSelection = (
+    crops: readonly CropProfile[],
+    selectedCropIds: readonly string[],
+    selectedPlotsByCrop: Readonly<Record<string, readonly string[]>>
+): boolean => {
+    // A selection naming FARM_GLOBAL is not the farmer naming a crop, and the
+    // crop list never contains it — strip it before comparing, exactly as
+    // `CostAnalysisSection.cropIdList` already does.
+    const namedCropIds = selectedCropIds.filter(cropId => cropId !== FARM_GLOBAL_ID);
+
+    // Narrowed to a subset of crops -> not the whole farm. An empty list is
+    // "not filtered", the same convention `getScopedLogCost` and
+    // `dayState.logInScope` already read.
+    if (namedCropIds.length > 0) {
+        const selected = new Set(namedCropIds);
+        if (crops.some(crop => !selected.has(crop.id))) return false;
+    }
+
+    // Narrowed to a subset of plots WITHIN any crop -> not the whole farm
+    // either. A farm-wide cost is not that plot's cost, so the farm total is
+    // the only figure it may appear in.
+    return crops.every(crop => {
+        const selectedPlotIds = selectedPlotsByCrop[crop.id];
+        if (!selectedPlotIds || selectedPlotIds.length === 0) return true;
+
+        const selected = new Set(selectedPlotIds);
+        return (crop.plots || []).every(plot => selected.has(plot.id));
+    });
+};
 
 export const getScopedLogCost = (
     log: DailyLog,
