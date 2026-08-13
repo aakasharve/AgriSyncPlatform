@@ -19,9 +19,19 @@
  * single block, and NO overlap with the sync/labour copy this phase touches —
  * so the split cannot collide with the wording work landing beside it.
  *
- * NOTHING HERE CHANGED. Every key and every string is byte-identical to what
- * `translations.ts` shipped at `39f4613a`; `__tests__/translationsSplit.test.ts`
- * pins that against a hand-transcribed oracle rather than against this file.
+ * THE SPLIT ITSELF CHANGED NOTHING. Every key and every string arrived here
+ * byte-identical to what `translations.ts` shipped at `39f4613a`;
+ * `__tests__/translationsSplit.test.ts` pins that against a hand-transcribed
+ * oracle rather than against this file.
+ *
+ * SINCE THEN, ONE DELIBERATE REVISION. The founder ruled on this copy on
+ * 2026-08-13 and rewrote 9 of the 38 `mr` strings (`closeToday`, `todayClosed`,
+ * `todaySummary`, `farmBookUpToDate`, `doesThisMatch`, `waitingForConfirmation`,
+ * `onboardingWelcome`, `firstLogCelebration`, `entries`). The other 29 `mr`
+ * strings and all 38 `en` strings are still the pre-split bytes. He is the
+ * Marathi authority: these strings are copied verbatim from his worksheet and
+ * are not an agent's to spell-correct, reword or re-punctuate. The oracle test
+ * was updated in the same commit, which is the two-file edit it exists to force.
  */
 import type { Language } from './language';
 
@@ -148,22 +158,22 @@ export const dfesTranslations: Record<Language, DfesTranslations> = {
 
     mr: {
         // Closure ritual
-        closeToday: 'आज बंद करा',
-        todayClosed: 'आज बंद. सगळं नोंद झालं.',
+        closeToday: 'आजच्या सर्व नोंदी माझ्या पर्यन्त पोहोचल्या का याची खात्री करा',
+        todayClosed: 'आजचं आटपलं. सगळी कामे आणि गोष्टी समजल्या',
         closeTodayQuestion: 'आजचं शेत बंद करायचं?',
 
         // Day summary
-        todaySummary: 'आज: {activities} कामं, Rs. {cost} खर्च.',
+        todaySummary: 'आजची कामे आणि त्याचा खर्च',
         weekSummary: 'या आठवड्यात: {entries} नोंदी, Rs. {cost} खर्च.',
-        farmBookUpToDate: 'शेतनोंद अद्ययावत आहे.',
+        farmBookUpToDate: 'शेतातील कामे आणि मी समजून घेतलेले कामे बरोबर आहेत',
 
         // Verification (anti-ego)
-        doesThisMatch: 'हे जुळतं का?',
+        doesThisMatch: 'हे बरोबर आहे ना?',
         allLooksCorrect: 'सगळं बरोबर दिसतंय',
         somethingNeedsFixing: 'काहीतरी सुधारायला हवं',
         ownerHasQuestion: '{owner} यांना या नोंदीबद्दल शंका आहे',
         updated: 'सुधारणा: {field} {oldValue} होतं, {newValue} आहे',
-        waitingForConfirmation: 'खात्रीची वाट पाहत आहे',
+        waitingForConfirmation: 'तपसणी बाकी आहे',
         confirmed: 'खात्री झाली',
 
         // Missed day
@@ -177,11 +187,11 @@ export const dfesTranslations: Record<Language, DfesTranslations> = {
 
         // Onboarding
         shramSathi: 'श्रम साथी',
-        onboardingWelcome: 'शेताची रोजची नोंद ठेवा. फक्त 30 सेकंद.',
+        onboardingWelcome: 'शेतातली कामे श्रम साथी ला सांगा तो तुमची शेती ओ तुमची कामाची पद्धत समजून घेत आहे',
         letsStart: 'चला सुरू करूया',
         whichCropToday: 'आज कोणत्या पिकावर काम?',
         whatWorkToday: 'आज काय काम झालं?',
-        firstLogCelebration: 'झालं! तुमची पहिली शेतनोंद जतन झाली.',
+        firstLogCelebration: 'तुमचे पहिले काम मला समजले',
         comeBackTomorrow: 'उद्या संध्याकाळी या.',
 
         // Owner verification trigger
@@ -198,7 +208,7 @@ export const dfesTranslations: Record<Language, DfesTranslations> = {
         activitiesLogged: 'कामे नोंदवली',
         needsReview: 'तपासायचे आहे',
         allVerified: 'सर्व खात्री झाली',
-        entries: 'नोंदी',
+        entries: 'कामे',
         unknown: 'अज्ञात',
         verify: 'खात्री करा',
 
