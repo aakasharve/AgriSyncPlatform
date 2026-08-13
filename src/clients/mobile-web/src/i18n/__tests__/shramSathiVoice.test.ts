@@ -37,6 +37,8 @@ describe('the tails a save sentence ends in — approved wording', () => {
             .toBe('शेतनोंदीत जाणार नाही');
         expect(t('sync.correctionsFiledTailMany', 'mr'))
             .toBe('{count} दुरुस्त्या शेतनोंदीत गेल्या.');
+        expect(t('sync.unsentEditTail', 'mr'))
+            .toBe('बाकीचे बदल शेतनोंदीत जाणार नाहीत.');
     });
 
     it('renders the proposed English', () => {
@@ -48,6 +50,18 @@ describe('the tails a save sentence ends in — approved wording', () => {
             .toBe('{count} labour correction reached your farm records.');
         expect(t('sync.correctionsFiledTailMany', 'en'))
             .toBe('{count} labour corrections reached your farm records.');
+        expect(t('sync.unsentEditTail', 'en'))
+            .toBe('The rest of this edit will not reach your farm records.');
+    });
+
+    it('the unsent-edit tail reuses the approved clause, so only two words are new', () => {
+        // FINAL REVIEW F-1. The Marathi verb phrase is lifted VERBATIM from the
+        // approved `notFiledCountTail`; `बाकीचे बदल` is the only string in this
+        // file no ruling has blessed yet, and it is on the founder-copy list.
+        // If someone rewords the approved clause, this stops holding and says so.
+        expect(t('sync.unsentEditTail', 'mr')).toContain('शेतनोंदीत जाणार नाहीत');
+        expect(t('sync.notFiledCountTail', 'mr')).toContain('शेतनोंदीत जाणार नाहीत');
+        expect(t('sync.unsentEditTail', 'en')).toContain('will not reach your farm records');
     });
 
     it('Marathi has ONE corrections form, because no singular was approved', () => {
@@ -116,13 +130,18 @@ describe('what these sentences are forbidden to say', () => {
         'sync.notFiledBadgeTail',
         'sync.correctionsFiledTailOne',
         'sync.correctionsFiledTailMany',
+        'sync.unsentEditTail',
     ];
 
     it('a record that will never be sent is never promised a "yet"', () => {
         // Finding B3. A skipped log `continue`s before any queue row is written,
         // so no worker will ever pick it up and no drawer can list it. "not yet"
         // is a promise the code cannot keep.
-        for (const key of ['sync.notFiledCountTail', 'sync.notFiledBadgeTail']) {
+        //
+        // `unsentEditTail` joins them (final review F-1) on the same evidence:
+        // `updateLog` POSTs labour corrections and enqueues nothing, so the rest
+        // of an edit has no queue row, no worker and no retry either.
+        for (const key of ['sync.notFiledCountTail', 'sync.notFiledBadgeTail', 'sync.unsentEditTail']) {
             expect(t(key, 'en').toLowerCase()).not.toContain('yet');
             expect(t(key, 'mr')).not.toContain('अजून');
             expect(t(key, 'en').toLowerCase()).toContain('will not');

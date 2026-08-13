@@ -411,3 +411,157 @@ describe('a local edit does not disarm the pull freshness guard', () => {
         expect(reloaded!.irrigation).toHaveLength(1);
     });
 });
+
+// ---------------------------------------------------------------------------
+// 6. FINAL REVIEW F-1 — the pull the correction itself guarantees.
+//
+//    Section 5 above proves a STALE pull cannot touch the edit, and replays an
+//    identical DTO to do it. That is not the pull that happens in production.
+//    `CorrectLabourHandler` calls `MarkLabourCorrected(now)`, which ADVANCES
+//    `DailyLog.ModifiedAtUtc` — deliberately, so a correction reaches a second
+//    device at all — so the very next delta carries this log with a FRESHER
+//    timestamp, the freshness guard passes on its merits, and `reconcileLogs`
+//    rebuilds the record whole.
+//
+//    These tests assert what then actually happens, including the part that is
+//    a loss. A test that asserted the loss away would be a fix in the test file.
+// ---------------------------------------------------------------------------
+
+/** The same log, restated by the server an hour later — a genuine delta row. */
+const freshLogDto = (workerCount: number) =>
+    logDto(workerCount, { modifiedAtUtc: '2026-08-13T07:00:00.000Z' });
+
+describe('a FRESH pull rebuilds the log, and the save said so in advance', () => {
+    /** Pull once so the local row carries a watermark, then edit both halves. */
+    async function correctBothHalves() {
+        const db = getDatabase();
+        await repo.batchSave([makeLog([PLOT_A])]);
+        await reconcileLogs(db, { dailyLogs: [logDto(8)] } as unknown as SyncPullResponse, new Map(), new Set());
+
+        const existing = await repo.getById(LOG) as DailyLog;
+        return correct(
+            { ...existing, irrigation: [{ id: 'irr-1', method: 'Drip', durationHours: 3 }] } as DailyLog,
+            6,
+        );
+    }
+
+    it('replaces the non-labour half of the edit, because the server was never told it', async () => {
+        const db = getDatabase();
+        const result = await correctBothHalves();
+        expect(result.success).toBe(true);
+        expect((await repo.getById(LOG))!.irrigation).toHaveLength(1);
+
+        // Fifteen seconds later, the delta the correction caused.
+        await reconcileLogs(db, { dailyLogs: [freshLogDto(6)] } as unknown as SyncPullResponse, new Map(), new Set());
+
+        const reloaded = await repo.getById(LOG);
+        // The labour correction survives — it is on the server, and comes back.
+        expect(reloaded!.labour[0].count).toBe(6);
+        // The irrigation correction does NOT. `UpdateLog` posts only labour, so
+        // the server's `tasks` never heard about it and `toDailyLog` rebuilds
+        // irrigation from `tasks`. This is the loss F-1 named; it is asserted
+        // here rather than wished away, so that the day a task-push path exists
+        // this test fails and someone reads the sentence below.
+        expect(reloaded!.irrigation).toHaveLength(0);
+    });
+
+    it('the save flags the half it could not send, so the toast can say it', async () => {
+        // THE GUARD. Without this the farmer gets a green `फोनवर सेव्ह ✓` over an
+        // edit that is half-reverted within the sync interval, which is exactly
+        // what ruling `R19` produced by deleting the caveat.
+        const result = await correctBothHalves();
+
+        expect(result.persistedLabourCorrections).toBe(1);
+        expect(result.hasUnsentChanges).toBe(true);
+    });
+
+    it('says nothing extra when the whole edit WAS sent', async () => {
+        // A headcount-only correction has no unsent half, and announcing an
+        // absence there would be a nag on the correction path (`P9`).
+        const existing = makeLog([PLOT_A]);
+        await repo.batchSave([existing]);
+
+        const result = await correct(existing, 6);
+
+        expect(result.persistedLabourCorrections).toBe(1);
+        expect(result.hasUnsentChanges).toBe(false);
+    });
+
+    it('flags an ADDED engagement, which no correction can carry and the pull deletes', async () => {
+        // `buildLabourCorrections` skips a newly added engagement by design —
+        // "not a correction of an existing one". So it is saved locally, sent
+        // nowhere, and then removed by `resolveLabour`, which lets a non-empty
+        // server answer win. Same defect as the irrigation one, on the labour
+        // half of the same submit.
+        const db = getDatabase();
+        await repo.batchSave([makeLog([PLOT_A])]);
+        await reconcileLogs(db, { dailyLogs: [logDto(8)] } as unknown as SyncPullResponse, new Map(), new Set());
+
+        const existing = await repo.getById(LOG) as DailyLog;
+        const result = await updateLog(
+            {
+                logId: LOG,
+                updatedData: {
+                    ...existing,
+                    labour: [
+                        labour({ count: 6 }),
+                        labour({ id: 'l2', labourAssignmentId: undefined, count: 2, activity: 'बांधणी' }),
+                    ],
+                },
+                actorId: 'mukadam-7',
+                reason: 'दोन जास्त आले',
+            },
+            repo,
+            actor,
+        );
+
+        expect(result.success).toBe(true);
+        expect(result.persistedLabourCorrections).toBe(1);
+        expect(result.hasUnsentChanges).toBe(true);
+
+        await reconcileLogs(db, { dailyLogs: [freshLogDto(6)] } as unknown as SyncPullResponse, new Map(), new Set());
+        expect((await repo.getById(LOG))!.labour).toHaveLength(1);
+    });
+
+    it('flags a change no LabourCorrectionRequest has a field for', async () => {
+        // An attribution, a wage or a task name moves on the handset only: the
+        // request carries quantity and duration and nothing else. Treating "some
+        // correction touched this id" as "this engagement was sent" would hide
+        // exactly this case, which is why the check compares the engagement with
+        // the correctable fields removed.
+        const existing = makeLog([PLOT_A]);
+        await repo.batchSave([existing]);
+
+        const result = await updateLog(
+            {
+                logId: LOG,
+                updatedData: { ...existing, labour: [labour({ count: 6, activity: 'बांधणी' })] },
+                actorId: 'mukadam-7',
+                reason: 'काम वेगळं होतं',
+            },
+            repo,
+            actor,
+        );
+
+        expect(result.persistedLabourCorrections).toBe(1);
+        expect(result.hasUnsentChanges).toBe(true);
+    });
+
+    it('does not raise the caveat for a re-serialised but unchanged record', async () => {
+        // `finalLog` is `{...existingLog, ...updatedData}` and the form REBUILDS
+        // its objects, so a naive `JSON.stringify` diff would report a change
+        // whenever key order differed and put a true-but-pointless sentence on
+        // every edit. The comparison is order-stable for exactly this reason.
+        const existing = makeLog([PLOT_A], {
+            irrigation: [{ id: 'irr-1', method: 'Drip', durationHours: 3 }],
+        } as unknown as Partial<DailyLog>);
+        await repo.batchSave([existing]);
+
+        const result = await correct(
+            { ...existing, irrigation: [{ durationHours: 3, id: 'irr-1', method: 'Drip' }] } as DailyLog,
+            6,
+        );
+
+        expect(result.hasUnsentChanges).toBe(false);
+    });
+});

@@ -501,7 +501,27 @@ export const useLogCommands = ({
                 // reached the second half. Both halves are i18n now.
                 const persistedCorrections = result.persistedLabourCorrections ?? 0;
                 setToast({
-                    message: buildEditSavedMessage(persistedCorrections, language),
+                    // FINAL REVIEW F-1 — the third argument is the half of the
+                    // edit no server call carried. `R19` had the caveat deleted
+                    // on the reading that `repo.save` made it false; it made the
+                    // LOCAL half false and left the SERVER half standing, so a
+                    // farmer who fixed a headcount and an irrigation figure in
+                    // one submit got a green tick over an irrigation change the
+                    // next delta pull reverts — a pull the labour correction
+                    // itself guarantees, because it advances `ModifiedAtUtc`.
+                    //
+                    // `?? false` is defensive only. `updateLog` sets the field on
+                    // every `success: true` path, so the fallback is unreachable
+                    // today; it exists because the field is optional on the
+                    // response type. It is NOT a safe default — it suppresses the
+                    // caveat — so if a second producer of `UpdateLogResponse`
+                    // ever appears, it must set this rather than lean on this
+                    // line.
+                    message: buildEditSavedMessage(
+                        persistedCorrections,
+                        language,
+                        result.hasUnsentChanges ?? false,
+                    ),
                     // `'success'` now, where C-2 correctly used `'partial'`.
                     //
                     // `'partial'` was right for an outcome that was partly landed

@@ -180,3 +180,82 @@ describe('buildEditSavedMessage — two true things, and no more', () => {
         }
     });
 });
+
+describe('buildEditSavedMessage — the half no server call carried (final review F-1)', () => {
+    it('says nothing extra when the whole edit was sent', () => {
+        // The happy path stays byte-identical, in both branches. A caveat on
+        // every edit would be a nag on the correction path (`P9`).
+        for (const language of LANGUAGES) {
+            expect(buildEditSavedMessage(0, language, false)).toBe(buildEditSavedMessage(0, language));
+            expect(buildEditSavedMessage(2, language, false)).toBe(buildEditSavedMessage(2, language));
+        }
+    });
+
+    it('defaults to silence, so an unaware caller cannot confess by accident', () => {
+        for (const language of LANGUAGES) {
+            expect(buildEditSavedMessage(1, language)).not.toContain(t('sync.unsentEditTail', language));
+        }
+    });
+
+    it('names the unsent half beside the corrections that DID land', () => {
+        // THE GUARD `R19` REMOVED. A farmer who fixed a headcount and an
+        // irrigation figure in one submit had the labour correction announced
+        // and the irrigation silently reverted by the pull that same correction
+        // guaranteed.
+        for (const language of LANGUAGES) {
+            const message = buildEditSavedMessage(1, language, true);
+
+            expect(message.startsWith(onPhoneClaim(language))).toBe(true);
+            expect(message).toContain(tf('sync.correctionsFiledTailOne', language, { count: 1 }));
+            expect(message).toContain(t('sync.unsentEditTail', language));
+            // Order: what landed, then what did not. The news the farmer can do
+            // nothing about comes last.
+            expect(message.indexOf(t('sync.unsentEditTail', language)))
+                .toBeGreaterThan(message.indexOf(onPhoneClaim(language)));
+        }
+    });
+
+    it('says it on an edit that sent NOTHING, which is where it matters most', () => {
+        // An irrigation-only edit posts no correction at all, so the count
+        // branch is silent and this tail is the ONLY thing standing between a
+        // bare green tick and a farmer who thinks the change is filed.
+        for (const language of LANGUAGES) {
+            const message = buildEditSavedMessage(0, language, true);
+
+            expect(message.startsWith(onPhoneClaim(language))).toBe(true);
+            expect(message).toContain(t('sync.unsentEditTail', language));
+            expect(message).not.toBe(onPhoneClaim(language));
+        }
+    });
+
+    it('keeps the whole sentence in one script', () => {
+        // The defect this module was extracted to fix, re-checked on the branch
+        // that adds a second tail.
+        const mr = buildEditSavedMessage(1, 'mr', true);
+        const en = buildEditSavedMessage(1, 'en', true);
+
+        expect(/[A-Za-z]{2,}/.test(mr)).toBe(false);
+        expect(/[ऀ-ॿ]/.test(en)).toBe(false);
+    });
+
+    it('is not the R19 sentence coming back', () => {
+        // R19 struck "shown on screen only — not saved anywhere", which `repo.save`
+        // made FALSE. This tail denies a SERVER write that does not happen, not a
+        // LOCAL save that does. The distinction is the whole justification, so it
+        // is asserted rather than argued.
+        for (const language of LANGUAGES) {
+            const message = buildEditSavedMessage(1, language, true);
+            expect(message.toLowerCase()).not.toContain('screen only');
+            expect(message.toLowerCase()).not.toContain('not saved');
+            expect(message).not.toContain('स्क्रीनवर');
+        }
+    });
+
+    it('never sends the farmer somewhere to check, because there is nowhere', () => {
+        for (const language of LANGUAGES) {
+            const message = buildEditSavedMessage(0, language, true);
+            expect(message).not.toContain('तपासा');
+            expect(message.toLowerCase()).not.toContain('check');
+        }
+    });
+});

@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { getDatabase } from '../../../infrastructure/storage/DexieDatabase';
 import { OPEN_FAILURE_STATUSES, partitionOpenFailures, type StuckMutationView } from '../status/stuckMutations';
+import { getUnqueueableLogCount, subscribeToUnqueueableLogs } from '../status/unqueueableLogs';
 
 export interface SyncQueueStatus {
      /**
@@ -31,6 +32,16 @@ export interface SyncQueueStatus {
       * Failed" above an empty list).
       */
      stuckMutations: StuckMutationView[];
+     /**
+      * Mutations the server has ACKNOWLEDGED (`APPLIED`) on this device.
+      *
+      * The ONLY positive evidence in this shape. Labour Phase 2 final review,
+      * F-2: the drawer used to declare "All synced" from `pendingCount === 0 &&
+      * failedCount === 0` — the absence of bad news — which is exactly what
+      * `syncHonestyState.ts:21-37` was rewritten to forbid for the chip. A
+      * device that has never pushed anything successfully has an empty queue
+      * too, and so does a device whose records were dropped before reaching one.
+      */
      syncedCount: number;
      // Upload queue
      pendingUploads: number;
@@ -54,6 +65,57 @@ const EMPTY_STATUS: SyncQueueStatus = {
      isOnline: typeof navigator !== 'undefined' ? navigator.onLine : true,
      lastSyncAt: null,
 };
+
+/**
+ * Labour Phase 2 — final whole-branch review, finding F-2.
+ *
+ * HOW MANY OF THIS SESSION'S RECORDS REACHED NO SYNC QUEUE AT ALL.
+ *
+ * THE DEFECT, IN ONE TAP. A save whose log `resolveSyncTarget` refuses
+ * (`logSyncMutationService.ts:509-511`) writes NO row anywhere — no mutation, no
+ * outbox, nothing. The header chip already weakens from `शेतनोंदीत जमा ✓` to
+ * `मी लिहून घेतलं ✓` because `noteUnqueueableLogs` tells it so. The farmer then
+ * taps that chip, which opens `SyncStatusDrawer` — and the drawer decided "All
+ * synced" from `totalPending === 0 && totalFailed === 0`, i.e. from the ABSENCE
+ * of rows, about the record just created. Two surfaces one tap apart, and the
+ * second made the stronger claim from the weaker evidence. That is verbatim what
+ * `syncHonestyState.ts:21-37` was rewritten to forbid.
+ *
+ * WHY THIS IS A SECOND HOOK AND NOT A FIELD ON `SyncQueueStatus`. Two reasons,
+ * one principled and one mechanical.
+ *
+ *   PRINCIPLED — `SyncQueueStatus` is a snapshot of DEXIE. This number is not in
+ *   Dexie and cannot be: the record leaves no row, which IS the defect. Folding
+ *   it into that object would put a fact with a different provenance and a
+ *   different lifetime (session-scoped, see `unqueueableLogs.ts`) behind a shape
+ *   whose every other member is a table count. `SyncStatusService` keeps the same
+ *   two inputs separate for the same reason, and subscribes rather than polls.
+ *
+ *   MECHANICAL — adding a REQUIRED member to `SyncQueueStatus` fails
+ *   `tsc --noEmit` on `SyncStatusDrawer.test.tsx:32`, whose fixture is a literal
+ *   of that type. Making it OPTIONAL instead would let a consumer read
+ *   `?? 0` and strengthen the claim by silence, which is the exact failure mode
+ *   finding F4 made `SyncEvidenceSnapshot.unqueueableCount` required to prevent.
+ *   A separate hook returning a plain `number` keeps the contract un-omittable
+ *   without weakening either type.
+ *
+ * SUBSCRIBED, NOT POLLED. `subscribeToUnqueueableLogs` fires the moment the save
+ * path records a drop, so this cannot sit up to three seconds behind the chip
+ * reading the same registry.
+ */
+export function useUnqueueableLogCount(): number {
+     const [count, setCount] = useState<number>(() => getUnqueueableLogCount());
+
+     useEffect(() => {
+          // Re-read on mount as well as subscribing: a drop recorded between the
+          // initial `useState` evaluation and this effect would otherwise be
+          // missed until the next one, and "missed" here means a green tick.
+          setCount(getUnqueueableLogCount());
+          return subscribeToUnqueueableLogs(setCount);
+     }, []);
+
+     return count;
+}
 
 /**
  * useSyncQueueStatus — Reactive hook for sync queue visibility.

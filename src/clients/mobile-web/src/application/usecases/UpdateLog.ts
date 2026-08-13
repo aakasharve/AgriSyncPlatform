@@ -50,6 +50,25 @@ export interface UpdateLogResponse {
      * server has your 6" from "your phone has your 6" (`P4`, `P5`).
      */
     persistedLabourCorrections?: number;
+    /**
+     * LABOUR_PHASE2 final review, F-1 — did this edit change anything that NO
+     * server call carried?
+     *
+     * `persistedLabourCorrections` says what reached the server. This says what
+     * did NOT, and the two are not complements: an edit can post two corrections
+     * and still leave an irrigation change, an added engagement or an attribution
+     * behind on the handset. Until this field existed the caller had no way to
+     * tell those apart, so it said `फोनवर सेव्ह ✓` over both.
+     *
+     * `true` means: at least one thing the farmer changed in this submit has no
+     * path to a server, in this client, ever — see `hasUnsentChanges`. It is not
+     * a failure and not a pending state; it is a limit, and the caller states it.
+     *
+     * `false` means every content difference this edit made was expressed as a
+     * labour correction and accepted. It does NOT mean the whole record is on
+     * the server — the record's untouched parts make no claim either way.
+     */
+    hasUnsentChanges?: boolean;
 }
 
 /** One engagement's worth of correction, ready to POST. */
@@ -158,6 +177,161 @@ export function buildLabourCorrections(
 }
 
 /**
+ * Every content bucket on a `DailyLog` that the edit path has NO server call
+ * for. Labour is absent because it has one (`postLabourCorrection`); it is
+ * handled separately below, per engagement.
+ *
+ * Two different fates hide in this list and neither is sent:
+ *   - `cropActivities` / `irrigation` / `inputs` / `observations` are REBUILT by
+ *     the next pull from `DailyLogDto.tasks` (`logsReconciler.toDailyLog`), so a
+ *     local change to them is reverted the moment the log comes back down.
+ *   - `machinery` / `activityExpenses` / `plannedTasks` have no `DailyLogDto`
+ *     counterpart at all, so the pull zeroes them.
+ * `financialSummary` is deliberately NOT here: it is derived, and
+ * `preserveLocalOnlyFields` already keeps the local one.
+ */
+const UNSENT_CONTENT_KEYS = [
+    'cropActivities',
+    'irrigation',
+    'inputs',
+    'observations',
+    'machinery',
+    'activityExpenses',
+    'plannedTasks',
+] as const;
+
+/**
+ * The four `LabourEvent` fields a `LabourCorrectionRequest` can actually state.
+ * Anything else that moves on an engagement — an attribution, a wage, a task
+ * name, a note — moves only on this handset.
+ */
+const CORRECTABLE_LABOUR_FIELDS: ReadonlySet<string> =
+    new Set(['count', 'maleCount', 'femaleCount', 'durationHours']);
+
+/**
+ * JSON with object keys in a fixed order, so "did this change?" answers the
+ * question a farmer would ask rather than the one the form's key order asks.
+ *
+ * `finalLog` is `{...existingLog, ...updatedData}` and `updatedData` comes from
+ * a form that REBUILDS its objects, so a plain `JSON.stringify` comparison
+ * reports a difference whenever the rebuild happened to enumerate keys in
+ * another order. That would raise the caveat over an edit that changed nothing
+ * there — true-but-useless words on the correction path (`P9`). Array order is
+ * preserved untouched: for these lists the order IS part of the record.
+ */
+function stableJson(value: unknown): string {
+    if (value === undefined) {
+        return 'null';
+    }
+    if (value === null || typeof value !== 'object') {
+        return JSON.stringify(value);
+    }
+    if (Array.isArray(value)) {
+        return `[${value.map(stableJson).join(',')}]`;
+    }
+    const entries = Object.entries(value as Record<string, unknown>)
+        .filter(([, entryValue]) => entryValue !== undefined)
+        .sort(([left], [right]) => (left < right ? -1 : left > right ? 1 : 0));
+    return `{${entries.map(([key, entryValue]) => `${JSON.stringify(key)}:${stableJson(entryValue)}`).join(',')}}`;
+}
+
+/** An engagement with the four correctable fields removed. */
+function beyondCorrection(event: LabourEvent): string {
+    return stableJson(Object.fromEntries(
+        Object.entries(event as unknown as Record<string, unknown>)
+            .filter(([key]) => !CORRECTABLE_LABOUR_FIELDS.has(key))));
+}
+
+/** Engagements keyed the way the server keys them, falling back to local id. */
+function keyEngagements(events: readonly LabourEvent[] | undefined): Map<string, LabourEvent> {
+    const byKey = new Map<string, LabourEvent>();
+    for (const event of events || []) {
+        byKey.set(event.labourAssignmentId || event.id, event);
+    }
+    return byKey;
+}
+
+/**
+ * LABOUR_PHASE2 final review, F-1 — WHAT THIS EDIT CHANGED THAT NOTHING WILL
+ * EVER SEND.
+ *
+ * WHY THIS EXISTS. Ruling `R19` deleted the edit toast's caveat on the grounds
+ * that `repo.save` had made it false. `repo.save` made HALF of it false: the
+ * edit is durable on this phone. The other half — that nothing outside labour
+ * reaches a server — was and is true, and deleting the sentence left a green
+ * `फोनवर सेव्ह ✓` over an irrigation correction that the next delta pull
+ * silently reverts. Worse, the labour correction is what GUARANTEES that pull:
+ * `CorrectLabourHandler` advances `DailyLog.ModifiedAtUtc`, so the log comes
+ * back down inside the sync interval and `reconcileLogs` rebuilds it whole.
+ *
+ * WHY THE ANSWER IS A SENTENCE AND NOT A WIDER PRESERVE GUARD. The obvious
+ * alternative — teach `preserveLocalOnlyFields` to keep these categories — is
+ * only legitimate for a field the WIRE CANNOT STATE, and the predicate for that
+ * is "the response carried this field", never "the value came back without my
+ * edit in it". `DailyLogDto.tasks` is NON-OPTIONAL and is always carried, and
+ * it is what irrigation, inputs, crop activities and observations are rebuilt
+ * from. So the server does state them; it simply was never told about this
+ * edit. Preserving them would be a decision to ignore a statement the server
+ * genuinely makes — a contents-based guard wearing a presence-based costume,
+ * and the exact reading that cost real farmer data in V1, pointed the other way.
+ * Saying less is allowed; claiming more is not.
+ *
+ * THE LABOUR HALF IS IN SCOPE TOO, and this is not scope creep — it is the same
+ * defect on the same submit. `buildLabourCorrections` deliberately skips an
+ * ADDED engagement, a REMOVED one, and one with no `labourAssignmentId`; a
+ * `LabourCorrectionRequest` cannot carry an attribution, a wage or a task name;
+ * and `wholeOrOmitted` drops a fractional headcount from the wire while
+ * `repo.save` keeps it locally. Every one of those saves locally, sends nothing,
+ * and is then overwritten by `resolveLabour`, which lets a non-empty server
+ * answer win. An engagement is treated as SENT only when the sole differences
+ * are correctable fields AND a correction for it was accepted — never merely
+ * because some correction touched that id.
+ *
+ * The bias is one-directional by construction: every branch that cannot prove a
+ * change was sent answers `true`. Over-stating the limit costs a true sentence;
+ * under-stating it costs the farmer's record.
+ */
+export function hasUnsentChanges(
+    existingLog: DailyLog,
+    finalLog: DailyLog,
+    corrections: readonly PendingLabourCorrection[],
+): boolean {
+    for (const key of UNSENT_CONTENT_KEYS) {
+        if (Object.is(existingLog[key], finalLog[key])) {
+            continue;
+        }
+        if (stableJson(existingLog[key]) !== stableJson(finalLog[key])) {
+            return true;
+        }
+    }
+
+    const before = keyEngagements(existingLog.labour);
+    const after = keyEngagements(finalLog.labour);
+    if (before.size !== after.size) {
+        return true;
+    }
+
+    const corrected = new Set(corrections.map(correction => correction.labourAssignmentId));
+    for (const [key, event] of after) {
+        const original = before.get(key);
+        if (!original) {
+            return true;
+        }
+        if (beyondCorrection(original) !== beyondCorrection(event)) {
+            return true;
+        }
+        if (stableJson(original) === stableJson(event)) {
+            continue;
+        }
+        if (!event.labourAssignmentId || !corrected.has(event.labourAssignmentId)) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+/**
  * UpdateLog Use-Case
  *
  * Handles secure updates to execution logs.
@@ -201,6 +375,14 @@ export function buildLabourCorrections(
  * expenses are now durable ON THIS PHONE and nowhere else. A second device will
  * not see them, and a pull that carries this log will rebuild those categories
  * from the server's own record. That is a real limit and the caller says so.
+ *
+ * AND FOR ONE RELEASE IT DID NOT (final review, F-1). Ruling `R19` read
+ * "`repo.save` now runs" as "the limit is gone" and had the caveat deleted, so
+ * the paragraph above described a promise no surface was keeping. The signal
+ * that restores it is `hasUnsentChanges` below, and the sentence is
+ * `sync.unsentEditTail`. If a future change gives these categories a server
+ * path, delete the SIGNAL — not the sentence — and the sentence stops firing on
+ * its own.
  *
 
  * WHAT 12b.7b DELETED, AND WHY IT MUST NOT COME BACK. This function used to
@@ -330,7 +512,17 @@ export const updateLog = async (
         // `corrections.length` and not a separate counter: the loop above either
         // POSTed every one of them or threw out of this try block, so reaching
         // here means all of them were accepted.
-        return { success: true, log: finalLog, persistedLabourCorrections: corrections.length };
+        //
+        // `hasUnsentChanges` is computed from the SAME `corrections` array that
+        // was actually posted, and only on this line — after the loop returned
+        // without throwing. A refused correction never reaches here, so the flag
+        // can never describe a send that did not happen.
+        return {
+            success: true,
+            log: finalLog,
+            persistedLabourCorrections: corrections.length,
+            hasUnsentChanges: hasUnsentChanges(existingLog, finalLog, corrections),
+        };
 
     } catch (e: unknown) {
         // Narrowed rather than `any` (the shape this used to carry): the pre-commit

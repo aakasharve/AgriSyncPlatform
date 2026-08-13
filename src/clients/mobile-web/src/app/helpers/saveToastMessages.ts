@@ -124,19 +124,49 @@ export function buildSkippedSyncToast(
  * `R19` is DONE, not pending: the old "shown on screen only — not saved
  * anywhere" sentence was DELETED when `updateLog` started persisting, not
  * softened. Do not reintroduce a screen-only caveat here.
+ *
+ * ── AND A THIRD TRUE THING, WHICH IS NOT THE R19 SENTENCE (final review, F-1) ─
+ *
+ * `unsentChanges` adds `sync.unsentEditTail`. It denies a SERVER write that does
+ * not happen; the deleted sentence denied a LOCAL save that does. Distinguishing
+ * them is the whole point:
+ *
+ *   deleted (false)  "shown on screen only — not saved anywhere"
+ *   restored (true)  "the rest of this edit will not reach your farm records"
+ *
+ * `updateLog` POSTs labour corrections and NOTHING else, and the edit branch
+ * enqueues no mutation of any kind — so for everything else there is no queue
+ * row, no worker and no retry. "will not" is therefore the honest tense, the
+ * same one `buildSkippedSyncToast` uses and for the same reason.
+ *
+ * The tail is ONLY appended when `updateLog` proves there is something to
+ * confess (`UpdateLogResponse.hasUnsentChanges`, computed by diffing the record
+ * against what the accepted corrections carried). An edit that changed only a
+ * headcount, and sent it, says nothing extra — announcing an absence there would
+ * be the nag `P9` forbids, and the zero branch above already refuses to do it.
+ *
+ * ORDER: phone claim, then what DID reach the server, then what did not. The
+ * reassurance still comes first (`startsWith(onPhoneClaim)` holds in every
+ * branch), and the news the farmer can do nothing about comes last.
  */
 export function buildEditSavedMessage(
     persistedCorrections: number,
     language: Language,
+    unsentChanges = false,
 ): string {
     const onPhone = onPhoneClaim(language);
-    if (persistedCorrections <= 0) {
-        return onPhone;
+    const tails: string[] = [];
+
+    if (persistedCorrections > 0) {
+        const tailKey = persistedCorrections === 1
+            ? 'sync.correctionsFiledTailOne'
+            : 'sync.correctionsFiledTailMany';
+        tails.push(translateFormat(tailKey, language, { count: persistedCorrections }));
     }
 
-    const tailKey = persistedCorrections === 1
-        ? 'sync.correctionsFiledTailOne'
-        : 'sync.correctionsFiledTailMany';
+    if (unsentChanges) {
+        tails.push(translate('sync.unsentEditTail', language));
+    }
 
-    return `${onPhone} — ${translateFormat(tailKey, language, { count: persistedCorrections })}`;
+    return tails.length === 0 ? onPhone : `${onPhone} — ${tails.join(' ')}`;
 }

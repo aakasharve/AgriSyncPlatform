@@ -63,7 +63,7 @@ import {
     deriveSyncHonestyState,
     EMPTY_SYNC_EVIDENCE,
 } from '../../../features/sync/status/syncHonestyState';
-import { tf as translateFormat, type Language } from '../../../i18n/translations';
+import { t as translate, tf as translateFormat, type Language } from '../../../i18n/translations';
 
 const makeLog = (id: string) => ({
     id,
@@ -789,6 +789,47 @@ describe('useLogCommands — the EDIT path may not claim a save it cannot eviden
         await submitEdit();
 
         expect(setToast).toHaveBeenCalledWith({ message: ON_PHONE_MR, type: 'success' });
+    });
+
+    it('carries the unsent half of the edit through to the toast (final review F-1)', async () => {
+        // THE SEAM F-1 LIVED IN. `updateLog` knew the irrigation half of the
+        // edit had reached no server; the hook did not ask, so the farmer got a
+        // green tick over a change the next pull reverts. Both halves are true
+        // in the same sentence now, and this pins the wire between them —
+        // neither `UpdateLog.convergence` nor `saveToastMessages` can, because
+        // one ends at the use case and the other starts at the string.
+        updateLog.mockResolvedValue({
+            success: true,
+            log: makeLog('1'),
+            persistedLabourCorrections: 1,
+            hasUnsentChanges: true,
+        });
+
+        await submitEdit();
+
+        expect(setToast).toHaveBeenCalledWith({
+            message: `${ON_PHONE_MR} — ${correctionsTail('mr', 1)} ${translate('sync.unsentEditTail', 'mr')}`,
+            type: 'success',
+        });
+    });
+
+    it('an edit that sent nothing AND kept something back still says the second half', async () => {
+        // The irrigation-only edit: no correction to announce, so this tail is
+        // the only thing between a bare green tick and a farmer who believes
+        // the change is filed.
+        updateLog.mockResolvedValue({
+            success: true,
+            log: makeLog('1'),
+            persistedLabourCorrections: 0,
+            hasUnsentChanges: true,
+        });
+
+        await submitEdit();
+
+        expect(setToast).toHaveBeenCalledWith({
+            message: `${ON_PHONE_MR} — ${translate('sync.unsentEditTail', 'mr')}`,
+            type: 'success',
+        });
     });
 
     it('a FAILED edit still says nothing was saved, and never enters success', async () => {

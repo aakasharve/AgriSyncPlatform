@@ -119,6 +119,34 @@ export interface SyncTranslations {
      */
     correctionsFiledTailOne: string;
     correctionsFiledTailMany: string;
+
+    /**
+     * "The rest of this edit will not reach your farm records."
+     *
+     * THE CAVEAT `R19` DELETED, RESTORED ON A DIFFERENT AND TRUE BASIS. The
+     * sentence R19 struck said the rest of an edit was *"shown on screen only —
+     * not saved anywhere"*, and Phase 4 made that false: `updateLog` calls
+     * `repo.save`, so it IS saved. What R19 then assumed — that no caveat was
+     * needed at all — does not follow. `repo.save` makes the edit durable ON
+     * THIS PHONE; it does not put it on a server. `UpdateLog` POSTs the labour
+     * corrections and nothing else, and the edit path enqueues no mutation of
+     * any kind, so nothing in this client will ever carry the rest.
+     *
+     * That is a different claim from the deleted one and must not be confused
+     * with it: the old sentence denied a local save that happens, this one
+     * denies a server write that does not. `saveToastMessages.test.ts` still
+     * forbids the old wording verbatim.
+     *
+     * "WILL NOT", NOT "NOT YET" — the same tense, and the same reason, as
+     * `notFiledCountTail`: there is no queue row, no worker and no retry behind
+     * it. A promise of a later send is one this code cannot keep.
+     *
+     * MARATHI — the verb phrase `शेतनोंदीत जाणार नाहीत` is lifted VERBATIM from
+     * the approved `notFiledCountTail`. The only new words are `बाकीचे बदल`
+     * ("the rest of the changes"), which is on the founder-copy list with the
+     * rest of this block and is the one string here no ruling has yet blessed.
+     */
+    unsentEditTail: string;
 }
 
 /**
@@ -150,6 +178,7 @@ export const syncTranslations: Record<Language, SyncTranslations> = {
         notFiledBadgeTail: 'will not reach your farm records',
         correctionsFiledTailOne: '{count} labour correction reached your farm records.',
         correctionsFiledTailMany: '{count} labour corrections reached your farm records.',
+        unsentEditTail: 'The rest of this edit will not reach your farm records.',
     },
     mr: {
         onPhone: 'मी लिहून घेतलं ✓',
@@ -160,6 +189,7 @@ export const syncTranslations: Record<Language, SyncTranslations> = {
         notFiledBadgeTail: 'शेतनोंदीत जाणार नाही',
         correctionsFiledTailOne: '{count} दुरुस्त्या शेतनोंदीत गेल्या.',
         correctionsFiledTailMany: '{count} दुरुस्त्या शेतनोंदीत गेल्या.',
+        unsentEditTail: 'बाकीचे बदल शेतनोंदीत जाणार नाहीत.',
     },
 };
 
