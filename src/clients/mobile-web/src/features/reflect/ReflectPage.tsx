@@ -39,6 +39,8 @@ import LogDetailDrawer from './sections/LogDetailDrawer';
 import { useFarmContext } from '../../core/session/FarmContext';
 import { emitClosureSummaryViewed } from '../../core/telemetry/eventEmitters';
 import DwcReminderChip from './components/DwcReminderChip';
+import FarmWideTodayPanel from '../logs/components/FarmWideTodayPanel';
+import { getFarmWideDaySummary } from '../../app/helpers/appContentDailyCounts';
 
 // --- MAIN PAGE ---
 
@@ -47,7 +49,6 @@ const ReflectPage: React.FC<ReflectPageProps> = ({
     crops,
     ledgerDefaults,
     onEditLog,
-    onUpdateNote,
     tasks,
     onUpdateTask,
     onAddTask,
@@ -197,6 +198,12 @@ const ReflectPage: React.FC<ReflectPageProps> = ({
             setViewCrops(allCrops);
             setViewPlots(allPlots);
         }
+    // `viewCrops.length` is read but deliberately NOT a dependency: this
+    // effect exists to SEED the selection once from `crops`, and its own
+    // guard makes it idempotent. Adding the dep would re-run it on every
+    // selection change — a behavioural change this wave has no mandate
+    // for. Pre-existing; surfaced only because the file is staged now.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [crops]);
 
     // Block reordering handlers — persistence is handled inside useUiPref's
@@ -234,6 +241,10 @@ const ReflectPage: React.FC<ReflectPageProps> = ({
         () => history
             .filter(log => log.date === currentDateStr && isLogVisibleInCurrentSelection(log))
             .flatMap(log => log.observations ?? []),
+        // `isLogVisibleInCurrentSelection` is re-created every render, so listing
+        // it would defeat the memo entirely. The deps below already cover
+        // everything it closes over (`viewCrops`, `viewPlots`).
+        // eslint-disable-next-line react-hooks/exhaustive-deps
         [history, currentDateStr, viewCrops, viewPlots]
     );
 
@@ -241,10 +252,17 @@ const ReflectPage: React.FC<ReflectPageProps> = ({
         () => history
             .filter(log => log.date === currentDateStr && isLogVisibleInCurrentSelection(log))
             .flatMap(log => log.plannedTasks ?? []),
+        // `isLogVisibleInCurrentSelection` is re-created every render, so listing
+        // it would defeat the memo entirely. The deps below already cover
+        // everything it closes over (`viewCrops`, `viewPlots`).
+        // eslint-disable-next-line react-hooks/exhaustive-deps
         [history, currentDateStr, viewCrops, viewPlots]
     );
 
     const mergedVisibleTasks = useMemo(() => {
+        // Mirrors `ReflectPageProps.tasks?: any[]`. Narrowing here without
+        // narrowing the prop would just move the cast. Pre-existing.
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const deduped = new Map<string, any>();
         [...(tasks || []), ...tasksFromTodaysLogs].forEach(task => {
             deduped.set(task.id, task);
@@ -256,6 +274,12 @@ const ReflectPage: React.FC<ReflectPageProps> = ({
         if (viewCrops.length === 0 && crops.length > 0) {
             setViewCrops(crops.map(c => c.id));
         }
+    // `viewCrops.length` is read but deliberately NOT a dependency: this
+    // effect exists to SEED the selection once from `crops`, and its own
+    // guard makes it idempotent. Adding the dep would re-run it on every
+    // selection change — a behavioural change this wave has no mandate
+    // for. Pre-existing; surfaced only because the file is staged now.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [crops]);
 
     // DWC v2 §2.8 #6 — emit closure_summary.viewed on ReflectPage mount.
@@ -434,7 +458,7 @@ const ReflectPage: React.FC<ReflectPageProps> = ({
                             ? crop.plots.filter(p => selectedPlotsForCrop.includes(p.id))
                             : crop.plots;
 
-                        return plotsToShow.map((plot, idx) => {
+                        return plotsToShow.map((plot) => {
                             const originalIndex = crop.plots.findIndex(p => p.id === plot.id);
                             return (
                                 <CompactCropCard
@@ -512,6 +536,21 @@ const ReflectPage: React.FC<ReflectPageProps> = ({
                             setCurrentDate(new Date(log.date));
                         }}
                     />
+                </div>
+            )}
+
+            {/* LABOUR_PHASE2 P2.4 — the farm-level day, on Reflect too (founder
+                ask: "show it on reflect page as well, only when anything for
+                entire farm is being logged").
+
+                Gated on the viewed date BEING today, because the line it
+                renders is `dfes.todaySummary` — "आज: …" — and printing "today"
+                over a past date would be false. A date-neutral approved Marathi
+                line would lift that limit; there is none, and no agent may
+                invent one. Renders nothing when no farm-wide record exists. */}
+            {currentDateStr === getDateKey() && (
+                <div className="px-4 pt-4">
+                    <FarmWideTodayPanel summary={getFarmWideDaySummary(history, currentDateStr)} />
                 </div>
             )}
 

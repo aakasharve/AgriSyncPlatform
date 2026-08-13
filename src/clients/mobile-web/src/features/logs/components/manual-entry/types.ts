@@ -10,6 +10,7 @@ import {
     LogTimelineEntry, PlannedTask, DailyLog, DisturbanceEvent
 } from '../../../../types';
 import type { LogProvenance } from '../../../../domain/ai/LogProvenance';
+import type { FarmWideDaySummary } from '../../../../app/helpers/appContentDailyCounts';
 
 export const SAFE_DEFAULTS: LedgerDefaults = {
     irrigation: {
@@ -61,6 +62,16 @@ export interface ManualEntryProps {
     provenance?: LogProvenance | null;
     onDataConsumed?: () => void;
     todayCountsMap?: Record<string, TodayCounts>;
+    /**
+     * LABOUR_PHASE2 P2.4 — what the farmer recorded for the WHOLE FARM today.
+     *
+     * SEPARATE from `todayCountsMap` on purpose. That map is per-plot and its
+     * consumer SUMS it across the plots in context, so folding a farm-wide
+     * record into it multiplies one record by the plot count — `R24` measured
+     * a plot's 3 labour entries becoming 11. This prop has no plot key, so the
+     * two can never be added together.
+     */
+    farmWideToday?: FarmWideDaySummary;
     transcriptEntries?: LogTimelineEntry[];  // Today's past logs for timeline display
     todayLogs?: DailyLog[];                  // Full log objects for loading into editor
     onLogSelect?: (logId: string) => void;   // Callback when user selects a log to edit

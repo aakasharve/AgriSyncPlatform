@@ -26,10 +26,12 @@ import LabourReview from './components/LabourReview';
 import ActivityLedger from './components/ActivityLedger';
 import CostStrip from './components/CostStrip';
 import ObservationHubSheet from '../ObservationHubSheet';
+import FarmWideTodayPanel from '../FarmWideTodayPanel';
+import { isFarmWideSelection } from '../../../../app/helpers/appContentDailyCounts';
 import { emitClosureSubmitted } from '../../../../core/telemetry/eventEmitters';
 import { useFarmContext } from '../../../../core/session/FarmContext';
 
-const ManualEntry: React.FC<ManualEntryProps> = ({ context, crops, defaults, profile, onSubmit, initialData, provenance, onDataConsumed, todayCountsMap, transcriptEntries = [], todayLogs = [], onLogSelect }) => {
+const ManualEntry: React.FC<ManualEntryProps> = ({ context, crops, defaults, profile, onSubmit, initialData, provenance, onDataConsumed, todayCountsMap, farmWideToday, transcriptEntries = [], todayLogs = [], onLogSelect }) => {
 
     // DWC v2 §2.8 — closure.submitted emit context. The downstream
     // logCommandService generates the persisted DailyLog.id, so for
@@ -461,6 +463,24 @@ const ManualEntry: React.FC<ManualEntryProps> = ({ context, crops, defaults, pro
                     />
                 }
             />
+
+            {/* LABOUR_PHASE2 P2.4 — R24's real under-count, closed.
+
+                A farm-wide context yields no plot ids, so `todayCountsMap` is
+                `{}` and `currentCounts` above is all zeros — the header told a
+                farmer who had just recorded whole-farm work that nothing had
+                happened today. `currentCounts` is NOT touched: it is a per-plot
+                sum, and folding a farm-wide record into it is exactly the
+                3-into-11 `R24` measured. The farm-level figure gets its own
+                panel, with no plot key, so the two can never be added.
+
+                Shown only when the farmer is recording FOR the whole farm AND
+                something is already there. No context match, or nothing
+                recorded, renders nothing — an empty panel that exists only to
+                be filled is a nag on the capture path (`P9`). */}
+            {isFarmWideSelection(context?.selection) && farmWideToday && (
+                <FarmWideTodayPanel summary={farmWideToday} />
+            )}
 
             <LabourReview
                 labourEntries={labourEntries}
