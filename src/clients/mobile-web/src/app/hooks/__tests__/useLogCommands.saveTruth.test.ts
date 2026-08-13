@@ -18,12 +18,16 @@
 //
 //   B1  The toast is not the only surface. `setStatus('success')` renders a
 //       full-screen "Saved to Ledger" panel that lives until the farmer
-//       navigates away, while the toast self-destructs after 3000ms. On the
-//       EDIT path that panel is flatly false — `updateLog` calls `repo.getById`
-//       and never `repo.save`, and `setHistory` is React state with no persist
-//       subscriber, so nothing is written anywhere. The edit path must never
-//       enter `'success'`; a skipped CREATE keeps it (its record IS in the
-//       ledger) and carries the sync truth on `lastSavedLogSummary` instead.
+//       navigates away, while the toast self-destructs after 3000ms. The edit
+//       path must never enter `'success'`; a skipped CREATE keeps it (its
+//       record IS in the ledger) and carries the sync truth on
+//       `lastSavedLogSummary` instead.
+//       PHASE 4 UPDATE: B1's original reason — that an edit wrote nothing
+//       anywhere — is no longer true; `updateLog` now calls `repo.save`. The
+//       panel is still refused, on the reason recorded at
+//       `useLogCommands.ts`'s `showSavedToLedgerPanel`: it is a CREATE-shaped
+//       confirmation whose body and sync badge have nothing to say about a
+//       correction.
 //   B3  `अडकलं — तपासा` says "go and check". A skipped log has no home in any
 //       queue, so there is nothing to check and nowhere to go.
 //   B4  A red toast reading `0 of 1` reads as "your record is gone", and the
@@ -35,6 +39,11 @@
 //       the edit: `ManualEntry` submits the whole log, so one edit changes
 //       irrigation hours AND a headcount, and only the labour half has a server
 //       path. A green tick over a partial truth.
+//       PHASE 4 UPDATE (ruling R19): C-2's remedy — "…shown on screen only —
+//       not saved anywhere." — described a MISSING FEATURE truthfully, and
+//       Phase 4 built it. Once `updateLog` persisted, that sentence became
+//       false the other way round, so the string and the seven tests pinning it
+//       were DELETED rather than re-worded. What replaces them is below.
 //   C-1  The header chip is the surface the farmer never navigates away from.
 //       It derives its claim from `db.mutationQueue`, where a skipped log has
 //       no row — and `APPLIED` rows are never pruned, so on any device that has
@@ -596,7 +605,31 @@ describe('useLogCommands — the EDIT path may not claim a save it cannot eviden
         });
     };
 
-    it('an edit that persisted nothing is not called saved', async () => {
+    // -------------------------------------------------------- PHASE 4 / R19
+    //
+    // WHAT WAS DELETED HERE, AND WHY THE DELETION IS THE FIX.
+    //
+    // Seven tests used to live in this block pinning the sentence
+    // "…shown on screen only — not saved anywhere." on both edit branches, plus
+    // its `'partial'` toast type. Every one of them was correct when written:
+    // `updateLog` called `repo.getById` and never `repo.save`, `setHistory` is
+    // React state with no persist subscriber, and the edit really did die on the
+    // next reload. They were a truthful description of a missing feature.
+    //
+    // Phase 4 built the feature (§A7.1). The moment `updateLog` persisted, that
+    // sentence became false in the OTHER direction — telling a farmer their
+    // saved record was not saved, which teaches them to distrust a correction
+    // that worked and to enter it again. Re-wording those tests to keep the
+    // sentence alive would have preserved the lie; they are removed together
+    // with the string, by the controller's standing ruling R19.
+    //
+    // WHAT IS NOT DELETED, because it never depended on that sentence: the edit
+    // path still refuses the full-screen "Saved to Ledger" panel, and the tests
+    // below still pin that — now for the reason stated at
+    // `useLogCommands.ts`'s `showSavedToLedgerPanel`, which is about the panel
+    // being create-shaped rather than about nothing being written.
+
+    it('an edit is reported as saved on the phone, because now it is', async () => {
         updateLog.mockResolvedValue({
             success: true,
             log: makeLog('1'),
@@ -605,22 +638,57 @@ describe('useLogCommands — the EDIT path may not claim a save it cannot eviden
 
         await submitEdit();
 
-        // `success: true` used to be enough to fire `Logged. Day closure: ...`.
-        // It is also what an edit with no server-side path at all returns.
-        expect(setToast).toHaveBeenCalledWith({
-            message: 'Shown on screen only — this edit is not saved anywhere.',
-            type: 'partial',
-        });
-        expect(setToast).not.toHaveBeenCalledWith(
-            expect.objectContaining({ type: 'success' }),
-        );
+        expect(setToast).toHaveBeenCalledWith({ message: ON_PHONE_MR, type: 'success' });
     });
 
-    it('B1: an edit NEVER shows the "Saved to Ledger" screen, whatever the outcome', async () => {
-        // `updateLog` calls `repo.getById` and never `repo.save`; `setHistory` is
-        // React state with no persist subscriber. The full-screen panel outlives
-        // the toast by design, so on this path it would be the longest-lived
-        // false claim in the flow.
+    it('the deleted claim never comes back: no edit toast says the edit is not saved', async () => {
+        // The R19 guard. Both branches, both languages, in the words the old
+        // sentence used — if any of them reappears on a path that now persists,
+        // this fails.
+        for (const persisted of [0, 1, 3]) {
+            vi.clearAllMocks();
+            setToast = vi.fn<ToastSetter>();
+            updateLog.mockResolvedValue({
+                success: true,
+                log: makeLog('1'),
+                persistedLabourCorrections: persisted,
+            });
+
+            await submitEdit();
+
+            const message = (setToast.mock.calls.at(-1)?.[0] as ToastCall)?.message ?? '';
+            expect(message.toLowerCase()).not.toContain('shown on screen only');
+            expect(message.toLowerCase()).not.toContain('not saved anywhere');
+            expect(message.toLowerCase()).not.toContain('not saved');
+        }
+    });
+
+    it('the edit toast speaks the SAME on-phone words as the create path, in both languages', async () => {
+        // `R6` — one claim, one string. The chip, the skipped-create toast and
+        // now the edit toast all resolve `sync.onPhone` through the real i18n
+        // table, so a copy change lands on all three or on none.
+        for (const [language, expected] of [['mr', ON_PHONE_MR], ['en', ON_PHONE_EN]] as const) {
+            vi.clearAllMocks();
+            setToast = vi.fn<ToastSetter>();
+            langRef.current = language;
+            updateLog.mockResolvedValue({
+                success: true,
+                log: makeLog('1'),
+                persistedLabourCorrections: 0,
+            });
+
+            await submitEdit();
+
+            expect((setToast.mock.calls.at(-1)?.[0] as ToastCall)?.message).toBe(expected);
+        }
+    });
+
+    it('an edit NEVER shows the "Saved to Ledger" screen, whatever the outcome', async () => {
+        // The reason changed in Phase 4; the answer did not. The panel is
+        // create-shaped — a "Stored In" card, a bucket breakdown of what the log
+        // CONTAINS, and a `syncQueued` badge derived from an enqueue this path
+        // never performs — so it would answer a question the farmer did not ask
+        // and evidence a sync claim it has no evidence for.
         for (const persisted of [0, 2]) {
             vi.clearAllMocks();
             setStatus = vi.fn<StatusSetter>();
@@ -638,7 +706,7 @@ describe('useLogCommands — the EDIT path may not claim a save it cannot eviden
         }
     });
 
-    it('an edit whose labour corrections the server accepted says exactly that, and what it cost', async () => {
+    it('an edit whose labour corrections the server accepted names that, beside the phone claim', async () => {
         updateLog.mockResolvedValue({
             success: true,
             log: makeLog('1'),
@@ -648,15 +716,9 @@ describe('useLogCommands — the EDIT path may not claim a save it cannot eviden
         await submitEdit();
 
         expect(setToast).toHaveBeenCalledWith({
-            message: '2 labour corrections sent to the server. '
-                + 'The rest of this edit is shown on screen only — not saved anywhere.',
-            type: 'partial',
+            message: `${ON_PHONE_MR} — 2 labour corrections sent to the server.`,
+            type: 'success',
         });
-        // It does not say "saved" — nothing was written to any ledger, local or
-        // otherwise. A server correction is the only thing it can evidence.
-        expect(setToast).not.toHaveBeenCalledWith(
-            expect.objectContaining({ message: expect.stringContaining('Saved') }),
-        );
     });
 
     it('one correction reads as one, not as "1 corrections"', async () => {
@@ -669,106 +731,49 @@ describe('useLogCommands — the EDIT path may not claim a save it cannot eviden
         await submitEdit();
 
         expect(setToast).toHaveBeenCalledWith({
-            message: '1 labour correction sent to the server. '
-                + 'The rest of this edit is shown on screen only — not saved anywhere.',
-            type: 'partial',
+            message: `${ON_PHONE_MR} — 1 labour correction sent to the server.`,
+            type: 'success',
         });
     });
 
-    // ------------------------------------------------------------------- C-2
-    // The zero-corrections branch was already honest. The `> 0` branch was the
-    // survivor of the B1 defect class: everything it said was true and
-    // evidenced, and everything it did NOT say was the farmer's irrigation
-    // entry. `ManualEntry` submits the whole log in one `userDraft`
-    // (`manual-entry/ManualEntry.tsx:281`), so one edit routinely changes
-    // irrigation hours AND a headcount; `updateLog` sends only the labour half
-    // and never calls `repo.save`. The farmer who fixed both read
-    // "1 labour correction sent to the server" under a green tick, and lost the
-    // irrigation change on the next reload, unmentioned.
-
-    it('C-2: a landed labour correction never implies the REST of the edit was saved', async () => {
+    it('makes no server claim when nothing was sent — an absence is not news', async () => {
+        // `P4` cuts both ways. A farmer who corrected an irrigation figure sent
+        // nothing because there was nothing labour-shaped to send; announcing
+        // that absence would be a nag on the correction path (`P9`). The message
+        // stops at the claim it can evidence.
         updateLog.mockResolvedValue({
             success: true,
             log: makeLog('1'),
-            persistedLabourCorrections: 1,
+            persistedLabourCorrections: 0,
         });
 
         await submitEdit();
 
-        const toast = setToast.mock.calls.at(-1)?.[0] as ToastCall;
-        // Both halves of the truth, in one message. The server half first,
-        // because it is the part the farmer asked for and it really happened.
-        expect(toast?.message).toContain('1 labour correction sent to the server.');
-        // And the half that used to be silence. `updateLog` calls `repo.getById`
-        // and never `repo.save`, and `setHistory` has no persist subscriber, so
-        // every non-labour category of this edit dies on the next reload.
-        expect(toast?.message).toContain('shown on screen only');
-        expect(toast?.message).toContain('not saved anywhere');
-    });
-
-    it('C-2: no green tick over a partial outcome — the icon must not say "all done"', async () => {
-        // The wording alone is not the fix. `'success'` renders emerald with a
-        // `CheckCircle` and self-destructs in 3000ms (`ActionToast.tsx:39-43,
-        // 71-84`); the tick is read before any words are, and it means "all
-        // done". Over an outcome that is partly landed and partly nowhere, the
-        // tick does the lying the sentence no longer does. `'partial'` is amber
-        // with an `AlertCircle` and stays 7000ms — notice this, do not fear it —
-        // and it is the toast type Phase 1 introduced for exactly this shape.
-        updateLog.mockResolvedValue({
-            success: true,
-            log: makeLog('1'),
-            persistedLabourCorrections: 3,
-        });
-
-        await submitEdit();
-
-        expect((setToast.mock.calls.at(-1)?.[0] as ToastCall)?.type).toBe('partial');
-        expect(setToast).not.toHaveBeenCalledWith(
-            expect.objectContaining({ type: 'success' }),
-        );
-    });
-
-    it('C-2: both edit outcomes speak ONE dialect about what is not saved', async () => {
-        // The zero branch was the model; the `> 0` branch reuses its exact
-        // vocabulary rather than inventing a third way to say the same thing. If
-        // a future edit re-words one of them, this fails and the pair is
-        // re-worded together.
-        const messages: string[] = [];
-        for (const persisted of [0, 2]) {
-            vi.clearAllMocks();
-            setToast = vi.fn<ToastSetter>();
-            updateLog.mockResolvedValue({
-                success: true,
-                log: makeLog('1'),
-                persistedLabourCorrections: persisted,
-            });
-
-            await submitEdit();
-
-            const toast = setToast.mock.calls.at(-1)?.[0] as ToastCall;
-            expect(toast?.type).toBe('partial');
-            messages.push(toast?.message ?? '');
-        }
-
-        for (const message of messages) {
-            // Lower-cased only because one of the two opens the sentence with it
-            // ("Shown on screen only — ...") and the other continues one
-            // ("The rest of this edit is shown on screen only — ..."). Same
-            // words either way, which is the whole point.
-            expect(message.toLowerCase()).toContain('shown on screen only');
-            expect(message.toLowerCase()).toContain('not saved anywhere');
-        }
+        const message = (setToast.mock.calls.at(-1)?.[0] as ToastCall)?.message ?? '';
+        expect(message).not.toContain('server');
+        expect(message).not.toContain('correction');
     });
 
     it('an older result with no evidence field at all is treated as no evidence', async () => {
-        // Defends the `?? 0`: absence must never be read as success.
+        // Defends the `?? 0`: absence must never be read as a server acceptance.
         updateLog.mockResolvedValue({ success: true, log: makeLog('1') });
 
         await submitEdit();
 
-        expect(setToast).toHaveBeenCalledWith({
-            message: 'Shown on screen only — this edit is not saved anywhere.',
-            type: 'partial',
-        });
+        expect(setToast).toHaveBeenCalledWith({ message: ON_PHONE_MR, type: 'success' });
+    });
+
+    it('a FAILED edit still says nothing was saved, and never enters success', async () => {
+        // The one path where "not saved" is still true. `updateLog` returns
+        // `success: false` when the correction was refused or `repo.save` threw,
+        // and the caller must not soften that into an on-phone claim.
+        updateLog.mockResolvedValue({ success: false, error: 'Request failed with status code 403' });
+
+        await submitEdit();
+
+        expect(setToast).not.toHaveBeenCalledWith(
+            expect.objectContaining({ type: 'success' }),
+        );
+        expect(setStatus).not.toHaveBeenCalledWith('success');
     });
 });

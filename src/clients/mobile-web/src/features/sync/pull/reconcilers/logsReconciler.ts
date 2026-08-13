@@ -188,6 +188,23 @@ function preserveLocalOnlyFields(
         labour: resolveLabour(incoming.labour, existing.labour),
         financialSummary: existing.financialSummary ?? incoming.financialSummary,
         context: serverStatedContext ? incoming.context : (existing.context ?? incoming.context),
+        // LABOUR_PHASE2 PHASE 4 — `patches` is LOCAL HISTORY THE WIRE CANNOT
+        // EXPRESS, so a pull may not delete it (`P3`: do not hard-delete
+        // something history should still be able to explain).
+        //
+        // `DailyLogDto` carries no counterpart and `toDailyLog` sets no
+        // `patches`, so `incoming.patches` is always `undefined` here — the
+        // blanket-empties case this whole function exists for, not a value the
+        // server stated. `existing.patches ?? incoming.patches` is the same
+        // shape `financialSummary` above already uses.
+        //
+        // IT BECAME REACHABLE IN PHASE 4 AND NOT BEFORE. A `PatchEvent` is the
+        // before-snapshot `UpdateLog` takes when a VERIFIED log is edited, and
+        // until Phase 4 that use case never called `repo.save`, so no patch ever
+        // reached Dexie. Now that one does, the very next pull carrying this log
+        // would have erased the only local record of what the log said before
+        // the correction — writing history and destroying it a moment later.
+        patches: existing.patches ?? incoming.patches,
     };
 }
 

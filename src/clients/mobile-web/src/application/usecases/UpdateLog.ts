@@ -25,29 +25,29 @@ export interface UpdateLogResponse {
     error?: string;
     log?: DailyLog;
     /**
-     * Labour Phase 2 / T2 — how many labour corrections this call actually
-     * POSTed and had accepted by the server. PURELY ADDITIVE: nothing about
-     * what this use case persists, when, or in what order changed.
+     * Labour Phase 2 / T2 — how many labour corrections this call POSTed and
+     * had accepted by the server.
      *
-     * It exists because the caller (`useLogCommands.handleManualSubmit`'s edit
-     * branch) fired a success toast off `success === true` alone — and
-     * `success === true` is ALSO what an edit that persisted absolutely
-     * nothing returns. Every non-labour category (crop activities, irrigation,
-     * inputs, machinery, expenses) still has no server-side persistence path,
-     * and this use case deliberately does not call `repo.save` either, so such
-     * an edit lives only in React state until the next reload. The toast had no
-     * way to tell the two apart; now it does.
+     * LABOUR_PHASE2 PHASE 4 — WHAT THIS NUMBER NOW MEANS, AND WHAT IT NEVER
+     * MEANT. It has always been a count of SERVER acceptances, and it still is.
+     * What changed underneath it is the other half: this use case now calls
+     * `repo.save`, so a successful edit is written to the local ledger whether
+     * this number is 0 or 5. The two facts are therefore independent and the
+     * caller must not read either one as the other:
+     *
+     *   `n > 0`  — the server accepted all n corrections AND the record was
+     *              written locally.
+     *   `0`      — nothing was sent to a server (nothing labour-shaped changed),
+     *              and the record was still written locally.
      *
      * `> 0` is a REAL server outcome: `postLabourCorrection` throws on any
-     * non-2xx, and a throw is caught below into `success: false`. So a `true`
-     * result carrying `n > 0` means the server accepted all n. A replayed
+     * non-2xx, and a throw is caught below into `success: false`. A replayed
      * (`alreadyApplied`) correction counts — that response is documented as a
      * success outcome that proves the retry did not double-write.
      *
-     * `0` means NOTHING was persisted anywhere by this call.
-     *
-     * NOT a fix for the missing `repo.save` — Phase 4 owns that. This only
-     * stops the caller claiming what it cannot evidence (`P4`, `P5`).
+     * It is still the ONLY evidence the caller has about a server, which is why
+     * it is still reported: `success: true` alone cannot distinguish "the
+     * server has your 6" from "your phone has your 6" (`P4`, `P5`).
      */
     persistedLabourCorrections?: number;
 }
@@ -164,13 +164,45 @@ export function buildLabourCorrections(
  * Enforces "Immutable Verification" rule:
  * - If log is APPROVED, create a PatchEvent and reset status to PENDING.
  *
- * PERSISTENCE, HONESTLY (Labour V1 Task 12b.7): the LABOUR portion of an edit is
- * sent to the Task 12b correction route and is genuinely persisted. Every other
- * edit category — crop activities, irrigation, inputs, machinery, expenses — has
- * NO server-side persistence path yet, so this use case still does not persist
- * them. That is deliberate (P5): a truthful missing feature beats a fake working
- * one, and the alternative is what step 12b.7b deleted.
+ * PERSISTENCE (LABOUR_PHASE2 PHASE 4 — §A7.1, doctrine `P2`/`P3`).
  *
+ * THE DEFECT THIS CLOSES. Until this change the function called `repo.getById`
+ * and never `repo.save`, and its caller's `setHistory` is React state with no
+ * persist subscriber. So a farmer corrected 8 to 6, the server accepted it, and
+ * the next reload showed 8 again — the literal *"phone says 8, server says 6"*
+ * §A7.1 names. `P2` calls correction "an adoption safety net, not an advanced
+ * feature": a farmer who cannot trust a correction stops logging at all.
+ *
+ * WHO HOLDS WHAT (`P3` requires this named, never left for a reader to infer):
+ *
+ *   CURRENT TRUTH — `db.logs`, written here by `repo.save`. This is the record
+ *                   every everyday screen reads, and the only thing a reload
+ *                   consults.
+ *   HISTORY       — three append-only stores, none of which any everyday view
+ *                   reads: the server's `labour_corrections` rows (what it was,
+ *                   who changed it, when — written by the correction route);
+ *                   `db.auditEvents`, appended by `repo.save` from the audit
+ *                   context passed below; and `finalLog.patches`, the
+ *                   before-snapshot taken above for a verified log.
+ *
+ * Nothing is overwritten and nothing is hard-deleted: `patches` is APPENDED to
+ * (`:235`), and the audit event is `db.auditEvents.add`.
+ *
+ * ORDER IS LOAD-BEARING: THE SERVER ANSWERS FIRST. The local write happens
+ * AFTER the correction loop, never before it. Saving first would mean a refused
+ * or unreachable correction still left 6 on the phone while the server held 8 —
+ * the same divergence with the signs flipped, and this time self-inflicted by
+ * the very function written to end it. A `repo.save` that throws is caught into
+ * `success: false` for the same reason: this use case never reports a save it
+ * did not make.
+ *
+ * WHAT IS STILL TRUE, AND STATED RATHER THAN GLOSSED: only the LABOUR portion of
+ * an edit has a server path. Crop activities, irrigation, inputs, machinery and
+ * expenses are now durable ON THIS PHONE and nowhere else. A second device will
+ * not see them, and a pull that carries this log will rebuild those categories
+ * from the server's own record. That is a real limit and the caller says so.
+ *
+
  * WHAT 12b.7b DELETED, AND WHY IT MUST NOT COME BACK. This function used to
  * enqueue `SyncMutationName.AddLogTask` with
  * `{dailyLogId, action, updatedData, reason, actorId}`. The server's allow-list
@@ -235,7 +267,7 @@ export const updateLog = async (
             finalLog.patches = [...(existingLog.patches || []), patch];
         }
 
-        // 4. Persist the LABOUR portion of the edit (Task 12b.7).
+        // 4. Send the LABOUR portion of the edit to the server (Task 12b.7).
         //    A failure here is REPORTED, never swallowed: the caller
         //    (`useLogCommands.handleManualSubmit`) throws on `success: false`, so
         //    the farmer learns the correction did not land instead of seeing a
@@ -271,10 +303,33 @@ export const updateLog = async (
             }
         }
 
+        // 5. LABOUR_PHASE2 PHASE 4 — THE EDIT REACHES THE LOCAL LEDGER.
+        //
+        //    UNCONDITIONAL, and that is the point: an edit that changed only
+        //    irrigation has no correction to POST, and it is exactly the edit
+        //    that used to evaporate on reload with nothing said about it.
+        //
+        //    It runs only after the correction loop has returned without
+        //    throwing, so the phone never gets ahead of the server (see the
+        //    header). A throw here falls into the catch below and is reported as
+        //    a failure — the record simply stays as it was, which is the same
+        //    place a farmer can retry from.
+        //
+        //    The audit context is what makes this a CORRECTION rather than a
+        //    silent mutation (`P3`): `DexieLogsRepository.save` appends one
+        //    `db.auditEvents` row carrying the actor, the reason and the time,
+        //    in the same transaction as the record write. Nothing in the
+        //    everyday read path reads that table — `getAll`/`getById`/`getByDate`
+        //    all read `db.logs` only — so history is kept without being pushed
+        //    into the farmer's daily view.
+        await repo.save(finalLog, {
+            actorId: request.actorId,
+            reason: request.reason || 'Edit to log',
+        });
+
         // `corrections.length` and not a separate counter: the loop above either
         // POSTed every one of them or threw out of this try block, so reaching
-        // here means all of them were accepted. Reporting the count is the only
-        // thing added here — no persistence behaviour was touched (T2).
+        // here means all of them were accepted.
         return { success: true, log: finalLog, persistedLabourCorrections: corrections.length };
 
     } catch (e: unknown) {

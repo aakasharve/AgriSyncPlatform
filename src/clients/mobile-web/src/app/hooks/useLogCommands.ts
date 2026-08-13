@@ -10,6 +10,7 @@ import { WeatherPort } from '../../application/ports/WeatherPort';
 import { computeDayState } from '../../shared/utils/dayState';
 import type { LastSavedLogSummaryItem } from '../uiRuntimeTypes';
 import { countAssertedPlots } from '../helpers/countAssertedPlots';
+import { createInFlightSaveLock } from '../helpers/inFlightSaveLock';
 import type { LogIntent } from './useAppNavigation';
 
 // ARCHITECTURE FIX: Import Service Class and Hook
@@ -242,6 +243,13 @@ export const useLogCommands = ({
     const logCommandService = useMemo(() => {
         return new LogCommandServiceImpl(dataSource.logs, weatherProvider);
     }, [dataSource.logs, weatherProvider]);
+
+    /**
+     * LABOUR_PHASE2 PHASE 4 (§A7.2) — the double-tap guard. One lock per mounted
+     * hook, created once; see `app/helpers/inFlightSaveLock.ts` for why it
+     * expires and why it is invisible.
+     */
+    const saveLock = useMemo(() => createInFlightSaveLock(), []);
 
     // --- HELPER: CALCULATE SUMMARY ---
     // Labour Phase 2 / T2 (review round 1, finding B1) — the enqueue outcome now
@@ -497,16 +505,44 @@ export const useLogCommands = ({
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const handleManualSubmit = useCallback(async (data: any) => {
         if (!hasActiveLogContext) return; // SAFE GUARD
+
+        // LABOUR_PHASE2 PHASE 4 (§A7.2) — the second tap of a double-tap stops
+        // here, before `createFromManual` can mint a second log id. Silent by
+        // design: no message, no disabled control, nothing the farmer must
+        // acknowledge (`P9`).
+        if (!saveLock.tryAcquire()) return;
+
         try {
             let savedLogIds: string[];
-            // Labour Phase 2 / T2 (review round 1, finding B1) — did this submit
-            // write anything to the LOCAL LEDGER? Only the create branch does
-            // (`confirmAndSave` -> `repo.batchSave`). The edit branch writes
-            // NOWHERE: `updateLog` calls `repo.getById` and never `repo.save`,
-            // and `setHistory` is React state with no persist subscriber. That
-            // distinction is what decides whether the full-screen
-            // "Saved to Ledger" panel (`mainView.tsx:600`) may be shown at all.
-            let ledgerWritten: boolean;
+            // May this submit show the full-screen "Saved to Ledger" panel
+            // (`mainView.tsx:645`)?
+            //
+            // LABOUR_PHASE2 PHASE 4 — THE REASON CHANGED; THE ANSWER DID NOT.
+            // T2 answered "no" for the edit branch because nothing was written
+            // anywhere. That is no longer true — `updateLog` now calls
+            // `repo.save`, so the panel's headline would be accurate. It still
+            // stays `false`, on its own merits:
+            //
+            //   - The panel is CREATE-SHAPED. Its body is `lastSavedLogSummary`:
+            //     a "Stored In" crop/plot card, a bucket breakdown of what the
+            //     log CONTAINS, and a `syncQueued` badge derived from an enqueue
+            //     outcome. An edit performs no enqueue, so that badge would have
+            //     no evidence either way, and "Labour ×1 · Irrigation ×2"
+            //     answers a question the farmer did not ask. They corrected 8 to
+            //     6; the panel would not mention it.
+            //   - It costs a screen state on the CORRECTION path, which `P2`
+            //     wants cheaper than capture, not dearer — it replaces the form
+            //     and hands back only "Review Details" / "View Activity
+            //     Heatmap".
+            //   - The confirmation that actually serves a correction already
+            //     happens: `setHistory` plus the durable write mean the ledger
+            //     list underneath shows 6 where it said 8. Seeing the number
+            //     change is stronger evidence than a green panel asserting it.
+            //
+            // A correction-shaped panel ("8 → 6, sent to the server") would be a
+            // real improvement. It is a new `.tsx` surface and needs a design
+            // pass; reusing this one is not the same thing.
+            let showSavedToLedgerPanel: boolean;
 
             if (data.originalLogId) {
                 // --- SECURE UPDATE ---
@@ -528,95 +564,67 @@ export const useLogCommands = ({
                     return [result.log as DailyLog, ...filtered];
                 });
 
-                // Labour Phase 2 / T2 — THE FIFTH TOAST. This branch never calls
-                // `enqueueLogsForSync` at all; queueing for an edit happens
-                // inside `application/usecases/UpdateLog.ts`. It used to fire
-                // the same `Logged.` success line off `result.success` alone —
-                // but `success: true` is also exactly what an edit that
-                // persisted NOTHING returns, because only the LABOUR portion of
-                // an edit has a server-side path (the Task 12b correction
-                // route). Crop activities, irrigation, inputs, machinery and
-                // expenses have none, and this use case does not `repo.save`
-                // either, so such an edit survives only in React state until the
-                // next reload.
+                // LABOUR_PHASE2 PHASE 4 — R19 EXECUTED: THE OLD SENTENCE IS
+                // DELETED, NOT SOFTENED.
                 //
-                // `persistedLabourCorrections` is the only real evidence
-                // available, and it IS a server outcome: `postLabourCorrection`
-                // throws on any non-2xx and the throw becomes `success: false`.
+                // Both branches used to end in "shown on screen only — not saved
+                // anywhere". That was TRUE, and it was a truthful description of
+                // a missing feature: `updateLog` called `repo.getById` and never
+                // `repo.save`, and `setHistory` is React state with no persist
+                // subscriber, so the edit really did die on the next reload.
                 //
-                // The zero case is deliberately NOT `NEEDS_FIX`. "अडकलं — तपासा"
-                // means the system is stuck and the farmer can act; here there
-                // is nothing to retry and nothing to check, because the feature
-                // does not exist yet. Claiming otherwise would teach the farmer
-                // the app is broken (`P5`). So it says less instead. It also
-                // does NOT say "not saved YET": there is no pending write and no
-                // scheduled one, and a false promise of eventual saving is the
-                // same class of defect as a false claim of saving. Phase 4 owns
-                // the real fix; revisit this wording when it lands.
+                // `updateLog` now persists (§A7.1). The moment it did, that
+                // sentence became FALSE in the other direction — telling a
+                // farmer their saved record was not saved, which would teach
+                // them to distrust a correction that worked and re-enter it.
+                // Editing the wording to keep the sentence alive was the wrong
+                // move; it is gone, and so are the tests that pinned it.
                 //
-                // Nor does it borrow `sync.onPhone`: unlike a skipped CREATE,
-                // this edit is not on the phone either. `setHistory` is React
-                // state and nothing persists it.
+                // WHAT REPLACES IT SAYS TWO TRUE THINGS AND NO MORE:
                 //
-                // FINDING C-2 — THE `> 0` BRANCH HAD THE SAME DEFECT, SMALLER.
-                // It used to stop after "N labour corrections sent to the
-                // server." in GREEN, with a tick. Every word of that is true and
-                // evidenced; the lie was everything it left out. `ManualEntry`
-                // submits the WHOLE log (`manual-entry/ManualEntry.tsx:281`
-                // builds one `userDraft` carrying cropActivities, irrigation,
-                // inputs, machinery, expenses AND labour), so one edit routinely
-                // changes irrigation hours AND a headcount. `updateLog` sends
-                // only the labour half and never calls `repo.save`, so the
-                // farmer who fixed both read "1 labour correction sent to the
-                // server", saw a green tick, and lost the irrigation change on
-                // the next reload without ever being told. A green tick over a
-                // partial truth is the same defect class as finding B1 on the
-                // create path — this is the one branch B1 did not cover.
+                //   1. The record is on the phone. That is now evidenced —
+                //      `updateLog` returned success only after `repo.save`
+                //      resolved — and it is said in the app's OWN existing
+                //      vocabulary, `sync.onPhone` (`फोनवर सेव्ह ✓` /
+                //      `Saved on phone`), the same string T1 gave the chip and
+                //      T2 gave the skipped-create toast. Three surfaces, one
+                //      claim, no fourth dialect (`R6`).
+                //   2. What reached the SERVER, and only when something did.
+                //      `persistedLabourCorrections` is the only server evidence
+                //      in scope: `postLabourCorrection` throws on any non-2xx and
+                //      the throw becomes `success: false`.
                 //
-                // So it now says BOTH true things, in the sibling branch's own
-                // vocabulary rather than a third dialect: what reached the
-                // server, then "shown on screen only" / "not saved anywhere" for
-                // the rest.
-                //
-                // STATED PLAINLY, because it is a real imprecision: when the
-                // farmer changed ONLY labour, "the rest of this edit" is an empty
-                // set and the second sentence warns about nothing. Nothing here
-                // can tell the two apart — `data` is the whole form either way,
-                // and deciding otherwise would mean re-deriving
-                // `buildLabourCorrections`'s changed-field diff for every other
-                // category, which is Phase 4's job and not a wording fix. An
-                // over-wide "some of this did not save" costs a moment's doubt;
-                // the silence it replaces cost the farmer their irrigation entry.
+                // AND THE ZERO BRANCH STOPS SHORT. "Nothing was sent" is true but
+                // it is also the normal, uninteresting case — a farmer who fixed
+                // an irrigation figure sent nothing because there was nothing
+                // labour-shaped to send. Announcing an absence there would be a
+                // nag on the correction path (`P9`), so it makes no server claim
+                // at all rather than a negative one. `P4`'s rule cuts both ways:
+                // no claim beats a claim without a use.
                 const persistedCorrections = result.persistedLabourCorrections ?? 0;
+                const onPhone = translate(SYNC_HONESTY_I18N_KEYS.ON_PHONE, language);
                 setToast({
                     message: persistedCorrections > 0
-                        ? `${persistedCorrections} labour correction${persistedCorrections === 1 ? '' : 's'} sent to the server. The rest of this edit is shown on screen only — not saved anywhere.`
-                        : 'Shown on screen only — this edit is not saved anywhere.',
-                    // `'partial'` on BOTH branches, and never `'error'` or
-                    // `'success'`.
+                        ? `${onPhone} — ${persistedCorrections} labour correction${persistedCorrections === 1 ? '' : 's'} sent to the server.`
+                        : onPhone,
+                    // `'success'` now, where C-2 correctly used `'partial'`.
                     //
-                    // Not `'error'`: NOTHING FAILED here. Red says "it broke, try
-                    // again", and there is nothing to try again; the edit path
-                    // has no persistence yet (Phase 4 owns that). A truthful
-                    // missing feature must not be dressed as a fault (`P5`).
+                    // `'partial'` was right for an outcome that was partly landed
+                    // and partly NOWHERE. That outcome no longer exists: the
+                    // record is in `db.logs`, exactly as a created one is, and the
+                    // create path calls that state `'success'`. Keeping amber
+                    // would make a correction look more doubtful than the capture
+                    // it corrects — training the farmer away from the one flow
+                    // `P2` needs them to trust.
                     //
-                    // Not `'success'`: green + `CheckCircle` is read before any
-                    // words are, and it means "all done". On an outcome that is
-                    // partly landed and partly nowhere, the tick does the lying
-                    // that the sentence no longer does. `'partial'` is amber with
-                    // an `AlertCircle` (`ActionToast.tsx:39-43,73-84`) — notice
-                    // this, do not fear it — and it is the exact toast type
-                    // Phase 1 introduced for this shape of outcome.
-                    //
-                    // It also buys the reading time: `'partial'` stays up 7000ms
-                    // where `'success'` gets 3000, and this is now a two-sentence
-                    // message on the ONLY confirmation surface the edit path has
-                    // (it deliberately never enters the `'success'` full-screen
-                    // panel — see `ledgerWritten` below).
-                    type: 'partial'
+                    // The tick is not over-claiming here the way it was before: it
+                    // sits over `फोनवर सेव्ह ✓`, a claim about the phone, and any
+                    // server claim beside it is separately evidenced. Nothing
+                    // failed, and nothing is pending.
+                    type: 'success'
                 });
                 savedLogIds = [(result.log as DailyLog).id];
-                ledgerWritten = false;
+                showSavedToLedgerPanel = false;
 
             } else {
                 // --- CREATE NEW ---
@@ -651,7 +659,7 @@ export const useLogCommands = ({
                     type: 'success'
                 });
                 savedLogIds = newLogs.map(l => l.id);
-                ledgerWritten = true;
+                showSavedToLedgerPanel = true;
             }
 
             // spec: 2026-07-13-labour-attendance-approval-design (Task 3.5) —
@@ -667,28 +675,31 @@ export const useLogCommands = ({
                 setStatus('idle');
                 setCurrentRoute('labour');
             } else {
-                // Labour Phase 2 / T2 (review round 1, finding B1) — `'success'`
-                // is not a mood, it is the trigger for a full-screen
-                // "Saved to Ledger" panel that persists until the farmer
-                // navigates away, long after the 3000ms toast has gone
-                // (`ActionToast.tsx:16`). An EDIT wrote to no ledger at all, so
-                // entering that state would leave the longest-lived surface in
-                // the flow making the one claim that is flatly false.
+                // `'success'` is not a mood, it is the trigger for the
+                // full-screen "Saved to Ledger" panel, which persists until the
+                // farmer navigates away — long after the toast has gone
+                // (`ActionToast.tsx:16`). See `showSavedToLedgerPanel` above for
+                // why an edit still declines it now that it genuinely persists.
                 //
                 // A skipped CREATE keeps `'success'` on purpose. Its record IS
                 // in the local ledger, so the panel's headline is true; what is
                 // false there is only the implied "and it is on its way", and
-                // the fix for that is the per-log `syncQueued` flag now carried
-                // on `lastSavedLogSummary` (rendered by `mainView.tsx`, batched
-                // into the L5b run) — NOT dropping to `'idle'`, which would
-                // return the farmer to a populated form and invite a duplicate
-                // record. Wrong trade: a soft contradiction is not worth a real
-                // double-entry.
-                setStatus(ledgerWritten ? 'success' : 'idle');
+                // the fix for that is the per-log `syncQueued` flag carried on
+                // `lastSavedLogSummary` (rendered by `mainView.tsx`) — NOT
+                // dropping to `'idle'`, which would return the farmer to a
+                // populated form and invite a duplicate record. Wrong trade: a
+                // soft contradiction is not worth a real double-entry.
+                setStatus(showSavedToLedgerPanel ? 'success' : 'idle');
             }
         } catch (e) {
             console.error("Critical error in handleManualSubmit:", e);
             setError("Failed to save logs. Please try again.");
+        } finally {
+            // `finally`, so a save that FAILED releases as promptly as one that
+            // succeeded. "Please try again" above must be an instruction the
+            // farmer can actually follow — a failed save that left the button
+            // inert would turn one bad network moment into a lost day (`P9`).
+            saveLock.release();
         }
         // Pre-existing exhaustive-deps gap (predates Task 3.5; calculateLogSummary
         // and isDemoMode were already missing before this change) — Task 3.5
@@ -698,7 +709,7 @@ export const useLogCommands = ({
         // make this callback lose its memoization on every render — a
         // separate, deliberate fix, not a byproduct of this task.
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [hasActiveLogContext, logScope, crops, farmerProfile, logCommandService, setHistory, setPlannedTasks, setStatus, setError, setLastSavedLogSummary, setLastSavedLogIds, computeClosureDelta, history, setToast, logIntent, setCurrentRoute, setLastLabourLogIds, language]);
+    }, [hasActiveLogContext, logScope, crops, farmerProfile, logCommandService, setHistory, setPlannedTasks, setStatus, setError, setLastSavedLogSummary, setLastSavedLogIds, computeClosureDelta, history, setToast, logIntent, setCurrentRoute, setLastLabourLogIds, language, saveLock]);
 
     const handleWizardSubmit = useCallback(async (logs: DailyLog[]) => {
         if (logs.length === 0) {

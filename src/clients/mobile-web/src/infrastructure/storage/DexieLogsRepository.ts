@@ -121,13 +121,44 @@ export class DexieLogsRepository implements LogsRepository {
         }
 
         await db.transaction('rw', [db.logs, db.outbox, db.auditEvents], async () => {
-            // 1. Write log record
-            await db.logs.put(toRecord(log));
+            // 1. Write log record.
+            //
+            //    LABOUR_PHASE2 PHASE 4 — `serverModifiedAtUtc` SURVIVES A LOCAL
+            //    EDIT. `toRecord` builds a record from a `DailyLog`, and this
+            //    column is not on a `DailyLog`: it is sync control state written
+            //    by exactly one writer, `reconcileLogs`, which uses it to skip a
+            //    STALE pull rather than overwrite a fresher local row
+            //    (`logsReconciler.ts:94-100`). A plain `put(toRecord(log))`
+            //    therefore ERASED it.
+            //
+            //    That was inert until Phase 4, because `save` had no production
+            //    caller at all — `UpdateLog` is its first. With one, the erasure
+            //    would silently disarm the freshness guard for every log a
+            //    farmer edits: the next pull would find no watermark, adopt the
+            //    server's rebuild of the log unconditionally, and take the
+            //    farmer's just-saved irrigation or machinery edit with it, on a
+            //    pull that had nothing new to say about that log.
+            //
+            //    Read from `existing`, never minted. A record this device has
+            //    never pulled has no watermark and still gets none — this cannot
+            //    invent a sync that did not happen (`P4`).
+            await db.logs.put({
+                ...toRecord(log),
+                ...(existing?.serverModifiedAtUtc
+                    ? { serverModifiedAtUtc: existing.serverModifiedAtUtc }
+                    : {}),
+            });
 
             // 2. Write outbox event
             const outboxEvent: OutboxEvent = {
                 idempotencyKey: idempotencyKey(log.id, action!),
-                action: action as any,
+                // Pre-existing `as any`, narrowed to the field's own type to
+                // clear the strict pre-commit ESLint gate on a file this task
+                // stages for the first time. Runtime behaviour is identical —
+                // both are erased at emit; `action` is a `string` by this point
+                // (the `if (!action)` above guarantees it) and this assertion
+                // simply names the union it is being stored as.
+                action: action as OutboxEvent['action'],
                 resourceId: log.id,
                 payload: log,
                 status: 'PENDING',

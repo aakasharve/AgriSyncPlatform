@@ -75,8 +75,16 @@ function makeLog(labour: LabourEvent[]): DailyLog {
     } as unknown as DailyLog;
 }
 
-function makeRepo(log: DailyLog): LogsRepository {
-    return { getById: vi.fn().mockResolvedValue(log) } as unknown as LogsRepository;
+/**
+ * LABOUR_PHASE2 PHASE 4 — `save` is now part of this use case's contract, so the
+ * double is no longer a bare `getById`. `calls` order matters to one test below
+ * and is asserted through `mock.invocationCallOrder`.
+ */
+function makeRepo(log: DailyLog): LogsRepository & { save: ReturnType<typeof vi.fn> } {
+    return {
+        getById: vi.fn().mockResolvedValue(log),
+        save: vi.fn().mockResolvedValue(undefined),
+    } as unknown as LogsRepository & { save: ReturnType<typeof vi.fn> };
 }
 
 const actor = { id: 'user-1' } as unknown as FarmerProfile;
@@ -192,9 +200,9 @@ describe('updateLog — Task 12b.7 labour corrections', () => {
         expect(result.success).toBe(true);
         expect(mockPostCorrection).not.toHaveBeenCalled();
         expect(mockEnqueue).not.toHaveBeenCalled();
-        // T2 / B2 — nothing was POSTed and nothing was written locally either
-        // (this use case never calls `repo.save`). Zero is what forbids the
-        // caller from claiming a save.
+        // Nothing was POSTed. Zero is what forbids the caller claiming a SERVER
+        // outcome — it says nothing about the local write, which happens either
+        // way (see the Phase 4 block below).
         expect(result.persistedLabourCorrections).toBe(0);
     });
 
@@ -247,6 +255,242 @@ describe('updateLog — Task 12b.7 labour corrections', () => {
 
         expect(result.success).toBe(false);
         expect(result.persistedLabourCorrections).toBeUndefined();
+    });
+});
+
+/**
+ * LABOUR_PHASE2 PHASE 4 (§A7.1) — the correction must reach Dexie.
+ *
+ * Until Phase 4 this use case called `repo.getById` and never `repo.save`, and
+ * its caller's `setHistory` is React state with no persist subscriber. A farmer
+ * corrected 8 to 6, the server accepted it, and the next reload showed 8 again.
+ */
+describe('updateLog — Phase 4: the edit reaches the local ledger', () => {
+    it('writes the corrected record to the repository', async () => {
+        const existing = makeLog([makeLabour({ count: 8 })]);
+        const repo = makeRepo(existing);
+
+        await updateLog(
+            {
+                logId: 'log-1',
+                updatedData: { labour: [makeLabour({ count: 6 })] },
+                actorId: 'user-1',
+                reason: 'मोजून पाहिलं',
+            },
+            repo,
+            actor,
+        );
+
+        expect(repo.save).toHaveBeenCalledTimes(1);
+        const [saved] = repo.save.mock.calls[0];
+        expect(saved.id).toBe('log-1');
+        expect(saved.labour[0].count).toBe(6);
+    });
+
+    it('carries the actor and the reason, so the audit row can say who and why', async () => {
+        // `P3` — a correction is never a silent mutation.
+        // `DexieLogsRepository.save` turns this context into one append-only
+        // `db.auditEvents` row, in the same transaction as the record write.
+        const existing = makeLog([makeLabour({ count: 8 })]);
+        const repo = makeRepo(existing);
+
+        await updateLog(
+            {
+                logId: 'log-1',
+                updatedData: { labour: [makeLabour({ count: 6 })] },
+                actorId: 'mukadam-7',
+                reason: 'मोजून पाहिलं',
+            },
+            repo,
+            actor,
+        );
+
+        expect(repo.save.mock.calls[0][1]).toEqual({
+            actorId: 'mukadam-7',
+            reason: 'मोजून पाहिलं',
+        });
+    });
+
+    it('persists an edit that changed no labour at all', async () => {
+        // The edit that used to evaporate with nothing said about it: a farmer
+        // fixes an irrigation figure, there is no correction to POST, and before
+        // Phase 4 the whole edit died on the next reload.
+        const existing = makeLog([makeLabour({ count: 8 })]);
+        const repo = makeRepo(existing);
+
+        const result = await updateLog(
+            {
+                logId: 'log-1',
+                updatedData: { date: '2026-08-11' },
+                actorId: 'user-1',
+                reason: 'edit',
+            },
+            repo,
+            actor,
+        );
+
+        expect(result.success).toBe(true);
+        expect(mockPostCorrection).not.toHaveBeenCalled();
+        expect(repo.save).toHaveBeenCalledTimes(1);
+        expect(repo.save.mock.calls[0][0].date).toBe('2026-08-11');
+    });
+
+    it('saves AFTER the server answered, never before it', async () => {
+        // Order is load-bearing. Saving first would leave 6 on the phone while
+        // the server still held 8 whenever the POST was refused — the same
+        // divergence §A7.1 exists to end, with the signs flipped.
+        const existing = makeLog([makeLabour({ count: 8 })]);
+        const repo = makeRepo(existing);
+
+        await updateLog(
+            {
+                logId: 'log-1',
+                updatedData: { labour: [makeLabour({ count: 6 })] },
+                actorId: 'user-1',
+                reason: 'edit',
+            },
+            repo,
+            actor,
+        );
+
+        expect(mockPostCorrection.mock.invocationCallOrder[0])
+            .toBeLessThan(repo.save.mock.invocationCallOrder[0]);
+    });
+
+    it('writes NOTHING locally when the correction was refused', async () => {
+        mockPostCorrection.mockRejectedValue(new Error('Request failed with status code 403'));
+        const existing = makeLog([makeLabour({ count: 8 })]);
+        const repo = makeRepo(existing);
+
+        const result = await updateLog(
+            {
+                logId: 'log-1',
+                updatedData: { labour: [makeLabour({ count: 6 })] },
+                actorId: 'user-1',
+                reason: 'edit',
+            },
+            repo,
+            actor,
+        );
+
+        expect(result.success).toBe(false);
+        expect(repo.save).not.toHaveBeenCalled();
+    });
+
+    it('writes nothing locally when the log has no resolvable farm', async () => {
+        // The early return above the POST loop. A correction that cannot even be
+        // addressed must not leave the phone claiming it landed.
+        mockResolveFarmId.mockResolvedValue(null);
+        const existing = makeLog([makeLabour({ count: 8 })]);
+        const repo = makeRepo(existing);
+
+        const result = await updateLog(
+            {
+                logId: 'log-1',
+                updatedData: { labour: [makeLabour({ count: 6 })] },
+                actorId: 'user-1',
+                reason: 'edit',
+            },
+            repo,
+            actor,
+        );
+
+        expect(result.success).toBe(false);
+        expect(repo.save).not.toHaveBeenCalled();
+    });
+
+    it('reports failure, not success, when the local write itself throws', async () => {
+        const existing = makeLog([makeLabour({ count: 8 })]);
+        const repo = makeRepo(existing);
+        repo.save.mockRejectedValue(new Error('QuotaExceededError'));
+
+        const result = await updateLog(
+            {
+                logId: 'log-1',
+                updatedData: { labour: [makeLabour({ count: 6 })] },
+                actorId: 'user-1',
+                reason: 'edit',
+            },
+            repo,
+            actor,
+        );
+
+        expect(result.success).toBe(false);
+        expect(result.error).toContain('QuotaExceededError');
+    });
+
+    it('P7: correcting attribution alone never changes the reported headcount', async () => {
+        // Eight workers with three people named is still eight. Attribution is
+        // an overlay on a reported quantity, never a replacement — naming people
+        // must not shrink the number, in the POST or in what is written locally.
+        const existing = makeLog([makeLabour({ count: 8, attributedOperators: [] })]);
+        const repo = makeRepo(existing);
+
+        const result = await updateLog(
+            {
+                logId: 'log-1',
+                updatedData: {
+                    labour: [makeLabour({
+                        count: 8,
+                        attributedOperators: [
+                            { fieldOperatorId: 'op-a', displayNameAtAttach: 'रमेश' },
+                            { fieldOperatorId: 'op-b', displayNameAtAttach: 'सीता' },
+                            { fieldOperatorId: 'op-c', displayNameAtAttach: 'गणेश' },
+                        ],
+                    })],
+                },
+                actorId: 'user-1',
+                reason: 'नावं जोडली',
+            },
+            repo,
+            actor,
+        );
+
+        expect(result.success).toBe(true);
+        // No quantity changed, so no quantity correction travels.
+        expect(mockPostCorrection).not.toHaveBeenCalled();
+        const [saved] = repo.save.mock.calls[0];
+        expect(saved.labour[0].count).toBe(8);
+        expect(saved.labour[0].attributedOperators).toHaveLength(3);
+    });
+
+    it('P3: appends to the patch history of a verified log and overwrites none of it', async () => {
+        // The before-snapshot is history; the record is current truth. Editing a
+        // verified log must add to the first without disturbing what is already
+        // there.
+        const existing = makeLog([makeLabour({ count: 8 })]);
+        (existing as unknown as { verification: unknown }).verification = {
+            status: 'APPROVED',
+            required: true,
+        };
+        (existing as unknown as { patches: unknown[] }).patches = [
+            { id: 'older-patch', timestamp: '2026-08-01T00:00:00.000Z', actorId: 'x', reason: 'r', previousState: {} },
+        ];
+        const repo = makeRepo(existing);
+
+        await updateLog(
+            {
+                logId: 'log-1',
+                updatedData: { labour: [makeLabour({ count: 6 })] },
+                actorId: 'mukadam-7',
+                reason: 'मोजून पाहिलं',
+            },
+            repo,
+            actor,
+        );
+
+        const [saved] = repo.save.mock.calls[0];
+        expect(saved.patches).toHaveLength(2);
+        expect(saved.patches[0].id).toBe('older-patch');
+
+        const appended = saved.patches[1];
+        // What it WAS, who changed it, and when.
+        expect(appended.previousState.labour[0].count).toBe(8);
+        expect(appended.actorId).toBe('mukadam-7');
+        expect(appended.reason).toBe('मोजून पाहिलं');
+        expect(Date.parse(appended.timestamp)).not.toBeNaN();
+        // And what it IS now, on the record itself.
+        expect(saved.labour[0].count).toBe(6);
     });
 });
 
