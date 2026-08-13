@@ -72,10 +72,12 @@ namespace ShramSafal.Sync.IntegrationTests.Dfes;
 public sealed class DailyRichnessAggregateTrackedWriteTests(Xunit.Abstractions.ITestOutputHelper output)
     : IAsyncLifetime
 {
-    // agrisync_app is created by migration 20260515090000_BootstrapDbRoles with this
-    // literal local-dev password; roles are cluster-global so it already exists on :5433.
-    private const string AppRoleUser = "agrisync_app";
-    private const string AppRolePassword = "dev_app_change_me";
+    // agrisync_app is created by migration 20260515090000_BootstrapDbRoles. Roles are
+    // CLUSTER-global, so on a cluster where it already exists the migration is a no-op
+    // and the live password is whatever it was rotated to — hence IntegrationPostgres
+    // resolves it from AGRISYNC_TEST_APP_ROLE_PASSWORD, not a constant.
+    private const string AppRoleUser = IntegrationPostgres.AppRoleUser;
+    private static string AppRolePassword => IntegrationPostgres.AppRolePassword;
 
     private static readonly Guid FarmId = Guid.Parse("dfe50000-0000-0000-0000-000000000001");
     private static readonly Guid OwnerUserId = Guid.Parse("dfe50000-0000-0000-0000-000000000002");
@@ -101,23 +103,16 @@ public sealed class DailyRichnessAggregateTrackedWriteTests(Xunit.Abstractions.I
 
     public async Task InitializeAsync()
     {
-        var baseConn = ResolveSuperuserConnectionOrNull();
-        if (baseConn is null)
-        {
-            _skip = true;
-            _skipReason = "No local ShramSafalDb connection string found in appsettings.Development.json.";
-            return;
-        }
+        var baseConn = IntegrationPostgres.ResolveRootConnection();
 
-        try
-        {
-            await using var probe = new NpgsqlConnection(baseConn);
-            await probe.OpenAsync();
-        }
-        catch (Exception ex)
+        // A genuinely ABSENT server self-skips; a server that answers and refuses us
+        // throws (IntegrationPostgres.ProbeOrSkipReasonAsync) — a misconfigured
+        // credential must never masquerade as a clean skip.
+        var probeSkip = await IntegrationPostgres.ProbeOrSkipReasonAsync(baseConn);
+        if (probeSkip is not null)
         {
             _skip = true;
-            _skipReason = $"Native Postgres :5433 unreachable ({ex.GetType().Name}); RequiresPostgres proof skipped.";
+            _skipReason = probeSkip;
             return;
         }
 
@@ -525,27 +520,4 @@ public sealed class DailyRichnessAggregateTrackedWriteTests(Xunit.Abstractions.I
         await cmd.ExecuteNonQueryAsync();
     }
 
-    private static string? ResolveSuperuserConnectionOrNull()
-    {
-        var path = System.IO.Path.Combine(
-            RepoRoot(), "src", "AgriSync.Bootstrapper", "appsettings.Development.json");
-        if (!System.IO.File.Exists(path))
-        {
-            return null;
-        }
-
-        var cfg = new ConfigurationBuilder().AddJsonFile(path, optional: true).Build();
-        var conn = cfg.GetConnectionString("ShramSafalDb");
-        return string.IsNullOrWhiteSpace(conn) ? null : conn;
-    }
-
-    private static string RepoRoot()
-    {
-        var dir = new System.IO.DirectoryInfo(AppContext.BaseDirectory);
-        while (dir is not null && !System.IO.Directory.Exists(System.IO.Path.Combine(dir.FullName, "src")))
-        {
-            dir = dir.Parent;
-        }
-        return dir?.FullName ?? AppContext.BaseDirectory;
-    }
 }

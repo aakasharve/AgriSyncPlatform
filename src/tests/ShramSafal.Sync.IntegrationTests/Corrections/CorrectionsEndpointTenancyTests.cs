@@ -177,15 +177,8 @@ public sealed class CorrectionsEndpointTenancyTests : IClassFixture<CorrectionsE
 /// </summary>
 public sealed class CorrectionsEndpointTenancyFixture : IAsyncLifetime
 {
-    private const string AppRoleUser = "agrisync_app";
-    private const string AppRolePassword = "dev_app_change_me";
-
-    // Non-secret placeholder — the real value comes from REQUIRES_POSTGRES_ROOT_CONN
-    // or ADMIN_TESTS_ADMIN_ROOT_CONN (both checked in ResolveRootConnection() below).
-    // Never a hardcoded credential in tracked source.
-    private static string DefaultRootConnectionString =>
-        Environment.GetEnvironmentVariable("REQUIRES_POSTGRES_ROOT_CONN")
-        ?? "Host=localhost;Port=5433;Database=postgres;Username=postgres;Password=SET_VIA_ENV_OR_secrets_local_credentials_json";
+    private const string AppRoleUser = IntegrationPostgres.AppRoleUser;
+    private static string AppRolePassword => IntegrationPostgres.AppRolePassword;
 
     public static readonly Guid UserA = Guid.Parse("c0eec001-0000-0000-0000-000000000001");
 
@@ -200,17 +193,16 @@ public sealed class CorrectionsEndpointTenancyFixture : IAsyncLifetime
 
     public async Task InitializeAsync()
     {
-        _rootConn = ResolveRootConnection();
+        _rootConn = IntegrationPostgres.ResolveRootConnection();
 
-        try
-        {
-            await using var probe = new NpgsqlConnection(_rootConn);
-            await probe.OpenAsync();
-        }
-        catch (Exception ex)
+        // A genuinely ABSENT server self-skips; a server that answers and refuses us
+        // throws (IntegrationPostgres.ProbeOrSkipReasonAsync) — a misconfigured
+        // credential must never masquerade as a clean skip.
+        var skipReason = await IntegrationPostgres.ProbeOrSkipReasonAsync(_rootConn);
+        if (skipReason is not null)
         {
             Skip = true;
-            SkipReason = $"Native Postgres :5433 unreachable ({ex.GetType().Name}); RequiresPostgres proof skipped.";
+            SkipReason = skipReason;
             return;
         }
 
@@ -331,37 +323,6 @@ public sealed class CorrectionsEndpointTenancyFixture : IAsyncLifetime
         return app;
     }
 
-    private static string ResolveRootConnection()
-    {
-        var env = Environment.GetEnvironmentVariable("ADMIN_TESTS_ADMIN_ROOT_CONN");
-        if (!string.IsNullOrWhiteSpace(env))
-        {
-            return new NpgsqlConnectionStringBuilder(env) { Database = "postgres" }.ConnectionString;
-        }
-
-        var appsettings = Path.Combine(RepoRoot(), "src", "AgriSync.Bootstrapper", "appsettings.Development.json");
-        if (File.Exists(appsettings))
-        {
-            var cfg = new ConfigurationBuilder().AddJsonFile(appsettings, optional: true).Build();
-            var conn = cfg.GetConnectionString("ShramSafalDb");
-            if (!string.IsNullOrWhiteSpace(conn))
-            {
-                return new NpgsqlConnectionStringBuilder(conn) { Database = "postgres" }.ConnectionString;
-            }
-        }
-
-        return DefaultRootConnectionString;
-    }
-
-    private static string RepoRoot()
-    {
-        var dir = new DirectoryInfo(AppContext.BaseDirectory);
-        while (dir is not null && !Directory.Exists(Path.Combine(dir.FullName, "src")))
-        {
-            dir = dir.Parent;
-        }
-        return dir?.FullName ?? AppContext.BaseDirectory;
-    }
 }
 
 /// <summary>

@@ -98,11 +98,12 @@ namespace ShramSafal.Sync.IntegrationTests;
 [Trait("Category", "RequiresPostgres")]
 public sealed class LedgerDerivationSupersessionRealPostgresTests(Xunit.Abstractions.ITestOutputHelper output) : IAsyncLifetime
 {
-    // agrisync_app is created by migration 20260515090000_BootstrapDbRoles with
-    // this literal local-dev password; roles are cluster-global so it already
-    // exists on the :5433 cluster.
-    private const string AppRoleUser = "agrisync_app";
-    private const string AppRolePassword = "dev_app_change_me";
+    // agrisync_app is created by migration 20260515090000_BootstrapDbRoles. Roles are
+    // CLUSTER-global, so on a cluster where it already exists the migration is a no-op
+    // and the live password is whatever it was rotated to — hence IntegrationPostgres
+    // resolves it from AGRISYNC_TEST_APP_ROLE_PASSWORD, not a constant.
+    private const string AppRoleUser = IntegrationPostgres.AppRoleUser;
+    private static string AppRolePassword => IntegrationPostgres.AppRolePassword;
 
     private static readonly Guid FarmId = Guid.Parse("aaaa1111-1111-1111-1111-111111111111");
     private static readonly Guid OwnerAccountId = Guid.Parse("aaaa2222-2222-2222-2222-222222222222");
@@ -161,25 +162,17 @@ public sealed class LedgerDerivationSupersessionRealPostgresTests(Xunit.Abstract
 
     public async Task InitializeAsync()
     {
-        // ── Resolve the local dev superuser connection (never echoed) ──────────
-        var baseConn = ResolveSuperuserConnectionOrNull();
-        if (baseConn is null)
-        {
-            _skip = true;
-            _skipReason = "No local ShramSafalDb connection string found in appsettings.Development.json.";
-            return;
-        }
+        // ── Resolve the superuser connection (never echoed) ────────────────────
+        var baseConn = IntegrationPostgres.ResolveRootConnection();
 
-        // ── Reachability probe — skip cleanly if native :5433 is down ──────────
-        try
-        {
-            await using var probe = new NpgsqlConnection(baseConn);
-            await probe.OpenAsync();
-        }
-        catch (Exception ex)
+        // ── Reachability probe — an ABSENT server skips cleanly; a server that
+        //    answers and REFUSES us throws, because a misconfigured credential
+        //    reported as a skip is how an unexecuted proof reports green. ───────
+        var probeSkip = await IntegrationPostgres.ProbeOrSkipReasonAsync(baseConn);
+        if (probeSkip is not null)
         {
             _skip = true;
-            _skipReason = $"Native Postgres :5433 unreachable ({ex.GetType().Name}); RequiresPostgres proof skipped.";
+            _skipReason = probeSkip;
             return;
         }
 
@@ -539,37 +532,6 @@ public sealed class LedgerDerivationSupersessionRealPostgresTests(Xunit.Abstract
     // ─────────────────────────────────────────────────────────────────────────
     // Helpers.
     // ─────────────────────────────────────────────────────────────────────────
-
-    private static string? ResolveSuperuserConnectionOrNull()
-    {
-        // Read the local dev connection from the Bootstrapper appsettings the
-        // same way the app does. The password is never printed by this test.
-        var candidates = new[]
-        {
-            System.IO.Path.Combine(RepoRoot(), "src", "AgriSync.Bootstrapper", "appsettings.Development.json"),
-        };
-        foreach (var path in candidates)
-        {
-            if (!System.IO.File.Exists(path)) continue;
-            var cfg = new ConfigurationBuilder().AddJsonFile(path, optional: true).Build();
-            var conn = cfg.GetConnectionString("ShramSafalDb");
-            if (!string.IsNullOrWhiteSpace(conn)) return conn;
-        }
-        return null;
-    }
-
-    private static string RepoRoot()
-    {
-        // Walk up from the test bin dir to the repo root (the folder that holds
-        // the src/ tree). AppContext.BaseDirectory is
-        // .../src/tests/ShramSafal.Sync.IntegrationTests/bin/<cfg>/net10.0/.
-        var dir = new System.IO.DirectoryInfo(AppContext.BaseDirectory);
-        while (dir is not null && !System.IO.Directory.Exists(System.IO.Path.Combine(dir.FullName, "src")))
-        {
-            dir = dir.Parent;
-        }
-        return dir?.FullName ?? AppContext.BaseDirectory;
-    }
 
     private static async Task<long> ScalarLongAsync(
         NpgsqlConnection db, string sql, params (string Name, object Value)[] args)

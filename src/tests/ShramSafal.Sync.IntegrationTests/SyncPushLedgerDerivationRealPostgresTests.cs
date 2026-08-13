@@ -63,11 +63,12 @@ namespace ShramSafal.Sync.IntegrationTests;
 [Trait("Category", "RequiresPostgres")]
 public sealed class SyncPushLedgerDerivationRealPostgresTests(Xunit.Abstractions.ITestOutputHelper output) : IAsyncLifetime
 {
-    // agrisync_app is created by migration 20260515090000_BootstrapDbRoles with
-    // this literal local-dev password; roles are cluster-global so it already
-    // exists on the :5433 cluster.
-    private const string AppRoleUser = "agrisync_app";
-    private const string AppRolePassword = "dev_app_change_me";
+    // agrisync_app is created by migration 20260515090000_BootstrapDbRoles. Roles are
+    // CLUSTER-global, so on a cluster where it already exists the migration is a no-op
+    // and the live password is whatever it was rotated to — hence IntegrationPostgres
+    // resolves it from AGRISYNC_TEST_APP_ROLE_PASSWORD, not a constant.
+    private const string AppRoleUser = IntegrationPostgres.AppRoleUser;
+    private static string AppRolePassword => IntegrationPostgres.AppRolePassword;
 
     // Farm A — the same-farm derivation case.
     private static readonly Guid FarmA = Guid.Parse("dddd1111-1111-1111-1111-111111111111");
@@ -123,23 +124,16 @@ public sealed class SyncPushLedgerDerivationRealPostgresTests(Xunit.Abstractions
 
     public async Task InitializeAsync()
     {
-        var baseConn = ResolveSuperuserConnectionOrNull();
-        if (baseConn is null)
-        {
-            _skip = true;
-            _skipReason = "No local ShramSafalDb connection string found in appsettings.Development.json.";
-            return;
-        }
+        var baseConn = IntegrationPostgres.ResolveRootConnection();
 
-        try
-        {
-            await using var probe = new NpgsqlConnection(baseConn);
-            await probe.OpenAsync();
-        }
-        catch (Exception ex)
+        // A genuinely ABSENT server self-skips; a server that answers and refuses us
+        // throws (IntegrationPostgres.ProbeOrSkipReasonAsync) — a misconfigured
+        // credential must never masquerade as a clean skip.
+        var probeSkip = await IntegrationPostgres.ProbeOrSkipReasonAsync(baseConn);
+        if (probeSkip is not null)
         {
             _skip = true;
-            _skipReason = $"Native Postgres :5433 unreachable ({ex.GetType().Name}); RequiresPostgres proof skipped.";
+            _skipReason = probeSkip;
             return;
         }
 
@@ -432,31 +426,6 @@ public sealed class SyncPushLedgerDerivationRealPostgresTests(Xunit.Abstractions
     // Helpers (mirror LedgerDerivationSupersessionRealPostgresTests).
     // ─────────────────────────────────────────────────────────────────────────
 
-    private static string? ResolveSuperuserConnectionOrNull()
-    {
-        var candidates = new[]
-        {
-            System.IO.Path.Combine(RepoRoot(), "src", "AgriSync.Bootstrapper", "appsettings.Development.json"),
-        };
-        foreach (var path in candidates)
-        {
-            if (!System.IO.File.Exists(path)) continue;
-            var cfg = new ConfigurationBuilder().AddJsonFile(path, optional: true).Build();
-            var conn = cfg.GetConnectionString("ShramSafalDb");
-            if (!string.IsNullOrWhiteSpace(conn)) return conn;
-        }
-        return null;
-    }
-
-    private static string RepoRoot()
-    {
-        var dir = new System.IO.DirectoryInfo(AppContext.BaseDirectory);
-        while (dir is not null && !System.IO.Directory.Exists(System.IO.Path.Combine(dir.FullName, "src")))
-        {
-            dir = dir.Parent;
-        }
-        return dir?.FullName ?? AppContext.BaseDirectory;
-    }
 
     private static async Task<long> ScalarLongAsync(
         NpgsqlConnection db, string sql, params (string Name, object Value)[] args)
