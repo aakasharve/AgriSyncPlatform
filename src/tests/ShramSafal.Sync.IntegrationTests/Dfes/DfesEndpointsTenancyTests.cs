@@ -94,15 +94,17 @@ public sealed class DfesEndpointsTenancyTests : IClassFixture<DfesEndpointsTenan
         if (_fx.Skip) { Assert.True(true, _fx.SkipReason); return; }
 
         // GET /day-understanding — the single farmer-facing /10, DERIVED server-side
-        // from Farm A's seeded per-dimension breakdown (47 of 70 possible weight → 7).
+        // from Farm A's seeded per-dimension breakdown (47 of 55 scored weight → 9).
+        // The seeded row is a dfes-2 roster read by the dfes-3 rollup, which no longer
+        // charges the unearnable LEARN_FACET (15) — hence 55, not 70.
         using (var resp = await GetAsync(DfesEndpointsTenancyFixture.MemberA,
             $"/shramsafal/day-understanding?farmId={DfesEndpointsTenancyFixture.FarmA}&date=2026-07-12"))
         {
             resp.StatusCode.Should().Be(HttpStatusCode.OK,
                 "the seeded member must read Farm A's Day Understanding Score under FORCE-RLS via the scope prelude");
             using var doc = JsonDocument.Parse(await resp.Content.ReadAsStringAsync());
-            doc.RootElement.GetProperty("score").GetInt32().Should().Be(7,
-                "covered ÷ possible weight = 47/70 = 0.671 → 7 — the farmer-facing /10");
+            doc.RootElement.GetProperty("score").GetInt32().Should().Be(9,
+                "covered ÷ scored weight = 47/55 = 0.854 → 9 — the farmer-facing /10");
         }
 
         // A day with NO aggregate → 200 with score:null (nothing scorable, NOT a failure).
@@ -474,7 +476,9 @@ public sealed class DfesEndpointsTenancyFixture : IAsyncLifetime
     // The farmer-facing /10 is derived from components_json (the per-dimension
     // breakdown), NOT from the three lens columns — those only carry each lens's
     // 0–100 ratio, which has already thrown the weights away. WHAT + COST +
-    // OBS_FACET covered = 47 of 70 possible weight → 6.71 → 7.
+    // OBS_FACET covered = 47 of 55 SCORED weight → 8.5 → 9. LEARN_FACET is still
+    // written into the roster (this is a genuine dfes-2 row) but takes no part in
+    // the /10 under dfes-3 — see DayUnderstandingScore.NotYetEarnable.
     private const string SeededComponentsJson =
         """
         {"Execution":[],"Insight":[],"Learning":[],"Possible":[

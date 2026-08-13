@@ -21,7 +21,12 @@ public sealed class DfesTuningTests
         // dfes-2 (2026-08-13): the Day Understanding rollup became covered ÷ possible
         // weight against a fixed denominator. Rows still stamped dfes-1 came from the
         // old mean-over-applicable-lenses engine and are deliberately NOT backfilled.
-        DfesTuning.ScoreEngineVersion.Should().Be("dfes-2");
+        // dfes-3 (2026-08-13, founder-decided): LEARN_FACET left the /10 while nothing
+        // can earn it, and DOSE/CARRIER became owed from the OPERATION rather than from
+        // a named product. No weight moved. The frontend mirror
+        // (mobile-web/src/features/logs/services/dfesTuning.ts) is value-locked to this
+        // string by dfesTuning.test.ts — bump both or that test fails.
+        DfesTuning.ScoreEngineVersion.Should().Be("dfes-3");
     }
 
     [Fact]

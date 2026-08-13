@@ -26,8 +26,18 @@ public static class DfesTuning
     /// against a FIXED denominator (see <see cref="DayUnderstandingScore"/>), and the
     /// extractor now records the completeness roster in <c>components_json</c>. Rows
     /// still stamped <c>dfes-1</c> were produced by the old rollup and are NOT
-    /// backfilled — the version string is how you tell them apart.</para></summary>
-    public const string ScoreEngineVersion = "dfes-2";
+    /// backfilled — the version string is how you tell them apart.</para>
+    /// <para><c>dfes-3</c> (2026-08-13, founder-decided): two scoring-PARTICIPATION
+    /// changes, no weight moved. (1) <c>LEARN_FACET</c> left the farmer-facing
+    /// denominator until something in production can actually earn it — see
+    /// <see cref="DayUnderstandingScore"/>. (2) <c>DOSE</c> / <c>CARRIER</c> now become
+    /// applicable from the OPERATION (a spray / input application is present in the
+    /// day) instead of from a NAMED PRODUCT, so naming the product only ever adds to
+    /// the numerator and can no longer push the number down. Rows stamped
+    /// <c>dfes-2</c> keep the old roster in <c>components_json</c>; the /10 is derived
+    /// on read, so change (1) reaches them immediately and change (2) reaches them on
+    /// the next recompute.</para></summary>
+    public const string ScoreEngineVersion = "dfes-3";
 
     /// <summary>Maximum Shram points a single LocalDate can earn after all bonuses.</summary>
     public const int DailyPointCap = 15;

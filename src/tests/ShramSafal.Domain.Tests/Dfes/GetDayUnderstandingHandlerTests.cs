@@ -20,8 +20,13 @@ public sealed class GetDayUnderstandingHandlerTests
     private static readonly Guid UserId = Guid.Parse("11111111-1111-1111-1111-111111111111");
     private static readonly DateOnly Day = new(2026, 7, 13);
 
-    // WHAT, COST and OBS_FACET covered; WEATHER and LEARN_FACET not: 47 of 70
-    // possible weight → 6.71 → 7.
+    // WHAT, COST and OBS_FACET covered; WEATHER and LEARN_FACET not.
+    //
+    // dfes-3 (2026-08-13): LEARN_FACET no longer takes part in the /10 while nothing
+    // in production can earn it, so this roster is 47 of 55 → 8.5 → 9, not 47 of 70
+    // → 6.71 → 7. The row itself is UNCHANGED — this is a dfes-2 roster read by the
+    // dfes-3 rollup, which is exactly how already-persisted days pick the fix up: the
+    // score is derived on read, so no backfill is needed for that half of the change.
     private static readonly ScoredDimension[] Roster =
     [
         new("WHAT", 20, true, 1.0, 1.0),
@@ -110,14 +115,14 @@ public sealed class GetDayUnderstandingHandlerTests
     {
         var repo = new InMemoryShramSafalRepository();
         repo.SetMembership(FarmId, UserId, AppRole.PrimaryOwner);
-        repo.SeededRichnessAggregates.Add(WithRoster(Roster)); // 47 of 70 → 7
+        repo.SeededRichnessAggregates.Add(WithRoster(Roster)); // 47 of 55 → 9
         var handler = new GetDayUnderstandingHandler(repo);
 
         var result = await handler.HandleAsync(new GetDayUnderstandingQuery(FarmId, Day, UserId));
 
         result.IsSuccess.Should().BeTrue();
         result.Value.Should().NotBeNull("a successful result must carry a DTO");
-        result.Value.Score.Should().Be(7);
+        result.Value.Score.Should().Be(9);
     }
 
     [Fact]

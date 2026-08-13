@@ -209,6 +209,6 @@ public sealed class DayUnderstandingScoreTests
     public void Version_is_tied_to_the_score_engine_version()
     {
         DayUnderstandingScore.Version.Should().Be(DfesTuning.ScoreEngineVersion);
-        DayUnderstandingScore.Version.Should().Be("dfes-2");
+        DayUnderstandingScore.Version.Should().Be("dfes-3");
     }
 }

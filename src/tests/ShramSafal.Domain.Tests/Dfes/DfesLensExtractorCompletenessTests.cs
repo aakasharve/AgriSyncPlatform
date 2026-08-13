@@ -70,6 +70,35 @@ public sealed class DfesLensExtractorCompletenessTests
       "inputs": [], "labour": [], "machinery": [], "activityExpenses": [] }
     """;
 
+    // Pruning. No spray, no fertiliser, no water — nothing was applied, so there is
+    // no dose to state and nothing for water to carry. The BOUNDARY of decision B.
+    private const string PruningOnlyDay = """
+    { "summary": "chhatani keli", "dayOutcome": "WORK_RECORDED",
+      "cropActivities": [ { "title": "pruning" } ],
+      "inputs": [], "irrigation": [], "labour": [], "machinery": [], "activityExpenses": [] }
+    """;
+
+    // The founder's own example, made scoreable: everything he COULD say about a
+    // spraying day is said — the work, the labour and what it cost, why the day was
+    // disrupted, what he noticed — EXCEPT which product went in the tank.
+    private const string WellDescribedSprayDay = """
+    { "summary": "sprayed the north block", "dayOutcome": "WORK_RECORDED",
+      "cropActivities": [ { "title": "spray" } ],
+      "labour": [ { "wagePerPerson": 350, "totalCost": 700 } ],
+      "disturbance": { "reason": "paus aala", "cause": "rain", "scope": "DELAYED" },
+      "inputs": [], "irrigation": [], "machinery": [], "activityExpenses": [] }
+    """;
+
+    // The very same day, one sentence longer: he answered "which product?".
+    private const string WellDescribedSprayDayWithProduct = """
+    { "summary": "sprayed the north block", "dayOutcome": "WORK_RECORDED",
+      "cropActivities": [ { "title": "spray" } ],
+      "labour": [ { "wagePerPerson": 350, "totalCost": 700 } ],
+      "disturbance": { "reason": "paus aala", "cause": "rain", "scope": "DELAYED" },
+      "inputs": [ { "productName": "Confidor", "mix": [ { "productName": "Confidor" } ] } ],
+      "irrigation": [], "machinery": [], "activityExpenses": [] }
+    """;
+
     // ── 1. the always-possible dimensions are always in the denominator ───────
 
     [Fact]
@@ -115,13 +144,63 @@ public sealed class DfesLensExtractorCompletenessTests
         DayUnderstandingScore.From(withoutDose).Should().Be(DayUnderstandingScore.From(day.Input));
     }
 
+    /// <summary>
+    /// FOUNDER DECISION B (2026-08-13, <c>dfes-3</c>): a spraying day owes DOSE and
+    /// CARRIER from the OPERATION, before any product is named. This test asserts the
+    /// opposite of what it did under <c>dfes-2</c> — that is the decision, not a
+    /// regression. See <see cref="NamingTheProduct_can_never_lower_the_number"/> for
+    /// why the old shape was untenable.
+    /// </summary>
     [Fact]
-    public void BareWorkDay_marks_both_input_dimensions_not_applicable()
+    public void SprayDay_owes_dose_and_carrier_before_any_product_is_named()
     {
-        var day = Run(BareWorkDay);
+        var day = Run(BareWorkDay); // "I sprayed." — nothing else
+
+        var dose = day.Input.Possible!.Single(d => d.Name == "DOSE");
+        var carrier = day.Input.Possible!.Single(d => d.Name == "CARRIER");
+
+        dose.Applicable.Should().BeTrue("a spray happened, so there IS a dose he could tell us");
+        carrier.Applicable.Should().BeTrue("a spray happened, so there IS water he could tell us about");
+        dose.Coverage.Should().Be(0.0, "he has not described it — owed is not the same as credited");
+        carrier.Coverage.Should().Be(0.0);
+    }
+
+    /// <summary>The BOUNDARY of decision B: a day with no application at all owes
+    /// NEITHER. The farmer is never charged for work he did not do.</summary>
+    [Fact]
+    public void NonApplicationDay_owes_neither_dose_nor_carrier()
+    {
+        var day = Run(PruningOnlyDay);
 
         day.Input.Possible!.Single(d => d.Name == "DOSE").Applicable.Should().BeFalse();
         day.Input.Possible!.Single(d => d.Name == "CARRIER").Applicable.Should().BeFalse();
+
+        // And it costs him nothing: dropping both leaves the number identical.
+        var withoutInputDims = new LensInput([], [], [],
+            [.. day.Input.Possible!.Where(d => d.Name is not ("DOSE" or "CARRIER"))]);
+        DayUnderstandingScore.From(withoutInputDims).Should().Be(DayUnderstandingScore.From(day.Input));
+    }
+
+    /// <summary>
+    /// FOUNDER DECISION (2026-08-13, <c>dfes-3</c>): <c>LEARN_FACET</c> is still
+    /// RECORDED in the roster — the day's picture stays complete — but takes no part
+    /// in the /10 while no production code path can produce its signal. Deleting it
+    /// from the roster entirely would have hidden the debt; leaving it in the
+    /// denominator capped every farmer at ~85/100 before he opened the app.
+    /// </summary>
+    [Fact]
+    public void LearnFacet_is_recorded_in_the_roster_but_takes_no_part_in_the_number()
+    {
+        var day = Run(BareWorkDay);
+
+        day.Input.Possible!.Should().Contain(d => d.Name == "LEARN_FACET",
+            "the dimension keeps its definition — this is a participation change, not a deletion");
+
+        var withoutLearn = new LensInput([], [], [],
+            [.. day.Input.Possible!.Where(d => d.Name != "LEARN_FACET")]);
+        DayUnderstandingScore.From(day.Input).Should().Be(
+            DayUnderstandingScore.From(withoutLearn),
+            "an unearnable dimension is in NEITHER the numerator nor the denominator");
     }
 
     // ── 3. the lens lists (classifier inputs) are untouched by this change ────
@@ -169,6 +248,45 @@ public sealed class DfesLensExtractorCompletenessTests
             + "operation was known, so his answer can only add to the numerator");
     }
 
+    /// <summary>
+    /// THE acceptance criterion for founder decision B, on the founder's own example.
+    /// A well-described spraying day, then the SAME day with the product named.
+    ///
+    /// <para>Under <c>dfes-2</c> this scored 10 → 8: DOSE and CARRIER only entered the
+    /// denominator once a product appeared, so answering "which product?" added 30
+    /// points of denominator and 10 of numerator. He told us more and the number fell.
+    /// Under <c>dfes-3</c> the denominator is set by the OPERATION, so it does not move
+    /// and his answer can only add: 6 → 8.</para>
+    ///
+    /// <para>This test FAILS on the pre-change extractor (8 is not ≥ 10).</para>
+    /// </summary>
+    [Fact]
+    public void NamingTheProduct_can_never_lower_the_number()
+    {
+        var silentAboutProduct = Run(WellDescribedSprayDay, Note("leaf curl on the north block"));
+        var named = Run(WellDescribedSprayDayWithProduct, Note("leaf curl on the north block"));
+
+        var before = DayUnderstandingScore.From(silentAboutProduct.Input);
+        var after = DayUnderstandingScore.From(named.Input);
+
+        after.Should().BeGreaterThanOrEqualTo(
+            before!.Value,
+            "answering Sathi's 'which product?' is the farmer being helpful — it may NEVER cost him the number");
+
+        // The denominator is what must not move; the numerator is what his answer fills.
+        Owed(named.Input).Should().Be(Owed(silentAboutProduct.Input),
+            "naming a product does not change what the day OWES — the spray already did");
+
+        before.Should().Be(6);
+        after.Should().Be(8);
+
+        static double Owed(LensInput input)
+            => input.Possible!.Where(d => d.Applicable && d.Name != "LEARN_FACET").Sum(d => (double)d.Weight);
+    }
+
+    /// <summary>Kept from <c>dfes-2</c>. Since LEARN_FACET now takes no part in the
+    /// /10, the guarantee is trivially satisfied for it today — the test stays as the
+    /// tripwire for the day a learning signal becomes earnable again.</summary>
     [Fact]
     public void FirstLearningAnswer_never_lowers_the_number_on_a_real_day()
     {
@@ -184,17 +302,27 @@ public sealed class DfesLensExtractorCompletenessTests
     // ── 5. the before/after shift, recorded for the founder ──────────────────
 
     /// <summary>
-    /// The honest-number shift. Most days score LOWER than under the mean, because
-    /// the denominator no longer shrinks to whatever the farmer happened to mention.
-    /// That is the intended consequence, NOT a regression — the weights themselves
-    /// are founder-gated and were not touched. This table is the receipt.
+    /// The honest-number shift, kept current as the receipt. <c>oldScore</c> is the
+    /// original mean-over-applicable-lenses rollup (untouched by any of this — it
+    /// reads the LENS scores, and those were deliberately left alone so the reward
+    /// economy does not move). <c>newScore</c> is the <c>dfes-3</c> /10.
+    ///
+    /// <para>Both directions are visible here and both are intended. Dropping the
+    /// unearnable LEARN_FACET from the denominator RAISES days (irrigation-only 4→5,
+    /// rich-spray 7→8). Charging DOSE/CARRIER from the operation LOWERS the days that
+    /// applied something and described none of it (bare-work-day 3→2). No weight
+    /// changed; what moved is which questions the day is asked.</para>
+    ///
+    /// <para>Five differently-shaped days, four different numbers — the number moves
+    /// with the day, which was the whole complaint.</para>
     /// </summary>
     [Theory]
-    [InlineData("bare-work-day", 3, 3)]
-    [InlineData("product-named-no-dose", 2, 3)]
+    [InlineData("bare-work-day", 3, 2)]
+    [InlineData("product-named-no-dose", 2, 4)]
     [InlineData("product-named-plus-weather", 7, 4)]
-    [InlineData("rich-spray-day", 7, 7)]
-    [InlineData("irrigation-only-day", 4, 4)]
+    [InlineData("rich-spray-day", 7, 8)]
+    [InlineData("irrigation-only-day", 4, 5)]
+    [InlineData("pruning-only-day", 3, 4)]
     public void Before_and_after_the_engine_change(string shape, int oldScore, int newScore)
     {
         var day = Shape(shape);
@@ -212,6 +340,7 @@ public sealed class DfesLensExtractorCompletenessTests
         "product-named-plus-weather" => Run(ProductNamedPlusWeather),
         "rich-spray-day" => Run(RichSprayDay, Note("leaf curl on the north block")),
         "irrigation-only-day" => Run(IrrigationOnlyDay),
+        "pruning-only-day" => Run(PruningOnlyDay),
         _ => throw new ArgumentOutOfRangeException(nameof(key), key, "unknown day shape"),
     };
 

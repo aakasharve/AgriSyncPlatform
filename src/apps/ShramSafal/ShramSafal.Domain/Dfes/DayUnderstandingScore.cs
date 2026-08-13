@@ -36,6 +36,14 @@ namespace ShramSafal.Domain.Dfes;
 /// false and is excluded from BOTH <c>covered</c> and <c>possible</c>. The farmer
 /// is never charged for failing to describe work he did not do.</para>
 ///
+/// <para><b>Dimensions that cannot yet be earned at all.</b> Separate from
+/// "cannot apply to THIS day" above: a dimension whose signal NO production code
+/// path can produce is unwinnable on EVERY day, so leaving it in the denominator
+/// is a permanent tax on every farmer rather than an honest gap in one day's
+/// record. Those names are listed in <see cref="NotYetEarnable"/> and are skipped
+/// here — in BOTH sums — regardless of what the roster says. See that field for
+/// the exact re-entry condition per name.</para>
+///
 /// <para><b>Legacy rows.</b> A row stamped by an engine that predates the roster
 /// deserializes with <see cref="LensInput.Possible"/> null/empty. Rather than
 /// invent a denominator for it, the union of the three lens lists is used — i.e.
@@ -61,6 +69,34 @@ public static class DayUnderstandingScore
     public const int MaxScore = 10;
 
     /// <summary>
+    /// spec: dfes-truthful-number-2026-08-13 (founder decision, <c>dfes-3</c>).
+    /// Dimension names that DO NOT take part in the farmer-facing /10 — excluded
+    /// from the numerator AND the denominator — because nothing in production can
+    /// currently produce their signal. The dimension keeps its definition, its
+    /// weight and its place in the roster (so <c>components_json</c> still records
+    /// it and the classifier lenses are untouched); it simply is not scored.
+    ///
+    /// <para><b><c>LEARN_FACET</c> (weight 15 of ~100).</b> Its two sources are
+    /// <c>ObservationEvent.Learning</c> and <c>NoteType == Tip</c>. The only writer
+    /// of the first is <c>ObservationEvent.ApplyInsightEntry</c>, which has ZERO
+    /// callers anywhere under <c>src/apps/**</c>; the second is never requested —
+    /// <c>AiPromptBuilder</c>'s OBSERVATIONS RULE names only
+    /// <c>observation</c> / <c>issue</c> / <c>reminder</c>, so the extraction model
+    /// is never asked for a tip. Verified 2026-08-13 against the real database: no
+    /// row can satisfy it. Leaving it in the denominator capped EVERY farmer at
+    /// ~85/100 before he opened the app, against a goal post set at 9.</para>
+    ///
+    /// <para><b>What must exist before it comes back.</b> Either (a) a production
+    /// caller that writes the <c>Learning</c> facet — the Phase-5 question/answer
+    /// path is the intended one — or (b) an <c>AiPromptBuilder</c> rule that asks
+    /// the model for <c>noteType "tip"</c>. When either lands, delete the name from
+    /// this set in the SAME change; a dimension is only exempt while it is
+    /// genuinely unwinnable, never because it is hard.</para>
+    /// </summary>
+    private static readonly HashSet<string> NotYetEarnable =
+        new(StringComparer.Ordinal) { "LEARN_FACET" };
+
+    /// <summary>
     /// Roll the day's scored dimensions up into the 0–10 Day Understanding Score,
     /// or <c>null</c> when no dimension applied. See the type remarks for the exact
     /// formula + rationale.
@@ -75,6 +111,11 @@ public static class DayUnderstandingScore
             if (!d.Applicable)
             {
                 continue; // cannot apply to this day's work → out of BOTH sums
+            }
+
+            if (NotYetEarnable.Contains(d.Name))
+            {
+                continue; // no production path can earn it on ANY day → out of BOTH sums
             }
 
             // Defensive clamps: ComponentsJson is now read back from storage, so a

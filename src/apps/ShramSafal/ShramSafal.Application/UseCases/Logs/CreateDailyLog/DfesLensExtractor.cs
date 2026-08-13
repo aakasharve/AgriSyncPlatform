@@ -1,4 +1,5 @@
 using System.Text.Json;
+using ShramSafal.Domain.Compare;
 using ShramSafal.Domain.Dfes;
 using ShramSafal.Domain.Farms;
 
@@ -51,8 +52,17 @@ internal static class DfesLensExtractor
         var learnFacet = Dim("LEARN_FACET", W_LEARN_FACET, hasLearning ? 1.0 : 0.0);
         // CONDITIONAL on the operations actually performed — Cover.NotApplicable when
         // the work they describe never happened (a DOSE on an irrigation-only day).
+        //
+        // TWO readings of "applicable", deliberately kept apart (dfes-3, 2026-08-13):
+        //   • the LENS reading (below) is unchanged and feeds ThreeLensScorer →
+        //     DayClassifier → the reward economy. Calibration there is founder-gated,
+        //     so this change does not move it by a single point.
+        //   • the ROSTER reading (doseOwed / carrierOwed) is the farmer-facing /10's
+        //     denominator only, and is the one the founder's decision changes.
         var dose = Dim("DOSE", W_DOSE, Best(CoverDose(roots), CoverDose(persisted)));           // input-op only
         var carrier = Dim("CARRIER", W_CARRIER, Best(CoverCarrier(roots), CoverCarrier(persisted))); // input- or irrigation-op
+        var doseOwed = Dim("DOSE", W_DOSE, Best(OwedDose(roots), OwedDose(persisted)));
+        var carrierOwed = Dim("CARRIER", W_CARRIER, Best(OwedCarrier(roots), OwedCarrier(persisted)));
 
         // ── the 3 lenses (classifier + persisted lens scores) ───────────────
         // Shape is UNCHANGED: a facet dimension appears in its lens only when the
@@ -71,9 +81,15 @@ internal static class DfesLensExtractor
         // OBS_FACET / LEARN_FACET is already in the denominator at coverage 0, so
         // supplying it can only add to the numerator. DOSE/CARRIER carry their own
         // Applicable flag and drop out of both sums when the work never happened.
+        //
+        // dfes-3: the roster takes doseOwed/carrierOwed — applicable from the day's
+        // OPERATION rather than from a named product — so "I sprayed" already owes both
+        // and "…with Confidor" only fills them in. LEARN_FACET is still RECORDED here
+        // (the roster stays a complete picture of the day) but DayUnderstandingScore
+        // skips it while nothing in production can earn it; see its NotYetEarnable.
         var possible = new List<ScoredDimension>
         {
-            what, cost, dose, carrier, weather, obsFacet, learnFacet,
+            what, cost, doseOwed, carrierOwed, weather, obsFacet, learnFacet,
         };
 
         var input = new LensInput(execution, insight, learning, possible);
@@ -135,6 +151,12 @@ internal static class DfesLensExtractor
         return new Cover(true, hasDose ? 1.0 : 0.5);
     }
 
+    // FOUNDER DECISION 2026-08-13 — an input application owes the water/carrier
+    // question even when it was applied to the SOIL (method "Soil", no spray tank).
+    // The founder was asked directly whether a soil-applied fertiliser should be
+    // exempt and answered NO: keep asking. Do NOT add a `method == "Soil"` bypass
+    // here — it looks like an obvious cleanup and it would reverse an explicit
+    // decision. If it is ever revisited, that is a founder call, not a refactor.
     private static Cover CoverCarrier(IReadOnlyList<JsonElement> roots)
     {
         var inputs = roots.SelectMany(r => Arr(r, "inputs")).ToList();
@@ -153,6 +175,55 @@ internal static class DfesLensExtractor
         var typ = inputs.Any(i => !string.IsNullOrWhiteSpace(Str(i, "carrierType")));
         if (vol || (cnt && typ)) return new Cover(true, 1.0);
         return new Cover(true, cnt || typ ? 0.5 : 0.0);
+    }
+
+    // ── what the DAY OWES, as opposed to what it happens to describe (dfes-3) ──
+    //
+    // spec: dfes-truthful-number-2026-08-13, founder decision B. A spraying /
+    // fertilising day owes DOSE and CARRIER from the moment the OPERATION is known,
+    // whether or not a product was ever named.
+    //
+    // The defect: applicability keyed off the `inputs[]` array, and the extraction
+    // pipeline only emits an `inputs[]` row once a product is mentioned. So
+    //   "I sprayed."                → DOSE / CARRIER not applicable → 10/10
+    //   "I sprayed, with Confidor." → both join the denominator      →  8/10
+    // He told us MORE and the number FELL — the exact lie the screen must not tell.
+    // Now the denominator is set by the operation, so naming the product can only
+    // ever raise the numerator.
+    //
+    // BOUNDARY: a day with no application at all still owes NEITHER. The operation
+    // test is CompareEngine.Categorize — the codebase's ONE activity-name →
+    // operation-type vocabulary, already used by the stage comparison — so no second
+    // keyword list is invented here. "Spraying" and "Fertilizer application" (the
+    // titles real LogTask rows carry) bucket as spray / fertigation; "Irrigation",
+    // "Observation" and "Machinery" do not, and those days are untouched.
+    private static readonly HashSet<string> ApplicationBuckets =
+        new(StringComparer.OrdinalIgnoreCase) { "spray", "fertigation" };
+
+    private static bool HasApplicationOperation(IReadOnlyList<JsonElement> roots)
+        => roots.Any(r => Arr(r, "cropActivities")
+            .Select(a => Str(a, "title"))
+            .Any(t => !string.IsNullOrWhiteSpace(t)
+                      && ApplicationBuckets.Contains(CompareEngine.Categorize(t!))));
+
+    // Both wrappers are strictly ADDITIVE over the lens rule: they can turn a
+    // NotApplicable into applicable-at-coverage-0, and can never lower a coverage the
+    // farmer had already earned. Coverage 0 is honest — the operation happened and he
+    // has not described it yet; no credit is invented for him.
+    private static Cover OwedDose(IReadOnlyList<JsonElement> roots)
+    {
+        var described = CoverDose(roots);
+        return described.Applicable || !HasApplicationOperation(roots)
+            ? described
+            : new Cover(true, 0.0);
+    }
+
+    private static Cover OwedCarrier(IReadOnlyList<JsonElement> roots)
+    {
+        var described = CoverCarrier(roots);
+        return described.Applicable || !HasApplicationOperation(roots)
+            ? described
+            : new Cover(true, 0.0);
     }
 
     private static double CoverCost(IReadOnlyList<JsonElement> roots)
