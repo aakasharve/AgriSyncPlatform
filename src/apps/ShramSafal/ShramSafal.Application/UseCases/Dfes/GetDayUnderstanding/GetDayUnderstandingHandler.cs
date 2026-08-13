@@ -1,3 +1,4 @@
+using System.Text.Json;
 using AgriSync.BuildingBlocks.Results;
 using ShramSafal.Application.Contracts.Dtos;
 using ShramSafal.Application.Ports;
@@ -8,15 +9,22 @@ namespace ShramSafal.Application.UseCases.Dfes.GetDayUnderstanding;
 
 /// <summary>
 /// spec: dfes-companion-2026-07-11 (Slice 3a). Reads the active farm's
-/// <see cref="Domain.Dfes.DailyRichnessAggregate"/> for one local day and rolls
-/// its three INTERNAL lens scores UP into the single farmer-facing Day
-/// Understanding Score (X/10) via <see cref="DayUnderstandingScore"/>.
+/// <see cref="Domain.Dfes.DailyRichnessAggregate"/> for one local day and rolls its
+/// per-dimension breakdown UP into the single farmer-facing Day Understanding Score
+/// (X/10) via <see cref="DayUnderstandingScore"/>.
 ///
-/// <para>Exposes ONLY the /10 (<see cref="DayUnderstandingDto"/>). The lens
-/// triple is read from the aggregate but NEVER placed on the DTO. RLS: the
-/// per-day read is farm-scoped (daily_richness_aggregates is farm_id RLS-gated)
-/// and the membership check below rejects any caller who is not a member of the
-/// requested farm — no cross-farm leak.</para>
+/// <para>The rollup reads <c>components_json</c> — the per-dimension breakdown the
+/// derivation service already persists — NOT the three lens columns. Those columns
+/// only carry each lens's 0–100 ratio, which has already thrown away the weights;
+/// dividing by a fixed denominator needs the dimension rows themselves. Keeping the
+/// score DERIVED on read (rather than adding a persisted column) means it always
+/// reflects the current engine.</para>
+///
+/// <para>Exposes ONLY the /10 (<see cref="DayUnderstandingDto"/>). Neither the lens
+/// triple nor any dimension is ever placed on the DTO. RLS: the per-day read is
+/// farm-scoped (daily_richness_aggregates is farm_id RLS-gated) and the membership
+/// check below rejects any caller who is not a member of the requested farm — no
+/// cross-farm leak.</para>
 /// </summary>
 public sealed class GetDayUnderstandingHandler(IShramSafalRepository repository)
 {
@@ -41,9 +49,30 @@ public sealed class GetDayUnderstandingHandler(IShramSafalRepository repository)
         // NOT a failure: the success screen simply shows no number.
         var score = aggregate is null
             ? (int?)null
-            : DayUnderstandingScore.From(new LensScores(
-                aggregate.ExecutionScore, aggregate.InsightScore, aggregate.LearningScore));
+            : DayUnderstandingScore.From(ReadComponents(aggregate.ComponentsJson));
 
         return Result.Success(new DayUnderstandingDto(score));
+    }
+
+    // An unstamped shell row carries "{}", and a hand-edited row could carry
+    // anything. Either way the honest answer is "I have nothing to score" — an
+    // EMPTY breakdown, which DayUnderstandingScore turns into null, never a 0.
+    private static readonly LensInput NothingScorable = new([], [], []);
+
+    private static LensInput ReadComponents(string? componentsJson)
+    {
+        if (string.IsNullOrWhiteSpace(componentsJson))
+        {
+            return NothingScorable;
+        }
+
+        try
+        {
+            return JsonSerializer.Deserialize<LensInput>(componentsJson) ?? NothingScorable;
+        }
+        catch (JsonException)
+        {
+            return NothingScorable;
+        }
     }
 }

@@ -17,8 +17,14 @@ public static class DfesTuning
     /// <summary>Count of AdvancesBar==true days at which UnlockStatus flips to "unlocked" (set-once).</summary>
     public const int UnlockThreshold = 25;
 
-    /// <summary>Stamped onto every aggregate row so recompute results are versioned.</summary>
-    public const string ScoreEngineVersion = "dfes-1";
+    /// <summary>Stamped onto every aggregate row so recompute results are versioned.
+    /// <para><c>dfes-2</c> (2026-08-13): the Day Understanding rollup moved from
+    /// "mean over whichever lenses were applicable" to covered-weight ÷ possible-weight
+    /// against a FIXED denominator (see <see cref="DayUnderstandingScore"/>), and the
+    /// extractor now records the completeness roster in <c>components_json</c>. Rows
+    /// still stamped <c>dfes-1</c> were produced by the old rollup and are NOT
+    /// backfilled — the version string is how you tell them apart.</para></summary>
+    public const string ScoreEngineVersion = "dfes-2";
 
     /// <summary>Maximum Shram points a single LocalDate can earn after all bonuses.</summary>
     public const int DailyPointCap = 15;

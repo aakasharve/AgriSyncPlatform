@@ -11,8 +11,8 @@ namespace ShramSafal.Domain.Tests.Dfes;
 /// <summary>
 /// spec: dfes-companion-2026-07-11 (Slice 3a). Guards the per-day read that
 /// exposes ONLY the /10: membership gating, the null-when-no-aggregate case, the
-/// server-side rollup, and (by reflection) that the wire DTO never grows a lens
-/// field.
+/// server-side rollup off the persisted per-dimension breakdown, and (by
+/// reflection) that the wire DTO never grows a lens field.
 /// </summary>
 public sealed class GetDayUnderstandingHandlerTests
 {
@@ -20,15 +20,26 @@ public sealed class GetDayUnderstandingHandlerTests
     private static readonly Guid UserId = Guid.Parse("11111111-1111-1111-1111-111111111111");
     private static readonly DateOnly Day = new(2026, 7, 13);
 
-    private static DailyRichnessAggregate WithLenses(int? exec, int? insight, int? learning)
+    // WHAT, COST and OBS_FACET covered; WEATHER and LEARN_FACET not: 47 of 70
+    // possible weight → 6.71 → 7.
+    private static readonly ScoredDimension[] Roster =
+    [
+        new("WHAT", 20, true, 1.0, 1.0),
+        new("COST", 12, true, 1.0, 1.0),
+        new("WEATHER", 8, true, 0.0, 1.0),
+        new("OBS_FACET", 15, true, 1.0, 1.0),
+        new("LEARN_FACET", 15, true, 0.0, 1.0),
+    ];
+
+    private static DailyRichnessAggregate WithComponents(string componentsJson)
     {
         var aggregate = DailyRichnessAggregate.Create(
             Guid.NewGuid(), FarmId, Day, "Asia/Kolkata", DateTimeOffset.UtcNow);
 
         aggregate.ApplyDerivation(
-            execScore: exec,
-            insightScore: insight,
-            learningScore: learning,
+            execScore: 80,
+            insightScore: 60,
+            learningScore: 40,
             classification: DayClassification.RichWorkDay,
             flags: default,
             advancesStreak: true,
@@ -37,10 +48,14 @@ public sealed class GetDayUnderstandingHandlerTests
             rewardReasonsJson: "[]",
             noWorkReasonCode: null,
             scoreEngineVersion: DfesTuning.ScoreEngineVersion,
-            componentsJson: "{}");
+            componentsJson: componentsJson);
 
         return aggregate;
     }
+
+    private static DailyRichnessAggregate WithRoster(params ScoredDimension[] possible)
+        => WithComponents(System.Text.Json.JsonSerializer.Serialize(
+            new LensInput([], [], [], possible)));
 
     [Fact]
     public async Task EmptyFarmId_ReturnsInvalidCommand()
@@ -91,26 +106,42 @@ public sealed class GetDayUnderstandingHandlerTests
     }
 
     [Fact]
-    public async Task Member_RollsInternalLensesIntoDayScore()
+    public async Task Member_RollsThePersistedBreakdownIntoDayScore()
     {
         var repo = new InMemoryShramSafalRepository();
         repo.SetMembership(FarmId, UserId, AppRole.PrimaryOwner);
-        repo.SeededRichnessAggregates.Add(WithLenses(80, 60, 40)); // mean 60 → 6
+        repo.SeededRichnessAggregates.Add(WithRoster(Roster)); // 47 of 70 → 7
         var handler = new GetDayUnderstandingHandler(repo);
 
         var result = await handler.HandleAsync(new GetDayUnderstandingQuery(FarmId, Day, UserId));
 
         result.IsSuccess.Should().BeTrue();
         result.Value.Should().NotBeNull("a successful result must carry a DTO");
-        result.Value.Score.Should().Be(6);
+        result.Value.Score.Should().Be(7);
     }
 
     [Fact]
-    public async Task Member_AllNullLenses_ReturnsNullScore()
+    public async Task Member_ScoresTheBreakdown_NotTheLensColumns()
     {
+        // The lens columns say 80/60/40 — mean 60, which the OLD rollup turned into
+        // 6. The breakdown is the truth now; the columns must not be consulted.
         var repo = new InMemoryShramSafalRepository();
         repo.SetMembership(FarmId, UserId, AppRole.PrimaryOwner);
-        repo.SeededRichnessAggregates.Add(WithLenses(null, null, null));
+        repo.SeededRichnessAggregates.Add(WithRoster(new ScoredDimension("WHAT", 20, true, 1.0, 1.0)));
+        var handler = new GetDayUnderstandingHandler(repo);
+
+        var result = await handler.HandleAsync(new GetDayUnderstandingQuery(FarmId, Day, UserId));
+
+        result.Value!.Score.Should().Be(10, "the fully-covered breakdown scores 10, not the columns' 6");
+    }
+
+    [Fact]
+    public async Task Member_UnstampedComponents_ReturnsNullScore()
+    {
+        // A shell row carries "{}" — nothing scorable. No number, never a zero.
+        var repo = new InMemoryShramSafalRepository();
+        repo.SetMembership(FarmId, UserId, AppRole.PrimaryOwner);
+        repo.SeededRichnessAggregates.Add(WithComponents("{}"));
         var handler = new GetDayUnderstandingHandler(repo);
 
         var result = await handler.HandleAsync(new GetDayUnderstandingQuery(FarmId, Day, UserId));
@@ -120,12 +151,50 @@ public sealed class GetDayUnderstandingHandlerTests
         result.Value.Score.Should().BeNull();
     }
 
+    [Theory]
+    [InlineData("not json at all")]
+    [InlineData("{\"Possible\": \"wrong shape\"}")]
+    [InlineData("[]")]
+    public async Task Member_MalformedComponents_ReturnsNullScore_NeverThrows(string componentsJson)
+    {
+        var repo = new InMemoryShramSafalRepository();
+        repo.SetMembership(FarmId, UserId, AppRole.PrimaryOwner);
+        repo.SeededRichnessAggregates.Add(WithComponents(componentsJson));
+        var handler = new GetDayUnderstandingHandler(repo);
+
+        var result = await handler.HandleAsync(new GetDayUnderstandingQuery(FarmId, Day, UserId));
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value!.Score.Should().BeNull("an unreadable breakdown means no number, not a zero");
+    }
+
+    [Fact]
+    public async Task Member_LegacyRowWithoutARoster_IsScoredOnWhatThatEngineRecorded()
+    {
+        // A row written before the completeness roster existed. Rather than invent a
+        // denominator for it, score the union of the three lens lists: 20/32 → 6.25 → 6.
+        var legacy = System.Text.Json.JsonSerializer.Serialize(new LensInput(
+            Execution: [new ScoredDimension("WHAT", 20, true, 1.0, 1.0),
+                        new ScoredDimension("COST", 12, true, 0.0, 1.0)],
+            Insight: [],
+            Learning: []));
+
+        var repo = new InMemoryShramSafalRepository();
+        repo.SetMembership(FarmId, UserId, AppRole.PrimaryOwner);
+        repo.SeededRichnessAggregates.Add(WithComponents(legacy));
+        var handler = new GetDayUnderstandingHandler(repo);
+
+        var result = await handler.HandleAsync(new GetDayUnderstandingQuery(FarmId, Day, UserId));
+
+        result.Value!.Score.Should().Be(6);
+    }
+
     [Fact]
     public async Task WrongDay_DoesNotReturnAnotherDaysAggregate()
     {
         var repo = new InMemoryShramSafalRepository();
         repo.SetMembership(FarmId, UserId, AppRole.PrimaryOwner);
-        repo.SeededRichnessAggregates.Add(WithLenses(80, 60, 40)); // seeded on Day
+        repo.SeededRichnessAggregates.Add(WithRoster(Roster)); // seeded on Day
         var handler = new GetDayUnderstandingHandler(repo);
 
         var result = await handler.HandleAsync(

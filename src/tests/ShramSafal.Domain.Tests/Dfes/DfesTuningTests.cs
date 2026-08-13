@@ -18,7 +18,10 @@ public sealed class DfesTuningTests
         DfesTuning.RichDayThreshold.Should().Be(25);
         DfesTuning.UnlockThreshold.Should().Be(25);
         DfesTuning.DailyPointCap.Should().Be(15);
-        DfesTuning.ScoreEngineVersion.Should().Be("dfes-1");
+        // dfes-2 (2026-08-13): the Day Understanding rollup became covered ÷ possible
+        // weight against a fixed denominator. Rows still stamped dfes-1 came from the
+        // old mean-over-applicable-lenses engine and are deliberately NOT backfilled.
+        DfesTuning.ScoreEngineVersion.Should().Be("dfes-2");
     }
 
     [Fact]

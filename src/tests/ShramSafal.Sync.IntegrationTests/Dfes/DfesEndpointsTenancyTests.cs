@@ -94,7 +94,7 @@ public sealed class DfesEndpointsTenancyTests : IClassFixture<DfesEndpointsTenan
         if (_fx.Skip) { Assert.True(true, _fx.SkipReason); return; }
 
         // GET /day-understanding — the single farmer-facing /10, DERIVED server-side
-        // from Farm A's seeded lens triple (80/70/60 → mean 70 → 7).
+        // from Farm A's seeded per-dimension breakdown (47 of 70 possible weight → 7).
         using (var resp = await GetAsync(DfesEndpointsTenancyFixture.MemberA,
             $"/shramsafal/day-understanding?farmId={DfesEndpointsTenancyFixture.FarmA}&date=2026-07-12"))
         {
@@ -102,7 +102,7 @@ public sealed class DfesEndpointsTenancyTests : IClassFixture<DfesEndpointsTenan
                 "the seeded member must read Farm A's Day Understanding Score under FORCE-RLS via the scope prelude");
             using var doc = JsonDocument.Parse(await resp.Content.ReadAsStringAsync());
             doc.RootElement.GetProperty("score").GetInt32().Should().Be(7,
-                "lenses 80/70/60 roll up to Mean(70)/10 = 7 — the farmer-facing /10");
+                "covered ÷ possible weight = 47/70 = 0.671 → 7 — the farmer-facing /10");
         }
 
         // A day with NO aggregate → 200 with score:null (nothing scorable, NOT a failure).
@@ -439,7 +439,8 @@ public sealed class DfesEndpointsTenancyFixture : IAsyncLifetime
         await SeedMembershipAsync(c, FarmA, MemberA, AccountA); // MemberA is an active member of A
         await SeedFarmAsync(c, FarmB, OwnerB, AccountB, "DFES Farm B");
 
-        // Farm A: one rich day. lenses 80/70/60 → Day Understanding Score 7.
+        // Farm A: one rich day. The /10 is derived from components_json (WHAT +
+        // OBS_FACET covered = 47 of 70 possible weight → 7), NOT from the lens columns.
         await SeedAggregateAsync(c, FarmA, new DateOnly(2026, 7, 12),
             exec: 80, insight: 70, learning: 60, points: 5, classification: "BasicWorkDay");
         // Farm B: a DISTINCTIVE row (99 points) so any cross-farm leak into A is visible.
@@ -479,6 +480,20 @@ public sealed class DfesEndpointsTenancyFixture : IAsyncLifetime
         await cmd.ExecuteNonQueryAsync();
     }
 
+    // The farmer-facing /10 is derived from components_json (the per-dimension
+    // breakdown), NOT from the three lens columns — those only carry each lens's
+    // 0–100 ratio, which has already thrown the weights away. WHAT + COST +
+    // OBS_FACET covered = 47 of 70 possible weight → 6.71 → 7.
+    private const string SeededComponentsJson =
+        """
+        {"Execution":[],"Insight":[],"Learning":[],"Possible":[
+          {"Name":"WHAT","Weight":20,"Applicable":true,"Coverage":1,"ConfidenceFactor":1},
+          {"Name":"COST","Weight":12,"Applicable":true,"Coverage":1,"ConfidenceFactor":1},
+          {"Name":"WEATHER","Weight":8,"Applicable":true,"Coverage":0,"ConfidenceFactor":1},
+          {"Name":"OBS_FACET","Weight":15,"Applicable":true,"Coverage":1,"ConfidenceFactor":1},
+          {"Name":"LEARN_FACET","Weight":15,"Applicable":true,"Coverage":0,"ConfidenceFactor":1}]}
+        """;
+
     private static async Task SeedAggregateAsync(
         NpgsqlConnection db, Guid farmId, DateOnly localDate,
         int exec, int insight, int learning, int points, string classification)
@@ -493,8 +508,9 @@ public sealed class DfesEndpointsTenancyFixture : IAsyncLifetime
                created_at_utc, updated_at_utc)
             VALUES (@id, @farm, @d, 'Asia/Kolkata', @exec, @insight, @learning,
                @class, true, false, false, false, false, false, true, true,
-               @points, '[]'::jsonb, 'dfes-1', '{}'::jsonb, NOW(), NOW());
+               @points, '[]'::jsonb, 'dfes-2', @components::jsonb, NOW(), NOW());
             """;
+        cmd.Parameters.AddWithValue("components", SeededComponentsJson);
         cmd.Parameters.AddWithValue("id", Guid.NewGuid());
         cmd.Parameters.AddWithValue("farm", farmId);
         cmd.Parameters.AddWithValue("d", localDate);

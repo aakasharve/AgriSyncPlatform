@@ -23,27 +23,45 @@ internal static class DfesLensExtractor
     public static (LensInput Input, ClassifierSignals Signals) Build(DayData data, LensScoresProbe probeSink, bool clientDatePlausible)
     {
         var roots = data.Roots;
-
-        // ── Execution lens ──────────────────────────────────────────────────
-        var execution = new List<ScoredDimension>
-        {
-            Dim("WHAT", W_WHAT, CoverWhat(roots)),
-            Dim("COST", W_COST, CoverCost(roots)),
-        };
-        AddIfApplicable(execution, "DOSE", W_DOSE, CoverDose(roots));      // input-op only
-        AddIfApplicable(execution, "CARRIER", W_CARRIER, CoverCarrier(roots));
-
-        // ── Insight lens ────────────────────────────────────────────────────
-        var insight = new List<ScoredDimension> { Dim("WEATHER", W_WEATHER, CoverWeather(roots, data.Observations)) };
         var hasStructuredObs = HasStructuredObservation(data.Observations);
-        if (hasStructuredObs) insight.Add(Dim("OBS_FACET", W_OBS_FACET, 1.0));
-
-        // ── Learning lens ───────────────────────────────────────────────────
-        var learning = new List<ScoredDimension>();
         var hasLearning = HasLearningFacet(data.Observations);
-        if (hasLearning) learning.Add(Dim("LEARN_FACET", W_LEARN_FACET, 1.0));
 
-        var input = new LensInput(execution, insight, learning);
+        // ── the day's dimensions, scored once ───────────────────────────────
+        // ALWAYS possible (any day can carry these — nothing about the work performed
+        // can make them impossible), so each one always has a coverage, 0 included.
+        var what = Dim("WHAT", W_WHAT, CoverWhat(roots));
+        var cost = Dim("COST", W_COST, CoverCost(roots));
+        var weather = Dim("WEATHER", W_WEATHER, CoverWeather(roots, data.Observations));
+        var obsFacet = Dim("OBS_FACET", W_OBS_FACET, hasStructuredObs ? 1.0 : 0.0);
+        var learnFacet = Dim("LEARN_FACET", W_LEARN_FACET, hasLearning ? 1.0 : 0.0);
+        // CONDITIONAL on the operations actually performed — Cover.NotApplicable when
+        // the work they describe never happened (a DOSE on an irrigation-only day).
+        var dose = Dim("DOSE", W_DOSE, CoverDose(roots));                  // input-op only
+        var carrier = Dim("CARRIER", W_CARRIER, CoverCarrier(roots));      // input- or irrigation-op
+
+        // ── the 3 lenses (classifier + persisted lens scores) ───────────────
+        // Shape is UNCHANGED: a facet dimension appears in its lens only when the
+        // farmer actually gave that signal, so ThreeLensScorer's 0–100 outputs — and
+        // therefore DayClassifier's RichWorkDay thresholds — behave exactly as before.
+        var execution = new List<ScoredDimension> { what, cost, dose, carrier };
+        var insight = new List<ScoredDimension> { weather };
+        if (hasStructuredObs) insight.Add(obsFacet);
+        var learning = new List<ScoredDimension>();
+        if (hasLearning) learning.Add(learnFacet);
+
+        // ── the completeness roster (ONE fixed denominator, all 3 lenses) ────
+        // Every dimension that COULD apply to this day's work, covered or not. This is
+        // what DayUnderstandingScore divides by, and it is the reason the farmer-facing
+        // /10 can no longer FALL when he answers Sathi and adds a signal: an absent
+        // OBS_FACET / LEARN_FACET is already in the denominator at coverage 0, so
+        // supplying it can only add to the numerator. DOSE/CARRIER carry their own
+        // Applicable flag and drop out of both sums when the work never happened.
+        var possible = new List<ScoredDimension>
+        {
+            what, cost, dose, carrier, weather, obsFacet, learnFacet,
+        };
+
+        var input = new LensInput(execution, insight, learning, possible);
 
         // ── Signals (unioned across all logs) ───────────────────────────────
         var hasWork = roots.Any(HasWork);
@@ -191,9 +209,6 @@ internal static class DfesLensExtractor
 
     private static ScoredDimension Dim(string name, int weight, Cover c)
         => new(name, weight, c.Applicable, c.Value, Cf);
-
-    private static void AddIfApplicable(List<ScoredDimension> list, string name, int weight, Cover c)
-        => list.Add(Dim(name, weight, c));
 
     private static IEnumerable<JsonElement> Arr(JsonElement el, string prop)
         => el.ValueKind == JsonValueKind.Object && el.TryGetProperty(prop, out var v) && v.ValueKind == JsonValueKind.Array
