@@ -26,11 +26,16 @@
  * `doesThisMatch`, `updated`, `waitingForConfirmation`, `onboardingWelcome`,
  * `firstLogCelebration`, `reviewAndClose`, `entries` and `clickToClose`;
  * `onboardingWelcome` also changed in `en` because it quoted a time cost his
- * rule forbids. Each was re-transcribed here from his worksheet, character for
- * character, in the same commit that changed the module — the deliberate
- * two-file edit this file exists to force. Everything else below is still the
- * pre-split transcription, so the split guard still holds for the other 25
- * `mr` strings and 37 `en`.
+ * rule forbids. Each was re-transcribed here character for character, in the
+ * same commit that changed the module — the deliberate two-file edit this file
+ * exists to force. Everything else below is still the pre-split transcription,
+ * so the split guard still holds for the other 25 `mr` strings and 37 `en`.
+ *
+ * THE `mr` VALUES COME FROM ONE PLACE: `shram-sathi-FINAL-strings.md`, main
+ * tables. Two earlier worksheets fed revisions in before that document existed
+ * and both carried errors the founder has since corrected — this oracle was
+ * reconciled against the authority key by key, so it now records what he
+ * approved rather than the sequence of drafts it took to get there.
  *
  * It also pins the two properties the split exists to create: `Language` is
  * still reachable from `translations.ts` (40-odd call sites import it there),
@@ -90,7 +95,7 @@ const DFES_APPROVED_COPY = {
         clickToClose: 'Click to close the day',
     },
     mr: {
-        closeToday: 'आजची सगळी कामे माझ्यापर्यंत पोहोचली का याची खात्री करा',
+        closeToday: 'आजच्या सर्व नोंदी माझ्यापर्यंत पोहोचल्या का याची खात्री करा',
         todayClosed: 'आजचं आटपलं. सगळी कामे आणि गोष्टी समजल्या',
         closeTodayQuestion: 'आजचं सगळं सांगून झालं का?',
         todaySummary: 'आजची {activities} कामे, खर्च रु. {cost}',
@@ -159,7 +164,7 @@ describe('translations.ts split — the copy moved, and only the copy', () => {
     it('`t()` still resolves a DFES key rather than echoing it back', () => {
         // `t()` returns the KEY when a lookup misses, so a broken composition
         // would render `dfes.closeToday` on a button instead of throwing.
-        expect(t('dfes.closeToday', 'mr')).toBe('आजची सगळी कामे माझ्यापर्यंत पोहोचली का याची खात्री करा');
+        expect(t('dfes.closeToday', 'mr')).toBe('आजच्या सर्व नोंदी माझ्यापर्यंत पोहोचल्या का याची खात्री करा');
         expect(t('dfes.closeToday', 'en')).toBe('Close today');
         expect(t('dfes.clickToClose', 'mr')).not.toBe('dfes.clickToClose');
     });
