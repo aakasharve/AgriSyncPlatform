@@ -29,13 +29,42 @@ const ACCESS: { cap: OperatorCapability; icon: React.ReactNode; mr: string; en: 
     { cap: OperatorCapability.MANAGE_PEOPLE, icon: <Users size={18} />, mr: 'टीम सांभाळणे', en: 'Manage team', desc: 'सदस्य जोडू किंवा काढू शकतो' },
 ];
 
+/**
+ * LABOUR_PHASE2 Phase 5 — the ONE capability on this card that reaches a
+ * server.
+ *
+ * Absent means the roster has not loaded, or this member is not in it, and the
+ * row is then not rendered at all. A switch with no server row behind it is the
+ * mock this replaces.
+ */
+interface LabourAccessView {
+    /**
+     * The EFFECTIVE answer. Never `hasExplicitGrant` — that is `false` for a
+     * Mukadam who can in fact do everything, so rendering it would show "off"
+     * beside someone with full authority.
+     */
+    canManage: boolean;
+    /**
+     * `false` for owner tier and Mukadam: the capability comes with the ROLE,
+     * the server refuses the write (409), and the row must render as a static
+     * state rather than as a switch. A switch that appears to move and does not
+     * is precisely the defect being removed (`P5`).
+     */
+    isEditable: boolean;
+    /** A write for this member is in flight. */
+    saving: boolean;
+    /** DESIRED state, not a toggle, so a retry on a bad line converges. */
+    onChange: (next: boolean) => void;
+}
+
 interface TeamMemberCardProps {
     member: Member;
     onToggleCap: (cap: OperatorCapability) => void;
     onDelete: () => void;
+    labourAccess?: LabourAccessView;
 }
 
-export const TeamMemberCard: React.FC<TeamMemberCardProps> = ({ member, onToggleCap, onDelete }) => {
+export const TeamMemberCard: React.FC<TeamMemberCardProps> = ({ member, onToggleCap, onDelete, labourAccess }) => {
     const [open, setOpen] = useState(false);
     const caps = member.capabilities || [];
     const granted = ACCESS.filter(a => caps.includes(a.cap)).length;
@@ -105,6 +134,66 @@ export const TeamMemberCard: React.FC<TeamMemberCardProps> = ({ member, onToggle
                             );
                         })}
                     </div>
+
+                    {/* LABOUR_PHASE2 Phase 5 — the real one.
+
+                        Rendered BELOW the four above and visually separated,
+                        because they are not the same kind of control. Those
+                        four are local state that the next pull OVERWRITES
+                        (`profileAndCropsReconciler.ts:150` recomputes
+                        capabilities from role via `capabilitiesForRole`); this
+                        one is the server's own answer.
+
+                        ENGLISH ONLY, by founder ruling — no approved Marathi
+                        exists for these three labels and no agent may invent
+                        farmer-facing Marathi. They are on the founder-copy list.
+
+                        `isEditable: false` renders a STATIC state, not a
+                        disabled switch: an owner-tier member or a Mukadam
+                        carries this by role and the server refuses the write,
+                        so anything switch-shaped would be a control that looks
+                        functional and does nothing (`P5`). */}
+                    {labourAccess && (
+                        <div className="mt-3 border-t border-slate-200 pt-3">
+                            {labourAccess.isEditable ? (
+                                <button
+                                    type="button"
+                                    data-testid={`labour-access-${member.id}`}
+                                    onClick={() => labourAccess.onChange(!labourAccess.canManage)}
+                                    disabled={labourAccess.saving}
+                                    aria-pressed={labourAccess.canManage}
+                                    aria-busy={labourAccess.saving}
+                                    className={`flex w-full items-center gap-3 rounded-xl border p-3 text-left transition-all active:scale-[0.98] disabled:opacity-60 disabled:active:scale-100 ${labourAccess.canManage ? 'border-emerald-200 bg-emerald-50/70 shadow-sm shadow-emerald-100' : 'border-slate-200 bg-white'}`}
+                                >
+                                    <span className={`flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl transition-colors ${labourAccess.canManage ? 'bg-emerald-600 text-white' : 'bg-slate-100 text-slate-400'}`}>
+                                        <ClipboardList size={18} />
+                                    </span>
+                                    <span className="min-w-0 flex-1">
+                                        <span className="block text-sm font-bold text-slate-800">Fix labour records</span>
+                                        <span className="block text-[11px] leading-snug text-slate-400">Can change attendance, hours and names</span>
+                                    </span>
+                                    <span className={`relative h-6 w-11 flex-shrink-0 rounded-full transition-colors ${labourAccess.canManage ? 'bg-emerald-500' : 'bg-slate-300'}`}>
+                                        <span className={`absolute left-0.5 top-0.5 h-5 w-5 rounded-full bg-white shadow-sm transition-transform ${labourAccess.canManage ? 'translate-x-5' : ''}`} />
+                                    </span>
+                                </button>
+                            ) : (
+                                <div
+                                    data-testid={`labour-access-${member.id}`}
+                                    className="flex w-full items-center gap-3 rounded-xl border border-emerald-200 bg-emerald-50/70 p-3 text-left"
+                                >
+                                    <span className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl bg-emerald-600 text-white">
+                                        <ClipboardList size={18} />
+                                    </span>
+                                    <span className="min-w-0 flex-1">
+                                        <span className="block text-sm font-bold text-slate-800">Fix labour records</span>
+                                        <span className="block text-[11px] leading-snug text-slate-400">Comes with their role</span>
+                                    </span>
+                                    <span className="flex-shrink-0 text-emerald-600"><CheckCircle2 size={22} /></span>
+                                </div>
+                            )}
+                        </div>
+                    )}
+
                     <button
                         type="button"
                         onClick={onDelete}

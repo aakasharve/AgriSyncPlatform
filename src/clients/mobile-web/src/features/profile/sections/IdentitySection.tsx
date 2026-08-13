@@ -23,6 +23,7 @@ import MembershipsList from '../../people/components/MembershipsList';
 import type { MyFarmDto, FarmDetailsDto } from '../../onboarding/qr/inviteApi';
 import ReliabilityScoreCard from '../../work/components/ReliabilityScoreCard';
 import { TeamMemberCard } from '../components/TeamMemberCard';
+import { useLabourPermissions } from '../hooks/useLabourPermissions';
 import { useLanguage } from '../../../i18n/LanguageContext';
 
 // Identity verification status for farmer ID
@@ -79,6 +80,11 @@ const IdentitySection: React.FC<IdentitySectionProps> = ({
     workerProfile,
 }) => {
     const { t } = useLanguage();
+    // LABOUR_PHASE2 Phase 5. `myFarm.farmId` is the SERVER's farm id. The hook
+    // makes no request until it resolves, and on a failed read it stays `null`
+    // rather than falling back to the local profile — see its docblock for why
+    // that matters (`profile.operators[].id` is not a server userId).
+    const labourPermissions = useLabourPermissions(myFarm?.farmId ?? null);
     return (
         <div className="bg-transparent animate-in fade-in space-y-6">
 
@@ -456,6 +462,15 @@ const IdentitySection: React.FC<IdentitySectionProps> = ({
                     </button>
                 )}
 
+                {/* LABOUR_PHASE2 Phase 5 — English, because no Marathi has been
+                    approved for these two situations and no agent may invent
+                    farmer-facing Marathi. On the founder-copy list. */}
+                {labourPermissions.error && (
+                    <p role="status" className="mb-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-800">
+                        {labourPermissions.error}
+                    </p>
+                )}
+
                 <div className="space-y-3">
                     {/* Existing People or Dummies if none */}
                     {(profile.operators && profile.operators.length > 0) ? (
@@ -464,6 +479,25 @@ const IdentitySection: React.FC<IdentitySectionProps> = ({
                                 <TeamMemberCard
                                     key={person.id}
                                     member={person as never}
+                                    /* LABOUR_PHASE2 Phase 5 — matched on the SERVER's
+                                       userId, never on `person.id`, which is a LOCAL
+                                       profile id the server has never seen. A member with
+                                       no server row gets NO switch, rather than a switch
+                                       whose PUT would target a phantom user. L5b confirmed
+                                       this is conditional: pre-pull ids render 0 switches;
+                                       once the reconciler sets id := server userId they
+                                       render correctly. */
+                                    labourAccess={(() => {
+                                        const row = labourPermissions.rows?.find(r => r.userId === person.id);
+                                        if (!row) return undefined;
+                                        return {
+                                            canManage: row.canManageLabourRecords,
+                                            isEditable: row.isGrantEditable,
+                                            saving: labourPermissions.savingUserId === row.userId,
+                                            onChange: (next: boolean) =>
+                                                void labourPermissions.setPermission(row.userId, next),
+                                        };
+                                    })()}
                                     onToggleCap={(cap) => {
                                         const has = person.capabilities?.includes(cap);
                                         const newCaps = has
