@@ -6,6 +6,8 @@
 
 import type { VisibleBucketId } from '../../domain/ai/BucketId';
 import type { CostCategoryId, CostCategoryRef } from '../../domain/finance/CostCategory';
+// LABOUR_PHASE2 Phase 3 — see the LABOUR ENGAGEMENT DTOS section below.
+import type { AttributedOperatorDto, LabourEngagementDto } from './labourDtos';
 
 export type VerificationStatus =
     | 'draft'
@@ -138,6 +140,19 @@ export interface VerificationEventDto {
  */
 export type DailyLogScope = 'Plot' | 'MultiPlot' | 'Farm';
 
+// =============================================================================
+// LABOUR ENGAGEMENT DTOS
+// =============================================================================
+//
+// LABOUR_PHASE2 Phase 3 — `AttributedOperatorDto` and `LabourEngagementDto` live
+// in `labourDtos.ts` and are re-exported here unchanged, so every
+// `from './dtos'` import site is untouched. They were MOVED, not changed:
+// adding them to this file put it over the 800-line cap
+// `scripts/check-file-sizes.mjs` enforces in CI. `DailyLogDto` below references
+// `LabourEngagementDto` directly, so it is imported at the top of this file as
+// well as re-exported here.
+export type { AttributedOperatorDto, LabourEngagementDto };
+
 export interface DailyLogDto {
     id: string;
     farmId: string;
@@ -205,6 +220,41 @@ export interface DailyLogDto {
      */
     scope?: DailyLogScope;
     plotIds?: string[];
+
+    /**
+     * LABOUR_PHASE2 Phase 3 — the labour engagements recorded against this log,
+     * as CURRENT truth. Labour was written and never read back: a farmer
+     * recorded 8 workers on Phone A and Phone B, freshly installed, saw the log
+     * with no labour on it at all (founder decision B4).
+     *
+     * THREE STATES, THREE DIFFERENT STATEMENTS, NOT INTERCHANGEABLE:
+     *   `undefined`/`null` — this response makes NO STATEMENT about labour.
+     *                        Every endpoint that returns a `DailyLogDto` without
+     *                        loading the engagements says exactly this: `POST
+     *                        /logs`, verify, add-task. So does a server build
+     *                        that predates Phase 3 — this twin is
+     *                        hand-maintained, and a device outlives the server
+     *                        build it talks to (web, APK and API deploy
+     *                        separately, and a backend rollback puts a new
+     *                        client in front of an old server).
+     *   `[]`               — the server STATES this log has no labour.
+     *   non-empty          — the engagements.
+     *
+     * The reconciler guard turns on precisely that distinction — "the response
+     * CARRIED the field" (`Array.isArray`), never "the array came back
+     * non-empty" — which is the same predicate `plotIds` already uses
+     * (`logsReconciler.serverStatedContext`). Reading an absent field as an
+     * empty one is what deleted a farmer's labour from his own device in Labour
+     * V1; reading an empty one as absence would drop a genuine "there is no
+     * labour here" statement. Both readings are wrong, in opposite directions.
+     *
+     * `?: … | null` and not `?: …`, because BOTH shapes are on the wire: the
+     * C# member is `IReadOnlyList<LabourEngagementDto>? = null`, so a
+     * non-projecting endpoint serialises JSON `null`, while an older server
+     * omits the key entirely. Both mean "no statement" and both must be read
+     * that way — same shape as `LogTaskDto.deviationReasonCode` above.
+     */
+    labour?: LabourEngagementDto[] | null;
 }
 
 export interface CostEntryDto {

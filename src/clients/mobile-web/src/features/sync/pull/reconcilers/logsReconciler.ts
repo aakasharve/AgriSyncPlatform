@@ -22,6 +22,7 @@ import type {
 } from '../../../../infrastructure/api/AgriSyncClient';
 import type { AgriLogDatabase } from '../../../../infrastructure/storage/DexieDatabase';
 import { normalizeMojibakeText } from '../../../../shared/utils/textEncoding';
+import { mapLabourEngagements } from '../helpers/mapLabourEngagements';
 import { mapVerificationStatus } from '../helpers/mapVerificationStatus';
 import {
     isIrrigationActivity,
@@ -119,40 +120,43 @@ export async function reconcileLogs(
  *
  * `toDailyLog` rebuilds a whole `DailyLog` from `DailyLogDto`, and the fields
  * the DTO has no counterpart for are filled with empty/zero literals. For most
- * of them that is merely lossy. For `labour` it is a false statement.
+ * of them that is merely lossy. For `labour` it was a false statement.
  *
- * THE DISTINCTION THAT MATTERS: `DailyLogDto` (infrastructure/api/dtos.ts) has
- * no `labour` property AT ALL, and no cost fields either — the server does not
- * send an empty labour array, it sends no labour field. So "the server says
- * this log has no labour" is not a state the wire can even express. Writing
- * `labour: []` over an existing local record therefore asserts something
- * nobody said, and — since `db.logs.put` is a full-record write, the
+ * THE DEFECT THIS WAS WRITTEN FOR: `db.logs.put` is a full-record write, the
  * pending-mutation guard only covers PENDING/SENDING/FAILED, and the freshness
  * guard needs a `serverModifiedAtUtc` that only this reconciler ever writes —
- * a farmer's own labour disappears from his own device the first time a log he
- * created syncs down. There is no backfill job in this system, and Dexie is
+ * so a farmer's own labour disappeared from his own device the first time a log
+ * he created synced down. There is no backfill job in this system, and Dexie is
  * the only copy the UI reads: `ReviewSheet` resolves its engagement from
  * `log.labour[].labourAssignmentId`, and `UpdateLog` builds its correction
- * `before` map from the same array, so the loss takes the attribution picker
- * and the whole correction path with it.
+ * `before` map from the same array, so the loss took the attribution picker and
+ * the whole correction path with it.
  *
- * It also cannot mask a server-side deletion, because there is no deletion
- * signal to mask: absent-from-the-wire is not empty-on-the-wire. If the pull
- * ever starts projecting labour, this function must be revisited — the
- * condition to add is "the DTO carried a labour field", never "the labour
- * array came back non-empty".
- *
- * `financialSummary` gets the same treatment for the same reason: the DTO
- * carries none of the five totals, so zeroing them over a local record is the
- * identical false assertion, and preserving only `totalLabourCost` would leave
- * a summary whose `grandTotal` contradicts its own labour line.
+ * `financialSummary` still gets that treatment unchanged, and for the reason
+ * the wire still cannot express it: the DTO carries none of the five totals, so
+ * zeroing them over a local record is the identical false assertion, and
+ * preserving only `totalLabourCost` would leave a summary whose `grandTotal`
+ * contradicts its own labour line.
  *
  * A genuinely NEW pulled log keeps today's empties: there is no local record to
  * preserve, and `financialSummary` is non-optional on `DailyLog` and is
  * dereferenced directly by display code.
  *
- * This is a holding measure, not a read path. Projecting labour onto
- * `DailyLogDto` and hydrating it here is the real fix and is deferred.
+ * ---------------------------------------------------------------------------
+ * LABOUR_PHASE2 Phase 3 — THE WIRE CAN NOW SPEAK, SO THE GUARD BECOMES A
+ * CONDITION INSTEAD OF A BLANKET.
+ *
+ * `DailyLogDto.labour` exists as of Phase 3, so labour is no longer preserved
+ * unconditionally: `resolveLabour` below decides, and engagements the server
+ * actually sent now overwrite the local copy. The function is REVISED, never
+ * deleted — deleting it is the V1 data loss, and that loss is still live for
+ * every log whose labour the server was never given.
+ *
+ * The V1 comment that stood here named the condition to add as "the DTO carried
+ * a labour field", never "the array came back non-empty". `resolveLabour`
+ * documents why, for labour specifically, those two readings turn out to
+ * produce identical records — and why the same distinction remains
+ * indispensable for `context` below, where it is anything but decorative.
  *
  * ---------------------------------------------------------------------------
  * LABOUR_PHASE2 A2b — `context` joins the guard, under the SAME predicate.
@@ -181,10 +185,118 @@ function preserveLocalOnlyFields(
 
     return {
         ...incoming,
-        labour: existing.labour ?? incoming.labour,
+        labour: resolveLabour(incoming.labour, existing.labour),
         financialSummary: existing.financialSummary ?? incoming.financialSummary,
         context: serverStatedContext ? incoming.context : (existing.context ?? incoming.context),
     };
+}
+
+/**
+ * LABOUR_PHASE2 Phase 3 — WHOSE LABOUR WINS, for a log this device already has.
+ *
+ * 1. THE SERVER SENT ENGAGEMENTS. They win, unconditionally. This is the point
+ *    of the whole feature: it is how a clean device reconstructs a log, how
+ *    Phone B sees what Phone A recorded, and how a correction propagates —
+ *    including a PARTIAL removal, where a log that had two engagements comes
+ *    back with one and the local copy must shrink to one. It is also how a
+ *    device stops contradicting itself: `UpdateLog` posts a correction to the
+ *    server and never writes Dexie, so before this line a phone that corrected
+ *    8 to 6 kept showing 8 forever.
+ *
+ * 2. THE SERVER SENT NO ENGAGEMENTS, over local labour. Local is kept. This is
+ *    the one refusal in this function and it is deliberate.
+ *
+ * ── WHY THIS TAKES TWO BRANCHES AND NOT THREE ───────────────────────────────
+ *
+ * `DailyLogDto.labour` has THREE states and they are genuinely different
+ * statements: absent/`null` is silence (`POST /logs`, verify and add-task all
+ * return a log without ever loading its engagements, and so does any server
+ * older than Phase 3), `[]` is "the server looked and found none", non-empty is
+ * the engagements. `serverStatedContext` above draws exactly that line for
+ * `plotIds`, where it is load-bearing: an empty plot set IS a farmer's
+ * assertion (`Farm` scope), so it must overwrite, while an absent one must not.
+ *
+ * For labour the same distinction COLLAPSES, and pretending otherwise would
+ * mean a branch no test can pin. Because branch 2 keeps local labour whenever
+ * the server sends none, "the server stated `[]`" and "the server said nothing"
+ * produce byte-identical records in every case — local empty or not, local
+ * absent or not. Adding a presence predicate here would look like a decision
+ * and decide nothing. The distinction is preserved where it is real: in
+ * `DailyLogDto.labour`'s own contract, and in `toDailyLog`, which reads a
+ * missing field as "no statement" rather than as the empty set.
+ *
+ * THE DAY THAT CHANGES is named at the end of this comment: if `[]` ever
+ * becomes adoptable, presence-not-contents is the predicate to reintroduce, and
+ * `serverStatedContext` is the shape to copy.
+ *
+ * ── WHY AN EMPTY ANSWER DOES NOT WIN, ARGUED FROM THE SERVER'S OWN CODE ─────
+ *
+ * WHAT `[]` CAN MEAN TODAY. Nothing in this system can delete a
+ * `LabourAssignment`. The only writes to that table are
+ * `AddLabourAssignmentAsync` (create) and `CorrectLabourHandler`, which mutates
+ * a row IN PLACE; there is no remove, no soft-delete and no endpoint that takes
+ * one away. The client cannot ask for one either — `buildLabourCorrections`
+ * skips a removed engagement by design ("not a correction of an existing one"),
+ * and `LabourCorrectionRequest` can remove an ATTRIBUTION but never the
+ * engagement. So `[]` from a Phase-3 server does not mean "the labour was
+ * removed". It means "this log has never had a labour row".
+ *
+ * AND THAT STATE IS REACHABLE WITH LABOUR SITTING IN DEXIE. Structured labour
+ * only started travelling on `create_daily_log` on 2026-08-11 (`44e04293`).
+ * Every log recorded before that date reached the server with NO labour
+ * payload, and got server-side rows only if it was a voice log whose derivation
+ * succeeded — derivation living in `CreateDailyLogHandler`'s best-effort
+ * side-car, where every branch catches, warns and returns success. A manual
+ * labour log from that era, or a voice log whose side-car rolled back, is on
+ * the server with zero labour rows, permanently: there is no backfill job, no
+ * re-derive endpoint, and the idempotency early-return hands back the existing
+ * log on every retry. The farmer's phone is the only place those 8 workers
+ * exist.
+ *
+ * THE SEQUENCE THIS PROTECTS: a farmer recorded 8 workers before 2026-08-11,
+ * the server was never told, and his phone still shows 8. The first pull after
+ * Phase 3 ships answers `[]` — truthfully — for that log. Adopting it deletes
+ * the only copy, silently, with no way back. That is the Labour V1 loss
+ * re-opened by the very commit that was supposed to close it.
+ *
+ * THE SEQUENCE THIS ACCEPTS, STATED PLAINLY: if a labour engagement is ever
+ * removed server-side — by a removal feature that does not exist yet, an ops
+ * SQL delete, or a restore from a backup taken before the log was written — a
+ * device that already holds that engagement keeps showing it until something
+ * else overwrites it. Case 1 above bounds that: as long as ONE engagement
+ * survives on the log, the whole set is replaced and the removed one goes.
+ * Only the all-the-way-to-zero transition is refused.
+ *
+ * THE TRIGGER TO REVISIT, so this does not quietly outlive its argument: THE
+ * DAY A DELETE PATH EXISTS FOR `ssf.labour_assignments`, this refusal becomes
+ * wrong and must be replaced by a provenance test — "is the local labour
+ * something the server ever acknowledged?" — not by simply adopting `[]`.
+ * Until then, provenance would be a field written for a case that cannot
+ * happen, and the honest guard is the narrow one.
+ *
+ * WHAT WAS CONSIDERED AND REJECTED as the discriminator: "does this log have an
+ * unacknowledged labour mutation in flight?". It cannot discriminate, because
+ * such a log never reaches this function — `readPendingLogIds` collects
+ * `dailyLogId` from every PENDING/SENDING/FAILED mutation and `reconcileLogs`
+ * skips those logs whole, before any field-level merge. And corrections never
+ * enter the queue at all: `UpdateLog` POSTs them directly. The queue is silent
+ * on precisely the logs at risk.
+ */
+function resolveLabour(
+    incoming: DailyLog['labour'],
+    existing: DailyLog['labour'],
+): DailyLog['labour'] {
+    if (incoming.length > 0 || !existing?.length) {
+        return incoming;
+    }
+
+    console.info(
+        JSON.stringify({
+            component: 'SyncPullReconciler',
+            action: 'keep_local_labour_over_server_empty',
+            engagements: existing.length,
+        }));
+    return existing;
 }
 
 /**
@@ -394,7 +506,16 @@ function toDailyLog(
         dayOutcome: 'WORK_RECORDED',
         cropActivities,
         irrigation,
-        labour: [],
+        // LABOUR_PHASE2 Phase 3 — the read-back. `?? []` is NOT a reading of the
+        // empty set: an empty set is on-the-wire and flows through
+        // `mapLabourEngagements` unchanged. It is reached only when the response
+        // carried no `labour` key (or a JSON `null`), i.e. made no statement —
+        // and for such a response `preserveLocalOnlyFields` keeps whatever this
+        // device already holds, so this literal is only ever the answer for a
+        // log this device has never seen. `DailyLog.labour` is non-optional and
+        // is dereferenced directly, so the empty array is the shape, never
+        // `undefined`.
+        labour: source.labour ? mapLabourEngagements(source.labour) : [],
         inputs,
         machinery: [],
         activityExpenses: [],
