@@ -591,6 +591,34 @@ public interface IShramSafalRepository
         => Task.FromResult<IReadOnlyList<ShramSafal.Domain.Farms.ObservationEvent>>(
             Array.Empty<ShramSafal.Domain.Farms.ObservationEvent>());
 
+    // ── the rest of the day's PERSISTED spine (task-7, 2026-08-13) ─────────────
+    // The richness scorer used to read the AI job's NormalizedResultJson and
+    // nothing else, so every fact the farmer supplied that lives ONLY as a typed
+    // row — a labour engagement, an irrigation, a machine, a disturbance — was
+    // invisible to it on any log without a usable AI-JSON root. These reads give
+    // the scorer the same rows the farmer actually created. Default impls return
+    // empty so the in-tree test doubles keep compiling; production overrides.
+
+    /// <summary>DFES — the <see cref="LabourAssignment"/> rows of the day's logs.</summary>
+    Task<IReadOnlyList<LabourAssignment>> GetLabourAssignmentsForDailyLogsAsync(
+        IReadOnlyCollection<Guid> dailyLogIds, CancellationToken ct = default)
+        => Task.FromResult<IReadOnlyList<LabourAssignment>>(Array.Empty<LabourAssignment>());
+
+    /// <summary>DFES — the <see cref="IrrigationEntry"/> rows of the day's logs.</summary>
+    Task<IReadOnlyList<IrrigationEntry>> GetIrrigationEntriesForDailyLogsAsync(
+        IReadOnlyCollection<Guid> dailyLogIds, CancellationToken ct = default)
+        => Task.FromResult<IReadOnlyList<IrrigationEntry>>(Array.Empty<IrrigationEntry>());
+
+    /// <summary>DFES — the <see cref="MachineryUsage"/> rows of the day's logs.</summary>
+    Task<IReadOnlyList<MachineryUsage>> GetMachineryUsagesForDailyLogsAsync(
+        IReadOnlyCollection<Guid> dailyLogIds, CancellationToken ct = default)
+        => Task.FromResult<IReadOnlyList<MachineryUsage>>(Array.Empty<MachineryUsage>());
+
+    /// <summary>DFES — the <see cref="DisturbanceEvent"/> rows of the day's logs.</summary>
+    Task<IReadOnlyList<DisturbanceEvent>> GetDisturbanceEventsForDailyLogsAsync(
+        IReadOnlyCollection<Guid> dailyLogIds, CancellationToken ct = default)
+        => Task.FromResult<IReadOnlyList<DisturbanceEvent>>(Array.Empty<DisturbanceEvent>());
+
     /// <summary>
     /// READ-ONLY lookup of the day's aggregate. The production implementation is
     /// <b>NO-TRACKING</b> — the returned entity is DETACHED, so mutating it (e.g.

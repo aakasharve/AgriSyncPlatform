@@ -30,14 +30,28 @@ public sealed class DailyRichnessDerivationService(
         var logIds = logs.Select(l => l.Id).ToList();
         var observations = await repository.GetObservationEventsForDailyLogsAsync(logIds, ct);
 
+        // FIX (task-7, 2026-08-13) — the rest of the farmer's PERSISTED spine. The
+        // scorer previously saw only the AI job's NormalizedResultJson (plus an
+        // activity-titles-only fallback), so a labour engagement, an irrigation, a
+        // machine or a disturbance he recorded was worth nothing unless an AI job
+        // happened to restate it. These are now read for EVERY log and folded in
+        // alongside the AI root, never instead of it.
+        var labourByLog = (await repository.GetLabourAssignmentsForDailyLogsAsync(logIds, ct))
+            .GroupBy(x => x.DailyLogId).ToDictionary(g => g.Key, g => (IReadOnlyList<Domain.Farms.LabourAssignment>)[.. g]);
+        var irrigationByLog = (await repository.GetIrrigationEntriesForDailyLogsAsync(logIds, ct))
+            .GroupBy(x => x.DailyLogId).ToDictionary(g => g.Key, g => (IReadOnlyList<Domain.Farms.IrrigationEntry>)[.. g]);
+        var machineryByLog = (await repository.GetMachineryUsagesForDailyLogsAsync(logIds, ct))
+            .GroupBy(x => x.DailyLogId).ToDictionary(g => g.Key, g => (IReadOnlyList<Domain.Farms.MachineryUsage>)[.. g]);
+        var disturbanceByLog = (await repository.GetDisturbanceEventsForDailyLogsAsync(logIds, ct))
+            .GroupBy(x => x.DailyLogId).ToDictionary(g => g.Key, g => (IReadOnlyList<Domain.Farms.DisturbanceEvent>)[.. g]);
+
         var roots = new List<JsonElement>();
+        var persistedRoots = new List<JsonElement>();
         var docs = new List<JsonDocument>(); // kept alive until scoring done
         try
         {
             foreach (var log in logs)
             {
-                var contributedAiRoot = false;
-
                 if (log.SourceAiJobId is { } jobId && jobId != Guid.Empty)
                 {
                     var job = await aiJobRepository.GetByIdAsync(jobId, ct);
@@ -51,7 +65,6 @@ public sealed class DailyRichnessDerivationService(
                             if (doc.RootElement.ValueKind == JsonValueKind.Object)
                             {
                                 roots.Add(doc.RootElement);
-                                contributedAiRoot = true;
                             }
                         }
                         catch (JsonException ex)
@@ -73,28 +86,37 @@ public sealed class DailyRichnessDerivationService(
                 // FIX (dfes-companion-2026-07-11, "scorer bug" — a real day of work was
                 // scored 0/10 UnaccountedDay): a DailyLog with no usable AI-job JSON root
                 // (no SourceAiJobId — manual entry / offline sync — or a dropped
-                // provenance link, or a cross-farm/malformed job) previously contributed
-                // NOTHING to the day's signals, even when the farmer's actual recorded
-                // work (LogTask rows — see AddLogTaskHandler) was sitting right there in
-                // the DB. That made DfesLensExtractor.HasWork false and the day
-                // classified UnaccountedDay — "nothing happened" — for a farmer who
-                // worked all day. This is a SAFETY-NET FALLBACK ONLY: it never runs when
-                // an AI-JSON root was already contributed above (that stays the richer,
-                // preferred source), and it only reflects work that is genuinely
-                // persisted (ExecutionStatus Completed/Partial/Modified — i.e. the task
-                // actually happened, not Skipped/Delayed) — never fabricated.
-                if (!contributedAiRoot && BuildPersistedWorkFallbackJson(log) is { } fallbackJson)
+                // provenance link, or a cross-farm/malformed job) contributed NOTHING to
+                // the day's signals, even when the farmer's actual recorded work was
+                // sitting right there in the DB.
+                //
+                // WIDENED (task-7, 2026-08-13): that fallback only synthesised activity
+                // TITLES from LogTask rows, and only for a log with no AI root — so the
+                // scorer still could not see a labour engagement, an irrigation, a
+                // machine or a disturbance, and a manual-entry day could never be scored
+                // as well as a voice day carrying the same facts. The persisted root is
+                // now built for EVERY log from ALL of its typed children, and folded in
+                // ALONGSIDE the AI root (DfesLensExtractor takes the better of the two
+                // per dimension) rather than instead of it. Still never fabricated: only
+                // non-null persisted columns are emitted, and a log with no typed child
+                // yields no root at all.
+                if (PersistedDayRootBuilder.Build(
+                        log,
+                        labourByLog.GetValueOrDefault(log.Id, []),
+                        irrigationByLog.GetValueOrDefault(log.Id, []),
+                        machineryByLog.GetValueOrDefault(log.Id, []),
+                        disturbanceByLog.GetValueOrDefault(log.Id, [])) is { } persistedJson)
                 {
-                    var doc = JsonDocument.Parse(fallbackJson);
+                    var doc = JsonDocument.Parse(persistedJson);
                     docs.Add(doc);
-                    roots.Add(doc.RootElement);
+                    persistedRoots.Add(doc.RootElement);
                 }
             }
 
             var serverTodayLocal = DateOnly.FromDateTime(clock.UtcNow + IstOffset);
             var plausible = ClientDateSanity.IsPlausible(localDate, serverTodayLocal);
 
-            var data = new DfesLensExtractor.DayData(roots, observations);
+            var data = new DfesLensExtractor.DayData(roots, observations, persistedRoots);
             var probe = new DfesLensExtractor.LensScoresProbe();
             var (input, signals) = DfesLensExtractor.Build(data, probe, plausible);
             var scores = probe.Scores;
@@ -149,38 +171,4 @@ public sealed class DailyRichnessDerivationService(
         }
     }
 
-    // ── persisted-work fallback (spec: dfes-companion-2026-07-11) ──────────────
-    // Statuses that mean the farmer actually DID the task that day. Skipped /
-    // Delayed explicitly mean the work did NOT happen (LogTask requires a
-    // DeviationReasonCode for those) — counting them as "work" would fabricate
-    // a signal the farmer never recorded, so they are deliberately excluded.
-    private static readonly HashSet<ExecutionStatus> WorkDoneStatuses =
-    [
-        ExecutionStatus.Completed, ExecutionStatus.Partial, ExecutionStatus.Modified
-    ];
-
-    // Builds a minimal synthetic JSON root in the same shape DfesLensExtractor
-    // already reads (see its "cropActivities" array reader), using ONLY the
-    // log's real, already-persisted LogTask rows. Returns null when the log has
-    // no task that genuinely represents completed work — in that case the day
-    // legitimately has nothing to fall back to, and DfesLensExtractor correctly
-    // sees no work (no dimension coverage is invented).
-    private static string? BuildPersistedWorkFallbackJson(DailyLog log)
-    {
-        var titles = log.Tasks
-            .Where(t => WorkDoneStatuses.Contains(t.ExecutionStatus) && !string.IsNullOrWhiteSpace(t.ActivityType))
-            .Select(t => t.ActivityType.Trim())
-            .ToList();
-
-        if (titles.Count == 0)
-        {
-            return null;
-        }
-
-        var root = new
-        {
-            cropActivities = titles.Select(title => new { title }).ToArray()
-        };
-        return JsonSerializer.Serialize(root);
-    }
 }

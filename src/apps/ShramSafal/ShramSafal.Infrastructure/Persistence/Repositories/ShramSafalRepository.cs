@@ -296,6 +296,38 @@ internal sealed class ShramSafalRepository(ShramSafalDbContext db) : IShramSafal
             .ToListAsync(ct);
     }
 
+    // ── the rest of the day's PERSISTED spine (task-7, 2026-08-13) ─────────────
+    // Same shape as the ObservationEvent read above: EXISTS-join children keyed
+    // by plain DailyLogId, read NO-TRACKING because the scorer only inspects
+    // them. Empty id set short-circuits so we never emit `IN ()`.
+    public async Task<IReadOnlyList<Domain.Farms.LabourAssignment>> GetLabourAssignmentsForDailyLogsAsync(
+        IReadOnlyCollection<Guid> dailyLogIds, CancellationToken ct = default)
+        => dailyLogIds.Count == 0
+            ? Array.Empty<Domain.Farms.LabourAssignment>()
+            : await db.LabourAssignments.AsNoTracking()
+                .Where(x => dailyLogIds.Contains(x.DailyLogId)).ToListAsync(ct);
+
+    public async Task<IReadOnlyList<Domain.Farms.IrrigationEntry>> GetIrrigationEntriesForDailyLogsAsync(
+        IReadOnlyCollection<Guid> dailyLogIds, CancellationToken ct = default)
+        => dailyLogIds.Count == 0
+            ? Array.Empty<Domain.Farms.IrrigationEntry>()
+            : await db.IrrigationEntries.AsNoTracking()
+                .Where(x => dailyLogIds.Contains(x.DailyLogId)).ToListAsync(ct);
+
+    public async Task<IReadOnlyList<Domain.Farms.MachineryUsage>> GetMachineryUsagesForDailyLogsAsync(
+        IReadOnlyCollection<Guid> dailyLogIds, CancellationToken ct = default)
+        => dailyLogIds.Count == 0
+            ? Array.Empty<Domain.Farms.MachineryUsage>()
+            : await db.MachineryUsages.AsNoTracking()
+                .Where(x => dailyLogIds.Contains(x.DailyLogId)).ToListAsync(ct);
+
+    public async Task<IReadOnlyList<Domain.Farms.DisturbanceEvent>> GetDisturbanceEventsForDailyLogsAsync(
+        IReadOnlyCollection<Guid> dailyLogIds, CancellationToken ct = default)
+        => dailyLogIds.Count == 0
+            ? Array.Empty<Domain.Farms.DisturbanceEvent>()
+            : await db.DisturbanceEvents.AsNoTracking()
+                .Where(x => dailyLogIds.Contains(x.DailyLogId)).ToListAsync(ct);
+
     public async Task<Domain.Dfes.DailyRichnessAggregate?> GetDailyRichnessAggregateAsync(
         Guid farmId, DateOnly localDate, CancellationToken ct = default)
         => await db.DailyRichnessAggregates

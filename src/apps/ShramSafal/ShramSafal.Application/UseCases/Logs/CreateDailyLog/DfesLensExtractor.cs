@@ -18,26 +18,41 @@ internal static class DfesLensExtractor
     private const int W_OBS_FACET = 15, W_LEARN_FACET = 15; // structured-noticing pseudo-dims
     private const double Cf = 1.0;
 
-    public sealed record DayData(IReadOnlyList<JsonElement> Roots, IReadOnlyList<ObservationEvent> Observations);
+    /// <param name="Roots">AI-extracted roots (one per DailyLog with a usable AI job).</param>
+    /// <param name="Observations">The day's persisted <see cref="ObservationEvent"/> rows.</param>
+    /// <param name="PersistedRoots">task-7 (2026-08-13) — one root per DailyLog projected
+    /// from its OWN persisted typed rows (labour / irrigation / machinery / disturbance /
+    /// tasks) by <see cref="PersistedDayRootBuilder"/>. Every dimension below is scored
+    /// against BOTH lists and takes the BETTER of the two, so folding the farmer's real
+    /// rows in can only ever reveal detail the AI text alone hid — never remove any.</param>
+    public sealed record DayData(
+        IReadOnlyList<JsonElement> Roots,
+        IReadOnlyList<ObservationEvent> Observations,
+        IReadOnlyList<JsonElement>? PersistedRoots = null);
 
     public static (LensInput Input, ClassifierSignals Signals) Build(DayData data, LensScoresProbe probeSink, bool clientDatePlausible)
     {
         var roots = data.Roots;
+        var persisted = data.PersistedRoots ?? [];
         var hasStructuredObs = HasStructuredObservation(data.Observations);
         var hasLearning = HasLearningFacet(data.Observations);
 
         // ── the day's dimensions, scored once ───────────────────────────────
         // ALWAYS possible (any day can carry these — nothing about the work performed
         // can make them impossible), so each one always has a coverage, 0 included.
-        var what = Dim("WHAT", W_WHAT, CoverWhat(roots));
-        var cost = Dim("COST", W_COST, CoverCost(roots));
-        var weather = Dim("WEATHER", W_WEATHER, CoverWeather(roots, data.Observations));
+        // Each rule runs UNCHANGED over the AI roots and over the persisted roots; the
+        // better answer wins (Math.Max / Best). Reading the farmer's own rows can
+        // therefore never LOWER a dimension he had already been credited for.
+        var what = Dim("WHAT", W_WHAT, Math.Max(CoverWhat(roots), CoverWhat(persisted)));
+        var cost = Dim("COST", W_COST, Math.Max(CoverCost(roots), CoverCost(persisted)));
+        var weather = Dim("WEATHER", W_WEATHER, Math.Max(
+            CoverWeather(roots, data.Observations), CoverWeather(persisted, data.Observations)));
         var obsFacet = Dim("OBS_FACET", W_OBS_FACET, hasStructuredObs ? 1.0 : 0.0);
         var learnFacet = Dim("LEARN_FACET", W_LEARN_FACET, hasLearning ? 1.0 : 0.0);
         // CONDITIONAL on the operations actually performed — Cover.NotApplicable when
         // the work they describe never happened (a DOSE on an irrigation-only day).
-        var dose = Dim("DOSE", W_DOSE, CoverDose(roots));                  // input-op only
-        var carrier = Dim("CARRIER", W_CARRIER, CoverCarrier(roots));      // input- or irrigation-op
+        var dose = Dim("DOSE", W_DOSE, Best(CoverDose(roots), CoverDose(persisted)));           // input-op only
+        var carrier = Dim("CARRIER", W_CARRIER, Best(CoverCarrier(roots), CoverCarrier(persisted))); // input- or irrigation-op
 
         // ── the 3 lenses (classifier + persisted lens scores) ───────────────
         // Shape is UNCHANGED: a facet dimension appears in its lens only when the
@@ -63,15 +78,15 @@ internal static class DfesLensExtractor
 
         var input = new LensInput(execution, insight, learning, possible);
 
-        // ── Signals (unioned across all logs) ───────────────────────────────
-        var hasWork = roots.Any(HasWork);
-        var hasDisturbance = roots.Any(HasDisturbanceReason);
+        // ── Signals (unioned across all logs AND both root sources) ─────────
+        var hasWork = roots.Any(HasWork) || persisted.Any(HasWork);
+        var hasDisturbance = roots.Any(HasDisturbanceReason) || persisted.Any(HasDisturbanceReason);
         var hasMeaningfulObs = hasStructuredObs || data.Observations.Any(o => o.TextRaw.Trim().Length >= 8);
         var hasExperiment = data.Observations.Any(o => !string.IsNullOrWhiteSpace(o.Hypothesis)
                                                        && !string.IsNullOrWhiteSpace(o.Evidence));
         var hasFollowup = data.Observations.Any(o => o.SourceQuestionId is not null
                                                     || !string.IsNullOrWhiteSpace(o.NextAction));
-        var (declared, reasonCode) = DeclaredNoWork(roots);
+        var (declared, reasonCode) = DeclaredNoWork(roots.Count > 0 ? [.. roots, .. persisted] : persisted);
         var isSilent = !hasWork && !hasDisturbance && !hasMeaningfulObs && !hasLearning;
 
         var scores = ThreeLensScorer.Score(input);
@@ -165,11 +180,35 @@ internal static class DfesLensExtractor
     }
 
     // ── facet / signal predicates ───────────────────────────────────────────
+
+    // The note types that mean "the farmer LOOKED at his field and told us what he
+    // saw". The extraction prompt (AiPromptBuilder) splits exactly that act into two
+    // labels — `observation` for a field condition, `issue` for a problem / disease /
+    // deficiency — so both are a noticing and both belong here.
+    //
+    // FIX (task-7, 2026-08-13): only `Observation` used to qualify, which made
+    // OBS_FACET unreachable in practice — every noticing the pipeline produced for
+    // this farmer came back labelled `issue` ("खोडांवरती काळा डाग दिसतोय" — black
+    // spots on the trunks), so 15 points of the denominator could never be earned no
+    // matter what he said. The same function already counted these very rows as
+    // HasMeaningfulObservation, so the engine was simultaneously asserting "he made a
+    // meaningful observation" and scoring that dimension 0.
+    //
+    // Deliberately EXCLUDED: `Reminder` (future intent — tomorrow's work, not a
+    // noticing), `Tip` (wisdom — that is LEARN_FACET's signal, credited there), and
+    // `Unknown` (the extractor could not classify it; crediting it would be a guess).
+    private static readonly HashSet<ObservationNoteType> NoticingNoteTypes =
+    [
+        ObservationNoteType.Observation, ObservationNoteType.Issue
+    ];
+
     private static bool HasStructuredObservation(IReadOnlyList<ObservationEvent> obs)
         => obs.Any(o => !string.IsNullOrWhiteSpace(o.Observation) || !string.IsNullOrWhiteSpace(o.Change)
             || !string.IsNullOrWhiteSpace(o.Comparison) || !string.IsNullOrWhiteSpace(o.Challenge)
             || !string.IsNullOrWhiteSpace(o.Uncertainty)
-            || (o.NoteType == ObservationNoteType.Observation && o.TextRaw.Trim().Length >= 8));
+            // Same content floor as before — an 8-character minimum, so an empty or
+            // one-word note is never credited just because a row exists.
+            || (NoticingNoteTypes.Contains(o.NoteType) && o.TextRaw.Trim().Length >= 8));
 
     private static bool HasLearningFacet(IReadOnlyList<ObservationEvent> obs)
         => obs.Any(o => !string.IsNullOrWhiteSpace(o.Learning) || o.NoteType == ObservationNoteType.Tip);
@@ -203,6 +242,18 @@ internal static class DfesLensExtractor
     {
         public static readonly Cover NotApplicable = new(false, 0.0);
     }
+
+    // task-7 — the better of the same rule's answer over the AI roots and over the
+    // farmer's persisted rows. A dimension is applicable if EITHER source shows the
+    // work happened; among the applicable answers the HIGHER coverage wins, so a
+    // second look at the same day can never take credit away.
+    private static Cover Best(Cover a, Cover b) => (a.Applicable, b.Applicable) switch
+    {
+        (false, false) => Cover.NotApplicable,
+        (true, false) => a,
+        (false, true) => b,
+        _ => new Cover(true, Math.Max(a.Value, b.Value)),
+    };
 
     private static ScoredDimension Dim(string name, int weight, double coverage)
         => new(name, weight, Applicable: true, Coverage: coverage, ConfidenceFactor: Cf);
