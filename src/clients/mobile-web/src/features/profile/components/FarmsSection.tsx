@@ -25,9 +25,9 @@ const FarmsSection: React.FC<FarmsSectionProps> = ({ farms, familyName, onOpenFa
         <div className="mt-4">
             {familyName && (
                 <div className="mb-2 flex items-center gap-2 px-1">
-                    <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-violet-50 text-violet-600"><Layers size={15} /></span>
-                    <span className="text-[13px] font-bold text-slate-700">{familyName}</span>
-                    <span className="text-[10.5px] text-slate-400">{sorted.length} {language === 'mr' ? 'शेती' : 'farms'}</span>
+                    <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-violet-50 text-violet-600"><Layers size={15} /></span>
+                    <span className="min-w-0 flex-1 truncate text-[13px] font-bold text-slate-700">{familyName}</span>
+                    <span className="shrink-0 text-[10.5px] text-slate-400">{sorted.length} {language === 'mr' ? 'शेती' : 'farms'}</span>
                 </div>
             )}
             <div className={`flex flex-col gap-2.5 ${familyName ? 'ml-3.5 border-l-2 border-dashed border-violet-100 pl-2.5' : ''}`}>

@@ -33,16 +33,20 @@ const FarmListCard: React.FC<FarmListCardProps> = ({ farm, tenure = 'owned', onO
             </span>
             <span className="min-w-0 flex-1">
                 <span className="block truncate text-[15.5px] font-bold text-slate-800">{farm.name}</span>
-                {seven && (
-                    <span className="mt-0.5 flex items-center gap-1.5 text-[10.5px] text-slate-400">
-                        <FileText size={12} /> {seven}
+                {/* Tenure chip + 7/12 code wrap onto a meta line so the farm
+                    name keeps the whole first row on a narrow phone. */}
+                <span className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1">
+                    <span className={`rounded-lg px-2 py-0.5 text-[9.5px] font-extrabold uppercase tracking-tight ${isOwned ? 'bg-emerald-50 text-emerald-800' : 'bg-amber-50 text-amber-700'}`}>
+                        {language === 'mr' ? t.mr : t.en}
                     </span>
-                )}
+                    {seven && (
+                        <span className="flex items-center gap-1 text-[10.5px] text-slate-400">
+                            <FileText size={12} /> {seven}
+                        </span>
+                    )}
+                </span>
             </span>
-            <span className={`flex-shrink-0 rounded-lg px-2 py-1 text-[9.5px] font-extrabold uppercase tracking-tight ${isOwned ? 'bg-emerald-50 text-emerald-800' : 'bg-amber-50 text-amber-700'}`}>
-                {language === 'mr' ? t.mr : t.en}
-            </span>
-            <ChevronRight size={18} className="flex-shrink-0 text-slate-300 transition-transform group-active:translate-x-0.5" />
+            <ChevronRight size={18} className="flex-shrink-0 self-center text-slate-300 transition-transform group-active:translate-x-0.5" />
         </button>
     );
 };

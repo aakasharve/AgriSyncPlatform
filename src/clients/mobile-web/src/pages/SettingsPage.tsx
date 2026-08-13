@@ -1,17 +1,13 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { useAppNavigationState } from '../app/context/AppFeatureContexts';
-import { BookOpen, FlaskConical, Bot, Trash2, Coins, Leaf, Check, Pencil, ChevronDown, Globe, Shield, MapPin, Mic, Camera, Activity } from 'lucide-react';
+import { BookOpen, FlaskConical, Bot, Coins, Leaf, Check, Pencil, ChevronDown, Mic, Activity } from 'lucide-react';
 import { LedgerDefaults, LabourShift, CropProfile, HarvestConfig } from '../types';
 import { getHarvestConfig } from '../services/harvestService';
 import NotificationTestComponent from '../shared/components/NotificationTestComponent';
 import HarvestConfigSheet from '../features/logs/components/harvest/HarvestConfigSheet';
 import { CropSymbol } from '../features/context/components/CropSelector';
 import { useLanguage } from '../i18n/LanguageContext';
-import { Language } from '../i18n/translations';
 import { idGenerator } from '../core/domain/services/IdGenerator';
-import { getMyFarms, type MyFarmDto } from '../features/onboarding/qr/inviteApi';
-import SubscriptionCard from '../features/admin/billing/SubscriptionCard';
-import { useUiPref } from '../shared/hooks/useUiPref';
 // spec: voice-diary-e2e-2026-05-17 (D.19) — Settings entry for the
 // FullHistoryJournal consent toggle. Lives next to the existing
 // Voice Journal "Open" CTA so the toggle is discoverable in the same
@@ -31,26 +27,7 @@ const SettingsPage: React.FC<SettingsPageProps> = ({
     crops
 }) => {
     const { setCurrentRoute } = useAppNavigationState();
-    const { t, language, setLanguage } = useLanguage();
-
-    // Billing state — fetched once farmId resolves from Dexie. Owner-only section.
-    // Sub-plan 04 Task 3 — current-farm-id now lives in Dexie via useUiPref.
-    // Initial render returns null fallback; the effect re-runs when the
-    // persisted value swaps in, matching the original behaviour.
-    const [currentFarmIdPref] = useUiPref<string | null>('shramsafal_current_farm_id', null);
-    const [currentFarm, setCurrentFarm] = useState<MyFarmDto | null>(null);
-    useEffect(() => {
-        let cancelled = false;
-        getMyFarms().then(farms => {
-            if (!cancelled && farms.length > 0) {
-                const farm = currentFarmIdPref
-                    ? farms.find(f => f.farmId === currentFarmIdPref) ?? farms[0]
-                    : farms[0];
-                setCurrentFarm(farm);
-            }
-        }).catch(() => { /* billing section just won't render */ });
-        return () => { cancelled = true; };
-    }, [currentFarmIdPref]);
+    const { t, language } = useLanguage();
 
     // Harvest Configuration state
     const [harvestConfigExpanded, setHarvestConfigExpanded] = useState(false);
@@ -103,163 +80,10 @@ const SettingsPage: React.FC<SettingsPageProps> = ({
         return `${pattern} / ${unitLabel}`;
     };
 
-    const languages: { code: Language; label: string; native: string }[] = [
-        { code: 'en', label: 'English', native: 'English' },
-        { code: 'mr', label: 'Marathi', native: 'मराठी' },
-    ];
-
     return (
         <div className="space-y-6 pb-24">
 
-            <h3 className="text-xl font-display font-black text-stone-800 px-1">{t('settings.general')}</h3>
-
-            {/* 0. Language Selector */}
-            <div className="glass-panel p-5">
-                <div className="flex items-center gap-4 mb-5">
-                    <div className="p-3 rounded-2xl bg-sky-100 text-sky-600 shadow-sm">
-                        <Globe size={24} strokeWidth={2.5} />
-                    </div>
-                    <div>
-                        <h3 className="font-bold text-stone-800 text-lg">{t('settings.language')}</h3>
-                        <p className="text-xs text-stone-500 font-medium mt-0.5">{t('settings.selectLanguage')}</p>
-                    </div>
-                </div>
-                <div className="flex gap-3">
-                    {languages.map((lang) => (
-                        <button
-                            key={lang.code}
-                            onClick={() => setLanguage(lang.code)}
-                            className={`flex-1 py-3 px-4 rounded-xl border-2 font-bold transition-all duration-200 active:scale-95 ${language === lang.code
-                                ? 'bg-primary-container border-primary text-emerald-800 shadow-sm'
-                                : 'bg-surface-100 border-transparent text-stone-500 hover:bg-white hover:border-stone-200'
-                                }`}
-                        >
-                            <div className="text-lg mb-1">{lang.native}</div>
-                            <div className="text-xs opacity-70 font-medium uppercase tracking-wide">{lang.label}</div>
-                        </button>
-                    ))}
-                </div>
-            </div>
-
-
-
-            
-            {/* App Permissions */}
-            <div className="pt-4">
-                <h3 className="text-xl font-display font-black text-stone-800 px-1">App Configuration</h3>
-            </div>
-            
-            <div className="glass-panel p-5 mb-6">
-                <div className="flex items-center justify-between mb-4">
-                    <div className="flex items-center gap-4 text-stone-700">
-                        <div className="bg-emerald-100 p-3 rounded-2xl text-emerald-700 shadow-sm"><Shield size={22} strokeWidth={2.5} /></div>
-                        <div>
-                            <h4 className="font-bold text-lg">App Permissions</h4>
-                            <p className="text-xs text-stone-500 mt-1 leading-relaxed">
-                                Manage Camera, Mic, and Location access.
-                            </p>
-                        </div>
-                    </div>
-                </div>
-                <div className="bg-stone-50 rounded-xl p-4 border border-stone-100 flex items-center justify-between">
-                    <div className="flex gap-4">
-                        <div className="flex flex-col items-center gap-1">
-                            <MapPin size={16} className="text-emerald-600" />
-                            <span className="text-[10px] font-bold text-stone-400">GPS</span>
-                        </div>
-                        <div className="flex flex-col items-center gap-1">
-                            <Mic size={16} className="text-emerald-600" />
-                            <span className="text-[10px] font-bold text-stone-400">MIC</span>
-                        </div>
-                        <div className="flex flex-col items-center gap-1">
-                            <Camera size={16} className="text-emerald-600" />
-                            <span className="text-[10px] font-bold text-stone-400">CAM</span>
-                        </div>
-                    </div>
-                    <button 
-                        onClick={() => alert('Please manage site permissions in your browser settings (usually near the URL bar).')}
-                        className="text-xs font-bold text-emerald-700 bg-emerald-100 px-4 py-2 rounded-lg hover:bg-emerald-200 transition-colors"
-                    >
-                        Browser Settings
-                    </button>
-                </div>
-            </div>
-
-            {/* spec: data-principle-spine-2026-05-05/06.4 — Privacy/Consent entry. */}
-            <div className="pt-4">
-                <h3 className="text-xl font-display font-black text-stone-800 px-1">Privacy</h3>
-            </div>
-            <div className="glass-panel p-5 mb-6">
-                <div className="flex items-start justify-between gap-4">
-                    <div className="flex items-start gap-4 text-stone-700">
-                        <div className="bg-emerald-100 p-3 rounded-2xl text-emerald-700 shadow-sm">
-                            <Shield size={22} strokeWidth={2.5} />
-                        </div>
-                        <div>
-                            <h4 className="font-bold text-lg">Consent</h4>
-                            <p className="text-xs text-stone-500 mt-1 leading-relaxed max-w-[280px]">
-                                Manage your three independent data permissions.
-                            </p>
-                        </div>
-                    </div>
-                    <button
-                        onClick={() => setCurrentRoute('consent')}
-                        className="shrink-0 rounded-xl bg-emerald-100 px-3 py-2 text-xs font-black text-emerald-800 transition-colors hover:bg-emerald-200 active:scale-95"
-                        data-testid="settings-open-consent"
-                    >
-                        Open
-                    </button>
-                </div>
-            </div>
-
-            {/* spec: data-principle-spine-2026-05-05/08.6 — DPDP §11 Export entry. */}
-            <div className="glass-panel p-5 mb-3">
-                <div className="flex items-start justify-between gap-4">
-                    <div className="flex items-start gap-4 text-stone-700">
-                        <div className="bg-emerald-100 p-3 rounded-2xl text-emerald-700 shadow-sm">
-                            <Shield size={22} strokeWidth={2.5} />
-                        </div>
-                        <div>
-                            <h4 className="font-bold text-lg">Export my data</h4>
-                            <p className="text-xs text-stone-500 mt-1 leading-relaxed max-w-[280px]">
-                                Download a copy of all your AgriSync data.
-                            </p>
-                        </div>
-                    </div>
-                    <button
-                        onClick={() => setCurrentRoute('dataRights/export')}
-                        className="shrink-0 rounded-xl bg-emerald-100 px-3 py-2 text-xs font-black text-emerald-800 transition-colors hover:bg-emerald-200 active:scale-95"
-                        data-testid="settings-open-data-export"
-                    >
-                        Open
-                    </button>
-                </div>
-            </div>
-
-            {/* spec: data-principle-spine-2026-05-05/08.6 — DPDP §12 Erasure entry. */}
-            <div className="glass-panel p-5 mb-6">
-                <div className="flex items-start justify-between gap-4">
-                    <div className="flex items-start gap-4 text-stone-700">
-                        <div className="bg-red-100 p-3 rounded-2xl text-red-700 shadow-sm">
-                            <Trash2 size={22} strokeWidth={2.5} />
-                        </div>
-                        <div>
-                            <h4 className="font-bold text-lg">Erase my data</h4>
-                            <p className="text-xs text-stone-500 mt-1 leading-relaxed max-w-[280px]">
-                                Permanently anonymize your personal data.
-                            </p>
-                        </div>
-                    </div>
-                    <button
-                        onClick={() => setCurrentRoute('dataRights/erasure')}
-                        className="shrink-0 rounded-xl bg-red-100 px-3 py-2 text-xs font-black text-red-800 transition-colors hover:bg-red-200 active:scale-95"
-                        data-testid="settings-open-data-erasure"
-                    >
-                        Open
-                    </button>
-                </div>
-            </div>
-
+            {/* Voice Journal — stays on Settings (Voice Diary is out of scope of the Setup-Hub migration) */}
             <div className="glass-panel p-5 mb-6">
                 <div className="flex items-start justify-between gap-4">
                     <div className="flex items-start gap-4 text-stone-700">
@@ -294,7 +118,7 @@ const SettingsPage: React.FC<SettingsPageProps> = ({
                 />
             </div>
 
-<div className="pt-4">
+            <div className="pt-4">
                 <h3 className="text-xl font-display font-black text-stone-800 px-1">{t('settings.ledgerConfig')}</h3>
             </div>
 
@@ -405,83 +229,49 @@ const SettingsPage: React.FC<SettingsPageProps> = ({
                 />
             )}
 
-            {/* Notification Tester */}
-            <NotificationTestComponent />
+            {/* Engineer-only tools — hidden from farmers in production builds. */}
+            {import.meta.env.DEV && (
+                <>
+                    {/* Notification Tester */}
+                    <NotificationTestComponent />
 
-            
-            {/* Manage Crops Data */}
-            <div className="pt-4">
-                <h3 className="text-xl font-display font-black text-stone-800 px-1">Manage Farm Data</h3>
-            </div>
-            <div className="glass-panel p-5 mb-6">
-                <h4 className="font-bold text-lg text-stone-800 mb-2">Delete Crop Data</h4>
-                <p className="text-xs text-stone-500 mb-4">Warning: This action is irreversible. All plots and logs related to the crop will be lost.</p>
-                <div className="space-y-2">
-                    {crops.map(crop => (
-                        <div key={crop.id} className="flex items-center justify-between border border-stone-100 rounded-xl p-3 bg-stone-50">
-                            <span className="font-bold text-sm text-stone-700">{crop.name}</span>
-                            <button className="text-xs font-bold text-red-600 bg-red-50 hover:bg-red-100 px-3 py-1.5 rounded-lg flex items-center gap-1 transition-colors">
-                                <Trash2 size={14} /> Delete
+                    {/* Developer Tools */}
+                    <div className="glass-panel p-5 mt-6">
+                        <h3 className="font-bold text-stone-800 text-lg mb-4">Developer Tools</h3>
+                        <div className="space-y-2">
+                            <button
+                                onClick={() => setCurrentRoute('test-e2e')}
+                                className="w-full py-3 px-4 bg-stone-100 text-stone-700 font-bold rounded-xl hover:bg-stone-200 transition-colors flex items-center justify-center gap-2 active:scale-[0.98]"
+                            >
+                                <FlaskConical size={20} />
+                                Open End-to-End Test Page
+                            </button>
+                            <button
+                                onClick={() => setCurrentRoute('ai-admin')}
+                                className="w-full py-3 px-4 bg-emerald-100 text-emerald-800 font-bold rounded-xl hover:bg-emerald-200 transition-colors flex items-center justify-center gap-2 active:scale-[0.98]"
+                            >
+                                <Bot size={20} />
+                                Open AI Operations (Admin)
+                            </button>
+                            <button
+                                onClick={() => setCurrentRoute('ops-admin')}
+                                className="w-full py-3 px-4 bg-blue-50 text-blue-800 font-bold rounded-xl hover:bg-blue-100 transition-colors flex items-center justify-center gap-2 active:scale-[0.98]"
+                            >
+                                <Activity size={20} />
+                                Open Ops Health (Admin)
+                            </button>
+                            {/* spec: data-principle-spine-2026-05-05/10.4 — admin PII review queue. */}
+                            <button
+                                onClick={() => setCurrentRoute('piiReview')}
+                                className="w-full py-3 px-4 bg-amber-50 text-amber-800 font-bold rounded-xl hover:bg-amber-100 transition-colors flex items-center justify-center gap-2 active:scale-[0.98]"
+                            >
+                                <Bot size={20} />
+                                Open PII Review Queue (Admin)
                             </button>
                         </div>
-                    ))}
-                    {crops.length === 0 && <p className="text-xs text-stone-400 italic">No crops available</p>}
-                </div>
-            </div>
-
-            {/* Billing — PrimaryOwner only; renders nothing for workers */}
-            {currentFarm && currentFarm.role === 'PrimaryOwner' && (
-                <div>
-                    <h3 className="text-xl font-display font-black text-stone-800 px-1 mb-4">
-                        बिलिंग · Billing
-                    </h3>
-                    <SubscriptionCard
-                        subscription={currentFarm.subscription}
-                        role={currentFarm.role}
-                        onManageBilling={() => {
-                            // TODO(Phase 7): open provider billing portal URL
-                            // For now, surface a friendly message.
-                            window.alert('Billing portal coming soon. Contact support@shramsafal.in.');
-                        }}
-                    />
-                </div>
+                    </div>
+                </>
             )}
-
-            {/* Developer Tools */}
-            <div className="glass-panel p-5 mt-6">
-                <h3 className="font-bold text-stone-800 text-lg mb-4">Developer Tools</h3>
-                <div className="space-y-2">
-                    <button
-                        onClick={() => setCurrentRoute('test-e2e')}
-                        className="w-full py-3 px-4 bg-stone-100 text-stone-700 font-bold rounded-xl hover:bg-stone-200 transition-colors flex items-center justify-center gap-2 active:scale-[0.98]"
-                    >
-                        <FlaskConical size={20} />
-                        Open End-to-End Test Page
-                    </button>
-                    <button
-                        onClick={() => setCurrentRoute('ai-admin')}
-                        className="w-full py-3 px-4 bg-emerald-100 text-emerald-800 font-bold rounded-xl hover:bg-emerald-200 transition-colors flex items-center justify-center gap-2 active:scale-[0.98]"
-                    >
-                        <Bot size={20} />
-                        Open AI Operations (Admin)
-                    </button>
-                    <button
-                        onClick={() => setCurrentRoute('ops-admin')}
-                        className="w-full py-3 px-4 bg-blue-50 text-blue-800 font-bold rounded-xl hover:bg-blue-100 transition-colors flex items-center justify-center gap-2 active:scale-[0.98]"
-                    >
-                        <Activity size={20} />
-                        Open Ops Health (Admin)
-                    </button>
-                    {/* spec: data-principle-spine-2026-05-05/10.4 — admin PII review queue. */}
-                    <button
-                        onClick={() => setCurrentRoute('piiReview')}
-                        className="w-full py-3 px-4 bg-amber-50 text-amber-800 font-bold rounded-xl hover:bg-amber-100 transition-colors flex items-center justify-center gap-2 active:scale-[0.98]"
-                    >
-                        <Bot size={20} />
-                        Open PII Review Queue (Admin)
-                    </button>
-                </div>
-            </div>
 
         </div>
     );

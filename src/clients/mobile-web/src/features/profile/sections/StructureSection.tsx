@@ -166,12 +166,12 @@ const StructureSection: React.FC<StructureSectionProps> = ({
 
                             {crop.plots.map(p => (
                                 <div key={p.id} className="p-3 rounded-xl hover:bg-slate-50 group space-y-2">
-                                    <div className="flex justify-between items-center">
-                                        <div>
-                                            <div className="font-bold text-slate-700 flex items-center gap-2">
+                                    <div className="flex justify-between items-center gap-2">
+                                        <div className="min-w-0 flex-1">
+                                            <div className="truncate font-bold text-slate-700">
                                                 {p.name}
                                             </div>
-                                            <div className="text-xs text-slate-400 flex items-center gap-2">
+                                            <div className="text-xs text-slate-400 flex flex-wrap items-center gap-x-2 gap-y-1">
                                                 <span>{p.baseline.totalArea} {p.baseline.unit}</span>
                                                 {p.infrastructure?.irrigationMethod && <span>• {p.infrastructure.irrigationMethod}</span>}
                                                 {p.geoData && <span className="flex items-center gap-0.5 text-emerald-600 font-bold bg-emerald-50 px-1.5 py-0.5 rounded text-[10px]"><MapPin size={10} /> {t('profile.mapped')}</span>}

@@ -58,6 +58,9 @@ export const renderProfileRoute = (ctx: AppRouterContext): React.ReactNode => {
                 }}
                 onOpenFinanceManager={() => ctx.setCurrentRoute('finance-manager')}
                 onOpenReferrals={() => ctx.setCurrentRoute('referrals')}
+                onOpenConsent={() => ctx.setCurrentRoute('consent')}
+                onOpenExport={() => ctx.setCurrentRoute('dataRights/export')}
+                onOpenErasure={() => ctx.setCurrentRoute('dataRights/erasure')}
                 onOpenQrDemo={() => ctx.setCurrentRoute('qr-demo')}
                 onExit={() => ctx.setCurrentRoute('main')}
             />
@@ -344,7 +347,7 @@ export const renderConsentRoute = (ctx: AppRouterContext): React.ReactNode => {
     if (ctx.currentRoute !== 'consent') return null;
     return (
         <div className="animate-in fade-in slide-in-from-right-4 duration-300">
-            <ConsentScreen onBack={() => ctx.setCurrentRoute('settings')} />
+            <ConsentScreen onBack={() => ctx.setCurrentRoute('profile')} />
         </div>
     );
 };
@@ -354,7 +357,7 @@ export const renderErasureRequestRoute = (ctx: AppRouterContext): React.ReactNod
     if (ctx.currentRoute !== 'dataRights/erasure') return null;
     return (
         <div className="animate-in fade-in slide-in-from-right-4 duration-300">
-            <ErasureRequestScreen onBack={() => ctx.setCurrentRoute('settings')} />
+            <ErasureRequestScreen onBack={() => ctx.setCurrentRoute('profile')} />
         </div>
     );
 };
@@ -364,7 +367,7 @@ export const renderExportRequestRoute = (ctx: AppRouterContext): React.ReactNode
     if (ctx.currentRoute !== 'dataRights/export') return null;
     return (
         <div className="animate-in fade-in slide-in-from-right-4 duration-300">
-            <ExportRequestScreen onBack={() => ctx.setCurrentRoute('settings')} />
+            <ExportRequestScreen onBack={() => ctx.setCurrentRoute('profile')} />
         </div>
     );
 };
