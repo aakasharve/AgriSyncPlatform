@@ -95,39 +95,46 @@ describe('the eyebrow', () => {
 
 describe('the numbers', () => {
     /**
-     * THESE TWO RUN IN `en`, AND THAT IS A FINDING, NOT A CONVENIENCE.
+     * THE FIGURES REACH BOTH LANGUAGES, AND THAT IS THE POINT OF THE PAIR.
      *
-     * The founder ruled on `dfes.todaySummary` on 2026-08-13 and replaced
-     * `'आज: {activities} कामं, Rs. {cost} खर्च.'` with `'आजची कामे आणि त्याचा
-     * खर्च'` — a heading, carrying no placeholders. `tf` therefore has nothing
-     * to substitute in Marathi, so the activity count and the stated spend
-     * reach the eye only in English. The properties below (`O-2` money whole;
-     * activities counted once) are still worth pinning and are pinned where
-     * they are still observable.
+     * `dfes.todaySummary` briefly lost its placeholders: the founder's first
+     * rewrite was a heading, `'आजची कामे आणि त्याचा खर्च'`, so `tf` had nothing
+     * to substitute and a Marathi farmer saw no count and no rupee figure. He
+     * reversed that on review — the approved string is
+     * `'आजची {activities} कामे, खर्च रु. {cost}'` — so the numbers are back.
      *
-     * This is the founder's copy decision with a visible consequence, raised
-     * for him rather than worked around: the fix, if he wants the figures back
-     * in Marathi, is his wording or a component change — never an agent
-     * re-writing his Marathi to put the placeholders back.
+     * The tests below were briefly forced into `en` by that gap and are back in
+     * Marathi with it closed. The `both languages` case exists so the gap
+     * cannot reopen unnoticed: an `mr` string that stops naming a placeholder
+     * silently drops a number the farmer is owed, which is the failure a
+     * shape-only check cannot see (`P4`).
      */
     it('shows the stated spend WHOLE, divided by nothing', () => {
         // `O-2`: a per-plot share of a farm-wide amount would invent an
         // allocation the farmer never gave.
-        langRef.current = 'en';
         render(<FarmWideTodayPanel summary={summary({ statedSpend: 2400 })} />);
         expect(screen.getByTestId('farm-wide-today-panel')).toHaveTextContent('2,400');
     });
 
-    it('shows no figure — and no dangling placeholder — in Marathi', () => {
-        // The other half of the ruling above, stated out loud so it cannot be
-        // "fixed" by accident. A `{cost}` left standing on screen would be the
-        // other failure mode of a rewrite that drops a placeholder; `tf` only
-        // substitutes what the template names, so nothing is left behind.
-        render(<FarmWideTodayPanel summary={summary({ statedSpend: 2400 })} />);
-        const panel = screen.getByTestId('farm-wide-today-panel');
-        expect(panel).toHaveTextContent('आजची कामे आणि त्याचा खर्च');
-        expect(panel).not.toHaveTextContent('2,400');
-        expect(panel.textContent).not.toContain('{');
+    it('shows the count and the spend in BOTH languages, with nothing dangling', () => {
+        for (const language of ['mr', 'en'] as const) {
+            langRef.current = language;
+            const { unmount } = render(<FarmWideTodayPanel summary={summary({
+                statedSpend: 2400,
+                counts: {
+                    cropActivities: 1, irrigation: 2, labour: 3, inputs: 0, machinery: 1,
+                    activityExpenses: 0, observations: 0, reminders: 0, disturbance: 0, harvest: 0,
+                },
+            })} />);
+            const panel = screen.getByTestId('farm-wide-today-panel');
+            expect(panel, language).toHaveTextContent('2,400');
+            expect(panel, language).toHaveTextContent('7');
+            // An unfilled `{cost}` on screen is the other way a placeholder
+            // edit goes wrong: `tf` leaves unknown names STANDING rather than
+            // blanking them, so a typo in a key renders braces at a farmer.
+            expect(panel.textContent, language).not.toContain('{');
+            unmount();
+        }
     });
 
     it('reports the record count as given, never a per-plot multiple', () => {
@@ -136,7 +143,6 @@ describe('the numbers', () => {
     });
 
     it('counts activities across buckets, once each', () => {
-        langRef.current = 'en';
         render(<FarmWideTodayPanel summary={summary({
             counts: {
                 cropActivities: 1, irrigation: 2, labour: 3, inputs: 0, machinery: 1,

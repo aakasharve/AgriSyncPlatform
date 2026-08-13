@@ -24,14 +24,31 @@
  * `__tests__/translationsSplit.test.ts` pins that against a hand-transcribed
  * oracle rather than against this file.
  *
- * SINCE THEN, ONE DELIBERATE REVISION. The founder ruled on this copy on
- * 2026-08-13 and rewrote 9 of the 38 `mr` strings (`closeToday`, `todayClosed`,
- * `todaySummary`, `farmBookUpToDate`, `doesThisMatch`, `waitingForConfirmation`,
- * `onboardingWelcome`, `firstLogCelebration`, `entries`). The other 29 `mr`
- * strings and all 38 `en` strings are still the pre-split bytes. He is the
- * Marathi authority: these strings are copied verbatim from his worksheet and
- * are not an agent's to spell-correct, reword or re-punctuate. The oracle test
- * was updated in the same commit, which is the two-file edit it exists to force.
+ * SINCE THEN, TWO ROUNDS OF FOUNDER REVISION (2026-08-13). 10 of the 38 `mr`
+ * strings are now his rather than the pre-split bytes: `closeToday`,
+ * `todayClosed`, `todaySummary`, `farmBookUpToDate`, `doesThisMatch`,
+ * `updated`, `waitingForConfirmation`, `onboardingWelcome`,
+ * `firstLogCelebration`, `entries`. The other 28 are untouched. He is the
+ * Marathi authority: these are copied verbatim from his worksheet and are not
+ * an agent's to spell-correct, reword or re-punctuate — round 2 is where his
+ * own slips got fixed (`तपसणी` -> `तपासणी`), by him.
+ *
+ * ONE `en` STRING CHANGED, AND ONLY BECAUSE THE MARATHI FORCED IT.
+ * `onboardingWelcome` promised "Just 30 seconds", and the founder's standing
+ * rule is that no string quotes a time cost — so the English kept making a
+ * promise the Marathi had stopped making. It now mirrors his sentence. Every
+ * other `en` string is the pre-split byte; where an `mr` rewrite moved a
+ * string's meaning, the English was left alone deliberately, because he ruled
+ * on Marathi and English is a separate pass.
+ *
+ * THREE STRINGS ARE DELIBERATELY NOT REVISED, PENDING A CLASH.
+ * `closeTodayQuestion`, `reviewAndClose` and `clickToClose` all carry the `बंद`
+ * ("close the day") metaphor. One ruling keeps `बंद` everywhere; a second
+ * removes it everywhere. They are held at their shipped wording until that is
+ * settled, so nobody reads their absence from the list above as an oversight.
+ *
+ * The oracle test is updated in the same commit, which is the two-file edit it
+ * exists to force.
  */
 import type { Language } from './language';
 
@@ -127,7 +144,7 @@ export const dfesTranslations: Record<Language, DfesTranslations> = {
 
         // Onboarding
         shramSathi: 'Shram Sathi',
-        onboardingWelcome: 'Keep a daily farm record. Just 30 seconds.',
+        onboardingWelcome: 'Tell Shram Sathi about the work on your farm. He will come to understand your farm and how you work.',
         letsStart: 'Let\'s start',
         whichCropToday: 'Which crop today?',
         whatWorkToday: 'What work happened today?',
@@ -158,12 +175,12 @@ export const dfesTranslations: Record<Language, DfesTranslations> = {
 
     mr: {
         // Closure ritual
-        closeToday: 'आजच्या सर्व नोंदी माझ्या पर्यन्त पोहोचल्या का याची खात्री करा',
+        closeToday: 'आजच्या सर्व नोंदी माझ्यापर्यंत पोहोचल्या का याची खात्री करा',
         todayClosed: 'आजचं आटपलं. सगळी कामे आणि गोष्टी समजल्या',
         closeTodayQuestion: 'आजचं शेत बंद करायचं?',
 
         // Day summary
-        todaySummary: 'आजची कामे आणि त्याचा खर्च',
+        todaySummary: 'आजची {activities} कामे, खर्च रु. {cost}',
         weekSummary: 'या आठवड्यात: {entries} नोंदी, Rs. {cost} खर्च.',
         farmBookUpToDate: 'शेतातील कामे आणि मी समजून घेतलेले कामे बरोबर आहेत',
 
@@ -172,8 +189,8 @@ export const dfesTranslations: Record<Language, DfesTranslations> = {
         allLooksCorrect: 'सगळं बरोबर दिसतंय',
         somethingNeedsFixing: 'काहीतरी सुधारायला हवं',
         ownerHasQuestion: '{owner} यांना या नोंदीबद्दल शंका आहे',
-        updated: 'सुधारणा: {field} {oldValue} होतं, {newValue} आहे',
-        waitingForConfirmation: 'तपसणी बाकी आहे',
+        updated: 'बदल: {field} — आधी {oldValue}, आता {newValue}',
+        waitingForConfirmation: 'तपासणी बाकी आहे',
         confirmed: 'खात्री झाली',
 
         // Missed day
@@ -187,7 +204,7 @@ export const dfesTranslations: Record<Language, DfesTranslations> = {
 
         // Onboarding
         shramSathi: 'श्रम साथी',
-        onboardingWelcome: 'शेतातली कामे श्रम साथी ला सांगा तो तुमची शेती ओ तुमची कामाची पद्धत समजून घेत आहे',
+        onboardingWelcome: 'शेतातली कामं श्रम साथीला सांगा — तो तुमची शेती आणि तुमच्या कामाची पद्धत समजून घेईल.',
         letsStart: 'चला सुरू करूया',
         whichCropToday: 'आज कोणत्या पिकावर काम?',
         whatWorkToday: 'आज काय काम झालं?',

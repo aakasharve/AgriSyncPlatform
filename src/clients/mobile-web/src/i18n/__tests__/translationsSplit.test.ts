@@ -20,14 +20,16 @@
  * bytes BEFORE the split — so this test compares the new arrangement against
  * the old file, which is the only comparison that means anything here.
  *
- * NINE `mr` STRINGS ARE NO LONGER THOSE BYTES, ON PURPOSE. The founder ruled on
- * the Shram Sathi copy on 2026-08-13 and rewrote `closeToday`, `todayClosed`,
- * `todaySummary`, `farmBookUpToDate`, `doesThisMatch`, `waitingForConfirmation`,
- * `onboardingWelcome`, `firstLogCelebration` and `entries`. Those nine were
- * re-transcribed here from his worksheet, character for character, in the same
- * commit that changed the module — the deliberate two-file edit this file
- * exists to force. Everything else below is still the pre-split transcription,
- * so the split guard still holds for the other 29 `mr` strings and all 38 `en`.
+ * TEN `mr` STRINGS AND ONE `en` STRING ARE NO LONGER THOSE BYTES, ON PURPOSE.
+ * Across two founder review rounds on 2026-08-13 he rewrote `closeToday`,
+ * `todayClosed`, `todaySummary`, `farmBookUpToDate`, `doesThisMatch`,
+ * `updated`, `waitingForConfirmation`, `onboardingWelcome`,
+ * `firstLogCelebration` and `entries`; `onboardingWelcome` also changed in `en`
+ * because it quoted a time cost his rule forbids. Each was re-transcribed here
+ * from his worksheet, character for character, in the same commit that changed
+ * the module — the deliberate two-file edit this file exists to force.
+ * Everything else below is still the pre-split transcription, so the split
+ * guard still holds for the other 28 `mr` strings and 37 `en`.
  *
  * It also pins the two properties the split exists to create: `Language` is
  * still reachable from `translations.ts` (40-odd call sites import it there),
@@ -40,10 +42,10 @@ import { dfesTranslations } from '../dfesTranslations';
 import type { Language } from '../language';
 
 /**
- * The approved DFES copy: the pre-split transcription, with the nine `mr`
- * strings the founder rewrote on 2026-08-13 re-transcribed from his worksheet.
- * If a founder revises DFES copy this is where it gets revised — deliberately,
- * and in two places, which is the point.
+ * The approved DFES copy: the pre-split transcription, with the strings the
+ * founder rewrote across his two 2026-08-13 rounds re-transcribed from his
+ * worksheet. If a founder revises DFES copy this is where it gets revised —
+ * deliberately, and in two places, which is the point.
  */
 const DFES_APPROVED_COPY = {
     en: {
@@ -66,7 +68,7 @@ const DFES_APPROVED_COPY = {
         daysLoggedThisWeek: 'You logged {logged} of {count} days this week',
         noWorkToday: 'No work today',
         shramSathi: 'Shram Sathi',
-        onboardingWelcome: 'Keep a daily farm record. Just 30 seconds.',
+        onboardingWelcome: 'Tell Shram Sathi about the work on your farm. He will come to understand your farm and how you work.',
         letsStart: 'Let\'s start',
         whichCropToday: 'Which crop today?',
         whatWorkToday: 'What work happened today?',
@@ -87,18 +89,18 @@ const DFES_APPROVED_COPY = {
         clickToClose: 'Click to close the day',
     },
     mr: {
-        closeToday: 'आजच्या सर्व नोंदी माझ्या पर्यन्त पोहोचल्या का याची खात्री करा',
+        closeToday: 'आजच्या सर्व नोंदी माझ्यापर्यंत पोहोचल्या का याची खात्री करा',
         todayClosed: 'आजचं आटपलं. सगळी कामे आणि गोष्टी समजल्या',
         closeTodayQuestion: 'आजचं शेत बंद करायचं?',
-        todaySummary: 'आजची कामे आणि त्याचा खर्च',
+        todaySummary: 'आजची {activities} कामे, खर्च रु. {cost}',
         weekSummary: 'या आठवड्यात: {entries} नोंदी, Rs. {cost} खर्च.',
         farmBookUpToDate: 'शेतातील कामे आणि मी समजून घेतलेले कामे बरोबर आहेत',
         doesThisMatch: 'हे बरोबर आहे ना?',
         allLooksCorrect: 'सगळं बरोबर दिसतंय',
         somethingNeedsFixing: 'काहीतरी सुधारायला हवं',
         ownerHasQuestion: '{owner} यांना या नोंदीबद्दल शंका आहे',
-        updated: 'सुधारणा: {field} {oldValue} होतं, {newValue} आहे',
-        waitingForConfirmation: 'तपसणी बाकी आहे',
+        updated: 'बदल: {field} — आधी {oldValue}, आता {newValue}',
+        waitingForConfirmation: 'तपासणी बाकी आहे',
         confirmed: 'खात्री झाली',
         addYesterday: 'कालचं काम नोंदवा',
         addPreviousDays: 'मागील दिवस नोंदवा',
@@ -106,7 +108,7 @@ const DFES_APPROVED_COPY = {
         daysLoggedThisWeek: 'या आठवड्यात {count} पैकी {logged} दिवस नोंद',
         noWorkToday: 'आज काम नाही',
         shramSathi: 'श्रम साथी',
-        onboardingWelcome: 'शेतातली कामे श्रम साथी ला सांगा तो तुमची शेती ओ तुमची कामाची पद्धत समजून घेत आहे',
+        onboardingWelcome: 'शेतातली कामं श्रम साथीला सांगा — तो तुमची शेती आणि तुमच्या कामाची पद्धत समजून घेईल.',
         letsStart: 'चला सुरू करूया',
         whichCropToday: 'आज कोणत्या पिकावर काम?',
         whatWorkToday: 'आज काय काम झालं?',
@@ -156,7 +158,7 @@ describe('translations.ts split — the copy moved, and only the copy', () => {
     it('`t()` still resolves a DFES key rather than echoing it back', () => {
         // `t()` returns the KEY when a lookup misses, so a broken composition
         // would render `dfes.closeToday` on a button instead of throwing.
-        expect(t('dfes.closeToday', 'mr')).toBe('आजच्या सर्व नोंदी माझ्या पर्यन्त पोहोचल्या का याची खात्री करा');
+        expect(t('dfes.closeToday', 'mr')).toBe('आजच्या सर्व नोंदी माझ्यापर्यंत पोहोचल्या का याची खात्री करा');
         expect(t('dfes.closeToday', 'en')).toBe('Close today');
         expect(t('dfes.clickToClose', 'mr')).not.toBe('dfes.clickToClose');
     });
