@@ -16,7 +16,9 @@ import LiveCaption from '../../features/voice/components/LiveCaption';
 import { DEFAULT_VOICE_CONFIG } from '../../infrastructure/voice/types';
 import ManualEntry from '../../features/logs/components/ManualEntry';
 import DailyLogCard from '../../features/logs/components/DailyLogCard';
-import { Leaf, Droplets, Users, Package, Tractor, Sprout, ArrowLeft } from 'lucide-react';
+// `ArrowLeft` left with `LabourLogBanner`, its only consumer. `Users` stays —
+// the success card's bucket chips still use it.
+import { Leaf, Droplets, Users, Package, Tractor, Sprout } from 'lucide-react';
 import { getSegmentVisual } from '../../shared/utils/uiUtils';
 import { getDateKey } from '../domain/services/DateKeyService';
 import { buildTimelineEntries } from '../../services/transcriptTimelineService';
@@ -25,8 +27,16 @@ import { formatCurrencyINR } from '../../shared/utils/dayState';
 import { getCropTheme } from '../../shared/utils/colorTheme';
 import { FEATURE_FLAGS } from '../../app/featureFlags';
 import { MeterDisplay } from '../../features/logs/components/MeterDisplay';
-import { useLanguage } from '../../i18n/LanguageContext';
-import { SYNC_HONESTY_I18N_KEYS } from '../../features/sync/status/syncHonestyState';
+// Only the SUMMARY is needed here — `mainView` hands it to `ManualEntry`,
+// which owns the decision to render the panel (it is the component that knows
+// whether the farmer's context is the whole farm).
+import { getFarmWideDaySummary } from '../../app/helpers/appContentDailyCounts';
+import {
+    LabourLogBanner,
+    NotQueuedForServerBadge,
+    SavedLocallyHeadline,
+    ShramSathiUnderstanding,
+} from './mainViewComponents';
 
 import { AppRouterContext } from './routeContext';
 import { ReflectPage, ComparePage } from './lazyComponents';
@@ -37,84 +47,20 @@ import {
     getVerificationPresentation
 } from './helpers';
 
-/**
- * Labour Phase 2 -> Phase 1, Task T2 (review round 1, finding B1) — the DURABLE
- * half of the skipped-save truth.
+/*
+ * The four components this module renders live in `./mainViewComponents`.
  *
- * The toast that reports a dropped record self-destructs; the "Saved to Ledger"
- * panel this sits inside persists until the farmer navigates away. Without this
- * line the reassuring half of the story outlives the honest half, on exactly the
- * screen a farmer looks at to decide whether their day is recorded.
+ * They were moved there to keep this file under the 800-line `check:file-sizes`
+ * cap once the farm-wide panel and the two hook-bearing headlines landed. The
+ * move is VERBATIM — same DOM, same component identities — so the viewport
+ * measurements taken against this screen still hold.
  *
- * THE THREE-VALUE RULE IS INSIDE THIS COMPONENT ON PURPOSE. `syncQueued` is
- * `boolean | null`, and `null` means demo mode — no enqueue was attempted, so
- * there is no evidence in either direction and we make NO claim. A caller
- * writing `{item.syncQueued && ...}` or `{!item.syncQueued && ...}` would turn
- * "I don't know" into "it failed", which is the same class of error pointed the
- * other way. Keeping the `!== false` guard here means there is one place to get
- * it right, and one place to test it.
- *
- * A COMPONENT rather than inline JSX because `mainView` is a table of render
- * FUNCTIONS, not components — `routeContext.ts:1-5` keeps them free of hook
- * calls so the cascade can call them conditionally. `useLanguage` is a hook, so
- * it needs a real component in the tree.
+ * `NotQueuedForServerBadge` and `LabourLogBanner` are RE-EXPORTED below because
+ * two test files import them from this module, and `labour-log-banner.test.tsx`
+ * compares `el.type === LabourLogBanner`. A second copy would satisfy the
+ * import and silently fail that identity check.
  */
-export const NotQueuedForServerBadge: React.FC<{ syncQueued: boolean | null | undefined }> = ({ syncQueued }) => {
-    const { t } = useLanguage();
-
-    if (syncQueued !== false) return null;
-
-    return (
-        <p className="mt-2 text-[11px] font-bold text-amber-700">
-            {/* AMBER, not red, and it never touches the "Saved to Ledger"
-                headline above it — that headline is TRUE for every log that
-                reaches this screen (`confirmAndSave` -> `repo.batchSave` ran
-                before the enqueue was even attempted). What is false is only the
-                IMPLIED "and it is on its way", so the fix is to state the fact,
-                not to weaken a true statement into a vaguer one.
-
-                The trailing clause is English and needs founder-supplied
-                Marathi (report item C1). It is the same clause T2 already
-                shipped in the toast for this event; it is not a new one. */}
-            {t(SYNC_HONESTY_I18N_KEYS.ON_PHONE)} — cannot be sent
-        </p>
-    );
-};
-
-/**
- * spec: 2026-07-13-labour-attendance-approval-design (Task 3.5)
- *
- * Replaces the Task-3.4 dismissible hint. Founder ask #1 (more visible,
- * matching the app's established aesthetic) + ask #2 (the ✕ becomes a "back
- * to Labour Management" action, not a dismiss — there is no dismiss any
- * more). Styling borrows the labour hub's own voice-card treatment
- * (LabourHub.tsx: rounded-[24px], emerald gradient, white/20 icon tile,
- * font-black white title, trailing white/20 pill) so the farmer reads this
- * as the SAME feature continuing onto this screen — while carrying no
- * neutral grays of its own, so it doesn't clash with mainView's stone
- * chrome even though the labour feature itself is built on slate.
- */
-export const LabourLogBanner: React.FC<{ onBackToLabour: () => void }> = ({ onBackToLabour }) => (
-    <button
-        type="button"
-        onClick={onBackToLabour}
-        data-testid="labour-log-banner"
-        aria-label="कामगार व्यवस्थापनाकडे परत जा — back to Labour Management"
-        className="relative mb-3 flex w-full items-center gap-3 overflow-hidden rounded-[20px] bg-gradient-to-br from-emerald-500 to-emerald-700 p-3.5 text-left shadow-[0_14px_28px_-12px_rgba(5,150,105,0.6)] transition-transform active:scale-[0.99] animate-in fade-in slide-in-from-top-2 duration-300"
-    >
-        <span className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-2xl bg-white/20 text-white">
-            <Users size={22} strokeWidth={2.4} />
-        </span>
-        <span className="min-w-0 flex-1">
-            <span className="block text-[14.5px] font-black text-white">कामगार व्यवस्थापनासाठी नोंद</span>
-            <span className="block truncate text-[11.5px] font-semibold text-emerald-50/90">मजूर · हजेरी · मजुरी बोला</span>
-        </span>
-        <span className="flex flex-shrink-0 items-center gap-1 rounded-full bg-white/20 px-3 py-1.5 text-[11px] font-extrabold text-white">
-            <ArrowLeft size={13} strokeWidth={2.6} />
-            कामगार व्यवस्थापन
-        </span>
-    </button>
-);
+export { NotQueuedForServerBadge, LabourLogBanner } from './mainViewComponents';
 
 export const renderReflectView = (ctx: AppRouterContext): React.ReactNode => {
     if (ctx.currentRoute !== 'main' || ctx.mainView !== 'reflect') return null;
@@ -503,6 +449,17 @@ export const renderLogView = (ctx: AppRouterContext): React.ReactNode => {
                                             }
                                             return map;
                                         })()}
+                                        /* LABOUR_PHASE2 P2.4 — the farm-wide half of the
+                                           day, carried SEPARATELY. A farm-wide context
+                                           yields no plot ids, so the map above is
+                                           legitimately `{}` and ManualEntry showed zeros
+                                           for a day the farmer HAD recorded work in. The
+                                           fix is NOT to fold farm-wide logs into that map:
+                                           `R24` measured that its consumer sums it across
+                                           the plots in context, turning a plot's 3 labour
+                                           entries into 11. No plot key here, so the two can
+                                           never be added. */
+                                        farmWideToday={getFarmWideDaySummary(history, getDateKey())}
                                         transcriptEntries={(() => {
                                             // Build timeline entries for today's logs in current context
                                             const todayStr = getDateKey();
@@ -627,7 +584,7 @@ export const renderLogView = (ctx: AppRouterContext): React.ReactNode => {
                             <div className="absolute top-0 left-0 w-full h-full flex items-center justify-center"><Leaf size={32} className="text-emerald-600 animate-pulse" /></div>
                         </div>
                     </div>
-                    <h3 className="text-xl font-bold text-stone-800 mb-3 leading-snug">Your Shram sathi is trying to understand what work you did today...</h3>
+                    <ShramSathiUnderstanding />
                     {/* SARVAM_PRIMARY_VOICE_PIPELINE — live transcript, placed right below the
                         recorder/banner so the farmer sees their words appear as Sarvam transcribes
                         the clip (post-Stop, cost-safe: reuses the single transcribe-stream that
@@ -653,7 +610,7 @@ export const renderLogView = (ctx: AppRouterContext): React.ReactNode => {
                             <div className="w-20 h-20 bg-white rounded-full flex items-center justify-center mx-auto mb-6 text-emerald-600 shadow-sm border border-emerald-50">
                                 <Leaf size={40} className="drop-shadow-sm" />
                             </div>
-                        <h2 className="text-3xl font-bold text-stone-800 mb-6 tracking-tight">Saved to Ledger</h2>
+                        <SavedLocallyHeadline />
 
                         {/* Dynamic Feedback Summary */}
                         {lastSavedLogSummary && lastSavedLogSummary.length > 0 ? (
@@ -674,7 +631,16 @@ export const renderLogView = (ctx: AppRouterContext): React.ReactNode => {
                                                     </div>
                                                     <div className="min-w-0 flex-1">
                                                         <p className="text-[10px] font-black uppercase tracking-[0.18em] text-stone-500">Stored In</p>
-                                                        <p className="truncate text-base font-black text-stone-900">
+                                                        {/* Since 2b this reads `Grapes • Plot A,
+                                                            Plot B, Plot C` and `truncate` silently
+                                                            cut it at 412px — the farmer saw which
+                                                            plots the record landed on, minus the
+                                                            ones that did not fit, with no ellipsis
+                                                            to warn him. The DATA was right; the
+                                                            presentation was not. `line-clamp-2`
+                                                            shows it and still bounds a pathological
+                                                            selection. */}
+                                                        <p className="line-clamp-2 break-words text-base font-black leading-snug text-stone-900">
                                                             {item.cropName} • {item.plotName}
                                                         </p>
                                                         <NotQueuedForServerBadge syncQueued={item.syncQueued} />

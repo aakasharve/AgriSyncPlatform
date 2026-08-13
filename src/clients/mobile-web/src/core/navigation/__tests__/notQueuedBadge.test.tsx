@@ -49,11 +49,17 @@ describe('NotQueuedForServerBadge — the durable half of the skipped-save truth
     it('says the record is on the phone when it could not be queued', () => {
         render(<NotQueuedForServerBadge syncQueued={false} />);
 
-        // The reassurance leads, and it is T1's founder-approved string rather
-        // than a fourth dialect of "saved" invented for this screen.
-        expect(screen.getByText(/cannot be sent/)).toHaveTextContent(
-            translate(SYNC_HONESTY_I18N_KEYS.ON_PHONE, 'mr'),
-        );
+        // The reassurance LEADS, then the news — and BOTH halves are now in
+        // the farmer's language. The tail used to be a hardcoded English
+        // fragment, so this assertion could match `/cannot be sent/` while the
+        // farmer read one sentence in two scripts. Pinning the composed
+        // sentence is what makes that unrepeatable.
+        expect(
+            screen.getByText(
+                `${translate(SYNC_HONESTY_I18N_KEYS.ON_PHONE, 'mr')} — ${translate('sync.notFiledBadgeTail', 'mr')}`,
+                { selector: 'p' },
+            ),
+        ).toBeInTheDocument();
     });
 
     it('says nothing at all when the log WAS queued', () => {
@@ -81,8 +87,11 @@ describe('NotQueuedForServerBadge — the durable half of the skipped-save truth
 
         render(<NotQueuedForServerBadge syncQueued={false} />);
 
-        expect(screen.getByText(/cannot be sent/)).toHaveTextContent(
-            translate(SYNC_HONESTY_I18N_KEYS.ON_PHONE, 'en'),
-        );
+        expect(
+            screen.getByText(
+                `${translate(SYNC_HONESTY_I18N_KEYS.ON_PHONE, 'en')} — ${translate('sync.notFiledBadgeTail', 'en')}`,
+                { selector: 'p' },
+            ),
+        ).toBeInTheDocument();
     });
 });
