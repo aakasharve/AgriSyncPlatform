@@ -254,10 +254,23 @@ export class BackendWeatherClient implements WeatherPort {
         return null;
     }
 
+    /**
+     * LABOUR_PHASE2 B1d — `WeatherStamp.plotId` became optional (a record naming
+     * a SET of plots has one observed condition and no single plot to record it
+     * against), while `WeatherEvent.plotId` is still required. This narrows at
+     * the boundary and claims nothing new: `'farm'` is the exact value this
+     * client already writes for a farm-centre reading (`getCurrentWeather`
+     * above), so the fallback restates this client's own existing meaning.
+     *
+     * Unreachable today in any case — the only live caller
+     * (`useWeatherMonitor.renderFetched`) sets `plotId: activePlotId ||
+     * activeFarmId || 'farm_center'` on the stamp before diffing it, so a
+     * `WeatherEvent` is never built from a stamp that omits the field.
+     */
     private event(stamp: WeatherStamp, type: string, severity: string, note: string) {
         return {
             id: `we_${idGenerator.generate()}`,
-            plotId: stamp.plotId,
+            plotId: stamp.plotId ?? 'farm',
             tsStart: stamp.timestampLocal,
             tsEnd: stamp.timestampLocal,
             eventType: type as never,

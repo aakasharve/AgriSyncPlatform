@@ -98,42 +98,76 @@ export function scopeChildId(baseId: string, plotId: string | null): string {
  * - `sharedOnly` — the selection is several plots and the farmer pinned the
  *   event to none of them. One engagement, one record, scoped to the whole set.
  *
- * An event pinned to a plot name that is in NO partition of this save is
- * dropped, which is exactly what happens today (`!t || t === name` is false for
- * every plot). Recorded here, not fixed here: it is pre-existing, it is not
- * worsened, and changing it is a separate decision about the voice parser's
- * plot-name matching.
+ * AND THE FOURTH CASE, WHICH USED TO BE SILENT DATA LOSS. An event pinned to a
+ * plot name that NO plot of this save carries — `targetPlotName: "Plot Z"` when
+ * the farmer selected A, B and C — matched no branch above and was dropped from
+ * every record: `!t` is false because it has a name, and `t === name` is false
+ * for every plot there is. The farmer's five workers were reported "Logged." and
+ * then did not exist. It now belongs to the record carrying the save's own facts
+ * (`isUnplaceable` below).
+ *
+ * WHY THAT IS THE HONEST HOME FOR IT, and not a fabrication of its own.
+ * `targetPlotName` is written by exactly ONE producer in this codebase — the
+ * voice parser's schema (`AgriLogResponseSchema.ts:340,375,402,462,478`). No
+ * manual-entry surface sets it. So an unmatched name is an AI extraction that
+ * failed to match the farmer's selection, NOT an assertion the farmer made. The
+ * record's spatial assertion comes from the plots he actually selected; the
+ * parser's guess rides along on the event, untouched, exactly as it was heard
+ * (`P8` — the value and what we were told about it, side by side). Nothing is
+ * invented and nothing disappears.
  */
 export type PlotEventScope = 'ownAndShared' | 'ownOnly' | 'sharedOnly';
 
 function belongsToPartition(
     targetPlotName: string | undefined,
     plotName: string | null,
-    eventScope: PlotEventScope
+    eventScope: PlotEventScope,
+    savePlotNames: readonly string[]
 ): boolean {
+    // Named a plot, but not one this save has: no per-plot record can exist for
+    // it, so the record carrying the save's own facts carries it too.
+    const isUnplaceable = Boolean(targetPlotName) && !savePlotNames.includes(targetPlotName as string);
+
     switch (eventScope) {
         case 'ownOnly':
-            return Boolean(targetPlotName) && targetPlotName === plotName;
+            return !isUnplaceable && Boolean(targetPlotName) && targetPlotName === plotName;
         case 'sharedOnly':
-            return !targetPlotName;
+            return isUnplaceable || !targetPlotName;
         case 'ownAndShared':
         default:
-            return !targetPlotName || targetPlotName === plotName;
+            return isUnplaceable || !targetPlotName || targetPlotName === plotName;
     }
 }
 
-export function filterEventsForPlot<T extends { id: string; targetPlotName?: string }>(
+export function selectEventsForPartition<T extends { id: string; targetPlotName?: string }>(
     events: T[] | undefined,
-    plotName: string | null,
-    plotId: string | null,
-    eventScope: PlotEventScope
+    partition: LogPartition
 ): T[] {
+    const { plotName, plotId, eventScope, savePlotNames } = partitionSelector(partition);
+
     return (events || [])
-        .filter(event => belongsToPartition(event.targetPlotName, plotName, eventScope))
+        .filter(event => belongsToPartition(event.targetPlotName, plotName, eventScope, savePlotNames))
         .map(event => ({
             ...event,
             id: scopeChildId(event.id, plotId)
         }));
+}
+
+/**
+ * The four facts the three selectors below need, read off the partition ONCE.
+ *
+ * They used to be four loose arguments threaded from the builders, which made it
+ * possible to pass one partition's `plotName` beside another's `eventScope`, and
+ * meant adding the save's plot set touched every call site. Reading them from
+ * the partition makes the mismatched combination unrepresentable.
+ */
+function partitionSelector(partition: LogPartition) {
+    return {
+        plotName: partition.plot ? partition.plot.plot.name : null,
+        plotId: partition.plot ? partition.plot.plotId : null,
+        eventScope: partition.eventScope,
+        savePlotNames: partition.savePlotNames,
+    };
 }
 
 /**
@@ -256,29 +290,32 @@ export function stampCreationFarmId(logs: DailyLog[], farmId: string | null | un
 }
 
 /**
- * LABOUR_PHASE2 B1b — `selectInputsForPlot` / `selectActivityExpensesForPlot`
- * are what is LEFT of `allocateInputsForPlot` / `allocateActivityExpensesForPlot`
- * once the invented per-plot division is gone: select the events that belong to
- * this partition, and scope their child ids.
+ * LABOUR_PHASE2 B1b — `selectInputsForPartition` /
+ * `selectActivityExpensesForPartition` are what is LEFT of
+ * `allocateInputsForPlot` / `allocateActivityExpensesForPlot` once the invented
+ * per-plot division is gone: select the events that belong to this partition,
+ * and scope their child ids.
  *
  * Renamed, not kept: a function still called `allocate…` that allocates nothing
- * is the kind of stale name the next reader reasons from.
+ * is the kind of stale name the next reader reasons from. B1d finished the job
+ * — `…ForPlot` was the same stale-name hazard one step on, because a partition
+ * is a SET of plots as often as it is one.
  *
  * `allocateLabourForPlot` and `allocateMachineryForPlot` are GONE rather than
- * renamed — with the division removed, both were `filterEventsForPlot`
+ * renamed — with the division removed, both were `selectEventsForPartition`
  * character for character, and two spellings of one rule is how they drift.
  *
  * These two survive as their own functions only because they carry CHILD
  * collections (`mix`, `items`) whose ids must be scoped with the parent's.
  */
-export function selectInputsForPlot(
+export function selectInputsForPartition(
     inputEvents: InputEvent[] | undefined,
-    plotName: string | null,
-    plotId: string | null,
-    eventScope: PlotEventScope
+    partition: LogPartition
 ): InputEvent[] {
+    const { plotName, plotId, eventScope, savePlotNames } = partitionSelector(partition);
+
     return (inputEvents || [])
-        .filter(event => belongsToPartition(event.targetPlotName, plotName, eventScope))
+        .filter(event => belongsToPartition(event.targetPlotName, plotName, eventScope, savePlotNames))
         .map(event => ({
             ...event,
             id: scopeChildId(event.id, plotId),
@@ -289,17 +326,17 @@ export function selectInputsForPlot(
         }));
 }
 
-export function selectActivityExpensesForPlot(
+export function selectActivityExpensesForPartition(
     expenseEvents: ActivityExpenseEvent[] | undefined,
-    plotName: string | null,
-    plotId: string | null,
-    eventScope: PlotEventScope
+    partition: LogPartition
 ): ActivityExpenseEvent[] {
+    const { plotName, plotId, eventScope, savePlotNames } = partitionSelector(partition);
+
     return (expenseEvents || [])
         // `ActivityExpenseEvent` does not declare `targetPlotName`, but the
         // parser emits it and the filter has always honoured it. Kept as-is.
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        .filter(event => belongsToPartition((event as any).targetPlotName, plotName, eventScope))
+        .filter(event => belongsToPartition((event as any).targetPlotName, plotName, eventScope, savePlotNames))
         .map(event => ({
             ...event,
             id: scopeChildId(event.id, plotId),
@@ -355,6 +392,16 @@ export interface LogPartition {
      * total three times — the headcount fault in another costume.
      */
     carriesDayFacts: boolean;
+    /**
+     * Every plot name the WHOLE SAVE asserts — not this record's.
+     *
+     * A per-plot partition knows only its own plot, so it cannot tell "pinned to
+     * a different plot of this save" (belongs to that plot's record) from
+     * "pinned to a plot this save does not have" (belongs nowhere, and used to
+     * be dropped). This is the set that tells them apart, computed once and
+     * carried on every partition so both answers come from the same list.
+     */
+    savePlotNames: readonly string[];
 }
 
 /**
@@ -394,6 +441,13 @@ export interface LogPartition {
  * and if every event happened to be pinned to a plot, that record would not have
  * been built at all and those facts would have been silently dropped. Caught by
  * `LogFactory.oneEngagementOneQuantity.test.ts`, not by reading.
+ *
+ * B1d ADDS A THIRD REASON, and it is the same class of loss. An event pinned to
+ * a plot name this save does not have belongs to no per-plot record, so if the
+ * shared record is not built it has nowhere to go and vanishes — which is what
+ * shipped. `hasUnplaceableWork` forces the record into existence for exactly
+ * that case. See `belongsToPartition` for why the save's own record is the
+ * honest home for it.
  */
 export function partitionSelectionByFarmerEvidence(
     resolved: ResolvedLogPlot[],
@@ -404,12 +458,15 @@ export function partitionSelectionByFarmerEvidence(
         return [];
     }
 
+    const savePlotNames: readonly string[] = resolved.map(({ plot }) => plot.name);
+
     if (resolved.length === 1) {
         return [{
             plot: resolved[0],
             plots: resolved,
             eventScope: 'ownAndShared',
             carriesDayFacts: true,
+            savePlotNames,
         }];
     }
 
@@ -419,6 +476,7 @@ export function partitionSelectionByFarmerEvidence(
         plots: resolved,
         eventScope: 'sharedOnly',
         carriesDayFacts: true,
+        savePlotNames,
     };
 
     const targeted = resolved.filter(candidate => eventGroups.some(group =>
@@ -428,7 +486,11 @@ export function partitionSelectionByFarmerEvidence(
     const hasUnattributedWork = eventGroups.some(group =>
         (group || []).some(event => !event.targetPlotName));
 
-    if (hasUnattributedWork || hasDayLevelFacts || targeted.length === 0) {
+    const hasUnplaceableWork = eventGroups.some(group =>
+        (group || []).some(event => Boolean(event.targetPlotName)
+            && !savePlotNames.includes(event.targetPlotName as string)));
+
+    if (hasUnattributedWork || hasUnplaceableWork || hasDayLevelFacts || targeted.length === 0) {
         partitions.push(shared);
     }
 
@@ -437,6 +499,7 @@ export function partitionSelectionByFarmerEvidence(
         plots: [plot],
         eventScope: 'ownOnly',
         carriesDayFacts: false,
+        savePlotNames,
     }));
 
     return partitions;

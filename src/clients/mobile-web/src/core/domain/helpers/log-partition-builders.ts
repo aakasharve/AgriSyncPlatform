@@ -29,9 +29,9 @@ import { VersionRegistry } from '../../contracts/VersionRegistry';
 import {
     FARM_GLOBAL_ID,
     scopeChildId,
-    filterEventsForPlot,
-    selectInputsForPlot,
-    selectActivityExpensesForPlot,
+    selectEventsForPartition,
+    selectInputsForPartition,
+    selectActivityExpensesForPartition,
     buildSelectionForPlots,
     soleCropId,
     sumLabourCost,
@@ -121,12 +121,13 @@ export function buildManualPartitionLog(
     nowISO: string,
     idGen: IdGenerator
 ): DailyLog {
-    const { plot: only, plots, eventScope, carriesDayFacts } = partition;
+    const { plot: only, plots, carriesDayFacts } = partition;
 
-    // `null` on both counts when the record asserts a SET of plots: there is
-    // no plot to match a `targetPlotName` against and no plot to scope a
-    // child id to. For a single-plot record they are the plot, as always.
-    const plotName = only ? only.plot.name : null;
+    // `null` when the record asserts a SET of plots: there is no plot to scope
+    // a child id to. For a single-plot record it is the plot, as always. The
+    // plot NAME an event's `targetPlotName` is matched against is read off the
+    // partition inside the selectors (`partitionSelector`), so it is no longer
+    // threaded through here.
     const childPlotId = only ? only.plotId : null;
 
     // A plot-keyed field on a record that names several plots has no honest
@@ -146,37 +147,15 @@ export function buildManualPartitionLog(
 
     const specificContext: FarmContext = { selection: buildSelectionForPlots(plots) };
 
-    const plotCropActivities = filterEventsForPlot<CropActivityEvent>(
+    const plotCropActivities = selectEventsForPartition<CropActivityEvent>(
         data.cropActivities as CropActivityEvent[] | undefined,
-        plotName,
-        childPlotId,
-        eventScope
+        partition
     );
-    const plotIrrigation = filterEventsForPlot<IrrigationEvent>(
-        completedIrrigation,
-        plotName,
-        childPlotId,
-        eventScope
-    );
-    const plotLabour = filterEventsForPlot<LabourEvent>(
-        data.labour,
-        plotName,
-        childPlotId,
-        eventScope
-    );
-    const plotInputs = selectInputsForPlot(data.inputs, plotName, childPlotId, eventScope);
-    const plotMachinery = filterEventsForPlot<MachineryEvent>(
-        data.machinery,
-        plotName,
-        childPlotId,
-        eventScope
-    );
-    const plotActivityExpenses = selectActivityExpensesForPlot(
-        data.activityExpenses,
-        plotName,
-        childPlotId,
-        eventScope
-    );
+    const plotIrrigation = selectEventsForPartition<IrrigationEvent>(completedIrrigation, partition);
+    const plotLabour = selectEventsForPartition<LabourEvent>(data.labour, partition);
+    const plotInputs = selectInputsForPartition(data.inputs, partition);
+    const plotMachinery = selectEventsForPartition<MachineryEvent>(data.machinery, partition);
+    const plotActivityExpenses = selectActivityExpensesForPartition(data.activityExpenses, partition);
 
     // Costs for THIS record — its own events, summed, never divided.
     const labourCost = sumLabourCost(plotLabour);
@@ -324,9 +303,8 @@ export function buildVoicePartitionLog(
     nowISO: string,
     idGen: IdGenerator
 ): DailyLog {
-    const { plot: only, plots, eventScope, carriesDayFacts } = partition;
+    const { plot: only, plots, carriesDayFacts } = partition;
 
-    const plotName = only ? only.plot.name : null;
     const childPlotId = only ? only.plotId : null;
     const anchorPlotId = only ? only.plotId : FARM_GLOBAL_ID;
     const anchorCropId = only ? only.crop.id : soleCropId(plots);
@@ -334,25 +312,10 @@ export function buildVoicePartitionLog(
 
     const specificContext: FarmContext = { selection: buildSelectionForPlots(plots) };
 
-    const myLabour = filterEventsForPlot<LabourEvent>(
-        response.labour,
-        plotName,
-        childPlotId,
-        eventScope
-    );
-    const myInputs = selectInputsForPlot(response.inputs, plotName, childPlotId, eventScope);
-    const myMachine = filterEventsForPlot<MachineryEvent>(
-        response.machinery,
-        plotName,
-        childPlotId,
-        eventScope
-    );
-    const myExpenses = selectActivityExpensesForPlot(
-        mappedExpenses,
-        plotName,
-        childPlotId,
-        eventScope
-    );
+    const myLabour = selectEventsForPartition<LabourEvent>(response.labour, partition);
+    const myInputs = selectInputsForPartition(response.inputs, partition);
+    const myMachine = selectEventsForPartition<MachineryEvent>(response.machinery, partition);
+    const myExpenses = selectActivityExpensesForPartition(mappedExpenses, partition);
 
     // Cost for THIS record — its own events, summed, never divided.
     const lCost = sumLabourCost(myLabour);
@@ -436,18 +399,8 @@ export function buildVoicePartitionLog(
         phaseAtLogTime: timeline?.phase,
         dayNumberAtLogTime: timeline?.day,
 
-        cropActivities: filterEventsForPlot<CropActivityEvent>(
-            response.cropActivities,
-            plotName,
-            childPlotId,
-            eventScope
-        ),
-        irrigation: filterEventsForPlot<IrrigationEvent>(
-            completedIrrigation,
-            plotName,
-            childPlotId,
-            eventScope
-        ),
+        cropActivities: selectEventsForPartition<CropActivityEvent>(response.cropActivities, partition),
+        irrigation: selectEventsForPartition<IrrigationEvent>(completedIrrigation, partition),
         labour: myLabour,
         inputs: myInputs,
         machinery: myMachine,

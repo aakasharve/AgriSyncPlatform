@@ -551,9 +551,23 @@ export async function enqueueLogsForSync(logs: DailyLog[]): Promise<{ queuedLogI
             sourceAiJobId: log.meta?.provenance?.sourceAiJobId,
             // B2.8 — carry the weather already captured at confirm-time to the server
             // (persisted into ssf.weather_stamps). Omit the client-only `id` (server generates).
+            //
+            // B1d — `plotId` is CONDITIONAL, by the same rule every other
+            // optional field on this payload follows: a value we do not have is
+            // not sent, rather than sent as `undefined`. A record naming a set
+            // of plots (or संपूर्ण शेत) has one observed condition and no single
+            // plot to record it against, and `weather_stamps.plot_id` is
+            // `uuid NULL`, so absence is the shape the server already models.
+            //
+            // It is sent AS RECORDED and never repaired here. The producer
+            // (`LogCommandServiceImpl.stampWeather`) is the one place that
+            // decides, and it sets the field explicitly on every path — because
+            // the weather clients fill it with `'farm'` / `'device'` /
+            // `'unknown'`, and any of those reaching `ZGuid` would throw out of
+            // `MutationQueue.enqueue` and cost the farmer the entire record.
             weatherStamp: log.weatherStamp
                 ? {
-                      plotId: log.weatherStamp.plotId,
+                      ...(log.weatherStamp.plotId ? { plotId: log.weatherStamp.plotId } : {}),
                       timestampLocal: log.weatherStamp.timestampLocal,
                       timestampProvider: log.weatherStamp.timestampProvider,
                       provider: log.weatherStamp.provider,

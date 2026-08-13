@@ -15,6 +15,35 @@ import { SessionStore } from '../../infrastructure/storage/SessionStore';
 // `persistedLabourCorrections` evidence survives this pass-through instead of
 // being erased by a narrower inline structural type.
 import type { UpdateLogResponse } from '../usecases/UpdateLog';
+import type { PlotGeo } from '../../domain/types';
+
+/**
+ * LABOUR_PHASE2 B1d — where to ask about the weather for a record that names no
+ * single plot, or `null` when this device cannot answer honestly.
+ *
+ * The farm's own recorded location, which is ALREADY the anchor this file falls
+ * back to when a plot carries no geo of its own — not a centroid of the selected
+ * plots (a location the farmer never gave) and not the first plot's coordinates
+ * (the pick founder decision O-1 closed). In production `FarmAnchoredWeatherService`
+ * replaces it with the farm centre whenever the app knows one, so this value is
+ * the floor, not the usual answer.
+ *
+ * `0, 0` is refused rather than sent. It is a real coordinate in the Gulf of
+ * Guinea; a reading fetched there and stored as this farm's weather is a
+ * fabricated observation (`P4`), and "no weather" is the truthful alternative.
+ */
+function farmAnchorGeo(profile: FarmerProfile): PlotGeo | null {
+    const location = profile.location;
+    if (typeof location?.lat !== 'number' || typeof location?.lon !== 'number') {
+        return null;
+    }
+
+    if (location.lat === 0 && location.lon === 0) {
+        return null;
+    }
+
+    return { lat: location.lat, lon: location.lon, source: 'approx' };
+}
 
 // Define the Service Interface
 export interface LogCommandService {
@@ -220,19 +249,48 @@ export class LogCommandServiceImpl implements LogCommandService {
     // --- PRIVATE HELPERS ---
 
     /**
-     * LABOUR_PHASE2 B1b — enrich only a record that names exactly ONE plot.
+     * LABOUR_PHASE2 B1d — WEATHER IS A SPINE, AND ONE RECORD GETS ONE READING.
      *
-     * A `WeatherStamp` is a reading taken at one plot's coordinates and carries
-     * that plot's id. A record naming three plots has one weather slot and no
-     * single answer for it, so it states none: attaching the first plot's
-     * reading would present a measurement of one place as the record's own,
-     * which is the first-plot pick founder decision O-1 closed, and dropping the
-     * `plotId` off the stamp would keep the number while discarding where it
-     * came from (`P8`).
+     * THE FOUNDER'S RULE THIS ENCODES. A quantity cannot be repeated without
+     * fabricating: eight workers stated once are eight, and writing them onto
+     * three plots invents sixteen people (`P4`/`P7`, founder decision O-2). An
+     * OBSERVATION can be repeated, because it is one fact that is true in
+     * several places — the weather over A, B and C is one observed condition,
+     * and recording it against the record that names all three invents nothing.
+     * B1b withheld it, which was the wrong trade: weather feeds the compare
+     * engine, the understanding meter and the intelligence layer, and losing it
+     * loses spine data to protect against a fabrication that was never on the
+     * table.
      *
-     * KNOWN LOSS, carried deliberately: a multi-plot save no longer captures
-     * weather at all, where the per-plot split used to capture one stamp per
-     * plot. Holding several is a `DailyLog` shape change, not a Phase 2b edit.
+     * THE SHAPE, AND WHY IT IS TRUE RATHER THAN CONVENIENT. One stamp per
+     * record. `plotId` is stated only when the record names exactly ONE plot;
+     * for a set of plots, or for संपूर्ण शेत, it is ABSENT. Absent is not a gap
+     * being papered over — `weather_stamps.plot_id` is `uuid NULL`, the domain
+     * models `Guid? PlotId`, and the wire schema is `ZGuid.optional()`. Naming
+     * the first plot instead would be the first-plot pick founder decision O-1
+     * closed; naming all three is impossible in one slot, and repeating the
+     * reading per plot would need a `DailyLog` shape change, a payload change
+     * and a server command change to store N identical readings — because the
+     * production provider is `FarmAnchoredWeatherService`, which resolves EVERY
+     * request to the same farm centre. There is no per-plot reading to preserve.
+     *
+     * SO THE STAMP CLAIMS NOTHING IT WAS NOT TOLD. `plotId` here has always
+     * meant "the plot this reading is recorded against", never "the coordinates
+     * it was measured at" — the anchor service has been overriding the requested
+     * geo with the farm centre on the single-plot path too. This change does not
+     * add a provenance claim, and it does not remove one: the stamp carries no
+     * lat/lon field to preserve, so none is invented (`P8`).
+     *
+     * THE ONE THING IT REFUSES. With no farm location at all it captures
+     * NOTHING, rather than asking a weather API about `0, 0` — a real reading
+     * for a point in the Gulf of Guinea, recorded as this farm's weather, is a
+     * fabricated observation (`P4`). No prompt, no block, no new field: the log
+     * saves exactly as it did (`P9`).
+     *
+     * THE SINGLE-PLOT BRANCH IS UNCHANGED, deliberately and including its own
+     * `|| 0` fallback, which has the Null-Island problem described above. That
+     * is pre-existing behaviour on the dominant path and is reported rather than
+     * altered here.
      */
     private async enrichWithWeather(logs: DailyLog[], crops: CropProfile[], profile: FarmerProfile) {
         const weatherProvider = this.weatherProvider;
@@ -240,20 +298,50 @@ export class LogCommandServiceImpl implements LogCommandService {
 
         await Promise.all(logs.map(async (log) => {
             const assertedPlotIds = log.context.selection.flatMap(entry => entry.selectedPlotIds || []);
+
             if (assertedPlotIds.length === 1) {
                 const plotId = assertedPlotIds[0];
                 const crop = crops.find(c => c.id === log.context.selection[0].cropId);
                 const plot = crop?.plots.find(p => p.id === plotId);
-                if (plot) {
-                    try {
-                        const geo = plot.geo || { lat: profile.location?.lat || 0, lon: profile.location?.lon || 0, source: 'approx' };
-                        const stamp = await getWeatherForLocation(geo, weatherProvider);
-                        stamp.plotId = plotId;
-                        log.weatherStamp = stamp;
-                    } catch (e) { console.error("Weather enrichment failed", e); }
-                }
+                if (!plot) return;
+
+                const geo = plot.geo || { lat: profile.location?.lat || 0, lon: profile.location?.lon || 0, source: 'approx' as const };
+                await this.stampWeather(log, geo, plotId);
+                return;
             }
+
+            // Several plots, or none at all (संपूर्ण शेत). One record, one
+            // observation, no plot named.
+            const farmGeo = farmAnchorGeo(profile);
+            if (!farmGeo) return;
+
+            await this.stampWeather(log, farmGeo, undefined);
         }));
+    }
+
+    /**
+     * Fetch once and record the reading against `log`, naming `plotId` only when
+     * the caller has one.
+     *
+     * `plotId` is set EXPLICITLY on every path — never left as whatever the
+     * provider returned. `BackendWeatherClient` fills the field with the
+     * placeholders `'farm'` and `'device'` and `TomorrowIoWeatherService` with
+     * `'unknown'`; none is a plot id, and any of them reaching the wire would
+     * fail the payload's `ZGuid`, throw out of `MutationQueue.enqueue`, and lose
+     * the whole record with a bare "Failed to save logs". Pinned by
+     * `logSyncMutationService.weatherStamp.test.ts`.
+     *
+     * A provider failure is swallowed exactly as before: weather is enrichment,
+     * and it may never cost the farmer the log (`P9`).
+     */
+    private async stampWeather(log: DailyLog, geo: PlotGeo, plotId: string | undefined): Promise<void> {
+        const weatherProvider = this.weatherProvider;
+        if (!weatherProvider) return;
+
+        try {
+            const stamp = await getWeatherForLocation(geo, weatherProvider);
+            log.weatherStamp = { ...stamp, plotId };
+        } catch (e) { console.error("Weather enrichment failed", e); }
     }
 
     private captureMoneyEventsFromLog(log: DailyLog): void {
