@@ -109,6 +109,25 @@ const posix = (p: string) => relative(SRC_ROOT, p).replace(/\\/g, '/');
 describe('the user-switch wipe is gone from production code', () => {
     const files = productionSourceFiles(SRC_ROOT);
 
+    /**
+     * READ ONCE, not once per assertion.
+     *
+     * Assertions 1 and 3 each used to `readFileSync` every one of the 300+
+     * production files, so the pair made TWO full passes over the tree inside a
+     * 5s-per-test budget while ~143 other suites competed for the same disk.
+     * That made this file a load-dependent flake — green in isolation, red
+     * under the full suite — and it was sitting close enough to the edge that
+     * adding three source files to the tree was enough to tip it over.
+     *
+     * Hoisting the read halves the I/O and takes the timing dependence out.
+     * NOTHING about what is asserted changes: the same files, the same text,
+     * the same patterns. If this ever needs to grow again, make it lazier —
+     * do not raise the timeout, which would hide the next regression in the
+     * same place.
+     */
+    const sources: ReadonlyArray<readonly [string, string]> =
+        files.map(file => [file, readFileSync(file, 'utf8')] as const);
+
     it('scans a real, non-empty production tree (guard against a vacuous pass)', () => {
         // Without this, a broken path would make every assertion below pass by
         // finding nothing — the exact way a "green" suite lies.
@@ -119,8 +138,7 @@ describe('the user-switch wipe is gone from production code', () => {
     it('1: no production module clears a table that holds a farmer\'s work', () => {
         const offenders: string[] = [];
 
-        for (const file of files) {
-            const src = readFileSync(file, 'utf8');
+        for (const [file, src] of sources) {
             for (const table of WORK_BEARING_TABLES) {
                 // `db.mutationQueue.clear()`, `getDatabase().logs.clear()`, and
                 // any whitespace/line-break between the accessor and the call.
@@ -163,8 +181,7 @@ describe('the user-switch wipe is gone from production code', () => {
         // this list and fails here until somebody writes down why.
         const found: string[] = [];
 
-        for (const file of files) {
-            const src = readFileSync(file, 'utf8');
+        for (const [file, src] of sources) {
             for (const match of src.matchAll(/\.(\w+)\s*\.\s*clear\s*\(/g)) {
                 const table = match[1];
                 // In-memory Set/Map clears are not Dexie; they carry no rows.
