@@ -296,8 +296,13 @@ public sealed class DfesEndpointsTenancyFixture : IAsyncLifetime
 {
     private const string AppRoleUser = "agrisync_app";
     private const string AppRolePassword = "dev_app_change_me";
-    private const string DefaultRootConnectionString =
-        "Host=localhost;Port=5433;Database=postgres;Username=postgres;Password=akash123";
+
+    // Non-secret placeholder — the real value comes from REQUIRES_POSTGRES_ROOT_CONN
+    // or ADMIN_TESTS_ADMIN_ROOT_CONN (both checked in ResolveRootConnection() below).
+    // Never a hardcoded credential in tracked source.
+    private static string DefaultRootConnectionString =>
+        Environment.GetEnvironmentVariable("REQUIRES_POSTGRES_ROOT_CONN")
+        ?? "Host=localhost;Port=5433;Database=postgres;Username=postgres;Password=SET_VIA_ENV_OR_secrets_local_credentials_json";
 
     // Farm A — the caller (MemberA) is a real active MEMBER (non-owner).
     public static readonly Guid FarmA = Guid.Parse("d1e50001-0000-0000-0000-000000000001");

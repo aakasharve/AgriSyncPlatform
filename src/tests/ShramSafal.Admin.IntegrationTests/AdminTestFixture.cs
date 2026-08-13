@@ -34,8 +34,12 @@ public sealed class AdminTestFixture : IAsyncLifetime
 {
     private const string TestDbName = "agrisync_admin_test";
 
-    private const string DefaultRootConnectionString =
-        "Host=localhost;Port=5433;Database=postgres;Username=postgres;Password=akash123";
+    // Non-secret placeholder — the real value comes from REQUIRES_POSTGRES_ROOT_CONN
+    // (checked first, below) or ADMIN_TESTS_ADMIN_ROOT_CONN (checked in the
+    // constructor). Never a hardcoded credential in tracked source.
+    private static string DefaultRootConnectionString =>
+        Environment.GetEnvironmentVariable("REQUIRES_POSTGRES_ROOT_CONN")
+        ?? "Host=localhost;Port=5433;Database=postgres;Username=postgres;Password=SET_VIA_ENV_OR_secrets_local_credentials_json";
 
     private readonly string _rootConnString;
     private readonly string _testConnString;
