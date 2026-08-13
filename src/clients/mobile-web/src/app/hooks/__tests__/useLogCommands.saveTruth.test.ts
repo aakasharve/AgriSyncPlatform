@@ -809,7 +809,12 @@ describe('useLogCommands — the EDIT path may not claim a save it cannot eviden
 
         expect(setToast).toHaveBeenCalledWith({
             message: `${ON_PHONE_MR} — ${correctionsTail('mr', 1)} ${translate('sync.unsentEditTail', 'mr')}`,
-            type: 'success',
+            // AMBER, not a green tick (coordinator ruling, final review). The
+            // same clause renders `'partial'` on the create path, and
+            // `ActionToast` gives `partial` 7000ms against `success`'s 3000 —
+            // so the longer sentence used to get less than half the reading
+            // time of the shorter one it echoes.
+            type: 'partial',
         });
     });
 
@@ -828,8 +833,30 @@ describe('useLogCommands — the EDIT path may not claim a save it cannot eviden
 
         expect(setToast).toHaveBeenCalledWith({
             message: `${ON_PHONE_MR} — ${translate('sync.unsentEditTail', 'mr')}`,
-            type: 'success',
+            type: 'partial',
         });
+    });
+
+    it('the colour follows the OUTCOME, not the branch', async () => {
+        // Both directions in one test, because the risk runs both ways: a
+        // blanket `'success'` hides a partial outcome behind a green tick (the
+        // defect just ruled on), and a blanket `'partial'` puts amber over a
+        // correction that fully landed — making a correction look more doubtful
+        // than the capture it corrects, which `P2` cannot afford.
+        for (const [hasUnsentChanges, expected] of [[false, 'success'], [true, 'partial']] as const) {
+            vi.clearAllMocks();
+            setToast = vi.fn<ToastSetter>();
+            updateLog.mockResolvedValue({
+                success: true,
+                log: makeLog('1'),
+                persistedLabourCorrections: 1,
+                hasUnsentChanges,
+            });
+
+            await submitEdit();
+
+            expect((setToast.mock.calls.at(-1)?.[0] as ToastCall)?.type).toBe(expected);
+        }
     });
 
     it('a FAILED edit still says nothing was saved, and never enters success', async () => {

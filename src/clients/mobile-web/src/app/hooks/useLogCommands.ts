@@ -522,21 +522,33 @@ export const useLogCommands = ({
                         language,
                         result.hasUnsentChanges ?? false,
                     ),
-                    // `'success'` now, where C-2 correctly used `'partial'`.
+                    // THE OUTCOME DECIDES THE COLOUR, not the branch.
                     //
-                    // `'partial'` was right for an outcome that was partly landed
-                    // and partly NOWHERE. That outcome no longer exists: the
-                    // record is in `db.logs`, exactly as a created one is, and the
-                    // create path calls that state `'success'`. Keeping amber
-                    // would make a correction look more doubtful than the capture
-                    // it corrects — training the farmer away from the one flow
-                    // `P2` needs them to trust.
+                    // `'success'` when the whole edit landed. That case is
+                    // unchanged and byte-identical: the record is in `db.logs`
+                    // exactly as a created one is, the create path calls that
+                    // `'success'`, and amber there would make a correction look
+                    // more doubtful than the capture it corrects — training the
+                    // farmer away from the one flow `P2` needs them to trust.
                     //
-                    // The tick is not over-claiming here the way it was before: it
-                    // sits over `फोनवर सेव्ह ✓`, a claim about the phone, and any
-                    // server claim beside it is separately evidenced. Nothing
-                    // failed, and nothing is pending.
-                    type: 'success'
+                    // `'partial'` when something in this edit reached no server
+                    // (coordinator ruling, final review). The blanket `'success'`
+                    // that stood here was defensible only while this toast could
+                    // not say otherwise; now that it CAN, the asymmetry was
+                    // indefensible. `buildSkippedSyncToast` renders the very same
+                    // clause — "will not reach your farm records" — as `'partial'`
+                    // on the create path, so one sentence had two colours
+                    // depending on which screen produced it.
+                    //
+                    // The reading time was backwards, which is the sharper half.
+                    // `ActionToast.DEFAULT_DURATION_MS` gives `success` 3000ms and
+                    // `partial` 7000ms, so the LONGER sentence — the one carrying
+                    // the caveat — got less than half the time of the shorter one.
+                    //
+                    // A green tick over a partial outcome is the exact shape this
+                    // branch removed everywhere else; it is not kept here just
+                    // because the partial half is quiet.
+                    type: (result.hasUnsentChanges ?? false) ? 'partial' : 'success'
                 });
                 savedLogIds = [(result.log as DailyLog).id];
                 showSavedToLedgerPanel = false;
