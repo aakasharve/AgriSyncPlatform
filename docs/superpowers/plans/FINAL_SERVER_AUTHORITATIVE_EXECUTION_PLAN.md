@@ -564,6 +564,48 @@ exemplar `FieldOperatorRlsRealPostgresTests.cs` **was verified to carry the cite
       top of every fact, FORCE/ENABLE catalog assertion, loadability probe, and a non-admin caller
       proven unable to read another actor's NULL-farm rows **through the endpoint AND a pull**.
 
+> ## ✅ §P0.2 — LANDED ON FEATURE BRANCH `da48d05b`. NOT MERGED, NOT RELEASED.
+>
+> All three layers closed. First real `E3` audit-isolation proof in the codebase — 7 facts, vacuity
+> guard on every one, FORCE/ENABLE catalog assertion, loadability probe before every rejection, and an
+> assertion that **exactly one policy exists** (finding 9 holds only while it *is* the one).
+> Mutation proof on five guards, each reverted → named assertion failed → restored by direct file hash.
+> Backend suite baseline-differenced: same 58 pre-existing failures before and after, +7 new passes.
+>
+> **Watermark: cannot skip data.** `ComputeNextCursor` is a `Max` chain floored at the caller's
+> `SinceUtc`; removing a term moves the result earlier or leaves it equal, never later, so at worst a
+> window is re-read. Pinned by a fact that plants a NULL-farm row an hour ahead and fails if the cursor
+> passes it. *(Analysis, not measurement: the **old** code could set the cursor from a foreign row
+> later than the query moment — a skip hazard the new behaviour removes by construction.)*
+>
+> **The three layers are over-determined** — reverting the handler alone, or handler+policy, still
+> yields an empty array. It takes all three to reproduce the leak. The plan's "written three times"
+> is confirmed as a measured property.
+>
+> ### 🛑 TWO CONSEQUENCES THAT NEED A FOUNDER DECISION BEFORE RELEASE
+>
+> **1. The platform-admin branch of `/shramsafal/audit` now returns ZERO rows on the app-role
+> connection.** The tightened policy has no platform-admin escape, and adding one is a *widening* ruled
+> out of P0.2's scope. **Asserted as a fact so it cannot drift silently.** No product screen is
+> affected — `GET /audit` has **zero callers in `src/clients/`**, confirmed. But the admin audit read
+> is now closed until a deliberate widening is designed. *(Separately: that route establishes no tenant
+> scope and is not on either interceptor list, so by code reading it **500s today** regardless. Not
+> touched — wiring scope is its own change.)*
+>
+> **2. The DSAR export depends on a production role property that could not be measured.**
+> `ExportWorker`'s `audit_events.json` reads through the admin context. **Locally that role is
+> superuser and bypasses RLS; if the production migration role does NOT bypass, the subject's audit
+> export goes from "their own NULL-farm rows" to EMPTY** — a data-rights regression, silent.
+> **Establish the production role's `rolbypassrls` before GR.** The plan's §4 and §7 assumed opposite
+> answers to this; neither was verified.
+>
+> **Dev-database note:** the migration is **not yet applied** to `agrisync_dev_v2`. `Program.cs:1185`
+> auto-migrates on startup, so restarting the dev backend applies it. The backend was stopped during
+> this work (it held the build output) and was not restarted.
+>
+> **Outstanding:** the DPDP/MeitY compliance check the repo's own hook requests on every migration
+> write did not run — the skill was unavailable in the execution context. **Run it before GR.**
+
 ### Carried out of P0.2 — named, not silently dropped
 
 - **The `WITH CHECK` write-side hole.** Any tenant able to INSERT can write a globally-readable
