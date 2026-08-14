@@ -30,6 +30,15 @@
  *     back to `'idle'`, so the farmer's next visit to the live capture
  *     screen does not land on a stale "Saved to Ledger" panel for a save
  *     made on this page.
+ *   - NEW (round 3) — a write that succeeds but whose post-write step (sync
+ *     enqueue) fails is its OWN outcome, `'saved_with_warning'`: this page
+ *     must tell the farmer plainly (its `setError`-driven surface exists
+ *     only on the main log screen, not here), never suggest a retry, and
+ *     still mark the draft reviewed (the record IS saved). The list row's
+ *     displayed timestamp must also come from the SAME instant the review
+ *     screen dates the log from (`resolveRecordedInstant`), not from
+ *     `job.result.receivedAtUtc` directly — round 2 fixed the SAVED date but
+ *     left the LIST showing a different one for the same note.
  */
 import '@testing-library/jest-dom/vitest';
 import React from 'react';
@@ -70,11 +79,16 @@ vi.mock('../../app/context/AppFeatureContexts', () => ({
 const mockListUnreviewedAiResults = vi.fn();
 const mockMarkAiResultReviewed = vi.fn();
 const mockBuildAiDraftForReview = vi.fn();
+// round 3 — distinct from DRAFT_JOB.result.receivedAtUtc ('2026-08-14T19:00')
+// on purpose, so a test can prove the list row renders THIS value and not
+// job.result.receivedAtUtc directly.
+const mockResolveRecordedInstant = vi.fn((..._args: unknown[]) => '2026-08-13T15:00:00.000Z');
 
 vi.mock('../../infrastructure/sync/PendingAiResultsReader', () => ({
     listUnreviewedAiResults: (...args: unknown[]) => mockListUnreviewedAiResults(...args),
     markAiResultReviewed: (...args: unknown[]) => mockMarkAiResultReviewed(...args),
     buildAiDraftForReview: (...args: unknown[]) => mockBuildAiDraftForReview(...args),
+    resolveRecordedInstant: (...args: unknown[]) => mockResolveRecordedInstant(...args),
 }));
 
 // Heavy component, already covered by its own tests elsewhere. Stubbed to a
@@ -258,11 +272,44 @@ describe('AiDraftsPage — handleManualSubmit\'s 3-way outcome is read correctly
             expect(mockMarkAiResultReviewed).toHaveBeenCalledWith(7);
         });
     });
+
+    // round 3 — the record IS saved on this outcome (a step AFTER the write
+    // failed, e.g. sync enqueue), so it must still be marked reviewed. But
+    // useLogCommands.ts's own error surface renders nowhere on this page, so
+    // THIS page must say something — and never suggest a retry, since the
+    // record already exists and a retry would duplicate it.
+    it('alerts (without suggesting a retry) AND marks reviewed when the outcome is saved_with_warning', async () => {
+        mockHandleManualSubmit.mockResolvedValue('saved_with_warning');
+        const alertSpy = vi.spyOn(window, 'alert').mockImplementation(() => {});
+        await openReview();
+
+        fireEvent.click(screen.getByText('Save'));
+
+        await waitFor(() => {
+            expect(mockMarkAiResultReviewed).toHaveBeenCalledWith(7);
+        });
+        expect(alertSpy).toHaveBeenCalledTimes(1);
+        const [alertMessage] = alertSpy.mock.calls[0] as [string];
+        expect(alertMessage.toLowerCase()).not.toContain('try again');
+        alertSpy.mockRestore();
+    });
 });
 
 describe('AiDraftsPage — a stale "Saved to Ledger" panel is never left behind (NEW 4)', () => {
     it('resets the app-level status to idle after a successful save', async () => {
         mockHandleManualSubmit.mockResolvedValue('saved');
+        await openReview();
+
+        fireEvent.click(screen.getByText('Save'));
+
+        await waitFor(() => {
+            expect(mockSetStatus).toHaveBeenCalledWith('idle');
+        });
+    });
+
+    it('resets status to idle for saved_with_warning too — the record is still saved', async () => {
+        mockHandleManualSubmit.mockResolvedValue('saved_with_warning');
+        vi.spyOn(window, 'alert').mockImplementation(() => {});
         await openReview();
 
         fireEvent.click(screen.getByText('Save'));
@@ -325,5 +372,23 @@ describe('AiDraftsPage — non-reviewable rows (IMPORTANT 2)', () => {
         expect(confirmMessage).toContain('receipt scan');
         expect(confirmMessage).not.toContain('voice note');
         confirmSpy.mockRestore();
+    });
+});
+
+describe('AiDraftsPage — the list row and the review screen agree on the note\'s date (round 3)', () => {
+    it('formats the list row from resolveRecordedInstant, not job.result.receivedAtUtc directly', async () => {
+        render(<AiDraftsPage onBack={vi.fn()} />);
+
+        await waitFor(() => {
+            expect(screen.getByRole('button', { name: /review/i })).toBeInTheDocument();
+        });
+
+        expect(mockResolveRecordedInstant).toHaveBeenCalledWith(DRAFT_JOB);
+        // mockResolveRecordedInstant returns '2026-08-13T15:00:00.000Z' —
+        // deliberately a DIFFERENT day than DRAFT_JOB.result.receivedAtUtc
+        // ('2026-08-14T19:00:00.000Z'). If the list ever regresses to reading
+        // receivedAtUtc directly, this fails on the wrong day showing.
+        expect(screen.getByText(/13 Aug/)).toBeInTheDocument();
+        expect(screen.queryByText(/14 Aug/)).not.toBeInTheDocument();
     });
 });

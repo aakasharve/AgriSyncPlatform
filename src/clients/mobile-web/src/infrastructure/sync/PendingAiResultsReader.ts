@@ -73,6 +73,28 @@ export async function markAiResultReviewed(jobId: number): Promise<void> {
     });
 }
 
+/**
+ * spec: 2026-08-14-founder-decisions-launch-cohort-and-scope — fix round 3.
+ *
+ * The single source of "when did this note actually happen", shared by the
+ * LIST row's displayed timestamp and the review screen's `recordedDateKey`.
+ * Before this export, `AiDraftsPage`'s list row formatted
+ * `job.result.receivedAtUtc` (the DRAIN instant) directly, while
+ * `buildAiDraftForReview` computed this same preference chain independently
+ * for the date the saved log would carry — so an offline text note (no
+ * `recordedAtUtc`) drained the morning after it was typed showed one day in
+ * the list and saved under a different one once reviewed. Same instant,
+ * used by both call sites now, so the two can never disagree again.
+ *
+ * Preference order — see `AiDraftForReview.recordedDateKey`'s own doc for the
+ * full reasoning: `context.recordedAtUtc` (voice capture instant) →
+ * `createdAt` (enqueue instant, voice AND text) → `result.receivedAtUtc`
+ * (drain instant, least accurate, last-resort only).
+ */
+export function resolveRecordedInstant(job: UnreviewedAiResult): string {
+    return job.context.recordedAtUtc ?? job.createdAt ?? job.result.receivedAtUtc;
+}
+
 /** What the reviewing surface needs to open a draft inside `ManualEntry`. */
 export interface AiDraftForReview {
     context: FarmContext;
@@ -160,7 +182,7 @@ export function buildAiDraftForReview(job: UnreviewedAiResult, crops: CropProfil
     }
     const agriLog = normalizeParsedLog(rawParsedLog);
 
-    const recordedDateKey = getDateKey(job.context.recordedAtUtc ?? job.createdAt ?? job.result.receivedAtUtc);
+    const recordedDateKey = getDateKey(resolveRecordedInstant(job));
 
     const context: FarmContext = {
         selection: [{

@@ -24,6 +24,7 @@ import {
     listUnreviewedAiResults,
     markAiResultReviewed,
     buildAiDraftForReview,
+    resolveRecordedInstant,
     type UnreviewedAiResult,
     type AiDraftForReview,
 } from '../infrastructure/sync/PendingAiResultsReader';
@@ -59,7 +60,14 @@ function previewLabel(job: UnreviewedAiResult): string {
     return summary || transcript || job.context.textTranscript || 'Voice note';
 }
 
-function formatReceivedAt(iso: string): string {
+// NEW (fix round 3) — renamed from `formatReceivedAt`, and its caller below
+// switched from `job.result.receivedAtUtc` (the DRAIN instant) to
+// `resolveRecordedInstant(job)` (the same capture-preferring instant
+// `buildAiDraftForReview` dates the saved log from). Before this, an offline
+// text note drained the morning after it was typed showed one day HERE and
+// saved under a DIFFERENT day once reviewed — the same note, two dates, on
+// one screen.
+function formatRecordedAt(iso: string): string {
     try {
         return new Date(iso).toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
     } catch {
@@ -179,9 +187,19 @@ const AiDraftsPage: React.FC<AiDraftsPageProps> = ({ onBack }) => {
     // NEW 2 (fix round 2) — a plain boolean was not enough: it collapsed "the
     // losing tap of a double-tap" (a save that IS happening, via the OTHER
     // call — must stay silent, per `useLogCommands.ts`'s own "Silent by
-    // design" comment) and "written, then a later step failed" (the record
-    // IS safe — telling the farmer to retry would mint a duplicate) into the
-    // same `false`. `ManualSubmitOutcome` keeps the three apart.
+    // design" comment) into the same `false` as a genuine no-op.
+    //
+    // NEW (fix round 3) — `'saved'` was still collapsing two outcomes: a
+    // clean save, and a save where the write succeeded but a LATER step
+    // (sync enqueue) failed. `useLogCommands.ts`'s `setError` on that path
+    // renders on exactly one surface — the main log screen's `AudioRecorder`
+    // — and NOWHERE on this page. Treating that as plain `'saved'` meant this
+    // page told the farmer nothing, marked the draft reviewed, and refreshed
+    // — the row vanished with the log sitting in Dexie and nothing queued to
+    // sync. `'saved_with_warning'` is its own outcome so this page can say so
+    // on ITS OWN surface, using the `window.alert` it already has below —
+    // BEFORE marking reviewed, never suggesting a retry (the record is safe;
+    // retrying would duplicate it).
     const handleSubmit: ManualEntryProps['onSubmit'] = async (data) => {
         const outcome = await handleManualSubmit(data);
 
@@ -202,10 +220,15 @@ const AiDraftsPage: React.FC<AiDraftsPageProps> = ({ onBack }) => {
             return;
         }
 
-        // outcome === 'saved' — the record is durably in the ledger, even if
-        // a step after the write also failed (useLogCommands.ts already told
-        // the farmer via its own error/toast in that case; this page must
-        // not ALSO tell him to retry something already committed).
+        if (outcome === 'saved_with_warning') {
+            // The record IS durably saved — say so, and say plainly that it
+            // has not reached the server yet. Never "try again": the log
+            // already exists, and a retry would create a second one.
+            window.alert('Saved, but not sent yet. It will send automatically once you are back online.');
+        }
+
+        // outcome is 'saved' or 'saved_with_warning' — either way the record
+        // is durably in the ledger, so it is safe to mark this draft reviewed.
         //
         // NEW 4 (fix round 2) — undo handleManualSubmit's own `setStatus(
         // 'success')`. That status exists to trigger mainView's full-screen
@@ -298,7 +321,7 @@ const AiDraftsPage: React.FC<AiDraftsPageProps> = ({ onBack }) => {
                                     <Mic size={18} />
                                 </div>
                                 <div className="min-w-0">
-                                    <p className="text-xs font-bold text-slate-400">{formatReceivedAt(job.result.receivedAtUtc)}</p>
+                                    <p className="text-xs font-bold text-slate-400">{formatRecordedAt(resolveRecordedInstant(job))}</p>
                                     <p className="text-sm text-slate-700 line-clamp-2">{previewLabel(job)}</p>
                                     {/* IMPORTANT 2 (fix round 1) — a row with only a Discard
                                         affordance and no explanation reads as a dead end. Say

@@ -192,12 +192,18 @@ describe('handleManualSubmit — ManualSubmitOutcome, each path', () => {
         expect(outcome).toBe('not_saved');
     });
 
-    // NEW 2(b) — THE finding this file exists to pin. `confirmAndSave` (the
-    // actual Dexie write) succeeds; `enqueueForSyncAndNoteSkips` (a step
-    // AFTER the write, same `try`) then throws. The record IS in the
-    // ledger — the outcome must say so, not tell the caller to retry into a
-    // duplicate.
-    it('returns saved (not not_saved) when a step AFTER the write throws', async () => {
+    // NEW 2(b) / round 3 — THE finding this file exists to pin, refined
+    // again in round 3. `confirmAndSave` (the actual Dexie write) succeeds;
+    // `enqueueForSyncAndNoteSkips` (a step AFTER the write, same `try`) then
+    // throws. The record IS in the ledger — the outcome must say so, not
+    // tell the caller to retry into a duplicate — AND it must be its OWN
+    // outcome (`'saved_with_warning'`), not collapsed into plain `'saved'`.
+    // Round 2 returned plain `'saved'` here, which let `AiDraftsPage` mark
+    // the draft reviewed and refresh with NOTHING said to the farmer on its
+    // own surface (`useLogCommands.ts`'s `setError` renders only on
+    // `mainView.tsx`'s `AudioRecorder`) — the row simply vanished while
+    // nothing was queued to sync.
+    it('returns saved_with_warning (not saved, not not_saved) when a step AFTER the write throws', async () => {
         confirmAndSave.mockResolvedValue(undefined);
         enqueueLogsForSync.mockRejectedValueOnce(new Error('sync enqueue boom'));
         const setError = vi.fn();
@@ -208,7 +214,7 @@ describe('handleManualSubmit — ManualSubmitOutcome, each path', () => {
             outcome = await result.current.handleManualSubmit({ cropActivities: [] });
         });
 
-        expect(outcome).toBe('saved');
+        expect(outcome).toBe('saved_with_warning');
         expect(confirmAndSave).toHaveBeenCalledTimes(1);
         // The caller must never be told "failed, try again" for a record
         // that is already safely in the ledger — a retry would duplicate it.

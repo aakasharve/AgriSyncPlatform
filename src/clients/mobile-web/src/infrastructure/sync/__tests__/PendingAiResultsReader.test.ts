@@ -30,6 +30,7 @@ import {
     listUnreviewedAiResults,
     markAiResultReviewed,
     buildAiDraftForReview,
+    resolveRecordedInstant,
 } from '../PendingAiResultsReader';
 import type { CropProfile } from '../../../types';
 
@@ -342,5 +343,46 @@ describe('buildAiDraftForReview', () => {
         const draft = buildAiDraftForReview(job, [cropWithPlot('crop-1', 'plot-1')]);
 
         expect(draft?.recordedDateKey).toBe('2026-08-14');
+    });
+});
+
+// spec: 2026-08-14-founder-decisions-launch-cohort-and-scope — fix round 3.
+// `resolveRecordedInstant` is now the SHARED source both the list row's
+// displayed timestamp (AiDraftsPage.tsx) and buildAiDraftForReview's
+// recordedDateKey read from — pinned directly here so its own contract
+// cannot drift out from under either caller. (`buildAiDraftForReview`'s own
+// tests above already exercise it indirectly through recordedDateKey; this
+// pins the exported function itself, callable with no plot/crop/Dexie
+// involved at all — a pure read of three job fields.)
+describe('resolveRecordedInstant', () => {
+    it('prefers context.recordedAtUtc when present', () => {
+        const job = baseJob({
+            context: { farmId: 'farm-1', userId: 'user-1', operation: 'voice', recordedAtUtc: '2026-08-13T15:00:00.000Z' },
+            result: { operationType: 'voice_parse', receivedAtUtc: '2026-08-14T05:00:00.000Z', payload: {} },
+        }) as unknown as Parameters<typeof resolveRecordedInstant>[0];
+
+        expect(resolveRecordedInstant(job)).toBe('2026-08-13T15:00:00.000Z');
+    });
+
+    it('falls back to createdAt (the enqueue instant) when recordedAtUtc is absent', () => {
+        const job = baseJob({
+            createdAt: '2026-08-13T15:00:00.000Z',
+            context: { farmId: 'farm-1', userId: 'user-1', operation: 'text' },
+            result: { operationType: 'voice_parse', receivedAtUtc: '2026-08-14T05:00:00.000Z', payload: {} },
+        }) as unknown as Parameters<typeof resolveRecordedInstant>[0];
+
+        expect(resolveRecordedInstant(job)).toBe('2026-08-13T15:00:00.000Z');
+    });
+
+    it('falls back to result.receivedAtUtc only as a last resort', () => {
+        const job = {
+            ...baseJob({
+                context: { farmId: 'farm-1', userId: 'user-1', operation: 'voice' },
+                result: { operationType: 'voice_parse', receivedAtUtc: '2026-08-14T05:00:00.000Z', payload: {} },
+            }),
+            createdAt: undefined,
+        } as unknown as Parameters<typeof resolveRecordedInstant>[0];
+
+        expect(resolveRecordedInstant(job)).toBe('2026-08-14T05:00:00.000Z');
     });
 });

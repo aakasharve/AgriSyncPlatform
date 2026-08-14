@@ -38,25 +38,13 @@ import { noteUnqueueableLogs } from '../../features/sync/status/unqueueableLogs'
 import { useLanguage } from '../../i18n/LanguageContext';
 import { buildEditSavedMessage, buildSkippedSyncToast } from '../helpers/saveToastMessages';
 
-/**
- * spec: 2026-08-14-founder-decisions-launch-cohort-and-scope — fix round 2.
- *
- * `handleManualSubmit`'s outcome, honestly. A plain boolean collapsed three
- * different situations into one `false`, and `AiDraftsPage` cannot treat them
- * the same:
- *   - `'saved'`          a log was actually created or updated. This is true
- *                         even if a step AFTER the write (sync enqueue, the
- *                         summary calc) then throws — the record is durably
- *                         in the ledger, so telling the farmer to retry would
- *                         mint a duplicate.
- *   - `'not_saved'`       nothing was written — no active context, or the
- *                         write itself failed/threw before completing.
- *   - `'already_saving'`  this call LOST a double-tap race; another call is
- *                         (or already did) performing the save. Silent by
- *                         design (`saveLock`, below) — showing an alert here
- *                         would contradict a save that is succeeding.
- */
-export type ManualSubmitOutcome = 'saved' | 'not_saved' | 'already_saving';
+// spec: 2026-08-14-founder-decisions-launch-cohort-and-scope — fix round 3.
+// `ManualSubmitOutcome` moved to `useLogCommands.types.ts` (its own doc
+// comment lives there) to keep this file under the 800-line budget;
+// re-exported here so existing `from './useLogCommands'` imports (and any
+// future ones) keep working.
+import type { ManualSubmitOutcome } from './useLogCommands.types';
+export type { ManualSubmitOutcome };
 
 export interface UseLogCommandsResult {
     handleAutoSave: (logData: AgriLogResponse, provenance?: LogProvenance) => Promise<void>;
@@ -673,14 +661,21 @@ export const useLogCommands = ({
         } catch (e) {
             console.error("Critical error in handleManualSubmit:", e);
             // spec: 2026-08-14-founder-decisions-launch-cohort-and-scope (fix
-            // round 2) — a throw here can land AFTER the durable write
+            // rounds 2-3) — a throw here can land AFTER the durable write
             // (`wasWritten`) if a post-write step failed (sync enqueue,
             // summary calc, toast build — all inside this same `try`). The
             // record is safe; "Failed to save logs. Please try again." is
             // actively wrong in that case — a retry would mint a duplicate.
+            // Round 3: this is its OWN outcome (`'saved_with_warning'`), not
+            // plain `'saved'` — `setError` below only renders on the main log
+            // screen (`mainView.tsx`'s `AudioRecorder`), so a caller that
+            // cannot tell this apart from a clean save (as `AiDraftsPage` was
+            // round 2) has no way to warn the farmer on its own surface, and
+            // the record would go on to be marked reviewed with nothing said
+            // and nothing queued to sync.
             if (wasWritten) {
                 setError("Saved, but something after the save failed. Your entry is safe.");
-                return 'saved';
+                return 'saved_with_warning';
             }
             setError("Failed to save logs. Please try again.");
             return 'not_saved';

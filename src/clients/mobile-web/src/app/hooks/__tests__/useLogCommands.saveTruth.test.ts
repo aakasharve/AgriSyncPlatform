@@ -493,10 +493,11 @@ describe('useLogCommands — a save may not claim what was never queued (T2)', (
         paths.push(() => result.current.handleAutoSave({ summary: 'x' } as never));
         paths.push(() => result.current.handleFinalConfirm({ summary: 'x' } as never, null));
         paths.push(() => result.current.handleWizardSubmit([makeLog('1')] as never));
-        // fix round 1 (spec: 2026-08-14-founder-decisions-launch-cohort-and-scope)
-        // widened handleManualSubmit's return to Promise<boolean> (AiDraftsPage
-        // needs a real save-succeeded signal); wrapped here so this array keeps
-        // its Promise<void> element type.
+        // fix rounds 1-2 (spec: 2026-08-14-founder-decisions-launch-cohort-and-scope)
+        // widened handleManualSubmit's return from Promise<void> to a
+        // ManualSubmitOutcome string union (AiDraftsPage needs to tell a real
+        // save from a no-op/failure/in-flight collision); wrapped here so this
+        // array keeps its Promise<void> element type.
         paths.push(async () => { await result.current.handleManualSubmit({ cropActivities: [] }); });
 
         for (const run of paths) {
