@@ -16,6 +16,7 @@
  */
 import { getDatabase, type PendingAiJobRecord, type PendingAiJobResult } from '../storage/DexieDatabase';
 import { systemClock } from '../../core/domain/services/Clock';
+import { getDateKey } from '../../core/domain/services/DateKeyService';
 import { normalizeParsedLog } from '../ai/BackendAiClient.helpers';
 import type { AgriLogResponse, CropProfile, FarmContext } from '../../types';
 import type { LogProvenance } from '../../domain/ai/LogProvenance';
@@ -77,6 +78,17 @@ export interface AiDraftForReview {
     context: FarmContext;
     agriLog: AgriLogResponse;
     provenance: LogProvenance;
+    /**
+     * IMPORTANT 4 (fix round 1) — the day this note actually belongs to, NOT
+     * the day the farmer happens to open the review screen. Sourced from
+     * `job.context.recordedAtUtc` (the MediaRecorder capture instant) when
+     * present, else `job.result.receivedAtUtc` (when the device processed
+     * it) — both are closer to the truth than "today" for a note recorded at
+     * dusk and reviewed the next morning. Threaded into `ManualEntry` via its
+     * OPTIONAL `recordedDateKey` prop; the live path never passes this prop,
+     * so its own default (`getDateKey()` = today) is untouched.
+     */
+    recordedDateKey: string;
 }
 
 function readString(source: Record<string, unknown> | undefined, key: string): string | undefined {
@@ -109,6 +121,15 @@ function readBoolean(source: Record<string, unknown> | undefined, key: string): 
  *   - the job's `context.plotId` must resolve to a plot the farmer still
  *     has. A plot deleted after the note was recorded leaves no context to
  *     open the draft into.
+ *   - `payload.parsedLog` must actually be present and be an object.
+ *     IMPORTANT 1 (fix round 1) — a `voice_parse` job whose stored payload
+ *     has no `parsedLog` key at all (a degenerate/empty `result.payload`)
+ *     used to reach `normalizeParsedLog(undefined)`, which returns
+ *     `undefined` typed as `AgriLogResponse` (`normalizeDriftedParsedLog`'s
+ *     own `!raw` guard), and the very next line's `agriLog.fullTranscript`
+ *     threw on a farmer's tap. There is nothing to recover here — refusing
+ *     (returning `null`, same as the receipt/patti case) is honest; a form
+ *     rendered from nothing would not be.
  */
 export function buildAiDraftForReview(job: UnreviewedAiResult, crops: CropProfile[]): AiDraftForReview | null {
     if (job.operationType !== 'voice_parse') {
@@ -124,7 +145,12 @@ export function buildAiDraftForReview(job: UnreviewedAiResult, crops: CropProfil
 
     const payload = job.result.payload as Record<string, unknown> | undefined;
     const rawParsedLog = payload && typeof payload === 'object' ? payload['parsedLog'] : undefined;
+    if (!rawParsedLog || typeof rawParsedLog !== 'object') {
+        return null;
+    }
     const agriLog = normalizeParsedLog(rawParsedLog);
+
+    const recordedDateKey = getDateKey(job.context.recordedAtUtc ?? job.result.receivedAtUtc);
 
     const context: FarmContext = {
         selection: [{
@@ -155,5 +181,5 @@ export function buildAiDraftForReview(job: UnreviewedAiResult, crops: CropProfil
         timestamp: job.result.receivedAtUtc,
     };
 
-    return { context, agriLog, provenance };
+    return { context, agriLog, provenance, recordedDateKey };
 }

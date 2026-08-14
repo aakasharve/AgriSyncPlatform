@@ -31,7 +31,7 @@ import { isFarmWideSelection } from '../../../../app/helpers/appContentDailyCoun
 import { emitClosureSubmitted } from '../../../../core/telemetry/eventEmitters';
 import { useFarmContext } from '../../../../core/session/FarmContext';
 
-const ManualEntry: React.FC<ManualEntryProps> = ({ context, crops, defaults, profile, onSubmit, initialData, provenance, onDataConsumed, todayCountsMap, farmWideToday, transcriptEntries = [], todayLogs = [], onLogSelect }) => {
+const ManualEntry: React.FC<ManualEntryProps> = ({ context, crops, defaults, profile, onSubmit, initialData, provenance, onDataConsumed, todayCountsMap, farmWideToday, transcriptEntries = [], todayLogs = [], onLogSelect, recordedDateKey }) => {
 
     // DWC v2 §2.8 — closure.submitted emit context. The downstream
     // logCommandService generates the persisted DailyLog.id, so for
@@ -277,7 +277,14 @@ const ManualEntry: React.FC<ManualEntryProps> = ({ context, crops, defaults, pro
             observations,
             plannedTasks, // Include in submission
             disturbance,
-            date: getDateKey(),
+            // spec: 2026-08-14-founder-decisions-launch-cohort-and-scope —
+            // `recordedDateKey` is OPTIONAL and every existing caller omits
+            // it, so this default is byte-for-byte unchanged: `getDateKey()`
+            // (today), correct for the live voice/manual path. Only the
+            // offline AI-drafts reviewing surface passes it, so a note
+            // recorded at dusk and reviewed the next morning is dated to
+            // when it was actually recorded, not to today.
+            date: recordedDateKey ?? getDateKey(),
             manualTotalCost,
             fullTranscript: transcript,
             originalLogId: selectedLogId || undefined // Pass the ID if we are editing

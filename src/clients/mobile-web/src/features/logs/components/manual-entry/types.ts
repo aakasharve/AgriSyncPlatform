@@ -61,6 +61,17 @@ export interface ManualEntryProps {
     initialData?: AgriLogResponse | null;
     provenance?: LogProvenance | null;
     onDataConsumed?: () => void;
+    /**
+     * spec: 2026-08-14-founder-decisions-launch-cohort-and-scope — OPTIONAL
+     * override for the submitted `date` field. Every existing caller omits
+     * this, so the default stays exactly `getDateKey()` (today), unchanged
+     * for the live voice/manual path where "today" is correct. It exists
+     * for the offline AI-drafts reviewing surface: a note recorded at dusk
+     * and drained (or reviewed) the next morning must be dated to when the
+     * farmer actually recorded it, not to whichever day he happens to open
+     * the review screen — see `AiDraftsPage.tsx`.
+     */
+    recordedDateKey?: string;
     todayCountsMap?: Record<string, TodayCounts>;
     /**
      * LABOUR_PHASE2 P2.4 — what the farmer recorded for the WHOLE FARM today.

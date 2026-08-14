@@ -45,8 +45,23 @@ export interface UseLogCommandsResult {
     // Sub-plan 04 Task 10 per eslint.config.js) — not introduced by this
     // change, left as-is to avoid retyping the ManualEntry payload contract
     // out of scope.
+    //
+    // spec: 2026-08-14-founder-decisions-launch-cohort-and-scope — return
+    // type widened from `Promise<void>` to `Promise<boolean>`. The function
+    // ALWAYS resolves (no-context guard, the double-tap lock, and a thrown
+    // save error are each caught and turned into a toast/error state, never
+    // a rejection) — "the promise resolved" was never proof a log was
+    // written. `AiDraftsPage` needs that proof before it may mark an
+    // offline draft reviewed (a false mark there silently loses the
+    // farmer's note). `true` iff a log was actually created or updated;
+    // every other exit — no active context, a losing double-tap, or a
+    // caught save failure — returns `false`. No existing caller inspected
+    // the old `void` return, so this is additive: `mainView.tsx` still
+    // passes this straight through as `ManualEntry`'s `onSubmit`, whose
+    // prop type returns `void` — TypeScript's void-return compatibility
+    // rule accepts a function that returns MORE than void there unchanged.
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    handleManualSubmit: (data: any) => Promise<void>;
+    handleManualSubmit: (data: any) => Promise<boolean>;
     handleWizardSubmit: (logs: DailyLog[]) => Promise<void>;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     handleUpdateNote: (logId: string, noteId: string, updates: any) => void;
@@ -429,13 +444,13 @@ export const useLogCommands = ({
     // in UseLogCommandsResult above.
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const handleManualSubmit = useCallback(async (data: any) => {
-        if (!hasActiveLogContext) return; // SAFE GUARD
+        if (!hasActiveLogContext) return false; // SAFE GUARD
 
         // LABOUR_PHASE2 PHASE 4 (§A7.2) — the second tap of a double-tap stops
         // here, before `createFromManual` can mint a second log id. Silent by
         // design: no message, no disabled control, nothing the farmer must
         // acknowledge (`P9`).
-        if (!saveLock.tryAcquire()) return;
+        if (!saveLock.tryAcquire()) return false;
 
         try {
             let savedLogIds: string[];
@@ -618,9 +633,12 @@ export const useLogCommands = ({
                 // soft contradiction is not worth a real double-entry.
                 setStatus(showSavedToLedgerPanel ? 'success' : 'idle');
             }
+
+            return true;
         } catch (e) {
             console.error("Critical error in handleManualSubmit:", e);
             setError("Failed to save logs. Please try again.");
+            return false;
         } finally {
             // `finally`, so a save that FAILED releases as promptly as one that
             // succeeded. "Please try again" above must be an instruction the

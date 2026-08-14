@@ -15,7 +15,9 @@
  */
 import React, { useCallback, useEffect, useState } from 'react';
 import { ArrowLeft, Mic, Trash2 } from 'lucide-react';
-import { useAppDataState, useAppCommandsState } from '../app/context/AppFeatureContexts';
+import { useAppDataState, useAppCommandsState, useAppLogState, useAppViewHelpers } from '../app/context/AppFeatureContexts';
+import { getDateKey } from '../core/domain/services/DateKeyService';
+import type { TodayCounts } from '../domain/types/farm.types';
 import ManualEntry from '../features/logs/components/ManualEntry';
 import type { ManualEntryProps } from '../features/logs/components/manual-entry/types';
 import {
@@ -32,7 +34,19 @@ interface AiDraftsPageProps {
 
 type ReviewingDraft = { job: UnreviewedAiResult } & AiDraftForReview;
 
-/** English-only placeholder preview text (Global Constraint: never compose new Marathi). */
+/** English-only placeholder copy (Global Constraint: never compose new Marathi). */
+function operationNoun(job: UnreviewedAiResult): string {
+    if (job.operationType === 'receipt_extract') return 'receipt scan';
+    if (job.operationType === 'patti_extract') return 'patti scan';
+    return 'voice note';
+}
+
+/** IMPORTANT 2 (fix round 1) — operation-correct, not hardcoded to "voice note". */
+function discardConfirmMessage(job: UnreviewedAiResult): string {
+    const destination = job.operationType === 'voice_parse' ? 'log' : 'records';
+    return `Discard this ${operationNoun(job)}? It will not be added to your ${destination}.`;
+}
+
 function previewLabel(job: UnreviewedAiResult): string {
     if (job.operationType !== 'voice_parse') {
         return job.operationType === 'receipt_extract' ? 'Receipt scan' : 'Patti scan';
@@ -56,6 +70,18 @@ function formatReceivedAt(iso: string): string {
 const AiDraftsPage: React.FC<AiDraftsPageProps> = ({ onBack }) => {
     const { crops, farmerProfile, ledgerDefaults } = useAppDataState();
     const { handleManualSubmit } = useAppCommandsState();
+    // CRITICAL 1 & 2 (fix round 1) — `handleManualSubmit` attributes and gates
+    // the save on the APP-LEVEL `logScope` (`useLogCommands.ts`), not on the
+    // `context` prop this page hands to `ManualEntry` for rendering. Those are
+    // two different pieces of state. Without `setLogScope` here, either
+    // `hasActiveLogContext` is false (nothing farmer ever selected elsewhere)
+    // and the save silently no-ops, or a stale scope from something else the
+    // farmer looked at earlier is still selected and the log lands on THAT
+    // plot instead of the one this draft was recorded on. `AppRouter.tsx`'s
+    // `handleEditLog` sets `logScope` before mounting `ManualEntry` for the
+    // exact same reason; this page must do the same for the same reason.
+    const { setLogScope } = useAppLogState();
+    const { getTodayCounts } = useAppViewHelpers();
 
     const [drafts, setDrafts] = useState<UnreviewedAiResult[]>([]);
     const [loading, setLoading] = useState(true);
@@ -79,11 +105,19 @@ const AiDraftsPage: React.FC<AiDraftsPageProps> = ({ onBack }) => {
             window.alert('This draft cannot be opened for review here yet.');
             return;
         }
+
+        const primarySelection = built.context.selection[0];
+        setLogScope({
+            selectedCropIds: [primarySelection.cropId],
+            selectedPlotIds: primarySelection.selectedPlotIds,
+            mode: 'single',
+            applyPolicy: 'broadcast',
+        });
         setReviewing({ job, ...built });
     };
 
     const handleDiscard = async (job: UnreviewedAiResult) => {
-        if (!window.confirm('Discard this voice note? It will not be added to your log.')) {
+        if (!window.confirm(discardConfirmMessage(job))) {
             return;
         }
         setBusyJobId(job.id);
@@ -97,11 +131,26 @@ const AiDraftsPage: React.FC<AiDraftsPageProps> = ({ onBack }) => {
 
     // The ONLY place this page marks a draft reviewed on the confirm path —
     // and only after `handleManualSubmit` (the farmer's real save action)
-    // has actually run. Scoped to this closure alone: there is no shared
-    // mutable "which job am I reviewing" state outside this component, so
-    // there is nothing here that can leak into an unrelated later save.
+    // ACTUALLY SAVED something, not merely resolved. Scoped to this closure
+    // alone: there is no shared mutable "which job am I reviewing" state
+    // outside this component, so there is nothing here that can leak into an
+    // unrelated later save.
+    //
+    // IMPORTANT 3 (fix round 1) — `handleManualSubmit` always resolves, even
+    // on a no-op (no active context, a losing double-tap) or a caught save
+    // failure; "the promise resolved" was never proof a log was written. It
+    // now resolves `true` only when it actually created or updated a log
+    // (`useLogCommands.ts`); this reads that signal instead of assuming it.
     const handleSubmit: ManualEntryProps['onSubmit'] = async (data) => {
-        await handleManualSubmit(data);
+        const saved = await handleManualSubmit(data);
+        if (!saved) {
+            // Nothing was written. Do NOT mark the draft reviewed — Step 4 of
+            // the brief is "only after the farmer acts", and a no-op is not
+            // an act. Stay on the review screen so the note is not lost.
+            window.alert('Could not save this log. Please try again.');
+            return;
+        }
+
         if (reviewing) {
             await markAiResultReviewed(reviewing.job.id);
         }
@@ -110,6 +159,19 @@ const AiDraftsPage: React.FC<AiDraftsPageProps> = ({ onBack }) => {
     };
 
     if (reviewing) {
+        // CRITICAL 3 (fix round 1) — built the same way `mainView.tsx` builds
+        // it for the live path. Omitting this prop falls back to all-zero
+        // counts (`ManualEntry.tsx`'s `zeroTodayCounts`), which reads as "you
+        // have logged nothing today" even when the farmer already has —a
+        // fabricated number standing in for an unknown.
+        const todayCountsMap: Record<string, TodayCounts> = {};
+        const todayStr = getDateKey();
+        const plotIdsInScope = new Set<string>();
+        reviewing.context.selection.forEach(selection => selection.selectedPlotIds.forEach(id => plotIdsInScope.add(id)));
+        plotIdsInScope.forEach(plotId => {
+            todayCountsMap[plotId] = getTodayCounts(plotId, todayStr);
+        });
+
         return (
             <div className="max-w-4xl mx-auto px-4 py-6 pb-24 min-h-screen bg-slate-50">
                 <button
@@ -128,6 +190,8 @@ const AiDraftsPage: React.FC<AiDraftsPageProps> = ({ onBack }) => {
                     initialData={reviewing.agriLog}
                     provenance={reviewing.provenance}
                     onDataConsumed={() => {}}
+                    todayCountsMap={todayCountsMap}
+                    recordedDateKey={reviewing.recordedDateKey}
                 />
             </div>
         );
@@ -173,6 +237,13 @@ const AiDraftsPage: React.FC<AiDraftsPageProps> = ({ onBack }) => {
                                 <div className="min-w-0">
                                     <p className="text-xs font-bold text-slate-400">{formatReceivedAt(job.result.receivedAtUtc)}</p>
                                     <p className="text-sm text-slate-700 line-clamp-2">{previewLabel(job)}</p>
+                                    {/* IMPORTANT 2 (fix round 1) — a row with only a Discard
+                                        affordance and no explanation reads as a dead end. Say
+                                        plainly that review isn't built for this yet, and that
+                                        the row is kept, not lost, if the farmer does nothing. */}
+                                    {!reviewable && (
+                                        <p className="text-xs text-amber-600 mt-1">Review isn't available for this yet. You can discard it, or leave it here.</p>
+                                    )}
                                 </div>
                             </div>
                             <div className="flex flex-col items-end gap-2 shrink-0">

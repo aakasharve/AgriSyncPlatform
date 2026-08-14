@@ -250,4 +250,70 @@ describe('buildAiDraftForReview', () => {
 
         expect(buildAiDraftForReview(job, [cropWithPlot('crop-1', 'plot-1')])).toBeNull();
     });
+
+    it('returns null for a patti_extract job — the missing sibling of the receipt_extract case above', async () => {
+        const db = getDatabase();
+        const id = await db.pendingAiJobs.add(baseJob({
+            operationType: 'patti_extract',
+            context: { farmId: 'farm-1', userId: 'user-1', plotId: 'plot-1', cropName: 'Grapes' },
+            result: {
+                operationType: 'patti_extract',
+                receivedAtUtc: '2026-08-14T19:00:00.000Z',
+                payload: { rate: 42, weight: 100 },
+            },
+        }));
+        const job = (await listUnreviewedAiResults()).find(r => r.id === id)!;
+
+        expect(buildAiDraftForReview(job, [cropWithPlot('crop-1', 'plot-1')])).toBeNull();
+    });
+
+    // IMPORTANT 1 (fix round 1) — a completed voice_parse job whose
+    // `result.payload` has no `parsedLog` key used to reach
+    // `normalizeParsedLog(undefined)` and throw on `agriLog.fullTranscript`
+    // the moment a farmer tapped Review. The row above ("an unusual answer is
+    // still an answer") proves `listUnreviewedAiResults` still lists it; this
+    // proves the BUILDER — the function `AiDraftsPage` actually calls on tap —
+    // refuses cleanly instead of throwing.
+    it('returns null (does not throw) for a voice_parse job whose payload has no parsedLog', async () => {
+        const db = getDatabase();
+        const id = await db.pendingAiJobs.add(baseJob({
+            context: { farmId: 'farm-1', userId: 'user-1', operation: 'voice', plotId: 'plot-1' },
+            result: { operationType: 'voice_parse', receivedAtUtc: '2026-08-14T19:00:00.000Z', payload: {} },
+        }));
+        const job = (await listUnreviewedAiResults()).find(r => r.id === id)!;
+
+        expect(() => buildAiDraftForReview(job, [cropWithPlot('crop-1', 'plot-1')])).not.toThrow();
+        expect(buildAiDraftForReview(job, [cropWithPlot('crop-1', 'plot-1')])).toBeNull();
+    });
+
+    it('recordedDateKey prefers context.recordedAtUtc over the device-received instant', async () => {
+        const db = getDatabase();
+        const id = await db.pendingAiJobs.add(baseJob({
+            // Recorded at dusk (2026-08-13, IST) but not drained/reviewed
+            // until the following morning (2026-08-14) — the whole point of
+            // IMPORTANT 4: the log must land on the 13th, not the 14th.
+            context: { farmId: 'farm-1', userId: 'user-1', operation: 'voice', plotId: 'plot-1', recordedAtUtc: '2026-08-13T15:00:00.000Z' },
+            result: { operationType: 'voice_parse', receivedAtUtc: '2026-08-14T05:00:00.000Z', payload: { parsedLog: VOICE_PARSED_LOG } },
+        }));
+        const job = (await listUnreviewedAiResults()).find(r => r.id === id)!;
+
+        const draft = buildAiDraftForReview(job, [cropWithPlot('crop-1', 'plot-1')]);
+
+        expect(draft?.recordedDateKey).toBe('2026-08-13');
+    });
+
+    it('recordedDateKey falls back to receivedAtUtc when the job has no recordedAtUtc', async () => {
+        const db = getDatabase();
+        const id = await db.pendingAiJobs.add(baseJob({
+            context: { farmId: 'farm-1', userId: 'user-1', operation: 'text' },
+            result: { operationType: 'voice_parse', receivedAtUtc: '2026-08-14T05:00:00.000Z', payload: { parsedLog: VOICE_PARSED_LOG } },
+        }));
+        // this row has no plotId, so seed a second, resolvable one directly for this assertion
+        await db.pendingAiJobs.update(id, { context: { farmId: 'farm-1', userId: 'user-1', operation: 'voice', plotId: 'plot-1' } });
+        const job = (await listUnreviewedAiResults()).find(r => r.id === id)!;
+
+        const draft = buildAiDraftForReview(job, [cropWithPlot('crop-1', 'plot-1')]);
+
+        expect(draft?.recordedDateKey).toBe('2026-08-14');
+    });
 });
