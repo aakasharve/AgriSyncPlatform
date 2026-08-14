@@ -39,7 +39,9 @@ git log --oneline -8                                   # what has landed
 git status --short                                     # is the tree clean
 git rev-list --left-right --count main...HEAD          # tower size, for the merge gate
 cd src/clients/mobile-web && npm run test:repro         # open containment defects
-ls src/clients/mobile-web/src/**/REPRO-*.test.ts        # how many REPRO files remain
+find src/clients/mobile-web/src -name 'REPRO-*.test.ts'  # which reproductions remain
+#  ^ use find, NOT ls with a glob: the glob fails with exit 2 in a non-globstar shell,
+#    and an absent REPRO file reads as "graduated" — a failed command would look like success
 ```
 
 ### How to read the answer
@@ -48,7 +50,17 @@ ls src/clients/mobile-web/src/**/REPRO-*.test.ts        # how many REPRO files r
   designed graduation path: once a reproduction goes fully green, it loses the `REPRO-` prefix and
   joins the blocking suite. **A shrinking REPRO count is progress, not loss.** Confirm with
   `git log --diff-filter=R --name-status`.
-- **The remaining REPRO failures are open defects, not deferrals** — see the caution below.
+- **The remaining REPRO failures are a MIX. Do not treat them uniformly.**
+  - **`REPRO-A2` isolation failures are OPEN §P0.1 WORK** — the highest-harm defect in this plan.
+  - **`REPRO-A3` money/contract failures are OPEN §P0.6 WORK.**
+  - **`REPRO-A1` fabrication failures are §17 DEFERRALS, expected red**, waiting on F1 to make the
+    fields optional. One of them — the `cropActivities … status completed` assertion — is the
+    **founder-blocked D1 two-rule collision (§P0.5)** and must NOT be "fixed" by an executor.
+  - **Read each failure against §17 before acting on it.** An earlier §0 carried this qualifier; a
+    later edit deleted it, leaving an unqualified sentence that overrode the deferral register.
+  - 🛑 **§0's precedence clause does NOT extend to overriding §17.** Where §0 and §17 disagree about
+    whether something is deferred, **§17 wins.** §0 is authoritative for *measured state*, never for
+    *what is in scope*.
 - **"LANDED" means committed on this branch. Nothing here has reached a farmer.**
 
 ### What has landed, by area — verify with the commands above, do not trust this list's completeness
@@ -66,40 +78,16 @@ failing assertions so the gate could go green. What shipped instead is a **dedic
 suite** — excluded from the main gate, run by `npm run test:repro`, with graduation by rename. That
 avoids every hazard reviewers found in the inversion approach. **The inversion plan is discarded.**
 
-### 🛑 CORRECTION — an earlier version of THIS SECTION was false and dangerous
+> 🛑 **RULING D9 LANDED ON THIS BRANCH AND REVERSES PART OF THIS PLAN.**
+> **Voice recordings are kept FOREVER.** The 30-day sweeper is now a hard `return 0`.
+> Five statements written before D9 rested on that sweeper working; each is corrected in place at
+> §2, §8, §9 and §P0.8. **Encryption is now the NEXT item in that area, not a later one** — an
+> unbounded archive of plaintext clips is the direct consequence of forever-retention.
 
-A first draft of §0 said *"everything marked P0 is history, start reading at §6"* and *"the 25
-remaining failures are the §17 deferrals"*. **Both were wrong, and together they buried the
-highest-harm defect in the document and created an instruction to destroy farmer data.** Corrected:
-
-**Only §P0.5, §P0.6 and §P0.7 shipped.** The five commits touch the reconciler, the log repository,
-the sync commands and the abandoned-state module. **They touch no isolation, audit, RLS, transcript or
-storage file.**
-
-| Section | Status |
-|---|---|
-| §P0.5 same-device destruction · §P0.6 money · §P0.7 offline trust | **[x] LANDED ON FEATURE BRANCH** — committed, **not merged, not deployed, not reaching any farmer** |
-| **§P0.1 isolation (cross-farmer PII leak)** | ❌ **NOT SHIPPED — all twelve assertions still red** |
-| **§P0.2 audit authorization bypass** | ❌ **NOT SHIPPED** |
-| **§P0.3 `farm_boundaries` RLS** | ❌ **NOT SHIPPED** |
-| **§P0.4 raw transcript** | ❌ **NOT SHIPPED** |
-| **§P0.8 device storage pressure** | ❌ **NOT SHIPPED** |
-| **§P0.9 export link · raw-blob linkage · seal AAD · bare-cast policy** | ❌ **NOT SHIPPED** |
-
-**Read §5 in full. It is the next work, not history.** The single highest-harm item in this plan —
-one farmer reading another's harvest, procurement and finance data, plus third-party worker names, on
-a shared handset — is in the part the withdrawn instruction told an executor to skip.
-
-**The 25 remaining failures are NOT all deferrals.** Roughly nineteen are **open §P0 tasks**: twelve
-are the isolation assertions, four are money and contract, three are offline. Only about six map to a
-§17 row.
-
-> 🛑 **And treating all 25 as "turn these green" is a data-destroying instruction.**
-> One of them — `a_farmer_database_can_be_deleted_somewhere_in_production_code` — goes green **only
-> when production gains a database-delete call.** §P0.1 forbids exactly that ("quarantine, never
-> delete… the device may hold the only copy") and §17 defers it behind a founder retention ruling
-> **and** `P10` being true. **That assertion must stay red until the founder rules.** Mark it in the
-> file so nobody "fixes" it.
+> **Superseded §0 wording, recorded so it is not reinstated:** an early draft said "everything marked
+> P0 is history, start reading at §6" and "the remaining failures are all deferrals". Both were false;
+> the second was an instruction to add a database-delete call §P0.1 forbids. **Read §5 in full.**
+> **§P0.1 remains the highest-harm open item.**
 
 ---
 
@@ -161,7 +149,8 @@ Kubernetes · global real-time · universal versioning · another client databas
 
 **Protect, do not redesign** (direction §7): the log-save honesty layer (*मी लिहून घेतलं* — it refuses
 to claim server acknowledgement without one) · the no-multiply rule · auth/token storage · server
-tenancy and RLS on farms/plots/crop cycles · the voice 30-day sweeper · crash recovery on
+tenancy and RLS on farms/plots/crop cycles · ~~the voice 30-day sweeper~~ **(WITHDRAWN — ruling D9
+keeps voice forever and disabled it)** · crash recovery on
 `mutationQueue` · the structured labour round trip · verification's event-sourced FSM ·
 `UploadQueueRetry`'s deliberately narrow scope · the field-operator erasure semantics.
 
@@ -439,7 +428,7 @@ working as designed.
       > defect in its own right — an owner-capable role can `DROP POLICY` outright, which `FORCE` does
       > not prevent — and it must be filed, not papered over. If it is false, the draft invented a
       > justification, which breaks this plan's own repo-is-truth contract.
-- [ ] **Do not add a permissive user-scoped SELECT policy** until read-back exists — permissive policies
+> **Do not add a permissive user-scoped SELECT policy** until read-back exists — permissive policies
       OR together (`E4`: visible ≠ authorised).
 - [ ] Proof cloned from the existing exemplar `FieldOperatorRlsRealPostgresTests.cs`: the `E3` vacuity
       guard (`rolsuper OR rolbypassrls` asserted **false**, `current_user` asserted) at the top of every
@@ -516,8 +505,9 @@ working as designed.
       Without this, after the full fourteen-field extension: the deletion **still resurrects**, and the
       farmer's `CONFIRMED` **still reads as `DRAFT`** in status queries. The task as drafted could not
       have passed its own acceptance column.
-- [ ] Ruling Q9's immediate neutralisation of fabricated values is satisfied by the wholesale
-      preservation above; the type-level fix waits for F1 (§17).
+> **NOT WORK — do not tick, do not dispatch.** Ruling Q9's immediate neutralisation is satisfied by
+> the preservation above. **The type-level fix waits for F1 (§17), and the `cropActivities` half is
+> founder-blocked on D1.** As a live checkbox this sent a subagent straight at the blocked ruling.
 - [ ] **`serverModifiedAtUtc` erasure is a bigger surface than `delete()` — corrected.** `save()`
       deliberately preserves it. **`batchSave()` does the same bare `put(toRecord(log))` with no
       preservation, and `batchSave` is the primary confirm-and-save path.** So the freshness guard is
@@ -533,7 +523,8 @@ working as designed.
       silently evaluate to nothing is a guard with a bypass, and "prove each guard by mutation" would
       **not** catch it. Fail closed: on error, guard everything.
 - [ ] **Prove each guard by mutation:** revert, watch the **named** assertion fail, restore
-      byte-identically, verify by `git diff --stat` empty and hash equality. "23 failed" is not evidence;
+      byte-identically, **verify by hashing the named file directly** — not `git diff --stat`, which §13 G3
+      forbids as an oracle. "23 failed" is not evidence;
       `machinery_survives_the_first_pull_after_acknowledgement` is.
 
 ### P0.6 — Money integrity
@@ -635,10 +626,14 @@ the farmer's next recording silently fails. Nothing in the client observes stora
 - [ ] **`QuotaExceededError` catch** with an explicit message naming cause and remedy, an entry in the
       honest-surface registry, and an emergency sweep-then-retry-once.
 - [ ] **Delete finished voice-job blobs.** The same bytes exist twice — in the AI job **and** in
-      `voiceClips`, which has the working 30-day sweeper. Dropping the job copy is safe today and halves
-      offline-voice storage.
-- [ ] **Receipt and patti jobs get a written `expiresAtUtc`**, swept on the existing purge call — not
-      "delete on complete", because the result is not yet delivered to the farmer.
+      `voiceClips`. Under ruling D9 the `voiceClips` copy is now **retained forever**, so dropping the
+      duplicate job copy is still safe and still halves offline-voice storage. **The reason is
+      duplication, not expiry.**
+- [ ] **DECIDE and record: does receipt/patti media get a sweeper D9 permits, or does it stay
+      unswept and say so?** 🛑 **The existing purge call is a no-op (`return 0`) under ruling D9 — do
+      NOT schedule sweeping against it.** Receipt and patti jobs may carry an `expiresAtUtc`, but **nothing sweeps
+      it today**. Either build a sweeper D9 permits, or leave the field unswept and say so. A task that
+      completes while nothing is ever swept is worse than no task.
 > 🛑 **DO NOT delete attachment bytes in P0. This task moves to §8, after server-side finalisation
       exists.**
       > **Why this was the most dangerous item in the draft.** An earlier version deleted local bytes on
@@ -651,7 +646,9 @@ the farmer's next recording silently fails. Nothing in the client observes stora
       > **Rule: no local media is deleted until a server-verified confirmation exists for that object.**
       > Until then, media bytes are Tier-2 protected alongside unsent work.
 - [ ] **Finished voice-job blobs may still be dropped in P0** — and only these — because the same bytes
-      demonstrably exist in a second store that has a working sweeper. State that reason in the code.
+      demonstrably exist in a second store **that retains them permanently under ruling D9**. State
+      *that* reason in the code. 🛑 **Do NOT write "a working sweeper" — that justification is false
+      since D9 and would put a lie in the source.**
 - [ ] **Protected, never auto-evicted:** unsent mutations · unfinished uploads and their bytes ·
       **finished-but-server-UNVERIFIED attachment bytes** · unfinished AI jobs · `aiCorrectionEvents`
       (the structured signal; the transcript inside it is removed by §P0.4) · `appMeta` (holds GPS
@@ -733,7 +730,7 @@ exact three files F1 must widen.
 - [ ] **One business-truth completeness field:** `legacyPartial`. Nothing else.
 - [ ] **`financialSummary` becomes expressible as "server stated nothing"** — today it is non-optional
       and dereferenced directly by display code, which is why the zeros cannot be fixed by omission.
-- [ ] **Explicitly NOT in F1:** version tokens · `capturedAt`/`actor` on every field · a provenance
+> **Explicitly NOT in F1:** version tokens · `capturedAt`/`actor` on every field · a provenance
       envelope type · media state · processing state · sync state · any Dexie bump · any other domain.
 
 ### F2 — Sync adoption + four gaps *(not a design; the state model exists)*
@@ -748,12 +745,12 @@ exact three files F1 must widen.
 - [ ] **Per-mutation server logging.** The push handler is **1,921 lines with zero logging**; a batch
       where every mutation failed returns 200 and emits nothing. One structured line per result plus a
       batch summary, at the single choke point.
-- [ ] **No new correlation id is needed.** `deviceId + clientRequestId` **is** the end-to-end key —
+> **No new correlation id is needed.** `deviceId + clientRequestId` **is** the end-to-end key —
       durable on both sides, on the wire in both directions. The server simply never logged the key it
       already receives. Send the existing `syncCycleId` as `X-Request-Id` (**already in the CORS
       allow-list**) and prefer it over `TraceIdentifier`. Surface `deviceId` and queue counts in the
       existing status drawer, or "my entry vanished" still cannot be joined to a log line.
-- [ ] **Explicitly NOT in F2:** a unified sync *function* · draining `db.outbox` (retire it instead —
+> **Explicitly NOT in F2:** a unified sync *function* · draining `db.outbox` (retire it instead —
       `DELETE_LOG` has **no server mutation type at all**, so a drainer would point at nothing) ·
       folding in analytics · storage-pressure policy · a `CONFLICT` status (zero producers until F3
       opts in an entity; it would ship as dead UI) · pruning `APPLIED` rows (**blocked** — the honesty
@@ -828,7 +825,7 @@ first means building that twice.
       lifecycle rule. Requires only `s3:PutObjectTagging` — strictly smaller than a delete grant.
 - [ ] **Presigned GET replaces `Results.File` proxying**, minted per request, **never persisted**. A
       stored URL is a bearer token with no revocation.
-- [ ] **No CloudFront for media.** No multipart orchestration (8 MB cap ⇒ single PUT). No presigned
+> **No CloudFront for media.** No multipart orchestration (8 MB cap ⇒ single PUT). No presigned
       DELETE. No wildcard CORS.
 - [ ] **Voice sealing — three blocking defects before "just wire it up":**
       **(a)** the read path calls `resolveDek()` unconditionally, bypassing the cache — enabling sealing
@@ -839,8 +836,10 @@ first means building that twice.
       (`P9`, C5).
       Also: **seal inside the existing writer** — the dead one does a bare `put(row)` and would silently
       drop status, job link and timestamps.
-      **The v18 re-seal cascade is NOT NEEDED** — the working 30-day sweeper ages every plaintext row
-      out within one retention period. Genuine scope deletion.
+      🛑 **The "v18 re-seal cascade is NOT NEEDED" scope deletion is WITHDRAWN.** It rested on the
+      30-day sweeper ageing plaintext rows out. **Ruling D9 keeps voice forever and disabled that
+      sweeper**, so plaintext clips now persist indefinitely and grow. The D9 commit says it directly:
+      encryption is the **next** item in this area, not a later one.
 - [ ] **The device is the smaller half of the plaintext window.** Every voice parse uploads raw audio to
       the server, which writes it under SSE-only encryption with no lifecycle. **A plan that seals the
       device and stops has not implemented the ruling.**
@@ -859,7 +858,7 @@ Directive §14: **never silently rewrite history.**
 | Un-namespaced localStorage keys | **Move into the incumbent's namespace on activation.** Never clear |
 | Pre-Dexie stale copies | Remove after the owning domain completes its pipeline |
 | Six dead stores, zero writers | **Delete.** Two separate Dexie bumps — additive first, destructive second, **never one**. To delete a store you must set it to `null`; omission is a silent no-op |
-| Raw voice audio | ~30 days after confirmed transcription, **and not plaintext during the window** |
+| Raw voice audio | 🛑 **RULING D9: KEPT FOREVER.** The ~30-day deletion written here is **withdrawn** — it destroyed farmer truth. **Plaintext-during-retention is now unbounded, so encryption is urgent, not deferred** |
 | The device-local audit table | **Debt, not a domain to reproduce.** Stop writing, then drop, after the server before-image exists |
 | `aiCorrectionEvents` | **Split.** Migrate the structured learning signal; **do not** duplicate the transcript |
 
@@ -972,7 +971,9 @@ Beyond §P0.1–P0.4:
       `attachments/` keeps retention; deploy prefixes expire at **the oldest retained manual RDS snapshot's age, not a round number** —
       a fixed horizon manufactures database rollback points with no matching binary; `apk/` gets **no expiry** — expiring it breaks live download
       links.
-- [ ] **Infrastructure as code — do not introduce CDK or Terraform.** The repo already has a
+- [ ] **Infrastructure as code — do not introduce CDK or Terraform.** 🛑 **This is the SAME single
+      transaction as the lifecycle task above, not a second write.** Author the script FIRST, then the
+      one capture→apply→diff runs *through* it. Do not apply by CLI and then re-apply by script. The repo already has a
       production-proven pattern (`aws/voice-retained/`, `aws/snapshot/`), verified **live and
       drift-free**; two buckets were simply skipped. Create `aws/uploads/` and `aws/raw/` on the same
       shape, plus bucket policies (neither bucket has one) and CORS. **Write the corrected lifecycle
@@ -1001,7 +1002,7 @@ Beyond §P0.1–P0.4:
 - [ ] **The retained-voice bucket is empty and unconfigured in production** — that path has never
       written. Bind it, then get the retention right **before** data exists.
 - [ ] **Remove `@capacitor/camera`** — declared, zero imports.
-- [ ] **Q23 backfill: closed, not deferred.** Measured: `attachments/` holds 4 objects, 83 bytes.
+> **CLOSED — no work. Do not tick.** Q23 backfill: Measured: `attachments/` holds 4 objects, 83 bytes.
       There is nothing to backfill.
 
 ---
@@ -1075,7 +1076,7 @@ every CI run, for months.
    A heavy-tier deploy plus the multi-hour manual acceptance suite in §16 — run by a founder who works
    late IST — **will straddle that boundary and lose the database and the host mid-flight.**
    **Disable both schedule rules for the window and re-enable after G10.**
-4. 🛑 **This is a HEAVY-tier deploy: the branch carries EF migrations (count in §0).** **§15 now splits change-level from release-level rollback; read it before proceeding.** Required and missing
+4. 🛑 **This is a HEAVY-tier deploy: the branch carries EF migrations — **count them yourself**: `git diff main...HEAD --name-only -- '*/Migrations/*.cs'`.** **§15 now splits change-level from release-level rollback; read it before proceeding.** Required and missing
    from the draft: a **pre-deploy RDS snapshot** (the database is single-AZ with 7-day automated
    backups, so a manual snapshot is the only rollback floor) and the deploy plugin's migration
    dry-run stage. Also missing: **any mechanism to apply a ShramSafal migration at all** — startup
@@ -1220,7 +1221,15 @@ Without this an executor cannot tell an expected red from a real one.
 | **I** | Server rejects → content survives, rejection **resolvable** | Automated rejection tests | **P0 exit** |
 | **J** | Storage, encryption, lifecycle in **version-controlled config** | The weekly config-diff audit | **Infra lane completion** |
 
-**Blocking at P0 exit: B, F, I.** Everything else activates later and is expected red until it does.
+**Blocking at P0 exit: A-CONTAINMENT, B, F, I.**
+
+| **A-CONTAINMENT** | Same-device check: a farmer's own sync does not reduce his own record | **§16 phase 3** | **P0 exit** |
+
+> Scenario **A** (full wipe-and-reconstruct) activates **per domain**, not at P0 — it needs server
+> homes that do not exist yet. **A-CONTAINMENT is its P0-scoped half** and owns §16 phase 3, which
+> §5's first exit criterion requires. Without this row the P0 exit set and §5/§16 disagreed.
+
+Everything else activates later and is **expected red** until it does.
 
 Plus, per the cofounder Definition of Done: spec referenced · tests added · architecture tests pass ·
 **Founder Acceptance Gate cleared before any deployment step** · **deployed and prod-proven** with a
