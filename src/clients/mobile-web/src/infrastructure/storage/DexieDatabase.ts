@@ -49,6 +49,7 @@ import { applyV21 } from './dexie/versions/v21';
 import { applyV22 } from './dexie/versions/v22';
 import { LEGACY_DATABASE_NAME } from './userDatabaseName';
 import { getActiveDatabaseName, clearResolvedDatabaseName } from './activeDatabaseName';
+import { recoverLegacyOwnershipClaim, settleOwnershipClaims } from './databaseOwnership';
 
 // =============================================================================
 // OUTBOX (Pending sync events)
@@ -804,11 +805,20 @@ export function getDatabase(): AgriLogDatabase {
 }
 
 /**
- * Reset the database instance (for testing).
+ * Drop everything held in memory and re-derive routing from durable state.
+ *
+ * P0.1: durable state now includes the ownership claim INSIDE `AgriLogDB`, so
+ * this reads it back and repairs the localStorage mirror before anybody is
+ * routed anywhere — the step that makes a cleared `localStorage` survivable.
+ * The in-flight claim settles BEFORE the handle closes, because closing a Dexie
+ * handle aborts its transactions and would discard the claim just written.
+ *
  * @internal
  */
 export async function resetDatabase(): Promise<void> {
+    await settleOwnershipClaims();
     dbInstance?.close();
     dbInstance = null;
     clearResolvedDatabaseName();
+    await recoverLegacyOwnershipClaim();
 }

@@ -60,6 +60,24 @@
  * this module cannot change where a single row lands until the provider opts
  * in, and a half-applied change cannot leave the app writing to a database no
  * one reads.
+ *
+ * WHY THE localStorage RECORD IS NO LONGER THE ANSWER (P0.1)
+ * ---------------------------------------------------------
+ * It was the only record, and it lives OUTSIDE the thing it describes. A
+ * privacy-mode pass, a "clear cookies and site data", or an OS storage reclaim
+ * removes it while leaving every IndexedDB row in place — and the code below
+ * then read "nobody owns AgriLogDB" and handed the incumbent's whole database,
+ * third-party worker names included, to the next person who signed in. The
+ * routing did not get the answer wrong; it LOST the answer and failed OPEN.
+ *
+ * The claim now lives in `appMeta.owner_user_id`, INSIDE the database it
+ * describes (`databaseOwnership.ts`). The record below is retained as a
+ * synchronous MIRROR of that claim, because routing must answer before an
+ * IndexedDB read can complete — but it is no longer the source of truth. When
+ * the two disagree the in-database claim wins and rewrites the mirror
+ * (`recordVerifiedLegacyDatabaseOwner`), because a claim kept inside the
+ * database cannot be separated from the rows it describes: erasing it means
+ * erasing them.
  */
 
 import { DemoModeStore } from './DemoModeStore';
@@ -105,6 +123,42 @@ export function getLegacyDatabaseOwner(): string | null {
 }
 
 /**
+ * Re-record an adoption that was read back OUT OF `AgriLogDB` itself.
+ *
+ * The only caller is `databaseOwnership.ts`, and the only value it may pass is
+ * one it read from `appMeta.owner_user_id` inside the database in question.
+ * That is strictly better evidence than this mirror: the claim and the rows it
+ * describes are the same object, so it cannot be half-deleted. It therefore
+ * OVERWRITES — unlike `resolveDatabaseNameForUser`'s write-once adoption, which
+ * is a guess made from whatever the handset happened to be carrying.
+ *
+ * Returns true when the mirror actually changed, so a caller can log a
+ * correction rather than a no-op.
+ */
+export function recordVerifiedLegacyDatabaseOwner(owner: string): boolean {
+    if (!canRecordOwnership()) {
+        return false;
+    }
+    if (localStorage.getItem(LEGACY_DB_OWNER_KEY) === owner) {
+        return false;
+    }
+    localStorage.setItem(LEGACY_DB_OWNER_KEY, owner);
+    return true;
+}
+
+/**
+ * The database created FOR a farmer. Never `AgriLogDB`, by construction of the
+ * prefix, so this is always a safe place to send somebody whose ownership of
+ * the legacy database has not been established.
+ */
+export function perUserDatabaseName(userId: string): string {
+    // `encodeURIComponent` is injective, so two distinct farmers can never be
+    // folded onto one database name — the failure that would turn this fix into
+    // the leak it was written to prevent.
+    return `${PER_USER_DATABASE_PREFIX}${encodeURIComponent(userId)}`;
+}
+
+/**
  * The database name for a farmer, deciding the adoption on first use.
  *
  * Has a side effect on purpose: the adoption must be settled at the first
@@ -129,10 +183,7 @@ export function resolveDatabaseNameForUser(userId: string): string {
 
     return owner === userId
         ? LEGACY_DATABASE_NAME
-        // `encodeURIComponent` is injective, so two distinct farmers can never
-        // be folded onto one database name — the failure that would turn this
-        // fix into the leak it was written to prevent.
-        : `${PER_USER_DATABASE_PREFIX}${encodeURIComponent(userId)}`;
+        : perUserDatabaseName(userId);
 }
 
 /**
@@ -143,6 +194,18 @@ export function resolveDatabaseNameForUser(userId: string): string {
  *
  * Answers `AgriLogDB` whenever routing has not been switched on, which is what
  * makes this change inert until `DataSourceProvider` opts in.
+ *
+ * KNOWN RESIDUAL FAIL-OPEN, MEASURED AND NOT YET CLOSED
+ * -----------------------------------------------------
+ * The second branch below answers `AgriLogDB` when the database HAS a recorded
+ * owner but nobody is signed in. An anonymous boot therefore still lands on the
+ * owner's database. Closing it means `getDatabase()` refusing to answer, and
+ * the measured blast radius of that is 122 production call sites in 55 files —
+ * 96 of them unguarded, including 17 in `DexieLogsRepository` and 14 in
+ * `MutationQueue`. A synchronous throw there stops a farmer recording today's
+ * work, which `P9` forbids. It needs a place to route an unidentified session
+ * to, which is a separate decision. Recorded here so it is not mistaken for
+ * closed.
  */
 export function resolveActiveDatabaseName(): string {
     const owner = getLegacyDatabaseOwner();
@@ -157,5 +220,5 @@ export function resolveActiveDatabaseName(): string {
 
     return owner === activeUserId
         ? LEGACY_DATABASE_NAME
-        : `${PER_USER_DATABASE_PREFIX}${encodeURIComponent(activeUserId)}`;
+        : perUserDatabaseName(activeUserId);
 }

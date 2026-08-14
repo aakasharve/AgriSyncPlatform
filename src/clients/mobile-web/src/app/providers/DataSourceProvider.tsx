@@ -16,6 +16,7 @@ import { getDatabase } from '../../infrastructure/storage/DexieDatabase';
 import { runLegacyLocalStorageMigration } from '../../infrastructure/storage/LegacyLocalStorageMigrator';
 import { DemoModeStore } from '../../infrastructure/storage/DemoModeStore';
 import { activateDatabaseForUser } from '../../infrastructure/storage/activateUserDatabase';
+import { recoverLegacyOwnershipClaim, settleOwnershipClaims } from '../../infrastructure/storage/databaseOwnership';
 import { purgeExpiredProcessingVoiceClips } from '../../infrastructure/voice/VoiceClipRetention';
 
 // --- CONTEXT ---
@@ -123,8 +124,23 @@ export const DataSourceProvider: React.FC<{ children: React.ReactNode }> = ({ ch
                 // ADDRESS and not a deletion. This runs before anything reads
                 // or writes — including the two localStorage imports below,
                 // which must land in the database that owns those rows.
+                //
+                // P0.1 — READ THE OWNERSHIP CLAIM BACK FIRST.
+                // Which farmer owns `AgriLogDB` now lives inside `AgriLogDB`
+                // (`appMeta.owner_user_id`), not only in localStorage. A farmer
+                // who cleared browser storage deleted the COPY of that answer,
+                // not the answer; routing before reading it back is precisely
+                // what handed the incumbent's database — worker names included
+                // — to the next person who signed in. Nothing in this recovery
+                // deletes anything: it repairs one localStorage key.
+                //
+                // Then wait for the claim to be written-or-verified, so the two
+                // localStorage imports below cannot pour one farmer's rows into
+                // another farmer's database while that check is still in flight.
                 if (!isDemoMode && session?.userId) {
+                    await recoverLegacyOwnershipClaim();
                     activateDatabaseForUser(session.userId);
+                    await settleOwnershipClaims();
                 }
                 await dataSource.initialize();
                 await MigrationService.migrate();

@@ -181,10 +181,38 @@ async function countEveryTable(db: AgriLogDatabase): Promise<Record<WipedTable, 
     return counts;
 }
 
-const ALL_EMPTY: Record<WipedTable, number> =
-    Object.fromEntries(WIPED_TABLES.map(t => [t, 0])) as Record<WipedTable, number>;
-const ALL_ONE: Record<WipedTable, number> =
-    Object.fromEntries(WIPED_TABLES.map(t => [t, 1])) as Record<WipedTable, number>;
+/**
+ * P0.1 — ONE EXTRA `appMeta` ROW, AND WHY IT IS NOT A LEAK
+ * ---------------------------------------------------------
+ * The ownership claim (`appMeta.owner_user_id`) now lives INSIDE the database
+ * it describes, written by `activateDatabaseForUser`. So every database a
+ * farmer has activated holds exactly one `appMeta` row more than this fixture
+ * seeded into it. That row is the app's own, not a farmer's record, and it
+ * names the farmer who is looking at it — `theOwnershipClaimNames` below
+ * asserts that, which is a stronger statement than the count it replaces.
+ *
+ * This does NOT weaken the wipe guard. If `resetAuthenticatedUserCacheIfNeeded`
+ * came back, `appMeta` would read 0 where these expect 1 or 2, and every proof
+ * still fails.
+ */
+const OWNERSHIP_CLAIM_ROWS = 1;
+
+function expectedCounts(seededPerTable: number): Record<WipedTable, number> {
+    return Object.fromEntries(WIPED_TABLES.map(t => [
+        t,
+        t === 'appMeta' ? seededPerTable + OWNERSHIP_CLAIM_ROWS : seededPerTable,
+    ])) as Record<WipedTable, number>;
+}
+
+/** No seeded rows — only the claim written by the activation under test. */
+const ALL_EMPTY: Record<WipedTable, number> = expectedCounts(0);
+/** One seeded row per table, plus the claim. */
+const ALL_ONE: Record<WipedTable, number> = expectedCounts(1);
+
+/** The claim inside the currently-open database, or null if there is none. */
+async function theOwnershipClaimNames(db: AgriLogDatabase): Promise<unknown> {
+    return (await db.appMeta.get('owner_user_id'))?.value ?? null;
+}
 
 async function wipeEverything(): Promise<void> {
     await resetDatabase();
@@ -228,6 +256,8 @@ describe('per-farmer databases — a second farmer signing in erases nothing', (
         // to clear is empty for B, because B is not looking at A's database.
         expect(getActiveDatabaseName()).toBe(DB_FOR_B);
         expect(await countEveryTable(getDatabase())).toEqual(ALL_EMPTY);
+        // ...and the single `appMeta` row B can see is B's own claim, not A's.
+        expect(await theOwnershipClaimNames(getDatabase())).toBe(FARMER_B);
     });
 
     it('PROOF 2b: what B writes stays out of A\'s database, in both directions', async () => {
