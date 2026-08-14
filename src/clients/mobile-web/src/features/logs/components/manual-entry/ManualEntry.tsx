@@ -314,7 +314,18 @@ const ManualEntry: React.FC<ManualEntryProps> = ({ context, crops, defaults, pro
             // editing an existing log (selectedLogId set) — an edit's
             // in-session `provenance` state can be stale from an unrelated
             // earlier parse and must not be misattributed to a different log.
-            provenance: selectedLogId ? undefined : (provenance ?? undefined)
+            //
+            // task-0b (dfes-farmer-facing-deploy-readiness-2026-08-14) — when there is
+            // NO AI provenance this is a genuinely hand-typed day, and it now SAYS SO
+            // instead of being inferred from the absence of a marker. The sync layer
+            // ships the typed draft only on a positive `source: 'manual'` assertion,
+            // because a voice log can reach it unmarked too (useLogCommands.ts:242-250
+            // passes undefined provenance) and shipping AI figures as manual would be a
+            // permanent provenance lie (P8). Declaring origin at the point that KNOWS it
+            // is the only way the gate can be both correct and fail-safe.
+            provenance: selectedLogId
+                ? undefined
+                : (provenance ?? { source: 'manual', timestamp: new Date().toISOString() })
         };
 
         if (initialAiDataRef.current && provenance?.source === 'ai') {

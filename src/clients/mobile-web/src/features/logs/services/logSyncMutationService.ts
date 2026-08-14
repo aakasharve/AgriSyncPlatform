@@ -145,13 +145,35 @@ function buildTaskPayloads(log: DailyLog): LogTaskMutationPayload[] {
  * nothing to persist. No typed children were ever written for it, the day scored 0/10,
  * and a farmer who had typed out everything he did was told he had recorded nothing.
  *
- * Returns undefined for a voice confirm (its facts already ride `sourceAiJobId`, and the
- * server derives from that AiJob) and for a log with no content at all — an absent draft
- * is the pre-task-0b wire exactly, which is what keeps old servers and voice saves
- * untouched.
+ * THE GATE IS POSITIVE, AND IT FAILS SAFE. A draft ships only when the log ASSERTS it is
+ * manual (`provenance.source === 'manual'`). Anything else — `'ai'`, `'pre_spine'`, or no
+ * provenance at all — ships nothing.
+ *
+ * Why not "no sourceAiJobId": that was wrong and would have written a lie. The client's
+ * real discriminator is `LogProvenance.source` (`domain/ai/LogProvenance.ts:18`);
+ * `sourceAiJobId` is OPTIONAL even on AI logs (`:36`), and two live producers stamp
+ * `source: 'ai'` with no job id — the streaming parse path
+ * (`features/voice/useVoiceRecorder.ts:253-258`) and `BackendAiClient.ts:149`
+ * (`apiResult.sourceAiJobId ?? undefined`). Such a log's buckets hold AI-EXTRACTED
+ * figures. Shipping them as a manual draft would have the server persist them with
+ * `Provenance.Manual` — model "n/a", no extractor SHA — making an inferred number
+ * permanently indistinguishable from one the farmer typed. Doctrine P8 forbids exactly
+ * that, and it is irreversible: it converts a gap in the record into a false record.
+ *
+ * Why ABSENT provenance ships nothing either: absence is genuinely ambiguous here. A
+ * voice route reaches this function with no provenance at all —
+ * `useLogCommands.ts:242-250` calls `createFromVoice(..., undefined, ...)` ("Provenance
+ * might be lost here", its own comment) and then enqueues. Since shipping is the
+ * irreversible direction, an unmarked log is treated as unknown-origin and withheld.
+ * Genuinely-manual producers therefore DECLARE themselves — `ManualEntry` and the wizard
+ * (`logSubmissionService`) stamp `source: 'manual'` — rather than being inferred from a
+ * silence that a voice log can also produce.
+ *
+ * Also returns undefined for a log with no content at all. An absent draft is the
+ * pre-task-0b wire exactly, which is what keeps old servers and voice saves untouched.
  */
 export function buildManualDraft(log: DailyLog): ManualDraftPayload | undefined {
-    if (log.meta?.provenance?.sourceAiJobId) {
+    if (log.meta?.provenance?.source !== 'manual') {
         return undefined;
     }
 
