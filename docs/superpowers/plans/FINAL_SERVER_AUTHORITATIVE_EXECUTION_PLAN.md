@@ -474,23 +474,110 @@ for every tenant *by design*. **Both defences share the hole.** NULL-farm rows a
 cross-farm ones: invites, joins, membership exits, admin elevations, DEK issue/resolve,
 erasure/export/breach. `payload` is returned verbatim.
 
-**The hole has three mouths, not one. An earlier draft patched one and would have left the widest open.**
+> ## 🔬 VERIFIED AGAINST THE REPO AT `b465fbd6` — two independent read-only inspectors, 2026-08-15
+> **All four paths CONFIRMED at the named lines.** Three corrections and one addition follow. Where
+> this block and the prose above disagree, **this block wins** — the prose predates the inspection.
 
-- [ ] **The sync pull applies the identical whitelist** (`PullSyncChangesHandler.cs:130`), so **every
-      device pulls every NULL-farm audit row, payload verbatim, on every sync** — invites, joins,
-      membership exits, admin elevations, DEK issue and resolve, erasure, export, breach. This is far
-      wider than the `/audit` endpoint and must be fixed in the same task.
-- [ ] **The repository port has a fail-open default body** (`IShramSafalRepository.cs:135-136`) that
-      **discards `farmIds` and calls the unscoped overload.** Any implementor that does not override it
-      returns every farm's audit events. Doctrine `F7` warns that default interface bodies let a test
-      double answer the default and pass for the wrong reason — this is that hazard, live.
-- [ ] **Fix the RLS policy too.** The draft said "both defences share the hole" and then filed a task
-      against one. `p_tenant_audit_events` still admits NULL-farm rows to every tenant, so patching only
-      the application layer turns two broken defences into one working one with **zero depth**.
-- [ ] Endpoint rule: NULL-farm rows visible only to their own `actor_user_id`, or to a platform-admin
-      claim.
-- [ ] Tests proving a non-admin caller cannot read another actor's NULL-farm rows **through either the
-      endpoint or a sync pull**.
+**1. THE PLAN'S NULL-FARM EVENT LIST IS WRONG, AND IT INHERITED THE ERROR FROM A STALE COMMENT.**
+Invites, joins and membership exits are **NOT** NULL-farm — all three pass a concrete farm id
+(`IssueFarmInviteHandler.cs:117`, `ClaimJoinHandler.cs:137`, `ExitMembershipHandler.cs:151`). DEK
+issue/resolve are non-NULL in practice. The list came from `HardenAuditIntegrity.cs:176-177`, true
+when written, false since those handlers moved to `AuditEventFactory`. **The real set is 17 sites**;
+the seven the plan never named include voice-clip retention, PII-review decisions, AI provider config,
+price config, test protocols and schedule templates.
+
+**2. WHAT ACTUALLY LEAKS IS NOT NAMES OR PHONES — IT IS WORSE IN A DIFFERENT WAY.** No phone numbers,
+no emails, no worker names (those audits are farm-scoped). What every device receives:
+**S3 object keys for other farmers' raw voice recordings** (kept forever under D9) ·
+**other users' GUIDs**, including erasure subjects · **unbounded staff free text** — the PII-review
+`note` describing detected PII is the highest-value payload in the set · admin elevation reasons ·
+DEK handles. It is a **complete cross-tenant privacy-incident ledger plus join keys into other
+subsystems.**
+
+**3. 🛑 ON `/sync/pull` THE AUDIT STREAM IS 100% LEAK — RLS ADMITS NOTHING ELSE.**
+`TenantConnectionInterceptor.cs:116-122` returns in user-scoped mode **before setting
+`agrisync.farm_id`**, so the policy's equality disjunct is always NULL and only `farm_id IS NULL`
+matches. There is no `p_user_select_audit_events`. So the pull is not "farm rows plus a NULL leak" —
+**farmers have never received their own farm's audit rows at all**, and the application-layer
+`farmIdSet.Contains(...)` branch is dead code on that path.
+
+**4. A FIFTH MOUTH, NOT IN THE PLAN — and it is probably CORRECT.** `ExportWorker.cs:150-156` (DSAR)
+reads audit events through the **RLS-bypassing admin context**, scoped only by a C# predicate
+`ActorUserId == userId`. That is the same actor rule §P0.2 proposes, so it is not obviously a defect —
+but it **gets zero depth from any RLS fix**, and any change to actor semantics must be mirrored here.
+
+**5. NOTHING CONSUMES THE AUDIT STREAM. THERE IS NO SCREEN TO BLANK.** `GET /audit` has **zero
+callers in `src/clients/`**. The pull's array is typed `auditEvents: unknown[]` (`dtos.ts:399`),
+parsed by nothing, consumed by no reconciler. The client's own `db.auditEvents` is a different,
+locally-written table. **The safest fix is also the most complete one.**
+> 🛑 **BUT DO NOT DELETE THE FIELD FROM THE WIRE.** Old APKs are in farmers' hands and the field is
+> non-optional in their bundled schema; removing it risks a parse failure that breaks sync entirely.
+> **Stop populating it — send an empty array — and leave the field.** Removing it is a later,
+> separate change gated on client rollout.
+
+**6. THE PLATFORM-ADMIN "CLAIM" DOES NOT EXIST AND MUST NOT BE INVENTED.** It was **deliberately
+removed** (`JwtTokenIssuer.cs:43-48` — *"tokens are identity, not authorization"*). The real mechanism
+is `IEntitlementResolver` → `AdminScope.IsPlatformAdmin` (`EntitlementResolver.cs:87-96`), enforced
+via `AdminScopeHelper`, which `AdminAuthGateTests.cs:85-95` already mandates. **A new `ModuleKey` for
+the audit ledger must be added** — none exists.
+
+**7. 🛑 STOP CONDITION — TIGHTEN `USING` ONLY. A SYMMETRIC `WITH CHECK` BREAKS EVERY ADMIN ACTION.**
+`FORCE` applies policies to the owner, and the admin context sets **no GUCs at all**, so admin and
+worker audit writes succeed **only** because `WITH CHECK` still carries `farm_id IS NULL`. Tightening
+it symmetrically `42501`s the audit-first row written *before* the privileged context is handed
+back — every admin elevation starts failing. **Before touching `WITH CHECK` at all, confirm the
+production migration role's `rolbypassrls`** — local roles prove nothing, the local migration
+connection is superuser.
+
+**8. THE HOLE IS WRITTEN THREE TIMES, NOT ONE.** SQL (`ShramSafalRepository.cs:676`), handler
+(`PullSyncChangesHandler.cs:131`), policy. **An implementor reading the old task text fixes one line.**
+
+**9. NO PERMISSIVE SIBLING POLICIES EXIST** — exactly one policy on the table, so amending it is
+genuinely sufficient on the database side. `actor_user_id` is `NOT NULL`, indexed, guarded at every
+write site, and **0 of 12,022 rows are NULL** — a viable key. Note ~all NULL-farm rows carry system
+sentinels (`SystemActor.cs:46-87`), so an actor rule correctly hides essentially all of them.
+
+**10. NO `E3` PROOF OF AUDIT ISOLATION EXISTS.** Every current audit query in tests runs as
+**superuser** and proves nothing. Nine suites carry the vacuity guard; none covers this table. The
+exemplar `FieldOperatorRlsRealPostgresTests.cs` **was verified to carry the cited shape** — clone it.
+
+### The tasks
+
+- [ ] **Stop populating `auditEvents` in the pull response — send an empty array, keep the wire
+      field.** Fix all three layers (`ShramSafalRepository.cs:676`, `PullSyncChangesHandler.cs:131`,
+      the policy), not one. **Check the watermark**: `PullSyncChangesHandler.cs:510-512` derives
+      `maxTimestamp` from these rows, so removing them changes the cursor — confirm it cannot skip data.
+- [ ] **Endpoint rule via `AdminScopeHelper`, not a claim.** NULL-farm rows visible only to their own
+      `actor_user_id`, or to a platform admin resolved through `IEntitlementResolver`. **Add the audit
+      `ModuleKey` and its `EntitlementMatrix` row.** Do **not** touch the farm branch
+      (`AuditEndpoints.cs:58-84`) — it is correctly gated.
+- [ ] **Amend `p_tenant_audit_events`'s `USING` only** — farm equality, OR NULL-farm restricted to
+      `actor_user_id = current_setting('agrisync.user_id')`. **Leave `WITH CHECK` as it stands** (§7).
+- [ ] **Retire the fail-open default body** (`IShramSafalRepository.cs:135-136`). **~25 test doubles
+      implement only the unscoped overload**, so deleting it is a suite-wide compile break and keeping
+      it preserves the `F7` hazard. **Default to `throw new NotSupportedException()`** — fails loudly
+      instead of open — unless the implementor finds a cheaper total override.
+- [ ] **Assert the operator-hydration amplifier shrinks.** `PullSyncChangesHandler.cs:567-570` feeds
+      leaked `ActorUserId`s into `CollectOperatorIds`, hydrating foreign operator records at `:153`.
+      The audit fix shrinks this automatically — **assert it, do not assume it.**
+- [ ] **`E3`-shaped proofs cloned from `FieldOperatorRlsRealPostgresTests.cs`**: vacuity guard at the
+      top of every fact, FORCE/ENABLE catalog assertion, loadability probe, and a non-admin caller
+      proven unable to read another actor's NULL-farm rows **through the endpoint AND a pull**.
+
+### Carried out of P0.2 — named, not silently dropped
+
+- **The `WITH CHECK` write-side hole.** Any tenant able to INSERT can write a globally-readable
+  NULL-farm row, and `UPDATE`/`DELETE` are revoked so a poisoned row is **permanent**. Closing it
+  requires giving the admin write path its own identity — real scope. **Trigger: immediately after
+  P0.2's `USING` fix is prod-proven. This is not deferred indefinitely.**
+- **`agrisync_app` holds `TRUNCATE` on `ssf.audit_events`.** `HardenAuditIntegrity.cs:169` revoked
+  `UPDATE`/`DELETE` to make the ledger append-only and **never revoked TRUNCATE**, which erases the
+  whole ledger in one statement, bypassing RLS. **The append-only guarantee has a hole the size of the
+  table.** One-line `REVOKE` — **founder's call whether it rides along with P0.2.**
+- **`ResolveTenantDekHandler.cs:48` echoes a client-supplied `dekId` verbatim** into an append-only,
+  everyone-readable payload — a stored-injection primitive. Out of P0.2's scope; recorded.
+- **The two DEK sites are non-NULL only by co-assignment.** An explicit `FarmId` guard would stop a
+  future `SetTenant` caller silently creating NULL-farm DEK rows.
 
 ### P0.3 — `ssf.farm_boundaries` RLS
 
