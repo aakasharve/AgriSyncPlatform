@@ -302,14 +302,41 @@ describe('buildAiDraftForReview', () => {
         expect(draft?.recordedDateKey).toBe('2026-08-13');
     });
 
-    it('recordedDateKey falls back to receivedAtUtc when the job has no recordedAtUtc', async () => {
+    // NEW 3 (fix round 2) — the text-note case named by the review.
+    // `BackendAiClient.enqueueOfflineVoiceJob`'s TEXT branch never sets
+    // `context.recordedAtUtc` (only the audio branch carries a MediaRecorder
+    // instant), so falling back straight to `receivedAtUtc` (the DRAIN
+    // instant, stamped by `AiJobWorker` whenever connectivity returns —
+    // possibly hours or days later) reproduced the exact defect Important 4
+    // was meant to close. `job.createdAt` — stamped at ENQUEUE time, i.e.
+    // immediately after the farmer finished speaking/typing, for both text
+    // and audio — must win instead.
+    it('recordedDateKey falls back to job.createdAt (not receivedAtUtc) for a text note with no recordedAtUtc', async () => {
         const db = getDatabase();
         const id = await db.pendingAiJobs.add(baseJob({
-            context: { farmId: 'farm-1', userId: 'user-1', operation: 'text' },
+            // Typed at dusk (2026-08-13, IST)...
+            createdAt: '2026-08-13T15:00:00.000Z',
+            context: { farmId: 'farm-1', userId: 'user-1', operation: 'text', plotId: 'plot-1', textTranscript: 'काल फवारणी केली' },
+            // ...but not drained until the following morning (2026-08-14).
             result: { operationType: 'voice_parse', receivedAtUtc: '2026-08-14T05:00:00.000Z', payload: { parsedLog: VOICE_PARSED_LOG } },
         }));
-        // this row has no plotId, so seed a second, resolvable one directly for this assertion
-        await db.pendingAiJobs.update(id, { context: { farmId: 'farm-1', userId: 'user-1', operation: 'voice', plotId: 'plot-1' } });
+        const job = (await listUnreviewedAiResults()).find(r => r.id === id)!;
+
+        const draft = buildAiDraftForReview(job, [cropWithPlot('crop-1', 'plot-1')]);
+
+        expect(draft?.recordedDateKey).toBe('2026-08-13');
+    });
+
+    it('recordedDateKey falls back to receivedAtUtc only if createdAt is also unusable (defensive, last resort)', async () => {
+        const db = getDatabase();
+        const id = await db.pendingAiJobs.add(baseJob({
+            context: { farmId: 'farm-1', userId: 'user-1', operation: 'voice', plotId: 'plot-1' },
+            result: { operationType: 'voice_parse', receivedAtUtc: '2026-08-14T05:00:00.000Z', payload: { parsedLog: VOICE_PARSED_LOG } },
+        }));
+        // `createdAt` is a required field on every real row; force it absent
+        // here only to prove the last-resort branch of the fallback chain is
+        // reachable and correct, not merely dead code.
+        await db.pendingAiJobs.update(id, { createdAt: undefined as unknown as string });
         const job = (await listUnreviewedAiResults()).find(r => r.id === id)!;
 
         const draft = buildAiDraftForReview(job, [cropWithPlot('crop-1', 'plot-1')]);

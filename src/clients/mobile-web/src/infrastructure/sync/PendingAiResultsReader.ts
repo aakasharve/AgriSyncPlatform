@@ -79,12 +79,22 @@ export interface AiDraftForReview {
     agriLog: AgriLogResponse;
     provenance: LogProvenance;
     /**
-     * IMPORTANT 4 (fix round 1) — the day this note actually belongs to, NOT
-     * the day the farmer happens to open the review screen. Sourced from
-     * `job.context.recordedAtUtc` (the MediaRecorder capture instant) when
-     * present, else `job.result.receivedAtUtc` (when the device processed
-     * it) — both are closer to the truth than "today" for a note recorded at
-     * dusk and reviewed the next morning. Threaded into `ManualEntry` via its
+     * IMPORTANT 4 (fix round 1) / NEW 3 (fix round 2) — the day this note
+     * actually belongs to, NOT the day the farmer happens to open the review
+     * screen, and NOT the day the device happened to be back online.
+     * Preference order: `job.context.recordedAtUtc` (the MediaRecorder
+     * capture instant — voice clips only) → `job.createdAt` (when the job
+     * was ENQUEUED, i.e. immediately after capture, for both voice and text
+     * notes — `BackendAiClient.enqueueOfflineVoiceJob` stamps this at the top
+     * of the function, before any network wait) → `job.result.receivedAtUtc`
+     * (when the device DRAINED the queue — least accurate; only reached if
+     * `createdAt` were ever missing, which the type does not allow today,
+     * kept as a last-resort guard). Round 1 fell back straight to
+     * `receivedAtUtc`, which is stamped by `AiJobWorker` at DRAIN time
+     * (`systemClock.nowISO()`) — for a text note (never carries
+     * `recordedAtUtc`, see `BackendAiClient.ts`) or a legacy clip missing it,
+     * that reproduced the exact dusk-note-drained-next-morning defect
+     * Important 4 was supposed to close. Threaded into `ManualEntry` via its
      * OPTIONAL `recordedDateKey` prop; the live path never passes this prop,
      * so its own default (`getDateKey()` = today) is untouched.
      */
@@ -150,7 +160,7 @@ export function buildAiDraftForReview(job: UnreviewedAiResult, crops: CropProfil
     }
     const agriLog = normalizeParsedLog(rawParsedLog);
 
-    const recordedDateKey = getDateKey(job.context.recordedAtUtc ?? job.result.receivedAtUtc);
+    const recordedDateKey = getDateKey(job.context.recordedAtUtc ?? job.createdAt ?? job.result.receivedAtUtc);
 
     const context: FarmContext = {
         selection: [{

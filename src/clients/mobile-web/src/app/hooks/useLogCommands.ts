@@ -38,6 +38,26 @@ import { noteUnqueueableLogs } from '../../features/sync/status/unqueueableLogs'
 import { useLanguage } from '../../i18n/LanguageContext';
 import { buildEditSavedMessage, buildSkippedSyncToast } from '../helpers/saveToastMessages';
 
+/**
+ * spec: 2026-08-14-founder-decisions-launch-cohort-and-scope — fix round 2.
+ *
+ * `handleManualSubmit`'s outcome, honestly. A plain boolean collapsed three
+ * different situations into one `false`, and `AiDraftsPage` cannot treat them
+ * the same:
+ *   - `'saved'`          a log was actually created or updated. This is true
+ *                         even if a step AFTER the write (sync enqueue, the
+ *                         summary calc) then throws — the record is durably
+ *                         in the ledger, so telling the farmer to retry would
+ *                         mint a duplicate.
+ *   - `'not_saved'`       nothing was written — no active context, or the
+ *                         write itself failed/threw before completing.
+ *   - `'already_saving'`  this call LOST a double-tap race; another call is
+ *                         (or already did) performing the save. Silent by
+ *                         design (`saveLock`, below) — showing an alert here
+ *                         would contradict a save that is succeeding.
+ */
+export type ManualSubmitOutcome = 'saved' | 'not_saved' | 'already_saving';
+
 export interface UseLogCommandsResult {
     handleAutoSave: (logData: AgriLogResponse, provenance?: LogProvenance) => Promise<void>;
     handleFinalConfirm: (editedData: AgriLogResponse | null, draftLog: AgriLogResponse | null) => Promise<void>;
@@ -47,21 +67,20 @@ export interface UseLogCommandsResult {
     // out of scope.
     //
     // spec: 2026-08-14-founder-decisions-launch-cohort-and-scope — return
-    // type widened from `Promise<void>` to `Promise<boolean>`. The function
-    // ALWAYS resolves (no-context guard, the double-tap lock, and a thrown
-    // save error are each caught and turned into a toast/error state, never
-    // a rejection) — "the promise resolved" was never proof a log was
-    // written. `AiDraftsPage` needs that proof before it may mark an
-    // offline draft reviewed (a false mark there silently loses the
-    // farmer's note). `true` iff a log was actually created or updated;
-    // every other exit — no active context, a losing double-tap, or a
-    // caught save failure — returns `false`. No existing caller inspected
-    // the old `void` return, so this is additive: `mainView.tsx` still
-    // passes this straight through as `ManualEntry`'s `onSubmit`, whose
-    // prop type returns `void` — TypeScript's void-return compatibility
-    // rule accepts a function that returns MORE than void there unchanged.
+    // type widened from `Promise<void>` (round 0) to `Promise<boolean>`
+    // (round 1) to `Promise<ManualSubmitOutcome>` (round 2 — see the type's
+    // own doc comment for why boolean was not enough). The function ALWAYS
+    // resolves — no-context guard, the double-tap lock, and a thrown save
+    // error are each caught and turned into a toast/error state, never a
+    // rejection — so "the promise resolved" was never proof a log was
+    // written, and (round 2) "it returned false" was never proof it wasn't.
+    // No existing caller inspected the old `void`/`boolean` return, so this
+    // stays additive: `mainView.tsx` still passes this straight through as
+    // `ManualEntry`'s `onSubmit`, whose prop type returns `void` —
+    // TypeScript's void-return compatibility rule accepts a function that
+    // returns MORE than void there unchanged.
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    handleManualSubmit: (data: any) => Promise<boolean>;
+    handleManualSubmit: (data: any) => Promise<ManualSubmitOutcome>;
     handleWizardSubmit: (logs: DailyLog[]) => Promise<void>;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     handleUpdateNote: (logId: string, noteId: string, updates: any) => void;
@@ -443,14 +462,28 @@ export const useLogCommands = ({
     // Pre-existing `any` (predates Task 3.5) — see note on handleManualSubmit
     // in UseLogCommandsResult above.
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const handleManualSubmit = useCallback(async (data: any) => {
-        if (!hasActiveLogContext) return false; // SAFE GUARD
+    const handleManualSubmit = useCallback(async (data: any): Promise<ManualSubmitOutcome> => {
+        if (!hasActiveLogContext) return 'not_saved'; // SAFE GUARD
 
         // LABOUR_PHASE2 PHASE 4 (§A7.2) — the second tap of a double-tap stops
         // here, before `createFromManual` can mint a second log id. Silent by
         // design: no message, no disabled control, nothing the farmer must
         // acknowledge (`P9`).
-        if (!saveLock.tryAcquire()) return false;
+        //
+        // spec: 2026-08-14-founder-decisions-launch-cohort-and-scope (fix
+        // round 2) — `'already_saving'`, not `'not_saved'`. The WINNING call
+        // of this race is the one actually writing; this losing call must
+        // never be read as "nothing happened" by a caller deciding whether
+        // to alert the farmer.
+        if (!saveLock.tryAcquire()) return 'already_saving';
+
+        // spec: 2026-08-14-founder-decisions-launch-cohort-and-scope (fix
+        // round 2) — set the instant the durable write succeeds, BEFORE any
+        // step that can still throw (sync enqueue, summary calc, toast
+        // building). The catch block below reads this to tell "nothing was
+        // written" from "written, then something downstream failed" — the
+        // record must never be reported lost once it is actually saved.
+        let wasWritten = false;
 
         try {
             let savedLogIds: string[];
@@ -497,6 +530,7 @@ export const useLogCommands = ({
                 if (!result.success) {
                     throw new Error(result.error || 'Update failed');
                 }
+                wasWritten = true;
 
                 // Update local state reflectively
                 setHistory(prev => {
@@ -582,6 +616,7 @@ export const useLogCommands = ({
                     newLogs,
                     setHistory
                 );
+                wasWritten = true;
                 // T2 — see handleAutoSave: the enqueue result decides the wording.
                 const syncOutcome = await enqueueForSyncAndNoteSkips(newLogs);
 
@@ -634,11 +669,21 @@ export const useLogCommands = ({
                 setStatus(showSavedToLedgerPanel ? 'success' : 'idle');
             }
 
-            return true;
+            return 'saved';
         } catch (e) {
             console.error("Critical error in handleManualSubmit:", e);
+            // spec: 2026-08-14-founder-decisions-launch-cohort-and-scope (fix
+            // round 2) — a throw here can land AFTER the durable write
+            // (`wasWritten`) if a post-write step failed (sync enqueue,
+            // summary calc, toast build — all inside this same `try`). The
+            // record is safe; "Failed to save logs. Please try again." is
+            // actively wrong in that case — a retry would mint a duplicate.
+            if (wasWritten) {
+                setError("Saved, but something after the save failed. Your entry is safe.");
+                return 'saved';
+            }
             setError("Failed to save logs. Please try again.");
-            return false;
+            return 'not_saved';
         } finally {
             // `finally`, so a save that FAILED releases as promptly as one that
             // succeeded. "Please try again" above must be an instruction the

@@ -13,9 +13,9 @@
  *
  * spec: 2026-08-14-founder-decisions-launch-cohort-and-scope
  */
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { ArrowLeft, Mic, Trash2 } from 'lucide-react';
-import { useAppDataState, useAppCommandsState, useAppLogState, useAppViewHelpers } from '../app/context/AppFeatureContexts';
+import { useAppDataState, useAppCommandsState, useAppLogState, useAppViewHelpers, useAppVoiceState } from '../app/context/AppFeatureContexts';
 import { getDateKey } from '../core/domain/services/DateKeyService';
 import type { TodayCounts } from '../domain/types/farm.types';
 import ManualEntry from '../features/logs/components/ManualEntry';
@@ -80,8 +80,35 @@ const AiDraftsPage: React.FC<AiDraftsPageProps> = ({ onBack }) => {
     // plot instead of the one this draft was recorded on. `AppRouter.tsx`'s
     // `handleEditLog` sets `logScope` before mounting `ManualEntry` for the
     // exact same reason; this page must do the same for the same reason.
-    const { setLogScope } = useAppLogState();
+    const { logScope, setLogScope } = useAppLogState();
     const { getTodayCounts } = useAppViewHelpers();
+    // NEW 4 (fix round 2) — a successful draft save runs handleManualSubmit's
+    // own success path, which sets the app-level `status` to `'success'` (the
+    // trigger for mainView's full-screen "Saved to Ledger" panel). Nothing
+    // resets it on route change, so without this the farmer's NEXT visit to
+    // main/log would land on a stale panel for a save made on THIS screen.
+    const { setStatus } = useAppVoiceState();
+
+    // NEW 1 (fix round 2) — `setLogScope` in `handleReview` overwrites the
+    // APP-LEVEL scope for the rest of the session unless something restores
+    // it. `LogContext.resetScope` has no production caller, so this page must
+    // do its own bookkeeping: snapshot whatever scope was active before this
+    // page ever touched it (captured ONCE, on first mount — `useRef`'s
+    // initial-value argument is ignored on every render after the first),
+    // and hand it back whenever review closes or this page unmounts. Without
+    // this, merely tapping Review and backing out leaves `hasActiveLogContext`
+    // true for the draft's plot, and the farmer's NEXT voice/manual capture on
+    // the main log screen — unrelated to this draft — lands there instead.
+    const originalLogScopeRef = useRef(logScope);
+    const restoreLogScope = useCallback(() => {
+        setLogScope(originalLogScopeRef.current);
+    }, [setLogScope]);
+    useEffect(() => {
+        return () => {
+            restoreLogScope();
+        };
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
 
     const [drafts, setDrafts] = useState<UnreviewedAiResult[]>([]);
     const [loading, setLoading] = useState(true);
@@ -98,6 +125,15 @@ const AiDraftsPage: React.FC<AiDraftsPageProps> = ({ onBack }) => {
     useEffect(() => {
         void refresh();
     }, [refresh]);
+
+    // Leaves the review screen and restores the app-level scope, whether the
+    // farmer backed out or just finished a successful save. The ONE place
+    // `reviewing` is cleared, so the restore can never be forgotten on a path
+    // that adds a new way to leave.
+    const closeReview = useCallback(() => {
+        restoreLogScope();
+        setReviewing(null);
+    }, [restoreLogScope]);
 
     const handleReview = (job: UnreviewedAiResult) => {
         const built = buildAiDraftForReview(job, crops);
@@ -137,24 +173,51 @@ const AiDraftsPage: React.FC<AiDraftsPageProps> = ({ onBack }) => {
     // unrelated later save.
     //
     // IMPORTANT 3 (fix round 1) — `handleManualSubmit` always resolves, even
-    // on a no-op (no active context, a losing double-tap) or a caught save
-    // failure; "the promise resolved" was never proof a log was written. It
-    // now resolves `true` only when it actually created or updated a log
-    // (`useLogCommands.ts`); this reads that signal instead of assuming it.
+    // on a no-op or a caught save failure; "the promise resolved" was never
+    // proof a log was written.
+    //
+    // NEW 2 (fix round 2) — a plain boolean was not enough: it collapsed "the
+    // losing tap of a double-tap" (a save that IS happening, via the OTHER
+    // call — must stay silent, per `useLogCommands.ts`'s own "Silent by
+    // design" comment) and "written, then a later step failed" (the record
+    // IS safe — telling the farmer to retry would mint a duplicate) into the
+    // same `false`. `ManualSubmitOutcome` keeps the three apart.
     const handleSubmit: ManualEntryProps['onSubmit'] = async (data) => {
-        const saved = await handleManualSubmit(data);
-        if (!saved) {
-            // Nothing was written. Do NOT mark the draft reviewed — Step 4 of
-            // the brief is "only after the farmer acts", and a no-op is not
-            // an act. Stay on the review screen so the note is not lost.
+        const outcome = await handleManualSubmit(data);
+
+        if (outcome === 'already_saving') {
+            // The losing tap of a double-tap. The WINNING call is doing (or
+            // has done) the save; alerting here would contradict a save that
+            // is succeeding. Do nothing — matches the silent design at
+            // useLogCommands.ts's saveLock guard.
+            return;
+        }
+
+        if (outcome === 'not_saved') {
+            // Genuinely nothing was written. Do NOT mark the draft reviewed —
+            // Step 4 of the brief is "only after the farmer acts", and a
+            // no-op is not an act. Stay on the review screen so the note is
+            // not lost.
             window.alert('Could not save this log. Please try again.');
             return;
         }
 
+        // outcome === 'saved' — the record is durably in the ledger, even if
+        // a step after the write also failed (useLogCommands.ts already told
+        // the farmer via its own error/toast in that case; this page must
+        // not ALSO tell him to retry something already committed).
+        //
+        // NEW 4 (fix round 2) — undo handleManualSubmit's own `setStatus(
+        // 'success')`. That status exists to trigger mainView's full-screen
+        // "Saved to Ledger" panel on the LIVE capture screen; left standing,
+        // the farmer's next visit to main/log would show that panel for a
+        // save made here instead.
+        setStatus('idle');
+
         if (reviewing) {
             await markAiResultReviewed(reviewing.job.id);
         }
-        setReviewing(null);
+        closeReview();
         await refresh();
     };
 
@@ -176,7 +239,7 @@ const AiDraftsPage: React.FC<AiDraftsPageProps> = ({ onBack }) => {
             <div className="max-w-4xl mx-auto px-4 py-6 pb-24 min-h-screen bg-slate-50">
                 <button
                     type="button"
-                    onClick={() => setReviewing(null)}
+                    onClick={closeReview}
                     className="mb-4 flex items-center gap-1.5 rounded-full bg-white py-2 pl-2.5 pr-3.5 text-[13px] font-bold text-slate-700 shadow-sm ring-1 ring-slate-100"
                 >
                     <ArrowLeft size={16} /> Back to Drafts
