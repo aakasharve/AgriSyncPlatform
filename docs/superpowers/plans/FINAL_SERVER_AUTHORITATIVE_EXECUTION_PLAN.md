@@ -394,6 +394,30 @@ next person who asks.
       Four sanity anchors stay green throughout. **Assert the orphaning is non-destructive:** old keys remain present and
       readable after the change.
 
+> ## ✅ P0.1 — FOUNDER RULINGS, 2026-08-15
+>
+> **1. Keep the broader session teardown.** If authentication disappears for **any** reason — manual
+> logout, failed refresh, expired session — the active farm context clears and is re-established after
+> signing in again. **Re-picking a farm is acceptable friction; seeing the wrong farmer's farm is not.**
+> The wiring landing in `clearAuthSession()` rather than the logout button is therefore **approved as
+> the better seam**, not tolerated as a workaround.
+>
+> **2. The empty anonymous database shell is acceptable.** The rule was *anonymous state must not touch
+> farmer business data*. An empty neutral shell holding no farmer data, never reused once identity
+> resolves, satisfies it. **Do not spend effort chasing literal zero footprint.**
+>
+> **3. Do not expand P0.1 to the dead legacy stores.** `BackupService`, `LocalDB`, `IntegrityChecker`
+> and the no-op audit writer have zero production importers. **Recorded as cleanup debt (X1). Do not
+> reopen isolation because dead storage exists.**
+>
+> **4. The two flipped sanity anchors are correct.** They asserted the unsafe behaviour the ruling
+> closes. **A test that says "this unsafe behaviour is expected" must fail when the defect is fixed.**
+> Rewriting them to assert the new boundary is right.
+>
+> **P0.1 CLOSES on one real-browser check:** A logs in → records → logs out → B logs in → **B sees
+> none of A's local information** → B logs out → A logs back in → **A's data intact.**
+> **No cleanup and no architecture work between P0.1 and P0.2.**
+
 ### P0.2 — Audit read-endpoint authorization bypass (new, security-found)
 
 `AuditEndpoints.cs:33-37` filters `.Where(x => x.HasValue)` **before** the membership check, so
