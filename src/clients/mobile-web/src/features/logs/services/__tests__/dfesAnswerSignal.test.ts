@@ -3,18 +3,27 @@
  * SPDX-License-Identifier: Apache-2.0
  *
  * dfesAnswerSignal — unit tests (Task 4, spec: dfes-farmer-facing-deploy-readiness-2026-08-14).
+ *
+ * `listeners` is a MODULE-LEVEL singleton (by design — see dfesAnswerSignal.ts),
+ * so it persists across tests within this file unless each test unsubscribes
+ * its own listener(s). Every test below captures its unsubscribe(s) and an
+ * afterEach calls them, so "no subscribers" in the last test is actually true,
+ * not just untested.
  */
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, afterEach } from 'vitest';
 import { subscribeDfesAnswered, notifyDfesAnswered } from '../dfesAnswerSignal';
 
 describe('dfesAnswerSignal', () => {
-    beforeEach(() => {
-        // Each test subscribes+unsubscribes its own listeners; nothing global to reset.
+    let unsubscribers: Array<() => void> = [];
+
+    afterEach(() => {
+        unsubscribers.forEach((unsubscribe) => unsubscribe());
+        unsubscribers = [];
     });
 
     it('calls a subscribed listener when notified', () => {
         const listener = vi.fn();
-        subscribeDfesAnswered(listener);
+        unsubscribers.push(subscribeDfesAnswered(listener));
 
         notifyDfesAnswered();
 
@@ -24,8 +33,7 @@ describe('dfesAnswerSignal', () => {
     it('calls every subscribed listener, not just the first', () => {
         const first = vi.fn();
         const second = vi.fn();
-        subscribeDfesAnswered(first);
-        subscribeDfesAnswered(second);
+        unsubscribers.push(subscribeDfesAnswered(first), subscribeDfesAnswered(second));
 
         notifyDfesAnswered();
 
@@ -36,7 +44,7 @@ describe('dfesAnswerSignal', () => {
     it('stops calling a listener after it unsubscribes', () => {
         const listener = vi.fn();
         const unsubscribe = subscribeDfesAnswered(listener);
-        unsubscribe();
+        unsubscribe(); // exercised directly — nothing left to clean up in afterEach
 
         notifyDfesAnswered();
 
@@ -44,6 +52,8 @@ describe('dfesAnswerSignal', () => {
     });
 
     it('notifying with no subscribers is a safe no-op', () => {
+        // Relies on the afterEach above having unsubscribed every prior test's
+        // listener, so this is genuinely zero subscribers, not just untested.
         expect(() => notifyDfesAnswered()).not.toThrow();
     });
 });
