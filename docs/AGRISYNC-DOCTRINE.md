@@ -110,6 +110,24 @@ When a value may be either stated or assumed, **record which**, as one atomic fa
 
 The simplest real utterance — *"आज ८ मजूर होते"* — must complete its record with **zero** names, warnings, wizards, completion percentages or nags. **No optional field may ever reject a record.** Enrichment is always optional; the closure loop is never subordinate to it.
 
+### P10. No acknowledged business truth may depend on one device *(founder, 2026-08-15)*
+
+> Once the system represents a farmer action as successfully committed, every durable business fact required to reconstruct that action must exist in server-authoritative storage.
+
+Client persistence may contain disposable cache, device preferences, temporary processing data and unsynchronized intent. **None may silently become the sole permanent copy of acknowledged farm truth.**
+
+Offline capture is permitted and required, but until server acknowledgement it must remain explicitly **unsynchronized intent** rather than canonical business truth.
+
+**The engineering invariant underneath it, and the test:**
+
+```
+Acknowledged = reconstructable without the originating device.
+```
+
+**Corollary — this is `P1` on the other side of the wire.** `P1` forbids canonical data living in a best-effort side-car *on the server*. `P10` forbids it living only in a disposable cache *on the device*. Same principle, two sides.
+
+**Born from:** the 2026-08-14 Data Ownership Matrix. Six independent tracers found ~50 defects with one cause — capture, persistence, read-back and reconstruction built as partially independent paths. The forbidden category, *"important information that exists permanently only on this phone"*, was holding the farmer's harvest book, his purchase book, his drawn plot boundaries and his planned work. Worse, the first sync after a successful save destroyed fourteen fields of a log **on the device that created it** — reproduced at runtime, 23 failing assertions. The system reported success and then silently reduced the record.
+
 ---
 
 ## §3. ENGINEERING RULES — how we build
