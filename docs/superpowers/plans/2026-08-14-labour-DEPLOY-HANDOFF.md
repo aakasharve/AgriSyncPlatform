@@ -32,6 +32,39 @@ Plus five fixes found along the way: the user-switch erasure that destroyed unse
 
 ---
 
+## 2b. What a farmer can actually do after this ships
+
+The plainest version, because the rest of this document is written for whoever runs the deploy.
+
+**New — he could not do this at all before:**
+1. **Log work for the whole farm** (संपूर्ण शेत). Previously the record was silently dropped — it never left the phone and he was told it saved.
+2. **Log work across several plots as one job.** 8 workers on 3 plots now reports **8**. It reported **24**.
+3. **See his labour on a new phone.** Workers, hours, wages, names, who was attributed — all reconstruct after a reinstall or a new handset.
+
+**Fixed — it existed but was broken or lied:**
+4. **A correction sticks.** Change 8 to 6, reload, it is 6. It used to go back to 8, and a second phone never heard about it.
+5. **The status chip tells the truth.** It said "Sending…" forever for everyone. Now it says what it can prove — and when it can prove nothing, it says nothing.
+6. **Two people on one phone stop destroying each other's work.** Signing in as a second farmer used to erase the first one's unsent records.
+7. **Removing someone from a farm actually removes them.** The exit was never saved; they kept access.
+8. **The Mukadam can verify again** — he was excluded from the one job that is most his.
+9. **An owner can grant a team member permission to fix labour records** — and the switch is real, not a mock that resets on the next sync.
+10. **The "Add worker" button is reachable.** It sat below a clipped card edge; a farmer could not finish adding a worker.
+11. **A new farmer sees faint example names** on the empty worker screen, so he knows what belongs there.
+
+**Unchanged but worth stating:** voice and manual logging, worker identity, attendance, approvals, weather on a log, and the day/reflect views all work as they did. Nothing was removed.
+
+### ⚠️ The gap in Option A that this handoff must not hide
+
+**Option A is currently onboarding *guidance*, not code.** Harvest, procurement, cost correction, income and log deletion are **still present in the app**. Not teaching a farmer about them does not stop a curious farmer reaching them — and those are the surfaces with live data-destroying defects owned by the other lane.
+
+**Founder decision needed before onboarding, and it is a real fork:**
+- **(a)** Accept it. Onboard a small, known group, tell them plainly which parts to use, and watch. Defensible with 5–10 farmers you can call.
+- **(b)** Hide those entries behind a flag until the other lane lands. Small, client-only, and it belongs to this lane rather than theirs.
+
+**(b) is the safer answer if these farmers are not people you can phone.** Do not treat "we did not tell them about it" as containment.
+
+---
+
 ## 3. Before you deploy
 
 - [ ] **Founder has run the APK test** — record labour → sync → reload → confirm it survives. This is the only proof that counts; everything else is `fake-indexeddb`.
