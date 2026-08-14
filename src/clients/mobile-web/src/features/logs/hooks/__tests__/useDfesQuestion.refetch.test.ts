@@ -101,13 +101,15 @@ describe('useDfesQuestion — onAnswered (Task 4)', () => {
         expect(recordQuestionEvent).toHaveBeenCalledTimes(1);
     });
 
-    it('does not let a throwing onAnswered escape recordOutcome as an unhandled rejection', async () => {
-        const onAnswered = vi.fn(() => { throw new Error('subscriber exploded'); });
-        const { result } = renderHook(() => useDfesQuestion('farm-1', null, inputs(), true, onAnswered));
-        await waitFor(() => expect(result.current.selected).not.toBeNull());
-
-        await expect(act(async () => {
-            await result.current.recordOutcome({ skipped: false, response: 'low' });
-        })).resolves.not.toThrow();
-    });
+    // Review round 2: a companion test here — asserting
+    // `await expect(act(...)).resolves.not.toThrow()` when onAnswered throws —
+    // was REMOVED. It was vacuous: even the OLD buggy code already swallowed
+    // any onAnswered throw inside its try/catch (that was the bug — the wrong
+    // SIDE EFFECT on recordedRef, never an escaping throw), so the assertion
+    // could not fail against either the broken or the fixed source, proven by
+    // the disclosed RED run staying green on this exact test. The test above
+    // ('does not re-arm the write guard...') already covers both real
+    // requirements from Finding 1 with an assertion that genuinely
+    // distinguishes fixed from broken (a real, git-stash-verified RED/GREEN
+    // pair) — nothing is lost by not re-asserting the same fix a second way.
 });
