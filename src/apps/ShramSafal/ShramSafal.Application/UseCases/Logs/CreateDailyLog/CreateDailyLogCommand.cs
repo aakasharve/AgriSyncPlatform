@@ -38,7 +38,16 @@ public sealed record CreateDailyLogCommand(
     // time. Persisted to ssf.weather_stamps by CreateDailyLogHandler on a
     // NON-BLOCKING best-effort basis (a bad/missing stamp never rejects the
     // log). Added at the END so existing callers/tests compile unchanged.
-    WeatherStampItem? WeatherStamp = null)
+    WeatherStampItem? WeatherStamp = null,
+    // spec: dfes-farmer-facing-deploy-readiness-2026-08-14 (task-0b) — the
+    // farmer's typed day, as entered on the manual-entry screen. Before this the
+    // draft never left Dexie, so a manual log persisted NO typed children and
+    // scored 0/10 no matter how much the farmer wrote. When SourceAiJobId
+    // resolves to no AiJob and this is present, CreateDailyLogHandler normalises
+    // it (ManualDraftNormalizer) and derives the typed ledger from it with
+    // Provenance.Manual. NULL is the pre-task-0b behaviour exactly — older
+    // clients omit it and voice confirms do not send it.
+    ManualDraftItem? ManualDraft = null)
 {
     public string? IdempotencyKey
     {

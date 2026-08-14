@@ -1,5 +1,5 @@
 import { AddLogTaskCommand } from '../../../application/usecases/sync/AddLogTaskCommand';
-import { CreateDailyLogCommand } from '../../../application/usecases/sync/CreateDailyLogCommand';
+import { CreateDailyLogCommand, type ManualDraftPayload } from '../../../application/usecases/sync/CreateDailyLogCommand';
 import { idGenerator } from '../../../core/domain/services/IdGenerator';
 import { type CropCycleDto, type PlotDto } from '../../../infrastructure/api/AgriSyncClient';
 import { getDatabase } from '../../../infrastructure/storage/DexieDatabase';
@@ -137,6 +137,39 @@ function buildTaskPayloads(log: DailyLog): LogTaskMutationPayload[] {
     return payloads;
 }
 
+/**
+ * spec: dfes-farmer-facing-deploy-readiness-2026-08-14 (task-0b) — carry the farmer's
+ * typed day to the server on a MANUAL save.
+ *
+ * The defect this closes: a manual log's payload was identity-only, so the server had
+ * nothing to persist. No typed children were ever written for it, the day scored 0/10,
+ * and a farmer who had typed out everything he did was told he had recorded nothing.
+ *
+ * Returns undefined for a voice confirm (its facts already ride `sourceAiJobId`, and the
+ * server derives from that AiJob) and for a log with no content at all — an absent draft
+ * is the pre-task-0b wire exactly, which is what keeps old servers and voice saves
+ * untouched.
+ */
+export function buildManualDraft(log: DailyLog): ManualDraftPayload | undefined {
+    if (log.meta?.provenance?.sourceAiJobId) {
+        return undefined;
+    }
+
+    // Only non-empty buckets go on the wire — an empty array says nothing the server
+    // does not already assume, and the draft is size-capped at the sync boundary.
+    const draft: ManualDraftPayload = {};
+    if (log.labour?.length) draft.labour = log.labour;
+    if (log.inputs?.length) draft.inputs = log.inputs;
+    if (log.irrigation?.length) draft.irrigation = log.irrigation;
+    if (log.observations?.length) draft.observations = log.observations;
+    if (log.plannedTasks?.length) draft.plannedTasks = log.plannedTasks;
+    if (log.cropActivities?.length) draft.cropActivities = log.cropActivities;
+    if (log.machinery?.length) draft.machinery = log.machinery;
+    if (log.activityExpenses?.length) draft.activityExpenses = log.activityExpenses;
+
+    return Object.keys(draft).length > 0 ? draft : undefined;
+}
+
 async function resolveSyncTarget(log: DailyLog): Promise<ResolvedLogSyncTarget | null> {
     const selection = log.context.selection?.[0];
     const plotId = selection?.selectedPlotIds?.[0];
@@ -201,6 +234,9 @@ export async function enqueueLogsForSync(logs: DailyLog[]): Promise<{ queuedLogI
             // the log's provenance (BackendAiClient stamps AiJob.Id there) so the
             // server can derive the typed ledger rows. Undefined for manual logs.
             sourceAiJobId: log.meta?.provenance?.sourceAiJobId,
+            // task-0b — the farmer's typed day, so a manual save persists typed
+            // children and can be scored. Undefined for voice confirms.
+            manualDraft: buildManualDraft(log),
             // B2.8 — carry the weather already captured at confirm-time to the server
             // (persisted into ssf.weather_stamps). Omit the client-only `id` (server generates).
             weatherStamp: log.weatherStamp

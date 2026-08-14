@@ -29,25 +29,11 @@ public sealed class LedgerDerivationService(IShramSafalRepository repository) : 
 {
     private static readonly JsonSerializerOptions ReadOptions = new(JsonSerializerDefaults.Web);
 
-    public async Task<DerivationOutcome> DeriveAsync(
+    public Task<DerivationOutcome> DeriveAsync(
         DailyLog log, AiJob sourceJob, IIdGenerator ids, IClock clock, CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(log);
         ArgumentNullException.ThrowIfNull(sourceJob);
-        ArgumentNullException.ThrowIfNull(ids);
-        ArgumentNullException.ThrowIfNull(clock);
-
-        if (string.IsNullOrWhiteSpace(sourceJob.NormalizedResultJson))
-        {
-            return default;
-        }
-
-        using var doc = JsonDocument.Parse(sourceJob.NormalizedResultJson);
-        var root = doc.RootElement;
-        if (root.ValueKind != JsonValueKind.Object)
-        {
-            return default;
-        }
 
         // Reuse the SOURCE job's provenance (Source.Voice + real model/prompt
         // versions), never a fabricated parallel lineage (Global Constraint).
@@ -58,6 +44,66 @@ public sealed class LedgerDerivationService(IShramSafalRepository repository) : 
             promptContentHash: sourceJob.Provenance.PromptContentHash,
             appVersion: sourceJob.Provenance.AppVersion,
             extractorCodeSha: sourceJob.Provenance.ExtractorCodeSha);
+
+        // Identity is scoped to the parse job: two logs confirmed from the SAME
+        // voice parse share a lineage and must supersede one another per plot.
+        return DeriveCoreAsync(
+            log, sourceJob.NormalizedResultJson, provenance, sourceJob.Id, ids, clock, ct);
+    }
+
+    public Task<DerivationOutcome> DeriveFromManualDraftAsync(
+        DailyLog log, string manualWireJson, string? appVersion,
+        IIdGenerator ids, IClock clock, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(log);
+
+        // spec: dfes-farmer-facing-deploy-readiness-2026-08-14 (task-0b). No AI
+        // touched these rows, so their lineage says so and keeps saying so: source
+        // "manual", model/prompt the canonical "n/a" placeholders, no prompt hash,
+        // no extractor SHA. Doctrine P8 — a hand-typed figure must stay
+        // distinguishable from an inferred one, forever. Deliberately NOT a
+        // fabricated AiJob row: an ai_jobs record for something no AI produced
+        // would itself be the lie.
+        var provenance = Provenance.Manual(appVersion ?? "unknown");
+
+        // The DETERMINISTIC source id. For voice the identity anchor is the parse
+        // job; for a typed day the anchor is the LOG itself — it is where the facts
+        // came from, and it is stable across re-saves, so a second derivation of
+        // the same log recomputes the same DerivedEventKey and SUPERSEDES rather
+        // than duplicating the farmer's single application.
+        return DeriveCoreAsync(log, manualWireJson, provenance, log.Id, ids, clock, ct);
+    }
+
+    /// <summary>
+    /// The one persistence body, shared by the voice and manual paths. Takes the wire
+    /// JSON to read, the provenance to stamp, and the deterministic source id that
+    /// anchors every <see cref="DerivedEventKey"/> — nothing else differs between the
+    /// two callers, which is precisely why there is no second writer.
+    /// </summary>
+    private async Task<DerivationOutcome> DeriveCoreAsync(
+        DailyLog log, string? wireJson, Provenance provenance, Guid sourceId,
+        IIdGenerator ids, IClock clock, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(ids);
+        ArgumentNullException.ThrowIfNull(clock);
+
+        if (string.IsNullOrWhiteSpace(wireJson))
+        {
+            return default;
+        }
+
+        using var doc = JsonDocument.Parse(wireJson);
+        var root = doc.RootElement;
+        if (root.ValueKind != JsonValueKind.Object)
+        {
+            return default;
+        }
+
+        // An observation with no explicit source belongs to whatever produced this
+        // derivation. Defaulting a hand-typed note to "voice" would misattribute it.
+        var observationFallback = provenance.Source == Source.Manual
+            ? ObservationSource.Manual
+            : ObservationSource.Voice;
 
         var now = clock.UtcNow;
         var operations = 0;
@@ -77,7 +123,7 @@ public sealed class LedgerDerivationService(IShramSafalRepository repository) : 
                 // The scope is log.PlotId (stable across re-confirms of the SAME
                 // plot), so a same-plot offline re-confirm still recomputes the same
                 // key and supersedes as intended.
-                var key = DerivedEventKey.Compute(sourceJob.Id, log.PlotId, span, "input");
+                var key = DerivedEventKey.Compute(sourceId, log.PlotId, span, "input");
 
                 var opId = ids.New();
                 var op = FarmOperation.Create(
@@ -282,7 +328,7 @@ public sealed class LedgerDerivationService(IShramSafalRepository repository) : 
                     plotId: ReadGuid(item, "plotId"),
                     noteType: MapNoteType(ReadString(item, "noteType")),
                     severity: MapObservationSeverity(ReadString(item, "severity")),
-                    source: MapObservationSource(ReadString(item, "source")),
+                    source: MapObservationSource(ReadString(item, "source"), observationFallback),
                     textRaw: textRaw!,
                     textCleaned: ReadString(item, "textCleaned"),
                     tagsJson: ReadRawArray(item, "tags"),
@@ -483,10 +529,15 @@ public sealed class LedgerDerivationService(IShramSafalRepository repository) : 
         _ => ObservationSeverity.Normal,
     };
 
-    private static ObservationSource MapObservationSource(string? s) => Norm(s) switch
+    // An EXPLICIT source in the blob always wins. When the row states none, the
+    // fallback is whichever pipeline is running this derivation — voice for an AiJob,
+    // manual for a typed draft. Hardcoding Voice here used to be safe (only voice jobs
+    // derived) and became a misattribution the moment manual drafts did too.
+    private static ObservationSource MapObservationSource(string? s, ObservationSource fallback) => Norm(s) switch
     {
         "manual" => ObservationSource.Manual,
-        _ => ObservationSource.Voice, // derivation runs on a voice job
+        "voice" => ObservationSource.Voice,
+        _ => fallback,
     };
 
     private static DisturbanceScope MapDisturbanceScope(string? s) => Norm(s) switch

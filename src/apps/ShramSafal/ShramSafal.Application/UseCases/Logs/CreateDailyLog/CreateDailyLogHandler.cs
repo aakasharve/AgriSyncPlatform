@@ -501,6 +501,25 @@ public sealed class CreateDailyLogHandler(
         {
             await ledgerDerivation.DeriveAsync(log, sourceJobForEvidence, idGenerator, clock, ct);
         }
+        else if (ManualDraftNormalizer.Normalize(command.ManualDraft) is { } manualWireJson)
+        {
+            // spec: dfes-farmer-facing-deploy-readiness-2026-08-14 (task-0b) — THE
+            // manual-entry defect. Reaching this branch means no AI job was derived
+            // from, so `provenance` above is Provenance.Manual and the farmer's own
+            // typed draft is the only account of the day we have. Until now it was
+            // simply dropped: no typed children were written, DfesLensExtractor saw an
+            // empty day, and a farmer who had described his whole day was told ०/१०.
+            //
+            // The two branches are mutually exclusive by construction, so a log can
+            // never be derived twice or acquire two lineages. The draft rides the SAME
+            // derivation body as voice (DeriveFromManualDraftAsync) — one writer, one
+            // set of rules — stamped manual and keyed to the log id so a re-save
+            // supersedes rather than duplicates.
+            // The log's OWN AppVersion, so the derived rows and the log they came from
+            // can never disagree about which client wrote them.
+            await ledgerDerivation.DeriveFromManualDraftAsync(
+                log, manualWireJson, log.Provenance.AppVersion, idGenerator, clock, ct);
+        }
 
         await repository.SaveChangesAsync(ct);
 

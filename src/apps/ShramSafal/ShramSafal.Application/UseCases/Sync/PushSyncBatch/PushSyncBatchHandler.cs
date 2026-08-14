@@ -1,3 +1,5 @@
+using System.Collections.Immutable;
+using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using AgriSync.BuildingBlocks.Abstractions;
@@ -129,6 +131,20 @@ public sealed class PushSyncBatchHandler(
     {
         PropertyNameCaseInsensitive = true
     };
+    // spec: dfes-farmer-facing-deploy-readiness-2026-08-14 (task-0b) — the buckets a
+    // manual draft may carry. Deliberately the SAME eight names as
+    // CreateDailyLogHandler.EvidenceArrayKeys and the canonical zod schema
+    // (sync-contract/schemas/payloads/create_daily_log.zod.ts): one vocabulary for the
+    // farmer's day, never a second list that can drift out of step with the first.
+    private static readonly ImmutableHashSet<string> ManualDraftBuckets =
+    [
+        "labour", "inputs", "irrigation", "observations",
+        "plannedTasks", "cropActivities", "machinery", "activityExpenses"
+    ];
+
+    /// <summary>Upper bound on one manual draft's raw JSON, in UTF-8 bytes.</summary>
+    private const int MaxManualDraftBytes = 64 * 1024;
+
     private static readonly Regex DeviceIdPattern = new(
         "^[a-zA-Z0-9\\-_]+$",
         RegexOptions.Compiled | RegexOptions.CultureInvariant,
@@ -578,11 +594,22 @@ public sealed class PushSyncBatchHandler(
         string? appVersion,
         CancellationToken ct)
     {
-        if (!PayloadHasOnly(payload, "dailyLogId", "farmId", "plotId", "cropCycleId", "operatorUserId", "logDate", "location", "weatherStamp", "sourceAiJobId"))
+        if (!PayloadHasOnly(payload, "dailyLogId", "farmId", "plotId", "cropCycleId", "operatorUserId", "logDate", "location", "weatherStamp", "sourceAiJobId", "manualDraft"))
         {
             return MutationExecutionOutcome.Failure(
                 "ShramSafal.SyncInvalidPayload",
                 "create_daily_log payload contains unsupported fields.");
+        }
+
+        // spec: dfes-farmer-facing-deploy-readiness-2026-08-14 (task-0b) — validate the
+        // manual draft at the SAME boundary and in the same posture as its neighbours:
+        // known keys only, bounded, and loud. Deserialization alone would silently drop
+        // an unrecognised bucket, and a farmer whose day was quietly halved is exactly
+        // the failure this task exists to end — so a malformed draft is REJECTED, never
+        // trimmed. An ABSENT draft skips all of this and behaves as it always did.
+        if (ValidateManualDraft(payload) is { } draftFailure)
+        {
+            return draftFailure;
         }
 
         var request = DeserializePayload<CreateDailyLogPayload>(payload);
@@ -646,10 +673,67 @@ public sealed class PushSyncBatchHandler(
                 // ledger rows. Null on manual/offline logs (no source job).
                 SourceAiJobId: request.SourceAiJobId,
                 ClientAppVersion: string.IsNullOrWhiteSpace(appVersion) ? "unknown" : appVersion,
-                WeatherStamp: request.WeatherStamp),
+                WeatherStamp: request.WeatherStamp,
+                // task-0b — the farmer's typed day. Null on voice confirms and on every
+                // client older than this contract, which is the pre-task-0b path exactly.
+                ManualDraft: request.ManualDraft),
             ct);
 
         return ToOutcome(result);
+    }
+
+    /// <summary>
+    /// spec: dfes-farmer-facing-deploy-readiness-2026-08-14 (task-0b). Boundary check for
+    /// the optional <c>manualDraft</c>: it must be an object whose keys are all known
+    /// buckets, each holding an array, and the whole draft must fit
+    /// <see cref="MaxManualDraftBytes"/>. Returns <c>null</c> when the draft is absent or
+    /// acceptable, or the failure outcome to return to the client.
+    /// </summary>
+    private static MutationExecutionOutcome? ValidateManualDraft(JsonElement payload)
+    {
+        if (!payload.TryGetProperty("manualDraft", out var draft)
+            || draft.ValueKind is JsonValueKind.Null or JsonValueKind.Undefined)
+        {
+            return null; // absent — pre-task-0b behaviour, unchanged.
+        }
+
+        if (draft.ValueKind != JsonValueKind.Object)
+        {
+            return MutationExecutionOutcome.Failure(
+                "ShramSafal.SyncInvalidPayload",
+                "create_daily_log manualDraft must be an object.");
+        }
+
+        // A day's typed entry is tens of rows, not thousands. 64 KiB leaves generous room
+        // for a very full day in Devanagari (3 bytes/char in UTF-8) while keeping one
+        // mutation from dominating a sync batch or handing the normaliser unbounded work.
+        // The limit is on the RAW draft so it is independent of how it later parses.
+        var draftBytes = Encoding.UTF8.GetByteCount(draft.GetRawText());
+        if (draftBytes > MaxManualDraftBytes)
+        {
+            return MutationExecutionOutcome.Failure(
+                "ShramSafal.SyncInvalidPayload",
+                $"create_daily_log manualDraft exceeds {MaxManualDraftBytes} bytes.");
+        }
+
+        foreach (var bucket in draft.EnumerateObject())
+        {
+            if (!ManualDraftBuckets.Contains(bucket.Name))
+            {
+                return MutationExecutionOutcome.Failure(
+                    "ShramSafal.SyncInvalidPayload",
+                    "create_daily_log manualDraft contains unsupported buckets.");
+            }
+
+            if (bucket.Value.ValueKind is not (JsonValueKind.Array or JsonValueKind.Null))
+            {
+                return MutationExecutionOutcome.Failure(
+                    "ShramSafal.SyncInvalidPayload",
+                    $"create_daily_log manualDraft bucket '{bucket.Name}' must be an array.");
+            }
+        }
+
+        return null;
     }
 
     /// <summary>
