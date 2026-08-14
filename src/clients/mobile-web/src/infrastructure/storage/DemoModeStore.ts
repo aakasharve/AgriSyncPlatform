@@ -37,8 +37,8 @@
  * would change observable behavior and is out of scope for this migration.
  */
 import { storageNamespace } from './StorageNamespace';
+import { readActiveUserId, writeActiveUserId } from './activeUserId';
 
-const ACTIVE_USER_ID_KEY = 'agrisync_active_user_id_v1';
 const DEMO_DATA_VERSION_KEY = 'demo_data_version';
 const PROCUREMENT_EXPENSES_KEY = 'dfes_procurement_expenses';
 const HARVEST_OTHER_INCOME_KEY = 'harvest_other_income';
@@ -62,11 +62,15 @@ function harvestSessionsKey(plotId: string, cropId: string): string {
 
 export const DemoModeStore = {
     // --- Active user id (literal key — NOT namespaced) ---
+    // P0.1: the key itself now lives in `activeUserId.ts`, because the
+    // isolation boundary (key scoping, routing, adoption) needs the same
+    // answer and must not depend on the demo-mode adapter to get it. Same key,
+    // same semantics — this pair is a delegation, not a behaviour change.
     getActiveUserId(): string | null {
-        return localStorage.getItem(ACTIVE_USER_ID_KEY);
+        return readActiveUserId();
     },
     setActiveUserId(userId: string): void {
-        localStorage.setItem(ACTIVE_USER_ID_KEY, userId);
+        writeActiveUserId(userId);
     },
 
     // --- Demo data version (namespaced) ---

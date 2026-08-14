@@ -52,14 +52,15 @@
  * conservative choice in both directions: it strands nothing, and the previous
  * behaviour for that same case was to DELETE the data.
  *
- * INERT UNTIL SWITCHED ON, DELIBERATELY
- * -------------------------------------
- * While `agrisync_active_user_id_v1` has no recorded owner, every function here
- * answers `AgriLogDB` — byte-for-byte today's behaviour. The owner is written
- * only by `activateUserDatabase.ts`, which only `DataSourceProvider` calls. So
- * this module cannot change where a single row lands until the provider opts
- * in, and a half-applied change cannot leave the app writing to a database no
- * one reads.
+ * ONE DOOR INTO A FARMER'S DATABASE
+ * ---------------------------------
+ * `resolveDatabaseNameForUser` takes an authenticated id and is reached only
+ * through `activateUserDatabase.ts`, which `DataSourceProvider` calls once auth
+ * has produced a user. `resolveActiveDatabaseName` — the answer a boot gets
+ * before that happens — no longer names a farmer's database at all. There is no
+ * second route in, which is what makes the ownership claim below meaningful:
+ * every open of a farmer's database is accompanied by a write-or-verify of the
+ * claim inside it.
  *
  * WHY THE localStorage RECORD IS NO LONGER THE ANSWER (P0.1)
  * ---------------------------------------------------------
@@ -80,13 +81,38 @@
  * erasing them.
  */
 
-import { DemoModeStore } from './DemoModeStore';
+import { readActiveUserId } from './activeUserId';
 
 /**
  * The database every install has today, and the only one that exists before
  * this module is switched on. `DexieDatabase.ts` still defaults to it.
  */
 export const LEGACY_DATABASE_NAME = 'AgriLogDB';
+
+/**
+ * WHERE AN UNIDENTIFIED SESSION GOES (founder ruling, P0.1)
+ * ---------------------------------------------------------
+ * > Authenticated user resolved   -> activate that user's database
+ * > Identity unresolved/anonymous -> NO farmer business database may be opened
+ *
+ * `getDatabase()` is called from 122 production sites, 96 of them unguarded,
+ * including the log write path — so refusing to answer would stop a farmer
+ * recording today's work (`P9` forbids that). This is the alternative the
+ * ruling asks for: the smallest safe unauthenticated boundary. A name that
+ * belongs to nobody, holds no farmer's rows, and is never routed to once an
+ * identity IS established.
+ *
+ * It is not a farmer's database and must never become one: nothing routes here
+ * on purpose, `MigrationService` and `LegacyLocalStorageMigrator` both refuse
+ * to import into it (they require `LEGACY_DATABASE_NAME`), and the attachment
+ * cache refuses to open for it. Dexie creates a database lazily, on first
+ * query, so an ordinary authenticated boot that activates before anything reads
+ * never materialises it at all.
+ *
+ * Distinct from `PER_USER_DATABASE_PREFIX` by construction — a per-user name
+ * always carries a `_` at position 12 (`AgriLogDB_u_`), this one carries `n`.
+ */
+export const UNIDENTIFIED_DATABASE_NAME = 'AgriLogDB_unidentified';
 
 /**
  * Prefix for a database created FOR a farmer rather than adopted by one.
@@ -177,7 +203,7 @@ export function resolveDatabaseNameForUser(userId: string): string {
         // regarded as the active user owns everything in `AgriLogDB`; if it has
         // never had one, the rows belong to nobody on record and the farmer
         // signing in now adopts them rather than losing them.
-        owner = DemoModeStore.getActiveUserId() ?? userId;
+        owner = readActiveUserId() ?? userId;
         localStorage.setItem(LEGACY_DB_OWNER_KEY, owner);
     }
 
@@ -187,38 +213,33 @@ export function resolveDatabaseNameForUser(userId: string): string {
 }
 
 /**
- * The database the handset should already be open on, from durable state
- * alone. Read by `getDatabase()` on its first call of a boot, so every reader
- * — background workers included — lands on the right database with no
- * dependency on provider start-up order.
+ * The database a boot lands on BEFORE anybody has been authenticated.
  *
- * Answers `AgriLogDB` whenever routing has not been switched on, which is what
- * makes this change inert until `DataSourceProvider` opts in.
+ * Read by `getDatabase()` on its first call of a boot, from durable state
+ * alone. It now has exactly one answer: the unidentified boundary.
  *
- * KNOWN RESIDUAL FAIL-OPEN, MEASURED AND NOT YET CLOSED
- * -----------------------------------------------------
- * The second branch below answers `AgriLogDB` when the database HAS a recorded
- * owner but nobody is signed in. An anonymous boot therefore still lands on the
- * owner's database. Closing it means `getDatabase()` refusing to answer, and
- * the measured blast radius of that is 122 production call sites in 55 files —
- * 96 of them unguarded, including 17 in `DexieLogsRepository` and 14 in
- * `MutationQueue`. A synchronous throw there stops a farmer recording today's
- * work, which `P9` forbids. It needs a place to route an unidentified session
- * to, which is a separate decision. Recorded here so it is not mistaken for
- * closed.
+ * THE FAIL-OPEN THIS REPLACES, AND WHY THE OLD ANSWER WAS WRONG
+ * -------------------------------------------------------------
+ * This function used to answer `AgriLogDB` twice over: once when no adoption
+ * had been recorded, and once when an adoption HAD been recorded but nobody was
+ * signed in. Both handed a farmer's database to a session with no identity —
+ * the second one handed over a database whose owner was known by name. It read
+ * `agrisync_active_user_id_v1` to do it, which is the LAST farmer to use the
+ * handset, not the current one.
+ *
+ * The founder ruling closes all of that: identity unresolved means no farmer
+ * business database may be opened, and `AgriLogDB`, the previous active user,
+ * the current farm pointer, a localStorage owner mirror and the last opened
+ * database are all named as forbidden fallbacks. Every one of them was in this
+ * function.
+ *
+ * A farmer's database is now reachable through ONE door — `activateDatabaseForUser`,
+ * called with an authenticated id — and that door writes-or-verifies the
+ * ownership claim inside the database it opens. Business repositories being
+ * unavailable until identity is established is accepted (founder ruling on
+ * `P9`: the rule protects an AUTHENTICATED farmer's capture from weak
+ * connectivity; it does not mean an anonymous session may record farm work).
  */
 export function resolveActiveDatabaseName(): string {
-    const owner = getLegacyDatabaseOwner();
-    if (owner === null) {
-        return LEGACY_DATABASE_NAME;
-    }
-
-    const activeUserId = DemoModeStore.getActiveUserId();
-    if (activeUserId === null) {
-        return LEGACY_DATABASE_NAME;
-    }
-
-    return owner === activeUserId
-        ? LEGACY_DATABASE_NAME
-        : perUserDatabaseName(activeUserId);
+    return UNIDENTIFIED_DATABASE_NAME;
 }

@@ -17,9 +17,9 @@
  *   1. `resolveDatabaseNameForUser` — asks which database this farmer owns,
  *      settling (once, permanently) who adopted the pre-existing `AgriLogDB`.
  *      It reads the OUTGOING active user id to do that, so it must run FIRST.
- *   2. `DemoModeStore.setActiveUserId` — records the incoming farmer, so that
- *      after a reload `getDatabase()` re-derives the same name on its first
- *      call, before any provider code runs.
+ *   2. `writeActiveUserId` — records the incoming farmer, so this handset knows
+ *      whose un-scoped localStorage rows it is holding and who adopted
+ *      `AgriLogDB` when that farmer next signs in.
  *   3. `setActiveDatabaseName` — swings the handle and wakes live subscribers.
  *
  * Write (2) before (3) so the durable record and the in-memory name can never
@@ -43,16 +43,18 @@
  * it was, quarantined, because the handset may hold its owner's only copy.
  */
 
-import { DemoModeStore } from './DemoModeStore';
+import { readActiveUserId, writeActiveUserId } from './activeUserId';
 import { getActiveDatabaseName, setActiveDatabaseName } from './activeDatabaseName';
 import {
     LEGACY_DATABASE_NAME,
+    getLegacyDatabaseOwner,
     perUserDatabaseName,
     recordVerifiedLegacyDatabaseOwner,
     resolveDatabaseNameForUser,
 } from './userDatabaseName';
 import { getDatabase } from './DexieDatabase';
 import { claimDatabaseOwnership, trackOwnershipClaim } from './databaseOwnership';
+import { adoptUnscopedBusinessKeys } from './businessKeyScope';
 
 export interface UserDatabaseActivation {
     /** The database now serving `getDatabase()`. */
@@ -69,10 +71,28 @@ export interface UserDatabaseActivation {
  * an ordinary logout/login from disturbing anything.
  */
 export function activateDatabaseForUser(userId: string): UserDatabaseActivation {
+    // ZEROTH, AND ONLY BEFORE THE INCOMING FARMER IS RECORDED (P0.1).
+    // localStorage business keys are scoped by farmer from this change on. The
+    // keys already on the handset carry no scope, and harvest, procurement and
+    // finance have no server home — that device is the only copy. Hand them to
+    // the farmer they belong to: the one this handset was already serving, or
+    // failing that whoever adopted `AgriLogDB`, or failing that the farmer
+    // arriving now (the same adoption rule the database itself uses, and the
+    // same conservative direction: it strands nothing).
+    //
+    // Runs once per device, copies rather than moves, and deletes nothing.
+    const incumbent = readActiveUserId() ?? getLegacyDatabaseOwner() ?? userId;
+    const adopted = adoptUnscopedBusinessKeys(incumbent);
+    if (adopted.length > 0) {
+        console.info('[activateUserDatabase] adopted un-scoped localStorage keys', {
+            owner: incumbent, keys: adopted.length,
+        });
+    }
+
     const databaseName = resolveDatabaseNameForUser(userId);
     const switched = getActiveDatabaseName() !== databaseName;
 
-    DemoModeStore.setActiveUserId(userId);
+    writeActiveUserId(userId);
     setActiveDatabaseName(databaseName);
     trackOwnershipClaim(enforceOwnership(databaseName, userId));
 

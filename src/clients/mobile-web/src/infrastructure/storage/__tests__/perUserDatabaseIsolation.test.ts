@@ -39,6 +39,7 @@ import {
 import { activateDatabaseForUser } from '../activateUserDatabase';
 import {
     LEGACY_DATABASE_NAME,
+    UNIDENTIFIED_DATABASE_NAME,
     getLegacyDatabaseOwner,
     resolveActiveDatabaseName,
 } from '../userDatabaseName';
@@ -338,6 +339,11 @@ describe('the upgrade path — an existing AgriLogDB is adopted, never orphaned'
     it('PROOF 5: rows written before this change are still reachable afterwards', async () => {
         // An install as it exists today: data in `AgriLogDB`, an active user id
         // written by the old provider, and no notion of per-farmer routing.
+        //
+        // P0.1: the old build reached `AgriLogDB` by simply booting; this one
+        // never does, so the fixture names the database the old build wrote to
+        // instead of relying on an unidentified boot to land there.
+        setActiveDatabaseName(LEGACY_DATABASE_NAME);
         await seedEveryTable(getDatabase(), FARMER_A);
         DemoModeStore.setActiveUserId(FARMER_A);
         expect(getLegacyDatabaseOwner()).toBeNull();
@@ -354,6 +360,9 @@ describe('the upgrade path — an existing AgriLogDB is adopted, never orphaned'
     });
 
     it('PROOF 5b: a DIFFERENT farmer booting first still cannot strand the owner\'s data', async () => {
+        // Same pre-existing install as PROOF 5 (see the note there on why the
+        // database is named rather than booted into).
+        setActiveDatabaseName(LEGACY_DATABASE_NAME);
         await seedEveryTable(getDatabase(), FARMER_A);
         DemoModeStore.setActiveUserId(FARMER_A);
 
@@ -373,9 +382,15 @@ describe('the upgrade path — an existing AgriLogDB is adopted, never orphaned'
     });
 
     it('PROOF 5c: on a handset no one has signed into, the data is adopted, not deleted', async () => {
-        // Pre-auth capture, or an install whose active-user id never got
-        // written. The old code treated `null -> someone` as a user CHANGE and
-        // wiped. There is no other claimant, so the farmer signing in adopts it.
+        // An install whose active-user id never got written — an older build
+        // that wrote into `AgriLogDB` without recording whose it was. The old
+        // code treated `null -> someone` as a user CHANGE and wiped. There is
+        // no other claimant, so the farmer signing in adopts it.
+        //
+        // P0.1: "pre-auth capture" is no longer one of the ways rows get here.
+        // An unidentified session cannot open `AgriLogDB` at all, so this
+        // fixture names it directly.
+        setActiveDatabaseName(LEGACY_DATABASE_NAME);
         await seedEveryTable(getDatabase(), 'anonymous');
         expect(DemoModeStore.getActiveUserId()).toBeNull();
 
@@ -409,25 +424,40 @@ describe('the upgrade path — an existing AgriLogDB is adopted, never orphaned'
     });
 });
 
-describe('inert until switched on, and unchanged for demo mode', () => {
+/**
+ * P0.1 — TWO ANCHORS IN THIS BLOCK DELIBERATELY FLIPPED
+ * -----------------------------------------------------
+ * They asserted the fail-open the founder ruling closes: that a boot with no
+ * established identity lands on `AgriLogDB`. Both were correct descriptions of
+ * the old behaviour and are now assertions of the OPPOSITE property — an
+ * unidentified session reaches no farmer's database — because "AgriLogDB" and
+ * "the previous active user" are both named forbidden fallbacks. A green run of
+ * the old wording would now mean the leak is back.
+ */
+describe('an unidentified boot reaches no farmer\'s database, and demo mode moves nothing', () => {
     beforeEach(wipeEverything);
     afterEach(wipeEverything);
 
-    it('a device that has never routed per farmer is on AgriLogDB, exactly as before', () => {
+    it('a device that has never routed per farmer opens nobody\'s database', () => {
         expect(getLegacyDatabaseOwner()).toBeNull();
-        expect(resolveActiveDatabaseName()).toBe(LEGACY_DATABASE_NAME);
-        expect(getActiveDatabaseName()).toBe(LEGACY_DATABASE_NAME);
-        expect(getDatabase().name).toBe(LEGACY_DATABASE_NAME);
+        expect(resolveActiveDatabaseName()).toBe(UNIDENTIFIED_DATABASE_NAME);
+        expect(getActiveDatabaseName()).toBe(UNIDENTIFIED_DATABASE_NAME);
+        expect(getDatabase().name).toBe(UNIDENTIFIED_DATABASE_NAME);
     });
 
-    it('an active user id with no recorded adoption still resolves to AgriLogDB', async () => {
-        // Half-applied state: the old code wrote an active user id, the new
-        // code has not run yet. It must read as today, not as a new database.
+    it('an active user id alone does NOT re-open that farmer\'s database', async () => {
+        // The handset remembers who used it last. That is not authentication,
+        // and the ruling names "the previous active user" as a forbidden
+        // fallback: nobody is signed in, so nobody's database opens.
         DemoModeStore.setActiveUserId(FARMER_B);
         await resetDatabase();
 
-        expect(resolveActiveDatabaseName()).toBe(LEGACY_DATABASE_NAME);
-        expect(getDatabase().name).toBe(LEGACY_DATABASE_NAME);
+        expect(resolveActiveDatabaseName()).toBe(UNIDENTIFIED_DATABASE_NAME);
+        expect(getDatabase().name).toBe(UNIDENTIFIED_DATABASE_NAME);
+
+        // ...and the moment that same farmer authenticates, they get theirs.
+        activateDatabaseForUser(FARMER_B);
+        expect(getActiveDatabaseName()).toBe(LEGACY_DATABASE_NAME);
     });
 
     it('PROOF 7: demo mode neither moves the database nor is moved by it', async () => {
@@ -438,7 +468,10 @@ describe('inert until switched on, and unchanged for demo mode', () => {
         // decided which Dexie database was open and still does not.
         storageNamespace.setNamespace('demo');
         expect(getActiveDatabaseName()).toBe(LEGACY_DATABASE_NAME);
-        expect(resolveActiveDatabaseName()).toBe(LEGACY_DATABASE_NAME);
+        // The boot-time answer is the unidentified boundary in BOTH namespaces
+        // — demo mode does not change which database an unidentified session
+        // may open, which is the same property this line always asserted.
+        expect(resolveActiveDatabaseName()).toBe(UNIDENTIFIED_DATABASE_NAME);
         expect(await countEveryTable(getDatabase())).toEqual(ALL_ONE);
 
         storageNamespace.setNamespace('user');

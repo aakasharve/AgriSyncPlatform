@@ -56,6 +56,28 @@ const NOOP_RESULT: LegacyMigrationResult = {
     profileParseFailed: false,
 };
 
+/**
+ * Read a pre-Dexie entry, in the scoped key FIRST and the un-scoped key second.
+ *
+ * P0.1 — WHY THE FALLBACK IS NOT OPTIONAL, AND WHY IT CANNOT LEAK
+ * ---------------------------------------------------------------
+ * localStorage business keys became farmer-scoped in the same change that
+ * introduced this helper. Reading only `storageNamespace.getKey(...)` would
+ * miss on any device whose entries were written before the scoping — and this
+ * migrator then sets its once-only flag anyway, so the farmer's crops and
+ * profile would be silently lost with no second attempt. That is the exact
+ * defect P0.1 names.
+ *
+ * The un-scoped fallback cannot cross farmers, because the caller has already
+ * refused to run unless the ACTIVE DATABASE is `AgriLogDB` — i.e. unless the
+ * farmer signing in is the one who adopted the pre-Dexie install. Those keys
+ * and that database describe the same person.
+ */
+function readLegacyEntry(baseKey: string): string | null {
+    return localStorage.getItem(storageNamespace.getKey(baseKey))
+        ?? localStorage.getItem(baseKey);
+}
+
 export async function runLegacyLocalStorageMigration(): Promise<LegacyMigrationResult> {
     if (localStorage.getItem(MIGRATED_FLAG) === '1') {
         return { ...NOOP_RESULT };
@@ -67,6 +89,9 @@ export async function runLegacyLocalStorageMigration(): Promise<LegacyMigrationR
     // normally already set by the time anyone switches farmer, so this is a
     // backstop; it returns WITHOUT setting the flag, so the import the owner is
     // owed still happens the next time they sign in.
+    //
+    // P0.1: this same guard is what stops an anonymous boot importing anybody's
+    // legacy entries — an unidentified session is not on `AgriLogDB` either.
     if (getActiveDatabaseName() !== LEGACY_DATABASE_NAME) {
         return { ...NOOP_RESULT };
     }
@@ -81,7 +106,7 @@ export async function runLegacyLocalStorageMigration(): Promise<LegacyMigrationR
     };
 
     // Crops migration.
-    const cropsRaw = localStorage.getItem(storageNamespace.getKey('crops'));
+    const cropsRaw = readLegacyEntry('crops');
     if (cropsRaw) {
         try {
             const parsed = JSON.parse(cropsRaw) as Array<{ id: string }>;
@@ -102,7 +127,7 @@ export async function runLegacyLocalStorageMigration(): Promise<LegacyMigrationR
     }
 
     // Profile migration.
-    const profileRaw = localStorage.getItem(storageNamespace.getKey('farmer_profile'));
+    const profileRaw = readLegacyEntry('farmer_profile');
     if (profileRaw) {
         try {
             const parsed = JSON.parse(profileRaw);

@@ -1,3 +1,9 @@
+import {
+    NoOwnedFileCacheError,
+    openOwnedLocalFileCache,
+    ownedLocalFileCacheName,
+} from './localFileCache';
+
 export interface FilePickResult {
     localPath?: string;
     fileName: string;
@@ -21,7 +27,6 @@ export interface DeviceFilesService {
 }
 
 const LOCAL_FILE_PATH_PREFIX = '/__agrisync_local_files__/';
-const LOCAL_FILE_CACHE_NAME = 'agrisync-local-files-v1';
 
 function sanitizeFileName(fileName: string): string {
     const trimmed = fileName.trim();
@@ -103,7 +108,10 @@ export class WebDeviceFilesService implements DeviceFilesService {
             return URL.createObjectURL(blob);
         }
 
-        const cache = await caches.open(LOCAL_FILE_CACHE_NAME);
+        // P0.1: the bucket is chosen by the ownership boundary, never by a
+        // constant. An unidentified session is refused here rather than writing
+        // a farmer-shaped file into a bucket nobody owns.
+        const cache = await openOwnedLocalFileCache('save');
         await cache.put(
             localPath,
             new Response(blob, {
@@ -130,7 +138,10 @@ export class WebDeviceFilesService implements DeviceFilesService {
             throw new Error('CacheStorage is unavailable; cannot read local attachment file.');
         }
 
-        const cache = await caches.open(LOCAL_FILE_CACHE_NAME);
+        // P0.1: reads the CURRENT farmer's bucket and only that one. There is
+        // no fallback to the shared bucket — a miss is a miss, because the
+        // alternative is farmer B pulling farmer A's bytes by holding a path.
+        const cache = await openOwnedLocalFileCache('read');
         const cachedResponse = await cache.match(localPath);
         if (!cachedResponse) {
             throw new Error(`Local attachment file not found at '${localPath}'.`);
@@ -149,7 +160,17 @@ export class WebDeviceFilesService implements DeviceFilesService {
             return;
         }
 
-        const cache = await caches.open(LOCAL_FILE_CACHE_NAME);
+        // P0.1: a session with no farmer deletes nothing. This is the one call
+        // that could destroy another farmer's media, so it refuses quietly
+        // rather than throwing — the callers are clean-up paths, and a throw
+        // here would abort a queue drain over a file it was never allowed to
+        // touch in the first place.
+        if (ownedLocalFileCacheName() === null) {
+            console.warn(new NoOwnedFileCacheError('delete').message, { localPath });
+            return;
+        }
+
+        const cache = await openOwnedLocalFileCache('delete');
         await cache.delete(localPath);
     }
 }
