@@ -338,6 +338,16 @@ export interface Translations {
         graspTargetHit: string;
         askRaisesScore: string;
 
+        // A day the farmer HONESTLY declared as no-work (founder ruling 2,
+        // 2026-08-14: "Reward honesty and mark its consistency — no score needed
+        // for such days"). No number is shown at all — a 0 would punish the very
+        // honesty the product is built to earn. consistencyKept carries a {days}
+        // placeholder = his current streak, which the server already advances
+        // across a declared no-work day (StreakRules.AdvanceOnDeclaredNoWork).
+        // spec: dfes-farmer-facing-deploy-readiness-2026-08-14 (Task 6).
+        noWorkDayAcknowledged: string;
+        consistencyKept: string;
+
         // Understanding-Meter arrival/transition line (dfes-companion Slice 5b) —
         // Sathi's progress toward "knowing" the farm (rich-days milestone).
         // Founder-confirmable copy on a flag-gated placeholder surface.
@@ -661,6 +671,12 @@ export const translations: Record<Language, Translations> = {
             graspTargetHit: 'You reached the mark',
             askRaisesScore: 'Tell me this and the number goes up',
 
+            // Declared no-work day (founder ruling 2, 2026-08-14). The Marathi is
+            // the founder's own register and ships verbatim; these two English
+            // lines are a working translation of it and are NOT founder-reviewed.
+            noWorkDayAcknowledged: 'No work today — you said so, and I recorded it.',
+            consistencyKept: 'You have told me without fail for {days} days running.',
+
             // Understanding-Meter arrival/transition line (dfes-companion Slice 5b)
             meterArrivalProgress: 'Understood days: {count}/{target}',
             meterArrivalArrived: ' — now I have come to know your farm',
@@ -976,6 +992,12 @@ export const translations: Record<Language, Translations> = {
             graspTarget: '{target} पर्यंत पोहोचायचंय',
             graspTargetHit: 'तुम्ही खूण गाठली!',
             askRaisesScore: 'हे सांगितलं तर आकडा वाढेल',
+
+            // A day he honestly said had no work. FOUNDER-SUPPLIED register, used
+            // verbatim — do not paraphrase. No number appears beside these lines:
+            // his honesty is acknowledged and his consistency named instead.
+            noWorkDayAcknowledged: 'आज काम नाही — तुम्ही सांगितलं, मी नोंदवलं.',
+            consistencyKept: 'सलग {days} दिवस तुम्ही न चुकता सांगताय.',
 
             // Understanding-Meter arrival/transition line (dfes-companion Slice 5b) —
             // founder-reviewed 2026-08-13, no longer a placeholder. Not a grade of

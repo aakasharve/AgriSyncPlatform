@@ -27,6 +27,11 @@ import { t as translate } from '../../../../../i18n/translations';
 
 // Controllable useDayUnderstanding mock — set per test.
 const dayUnderstandingMock = vi.fn();
+// Task 6 — the card also consults useFarmerEngagement (for the streak on a
+// declared no-work day). Mocked here so these ordinary-day cases stay
+// network-silent; the no-work behaviour itself is covered in
+// DayUnderstandingCard.noWork.test.tsx.
+const farmerEngagementMock = vi.fn();
 
 /**
  * Load DayUnderstandingCard with FEATURE_FLAGS.understandingMeter forced, the
@@ -50,18 +55,29 @@ async function loadComponent(understandingMeter: boolean) {
     vi.doMock('../../../hooks/useDayUnderstanding', () => ({
         useDayUnderstanding: (...args: unknown[]) => dayUnderstandingMock(...args),
     }));
+    vi.doMock('../../../hooks/useFarmerEngagement', () => ({
+        useFarmerEngagement: (...args: unknown[]) => farmerEngagementMock(...args),
+    }));
     vi.doMock('../../../../../i18n/LanguageContext', () => ({
         useLanguage: () => ({ language: 'mr', setLanguage: () => undefined, t: (k: string) => translate(k, 'mr') }),
     }));
     return import('../DayUnderstandingCard');
 }
 
+// An ORDINARY work day (BasicWorkDay) unless a test says otherwise — the no-work
+// classification has its own suite.
 function mockDayScore(score: number | null, error: string | null = null) {
-    dayUnderstandingMock.mockReturnValue({ score, isLoading: false, error, refresh: vi.fn() });
+    dayUnderstandingMock.mockReturnValue({
+        score, classification: 'BasicWorkDay', isLoading: false, error, refresh: vi.fn(),
+    });
 }
 
 beforeEach(() => {
     dayUnderstandingMock.mockReset();
+    farmerEngagementMock.mockReset();
+    farmerEngagementMock.mockReturnValue({
+        engagement: null, isLoading: false, error: null, refresh: vi.fn(),
+    });
     mockDayScore(null);
 });
 
@@ -69,6 +85,7 @@ afterEach(() => {
     cleanup();
     vi.doUnmock('../../../../../app/featureFlags');
     vi.doUnmock('../../../hooks/useDayUnderstanding');
+    vi.doUnmock('../../../hooks/useFarmerEngagement');
     vi.doUnmock('../../../../../i18n/LanguageContext');
     vi.resetModules();
 });
@@ -242,7 +259,7 @@ describe('DayUnderstandingCard (server /10 Day Understanding Score)', () => {
     // -------------------------------------------------------------------------
     it('calls useDayUnderstanding\'s refresh when notified that a DFES answer was recorded', async () => {
         const refresh = vi.fn();
-        dayUnderstandingMock.mockReturnValue({ score: 6, isLoading: false, error: null, refresh });
+        dayUnderstandingMock.mockReturnValue({ score: 6, classification: 'BasicWorkDay', isLoading: false, error: null, refresh });
         const { DayUnderstandingCard } = await loadComponent(true);
         const { notifyDfesAnswered } = await import('../../../services/dfesAnswerSignal');
 
@@ -256,7 +273,7 @@ describe('DayUnderstandingCard (server /10 Day Understanding Score)', () => {
 
     it('stops listening once unmounted, so a later answer on another screen cannot call a stale refresh', async () => {
         const refresh = vi.fn();
-        dayUnderstandingMock.mockReturnValue({ score: 6, isLoading: false, error: null, refresh });
+        dayUnderstandingMock.mockReturnValue({ score: 6, classification: 'BasicWorkDay', isLoading: false, error: null, refresh });
         const { DayUnderstandingCard } = await loadComponent(true);
         const { notifyDfesAnswered } = await import('../../../services/dfesAnswerSignal');
 

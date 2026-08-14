@@ -31,6 +31,14 @@ import { FEATURE_FLAGS } from '../../../app/featureFlags';
 export interface UseDayUnderstandingState {
     /** 0–10 server score, or null when not-enough-understood / offline / failed. */
     score: number | null;
+    /**
+     * The day's STORED DayClassification as the server recorded it (e.g.
+     * 'DeclaredNoWorkDay', 'BasicWorkDay'), or null when the server has no
+     * aggregate for the day / the fetch failed / the meter flag is OFF. Passed
+     * through untouched — never derived here (P4/P8). spec:
+     * dfes-farmer-facing-deploy-readiness-2026-08-14 (Task 6).
+     */
+    classification: string | null;
     isLoading: boolean;
     error: string | null;
     refresh: () => Promise<void>;
@@ -45,12 +53,14 @@ export function useDayUnderstanding(
     refreshKey?: string | null,
 ): UseDayUnderstandingState {
     const [score, setScore] = useState<number | null>(null);
+    const [classification, setClassification] = useState<string | null>(null);
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
     const refresh = useCallback(async () => {
         if (!farmId || !FEATURE_FLAGS.understandingMeter) {
             setScore(null);
+            setClassification(null);
             setError(null);
             setIsLoading(false);
             return;
@@ -60,12 +70,16 @@ export function useDayUnderstanding(
         try {
             const dto = await agriSyncClient.getDayUnderstanding(farmId, date);
             setScore(dto.score ?? null);
+            setClassification(dto.classification ?? null);
         } catch (loadError) {
             // Offline / failed → NO number (gentle pending). Intentionally do NOT
             // fall back to the client scoreVlog /100 — that diverges from the
             // server /10 and would be inconsistent.
             setError(loadError instanceof Error ? loadError.message : 'Failed to load day understanding.');
             setScore(null);
+            // …and NO classification either. Guessing "it must have been a no-work
+            // day" from a failed fetch would be a fabricated fact about the day.
+            setClassification(null);
         } finally {
             setIsLoading(false);
         }
@@ -77,5 +91,5 @@ export function useDayUnderstanding(
 
     useEffect(() => { void refresh(); }, [refresh]);
 
-    return { score, isLoading, error, refresh };
+    return { score, classification, isLoading, error, refresh };
 }

@@ -17,6 +17,11 @@
  * "अजून समजतंय…") — never a 0, never shame, and never a fall back to the client
  * scoreVlog /100 (which diverges from the server /10).
  *
+ * On a day the SERVER classified as DeclaredNoWorkDay — one the farmer honestly
+ * told us had no work — we show no number of ANY kind and acknowledge his
+ * consistency instead (founder ruling 2, 2026-08-14). The classification is read
+ * from the server's stored value and never computed here.
+ *
  * THIS COMPONENT IS THE SINGLE OWNER of the useDayUnderstanding fetch. MeterDisplay
  * no longer calls it — do not re-add a second call anywhere.
  *
@@ -31,6 +36,7 @@ import { useSelector } from '@xstate/react';
 import { FEATURE_FLAGS } from '../../../../app/featureFlags';
 import { toMarathiNumber } from '../../services/disciplineRecognition';
 import { useDayUnderstanding } from '../../hooks/useDayUnderstanding';
+import { useFarmerEngagement } from '../../hooks/useFarmerEngagement';
 import { useLanguage } from '../../../../i18n/LanguageContext';
 import { getRootStore } from '../../../../app/state/RootStore';
 import { subscribeDfesAnswered } from '../../services/dfesAnswerSignal';
@@ -62,6 +68,18 @@ const UNDERSTANDING_MAX = 10;
  * fixed, because today the last stretch is the part most likely to move backwards.
  */
 const UNDERSTANDING_TARGET = 9;
+
+/**
+ * The SERVER's stored DayClassification for a day the farmer honestly told us had
+ * no work (ShramSafal.Domain.Dfes.DayClassification.DeclaredNoWorkDay, persisted
+ * as this exact string). Compared against, never computed — the server is the
+ * authority on what kind of day it was (P4/P8).
+ *
+ * NOTE this is a DIFFERENT thing from the client-side `dayOutcome` enum value
+ * `NO_WORK_PLANNED` (log.types.ts): that is what the farmer's own log says about
+ * his intent; this is the classification the DFES engine stamped on the day.
+ */
+const DECLARED_NO_WORK_DAY = 'DeclaredNoWorkDay';
 
 export interface DayUnderstandingCardProps {
     /** Active farm — drives the Day Understanding Score fetch. */
@@ -109,8 +127,27 @@ export function DayUnderstandingCard({
     // Day Understanding Score (server /10). The hook self-gates on
     // understandingMeter, so with the flag OFF this issues ZERO network calls —
     // safe to call above the flag early-return below.
-    const { score: dayUnderstandingScore, refresh: refreshDayUnderstanding } =
+    const { score: dayUnderstandingScore, classification, refresh: refreshDayUnderstanding } =
         useDayUnderstanding(farmId ?? null, dayDate, refreshKey);
+
+    // Task 6 (spec: dfes-farmer-facing-deploy-readiness-2026-08-14) — founder
+    // ruling 2: "Reward honesty and mark its consistency — no score needed for
+    // such days." `classification` is the SERVER's stored value; the flag-OFF and
+    // failed-fetch paths both yield null, so this is false in production today.
+    const isDeclaredNoWorkDay = classification === DECLARED_NO_WORK_DAY;
+
+    // The streak is NOT on the day-understanding wire — it lives on the engagement
+    // projection, whose single fetch is owned by LedgerRecognitionPanel, a SIBLING
+    // of this card under mainView (not an ancestor), so it cannot be read from
+    // here. Rather than widen the day-understanding contract further than founder
+    // ruling 2 needed — GET /engagement folds the farm's WHOLE aggregate history,
+    // and this card refetches on every save, sync tick and answered question —
+    // reuse the existing hook, but ONLY on a no-work day: useFarmerEngagement
+    // short-circuits before it fetches on a falsy farmId, so passing null on every
+    // other day leaves the ordinary success screen on exactly the network calls it
+    // made before. The number rendered below is therefore always the server's own
+    // streak; if it has not arrived, the line is omitted rather than invented (P4).
+    const { engagement } = useFarmerEngagement(isDeclaredNoWorkDay ? farmId ?? null : null);
 
     // BUGFIX_2026-08-15 (Task 4, spec: dfes-farmer-facing-deploy-readiness-
     // 2026-08-14) — founder ruling A: "the number he is looking at must
@@ -127,9 +164,10 @@ export function DayUnderstandingCard({
     // pub/sub rather than a prop.
     //
     // HAZARD (review round 1) — this hook MUST stay ABOVE every return
-    // statement in this component, including any Task 6 adds (its brief has
-    // this card returning early for a no-work day, per `data.classification
-    // === 'DeclaredNoWorkDay'`). A hook placed below an early return is
+    // statement in this component. Task 6 has since landed the no-work early
+    // return it warned about (`classification === DECLARED_NO_WORK_DAY`), and
+    // it sits BELOW this effect for exactly this reason; keep any further
+    // early return below it too. A hook placed below an early return is
     // called conditionally — a rules-of-hooks violation — and this
     // subscription would silently stop firing on whichever render path skips
     // it, with no compile error to catch it.
@@ -146,6 +184,41 @@ export function DayUnderstandingCard({
     // Flag gate: inert in production until the meter is calibrated + founder-approved.
     if (!FEATURE_FLAGS.understandingMeter) {
         return null;
+    }
+
+    // Founder ruling 2 (2026-08-14): a day the farmer honestly declared as no-work
+    // earns NO score — showing him a 0 would punish the honesty we are trying to
+    // build. His consistency is what we acknowledge instead. The streak itself is
+    // already preserved server-side (StreakRules.AdvanceOnDeclaredNoWork).
+    //
+    // NOTHING numeric renders on this path: no /10, no band word, no bar, no
+    // target. Placed BELOW the subscription effect above deliberately (see its
+    // HAZARD note) — every hook this component uses has already run by here.
+    if (isDeclaredNoWorkDay) {
+        // The server's own streak, or nothing. A streak of 0 would read as "सलग ०
+        // दिवस", which is both nonsense and discouraging on the one day we are
+        // trying to thank him, so the line is dropped rather than dressed up.
+        const streak = engagement ? Math.max(0, engagement.currentStreak) : 0;
+        return (
+            <div data-testid="meter-score" className="text-left" style={{ fontFamily: SANS }}>
+                <p
+                    data-testid="day-understanding-nowork"
+                    className="font-bold text-stone-900"
+                    style={{ fontSize: 17, lineHeight: 1.35, margin: 0 }}
+                >
+                    {t('dfes.noWorkDayAcknowledged')}
+                </p>
+                {streak > 0 ? (
+                    <p
+                        data-testid="day-understanding-consistency"
+                        className="mt-2 font-bold"
+                        style={{ fontSize: 13.5, lineHeight: 1.5, color: '#047857' }}
+                    >
+                        {t('dfes.consistencyKept').replace('{days}', toMarathiNumber(streak))}
+                    </p>
+                ) : null}
+            </div>
+        );
     }
 
     return (
