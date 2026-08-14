@@ -67,20 +67,39 @@ export function useDfesQuestion(
     const recordOutcome = useCallback(async (outcome: QuestionOutcome) => {
         if (!selected || recordedRef.current) return;
         recordedRef.current = true;
+        let wroteToServer = false;
         try {
             await recordQuestionEvent(farmId, plotId, selected, outcome, shownAtRef.current);
-            // Only after the server has the answer — a failed write must never
-            // move the number, or the farmer is shown a score the server does
-            // not agree with. Fired for every outcome the server accepts (bare
-            // ack/dismiss included): Task 3 already guards the SERVER-side
-            // recompute to fire only when an answer could credit something
-            // (DailyRichnessDerivationService), so calling this unconditionally
-            // costs at most one extra read-only GET on a no-op ack/dismiss —
-            // cheaper and less fragile than duplicating that "would this
-            // credit" rule here, where it could silently drift out of sync.
-            onAnswered?.();
+            wroteToServer = true;
         } catch {
             recordedRef.current = false; // allow a retry on transient failure
+        }
+        if (!wroteToServer) return;
+        // FIX (review round 1, Task 4) — onAnswered?.() lives OUTSIDE the
+        // try/catch above, gated on the `wroteToServer` flag, and in its OWN
+        // try/catch. It used to sit INSIDE that try block: if a subscriber
+        // threw, execution fell into the SAME catch that resets
+        // recordedRef.current on a genuinely failed write — misattributing
+        // the subscriber's bug as a failed server write and re-arming the
+        // guard. The next tap would then insert a SECOND question_events row
+        // for an event the server had already recorded (the table is
+        // append-only). Only after the server has the answer — a failed
+        // write must never move the number, or the farmer is shown a score
+        // the server does not agree with. Fired for every outcome the server
+        // accepts (bare ack/dismiss included): Task 3 already guards the
+        // SERVER-side recompute to fire only when an answer could credit
+        // something (DailyRichnessDerivationService), so calling this
+        // unconditionally costs at most one extra read-only GET on a no-op
+        // ack/dismiss — cheaper and less fragile than duplicating that
+        // "would this credit" rule here, where it could silently drift out
+        // of sync.
+        try {
+            onAnswered?.();
+        } catch {
+            // Swallow — the write already succeeded; a broken subscriber is
+            // the subscriber's problem, never a reason to retry the write.
+            // (notifyDfesAnswered also isolates each of ITS listeners, so in
+            // production this only guards a directly-injected onAnswered.)
         }
     }, [farmId, plotId, selected, onAnswered]);
 

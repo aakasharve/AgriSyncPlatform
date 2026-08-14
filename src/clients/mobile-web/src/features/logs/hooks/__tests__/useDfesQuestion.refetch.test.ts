@@ -68,8 +68,46 @@ describe('useDfesQuestion — onAnswered (Task 4)', () => {
         const { result } = renderHook(() => useDfesQuestion('farm-1', null, inputs(), true));
         await waitFor(() => expect(result.current.selected).not.toBeNull());
 
+        await act(async () => { await result.current.recordOutcome({ skipped: true }); });
+
+        // Review round 1, item 2: "resolves.not.toThrow()" alone can't fail —
+        // the hook's own try/catch swallows everything, including a THROW
+        // from a bug in this call itself, and it also passes vacuously if
+        // recordOutcome silently early-returns and does nothing. Assert the
+        // real write actually happened.
+        expect(recordQuestionEvent).toHaveBeenCalled();
+    });
+
+    // -------------------------------------------------------------------------
+    // Review round 1, Finding 1 — a throwing onAnswered must never be
+    // misattributed as a failed server write. It used to sit INSIDE the same
+    // try/catch that resets recordedRef on a genuinely failed write, so a
+    // throwing subscriber would wrongly re-arm the guard and let the NEXT tap
+    // insert a SECOND question_events row for an event the server already
+    // has (the table is append-only).
+    // -------------------------------------------------------------------------
+    it('does not re-arm the write guard when onAnswered throws — the server already has the write', async () => {
+        const onAnswered = vi.fn(() => { throw new Error('subscriber exploded'); });
+        const { result } = renderHook(() => useDfesQuestion('farm-1', null, inputs(), true, onAnswered));
+        await waitFor(() => expect(result.current.selected).not.toBeNull());
+
+        await act(async () => { await result.current.recordOutcome({ skipped: false, response: 'low' }); });
+        expect(recordQuestionEvent).toHaveBeenCalledTimes(1);
+        expect(onAnswered).toHaveBeenCalledTimes(1);
+
+        // A second tap must NOT insert a second append-only row: recordedRef
+        // must still be true even though onAnswered threw on the first call.
+        await act(async () => { await result.current.recordOutcome({ skipped: true }); });
+        expect(recordQuestionEvent).toHaveBeenCalledTimes(1);
+    });
+
+    it('does not let a throwing onAnswered escape recordOutcome as an unhandled rejection', async () => {
+        const onAnswered = vi.fn(() => { throw new Error('subscriber exploded'); });
+        const { result } = renderHook(() => useDfesQuestion('farm-1', null, inputs(), true, onAnswered));
+        await waitFor(() => expect(result.current.selected).not.toBeNull());
+
         await expect(act(async () => {
-            await result.current.recordOutcome({ skipped: true });
+            await result.current.recordOutcome({ skipped: false, response: 'low' });
         })).resolves.not.toThrow();
     });
 });

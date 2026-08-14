@@ -56,4 +56,23 @@ describe('dfesAnswerSignal', () => {
         // listener, so this is genuinely zero subscribers, not just untested.
         expect(() => notifyDfesAnswered()).not.toThrow();
     });
+
+    // -------------------------------------------------------------------------
+    // Review round 1, Finding 1(b) — one throwing listener must never starve
+    // the others. useDfesQuestion.ts's onAnswered (the sole subscriber today)
+    // wires in notifyDfesAnswered as its own recordOutcome guard depends on
+    // this call never throwing back into it; a bare `forEach(l => l())` would
+    // let an earlier throwing listener abort the loop before later listeners
+    // ever ran.
+    // -------------------------------------------------------------------------
+    it('isolates a throwing listener so later subscribers are still notified', () => {
+        const throwing = vi.fn(() => { throw new Error('boom'); });
+        const after = vi.fn();
+        unsubscribers.push(subscribeDfesAnswered(throwing), subscribeDfesAnswered(after));
+
+        expect(() => notifyDfesAnswered()).not.toThrow();
+
+        expect(throwing).toHaveBeenCalledTimes(1);
+        expect(after).toHaveBeenCalledTimes(1);
+    });
 });

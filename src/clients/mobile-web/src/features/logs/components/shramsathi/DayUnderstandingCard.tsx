@@ -125,7 +125,23 @@ export function DayUnderstandingCard({
     // OWN existing refresh(), same one useDayUnderstanding already exposes
     // for the refreshKey path. See dfesAnswerSignal.ts for why this is a
     // pub/sub rather than a prop.
-    useEffect(() => subscribeDfesAnswered(() => { void refreshDayUnderstanding(); }), [refreshDayUnderstanding]);
+    //
+    // HAZARD (review round 1) — this hook MUST stay ABOVE every return
+    // statement in this component, including any Task 6 adds (its brief has
+    // this card returning early for a no-work day, per `data.classification
+    // === 'DeclaredNoWorkDay'`). A hook placed below an early return is
+    // called conditionally — a rules-of-hooks violation — and this
+    // subscription would silently stop firing on whichever render path skips
+    // it, with no compile error to catch it.
+    useEffect(() => {
+        // Braced body with an EXPLICIT return (not a single-expression arrow
+        // implicitly returning subscribeDfesAnswered's result) — review round
+        // 1: a concise-arrow cleanup return is one accidental extra statement
+        // away from silently losing the unsubscribe and leaking a listener,
+        // with no compile error.
+        const unsubscribe = subscribeDfesAnswered(() => { void refreshDayUnderstanding(); });
+        return unsubscribe;
+    }, [refreshDayUnderstanding]);
 
     // Flag gate: inert in production until the meter is calibrated + founder-approved.
     if (!FEATURE_FLAGS.understandingMeter) {
