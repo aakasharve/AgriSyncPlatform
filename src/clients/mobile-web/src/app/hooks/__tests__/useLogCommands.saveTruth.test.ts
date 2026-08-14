@@ -28,8 +28,9 @@
 //       `useLogCommands.ts`'s `showSavedToLedgerPanel`: it is a CREATE-shaped
 //       confirmation whose body and sync badge have nothing to say about a
 //       correction.
-//   B3  `अडकलं — तपासा` says "go and check". A skipped log has no home in any
-//       queue, so there is nothing to check and nowhere to go.
+//   B3  `मदत कराल का?` asks the farmer to step in and unblock something. A
+//       skipped log has no home in any queue, so there is nothing for him to
+//       unblock and nowhere for him to go.
 //   B4  A red toast reading `0 of 1` reads as "your record is gone", and the
 //       farmer re-records it — creating a duplicate. The record IS on the
 //       phone. Say so first.
@@ -125,7 +126,7 @@ vi.mock('../../../application/services/LogCommandService', () => ({
 }));
 
 /** The exact strings shipped in `i18n/translations.ts` under the `sync` namespace. */
-const ON_PHONE_MR = 'मी लिहून घेतलं ✓';
+const ON_PHONE_MR = 'लक्षात ठेवलं ✓';
 const ON_PHONE_EN = 'Shram Sathi has it';
 
 /*
@@ -155,8 +156,8 @@ const correctionsTail = (language: Language, count: number): string =>
         { count },
     );
 /** T1's NEEDS_FIX label. It must NOT appear on this surface — see B3. */
-const NEEDS_FIX_MR = 'अडकलं — तपासा';
-const NEEDS_FIX_EN = 'Stuck — check';
+const NEEDS_FIX_MR = 'मदत कराल का?';
+const NEEDS_FIX_EN = 'Can you help?';
 
 type ToastCall = { message: string; type: 'success' | 'error' | 'partial' } | null;
 type ToastSetter = (toast: ToastCall) => void;

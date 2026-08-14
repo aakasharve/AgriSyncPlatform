@@ -185,9 +185,10 @@ describe('a record that reached NO queue still blocks the receipt (C-1)', () => 
     });
 
     it('it never raises the alarm, because there is nothing to retry (B3)', () => {
-        // `अडकलं — तपासा` means "the system is stuck and you can act". A skipped
-        // log has no queue row, so no worker will retry it and no drawer can
-        // list it. Sending the farmer to check would point at nothing.
+        // `मदत कराल का?` asks the farmer to step in and unblock something. A
+        // skipped log has no queue row, so no worker will retry it and no
+        // drawer can list it — there is nothing for him to unblock. Asking
+        // would summon him to an action that does not exist.
         expect(deriveSyncHonestyState(settled({ unqueueableCount: 9 }))).not.toBe('NEEDS_FIX');
     });
 
@@ -339,7 +340,8 @@ describe('the label and the badge beside it cannot contradict each other', () =>
         }
 
         if (claim === 'NEEDS_FIX') {
-            // "Stuck — check" must be accompanied by a red count.
+            // "Can you help?" must be accompanied by a red count — the ask is
+            // only fair if the farmer can see how much is waiting on him.
             expect(badge.failed).toBeGreaterThan(0);
         }
 
@@ -429,20 +431,49 @@ describe('every state in the model has a label in both languages', () => {
 
     // Plan section G wording, field-testable. If a founder revises the Marathi
     // this test is where it gets revised — deliberately, not by accident.
+    //
+    // FOUNDER REVISION 2026-08-14. `ON_PHONE` and `NEEDS_FIX` were reworded;
+    // both new forms are SHORTENED FROM HIS OWN SENTENCES rather than invented
+    // — `लक्षात ठेवलं` is the tail of his `…व लक्षात ठेवले` (`sync.onPhoneFull`)
+    // and `मदत कराल का?` is his phrase verbatim. The chip is a 72px pill beside
+    // the farm switcher, measured at ~13-16 Devanagari code points; both land
+    // inside it (14 and 12) and both are SHORTER than what they replace (16 and
+    // 13), so no surface can newly clip.
     it('renders the approved Marathi', () => {
-        expect(t(SYNC_HONESTY_I18N_KEYS.ON_PHONE, 'mr')).toBe('मी लिहून घेतलं ✓');
+        expect(t(SYNC_HONESTY_I18N_KEYS.ON_PHONE, 'mr')).toBe('लक्षात ठेवलं ✓');
+        // UNCHANGED, deliberately, and the only one of the three that is. It is
+        // the approved wording, it is already shipping, and it is the single
+        // claim in the model backed by a server acknowledgement — churning it
+        // would be churn for its own sake.
         expect(t(SYNC_HONESTY_I18N_KEYS.ON_SERVER, 'mr')).toBe('शेतनोंदीत जमा ✓');
-        // UNCHANGED, deliberately. The founder's complaint named "saved on
-        // phone" and "cannot be sent"; it did not name this string. It is
-        // already L5b-measured, and T3 proved by enumeration that all three of
-        // its producers have a reachable clearing action.
-        expect(t(SYNC_HONESTY_I18N_KEYS.NEEDS_FIX, 'mr')).toBe('अडकलं — तपासा');
+        expect(t(SYNC_HONESTY_I18N_KEYS.NEEDS_FIX, 'mr')).toBe('मदत कराल का?');
     });
 
     it('renders the approved English', () => {
+        // English must MEAN what the Marathi means, not transliterate it.
+        // `ON_PHONE` already said "Shram Sathi has it" — the same claim
+        // `लक्षात ठेवलं ✓` makes — so it is left alone. `NEEDS_FIX` follows the
+        // Marathi from an instruction into a request for help.
         expect(t(SYNC_HONESTY_I18N_KEYS.ON_PHONE, 'en')).toBe('Shram Sathi has it');
         expect(t(SYNC_HONESTY_I18N_KEYS.ON_SERVER, 'en')).toBe('In your farm records');
-        expect(t(SYNC_HONESTY_I18N_KEYS.NEEDS_FIX, 'en')).toBe('Stuck — check');
+        expect(t(SYNC_HONESTY_I18N_KEYS.NEEDS_FIX, 'en')).toBe('Can you help?');
+    });
+
+    it('the chip labels stay inside the 72px pill the header gives them', () => {
+        // The ceiling is MEASURED, not guessed: at 412px width the pill is a
+        // 72px box with 140.23px of clearance to the farm switcher, and the
+        // outgoing `अडकलं — तपासा` filled 71.92px of it at 13 code points. A
+        // wording pass is exactly where a 20-point sentence gets dropped into
+        // that box, so the budget is asserted rather than remembered.
+        //
+        // Code points, not `.length`: a JS string counts UTF-16 units, and
+        // Devanagari matras are separate code points that render inside the
+        // preceding cluster. This over-counts glyphs, which is the safe
+        // direction for a width budget.
+        for (const state of states) {
+            const label = [...t(SYNC_HONESTY_I18N_KEYS[state], 'mr')];
+            expect(label.length).toBeLessThanOrEqual(16);
+        }
     });
 
     it('only ON_SERVER makes the durability promise', () => {
@@ -468,18 +499,44 @@ describe('every state in the model has a label in both languages', () => {
         // Correct copy with NO SURFACE today: it was drafted for the post-save
         // headline, and L5b ruled the short form there instead. Pinned anyway,
         // so the day it does get a surface it is already the right sentence.
-        expect(t('sync.onPhoneFull', 'mr')).toBe('मी समजून घेतलं — नोंद माझ्याकडे आहे');
-        expect(t('sync.onPhoneFull', 'en')).toBe('Shram Sathi understood — the record is with me');
+        // The founder's own sentence as of 2026-08-14.
+        expect(t('sync.onPhoneFull', 'mr')).toBe('श्रम साथी ने समजले व लक्षात ठेवले');
+        expect(t('sync.onPhoneFull', 'en')).toBe('Shram Sathi understood and remembered it');
         expect(t('sync.onPhoneFull', 'mr')).not.toContain('शेतनोंदीत');
         expect(t('sync.onPhoneFull', 'en').toLowerCase()).not.toContain('farm records');
     });
 
-    it('Shram Sathi speaks in the first person in Marathi', () => {
-        // `WelcomeScreen.tsx:148` already ships `मी श्रम साथी…`. Same
-        // character, same voice — the rule the Understanding-Meter design
-        // states verbatim.
-        expect(t(SYNC_HONESTY_I18N_KEYS.ON_PHONE, 'mr').startsWith('मी')).toBe(true);
-        expect(t('sync.onPhoneFull', 'mr').startsWith('मी')).toBe(true);
+    it('the full ON_SERVER form is the one sentence allowed to name the system', () => {
+        // Also surfaceless — 27 code points against a 72px chip — and defined
+        // for the same reason as `onPhoneFull`: so the sentence is already
+        // right the day something roomier asks for it. Until 2026-08-14 this
+        // key did not exist at all, while `mainViewComponents.tsx` referred to
+        // it by name.
+        expect(t('sync.onServerFull', 'mr')).toBe('श्रम सफल मध्ये साठवून ठेवले');
+        expect(t('sync.onServerFull', 'en')).toBe('Stored in Shram Safal');
+    });
+
+    it('श्रम सफल is the system and श्रम साथी is the helper', () => {
+        // FOUNDER RULING 2026-08-14, and it REPLACES the test that used to
+        // stand here. That one required every `mr` phone claim to start with
+        // `मी` — Sathi in the first person. He relaxed it explicitly ("don't
+        // force that as a hard rule"), and his own replacement sentence names
+        // Sathi in the THIRD person, so the old rule would have rejected the
+        // founder's own copy.
+        //
+        // What survives is the distinction that carries the honesty: naming
+        // श्रम सफल is a claim that THE SYSTEM holds the record, so it may
+        // appear only where an acknowledgement backs it. On the on-phone
+        // claims it would be the precise false promise this phase removed.
+        expect(t(SYNC_HONESTY_I18N_KEYS.ON_PHONE, 'mr')).not.toContain('श्रम सफल');
+        expect(t('sync.onPhoneFull', 'mr')).not.toContain('श्रम सफल');
+        expect(t('sync.onPhoneFull', 'mr')).toContain('श्रम साथी');
+
+        expect(t('sync.onServerFull', 'mr')).toContain('श्रम सफल');
+        expect(t('sync.onServerFull', 'mr')).not.toContain('श्रम साथी');
+
+        // Sathi's own conversational line is untouched and still first person,
+        // so the voice did not disappear — it stopped being enforced by prefix.
         expect(t('shramSathi.understanding', 'mr').startsWith('मी')).toBe(true);
     });
 });

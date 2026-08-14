@@ -20,11 +20,34 @@
  * translation question, and they are revised together, by the founder, as one
  * decision.
  *
- * NOTHING HERE CHANGED IN THE MOVE. Every key and value is byte-identical to
- * what `translations.ts` held immediately before the split;
+ * NOTHING CHANGED IN THE MOVE ITSELF. Every key and value arrived here
+ * byte-identical to what `translations.ts` held immediately before the split;
  * `__tests__/shramSathiVoice.test.ts` and
  * `features/sync/status/__tests__/syncHonestyState.test.ts` pin the values
  * against hand-written literals, independently of this file.
+ *
+ * SINCE THEN, FOUNDER REVISION (2026-08-14) — FIVE VALUES AND ONE NEW KEY.
+ * `sync.onPhone` and `sync.needsFix` were reworded in both languages,
+ * `sync.onPhoneFull` was replaced with the founder's own sentence, and
+ * `sync.onServerFull` was added carrying the other one. His ruling:
+ *
+ *   *"Shram Sathi is a helper person but don't force that as a hard rule —
+ *   just make it readable enough that Shram Safal is the system and Shram
+ *   Sathi is the helper."*
+ *
+ * That RELAXES the rule this file used to enforce (Sathi speaks in the first
+ * person, so every `mr` claim opened with `मी`) and REPLACES it with a
+ * weaker, sharper one: **श्रम सफल is the system, श्रम साथी is the helper.**
+ * The name of the system may appear only where the system genuinely holds
+ * the record. `syncHonestyState.test.ts` now pins that property instead of
+ * the `मी` prefix — his own `onPhoneFull` sentence names Sathi in the third
+ * person and would have failed the old test.
+ *
+ * The chip forms are SHORTENED FROM HIS OWN SENTENCES, not invented:
+ * `लक्षात ठेवलं ✓` is the tail of `…व लक्षात ठेवले`, and `मदत कराल का?` is his
+ * phrase verbatim. `sync.onServer` (`शेतनोंदीत जमा ✓`) is untouched — it was
+ * approved, it is already shipping, and it is the one claim backed by an
+ * acknowledgement.
  */
 import type { Language } from './language';
 
@@ -44,23 +67,48 @@ export interface SyncTranslations {
     /** Rejected, past the retry cap, or never queued at all. */
     needsFix: string;
     /**
-     * The FULL form of the ON_PHONE claim.
+     * The FULL form of the ON_PHONE claim, in the founder's own sentence:
+     * `श्रम साथी ने समजले व लक्षात ठेवले` — "Shram Sathi understood it and
+     * kept it in mind."
      *
-     * The founder's sentence — *"Shram Sathi understood and kept in our
-     * farm records"* — is TWO facts at two different times. "Understood" is
-     * true the instant the record reaches `db.logs`; "kept in our farm
-     * records" is a DURABILITY promise and is true only once the server has
-     * acknowledged it. This key carries the FIRST half only.
+     * IT NAMES THE HELPER AND NOT THE SYSTEM, WHICH IS THE WHOLE POINT. At
+     * this instant a person has the record and the system does not, so the
+     * sentence says exactly that. The earlier draft — *"Shram Sathi
+     * understood and kept in our farm records"* — was two facts at two
+     * different times: "understood" is true the moment the record reaches
+     * `db.logs`, "kept in our farm records" is a DURABILITY promise and is
+     * true only once the server has acknowledged it. `onServerFull` is now
+     * the key that carries the second half, and it is the only one allowed
+     * to say श्रम सफल.
      *
      * NO SURFACE TODAY, and that is deliberate. It was drafted for the
      * post-save headline; L5b measured the short `onPhone` form there at
      * 190.42px on one line — 34px narrower than the string it replaced, 0px
      * fold movement — and the long form was not authorised. Kept as correct
-     * copy awaiting a surface, exactly like `onServerFull` (which is not
-     * defined at all, because at every moment the app could say it there is
-     * no acknowledgement in hand).
+     * copy awaiting a surface. At 33 code points it does not fit the 72px
+     * chip (~13-16) nor the drawer's 34-point split header, which hard-clips.
      */
     onPhoneFull: string;
+
+    /**
+     * The FULL form of the ON_SERVER claim, in the founder's own sentence:
+     * `श्रम सफल मध्ये साठवून ठेवले` — "stored in Shram Safal."
+     *
+     * THE ONLY STRING IN THIS FILE THAT MAY NAME THE SYSTEM. It asserts the
+     * record is inside श्रम सफल, so it may appear only on the state a server
+     * acknowledgement backs — ON_SERVER, and never ON_PHONE. Putting it on
+     * the on-phone state would tell a farmer his work is in the system when
+     * it is only on his handset: the exact false promise this phase exists
+     * to remove (`B5`).
+     *
+     * NO SURFACE TODAY, the same standing as `onPhoneFull` and for the same
+     * reason — 27 code points against a chip that fits ~13-16, which is why
+     * the chip keeps the short `onServer` (`शेतनोंदीत जमा ✓`). It is defined
+     * so the sentence is already right the day a roomier surface asks for
+     * it; `core/navigation/mainViewComponents.tsx` refers to this key by
+     * name and, until now, referred to one that did not exist.
+     */
+    onServerFull: string;
 
     /*
      * ── The TAILS ────────────────────────────────────────────────────────
@@ -172,8 +220,9 @@ export const syncTranslations: Record<Language, SyncTranslations> = {
     en: {
         onPhone: 'Shram Sathi has it',
         onServer: 'In your farm records',
-        needsFix: 'Stuck — check',
-        onPhoneFull: 'Shram Sathi understood — the record is with me',
+        needsFix: 'Can you help?',
+        onPhoneFull: 'Shram Sathi understood and remembered it',
+        onServerFull: 'Stored in Shram Safal',
         notFiledCountTail: '{skipped} of {handled} will not reach your farm records.',
         notFiledBadgeTail: 'will not reach your farm records',
         correctionsFiledTailOne: '{count} labour correction reached your farm records.',
@@ -181,10 +230,11 @@ export const syncTranslations: Record<Language, SyncTranslations> = {
         unsentEditTail: 'The rest of this edit will not reach your farm records.',
     },
     mr: {
-        onPhone: 'मी लिहून घेतलं ✓',
+        onPhone: 'लक्षात ठेवलं ✓',
         onServer: 'शेतनोंदीत जमा ✓',
-        needsFix: 'अडकलं — तपासा',
-        onPhoneFull: 'मी समजून घेतलं — नोंद माझ्याकडे आहे',
+        needsFix: 'मदत कराल का?',
+        onPhoneFull: 'श्रम साथी ने समजले व लक्षात ठेवले',
+        onServerFull: 'श्रम सफल मध्ये साठवून ठेवले',
         notFiledCountTail: '{handled} पैकी {skipped} शेतनोंदीत जाणार नाहीत.',
         notFiledBadgeTail: 'शेतनोंदीत जाणार नाही',
         correctionsFiledTailOne: '{count} दुरुस्त्या शेतनोंदीत गेल्या.',
