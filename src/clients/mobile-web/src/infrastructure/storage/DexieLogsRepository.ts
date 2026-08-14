@@ -40,6 +40,38 @@ function toRecord(log: DailyLog): DexieLogRecord {
     };
 }
 
+/**
+ * P0.5 — CARRY THE SYNC WATERMARK ACROSS EVERY LOCAL WRITE, IN ONE PLACE.
+ *
+ * `serverModifiedAtUtc` is not a field of `DailyLog`; it is sync control state
+ * with exactly one writer (`reconcileLogs`) and one reader (the freshness guard
+ * that stops a STALE pull overwriting a fresher local row). `toRecord` builds a
+ * record from a `DailyLog` and therefore cannot carry it — so any bare
+ * `put(toRecord(...))` silently ERASES the watermark and disarms that guard.
+ *
+ * `save()` already did this correctly and inline. `batchSave()` and `delete()`
+ * did not, and `batchSave` is the primary confirm-and-save path — so the guard
+ * was disarmed on nearly every log a farmer saved, not merely on deletes. The
+ * visible consequence was a deleted log returning on the next pull.
+ *
+ * Extracted rather than copied a third time: three inline copies of a rule this
+ * subtle is how the second one drifts from the first.
+ *
+ * A log this device never pulled has no watermark and still gets none — this
+ * cannot invent a sync that did not happen (`P4`).
+ */
+function toRecordPreservingWatermark(
+    log: DailyLog,
+    existing: DexieLogRecord | undefined,
+): DexieLogRecord {
+    return {
+        ...toRecord(log),
+        ...(existing?.serverModifiedAtUtc
+            ? { serverModifiedAtUtc: existing.serverModifiedAtUtc }
+            : {}),
+    };
+}
+
 function normalizeForRead(log: DailyLog): DailyLog {
     return normalizeMojibakeDeep(log).value as DailyLog;
 }
@@ -142,12 +174,7 @@ export class DexieLogsRepository implements LogsRepository {
             //    Read from `existing`, never minted. A record this device has
             //    never pulled has no watermark and still gets none — this cannot
             //    invent a sync that did not happen (`P4`).
-            await db.logs.put({
-                ...toRecord(log),
-                ...(existing?.serverModifiedAtUtc
-                    ? { serverModifiedAtUtc: existing.serverModifiedAtUtc }
-                    : {}),
-            });
+            await db.logs.put(toRecordPreservingWatermark(log, existing));
 
             // 2. Write outbox event
             const outboxEvent: OutboxEvent = {
@@ -194,7 +221,12 @@ export class DexieLogsRepository implements LogsRepository {
             const now = new Date().toISOString();
 
             for (const log of logs) {
-                await db.logs.put(toRecord(log));
+                // P0.5 — the watermark survives a batch save exactly as it
+                // survives a single one. This is the confirm-and-save path, so
+                // the bare `put(toRecord(log))` that stood here disarmed the
+                // freshness guard on nearly every log a farmer records.
+                const existing = await db.logs.get(log.id);
+                await db.logs.put(toRecordPreservingWatermark(log, existing));
 
                 await db.outbox.add({
                     idempotencyKey: idempotencyKey(log.id, 'UPDATE_LOG'),
@@ -235,7 +267,9 @@ export class DexieLogsRepository implements LogsRepository {
         };
 
         await db.transaction('rw', [db.logs, db.outbox, db.auditEvents], async () => {
-            await db.logs.put(toRecord(updatedLog));
+            // P0.5 — a delete that erased the watermark left the next pull free
+            // to overwrite the row, and the log the farmer deleted came back.
+            await db.logs.put(toRecordPreservingWatermark(updatedLog, record));
 
             await db.outbox.add({
                 idempotencyKey: idempotencyKey(id, 'DELETE_LOG'),
