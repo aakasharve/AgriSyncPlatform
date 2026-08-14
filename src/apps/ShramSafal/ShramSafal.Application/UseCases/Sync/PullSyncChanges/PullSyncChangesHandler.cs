@@ -127,9 +127,32 @@ public sealed class PullSyncChangesHandler(
         var plannedActivities = (await repository.GetPlannedActivitiesChangedSinceAsync(farmIds, sinceUtc, ct))
             .Where(a => cropCycleIds.Contains(a.CropCycleId))
             .ToList();
-        var auditEvents = (await repository.GetAuditEventsChangedSinceAsync(farmIds, sinceUtc, ct))
-            .Where(a => !a.FarmId.HasValue || farmIdSet.Contains(a.FarmId.Value))
-            .ToList();
+        // §P0.2 — the sync pull no longer carries the audit ledger at all.
+        //
+        // Not a trim: every audit row this path could ever have returned was a
+        // NULL-farm cross-tenant row. TenantConnectionInterceptor returns in
+        // user-scoped mode BEFORE setting agrisync.farm_id, so the tenant
+        // policy's equality disjunct was always NULL and only the
+        // `farm_id IS NULL` branch could match. There is no
+        // p_user_select_audit_events. So farmers have never received their own
+        // farm's audit rows here, and the farmIdSet.Contains(...) branch that
+        // used to sit on this line was dead code guarding rows that never
+        // arrived. What DID arrive was the cross-tenant set: S3 object keys for
+        // other farmers' raw voice recordings, erasure subjects' GUIDs,
+        // PII-review staff notes, admin elevation reasons.
+        //
+        // The empty list still flows into ComputeNextCursor and
+        // CollectOperatorIds below — deliberately, so the two effects are
+        // visible rather than deleted: the cursor stops advancing off audit
+        // timestamps (it can only move EARLIER, never later, so no row can be
+        // skipped) and the operator directory stops hydrating strangers'
+        // display names out of leaked ActorUserIds.
+        //
+        // The `auditEvents` field STAYS on the wire as an empty array. APKs in
+        // farmers' hands have it non-optional in their bundled schema; removing
+        // it risks a parse failure that breaks sync entirely. Deleting the field
+        // is a later change gated on client rollout.
+        IReadOnlyList<Domain.Audit.AuditEvent> auditEvents = [];
         var templatesResult = await getScheduleTemplatesHandler.HandleAsync(ct);
         if (!templatesResult.IsSuccess)
         {

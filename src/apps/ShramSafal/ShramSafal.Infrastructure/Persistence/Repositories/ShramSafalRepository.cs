@@ -666,14 +666,23 @@ internal sealed class ShramSafalRepository(ShramSafalDbContext db) : IShramSafal
             .ToListAsync(ct);
     }
 
+    // §P0.2 — farm-scoped changed-since audit read. The `!a.FarmId.HasValue ||`
+    // disjunct that used to lead this predicate was one of the three places the
+    // same hole was written (the other two: the pull handler's filter and the
+    // p_tenant_audit_events USING clause). It admitted every NULL-farm row —
+    // the cross-farm ones — to every caller, whatever farms they asked for.
+    // Nothing in production calls this today: the pull no longer reads the
+    // ledger. It is kept, and kept tight, so that a future caller that DOES
+    // reach for a farm-scoped audit slice gets farm rows and nothing else.
     public async Task<List<AuditEvent>> GetAuditEventsChangedSinceAsync(IEnumerable<Guid> farmIds, DateTime sinceUtc, CancellationToken ct = default)
     {
         var ids = NormalizeFarmIds(farmIds);
+        if (ids.Count == 0) return [];
 
         return await db.AuditEvents
             .AsNoTracking()
             .Where(a => a.OccurredAtUtc > sinceUtc)
-            .Where(a => !a.FarmId.HasValue || ids.Contains(a.FarmId.Value))
+            .Where(a => a.FarmId.HasValue && ids.Contains(a.FarmId.Value))
             .OrderBy(a => a.OccurredAtUtc)
             .ToListAsync(ct);
     }

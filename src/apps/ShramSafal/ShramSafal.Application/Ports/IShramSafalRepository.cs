@@ -132,8 +132,24 @@ public interface IShramSafalRepository
         => GetPlannedActivitiesChangedSinceAsync(sinceUtc, ct);
     Task<List<Attachment>> GetAttachmentsChangedSinceAsync(IEnumerable<Guid> farmIds, DateTime sinceUtc, CancellationToken ct = default)
         => GetAttachmentsChangedSinceAsync(sinceUtc, ct);
+    /// <summary>
+    /// §P0.2 — this default used to FAIL OPEN. It forwarded to the unscoped
+    /// overload, so any implementation that did not override it answered a
+    /// farm-scoped audit request with the WHOLE ledger, silently, while the
+    /// call site read as if it were scoped. Roughly 25 test doubles implement
+    /// only the unscoped overload, so deleting the default is a suite-wide
+    /// compile break and keeping the forward preserves the hazard.
+    ///
+    /// Throwing is the third option: a double that never calls this is
+    /// unaffected, and one that does gets a loud stop instead of the ledger.
+    /// The production override in ShramSafalRepository is the only real
+    /// implementation.
+    /// </summary>
     Task<List<AuditEvent>> GetAuditEventsChangedSinceAsync(IEnumerable<Guid> farmIds, DateTime sinceUtc, CancellationToken ct = default)
-        => GetAuditEventsChangedSinceAsync(sinceUtc, ct);
+        => throw new NotSupportedException(
+            "GetAuditEventsChangedSinceAsync(farmIds, ...) has no fail-open default. "
+            + "Forwarding to the unscoped overload returned the entire audit ledger "
+            + "for a farm-scoped request (§P0.2). Override it on this implementation.");
 
     Task<List<AuditEvent>> GetAuditEventsForEntityAsync(Guid entityId, string entityType, CancellationToken ct = default);
     Task<List<AuditEvent>> GetAuditEventsForFarmAsync(Guid farmId, DateOnly from, DateOnly to, int limit, int offset, CancellationToken ct = default);
