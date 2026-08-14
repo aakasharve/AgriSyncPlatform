@@ -17,7 +17,7 @@ import { getDateKey } from '../../../../core/domain/services/DateKeyService';
 import { buildWorkDoneProjection } from '../../services/workDoneProjection';
 import { buildAiCorrectionEvents, persistAiCorrectionEvents, postAiCorrectionBlob } from '../../../../infrastructure/ai/CorrectionEventStore';
 
-import { ManualEntryProps, TargetSelectionGroup } from './types';
+import { ManualEntryProps, TargetSelectionGroup, ManualEntryFormOrigin } from './types';
 import { useManualEntryHydration } from './hooks/useManualEntryHydration';
 import { buildLinkedDetailMaps } from './services/loadLogIntoEditor';
 import ManualEntryHeader from './components/ManualEntryHeader';
@@ -57,6 +57,12 @@ const ManualEntry: React.FC<ManualEntryProps> = ({ context, crops, defaults, pro
     const handleLogSelect = (logId: string) => {
         const log = todayLogs.find(l => l.id === logId);
         if (!log) return;
+
+        // task-0b — this is a fill site too: everything below comes out of a log that
+        // was already saved, so say so. (handleSaveDay also short-circuits on
+        // selectedLogId; the marker is set anyway so the origin never depends on a
+        // second, unrelated piece of state staying in sync.)
+        formOriginRef.current = 'existing-log';
 
         // Load all data from the selected log
         setSelectedLogId(logId);
@@ -127,6 +133,11 @@ const ManualEntry: React.FC<ManualEntryProps> = ({ context, crops, defaults, pro
     const hasVoiceDataBeenApplied = React.useRef(false);
     const initialAiDataRef = React.useRef<AgriLogResponse | null>(null);
 
+    // task-0b (spec: dfes-farmer-facing-deploy-readiness-2026-08-14) — set by whichever
+    // code fills this form, read by handleSaveDay. Starts 'blank' because a freshly
+    // mounted form IS empty until something fills it.
+    const formOriginRef = React.useRef<ManualEntryFormOrigin>('blank');
+
     // --- PRE-FILL & HYDRATION ---
     useManualEntryHydration({
         initialData,
@@ -137,6 +148,7 @@ const ManualEntry: React.FC<ManualEntryProps> = ({ context, crops, defaults, pro
         onDataConsumed,
         hasVoiceDataBeenApplied,
         initialAiDataRef,
+        formOriginRef,
         setCropActivities,
         setIrrigationMap,
         setLabourMap,
@@ -315,17 +327,30 @@ const ManualEntry: React.FC<ManualEntryProps> = ({ context, crops, defaults, pro
             // in-session `provenance` state can be stale from an unrelated
             // earlier parse and must not be misattributed to a different log.
             //
-            // task-0b (dfes-farmer-facing-deploy-readiness-2026-08-14) — when there is
-            // NO AI provenance this is a genuinely hand-typed day, and it now SAYS SO
-            // instead of being inferred from the absence of a marker. The sync layer
-            // ships the typed draft only on a positive `source: 'manual'` assertion,
-            // because a voice log can reach it unmarked too (useLogCommands.ts:242-250
-            // passes undefined provenance) and shipping AI figures as manual would be a
-            // permanent provenance lie (P8). Declaring origin at the point that KNOWS it
-            // is the only way the gate can be both correct and fail-safe.
+            // task-0b (dfes-farmer-facing-deploy-readiness-2026-08-14) — a genuinely
+            // hand-typed day now SAYS SO, because the sync layer ships the typed draft
+            // only on a positive `source: 'manual'` assertion (a voice log can reach it
+            // unmarked too — useLogCommands.ts:242-250 passes undefined provenance).
+            //
+            // But the claim is only ever repeated here, never worked out here. This
+            // button sees populated buckets and no AI marker and cannot tell a day the
+            // farmer typed from one the AI filled in for him — and two routes deliver
+            // exactly that: "Edit This Log" (mainView `onEditLog` hands the saved log
+            // in as initialData with no provenance) and the same-day re-open (the
+            // hydration hook merges today's already-saved log back into the form). So
+            // the answer comes from `formOriginRef`, written by whichever code filled
+            // the form. Only a form that started and stayed EMPTY earns the claim.
+            //
+            // Anything else falls back to claiming nothing, which is the pre-task-0b
+            // wire exactly: no assertion, no draft shipped, nothing lost. The opposite
+            // error is not recoverable — the server stamps an AI-inferred figure
+            // `Provenance.Manual` (model "n/a", no extractor SHA) and doctrine P8 makes
+            // that permanent. Silence is safe; a false claim never is.
             provenance: selectedLogId
                 ? undefined
-                : (provenance ?? { source: 'manual', timestamp: new Date().toISOString() })
+                : (provenance ?? (formOriginRef.current === 'blank'
+                    ? { source: 'manual' as const, timestamp: new Date().toISOString() }
+                    : undefined))
         };
 
         if (initialAiDataRef.current && provenance?.source === 'ai') {

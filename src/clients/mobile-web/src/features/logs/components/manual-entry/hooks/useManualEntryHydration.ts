@@ -12,6 +12,7 @@ import {
 } from '../../../../../types';
 import { isCompletedIrrigationEvent } from '../../../services/irrigationCompletion';
 import { getDateKey } from '../../../../../core/domain/services/DateKeyService';
+import type { ManualEntryFormOrigin } from '../types';
 
 interface HydrationParams {
     initialData?: AgriLogResponse | null;
@@ -22,6 +23,12 @@ interface HydrationParams {
     onDataConsumed?: () => void;
     hasVoiceDataBeenApplied: React.MutableRefObject<boolean>;
     initialAiDataRef: React.MutableRefObject<AgriLogResponse | null>;
+    /**
+     * spec: dfes-farmer-facing-deploy-readiness-2026-08-14 (task-0b) — written by this
+     * hook, read by the save button. This effect is the only code that knows whether
+     * the form the farmer is looking at was filled by him or filled for him.
+     */
+    formOriginRef: React.MutableRefObject<ManualEntryFormOrigin>;
     setCropActivities: React.Dispatch<React.SetStateAction<CropActivityEvent[]>>;
     setIrrigationMap: React.Dispatch<React.SetStateAction<Record<string, IrrigationEvent>>>;
     setLabourMap: React.Dispatch<React.SetStateAction<Record<string, LabourEvent>>>;
@@ -42,7 +49,7 @@ interface HydrationParams {
 export function useManualEntryHydration(params: HydrationParams): void {
     const {
         initialData, activePlot, defaults, profile, todayLogs, onDataConsumed,
-        hasVoiceDataBeenApplied, initialAiDataRef,
+        hasVoiceDataBeenApplied, initialAiDataRef, formOriginRef,
         setCropActivities, setIrrigationMap, setLabourMap, setMachineryMap, setInputMap,
         setExpenses, setObservations, setPlannedTasks, setDisturbance, setTranscript,
     } = params;
@@ -169,6 +176,23 @@ export function useManualEntryHydration(params: HydrationParams): void {
                 }
             });
         }
+
+        // task-0b (spec: dfes-farmer-facing-deploy-readiness-2026-08-14) — did the merge
+        // above actually put anything in the form? Measured HERE, before the initialData
+        // overlay writes into the same maps, so it reports only what came out of
+        // already-saved logs. Presence of a log is not enough: a log that contributed
+        // nothing leaves the form genuinely blank, and needlessly withholding a typed
+        // day would revert the very fix task-0b landed.
+        const filledFromExistingLogs =
+            Object.keys(newLabourMap).length > 0
+            || Object.keys(newIrrigationMap).length > 0
+            || Object.keys(newMachineryMap).length > 0
+            || Object.keys(newInputMap).length > 0
+            || currentExpenses.length > 0
+            || currentObservations.length > 0
+            || currentTasks.length > 0
+            || (globalActivity.workTypes?.length ?? 0) > 0
+            || currentDisturbance !== undefined;
 
         // 2. SMART DATA OVERLAY (InitialData from Voice)
         if (initialData) {
@@ -341,6 +365,16 @@ export function useManualEntryHydration(params: HydrationParams): void {
             }
             if (initialData.fullTranscript) setTranscript(initialData.fullTranscript);
         }
+
+        // task-0b — DECLARE THE ORIGIN. This runs on every pass that actually fills the
+        // form, so the marker always describes the state being committed just below.
+        // The two early returns above are deliberately NOT covered: neither touches the
+        // form, so the marker from the run that DID fill it stays correct (in
+        // particular the `hasVoiceDataBeenApplied` return, which fires right after a
+        // draft was applied and must not downgrade it to 'blank').
+        formOriginRef.current = initialData
+            ? 'prefilled-draft'
+            : (filledFromExistingLogs ? 'existing-log' : 'blank');
 
         // Apply Final State
         setCropActivities([globalActivity]);

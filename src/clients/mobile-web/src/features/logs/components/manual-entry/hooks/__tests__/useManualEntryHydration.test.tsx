@@ -23,6 +23,7 @@ import {
     InputEvent, CropActivityEvent, ActivityExpenseEvent, ObservationNote,
     PlannedTask, DisturbanceEvent, FarmerProfile, LedgerDefaults, DailyLog,
 } from '../../../../../../types';
+import type { ManualEntryFormOrigin } from '../../types';
 
 /** A populated parse with flat buckets and an empty cropActivities array. */
 function makeInitialData(): AgriLogResponse {
@@ -94,7 +95,11 @@ function runHydration(opts: {
     initialData?: AgriLogResponse | null;
     activePlot: Plot | undefined;
     todayLogs?: DailyLog[];
-}): { captured: Captured; onDataConsumed: ReturnType<typeof vi.fn> } {
+}): {
+    captured: Captured;
+    onDataConsumed: ReturnType<typeof vi.fn>;
+    formOrigin: React.MutableRefObject<ManualEntryFormOrigin>;
+} {
     const captured: Captured = {
         cropActivities: [],
         irrigationMap: {},
@@ -119,6 +124,7 @@ function runHydration(opts: {
     const onDataConsumed = vi.fn();
     const hasVoiceDataBeenApplied = { current: false } as React.MutableRefObject<boolean>;
     const initialAiDataRef = { current: null } as React.MutableRefObject<AgriLogResponse | null>;
+    const formOrigin = { current: 'blank' } as React.MutableRefObject<ManualEntryFormOrigin>;
 
     renderHook(() =>
         useManualEntryHydration({
@@ -130,6 +136,7 @@ function runHydration(opts: {
             onDataConsumed,
             hasVoiceDataBeenApplied,
             initialAiDataRef,
+            formOriginRef: formOrigin,
             setCropActivities: setter('cropActivities') as React.Dispatch<React.SetStateAction<CropActivityEvent[]>>,
             setIrrigationMap: setter('irrigationMap') as React.Dispatch<React.SetStateAction<Record<string, IrrigationEvent>>>,
             setLabourMap: setter('labourMap') as React.Dispatch<React.SetStateAction<Record<string, LabourEvent>>>,
@@ -143,7 +150,7 @@ function runHydration(opts: {
         })
     );
 
-    return { captured, onDataConsumed };
+    return { captured, onDataConsumed, formOrigin };
 }
 
 describe('useManualEntryHydration — Entire Farm (no single plot)', () => {
@@ -277,7 +284,7 @@ describe('useManualEntryHydration — provenanceVerified guardrail (spec: dfes-c
         expect(captured.cropActivities[0].provenanceVerified).toBeUndefined();
     });
 
-    it('threads provenanceVerified through plannedTasks', () => {
+    it('threads provenanceVerified through plannedTasks (guardrail)', () => {
         const initialData: AgriLogResponse = {
             ...makeInitialData(),
             plannedTasks: [
@@ -294,5 +301,76 @@ describe('useManualEntryHydration — provenanceVerified guardrail (spec: dfes-c
         const { captured } = runHydration({ initialData, activePlot: makePlot() });
 
         expect(captured.plannedTasks[0].provenanceVerified).toBe(false);
+    });
+});
+
+/**
+ * spec: dfes-farmer-facing-deploy-readiness-2026-08-14 (task-0b) — THE ORIGIN MARKER.
+ *
+ * This hook is the only code that knows whether the form the farmer is looking at was
+ * filled by him or filled for him, so it is the code that says so. The save button
+ * reads the marker and may claim `source: 'manual'` ONLY for 'blank'; anything else
+ * makes no claim and ships nothing, which is the pre-task-0b wire exactly.
+ */
+function makeSavedLog(partial: Partial<DailyLog>): DailyLog {
+    return {
+        id: 'log_saved_1',
+        date: '2026-08-15',
+        context: { selection: [{ cropId: 'crop_1', cropName: 'Grapes', selectedPlotIds: ['plot_1'], selectedPlotNames: ['North Block'] }] },
+        ...partial,
+    } as unknown as DailyLog;
+}
+
+describe('useManualEntryHydration — form origin (spec: dfes-farmer-facing-deploy-readiness-2026-08-14)', () => {
+    it('marks a handed-in AgriLogResponse as prefilled-draft, never as blank', () => {
+        // Covers BOTH producers of initialData — a fresh voice parse and mainView's
+        // "Edit This Log" conversion. The hook cannot tell them apart, and does not
+        // pretend to: it reports only that the farmer did not type this here.
+        const { formOrigin, captured } = runHydration({
+            initialData: makeInitialData(),
+            activePlot: makePlot(),
+        });
+
+        expect(captured.labourMap['act_global_daily'].count).toBe(2);
+        expect(formOrigin.current).toBe('prefilled-draft');
+    });
+
+    it('marks a form filled from today\'s already-saved log as existing-log', () => {
+        const { formOrigin, captured } = runHydration({
+            initialData: null,
+            activePlot: makePlot(),
+            todayLogs: [makeSavedLog({
+                labour: [{ id: 'ai_lab_1', type: 'HIRED', count: 3, activity: 'Spraying' }],
+            } as unknown as Partial<DailyLog>)],
+        });
+
+        expect(captured.labourMap['act_global_daily'].count).toBe(3);
+        expect(formOrigin.current).toBe('existing-log');
+    });
+
+    it('marks a form that nothing filled as blank, so a typed day still ships', () => {
+        const { formOrigin, captured } = runHydration({
+            initialData: null,
+            activePlot: makePlot(),
+        });
+
+        expect(Object.keys(captured.labourMap)).toHaveLength(0);
+        expect(formOrigin.current).toBe('blank');
+    });
+
+    it('stays blank when today\'s log exists but contributed nothing to the form', () => {
+        // Presence of a log is not the test — what landed in the form is. Withholding
+        // here would cost the farmer his score for a day he really did type out.
+        const { formOrigin, captured } = runHydration({
+            initialData: null,
+            activePlot: makePlot(),
+            todayLogs: [makeSavedLog({
+                labour: [], irrigation: [], machinery: [], inputs: [],
+                cropActivities: [], activityExpenses: [], observations: [], plannedTasks: [],
+            } as unknown as Partial<DailyLog>)],
+        });
+
+        expect(Object.keys(captured.labourMap)).toHaveLength(0);
+        expect(formOrigin.current).toBe('blank');
     });
 });
