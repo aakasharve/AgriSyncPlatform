@@ -292,7 +292,7 @@ textarea:focus-visible {
     /* Oversized on purpose — this only CAPS height, so a max-height
        transition plays the same collapse regardless of the real card
        height (the standard CSS max-height collapse technique). */
-    max-height: 600px;
+    max-height: 2000px;
     opacity: 1;
     overflow: hidden;
     transition: max-height 220ms ease-in-out 160ms, opacity 220ms ease-in-out 160ms;

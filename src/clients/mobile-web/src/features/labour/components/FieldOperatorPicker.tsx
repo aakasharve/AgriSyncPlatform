@@ -313,10 +313,56 @@ const FieldOperatorPicker: React.FC<Props> = ({ farmId, labourAssignmentId, onTo
                     {loading && <LoadingState label="माणसं आणत आहोत…" compact />}
                     {loadFailed && <LoadErrorBanner onRetry={() => void load()} compact />}
                     {!loading && !loadFailed && rows.length === 0 && (
+                        /*
+                         * INSTRUCTIONAL EXAMPLES (founder, 2026-08-14: "less
+                         * opacity worker names so that they can mention their
+                         * worker names"). An empty list does not tell a
+                         * first-time farmer WHAT belongs in it; three faint
+                         * names do, with no instruction to read. There is
+                         * deliberately NO lead word — an earlier draft opened
+                         * with "उदा." and the founder cut it.
+                         *
+                         * §B6 — DEMO PEOPLE ARE UI EXAMPLES ONLY, ZERO FAKE
+                         * `FieldOperator` ROWS. These are three string
+                         * literals. Nothing fetches, creates, attaches or
+                         * stores them, so `ssf.field_operators` stays at 0
+                         * because of them; and they can never be mistaken for
+                         * someone selectable, because there is nothing to
+                         * select — no avatar, no card, no `+`, no tap target,
+                         * not a `<button>` and no handler, so `P5` (a control
+                         * that looks functional and is not) cannot apply.
+                         * `aria-hidden` because announcing three people who
+                         * do not exist is worse than silence. The guard on
+                         * this branch already excludes loading and load
+                         * failure, so they show ONLY while the farm is
+                         * knowably empty, and vanish the moment a real roster
+                         * — or the farmer's own first person — arrives.
+                         *
+                         * They ride `EmptyState`'s trailing slot rather than a
+                         * new prop, so the honest "अजून कुणाचं नाव नाही"
+                         * heading stays directly above them and the shared kit
+                         * is untouched.
+                         */
                         <EmptyState
                             icon={<Users size={22} />}
                             title="अजून कुणाचं नाव नाही"
                             subtitle="खाली नाव लिहून पहिलं नाव जोडा."
+                            action={
+                                <span
+                                    aria-hidden="true"
+                                    data-testid="fo-example-names"
+                                    // Name-sized and name-weighted, because the lesson is
+                                    // WHERE a name goes — but at 35% ink (~2.1:1 on white),
+                                    // fainter than this component's own placeholders
+                                    // (stone-400, ~2.5:1). The faintness IS the design; it
+                                    // is not a contrast defect to be "fixed".
+                                    className="mt-1 flex flex-wrap justify-center gap-x-4 gap-y-1 text-[19px] font-bold text-stone-800/35"
+                                >
+                                    <span>सुनीता</span>
+                                    <span>संदीप</span>
+                                    <span>विलास</span>
+                                </span>
+                            }
                         />
                     )}
                     {!loading && !loadFailed && rows.map((row) => {

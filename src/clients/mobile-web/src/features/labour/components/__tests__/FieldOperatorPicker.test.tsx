@@ -544,3 +544,175 @@ describe('Task 13.1b — the engagement visibly carries the person afterwards', 
         expect(screen.queryByTestId('fo-picker-attached')).toBeNull();
     });
 });
+
+// ===========================================================================
+// Phase 6 — instructional examples on an empty roster.
+//
+// An empty list does not tell a first-time farmer WHAT belongs in it. Three
+// faint names do, without a word of instruction. The whole risk of that idea
+// is that a name on screen looks like a person in the system, so every test
+// below exists to prove the opposite: these are three string literals that
+// create nothing, fetch nothing, store nothing and cannot be tapped.
+//
+// §B6, the binding constraint: demo people are UI EXAMPLES ONLY — zero fake
+// `FieldOperator` rows. The plan's acceptance test is a database assertion
+// (`SELECT count(*) FROM ssf.field_operators` = 0); its front-end half is
+// here, because `createFieldOperator` / `attachFieldOperator` are the ONLY
+// two calls in this client that can put a row in that table.
+// ===========================================================================
+
+describe('Phase 6 — the empty roster teaches by example, and creates nobody', () => {
+    /*
+     * The oracle. A deliberate second copy of the literals the component
+     * renders, held here rather than imported, so changing a farmer-facing
+     * name is a decision someone has to make in two places — the same
+     * discipline `translationsSplit.test.ts` applies to Marathi copy. It is
+     * also what stops a real person's name, or a nag phrase, being slipped in
+     * silently.
+     */
+    const EXAMPLE_NAMES = ['सुनीता', 'संदीप', 'विलास'];
+
+    /*
+     * jsdom ships no IndexedDB, so a spied stand-in is the whole of the
+     * device's local storage for the duration of these tests. `open` is the
+     * first thing Dexie does — before it can read or write a single row — so
+     * zero calls to it is a complete proof that nothing was persisted
+     * locally, not a proxy for one.
+     */
+    const originalIndexedDb = Reflect.get(globalThis, 'indexedDB');
+    let idbOpen: ReturnType<typeof vi.fn>;
+
+    beforeEach(() => {
+        idbOpen = vi.fn();
+        Reflect.set(globalThis, 'indexedDB', { open: idbOpen, deleteDatabase: vi.fn(), databases: vi.fn() });
+    });
+    afterEach(() => Reflect.set(globalThis, 'indexedDB', originalIndexedDb));
+
+    /** Empty roster, panel open, examples on screen — the state under test. */
+    const openOnEmptyRoster = async (onToast = vi.fn()) => {
+        mockFetch.mockResolvedValue([]);
+        renderPicker(onToast);
+        await openPicker();
+        return screen.findByTestId('fo-example-names');
+    };
+
+    it('shows the example names, and exactly those, once the roster comes back genuinely empty', async () => {
+        const examples = await openOnEmptyRoster();
+
+        expect([...examples.children].map((el) => el.textContent)).toEqual(EXAMPLE_NAMES);
+        // They sit under the honest heading, which still says there is nobody
+        // here — so the screen never claims these three are a roster.
+        expect(screen.getByText('अजून कुणाचं नाव नाही')).toBeInTheDocument();
+    });
+
+    it('carries NO lead word — just the names (the founder cut "उदा.")', async () => {
+        const examples = await openOnEmptyRoster();
+
+        expect(examples.textContent).not.toMatch(/उदा|उदाहरण|e\.g\.|example/i);
+        // And nothing numeric crept in with them (P9: no counts anywhere on
+        // this optional overlay, in either digit system).
+        expect(examples.textContent).not.toMatch(/[0-9०-९]/);
+    });
+
+    it('is inert text, not a control: no button, no link, no role, no tab stop, no handler', async () => {
+        const examples = await openOnEmptyRoster();
+
+        expect(examples.tagName).toBe('SPAN');
+        expect(examples.closest('button')).toBeNull();
+        expect(examples.querySelector('button, a, input, [role], [tabindex], [onclick], [href]')).toBeNull();
+        [...examples.children].forEach((child) => {
+            expect(child.tagName).toBe('SPAN');
+            expect(child.hasAttribute('role')).toBe(false);
+            expect(child.hasAttribute('tabindex')).toBe(false);
+        });
+    });
+
+    it('does nothing at all when tapped — no attach, no create, no toast, no selection', async () => {
+        const onToast = vi.fn();
+        const examples = await openOnEmptyRoster(onToast);
+
+        [...examples.children].forEach((child) => fireEvent.click(child));
+        fireEvent.click(examples);
+
+        expect(mockCreate).not.toHaveBeenCalled();
+        expect(mockAttach).not.toHaveBeenCalled();
+        expect(onToast).not.toHaveBeenCalled();
+        expect(screen.queryByTestId('fo-picker-attached')).toBeNull();
+    });
+
+    it('mints no Field Operator by existing — the two calls that could write a row are never made', async () => {
+        await openOnEmptyRoster();
+
+        // The front-end half of `SELECT count(*) FROM ssf.field_operators` = 0.
+        expect(mockCreate).not.toHaveBeenCalled();
+        expect(mockAttach).not.toHaveBeenCalled();
+        // And not one of them is a selectable person: no operator row exists.
+        expect(document.querySelectorAll('[data-testid^="fo-row-"]')).toHaveLength(0);
+    });
+
+    it('writes nothing to the device — no local database is so much as opened', async () => {
+        await openOnEmptyRoster();
+
+        expect(idbOpen).not.toHaveBeenCalled();
+    });
+
+    it('is hidden from screen readers — three people who do not exist are never announced', async () => {
+        const examples = await openOnEmptyRoster();
+
+        expect(examples).toHaveAttribute('aria-hidden', 'true');
+        EXAMPLE_NAMES.forEach((name) => expect(screen.queryByLabelText(name)).toBeNull());
+    });
+
+    it('never appears before the farmer opts in — the closed opt-in shows no names (P9)', () => {
+        renderPicker();
+
+        expect(screen.queryByTestId('fo-example-names')).toBeNull();
+        expect(mockFetch).not.toHaveBeenCalled();
+    });
+
+    it('does not flash while the roster is still being fetched', async () => {
+        let releaseRoster!: (operators: FieldOperator[]) => void;
+        mockFetch.mockImplementation(() => new Promise<FieldOperator[]>((resolve) => { releaseRoster = resolve; }));
+        renderPicker();
+        await openPicker();
+
+        expect(screen.getByText('माणसं आणत आहोत…')).toBeInTheDocument();
+        expect(screen.queryByTestId('fo-example-names')).toBeNull();
+
+        releaseRoster([]);
+        await waitFor(() => expect(screen.getByTestId('fo-example-names')).toBeInTheDocument());
+    });
+
+    it('never appears when the roster failed to load — a failure is not an empty farm', async () => {
+        mockFetch.mockRejectedValueOnce(new Error('offline'));
+        renderPicker();
+        await openPicker();
+
+        await screen.findByText('माहिती आणता आली नाही');
+        expect(screen.queryByTestId('fo-example-names')).toBeNull();
+        // Nor do the names leak in as loose text beside the error.
+        EXAMPLE_NAMES.forEach((name) => expect(screen.queryByText(name)).toBeNull());
+    });
+
+    it('is gone the moment a real roster arrives — never sits beside a real person', async () => {
+        mockFetch.mockResolvedValue([GANESH]);
+        renderPicker();
+        await openPicker();
+
+        await screen.findByTestId(`fo-row-${GANESH.id}`);
+        expect(screen.queryByTestId('fo-example-names')).toBeNull();
+        EXAMPLE_NAMES.forEach((name) => expect(screen.queryByText(name)).toBeNull());
+    });
+
+    it('is gone the instant the farmer’s OWN first person lands, with no re-fetch', async () => {
+        mockCreate.mockResolvedValue(BALU_NO_FULL);
+        await openOnEmptyRoster();
+
+        fireEvent.change(screen.getByTestId('fo-new-name'), { target: { value: 'बाळू' } });
+        fireEvent.click(screen.getByTestId('fo-add'));
+
+        await screen.findByTestId(`fo-row-${BALU_NO_FULL.id}`);
+        expect(screen.queryByTestId('fo-example-names')).toBeNull();
+        expect(mockFetch).toHaveBeenCalledTimes(1);
+    });
+});
