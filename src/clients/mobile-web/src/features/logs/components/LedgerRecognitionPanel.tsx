@@ -42,6 +42,14 @@
  * "severe weather, no logged impact" care-check signal) under the SAME
  * questionsEnabled gate as scheduleContext/weatherContext.
  *
+ * Task 7 (spec: dfes-farmer-facing-deploy-readiness-2026-08-14): same call
+ * site, same gate, now also runs computePreviousLog over the SAME `allLogs`
+ * ledger — the farmer's most recent prior working day, so the day's question
+ * can refer back to real work ("{daysAgo} दिवसांपूर्वी {lastActivity}") instead of
+ * asking in a vacuum. `resolvedDate` is the SAVED log's own date, so the log
+ * just written is never cited as "last time". No prior working log means the
+ * field stays undefined and the clause disappears (P4 — never invented).
+ *
  * Task 8 (spec: dfes-companion-2026-07-11): this is also the fire-once
  * wire for "Sathi talks back" — the same live `engagement` this panel
  * already fetches carries `unlockStatus`, so a `useEffect` here speaks the
@@ -60,6 +68,7 @@ import { t as translateForced } from '../../../i18n/translations';
 import { useFarmerEngagement } from '../hooks/useFarmerEngagement';
 import { computeScheduleGap } from '../services/dfesScheduleWindow';
 import { reconcileWeather } from '../services/dfesWeatherReconcile';
+import { computePreviousLog } from '../services/dfesPreviousLog';
 import type { WeatherTriggerContext } from '../services/dfesQuestionEngine';
 import { speakUnlockReward } from '../../../infrastructure/voice/speakUnlockReward';
 import { wasUnlockSpoken, markUnlockSpoken } from '../../../infrastructure/storage/unlockSpeechStore';
@@ -143,6 +152,13 @@ export function LedgerRecognitionPanel({
     // Task 4B: SAME gate — a flag-OFF (or farm-less) render never runs the
     // severe-weather-reconciliation check either, zero extra work.
     const weatherReconcileContext = questionsEnabled ? reconcileWeather(savedLog) ?? undefined : undefined;
+    // Task 7: SAME gate — the farmer's most recent prior working day, read off
+    // the same real `allLogs` ledger the schedule gap already uses, so a
+    // question can refer back to actual work. `undefined` when there is no such
+    // log (P4: never invented) — resolvePrompt then drops the clause entirely.
+    const previousLog = questionsEnabled
+        ? computePreviousLog(allLogs, plotId, resolvedDate) ?? undefined
+        : undefined;
 
     // Task 8: "Sathi talks back" — fires the spoken unlock reward EXACTLY
     // ONCE ever per farm. Flag OFF returns immediately: no speak, no
@@ -178,6 +194,7 @@ export function LedgerRecognitionPanel({
                 scheduleContext,
                 weather: weatherContext,
                 weatherReconcileContext,
+                previousLog,
                 engagement: {
                     totalRichDays: engagement?.totalRichDays ?? 0,
                     unlockStatus: engagement?.unlockStatus ?? 'locked',

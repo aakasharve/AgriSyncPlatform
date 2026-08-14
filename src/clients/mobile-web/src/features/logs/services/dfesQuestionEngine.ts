@@ -72,6 +72,14 @@ export interface DailyQuestionInputs {
     engagement: { totalRichDays: number; unlockStatus: 'locked' | 'unlocked' };
     recentEvents: RecentQuestionEvent[];
     openObservation?: { summary: string };
+    /**
+     * Task 7 — what the farmer actually did on their most recent prior working
+     * day (dfesPreviousLog.computePreviousLog), so a question can refer back to
+     * real work instead of asking in a vacuum. ABSENT when there is no such log:
+     * P4 forbids inventing one, and `resolvePrompt` drops the whole clause
+     * rather than filling it with a guess.
+     */
+    previousLog?: { activityMr: string; daysAgo: number };
 }
 
 export interface SelectedQuestion {
@@ -104,11 +112,50 @@ function eligible(q: DfesQuestion | undefined, recent: RecentQuestionEvent[]): q
     return approved(q) && !onCooldown(q, recent);
 }
 
-function resolvePrompt(promptMr: string, inputs: DailyQuestionInputs): string {
+/**
+ * Resolve the Marathi prompt against everything the engine already knows.
+ *
+ * Founder ruling 3 (2026-08-14): a question must be context-rich, not generic.
+ * The engine has always USED weather and stage to pick the question; it never
+ * SPOKE them. It does now.
+ *
+ * Every token is stripped when its context is absent — a farmer must never see
+ * a raw `{weather}`, and a sentence that reads oddly without its clause is a
+ * copy problem to fix in the bank, not a reason to print a placeholder.
+ *
+ * One tokenising pass rather than a chain of `.replace` calls, so the
+ * guarantee is structural rather than a list that has to stay in step with the
+ * bank: EVERY `{token}` occurrence is matched (a template using a token twice
+ * cannot leak the second one), and a token this resolver does not know about —
+ * a copy typo like `{crops}` — is stripped exactly the same way instead of
+ * reaching the farmer.
+ *
+ * Exported so the resolution itself is testable directly, without having to
+ * add tokens to agronomist-approved bank copy to exercise it.
+ *
+ * KNOWN LIMIT — `{weather}`: WeatherTriggerContext.conditionText is the weather
+ * provider's own text and is ENGLISH ('Clear', 'Light rain', 'Partly Cloudy');
+ * there is no reviewed English->Marathi condition vocabulary in the repo, and
+ * inventing one here would be unreviewed Marathi shipped in code. No bank entry
+ * carries {weather} today, so nothing English can reach a farmer — but do NOT
+ * add {weather} to a prompt until that vocabulary exists (or the numbers the
+ * question already triggers on are spoken instead). Raised as a blocker in the
+ * Task 7 context-rich-prompt drafts sent for agronomist review.
+ */
+export function resolvePrompt(promptMr: string, inputs: DailyQuestionInputs): string {
+    const values: Readonly<Record<string, string | undefined>> = {
+        crop: inputs.crop,
+        observation: inputs.openObservation?.summary,
+        category: inputs.scheduleContext?.categoryLabelMr,
+        weather: inputs.weather?.conditionText,
+        lastActivity: inputs.previousLog?.activityMr,
+        daysAgo: inputs.previousLog === undefined ? undefined : String(inputs.previousLog.daysAgo),
+    };
     return promptMr
-        .replace('{crop}', inputs.crop)
-        .replace('{observation}', inputs.openObservation?.summary ?? '')
-        .replace('{category}', inputs.scheduleContext?.categoryLabelMr ?? '');
+        .replace(/\{([a-zA-Z]+)\}/g, (_match, token: string) => values[token] ?? '')
+        .replace(/\s{2,}/g, ' ')
+        .replace(/\s+([,.?!])/g, '$1')
+        .trim();
 }
 
 function pack(q: DfesQuestion, inputs: DailyQuestionInputs, reason: string): SelectedQuestion {

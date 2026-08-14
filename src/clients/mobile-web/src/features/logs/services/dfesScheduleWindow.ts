@@ -47,8 +47,12 @@ export interface ScheduleGapContext {
  *   - FERTIGATION  'खत'    — i18n/translations.ts context.inputs 'खत आणि औषधे' / noInputs 'आज खत/औषध वापरले नाही'
  *   - IRRIGATION   'सिंचन'  — i18n/translations.ts context.irrigation
  *   - ACTIVITY     'कामे'   — i18n/translations.ts activitiesLogged 'कामे नोंदवली'
+ *
+ * Exported (Task 7, spec: dfes-farmer-facing-deploy-readiness-2026-08-14) so
+ * dfesPreviousLog.ts speaks the farmer's previous work with these SAME four
+ * approved words rather than defining a second, divergable copy of them.
  */
-const CATEGORY_LABEL_MR: Readonly<Record<OperationCategory, string>> = {
+export const CATEGORY_LABEL_MR: Readonly<Record<OperationCategory, string>> = {
     FOLIAR_SPRAY: 'फवारणी',
     FERTIGATION: 'खत',
     IRRIGATION: 'सिंचन',
