@@ -69,9 +69,16 @@ find src/clients/mobile-web/src -name 'REPRO-*.test.ts'  # which reproductions r
 |---|---|
 | §P0.5 same-device destruction · §P0.6 money · §P0.7 offline trust | `[x]` **LANDED ON FEATURE BRANCH** — not merged, not released |
 | §P0.8 device storage pressure | `[~]` **PARTIALLY STARTED** — later commits touch storage and voice-retention surfaces. **Re-check the diff before assuming it is untouched;** an earlier draft asserted the landed work touched no storage file and that is no longer true |
-| §P0.1 isolation · §P0.2 audit bypass · §P0.3 RLS · §P0.4 transcript · §P0.9 security items | `[ ]` **OPEN** |
+| §P0.1 isolation | `[x]` **LANDED + FOUNDER-ACCEPTED 2026-08-15** — closed on a real-browser two-farmer check, both directions. Not merged, not released |
+| §P0.2 audit bypass · §P0.3 RLS · §P0.4 transcript · §P0.9 security items | `[ ]` **OPEN** |
 
-**§P0.1 is the highest-harm open item in this document** and the reason to read §5 in full.
+**§P0.2 is now the highest-harm open item in this document.** Its widest mouth is **not** the `/audit`
+endpoint everyone looks at — it is the sync pull, which sends every NULL-farm audit row, payload
+verbatim, to every device. Read §P0.2 in full before touching it.
+
+> 🛑 **Blocking acceptance gates run against a FROZEN COMMIT on a stable tree** — founder instruction
+> at P0.1 closure. Freeze → clean worktree → run → record the SHA → only then may another agent touch
+> shared files. See the P0.1 closure block in §5.
 
 **One superseded mechanism, recorded so it is not reinstated:** an early draft proposed inverting the
 failing assertions so the gate could go green. What shipped instead is a **dedicated reproduction
@@ -87,7 +94,7 @@ avoids every hazard reviewers found in the inversion approach. **The inversion p
 > **Superseded §0 wording, recorded so it is not reinstated:** an early draft said "everything marked
 > P0 is history, start reading at §6" and "the remaining failures are all deferrals". Both were false;
 > the second was an instruction to add a database-delete call §P0.1 forbids. **Read §5 in full.**
-> **§P0.1 remains the highest-harm open item.**
+> *(§P0.1 has since closed — see its closure block in §5. **§P0.2 is now the highest-harm open item.**)*
 
 ---
 
@@ -417,6 +424,47 @@ next person who asks.
 > **P0.1 CLOSES on one real-browser check:** A logs in → records → logs out → B logs in → **B sees
 > none of A's local information** → B logs out → A logs back in → **A's data intact.**
 > **No cleanup and no architecture work between P0.1 and P0.2.**
+
+> ## ✅ §P0.1 — **CLOSED. FOUNDER-ACCEPTED 2026-08-15.**
+>
+> **The real-browser check PASSED**, both halves. Two real accounts, both created through the actual
+> sign-in UI — the anticipated "no second account" blocker did not apply, because local dev logs the
+> OTP to the server console (`Msg91.UseDevStub: true`) rather than texting it. **No storage was
+> hand-edited at any point.**
+>
+> Evidence: A recorded `FARMER-A-MARKER-P01EXIT` / ₹44,321 → logged out → B signed in via OTP into a
+> **separate database with its own owner claim** → a programmatic scan of the DOM **and every object
+> store in all three databases** found A's marker, A's amount and A's name **absent** → A signed back
+> in and **both were present again**. The recovery half is the half a naive isolation fix breaks, and
+> it holds precisely *because* nothing deletes a farmer's database.
+>
+> **The expected-red assertion stays red.** `a_farmer_database_can_be_deleted_somewhere_in_production_code`
+> goes green only when production gains a delete call. **Nothing may be changed merely to make it
+> green.**
+>
+> **Three founder instructions issued at closure:**
+>
+> **1. The attachment-byte boundary was NOT manually verified — record it, do not fake it, do not
+> block on it.** No photo was captured during the run, so no per-farmer Cache Storage bucket was ever
+> created and `localFileCache.ts`'s bucketing was never exercised in a browser. Code and tests cover
+> it. **This is a remaining acceptance check owned by the media path (§8), not a P0.2 precondition.**
+>
+> **2. The local `42501` registration failure is separate pre-existing debt.** `/user/auth/register`
+> fails locally on a memberships RLS violation (`RegisterUserHandler.cs:71`). The OTP path made it
+> moot for this check. **Recorded; do not chase it inside this programme.**
+>
+> **3. 🛑 EVERY BLOCKING ACCEPTANCE GATE FROM HERE RUNS AGAINST A FROZEN COMMIT.**
+> This run's evidence is usable — the concurrently-modified files did not touch the isolation
+> boundary, and the proof was durable storage that survives a hot reload — but **the working tree was
+> not stable while a blocking security proof was executing**, and that must not recur.
+>
+> ```text
+> freeze commit → clean/stable worktree → run acceptance → record the exact SHA
+>               → only then may another agent modify shared files
+> ```
+>
+> Where parallel work is unavoidable, give agents **isolated worktrees or disjoint file ownership**.
+> **No concurrent agent may change code underneath a running runtime proof.**
 
 ### P0.2 — Audit read-endpoint authorization bypass (new, security-found)
 
@@ -1216,6 +1264,8 @@ Each named, with the trigger that un-defers it. **Nothing is a "future considera
 
 | Deferred | Trigger |
 |---|---|
+| **Real-browser proof of the per-farmer ATTACHMENT-BYTE boundary** | **§8 media work.** P0.1's browser run captured no photo, so no per-farmer Cache Storage bucket was created and `localFileCache.ts`'s bucketing was never exercised outside jsdom. Code and tests cover it; **the manual proof does not exist and must not be described as if it does** |
+| Local `/user/auth/register` failing `42501` on memberships RLS | **Separate pre-existing local-environment debt** (`RegisterUserHandler.cs:71`). Surfaced during P0.1 acceptance; the OTP path made it moot. **Not in this programme's scope** |
 | **The D1 transitional local-preservation rule (§P0.5)** | **D1 stage 3 prod-proven. Then server authority wins and the protection is DELETED** — it must not harden into the permanent model |
 | F3 concurrency primitive | D2 creates a second write path onto cost entries |
 | Type-level neutralisation of the fabricated constants | F1 makes the fields optional |
