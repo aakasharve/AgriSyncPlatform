@@ -20,11 +20,23 @@ namespace ShramSafal.Application.UseCases.Dfes.GetDayUnderstanding;
 /// score DERIVED on read (rather than adding a persisted column) means it always
 /// reflects the current engine.</para>
 ///
-/// <para>Exposes ONLY the /10 (<see cref="DayUnderstandingDto"/>). Neither the lens
-/// triple nor any dimension is ever placed on the DTO. RLS: the per-day read is
+/// <para>Exposes the /10 AND the day's stored classification
+/// (<see cref="DayUnderstandingDto"/>) — and nothing else. Neither the lens triple
+/// nor any dimension is ever placed on the DTO. RLS: the per-day read is
 /// farm-scoped (daily_richness_aggregates is farm_id RLS-gated) and the membership
 /// check below rejects any caller who is not a member of the requested farm — no
 /// cross-farm leak.</para>
+///
+/// <para>spec: dfes-farmer-facing-deploy-readiness-2026-08-14 (Task 6). The
+/// classification was added on founder ruling 2 (2026-08-14) — "Reward honesty and
+/// mark its consistency — no score needed for such days" — SUPERSEDING this
+/// handler's earlier score-only contract. A day the farmer honestly declared as
+/// no-work must show him NO number (a 0 would punish the honesty the product is
+/// built to earn), and the client cannot tell that day apart from a zero-scoring
+/// one without being told. What is passed out is the value the Phase-2 classifier
+/// ALREADY stamped on the aggregate; this handler derives no classification of its
+/// own, and neither may the client (P4/P8 — the server is the authority on what
+/// kind of day it was).</para>
 /// </summary>
 public sealed class GetDayUnderstandingHandler(IShramSafalRepository repository)
 {
@@ -51,7 +63,12 @@ public sealed class GetDayUnderstandingHandler(IShramSafalRepository repository)
             ? (int?)null
             : DayUnderstandingScore.From(ReadComponents(aggregate.ComponentsJson));
 
-        return Result.Success(new DayUnderstandingDto(score));
+        // The STORED classification, passed straight out. No aggregate means the
+        // server has no opinion on what kind of day this was — null, never a
+        // guessed one.
+        var classification = aggregate?.DayClassification.ToString();
+
+        return Result.Success(new DayUnderstandingDto(score, classification));
     }
 
     // An unstamped shell row carries "{}", and a hand-edited row could carry

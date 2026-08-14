@@ -36,7 +36,9 @@ public sealed class GetDayUnderstandingHandlerTests
         new("LEARN_FACET", 15, true, 0.0, 1.0),
     ];
 
-    private static DailyRichnessAggregate WithComponents(string componentsJson)
+    private static DailyRichnessAggregate WithComponents(
+        string componentsJson,
+        DayClassification classification = DayClassification.RichWorkDay)
     {
         var aggregate = DailyRichnessAggregate.Create(
             Guid.NewGuid(), FarmId, Day, "Asia/Kolkata", DateTimeOffset.UtcNow);
@@ -45,7 +47,7 @@ public sealed class GetDayUnderstandingHandlerTests
             execScore: 80,
             insightScore: 60,
             learningScore: 40,
-            classification: DayClassification.RichWorkDay,
+            classification: classification,
             flags: default,
             advancesStreak: true,
             advancesBar: true,
@@ -210,15 +212,78 @@ public sealed class GetDayUnderstandingHandlerTests
         result.Value.Score.Should().BeNull();
     }
 
-    [Fact]
-    public void Dto_exposes_only_the_score_never_a_lens_field()
+    // ── Task 6 (spec: dfes-farmer-facing-deploy-readiness-2026-08-14) ──────────
+    // Founder ruling 2 (2026-08-14): "Reward honesty and mark its consistency —
+    // no score needed for such days." The client cannot obey that ruling without
+    // knowing the day was an honestly-declared no-work day, so the STORED
+    // classification now crosses the boundary alongside the /10. It is the value
+    // the classifier already stamped — this handler never derives a new one.
+    [Theory]
+    [InlineData(DayClassification.DeclaredNoWorkDay, "DeclaredNoWorkDay")]
+    [InlineData(DayClassification.BasicWorkDay, "BasicWorkDay")]
+    [InlineData(DayClassification.RichWorkDay, "RichWorkDay")]
+    [InlineData(DayClassification.UnaccountedDay, "UnaccountedDay")]
+    public async Task Member_ExposesTheStoredClassification(
+        DayClassification stored, string expectedOnTheWire)
     {
-        // Contract guard: the client-facing DTO must carry ONLY the /10. If a
-        // future change adds a lens (Execution/Insight/Learning) to the wire
-        // shape this fails loudly.
+        var repo = new InMemoryShramSafalRepository();
+        repo.SetMembership(FarmId, UserId, AppRole.PrimaryOwner);
+        repo.SeededRichnessAggregates.Add(WithComponents("{}", stored));
+        var handler = new GetDayUnderstandingHandler(repo);
+
+        var result = await handler.HandleAsync(new GetDayUnderstandingQuery(FarmId, Day, UserId));
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value!.Classification.Should().Be(expectedOnTheWire);
+    }
+
+    [Fact]
+    public async Task Member_DeclaredNoWorkDay_CarriesTheClassificationEvenWithNoScore()
+    {
+        // The exact shape the no-work screen depends on: nothing scorable ("{}" →
+        // null score) but the day IS classified. A null classification here would
+        // leave the client unable to tell an honest no-work day from a day the
+        // server simply has not scored yet — and it would show him a number.
+        var repo = new InMemoryShramSafalRepository();
+        repo.SetMembership(FarmId, UserId, AppRole.PrimaryOwner);
+        repo.SeededRichnessAggregates.Add(
+            WithComponents("{}", DayClassification.DeclaredNoWorkDay));
+        var handler = new GetDayUnderstandingHandler(repo);
+
+        var result = await handler.HandleAsync(new GetDayUnderstandingQuery(FarmId, Day, UserId));
+
+        result.Value!.Score.Should().BeNull();
+        result.Value.Classification.Should().Be("DeclaredNoWorkDay");
+    }
+
+    [Fact]
+    public async Task Member_NoAggregateForDay_ReturnsNullClassification()
+    {
+        // No row = the server has NO opinion on what kind of day this was. Naming
+        // one here would be a fabricated classification.
+        var repo = new InMemoryShramSafalRepository();
+        repo.SetMembership(FarmId, UserId, AppRole.PrimaryOwner);
+        var handler = new GetDayUnderstandingHandler(repo);
+
+        var result = await handler.HandleAsync(new GetDayUnderstandingQuery(FarmId, Day, UserId));
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value!.Classification.Should().BeNull();
+    }
+
+    [Fact]
+    public void Dto_exposes_only_the_score_and_classification_never_a_lens_field()
+    {
+        // Contract guard. The client-facing DTO carries the /10 and — since
+        // founder ruling 2 (2026-08-14) — the stored day classification, and
+        // NOTHING else. If a future change adds a lens
+        // (Execution/Insight/Learning) to the wire shape this fails loudly.
         var props = typeof(DayUnderstandingDto).GetProperties().Select(p => p.Name).ToArray();
 
-        props.Should().ContainSingle().Which.Should().Be(nameof(DayUnderstandingDto.Score));
+        props.Should().BeEquivalentTo([
+            nameof(DayUnderstandingDto.Score),
+            nameof(DayUnderstandingDto.Classification),
+        ]);
         props.Should().NotContain(n =>
             n.Contains("Execution", StringComparison.OrdinalIgnoreCase) ||
             n.Contains("Insight", StringComparison.OrdinalIgnoreCase) ||

@@ -51,10 +51,14 @@ public static class DfesEndpoints
 
         // GET /shramsafal/day-understanding?farmId={guid}&date=yyyy-MM-dd
         // The single farmer-facing "Day Understanding Score" (X/10) for the active
-        // farm's day — DERIVED server-side from the internal lens scores. Returns
-        // ONLY { score } (null when nothing scorable is logged for the day); the
-        // three DFES lenses NEVER cross to the client. `date` defaults to the
-        // farm-local (IST) today.
+        // farm's day — DERIVED server-side from the internal lens scores — plus the
+        // day's STORED classification. Returns { score, classification } and nothing
+        // else: score is null when nothing scorable is logged, classification is null
+        // when there is no aggregate for the day, and the three DFES lenses NEVER
+        // cross to the client. Classification was added on founder ruling 2
+        // (2026-08-14) so a day the farmer honestly declared as no-work can show him
+        // NO number — see DayUnderstandingDto for the full rationale.
+        // `date` defaults to the farm-local (IST) today.
         group.MapGet("/day-understanding", async (
             Guid farmId,
             DateOnly? date,
