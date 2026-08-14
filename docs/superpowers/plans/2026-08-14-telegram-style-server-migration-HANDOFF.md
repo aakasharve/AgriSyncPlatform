@@ -112,6 +112,27 @@ For each of the four missing categories — **machinery, activity expenses, plan
 
 **Weather** is a fifth item of a different kind: it is already stored and has **no reader**. Either give it one or decide it is write-only and say so — an orphaned write is a `P5` waiting to happen.
 
+### ADDED 2026-08-14 — irrigation and inputs are broken the same way, and they FABRICATE
+
+Found after this handoff was first written, and **not in the four-category list above.** Irrigation and inputs suffer the identical flattening as machinery — but on the way back the app does something worse than losing data: it **invents the missing details from fixed constants.**
+
+```
+irrigation method  → always "Drip"        irrigation source → always "Field"
+spray reason       → always "Preventive"  spray type        → always "pesticide"
+fertiliser reason  → always "Growth"      fertiliser type   → always "fertilizer"
+```
+
+A farmer who flood-irrigated is shown **drip**. A farmer who sprayed a live infestation is told it was **preventive**. Quantity and cost are pushed into a notes field and never read back at all.
+
+**This is `P4`, live, shipping today** — the doctrine's own phrase for it is *"constants wearing the costume of a measurement,"* and its `Born from` line describes exactly this shape of defect.
+
+Three honest options, and the decision is the founder's:
+- **(a)** In scope — fix alongside machinery. Same defect, same code path.
+- **(b)** Out of scope, filed as EXISTING DEBT under `W2`.
+- **(c)** **Neutralise now**: stop displaying the invented values at all until they can be real. Cheapest honest option and satisfies `P5` immediately, without waiting for the full migration.
+
+Whatever is chosen, **no new invented value may be added** by this work.
+
 ---
 
 ## 6. The one real design decision
@@ -187,7 +208,7 @@ All under `.superpowers/sdd/2026-08-12-labour-phase2-server-truth-farm-context/`
 
 **In the repo:** `docs/AGRISYNC-DOCTRINE.md` · `docs/superpowers/plans/2026-08-12-labour-phase2-server-truth-farm-context.md` (the pattern this work extends) · `docs/superpowers/plans/2026-08-12-labour-phase2-EXECUTION-HANDOFF.md`.
 
-**Also check** whether a **Thin Client Migration** plan already exists in `Operations/Plans/` — project memory records phases 0–7 as done. **Read it before designing.** Do not build a second approach beside an existing one.
+**CORRECTED 2026-08-14 — do not chase the Thin Client Migration plan.** An earlier draft of this handoff said project memory records a Thin Client Migration as complete through phases 0–7 and told you to read it first. **That claim is unverifiable.** The only surviving artifact is a 13-line tombstone whose pointer to its own "full record" resolves to a directory holding nothing — it was born as a tombstone. Memory has been corrected. **Do not cite it, and do not treat it as prior art.** You are not building beside an existing design; there isn't one.
 
 ---
 
