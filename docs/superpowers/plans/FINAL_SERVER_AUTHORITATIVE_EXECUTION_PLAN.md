@@ -15,6 +15,94 @@ then adversarially reviewed and cross-verified. All claims carry file:line evide
 
 ---
 
+## 0. STATUS — THE ONLY SOURCE OF EXECUTION STATUS
+
+> **§0 is authoritative for status. Every other section defers to it.** No sibling section carries a
+> commit count, a branch state, a test tally or a deploy state — those are volatile and duplicating
+> them is the same defect this migration exists to remove from the product. **Re-measure at execution
+> time.** If any section below contradicts §0, §0 wins and the other section is stale.
+
+> **"LANDED" ≠ "SHIPPED".** Nothing in this plan has reached a farmer. Work described as landed is
+> **committed on the feature branch**, behind an unmerged tower. This distinction is foundational to
+> the truth doctrine and is used strictly throughout.
+
+> 🛑 **§0 CACHES NO NUMBERS. It tells you how to measure and how to read the answer.**
+> Three separate drafts of this section wrote a head SHA, a commit count and a test tally. **All three
+> went stale within hours**, because the repo moves while the document sits. A cached number in a plan
+> is the same defect as a cached number in the product. **Run the commands. Trust nothing written
+> here as a value.**
+
+### Measure before you act — these four, every time
+
+```bash
+git log --oneline -8                                   # what has landed
+git status --short                                     # is the tree clean
+git rev-list --left-right --count main...HEAD          # tower size, for the merge gate
+cd src/clients/mobile-web && npm run test:repro         # open containment defects
+ls src/clients/mobile-web/src/**/REPRO-*.test.ts        # how many REPRO files remain
+```
+
+### How to read the answer
+
+- **A REPRO file that disappeared was not deleted — it was RENAMED into the main gate.** That is the
+  designed graduation path: once a reproduction goes fully green, it loses the `REPRO-` prefix and
+  joins the blocking suite. **A shrinking REPRO count is progress, not loss.** Confirm with
+  `git log --diff-filter=R --name-status`.
+- **The remaining REPRO failures are open defects, not deferrals** — see the caution below.
+- **"LANDED" means committed on this branch. Nothing here has reached a farmer.**
+
+### What has landed, by area — verify with the commands above, do not trust this list's completeness
+
+| Area | State |
+|---|---|
+| §P0.5 same-device destruction · §P0.6 money · §P0.7 offline trust | `[x]` **LANDED ON FEATURE BRANCH** — not merged, not released |
+| §P0.8 device storage pressure | `[~]` **PARTIALLY STARTED** — later commits touch storage and voice-retention surfaces. **Re-check the diff before assuming it is untouched;** an earlier draft asserted the landed work touched no storage file and that is no longer true |
+| §P0.1 isolation · §P0.2 audit bypass · §P0.3 RLS · §P0.4 transcript · §P0.9 security items | `[ ]` **OPEN** |
+
+**§P0.1 is the highest-harm open item in this document** and the reason to read §5 in full.
+
+**One superseded mechanism, recorded so it is not reinstated:** an early draft proposed inverting the
+failing assertions so the gate could go green. What shipped instead is a **dedicated reproduction
+suite** — excluded from the main gate, run by `npm run test:repro`, with graduation by rename. That
+avoids every hazard reviewers found in the inversion approach. **The inversion plan is discarded.**
+
+### 🛑 CORRECTION — an earlier version of THIS SECTION was false and dangerous
+
+A first draft of §0 said *"everything marked P0 is history, start reading at §6"* and *"the 25
+remaining failures are the §17 deferrals"*. **Both were wrong, and together they buried the
+highest-harm defect in the document and created an instruction to destroy farmer data.** Corrected:
+
+**Only §P0.5, §P0.6 and §P0.7 shipped.** The five commits touch the reconciler, the log repository,
+the sync commands and the abandoned-state module. **They touch no isolation, audit, RLS, transcript or
+storage file.**
+
+| Section | Status |
+|---|---|
+| §P0.5 same-device destruction · §P0.6 money · §P0.7 offline trust | **[x] LANDED ON FEATURE BRANCH** — committed, **not merged, not deployed, not reaching any farmer** |
+| **§P0.1 isolation (cross-farmer PII leak)** | ❌ **NOT SHIPPED — all twelve assertions still red** |
+| **§P0.2 audit authorization bypass** | ❌ **NOT SHIPPED** |
+| **§P0.3 `farm_boundaries` RLS** | ❌ **NOT SHIPPED** |
+| **§P0.4 raw transcript** | ❌ **NOT SHIPPED** |
+| **§P0.8 device storage pressure** | ❌ **NOT SHIPPED** |
+| **§P0.9 export link · raw-blob linkage · seal AAD · bare-cast policy** | ❌ **NOT SHIPPED** |
+
+**Read §5 in full. It is the next work, not history.** The single highest-harm item in this plan —
+one farmer reading another's harvest, procurement and finance data, plus third-party worker names, on
+a shared handset — is in the part the withdrawn instruction told an executor to skip.
+
+**The 25 remaining failures are NOT all deferrals.** Roughly nineteen are **open §P0 tasks**: twelve
+are the isolation assertions, four are money and contract, three are offline. Only about six map to a
+§17 row.
+
+> 🛑 **And treating all 25 as "turn these green" is a data-destroying instruction.**
+> One of them — `a_farmer_database_can_be_deleted_somewhere_in_production_code` — goes green **only
+> when production gains a database-delete call.** §P0.1 forbids exactly that ("quarantine, never
+> delete… the device may hold the only copy") and §17 defers it behind a founder retention ruling
+> **and** `P10` being true. **That assertion must stay red until the founder rules.** Mark it in the
+> file so nobody "fixes" it.
+
+---
+
 ## 1. EXECUTIVE CONCLUSION
 
 **The defect class.** Client capture, server persistence, read-back and reconstruction were built as
@@ -23,8 +111,8 @@ changing meaning, fabricated defaults, offline work vanishing, deletions resurre
 corrections silently rejected, duplicate money events, business truth living only on one handset,
 media queues wedging, and one farmer's data reachable by the next farmer on the same phone.
 
-**Four were reproduced at runtime**, not merely read: 48 failing assertions across four test files,
-each with a passing sanity anchor proving the harness sound.
+**Four were reproduced at runtime**, not merely read — each with a passing sanity anchor proving the
+harness sound. **Current counts live in §0 only; measure, never cite.**
 
 **What changed once specialists looked.** Five things the audit got wrong, all in the direction of
 *less* to build:
@@ -37,11 +125,10 @@ each with a passing sanity anchor proving the harness sound.
 | The audit trail barely exists | It carries **8 of 9** required attributes as first-class columns, is append-only by privilege, and has ~60 write sites. Only the before-image is missing. |
 | Old photos need measuring before backfill | Measured: `attachments/` holds **4 objects, 83 bytes**. There is nothing to backfill. Deferral closed. |
 
-**The gating fact.** This branch is the labour branch plus one docs commit — **145 commits ahead of
-`main`, none merged**. Every fix below becomes commit 146 on a tower that has never reached
-production. The P0 security fix has nowhere to land until that merge happens, and because the tower
-carries backend Labour Phase 2 persistence, the merge is a backend + web + APK deploy on hibernated
-prod, not a static push.
+**The gating fact.** This branch sits on an **unmerged tower** that has never reached production, so
+every fix below has nowhere to land until the founder gates it. The tower carries backend persistence,
+so releasing it is a backend + web + APK deploy, not a static push. **Commit counts and branch state
+live in §0 only — re-measure there, never here.**
 
 **The end state, and the test:**
 
@@ -83,7 +170,11 @@ tenancy and RLS on farms/plots/crop cycles · the voice 30-day sweeper · crash 
 ## 3. FINAL DEPENDENCY GRAPH
 
 ```
-G0  FOUNDER GATE — merge the 145-commit tower to main            ← blocks all delivery
+GM  FOUNDER GATE — MERGE the tower to main       (source control; size in §0)
+GR  FOUNDER GATE — RELEASE to production         (separate; heavy-tier, see §14)
+        │   GM and GR are TWO decisions. If merging auto-deploys, GM waits on GR's
+        │   preconditions. If it does not, GM may proceed on remote-green while
+        │   production stays blocked.
         │
         ├─────────────── P0 CONTAINMENT (§5) ────────────────┐
         │   isolation · audit bypass · RLS · transcript      │
@@ -122,62 +213,98 @@ G0  FOUNDER GATE — merge the 145-commit tower to main            ← blocks al
 
 ---
 
-## 4. GATE G0 — THE FOUNDER DECISION THAT BLOCKS DELIVERY
+## 4. THE TWO FOUNDER GATES — GM (MERGE) AND GR (RELEASE)
 
-```
-main...HEAD  =  0 behind, 147 ahead        ← re-measure before presenting; it moves
-feat/labour-management-ui..HEAD  =  EMPTY  ← this branch is IDENTICAL to the labour branch
-```
+> **These are two decisions, not one.** An earlier draft treated them as a single gate. The same
+> document then established ten migrations, disabled startup migrations, no existing mechanism to
+> apply a migration, a required pre-deploy snapshot, mandatory cache invalidation and a daily
+> production stop schedule — none of which are merge concerns.
 
-> **Corrected.** An earlier draft said "145 ahead" and "the labour branch plus one docs commit". The
-> count is 147 and the branches are **identical** — every planning document written in this session is
-> still untracked. **Re-measure both figures immediately before putting this decision to the founder.**
-> Asking someone to approve a merge sized by a stale number is the same error this plan exists to end.
+> 🛑 **Branch size and divergence are NOT stated here.** Four sections once carried four different
+> numbers, all stale. **Measure at the moment of asking** and read the current state from §0.
+> Presenting a merge sized by a stale number is the error this plan exists to end.
 
-Nothing below reaches a farmer until this merges. Three options:
+### GM — merge to `main` (source control)
 
-- **(a) Merge the tower to `main` now**, then land containment on top. **Recommended.** It is green
-  (997 tests), and holding a security containment behind an unrelated review is the worse risk.
+Preconditions: remote green on the landed commit. **If merging to `main` auto-deploys, GM inherits
+every GR precondition below and must wait for them. If it does not, GM may proceed while production
+stays blocked at GR.** Establish which before asking.
+
+- [ ] **GM decision recorded: (a) / (b) / (c)** — options below
+- [ ] **Auto-deploy on merge? yes / no** — determines whether GM is independent of GR
+
+### GR — release to production (separate, heavy tier)
+
+Preconditions, all from §14: pre-deploy RDS snapshot · a proven mechanism to apply the migrations ·
+the nap schedule suspended for the window · CloudFront invalidation planned · a new APK build.
+**GR is blocked until every one is true.**
+
+- [ ] **GR decision recorded, separately from GM**
+
+### The three GM options
+
+- **(a) Merge the tower to `main` now**, then land containment on top. **Recommended.** It is green on remote, and holding a security containment behind an unrelated review is the worse risk.
 - **(b) Cherry-pick containment onto a branch cut from `main`**, ship the security fix alone, merge the
   tower later. Costs a rebase and splits history; buys a smaller review.
 - **(c) Hold both** until the labour work is founder-accepted. Leaves the shared-handset leak live.
 
-**Deploy shape either way:** backend (`agrisync-deploy`) + web + **a new APK build**, on hibernated
-prod (`bash aws/hibernate/wake.sh`). Wake once for the tower and containment together. `DEPLOYMENT_TRACKER.md`
-gets one row for the merge and one for containment on the same wake.
-
-- [ ] **Founder decision recorded: (a) / (b) / (c)**
+**Deploy shape (GR, not GM):** backend + web + **a new APK build**. See §14 for the full precondition
+list — prod is **not** hibernated and the framing that it is has been withdrawn.
 
 ---
 
 ## 5. PHASE P0 — CONTAINMENT
 
-**Entry:** G0 decided. **Exit:** all P0 acceptance items green, destructive-device suite Phases 5–7 clean.
+**Entry:** GM decided (§4). **P0 implementation does not wait on GR.**
+
+> 🛑 **Exit criterion corrected — the draft's was impossible.** It required destructive-device phases
+> 5 to 7, but **phase 5 asks harvest, procurement, machinery and financial semantics to reconstruct
+> after a full wipe** — and those fields do not become server-authoritative until D1, D4 and D5.
+> **P0 could never have passed it.**
+
+**P0 proves CONTAINMENT, not reconstruction.** Exit when all five hold:
+
+- [ ] **No same-device destruction** — a farmer's own sync does not reduce his own record
+- [ ] **No cross-farmer exposure** — §16 phase 6, both directions
+- [ ] **Honest money and rejection state** — a refused correction is visible; no duplicate entries
+- [ ] **Offline intent survives a kill** — §16 phase 7
+- [ ] **No new fabrication introduced**
+
+**Full wipe-and-reconstruct (§16 phase 5) is proven per-domain as each lands, and finally at X2.**
+It is not a P0 gate.
 
 Ordered by farmer harm (direction §9). Every task is client-side or a single migration; **none creates
 a temporary architecture Lane B must undo.**
 
-### P0.0 — Gate hygiene (must precede every other task)
+### P0.0 — Gate hygiene
 
-**Why now:** the four reproduction files sit inside `ci-gate.yml`'s `npm test`, which is the single
-required check. 48 red assertions currently **block merge to `main`**. And the plan's own verification
-command cannot fail.
+> 🛑 **HISTORICAL — DO NOT EXECUTE THIS SECTION.** Its premise ("the reproduction files sit inside the
+> required check and block the merge") was **already resolved** by the shipped dedicated suite
+> described in §0. Every task below is superseded. **The checkbox semantics are deliberately removed**
+> so a subagent cannot pick one up. The reasoning is retained as scar tissue — the `it.fails` hazards
+> in particular are why the shipped mechanism is correct — but nothing here is work.
+>
+> **What replaced it:** `vitest.config.ts` excludes `src/**/REPRO-*.test.ts`; `npm run test:repro` runs
+> them; the file carries an instruction to rename a REPRO file back into the gate once it goes fully
+> green. No inversion, no pass-on-any-failure, no green-on-revert.
+>
+> **The only live item from this section** is the lint threshold, now stated in §13.
 
-- [ ] 🛑 **COMMIT THE FOUR REPRODUCTION FILES FIRST. They are untracked.**
+~~(historical, do not execute)~~ 🛑 **COMMIT THE FOUR REPRODUCTION FILES FIRST. They are untracked.**
       An earlier draft asserted that 48 red assertions "currently block merge to `main`". **False** —
       the files are on no branch, so CI has never seen them, and no task committed them. Everything
       else in this section depends on them existing in the repo.
-- [ ] **The baseline is a RANGE plus a re-measurement, not a fixed tally.** A draft asserted
+~~(historical, do not execute)~~ **The baseline is a RANGE plus a re-measurement, not a fixed tally.** A draft asserted
       `6 failed | 145 passed (151)` / `50 failed | 1449 passed (1499)`. A later unpiped run measured
       `4 failed | 147 passed (151)` / `48 failed | 1453 passed (1501)`: the two timeout files passed and
       the total moved. **An "exact tally" gate is a random variable and would have fired on task one.**
       Re-measure at the start, record the actual numbers, and gate on *"the four REPRO tallies match
       and no other file regresses"*.
-- [ ] **Own the two timeout tests — do not merely record them.** They pass in isolation and fail under
+~~(historical, do not execute)~~ **Own the two timeout tests — do not merely record them.** They pass in isolation and fail under
       load. Left unowned, the required check fails on any loaded run and the merge is blocked by nobody's
       task. Either raise the timeout or remove the real timer. **The draft asserted both that they are
       flaky and that the baseline is exact; those cannot both hold.**
-- [ ] **Convert every §17-deferred assertion to `it.fails(...)`** with a `// DEFERRED → §17 row N` tag,
+~~(historical, do not execute)~~ **Convert every §17-deferred assertion to `it.fails(...)`** with a `// DEFERRED → §17 row N` tag,
       **and understand exactly what it does and does not buy.**
       > `it.fails` flips *any* non-pass into a pass — including a timeout, a fixture `TypeError`, or an
       > import error. So it **violates this plan's own flake rule** ("a test that cannot run must fail")
@@ -186,16 +313,16 @@ command cannot fail.
       > **Two consequences that must be written into the tasks:** convert only *single-assertion* tests;
       > and **run the mutation proof BEFORE converting**, because after conversion reverting the fix
       > makes the test *green* — G3 would silently pass for every converted test.
-- [ ] **Identify by name the sanity anchors that ASSERT THE DEFECT, and convert them too.** Several
+~~(historical, do not execute)~~ **Identify by name the sanity anchors that ASSERT THE DEFECT, and convert them too.** Several
       currently-*passing* tests encode the broken behaviour — that a wedged row stays wedged, that the
       delete erases the freshness marker. **The correct fixes turn them red**, and a gate that reads
       "an anchor turning red means the fix is wrong" would misdiagnose four correct fixes as
       regressions, on a blocking gate. List them explicitly; do not refer to "the 17 anchors" — the
       real count is 18 passing, 11 labelled, and 17 matches neither.
-- [ ] **Every verification command runs unpiped** (or `set -o pipefail`) and asserts `$?`.
+~~(historical, do not execute)~~ **Every verification command runs unpiped** (or `set -o pipefail`) and asserts `$?`.
       **Also assert the file count** — a vitest run that silently collects a subset is how a green gate
       becomes meaningless.
-- [ ] **Promote `check:storage-discipline` into `ci-gate.yml`** — but **not** as a proof of anything.
+~~(historical, do not execute)~~ **Promote `check:storage-discipline` into `ci-gate.yml`** — but **not** as a proof of anything.
       > **Correction, found independently by two reviewers.** An earlier draft called this "a proof of
       > exhaustiveness for the isolation fix" and "the strongest structural guarantee in the codebase".
       > **Both claims are false.** It matches four literal method names on a bare `localStorage.` token,
@@ -294,7 +421,7 @@ erasure/export/breach. `payload` is returned verbatim.
 geometry read-back ships** (D6). Closing it means deliberately editing the allowlist — the control
 working as designed.
 
-- [ ] 🛑 **ORDER CORRECTED — reproduce the scope wiring FIRST, migrate second.** `PUT /farms/{id}/boundary`
+> 🛑 **ORDER CORRECTED — reproduce the scope wiring FIRST, migrate second.** `PUT /farms/{id}/boundary`
       never establishes tenant scope; it takes the farm from the route and authorizes in the handler.
       **Landing the policy before the scope is wired means the setting is unset, the read filters to
       nothing (so the version silently resets to 1 and the prior boundary is never archived), and the
@@ -361,7 +488,7 @@ working as designed.
       the client read that silence as `DRAFT`, overwriting the farmer's own `CONFIRMED`. Preserve local
       verification when the response makes no statement. **Do not change `mapVerificationStatus`** — the
       mapping is right; the caller is wrong to treat silence as a statement.
-- [ ] 🛑 **DO NOT merge by `task.id`. An earlier draft specified this and it duplicates money.**
+> 🛑 **DO NOT merge by `task.id`. An earlier draft specified this and it duplicates money.**
       > The client **mints a fresh UUID per payload build** for any non-UUID local id, and the
       > manual-entry surface produces exactly those (`act_global_daily`, `irr_{timestamp}`). So
       > merge-by-id finds no match and keeps **both** rows. Machinery compounds it: it is sent as a task
@@ -369,9 +496,19 @@ working as designed.
       > preserved local machinery entry — the exact "two representations visible to the farmer" §9
       > forbids. Inputs carry `cost` and machinery carries rental and fuel: **this is duplicated rupees,
       > not duplicated rows.**
-      **Instead: preserve the local collection wholesale when the device has one**, and take the
-      rebuilt collection only when the device has nothing. Same predicate as the rest of the task —
-      "did the response state this", never a per-item identity join.
+      ✅ **D1 RULED — the answer is neither "local wins" nor "server wins". It is honesty, and it is
+      transitional.** The founder rejected both binary framings. The containment rule:
+      > **1. Never overwrite richer local truth with a lossy or fabricated server reconstruction.**
+      > **2. Never merge using unstable identities** — the mint-a-fresh-UUID path makes id joins
+      >    duplicate money.
+      > **3. On any other device, show only what the server genuinely knows**, and mark the rest
+      >    **partial / unknown**. Never fabricate to fill the gap.
+      >
+      > So the originating device may temporarily hold richer information **until D1 gives those fields
+      > a faithful server contract.** This exists only because `P10` is not yet true for them.
+      > **It is explicitly transitional: once D1's round trip is proven, server authority wins and this
+      > protection is deleted.** Do not let it harden into the permanent model.
+      **Add this expiry to §17's trigger column: the protection ends when D1 stage 3 is prod-proven.**
 - [ ] 🛑 **Fixing the blob is not enough — the INDEX columns are computed outside the guard.**
       `reconcileLogs` derives `verificationStatus` and `isDeleted` from the **incoming rebuilt log**,
       outside `preserveLocalOnlyFields`. `toDailyLog` never sets `deletion`, so `isDeleted` is written
@@ -502,7 +639,7 @@ the farmer's next recording silently fails. Nothing in the client observes stora
       offline-voice storage.
 - [ ] **Receipt and patti jobs get a written `expiresAtUtc`**, swept on the existing purge call — not
       "delete on complete", because the result is not yet delivered to the farmer.
-- [ ] 🛑 **DO NOT delete attachment bytes in P0. This task moves to §8, after server-side finalisation
+> 🛑 **DO NOT delete attachment bytes in P0. This task moves to §8, after server-side finalisation
       exists.**
       > **Why this was the most dangerous item in the draft.** An earlier version deleted local bytes on
       > a **client-side** `status === 'uploaded'` flag, while the `HeadObject` finalisation that actually
@@ -516,9 +653,19 @@ the farmer's next recording silently fails. Nothing in the client observes stora
 - [ ] **Finished voice-job blobs may still be dropped in P0** — and only these — because the same bytes
       demonstrably exist in a second store that has a working sweeper. State that reason in the code.
 - [ ] **Protected, never auto-evicted:** unsent mutations · unfinished uploads and their bytes ·
-      unfinished AI jobs · `aiCorrectionEvents` · `appMeta` (holds GPS consent) · every localStorage
-      business key · **and `logs`, until F1 lands** — 14 fields have no wire representation, so a log row
-      is still the only copy.
+      **finished-but-server-UNVERIFIED attachment bytes** · unfinished AI jobs · `aiCorrectionEvents`
+      (the structured signal; the transcript inside it is removed by §P0.4) · `appMeta` (holds GPS
+      consent) · every localStorage business key · **and `logs`, until F1 lands** — 14 fields have no
+      wire representation, so a log row is still the only copy.
+      > 🛑 **The third item was missing from an earlier draft of this list**, while the rule above it
+      > already said no media may be deleted without server verification. The rule was corrected and
+      > **the checklist an executor actually ticks was not** — leaving exactly the deletion the rule
+      > exists to prevent.
+> 🛑 **The "emergency sweep" needs a defined target set before it can ship, and it must not ship
+      before §P0.1.** §17 defers the eviction policy until *after* §P0.8, so as drafted the sweep ships
+      before the policy that bounds it exists. And §3 hard rule 1 forbids any cleanup or sweeper before
+      isolation lands — an unbounded sweep running against the fail-open shared database described in
+      §P0.1 deletes the wrong farmer's data. **Sequence: §P0.1 → eviction policy → sweep.**
 
 ---
 
@@ -750,7 +897,50 @@ Beyond §P0.1–P0.4:
 
 ## 11. AWS AND STORAGE CORRECTIONS *(parallel from day one; shares no files)*
 
-- [ ] **Remove the Glacier transition. No replacement.** The class is Flexible Retrieval: an object in
+> 🛑🛑 **READ BEFORE TOUCHING ANY LIFECYCLE TASK IN THIS SECTION.**
+>
+> **This section contains THREE separate tasks that each rewrite the SAME single S3 lifecycle
+> document, on a lane declared "parallel from day one", with no ordering between them.**
+> `put-bucket-lifecycle-configuration` **replaces the whole document** — so the last writer silently
+> reverts the other two. **Land them as ONE change, or sequence them explicitly.**
+>
+> **And "remove the Glacier transition" is not a separate edit.** The live configuration is a
+> **single rule** carrying **both** the transition **and** the 7-year expiration at a bucket-wide
+> prefix. Removing the transition therefore means rewriting the rule that carries the farmer-evidence
+> retention. No task said so. Capture the existing document verbatim first; treat that capture as the
+> rollback.
+>
+> **The 180-day deploy-prefix expiry is a second uncovered data-destroying path.** The 🛑🛑 further
+> down covers only *noncurrent* versions; this is a **current-version** expiry, and it is unenumerated
+> — the bucket has **four** deploy-ish prefixes, none of them named here. Manual RDS snapshots never
+> expire, so a 180-day artifact expiry manufactures database rollback points **with no matching
+> binary**, while §15 promises "redeploy the previous SHA" with no horizon. **Enumerate every prefix,
+> and tie the horizon to the oldest retained manual RDS snapshot, not to a round number.**
+>
+> ### ▶ THE RULE: ONE DESIRED-STATE TRANSACTION PER BUCKET
+> **Do not execute "remove Glacier", "scope by prefix" and "write it through the script" as separate
+> tasks.** One specialist produces **one complete desired lifecycle document per bucket**, covering
+> every prefix, then:
+> 1. **Capture the live policy verbatim** — that capture is the rollback, recorded in the commit.
+> 2. **Apply once.**
+> 3. **Diff live against desired** and confirm they match.
+>
+> **Intent to preserve, so the transaction is unambiguous:** remove the 365-day Glacier transition,
+> **keep the seven-year evidence expiry**, and leave the **raw bucket's noncurrent versions
+> untouched** until the evidence-retention decision is settled — this plan established they may be
+> the only surviving copies.
+
+- [ ] **THE ONE LIFECYCLE TASK — this replaces the separate lifecycle bullets below.**
+      Produce **one complete desired lifecycle document per bucket**, covering every prefix, then:
+      **capture the live policy verbatim** (that capture is the rollback, recorded in the commit) →
+      **apply once** → **diff live against desired**. The bullets that follow are **inputs to that one
+      document, not separate executions.**
+
+> The three bullets below are **INPUTS to the single task above.** Do not execute them independently —
+> each `put-bucket-lifecycle-configuration` replaces the whole document, so the last writer silently
+> reverts the others.
+
+- **INPUT — remove the Glacier transition. No replacement.** The class is Flexible Retrieval: an object in
       it **cannot be read** without a restore step — 3–5 hours, or $0.012 per expedited request.
       **One "show me last season" tap costs 13× that photo's entire annual storage bill** (164× after
       compression); a 30-photo album is ~₹30 in retrieval fees. The rule saves **$0.53/month**.
@@ -760,7 +950,7 @@ Beyond §P0.1–P0.4:
       **Do not substitute Standard-IA** — its 128 KB minimum billable size would make thumbnails *more*
       expensive. **Defer `GLACIER_IR`** (millisecond access, no restore, cheaper than IA) with a numeric
       trigger: `attachments/` exceeds 100 GB.
-- [ ] 🛑🛑 **STOP. THE DRAFT OF THIS TASK WOULD HAVE DESTROYED 123 MB OF RAW FARMER VOICE EVIDENCE,
+> 🛑🛑 **STOP. THE DRAFT OF THIS TASK WOULD HAVE DESTROYED 123 MB OF RAW FARMER VOICE EVIDENCE,
       IRRECOVERABLY. DO NOT APPLY A BUCKET-WIDE NONCURRENT RULE TO THE RAW BUCKET.**
       > The draft said "79 MB of noncurrent versions exist right now" and applied the rule to **both**
       > buckets. **That figure was measured on the uploads bucket and generalised without measuring the
@@ -778,15 +968,16 @@ Beyond §P0.1–P0.4:
       proven to hold nothing but reproducible artifacts. Treat the raw bucket's noncurrent versions as
       **farmer evidence requiring a retention decision**, not as garbage. `AbortIncompleteMultipartUpload`
       is safe on both and can proceed.
-- [ ] **Scope rules by prefix.** 618 MB of deploy artifacts sit under a 7-year farmer-evidence policy.
-      `attachments/` keeps retention; deploy prefixes expire at **180 days** (confirm the rollback
-      horizon with the deploy owner first); `apk/` gets **no expiry** — expiring it breaks live download
+- **INPUT — scope rules by prefix.** 618 MB of deploy artifacts sit under a 7-year farmer-evidence policy.
+      `attachments/` keeps retention; deploy prefixes expire at **the oldest retained manual RDS snapshot's age, not a round number** —
+      a fixed horizon manufactures database rollback points with no matching binary; `apk/` gets **no expiry** — expiring it breaks live download
       links.
 - [ ] **Infrastructure as code — do not introduce CDK or Terraform.** The repo already has a
       production-proven pattern (`aws/voice-retained/`, `aws/snapshot/`), verified **live and
       drift-free**; two buckets were simply skipped. Create `aws/uploads/` and `aws/raw/` on the same
       shape, plus bucket policies (neither bucket has one) and CORS. **Write the corrected lifecycle
       *through* the new script**, so the first change to that bucket is already reproducible.
+      *(This is the same single transaction, not a third execution.)*
 - [ ] **Drift detection needs no new CI.** `prod-hygiene-audit.yml` already runs weekly via OIDC with
       SNS alerts and contains **zero S3 checks**. Add a config-diff block.
 - [ ] **Raw bucket — and the order within this task is mandatory.**
@@ -830,10 +1021,20 @@ Beyond §P0.1–P0.4:
 
 | # | Gate | Blocks? |
 |---|---|---|
-| G0 | Baseline lock — exact tallies, unpiped, exit code recorded | **BLOCKS** |
-| G1 | Per-task red→green on the named REPRO file | **BLOCKS** that task |
-| G2 | The 17 sanity anchors stay green | **BLOCKS** — an anchor turning red means the fix is wrong |
-| G3 | Mutation proof — **hash the named file directly.** Do **not** use `git diff --stat` as the oracle (it is empty by construction for untracked files, and the tree already has unrelated modifications) and do **not** use `git stash` (it takes the whole tree; with parallel agents a concurrent write turns `stash pop` into a conflict with work stranded). **Run before any `it.fails` conversion** | **BLOCKS** |
+**Gates key on NAMED TESTS, never on magic counts.** Earlier drafts locked "exact tallies" and "the
+17 sanity anchors"; tallies are a random variable and the anchor count matched nothing real. Three
+oracles only: **the named test** · **that the run collected the files it should** (a run that silently
+collects a subset is how a green gate becomes meaningless) · **no unrelated regression**.
+Note the REPRO file count **legitimately shrinks** as reproductions graduate into the main gate by
+rename — treat a smaller count as progress and confirm it against the rename history, never as a
+missing-file failure.
+
+| # | Gate | Blocks? |
+|---|---|---|
+| G0 | Baseline — re-measure and record; gate on *named REPRO tests + files collected as expected + no unrelated regression*. **Never a fixed tally** | **BLOCKS** |
+| G1 | Per-task red→green on the **named** assertion in the named REPRO file | **BLOCKS** that task |
+| G2 | Named sanity anchors stay green — **listed by name in the task, not by count.** Anchors that deliberately assert the defect are named as expected-to-flip, so a correct fix is not misread as a regression | **BLOCKS** |
+| G3 | Mutation proof — **hash the named file directly.** Not `git diff --stat` (empty by construction for untracked files) and not `git stash` (whole-tree; concurrent agents strand work in a conflict). *(The `it.fails` sequencing note is withdrawn — see §0.)* | **BLOCKS** |
 | G4 | Contract-parity drift | **BLOCKS** |
 | G5 | Backend `Category=Contract` | **reports only** — it locks *names*, not fields; it would pass identically before and after, and naming that honestly matters |
 | G6 | Real-Postgres money and tenancy | **BLOCKS** |
@@ -858,16 +1059,23 @@ every CI run, for months.
 
 ## 14. DEPLOYMENT SEQUENCE
 
-1. Founder decides G0 and merges. **Merge to `main` is founder-gated, never autonomous.**
+> **Steps 1-2 belong to GM (merge). Steps 3 onward belong to GR (release).** An earlier draft called
+> step 1 "G0", which §13 defines as the baseline test gate — two different things under one name.
+
+**GM — merge**
+
+1. Founder decides **GM** and merges. **Merge to `main` is founder-gated, never autonomous.**
 2. `REMOTE_GREEN` on the landed commit. Local green is not evidence.
+
+**GR — release. Every item below is a GR precondition, not a merge concern.**
+
 3. 🛑 **Prod is NOT hibernated — that framing is wrong and it hides a real hazard.** RDS and EC2 are
    **running right now**. What exists is a **daily nap cycle**: an enabled schedule stops production
    every day at **19:30 UTC (01:00 IST)** and wakes it at 00:00 UTC, **regardless of any manual wake**.
    A heavy-tier deploy plus the multi-hour manual acceptance suite in §16 — run by a founder who works
    late IST — **will straddle that boundary and lose the database and the host mid-flight.**
    **Disable both schedule rules for the window and re-enable after G10.**
-4. 🛑 **This is a HEAVY-tier deploy: the branch carries 10 EF migrations.** §15's first row claiming
-   "no schema change, nothing to reverse" is **false** for the combined merge. Required and missing
+4. 🛑 **This is a HEAVY-tier deploy: the branch carries EF migrations (count in §0).** **§15 now splits change-level from release-level rollback; read it before proceeding.** Required and missing
    from the draft: a **pre-deploy RDS snapshot** (the database is single-AZ with 7-day automated
    backups, so a manual snapshot is the only rollback floor) and the deploy plugin's migration
    dry-run stage. Also missing: **any mechanism to apply a ShramSafal migration at all** — startup
@@ -876,21 +1084,32 @@ every CI run, for months.
    inherits a 24-hour TTL. Without invalidation, **returning web users stay on the vulnerable shell for
    up to a day** after a cross-farmer exposure fix. Smoke checks must assert **`Content-Type`**, not
    status — that distribution serves `index.html` at HTTP 200 for paths that do not exist.
-4. Deploy via the `/deploy` plugin. **Never hand-rolled.**
-5. **Backend + web + a new APK build.** The APK bundles web assets at build time, so a web deploy does
+6. Deploy via the `/deploy` plugin. **Never hand-rolled.**
+7. **Backend + web + a new APK build.** The APK bundles web assets at build time, so a web deploy does
    not reach APK users. **For a cross-farmer exposure fix the APK is a gate item, not a conditional.**
-6. Prod proof: `/version` SHA and HTTP status. **Written ≠ live.**
-7. `DEPLOYMENT_TRACKER.md` rows — one for the tower merge, one for containment.
-8. Infra lane deploys independently — AWS config only, no code.
+8. Prod proof: `/version` SHA and HTTP status. **Written ≠ live.**
+9. `DEPLOYMENT_TRACKER.md` rows — one for the tower merge, one for containment.
+10. Infra lane deploys independently — AWS config only, no code.
 
 ---
 
 ## 15. ROLLBACK STRATEGY
 
-| Change | Rollback |
+> 🛑 **Rollback is TWO things and the draft conflated them.**
+> **Change-level rollback** = undo one commit's behaviour. **Release-level rollback** = undo what
+> actually reached production. For the combined tower release those are completely different
+> problems, and the draft's first row was only ever true of an isolated client-only release.
+
+**Release-level rollback for the combined tower** requires, before it ships: a **pre-deploy RDS
+snapshot** (single-AZ, 7-day automated backups — the snapshot is the only floor) · a **proven
+migration-application procedure** · **schema compatibility analysis** (can the previous binary read
+the new schema?) · **previous-binary compatibility confirmed**. **Absent these, there is no release
+rollback — only forward fixes.** Say so plainly rather than implying a SHA revert suffices.
+
+| Change | Change-level rollback |
 |---|---|
-| P0 client fixes | Redeploy the previous SHA. No schema change, nothing to reverse |
-| `farm_boundaries` RLS | `DROP POLICY` + `NO FORCE`. Additive, reversible |
+| P0 client fixes **as an isolated client-only release** | Redeploy the previous SHA. No schema change. **This row does NOT apply to the combined tower release** — see above |
+| `farm_boundaries` RLS | **Capture the exact pre-change RLS state first and restore that.** `DROP POLICY` + `NO FORCE` is **wrong if the table began with RLS disabled** — it would leave RLS enabled with no policy, making every boundary invisible and unwritable to the application role. If disabled was the original state, **disable it** |
 | Glacier removal | Re-apply the captured prior policy. Instantaneous and lossless **before 2027-05-03** |
 | Raw-bucket CMK | Re-encryption is copy-in-place; the prior objects are versioned |
 | Domain stages 1–4 | Additive; old clients unaffected |
@@ -934,7 +1153,14 @@ else in this document.** Then log back in as A — **A's data must still be ther
 be visibly pending. Restore network, wait for acknowledgement, then confirm the server has **exactly
 one**, not two.
 
-**Pass condition:** phases 5, 6 and 7 clean. Phase 3 is diagnostic and must be clean after P0.
+**Pass condition — re-keyed to match §5's split.**
+
+- **P0 exit (gate G9 at P0):** phases **3, 6 and 7** clean. That is containment: no same-device
+  destruction, no cross-farmer exposure, offline intent survives a kill.
+- **Phase 5 (full wipe-and-reconstruct) is NOT a P0 gate.** It asks harvest, procurement and
+  machinery to return after a wipe, and those have no server domain until D1, D4 and D5. **Run it
+  per-domain as each lands, scoped to that domain's fields, and in full at X2.**
+  An earlier draft made it a P0 pass condition, which P0 could never have satisfied.
 
 **Scenarios A–J** map to: A per-domain at each completion · B F2 · C F1 completeness + media · D F3 in
 D2 · E F1 + D1 reconstruction · F P0.1 · G bounded hydration (**not testable until the capability
@@ -948,6 +1174,7 @@ Each named, with the trigger that un-defers it. **Nothing is a "future considera
 
 | Deferred | Trigger |
 |---|---|
+| **The D1 transitional local-preservation rule (§P0.5)** | **D1 stage 3 prod-proven. Then server authority wins and the protection is DELETED** — it must not harden into the permanent model |
 | F3 concurrency primitive | D2 creates a second write path onto cost entries |
 | Type-level neutralisation of the fabricated constants | F1 makes the fields optional |
 | `db.outbox` removal | D1 gives deletion a real mutation type |
@@ -976,18 +1203,24 @@ Each named, with the trigger that un-defers it. **Nothing is a "future considera
 **Not** done because: localStorage shrank · more endpoints exist · more columns reach PostgreSQL ·
 tests are green.
 
-**Done when all ten hold:**
+**Every scenario carries an evidence owner and an ACTIVATION POINT.** Before its activation point a
+scenario is **expected red** and must not be read as programme failure; from that point it **blocks**.
+Without this an executor cannot tell an expected red from a real one.
 
-- [ ] **A** — record online → acknowledge → wipe client storage → login → **the same semantic record**
-- [ ] **B** — record offline → kill app → reopen → intent survives → reconnect → **exactly-once** commit
-- [ ] **C** — work committed while the image fails → **work valid, image honestly pending**
-- [ ] **D** — two devices change a protected fact → **neither silently destroys the other**
-- [ ] **E** — partial history returns **partial, never fabricated**
-- [ ] **F** — farmer A logs out, B logs in → **no A information exposed**, and **A's data is still there**
-- [ ] **G** — years of history → **useful quickly** without downloading the archive
-- [ ] **H** — stated money, derived money, income and expense **remain distinct** after the round trip
-- [ ] **I** — server rejects an offline mutation → **content survives, rejection is resolvable**
-- [ ] **J** — storage, encryption and lifecycle live in **version-controlled config**, not console state
+| # | Scenario | Evidence | Activates (blocks from) |
+|---|---|---|---|
+| **A** | Online → acknowledge → wipe → login → **same semantic record** | §16 phases 4-5, manual, per domain | **Per domain as each lands**, for that domain's fields only. Global at X2 |
+| **B** | Offline → kill → reopen → intent survives → **exactly-once** commit | §16 phase 7 + automated queue tests | **P0 exit** |
+| **C** | Work commits while the image fails → work valid, image **honestly pending** | Automated, fault-injected | **F1 completeness + media finalisation** |
+| **D** | Two devices change a protected fact → neither silently destroys the other | Real-Postgres test | **D2 / F3.** Cannot block before then — no entity is versioned |
+| **E** | Partial history returns **partial, never fabricated** | The named REPRO fabrication assertions | **F1 + D1 reconstruction** |
+| **F** | A logs out, B logs in → **no A data exposed**, and **A's data still there** | §16 phase 6, both directions | **P0 exit** — this is §P0.1 |
+| **G** | Years of history → useful quickly without downloading the archive | **No oracle exists yet** — pull is unbounded | **Bounded hydration.** Explicitly **not blocking** before it |
+| **H** | Stated money, derived money, income and expense **stay distinct** | §16 phase 5 money rows + contract tests | **D2** |
+| **I** | Server rejects → content survives, rejection **resolvable** | Automated rejection tests | **P0 exit** |
+| **J** | Storage, encryption, lifecycle in **version-controlled config** | The weekly config-diff audit | **Infra lane completion** |
+
+**Blocking at P0 exit: B, F, I.** Everything else activates later and is expected red until it does.
 
 Plus, per the cofounder Definition of Done: spec referenced · tests added · architecture tests pass ·
 **Founder Acceptance Gate cleared before any deployment step** · **deployed and prod-proven** with a
