@@ -33,12 +33,44 @@ export function computeProcessingVoiceClipExpiry(recordedAtUtc: string): string 
     return new Date(baseMs + PROCESSING_VOICE_CLIP_RETENTION_DAYS * 24 * 60 * 60 * 1000).toISOString();
 }
 
-export async function purgeExpiredProcessingVoiceClips(nowUtc: string = new Date().toISOString()): Promise<number> {
-    const db = getDatabase();
-    return db.voiceClips
-        .where('expiresAtUtc')
-        .belowOrEqual(nowUtc)
-        .delete();
+/**
+ * DISABLED BY FOUNDER RULING D9 (2026-08-14) — VOICE RECORDINGS ARE KEPT
+ * FOREVER. THIS IS A PRODUCT PRIVILEGE, NOT A RETENTION WINDOW.
+ *
+ * > *"He can actually listen to everything that was spoken on that day, by
+ * > whoever spoke."*
+ *
+ * This function WORKED. That was the problem: it was the only retention policy
+ * in the client that actually functioned, and it was quietly deleting the
+ * feature thirty days at a time. The earlier 30-day ruling it implemented was
+ * made in the belief that the clips were encrypted; they are not (see below),
+ * and the ruling was reversed once that came to light.
+ *
+ * WHY A NO-OP RATHER THAN DELETING THE FUNCTION AND ITS THREE CALL SITES.
+ * The sweep points — app boot, the voice-diary page, and the parse path — are
+ * the right places for a lifecycle hook, and D9 explicitly orders this switched
+ * off *before* anything else in this area. Removing the seam would make the
+ * next change (a real, consented lifecycle) a re-plumbing job instead of an
+ * edit, and it would silently drop the call sites from review. Keeping the
+ * function and emptying it means one reversible change that cannot miss a
+ * caller.
+ *
+ * `expiresAtUtc` is still WRITTEN on persist, and deliberately so: it is an
+ * indexed column, it records when the old policy would have fired, and nothing
+ * reads it now. Removing it is a Dexie change and Dexie changes are one-way for
+ * APK users, so it does not ride along with a behavioural fix.
+ *
+ * 🔴 WHAT THIS MAKES URGENT, STATED HERE BECAUSE IT IS NOW WORSE: every clip is
+ * PLAIN, OPENABLE AUDIO. `sealVoiceClip` exists in this codebase with zero
+ * callers on the live write path. Thirty days of plaintext was a bounded risk;
+ * forever is an unbounded and permanently growing one. D9 makes encryption
+ * non-optional and it is the next item in this area, not a later one.
+ *
+ * @returns always 0 — nothing is deleted. The signature is unchanged so the
+ *          three call sites keep compiling and keep reporting a real number.
+ */
+export async function purgeExpiredProcessingVoiceClips(_nowUtc: string = new Date().toISOString()): Promise<number> {
+    return 0;
 }
 
 /**
