@@ -37,7 +37,8 @@ import {
     ConsentScreen,
     ErasureRequestScreen,
     ExportRequestScreen,
-    PiiReviewQueuePage
+    PiiReviewQueuePage,
+    AiDraftsPage
 } from './lazyComponents';
 
 export const renderProfileRoute = (ctx: AppRouterContext): React.ReactNode => {
@@ -64,6 +65,7 @@ export const renderProfileRoute = (ctx: AppRouterContext): React.ReactNode => {
                 onOpenExport={() => ctx.setCurrentRoute('dataRights/export')}
                 onOpenErasure={() => ctx.setCurrentRoute('dataRights/erasure')}
                 onOpenQrDemo={() => ctx.setCurrentRoute('qr-demo')}
+                onOpenAiDrafts={() => ctx.setCurrentRoute('ai-drafts')}
                 onExit={() => ctx.setCurrentRoute('main')}
             />
         </div>
@@ -412,6 +414,18 @@ export const renderPiiReviewRoute = (ctx: AppRouterContext): React.ReactNode => 
     );
 };
 
+// spec: 2026-08-14-founder-decisions-launch-cohort-and-scope — offline
+// voice-note drafts (pendingAiJobs.result) waiting for the farmer to confirm
+// or discard them into a log.
+export const renderAiDraftsRoute = (ctx: AppRouterContext): React.ReactNode => {
+    if (ctx.currentRoute !== 'ai-drafts') return null;
+    return (
+        <div className="animate-in fade-in slide-in-from-right-4 duration-300">
+            <AiDraftsPage onBack={() => ctx.setCurrentRoute('profile')} />
+        </div>
+    );
+};
+
 // CEI Phase 4 §4.8 — Worker profile
 export const renderWorkerProfileRoute = (ctx: AppRouterContext): React.ReactNode => {
     if (ctx.currentRoute !== 'worker-profile') return null;
@@ -470,5 +484,6 @@ export const SIMPLE_ROUTE_RENDERERS: Array<(ctx: AppRouterContext) => React.Reac
     renderConsentRoute,
     renderErasureRequestRoute,
     renderExportRequestRoute,
-    renderPiiReviewRoute
+    renderPiiReviewRoute,
+    renderAiDraftsRoute
 ];

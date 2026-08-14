@@ -418,7 +418,11 @@ export type AppRoute =
     /** DATA_PRINCIPLE_SPINE Phase 08.6 — DPDP §11 self-serve export screen. */
     | 'dataRights/export'
     /** DATA_PRINCIPLE_SPINE Phase 10.4 — admin PII review queue. */
-    | 'piiReview';
+    | 'piiReview'
+    /** spec: 2026-08-14-founder-decisions-launch-cohort-and-scope — offline
+     * voice-note drafts (`pendingAiJobs.result`) waiting for the farmer to
+     * confirm or discard them. */
+    | 'ai-drafts';
 
 export interface AudioData {
     blob: Blob;

@@ -52,6 +52,9 @@ export const ErasureRequestScreen = React.lazy(() => import('../../features/data
 export const ExportRequestScreen = React.lazy(() => import('../../features/dataRights/ExportRequestScreen'));
 // spec: data-principle-spine-2026-05-05/10.4 — admin PII review queue.
 export const PiiReviewQueuePage = React.lazy(() => import('../../features/admin/piiReview/PiiReviewQueuePage'));
+// spec: 2026-08-14-founder-decisions-launch-cohort-and-scope — offline
+// voice-note drafts review surface.
+export const AiDraftsPage = React.lazy(() => import('../../pages/AiDraftsPage'));
 
 export const RouteLoader: React.FC = () => (
     React.createElement('div', {

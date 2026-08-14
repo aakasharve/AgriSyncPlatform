@@ -10,7 +10,7 @@
  */
 
 import React, { useState, useEffect, useRef } from 'react';
-import { User, Sprout, Zap, Tractor, FlaskConical, ArrowLeft, Globe, Shield, Download, Trash2, CreditCard } from 'lucide-react';
+import { User, Sprout, Zap, Tractor, FlaskConical, ArrowLeft, Globe, Shield, Download, Trash2, CreditCard, Mic } from 'lucide-react';
 import { idGenerator } from '../../core/domain/services/IdGenerator';
 import { useLanguage } from '../../i18n/LanguageContext';
 import { useAuth } from '../../app/providers/AuthProvider';
@@ -69,6 +69,9 @@ interface ProfilePageProps {
     onOpenExport?: () => void;
     onOpenErasure?: () => void;
     onOpenQrDemo?: () => void;
+    /** spec: 2026-08-14-founder-decisions-launch-cohort-and-scope — offline
+     * voice-note drafts waiting for the farmer's review. */
+    onOpenAiDrafts?: () => void;
     /** Leave the Profile screen (back to the main app / daily log). */
     onExit?: () => void;
     /**
@@ -84,7 +87,7 @@ const ProfilePage: React.FC<ProfilePageProps> = ({
     profile, crops, onUpdateProfile, onUpdateCrops,
     onAddPerson, onDeletePerson,
     onOpenScheduleLibrary, onOpenFinanceManager, onOpenLabour, onOpenReferrals,
-    onOpenConsent, onOpenExport, onOpenErasure,
+    onOpenConsent, onOpenExport, onOpenErasure, onOpenAiDrafts,
     onExit,
     initialTab,
 }) => {
@@ -323,6 +326,10 @@ const ProfilePage: React.FC<ProfilePageProps> = ({
                     export: { label: 'डेटा डाउनलोड · Export my data', icon: <Download size={20} />, subtitle: 'सर्व डेटाची प्रत · A copy of your data' },
                     erase: { label: 'डेटा पुसा · Erase my data', icon: <Trash2 size={20} />, subtitle: 'कायमचा पुसा · Permanent' },
                     billing: { label: 'बिलिंग · Billing', icon: <CreditCard size={20} />, subtitle: 'तुमचा प्लॅन · Your plan' },
+                    // English-only placeholder copy (Global Constraint: never compose new
+                    // Marathi) — every other row here already had an existing Marathi
+                    // string to reuse verbatim; this one does not.
+                    'ai-drafts': { label: 'AI Drafts', icon: <Mic size={20} />, subtitle: 'Review voice notes' },
                 };
                 const settingsItems = buildSettingsExtraIds(isOwner).map(id => ({ id, ...settingsMeta[id] }));
 
@@ -330,6 +337,7 @@ const ProfilePage: React.FC<ProfilePageProps> = ({
                     if (id === 'consent') { onOpenConsent?.(); return; }
                     if (id === 'export') { onOpenExport?.(); return; }
                     if (id === 'erase') { onOpenErasure?.(); return; }
+                    if (id === 'ai-drafts') { onOpenAiDrafts?.(); return; }
                     setActiveExtra(id); // 'language' | 'billing' — folded sub-screens
                 };
 
