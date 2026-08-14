@@ -191,15 +191,23 @@ const AiDraftsPage: React.FC<AiDraftsPageProps> = ({ onBack }) => {
     //
     // NEW (fix round 3) — `'saved'` was still collapsing two outcomes: a
     // clean save, and a save where the write succeeded but a LATER step
-    // (sync enqueue) failed. `useLogCommands.ts`'s `setError` on that path
-    // renders on exactly one surface — the main log screen's `AudioRecorder`
-    // — and NOWHERE on this page. Treating that as plain `'saved'` meant this
+    // (sync enqueue) failed. Treating that as plain `'saved'` meant this
     // page told the farmer nothing, marked the draft reviewed, and refreshed
     // — the row vanished with the log sitting in Dexie and nothing queued to
     // sync. `'saved_with_warning'` is its own outcome so this page can say so
     // on ITS OWN surface, using the `window.alert` it already has below —
     // BEFORE marking reviewed, never suggesting a retry (the record is safe;
     // retrying would duplicate it).
+    //
+    // ROUND 4 (N2) — a sentence has been deleted from the paragraph above.
+    // It said `useLogCommands.ts`'s `setError` "renders on exactly one
+    // surface — the main log screen's `AudioRecorder`". It renders on NO
+    // surface for this outcome: `mainView.tsx:388`/`:405` pass `error` as
+    // `externalError` to `AudioRecorder`/`AudioRecorderStreaming`, and both
+    // are mounted only when `mode === 'voice'`, whereas `ManualEntry` — the
+    // only caller of `handleManualSubmit` — is the other branch. What this
+    // page says below is therefore not a second copy of a message shown
+    // elsewhere; it is the only place the farmer is told at all.
     const handleSubmit: ManualEntryProps['onSubmit'] = async (data) => {
         const outcome = await handleManualSubmit(data);
 
@@ -221,10 +229,42 @@ const AiDraftsPage: React.FC<AiDraftsPageProps> = ({ onBack }) => {
         }
 
         if (outcome === 'saved_with_warning') {
-            // The record IS durably saved — say so, and say plainly that it
-            // has not reached the server yet. Never "try again": the log
-            // already exists, and a retry would create a second one.
-            window.alert('Saved, but not sent yet. It will send automatically once you are back online.');
+            // ROUND 4 (N1) — this said "Saved, but not sent yet. It will send
+            // automatically once you are back online." Both halves were false
+            // on the exact path that shows it, and `saveToastMessages.ts`
+            // already forbids the shape in writing: "never 'not yet' … a
+            // promise of a retry that no code path can keep".
+            //   - The documented trigger is `MutationQueue.enqueue` throwing
+            //     on payload validation, NOT being offline. Blaming
+            //     connectivity points the farmer at a cause he can "fix" by
+            //     waiting, which does nothing.
+            //   - `enqueueLogsForSync` has no try/catch, so on that trigger no
+            //     mutation row was ever written: nothing is queued for a
+            //     worker to pick up, `noteUnqueueableLogs` never ran so not
+            //     even the session honesty registry learned, and
+            //     `logSyncMutationService.ts` states there is no backfill job
+            //     in this system. On the EDIT branch nothing is enqueued at
+            //     all, ever. Nothing will "send automatically".
+            //
+            // The replacement claims only what this code can prove, in the
+            // order `saveToastMessages.ts` established: the phone claim FIRST
+            // (true, and saying it is what stops the farmer re-recording a
+            // record that already exists), then the failure, then the
+            // present-perfect fact that it is not in the farm records.
+            //
+            // IT MAKES NO CLAIM ABOUT THE FUTURE, deliberately. "will not
+            // reach your farm records" is the honest tense for a KNOWN-skipped
+            // record (`buildSkippedSyncToast`), but this one outcome also
+            // covers a throw from a step that runs AFTER a SUCCESSFUL enqueue
+            // (`calculateLogSummary`, `computeClosureDelta`), where a queued
+            // row does exist and the worker will carry it. The catch block
+            // cannot tell those apart, so promising either direction would
+            // swap one false claim for another. `buildEditSavedMessage`'s zero
+            // branch is the precedent: no claim beats a claim with no use.
+            //
+            // English placeholder only (Global Constraint): no Marathi is
+            // composed here, and no existing Marathi string says this.
+            window.alert('Saved on your phone. Something after the save failed, and it has not reached your farm records.');
         }
 
         // outcome is 'saved' or 'saved_with_warning' — either way the record

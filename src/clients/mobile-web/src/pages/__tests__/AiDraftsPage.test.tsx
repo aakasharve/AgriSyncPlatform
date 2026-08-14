@@ -3,7 +3,7 @@
  * @license
  * SPDX-License-Identifier: Apache-2.0
  *
- * spec: 2026-08-14-founder-decisions-launch-cohort-and-scope — fix rounds 1-2.
+ * spec: 2026-08-14-founder-decisions-launch-cohort-and-scope — fix rounds 1-4.
  *
  * Independent review found that the reader-level tests proved
  * `PendingAiResultsReader` is called correctly, but nothing proved
@@ -32,13 +32,21 @@
  *     made on this page.
  *   - NEW (round 3) — a write that succeeds but whose post-write step (sync
  *     enqueue) fails is its OWN outcome, `'saved_with_warning'`: this page
- *     must tell the farmer plainly (its `setError`-driven surface exists
- *     only on the main log screen, not here), never suggest a retry, and
- *     still mark the draft reviewed (the record IS saved). The list row's
- *     displayed timestamp must also come from the SAME instant the review
- *     screen dates the log from (`resolveRecordedInstant`), not from
- *     `job.result.receivedAtUtc` directly — round 2 fixed the SAVED date but
- *     left the LIST showing a different one for the same note.
+ *     must tell the farmer plainly (`useLogCommands.ts`'s own `setError`
+ *     reaches no mounted surface on this path — see round 4 below), never
+ *     suggest a retry, and still mark the draft reviewed (the record IS
+ *     saved). The list row's displayed timestamp must also come from the SAME
+ *     instant the review screen dates the log from (`resolveRecordedInstant`),
+ *     not from `job.result.receivedAtUtc` directly — round 2 fixed the SAVED
+ *     date but left the LIST showing a different one for the same note.
+ *   - N1 (round 4) — WHAT that alert actually SAYS is now pinned positively.
+ *     Round 3 shipped "Saved, but not sent yet. It will send automatically
+ *     once you are back online." — a promise no code path in this system can
+ *     keep, and a cause (connectivity) that is not the documented trigger.
+ *     The only assertion guarding the sentence was `not.toContain('try
+ *     again')`, which that false promise passed. Asserting the ABSENCE of one
+ *     bad word cannot catch a bad claim; the suite now asserts the honest
+ *     claim itself, so the next false promise fails here.
  */
 import '@testing-library/jest-dom/vitest';
 import React from 'react';
@@ -275,9 +283,9 @@ describe('AiDraftsPage — handleManualSubmit\'s 3-way outcome is read correctly
 
     // round 3 — the record IS saved on this outcome (a step AFTER the write
     // failed, e.g. sync enqueue), so it must still be marked reviewed. But
-    // useLogCommands.ts's own error surface renders nowhere on this page, so
-    // THIS page must say something — and never suggest a retry, since the
-    // record already exists and a retry would duplicate it.
+    // useLogCommands.ts's own error surface is mounted nowhere at that moment
+    // (round 4 / N2), so THIS page must say something — and never suggest a
+    // retry, since the record already exists and a retry would duplicate it.
     it('alerts (without suggesting a retry) AND marks reviewed when the outcome is saved_with_warning', async () => {
         mockHandleManualSubmit.mockResolvedValue('saved_with_warning');
         const alertSpy = vi.spyOn(window, 'alert').mockImplementation(() => {});
@@ -292,6 +300,78 @@ describe('AiDraftsPage — handleManualSubmit\'s 3-way outcome is read correctly
         const [alertMessage] = alertSpy.mock.calls[0] as [string];
         expect(alertMessage.toLowerCase()).not.toContain('try again');
         alertSpy.mockRestore();
+    });
+});
+
+/**
+ * N1 (round 4) — THE SENTENCE ITSELF, pinned positively.
+ *
+ * The round-3 sentence ("Saved, but not sent yet. It will send automatically
+ * once you are back online.") was false on the one path that shows it, and it
+ * sailed through the only guard the suite had — `not.toContain('try again')`.
+ * A negative assertion about one forbidden word cannot detect a forbidden
+ * CLAIM, so these tests assert what the sentence must say, not merely what it
+ * must not.
+ *
+ * The rules come from `src/app/helpers/saveToastMessages.ts`, which already
+ * carries them in prose for the toast path:
+ *   - the phone claim comes FIRST (a farmer who reads "gone" re-records, and
+ *     the record genuinely IS on the handset);
+ *   - never "not yet", and never a promise of a later send — on the trigger
+ *     this outcome documents, `MutationQueue.enqueue` threw and no mutation
+ *     row exists, so no worker can ever pick it up;
+ *   - and the cause is payload validation, not connectivity, so the copy must
+ *     not send the farmer off to wait for a network that was never the point.
+ */
+describe('AiDraftsPage — the saved_with_warning sentence tells the truth (N1, round 4)', () => {
+    const captureAlert = async (): Promise<string> => {
+        mockHandleManualSubmit.mockResolvedValue('saved_with_warning');
+        const alertSpy = vi.spyOn(window, 'alert').mockImplementation(() => {});
+        await openReview();
+
+        fireEvent.click(screen.getByText('Save'));
+
+        await waitFor(() => {
+            expect(alertSpy).toHaveBeenCalledTimes(1);
+        });
+        const [message] = alertSpy.mock.calls[0] as [string];
+        alertSpy.mockRestore();
+        return message;
+    };
+
+    it('leads with the phone claim — the record is asserted SAFE before any bad news', async () => {
+        const message = await captureAlert();
+        // `startsWith`, not `contains` — same rule every caller-side test of
+        // `saveToastMessages` holds. Reassurance last is how duplicates start.
+        expect(message.startsWith('Saved on your phone.')).toBe(true);
+    });
+
+    it('states positively that the record is NOT in the farm records', async () => {
+        const message = await captureAlert();
+        expect(message).toContain('has not reached your farm records');
+    });
+
+    it('says a step after the save failed — the farmer is told something went wrong', async () => {
+        const message = await captureAlert();
+        expect(message).toContain('Something after the save failed');
+    });
+
+    it('promises no later send: no "not yet", no "will send", no "automatically"', async () => {
+        const message = await captureAlert();
+        // The exact shape `saveToastMessages.ts` forbids in writing. A promise
+        // of a retry that no code path can keep is the defect this phase
+        // exists to remove, and it is what round 3 shipped here.
+        expect(message).not.toMatch(/not yet|will send|will be sent|sends? later|automatically|shortly|soon/i);
+    });
+
+    it('never blames connectivity — the documented trigger is payload validation, not being offline', async () => {
+        const message = await captureAlert();
+        expect(message).not.toMatch(/offline|online|internet|connection|network|signal/i);
+    });
+
+    it('never asks for a retry — the record exists and a retry would mint a duplicate', async () => {
+        const message = await captureAlert();
+        expect(message).not.toMatch(/try again|retry|record it again|save it again/i);
     });
 });
 

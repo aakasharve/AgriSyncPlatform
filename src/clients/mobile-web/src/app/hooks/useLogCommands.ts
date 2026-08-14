@@ -661,18 +661,25 @@ export const useLogCommands = ({
         } catch (e) {
             console.error("Critical error in handleManualSubmit:", e);
             // spec: 2026-08-14-founder-decisions-launch-cohort-and-scope (fix
-            // rounds 2-3) — a throw here can land AFTER the durable write
+            // rounds 2-4) — a throw here can land AFTER the durable write
             // (`wasWritten`) if a post-write step failed (sync enqueue,
             // summary calc, toast build — all inside this same `try`). The
             // record is safe; "Failed to save logs. Please try again." is
             // actively wrong in that case — a retry would mint a duplicate.
-            // Round 3: this is its OWN outcome (`'saved_with_warning'`), not
-            // plain `'saved'` — `setError` below only renders on the main log
-            // screen (`mainView.tsx`'s `AudioRecorder`), so a caller that
-            // cannot tell this apart from a clean save (as `AiDraftsPage` was
-            // round 2) has no way to warn the farmer on its own surface, and
-            // the record would go on to be marked reviewed with nothing said
-            // and nothing queued to sync.
+            // Round 3 gave it its OWN outcome (`'saved_with_warning'`) so a
+            // caller can tell it from a clean save and warn on its own
+            // surface — which every caller must do, for the reason below.
+            //
+            // ROUND 4 (N2) — this comment used to say `setError` "only
+            // renders on the main log screen's `AudioRecorder`". FALSE for
+            // this path: `error` has exactly one reader, `mainView.tsx:388`
+            // /`:405` (`externalError` on `AudioRecorder` /
+            // `AudioRecorderStreaming`), and both sit inside the
+            // `mode === 'voice'` branch, while `ManualEntry` — the only
+            // caller of `handleManualSubmit` — is the OTHER branch. So this
+            // message is mounted NOWHERE at that moment, the main log screen
+            // included, and nothing clears `error` on a mode change, so it
+            // can only surface later, decontextualised, in voice mode.
             if (wasWritten) {
                 setError("Saved, but something after the save failed. Your entry is safe.");
                 return 'saved_with_warning';

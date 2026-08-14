@@ -1,4 +1,4 @@
-// spec: 2026-08-14-founder-decisions-launch-cohort-and-scope — fix round 2.
+// spec: 2026-08-14-founder-decisions-launch-cohort-and-scope — fix rounds 2-4.
 // @vitest-environment jsdom
 //
 // COVERAGE GAP (independent review, round 2) — nothing asserted
@@ -13,9 +13,11 @@
 //   - each guard path returns its correct outcome
 //   - the CREATE and EDIT success paths both return 'saved'
 //   - NEW 2(b) — a throw AFTER the durable write (inside the same `try`, in
-//     the sync-enqueue or summary-calc step) still returns 'saved', not
-//     'not_saved' — the record is safe and a caller must never be told to
-//     retry it.
+//     the sync-enqueue or summary-calc step) returns 'saved_with_warning'
+//     (round 3 split this out of plain 'saved'), never 'not_saved' — the
+//     record is safe and a caller must never be told to retry it.
+//   - N1 (round 4) — and the message that accompanies it is asserted by its
+//     CLAIM, not by the absence of one forbidden word.
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
 import { useLogCommands } from '../useLogCommands';
@@ -200,9 +202,16 @@ describe('handleManualSubmit — ManualSubmitOutcome, each path', () => {
     // outcome (`'saved_with_warning'`), not collapsed into plain `'saved'`.
     // Round 2 returned plain `'saved'` here, which let `AiDraftsPage` mark
     // the draft reviewed and refresh with NOTHING said to the farmer on its
-    // own surface (`useLogCommands.ts`'s `setError` renders only on
-    // `mainView.tsx`'s `AudioRecorder`) — the row simply vanished while
-    // nothing was queued to sync.
+    // own surface — the row simply vanished while nothing was queued to sync.
+    //
+    // ROUND 4 (N2) — the parenthetical that used to sit above said
+    // `useLogCommands.ts`'s `setError` "renders only on `mainView.tsx`'s
+    // `AudioRecorder`". It renders NOWHERE on this path: `error` reaches
+    // `AudioRecorder`/`AudioRecorderStreaming` only via `externalError` at
+    // `mainView.tsx:388`/`:405`, and those mount only when `mode === 'voice'`,
+    // while `ManualEntry` — the sole caller of `handleManualSubmit` — is the
+    // other branch. That is precisely why every caller must warn on its own
+    // surface, and why the message below has to be honest on its own.
     it('returns saved_with_warning (not saved, not not_saved) when a step AFTER the write throws', async () => {
         confirmAndSave.mockResolvedValue(undefined);
         enqueueLogsForSync.mockRejectedValueOnce(new Error('sync enqueue boom'));
@@ -219,5 +228,22 @@ describe('handleManualSubmit — ManualSubmitOutcome, each path', () => {
         // The caller must never be told "failed, try again" for a record
         // that is already safely in the ledger — a retry would duplicate it.
         expect(setError).not.toHaveBeenCalledWith('Failed to save logs. Please try again.');
+
+        // ROUND 4 (N1) — assert the CLAIM, not just the absence of one bad
+        // word. `not.toHaveBeenCalledWith(...)` above is satisfied by any
+        // other string, including a false promise of a later automatic send;
+        // that is exactly how round 3's "It will send automatically once you
+        // are back online." reached the farmer on the sibling surface. Pin
+        // what this message positively says and what shape it may never take.
+        expect(setError).toHaveBeenCalledTimes(1);
+        const [message] = setError.mock.calls[0] as [string];
+        expect(message).toBe('Saved, but something after the save failed. Your entry is safe.');
+        // No promise of a retry or a later send. `enqueueLogsForSync` has no
+        // try/catch, so on this trigger no mutation row was written and no
+        // worker can ever pick the record up — a promise here is one no code
+        // path in this system can keep (`saveToastMessages.ts`).
+        expect(message).not.toMatch(/not yet|will send|will be sent|automatically|try again|retry/i);
+        // And the cause is never attributed to connectivity.
+        expect(message).not.toMatch(/offline|online|internet|connection|network/i);
     });
 });
