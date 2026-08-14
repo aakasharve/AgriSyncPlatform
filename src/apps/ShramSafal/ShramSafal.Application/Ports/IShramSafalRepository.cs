@@ -670,4 +670,24 @@ public interface IShramSafalRepository
     Task<IReadOnlyList<ShramSafal.Domain.Dfes.QuestionEvent>> GetRecentQuestionEventsForFarmAsync(
         Guid farmId, DateTime sinceUtc, CancellationToken ct = default)
         => Task.FromResult<IReadOnlyList<ShramSafal.Domain.Dfes.QuestionEvent>>(Array.Empty<ShramSafal.Domain.Dfes.QuestionEvent>());
+
+    /// <summary>
+    /// task-3 (2026-08-14), founder ruling A — the gap dimensions the farmer actually
+    /// ANSWERED on one local day, for the daily-richness recompute to credit.
+    ///
+    /// <para>Returns only what <see cref="ShramSafal.Domain.Dfes.AnsweredGap.TryFrom"/>
+    /// accepts: a <c>gap.*</c> question whose response carries content. Non-gap questions
+    /// and empty answers yield nothing, so silence can never score (doctrine P4). Every
+    /// instance MUST be built through <c>TryFrom</c> — it is what upper-cases the
+    /// dimension, and the extractor compares dimension names with ordinal equality.</para>
+    ///
+    /// <para><c>question_events</c> has no local-date column, so the day is expressed as the
+    /// UTC window <see cref="ShramSafal.Domain.Dfes.FarmLocalDay.UtcWindow"/> defines —
+    /// the same rule the handler uses to decide which day was answered. RLS scopes rows to
+    /// the caller's tenant; the app layer additionally membership-checks. Default empty so
+    /// in-tree test doubles keep compiling; production overrides.</para>
+    /// </summary>
+    Task<IReadOnlyList<ShramSafal.Domain.Dfes.AnsweredGap>> GetAnsweredGapsAsync(
+        Guid farmId, DateOnly localDate, CancellationToken ct = default)
+        => Task.FromResult<IReadOnlyList<ShramSafal.Domain.Dfes.AnsweredGap>>(Array.Empty<ShramSafal.Domain.Dfes.AnsweredGap>());
 }

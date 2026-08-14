@@ -363,6 +363,40 @@ internal sealed class ShramSafalRepository(ShramSafalDbContext db) : IShramSafal
             .OrderByDescending(q => q.CreatedAtUtc)
             .ToListAsync(ct);
 
+    // task-3 (2026-08-14), founder ruling A. question_events carries no local_date, so the
+    // day is a half-open UTC window (FarmLocalDay — the SAME rule the handler and the
+    // derivation service use; a second one here would credit the wrong day). ShownAtUtc is
+    // nullable, and CreatedAtUtc is the fallback the handler also derives from, so the two
+    // sides agree row-for-row.
+    public async Task<IReadOnlyList<Domain.Dfes.AnsweredGap>> GetAnsweredGapsAsync(
+        Guid farmId, DateOnly localDate, CancellationToken ct = default)
+    {
+        var (startUtc, endUtcExclusive) = Domain.Dfes.FarmLocalDay.UtcWindow(localDate);
+
+        var rows = await db.QuestionEvents
+            .AsNoTracking()
+            .Where(e => e.FarmId == farmId
+                        && (e.ShownAtUtc ?? e.CreatedAtUtc) >= startUtc
+                        && (e.ShownAtUtc ?? e.CreatedAtUtc) < endUtcExclusive)
+            .Select(e => new { e.QuestionKey, e.Response })
+            .ToListAsync(ct);
+
+        var gaps = new List<Domain.Dfes.AnsweredGap>();
+        foreach (var r in rows)
+        {
+            // TryFrom is the ONLY constructor used here: it enforces the gap-key and
+            // non-empty-answer rules and upper-cases the dimension the extractor matches
+            // on. Rehydrating an AnsweredGap straight from the column would silently
+            // credit nothing (casing) or credit silence.
+            if (Domain.Dfes.AnsweredGap.TryFrom(r.QuestionKey, r.Response, localDate, out var gap))
+            {
+                gaps.Add(gap);
+            }
+        }
+
+        return gaps;
+    }
+
     public async Task AddAttachmentAsync(Attachment attachment, CancellationToken ct = default)
     {
         await db.Attachments.AddAsync(attachment, ct);

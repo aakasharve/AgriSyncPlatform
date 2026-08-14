@@ -30,7 +30,7 @@ public sealed class RecordQuestionEventHandlerTests
     {
         var farmId = Guid.NewGuid(); var userId = Guid.NewGuid();
         var repo = new CapturingRepo(memberOfFarm: true);
-        var handler = new RecordQuestionEventHandler(repo, new FixedClock(FixedNow), NullLogger<RecordQuestionEventHandler>.Instance);
+        var handler = new RecordQuestionEventHandler(repo, new NullDailyRichnessDerivationService(), new FixedClock(FixedNow), NullLogger<RecordQuestionEventHandler>.Instance);
         var cmd = ValidCommand(farmId, userId) with { AgronomistApproved = false };
 
         var result = await handler.HandleAsync(cmd, CancellationToken.None);
@@ -43,7 +43,7 @@ public sealed class RecordQuestionEventHandlerTests
     public async Task Forbids_non_member()
     {
         var repo = new CapturingRepo(memberOfFarm: false);
-        var handler = new RecordQuestionEventHandler(repo, new FixedClock(FixedNow), NullLogger<RecordQuestionEventHandler>.Instance);
+        var handler = new RecordQuestionEventHandler(repo, new NullDailyRichnessDerivationService(), new FixedClock(FixedNow), NullLogger<RecordQuestionEventHandler>.Instance);
         var result = await handler.HandleAsync(ValidCommand(Guid.NewGuid(), Guid.NewGuid()), CancellationToken.None);
         Assert.True(result.IsFailure);
         Assert.Contains("Forbidden", result.Error.Code);
@@ -53,7 +53,7 @@ public sealed class RecordQuestionEventHandlerTests
     public async Task Stages_an_append_only_row_with_versions_stamped()
     {
         var repo = new CapturingRepo(memberOfFarm: true);
-        var handler = new RecordQuestionEventHandler(repo, new FixedClock(FixedNow), NullLogger<RecordQuestionEventHandler>.Instance);
+        var handler = new RecordQuestionEventHandler(repo, new NullDailyRichnessDerivationService(), new FixedClock(FixedNow), NullLogger<RecordQuestionEventHandler>.Instance);
         var farmId = Guid.NewGuid();
 
         var result = await handler.HandleAsync(ValidCommand(farmId, Guid.NewGuid()), CancellationToken.None);

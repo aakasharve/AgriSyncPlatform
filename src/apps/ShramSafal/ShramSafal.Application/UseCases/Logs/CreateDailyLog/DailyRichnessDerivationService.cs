@@ -14,10 +14,6 @@ public sealed class DailyRichnessDerivationService(
     IIdGenerator idGenerator,
     IClock clock) : IDailyRichnessDerivationService
 {
-    // Asia/Kolkata is a fixed +05:30 offset (no DST) — compute the local date
-    // deterministically without depending on the host TZ database.
-    private static readonly TimeSpan IstOffset = TimeSpan.FromMinutes(330);
-
     public async Task RecomputeAsync(Guid farmId, DateOnly localDate, CancellationToken ct = default)
     {
         var logs = await repository.GetDailyLogsForFarmDateAsync(farmId, localDate, ct);
@@ -44,6 +40,14 @@ public sealed class DailyRichnessDerivationService(
             .GroupBy(x => x.DailyLogId).ToDictionary(g => g.Key, g => (IReadOnlyList<Domain.Farms.MachineryUsage>)[.. g]);
         var disturbanceByLog = (await repository.GetDisturbanceEventsForDailyLogsAsync(logIds, ct))
             .GroupBy(x => x.DailyLogId).ToDictionary(g => g.Key, g => (IReadOnlyList<Domain.Farms.DisturbanceEvent>)[.. g]);
+
+        // task-3 (2026-08-14), founder ruling A — what the farmer told Sathi about this
+        // day. Loaded HERE, inside RecomputeAsync, rather than by any caller: the roster
+        // this feeds is PERSISTED and read back, so a recompute path that omitted the
+        // answered gaps would overwrite the row with a lower score and slide the farmer
+        // backwards for having answered. Loading it at the single point every path goes
+        // through makes that impossible to forget.
+        var answeredGaps = await repository.GetAnsweredGapsAsync(farmId, localDate, ct);
 
         var roots = new List<JsonElement>();
         var persistedRoots = new List<JsonElement>();
@@ -113,10 +117,10 @@ public sealed class DailyRichnessDerivationService(
                 }
             }
 
-            var serverTodayLocal = DateOnly.FromDateTime(clock.UtcNow + IstOffset);
+            var serverTodayLocal = FarmLocalDay.From(clock.UtcNow);
             var plausible = ClientDateSanity.IsPlausible(localDate, serverTodayLocal);
 
-            var data = new DfesLensExtractor.DayData(roots, observations, persistedRoots);
+            var data = new DfesLensExtractor.DayData(roots, observations, persistedRoots, answeredGaps);
             var probe = new DfesLensExtractor.LensScoresProbe();
             var (input, signals) = DfesLensExtractor.Build(data, probe, plausible);
             var scores = probe.Scores;

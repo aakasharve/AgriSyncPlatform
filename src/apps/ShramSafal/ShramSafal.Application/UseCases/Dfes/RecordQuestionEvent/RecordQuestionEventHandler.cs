@@ -2,6 +2,7 @@ using AgriSync.BuildingBlocks.Abstractions;
 using AgriSync.BuildingBlocks.Results;
 using Microsoft.Extensions.Logging;
 using ShramSafal.Application.Ports;
+using ShramSafal.Application.UseCases.Logs.CreateDailyLog;
 using ShramSafal.Domain.Common;
 using ShramSafal.Domain.Dfes;
 
@@ -9,6 +10,7 @@ namespace ShramSafal.Application.UseCases.Dfes.RecordQuestionEvent;
 
 public sealed class RecordQuestionEventHandler(
     IShramSafalRepository repository,
+    IDailyRichnessDerivationService dailyRichnessDerivation,
     IClock clock,
     ILogger<RecordQuestionEventHandler> logger)
 {
@@ -54,6 +56,26 @@ public sealed class RecordQuestionEventHandler(
 
         await repository.AddQuestionEventAsync(entity, ct);
         await repository.SaveChangesAsync(ct);
+
+        // task-3 (2026-08-14), founder ruling A — the farmer just told us something true
+        // about this day. The number he is looking at must reflect it before he looks
+        // away; a screen that thanks him and then shows the same score teaches him that
+        // answering is pointless.
+        //
+        // Ordering matters: the event is COMMITTED first, because the recompute reads the
+        // day's answered gaps back out of question_events. RecomputeAsync rebuilds the
+        // whole (farm, date) aggregate from scratch and is safe to call any number of
+        // times (see IDailyRichnessDerivationService) — and it no-ops when the day has no
+        // log at all, so answering about a day the farmer never recorded invents nothing.
+        //
+        // The local day comes from the SAME rule the derivation and the repository use
+        // (FarmLocalDay), off the instant the question was shown — falling back to the
+        // row's own creation time when the client sent no ShownAtUtc, exactly as the
+        // repository's window does. No second date source is introduced.
+        var localDate = FarmLocalDay.From(entity.ShownAtUtc ?? entity.CreatedAtUtc);
+        await dailyRichnessDerivation.RecomputeAsync(cmd.FarmId, localDate, ct);
+        await repository.SaveChangesAsync(ct);
+
         return Result.Success(entity.Id);
     }
 }
