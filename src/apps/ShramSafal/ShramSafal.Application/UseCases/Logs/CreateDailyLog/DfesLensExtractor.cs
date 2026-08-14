@@ -26,10 +26,16 @@ internal static class DfesLensExtractor
     /// tasks) by <see cref="PersistedDayRootBuilder"/>. Every dimension below is scored
     /// against BOTH lists and takes the BETTER of the two, so folding the farmer's real
     /// rows in can only ever reveal detail the AI text alone hid — never remove any.</param>
+    /// <param name="AnsweredGaps">task-2 (2026-08-14), founder ruling A — gap dimensions
+    /// the farmer answered on this day. Credited into the completeness roster only (see
+    /// the crediting block in <see cref="Build"/>): never into the classifier lenses, so
+    /// the reward economy does not move. Optional so every pre-existing construction site
+    /// keeps compiling; callers that do not pass it credit nothing, same as before.</param>
     public sealed record DayData(
         IReadOnlyList<JsonElement> Roots,
         IReadOnlyList<ObservationEvent> Observations,
-        IReadOnlyList<JsonElement>? PersistedRoots = null);
+        IReadOnlyList<JsonElement>? PersistedRoots = null,
+        IReadOnlyList<AnsweredGap>? AnsweredGaps = null);
 
     public static (LensInput Input, ClassifierSignals Signals) Build(DayData data, LensScoresProbe probeSink, bool clientDatePlausible)
     {
@@ -87,9 +93,32 @@ internal static class DfesLensExtractor
         // and "…with Confidor" only fills them in. LEARN_FACET is still RECORDED here
         // (the roster stays a complete picture of the day) but DayUnderstandingScore
         // skips it while nothing in production can earn it; see its NotYetEarnable.
+        // task-2 (2026-08-14), founder ruling A — an answered gap credits the
+        // dimension the farmer actually answered, at the dimension's own weight,
+        // into the completeness ROSTER only. Never into `execution`/`insight` above
+        // (those are already built from the roots/persisted rows and stay exactly
+        // what the day's data shows — the classifier and reward economy do not
+        // move). Never additive on top of a logged fact — answering is a second
+        // route to the same point, not a bonus, so a dimension already at coverage
+        // 1.0 is left untouched. A dimension that cannot apply to this day's work
+        // (Applicable == false) is also left untouched — answering never invents
+        // applicability the day's own data did not show (doctrine P4).
+        //
+        // Controller Ruling R2 (binding): the creditable set is EXACTLY the
+        // dimensions the extractor already weighs — WHAT, DOSE, CARRIER, COST,
+        // WEATHER. SCOPE was deliberately removed from scoring and PURPOSE /
+        // CONTINUITY never had a weight, so an answered gap for any of them
+        // matches no case below and credits nothing.
+        var gaps = data.AnsweredGaps ?? [];
         var possible = new List<ScoredDimension>
         {
-            what, cost, doseOwed, carrierOwed, weather, obsFacet, learnFacet,
+            Credit(what, "WHAT", gaps),
+            Credit(cost, "COST", gaps),
+            Credit(doseOwed, "DOSE", gaps),
+            Credit(carrierOwed, "CARRIER", gaps),
+            Credit(weather, "WEATHER", gaps),
+            obsFacet,
+            learnFacet,
         };
 
         var input = new LensInput(execution, insight, learning, possible);
@@ -331,6 +360,16 @@ internal static class DfesLensExtractor
 
     private static ScoredDimension Dim(string name, int weight, Cover c)
         => new(name, weight, c.Applicable, c.Value, Cf);
+
+    // task-2 (2026-08-14) — fill `dim` to full coverage when the farmer answered
+    // its dimension AND the day has not already earned it. A no-op when: the
+    // dimension does not apply to this day's work (Applicable false — never
+    // invent applicability); the dimension is already fully covered (Coverage
+    // 1.0 — never double-count); or no answered gap names this dimension.
+    private static ScoredDimension Credit(ScoredDimension dim, string dimension, IReadOnlyList<AnsweredGap> gaps)
+        => dim.Applicable && dim.Coverage < 1.0 && gaps.Any(g => g.Dimension == dimension)
+            ? dim with { Coverage = 1.0 }
+            : dim;
 
     private static IEnumerable<JsonElement> Arr(JsonElement el, string prop)
         => el.ValueKind == JsonValueKind.Object && el.TryGetProperty(prop, out var v) && v.ValueKind == JsonValueKind.Array
