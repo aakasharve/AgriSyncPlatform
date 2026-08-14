@@ -340,13 +340,18 @@ next person who asks.
       **(a)** The init effect wraps everything in a `try/catch` that only logs, and its `finally`
       **always** clears the loading flag — so if activation throws, children render anyway with no
       activated database. Fail-closed becomes fail-open plus a crash.
-      **(b)** Activation is **conditional** (`if (!isDemoMode && session?.userId)`) while
-      `dataSource.initialize()` on the next line is **unconditional**. Demo mode, and any render where
-      the session id is not yet hydrated, still open the **incumbent's** database. The draft never
-      mentioned demo mode at all.
-      **(c)** The blast radius is ~3× the draft's figure: **299 `getDatabase()` calls across 84 files**,
-      not the ~104 quoted from a stale in-file comment. Produce an inventory of which sites swallow a
-      throw (a worker stops silently) versus which crash boot, **before** making it throw.
+      **(b)** ✅ **CORRECTED BY EXECUTION.** The draft blamed `dataSource.initialize()` — that function
+      has an **EMPTY BODY** and opens nothing. The hazard is real; the mechanism named for it was inert.
+      **The actual unconditional openers are `MigrationService.migrate()` and
+      `runLegacyLocalStorageMigration()`**, and then every later `getDatabase()`.
+      **(c)** ✅ **MEASURED, and smaller than the draft claimed in the way that matters:**
+      **314 call sites across 86 files, of which only 122 in 55 production files** — the other 192 are
+      tests. Of the production sites, **26 swallow a throw inside a `try{}`** (a worker stops silently)
+      and **96 are unguarded** (throw propagates). Heaviest unguarded: the log repository ×17 and the
+      mutation queue ×14.
+      🛑 **DO NOT make `getDatabase()` throw across those 96.** The unguarded set includes the log write
+      path — a synchronous throw stops a farmer recording today's work (`P9`). **Fix the
+      activation/ownership boundary, not 96 symptoms.**
 - [ ] **Cache Storage: renaming does not isolate.** `caches` is **origin-scoped, not
       database-scoped** — `caches.open('agrisync-local-files-v1')` stays callable from any farmer's
       session, and "quarantine, never delete" guarantees the old cache survives holding every existing
@@ -373,8 +378,20 @@ next person who asks.
       callers.
 - [ ] **Previous farmer's database: quarantine, never delete.** Route nobody to it. Deletion is
       irreversible and the device may hold the only copy — `P10` is not yet true.
-- [ ] **Verify:** `REPRO-A2` — all seven A2.2 assertions and the namespace assertion flip green; four
-      sanity anchors stay green. **Assert the orphaning is non-destructive:** old keys remain present and
+      🛑 **`REPRO-A2`'s `a_farmer_database_can_be_deleted_somewhere_in_production_code` is EXPECTED RED
+      BY DESIGN and NON-GATING.** It goes green only when production gains a delete call, which this
+      section forbids and §17 defers behind a founder retention ruling. **Nobody may "fix" it.**
+- [ ] **The `appMeta` ownership claim row is COUNTED by the green gate.** `perUserDatabaseIsolation.test.ts`
+      row-counts 21 tables including `appMeta`, so the mandated claim row collides with the
+      all-one/all-empty expectations in nine proofs. Carry it in the expected counts **and** assert the
+      claim *names the right farmer* — a stronger check than the count it replaces.
+- [ ] **Verify — the assertions each dispatch owns, named.**
+      **Ownership + fail-closed (LANDED `12e6fb4e`):** `farmer_B_cannot_read_farmer_A_records_after_localStorage_is_cleared_but_indexeddb_survives` ·
+      `farmer_B_cannot_read_farmer_A_private_row_after_localStorage_is_cleared` ·
+      `farmer_A_keeps_access_to_own_records_after_localStorage_is_cleared`. **These three were not
+      listed in any earlier draft of this section.**
+      **localStorage move:** the seven A2.2 assertions and the namespace assertion.
+      Four sanity anchors stay green throughout. **Assert the orphaning is non-destructive:** old keys remain present and
       readable after the change.
 
 ### P0.2 — Audit read-endpoint authorization bypass (new, security-found)
