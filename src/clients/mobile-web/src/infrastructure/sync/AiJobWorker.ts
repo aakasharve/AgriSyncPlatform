@@ -112,13 +112,24 @@ export class AiJobWorker {
         await this.updateVoiceClipStatus(job, 'parsing');
 
         try {
-            await this.executeJob(job);
+            // KEEP THE ANSWER. `executeJob` used to await the parse and assign
+            // it to nothing: the audio uploaded, the server read it, this row
+            // was marked `completed`, and the farmer's spoken note produced
+            // nothing he could ever see. Marking a job done while throwing away
+            // the only thing it produced is the sharpest form of the dishonesty
+            // this codebase is removing — a green tick over an empty hand.
+            const payload = await this.executeJob(job);
 
             await db.pendingAiJobs.update(job.id, {
                 status: 'completed',
                 updatedAt: systemClock.nowISO(),
                 lastError: undefined,
                 nextRetryAfterMs: undefined,
+                result: {
+                    operationType: job.operationType,
+                    receivedAtUtc: systemClock.nowISO(),
+                    payload,
+                },
             });
             await this.updateVoiceClipStatus(job, 'parsed');
 
@@ -191,7 +202,7 @@ export class AiJobWorker {
         });
     }
 
-    private static async executeJob(job: PendingAiJobWithId): Promise<void> {
+    private static async executeJob(job: PendingAiJobWithId): Promise<unknown> {
         const { context } = job;
 
         const farmId = context.farmId?.trim();
@@ -208,7 +219,7 @@ export class AiJobWorker {
                     throw new Error('Missing text transcript for queued text voice parse.');
                 }
 
-                await agriSyncClient.parseTextLog(
+                return await agriSyncClient.parseTextLog(
                     transcript,
                     parseContext,
                     farmId,
@@ -237,7 +248,7 @@ export class AiJobWorker {
                 throw new Error('Missing audio blob for queued voice parse job.');
             }
 
-            await agriSyncClient.parseVoiceLog(
+            return await agriSyncClient.parseVoiceLog(
                 job.inputBlob,
                 job.inputMimeType ?? 'audio/webm',
                 parseContext,
@@ -267,7 +278,7 @@ export class AiJobWorker {
         }
 
         if (job.operationType === 'receipt_extract') {
-            await agriSyncClient.extractReceipt(
+            return await agriSyncClient.extractReceipt(
                 job.inputBlob,
                 job.inputMimeType ?? 'image/jpeg',
                 farmId,
@@ -282,7 +293,7 @@ export class AiJobWorker {
                 throw new Error('Missing cropName for queued patti extract job.');
             }
 
-            await agriSyncClient.extractPatti(
+            return await agriSyncClient.extractPatti(
                 job.inputBlob,
                 job.inputMimeType ?? 'image/jpeg',
                 cropName,

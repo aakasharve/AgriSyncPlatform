@@ -220,6 +220,48 @@ export interface PendingAiJobRecord {
     lastError?: string;
     nextRetryAfterMs?: number;
     attemptSignatures?: PendingAiAttemptSignature[];
+    /**
+     * THE THING THE SERVER SENT BACK. Written when the job completes.
+     *
+     * Until this field existed, the worker awaited the parse and assigned the
+     * answer to nothing — the audio uploaded, the server read it, the job was
+     * marked `completed`, and the farmer's spoken note produced NOTHING he
+     * could ever see. On a voice-first app that is the product failing, not a
+     * feature failing.
+     *
+     * Stored VERBATIM, exactly as the API returned it. The live path already
+     * owns the normalisation (`BackendAiClient` — schema parse, then a drift
+     * fallback), and duplicating that here would give the app two readings of
+     * one payload that drift apart. The reviewing surface normalises on read,
+     * through the same code the live path uses.
+     *
+     * This is TEMPORARY PROCESSING DATA, not business truth, and it is
+     * deliberately NOT turned into a `DailyLog` on arrival: the farmer has not
+     * confirmed it. Writing an unconfirmed log would assert he recorded
+     * something he never approved. It stays here until he does.
+     *
+     * NON-INDEXED ON PURPOSE — no Dexie version bump, so no one-way upgrade for
+     * APK users. Old rows simply have no `result`, which reads as "this job
+     * completed before the app could keep the answer" and is exactly true.
+     */
+    result?: PendingAiJobResult;
+}
+
+/**
+ * A completed job's answer, kept with enough context to review it later.
+ *
+ * `receivedAtUtc` is the moment the DEVICE received it, which is not the moment
+ * the farmer spoke — a note recorded at dusk and drained next morning has a
+ * `recordedAtUtc` on its clip and this stamp a night later. Both are kept
+ * because conflating them would misdate the farmer's own day.
+ */
+export interface PendingAiJobResult {
+    operationType: PendingAiOperationType;
+    receivedAtUtc: string;
+    /** Verbatim API response. Shape varies by `operationType`; normalised on read. */
+    payload: unknown;
+    /** True once the farmer has acted on it, so a reviewed draft stops resurfacing. */
+    reviewedAtUtc?: string;
 }
 
 // =============================================================================

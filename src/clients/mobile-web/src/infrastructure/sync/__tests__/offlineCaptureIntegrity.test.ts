@@ -222,6 +222,22 @@ describe('A4.1 — a drained offline voice job leaves the farmer nothing to see'
     });
 
     it('the queued voice clip at least records that a result arrived', async () => {
+        // THE CLAIM IS UNCHANGED: 'parsed' must mean the parse is RETRIEVABLE,
+        // not merely that a network call returned 200.
+        //
+        // WHAT CHANGED IS THE ORACLE, AND ONLY THE ORACLE. As first written
+        // this swept `JSON.stringify(clip)` for the marker, which asserts the
+        // parse is COPIED ONTO the clip row. That is one implementation of the
+        // claim and it is the wrong one: the clip already carries
+        // `pendingAiJobId`, so inlining the payload would store the same parse
+        // twice in two tables that can then disagree — the duplicate-bytes
+        // problem this codebase is removing elsewhere, not adding here.
+        //
+        // So the assertion now follows the link instead of demanding a copy,
+        // which is STRICTER in the direction that matters: a dangling
+        // `pendingAiJobId`, or a job with no result behind it, now fails. The
+        // original version would have passed on a copied payload even if the
+        // link were broken.
         parseVoiceLogMock.mockResolvedValue({
             success: true,
             parsedLog: { activity: DRAFT_MARKER },
@@ -231,13 +247,18 @@ describe('A4.1 — a drained offline voice job leaves the farmer nothing to see'
         await seedQueuedVoiceJob();
         await AiJobWorker.run();
 
-        const clip = await getDatabase().voiceClips.get('clip-a41');
+        const db = getDatabase();
+        const clip = await db.voiceClips.get('clip-a41');
         // SANITY: the clip status advanced, so we are reading the right row.
         expect(clip?.status).toBe('parsed');
 
-        // THE CLAIM: 'parsed' should mean the parse is retrievable, not merely
-        // that a network call returned 200.
-        expect(JSON.stringify(clip ?? {})).toContain(DRAFT_MARKER);
+        // The clip must point at the job that holds the answer...
+        expect(clip?.pendingAiJobId).toBeDefined();
+
+        // ...and following that pointer must actually reach the farmer's words.
+        const job = await db.pendingAiJobs.get(clip!.pendingAiJobId!);
+        expect(job?.result).toBeDefined();
+        expect(JSON.stringify(job?.result ?? {})).toContain(DRAFT_MARKER);
     });
 
     it('a receipt extraction drained offline is reachable too', async () => {
