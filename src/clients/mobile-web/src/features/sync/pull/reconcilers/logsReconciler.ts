@@ -59,6 +59,35 @@ function serverStatedContext(source: DailyLogDto): boolean {
     return Array.isArray(source.plotIds);
 }
 
+/**
+ * P0.5 — "did this response STATE anything about verification?"
+ *
+ * Unlike `plotIds` above, presence-of-field cannot draw this line: `DailyLogDto
+ * .verificationEvents` is non-optional and is sent on EVERY response, so
+ * `Array.isArray` is true even for a response that has nothing to say. The
+ * discriminator has to be whether the server holds a verification record at all.
+ *
+ * WHY ZERO EVENTS IS SILENCE AND NOT A STATEMENT. Verification is an append-only
+ * event stream server-side — there is no delete, no revoke and no endpoint that
+ * removes an event. So "zero events and no `lastVerificationStatus`" cannot mean
+ * "the farmer's confirmation was withdrawn"; it means the server was never told.
+ * And it is routinely reachable: `POST /logs`, `verify` and `add_log_task` all
+ * return a log without loading its verification events.
+ *
+ * THE DEFECT THIS CLOSES. `mapVerificationStatus(undefined)` returns `DRAFT`, so
+ * the caller read that silence as an assertion and overwrote the farmer's own
+ * `CONFIRMED` with `DRAFT` — on his own device, on the first pull after his own
+ * save was acknowledged. `mapVerificationStatus` is NOT changed: the mapping is
+ * right, and the caller was wrong to treat silence as a statement.
+ *
+ * A genuine downgrade still lands, because a server that downgraded a log has an
+ * event to send and therefore flows through the left branch.
+ */
+function serverStatedVerification(source: DailyLogDto): boolean {
+    return source.lastVerificationStatus != null
+        || (Array.isArray(source.verificationEvents) && source.verificationEvents.length > 0);
+}
+
 export async function reconcileLogs(
     db: AgriLogDatabase,
     payload: SyncPullResponse,
@@ -69,12 +98,16 @@ export async function reconcileLogs(
 
     const serverModifiedByLogId = new Map<string, string>();
     const contextStatedLogIds = new Set<string>();
+    const verificationStatedLogIds = new Set<string>();
     for (const dto of payload.dailyLogs) {
         if (dto.modifiedAtUtc) {
             serverModifiedByLogId.set(dto.id, dto.modifiedAtUtc);
         }
         if (serverStatedContext(dto)) {
             contextStatedLogIds.add(dto.id);
+        }
+        if (serverStatedVerification(dto)) {
+            verificationStatedLogIds.add(dto.id);
         }
     }
 
@@ -99,14 +132,31 @@ export async function reconcileLogs(
             continue;
         }
 
+        // P0.5 — THE INDEX COLUMNS ARE DERIVED FROM THE MERGED RECORD, NEVER
+        // FROM THE REBUILD.
+        //
+        // Every reader queries the index, not the blob: the log lists filter on
+        // `isDeleted`, and the status screens query `verificationStatus`. So
+        // preserving a field inside `log` while computing the column beside it
+        // from `incoming` fixes nothing a farmer can see — the deletion still
+        // resurrects in every list, and his own `CONFIRMED` still reads `DRAFT`
+        // in every status query. `toDailyLog` never sets `deletion` at all, so
+        // the old `log.deletion ? 1 : 0` wrote `0` unconditionally.
+        const merged = preserveLocalOnlyFields(
+            log,
+            existing?.log,
+            contextStatedLogIds.has(log.id),
+            verificationStatedLogIds.has(log.id),
+        );
+
         await db.logs.put({
-            id: log.id,
+            id: merged.id,
             schemaVersion: VersionRegistry.DB_SCHEMA_VERSION,
-            log: preserveLocalOnlyFields(log, existing?.log, contextStatedLogIds.has(log.id)),
-            date: log.date,
-            verificationStatus: log.verification?.status,
-            createdByOperatorId: log.meta?.createdByOperatorId,
-            isDeleted: log.deletion ? 1 : 0,
+            log: merged,
+            date: merged.date,
+            verificationStatus: merged.verification?.status,
+            createdByOperatorId: merged.meta?.createdByOperatorId,
+            isDeleted: merged.deletion ? 1 : 0,
             serverModifiedAtUtc: serverModified,
         });
     }
@@ -178,6 +228,7 @@ function preserveLocalOnlyFields(
     incoming: DailyLog,
     existing: DailyLog | undefined,
     serverStatedContext: boolean,
+    serverStatedVerification: boolean,
 ): DailyLog {
     if (!existing) {
         return incoming;
@@ -188,6 +239,98 @@ function preserveLocalOnlyFields(
         labour: resolveLabour(incoming.labour, existing.labour),
         financialSummary: existing.financialSummary ?? incoming.financialSummary,
         context: serverStatedContext ? incoming.context : (existing.context ?? incoming.context),
+
+        // ── P0.5 — THE TEN FIELDS THE WIRE HAS NO WORD FOR ──────────────────
+        //
+        // `DailyLogDto` carries no counterpart for any of these, so `toDailyLog`
+        // leaves them absent and the full-record `put` erased them. Preserved
+        // under the same rule as the four above: local wins wherever the
+        // response made no statement. `?? incoming.X` rather than a bare
+        // `existing.X` so that the day the wire learns to carry one, a local
+        // absence does not veto it.
+        //
+        // `deletion` is the sharpest of them — its loss is what let a log the
+        // farmer deleted come back on the next pull. See the index-column note
+        // in `reconcileLogs`: preserving it here is only half that fix.
+        machinery: existing.machinery ?? incoming.machinery,
+        activityExpenses: existing.activityExpenses ?? incoming.activityExpenses,
+        plannedTasks: existing.plannedTasks ?? incoming.plannedTasks,
+        disturbance: existing.disturbance ?? incoming.disturbance,
+        fullTranscript: existing.fullTranscript ?? incoming.fullTranscript,
+        manualTotalCost: existing.manualTotalCost ?? incoming.manualTotalCost,
+        understanding: existing.understanding ?? incoming.understanding,
+        weatherStamp: existing.weatherStamp ?? incoming.weatherStamp,
+        phaseAtLogTime: existing.phaseAtLogTime ?? incoming.phaseAtLogTime,
+        dayNumberAtLogTime: existing.dayNumberAtLogTime ?? incoming.dayNumberAtLogTime,
+        deletion: existing.deletion ?? incoming.deletion,
+
+        // ── P0.5 — `meta` IS MERGED, NOT REPLACED ───────────────────────────
+        //
+        // It was replaced wholesale, which erased `appVersion`, `deviceId` and
+        // the whole `provenance` block — the record of WHICH model and WHICH
+        // prompt version produced an AI-derived log. That block is the only
+        // thing distinguishing a farmer's own words from a machine's reading of
+        // them (`P1`, `P8`), and nothing on the wire can rebuild it.
+        //
+        // Incoming still wins on every key it states, so B1c's `farmId` read-back
+        // is unchanged: this widens what survives, it does not override the wire.
+        meta: incoming.meta
+            ? { ...existing.meta, ...incoming.meta }
+            : existing.meta,
+
+        // `dayOutcome` is a literal `'WORK_RECORDED'` in `toDailyLog` — it is
+        // not on the wire in any form, so it belongs to the set above. A day the
+        // farmer recorded as a disturbance came back as a day he worked.
+        dayOutcome: existing.dayOutcome ?? incoming.dayOutcome,
+
+        // ── DELIBERATELY NOT PRESERVED HERE: cropActivities, irrigation,
+        //    inputs, observations. THE FABRICATION ON THOSE IS REAL AND STILL
+        //    LIVE — READ THIS BEFORE "FIXING" IT. ──────────────────────────────
+        //
+        // The server stores them flattened into `tasks`, and `toDailyLog`
+        // rebuilds them by guessing back the structure it lost: a flood
+        // irrigation from a canal returns as `Drip` from `Field`, a curative
+        // fungicide as a `Preventive` pesticide, an urgent voice observation as
+        // `normal`/`manual`, and every unbucketed task stamped `completed`.
+        // Those are literals, not readings of the wire. `REPRO-A1` reproduces
+        // each one and they are still red.
+        //
+        // THEY ARE NOT FIXED BY PRESERVATION, BECAUSE THIS FILE ALREADY HAS A
+        // CONTRACT THAT SAYS THE OPPOSITE, AND THAT CONTRACT IS DEFENDED BY
+        // TESTS. `logsReconciler.labourPreservation.test.ts:149` states it
+        // outright — *"Preservation must be scoped to the fields the wire cannot
+        // express — otherwise it would be a different bug, one that ignores the
+        // server"* — and asserts that a server-sent task DOES replace the local
+        // `cropActivities`. `logsReconciler.multiPlotRoundTrip`,
+        // `logsReconciler.labourReadBack` and `UpdateLog.convergence` assert the
+        // same boundary. These four are the same read-back the labour work was
+        // built on, and the programme says to protect it, not redesign it.
+        //
+        // So the two rules genuinely collide on exactly these four collections:
+        // the wire CAN say a task happened, and CANNOT say what it was. This
+        // guard therefore stops at the intersection both rules agree on — the
+        // fields the wire has no word for at all — and leaves the four alone.
+        //
+        // A PER-ITEM MERGE BY `task.id` IS NOT THE ESCAPE HATCH, AND IS WORSE
+        // THAN EITHER: the client mints a fresh UUID per payload build for any
+        // non-UUID local id, and the manual-entry surface produces exactly those
+        // (`act_global_daily`, `irr_{timestamp}`), so the join matches nothing
+        // and keeps BOTH rows. Since machinery is sent as a task and rebuilt as
+        // a crop activity, the farmer would see a phantom "Machinery Tractor"
+        // beside his own entry, each carrying its own rental and fuel cost.
+        // That is duplicated rupees, not duplicated rows.
+        //
+        // THE REAL FIX is the one already scheduled: make the CONTRACT carry the
+        // structured values, so the rebuild stops guessing (F1 — "type-level
+        // neutralisation of the fabricated constants", triggered when F1 makes
+        // the fields optional). Until then the fabrication is live, reproduced,
+        // and named — not silently absorbed into a guard that was never designed
+        // to carry it.
+
+        // See `serverStatedVerification`. Silence is not a downgrade.
+        verification: serverStatedVerification
+            ? incoming.verification
+            : (existing.verification ?? incoming.verification),
         // LABOUR_PHASE2 PHASE 4 — `patches` is LOCAL HISTORY THE WIRE CANNOT
         // EXPRESS, so a pull may not delete it (`P3`: do not hard-delete
         // something history should still be able to explain).
