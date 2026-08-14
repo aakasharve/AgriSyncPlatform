@@ -95,6 +95,15 @@ jobs:
       - name: Unit tests (vitest)
         run: npm test
         working-directory: src/clients/mobile-web
+      # Runtime reproductions of KNOWN, OPEN defects. Red on purpose until the
+      # named task lands, so this step reports and never blocks — the trunk gate
+      # above answers "did this change break something?", not "is the backlog
+      # empty?". Nothing is skipped or masked: every assertion runs and the
+      # tally is printed here. It must only ever go down.
+      - name: Open-defect reproductions (reporting only)
+        run: npm run test:repro
+        working-directory: src/clients/mobile-web
+        continue-on-error: true
       - name: Build
         run: npm run build
         working-directory: src/clients/mobile-web

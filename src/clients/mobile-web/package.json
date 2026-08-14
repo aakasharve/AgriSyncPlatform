@@ -20,6 +20,7 @@
     "check:storage-discipline": "node scripts/check-storage-discipline.mjs",
     "verify:mutation-queue": "node scripts/verify-mutation-queue.mjs",
     "test": "vitest run",
+    "test:repro": "vitest run --config vitest.repro.config.ts",
     "test:watch": "vitest",
     "test:voice-pipeline": "tsx scripts/voice_pipeline_gate_check.ts",
     "test:doom-loop": "tsx scripts/ai_doom_loop_gate_check.ts",
