@@ -48,6 +48,19 @@ const PERMANENT_REJECTION_CODES: readonly string[] = [
     // Server-side validation 4xx — user must edit and retry.
     'INVALID_COMMAND',
     'INVALID_PAYLOAD',
+    // P0.6 — THE CODE THE SERVER ACTUALLY SENDS. Verified in
+    // `PushSyncBatchHandler.cs` — every allow-list refusal returns
+    // `ShramSafal.SyncInvalidPayload`. `normalizeCode` keeps the tail after the
+    // last dot and upper-cases it, yielding `SYNCINVALIDPAYLOAD`, which the
+    // underscored `INVALID_PAYLOAD` above never matched. So the single most
+    // common permanent refusal in the system was classified RETRYABLE: the row
+    // burned five charged retries and parked in FAILED, and
+    // `ConflictResolutionService.list()` reads only REJECTED_USER_REVIEW — so
+    // the farmer's correction did not merely fail, it failed INVISIBLY.
+    //
+    // This does not make a refused mutation succeed. It makes the refusal
+    // reach a screen the farmer can act on, which is the honest half (`P5`).
+    'SyncInvalidPayload',
     'VALIDATION_FAILED',
     'FORBIDDEN',
     'UNAUTHORIZED',
