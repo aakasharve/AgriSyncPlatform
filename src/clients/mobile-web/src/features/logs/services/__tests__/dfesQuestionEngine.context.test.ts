@@ -19,13 +19,17 @@
  * token-carrying templates below are substituted fixtures, mounted with the
  * same vi.doMock + vi.resetModules() + dynamic-import isolation the Schedule
  * and WeatherReconcile tier suites in dfesQuestionEngine.test.ts already use.
- * The one suite that runs against the REAL bank is the farmer-visible
- * guarantee: every shipped prompt must resolve token-free.
+ * Two suites run against the REAL bank, and they are the farmer-visible
+ * guarantee: the bank may carry no token the resolver does not know, and the
+ * whitespace cleanup may not alter a single approved character.
  *
  * spec: dfes-farmer-facing-deploy-readiness-2026-08-14 (task-7)
  */
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { selectDailyQuestion, resolvePrompt, type DailyQuestionInputs } from '../dfesQuestionEngine';
+import {
+    selectDailyQuestion, resolvePrompt, tidyResolvedPrompt, RESOLVER_TOKENS,
+    type DailyQuestionInputs,
+} from '../dfesQuestionEngine';
 import { DFES_QUESTION_BANK, type DfesQuestion } from '../dfesQuestionBank';
 import { computePreviousLog } from '../dfesPreviousLog';
 import type { DailyLog, VlogScore } from '../../../../domain/types/log.types';
@@ -94,6 +98,35 @@ describe('resolvePrompt — speaks the context the engine already knows (Task 7)
         expect(resolved).not.toMatch(ANY_TOKEN);
     });
 
+    // `values` must not be a plain object: `values['toString']` would return a
+    // FUNCTION, not undefined, and `?? ''` would never fire — injecting
+    // "function toString() { [native code] }" into a farmer-facing prompt.
+    it.each(['toString', 'constructor', 'valueOf', 'hasOwnProperty', 'isPrototypeOf', 'propertyIsEnumerable'])(
+        'strips {%s} rather than injecting an Object.prototype member into the prompt',
+        (token) => {
+            expect(resolvePrompt(`आज {${token}} कसं आहे?`, inputsWith())).toBe('आज कसं आहे?');
+        },
+    );
+
+    // The stated guarantee is about the resolver's OWN token shape, and stops
+    // exactly there. A near-miss is left alone on purpose — silently deleting
+    // it would hide the typo. What stops it reaching a farmer is the bank guard
+    // below, which refuses to let it into the shipped copy at all.
+    it.each(['{crop }', '{ crop}', '{last_activity}', '{crop-name}', '{daysAgo2}'])(
+        'leaves the near-miss %s untouched — it is not a token, and the BANK guard is what catches it',
+        (nearMiss) => {
+            expect(resolvePrompt(`आज ${nearMiss} कसं आहे?`, inputsWith({ crop: 'द्राक्ष' })))
+                .toBe(`आज ${nearMiss} कसं आहे?`);
+        },
+    );
+
+    // The other half of the same hole: {Crop} IS the resolver's shape, so it is
+    // stripped — the wrong-case token vanishes rather than substituting the
+    // crop. Silent either way; the bank guard is the only place it can be seen.
+    it('strips {Crop} — a wrong-case token is an UNKNOWN token, not the crop', () => {
+        expect(resolvePrompt('आज {Crop} कसं आहे?', inputsWith({ crop: 'द्राक्ष' }))).toBe('आज कसं आहे?');
+    });
+
     it('P4: no previous log means NO previous-log text — nothing is invented in its place', () => {
         const resolved = resolvePrompt(
             'मागच्या वेळी {lastActivity} — आज काय केलं?',
@@ -159,24 +192,69 @@ describe('selectDailyQuestion — the chosen question SPEAKS its context (Task 7
     });
 });
 
-// The one suite that runs against the REAL, shipped, agronomist-approved bank:
-// whatever the copy says, resolving it with NO context available must never
-// leave a token on screen.
-describe('every SHIPPED bank prompt resolves token-free with no context (farmer-visible guarantee)', () => {
-    const noContext = inputsWith({
-        crop: '',
-        weather: undefined,
-        previousLog: undefined,
-        openObservation: undefined,
-        scheduleContext: undefined,
-    });
+// The suite that runs against the REAL, shipped, agronomist-approved bank.
+//
+// It asserts over the RAW `promptMr`, not over `resolvePrompt`'s output. An
+// output-shaped assertion is a tautology: the resolver strips every `{a-zA-Z}`
+// run it sees and never emits a brace, so "the resolved prompt has no
+// {token}" cannot fail for ANY bank content — including the near-misses that
+// actually leak. Step 5's workflow is a non-engineer hand-copying tokens into
+// Marathi from a review document, so `{crop }` / `{last_activity}` /
+// `{daysAgo2}` are the EXPECTED input, not an exotic case. This is the guard
+// that catches them, at the only place it can be caught: the copy itself.
+describe('the SHIPPED bank may carry no token but a known one (farmer-visible guarantee)', () => {
+    /**
+     * Every brace-delimited run, however malformed — deliberately WIDER than
+     * the resolver's own `\{([a-zA-Z]+)\}`, because it is precisely the runs
+     * OUTSIDE that shape which reach a farmer verbatim.
+     */
+    const BRACED = /\{[^}]*\}/g;
+
+    /**
+     * Tokens a shipped prompt may carry. `{weather}` is a token the resolver
+     * genuinely substitutes but is deliberately NOT bank-allowed: its value is
+     * the weather provider's ENGLISH `conditionText`, so a bank entry carrying
+     * it would ship "आज Light rain होतं" to a Marathi-only farmer. It becomes
+     * allowable when a reviewed Marathi condition vocabulary exists — until
+     * then this list, not a code comment, is what enforces it.
+     */
+    const BANK_ALLOWED_TOKENS = new Set(RESOLVER_TOKENS.filter(token => token !== 'weather'));
+
+    /** Braced runs in `promptMr` that must never ship. Empty means the copy is clean. */
+    const forbiddenTokensIn = (promptMr: string): string[] =>
+        (promptMr.match(BRACED) ?? []).filter(braced => !BANK_ALLOWED_TOKENS.has(braced.slice(1, -1)));
 
     it.each(DFES_QUESTION_BANK.map(q => [q.questionKey, q.promptMr] as const))(
-        '%s leaves no token behind',
+        '%s carries only tokens the resolver knows and may speak',
         (_questionKey, promptMr) => {
-            expect(resolvePrompt(promptMr, noContext)).not.toMatch(ANY_TOKEN);
+            expect(forbiddenTokensIn(promptMr)).toEqual([]);
         },
     );
+
+    it('accepts every bank-allowed token', () => {
+        expect(forbiddenTokensIn('{crop} {observation} {category} {lastActivity} {daysAgo}')).toEqual([]);
+    });
+
+    // Proof the guard is not a tautology, run over FIXTURES — never the real
+    // bank. Each is a spelling a hand-copy from the review document produces.
+    it.each([
+        ['a trailing space inside the braces', 'आज {crop } कसं आहे?', '{crop }'],
+        ['a leading space inside the braces', 'आज { crop} कसं आहे?', '{ crop}'],
+        ['snake_case instead of camelCase', '{last_activity} झाली होती', '{last_activity}'],
+        ['a hyphen', '{crop-name} आता कोणत्या टप्प्यात आहे?', '{crop-name}'],
+        ['a stray digit', '{daysAgo2} दिवसांपूर्वी', '{daysAgo2}'],
+        ['the wrong case', '{Crop} आता कोणत्या टप्प्यात आहे?', '{Crop}'],
+        ['an empty brace pair', 'आज {} कसं आहे?', '{}'],
+        ['an un-vocabularised {weather} — English would reach the farmer', 'आज {weather} होतं?', '{weather}'],
+    ])('rejects %s', (_why, promptMr, offender) => {
+        expect(forbiddenTokensIn(promptMr)).toEqual([offender]);
+    });
+
+    it('reports the bank-allowed set as a strict subset of what the resolver substitutes', () => {
+        for (const token of BANK_ALLOWED_TOKENS) expect(RESOLVER_TOKENS).toContain(token);
+        expect(RESOLVER_TOKENS).toContain('weather');
+        expect(BANK_ALLOWED_TOKENS.has('weather')).toBe(false);
+    });
 
     // End-to-end through the REAL bank and the REAL selector (no mocks): the
     // stage question carries {crop}, and a saved log can genuinely arrive with
@@ -191,6 +269,28 @@ describe('every SHIPPED bank prompt resolves token-free with no context (farmer-
         expect(picked!.question.questionKey).toBe('stage.confirm_current');
         expect(picked!.resolvedPromptMr).not.toMatch(ANY_TOKEN);
         expect(picked!.resolvedPromptMr).toBe('आता कोणत्या टप्प्यात आहे?');
+    });
+});
+
+// The second REAL-bank guarantee. The whitespace/punctuation cleanup is NEW in
+// Task 7 (the old resolver had none) and it now runs over all 16
+// agronomist-approved strings on every render. "Approved Marathi may not change
+// without founder approval" is a hard constraint, so the claim that the cleanup
+// is the identity function on that copy has to be PINNED, not asserted in a
+// report: an approved string arriving with a space before `?` would have its
+// reviewed typography silently rewritten, and nothing else would notice.
+// Fails from either direction — new copy that the cleanup would alter, or a
+// changed cleanup chain.
+describe('the whitespace cleanup never rewrites agronomist-approved copy', () => {
+    it.each(DFES_QUESTION_BANK.map(q => [q.questionKey, q.promptMr] as const))(
+        '%s is byte-identical after tidyResolvedPrompt',
+        (_questionKey, promptMr) => {
+            expect(tidyResolvedPrompt(promptMr)).toBe(promptMr);
+        },
+    );
+
+    it('is not vacuously identity — it is exactly the tidy-up a stripped token needs', () => {
+        expect(tidyResolvedPrompt('  आज  कसं होतं ?  ')).toBe('आज कसं होतं?');
     });
 });
 

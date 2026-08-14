@@ -113,6 +113,50 @@ function eligible(q: DfesQuestion | undefined, recent: RecentQuestionEvent[]): q
 }
 
 /**
+ * The token vocabulary, as a table rather than a chain of `.replace` calls, so
+ * the resolver and the guard that polices the BANK read from the same list and
+ * cannot drift apart. Order is irrelevant; membership is the contract.
+ */
+const TOKEN_VALUES: ReadonlyArray<readonly [string, (inputs: DailyQuestionInputs) => string | undefined]> = [
+    ['crop', i => i.crop],
+    ['observation', i => i.openObservation?.summary],
+    ['category', i => i.scheduleContext?.categoryLabelMr],
+    ['weather', i => i.weather?.conditionText],
+    ['lastActivity', i => i.previousLog?.activityMr],
+    ['daysAgo', i => (i.previousLog === undefined ? undefined : String(i.previousLog.daysAgo))],
+];
+
+/**
+ * Every token `resolvePrompt` actually substitutes. Exported so the bank guard
+ * in the tests can assert that a shipped `promptMr` carries nothing else — a
+ * near-miss spelling is caught at review time instead of shipping.
+ */
+export const RESOLVER_TOKENS: readonly string[] = TOKEN_VALUES.map(([token]) => token);
+
+/** The exact shape this resolver recognises. Anything else brace-shaped is NOT a token. */
+const TOKEN_PATTERN = /\{([a-zA-Z]+)\}/g;
+
+/**
+ * Whitespace/punctuation tidy-up run AFTER substitution, so a stripped token
+ * cannot leave a double space or a space stranded before punctuation.
+ *
+ * Exported ONLY so a test can pin the one thing that matters about it: it is
+ * the IDENTITY function on every agronomist-approved string in
+ * `dfesQuestionBank.ts`. Approved Marathi may not change without founder
+ * approval, and this chain runs over all of it on every render — an approved
+ * string that happened to arrive with a space before `?` would have its
+ * reviewed typography silently rewritten. `dfesQuestionEngine.context.test.ts`
+ * fails loudly if that ever becomes true, from either direction (new copy, or
+ * a changed chain).
+ */
+export function tidyResolvedPrompt(text: string): string {
+    return text
+        .replace(/\s{2,}/g, ' ')
+        .replace(/\s+([,.?!])/g, '$1')
+        .trim();
+}
+
+/**
  * Resolve the Marathi prompt against everything the engine already knows.
  *
  * Founder ruling 3 (2026-08-14): a question must be context-rich, not generic.
@@ -123,12 +167,25 @@ function eligible(q: DfesQuestion | undefined, recent: RecentQuestionEvent[]): q
  * a raw `{weather}`, and a sentence that reads oddly without its clause is a
  * copy problem to fix in the bank, not a reason to print a placeholder.
  *
- * One tokenising pass rather than a chain of `.replace` calls, so the
- * guarantee is structural rather than a list that has to stay in step with the
- * bank: EVERY `{token}` occurrence is matched (a template using a token twice
- * cannot leak the second one), and a token this resolver does not know about —
- * a copy typo like `{crops}` — is stripped exactly the same way instead of
- * reaching the farmer.
+ * One tokenising pass rather than a chain of `.replace` calls, so EVERY
+ * `{token}` occurrence is matched (a template using a token twice cannot leak
+ * the second one) and a token this resolver does not know about — a copy typo
+ * like `{crops}` — is stripped exactly the same way instead of reaching the
+ * farmer. `values` is a Map, not an object literal: `values['toString']` on an
+ * object would return a FUNCTION rather than undefined and inject
+ * `function toString() { [native code] }` into a farmer-facing prompt.
+ *
+ * SCOPE OF THAT GUARANTEE — it covers this pattern only. `{crop }`,
+ * `{last_activity}` and `{crop-name}` are not tokens at all: they are neither
+ * substituted NOR stripped, and would reach a farmer verbatim. That is
+ * deliberate — silently deleting a near-miss would hide the typo instead of
+ * surfacing it — and it is why the shipped bank is policed by its OWN test
+ * (see `RESOLVER_TOKENS`), which rejects any braced run that is not exactly a
+ * known token. The two together are what make "no raw brace reaches a farmer"
+ * true end-to-end; neither half is sufficient alone.
+ *
+ * The replacement is a FUNCTION, never a string: a `.replace` string
+ * replacement would interpret `$&` / `$1` inside a substituted VALUE.
  *
  * Exported so the resolution itself is testable directly, without having to
  * add tokens to agronomist-approved bank copy to exercise it.
@@ -137,25 +194,19 @@ function eligible(q: DfesQuestion | undefined, recent: RecentQuestionEvent[]): q
  * provider's own text and is ENGLISH ('Clear', 'Light rain', 'Partly Cloudy');
  * there is no reviewed English->Marathi condition vocabulary in the repo, and
  * inventing one here would be unreviewed Marathi shipped in code. No bank entry
- * carries {weather} today, so nothing English can reach a farmer — but do NOT
- * add {weather} to a prompt until that vocabulary exists (or the numbers the
- * question already triggers on are spoken instead). Raised as a blocker in the
- * Task 7 context-rich-prompt drafts sent for agronomist review.
+ * carries {weather} today, so nothing English can reach a farmer — and the bank
+ * guard now ENFORCES that rather than trusting this comment: `{weather}` is
+ * excluded from the bank-allowed token set until that vocabulary exists (or the
+ * numbers the question already triggers on are spoken instead). Raised as a
+ * blocker in the Task 7 context-rich-prompt drafts sent for agronomist review.
  */
 export function resolvePrompt(promptMr: string, inputs: DailyQuestionInputs): string {
-    const values: Readonly<Record<string, string | undefined>> = {
-        crop: inputs.crop,
-        observation: inputs.openObservation?.summary,
-        category: inputs.scheduleContext?.categoryLabelMr,
-        weather: inputs.weather?.conditionText,
-        lastActivity: inputs.previousLog?.activityMr,
-        daysAgo: inputs.previousLog === undefined ? undefined : String(inputs.previousLog.daysAgo),
-    };
-    return promptMr
-        .replace(/\{([a-zA-Z]+)\}/g, (_match, token: string) => values[token] ?? '')
-        .replace(/\s{2,}/g, ' ')
-        .replace(/\s+([,.?!])/g, '$1')
-        .trim();
+    const values = new Map<string, string | undefined>(
+        TOKEN_VALUES.map(([token, read]) => [token, read(inputs)]),
+    );
+    return tidyResolvedPrompt(
+        promptMr.replace(TOKEN_PATTERN, (_match, token: string) => values.get(token) ?? ''),
+    );
 }
 
 function pack(q: DfesQuestion, inputs: DailyQuestionInputs, reason: string): SelectedQuestion {

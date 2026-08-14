@@ -34,6 +34,16 @@
  * (flag OFF or no farm) — zero extra work in that state, same as
  * scheduleContext.
  *
+ * Task 7 (spec: dfes-farmer-facing-deploy-readiness-2026-08-14) adds: this
+ * panel is also the call site for computePreviousLog (mocked here — the pure
+ * function's own behaviour is covered by dfesQuestionEngine.context.test.ts),
+ * so these additional tests assert the panel (a) calls it with
+ * (allLogs, plotId, resolvedDate) and threads a real result through as
+ * questionInputs.previousLog, (b) leaves previousLog undefined when there is
+ * no prior working log (P4 — never invented), and (c) never calls it at all
+ * when the stageQuestions+farmId gate is closed, leaving previousLog
+ * undefined — same gate, same shape as scheduleContext/weather.
+ *
  * Task 8 adds: this panel is the fire-once wire for "Sathi talks back" —
  * these additional tests assert (a) flag ON + unlocked + not-yet-spoken
  * speaks once and marks the farm, (b) a second render after marking never
@@ -54,6 +64,7 @@ const useFarmerEngagementMock = vi.fn();
 const useDfesQuestionMock = vi.fn();
 const computeScheduleGapMock = vi.fn();
 const reconcileWeatherMock = vi.fn();
+const computePreviousLogMock = vi.fn();
 const speakUnlockRewardMock = vi.fn();
 const wasUnlockSpokenMock = vi.fn();
 const markUnlockSpokenMock = vi.fn();
@@ -75,6 +86,12 @@ vi.mock('../../services/dfesScheduleWindow', () => ({
 // threshold arithmetic (covered separately by dfesWeatherReconcile.test.ts).
 vi.mock('../../services/dfesWeatherReconcile', () => ({
     reconcileWeather: (...args: unknown[]) => reconcileWeatherMock(...args),
+}));
+// Task 7: mock the pure signal for the same reason — these wiring tests own the
+// panel's gate + arg-threading; the previous-log derivation itself is covered
+// by dfesQuestionEngine.context.test.ts.
+vi.mock('../../services/dfesPreviousLog', () => ({
+    computePreviousLog: (...args: unknown[]) => computePreviousLogMock(...args),
 }));
 // Task 8: mock the speaker + once-ever store so these wiring tests stay
 // focused on the panel's own fire-once gating, not the speechSynthesis
@@ -140,6 +157,7 @@ beforeEach(() => {
     useDfesQuestionMock.mockReset();
     computeScheduleGapMock.mockReset();
     reconcileWeatherMock.mockReset();
+    computePreviousLogMock.mockReset();
     speakUnlockRewardMock.mockReset();
     wasUnlockSpokenMock.mockReset();
     markUnlockSpokenMock.mockReset();
@@ -147,6 +165,7 @@ beforeEach(() => {
     useDfesQuestionMock.mockReturnValue({ selected: null, loading: false, recordOutcome: vi.fn() });
     computeScheduleGapMock.mockReturnValue(null);
     reconcileWeatherMock.mockReturnValue(null);
+    computePreviousLogMock.mockReturnValue(null);
     wasUnlockSpokenMock.mockReturnValue(false);
 });
 
@@ -406,6 +425,63 @@ describe('LedgerRecognitionPanel — weather-reconcile wiring (Task 4B, spec: df
         );
 
         expect(reconcileWeatherMock).not.toHaveBeenCalled();
+    });
+});
+
+describe('LedgerRecognitionPanel — previous-log wiring (Task 7, spec: dfes-farmer-facing-deploy-readiness-2026-08-14)', () => {
+    const history: DailyLog[] = [makeSavedLog({ id: 'prior', date: '2026-07-08' })];
+    const previous = { activityMr: 'फवारणी', daysAgo: 3 };
+
+    it('calls computePreviousLog with (allLogs, plotId, resolvedDate) and threads a real previous log through as questionInputs.previousLog', async () => {
+        computePreviousLogMock.mockReturnValue(previous);
+        const { LedgerRecognitionPanel } = await loadComponent();
+        render(
+            <LedgerRecognitionPanel
+                farmId="farm-1"
+                plotId="plot-9"
+                todayLocalDate="2026-07-11"
+                allLogs={history}
+            />,
+        );
+
+        expect(computePreviousLogMock).toHaveBeenCalledWith(history, 'plot-9', '2026-07-11');
+        const [, , questionInputs] = useDfesQuestionMock.mock.calls[0];
+        expect(questionInputs.previousLog).toEqual(previous);
+    });
+
+    it('leaves questionInputs.previousLog undefined when there is no prior working log — P4, nothing invented', async () => {
+        computePreviousLogMock.mockReturnValue(null);
+        const { LedgerRecognitionPanel } = await loadComponent();
+        render(
+            <LedgerRecognitionPanel farmId="farm-1" plotId="plot-9" allLogs={history} />,
+        );
+
+        const [, , questionInputs] = useDfesQuestionMock.mock.calls[0];
+        expect(questionInputs.previousLog).toBeUndefined();
+    });
+
+    it('never calls computePreviousLog when stageQuestions is OFF — zero extra work, and previousLog stays undefined', async () => {
+        computePreviousLogMock.mockReturnValue(previous);
+        const { LedgerRecognitionPanel } = await loadComponent(false);
+        render(
+            <LedgerRecognitionPanel farmId="farm-1" plotId="plot-9" allLogs={history} />,
+        );
+
+        expect(computePreviousLogMock).not.toHaveBeenCalled();
+        const [, , questionInputs] = useDfesQuestionMock.mock.calls[0];
+        expect(questionInputs.previousLog).toBeUndefined();
+    });
+
+    it('never calls computePreviousLog when farmId is null, even with stageQuestions ON', async () => {
+        computePreviousLogMock.mockReturnValue(previous);
+        const { LedgerRecognitionPanel } = await loadComponent(true);
+        render(
+            <LedgerRecognitionPanel farmId={null} plotId="plot-9" allLogs={history} />,
+        );
+
+        expect(computePreviousLogMock).not.toHaveBeenCalled();
+        const [, , questionInputs] = useDfesQuestionMock.mock.calls[0];
+        expect(questionInputs.previousLog).toBeUndefined();
     });
 });
 
