@@ -19,6 +19,7 @@ import React from 'react';
 import { FEATURE_FLAGS } from '../../../app/featureFlags';
 import { MeterDisplay } from './MeterDisplay';
 import { useDfesQuestion } from '../hooks/useDfesQuestion';
+import { notifyDfesAnswered } from '../services/dfesAnswerSignal';
 import type { DailyQuestionInputs } from '../services/dfesQuestionEngine';
 import type { DfesAnswerOption } from '../services/dfesQuestionBank';
 import type { VlogScore } from '../../../domain/types/log.types';
@@ -45,7 +46,13 @@ export function MeterQuestionHost({
     farmId, plotId, score, allLogs, engagement, questionInputs,
 }: MeterQuestionHostProps): React.ReactElement | null {
     const enabled = FEATURE_FLAGS.stageQuestions && !!farmId;
-    const { selected, recordOutcome } = useDfesQuestion(farmId ?? '', plotId, questionInputs, enabled);
+    // Task 4 (spec: dfes-farmer-facing-deploy-readiness-2026-08-14) — notify the
+    // Day Understanding Score card the moment the server has accepted the
+    // answer, so it can refetch. See dfesAnswerSignal.ts for why this is a
+    // same-feature pub/sub rather than a prop: this host and
+    // DayUnderstandingCard are siblings under mainView's hook-free route
+    // render function.
+    const { selected, recordOutcome } = useDfesQuestion(farmId ?? '', plotId, questionInputs, enabled, notifyDfesAnswered);
     // Task 2A: a tapped answer option carries the REAL response into the SAME
     // single INSERT (recordOutcome/recordQuestionEvent) — question_events is
     // append-only, so there is no separate "shown" write to patch later.

@@ -230,4 +230,41 @@ describe('DayUnderstandingCard (server /10 Day Understanding Score)', () => {
         expect(farmArg).toBeNull();
         expect(dateArg).toBeUndefined();
     });
+
+    // -------------------------------------------------------------------------
+    // 7. Task 4 (spec: dfes-farmer-facing-deploy-readiness-2026-08-14) —
+    //    refetch after a DFES gap question is answered. Founder ruling A: "the
+    //    number he is looking at must reflect it before he looks away."
+    //    MeterQuestionHost (a SIBLING of this card under mainView's success
+    //    surface) calls notifyDfesAnswered() once the server has accepted an
+    //    answer; this card must call its OWN useDayUnderstanding refresh() in
+    //    response — not wait for the next sync tick or a new saved log.
+    // -------------------------------------------------------------------------
+    it('calls useDayUnderstanding\'s refresh when notified that a DFES answer was recorded', async () => {
+        const refresh = vi.fn();
+        dayUnderstandingMock.mockReturnValue({ score: 6, isLoading: false, error: null, refresh });
+        const { DayUnderstandingCard } = await loadComponent(true);
+        const { notifyDfesAnswered } = await import('../../../services/dfesAnswerSignal');
+
+        render(<DayUnderstandingCard farmId="farm-1" dayDate="2026-07-11" />);
+        expect(refresh).not.toHaveBeenCalled();
+
+        await act(async () => { notifyDfesAnswered(); });
+
+        expect(refresh).toHaveBeenCalledTimes(1);
+    });
+
+    it('stops listening once unmounted, so a later answer on another screen cannot call a stale refresh', async () => {
+        const refresh = vi.fn();
+        dayUnderstandingMock.mockReturnValue({ score: 6, isLoading: false, error: null, refresh });
+        const { DayUnderstandingCard } = await loadComponent(true);
+        const { notifyDfesAnswered } = await import('../../../services/dfesAnswerSignal');
+
+        const { unmount } = render(<DayUnderstandingCard farmId="farm-1" dayDate="2026-07-11" />);
+        unmount();
+
+        await act(async () => { notifyDfesAnswered(); });
+
+        expect(refresh).not.toHaveBeenCalled();
+    });
 });

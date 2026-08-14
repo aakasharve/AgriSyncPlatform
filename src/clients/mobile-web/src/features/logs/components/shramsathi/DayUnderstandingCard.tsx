@@ -26,13 +26,14 @@
  * spec: ai-intelligence-plan-2026-06-25 · dfes-companion-2026-07-11
  */
 
-import React from 'react';
+import React, { useEffect } from 'react';
 import { useSelector } from '@xstate/react';
 import { FEATURE_FLAGS } from '../../../../app/featureFlags';
 import { toMarathiNumber } from '../../services/disciplineRecognition';
 import { useDayUnderstanding } from '../../hooks/useDayUnderstanding';
 import { useLanguage } from '../../../../i18n/LanguageContext';
 import { getRootStore } from '../../../../app/state/RootStore';
+import { subscribeDfesAnswered } from '../../services/dfesAnswerSignal';
 import UnderstandingBar from './UnderstandingBar';
 
 // Marathi body text must render with Noto Sans Devanagari (incl. the Devanagari
@@ -108,7 +109,23 @@ export function DayUnderstandingCard({
     // Day Understanding Score (server /10). The hook self-gates on
     // understandingMeter, so with the flag OFF this issues ZERO network calls —
     // safe to call above the flag early-return below.
-    const { score: dayUnderstandingScore } = useDayUnderstanding(farmId ?? null, dayDate, refreshKey);
+    const { score: dayUnderstandingScore, refresh: refreshDayUnderstanding } =
+        useDayUnderstanding(farmId ?? null, dayDate, refreshKey);
+
+    // BUGFIX_2026-08-15 (Task 4, spec: dfes-farmer-facing-deploy-readiness-
+    // 2026-08-14) — founder ruling A: "the number he is looking at must
+    // reflect it before he looks away." Task 3 made the SERVER recompute the
+    // day's score when a DFES gap question is answered, but nothing on the
+    // client noticed: the farmer answers, the server updates, and this card
+    // sat on the stale number until the NEXT sync tick or saved log bumped
+    // refreshKey. MeterQuestionHost (the question surface, rendered as a
+    // SIBLING of this card under mainView's success surface) now calls
+    // notifyDfesAnswered() once the server has accepted an answer
+    // (useDfesQuestion's onAnswered) — subscribe here and call this card's
+    // OWN existing refresh(), same one useDayUnderstanding already exposes
+    // for the refreshKey path. See dfesAnswerSignal.ts for why this is a
+    // pub/sub rather than a prop.
+    useEffect(() => subscribeDfesAnswered(() => { void refreshDayUnderstanding(); }), [refreshDayUnderstanding]);
 
     // Flag gate: inert in production until the meter is calibrated + founder-approved.
     if (!FEATURE_FLAGS.understandingMeter) {

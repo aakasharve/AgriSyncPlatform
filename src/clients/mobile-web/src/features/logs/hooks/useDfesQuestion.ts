@@ -29,6 +29,12 @@ export function useDfesQuestion(
     plotId: string | null,
     inputs: Omit<DailyQuestionInputs, 'recentEvents'>,
     enabled = true,
+    // Task 4 (spec: dfes-farmer-facing-deploy-readiness-2026-08-14) — optional,
+    // trailing, following this file's own idiom for `enabled` above. Invoked
+    // AFTER recordQuestionEvent resolves, so a caller (MeterQuestionHost) can
+    // trigger the Day Understanding Score refetch (DayUnderstandingCard/
+    // useDayUnderstanding) the moment the server has accepted the answer.
+    onAnswered?: () => void,
 ): UseDfesQuestionResult {
     const [selected, setSelected] = useState<SelectedQuestion | null>(null);
     const [loading, setLoading] = useState(enabled);
@@ -63,10 +69,20 @@ export function useDfesQuestion(
         recordedRef.current = true;
         try {
             await recordQuestionEvent(farmId, plotId, selected, outcome, shownAtRef.current);
+            // Only after the server has the answer — a failed write must never
+            // move the number, or the farmer is shown a score the server does
+            // not agree with. Fired for every outcome the server accepts (bare
+            // ack/dismiss included): Task 3 already guards the SERVER-side
+            // recompute to fire only when an answer could credit something
+            // (DailyRichnessDerivationService), so calling this unconditionally
+            // costs at most one extra read-only GET on a no-op ack/dismiss —
+            // cheaper and less fragile than duplicating that "would this
+            // credit" rule here, where it could silently drift out of sync.
+            onAnswered?.();
         } catch {
             recordedRef.current = false; // allow a retry on transient failure
         }
-    }, [farmId, plotId, selected]);
+    }, [farmId, plotId, selected, onAnswered]);
 
     return { selected, loading, recordOutcome };
 }

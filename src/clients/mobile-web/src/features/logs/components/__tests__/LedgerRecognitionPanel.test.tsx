@@ -180,6 +180,11 @@ describe('LedgerRecognitionPanel (Phase 5, Task 5.9)', () => {
                 engagement: { totalRichDays: 12, unlockStatus: 'unlocked' },
             }),
             true,
+            // Task 4 (spec: dfes-farmer-facing-deploy-readiness-2026-08-14) — the
+            // real panel renders the real MeterQuestionHost here (only
+            // useDfesQuestion itself is mocked), so this call carries the real
+            // notifyDfesAnswered (dfesAnswerSignal.ts) as the 5th positional arg.
+            expect.any(Function),
         );
     });
 
@@ -193,6 +198,7 @@ describe('LedgerRecognitionPanel (Phase 5, Task 5.9)', () => {
             null,
             expect.objectContaining({ crop: '', todayLocalDate: todayIso }),
             true,
+            expect.any(Function),
         );
     });
 
@@ -206,6 +212,7 @@ describe('LedgerRecognitionPanel (Phase 5, Task 5.9)', () => {
             null,
             expect.objectContaining({ engagement: { totalRichDays: 0, unlockStatus: 'locked' } }),
             true,
+            expect.any(Function),
         );
     });
 

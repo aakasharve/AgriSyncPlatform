@@ -106,6 +106,10 @@ describe('MeterQuestionHost (Phase 5, Task 5.9)', () => {
             'farm-1', 'plot-1',
             expect.objectContaining({ crop: 'grapes', todayLocalDate: '2026-07-11' }),
             true,
+            // Task 4 — the 5th positional arg is notifyDfesAnswered
+            // (dfesAnswerSignal.ts), always passed so DayUnderstandingCard can
+            // refetch after an accepted answer.
+            expect.any(Function),
         );
     });
 
@@ -119,7 +123,7 @@ describe('MeterQuestionHost (Phase 5, Task 5.9)', () => {
                 questionInputs={{ crop: 'grapes', todayLocalDate: '2026-07-11', engagement: { totalRichDays: 0, unlockStatus: 'locked' } }}
             />,
         );
-        expect(useDfesQuestionMock).toHaveBeenCalledWith('farm-1', null, expect.anything(), false);
+        expect(useDfesQuestionMock).toHaveBeenCalledWith('farm-1', null, expect.anything(), false, expect.any(Function));
     });
 
     it('disables the hook when farmId is null, even with stageQuestions ON', async () => {
@@ -132,7 +136,26 @@ describe('MeterQuestionHost (Phase 5, Task 5.9)', () => {
                 questionInputs={{ crop: '', todayLocalDate: '2026-07-11', engagement: { totalRichDays: 0, unlockStatus: 'locked' } }}
             />,
         );
-        expect(useDfesQuestionMock).toHaveBeenCalledWith('', null, expect.anything(), false);
+        expect(useDfesQuestionMock).toHaveBeenCalledWith('', null, expect.anything(), false, expect.any(Function));
+    });
+
+    // -------------------------------------------------------------------------
+    // Task 4 (spec: dfes-farmer-facing-deploy-readiness-2026-08-14)
+    // -------------------------------------------------------------------------
+    it('wires the real notifyDfesAnswered signal in as onAnswered, so DayUnderstandingCard can refetch', async () => {
+        const { MeterQuestionHost } = await loadComponent(true, true);
+        const { notifyDfesAnswered } = await import('../../services/dfesAnswerSignal');
+        render(
+            <MeterQuestionHost
+                farmId="farm-1"
+                plotId="plot-1"
+                score={score}
+                allLogs={arrivedLogs}
+                questionInputs={{ crop: 'grapes', todayLocalDate: '2026-07-11', score, engagement: { totalRichDays: 0, unlockStatus: 'locked' } }}
+            />,
+        );
+        const onAnswered = useDfesQuestionMock.mock.calls[0][4];
+        expect(onAnswered).toBe(notifyDfesAnswered);
     });
 
     it('threads the selected question into MeterDisplay and fires recordOutcome({ skipped: false }) on tap', async () => {
