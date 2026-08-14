@@ -42,10 +42,14 @@ namespace ShramSafal.Sync.IntegrationTests.Dfes;
 /// with how much. Sathi asks <c>gap.dose</c>; he answers "250 ml". The stored score must be
 /// strictly higher afterwards, and the DOSE row of the stored roster must be the reason.</para>
 ///
-/// <para><b>The honesty guard.</b> The second test answers the SAME question with an empty
-/// response. Silence is not an answer (doctrine P4), so the number must not move. Without
-/// this, "answering raises the score" could be satisfied by a rule that rewards the mere
-/// act of dismissing a card.</para>
+/// <para><b>The honesty guards.</b> Test 2 dismisses the SAME question. Silence is not an
+/// answer (doctrine P4), so the number must not move — without this, "answering raises the
+/// score" could be satisfied by a rule that rewards the mere act of dismissing a card. It
+/// also pins the COST guard: the client fires recordOutcome on every card interaction, so a
+/// dismissal must not rebuild the whole day, while the telemetry row must still land.
+/// Test 3 submits the one shape <c>TryFrom</c> cannot judge — a SKIPPED row carrying text —
+/// and proves the repository read excludes it, which is what makes the shipped
+/// "a skip yields nothing" docstring true rather than merely aspirational.</para>
 ///
 /// <para><b>Native :5433, opt-in, self-skipping.</b> Follows
 /// <c>DailyRichnessAggregateTrackedWriteTests</c> verbatim — same <c>RequiresPostgres</c>
@@ -68,9 +72,10 @@ public sealed class AnswerRaisesScoreTests(Xunit.Abstractions.ITestOutputHelper 
     private static readonly Guid PlotId = Guid.Parse("dfe5a000-0000-0000-0000-000000000004");
     private static readonly Guid CropCycleId = Guid.Parse("dfe5a000-0000-0000-0000-000000000005");
 
-    // One date per test so the two proofs never contend on ux_daily_richness_farm_local_date.
+    // One date per test so the proofs never contend on ux_daily_richness_farm_local_date.
     private static readonly DateOnly AnsweredDate = DateOnly.FromDateTime(DateTime.UtcNow.Date);
     private static readonly DateOnly SilentDate = AnsweredDate.AddDays(-1);
+    private static readonly DateOnly SkippedWithTextDate = AnsweredDate.AddDays(-2);
 
     // 09:00 UTC is 14:30 IST — the middle of the working day, so the instant sits
     // unambiguously inside its local date under ANY sane +05:30 conversion. The test
@@ -232,18 +237,24 @@ public sealed class AnswerRaisesScoreTests(Xunit.Abstractions.ITestOutputHelper 
             "founder ruling A — the farmer answered Sathi, so the number he is looking at must go UP before he looks away");
         Coverage(after.Roster, "DOSE").Should().Be(1.0,
             "the rise must come from the dimension he actually answered, not from anything else moving");
+        after.UpdatedAtUtc.Should().BeAfter(before.UpdatedAtUtc,
+            "a real answer must pass the handler's recompute guard and rebuild the day");
 
         output.WriteLine("[EVIDENCE] === answering gap.dose raises the stored score (real Npgsql :5433) ===");
         output.WriteLine($"[EVIDENCE] stored score  before = {before.Score}  after = {after.Score}");
         output.WriteLine($"[EVIDENCE] DOSE coverage before = {Coverage(before.Roster, "DOSE")}  after = {Coverage(after.Roster, "DOSE")}");
+        output.WriteLine($"[EVIDENCE] aggregate rebuilt: updated_at_utc {before.UpdatedAtUtc:O} -> {after.UpdatedAtUtc:O}");
     }
 
     // ─────────────────────────────────────────────────────────────────────────
-    // PROOF 2 — HONESTY GUARD. An empty answer is silence, and silence never
-    // scores (doctrine P4). Dismissing the card must not buy a point.
+    // PROOF 2 — HONESTY GUARD + COST GUARD. A dismissal is silence, and silence
+    // never scores (doctrine P4). It must also not REBUILD the day: the client
+    // fires recordOutcome on every card interaction, so a recompute here would
+    // turn one INSERT into a full re-derivation plus an aggregate UPDATE on a
+    // single small prod instance. The telemetry row must still land.
     // ─────────────────────────────────────────────────────────────────────────
     [Fact]
-    public async Task An_empty_answer_is_silence_and_must_not_raise_the_stored_day_score()
+    public async Task A_dismissal_is_recorded_but_neither_scores_nor_rebuilds_the_day()
     {
         if (SkippedForMissingPostgres())
         {
@@ -263,9 +274,60 @@ public sealed class AnswerRaisesScoreTests(Xunit.Abstractions.ITestOutputHelper 
         after.Score.Should().Be(before.Score,
             "the farmer told us nothing, so the number must not move — a score that rewards dismissing the card is a fabricated number (P4)");
         Coverage(after.Roster, "DOSE").Should().Be(0.0, "DOSE is still unanswered");
+        after.UpdatedAtUtc.Should().Be(before.UpdatedAtUtc,
+            "the recompute guard must skip an event that can credit nothing — MarkUpdated is unconditional, so any rebuild would move this timestamp");
+        (await CountQuestionEventsAsync(SilentDate)).Should().Be(1,
+            "skipping the recompute must never skip the telemetry — the row is the point of the endpoint");
 
-        output.WriteLine("[EVIDENCE] === an empty answer earns nothing (real Npgsql :5433) ===");
-        output.WriteLine($"[EVIDENCE] stored score  before = {before.Score}  after = {after.Score} (must be equal)");
+        output.WriteLine("[EVIDENCE] === a dismissal earns nothing and rebuilds nothing (real Npgsql :5433) ===");
+        output.WriteLine($"[EVIDENCE] stored score    before = {before.Score}  after = {after.Score} (must be equal)");
+        output.WriteLine($"[EVIDENCE] updated_at_utc  before = {before.UpdatedAtUtc:O}");
+        output.WriteLine($"[EVIDENCE] updated_at_utc  after  = {after.UpdatedAtUtc:O} (must be identical — no rebuild)");
+        output.WriteLine("[EVIDENCE] question_events rows for the day = 1 (telemetry still recorded)");
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // PROOF 3 — "a skip yields nothing" is ENFORCED, not merely documented.
+    // AnsweredGap.TryFrom never sees the skipped flag, so a dismissal that
+    // somehow carried text would slip past it. The repository read excludes such
+    // rows, which is what makes the shipped docstring true — and it holds for
+    // EVERY recompute path, not just the question-event one.
+    // ─────────────────────────────────────────────────────────────────────────
+    [Fact]
+    public async Task A_skipped_row_carrying_text_is_excluded_by_the_repository_and_credits_nothing()
+    {
+        if (SkippedForMissingPostgres())
+        {
+            return;
+        }
+
+        await SeedSprayingDayAsync(SkippedWithTextDate);
+        await RecomputeAndCommitAsync(SkippedWithTextDate);
+
+        var before = await ReadStoredDayAsync(SkippedWithTextDate);
+
+        // Contradictory data the shipped client cannot produce (onDismiss sends no
+        // response): skipped, yet carrying an answer. TryFrom would happily accept the
+        // key + text, so ONLY the repository's exclusion can stop it scoring.
+        var result = await RecordQuestionEventAsync(
+            "gap.carrier", response: "drip", SkippedWithTextDate, skipped: true);
+        result.IsSuccess.Should().BeTrue();
+
+        var after = await ReadStoredDayAsync(SkippedWithTextDate);
+
+        // The handler's guard CANNOT see the skipped flag, so it lets this through and the
+        // day really is rebuilt. Asserting that keeps the proof honest: without it this
+        // test would also pass if the recompute had simply never run, which would prove
+        // nothing about the repository's exclusion.
+        after.UpdatedAtUtc.Should().BeAfter(before.UpdatedAtUtc,
+            "the recompute genuinely ran — so the exclusion below is what stopped the credit, not a skipped rebuild");
+        Coverage(after.Roster, "CARRIER").Should().Be(0.0,
+            "he SKIPPED the question — the text on a skipped row must never be credited, whatever it says");
+        after.Score.Should().Be(before.Score, "nothing was credited, so the number must not move");
+
+        output.WriteLine("[EVIDENCE] === a skipped row carrying text credits nothing (real Npgsql :5433) ===");
+        output.WriteLine($"[EVIDENCE] CARRIER coverage before = {Coverage(before.Roster, "CARRIER")}  after = {Coverage(after.Roster, "CARRIER")}");
+        output.WriteLine($"[EVIDENCE] stored score     before = {before.Score}  after = {after.Score} (must be equal)");
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -276,7 +338,7 @@ public sealed class AnswerRaisesScoreTests(Xunit.Abstractions.ITestOutputHelper 
 
     /// <summary>The REAL handler, exactly as the endpoint calls it.</summary>
     private async Task<AgriSync.BuildingBlocks.Results.Result<Guid>> RecordQuestionEventAsync(
-        string questionKey, string? response, DateOnly localDate)
+        string questionKey, string? response, DateOnly localDate, bool? skipped = null)
     {
         await using var scope = _rootProvider!.CreateAsyncScope();
         var sp = scope.ServiceProvider;
@@ -298,7 +360,7 @@ public sealed class AnswerRaisesScoreTests(Xunit.Abstractions.ITestOutputHelper 
             BankVersion: "dfes-bank-1", QuestionEngineVersion: "dfes-qengine-1",
             AnswerObservationId: null, ShownAtUtc: MiddayUtc(localDate), TriggerReason: "gap DOSE",
             WeatherContext: null, Response: response, StageConfirmed: null,
-            PhotoSubmitted: false, Skipped: response is null));
+            PhotoSubmitted: false, Skipped: skipped ?? response is null));
 
         await tx.CommitAsync();
         return result;
@@ -377,7 +439,12 @@ public sealed class AnswerRaisesScoreTests(Xunit.Abstractions.ITestOutputHelper 
     // map — and roll the stored breakdown up EXACTLY as GetDayUnderstandingHandler
     // does, so "the stored score" here is the number the farmer is actually shown.
     // ─────────────────────────────────────────────────────────────────────────
-    private sealed record StoredDay(int? Score, IReadOnlyList<ScoredDimension> Roster);
+    /// <param name="UpdatedAtUtc">RecomputeAsync calls MarkUpdated UNCONDITIONALLY, so this
+    /// timestamp moves whenever the day was rebuilt — even when the derivation produced an
+    /// identical result. That makes it the honest witness for "was the recompute run at
+    /// all", which an unchanged score alone cannot distinguish from "run and changed
+    /// nothing".</param>
+    private sealed record StoredDay(int? Score, IReadOnlyList<ScoredDimension> Roster, DateTime UpdatedAtUtc);
 
     private async Task<StoredDay> ReadStoredDayAsync(DateOnly localDate)
     {
@@ -385,7 +452,7 @@ public sealed class AnswerRaisesScoreTests(Xunit.Abstractions.ITestOutputHelper 
         await db.OpenAsync();
         await using var cmd = db.CreateCommand();
         cmd.CommandText = """
-            SELECT components_json
+            SELECT components_json, updated_at_utc
             FROM ssf.daily_richness_aggregates
             WHERE farm_id = @farm AND local_date = @d
             """;
@@ -394,10 +461,26 @@ public sealed class AnswerRaisesScoreTests(Xunit.Abstractions.ITestOutputHelper 
         await using var reader = await cmd.ExecuteReaderAsync();
         (await reader.ReadAsync()).Should().BeTrue("the aggregate row must exist for {0}", localDate);
         var json = reader.GetFieldValue<string>(0);
+        var updatedAtUtc = reader.GetFieldValue<DateTime>(1);
 
         var input = JsonSerializer.Deserialize<LensInput>(json);
         input.Should().NotBeNull("components_json must deserialize into the breakdown the read path rolls up");
-        return new StoredDay(DayUnderstandingScore.From(input!), input!.Possible ?? []);
+        return new StoredDay(DayUnderstandingScore.From(input!), input!.Possible ?? [], updatedAtUtc);
+    }
+
+    /// <summary>Proves the telemetry row landed even when nothing was recomputed.</summary>
+    private async Task<int> CountQuestionEventsAsync(DateOnly localDate)
+    {
+        await using var db = new NpgsqlConnection(_superuserConn);
+        await db.OpenAsync();
+        await using var cmd = db.CreateCommand();
+        cmd.CommandText = """
+            SELECT COUNT(*) FROM ssf.question_events
+            WHERE farm_id = @farm AND shown_at_utc = @shown
+            """;
+        cmd.Parameters.AddWithValue("farm", FarmId);
+        cmd.Parameters.AddWithValue("shown", MiddayUtc(localDate));
+        return (int)(long)(await cmd.ExecuteScalarAsync())!;
     }
 
     private static double Coverage(IReadOnlyList<ScoredDimension> roster, string name)

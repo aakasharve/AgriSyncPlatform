@@ -677,9 +677,12 @@ public interface IShramSafalRepository
     ///
     /// <para>Returns only what <see cref="ShramSafal.Domain.Dfes.AnsweredGap.TryFrom"/>
     /// accepts: a <c>gap.*</c> question whose response carries content. Non-gap questions
-    /// and empty answers yield nothing, so silence can never score (doctrine P4). Every
-    /// instance MUST be built through <c>TryFrom</c> — it is what upper-cases the
-    /// dimension, and the extractor compares dimension names with ordinal equality.</para>
+    /// and empty answers yield nothing, so silence can never score (doctrine P4). Rows the
+    /// farmer explicitly SKIPPED are excluded before <c>TryFrom</c> ever sees them — it has
+    /// no access to the flag, so this read is what makes "a skip yields nothing" TRUE
+    /// rather than merely documented. Every instance MUST be built through <c>TryFrom</c>
+    /// — it is what upper-cases the dimension, and the extractor compares dimension names
+    /// with ordinal equality.</para>
     ///
     /// <para><c>question_events</c> has no local-date column, so the day is expressed as the
     /// UTC window <see cref="ShramSafal.Domain.Dfes.FarmLocalDay.UtcWindow"/> defines —

@@ -4,6 +4,7 @@ using System.Threading.Tasks;
 using AgriSync.BuildingBlocks.Abstractions;
 using Microsoft.Extensions.Logging.Abstractions;
 using ShramSafal.Application.UseCases.Dfes.RecordQuestionEvent;
+using ShramSafal.Application.UseCases.Logs.CreateDailyLog;
 using ShramSafal.Domain.Dfes;
 using ShramSafal.Domain.Tests.Common;
 using Xunit;
@@ -66,7 +67,99 @@ public sealed class RecordQuestionEventHandlerTests
         Assert.True(repo.SavedChanges);
     }
 
+    // ─────────────────────────────────────────────────────────────────────────
+    // The recompute guard (task-3, review fix round 1 / finding 2).
+    //
+    // The client fires recordOutcome on ALL THREE outcomes — a real answer, a bare
+    // acknowledgement and a dismissal (MeterQuestionHost.tsx) — but only an answer can
+    // move the score. Rebuilding the day for the other two would turn one INSERT into a
+    // full re-derivation plus an unconditional UPDATE on the aggregate, on every card
+    // interaction. The event itself is still recorded in every case: the telemetry is the
+    // point of the endpoint, the recompute is not.
+    // ─────────────────────────────────────────────────────────────────────────
+
+    [Fact]
+    public async Task A_real_answer_rebuilds_the_day_for_the_date_the_question_was_shown()
+    {
+        var repo = new CapturingRepo(memberOfFarm: true);
+        var derivation = new RecordingDerivation();
+        var handler = new RecordQuestionEventHandler(repo, derivation, new FixedClock(FixedNow), NullLogger<RecordQuestionEventHandler>.Instance);
+        var farmId = Guid.NewGuid();
+
+        var result = await handler.HandleAsync(ValidCommand(farmId, Guid.NewGuid()), CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(1, derivation.Calls);
+        Assert.Equal(farmId, derivation.LastFarmId);
+        // FixedNow is 2026-07-12 06:00 UTC = 11:30 IST — the same local day.
+        Assert.Equal(new DateOnly(2026, 7, 12), derivation.LastLocalDate);
+    }
+
+    [Fact]
+    public async Task A_dismissal_is_still_recorded_but_never_rebuilds_the_day()
+    {
+        var repo = new CapturingRepo(memberOfFarm: true);
+        var derivation = new RecordingDerivation();
+        var handler = new RecordQuestionEventHandler(repo, derivation, new FixedClock(FixedNow), NullLogger<RecordQuestionEventHandler>.Instance);
+        // Exactly what MeterQuestionHost's onDismiss sends: skipped, no response.
+        var cmd = ValidCommand(Guid.NewGuid(), Guid.NewGuid()) with { Response = null, Skipped = true };
+
+        var result = await handler.HandleAsync(cmd, CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        Assert.NotNull(repo.Captured); // telemetry still written
+        Assert.Equal(0, derivation.Calls);
+    }
+
+    [Fact]
+    public async Task A_bare_acknowledgement_with_no_response_never_rebuilds_the_day()
+    {
+        var repo = new CapturingRepo(memberOfFarm: true);
+        var derivation = new RecordingDerivation();
+        var handler = new RecordQuestionEventHandler(repo, derivation, new FixedClock(FixedNow), NullLogger<RecordQuestionEventHandler>.Instance);
+        // MeterQuestionHost's onQuestionInteract: { skipped: false }, no response.
+        var cmd = ValidCommand(Guid.NewGuid(), Guid.NewGuid()) with { Response = "   ", Skipped = false };
+
+        var result = await handler.HandleAsync(cmd, CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        Assert.NotNull(repo.Captured);
+        Assert.Equal(0, derivation.Calls);
+    }
+
+    [Fact]
+    public async Task An_answered_non_gap_question_never_rebuilds_the_day()
+    {
+        var repo = new CapturingRepo(memberOfFarm: true);
+        var derivation = new RecordingDerivation();
+        var handler = new RecordQuestionEventHandler(repo, derivation, new FixedClock(FixedNow), NullLogger<RecordQuestionEventHandler>.Instance);
+        // A real, useful answer — but safety.* names no scored dimension, so it can
+        // credit nothing and the day does not need rebuilding.
+        var cmd = ValidCommand(Guid.NewGuid(), Guid.NewGuid()) with { QuestionKey = "safety.mask", Response = "होय" };
+
+        var result = await handler.HandleAsync(cmd, CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        Assert.NotNull(repo.Captured);
+        Assert.Equal(0, derivation.Calls);
+    }
+
     private sealed class FixedClock(DateTime utcNow) : IClock { public DateTime UtcNow => utcNow; }
+
+    private sealed class RecordingDerivation : IDailyRichnessDerivationService
+    {
+        public int Calls { get; private set; }
+        public Guid LastFarmId { get; private set; }
+        public DateOnly LastLocalDate { get; private set; }
+
+        public Task RecomputeAsync(Guid farmId, DateOnly localDate, CancellationToken ct = default)
+        {
+            Calls++;
+            LastFarmId = farmId;
+            LastLocalDate = localDate;
+            return Task.CompletedTask;
+        }
+    }
 
     // Extends the shared FakeShramSafalRepository (all members throw); override only
     // the three the handler touches.

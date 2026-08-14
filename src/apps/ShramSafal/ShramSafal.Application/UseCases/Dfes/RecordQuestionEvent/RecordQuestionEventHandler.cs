@@ -62,19 +62,39 @@ public sealed class RecordQuestionEventHandler(
         // away; a screen that thanks him and then shows the same score teaches him that
         // answering is pointless.
         //
-        // Ordering matters: the event is COMMITTED first, because the recompute reads the
-        // day's answered gaps back out of question_events. RecomputeAsync rebuilds the
-        // whole (farm, date) aggregate from scratch and is safe to call any number of
-        // times (see IDailyRichnessDerivationService) — and it no-ops when the day has no
-        // log at all, so answering about a day the farmer never recorded invents nothing.
+        // Ordering matters: the row is FLUSHED first (the SaveChanges above), because the
+        // recompute reads the day's answered gaps back out of question_events with an EF
+        // query and would otherwise not see it. Flushed, NOT committed — this endpoint is
+        // not on TenantTransactionMiddleware's skip-list, so everything here rides the
+        // per-request transaction that middleware opened and commits only once the whole
+        // pipeline succeeds. That is deliberate and load-bearing: if the recompute throws,
+        // the WHOLE request rolls back, the event never becomes durable, and the farmer
+        // gets a loud failure instead of a 200 with a silently unmoved score. Do not
+        // "harden" this with the savepoint/try-catch dance CreateDailyLogHandler uses —
+        // that handler also serves /sync/push, which IS skip-listed and therefore has no
+        // ambient transaction, which is the only reason it needs savepoints.
         //
         // The local day comes from the SAME rule the derivation and the repository use
         // (FarmLocalDay), off the instant the question was shown — falling back to the
         // row's own creation time when the client sent no ShownAtUtc, exactly as the
         // repository's window does. No second date source is introduced.
         var localDate = FarmLocalDay.From(entity.ShownAtUtc ?? entity.CreatedAtUtc);
-        await dailyRichnessDerivation.RecomputeAsync(cmd.FarmId, localDate, ct);
-        await repository.SaveChangesAsync(ct);
+
+        // Recompute ONLY when this event could actually credit something. The client fires
+        // recordOutcome on all three outcomes — a real answer, a bare acknowledgement, and
+        // a dismissal (MeterQuestionHost.tsx) — and the last two carry no response, so
+        // they can move nothing. Rebuilding the day for them would turn one INSERT into a
+        // full re-derivation (the day's logs, observations, per-log AI jobs, labour,
+        // irrigation, machinery and disturbance rows) plus an unconditional
+        // MarkUpdated/UPDATE on the aggregate, on every single card interaction.
+        //
+        // TryFrom is the same gate the recompute's own repository read applies, so this
+        // can only ever skip work that would have changed nothing — never a real answer.
+        if (AnsweredGap.TryFrom(cmd.QuestionKey, cmd.Response, localDate, out _))
+        {
+            await dailyRichnessDerivation.RecomputeAsync(cmd.FarmId, localDate, ct);
+            await repository.SaveChangesAsync(ct);
+        }
 
         return Result.Success(entity.Id);
     }

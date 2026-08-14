@@ -376,6 +376,14 @@ internal sealed class ShramSafalRepository(ShramSafalDbContext db) : IShramSafal
         var rows = await db.QuestionEvents
             .AsNoTracking()
             .Where(e => e.FarmId == farmId
+                        // A skip yields nothing — the contract AnsweredGap's own docstring
+                        // states. TryFrom cannot enforce it (it never sees the flag), so the
+                        // exclusion lives HERE, at the read, rather than in the question
+                        // handler's recompute guard: this way EVERY recompute path honours
+                        // it, including the daily-log ones that never look at a command.
+                        // A dismissal carrying text is contradictory data the shipped client
+                        // cannot produce; if one ever lands, it must still score nothing.
+                        && e.Skipped != true
                         && (e.ShownAtUtc ?? e.CreatedAtUtc) >= startUtc
                         && (e.ShownAtUtc ?? e.CreatedAtUtc) < endUtcExclusive)
             .Select(e => new { e.QuestionKey, e.Response })
