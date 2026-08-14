@@ -105,6 +105,33 @@ describe('CreateDailyLogPayload', () => {
         });
         expect(r.success).toBe(false);
     });
+    // task-0b — the manual draft. Absent is the pre-task-0b wire (covered above and
+    // still valid); present must carry buckets of ROWS.
+    it('accepts a manual draft of typed buckets', () => {
+        const r = payloads.CreateDailyLogPayload.safeParse({
+            dailyLogId: VALID_GUID_A,
+            farmId: VALID_GUID_B,
+            plotId: VALID_GUID_C,
+            cropCycleId: VALID_GUID_D,
+            logDate: VALID_LOG_DATE,
+            manualDraft: {
+                labour: [{ id: 'lb-0', type: 'HIRED', count: 5, rate: 350 }],
+                irrigation: [{ id: 'irr-0', method: 'drip', durationHours: 2.5 }],
+            },
+        });
+        expect(r.success).toBe(true);
+    });
+    it('rejects a manual draft bucket that is not an array of rows', () => {
+        const r = payloads.CreateDailyLogPayload.safeParse({
+            dailyLogId: VALID_GUID_A,
+            farmId: VALID_GUID_B,
+            plotId: VALID_GUID_C,
+            cropCycleId: VALID_GUID_D,
+            logDate: VALID_LOG_DATE,
+            manualDraft: { labour: 'five workers' },
+        });
+        expect(r.success).toBe(false);
+    });
 });
 
 describe('AddLogTaskPayload', () => {

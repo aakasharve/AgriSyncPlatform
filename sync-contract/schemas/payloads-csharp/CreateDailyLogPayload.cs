@@ -39,6 +39,25 @@ public sealed record WeatherStampItem(
     IReadOnlyList<string>? Alerts = null
 );
 
+public sealed record ManualDraftItem(
+    // generator: ZodAny / ZodUnknown
+    IReadOnlyList<object>? Labour = null,
+    // generator: ZodAny / ZodUnknown
+    IReadOnlyList<object>? Inputs = null,
+    // generator: ZodAny / ZodUnknown
+    IReadOnlyList<object>? Irrigation = null,
+    // generator: ZodAny / ZodUnknown
+    IReadOnlyList<object>? Observations = null,
+    // generator: ZodAny / ZodUnknown
+    IReadOnlyList<object>? PlannedTasks = null,
+    // generator: ZodAny / ZodUnknown
+    IReadOnlyList<object>? CropActivities = null,
+    // generator: ZodAny / ZodUnknown
+    IReadOnlyList<object>? Machinery = null,
+    // generator: ZodAny / ZodUnknown
+    IReadOnlyList<object>? ActivityExpenses = null
+);
+
 public sealed record CreateDailyLogPayload(
     Guid DailyLogId,
     Guid FarmId,
@@ -48,5 +67,6 @@ public sealed record CreateDailyLogPayload(
     Guid? OperatorUserId = null,
     LocationItem? Location = null,
     WeatherStampItem? WeatherStamp = null,
-    Guid? SourceAiJobId = null
+    Guid? SourceAiJobId = null,
+    ManualDraftItem? ManualDraft = null
 );

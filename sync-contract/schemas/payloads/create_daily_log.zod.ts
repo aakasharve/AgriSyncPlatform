@@ -52,6 +52,34 @@ const WeatherStampPayloadSchema = z.object({
     alerts: z.array(z.string()).optional(),
 });
 
+// spec: dfes-farmer-facing-deploy-readiness-2026-08-14 (task-0b) — the MANUAL
+// draft. Until now a manual save sent only the log's identity, so the server had
+// nothing to normalise: no typed children were ever written for it, the scorer
+// saw an empty day, and every manual-entry day was reported to the farmer as
+// 0/10. These are the eight buckets the confirm screen (ManualEntry.tsx) already
+// builds its `userDraft` from, and they are deliberately the SAME eight names as
+// `CreateDailyLogHandler.EvidenceArrayKeys` — one vocabulary, not a second list.
+//
+// Each row is `z.unknown()` on purpose. The buckets are heterogeneous and still
+// evolving on the client, and a strict per-row schema here would reject a farmer's
+// whole day over one unrecognised field. Row-level meaning is applied SERVER-side
+// by ManualDraftNormalizer, which copies only fields it recognises and never
+// invents one. The array-of-objects shape IS enforced (a scalar in a bucket is a
+// contract error, not data), and PushSyncBatchHandler independently rejects
+// unknown bucket keys and over-sized drafts at the sync boundary.
+const ZDraftBucket = z.array(z.unknown());
+
+const ManualDraftSchema = z.object({
+    labour: ZDraftBucket.optional(),
+    inputs: ZDraftBucket.optional(),
+    irrigation: ZDraftBucket.optional(),
+    observations: ZDraftBucket.optional(),
+    plannedTasks: ZDraftBucket.optional(),
+    cropActivities: ZDraftBucket.optional(),
+    machinery: ZDraftBucket.optional(),
+    activityExpenses: ZDraftBucket.optional(),
+});
+
 export const CreateDailyLogPayload = z.object({
     dailyLogId: ZGuid,
     farmId: ZGuid,
@@ -68,6 +96,10 @@ export const CreateDailyLogPayload = z.object({
     // ZGuid (not z.string().uuid()) so the C# generator emits a `Guid?` that
     // maps 1:1 onto CreateDailyLogCommand.SourceAiJobId (Guid?).
     sourceAiJobId: ZGuid.optional(),
+    // The farmer's typed day. Present on a MANUAL save; omitted on a voice
+    // confirm (whose facts already ride sourceAiJobId's AiJob) and omitted by
+    // every older client — an absent draft must behave exactly as before.
+    manualDraft: ManualDraftSchema.optional(),
 });
 
 export type CreateDailyLogPayloadType = z.infer<typeof CreateDailyLogPayload>;
