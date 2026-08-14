@@ -8,6 +8,7 @@ import { recordAiFailureSignature } from './AiDoomLoopDetector';
 // archive immediately after a successful AI parse. The function is a
 // no-op when the user has not granted FullHistoryJournal.
 import { archiveToRetainedTierIfConsented } from '../voice/VoiceClipRetention';
+import { reclaimAbandonedAiJobs } from './abandonedStateRecovery';
 
 const MAX_RETRIES = 5;
 const BATCH_LIMIT = 10;
@@ -42,10 +43,39 @@ function emitPermanentFailureToast(): void {
 }
 
 export class AiJobWorker {
+    /**
+     * P0.7 — re-entrancy guard, added WITH the reclaim below and load-bearing
+     * for it. `run()` is called from more than one place and was free to
+     * overlap with itself. Once a cycle reclaims `processing` rows, an
+     * overlapping call would flip a job the first call is genuinely working on
+     * back to `pending` and parse it a second time. The guard is what makes
+     * "this worker holds nothing right now" true at the top of the cycle.
+     */
+    private static cycleInProgress = false;
+
     static async run(): Promise<void> {
         if (!navigator.onLine || !getAuthSession()) {
             return;
         }
+
+        if (AiJobWorker.cycleInProgress) {
+            return;
+        }
+
+        AiJobWorker.cycleInProgress = true;
+        try {
+            await AiJobWorker.runCycle();
+        } finally {
+            AiJobWorker.cycleInProgress = false;
+        }
+    }
+
+    private static async runCycle(): Promise<void> {
+        // P0.7 — reclaim jobs a killed session left in `processing`, before this
+        // cycle takes anything in hand. Only `pendingAiJobs` — never the upload
+        // tables, whose worker runs on an independent timer and may genuinely
+        // hold a row right now.
+        await reclaimAbandonedAiJobs();
 
         const db = getDatabase();
         const pendingJobs = await db.pendingAiJobs
