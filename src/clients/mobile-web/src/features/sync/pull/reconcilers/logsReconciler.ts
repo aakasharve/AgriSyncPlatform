@@ -67,19 +67,80 @@ export async function reconcileLogs(
             continue;
         }
 
+        const merged = mergeOverDeviceLog(existing?.log, log);
+
         await db.logs.put({
-            id: log.id,
+            id: merged.id,
             schemaVersion: VersionRegistry.DB_SCHEMA_VERSION,
-            log,
-            date: log.date,
-            verificationStatus: log.verification?.status,
-            createdByOperatorId: log.meta?.createdByOperatorId,
-            isDeleted: log.deletion ? 1 : 0,
+            log: merged,
+            date: merged.date,
+            verificationStatus: merged.verification?.status,
+            createdByOperatorId: merged.meta?.createdByOperatorId,
+            isDeleted: merged.deletion ? 1 : 0,
             serverModifiedAtUtc: serverModified,
         });
     }
 
     return logs.length;
+}
+
+/**
+ * Merge the server's projection over the log already on the phone.
+ *
+ * `DailyLogDto` (infrastructure/api/dtos.ts) carries identity, plot context,
+ * `tasks[]` and `verificationEvents[]` — and nothing else. Every other field on
+ * `DailyLog` has no channel on the wire, so `toDailyLog` cannot read one: it
+ * *invents* those fields (empty arrays, zeroed money, a hardcoded
+ * `dayOutcome: 'WORK_RECORDED'`). Writing that invention over the device row —
+ * which is what a whole-record replace did — destroys the farmer's own data on
+ * the first pull after a successful sync, on his own phone, with no wipe and no
+ * new device involved.
+ *
+ * So the device log is the BASE and the server overwrites only the fields it
+ * genuinely owns. Stated that way round, a field added to `DailyLog` later is
+ * preserved by default rather than silently erased until someone remembers to
+ * extend a list.
+ *
+ * What that saves, concretely:
+ *  - `understanding` — feeds `meterArrival.ts` (Sathi's familiarity counter) and
+ *    `closureReceiptProjection.ts`. Erasing it made the companion forget days
+ *    the farmer actually logged, so the counter walked backwards after a sync.
+ *  - `dayOutcome` — a day the farmer honestly declared as no-work came back as a
+ *    WORK day with nothing in it, classified as an unaccounted day, earning
+ *    nothing and eventually breaking his streak. Honesty must not cost him
+ *    anything (founder ruling 2, 2026-08-14).
+ *  - `deletion` — dropped, so a locally deleted log resurrected. The pull
+ *    payload has no tombstone field, so the device copy is the only record of
+ *    the deletion that exists.
+ *  - plus labour, machinery, expenses, planned tasks, disturbance, transcripts,
+ *    weather stamp, phase/day-number and the money totals — all device-only.
+ */
+function mergeOverDeviceLog(existing: DailyLog | undefined, incoming: DailyLog): DailyLog {
+    if (!existing) {
+        return incoming;
+    }
+
+    return {
+        ...existing,
+        // Identity and the plot context the server resolved.
+        id: incoming.id,
+        date: incoming.date,
+        context: incoming.context,
+        // The four buckets projected from `source.tasks` — the server is the
+        // source of truth for these, so a task removed server-side disappears
+        // here too.
+        cropActivities: incoming.cropActivities,
+        irrigation: incoming.irrigation,
+        inputs: incoming.inputs,
+        observations: incoming.observations,
+        // Verification is a server-side FSM; the device never wins it.
+        verification: incoming.verification,
+        // Server owns createdAtISO / createdByOperatorId / schemaVersion. Keys
+        // it never sees (deviceId, appVersion, provenance) survive underneath.
+        meta: incoming.meta
+            ? { ...existing.meta, ...incoming.meta }
+            : existing.meta,
+    };
 }
 
 function toDailyLog(
