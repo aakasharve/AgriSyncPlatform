@@ -134,6 +134,51 @@ public sealed class ErasureRequest
         CompletedAtUtc = nowUtc;
     }
 
+    /// <summary>
+    /// The DPDP §12 database manifest ran to completion, but a named part of
+    /// the erasure did NOT — today, deletion of the retained voice clips from
+    /// S3. The rows are scrubbed and the count is real; something the farmer
+    /// asked to have removed still exists.
+    ///
+    /// <para>
+    /// <b>Why this is not <see cref="MarkCompleted"/>.</b> Calling that would
+    /// tell an auditor the erasure finished cleanly when raw audio survives —
+    /// a false claim about a data-subject right.
+    /// </para>
+    ///
+    /// <para>
+    /// <b>Why this is not <see cref="MarkFailed"/>.</b> That is what the worker
+    /// used to do, and it is the defect this method exists to remove. Nine
+    /// tables are irreversibly scrubbed by this point. Stamping the request
+    /// <c>Failed</c> tells a support person nothing happened, so they truthfully
+    /// but wrongly tell the farmer their deletion did not go through — and a
+    /// retry would report SMALLER numbers than the truth, because the rows it
+    /// would count are already gone.
+    /// </para>
+    ///
+    /// <para>
+    /// The specifics of what remains live in the <c>ErasureRequest/Completed</c>
+    /// audit event payload for this request.
+    /// </para>
+    /// </summary>
+    public void MarkCompletedWithResidue(int rowsAnonymizedCount, DateTime nowUtc)
+    {
+        if (Status != ErasureStatus.InProgress)
+        {
+            throw new InvalidOperationException(
+                $"ErasureRequest {Id} cannot transition to CompletedWithResidue from {Status}.");
+        }
+        if (rowsAnonymizedCount < 0)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(rowsAnonymizedCount), rowsAnonymizedCount,
+                "rowsAnonymizedCount must be >= 0");
+        }
+        Status = ErasureStatus.CompletedWithResidue;
+        RowsAnonymizedCount = rowsAnonymizedCount;
+        CompletedAtUtc = nowUtc;
+    }
+
     public void MarkFailed(string reason, DateTime nowUtc)
     {
         if (string.IsNullOrWhiteSpace(reason))
@@ -148,8 +193,23 @@ public sealed class ErasureRequest
 
 /// <summary>
 /// Phase 08 — DPDP §12 erasure request FSM. Linear progression
-/// Requested → InProgress → Completed. Failed is a terminal sibling
-/// of Completed reachable only from InProgress.
+/// Requested → InProgress → Completed. Failed and CompletedWithResidue are
+/// terminal siblings of Completed, both reachable only from InProgress.
+///
+/// <para>
+/// <b>Read the three terminal states as answers to "what is actually gone?"</b>
+/// <c>Completed</c> — everything in the manifest. <c>CompletedWithResidue</c> —
+/// the database scrub, but a named part survives. <c>Failed</c> — the scrub
+/// itself did not complete.
+/// </para>
+///
+/// <para>
+/// Persisted as <c>integer</c> with no CHECK constraint
+/// (<c>ssf.erasure_requests.status</c>), so adding a member needs no migration.
+/// Nothing switches exhaustively on this enum; the existing comparisons are all
+/// <c>== Completed</c> / <c>== Requested</c> / <c>!= Failed</c>, and a value of
+/// 4 is correctly NOT treated as clean completion by any of them.
+/// </para>
 /// </summary>
 public enum ErasureStatus
 {
@@ -157,4 +217,12 @@ public enum ErasureStatus
     InProgress = 1,
     Completed = 2,
     Failed = 3,
+
+    /// <summary>
+    /// The database manifest completed and <see cref="ErasureRequest.RowsAnonymizedCount"/>
+    /// is real, but something the farmer asked to have removed still exists —
+    /// currently only: retained voice clips whose S3 deletion failed. See the
+    /// request's <c>ErasureRequest/Completed</c> audit event for what and why.
+    /// </summary>
+    CompletedWithResidue = 4,
 }

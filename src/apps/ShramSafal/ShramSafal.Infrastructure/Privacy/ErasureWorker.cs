@@ -24,9 +24,22 @@
 // audit row.
 //
 // Per OQ-8 (IRetainedBlobStore): the worker calls the port
-// unconditionally; the stub throws NotImplementedException which the
-// worker catches + logs + marks voice_clips_retained_deferred=true on
-// the request payload.
+// unconditionally.
+//
+// SUPERSEDED — the rest of the original OQ-8 note said the stub throws
+// NotImplementedException which the worker catches, logs, and records as
+// voice_clips_retained_deferred=true. That stub (PendingRetainedBlobStore)
+// was DELETED in the Voice Diary ship; Program.cs:445-451 binds the real
+// S3RetainedBlobStore, and the port's own docstring says the catch is no
+// longer needed. The narrow catch survived the stub by ~3 months and
+// guarded the one exception that could no longer be thrown while letting
+// through every one that could — aborting the run AFTER nine tables were
+// irreversibly scrubbed but BEFORE any audit row was written.
+//
+// The worker now catches everything from that step and records the outcome
+// as ErasureStatus.CompletedWithResidue. voice_clips_retained_deferred is
+// still emitted for payload compatibility, but the meaningful fields are
+// retainedVoiceDeleted / retainedVoiceResidue. See the block at step (e).
 //
 // SARVAM_PRIMARY_VOICE_PIPELINE Task 3.4 — extension to the cascade.
 // The voice-spine schema adds three user-keyed surfaces that DELETE
@@ -467,19 +480,71 @@ public sealed class ErasureWorker(
             .ConfigureAwait(false);
         totalAnonymized += perTableCounts["golden_set_candidate"];
 
-        // (e) Retained voice S3 — via port (Phase 07 rebinds the stub).
+        // (e) Retained voice S3 — via port.
+        //
+        // ── EVERY exception is caught here, and that is the whole point ──
+        //
+        // By the time control reaches this line the nine tables above are
+        // ALREADY SCRUBBED AND COMMITTED. There is no transaction around the
+        // cascade: each anonymizer runs ExecuteSqlRawAsync/ExecuteDeleteAsync,
+        // which autocommits immediately on this admin context. The audit rows,
+        // by contrast, are only tracked — they do not exist until the
+        // SaveChangesAsync at the end of this method.
+        //
+        // So an exception escaping this block does not "abort the erasure". The
+        // erasure has happened. What it aborts is the RECORD of it: the run
+        // unwinds to RunPassAsync, which stamps the request Failed with no audit
+        // events at all. A support person or DPDP auditor then reads `Failed`
+        // and truthfully but wrongly tells the farmer their deletion did not go
+        // through — and a retry cannot correct them, because the rows it would
+        // count are already gone, so it reports SMALLER numbers than the truth.
+        //
+        // The previous catch handled exactly one type, NotImplementedException,
+        // for a stub (PendingRetainedBlobStore) that no longer exists — deleted
+        // in the Voice Diary ship, which Program.cs:445-451 and this port's own
+        // docstring both record. It guarded against the one thing that could no
+        // longer be thrown while letting through everything that could:
+        // AccessDenied, throttling, a network fault, a DB error on the metadata
+        // read, cancellation at shutdown.
+        //
+        // Fixing this by making the scrub conditional on the S3 delete would be
+        // the wrong direction: it would mean erasure never completes at all
+        // wherever the delete cannot succeed, which is strictly worse for the
+        // farmer. What has to become atomic is the RECORD, not the deletion.
+        string? retainedVoiceResidue = null;
         var retainedStore = sp.GetRequiredService<IRetainedBlobStore>();
         try
         {
             await retainedStore.DeleteRetainedVoiceForUserAsync(targetUserId, ct).ConfigureAwait(false);
         }
-        catch (NotImplementedException ex)
+        catch (Exception ex)
         {
+            // Cancellation is deliberately included. At shutdown the scrub is
+            // still done, so the record still has to land — see recordCt below.
             voiceClipsDeferred = true;
-            logger.LogWarning(ex,
-                "ErasureWorker: voice_clips_retained purge deferred for user {UserId} (Phase 07 not yet shipped).",
+            retainedVoiceResidue = $"{ex.GetType().Name}: {ex.Message}";
+
+            logger.LogError(ex,
+                "ErasureWorker: retained voice deletion FAILED for user {UserId}. The database scrub "
+                + "already completed and is committed; request will be stamped CompletedWithResidue "
+                + "so the record does not claim nothing happened.",
                 targetUserId);
         }
+
+        // From here to SaveChangesAsync the work is NON-CANCELLABLE, on purpose.
+        //
+        // The irreversible part is done. If a shutdown token cancelled the audit
+        // write we would reproduce the exact defect this change removes — data
+        // gone, no record — only triggered by a deploy instead of by S3. Writing
+        // the record is a handful of local inserts; finishing it is always
+        // correct and always fast.
+        //
+        // NOTE this does NOT cover a cancellation that lands mid-scrub, higher
+        // up: that still aborts with some tables scrubbed, no audit, and the
+        // request stuck InProgress (RunPassAsync:302 excludes
+        // OperationCanceledException from its catch). Same class of hole, wider
+        // blast radius, reported rather than fixed here.
+        var recordCt = CancellationToken.None;
 
         // Per-row audit emission per DS-017 rule (d). We emit one
         // aggregate "ErasureAnonymize/Applied" row per TABLE (carrying
@@ -489,11 +554,20 @@ public sealed class ErasureWorker(
         // surviving rows carry the sentinel + per-row AuditEvent
         // entries). To keep that contract honest we emit one
         // AuditEvent per anonymized data row, batched here.
-        await EmitPerRowAuditEventsAsync(admin, request, perTableCounts, sentinel, ct).ConfigureAwait(false);
+        await EmitPerRowAuditEventsAsync(admin, request, perTableCounts, sentinel, recordCt).ConfigureAwait(false);
 
-        request.MarkCompleted(totalAnonymized, nowUtc);
+        if (retainedVoiceResidue is null)
+        {
+            request.MarkCompleted(totalAnonymized, nowUtc);
+        }
+        else
+        {
+            // Scrub done, something named still exists. Distinguishable in the
+            // persisted state from both "clean" and "nothing happened".
+            request.MarkCompletedWithResidue(totalAnonymized, nowUtc);
+        }
 
-        // Final ErasureRequest/Completed audit row (single, not per-table).
+        // Final ErasureRequest audit row (single, not per-table).
         var completionPayload = new
         {
             requestId = request.Id,
@@ -501,12 +575,25 @@ public sealed class ErasureWorker(
             rowsAnonymizedCount = totalAnonymized,
             perTableCounts,
             voiceClipsRetainedDeferred = voiceClipsDeferred,
+
+            // What actually happened to the retained voice tier, stated either
+            // way rather than only on failure — an absent field reads as "not
+            // considered", which is what we are trying to stop doing.
+            retainedVoiceDeleted = retainedVoiceResidue is null,
+            retainedVoiceResidue,
+
+            // Requirement: a retry must not report smaller numbers than the
+            // truth. These counts are what THIS run scrubbed. Any later run for
+            // the same subject necessarily counts fewer rows, because this run
+            // already removed them — such counts are post-hoc and are not a
+            // measure of what was erased.
+            countsAreFromThisRunOnly = true,
         };
 
         var completionAudit = AuditEventFactory.Create(
             entityType: "ErasureRequest",
             entityId: request.Id,
-            action: "Completed",
+            action: retainedVoiceResidue is null ? "Completed" : "CompletedWithResidue",
             actorUserId: sentinel,
             actorRole: "system_erasure_worker",
             payload: completionPayload,
@@ -518,11 +605,25 @@ public sealed class ErasureWorker(
             sourceAiJobId: null);
         admin.AuditEvents.Add(completionAudit);
 
-        await admin.SaveChangesAsync(ct).ConfigureAwait(false);
+        // recordCt, not ct — see the note above. The scrub is irreversible and
+        // already committed; the record must land even if we are shutting down.
+        await admin.SaveChangesAsync(recordCt).ConfigureAwait(false);
 
-        logger.LogInformation(
-            "ErasureWorker completed request {RequestId} for user {UserId}: {Count} rows anonymized.",
-            request.Id, targetUserId, totalAnonymized);
+        if (retainedVoiceResidue is null)
+        {
+            logger.LogInformation(
+                "ErasureWorker completed request {RequestId} for user {UserId}: {Count} rows anonymized.",
+                request.Id, targetUserId, totalAnonymized);
+        }
+        else
+        {
+            logger.LogError(
+                "ErasureWorker completed request {RequestId} for user {UserId} WITH RESIDUE: {Count} rows "
+                + "anonymized, but retained voice deletion failed ({Residue}). The farmer's raw audio still "
+                + "exists. Status is CompletedWithResidue and the audit event carries the detail — query "
+                + "ssf.erasure_requests, do not rely on this log line reaching anyone.",
+                request.Id, targetUserId, totalAnonymized, retainedVoiceResidue);
+        }
     }
 
     // ── Per-table anonymizers ────────────────────────────────────────
@@ -842,7 +943,16 @@ UPDATE ssf.farm_operations
             var req = await admin.ErasureRequests
                 .FirstOrDefaultAsync(r => r.Id == requestId, ct)
                 .ConfigureAwait(false);
-            if (req is not null && req.Status != ErasureStatus.Failed && req.Status != ErasureStatus.Completed)
+            // CompletedWithResidue is terminal and must be protected here for
+            // the same reason Completed is: it records that nine tables were
+            // irreversibly scrubbed. Letting a later error downgrade it to
+            // Failed would restore the exact lie this change removes — and it
+            // is reachable, because the audit write now runs after a caught
+            // retained-voice failure.
+            if (req is not null
+                && req.Status != ErasureStatus.Failed
+                && req.Status != ErasureStatus.Completed
+                && req.Status != ErasureStatus.CompletedWithResidue)
             {
                 req.MarkFailed(reason.Length > 1000 ? reason[..1000] : reason, DateTime.UtcNow);
                 await admin.SaveChangesAsync(ct).ConfigureAwait(false);
