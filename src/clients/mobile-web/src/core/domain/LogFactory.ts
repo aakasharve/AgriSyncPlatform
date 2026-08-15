@@ -1,6 +1,6 @@
 import {
     DailyLog, FarmContext, LogScope, FarmerProfile, CropProfile,
-    LogVerificationStatus, WeatherStamp,
+    LogVerificationStatus, OperatorCapability, WeatherStamp,
     CropActivityEvent, IrrigationEvent,
     LabourEvent, InputEvent, MachineryEvent, ExpenseItem,
     ActivityExpenseEvent, ObservationNote,
@@ -82,6 +82,28 @@ type AgriLogPlannedTask = NonNullable<AgriLogResponse['plannedTasks']>[number];
  * Ensures consistent IDs, Metadata, and Trust Layer compliance.
  */
 export class LogFactory {
+    /**
+     * Trust predicate: does the ACTIVE operator hold approval authority?
+     *
+     * WAVE-1.1 (spec: dfes-companion-2026-07-11). Was
+     * `profile.activeOperatorId === 'owner'` at four sites. Post-sync
+     * `profileAndCropsReconciler` overwrites `activeOperatorId` with a server
+     * GUID (its preserve-existing candidates are all `operator.userId`, so the
+     * literal `'owner'` can never match), so NOBODY matched and every log the
+     * owner recorded was filed PENDING — he logged work and his score dropped.
+     *
+     * Compare CAPABILITY, never identity: `capabilities` exists in BOTH states
+     * (pre-sync seeded by `useAppData`, post-sync via `capabilitiesForRole`),
+     * whereas the owner's GUID is absent on a new device — an id comparison has
+     * a day-one hole. APPROVE_LOGS rather than `role === 'PRIMARY_OWNER'`
+     * because SECONDARY_OWNER legitimately holds it (`operatorRole.ts`), and it
+     * is the same predicate `isVerifier` encodes.
+     */
+    private static hasApprovalAuthority(profile: FarmerProfile): boolean {
+        const actor = profile.operators?.find(op => op.id === profile.activeOperatorId);
+        return actor?.capabilities?.includes(OperatorCapability.APPROVE_LOGS) ?? false;
+    }
+
     private static buildPlannedTasksFromObservationCandidates(
         observations: ObservationNote[] | undefined,
         plotId: string,
@@ -264,7 +286,7 @@ export class LogFactory {
             ].some(events => events.length > 0);
 
             // Trust & Verification Logic
-            const isOwner = profile.activeOperatorId === 'owner';
+            const isOwner = this.hasApprovalAuthority(profile);
             const autoApproveAll = profile.trust?.reviewPolicy === 'AUTO_APPROVE_ALL';
 
             let verificationStatus = LogVerificationStatus.PENDING;
@@ -314,7 +336,8 @@ export class LogFactory {
                 verification: {
                     status: verificationStatus,
                     required: !isOwner,
-                    verifiedByOperatorId: isOwner ? 'owner' : undefined,
+                    // WAVE-1.1: the REAL id — 'owner' resolved to no operator.
+                    verifiedByOperatorId: isOwner ? profile.activeOperatorId : undefined,
                     verifiedAtISO: isOwner ? nowISO : undefined
                 }
             };
@@ -404,7 +427,7 @@ export class LogFactory {
             activityExpenses,
         ].some(events => events.length > 0);
 
-        const isOwner = profile.activeOperatorId === 'owner';
+        const isOwner = this.hasApprovalAuthority(profile);
         const autoApproveAll = profile.trust?.reviewPolicy === 'AUTO_APPROVE_ALL';
         const verificationStatus = (isOwner || autoApproveAll)
             ? LogVerificationStatus.APPROVED
@@ -451,7 +474,8 @@ export class LogFactory {
             verification: {
                 status: verificationStatus,
                 required: !isOwner,
-                verifiedByOperatorId: isOwner ? 'owner' : undefined,
+                // WAVE-1.1: the REAL id — 'owner' resolved to no operator.
+                verifiedByOperatorId: isOwner ? profile.activeOperatorId : undefined,
                 verifiedAtISO: isOwner ? nowISO : undefined
             }
         };
@@ -576,7 +600,7 @@ export class LogFactory {
             const mCost = sumMachineryCost(myMachine);
             const eCost = sumExpenseCost(myExpenses);
 
-            const isOwner = profile.activeOperatorId === 'owner';
+            const isOwner = this.hasApprovalAuthority(profile);
             const autoApprove = profile.trust?.reviewPolicy === 'AUTO_APPROVE_ALL' ||
                 (profile.trust?.reviewPolicy === 'AUTO_APPROVE_OWNER' && isOwner);
 
@@ -683,7 +707,8 @@ export class LogFactory {
                 verification: {
                     status: autoApprove ? LogVerificationStatus.APPROVED : LogVerificationStatus.PENDING,
                     required: !isOwner,
-                    verifiedByOperatorId: isOwner ? 'owner' : undefined,
+                    // WAVE-1.1: the REAL id — 'owner' resolved to no operator.
+                    verifiedByOperatorId: isOwner ? profile.activeOperatorId : undefined,
                     verifiedAtISO: isOwner ? nowISO : undefined
                 }
             };
@@ -713,7 +738,7 @@ export class LogFactory {
         // Daily Clarity Loop gate — see createFromVoiceResult. Off ⇒ resolver inert.
         resolveDue: boolean
     ): DailyLog {
-        const isOwner = profile.activeOperatorId === 'owner';
+        const isOwner = this.hasApprovalAuthority(profile);
         const autoApprove = profile.trust?.reviewPolicy === 'AUTO_APPROVE_ALL' ||
             (profile.trust?.reviewPolicy === 'AUTO_APPROVE_OWNER' && isOwner);
 
@@ -816,7 +841,8 @@ export class LogFactory {
             verification: {
                 status: autoApprove ? LogVerificationStatus.APPROVED : LogVerificationStatus.PENDING,
                 required: !isOwner,
-                verifiedByOperatorId: isOwner ? 'owner' : undefined,
+                // WAVE-1.1: the REAL id — 'owner' resolved to no operator.
+                verifiedByOperatorId: isOwner ? profile.activeOperatorId : undefined,
                 verifiedAtISO: isOwner ? nowISO : undefined
             }
         };
