@@ -10,6 +10,7 @@ import PageToggle from '../../../shared/components/ui/PageToggle';
 import { useLanguage } from '../../../i18n/LanguageContext';
 
 import { FarmOperator } from '../../../domain/types/farm.types';
+import type { DailyLog } from '../../../domain/types/log.types';
 import { FarmSwitcherSheet } from './FarmContextSwitcher';
 import type { MyFarmDto } from '../../onboarding/qr/inviteApi';
 import { useSyncQueueStatus, SyncStatusDrawer } from '../../sync';
@@ -51,6 +52,31 @@ interface AppHeaderProps {
     onCreateFarm: () => void;
     onJoinViaQr: () => void;
   };
+  /**
+   * spec: owner-oversight-loop (Ruling 12) — the narrow slice of
+   * `AppFeatureProviders`-scoped state `buildOversightModel` needs, computed
+   * by `AppContent.tsx` (`app/helpers/appContentOversightInputs.ts`) because
+   * `AppHeader` itself renders OUTSIDE that provider tree and cannot reach it
+   * any other way (props only — no second `useAppData()`, no moving
+   * `AppHeader` inside the tree). Omit entirely (as every test but
+   * `AppHeader.oversight.test.tsx`'s "real data" case does) to fall back to
+   * the same honest zeros/empties this component used before this prop
+   * existed — never a silent default that looks like real data.
+   */
+  oversightData?: {
+    /** Already the FULL per-user history — see this file's own comment
+     * above `buildOversightModel`'s call for the multi-farm caveat this
+     * does NOT solve. */
+    logs: DailyLog[];
+    operatorNameById: Record<string, string>;
+    plotCount: number;
+    unverifiedCount: number;
+    yesterdayNotClosed: boolean;
+    /** Always `null` today — see the comment above this component's
+     * `oversightModel` construction for why naming a delegate is not yet
+     * something this task can honestly do. */
+    approvalHolderName: string | null;
+  };
 }
 
 /**
@@ -87,6 +113,7 @@ const AppHeader: React.FC<AppHeaderProps> = ({
   activeOperator,
   onVoiceTrigger,
   farmContext,
+  oversightData,
 }) => {
   const { language, t } = useLanguage();
   const [isSyncDrawerOpen, setIsSyncDrawerOpen] = React.useState(false);
@@ -110,15 +137,13 @@ const AppHeader: React.FC<AppHeaderProps> = ({
     ?? farmContext?.farms[0];
   const farmName = currentFarm?.name ?? '';
 
-  // PLOT COUNT — genuinely UNREACHABLE from `AppHeader` today. `farmContext`
-  // carries `MyFarmDto` (`onboarding/qr/inviteApi.ts`: farmId/name/role/
-  // farmCode/subscription — no plot count). The real count lives on
-  // `app.data.crops`, scoped inside `<AppFeatureProviders>` in
-  // `AppContent.tsx` — a SIBLING of `<AppHeader>` there, not an ancestor, so
-  // no prop or context reaches it without touching a file outside this
-  // task's scope ("Files: modify AppHeader.tsx"). Honest zero, never a
-  // fabricated count (spec §P-F) — see the task-6 report for the finding.
-  const plotCount = 0;
+  // PLOT COUNT (Ruling 12) — real when `AppContent.tsx` supplies
+  // `oversightData` (it always does in production; see
+  // `app/helpers/appContentOversightInputs.ts`). `farmContext` alone carries
+  // only `MyFarmDto` (farmId/name/role/farmCode/subscription — no plot
+  // count), so a caller that omits `oversightData` (every test but the
+  // "real data" one) gets an honest 0, never a fabricated count (spec §P-F).
+  const plotCount = oversightData?.plotCount ?? 0;
 
   // `failedSendCount` mirrors exactly what the deleted `SyncIndicator` chip
   // used to sum for its own red badge (`queueStatus.failedCount +
@@ -126,26 +151,31 @@ const AppHeader: React.FC<AppHeaderProps> = ({
   // those two terms are exactly `syncHonestyState.ts`'s two `NEEDS_FIX`
   // conditions (a durable/capped mutation row; a capped upload row). This is
   // how `NEEDS_FIX` keeps reaching the farmer after the chip is deleted
-  // (spec §4.1's binding constraint).
+  // (spec §4.1's binding constraint). Always real — `useSyncQueueStatus` is
+  // called directly in this component, no prop needed.
   const failedSendCount = queueStatus.failedCount + queueStatus.failedUploads;
 
-  // The rest of `buildOversightModel`'s inputs — real per-farm logs,
-  // resolved operator names, the outstanding-approval count and yesterday's
-  // close state — are ALSO unreachable from `AppHeader`: they live on
-  // `app.data.history` / `app.data.crops` / `app.data.farmerProfile.operators`
-  // behind the same `AppFeatureProviders` boundary as plot count above.
-  // Honest empty/zero inputs — not a fabricated model (spec §P-F). Only
-  // `failedSendCount`, read straight off `useSyncQueueStatus` (a hook
-  // already called in this component before this task), is real.
+  // The rest of `buildOversightModel`'s inputs (Ruling 12) — real per-farm
+  // logs, resolved operator names, the outstanding-approval count and
+  // yesterday's close state — now come from `oversightData`, computed by
+  // `AppContent.tsx` where `AppFeatureProviders`-scoped state IS in scope
+  // (`app/helpers/appContentOversightInputs.ts` — read its header for the
+  // multi-farm-scoping caveat it does NOT solve). `approvalHolderName` stays
+  // `null` even when `oversightData` is supplied: naming a specific person
+  // as "holds this decision" requires a verified, server-governed
+  // permission grant (spec §P-E), which this task has not confirmed exists
+  // — asserting a wrong name would be a worse claim than naming no one.
+  // A caller that omits `oversightData` entirely falls back to the same
+  // honest empty/zero inputs this component used before this prop existed.
   const oversightModel = buildOversightModel({
-    logs: [],
+    logs: oversightData?.logs ?? [],
     checkpointISO,
     nowISO: systemClock.nowISO(),
-    operatorNameById: {},
-    unverifiedCount: 0,
-    yesterdayNotClosed: false,
+    operatorNameById: oversightData?.operatorNameById ?? {},
+    unverifiedCount: oversightData?.unverifiedCount ?? 0,
+    yesterdayNotClosed: oversightData?.yesterdayNotClosed ?? false,
     failedSendCount,
-    approvalHolderName: null,
+    approvalHolderName: oversightData?.approvalHolderName ?? null,
   });
 
   // Ruling 4 (plan ledger) — removing the sync chip orphans this header's

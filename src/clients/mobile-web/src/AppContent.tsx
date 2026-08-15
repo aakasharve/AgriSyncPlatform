@@ -6,7 +6,7 @@
  *  - context-display JSX helpers (helpers/appContentContextDisplay)
  */
 
-import React, { useEffect } from 'react';
+import React, { useEffect, useMemo } from 'react';
 
 import BottomNavigation from './features/context/components/BottomNavigation';
 import AppHeader from './features/context/components/AppHeader';
@@ -32,6 +32,11 @@ import {
     buildContextColorIndicator,
     buildContextDisplay,
 } from './app/helpers/appContentContextDisplay';
+// spec: owner-oversight-loop (Ruling 12) — the narrow slice of
+// AppFeatureProviders-scoped state AppHeader's oversight strip needs. See
+// that file's header for what it does and does NOT solve (multi-farm data
+// isolation is a pre-existing, separate gap, not introduced here).
+import { buildOversightHeaderInputs } from './app/helpers/appContentOversightInputs';
 
 interface AppContentProps {
     crops: CropProfile[];
@@ -73,6 +78,21 @@ const AppContent: React.FC<AppContentProps> = ({ crops: initialCrops, setCrops }
         getContextDisplay: () => buildContextDisplay(context, data.crops),
     };
 
+    // spec: owner-oversight-loop (Ruling 12) — narrow, purpose-built props
+    // for AppHeader's oversight strip/drawer ONLY: not `data`, not `app`.
+    // `data.history` itself still has to be a prop (the drawer's per-person
+    // breakdown needs individual records, not a scalar), but nothing else
+    // from `data` crosses this boundary.
+    const oversightHeaderInputs = useMemo(
+        () => buildOversightHeaderInputs(
+            data.history,
+            data.crops,
+            data.farmerProfile.operators,
+            data.plannedTasks,
+        ),
+        [data.history, data.crops, data.farmerProfile.operators, data.plannedTasks],
+    );
+
     return (
         <div className="relative flex h-full flex-col bg-transparent text-stone-800 font-sans selection:bg-emerald-200">
             <AiTestModeBanner />
@@ -90,6 +110,16 @@ const AppContent: React.FC<AppContentProps> = ({ crops: initialCrops, setCrops }
                     onCreateFarm: () => setShowFirstFarmWizard(true),
                     onJoinViaQr: handleJoinViaQr,
                 } : undefined}
+                oversightData={{
+                    logs: data.history,
+                    operatorNameById: oversightHeaderInputs.operatorNameById,
+                    plotCount: oversightHeaderInputs.plotCount,
+                    unverifiedCount: oversightHeaderInputs.unverifiedCount,
+                    yesterdayNotClosed: oversightHeaderInputs.yesterdayNotClosed,
+                    // Genuinely unreachable honestly, not fabricated — see
+                    // AppHeader.tsx's own doc comment on this field.
+                    approvalHolderName: null,
+                }}
             />
 
             <MeAlertRail />

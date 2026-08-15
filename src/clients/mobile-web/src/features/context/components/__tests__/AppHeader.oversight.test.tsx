@@ -52,6 +52,8 @@ import React from 'react';
 
 import { t as translate, type Language } from '../../../../i18n/translations';
 import type { SyncQueueStatus } from '../../../sync/hooks/useSyncQueueStatus';
+import { SYNC_HONESTY_I18N_KEYS } from '../../../sync/status/syncHonestyState';
+import type { DailyLog } from '../../../../domain/types/log.types';
 
 const queueRef: { current: SyncQueueStatus } = {
     current: {
@@ -100,6 +102,39 @@ const farmContext = {
     onCreateFarm: vi.fn(),
     onJoinViaQr: vi.fn(),
 };
+
+/** Minimal, real `DailyLog` fixture — same shape `oversightSelectors.test.ts`
+ * builds by hand, not fetched from storage. */
+function makeLog(overrides: Partial<DailyLog> & { id: string }): DailyLog {
+    return {
+        id: overrides.id,
+        date: overrides.date ?? '2026-08-14',
+        context: overrides.context ?? {
+            selection: [
+                {
+                    cropId: 'crop-1',
+                    cropName: 'Grapes',
+                    selectedPlotIds: ['plot-1'],
+                    selectedPlotNames: ['Grapes A'],
+                },
+            ],
+        },
+        dayOutcome: overrides.dayOutcome ?? 'WORK_RECORDED',
+        cropActivities: overrides.cropActivities ?? [],
+        irrigation: overrides.irrigation ?? [],
+        labour: overrides.labour ?? [],
+        inputs: overrides.inputs ?? [],
+        machinery: overrides.machinery ?? [],
+        observations: overrides.observations,
+        meta: overrides.meta,
+        financialSummary: overrides.financialSummary ?? {
+            totalLabourCost: 0,
+            totalInputCost: 0,
+            totalMachineryCost: 0,
+            grandTotal: 0,
+        },
+    };
+}
 
 function renderHeader(overrides: Partial<React.ComponentProps<typeof AppHeader>> = {}) {
     return render(
@@ -173,6 +208,17 @@ describe('AppHeader — the sync chip is gone', () => {
         // fabricated literal.
         expect(screen.getByTestId('canonical-strip-waiting-button')).toBeInTheDocument();
         expect(screen.getByTestId('canonical-strip-waiting-count')).toHaveTextContent('1');
+
+        // Ruling 12 fix-round: the retired `AppHeader.claim.test.tsx` also
+        // asserted none of the three sync-honesty labels "leak in by another
+        // route" (its own wording). Restated here, at the AppHeader level —
+        // not just structurally (SyncIndicator is never imported by this
+        // file any more) but by an explicit DOM-negative assertion, so a
+        // future regression that re-adds ANY SyncIndicator render here would
+        // fail a NAMED test, not just a code review.
+        for (const key of Object.values(SYNC_HONESTY_I18N_KEYS)) {
+            expect(screen.queryByText(translate(key, 'mr'))).not.toBeInTheDocument();
+        }
     });
 
     it('renders no sync chip even when nothing is outstanding', async () => {
@@ -187,9 +233,15 @@ describe('AppHeader — the sync chip is gone', () => {
 
 describe('AppHeader — NEEDS_FIX still reaches the farmer (Ruling 4)', () => {
     it('the_failed_send_row_can_still_open_the_sync_status_drawer', async () => {
+        // Ruling 12 fix-round: BOTH terms set (not just `failedCount`),
+        // exactly like the retired `AppHeader.claim.test.tsx`'s "the chip
+        // carries the number it is standing beside" — restores that test's
+        // arithmetic proof (`failedCount + failedUploads`, not just one of
+        // the two summands) at its new destination, the waiting row.
         queueRef.current = {
             ...queueRef.current,
-            failedCount: 3,
+            failedCount: 2,
+            failedUploads: 1,
         };
 
         await act(async () => {
@@ -201,8 +253,8 @@ describe('AppHeader — NEEDS_FIX still reaches the farmer (Ruling 4)', () => {
         expect(screen.getByTestId('waiting-drawer-sheet')).toBeInTheDocument();
 
         const failedSendRow = screen.getByTestId('waiting-drawer-decision-failedSend');
-        // The row carries the REAL count from `useSyncQueueStatus`, not a
-        // literal — same evidence, same number, all the way through.
+        // The row carries the REAL sum from `useSyncQueueStatus`
+        // (2 + 1 = 3), not a literal and not just one of the two terms.
         expect(failedSendRow).toHaveTextContent('3');
         expect(screen.queryByTestId('sync-status-drawer-stub')).not.toBeInTheDocument();
 
@@ -215,5 +267,90 @@ describe('AppHeader — NEEDS_FIX still reaches the farmer (Ruling 4)', () => {
         // on the retry surface behind a black overlay (same rule the
         // existing `onOpenConflicts` comment already states for this drawer).
         expect(screen.queryByTestId('waiting-drawer-sheet')).not.toBeInTheDocument();
+    });
+});
+
+describe('AppHeader — real oversight data populates a non-empty briefing (Ruling 12)', () => {
+    it('the_header_receives_real_oversight_data_and_the_drawer_shows_a_non_empty_briefing', async () => {
+        // Two real logs from a NAMED operator, on two named plots — exactly
+        // the shape `app/helpers/appContentOversightInputs.ts` produces from
+        // `AppContent.tsx`'s real `data.history`/`data.crops`/
+        // `data.farmerProfile.operators`. Nothing here is a literal echoed by
+        // the component — every assertion below reads a number/name back off
+        // THIS fixture.
+        const logs: DailyLog[] = [
+            makeLog({
+                id: 'log-1',
+                date: '2026-08-14',
+                meta: { createdAtISO: '2026-08-14T09:00:00.000Z', createdByOperatorId: 'op-rokade' },
+                context: {
+                    selection: [{
+                        cropId: 'crop-1', cropName: 'Grapes',
+                        selectedPlotIds: ['plot-1'], selectedPlotNames: ['Grapes A'],
+                    }],
+                },
+            }),
+            makeLog({
+                id: 'log-2',
+                date: '2026-08-14',
+                meta: { createdAtISO: '2026-08-14T15:00:00.000Z', createdByOperatorId: 'op-rokade' },
+                context: {
+                    selection: [{
+                        cropId: 'crop-2', cropName: 'Sugarcane',
+                        selectedPlotIds: ['plot-2'], selectedPlotNames: ['Sugarcane B'],
+                    }],
+                },
+            }),
+        ];
+
+        await act(async () => {
+            renderHeader({
+                oversightData: {
+                    logs,
+                    operatorNameById: { 'op-rokade': 'Rokade' },
+                    plotCount: 4,
+                    unverifiedCount: 0,
+                    yesterdayNotClosed: false,
+                    approvalHolderName: null,
+                },
+            });
+        });
+
+        // 1. The farm chip's plot count is the REAL one, not the honest-zero
+        // fallback (proves the prop actually reached CanonicalStrip).
+        expect(screen.getByTestId('canonical-strip-farm-chip')).toHaveTextContent('4');
+
+        // 2. The waiting count reflects one real PERSON (no decisions were
+        // supplied), and opening the drawer proves the briefing itself —
+        // not just that a prop was passed — is populated.
+        expect(screen.getByTestId('canonical-strip-waiting-count')).toHaveTextContent('1');
+        fireEvent.click(screen.getByTestId('canonical-strip-waiting-button'));
+
+        expect(screen.getByTestId('waiting-drawer-tally-people')).toHaveTextContent('1');
+        expect(screen.getByTestId('waiting-drawer-tally-records')).toHaveTextContent('2');
+        expect(screen.getByTestId('waiting-drawer-tally-plots')).toHaveTextContent('2');
+
+        // 3. The named person row itself — real name, real per-person tally
+        // (`recordCount · plotNames.length`), not a zero/empty placeholder.
+        const personRow = screen.getByTestId('waiting-drawer-person-row-op-rokade');
+        expect(personRow).toHaveTextContent('Rokade');
+        expect(personRow).toHaveTextContent('2');
+
+        // 4. No unattributed row — every log in this fixture named its creator.
+        expect(screen.queryByTestId('waiting-drawer-unattributed-row')).not.toBeInTheDocument();
+    });
+
+    it('omitting oversightData falls back to the same honest zeros/empties as before', async () => {
+        // Control case: proves the fallback path (every OTHER test in this
+        // file omits `oversightData`) still yields an honest empty briefing —
+        // no leftover "4" plot count, no phantom person row — never a stale
+        // echo of the fixture above.
+        await act(async () => {
+            renderHeader();
+        });
+
+        expect(screen.getByTestId('canonical-strip-farm-chip')).not.toHaveTextContent('4');
+        expect(screen.getByTestId('canonical-strip-waiting-rest-tick')).toBeInTheDocument();
+        expect(screen.queryByTestId('canonical-strip-waiting-count')).not.toBeInTheDocument();
     });
 });
