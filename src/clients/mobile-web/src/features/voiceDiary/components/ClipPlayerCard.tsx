@@ -15,7 +15,8 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { CheckCircle2, Clock, AlertCircle, Loader2, Mic, Play, Pause, Cloud, HardDrive } from 'lucide-react';
 import type { VoiceClipCacheRecord, VoiceClipStatus } from '../../../infrastructure/storage/DexieDatabase';
-import { readVoiceClipPlaintext } from '../../../infrastructure/voice/VoiceClipRetention';
+import { readVoiceClipPlaintext, resolveVoiceClipBinding } from '../../../infrastructure/voice/VoiceClipRetention';
+import { getDatabase } from '../../../infrastructure/storage/DexieDatabase';
 import { openVoiceClip } from '../../../infrastructure/security/voiceEnvelope';
 import { resolveDek } from '../../../infrastructure/security/tenantDekClient';
 import { getVoiceDiaryById } from '../../../infrastructure/voiceDiary/voiceDiaryApiClient';
@@ -178,8 +179,29 @@ const ClipPlayerCard: React.FC<Props> = ({ locale, clip }) => {
                 setFetchError('clip_not_found');
                 return;
             }
-            const cipher = Uint8Array.from(atob(result.cipherBase64), c => c.charCodeAt(0));
+            // The retained tier keeps the 16-byte AES-GCM auth tag in its own
+            // column (the archive path split it off before upload). WebCrypto
+            // expects it appended to the ciphertext, so rejoin it here —
+            // `authTagBase64` was fetched and then dropped, which meant this
+            // path could never have decrypted anything.
+            const cipherBody = Uint8Array.from(atob(result.cipherBase64), c => c.charCodeAt(0));
+            const authTag = Uint8Array.from(atob(result.authTagBase64), c => c.charCodeAt(0));
+            const cipher = new Uint8Array(cipherBody.byteLength + authTag.byteLength);
+            cipher.set(cipherBody);
+            cipher.set(authTag, cipherBody.byteLength);
             const iv = Uint8Array.from(atob(result.ivBase64), c => c.charCodeAt(0));
+            // The seal is bound to (clipId, ownerAccountId). The retained-tier
+            // DTO carries no owner account, so the binding is rebuilt from the
+            // local row this clip was archived from — the archive path reuses
+            // the local Dexie id as the server PK, so the ids match.
+            const localRow = await getDatabase().voiceClips.get(result.clipId);
+            const binding = localRow
+                ? await resolveVoiceClipBinding(result.clipId, localRow.farmId)
+                : null;
+            if (!binding) {
+                setFetchError('clip_binding_unavailable');
+                return;
+            }
             const dek = await resolveDek(result.dekId);
             if (!dek) {
                 setFetchError('dek_unavailable');
@@ -188,6 +210,7 @@ const ClipPlayerCard: React.FC<Props> = ({ locale, clip }) => {
             const plaintext = await openVoiceClip(
                 { ciphertext: cipher, iv, wrappedDekId: result.dekId },
                 dek,
+                binding,
             );
             // Voice clips are persisted as the recording's original mime type
             // (typically audio/webm). Cloud projection doesn't echo it back —

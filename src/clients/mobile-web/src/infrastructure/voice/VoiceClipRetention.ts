@@ -20,7 +20,7 @@
 // the unified VoiceDiary view de-dups cleanly.
 
 import { getDatabase, type VoiceClipCacheRecord, type VoiceClipStatus } from '../storage/DexieDatabase';
-import { sealVoiceClip, openVoiceClip } from '../security/voiceEnvelope';
+import { sealVoiceClip, openVoiceClip, type VoiceClipBinding } from '../security/voiceEnvelope';
 import { getCurrentTenantDek, resolveDek } from '../security/tenantDekClient';
 import { agriSyncClient } from '../api/AgriSyncClient';
 import { persistRetainedVoiceClip } from '../voiceDiary/voiceDiaryApiClient';
@@ -74,6 +74,30 @@ export async function purgeExpiredProcessingVoiceClips(_nowUtc: string = new Dat
 }
 
 /**
+ * The row identity a clip's ciphertext is sealed to, resolved from data
+ * this device already holds. **No network call** — `farms` is the local
+ * Dexie cache, so a farmer with no connectivity can still open their own
+ * clip. (The `resolveDek` round-trip on the read path is a separate,
+ * known offline gap owned by §8 of the server-authoritative plan; this
+ * function deliberately does not add a second one.)
+ *
+ * Returns `null` when the clip's farm is not cached locally. Callers must
+ * treat that as "cannot open yet", never as "open without a binding" —
+ * an unbound open is exactly the hole the binding closes.
+ */
+export async function resolveVoiceClipBinding(
+    clipId: string,
+    farmId: string,
+): Promise<VoiceClipBinding | null> {
+    const farm = await getDatabase().farms.get(farmId);
+    const ownerAccountId = farm?.ownerAccountId;
+    if (!ownerAccountId) {
+        return null;
+    }
+    return { clipId, ownerAccountId: String(ownerAccountId) };
+}
+
+/**
  * Input shape for `persistVoiceClip`. Plaintext goes in, sealed row
  * comes out — the caller never touches the cipher.
  */
@@ -101,8 +125,19 @@ export interface PersistVoiceClipInput {
  * spec: data-principle-spine-2026-05-05/05.3
  */
 export async function persistVoiceClip(input: PersistVoiceClipInput): Promise<void> {
+    // Bind the seal to the row it is about to occupy. Resolved BEFORE the
+    // DEK fetch so an unbindable clip fails on the cheap local read rather
+    // than after a network round-trip.
+    const binding = await resolveVoiceClipBinding(input.id, input.farmId);
+    if (!binding) {
+        throw new Error(
+            `persistVoiceClip: cannot seal clip ${input.id} — farm ${input.farmId} is not in the local cache, `
+            + 'so the owner account that binds the seal is unknown. Sealing unbound would let this ciphertext '
+            + "be moved into another clip's row undetected.",
+        );
+    }
     const { dek, dekId } = await getCurrentTenantDek();
-    const sealed = await sealVoiceClip(input.plaintext, dek, dekId);
+    const sealed = await sealVoiceClip(input.plaintext, dek, dekId, binding);
     const nowIso = new Date().toISOString();
     const row: VoiceClipCacheRecord = {
         id: input.id,
@@ -129,9 +164,10 @@ export async function persistVoiceClip(input: PersistVoiceClipInput): Promise<vo
 /**
  * Read a voice clip and return its plaintext bytes. Returns `null` when
  * the clip is missing, when its row is the pre-v18 plaintext shape with
- * no sealed fields (caller should fall back to `row.localBlob`), or when
- * the DEK can't be resolved (wrong tenant or expired wrap — caller
- * should treat as unrecoverable and surface to UI).
+ * no sealed fields (caller should fall back to `row.localBlob`), when the
+ * seal binding can't be rebuilt (the clip's farm is not cached locally),
+ * or when the DEK can't be resolved (wrong tenant or expired wrap —
+ * caller should treat as unrecoverable and surface to UI).
  *
  * Throws when the DEK resolves but the ciphertext fails the GCM auth
  * tag (tampered storage). Throw-on-tamper is intentional — we'd rather
@@ -146,11 +182,16 @@ export async function readVoiceClipPlaintext(clipId: string): Promise<Uint8Array
         // Legacy pre-v18 shape; caller decides how to handle plaintext blob.
         return null;
     }
+    // Rebuild the same binding the seal was made under. Local read, no
+    // network — see `resolveVoiceClipBinding`.
+    const binding = await resolveVoiceClipBinding(clipId, row.farmId);
+    if (!binding) return null;
     const dek = await resolveDek(row.wrappedDekId);
     if (!dek) return null;
     return openVoiceClip(
         { ciphertext: row.ciphertext, iv: row.iv, wrappedDekId: row.wrappedDekId },
         dek,
+        binding,
     );
 }
 
