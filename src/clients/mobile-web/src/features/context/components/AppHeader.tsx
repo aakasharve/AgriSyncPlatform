@@ -34,7 +34,16 @@ interface AppHeaderProps {
   };
 }
 
-const getUserColor = (name: string) => {
+/**
+ * Deterministic name -> Tailwind colour-triple hash (border/text/bg), so the
+ * same person renders in the same colour everywhere in the app — the profile
+ * avatar here, and the oversight drawer's person pins
+ * (`features/oversight/components/WaitingDrawer.tsx`, spec
+ * `docs/superpowers/specs/2026-08-15-owner-oversight-loop-design.md` §3:
+ * "coloured pin ... from the app's existing `getUserColor`"). Exported for
+ * that reuse — do not fork a second copy of this hash or palette.
+ */
+export const getUserColor = (name: string) => {
   const colors = [
     'border-emerald-500 text-emerald-600 bg-emerald-50',
     'border-blue-500 text-blue-600 bg-blue-50',

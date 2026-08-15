@@ -4,14 +4,17 @@
  *
  * Guards for `oversightTranslations.ts` — see that file's header for the
  * Hard Rule this module exists to enforce (spec §6, "no agent may invent
- * farmer-facing Marathi") and for Controller Ruling 7 (the six
- * "keyless-but-declared" keys whose `mr` is the literal empty string).
+ * farmer-facing Marathi") and for Controller Ruling 7 (the original six
+ * "keyless-but-declared" keys whose `mr` is the literal empty string) plus
+ * Ruling 8 (two more keys added by Task 5 / `WaitingDrawer`, following the
+ * exact same pattern — see `oversightTranslations.ts`'s "TASK 5 ADDITIONS"
+ * header section).
  *
  * Failure modes covered, one test group each:
  *
  *   1. A key with an `mr` but no `en` (or vice versa) — silently breaks
  *      the "render the placeholder beside its English fallback" contract
- *      spec §6.2 requires for every pending string. For the six Ruling-7
+ *      spec §6.2 requires for every pending string. For the eight Ruling-7/8
  *      keys the correct `mr` is deliberately `''`, so this group also
  *      pins that emptiness explicitly rather than just tolerating it.
  *   2. `PENDING_FOUNDER_STRINGS` naming a key that does not exist — the
@@ -51,8 +54,9 @@ const DFES_SOURCED_KEYS: (keyof OversightTranslations & keyof DfesTranslations)[
     'entries',
 ];
 
-// Category (c), Controller Ruling 7 — `mr` is '' by design, `en` is the
-// only thing on screen until a founder supplies real Marathi.
+// Category (c), Controller Ruling 7 (original six) + Ruling 8 (two more,
+// added by Task 5) — `mr` is '' by design, `en` is the only thing on screen
+// until a founder supplies real Marathi.
 const KEYLESS_BUT_DECLARED_KEYS: (keyof OversightTranslations)[] = [
     'talliesPeopleUnit',
     'plotsUnit',
@@ -60,6 +64,8 @@ const KEYLESS_BUT_DECLARED_KEYS: (keyof OversightTranslations)[] = [
     'retryAffordance',
     'bandDecisionsHeader',
     'bandSinceLastLookedHeader',
+    'sinceLastLookedTail',
+    'dayNotClosedLine',
 ];
 
 describe('oversightTranslations — every_key_has_both_mr_and_en', () => {

@@ -114,14 +114,37 @@
  *                         ("Needs your decision" / "Since you last
  *                         looked"), carried as `en` per Ruling 7.
  *
- * NOT IN THIS FILE, AND WHY
- * --------------------------
- * One sub-piece remains genuinely absent, deliberately, because Ruling 7
- * did not name it and "do not change anything else" governs: the "since
- * you last looked — N days" sub-line tail (spec §3). The spec gives only
- * an English form for it and no Marathi anywhere, exactly like the six (c)
- * keys above — but it was not part of Ruling 7's enumerated five pieces, so
- * it stays out rather than being added on this task's own initiative.
+ * TASK 5 ADDITIONS (Ruling 8) — two more keyless-but-declared keys
+ * ------------------------------------------------------------------
+ * Ruling 8 (SDD ledger, `.superpowers/sdd/2026-08-15-owner-oversight-loop-
+ * plan/progress.md`) authorised "whoever needs it" to extend this file's
+ * SAME empty-`mr` + `PENDING_FOUNDER_STRINGS` pattern (category (c) above)
+ * rather than block on a founder ruling or invent the missing words. Task 5
+ * (`WaitingDrawer`) needs two such pieces:
+ *
+ *   sinceLastLookedTail — the briefing sub-line's "since you last looked —
+ *     N days" tail (spec §3, the very sub-piece the file header above
+ *     previously logged as absent). Template — `{days}`.
+ *
+ *   dayNotClosedLine — Band 1's second row source (spec §3's own table:
+ *     "yesterdayDayState not closed"). The design doc's Band-1 table (§3)
+ *     prints a Devanagari string for this row inline in its own prose
+ *     ("कालचा दिवस बंद झाला नाही"), but — unlike §6.1's reuse table — that
+ *     string is not cited as copied from an already-shipped, load-bearing
+ *     source, and it is absent from §6.2's own placeholder table, which is
+ *     that section's complete enumeration of what ships as a placeholder.
+ *     Treating spec prose as an approved source on my own judgment is
+ *     exactly the shortcut the Hard Rule forbids, so this key follows
+ *     category (c), not (b): `mr: ''`, English only, pending the founder.
+ *
+ * `retryAffordance` (already declared above) is reused as-is for a SECOND
+ * role in Task 5: the Seen control's own retry affordance when
+ * `useOversightAcknowledgement`'s `status` is `'failed'` (spec §P-D). Its
+ * header comment above named only "the failed-sends row's retry label",
+ * but the word "Retry" is equally generic for both a failed sync-send and a
+ * failed acknowledgement write, and Ruling 7's own precedent (`entries`
+ * serving two roles rather than gaining a duplicate key) is the reason to
+ * reuse it here too instead of adding a near-identical third key.
  */
 import type { Language } from './language';
 
@@ -200,6 +223,18 @@ export interface OversightTranslations {
     bandDecisionsHeader: string;
     /** Drawer Band 2's section header (spec §3). */
     bandSinceLastLookedHeader: string;
+    /**
+     * Task 5 / Ruling 8. Briefing sub-line tail (spec §3): "since you last
+     * looked — N days". Template — `{days}`. `null` `sinceDays` (no
+     * checkpoint yet) means a consumer never renders this key at all.
+     */
+    sinceLastLookedTail: string;
+    /**
+     * Task 5 / Ruling 8. Band 1's `dayNotClosed` decision row (spec §3's
+     * table: "yesterdayDayState not closed"). No template — the row carries
+     * no count in the spec's own wording.
+     */
+    dayNotClosedLine: string;
 }
 
 export const oversightTranslations: Record<Language, OversightTranslations> = {
@@ -234,6 +269,8 @@ export const oversightTranslations: Record<Language, OversightTranslations> = {
         retryAffordance: 'Retry',
         bandDecisionsHeader: 'Needs your decision',
         bandSinceLastLookedHeader: 'Since you last looked',
+        sinceLastLookedTail: 'since you last looked — {days} days',
+        dayNotClosedLine: "Yesterday's day was not closed",
     },
     mr: {
         welcomeBack: 'पुन्हा स्वागत! शेतात काय चाललं?',
@@ -270,6 +307,10 @@ export const oversightTranslations: Record<Language, OversightTranslations> = {
         retryAffordance: '',
         bandDecisionsHeader: '',
         bandSinceLastLookedHeader: '',
+        // Task 5 / Ruling 8 — same reasoning as the six above: no Marathi
+        // exists anywhere this task may cite for either concept.
+        sinceLastLookedTail: '',
+        dayNotClosedLine: '',
     },
 };
 
@@ -296,6 +337,8 @@ export const PENDING_FOUNDER_STRINGS: readonly string[] = [
     'retryAffordance',
     'bandDecisionsHeader',
     'bandSinceLastLookedHeader',
+    'sinceLastLookedTail',
+    'dayNotClosedLine',
 ];
 
 /**
