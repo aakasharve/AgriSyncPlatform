@@ -722,6 +722,50 @@ working as designed.
 >    match, do not invent.**
 > 4. **Prove versioning survives the policy on the SECOND write** (§3 above).
 > 5. **Edit the allowlist deliberately**, and fix the surviving comment (§6 above).
+>
+> ## ✅ §P0.3 — LANDED ON FEATURE BRANCH `5c234888`. NOT MERGED, NOT RELEASED.
+>
+> **The live defect is fixed and the fix is runtime-proven, not reasoned.**
+> Before: `PUT /farms/{id}/boundary` → **500**, `ssf.farm_boundaries` count **0**, dying at
+> `TenantConnectionInterceptor.cs:125`. After scope wiring, **before any policy existed**: **200**,
+> one row at `version = 1, is_active = t`.
+> **The proof that matters — the SECOND write, under the live policy:**
+> ```
+> version | is_active | archived_at_utc
+>       1 | f         | 2026-08-15 11:47:41+05:30
+>       2 | t         |
+> ```
+> Version advanced, prior row archived. **The `?? 0` / `?.` degradation did not occur.**
+>
+> **Negative control RUN, and reported honestly.** Emptying the migration's `Up()` failed **4 of 5
+> facts by name**. The 5th still passed — **correctly**: it defends versioning against the policy
+> *breaking* it, not against the policy's absence. The executor said so rather than dressing it up.
+> The endpoint fix was negative-controlled separately: stripping the wiring failed
+> `Every_farm_id_route_establishes_the_caller_farm_tenant_scope`, naming the route.
+>
+> **The missing tripwire now exists.** `FarmScopedRouteTenantScopeTests` asserts every `farm_id` route
+> establishes scope — the regression guard whose absence let a commit scoped to *"farm reads"* leave
+> the PUT dead for two months.
+>
+> **Three corrections to this very block, from the executor:**
+> - **`SkipPathPrefixes` lives in `TenantTransactionMiddleware`, not `TenantConnectionInterceptor`.**
+>   This block attributed it to the interceptor. Corrected.
+> - **The skip-list trap is real but NARROWER than written above.** Under admin elevation no GUC is
+>   set, so `p_tenant_farms` filters the *farm* read too and the handler returns `FarmNotFound` before
+>   reaching the boundary code. The silent version-reset is reachable **via the repository** (proven:
+>   scoped returns a row, unscoped returns null), and the following write would hit `23505` on the
+>   partial unique index. **Measured, not dramatised — the trap survives, its blast radius shrinks.**
+> - **The allowlist comment now records the REAL reason the survivors sit outside the gate:** an invite
+>   is read by someone **deliberately not yet a member**, so a `farm_id` policy would break the very
+>   flow it protects. `GetTokenByHashAsync` keys on the token hash alone with no farm in the predicate.
+>   That is a genuine design constraint; the old *"accessed only via a join"* prose was simply false.
+>
+> **Housekeeping:** `agrisync_dev_v2` is now fully migrated (**91 applied**), including both P0.2
+> migrations. Another agent's "TRUNCATE revoke is the last migration" guard was displaced by this
+> migration and **retargeted per its own docstring, not deleted**.
+>
+> ⚠️ **Production remains inference.** Every before/after here is dev-measured. The failing path is
+> environment-independent, but **nothing in this block asserts production behaviour.**
 - [ ] Migration: `ENABLE` + `FORCE` row level security; policy on the direct `farm_id` column.
       Doctrine `F8` does **not** apply — the tenant column already exists, so no `EXISTS` check is needed.
       > **Two justifications in the draft were wrong and are withdrawn.**
