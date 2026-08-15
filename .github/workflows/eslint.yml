@@ -59,20 +59,23 @@ jobs:
       # some other way in the future) this step's cross-branch half is inert.
       #
       # scripts/check-dexie-version.mjs is owned by another agent and is not
-      # modified here. Verified before this was wired (task-9-report.md):
-      # when it cannot see other refs, it prints "cross-branch: SKIPPED" but
-      # STILL exits 0 and prints "OK" — contradicting its own header comment
-      # ("does NOT pass quietly in that case") and the report that shipped
-      # with it. That is reported to the script's owner as a finding, not
-      # fixed here. Because "a version-collision guard that silently passes
-      # because it could not fetch" is exactly the defect this whole gate
-      # exists to prevent, the wiring below does not simply trust the
-      # script's own exit code — it separately checks the printed output for
-      # the SKIPPED marker and fails the job if found, regardless of what the
-      # script itself exited with. This is workflow-level wiring, not a
-      # script edit: it fails CLOSED if fetch-depth ever regresses or ref
-      # visibility breaks for any other reason, instead of quietly reporting
-      # green having compared nothing.
+      # modified here. UPDATE (2026-08-16): the exit-0-on-SKIPPED defect
+      # found while wiring this (task-9-report.md) is now FIXED AT SOURCE —
+      # the script owner closed it and independently found and closed two
+      # more zeros of the same shape: zero readable version files for this
+      # branch's own HEAD, and refs that exist but are every one unreadable
+      # (so `compared` stays 0 while `refs.length` does not, see
+      # check-dexie-version.mjs:352). All three now call `fail(...)` and the
+      # script exits non-zero on each. Verified directly against the current
+      # file, not assumed from the changelog.
+      #
+      # The grep below is now a SECOND layer, not the only thing holding
+      # this gate closed — kept deliberately, on the script owner's judgment
+      # (relayed here, not overridden): removing a redundant guard the
+      # moment the primary one is fixed is how a gate ends up covered by
+      # neither. No false-positive risk: the only remaining path that still
+      # prints "SKIPPED" is `--local-only`, which self-labels "NOT a CI-valid
+      # run" in its own note text, and this step never passes that flag.
       - name: Dexie cross-branch schema-version check
         run: |
           set +e
