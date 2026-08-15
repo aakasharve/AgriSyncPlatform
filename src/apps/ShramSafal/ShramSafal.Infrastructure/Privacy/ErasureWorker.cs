@@ -513,9 +513,16 @@ public sealed class ErasureWorker(
         // farmer. What has to become atomic is the RECORD, not the deletion.
         string? retainedVoiceResidue = null;
 
-        // Recorded verbatim in the audit payload: NothingToDelete | Deleted |
-        // SkippedNoBucketConfigured | Failed. A boolean could not tell the last
-        // two apart, and conflating them is exactly the bug fixed here.
+        // Recorded verbatim in the audit payload. A boolean could not tell a
+        // skip from a failure, and conflating them is exactly the bug fixed
+        // here.
+        //
+        // Domain of this field: the three RetainedVoiceDeletionOutcome names
+        // (NothingToDelete | Deleted | SkippedNoBucketConfigured) PLUS the
+        // string "Failed", which is NOT an enum member — the store threw, so it
+        // returned no outcome at all. A consumer must therefore parse this as a
+        // string with a four-value domain; Enum.Parse over
+        // RetainedVoiceDeletionOutcome will throw on "Failed".
         var retainedVoiceOutcome = nameof(RetainedVoiceDeletionOutcome.NothingToDelete);
 
         var retainedStore = sp.GetRequiredService<IRetainedBlobStore>();
@@ -569,7 +576,7 @@ public sealed class ErasureWorker(
         // the record is a handful of local inserts; finishing it is always
         // correct and always fast.
         //
-        // ── FOLLOW-UP: erasure-cancellation-midscrub — NOT YET TRACKED ──
+        // ── FOLLOW-UP: erasure-cancellation-midscrub — TRACKED ──
         //
         // This does NOT cover a cancellation that lands mid-scrub, higher up.
         // That window is much larger than the one closed here: the nine
@@ -583,11 +590,9 @@ public sealed class ErasureWorker(
         // is stranded at InProgress PERMANENTLY and is never retried — some
         // tables scrubbed, no audit, no terminal state, no second attempt.
         //
-        // Deferred on scope, not on judgement. A tracked item has to exist for
-        // this or it dies with the report; it belongs in
-        // _COFOUNDER/specs/_inbox/, which is outside this agent's allowlist, so
-        // it is named here and in task-5-report.md §I2 for the coordinator to
-        // file. Grep marker: erasure-cancellation-midscrub.
+        // Deferred on scope, not on judgement. Tracked at
+        // _COFOUNDER/specs/_inbox/erasure-cancellation-midscrub-2026-08-16.md.
+        // Grep marker: erasure-cancellation-midscrub.
         var recordCt = CancellationToken.None;
 
         // Per-row audit emission per DS-017 rule (d). We emit one
@@ -684,7 +689,8 @@ public sealed class ErasureWorker(
         catch (Exception saveEx)
         {
             await TryWriteMinimalOutcomeRecordAsync(
-                sp, request.Id, totalAnonymized, retainedVoiceOutcome, retainedVoiceResidue, saveEx)
+                sp, request.Id, targetUserId, totalAnonymized,
+                retainedVoiceOutcome, retainedVoiceResidue, saveEx)
                 .ConfigureAwait(false);
 
             // Rethrow so the failure stays visible. This is now safe: if the
@@ -1046,6 +1052,7 @@ UPDATE ssf.farm_operations
     private async Task TryWriteMinimalOutcomeRecordAsync(
         IServiceProvider sp,
         Guid requestId,
+        Guid targetUserId,
         int totalAnonymized,
         string retainedVoiceOutcome,
         string? retainedVoiceResidue,
@@ -1086,6 +1093,12 @@ UPDATE ssf.farm_operations
                 payload: new
                 {
                     requestId,
+
+                    // Present for the same reason the full payload carries it:
+                    // a DPDP handler arrives holding a SUBJECT, not a request
+                    // id. Omitting it made this record unfindable by the only
+                    // handle they have.
+                    targetUserId,
                     rowsAnonymizedCount = totalAnonymized,
                     retainedVoiceDeleted = retainedVoiceResidue is null,
                     retainedVoiceOutcome,
@@ -1116,11 +1129,19 @@ UPDATE ssf.farm_operations
         }
         catch (Exception ex)
         {
+            // Do NOT send anyone to ssf.audit_events here. On this path there
+            // is no erasure audit row to find: the per-row events died with the
+            // primary transaction and this fallback wrote nothing. Naming a
+            // destination that is empty is the same failure as naming one that
+            // does not exist.
             logger.LogError(ex,
-                "ErasureWorker: fallback outcome record ALSO failed for request {RequestId}. The scrub "
-                + "completed but the row will be stamped Failed with no audit. Reconcile from "
-                + "ssf.audit_events by target user.",
-                requestId);
+                "ErasureWorker: fallback outcome record ALSO failed for request {RequestId} "
+                + "(subject {TargetUserId}). The scrub COMPLETED and is committed, but the row will "
+                + "be stamped Failed and there is NO erasure audit event for it — do not look for "
+                + "one. What survives: the ssf.erasure_requests row (status Failed, failure_reason), "
+                + "and the scrub itself, evidenced by rows carrying the ErasedFarmer sentinel for "
+                + "this subject. Treat the Failed status as unreliable for this request.",
+                requestId, targetUserId);
         }
     }
 

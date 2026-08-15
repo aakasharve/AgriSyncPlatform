@@ -7,11 +7,15 @@ using FluentAssertions;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 using Npgsql;
 using ShramSafal.Application.Privacy.Ports;
 using ShramSafal.Domain.Privacy;
 using ShramSafal.Infrastructure;
 using ShramSafal.Infrastructure.Privacy;
+using ShramSafal.Infrastructure.Persistence;
+using AgriSync.BuildingBlocks.Persistence;
 using Xunit;
 
 namespace ShramSafal.Sync.IntegrationTests.Privacy;
@@ -271,6 +275,121 @@ public sealed class ErasureAuditSurvivesBlobFailureRealPostgresTests : IAsyncLif
             "and it must say WHICH non-purge this was — a skip is not the same as a failure");
     }
 
+    /// <summary>
+    /// The REAL store's blank-bucket branch, not a fake standing in for it.
+    ///
+    /// <para>
+    /// <see cref="NoBucketConfiguredSkip_IsRecordedAsResidue_NotAsAPurge"/> proves
+    /// the worker handles the enum correctly, but it hands the worker a fake
+    /// that returns that enum directly — so it never exercises
+    /// <c>S3RetainedBlobStore.cs:70-83</c>, which is the branch that actually
+    /// fires in production. Without this test the claim "a blank bucket name
+    /// yields SkippedNoBucketConfigured" is an assertion about code no test
+    /// runs.
+    /// </para>
+    ///
+    /// <para>
+    /// The <see cref="IAmazonS3"/> stub is deliberately throw-on-everything: if
+    /// the short-circuit ever regresses into calling S3, this fails loudly
+    /// instead of silently passing.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public async Task RealStore_WithBlankBucketName_ReturnsSkipped_AndDeletesTheMetadataRow()
+    {
+        var clipId = Guid.NewGuid();
+        await SeedRetainedClipAsync(clipId, _userId);
+
+        var options = Microsoft.Extensions.Options.Options.Create(
+            new ShramSafal.Infrastructure.Privacy.RetainedBlobStoreOptions { BucketName = string.Empty });
+
+        await using var provider = BuildProvider(new NoOpRetainedBlobStore());
+        await using var scope = provider.CreateAsyncScope();
+
+        // The scoped context carries TenantConnectionInterceptor, which
+        // fail-closes without a claim. Production reaches this store through
+        // ErasureWorker's admin-elevated context, so elevate to match.
+        scope.ServiceProvider.GetRequiredService<TenantContext>().ElevateToAdminCrossTenant();
+
+        var db = scope.ServiceProvider.GetRequiredService<ShramSafalDbContext>();
+
+        var store = new S3RetainedBlobStore(new ThrowOnAnyCallS3(), options, db);
+
+        var outcome = await store.DeleteRetainedVoiceForUserAsync(_userId, CancellationToken.None);
+
+        outcome.Should().Be(RetainedVoiceDeletionOutcome.SkippedNoBucketConfigured,
+            "rows existed and no S3 object was touched — that is residue, not a purge");
+
+        // The row really is gone: this branch deletes the only pointer to an
+        // object that is still in the bucket, which is precisely why the
+        // outcome must not read as success.
+        await using var raw = new NpgsqlConnection(_superuserConn);
+        await raw.OpenAsync();
+        var remaining = Convert.ToInt32(await ScalarAsync(raw,
+            "SELECT count(*) FROM ssf.voice_clips_retained WHERE clip_id = @cid", ("cid", clipId)));
+        remaining.Should().Be(0);
+    }
+
+    /// <summary>
+    /// The I1 fallback's SUCCESS path — previously unexercised in either
+    /// direction.
+    ///
+    /// <para>
+    /// My earlier report justified the gap with "no seam exists". That was
+    /// wrong: <see cref="IAdminDbContextFactory{TContext}"/> is resolved from
+    /// the container at every call site, so a throwing implementation is a
+    /// one-class substitution — the same shape the suite already uses for
+    /// <see cref="IRetainedBlobStore"/>.
+    /// </para>
+    ///
+    /// <para>
+    /// The stub here fails the SECOND context creation — the one
+    /// <c>ProcessOneAsync</c> uses — while letting the first (the poller's) and
+    /// the third (the fallback's) succeed. That reproduces "the primary write
+    /// path broke after the scrub" without breaking the fallback that has to
+    /// rescue it.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public async Task WhenTheMainRecordWriteFails_TheFallbackStillLandsATerminalRecord()
+    {
+        var requestId = await SeedErasureRequestAsync();
+
+        var services = BaseServices();
+        services.AddSingleton<IRetainedBlobStore>(new NoOpRetainedBlobStore());
+        services.UseAdminFactoryFailingOnRecordWrite();
+
+        await using var provider = services.BuildServiceProvider();
+        await RunWorkerWithProviderAsync(provider, requestId);
+
+        await using var raw = new NpgsqlConnection(_superuserConn);
+        await raw.OpenAsync();
+
+        var status = Convert.ToInt32(await ScalarAsync(raw,
+            "SELECT status FROM ssf.erasure_requests WHERE id = @id", ("id", requestId)));
+
+        status.Should().NotBe((int)ErasureStatus.Failed,
+            "the scrub committed, so stamping Failed is the lie this whole task removes — the " +
+            "fallback exists to write a terminal record when the primary write cannot");
+        status.Should().BeOneOf(
+            [(int)ErasureStatus.Completed, (int)ErasureStatus.CompletedWithResidue]);
+
+        var payload = (string?)await ScalarAsync(raw,
+            """
+            SELECT payload::text FROM ssf.audit_events
+             WHERE entity_type = 'ErasureRequest' AND entity_id = @id
+             ORDER BY occurred_at_utc DESC LIMIT 1
+            """,
+            ("id", requestId));
+
+        payload.Should().NotBeNull("a degraded record is still a record");
+        payload!.Should().Contain("\"degradedRecord\":true",
+            "and it must say it is thinner than normal, so missing per-row events are not read " +
+            "as 'those tables were untouched'");
+        payload.Should().Contain("\"targetUserId\"",
+            "a DPDP handler arrives holding a subject, not a request id");
+    }
+
     // ── harness ──────────────────────────────────────────────────────────
 
     /// <summary>
@@ -290,7 +409,7 @@ public sealed class ErasureAuditSurvivesBlobFailureRealPostgresTests : IAsyncLif
     /// terminal we fail with a message that says so explicitly.
     /// </para>
     /// </summary>
-    private async Task RunWorkerAsync(IRetainedBlobStore retainedStore, Guid requestId)
+    private ServiceCollection BaseServices()
     {
         var services = new ServiceCollection();
         services.AddLogging();
@@ -304,10 +423,24 @@ public sealed class ErasureAuditSurvivesBlobFailureRealPostgresTests : IAsyncLif
             .Build();
         services.AddSingleton<IConfiguration>(config);
         services.AddShramSafalInfrastructure(config);
+        return services;
+    }
+
+    private ServiceProvider BuildProvider(IRetainedBlobStore retainedStore)
+    {
+        var services = BaseServices();
         services.AddSingleton(retainedStore);
+        return services.BuildServiceProvider();
+    }
 
-        await using var provider = services.BuildServiceProvider();
+    private async Task RunWorkerAsync(IRetainedBlobStore retainedStore, Guid requestId)
+    {
+        await using var provider = BuildProvider(retainedStore);
+        await RunWorkerWithProviderAsync(provider, requestId);
+    }
 
+    private async Task RunWorkerWithProviderAsync(ServiceProvider provider, Guid requestId)
+    {
         var scopeFactory = provider.GetRequiredService<IServiceScopeFactory>();
         var worker = new ErasureWorker(scopeFactory, NullLogger<ErasureWorker>.Instance);
 
@@ -396,6 +529,25 @@ public sealed class ErasureAuditSurvivesBlobFailureRealPostgresTests : IAsyncLif
             throw new NotSupportedException();
     }
 
+    /// <summary>
+    /// Throws on every member. Used where the code under test must NOT reach
+    /// S3 — a regression that starts calling it fails loudly rather than
+    /// quietly passing against a permissive fake.
+    /// </summary>
+    private sealed class ThrowOnAnyCallS3 : Amazon.S3.AmazonS3Client
+    {
+        public ThrowOnAnyCallS3()
+            : base(new Amazon.Runtime.BasicAWSCredentials("test", "test"),
+                   Amazon.RegionEndpoint.APSouth1)
+        {
+        }
+
+        public override Task<Amazon.S3.Model.DeleteObjectResponse> DeleteObjectAsync(
+            string bucketName, string key, CancellationToken cancellationToken = default) =>
+            throw new InvalidOperationException(
+                "S3 must not be called on the blank-bucket short-circuit path.");
+    }
+
     /// <summary>Genuinely purges — the clean-path control.</summary>
     private sealed class NoOpRetainedBlobStore : IRetainedBlobStore
     {
@@ -465,6 +617,24 @@ public sealed class ErasureAuditSurvivesBlobFailureRealPostgresTests : IAsyncLif
         }
     }
 
+    /// <summary>One retained-clip metadata row, all NOT NULL columns populated.</summary>
+    private async Task SeedRetainedClipAsync(Guid clipId, Guid userId)
+    {
+        await using var db = new NpgsqlConnection(_superuserConn);
+        await db.OpenAsync();
+        await using var c = db.CreateCommand();
+        c.CommandText = """
+            INSERT INTO ssf.voice_clips_retained
+                (clip_id, user_id, recorded_at_utc, s3_key, dek_id, iv_b64, auth_tag_b64,
+                 duration_seconds, language, created_at_utc)
+            VALUES (@cid, @uid, NOW(), @key, 'dek-test', 'iv', 'tag', 12, 'mr-IN', NOW());
+            """;
+        c.Parameters.AddWithValue("cid", clipId);
+        c.Parameters.AddWithValue("uid", userId);
+        c.Parameters.AddWithValue("key", $"retained/{userId:N}/{clipId:N}.bin");
+        await c.ExecuteNonQueryAsync();
+    }
+
     private static async Task<object?> ScalarAsync(
         NpgsqlConnection db, string sql, params (string Name, object Value)[] parameters)
     {
@@ -477,5 +647,78 @@ public sealed class ErasureAuditSurvivesBlobFailureRealPostgresTests : IAsyncLif
 
         var result = await cmd.ExecuteScalarAsync();
         return result is DBNull ? null : result;
+    }
+}
+
+/// <summary>
+/// Drives the I1 fallback by failing the ONE call that matters: the record
+/// write at the end of <c>ProcessOneAsync</c>.
+///
+/// <para>
+/// The seam is a <see cref="ShramSafalDbContext"/> subclass whose second
+/// <c>SaveChangesAsync</c> throws. <c>ProcessOneAsync</c> saves exactly twice on
+/// its context — once for <c>MarkInProgress</c>, once for the audit + status —
+/// so failing the second reproduces "everything scrubbed and committed, then the
+/// record write died" without disturbing anything before it.
+/// </para>
+///
+/// <para>
+/// An earlier attempt disposed the whole context instead. That was too blunt: it
+/// broke the FIRST save too, so the scrub never ran and the test was measuring
+/// a different failure entirely. Worth stating, because a seam that fails too
+/// early looks identical in the status column.
+/// </para>
+///
+/// <para>
+/// The fallback's own fresh context saves only once, so it is unaffected and can
+/// still land the record — which is the behaviour under test.
+/// </para>
+/// </summary>
+internal static class FailingAdminFactoryRegistration
+{
+    public static void UseAdminFactoryFailingOnRecordWrite(this IServiceCollection services) =>
+        services.AddScoped<IAdminDbContextFactory<ShramSafalDbContext>>(sp =>
+            new FailingAdminDbContextFactory(sp.GetRequiredService<IConfiguration>()));
+}
+
+internal sealed class FailingAdminDbContextFactory(IConfiguration configuration)
+    : IAdminDbContextFactory<ShramSafalDbContext>
+{
+    public Task<ShramSafalDbContext> CreateAsync(string reason, Guid actorUserId, CancellationToken ct)
+    {
+        var connectionString =
+            configuration.GetConnectionString("ShramSafalDb_Migration")
+            ?? configuration.GetConnectionString("ShramSafalDb")
+            ?? throw new InvalidOperationException("No ShramSafalDb connection string available.");
+
+        // Same options shape the real factory builds — no
+        // TenantConnectionInterceptor, so the owner connection bypasses RLS
+        // exactly as in production — plus the one seam this test needs.
+        var options = new DbContextOptionsBuilder<ShramSafalDbContext>()
+            .UseNpgsql(connectionString)
+            .AddInterceptors(new ThrowOnSecondSaveInterceptor())
+            .Options;
+
+        return Task.FromResult(new ShramSafalDbContext(options));
+    }
+}
+
+internal sealed class ThrowOnSecondSaveInterceptor : SaveChangesInterceptor
+{
+    private int _saves;
+
+    public override ValueTask<InterceptionResult<int>> SavingChangesAsync(
+        DbContextEventData eventData,
+        InterceptionResult<int> result,
+        CancellationToken cancellationToken = default)
+    {
+        if (Interlocked.Increment(ref _saves) == 2)
+        {
+            throw new InvalidOperationException(
+                "Simulated failure of the erasure record write (I1). The scrub is already committed "
+                + "at this point; the fallback must still land a terminal record.");
+        }
+
+        return base.SavingChangesAsync(eventData, result, cancellationToken);
     }
 }

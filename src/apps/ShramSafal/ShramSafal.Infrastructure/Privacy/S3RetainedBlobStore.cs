@@ -69,9 +69,14 @@ public sealed class S3RetainedBlobStore : IRetainedBlobStore
 
         if (string.IsNullOrWhiteSpace(_opt.BucketName))
         {
-            // No bucket configured (dev). Drop the metadata rows so the
-            // erasure manifest still completes; the S3 objects simply
-            // don't exist.
+            // No bucket configured. Drop the metadata rows so the erasure
+            // manifest still completes rather than blocking the farmer's
+            // erasure on a config state they cannot influence.
+            //
+            // This comment used to end "the S3 objects simply don't exist."
+            // That is FALSE whenever this branch is reached with rows present,
+            // and it was the origin of a false claim that reached the erasure
+            // audit record — see the note under the RemoveRange below.
             _db.VoiceClipsRetained.RemoveRange(rows);
             await _db.SaveChangesAsync(ct).ConfigureAwait(false);
 

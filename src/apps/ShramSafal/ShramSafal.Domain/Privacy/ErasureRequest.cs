@@ -247,8 +247,18 @@ public enum ErasureStatus
     /// <summary>
     /// The database manifest completed and <see cref="ErasureRequest.RowsAnonymizedCount"/>
     /// is real, but something the farmer asked to have removed still exists —
-    /// currently only: retained voice clips whose S3 deletion failed. See the
-    /// request's <c>ErasureRequest/Completed</c> audit event for what and why.
+    /// currently: retained voice clips that were neither deleted from S3 nor,
+    /// in the no-bucket case, even attempted.
+    ///
+    /// <para>
+    /// For what and why, read the audit event for this request:
+    /// <c>entity_type = 'ErasureRequest'</c> AND
+    /// <c>entity_id = &lt;requestId&gt;</c>. Query on the id, NOT on the action —
+    /// a request in this state writes <c>action = 'CompletedWithResidue'</c>,
+    /// so anyone filtering on <c>'Completed'</c> finds nothing for exactly the
+    /// requests that need looking at. The payload's <c>retainedVoiceOutcome</c>
+    /// and <c>retainedVoiceResidue</c> carry the cause.
+    /// </para>
     /// </summary>
     CompletedWithResidue = 4,
 }
