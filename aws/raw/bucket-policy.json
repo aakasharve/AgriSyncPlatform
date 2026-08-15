@@ -1,0 +1,66 @@
+{
+  "_comment": [
+    "S3 bucket policy — agrisync-raw-ap-south-1. PHASE 1 (safe to apply now).",
+    "spec: FINAL_SERVER_AUTHORITATIVE_EXECUTION_PLAN §11 (S11-infra-author)",
+    "",
+    "LIVE STATE CAPTURED 2026-08-15 (read-only, aws s3api get-bucket-policy):",
+    "  NoSuchBucketPolicy — this bucket has NO policy today. Rollback:",
+    "    aws s3api delete-bucket-policy --bucket agrisync-raw-ap-south-1 --region ap-south-1",
+    "",
+    "This is PHASE 1 only — TLS-only + 'some encryption header present' deny",
+    "rails. It deliberately does NOT require a specific algorithm or a specific",
+    "KMS key. Live encryption on this bucket today (captured 2026-08-15, read-",
+    "only aws s3api get-bucket-encryption) is SSE-S3 AES256 with",
+    "BucketKeyEnabled=true — NOT the customer-managed KMS key the plan intends",
+    "('under AES256, not the intended customer-managed key' — gap register I4).",
+    "This policy is written to be satisfied by that CURRENT state, so applying",
+    "it today changes nothing about what encryption objects get; it only",
+    "closes the 'no policy at all' gap and blocks unencrypted / non-TLS access.",
+    "",
+    "PHASE 2 (a SEPARATE, NOT-YET-SAFE file: bucket-policy-cmk-deny-rail.",
+    "PHASE2-DO-NOT-APPLY.json) tightens this to require the dedicated CMK",
+    "specifically. Do not fold that statement into this file and do not apply",
+    "it until the ordering trap in that file's header is resolved by the",
+    "backend team (unswallow the failure -> bind RawBlobStore config with",
+    "ValidateOnStart -> only then add the CMK deny rail). Applying the CMK",
+    "requirement before the key is bound makes every PUT fail with the",
+    "exception silently swallowed by the current write path — farmers would",
+    "get HTTP 200s while their evidence silently stopped being retained. That",
+    "code change is out of this lane's scope (src/, not aws/).",
+    "",
+    "APPLY (founder only): aws s3api put-bucket-policy --bucket agrisync-raw-ap-south-1 --policy file://bucket-policy.json --region ap-south-1",
+    "  (apply-config.sh does this as part of the single transaction.)",
+    "VERIFY: aws s3api get-bucket-policy --bucket agrisync-raw-ap-south-1 --region ap-south-1 | jq -r '.Policy | fromjson | .Statement[].Sid'"
+  ],
+  "Version": "2012-10-17",
+  "Id": "AgrisyncRawBucketPolicyPhase1",
+  "Statement": [
+    {
+      "Sid": "DenyInsecureTransport",
+      "Effect": "Deny",
+      "Principal": "*",
+      "Action": "s3:*",
+      "Resource": [
+        "arn:aws:s3:::agrisync-raw-ap-south-1",
+        "arn:aws:s3:::agrisync-raw-ap-south-1/*"
+      ],
+      "Condition": {
+        "Bool": {
+          "aws:SecureTransport": "false"
+        }
+      }
+    },
+    {
+      "Sid": "DenyMissingEncryptionHeader",
+      "Effect": "Deny",
+      "Principal": "*",
+      "Action": "s3:PutObject",
+      "Resource": "arn:aws:s3:::agrisync-raw-ap-south-1/*",
+      "Condition": {
+        "Null": {
+          "s3:x-amz-server-side-encryption": "true"
+        }
+      }
+    }
+  ]
+}

@@ -1,0 +1,6 @@
+# apply-config.sh writes a timestamped capture/<UTC-timestamp>/ folder on every
+# run (live-state capture + rendered-desired + diff + version-counts, for
+# audit trail). These are generated artifacts, not source — never commit
+# them. The verbatim rollback capture that matters is recorded in the
+# landing commit message and in README.md, not as files here.
+capture/

@@ -5,6 +5,18 @@ name: Prod Hygiene & Cost Audit
 # severity-labelled subject. Runs with NO stored credentials — assumes a read-only
 # IAM role via GitHub OIDC. See aws/audit/prod-hygiene-audit.sh.
 #
+# S3 config-drift checks (§11, S11-infra-author, added alongside this env block):
+# the script's §5 diffs the live lifecycle/bucket-policy/CORS on UPLOADS_BUCKET and
+# RAW_BUCKET against the desired state authored in aws/uploads/ and aws/raw/.
+# REPORTS drift only — the audit role is never granted any s3:Put*/Delete*. The
+# single most important check in §5 is the raw-bucket D9 tripwire: that bucket
+# holds farmer voice evidence with no backup, retained FOREVER per founder ruling
+# D9, and §5 fails CRITICAL if its live lifecycle ever gains an expiring action.
+# IAM NOTE: the agrisync-prod-audit role has ZERO S3 permissions as of 2026-08-15
+# (verified read-only) — §5 degrades to one WARN + skipped checks until
+# aws/audit/s3-readonly-policy-addition.json is merged into that role (founder-gated
+# IAM change, authored not applied; see that file for the exact steps).
+#
 # NOTE: scheduled (cron) workflows only run from the default branch (main). This file
 # must be on `main` for the weekly schedule to fire. workflow_dispatch works from any
 # branch the file exists on (trust policy allows main + akash_edits).
@@ -26,6 +38,12 @@ env:
   AWS_REGION: ap-south-1
   AUDIT_TOPIC_ARN: arn:aws:sns:ap-south-1:951921970996:shramsafal-prod-audit-alerts
   AUDIT_ROLE_ARN: arn:aws:iam::951921970996:role/agrisync-prod-audit
+  # §11 S3 config-drift inputs (aws/audit/prod-hygiene-audit.sh §5 hardcodes the
+  # same two names directly, matching this script's existing LIVE_DB convention —
+  # these env vars exist for workflow-level visibility of every resource this
+  # audit watches, not because the script reads them by name).
+  UPLOADS_BUCKET: shramsafal-uploads-prod
+  RAW_BLOB_BUCKET: agrisync-raw-ap-south-1
 
 jobs:
   audit:
