@@ -99,7 +99,7 @@ internal sealed class AiOrchestrator(
         // voice-rawblob-resilient-2026-06-10 — NON-FATAL: a cold-tier storage
         // failure no longer fails the farmer's voice log. On failure blobRef is
         // null → rawInputRef is null (a valid Phase-01 state) and we continue.
-        var blobRef = await TryPersistRawBlobAsync(payload, mimeType, ct);
+        var blobRef = await TryPersistRawBlobAsync(payload, mimeType, userId, ct);
 
         // DATA_PRINCIPLE_SPINE sub-phase 01.4 — stamp the AiJob with real voice
         // provenance instead of the Manual("unknown") default.
@@ -297,7 +297,7 @@ internal sealed class AiOrchestrator(
         // voice-rawblob-resilient-2026-06-10 — NON-FATAL (see helper): a
         // cold-tier storage failure leaves blobRef null → rawInputRef null,
         // and the two-stage parse still proceeds.
-        var blobRef = await TryPersistRawBlobAsync(payload, mimeType, ct);
+        var blobRef = await TryPersistRawBlobAsync(payload, mimeType, userId, ct);
 
         // W1.P2 T3 — ExtractorCodeSha stamped with promptContentHash (same
         // rationale as the one-stage path above: SourceRevisionId not yet wired).
@@ -954,7 +954,7 @@ internal sealed class AiOrchestrator(
         // receipt/patti raw-evidence PUT goes through the same AWSSDK.S3 v4
         // client that fails SignatureDoesNotMatch on prod, so it gets the same
         // resilience — a storage failure no longer fails the OCR extraction.
-        var blobRef = await TryPersistRawBlobAsync(payload, mimeType, ct);
+        var blobRef = await TryPersistRawBlobAsync(payload, mimeType, userId, ct);
 
         // Codex cross-verification 2026-05-15 MAJOR-2: stamp real provenance
         // on the receipt/patti AiJob at creation. Was: null (falls back to
@@ -1487,13 +1487,19 @@ internal sealed class AiOrchestrator(
     //
     // OperationCanceledException is re-thrown so request cancellation still
     // unwinds normally and is never masquerading as a "store failed" log.
-    private async Task<RawBlobRef?> TryPersistRawBlobAsync(byte[] payload, string mimeType, CancellationToken ct)
+    //
+    // §P0.9 — subjectUserId is the data-subject linkage, persisted alongside
+    // the ref-count row. It is the caller's authenticated userId, already in
+    // scope at all three call sites; it is NEVER defaulted, guessed, or filled
+    // with a placeholder. If a future caller genuinely has no subject it must
+    // pass null, which records the blob as unowned rather than mislabelling it.
+    private async Task<RawBlobRef?> TryPersistRawBlobAsync(byte[] payload, string mimeType, Guid subjectUserId, CancellationToken ct)
     {
         try
         {
             using var blobStream = new MemoryStream(payload, writable: false);
             var blobRef = await blobStore.PutAsync(blobStream, mimeType, ct);
-            await shramSafalRepository.UpsertRawBlobIndexAsync(blobRef, ct);
+            await shramSafalRepository.UpsertRawBlobIndexAsync(blobRef, subjectUserId, ct);
             return blobRef;
         }
         catch (OperationCanceledException)

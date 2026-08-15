@@ -178,6 +178,17 @@ public sealed class ShramSafalDbContext(DbContextOptions<ShramSafalDbContext> op
     public DbSet<RawBlobIndexEntry> RawBlobIndices => Set<RawBlobIndexEntry>();
 
     /// <summary>
+    /// FINAL_SERVER_AUTHORITATIVE_EXECUTION_PLAN §P0.9: which data subject a
+    /// content-addressed raw blob belongs to. Mapped to
+    /// <c>ssf.raw_blob_subjects</c>. Deliberately a join table, not a column on
+    /// <see cref="RawBlobIndices"/> — the store is content-addressed and
+    /// ref-counted, so subject↔blob is many-to-many by construction. Written at
+    /// blob-creation time so the linkage does not die with
+    /// <c>ssf.ai_jobs</c> during a DPDP erasure.
+    /// </summary>
+    public DbSet<RawBlobSubject> RawBlobSubjects => Set<RawBlobSubject>();
+
+    /// <summary>
     /// DATA_PRINCIPLE_SPINE_2026-05-05 Phase 02 sub-phase 02.3: warm-tier
     /// transcript projection for AI job attempts. One row per
     /// <see cref="AiJobAttempt"/>. Mapped to <c>ssf.transcripts</c>.

@@ -360,13 +360,29 @@ public interface IShramSafalRepository
     /// upload of the same SHA-256. The unique key is
     /// <see cref="RawBlobRef.Sha256"/>.
     /// <para>
+    /// <b>§P0.9 — <paramref name="subjectUserId"/> is the data-subject
+    /// linkage.</b> The implementation also records
+    /// <c>(sha256, subjectUserId)</c> in <c>ssf.raw_blob_subjects</c>,
+    /// idempotently. This is the ONLY user→audio pointer that survives a DPDP
+    /// erasure: the cascade deletes <c>ai_jobs WHERE user_id = X</c>, and
+    /// <c>ai_jobs.raw_input_ref</c> was previously the only link, so the S3
+    /// object was left permanently unattributable.
+    /// </para>
+    /// <para>
+    /// <b>Pass <c>null</c> when the subject is genuinely unknown</b> — and only
+    /// then. The linkage row is skipped, so an unknown owner is recorded as the
+    /// ABSENCE of a row. Never pass <see cref="Guid.Empty"/> or a fresh GUID to
+    /// fill the parameter; a fabricated owner reads as a real one and is worse
+    /// than an honest gap.
+    /// </para>
+    /// <para>
     /// Default impl is a no-op so the dozens of in-tree
     /// <c>IShramSafalRepository</c> test doubles keep compiling. Production
     /// <c>ShramSafalRepository</c> overrides with EF Core writes; integration
     /// suites that care about ref-count semantics override as well.
     /// </para>
     /// </summary>
-    Task UpsertRawBlobIndexAsync(RawBlobRef blobRef, CancellationToken ct = default)
+    Task UpsertRawBlobIndexAsync(RawBlobRef blobRef, Guid? subjectUserId, CancellationToken ct = default)
         => Task.CompletedTask;
 
     // --- SARVAM_PRIMARY_VOICE_PIPELINE Task 2.10 (transcript idempotency) ---

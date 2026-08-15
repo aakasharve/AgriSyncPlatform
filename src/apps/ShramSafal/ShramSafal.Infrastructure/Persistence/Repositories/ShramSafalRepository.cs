@@ -1401,7 +1401,43 @@ internal sealed class ShramSafalRepository(ShramSafalDbContext db) : IShramSafal
     /// upsert call BEFORE it adds the AiJob to the tracker, so nothing else
     /// is in flight at this point.
     /// </summary>
-    public async Task UpsertRawBlobIndexAsync(RawBlobRef blobRef, CancellationToken ct = default)
+    /// <remarks>
+    /// <para>
+    /// <b>§P0.9 addendum — the subject linkage.</b> After the index row is
+    /// durable, <c>(sha256, subjectUserId)</c> is recorded in
+    /// <c>ssf.raw_blob_subjects</c>. That table is the only user→audio pointer
+    /// that outlives a DPDP erasure, which deletes
+    /// <c>ai_jobs WHERE user_id = X</c> and with it the former sole link
+    /// (<c>ai_jobs.raw_input_ref</c>).
+    /// </para>
+    /// <para>
+    /// <b>Why raw SQL with <c>ON CONFLICT DO NOTHING</c> rather than an EF
+    /// add.</b> Two reasons, both about not failing.
+    /// (1) <i>Idempotency under concurrency.</i> An EF
+    /// read-then-add races: two parallel requests for the same
+    /// <c>(sha256, user)</c> both see "absent" and the second insert dies on
+    /// the composite PK. <c>ON CONFLICT</c> resolves that in the engine.
+    /// (2) <i>RLS.</i> <c>ssf.raw_blob_subjects</c> is FORCE RLS and
+    /// user-scoped, so an EF existence check would not see another subject's
+    /// row and would then attempt a duplicate insert. <c>DO NOTHING</c> needs
+    /// no policy-visible read of the conflicting row.
+    /// </para>
+    /// <para>
+    /// <b>Why the linkage is NOT conditional on the ref-count increment.</b>
+    /// The two answer different questions and are deliberately decoupled:
+    /// <c>ref_count</c> counts persist events for a blob, the linkage counts
+    /// DISTINCT subjects of it. Gating the insert on "was this a first
+    /// sighting" would mean the SECOND farmer to upload an identical clip is
+    /// never linked — precisely the many-to-many case this table exists for.
+    /// So the increment happens every call (behaviour unchanged) and the
+    /// linkage upsert happens every call, each idempotent on its own key.
+    /// </para>
+    /// <para>
+    /// <b>A null subject writes no row.</b> Absence means unknown. No
+    /// placeholder, no <see cref="Guid.Empty"/>, no minted GUID.
+    /// </para>
+    /// </remarks>
+    public async Task UpsertRawBlobIndexAsync(RawBlobRef blobRef, Guid? subjectUserId, CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(blobRef);
 
@@ -1418,6 +1454,19 @@ internal sealed class ShramSafalRepository(ShramSafalDbContext db) : IShramSafal
         }
 
         await db.SaveChangesAsync(ct);
+
+        // The index row is now durable, so the FK on the linkage row resolves.
+        if (subjectUserId is not { } userId || userId == Guid.Empty)
+        {
+            return;
+        }
+
+        await db.Database.ExecuteSqlRawAsync(
+            @"INSERT INTO ssf.raw_blob_subjects (sha256, user_id, first_seen_utc)
+              VALUES ({0}, {1}, {2})
+              ON CONFLICT (sha256, user_id) DO NOTHING;",
+            new object[] { blobRef.Sha256, userId, DateTime.UtcNow },
+            ct);
     }
 
     // --- SARVAM_PRIMARY_VOICE_PIPELINE Task 2.10 (transcript idempotency) ---
