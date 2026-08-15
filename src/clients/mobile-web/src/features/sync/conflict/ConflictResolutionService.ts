@@ -23,6 +23,7 @@ import { getRootStore } from '../../../app/state/RootStore';
 import { getDatabase } from '../../../infrastructure/storage/DexieDatabase';
 import { systemClock } from '../../../core/domain/services/Clock';
 import { getEditSurface } from './EditSurfaceRegistry';
+import { DEPENDENCY_PARENT_UNRESOLVED_CODE } from '../../../infrastructure/sync/MutationDependency';
 
 export interface RejectedMutationView {
     mutationId: string;
@@ -36,25 +37,50 @@ export interface RejectedMutationView {
 const MAX_PAYLOAD_PREVIEW = 160;
 
 export class ConflictResolutionService {
+    /**
+     * Everything the farmer can actually act on.
+     *
+     * §P0.7 box 2d — THIS USED TO READ ONE OF THE TWO STUCK SETS.
+     *
+     * `getRejectedUserReview()` alone meant a `FAILED` row that had exhausted
+     * its auto-retry cap never appeared here. That row is just as stuck —
+     * `markFailedAsPending` will not touch it again — and the header chip has
+     * always said so, rendering `NEEDS_FIX` and sending the farmer to a screen
+     * that then told them everything was synced. A chip that promises a fix and
+     * routes to an empty list is worse than no chip: it teaches the farmer that
+     * the app's own alarms mean nothing (`P5`).
+     *
+     * Both remedies already work on these rows. `retry()` falls through to
+     * `backgroundSyncWorker.retryFailed`, which ignores the cap by design, and
+     * `discard()` soft-deletes any row. So this is a read widening, not a new
+     * capability — which is exactly why the gap survived: nothing was missing
+     * except the rows.
+     */
     static async list(): Promise<RejectedMutationView[]> {
-        const rows = await mutationQueue.getRejectedUserReview();
-        return rows.map(r => {
-            const payloadJson = (() => {
-                try {
-                    return JSON.stringify(r.payload);
-                } catch {
-                    return '<unserializable>';
-                }
-            })();
-            return {
-                mutationId: r.clientRequestId,
-                mutationType: r.mutationType,
-                capturedAt: r.createdAt,
-                reason: r.lastError ?? 'UNKNOWN',
-                hint: this.hintFor(r.lastError),
-                payloadPreview: payloadJson.slice(0, MAX_PAYLOAD_PREVIEW),
-            };
-        });
+        const [rejected, capExhausted] = await Promise.all([
+            mutationQueue.getRejectedUserReview(),
+            mutationQueue.getCapExhaustedFailed(),
+        ]);
+
+        return [...rejected, ...capExhausted]
+            .sort((left, right) => (left.id ?? 0) - (right.id ?? 0))
+            .map(r => {
+                const payloadJson = (() => {
+                    try {
+                        return JSON.stringify(r.payload);
+                    } catch {
+                        return '<unserializable>';
+                    }
+                })();
+                return {
+                    mutationId: r.clientRequestId,
+                    mutationType: r.mutationType,
+                    capturedAt: r.createdAt,
+                    reason: r.lastError ?? 'UNKNOWN',
+                    hint: this.hintFor(r.lastError, r.status === 'FAILED'),
+                    payloadPreview: payloadJson.slice(0, MAX_PAYLOAD_PREVIEW),
+                };
+            });
     }
 
     static async retry(mutationId: string): Promise<void> {
@@ -140,9 +166,22 @@ export class ConflictResolutionService {
         }
     }
 
-    private static hintFor(reason: string | undefined): string | undefined {
-        if (!reason) return undefined;
+    private static hintFor(reason: string | undefined, autoRetriesExhausted = false): string | undefined {
+        if (!reason) {
+            // §P0.7 box 2d — a cap-exhausted row can reach this screen with no
+            // `lastError` at all (a batch that omitted it never produced one).
+            // Say the one true thing there is to say rather than nothing: the
+            // app has stopped trying and the farmer's tap is what restarts it.
+            return autoRetriesExhausted
+                ? 'अ‍ॅपने पुन्हा पाठवणे थांबवले आहे. तपासा आणि पुन्हा प्रयत्न करा.'
+                : undefined;
+        }
         const upper = reason.toUpperCase();
+        if (upper.includes(DEPENDENCY_PARENT_UNRESOLVED_CODE)) {
+            // §P0.7 box 2a — the parent log is named in `reason` itself; this
+            // says what to do about it.
+            return 'ही नोंद ज्या दैनंदिन नोंदीशी जोडली आहे ती सर्व्हरवर पोहोचली नाही. आधी ती नोंद तपासा.';
+        }
         if (upper.includes('CLIENT_TOO_OLD') || upper.includes('CLIENT_OUTDATED')) {
             return 'अॅप अपडेट करा आणि पुन्हा सिंक करा.';
         }
@@ -157,6 +196,9 @@ export class ConflictResolutionService {
         }
         if (upper.includes('VALIDATION') || upper.includes('INVALID_COMMAND') || upper.includes('INVALID_PAYLOAD')) {
             return 'नोंदीची माहिती तपासा. नंतर बदल करून पुन्हा प्रयत्न करा.';
+        }
+        if (autoRetriesExhausted) {
+            return 'अ‍ॅपने पुन्हा पाठवणे थांबवले आहे. तपासा आणि पुन्हा प्रयत्न करा.';
         }
         return undefined;
     }

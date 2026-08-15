@@ -1,4 +1,4 @@
-import { mutationQueue } from './MutationQueue';
+import { mutationQueue, MAX_AUTO_RETRY_COUNT } from './MutationQueue';
 import { systemClock } from '../../core/domain/services/Clock';
 import { agriSyncClient, type SyncMutationType } from '../api/AgriSyncClient';
 import { getAuthSession } from '../storage/AuthTokenStore';
@@ -160,13 +160,23 @@ export class BackgroundSyncWorker {
      * `mutationId` (`syncMachine.ts:44-46`), and `MUTATION_REJECTED` is
      * accepted from `idle`, `syncing` and `conflict` alike.
      *
+     * §P0.7 box 2d — IT NOW ANNOUNCES BOTH STUCK SETS, not one.
+     * `ConflictResolutionService.list()` was widened to include cap-exhausted
+     * `FAILED` rows, but widening the list alone would have been invisible: the
+     * badge is the route to the screen, and the badge counts what this method
+     * announces. One without the other is another painted door, pointing the
+     * other way.
+     *
      * Public so a test can await it — `start()` cannot, and a floating promise
      * is not something to assert against.
      */
     async rehydrateRejectedMutations(): Promise<void> {
         try {
-            const rejected = await mutationQueue.getRejectedUserReview();
-            for (const row of rejected) {
+            const [rejected, capExhausted] = await Promise.all([
+                mutationQueue.getRejectedUserReview(),
+                mutationQueue.getCapExhaustedFailed(),
+            ]);
+            for (const row of [...rejected, ...capExhausted]) {
                 notifySync({
                     type: 'MUTATION_REJECTED',
                     mutationId: row.clientRequestId,
@@ -385,8 +395,24 @@ export class BackgroundSyncWorker {
                     // permanently enough to need the farmer yet. A verdict all
                     // the same -> charged, so five refusals escalate rather
                     // than churn forever. Retries next cycle; no syncMachine
-                    // event so the badge doesn't churn.
-                    await mutationQueue.markFailed(mutationId, errorMessage, 'REJECTION');
+                    // event while it is still below the cap, so the badge
+                    // doesn't churn.
+                    const chargedRetries = await mutationQueue.markFailed(mutationId, errorMessage, 'REJECTION');
+
+                    // §P0.7 box 2d — but the attempt that EXHAUSTS the cap does
+                    // need announcing. Past this point nothing in the app moves
+                    // the row again on its own, the chip flips to NEEDS_FIX, and
+                    // the row is now in `ConflictResolutionService.list()`. If
+                    // the badge stayed silent the farmer would have to guess
+                    // that the screen had gained a row, or wait for the next
+                    // app launch to be told.
+                    if (chargedRetries >= MAX_AUTO_RETRY_COUNT) {
+                        notifySync({
+                            type: 'MUTATION_REJECTED',
+                            mutationId: mutation.clientRequestId,
+                            reason: errorMessage,
+                        });
+                    }
                 }
             }
         } catch (error) {

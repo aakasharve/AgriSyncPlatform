@@ -217,8 +217,13 @@ export class MutationQueue {
      *
      * Defaults to `REJECTION` so a caller that says nothing gets the stricter,
      * bounded behaviour — a silent omission can never produce an uncapped loop.
+     *
+     * @returns the row's CHARGED retry count after this attempt, so the caller
+     *          can tell — without a second read — whether this is the failure
+     *          that just exhausted the cap and therefore needs announcing to
+     *          the farmer (§P0.7 box 2d).
      */
-    async markFailed(id: number, error: string, kind: MutationFailureKind = 'REJECTION'): Promise<void> {
+    async markFailed(id: number, error: string, kind: MutationFailureKind = 'REJECTION'): Promise<number> {
         const db = getDatabase();
         const existing = await db.mutationQueue.get(id);
         const chargedRetries = existing?.retryCount ?? 0;
@@ -226,14 +231,17 @@ export class MutationQueue {
         // does about it. Counted separately from `retryCount` so the two
         // deliberately-uncharged kinds still back off.
         const attemptCount = (existing?.attemptCount ?? 0) + 1;
+        const nextRetryCount = kind === 'REJECTION' ? chargedRetries + 1 : chargedRetries;
         await db.mutationQueue.update(id, {
             status: 'FAILED',
             updatedAt: systemClock.nowISO(),
-            retryCount: kind === 'REJECTION' ? chargedRetries + 1 : chargedRetries,
+            retryCount: nextRetryCount,
             lastError: error,
             attemptCount,
             nextRetryAfterMs: Date.now() + backoffDelayMs(attemptCount),
         });
+
+        return nextRetryCount;
     }
 
     /**
@@ -325,6 +333,35 @@ export class MutationQueue {
         const items = await db.mutationQueue
             .where('status')
             .equals('REJECTED_USER_REVIEW')
+            .toArray();
+        return items.sort((left, right) => (left.id ?? 0) - (right.id ?? 0));
+    }
+
+    /**
+     * §P0.7 box 2d — THE OTHER SET OF ROWS THAT NEEDS THE FARMER.
+     *
+     * A `FAILED` row at or over `MAX_AUTO_RETRY_COUNT` is as stuck as a durable
+     * rejection: `markFailedAsPending` will not touch it again, so nothing in
+     * the app will move it without a tap. The header chip has always known that
+     * (`syncHonestyState.ts` returns `NEEDS_FIX`) and `stuckMutations` has
+     * always counted it — but `ConflictResolutionService.list()` read only
+     * `REJECTED_USER_REVIEW`, so the chip pointed at a door that was not there.
+     *
+     * Same predicate as `stuckMutations.needsFarmerAction`, same constant, and
+     * `stuckMutations.agreement.test.ts` already holds the chip and the drawer
+     * to it across the whole status/retryCount cross-product.
+     *
+     * Indexed on `status`, then filtered in memory over the FAILED rows only —
+     * a set bounded by how much is currently broken, not by the size of the
+     * queue. `retryCount` is not indexed and indexing it would need a Dexie
+     * version bump, which this task is explicitly forbidden from spending.
+     */
+    async getCapExhaustedFailed(): Promise<MutationQueueItem[]> {
+        const db = getDatabase();
+        const items = await db.mutationQueue
+            .where('status')
+            .equals('FAILED')
+            .filter((item) => item.retryCount >= MAX_AUTO_RETRY_COUNT)
             .toArray();
         return items.sort((left, right) => (left.id ?? 0) - (right.id ?? 0));
     }
