@@ -175,12 +175,29 @@ export class BackgroundSyncWorker {
      * is not something to assert against.
      */
     async rehydrateRejectedMutations(): Promise<void> {
+        // §P0.7 review M2 — EACH SET UNDER ITS OWN TRY.
+        //
+        // The first version read both under one `Promise.all` in one `try`, so a
+        // throw from either lost BOTH — and this method is the only thing that
+        // makes `ConflictBadge` survive a restart, which is the only route to the
+        // conflict screen. Adding a second query must not double the blast radius
+        // of the first. One set failing now costs that set only.
+        await this.announceStuckRows(
+            () => mutationQueue.getRejectedUserReview(),
+            'durable rejections',
+        );
+        await this.announceStuckRows(
+            () => mutationQueue.getCapExhaustedFailed(),
+            'cap-exhausted failures',
+        );
+    }
+
+    private async announceStuckRows(
+        read: () => Promise<Array<{ clientRequestId: string; lastError?: string }>>,
+        label: string,
+    ): Promise<void> {
         try {
-            const [rejected, capExhausted] = await Promise.all([
-                mutationQueue.getRejectedUserReview(),
-                mutationQueue.getCapExhaustedFailed(),
-            ]);
-            for (const row of [...rejected, ...capExhausted]) {
+            for (const row of await read()) {
                 notifySync({
                     type: 'MUTATION_REJECTED',
                     mutationId: row.clientRequestId,
@@ -188,7 +205,7 @@ export class BackgroundSyncWorker {
                 });
             }
         } catch (error) {
-            console.warn('[BackgroundSyncWorker] Could not rehydrate rejected mutations', error);
+            console.warn(`[BackgroundSyncWorker] Could not rehydrate ${label}`, error);
         }
     }
 
@@ -359,6 +376,25 @@ export class BackgroundSyncWorker {
 
                 if (result.status === 'applied' || result.status === 'duplicate') {
                     await mutationQueue.markApplied(mutationId);
+                    // §P0.7 review B002 — A ROW THE SERVER HAS ACCEPTED IS NOT A
+                    // CONFLICT, AND THE BADGE MUST STOP SAYING IT IS.
+                    //
+                    // `syncMachine` drops an entry only on `CONFLICT_RESOLVED`,
+                    // and only `ConflictResolutionService.retry/discard` emitted
+                    // it. The drawer's "Retry All" and per-row "Retry" — the
+                    // remedy `stuckMutations` assigns a cap-exhausted row, and
+                    // the one the farmer is actually steered to — emit nothing.
+                    // So once box 2d put cap-exhausted rows in the badge, a
+                    // successful "Retry All" left the count STUCK UP for the rest
+                    // of the session, and tapping it opened a page saying
+                    // everything was synced. The old painted door, mirrored.
+                    //
+                    // Emitting here rather than in each retry path is deliberate:
+                    // acceptance is the one fact that settles this for every
+                    // route, including ones not written yet. `removeResolution`
+                    // filters by id, so it is a no-op for a row that was never
+                    // announced.
+                    notifySync({ type: 'CONFLICT_RESOLVED', mutationId: mutation.clientRequestId });
                     continue;
                 }
 
