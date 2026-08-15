@@ -444,11 +444,54 @@ export async function resolveLogFarmId(log: DailyLog): Promise<string | null> {
  * and the attribution would be invented: a `cropCycleId` the farmer never gave,
  * manufactured by the recovery itself.
  *
- * So recovery does not consult "now" at all. It asks which cycle's own dates
- * CONTAIN the log's own date — the record's evidence against server-issued
- * boundaries — and if that question does not have exactly one answer it refuses
- * and the caller reports the log as unroutable. It never falls back, never
- * prefers the open cycle, and never picks the likelier one.
+ * So recovery does not consult "now" at all for the CHOICE. It asks which
+ * cycle's own dates CONTAIN the log's own date — the record's evidence against
+ * server-issued boundaries — and if that question does not have exactly one
+ * answer it refuses and the caller reports the log as unroutable. The selection
+ * never sorts, never prefers the open cycle, and never picks the likelier one.
+ *
+ * ONE PREFERENCE SURVIVES, AND IT IS UPSTREAM OF THE SELECTION (review N1).
+ * "No fallback" is true of the selection and NOT of the candidate set. The
+ * candidate list is built by filtering the plot's cycles on `cropName`, and when
+ * that filter matches none it FALLS BACK to every cycle on the plot (`:562-565`
+ * below). So a log whose recorded crop name has drifted — a rename, a spelling
+ * change, an AI-derived name that no longer matches the reference data — can get
+ * a unique, confident attribution to a DIFFERENT crop's cycle.
+ *
+ * That fallback predates this change and applies to both modes; date containment
+ * makes it strictly less likely to fire wrongly, since the other crop's cycle
+ * must also contain the date. It is named here rather than removed because
+ * removing it would refuse to route logs that route correctly today, which is a
+ * separate decision with its own cost. Do not read "no fallback" as covering it.
+ *
+ * ---------------------------------------------------------------------------
+ * DEPENDENCY: THIS IS ONLY CORRECT WHILE CROP CYCLES ARE IMMUTABLE (review N2).
+ * ---------------------------------------------------------------------------
+ * Date containment answers "which cycle was open then" using the cycle's dates
+ * AS THEY ARE NOW. That is sound only because a cycle's `startDate` / `endDate`
+ * cannot change after the fact. Today they cannot:
+ *
+ *   - `CropCycle.cs` exposes private setters, a `Create` factory and no mutator;
+ *   - there is no update handler for a crop cycle;
+ *   - the sync catalog carries `create_crop_cycle` and nothing else that could
+ *     write one from a client.
+ *
+ * Also load-bearing, and independently true: `CreateCropCycleHandler.cs:77-89`
+ * REJECTS overlapping cycles on a plot, so server-issued cycles partition a
+ * plot's timeline and containment can match at most one. The "two or more
+ * matches" refusal below is therefore a guard against locally inconsistent data,
+ * not a state the server can produce.
+ *
+ * THE DAY SOMEONE ADDS A CLOSE-OR-EDIT PATH, THIS SILENTLY CHANGES MEANING:
+ * editing a cycle's dates would retroactively re-attribute every historical log
+ * that recovery later touches, and no test here would fail. If you are adding
+ * that path, decide first whether recovery should freeze the attribution at
+ * capture time instead — `SelectedCropContext` carries no cycle today, so that
+ * would mean recording one.
+ *
+ * `__tests__/cropCycleImmutability.guard.test.ts` fails if a cycle-mutating
+ * mutation type appears in the catalog, so this note gets read rather than
+ * discovered.
  */
 export type CycleResolution = 'at-capture' | 'from-log-date';
 
@@ -540,6 +583,13 @@ async function resolveSyncTarget(
     // ONE candidate list, both modes. The cropName filter with its
     // fall-back-to-all is unchanged; only what happens NEXT differs, so the two
     // modes cannot drift apart over which cycles were even in the running.
+    //
+    // Review N1 — THIS FALLBACK IS A PREFERENCE, and it is the one thing
+    // `from-log-date` does not eliminate. When the recorded crop name matches no
+    // cycle on the plot (a rename, a spelling drift, an AI-derived name), every
+    // cycle becomes a candidate and the log can be attributed to a DIFFERENT
+    // crop's cycle. Pre-existing and unchanged; named where it happens so the
+    // mode's "no fallback" claim is not read as covering it.
     const inTheRunning = candidates.length > 0
         ? candidates
         : cycleRecords.map(record => record.payload as CropCycleDto);
