@@ -140,7 +140,9 @@ describe('W1.P2 — Dexie v22: DATABASE_VERSION constant', () => {
     /**
      * This file owns the v21 → v22 upgrade. The pin on the CURRENT schema
      * version moves to the newest version's test with each bump — as of
-     * §P0.4 that is `v23.upgrade.test.ts`, which asserts `toBe(23)` exactly.
+     * §P0.4 that is `v24.upgrade.test.ts`, which asserts `toBe(24)` exactly.
+     * (§P0.4 shipped as v23 and was renumbered — 23 belongs to
+     * `feat/dfes-companion`, which ships first. See `versions/v24.ts`.)
      * What this assertion is for is that v22 has shipped and cannot be
      * un-shipped: `DATABASE_VERSION` may never fall back below it, because
      * an older schema opening a newer database throws for that farmer.

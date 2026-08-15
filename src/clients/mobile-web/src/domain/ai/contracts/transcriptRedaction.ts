@@ -12,7 +12,9 @@
  * This module is the single definition of "which keys are verbatim speech".
  * It is used by:
  *   - `CorrectionEventStore` — before a correction is built or POSTed;
- *   - Dexie `v23` — to clean rows already sitting unencrypted on handsets.
+ *   - Dexie `v24` — to clean rows already sitting unencrypted on handsets.
+ *     (Shipped as v23; renumbered because `feat/dfes-companion` owns 23 and
+ *     ships first, and Dexie would have run no upgrade at all for 23 → 23.)
  *
  * Contract:
  *   - It only ever REMOVES keys. It never adds, renames, defaults or

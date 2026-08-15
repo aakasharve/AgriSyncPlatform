@@ -38,7 +38,7 @@ import { applyV19 } from './dexie/versions/v19';
 import { applyV20 } from './dexie/versions/v20';
 import { applyV21 } from './dexie/versions/v21';
 import { applyV22 } from './dexie/versions/v22';
-import { applyV23 } from './dexie/versions/v23';
+import { applyV24 } from './dexie/versions/v24';
 import { LEGACY_DATABASE_NAME } from './userDatabaseName';
 import { getActiveDatabaseName, clearResolvedDatabaseName } from './activeDatabaseName';
 import { recoverLegacyOwnershipClaim, settleOwnershipClaims } from './databaseOwnership';
@@ -86,7 +86,7 @@ export type * from './DexieDatabase.types';
 // =============================================================================
 
 /** Current Dexie schema version — bump this when adding version(N).stores(). */
-export const DATABASE_VERSION = 23; // §P0.4 — strip the raw transcript out of stored correction events; no index change.
+export const DATABASE_VERSION = 24; // §P0.4 — strip the raw transcript out of stored correction events; no index change. 23 is RESERVED for feat/dfes-companion — see versions/v24.ts.
 /** CEI Phase 1 schema version (now active — applied by Task 5.1.1). */
 export const CEI_PHASE1_SCHEMA_VERSION = 7;
 /** CEI Phase 2 schema version — adds test stack (protocols/instances/recs). */
@@ -117,8 +117,17 @@ export const DATA_PRINCIPLE_SPINE_CONSENT_TOKEN_KID_SCHEMA_VERSION = 19;
 export const DATA_PRINCIPLE_SPINE_PII_REDACTION_EVENT_SCHEMA_VERSION = 20;
 /** voice-diary-e2e-2026-05-17 (D.17) — voiceClips row gains `s3RetainedKey` index for cross-reference into the retained S3 tier. */
 export const VOICE_DIARY_RETAINED_KEY_SCHEMA_VERSION = 21;
-/** §P0.4 — correction events stop carrying verbatim speech; v23 strips it from rows already on the handset. */
-export const CORRECTION_EVENT_TRANSCRIPT_STRIPPED_SCHEMA_VERSION = 23;
+/**
+ * §P0.4 — correction events stop carrying verbatim speech; v24 strips it from
+ * rows already on the handset.
+ *
+ * 24, not 23: `feat/dfes-companion` owns 23 and ships first. Dexie only runs an
+ * upgrade for versions ABOVE the one on the device, so re-using 23 would have
+ * meant the strip never executed on any handset that took DFES first — a
+ * privacy fix that looks shipped and is not. Full reasoning in
+ * `dexie/versions/v24.ts`.
+ */
+export const CORRECTION_EVENT_TRANSCRIPT_STRIPPED_SCHEMA_VERSION = 24;
 
 // =============================================================================
 // DATABASE CLASS
@@ -177,7 +186,7 @@ export class AgriLogDatabase extends Dexie {
     /**
      * @param databaseName Which IndexedDB database to open. Defaults to the one
      * every install already has; `userDatabaseName.ts` decides the rest. The
-     * SCHEMA is identical either way — a per-farmer database is these same v23
+     * SCHEMA is identical either way — a per-farmer database is these same v24
      * stores under another name, which is why this needed no version bump.
      * It also means every upgrade callback runs ONCE PER FARMER DATABASE on a
      * shared device, so each one must be idempotent per database.
@@ -210,7 +219,7 @@ export class AgriLogDatabase extends Dexie {
         applyV20(this);
         applyV21(this);
         applyV22(this);
-        applyV23(this);
+        applyV24(this);
     }
 }
 

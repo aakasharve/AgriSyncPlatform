@@ -1,6 +1,31 @@
 // spec: FINAL_SERVER_AUTHORITATIVE_EXECUTION_PLAN §P0.4
 //
-// Dexie schema v23 — strip the raw transcript from stored correction events.
+// Dexie schema v24 — strip the raw transcript from stored correction events.
+//
+// ┌─ WHY 24 AND NOT 23, WHICH IS WHAT THIS SHIPPED AS FIRST ────────────────┐
+// │                                                                         │
+// │ `feat/dfes-companion` ALSO declares 23, for a different schema (it adds │
+// │ a `pendingInterpretations` store), and the founder decided DFES ships   │
+// │ first.                                                                  │
+// │                                                                         │
+// │ Dexie runs an upgrade only for versions ABOVE the one recorded on the   │
+// │ device. A handset that took DFES's v23 records "23". This branch        │
+// │ arriving later, also declaring 23, would make Dexie compare 23 to 23    │
+// │ and RUN NOTHING — so the strip below would never execute. The type      │
+// │ change would still stop new rows, so the fix would look shipped while   │
+// │ every correction row already on that phone kept the farmer's raw speech │
+// │ and worker names in unencrypted IndexedDB, permanently.                 │
+// │                                                                         │
+// │ A privacy fix that looks shipped and is not is worse than one that is   │
+// │ visibly outstanding. Renumbering was safe only while neither version    │
+// │ had reached a farmer; both branches were unmerged when this was done.   │
+// │                                                                         │
+// │ 23 IS NOW RESERVED FOR DFES. Do not reuse it here, and if these two     │
+// │ branches merge, the merger must keep DFES's v23 store list intact —     │
+// │ Dexie treats an unlisted store as unchanged, so the list below omitting │
+// │ `pendingInterpretations` does not delete it, but re-listing it wrongly  │
+// │ would.                                                                  │
+// └─────────────────────────────────────────────────────────────────────────┘
 //
 //   `CorrectionEvent.rawTranscript` was a REQUIRED field, so every correction
 //   row already on a farmer's phone carries the full utterance in unencrypted
@@ -31,19 +56,20 @@
 //   deep strip of an already-stripped value is the identity, so a device
 //   holding three farmer databases runs this three times to the same result.
 //
-//   One-way for APK users: an older build opening a v23 database throws. This
+//   One-way for APK users: an older build opening a v24 database throws. This
 //   bump therefore ships ALONE — no behavioural change rides with it.
 //
-// @module infrastructure/storage/dexie/versions/v23
+// @module infrastructure/storage/dexie/versions/v24
 
 import type Dexie from 'dexie';
 import type { Transaction } from 'dexie';
 import { stripTranscriptText } from '../../../../domain/ai/contracts/transcriptRedaction';
 
-export function applyV23(db: Dexie): void {
-    db.version(23)
+export function applyV24(db: Dexie): void {
+    db.version(24)
         .stores({
-            // All v22 stores re-listed verbatim. No index changes — a partial
+            // All v22 stores re-listed verbatim (v23 is DFES's, not this
+            // branch's — see the header). No index changes — a partial
             // store list on a new version causes silent data loss on devices
             // that have never seen the omitted stores (the Dexie audit pattern).
             logs: 'id, date, verificationStatus, createdByOperatorId, isDeleted, [date+isDeleted], [createdByOperatorId+isDeleted]',

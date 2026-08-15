@@ -3,8 +3,17 @@
  * @license
  * SPDX-License-Identifier: Apache-2.0
  *
- * §P0.4 — Dexie v22 → v23: strip the transcript out of correction rows that
- * are ALREADY on farmers' phones.
+ * §P0.4 — Dexie → v24: strip the transcript out of correction rows that are
+ * ALREADY on farmers' phones.
+ *
+ * THIS SHIPPED AS v23 AND WAS RENUMBERED. `feat/dfes-companion` also declares
+ * 23, for a different schema, and it ships first. Dexie runs an upgrade only
+ * for versions ABOVE the one on the device, so a handset that took DFES's v23
+ * would have compared 23 to 23 and run nothing — the strip would never have
+ * executed and the fix would have looked shipped while every existing
+ * correction row kept the farmer's speech. The last describe block below is
+ * the proof that the renumber actually closes that: a device sitting at 23 is
+ * upgraded and stripped.
  *
  * spec: FINAL_SERVER_AUTHORITATIVE_EXECUTION_PLAN §P0.4
  *
@@ -53,7 +62,7 @@ import { applyV19 } from '../versions/v19';
 import { applyV20 } from '../versions/v20';
 import { applyV21 } from '../versions/v21';
 import { applyV22 } from '../versions/v22';
-import { applyV23 } from '../versions/v23';
+import { applyV24 } from '../versions/v24';
 
 /** The words a farmer said. Two worker names are inside them. */
 const SPOKEN = 'आज रामू आणि सीता यांनी चार तास काम केले';
@@ -74,10 +83,10 @@ async function openV22(name: string): Promise<Dexie> {
     return db;
 }
 
-async function openV23(name: string): Promise<Dexie> {
+async function openV24(name: string): Promise<Dexie> {
     const db = new Dexie(name);
     applyThrough22(db);
-    applyV23(db);
+    applyV24(db);
     await db.open();
     return db;
 }
@@ -99,17 +108,19 @@ function legacyRow(id: string): Record<string, unknown> {
     };
 }
 
-const DB_NAME = 'AgriLogDB_v23_upgrade_test';
+const DB_NAME = 'AgriLogDB_v24_upgrade_test';
 
-describe('§P0.4 — Dexie v23: version constant', () => {
-    it('DATABASE_VERSION is 23', () => {
-        expect(DATABASE_VERSION).toBe(23);
+describe('§P0.4 — Dexie v24: version constant', () => {
+    it('DATABASE_VERSION is 24', () => {
+        // Exact, not `>= 24`. 23 belongs to `feat/dfes-companion`; a silent
+        // regression to it is the whole defect this renumber exists to remove.
+        expect(DATABASE_VERSION).toBe(24);
     });
 });
 
-describe('§P0.4 — Dexie v23: store-completeness guard', () => {
-    it('v23_re_lists_every_store_v22_had', async () => {
-        const nameA = 'AgriLogDB_v23_storecount_v22';
+describe('§P0.4 — Dexie v24: store-completeness guard', () => {
+    it('v24_re_lists_every_store_v22_had', async () => {
+        const nameA = 'AgriLogDB_v24_storecount_v22';
         const dbA = new Dexie(nameA);
         applyThrough22(dbA);
         await dbA.open();
@@ -117,22 +128,22 @@ describe('§P0.4 — Dexie v23: store-completeness guard', () => {
         dbA.close();
         await Dexie.delete(nameA);
 
-        const nameB = 'AgriLogDB_v23_storecount_v23';
+        const nameB = 'AgriLogDB_v24_storecount_v24';
         const dbB = new Dexie(nameB);
         applyThrough22(dbB);
-        applyV23(dbB);
+        applyV24(dbB);
         await dbB.open();
-        const v23Stores = dbB.tables.map(t => t.name).sort();
+        const v24Stores = dbB.tables.map(t => t.name).sort();
         dbB.close();
         await Dexie.delete(nameB);
 
         // A partial store list on a new version silently drops stores on
         // devices that have never seen the omitted ones.
-        expect(v23Stores).toEqual(v22Stores);
+        expect(v24Stores).toEqual(v22Stores);
     });
 });
 
-describe('§P0.4 — Dexie v22 → v23 upgrade', () => {
+describe('§P0.4 — Dexie v22 → v24 upgrade', () => {
     beforeEach(async () => { await Dexie.delete(DB_NAME); });
     afterEach(async () => { await Dexie.delete(DB_NAME); });
 
@@ -144,9 +155,9 @@ describe('§P0.4 — Dexie v22 → v23 upgrade', () => {
         expect(JSON.stringify(before)).toContain(SPOKEN);
         db22.close();
 
-        const db23 = await openV23(DB_NAME);
-        const after = await db23.table('aiCorrectionEvents').get('corr-1') as Record<string, unknown>;
-        db23.close();
+        const db24 = await openV24(DB_NAME);
+        const after = await db24.table('aiCorrectionEvents').get('corr-1') as Record<string, unknown>;
+        db24.close();
 
         expect(after).toBeDefined();
         expect(after.rawTranscript).toBeUndefined();
@@ -159,9 +170,9 @@ describe('§P0.4 — Dexie v22 → v23 upgrade', () => {
         await db22.table('aiCorrectionEvents').put(legacyRow('corr-2'));
         db22.close();
 
-        const db23 = await openV23(DB_NAME);
-        const after = await db23.table('aiCorrectionEvents').get('corr-2') as Record<string, unknown>;
-        db23.close();
+        const db24 = await openV24(DB_NAME);
+        const after = await db24.table('aiCorrectionEvents').get('corr-2') as Record<string, unknown>;
+        db24.close();
 
         // The worker names hid in the per-item `sourceText`, not only at the
         // top level. Deleting the two top-level keys alone would leave them.
@@ -175,9 +186,9 @@ describe('§P0.4 — Dexie v22 → v23 upgrade', () => {
         await db22.table('aiCorrectionEvents').put(legacyRow('corr-3'));
         db22.close();
 
-        const db23 = await openV23(DB_NAME);
-        const after = await db23.table('aiCorrectionEvents').get('corr-3') as Record<string, unknown>;
-        db23.close();
+        const db24 = await openV24(DB_NAME);
+        const after = await db24.table('aiCorrectionEvents').get('corr-3') as Record<string, unknown>;
+        db24.close();
 
         // This is the half that must NOT be lost. It is the AI learning
         // loop's input and it has no other home.
@@ -197,9 +208,9 @@ describe('§P0.4 — Dexie v22 → v23 upgrade', () => {
         await db22.table('aiCorrectionEvents').put(legacyRow('corr-4'));
         db22.close();
 
-        const db23 = await openV23(DB_NAME);
-        const after = await db23.table('aiCorrectionEvents').get('corr-4') as Record<string, unknown>;
-        db23.close();
+        const db24 = await openV24(DB_NAME);
+        const after = await db24.table('aiCorrectionEvents').get('corr-4') as Record<string, unknown>;
+        db24.close();
 
         const legacyKeys = new Set(Object.keys(legacyRow('corr-4')));
         // Every surviving key existed before. No placeholder, no default,
@@ -219,9 +230,9 @@ describe('§P0.4 — Dexie v22 → v23 upgrade', () => {
         });
         db22.close();
 
-        const db23 = await openV23(DB_NAME);
-        const log = await db23.table('logs').get('log-1') as { log: { fullTranscript: string } };
-        db23.close();
+        const db24 = await openV24(DB_NAME);
+        const log = await db24.table('logs').get('log-1') as { log: { fullTranscript: string } };
+        db24.close();
 
         expect(log.log.fullTranscript).toBe(SPOKEN);
     });
@@ -233,11 +244,11 @@ describe('§P0.4 — Dexie v22 → v23 upgrade', () => {
         await db22.table('aiCorrectionEvents').put(legacyRow('corr-5'));
         db22.close();
 
-        const first = await openV23(DB_NAME);
+        const first = await openV24(DB_NAME);
         const afterFirst = await first.table('aiCorrectionEvents').get('corr-5');
         first.close();
 
-        const second = await openV23(DB_NAME);
+        const second = await openV24(DB_NAME);
         const afterSecond = await second.table('aiCorrectionEvents').get('corr-5');
         second.close();
 
@@ -261,9 +272,9 @@ describe('§P0.4 — Dexie v22 → v23 upgrade', () => {
         await db22.table('aiCorrectionEvents').put(clean);
         db22.close();
 
-        const db23 = await openV23(DB_NAME);
-        const after = await db23.table('aiCorrectionEvents').get('corr-6');
-        db23.close();
+        const db24 = await openV24(DB_NAME);
+        const after = await db24.table('aiCorrectionEvents').get('corr-6');
+        db24.close();
 
         expect(after).toEqual(clean);
     });
@@ -280,15 +291,121 @@ describe('§P0.4 — Dexie v22 → v23 upgrade', () => {
         ]);
         db22.close();
 
-        const db23 = await openV23(DB_NAME);
-        const good = await db23.table('aiCorrectionEvents').get('good-1') as Record<string, unknown>;
-        const count = await db23.table('aiCorrectionEvents').count();
-        db23.close();
+        const db24 = await openV24(DB_NAME);
+        const good = await db24.table('aiCorrectionEvents').get('good-1') as Record<string, unknown>;
+        const count = await db24.table('aiCorrectionEvents').count();
+        db24.close();
 
         // The database opened, every row is still there, and the good row
         // was still cleaned despite its neighbours.
         expect(count).toBe(3);
         expect(good.rawTranscript).toBeUndefined();
         expect(JSON.stringify(good)).not.toContain(SPOKEN);
+    });
+});
+
+// ---------------------------------------------------------------------------
+// THE RENUMBER ITSELF. This is the block that justifies 23 → 24.
+// ---------------------------------------------------------------------------
+
+/**
+ * A handset that took `feat/dfes-companion` FIRST.
+ *
+ * DFES's v23 adds a `pendingInterpretations` store. Reproduced here rather than
+ * imported, because that file lives on the other branch and this branch must not
+ * depend on it — what is being modelled is only the FACT that the device records
+ * "23", which is the whole of the hazard.
+ */
+function applyDfesV23(db: Dexie): void {
+    db.version(23).stores({
+        pendingInterpretations: '++id, status, createdAt',
+    });
+}
+
+async function openDfesV23(name: string): Promise<Dexie> {
+    const db = new Dexie(name);
+    applyThrough22(db);
+    applyDfesV23(db);
+    await db.open();
+    return db;
+}
+
+/** This branch arriving on that handset afterwards. */
+async function openDfesThenV24(name: string): Promise<Dexie> {
+    const db = new Dexie(name);
+    applyThrough22(db);
+    applyDfesV23(db);
+    applyV24(db);
+    await db.open();
+    return db;
+}
+
+describe('§P0.4 — the renumber: a device already at 23 still gets stripped', () => {
+    const DFES_DB = 'AgriLogDB_dfes_v23_then_v24';
+
+    beforeEach(async () => { await Dexie.delete(DFES_DB); });
+    afterEach(async () => { await Dexie.delete(DFES_DB); });
+
+    it('a_handset_that_took_DFES_v23_first_runs_the_transcript_strip_on_the_way_to_24', async () => {
+        // The farmer's phone is at 23 because DFES shipped first, and it holds a
+        // correction row written before any of this — with their speech in it.
+        const dfes = await openDfesV23(DFES_DB);
+        await dfes.table('aiCorrectionEvents').put(legacyRow('corr-dfes'));
+        expect(dfes.verno).toBe(23);
+        const before = await dfes.table('aiCorrectionEvents').get('corr-dfes');
+        expect(JSON.stringify(before)).toContain(SPOKEN);
+        dfes.close();
+
+        // This branch arrives.
+        const upgraded = await openDfesThenV24(DFES_DB);
+        const after = await upgraded.table('aiCorrectionEvents').get('corr-dfes') as Record<string, unknown>;
+        const verno = upgraded.verno;
+        upgraded.close();
+
+        expect(verno).toBe(24);
+        // THE POINT OF THE RENUMBER. Had this branch also declared 23, Dexie
+        // would have compared 23 to 23, run nothing, and left every one of these
+        // rows carrying the farmer's raw speech and worker names for ever.
+        expect(after.rawTranscript).toBeUndefined();
+        expect(after.sourceText).toBeUndefined();
+        expect(JSON.stringify(after)).not.toContain(SPOKEN);
+        expect(containsTranscriptText(after)).toBe(false);
+    });
+
+    it('DFES_own_store_survives_this_branch_arriving_after_it', async () => {
+        // v24's store list does not mention `pendingInterpretations` — it cannot,
+        // the other branch is not merged. Dexie treats an unlisted store as
+        // UNCHANGED rather than deleted, so DFES's data is safe. Asserted rather
+        // than assumed, because getting this wrong destroys a store on every
+        // device that shipped DFES first.
+        const dfes = await openDfesV23(DFES_DB);
+        await dfes.table('pendingInterpretations').put({ status: 'pending', createdAt: 'x' });
+        dfes.close();
+
+        const upgraded = await openDfesThenV24(DFES_DB);
+        const names = upgraded.tables.map(t => t.name);
+        const surviving = await upgraded.table('pendingInterpretations').count();
+        upgraded.close();
+
+        expect(names).toContain('pendingInterpretations');
+        expect(surviving).toBe(1);
+    });
+
+    it('the_ordinary_path_is_unaffected_a_device_at_22_goes_straight_to_24', async () => {
+        // Most handsets have never seen 23 at all. Dexie skips the gap.
+        const db22 = await openV22(DB_NAME);
+        await db22.table('aiCorrectionEvents').put(legacyRow('corr-22'));
+        expect(db22.verno).toBe(22);
+        db22.close();
+
+        const db24 = await openV24(DB_NAME);
+        const after = await db24.table('aiCorrectionEvents').get('corr-22') as Record<string, unknown>;
+        const verno = db24.verno;
+        db24.close();
+        await Dexie.delete(DB_NAME);
+
+        expect(verno).toBe(24);
+        expect(after.rawTranscript).toBeUndefined();
+        expect(containsTranscriptText(after)).toBe(false);
     });
 });
