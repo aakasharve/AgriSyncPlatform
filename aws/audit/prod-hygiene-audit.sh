@@ -31,9 +31,19 @@
 # audit exits 0 (round-2 finding B1). This is a NARROW exception: an unreadable
 # result for ANY OTHER reason (throttle, expired token, wrong region, a renamed
 # bucket, an unparseable response) is still CRITICAL and does NOT skip anything
-# — that distinction is the entire point of §5a and it does not go away once
-# the IAM grant lands. After the grant is applied, an AccessDenied here would
-# no longer match "the known missing grant" and would correctly become CRIT.
+# — that distinction is the entire point of §5a.
+#
+# === ROUND 3 REVIEW FINDING B001 — TEXT CORRECTED 2026-08-15 ===
+# The line this replaces claimed AccessDenied "would correctly become CRIT"
+# once the grant lands. That was FALSE and has been deleted: the check at
+# `grep -qi "AccessDenied"` (line ~194) matches on the error string alone —
+# it has no way to tell "grant never applied" apart from "grant revoked",
+# "grant scoped to the wrong bucket", or "a bucket policy Deny added later".
+# All of those produce the identical WARN + skip + exit 0, forever, whether
+# the grant has landed or not. Landing the grant does not change this
+# check's behaviour in any way — it only changes whether the WARN fires at
+# all (present vs unreadable). See the WARN text itself (~line 254) for the
+# operative instruction this correction replaces the false reassurance with.
 set -uo pipefail
 export MSYS_NO_PATHCONV=1
 
@@ -182,8 +192,22 @@ s3_get_status() {
   ec=$?
   err=$(cat "$errfile"); rm -f "$errfile"
   S3_IS_ACCESS_DENIED=0
-  if [ $ec -eq 0 ]; then
+  # === ROUND 3 REVIEW FINDING B003 — FIX APPLIED 2026-08-15 ===
+  # A real `aws` exiting 0 always writes a body. An exit 0 with EMPTY stdout
+  # (only ever seen from a broken stub in testing, but not ruled out) used to
+  # fall into the `present` branch below with S3_JSON="" — every downstream
+  # `jq` on an empty string then failed to parse, which the FORBIDDEN check's
+  # `|| echo "?"` masked into a correct-looking CRIT, but several OTHER call
+  # sites (e.g. the `[ "$X" -gt 0 ]` integer tests in 5c-5f) have no such
+  # fallback and threw a visible `integer expression expected` bash error
+  # while STILL printing a positive "OK ... matches desired" line above it —
+  # a verification claim about a lifecycle that was never actually read. Do
+  # not treat exit-0-with-empty-body as "present"; treat it as "unreadable".
+  if [ $ec -eq 0 ] && [ -n "$S3_JSON" ]; then
     S3_STATUS="present"
+  elif [ $ec -eq 0 ]; then
+    S3_STATUS="unreadable"
+    S3_ERROR="aws exited 0 but returned no body (unexpected for a real call) — treating as unreadable, not present"
   elif echo "$err" | grep -q "$not_found_marker"; then
     S3_STATUS="absent"
     S3_JSON=""
@@ -214,6 +238,25 @@ echo "## 5. S3 config drift — uploads + raw buckets"
 # point and it must survive untouched. This is verified below both ways:
 # AccessDenied -> WARN/exit 0, NoSuchBucket (a different, non-AccessDenied
 # unreadable cause) -> CRIT/exit 1 (see report for both stub commands).
+#
+# === ROUND 3 REVIEW FINDING B002 — DISCLOSED, not code-changed 2026-08-15 ===
+# "Same cause would repeat" (above) is an ASSUMPTION, stated as one: it holds
+# because this account's IAM grant is currently all-or-nothing (one policy,
+# zero S3 statements, attached to one role) — so today, if the raw-bucket
+# read is denied, every other S3 call this section makes IS denied for the
+# identical reason. It would NOT hold if the grant later lands partially or
+# scoped to only one bucket, or if a bucket policy denies only the raw
+# bucket while the uploads bucket stays readable. In that scenario this gate
+# would ALSO suppress two CRITICAL-level uploads-bucket checks that have
+# nothing to do with the raw bucket or D9 — apk/ carrying an expiry (breaks
+# live download links) and a C2-removed prefix regaining an unproven
+# deletion rule — because they live inside the same SKIP_REMAINING_5 block.
+# Measured: identical live uploads state (apk/ 30d + one C2 prefix regaining
+# an expiry), varying only the raw response: raw AccessDenied -> 0 CRIT, 1
+# WARN, exit 0; raw readable -> 2 CRIT, 3 WARN, exit 1. Moot today (zero
+# grant, so this cannot happen); worth knowing if the grant is ever applied
+# unevenly. Not fixed this round — disclosure only, per the review's ruling
+# not to redesign the discrimination logic.
 SKIP_REMAINING_5=0
 
 # ---- 5a. RAW BUCKET — D9 tripwire [the single most important check here] ----
@@ -248,11 +291,25 @@ case "$S3_STATUS" in
     ;;
   unreadable)
     if [ "$S3_IS_ACCESS_DENIED" -eq 1 ]; then
-      echo "  WARN  raw bucket ($RAW_BUCKET): lifecycle AccessDenied — the documented IAM grant"
-      echo "        (aws/audit/s3-readonly-policy-addition.json) is not applied yet. This is the EXPECTED"
-      echo "        pre-grant state, not a D9 violation. Skipping the rest of §5 (same cause would repeat)."
-      echo "        Once the grant lands, AccessDenied here becomes a genuine CRIT again — this branch"
-      echo "        only applies to the specific 'AccessDenied' signature, nothing else."
+      # === ROUND 3 REVIEW FINDING B001 — TEXT CORRECTED 2026-08-15 (this exact
+      # text reaches the founder's weekly SNS email) === The line this replaces
+      # said AccessDenied "becomes a genuine CRIT again" once the IAM grant
+      # lands. That was FALSE: this check matches on the AccessDenied error
+      # string alone (see s3_get_status() above) — it has no way to tell a
+      # grant that was never applied apart from one that was revoked, scoped to
+      # the wrong bucket, or newly denied by a bucket policy. All of those look
+      # identical and land in this exact WARN, whether the grant has landed or
+      # not. The correction below says that plainly and gives the founder the
+      # instruction the false sentence was pretending to give.
+      echo "  WARN  raw bucket ($RAW_BUCKET): lifecycle AccessDenied — matches the known signature of the"
+      echo "        undelivered IAM grant (aws/audit/s3-readonly-policy-addition.json). Skipping the rest"
+      echo "        of §5 (the same cause would repeat on every other S3 call this section makes)."
+      echo "        HONEST LIMIT: this check matches on the error string alone and CANNOT tell 'never"
+      echo "        applied' apart from 'revoked', 'scoped to the wrong bucket', or 'newly denied by a"
+      echo "        bucket policy' — all of those land here too, identically, forever."
+      echo "        IF YOU HAVE ALREADY APPLIED THE S3 READ GRANT: treat this WARN as a CRIT and"
+      echo "        investigate now — the read is being denied for a different reason, on the bucket"
+      echo "        holding farmer voice evidence under founder ruling D9."
       WARN=$((WARN+1))
       SKIP_REMAINING_5=1
     else

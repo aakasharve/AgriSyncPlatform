@@ -239,16 +239,46 @@ aws s3api list-object-versions --bucket "$BUCKET" --region "$REGION" \
   --query '{current: length(Versions[?IsLatest==`true`]), noncurrent: length(Versions[?IsLatest==`false`]), delete_markers: length(DeleteMarkers)}' \
   --output json > "${CAPTURE_DIR}/version-counts.after.json" 2>/dev/null || echo '{}' > "${CAPTURE_DIR}/version-counts.after.json"
 
+VERSION_LOSS_DETECTED=0
 if ! diff -u "${CAPTURE_DIR}/version-counts.json" "${CAPTURE_DIR}/version-counts.after.json" >/dev/null 2>&1; then
   echo "[apply-config] WARNING: object version counts changed during this run — investigate" >&2
   echo "  before ($(cat "${CAPTURE_DIR}/version-counts.json")) vs after ($(cat "${CAPTURE_DIR}/version-counts.after.json"))" >&2
   echo "  (this script's own lifecycle change cannot cause this — it only aborts" >&2
   echo "  incomplete multipart uploads — so a change here means something ELSE" >&2
   echo "  wrote or deleted objects during this run, not this script.)" >&2
+
+  # === ROUND 3 REVIEW FINDING N2 — FIX APPLIED 2026-08-15 ===
+  # A count CHANGE alone used to only ever print a WARNING to stderr and
+  # still exit 0 — including a DECREASE. On the bucket that holds 129 MB of
+  # raw farmer voice + DPDP export evidence that exists ONLY as noncurrent
+  # versions with no backup, "OK" plus exit 0 while that count is dropping
+  # actively co-signs a warning about exactly the bytes founder ruling D9
+  # protects, and this repo's own rule is that success is read from the exit
+  # code, not the log line. A count INCREASE (normal — prod keeps writing
+  # while this script runs) does not trip this; only a DECREASE in any of
+  # current/noncurrent/delete_markers does, and that is treated as fatal
+  # regardless of --apply vs dry-run (this script cannot cause it either
+  # way, so it is always something else's action worth stopping to look at).
+  for field in current noncurrent delete_markers; do
+    before="$(jq -r --arg f "$field" '.[$f] // empty' "${CAPTURE_DIR}/version-counts.json" 2>/dev/null)"
+    after="$(jq -r --arg f "$field" '.[$f] // empty' "${CAPTURE_DIR}/version-counts.after.json" 2>/dev/null)"
+    if [[ "$before" =~ ^[0-9]+$ && "$after" =~ ^[0-9]+$ ]] && [[ "$after" -lt "$before" ]]; then
+      echo "[apply-config] CRITICAL: $field DROPPED from $before to $after during this run." >&2
+      echo "  This bucket holds raw farmer voice evidence covered by founder ruling D9 (retained" >&2
+      echo "  FOREVER). A drop is a loss signal, not noise. STOP and investigate before doing anything" >&2
+      echo "  else — do not treat a later 'OK' in this run's own output as clearing this." >&2
+      VERSION_LOSS_DETECTED=1
+    fi
+  done
 fi
 
 if [[ "$DIFF_FAILED" -eq 1 ]]; then
   echo "[apply-config] FAILED — live does not match desired. Investigate before trusting this bucket's config." >&2
+  exit 1
+fi
+
+if [[ "$VERSION_LOSS_DETECTED" -eq 1 ]]; then
+  echo "[apply-config] FAILED — object versions were lost during this run (see CRITICAL lines above)." >&2
   exit 1
 fi
 
