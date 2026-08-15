@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using Accounts.Infrastructure.Persistence;
@@ -8,7 +9,6 @@ using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Migrations;
 using Npgsql;
 using ShramSafal.Infrastructure.Persistence;
-using Testcontainers.PostgreSql;
 using User.Infrastructure.Persistence;
 using Xunit;
 
@@ -20,10 +20,18 @@ namespace ShramSafal.Sync.IntegrationTests;
 /// (Testcontainers harness chosen 2026-05-01 — α path).
 ///
 /// <para>
-/// Marked <c>Trait("Category","RequiresDocker")</c>. Local environments
-/// without Docker skip these; CI runs them as part of the full
-/// integration test sweep on the GitHub Actions runner where Docker
-/// is available out of the box.
+/// <b>2026-08-15 — moved from <c>RequiresDocker</c> into the merge gate
+/// (spec: FINAL_SERVER_AUTHORITATIVE_EXECUTION_PLAN, wvfd-metric-test).</b>
+/// The doc comment below used to claim "CI runs them as part of the full
+/// integration test sweep". It did not: <c>ci-gate.yml</c>'s only test step
+/// filters <c>Category!=RequiresDocker</c>, and <c>dotnet-ci.yml</c> does the
+/// same — so this suite, the ONLY test that touches the real
+/// <c>mis.wvfd_weekly</c>, never ran on a pull request. Provisioning now
+/// follows the established 2026-07-19 <c>RequiresPostgres</c> pattern (scratch
+/// database on native/CI Postgres via
+/// <see cref="RequiresPostgresConnection"/>) instead of Testcontainers, which
+/// drops the Docker dependency and puts these assertions inside the gate.
+/// Unreachable Postgres THROWS — this suite can fail, never skip.
 /// </para>
 ///
 /// <para>
@@ -49,31 +57,78 @@ namespace ShramSafal.Sync.IntegrationTests;
 /// MIS_DropVerificationsCompatView all broken on a fresh DB.
 /// </para>
 /// </summary>
-[Trait("Category", "RequiresDocker")]
+[Trait("Category", "RequiresPostgres")]
 public sealed class AnalyticsMigrationTests : IAsyncLifetime
 {
-    // Testcontainers 4.x marks the parameterless PostgreSqlBuilder()
-    // constructor obsolete; the recommended overload takes the image
-    // tag as a constructor argument. The .WithImage() call below
-    // satisfies that intent functionally — image gets pinned the
-    // same way — but the parameterless ctor itself still emits
-    // CS0618. Suppress just this line so CI's -warnaserror passes.
-#pragma warning disable CS0618 // Type or member is obsolete
-    private readonly PostgreSqlContainer _pg = new PostgreSqlBuilder()
-        .WithImage("postgres:16-alpine")
-        .WithDatabase("agrisync_test")
-        .WithUsername("test")
-        .WithPassword("test")
-        .Build();
-#pragma warning restore CS0618
+    private string _adminConn = string.Empty;
+    private string _scratchDbName = string.Empty;
+    private string _scratchConn = string.Empty;
 
-    public Task InitializeAsync() => _pg.StartAsync();
-    public Task DisposeAsync() => _pg.DisposeAsync().AsTask();
+    public async Task InitializeAsync()
+    {
+        // Throws — never skips — when Postgres is unconfigured or unreachable.
+        _adminConn = await RequiresPostgresConnection.ResolveReachableConnectionOrThrowAsync();
+
+        _scratchDbName = $"analytics_chain_proof_{Guid.NewGuid():N}";
+        await using var admin = new NpgsqlConnection(_adminConn);
+        await admin.OpenAsync();
+
+        await using (var create = admin.CreateCommand())
+        {
+            create.CommandText = $"CREATE DATABASE \"{_scratchDbName}\"";
+            await create.ExecuteNonQueryAsync();
+        }
+
+        // Read the catalog back — never trust an unverified "it worked".
+        await using var confirm = admin.CreateCommand();
+        confirm.CommandText = "SELECT 1 FROM pg_database WHERE datname = @db";
+        confirm.Parameters.AddWithValue("db", _scratchDbName);
+        if (await confirm.ExecuteScalarAsync() is null)
+        {
+            throw new InvalidOperationException(
+                $"Analytics chain proof: scratch database '{_scratchDbName}' is absent from " +
+                "pg_database immediately after CREATE DATABASE.");
+        }
+
+        _scratchConn = new NpgsqlConnectionStringBuilder(_adminConn)
+        {
+            Database = _scratchDbName,
+        }.ConnectionString;
+    }
+
+    public async Task DisposeAsync()
+    {
+        if (string.IsNullOrEmpty(_scratchDbName) || string.IsNullOrEmpty(_adminConn))
+        {
+            return;
+        }
+
+        try
+        {
+            await using var admin = new NpgsqlConnection(_adminConn);
+            await admin.OpenAsync();
+            await using (var terminate = admin.CreateCommand())
+            {
+                terminate.CommandText =
+                    "SELECT pg_terminate_backend(pid) FROM pg_stat_activity " +
+                    "WHERE datname = @db AND pid <> pg_backend_pid()";
+                terminate.Parameters.AddWithValue("db", _scratchDbName);
+                await terminate.ExecuteNonQueryAsync();
+            }
+            await using var drop = admin.CreateCommand();
+            drop.CommandText = $"DROP DATABASE IF EXISTS \"{_scratchDbName}\"";
+            await drop.ExecuteNonQueryAsync();
+        }
+        catch
+        {
+            // Best-effort teardown; a leaked scratch DB is harmless.
+        }
+    }
 
     [Fact]
     public async Task Full_migration_chain_applies_cleanly_to_fresh_postgres()
     {
-        var conn = _pg.GetConnectionString();
+        var conn = _scratchConn;
 
         // Apply User schema first (public.users).
         var userOpts = new DbContextOptionsBuilder<UserDbContext>()
