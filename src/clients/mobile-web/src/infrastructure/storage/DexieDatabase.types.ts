@@ -83,8 +83,41 @@ export interface MutationQueueItem {
     status: MutationQueueStatus;
     createdAt: string;
     updatedAt: string;
+    /**
+     * CHARGED attempts. Gates `MAX_AUTO_RETRY_COUNT` and therefore whether the
+     * farmer is asked to act. Only a `REJECTION` increments it — a transport
+     * fault or a missing parent never judged this row (`RejectionPolicy`).
+     */
     retryCount: number;
     lastError?: string;
+    /**
+     * §P0.7 box 2c — epoch ms before which `getPending` will not offer this row.
+     *
+     * NOT INDEXED, deliberately: Dexie only needs a schema declaration for
+     * fields it indexes, so this needed no version bump — the same property
+     * `PendingAiJobRecord.nextRetryAfterMs` already relies on
+     * (`pendingAiJobs: '++id, operationType, status, createdAt, [status+createdAt]'`).
+     * A bump is one-way for APK users and must never ride along with a
+     * behaviour change.
+     *
+     * Absolute rather than relative so it survives the app being killed: after
+     * a restart hours later the deadline is simply long past, which is the
+     * right answer.
+     */
+    nextRetryAfterMs?: number;
+    /**
+     * §P0.7 box 2c — EVERY attempt, charged or not. Drives the backoff exponent
+     * and nothing else.
+     *
+     * Distinct from `retryCount` on purpose, and the distinction is the whole
+     * point: transport faults and dependency waits must not consume the cap,
+     * but they must still slow the row down, or a child whose parent is one
+     * batch behind re-asks the server every 15 seconds for free. Reading the
+     * exponent off `retryCount` would leave every uncharged failure permanently
+     * at the two-second step, i.e. no backoff at all on exactly the paths that
+     * need it most.
+     */
+    attemptCount?: number;
 }
 
 // =============================================================================

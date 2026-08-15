@@ -138,6 +138,32 @@ describe('BackgroundSyncWorker — §P0.7 box 2a: DailyLogNotFound is not the ch
         expect(child?.lastError).toContain(PARENT_LOG);
     });
 
+    it('an_uncharged_dependency_wait_is_backed_off_and_does_not_re_ask_every_cycle', async () => {
+        // Boxes 2a and 2c are a pair. 2a removes the charge, so the cap no
+        // longer bounds this row; 2c is what stops it asking four times a
+        // minute for ever. Neither is safe on its own.
+        await seedParent('SENDING');
+        const childId = await enqueueChild();
+
+        await backgroundSyncWorker.triggerNow();
+        const pushesAfterFirstCycle = pushBatchMock.mock.calls.length;
+
+        await backgroundSyncWorker.triggerNow();
+        await backgroundSyncWorker.triggerNow();
+
+        for (let call = pushesAfterFirstCycle; call < pushBatchMock.mock.calls.length; call++) {
+            const batch = pushBatchMock.mock.calls[call][0] as { mutations: Array<{ clientRequestId: string }> };
+            expect(
+                batch.mutations.some(m => m.clientRequestId === childId),
+                'a backed-off dependency wait was put straight back on the wire',
+            ).toBe(false);
+        }
+
+        const child = await readChild(childId);
+        expect(child?.retryCount).toBe(0);
+        expect(child?.nextRetryAfterMs).toBeGreaterThan(Date.now());
+    });
+
     it('child_of_a_parent_parked_in_REJECTED_USER_REVIEW_is_rejected_not_retried_forever', async () => {
         // THE TRAP. A "parent still open" rule reads this parent as open — it is
         // neither applied nor discarded — so the child would stay retryable and

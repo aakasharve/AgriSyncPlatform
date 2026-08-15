@@ -73,6 +73,9 @@ export class ConflictResolutionService {
                 status: 'PENDING',
                 updatedAt: systemClock.nowISO(),
             });
+            // §P0.7 box 2c — a tap means now; clear any earned backoff so
+            // `triggerNow()` can actually pick this row up.
+            await mutationQueue.clearBackoff(row.id);
             await backgroundSyncWorker.triggerNow();
         } else {
             // Fall back to the legacy path (for older FAILED rows that

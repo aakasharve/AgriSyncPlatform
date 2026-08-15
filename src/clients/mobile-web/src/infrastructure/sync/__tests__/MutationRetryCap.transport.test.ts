@@ -108,9 +108,30 @@ function pushCallsIncluding(clientRequestId: string): number {
     }).length;
 }
 
+/**
+ * §P0.7 box 2c — CYCLES ARE 15 SECONDS APART; THESE ONES MUST BE TOO.
+ *
+ * A `FAILED` row now carries an exponentially growing deadline (2s -> 60s
+ * ceiling) that `getPending` respects, so "one cycle, one attempt" only holds
+ * if wall-clock time actually passes between cycles. In production it does —
+ * `BackgroundSyncWorker.intervalMs` is 15000. Here the cycles complete in
+ * microseconds, so the clock is advanced explicitly past the ceiling.
+ *
+ * NOTHING THIS FILE ASSERTS IS RELAXED. Every call count, every `retryCount`
+ * arithmetic check and the cap bound are still measured exactly as before; the
+ * fixture simply stops pretending that five cycles happen in the same
+ * millisecond. `Date.now` is offset rather than frozen with fake timers so
+ * Dexie's own internals keep running on real time.
+ */
+const BACKOFF_CEILING_MS = 60000;
+let clockOffsetMs = 0;
+const realDateNow = Date.now.bind(Date);
+vi.spyOn(Date, 'now').mockImplementation(() => realDateNow() + clockOffsetMs);
+
 async function runCycles(count: number): Promise<void> {
     for (let i = 0; i < count; i++) {
         await backgroundSyncWorker.triggerNow();
+        clockOffsetMs += BACKOFF_CEILING_MS + 1000;
     }
 }
 

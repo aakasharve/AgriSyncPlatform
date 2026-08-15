@@ -23,6 +23,54 @@ const LAST_PULL_META_KEY = 'shramsafal_last_pull_payload';
  */
 export { MAX_AUTO_RETRY_COUNT };
 
+/**
+ * §P0.7 box 2c — EXPONENTIAL BACKOFF ON THE MUTATION QUEUE.
+ *
+ * `AiJobWorker` has had this since it shipped (`AiJobWorker.ts:152`) and the
+ * attachment worker has its own (`AttachmentUploadWorker.ts:11-12`). The
+ * mutation queue — the one carrying the farmer's actual records — had none: a
+ * failing row was re-pushed every 15 seconds, at full price in battery and
+ * mobile data, until it either succeeded or hit the cap.
+ *
+ * That was survivable while every failure was charged, because the cap put a
+ * ceiling of five on it. §P0.7 box 2a deliberately removes the charge from
+ * dependency waits, so without backoff a child whose parent is one batch behind
+ * would re-ask the server four times a minute FOR EVER, for free. The two
+ * changes are a pair; neither is safe alone.
+ *
+ * Same shape and same numbers as `AiJobWorker`: 2s, 4s, 8s, 16s, 32s, then a
+ * 60s ceiling. Copied rather than shared because the two queues have different
+ * attempt counters and unifying them would couple two workers that must be able
+ * to change independently.
+ */
+const BACKOFF_BASE_MS = 1000;
+const BACKOFF_CEILING_MS = 60000;
+
+export function backoffDelayMs(attemptCount: number): number {
+    return Math.min(BACKOFF_BASE_MS * Math.pow(2, attemptCount), BACKOFF_CEILING_MS);
+}
+
+/**
+ * Is this row allowed on the wire yet?
+ *
+ * A row with no `nextRetryAfterMs` is due — every row written before §P0.7, and
+ * every fresh enqueue. Absence must mean "go", never "wait", or the change
+ * would silently freeze the queue on every handset it upgraded.
+ */
+export function isMutationDue(item: Pick<MutationQueueItem, 'nextRetryAfterMs'>, nowMs: number): boolean {
+    return item.nextRetryAfterMs === undefined || item.nextRetryAfterMs <= nowMs;
+}
+
+/**
+ * The fields that put a row back in play immediately.
+ *
+ * Used everywhere the FARMER acts — "Retry All", the per-row retry, the
+ * conflict screen's retry and edit. A tap must not land behind a delay the
+ * farmer cannot see; that is the painted-door defect this codebase keeps
+ * removing (`P5`). Not used by the auto-retry path, whose whole job is to wait.
+ */
+const CLEAR_BACKOFF = { nextRetryAfterMs: undefined, attemptCount: 0 } as const;
+
 function getOrCreateDeviceId(): string {
     const existing = readDeviceId();
     if (existing) {
@@ -112,11 +160,22 @@ export class MutationQueue {
         }
     }
 
+    /**
+     * The rows the worker may put on the wire this cycle.
+     *
+     * §P0.7 box 2c — the due-time filter runs BEFORE `limit`, so a handful of
+     * backed-off rows cannot squat the batch and starve rows that are ready.
+     * `MutationQueueBackoff.test.ts` pins that ordering explicitly, because
+     * getting it the other way round is silent: the queue would simply appear
+     * to stall.
+     */
     async getPending(limit = 50): Promise<MutationQueueItem[]> {
         const db = getDatabase();
+        const nowMs = Date.now();
         const items = await db.mutationQueue
             .where('status')
             .equals('PENDING')
+            .filter((item) => isMutationDue(item, nowMs))
             .limit(limit)
             .toArray();
 
@@ -137,6 +196,7 @@ export class MutationQueue {
             status: 'APPLIED',
             updatedAt: systemClock.nowISO(),
             lastError: undefined,
+            ...CLEAR_BACKOFF,
         });
     }
 
@@ -162,11 +222,17 @@ export class MutationQueue {
         const db = getDatabase();
         const existing = await db.mutationQueue.get(id);
         const chargedRetries = existing?.retryCount ?? 0;
+        // §P0.7 box 2c — every attempt slows the row down, whatever the cap
+        // does about it. Counted separately from `retryCount` so the two
+        // deliberately-uncharged kinds still back off.
+        const attemptCount = (existing?.attemptCount ?? 0) + 1;
         await db.mutationQueue.update(id, {
             status: 'FAILED',
             updatedAt: systemClock.nowISO(),
             retryCount: kind === 'REJECTION' ? chargedRetries + 1 : chargedRetries,
             lastError: error,
+            attemptCount,
+            nextRetryAfterMs: Date.now() + backoffDelayMs(attemptCount),
         });
     }
 
@@ -241,6 +307,10 @@ export class MutationQueue {
             status: 'PENDING',
             lastError: undefined,
             updatedAt: systemClock.nowISO(),
+            // The farmer just corrected this record by hand. Making them wait
+            // out a delay earned by the bytes they have already replaced would
+            // be a penalty for fixing it.
+            ...CLEAR_BACKOFF,
         });
 
         return true;
@@ -267,7 +337,11 @@ export class MutationQueue {
      * only; `retryAllFailedByUser()` below is the farmer's uncapped path.
      */
     async markFailedAsPending(maxRetryCount = MAX_AUTO_RETRY_COUNT): Promise<void> {
-        await this.flipFailedToPending(maxRetryCount);
+        // Backoff is NOT cleared here. This is the automatic path, and the flip
+        // to PENDING is only permission to be considered — `getPending` still
+        // holds the row until its delay expires. Clearing here would make the
+        // backoff a no-op, since this runs at the top of every cycle.
+        await this.flipFailedToPending(maxRetryCount, { clearBackoff: false });
     }
 
     /**
@@ -297,10 +371,18 @@ export class MutationQueue {
      *          something true about what just happened instead of guessing.
      */
     async retryAllFailedByUser(): Promise<number> {
-        return this.flipFailedToPending(Number.POSITIVE_INFINITY);
+        // §P0.7 box 2c — a deliberate tap clears the backoff. The whole reason
+        // this method exists is that the previous version silently skipped the
+        // rows the farmer had come to the drawer about; leaving them behind a
+        // 60-second delay with no indication would recreate that defect in a
+        // new form.
+        return this.flipFailedToPending(Number.POSITIVE_INFINITY, { clearBackoff: true });
     }
 
-    private async flipFailedToPending(maxRetryCount: number): Promise<number> {
+    private async flipFailedToPending(
+        maxRetryCount: number,
+        options: { clearBackoff: boolean },
+    ): Promise<number> {
         const db = getDatabase();
         const failed = await db.mutationQueue.where('status').equals('FAILED').toArray();
         let flipped = 0;
@@ -312,11 +394,24 @@ export class MutationQueue {
             await db.mutationQueue.update(item.id, {
                 status: 'PENDING',
                 updatedAt: systemClock.nowISO(),
+                ...(options.clearBackoff ? CLEAR_BACKOFF : {}),
             });
             flipped += 1;
         }
 
         return flipped;
+    }
+
+    /**
+     * Put a row back on the wire NOW, whatever delay it had earned.
+     *
+     * The single place the "a tap means now" rule is written, so the three
+     * farmer-initiated paths that reach into `db.mutationQueue` directly
+     * (`BackgroundSyncWorker.retryFailed`, `ConflictResolutionService.retry`)
+     * cannot each forget it in their own way.
+     */
+    async clearBackoff(id: number): Promise<void> {
+        await getDatabase().mutationQueue.update(id, { ...CLEAR_BACKOFF });
     }
 
     async resetInFlightMutations(): Promise<void> {

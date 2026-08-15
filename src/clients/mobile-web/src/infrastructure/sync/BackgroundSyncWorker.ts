@@ -103,6 +103,11 @@ export class BackgroundSyncWorker {
                 status: 'PENDING',
                 updatedAt: systemClock.nowISO(),
             });
+            // §P0.7 box 2c — this is a tap, so it means NOW. Without this the
+            // row is flipped to PENDING, `triggerNow()` runs, `getPending`
+            // silently skips it for up to a minute, and the button reads as
+            // broken.
+            await mutationQueue.clearBackoff(failedItem.id);
             await this.triggerNow();
         }
     }
