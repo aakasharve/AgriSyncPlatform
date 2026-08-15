@@ -42,9 +42,12 @@ name: zap-baseline
 #   removed. Instead — verified read-only against live IAM before writing
 #   this, not assumed — this job now assumes the SAME `agrisync-prod-audit`
 #   OIDC role the weekly hygiene audit already uses (its trust policy is
-#   scoped by branch, `repo:aakasharve/AgriSyncPlatform:ref:refs/heads/main`,
-#   not by workflow file, so any workflow running on `main` — which this one
-#   must, for its cron trigger to fire at all — can assume it; its
+#   scoped by branch, not by workflow file — `aws iam get-role` shows the
+#   StringLike condition on token.actions.githubusercontent.com:sub lists
+#   BOTH `repo:aakasharve/AgriSyncPlatform:ref:refs/heads/main` AND
+#   `...ref:refs/heads/akash_edits`, so any workflow running on either of
+#   those two branches can assume it; this one's cron trigger only ever
+#   fires from `main`, which is covered either way); its
 #   permission policy already grants `sns:Publish` on
 #   `arn:aws:sns:ap-south-1:951921970996:shramsafal-prod-audit-alerts` with
 #   no further resource restriction) and publishes to that SAME topic on any
@@ -148,11 +151,32 @@ jobs:
             -r zap-report.html
 
       - uses: actions/upload-artifact@v4
-        if: steps.reachability.outputs.reachable == 'true'
+        # === ADDENDUM (post-round-1 review note) — FIX APPLIED ===
+        # This used to be `if: steps.reachability.outputs.reachable == 'true'`
+        # alone. GitHub implicitly ANDs an unstated `success()` onto every
+        # step condition, so the upload was skipped whenever the ZAP step
+        # itself failed — precisely the FAIL-severity case a human most needs
+        # the report for. `always()` removes that implicit success() gate;
+        # `reachable == 'true'` still correctly excludes the "resolves but
+        # broken" reachability-failure path, where ZAP never ran and there is
+        # genuinely nothing to upload (that path's output is explicitly
+        # written as 'false' before its `exit 1`, so it evaluates correctly
+        # here even though the step that set it failed).
+        if: always() && steps.reachability.outputs.reachable == 'true'
         with:
           name: zap-report
           path: zap-report.html
           retention-days: 30
+          # zap-baseline.py writes the report as part of a normal scan
+          # completion (including a FAIL-severity result) before it exits
+          # with a severity-reflecting code — so the report exists in the
+          # FAIL case this fix targets. It would NOT exist if the scan
+          # crashed before writing anything (e.g. docker itself failed to
+          # start) — `warn`, not `error`, so that rarer case surfaces as a
+          # warning in this step's own log rather than a second, confusing
+          # failure stacked on top of the real one; the "Notify on failure"
+          # step below still fires either way.
+          if-no-files-found: warn
 
       - name: Staging not yet provisioned (expected — quiet by design, not a scan result)
         # Only reached when the reachability step succeeded AND classified
@@ -173,9 +197,11 @@ jobs:
           DATE=$(date -u +%F)
           SUBJECT="[AgriSync ZAP Scan] FAILED - $DATE"
           MESSAGE="zap-baseline.yml job failed for target ${{ steps.reachability.outputs.target || 'unknown' }}.
-          Cause is one of: the target resolves but refused/timed out/errored (see the 'Check target
-          reachability' step), or the ZAP scan itself crashed or found FAIL-severity issues (see the
-          'ZAP baseline scan' step and the uploaded zap-report artifact, if it exists).
+          Cause is one of two shapes: (1) the target RESOLVED but refused/timed out/errored -- see the
+          'Check target reachability' step; no scan ran, so there is NO zap-report artifact this run.
+          (2) the target was reachable and the ZAP scan ran -- see the 'ZAP baseline scan' step; the
+          zap-report artifact IS uploaded whenever the scan completes (including a FAIL-severity
+          result), and is only absent if the scan crashed before writing anything.
           Run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
           echo "Publishing: $SUBJECT"
           aws sns publish --region "${AWS_REGION}" \
