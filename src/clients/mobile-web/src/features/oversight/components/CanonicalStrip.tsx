@@ -171,6 +171,7 @@ const CanonicalStrip: React.FC<CanonicalStripProps> = ({
                     </span>
                     {englishCaption && (
                         <span
+                            data-testid="canonical-strip-waiting-caption"
                             className={`block truncate text-[9px] font-bold uppercase leading-tight tracking-wide ${
                                 isWaiting ? 'text-amber-50/80' : 'text-stone-400'
                             }`}

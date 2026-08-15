@@ -37,16 +37,23 @@ function baseProps(overrides: Partial<CanonicalStripProps> = {}): CanonicalStrip
 describe('CanonicalStrip', () => {
     it('waiting_button_keeps_its_height_in_both_states', () => {
         // Spec §2.2: "Rest state keeps its exact place and size ... The
-        // layout never reshuffles, so the strip is a fixed landmark." Both
-        // renders must produce the SAME min-height on the SAME button — a
-        // farmer must never see it shrink, move, or disappear at rest.
-        const { unmount } = render(<CanonicalStrip {...baseProps({ waitingCount: 0 })} />);
+        // layout never reshuffles, so the strip is a fixed landmark." The
+        // scenario this protects against is `waitingCount` changing on a
+        // LIVE header instance (0 -> 6 as records arrive), not two
+        // isolated mounts — so this uses `rerender()` on one instance, not
+        // two separate `render()` calls.
+        const { rerender } = render(<CanonicalStrip {...baseProps({ waitingCount: 0 })} />);
         const restButton = screen.getByTestId('canonical-strip-waiting-button');
         expect(restButton).toHaveStyle({ minHeight: '52px' });
-        unmount();
 
-        render(<CanonicalStrip {...baseProps({ waitingCount: 6 })} />);
+        rerender(<CanonicalStrip {...baseProps({ waitingCount: 6 })} />);
         const waitingButton = screen.getByTestId('canonical-strip-waiting-button');
+
+        // The identity assertion is the one that actually catches a
+        // conditional unmount/remount across the branch — a node that
+        // merely happens to carry the same height, but is a NEW node, would
+        // still be a reflow a farmer can see.
+        expect(waitingButton).toBe(restButton);
         expect(waitingButton).toHaveStyle({ minHeight: '52px' });
     });
 
@@ -128,5 +135,33 @@ describe('CanonicalStrip', () => {
 
         expect(screen.getByText(oversightTranslations.en.waitingLabel)).toBeInTheDocument();
         expect(screen.queryByText(oversightTranslations.mr.waitingLabel)).not.toBeInTheDocument();
+    });
+
+    it('marathi_mode_shows_an_english_caption_that_derives_from_the_same_placeholder_key', () => {
+        // Spec §6.2: unapproved placeholder copy "ship[s] ... with the
+        // English fallback visible." Proves the caption is literally
+        // `oversightTranslations.en[<same key as the primary Marathi
+        // line>]` (uppercased) — not a second, independently-invented
+        // literal — for both the waiting and the rest label.
+        const { rerender } = render(<CanonicalStrip {...baseProps({ language: 'mr', waitingCount: 6 })} />);
+        expect(screen.getByTestId('canonical-strip-waiting-caption')).toHaveTextContent(
+            oversightTranslations.en.waitingLabel.toUpperCase(),
+        );
+
+        rerender(<CanonicalStrip {...baseProps({ language: 'mr', waitingCount: 0 })} />);
+        expect(screen.getByTestId('canonical-strip-waiting-caption')).toHaveTextContent(
+            oversightTranslations.en.restState.toUpperCase(),
+        );
+    });
+
+    it('english_mode_does_not_double_up_the_caption', () => {
+        // In English mode the primary label already IS
+        // `oversightTranslations.en.waitingLabel` — a second, uppercase copy
+        // directly beneath it would be a literal duplicate, so no caption
+        // node should render at all.
+        render(<CanonicalStrip {...baseProps({ language: 'en', waitingCount: 6 })} />);
+
+        expect(screen.queryByTestId('canonical-strip-waiting-caption')).not.toBeInTheDocument();
+        expect(screen.getAllByText(oversightTranslations.en.waitingLabel)).toHaveLength(1);
     });
 });
