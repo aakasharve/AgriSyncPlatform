@@ -174,12 +174,28 @@ public sealed class RlsExemptionAllowlistTests
         "organization_farm_scopes",
 
         // Farm-adjacent metadata that lives outside the farms table
-        // proper. Each has a deterministic FK to a farm and is
-        // accessed only via that join in the application layer —
-        // adding an EXISTS-policy here would be a defence-in-depth
-        // upgrade but is not strictly load-bearing today (no direct
-        // SELECT path exists). Tracked for a follow-up RLS pass.
-        "farm_boundaries",
+        // proper.
+        //
+        // 🛑 CORRECTED (FINAL_SERVER_AUTHORITATIVE_EXECUTION_PLAN §P0.3).
+        // This entry used to read "accessed only via that join in the
+        // application layer … no direct SELECT path exists" and used to
+        // cover farm_boundaries as well. Both halves were false.
+        //   - farm_boundaries had a direct SELECT
+        //     (ShramSafalRepository.GetActiveFarmBoundaryAsync) from the
+        //     day the table shipped, and is now RLS-enabled + FORCEd by
+        //     20260815115414_AddFarmBoundariesRls — removed from this list.
+        //   - The two entries that REMAIN have direct SELECT paths too:
+        //     FarmInvitationRepository.GetActiveInvitationByFarmAsync reads
+        //     ssf.farm_invitations directly, and GetTokenByHashAsync reads
+        //     ssf.farm_join_tokens keyed on the token hash ALONE, with no
+        //     farm in the predicate at all. So the reason they sit outside
+        //     the gate is NOT "there is no direct read" — it is that nobody
+        //     has yet chosen the policy shape (a join-invite flow is read by
+        //     a caller who is deliberately NOT yet a member of the farm, so
+        //     a farm_id-keyed policy would break the invite it is meant to
+        //     protect). That is a real open design question, recorded here
+        //     honestly rather than papered over. Tracked for a follow-up
+        //     RLS pass; do not restore the old justification.
         "farm_invitations",
         "farm_join_tokens",
 

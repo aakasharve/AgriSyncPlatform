@@ -754,14 +754,27 @@ public sealed class AuditEventIsolationRealPostgresTests(Xunit.Abstractions.ITes
     {
         await AssertAppRoleIsNotVacuousAsync();
 
-        // ── The rollback below must revert THIS migration and nothing else. If a
-        //    later migration is ever added, fail loudly here rather than silently
-        //    reverting unrelated work inside a security proof.
+        // ── RETARGETED, not deleted (§P0.3). The guard originally required the
+        //    TRUNCATE revoke to be the LAST ShramSafal migration, because the
+        //    roll-back below reverts everything after its target. A later
+        //    migration has now landed (20260815061537_AddFarmBoundariesRls), so
+        //    the rollback sweeps that one too and re-applies it immediately.
+        //    That is reviewed and safe — AddFarmBoundariesRls is pure DDL on
+        //    ssf.farm_boundaries with a symmetric Down(), touches nothing this
+        //    fact asserts about ssf.audit_events, and this scratch database is
+        //    created and dropped per [Fact]. The guard's job is unchanged: any
+        //    UNREVIEWED migration landing after the revoke must fail here
+        //    loudly rather than be silently reverted inside a security proof.
+        //    Add it to the list below only after checking its Down() is safe to
+        //    run mid-proof. Do not delete this guard.
+        var appliedAfterRevoke = await ReadSsfMigrationsAppliedAfterAsync(RevokeTruncateMigrationId);
+        appliedAfterRevoke.Should().BeSubsetOf(ReviewedMigrationsAfterRevokeTruncate,
+            "this fact drives the migrator back PAST the TRUNCATE revoke and forward again, so every "
+            + "migration applied after it is reverted and re-applied inside this proof. Each one must "
+            + "have been reviewed for a safe Down(); retarget or extend the reviewed list — do not "
+            + "delete this guard. Unreviewed: "
+            + string.Join(", ", appliedAfterRevoke.Except(ReviewedMigrationsAfterRevokeTruncate)));
         var lastApplied = await ReadLastAppliedSsfMigrationAsync();
-        lastApplied.Should().Be(RevokeTruncateMigrationId,
-            "this fact drives the migrator back one step and forward again. That is only safe while "
-            + "the TRUNCATE revoke is the LAST ShramSafal migration. When a newer one lands, retarget "
-            + "the rollback — do not delete this guard");
 
         // ── The scratch/production divergence, recorded as data so it cannot be
         //    forgotten by the next reader (see the docstring).
@@ -883,6 +896,33 @@ public sealed class AuditEventIsolationRealPostgresTests(Xunit.Abstractions.ITes
 
     private const string RevokeTruncateMigrationId = "20260815052139_RevokeTruncateOnAuditEvents";
     private const string MigrationBeforeRevokeTruncate = "20260814214715_TightenAuditEventsTenantPolicyUsing";
+
+    /// <summary>
+    /// ShramSafal migrations that land AFTER the TRUNCATE revoke and have been
+    /// reviewed as safe to revert and re-apply inside this proof (symmetric
+    /// <c>Down()</c>, no dependency on <c>ssf.audit_events</c> state).
+    /// </summary>
+    private static readonly string[] ReviewedMigrationsAfterRevokeTruncate =
+    [
+        // §P0.3 — ENABLE + FORCE RLS and one tenant policy on
+        // ssf.farm_boundaries. Down() drops the policy and disables RLS.
+        "20260815061537_AddFarmBoundariesRls",
+    ];
+
+    /// <summary>
+    /// Every applied ShramSafal migration that sorts after <paramref name="migrationId"/>,
+    /// asked through EF so the history-table location is not hardcoded.
+    /// </summary>
+    private async Task<List<string>> ReadSsfMigrationsAppliedAfterAsync(string migrationId)
+    {
+        var opts = new DbContextOptionsBuilder<ShramSafalDbContext>().UseNpgsql(_superuserConn).Options;
+        await using var ctx = new ShramSafalDbContext(opts);
+        var applied = await ctx.Database.GetAppliedMigrationsAsync();
+        return applied
+            .Where(m => string.CompareOrdinal(m, migrationId) > 0)
+            .OrderBy(m => m, StringComparer.Ordinal)
+            .ToList();
+    }
 
     /// <summary>
     /// Drives EF's own migrator on the ShramSafal context. <c>null</c> means
