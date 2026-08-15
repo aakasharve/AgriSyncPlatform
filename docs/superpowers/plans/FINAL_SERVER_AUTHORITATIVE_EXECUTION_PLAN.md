@@ -647,6 +647,81 @@ working as designed.
       nothing (so the version silently resets to 1 and the prior boundary is never archived), and the
       write throws `42501`** — an availability *and* integrity break. The draft had these tasks in the
       wrong order.
+
+> ## 🔬 REPRODUCED AT RUNTIME 2026-08-15 — six corrections. **This block outranks the prose above it.**
+>
+> **1. 🔴 SAVING A FARM BOUNDARY 500s FOR EVERY FARMER, TODAY. This is a LIVE availability defect,
+> not a latent one, and it has nothing to do with RLS.** Measured against a real JWT for the farm's
+> `PrimaryOwner`: `GET /farms/{id}` → **200**, `PUT /farms/{id}/boundary` → **500**, nothing written.
+> ```
+> InvalidOperationException: TenantConnectionInterceptor: no tenant claim set and not in admin scope.
+>   TenantConnectionInterceptor.cs:125 ← ShramSafalRepository.GetFarmByIdAsync:45
+>   ← UpdateFarmBoundaryAuthorizer:45 ← AuthorizationBehavior:38
+> ```
+> It dies on the **first DbCommand of the authorization stage** and never reaches the handler.
+> **Attributable:** `69262b9f` (2026-06-09) added `EstablishForCallerAsync` to three `FarmEndpoints`
+> routes — **all GETs**, per its own scope line *"farm **reads**"*. The PUT was missed, and has been
+> dead since FORCE-RLS landed on `ssf.farms`. **Two live client call sites hit it:**
+> `BackendFarmGeographyClient.ts:223` and `inviteApi.ts:254`.
+> ⚠️ **Measured on dev.** The failing code path is environment-independent, so production is very
+> likely identical — **but that is inference. Confirm against production before asserting it.**
+>
+> **2. 🛑 THE PLAN'S STATED FAILURE MODE IS NOT REACHABLE TODAY — and step two must not defend the
+> wrong thing.** The route 500s at `ssf.farms` before `farm_boundaries` is ever queried, so landing
+> the policy first is **inert, not destructive.** The ordering instruction is still right; the
+> mechanism is different:
+> > **The integrity break fires if someone "wires the scope" by adding `/shramsafal/farms` to
+> > `SkipPathPrefixes` instead of injecting `ICallerFarmTenantScope`.** Admin elevation makes the
+> > interceptor a no-op that sets **no GUC**, so with a policy in place the read filters to nothing →
+> > `?? 0` gives version 1 → `?.Archive` no-ops → the insert fails. **The skip-list is the tempting
+> > one-line shortcut, and it is the trap.**
+>
+> **3. Lines 77-79 of `UpdateFarmBoundaryHandler.cs` are the entire hazard.** `nextVersion` and
+> `activeBoundary?.Archive(...)` both derive from **one RLS-filtered read**, and both degrade
+> *silently* — `?? 0` and `?.` are the failure mode, not an exception. A partial unique index
+> (`ux_farm_boundaries_active_farm_id`) is a second backstop that would raise `23505`.
+> **The assertion that matters is the SECOND `PUT`:** version must reach `2` and the prior row must
+> archive. **A single-write test passes trivially and proves nothing.**
+>
+> **4. `FORCE`'s real justification is TABLE OWNERSHIP, and the plan's "no such GRANT exists"
+> sentence is WITHDRAWN as written.** `GRANT agrisync_owner TO agrisync_app` is not in migration code,
+> but it **is** documented in-repo (`2026-07-19-labour-deploy-handoff.md:210,229,407`) and is **live in
+> the database** (`pg_has_role → t`). The plan did not invent the relationship; it failed to find it.
+> **The stronger fact it missed: `agrisync_app` directly OWNS the `ssf` tables** (`pg_class.relowner`),
+> and **a table owner bypasses `ENABLE`-only RLS.** So `FORCE` is load-bearing on ownership alone —
+> state that, verifiable in one `pg_class` query. Neither role attribute is the reason
+> (`rolsuper=f`, `rolbypassrls=f`).
+>
+> **5. 🔴 UNFILED PRIVILEGE DEFECT — file it, do NOT fix it here.** Two independent measured routes to
+> policy bypass: `agrisync_app` is a **member of `agrisync_owner`**, and `agrisync_app` **owns the
+> tables**. Either lets the runtime role `DROP POLICY` or `ALTER TABLE … NO FORCE`, which `FORCE`
+> cannot prevent. *(Dev-measured; prod is asserted-but-unverified by the handoff doc.)*
+>
+> **6. The allowlist justification is ALREADY FALSE and must be corrected, not deleted.** It claims
+> `farm_boundaries` is *"accessed only via that join … no direct SELECT path exists"*. There **is** a
+> direct `SELECT` (`ShramSafalRepository.cs:35-41`), and has been since the table shipped. The D6
+> expiry condition is right; the prose defending it is wrong, **and the same wrong prose still covers
+> `farm_invitations` and `farm_join_tokens` after `farm_boundaries` is removed.**
+>
+> ### 🛑 ENVIRONMENT FACT THAT INVALIDATES A BRIEFING PREMISE
+> **The dev database is 11 migrations behind, and starting the backend does NOT apply them.**
+> `Program.cs:944-985` gates every migration call on `!IsDevelopment()`. Measured: **91** migration
+> files in the repo, **80** rows in `ssf.__ef_migrations`; neither P0.2 migration is applied.
+> **Step two must run `dotnet ef database update` explicitly.** Any earlier statement that startup
+> auto-migrates in Development is wrong.
+>
+> ### The sequence step two must follow
+> 1. **Wire the scope via `ICallerFarmTenantScope` — NEVER via the skip-list.** Mirror
+>    `FarmEndpoints.cs:52-70`. It is the only mechanism that sets both `agrisync.farm_id` and
+>    `agrisync.owner_account_id` after an RLS-gated membership check.
+>    **Authorization overlap to respect:** `CallerFarmTenantScope` forbids non-**members**;
+>    `UpdateFarmBoundaryAuthorizer` requires **owner**. Scope runs first and **is not the ownership gate.**
+> 2. **Prove it at runtime — the same `PUT` returns 200 and one row lands at `version = 1`.**
+>    Baseline is a 500 and zero rows, so the delta is unambiguous.
+> 3. **Then** the migration: `ENABLE` + `FORCE`, policy on the direct `farm_id` column, **house shape —
+>    match, do not invent.**
+> 4. **Prove versioning survives the policy on the SECOND write** (§3 above).
+> 5. **Edit the allowlist deliberately**, and fix the surviving comment (§6 above).
 - [ ] Migration: `ENABLE` + `FORCE` row level security; policy on the direct `farm_id` column.
       Doctrine `F8` does **not** apply — the tenant column already exists, so no `EXISTS` check is needed.
       > **Two justifications in the draft were wrong and are withdrawn.**
