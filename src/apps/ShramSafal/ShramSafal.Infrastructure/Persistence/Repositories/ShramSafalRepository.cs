@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Npgsql;
 using AgriSync.BuildingBlocks.Persistence;
 using AgriSync.SharedKernel.Contracts.Ids;
 using AgriSync.SharedKernel.Contracts.Roles;
@@ -1411,62 +1412,159 @@ internal sealed class ShramSafalRepository(ShramSafalDbContext db) : IShramSafal
     /// (<c>ai_jobs.raw_input_ref</c>).
     /// </para>
     /// <para>
-    /// <b>Why raw SQL with <c>ON CONFLICT DO NOTHING</c> rather than an EF
-    /// add.</b> Two reasons, both about not failing.
-    /// (1) <i>Idempotency under concurrency.</i> An EF
-    /// read-then-add races: two parallel requests for the same
-    /// <c>(sha256, user)</c> both see "absent" and the second insert dies on
-    /// the composite PK. <c>ON CONFLICT</c> resolves that in the engine.
-    /// (2) <i>RLS.</i> <c>ssf.raw_blob_subjects</c> is FORCE RLS and
-    /// user-scoped, so an EF existence check would not see another subject's
-    /// row and would then attempt a duplicate insert. <c>DO NOTHING</c> needs
-    /// no policy-visible read of the conflicting row.
-    /// </para>
-    /// <para>
     /// <b>Why the linkage is NOT conditional on the ref-count increment.</b>
     /// The two answer different questions and are deliberately decoupled:
     /// <c>ref_count</c> counts persist events for a blob, the linkage counts
     /// DISTINCT subjects of it. Gating the insert on "was this a first
     /// sighting" would mean the SECOND farmer to upload an identical clip is
     /// never linked — precisely the many-to-many case this table exists for.
-    /// So the increment happens every call (behaviour unchanged) and the
-    /// linkage upsert happens every call, each idempotent on its own key.
     /// </para>
     /// <para>
     /// <b>A null subject writes no row.</b> Absence means unknown. No
     /// placeholder, no <see cref="Guid.Empty"/>, no minted GUID.
+    /// </para>
+    /// <para>
+    /// <b>Why neither write uses <c>ON CONFLICT</c>, despite that being the
+    /// obvious idiom.</b> MEASURED on this schema as <c>agrisync_app</c>, with
+    /// a committed <c>raw_blob_index</c> row that the tenant's RLS policy hides:
+    /// plain <c>INSERT</c> → <c>23505</c>; <c>ON CONFLICT … DO NOTHING</c> →
+    /// <c>ERROR: new row violates row-level security policy</c>;
+    /// <c>ON CONFLICT … DO UPDATE</c> → same error; bare <c>UPDATE</c> →
+    /// <c>UPDATE 0</c>, no error. <c>ON CONFLICT</c> needs the conflicting row
+    /// to be policy-visible, and under <c>p_tenant_raw_blob_index</c> —
+    /// an EXISTS-join to <c>ssf.ai_jobs</c> keyed on <c>agrisync.farm_id</c> —
+    /// another farm's row is not. So the conflict is absorbed with a SAVEPOINT
+    /// instead, which needs no visibility at all.
     /// </para>
     /// </remarks>
     public async Task UpsertRawBlobIndexAsync(RawBlobRef blobRef, Guid? subjectUserId, CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(blobRef);
 
-        var existing = await db.RawBlobIndices
-            .FirstOrDefaultAsync(x => x.Sha256 == blobRef.Sha256, ct);
+        await UpsertBlobIndexRowAsync(blobRef, ct);
 
-        if (existing is not null)
-        {
-            existing.IncrementRefCount();
-        }
-        else
-        {
-            await db.RawBlobIndices.AddAsync(RawBlobIndexEntry.New(blobRef), ct);
-        }
-
+        // Flush any tracked work the caller had pending, preserving the
+        // durability contract this method has always advertised. A no-op in
+        // practice — the orchestrator upserts BEFORE adding the AiJob — but
+        // free, and removing it would be a silent behaviour change for any
+        // future caller that does have state in flight.
         await db.SaveChangesAsync(ct);
 
         // The index row is now durable, so the FK on the linkage row resolves.
+        // (FK checks bypass RLS by design, so this holds even when the index
+        // row belongs to a different tenant and is invisible here.)
         if (subjectUserId is not { } userId || userId == Guid.Empty)
         {
             return;
         }
 
-        await db.Database.ExecuteSqlRawAsync(
+        await InsertIgnoringDuplicateAsync(
             @"INSERT INTO ssf.raw_blob_subjects (sha256, user_id, first_seen_utc)
-              VALUES ({0}, {1}, {2})
-              ON CONFLICT (sha256, user_id) DO NOTHING;",
-            new object[] { blobRef.Sha256, userId, DateTime.UtcNow },
+              VALUES ({0}, {1}, {2});",
+            [blobRef.Sha256, userId, DateTime.UtcNow],
             ct);
+    }
+
+    /// <summary>
+    /// §P0.9 — create-or-increment the <c>ssf.raw_blob_index</c> row without
+    /// ever throwing, so the subject linkage that follows it always gets to run.
+    ///
+    /// <para>
+    /// <b>The bug this replaces.</b> The previous EF read-then-write was
+    /// <c>FirstOrDefaultAsync</c> → <c>Add</c> or <c>IncrementRefCount</c>. That
+    /// read is RLS-filtered. When farmer B uploads bytes identical to farmer A's
+    /// earlier clip, B cannot see A's index row, so EF took the INSERT branch
+    /// and Postgres raised <c>23505</c>;
+    /// <c>AiOrchestrator.TryPersistRawBlobAsync</c> swallowed it, and B got no
+    /// linkage row and no <c>ai_jobs.raw_input_ref</c>. The flagship
+    /// many-to-many case — the entire reason this is a join table — produced
+    /// nothing in production. Two users uploading identical bytes concurrently
+    /// hit the same shape.
+    /// </para>
+    ///
+    /// <para>
+    /// <b>UPDATE first, then INSERT.</b> The UPDATE is the atomic form of the
+    /// old increment (it also fixes the read-modify-write lost-update race the
+    /// EF version had). It affects 0 rows when the row is absent OR hidden —
+    /// neither is an error. Only then do we try to create it.
+    /// </para>
+    ///
+    /// <para>
+    /// <b>Known, deliberate limitation.</b> When the row exists but is hidden
+    /// from this tenant, <c>ref_count</c> is NOT incremented — the UPDATE
+    /// matched nothing and the INSERT hit a duplicate. That undercount is a
+    /// property of <c>p_tenant_raw_blob_index</c>, not of this method, and
+    /// fixing it means changing that policy (out of scope for §P0.9). It is
+    /// strictly better than the previous behaviour, where the same case threw
+    /// and cost us the subject linkage as well as the increment.
+    /// </para>
+    /// </summary>
+    private async Task UpsertBlobIndexRowAsync(RawBlobRef blobRef, CancellationToken ct)
+    {
+        var incremented = await db.Database.ExecuteSqlRawAsync(
+            "UPDATE ssf.raw_blob_index SET ref_count = ref_count + 1 WHERE sha256 = {0};",
+            [blobRef.Sha256],
+            ct);
+
+        if (incremented > 0)
+        {
+            return;
+        }
+
+        // First sighting (or a sighting of a row this tenant cannot see). The
+        // domain factory still governs the initial state — RefCount=1 and the
+        // FirstSeenUtc stamp come from RawBlobIndexEntry.New, not from SQL.
+        var entry = RawBlobIndexEntry.New(blobRef);
+
+        await InsertIgnoringDuplicateAsync(
+            @"INSERT INTO ssf.raw_blob_index
+                  (sha256, s3_key, content_type, size_bytes, first_seen_utc, ref_count)
+              VALUES ({0}, {1}, {2}, {3}, {4}, {5});",
+            [entry.Sha256, entry.S3Key, entry.ContentType, entry.SizeBytes, entry.FirstSeenUtc, entry.RefCount],
+            ct);
+    }
+
+    /// <summary>
+    /// Run an INSERT, treating a unique violation as success (the row is
+    /// already there — possibly invisible to this tenant under RLS).
+    ///
+    /// <para>
+    /// The SAVEPOINT is load-bearing, not defensive. In Postgres a failed
+    /// statement poisons the whole transaction — every later command answers
+    /// <c>25P02 current transaction is aborted</c> — and these writes run inside
+    /// the per-request transaction <c>TenantTransactionMiddleware</c> opened. So
+    /// catching <c>23505</c> without a savepoint would convert one duplicate
+    /// blob into a failure of the entire request. Rolling back to the savepoint
+    /// discards only the failed INSERT.
+    /// </para>
+    ///
+    /// <para>
+    /// With no ambient transaction each statement is its own implicit
+    /// transaction, so a failure is already contained and no savepoint is
+    /// needed — hence the null check rather than an assumption.
+    /// </para>
+    /// </summary>
+    private async Task InsertIgnoringDuplicateAsync(string sql, object[] parameters, CancellationToken ct)
+    {
+        var transaction = db.Database.CurrentTransaction;
+        var savepoint = transaction is null ? null : "sp_blob_upsert_" + Guid.NewGuid().ToString("N");
+
+        if (transaction is not null)
+        {
+            await transaction.CreateSavepointAsync(savepoint!, ct);
+        }
+
+        try
+        {
+            await db.Database.ExecuteSqlRawAsync(sql, parameters, ct);
+        }
+        catch (PostgresException ex) when (ex.SqlState == PostgresErrorCodes.UniqueViolation)
+        {
+            if (transaction is not null)
+            {
+                await transaction.RollbackToSavepointAsync(savepoint!, ct);
+            }
+        }
     }
 
     // --- SARVAM_PRIMARY_VOICE_PIPELINE Task 2.10 (transcript idempotency) ---

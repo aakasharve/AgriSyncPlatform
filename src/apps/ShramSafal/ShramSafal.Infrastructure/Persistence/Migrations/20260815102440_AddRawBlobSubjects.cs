@@ -138,56 +138,144 @@ namespace ShramSafal.Infrastructure.Persistence.Migrations
                 table: "raw_blob_subjects",
                 column: "user_id");
 
-            // ── 2. Backfill from ai_jobs, honestly ───────────────────────
+            // ── 2. GRANTs — without these the table is silently unwritable ──
+            //
+            // MEASURED, not defensive: without this block the runtime app role
+            // gets `ERROR: permission denied for table raw_blob_subjects`
+            // (42501) on every insert, and AiOrchestrator.TryPersistRawBlobAsync
+            // swallows it. The linkage would be dead on arrival in exactly the
+            // silent way ssf.correction_events was.
+            //
+            // Why the schema-wide defaults do not cover it: the GRANTs in
+            // 20260515090000_BootstrapDbRoles are `ALTER DEFAULT PRIVILEGES FOR
+            // ROLE <the role that ran THAT migration>`, and those defaults apply
+            // only to tables subsequently created BY that same role. Migrations
+            // now run under the *_Migration connection (the superuser), so any
+            // table created from here on inherits nothing.
+            //
+            // This is not unique to this table — ssf.field_operators,
+            // ssf.field_operator_work_rows and ssf.labour_corrections (all added
+            // 2026-08-11) currently have `relacl IS NULL` for the same reason.
+            // Those are outside this task; they are reported, not fixed here.
+            //
+            // Idempotent and role-guarded: a database where the roles were never
+            // bootstrapped (some test harnesses) skips instead of failing.
+            migrationBuilder.Sql(@"
+DO $$
+BEGIN
+    IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'agrisync_app') THEN
+        GRANT SELECT, INSERT, UPDATE, DELETE ON ssf.raw_blob_subjects TO agrisync_app;
+    END IF;
+    IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'agrisync_readonly') THEN
+        GRANT SELECT ON ssf.raw_blob_subjects TO agrisync_readonly;
+    END IF;
+END $$;
+");
+
+            // ── 3. Backfill from ai_jobs, honestly ───────────────────────
             //
             // Two recorded links exist between an AiJob and a blob, populated by
             // different code paths, so both are used:
             //   raw_input_ref      — stamped by AiOrchestrator from
-            //                        blobRef.Sha256; matched with LIKE to mirror
-            //                        the existing p_tenant_raw_blob_index policy,
-            //                        which allows for a prefixed form.
+            //                        blobRef.Sha256 (AiOrchestrator.cs:133/319/980),
+            //                        so in practice it IS the bare 64-char hash.
             //   input_content_hash — the hash ErasureWorker itself collects.
             // Neither is invented. A row appears here only because ai_jobs had
             // already asserted that relationship.
             //
-            // FORCE RLS applies to the table owner too, and the tenant GUCs are
-            // unset during a migration, so both policies would match zero rows
-            // and this backfill would report success having linked nothing —
-            // the same trap 20260815080242 documents. Lift FORCE for the
-            // statement and put it straight back.
+            // ⚠️ DEPLOY-TIME LOCK — why this is a UNION of equality joins and
+            // not the obvious single `OR`.
+            //
+            // Migrations run at process start (Program.cs:944-985), so anything
+            // slow here delays the whole API coming up. The natural phrasing —
+            //     ON j.input_content_hash = b.sha256
+            //     OR j.raw_input_ref LIKE '%' || b.sha256 || '%'
+            // — cannot be answered by a hash or merge join, because an OR across
+            // two different columns has no single join key. Postgres falls back
+            // to a nested loop running a LIKE with a 64-char needle for every
+            // (blob × job) pair. On a populated production ai_jobs that is
+            // O(n·m) while the table is locked (see below), i.e. minutes of
+            // downtime at startup. Splitting into UNION'd branches lets each
+            // branch use an equality hash join. The LIKE survives only as a
+            // third branch restricted to `length(raw_input_ref) <> 64`, which
+            // matches no row that the equality branch already covered and is
+            // expected to match nothing at all.
+            //
+            // The FORCE-RLS lift is likewise now conditional. FORCE applies to
+            // the table owner, so a non-superuser migration runner would read
+            // zero rows and this backfill would report success having linked
+            // nothing (the trap 20260815080242 documents). But
+            // `ALTER TABLE ... NO FORCE ROW LEVEL SECURITY` takes an ACCESS
+            // EXCLUSIVE lock held to COMMIT — it blocks every reader and writer
+            // of ssf.ai_jobs for the duration. A superuser bypasses RLS anyway,
+            // so when the runner can bypass we skip the ALTER entirely and take
+            // no lock at all. On this deployment migrations run as the
+            // superuser, so the locking branch is not expected to execute.
+            //
+            // SAFE ROLLOUT if the locking branch ever does run on a populated
+            // database: apply this migration out-of-band (psql, off the startup
+            // path) during a maintenance window rather than letting it run at
+            // boot, and check `select count(*) from ssf.ai_jobs` first.
+            // UNMEASURED on production data — prod is hibernated.
             migrationBuilder.Sql(@"
-ALTER TABLE ssf.raw_blob_index NO FORCE ROW LEVEL SECURITY;
-ALTER TABLE ssf.ai_jobs        NO FORCE ROW LEVEL SECURITY;
+DO $$
+DECLARE
+    can_bypass_rls boolean;
+BEGIN
+    SELECT rolsuper OR rolbypassrls INTO can_bypass_rls
+      FROM pg_roles WHERE rolname = current_user;
 
-INSERT INTO ssf.raw_blob_subjects (sha256, user_id, first_seen_utc)
-SELECT b.sha256,
-       j.user_id,
-       -- The blob's own first-seen timestamp is the honest value: it is when
-       -- these bytes were first recorded, which is what the column means.
-       -- now() would assert the subject was first seen at migration time.
-       b.first_seen_utc
-  FROM ssf.raw_blob_index b
-  JOIN ssf.ai_jobs j
-    ON (
-         j.input_content_hash = b.sha256
-      OR j.raw_input_ref LIKE '%' || b.sha256 || '%'
-       )
- -- Never propagate a placeholder as if it were a real subject. ai_jobs.user_id
- -- is NOT NULL, so a row that never had a real owner carries the all-zero uuid;
- -- linking that would manufacture an owner out of a sentinel. Such a blob stays
- -- unlinked and is counted as unrecoverable below, which is the truth.
- WHERE j.user_id <> '00000000-0000-0000-0000-000000000000'::uuid
- -- Degenerate guard: LIKE '%' || '' || '%' matches every row. sha256 is always
- -- 64 chars (RawBlobRef enforces it), so this can only ever exclude corruption.
-   AND length(b.sha256) = 64
- GROUP BY b.sha256, j.user_id, b.first_seen_utc
-ON CONFLICT (sha256, user_id) DO NOTHING;
+    IF NOT can_bypass_rls THEN
+        ALTER TABLE ssf.raw_blob_index NO FORCE ROW LEVEL SECURITY;
+        ALTER TABLE ssf.ai_jobs        NO FORCE ROW LEVEL SECURITY;
+    END IF;
 
-ALTER TABLE ssf.ai_jobs        FORCE ROW LEVEL SECURITY;
-ALTER TABLE ssf.raw_blob_index FORCE ROW LEVEL SECURITY;
+    INSERT INTO ssf.raw_blob_subjects (sha256, user_id, first_seen_utc)
+    -- The blob's own first-seen timestamp is the honest value: it is when these
+    -- bytes were first recorded, which is what the column means. now() would
+    -- assert the subject was first seen at migration time.
+    --
+    -- Never propagate a placeholder as if it were a real subject. ai_jobs.user_id
+    -- is NOT NULL, so a row that never had a real owner carries the all-zero
+    -- uuid; linking that would manufacture an owner out of a sentinel. Such a
+    -- blob stays unlinked and is counted as unrecoverable below — the truth.
+    SELECT b.sha256, j.user_id, b.first_seen_utc
+      FROM ssf.raw_blob_index b
+      JOIN ssf.ai_jobs j ON j.input_content_hash = b.sha256
+     WHERE j.user_id <> '00000000-0000-0000-0000-000000000000'::uuid
+       AND length(b.sha256) = 64
+
+    UNION
+
+    SELECT b.sha256, j.user_id, b.first_seen_utc
+      FROM ssf.raw_blob_index b
+      JOIN ssf.ai_jobs j ON j.raw_input_ref = b.sha256
+     WHERE j.user_id <> '00000000-0000-0000-0000-000000000000'::uuid
+       AND length(b.sha256) = 64
+
+    UNION
+
+    -- Legacy/prefixed forms only. Anything exactly 64 chars was already caught
+    -- by the equality branch above, so this scans effectively nothing.
+    SELECT b.sha256, j.user_id, b.first_seen_utc
+      FROM ssf.raw_blob_index b
+      JOIN ssf.ai_jobs j
+        ON j.raw_input_ref LIKE '%' || b.sha256 || '%'
+     WHERE j.raw_input_ref IS NOT NULL
+       AND length(j.raw_input_ref) <> 64
+       AND j.user_id <> '00000000-0000-0000-0000-000000000000'::uuid
+       AND length(b.sha256) = 64
+
+    ON CONFLICT (sha256, user_id) DO NOTHING;
+
+    IF NOT can_bypass_rls THEN
+        ALTER TABLE ssf.ai_jobs        FORCE ROW LEVEL SECURITY;
+        ALTER TABLE ssf.raw_blob_index FORCE ROW LEVEL SECURITY;
+    END IF;
+END $$;
 ");
 
-            // ── 3. Say out loud what could not be recovered ──────────────
+            // ── 4. Say out loud what could not be recovered ──────────────
             //
             // A backfill that silently leaves rows unlinked reads as done. It is
             // not done — those blobs are the pre-existing damage and the count
@@ -195,21 +283,32 @@ ALTER TABLE ssf.raw_blob_index FORCE ROW LEVEL SECURITY;
             // unrecoverable rows are an EXPECTED pre-existing state, not a
             // failure of this migration, and raising here would block the very
             // change that stops the count from growing.
+            //
+            // Same conditional FORCE-RLS lift as above, for the same
+            // ACCESS-EXCLUSIVE-lock reason — a superuser runner takes no lock.
             migrationBuilder.Sql(@"
 DO $$
 DECLARE
-    total_blobs   bigint;
-    linked_blobs  bigint;
-    orphan_blobs  bigint;
+    total_blobs    bigint;
+    linked_blobs   bigint;
+    orphan_blobs   bigint;
+    can_bypass_rls boolean;
 BEGIN
-    ALTER TABLE ssf.raw_blob_index    NO FORCE ROW LEVEL SECURITY;
+    SELECT rolsuper OR rolbypassrls INTO can_bypass_rls
+      FROM pg_roles WHERE rolname = current_user;
+
+    IF NOT can_bypass_rls THEN
+        ALTER TABLE ssf.raw_blob_index NO FORCE ROW LEVEL SECURITY;
+    END IF;
 
     SELECT count(*)                 INTO total_blobs  FROM ssf.raw_blob_index;
     SELECT count(DISTINCT s.sha256) INTO linked_blobs FROM ssf.raw_blob_subjects s;
 
     orphan_blobs := total_blobs - linked_blobs;
 
-    ALTER TABLE ssf.raw_blob_index    FORCE ROW LEVEL SECURITY;
+    IF NOT can_bypass_rls THEN
+        ALTER TABLE ssf.raw_blob_index FORCE ROW LEVEL SECURITY;
+    END IF;
 
     RAISE NOTICE
         'P0.9 raw-blob subject backfill: % of % blob(s) linked to a subject; % UNRECOVERABLE (ai_jobs row already deleted — pre-existing damage; no owner was fabricated for these).',
@@ -217,7 +316,7 @@ BEGIN
 END $$;
 ");
 
-            // ── 4. RLS ───────────────────────────────────────────────────
+            // ── 5. RLS ───────────────────────────────────────────────────
             migrationBuilder.Sql(@"
 ALTER TABLE ssf.raw_blob_subjects ENABLE ROW LEVEL SECURITY;
 ALTER TABLE ssf.raw_blob_subjects FORCE ROW LEVEL SECURITY;

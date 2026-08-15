@@ -37,23 +37,35 @@ namespace ShramSafal.Sync.IntegrationTests.Storage;
 /// </para>
 ///
 /// <para>
-/// <b>Read this before changing the harness: writes run ADMIN-ELEVATED, and
-/// that is not a convenience.</b> Under a tenant-scoped
-/// <see cref="TenantContext"/> the pre-existing
-/// <c>TenantConnectionInterceptor</c> prepends <c>SET LOCAL …;</c> to every
-/// command, which desyncs EF's rows-affected accounting on WRITES and makes
-/// <c>SaveChangesAsync</c> throw <c>DbUpdateConcurrencyException: expected to
-/// affect 1 row(s), but actually affected 0</c>. That is a known, documented,
-/// deliberately-deferred systemic defect (spec
-/// <c>interceptor-write-rowsaffected-desync-2026-06-06</c>), it predates this
-/// task, and admin elevation is the repo's own established workaround. It is
-/// pinned here by <see cref="KNOWN_DEFECT_TenantScopedWrite_StillBreaksBeforeTheLinkageIsReached"/>
-/// rather than left as prose, because it currently prevents this linkage from
-/// being written on the live voice path.
+/// <b>Writes run ADMIN-ELEVATED because that is what production does.</b> All
+/// three AI endpoints call <c>scope.EstablishForCallerAsync(...)</c> before the
+/// handler (<c>AiEndpoints.cs:591 / :716 / :807</c>), and
+/// <c>CallerFarmTenantScope.cs:68</c> calls
+/// <c>tenantContext.ElevateToAdminCrossTenant()</c>, which makes
+/// <c>TenantConnectionInterceptor</c> a no-op at <c>:106</c>. The GUCs are then
+/// set by hand with tx-local <c>set_config</c>. This harness mirrors that
+/// sequence rather than working around it.
 /// </para>
 ///
 /// <para>
-/// <b>Verification reads use a superuser connection</b> so RLS does not hide
+/// <b>Superuser vs production role — know which each test proves.</b> The
+/// <c>_provider</c> tests below connect as a SUPERUSER, which bypasses BOTH
+/// FORCE-RLS and table privileges. That is fine for mapping and persistence,
+/// and it is why they are fast — but it cannot see an RLS interaction or a
+/// missing <c>GRANT</c>. Both of those turned out to be real bugs. The
+/// <c>ProductionRole_*</c> tests therefore connect as <c>agrisync_app</c>, which
+/// is neither superuser nor BYPASSRLS, and are the ones that hold the line on:
+/// </para>
+/// <list type="bullet">
+/// <item><description>the flagship cross-farm many-to-many case, which used to
+/// raise <c>23505</c> and lose the linkage entirely; and</description></item>
+/// <item><description>the <c>GRANT</c> on <c>ssf.raw_blob_subjects</c>, whose
+/// absence produced <c>42501 permission denied</c> — swallowed by
+/// <c>TryPersistRawBlobAsync</c>, i.e. silent.</description></item>
+/// </list>
+///
+/// <para>
+/// <b>Verification reads use the superuser connection</b> so RLS does not hide
 /// the rows under test. The policy itself is asserted separately, on its text,
 /// in <see cref="RlsPolicy_IsUserKeyed_AndDoesNotDependOnAiJobs"/>.
 /// </para>
@@ -350,58 +362,141 @@ public sealed class RawBlobSubjectLinkageRealPostgresTests : IAsyncLifetime
     }
 
     /// <summary>
-    /// TRIPWIRE for a PRE-EXISTING defect that this task did not introduce and
-    /// deliberately does not fix — recorded as an executable assertion rather
-    /// than a paragraph, because it currently stops the §P0.9 linkage from ever
-    /// being written on the live voice path.
+    /// PRODUCTION-ROLE proof that the app role can write the linkage at all.
     ///
     /// <para>
-    /// Under a tenant-scoped <see cref="TenantContext"/> the
-    /// <c>TenantConnectionInterceptor</c> prepends <c>SET LOCAL …;</c> to the
-    /// command text, which desyncs EF's rows-affected accounting on writes.
-    /// <c>UpsertRawBlobIndexAsync</c> therefore throws at its ORIGINAL
-    /// <c>SaveChangesAsync</c> — before any code added by this task runs — and
-    /// <c>AiOrchestrator.TryPersistRawBlobAsync</c> swallows the exception by
-    /// design (a cold-tier failure must not fail the farmer's voice parse). Net
-    /// effect: no linkage row.
+    /// Every other test in this class writes as a superuser, which bypasses both
+    /// RLS and table privileges. On a long-lived database that blind spot hides a
+    /// real failure: <c>ssf.raw_blob_subjects</c> can end up with
+    /// <c>relacl IS NULL</c>, and then every insert is
+    /// <c>ERROR: permission denied for table raw_blob_subjects</c> (42501) —
+    /// which <c>AiOrchestrator.TryPersistRawBlobAsync</c> swallows, i.e. silent,
+    /// exactly the way <c>ssf.correction_events</c> failed.
     /// </para>
     ///
     /// <para>
-    /// <c>/shramsafal/ai/voice-parse</c>, <c>/ai/receipt-extract</c> and
-    /// <c>/ai/patti-extract</c> are NOT in
-    /// <c>TenantTransactionMiddleware.SkipPathPrefixes</c>, so they run
-    /// tenant-scoped and hit this. Tracked as
-    /// <c>interceptor-write-rowsaffected-desync-2026-06-06</c>; the fix touches
-    /// a high-trust shared file and needs its own brief.
+    /// It happens because <c>20260515090000_BootstrapDbRoles</c> grants via
+    /// <c>ALTER DEFAULT PRIVILEGES FOR ROLE current_user</c>, and those defaults
+    /// only reach tables later created BY that same role. Measured on
+    /// <c>agrisync_dev_v2</c>, whose bootstrap ran as <c>agrisync_app</c> while
+    /// migrations now run as the superuser: <c>relacl</c> was <c>(none)</c> and
+    /// the app role got 42501. Three tables added 2026-08-11
+    /// (<c>field_operators</c>, <c>field_operator_work_rows</c>,
+    /// <c>labour_corrections</c>) are in that state right now. The migration's
+    /// explicit GRANT makes the outcome independent of which role ran what.
     /// </para>
     ///
     /// <para>
-    /// <b>When that defect is fixed, this test will fail.</b> That is the
-    /// intended signal: delete it, and re-point the suite's writes at a
-    /// tenant-scoped context.
+    /// <b>Honest limit of this test.</b> A FRESH scratch database — what this
+    /// harness and CI build — has its bootstrap and its migrations run by the
+    /// same superuser, so the default privileges DO reach the table and the app
+    /// role can write even with the explicit GRANT deleted. Verified: removing
+    /// the GRANT from the migration leaves this test green. So this asserts the
+    /// INVARIANT ("the app role can write"), and catches a regression that loses
+    /// both mechanisms — it does not mutation-prove the GRANT line itself. The
+    /// evidence for that line is the measured before/after on the drifted
+    /// database, recorded in the report.
     /// </para>
     /// </summary>
     [Fact]
-    public async Task KNOWN_DEFECT_TenantScopedWrite_StillBreaksBeforeTheLinkageIsReached()
+    public async Task ProductionRole_CanWriteTheLinkage_GrantsArePresent()
     {
-        var userX = Guid.NewGuid();
+        // Stated directly, so the failure message names the privilege rather
+        // than surfacing as a confusing empty-result assertion.
+        var canInsert = await RawQueryAsync(
+            "SELECT has_table_privilege('agrisync_app','ssf.raw_blob_subjects','INSERT')::text");
+        canInsert.Should().ContainSingle().Which.Should().BeEquivalentTo("true",
+            because: "without INSERT for agrisync_app every linkage write is 42501, and " +
+                     "TryPersistRawBlobAsync swallows it — silent, like correction_events");
+
+        var canSelect = await RawQueryAsync(
+            "SELECT has_table_privilege('agrisync_app','ssf.raw_blob_subjects','SELECT')::text");
+        canSelect.Should().ContainSingle().Which.Should().BeEquivalentTo("true");
+
+        // And prove it end-to-end through the real repository as that role.
+        var farmerA = Guid.NewGuid();
+        var farmId = Guid.NewGuid();
         var blob = BlobRef("66");
 
-        await using var scope = _provider.CreateAsyncScope();
-        var tenant = scope.ServiceProvider.GetRequiredService<TenantContext>();
-        tenant.SetUserScoped(userX); // exactly what the middleware does
+        await UpsertAsAppRoleAsync(farmerA, farmId, farmerA, blob);
 
-        var db = scope.ServiceProvider.GetRequiredService<ShramSafalDbContext>();
-        var repo = scope.ServiceProvider.GetRequiredService<IShramSafalRepository>();
+        var rows = await RawQueryAsync(
+            "SELECT user_id::text FROM ssf.raw_blob_subjects WHERE sha256 = @sha", ("sha", blob.Sha256));
+        rows.Should().ContainSingle().Which.Should().Be(farmerA.ToString());
+    }
 
-        await using var tx = await db.Database.BeginTransactionAsync();
+    /// <summary>
+    /// THE flagship many-to-many case, under the PRODUCTION role — the one that
+    /// silently produced nothing before this round.
+    ///
+    /// <para>
+    /// <b>What used to happen.</b> Farmer B on farm 2 uploads bytes identical to
+    /// farmer A's earlier clip on farm 1. The governing policy
+    /// <c>p_tenant_raw_blob_index</c> EXISTS-joins to <c>ssf.ai_jobs</c> on
+    /// <c>agrisync.farm_id</c>, so A's index row is invisible to B. The old EF
+    /// read-then-write saw "absent", INSERTed, and Postgres raised
+    /// <c>23505</c>; <c>TryPersistRawBlobAsync</c> swallowed it and B got no
+    /// linkage row at all. The entire reason this is a join table produced
+    /// nothing in production, and the superuser-only suite could not see it.
+    /// </para>
+    ///
+    /// <para>
+    /// The <c>ai_jobs</c> row seeded between the two uploads is not decoration —
+    /// it is what makes A's index row visible to farm 1 and invisible to farm 2,
+    /// reproducing the real asymmetry. Production creates that row moments after
+    /// the upsert, on the same request.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public async Task ProductionRole_CrossFarmSameBytes_LinksBothFarmers()
+    {
+        var farmerA = Guid.NewGuid();
+        var farmerB = Guid.NewGuid();
+        var farmA = Guid.NewGuid();
+        var farmB = Guid.NewGuid();
+        var blob = BlobRef("77");
 
-        var act = async () => await repo.UpsertRawBlobIndexAsync(blob, userX, CancellationToken.None);
+        await UpsertAsAppRoleAsync(farmerA, farmA, farmerA, blob);
 
-        (await act.Should().ThrowAsync<DbUpdateConcurrencyException>(
-                because: "the pre-existing SET LOCAL prepend desyncs EF's rows-affected " +
-                         "accounting on writes; see interceptor-write-rowsaffected-desync-2026-06-06"))
-            .WithMessage("*affected 0 row(s)*");
+        // Farm 1's AiJob — this is what makes the index row visible to farm 1
+        // and NOT to farm 2 under p_tenant_raw_blob_index.
+        await SeedAiJobAsync(farmerA, farmA, blob.Sha256);
+
+        await UpsertAsAppRoleAsync(farmerB, farmB, farmerB, blob);
+
+        var subjects = await RawQueryAsync(
+            "SELECT user_id::text FROM ssf.raw_blob_subjects WHERE sha256 = @sha ORDER BY user_id",
+            ("sha", blob.Sha256));
+
+        subjects.Should().BeEquivalentTo(
+            new[] { farmerA.ToString(), farmerB.ToString() },
+            because: "erasing farmer A must never make farmer B's bytes unattributable, and " +
+                     "vice versa — that is the whole reason this is a join table");
+    }
+
+    /// <summary>
+    /// The same-tenant repeat still increments under the production role, so the
+    /// conflict-tolerant rewrite did not quietly cost us the ref-count that the
+    /// superuser test asserts.
+    /// </summary>
+    [Fact]
+    public async Task ProductionRole_RepeatBySameFarm_StillIncrementsRefCount()
+    {
+        var farmer = Guid.NewGuid();
+        var farmId = Guid.NewGuid();
+        var blob = BlobRef("88");
+
+        await UpsertAsAppRoleAsync(farmer, farmId, farmer, blob);
+        await SeedAiJobAsync(farmer, farmId, blob.Sha256);
+        await UpsertAsAppRoleAsync(farmer, farmId, farmer, blob);
+
+        var refCount = await RawQueryAsync(
+            "SELECT ref_count::text FROM ssf.raw_blob_index WHERE sha256 = @sha", ("sha", blob.Sha256));
+        refCount.Should().ContainSingle().Which.Should().Be("2");
+
+        var linkage = await RawQueryAsync(
+            "SELECT user_id::text FROM ssf.raw_blob_subjects WHERE sha256 = @sha", ("sha", blob.Sha256));
+        linkage.Should().ContainSingle("the linkage stays idempotent on (sha256, user_id)");
     }
 
     // ── helpers ──────────────────────────────────────────────────────────
@@ -417,8 +512,14 @@ public sealed class RawBlobSubjectLinkageRealPostgresTests : IAsyncLifetime
     /// <summary>
     /// Drives the REAL production write path — a scoped
     /// <see cref="IShramSafalRepository"/> from the real DI graph, inside a
-    /// transaction. Admin-elevated for the interceptor reason documented on the
-    /// class and pinned by the tripwire test above.
+    /// transaction, admin-elevated exactly as <c>CallerFarmTenantScope.cs:68</c>
+    /// does on the live AI endpoints.
+    ///
+    /// <para>
+    /// Connects as the SUPERUSER, so RLS and privileges are bypassed. Good
+    /// enough for mapping/persistence assertions; see
+    /// <see cref="UpsertAsAppRoleAsync"/> for the production-role path.
+    /// </para>
     /// </summary>
     private async Task UpsertAsync(Guid? subjectUserId, RawBlobRef blob)
     {
@@ -433,6 +534,90 @@ public sealed class RawBlobSubjectLinkageRealPostgresTests : IAsyncLifetime
         await using var tx = await db.Database.BeginTransactionAsync();
         await repo.UpsertRawBlobIndexAsync(blob, subjectUserId, CancellationToken.None);
         await tx.CommitAsync();
+    }
+
+    /// <summary>
+    /// Drives the repository as the PRODUCTION role <c>agrisync_app</c>, with
+    /// the tenant GUCs established exactly the way
+    /// <c>CallerFarmTenantScope.EstablishForCallerAsync</c> does on the live AI
+    /// endpoints: elevate to admin so <c>TenantConnectionInterceptor</c> no-ops
+    /// (<c>CallerFarmTenantScope.cs:68</c>), then set <c>agrisync.user_id</c>,
+    /// <c>agrisync.farm_id</c> and <c>agrisync.owner_account_id</c> by hand with
+    /// tx-local <c>set_config</c>.
+    ///
+    /// <para>
+    /// This is the fidelity the superuser harness cannot give: <c>agrisync_app</c>
+    /// is neither superuser nor BYPASSRLS, so both FORCE-RLS and table privileges
+    /// are genuinely in force here.
+    /// </para>
+    /// </summary>
+    private async Task UpsertAsAppRoleAsync(Guid? subjectUserId, Guid farmId, Guid userId, RawBlobRef blob)
+    {
+        await using var provider = BuildAppRoleProvider();
+        await using var scope = provider.CreateAsyncScope();
+
+        var tenant = scope.ServiceProvider.GetRequiredService<TenantContext>();
+        tenant.ElevateToAdminCrossTenant();
+
+        var db = scope.ServiceProvider.GetRequiredService<ShramSafalDbContext>();
+        var repo = scope.ServiceProvider.GetRequiredService<IShramSafalRepository>();
+
+        await using var tx = await db.Database.BeginTransactionAsync();
+
+        // set_config(..., true) is transaction-local, so it must run inside tx.
+        await db.Database.ExecuteSqlInterpolatedAsync(
+            $"SELECT set_config('agrisync.user_id', {userId.ToString()}, true)");
+        await db.Database.ExecuteSqlInterpolatedAsync(
+            $"SELECT set_config('agrisync.farm_id', {farmId.ToString()}, true)");
+        await db.Database.ExecuteSqlInterpolatedAsync(
+            $"SELECT set_config('agrisync.owner_account_id', {farmId.ToString()}, true)");
+
+        await repo.UpsertRawBlobIndexAsync(blob, subjectUserId, CancellationToken.None);
+        await tx.CommitAsync();
+    }
+
+    /// <summary>
+    /// Minimal <c>ssf.ai_jobs</c> row — only the NOT NULL columns plus the two
+    /// hash links. Its sole purpose is to satisfy the EXISTS-join in
+    /// <c>p_tenant_raw_blob_index</c> for one farm, which is what makes a blob
+    /// index row visible to that farm and invisible to every other.
+    /// </summary>
+    private Task SeedAiJobAsync(Guid userId, Guid farmId, string sha256) => ExecuteRawAsync(
+        @"INSERT INTO ssf.ai_jobs
+              (id, idempotency_key, operation_type, user_id, farm_id, status, schema_version,
+               created_at_utc, total_attempts, modified_at_utc, source, model_version,
+               prompt_version, transcript_schema_version, input_content_hash, raw_input_ref)
+          VALUES (gen_random_uuid(), @key, 0, @uid, @fid, 2, 1, now(), 1, now(),
+                  'Voice', 'm', 'v1', 1, @sha, @sha);",
+        ("key", Guid.NewGuid().ToString("N")), ("uid", userId), ("fid", farmId), ("sha", sha256));
+
+    /// <summary>
+    /// A DI graph pointed at the scratch database over an <c>agrisync_app</c>
+    /// connection. Credential resolution goes through
+    /// <see cref="TestRoleCredentials"/> — the repo's single source of truth,
+    /// env-var first so a local rotation does not require editing a tracked file.
+    /// </summary>
+    private ServiceProvider BuildAppRoleProvider()
+    {
+        var appConn = new NpgsqlConnectionStringBuilder(_scratchConn)
+        {
+            Username = TestRoleCredentials.AppRoleUser,
+            Password = TestRoleCredentials.AppRolePassword,
+        }.ConnectionString;
+
+        var services = new ServiceCollection();
+        services.AddLogging();
+        var config = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["ConnectionStrings:ShramSafalDb"] = appConn,
+                ["ConnectionStrings:ShramSafalDb_Migration"] = appConn,
+                ["ConnectionStrings:UserDb"] = appConn,
+            })
+            .Build();
+        services.AddSingleton<IConfiguration>(config);
+        services.AddShramSafalInfrastructure(config);
+        return services.BuildServiceProvider();
     }
 
     private async Task<T> QueryAsync<T>(Func<ShramSafalDbContext, Task<T>> query)

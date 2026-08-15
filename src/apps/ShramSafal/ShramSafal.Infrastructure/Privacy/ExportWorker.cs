@@ -241,6 +241,46 @@ public sealed class ExportWorker(
         var rawBlobStore = sp.GetRequiredService<IRawBlobStore>();
         var blobRef = await rawBlobStore.PutAsync(ms, "application/zip", ct).ConfigureAwait(false);
 
+        // ── §P0.9 — index + subject linkage for the export ZIP ───────
+        //
+        // This is the second (and only other) IRawBlobStore.PutAsync site, and
+        // the object it writes is the most sensitive artefact this system
+        // produces: the farmer's ENTIRE exported dataset.
+        //
+        // It looks already-attributable, because ssf.export_artifacts carries a
+        // user_id and ErasureWorker never deletes that table. But the row does
+        // not outlive the object. RetentionSweepWorker:93-130 deletes
+        // export_artifacts unconditionally at 7 days, while the paired S3
+        // delete (S3RawBlobStore.DereferenceAsync — a hard DeleteObjectAsync) is
+        // best-effort in a try/catch AND impossible in production, which holds
+        // no s3:DeleteObject permission on either media bucket. So after day 7
+        // the ZIP remains in the bucket with no export_artifacts row — the exact
+        // §P0.9 failure mode, on a worse object, reached by a timer rather than
+        // by an erasure request.
+        //
+        // The linkage row needs an index row for its FK, so this upserts both,
+        // the same way the orchestrator does. Constructed directly on `admin`
+        // rather than resolved from `sp` so the writes join THIS worker's
+        // admin-elevated context and transaction rather than a second one.
+        //
+        // Best-effort by deliberate symmetry with the orchestrator: a linkage
+        // failure must not fail a DPDP export the farmer asked for. It is logged
+        // at Error so it is alertable rather than silent.
+        try
+        {
+            await new Persistence.Repositories.ShramSafalRepository(admin)
+                .UpsertRawBlobIndexAsync(blobRef, userId, ct)
+                .ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(
+                ex,
+                "[export] §P0.9 subject linkage failed for export ZIP sha={Sha256} user={UserId} — the export still ships, but this blob is unattributable once its export_artifacts row is swept at 7 days.",
+                blobRef.Sha256,
+                userId);
+        }
+
         // blobRef.Sha256 IS the object key in the content-addressed store
         // (`raw/{sha256}`). The synthetic prefix below is retained verbatim
         // because RetentionSweepWorker.ExtractSha256 parses this exact shape
@@ -344,9 +384,15 @@ VALUES ({0}, {1}, {2}, {3}, {4});";
         await s.WriteAsync(bytes.AsMemory(), ct).ConfigureAwait(false);
     }
 
+    // LEGAL_REVIEW_PENDING: README intentionally carries the marker
+    // until counsel finalizes copy. Mirrors the OQ-7 i18n convention.
+    //
+    // (Comments moved above the signature from between `=>` and the expression:
+    // `dotnet format` cannot lay that shape out and reports WHITESPACE errors it
+    // will not auto-fix, which blocks the pre-commit hook for anyone who stages
+    // this file. Pre-existing since before this task; whitespace only, no
+    // semantic or output change to the exported README.)
     private static string BuildReadmeMarkdown(Guid userId, Guid requestId, DateTime generatedAtUtc) =>
-        // LEGAL_REVIEW_PENDING: README intentionally carries the marker
-        // until counsel finalizes copy. Mirrors the OQ-7 i18n convention.
         $"""
         <!-- LEGAL_REVIEW_PENDING: counsel must finalize this README before counsel-clearance gate -->
         # AgriSync — Your Data Export
