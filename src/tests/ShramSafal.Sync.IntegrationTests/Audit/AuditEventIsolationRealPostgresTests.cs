@@ -925,8 +925,23 @@ public sealed class AuditEventIsolationRealPostgresTests(Xunit.Abstractions.ITes
     /// that is created in <see cref="InitializeAsync"/> and dropped in
     /// <see cref="DisposeAsync"/>, seeded only with the handful of rows this
     /// class plants. It is <b>not</b> a claim that the <c>Down()</c> is safe to
-    /// run anywhere else, and specifically not on production. Two of the
-    /// <c>Down()</c>s below are destructive on a populated database and say so.
+    /// run anywhere else, and specifically not on production.
+    /// <b>ALL FOUR <c>Down()</c>s below are unsafe on a populated production
+    /// database</b>, in three different ways:
+    /// <list type="bullet">
+    /// <item><c>AddFarmBoundariesRls</c> — <b>security regression, not data
+    /// loss.</b> Its <c>Down()</c> drops the tenant policy and DISABLES row
+    /// level security on <c>ssf.farm_boundaries</c>, leaving the table
+    /// cross-tenant readable. It destroys no rows, which is exactly why it is
+    /// the easiest of the four to wave through.</item>
+    /// <item><c>StripTranscriptFromCorrectionEvents</c> — lossy, and under a
+    /// non-superuser runner it aborts partway instead. See its entry.</item>
+    /// <item><c>AddCostEntryDirectionAndLineDetail</c> — drops seven columns of
+    /// real data (<c>direction</c>, <c>quantity</c>, <c>unit_price</c>,
+    /// <c>vendor_name</c> and three more). Symmetric in SCHEMA only.</item>
+    /// <item><c>AddRawBlobSubjects</c> — drops the table, one-way. See its
+    /// entry.</item>
+    /// </list>
     /// Do not lift a line out of this list and read it as a rollback approval.
     /// </para>
     ///
@@ -944,16 +959,24 @@ public sealed class AuditEventIsolationRealPostgresTests(Xunit.Abstractions.ITes
     private static readonly string[] ReviewedMigrationsAfterRevokeTruncate =
     [
         // §P0.3 — ENABLE + FORCE RLS and one tenant policy on
-        // ssf.farm_boundaries. Down() drops the policy and disables RLS.
+        // ssf.farm_boundaries. Down() drops the policy and disables RLS. Safe
+        // mid-proof (nothing here reads farm_boundaries); a SECURITY REGRESSION
+        // on production — see the list in this field's docstring.
         "20260815061537_AddFarmBoundariesRls",
 
         // ── Reviewed 2026-08-15 (spec: FINAL_SERVER_AUTHORITATIVE_EXECUTION_PLAN,
         //    audit-guard-review). Each Down() below was read in full, not
-        //    name-matched. The common ground for all three: this class touches
-        //    ssf.audit_events, ssf.farms, public.users and ssf.daily_logs and
-        //    NOTHING else — grep this file for correction_events, cost_entries,
-        //    ai_jobs, raw_blob_index or raw_blob_subjects and you get zero hits
-        //    — so every table these three migrations write is EMPTY here.
+        //    name-matched. The common ground for all three: the SQL this class
+        //    executes touches ssf.audit_events, ssf.farms, public.users and
+        //    ssf.daily_logs and NOTHING else, so every table these three
+        //    migrations write is EMPTY here.
+        //    TO RE-VERIFY THAT: search this file for correction_events,
+        //    cost_entries, ai_jobs, raw_blob_index or raw_blob_subjects
+        //    EXCLUDING comment lines — e.g.
+        //      grep -nE "correction_events|cost_entries|ai_jobs|raw_blob" \
+        //        AuditEventIsolationRealPostgresTests.cs | grep -v "^[0-9]*: *//"
+        //    — and expect zero hits. A plain grep now returns the prose in this
+        //    very block, which is why the filter is part of the recipe.
         //    Each Up() also already ran once against this same database as this
         //    same role during InitializeAsync, so the roll-forward is a replay of
         //    statements known to succeed in this exact environment.
@@ -967,10 +990,26 @@ public sealed class AuditEventIsolationRealPostgresTests(Xunit.Abstractions.ITes
         // against the same empty table — a no-op both times — then drops the
         // function again. Its FORCE-RLS lift on correction_events is symmetric
         // (lifted and restored in the same statement). Touches no audit_events.
-        // ⚠️ NOT SAFE ON A POPULATED DATABASE: that Down() stamps a sentinel over
-        // real NULLs, and the Up() that follows re-widens the column without ever
-        // restoring them. The transcripts the migration strips are gone for good
-        // by design — Down() cannot bring them back and does not pretend to.
+        // ⚠️ NOT SAFE ON A POPULATED DATABASE — and it fails DIFFERENTLY
+        // depending on who runs it. A deploy engineer needs both mechanisms.
+        //   • SUPERUSER runner: RLS is bypassed, so the UPDATE matches and the
+        //     rollback COMPLETES LOSSILY. It stamps '00000000-…' over genuine
+        //     NULLs, and Up() only does DROP NOT NULL (Up():71) — it never
+        //     restores them. A Down()→Up() cycle therefore PERMANENTLY converts
+        //     an honest "no originating AiJob" into a value that reads like a
+        //     real link. That is the more dangerous of the two outcomes,
+        //     because it succeeds.
+        //   • NON-SUPERUSER owner-role runner: ssf.correction_events is FORCE
+        //     ROW LEVEL SECURITY and Down(), UNLIKE Up(), never lifts FORCE.
+        //     With agrisync.user_id unset the policy matches no rows, so the
+        //     UPDATE clears nothing and the following SET NOT NULL ABORTS — DDL
+        //     validation scans are not RLS-filtered, so it sees the NULLs the
+        //     UPDATE could not reach. The rollback HARD-FAILS PART-WAY.
+        //     This is not the unlikely path: the AddRawBlobSubjects entry below
+        //     records that startup migrates ssfContext on the RUNTIME
+        //     connection, so a non-superuser runner is at least as likely.
+        // Neither outcome is a reason to change this migration for the sake of
+        // this proof; both are reasons not to run its Down() on production.
         "20260815080242_StripTranscriptFromCorrectionEvents",
 
         // §P0.5 — the genuinely boring one. Up() adds seven NULLABLE columns to
@@ -1013,13 +1052,29 @@ public sealed class AuditEventIsolationRealPostgresTests(Xunit.Abstractions.ITes
         // role-guarded GRANT block, re-runs the backfill (0 in, 0 out; its RAISE
         // NOTICE reports 0 of 0 and it raises no EXCEPTION), and re-establishes
         // ENABLE + FORCE RLS and the policy Down() dropped.
-        // ONE ENVIRONMENT NOTE: that backfill lifts FORCE RLS on ssf.ai_jobs and
-        // ssf.raw_blob_index only when the migration runner cannot bypass RLS,
-        // taking an ACCESS EXCLUSIVE lock while it does. Locally the resolved
-        // connection is agrisync_app (not superuser) so that branch runs; in CI
-        // REQUIRES_POSTGRES_ROOT_CONN is the postgres superuser so it is skipped.
-        // Both are harmless on a single-session scratch database, and the lift is
-        // symmetric — FORCE is restored inside the same DO block.
+        // ⚠️ WHICH BACKFILL BRANCH THIS PROOF HAS ACTUALLY RUN — read before
+        // citing this fact as evidence for a P0.9 deploy.
+        // Up()'s backfill lifts FORCE RLS on ssf.ai_jobs and ssf.raw_blob_index
+        // ONLY when the migration runner cannot bypass RLS, taking an ACCESS
+        // EXCLUSIVE lock on both, held to COMMIT, while it does.
+        // THIS SUITE ONLY EVER RUNS THE BYPASS BRANCH — the cheap one that takes
+        // no lock — and it cannot run the other, because this [Fact] requires a
+        // superuser migrator: ReadPrivilegedMaintenancePathAsync reads
+        // _superuserConn and the assertion above demands rolsuper = true, while
+        // AssertAppRoleIsNotVacuousAsync demands rolsuper OR rolbypassrls = false
+        // for agrisync_app. Both cannot hold of one role, so a run whose migrator
+        // is agrisync_app fails this fact rather than exercising the lock path.
+        // (Measured: with REQUIRES_POSTGRES_ROOT_CONN unset the resolver falls
+        // back to appsettings.Development.json's agrisync_app and this fact does
+        // not even reach that assertion — it fails in InitializeAsync with 28P01.)
+        // So: the locking branch is UNEXERCISED here, by anyone, in any
+        // environment. Nothing in this repository has observed it run. The
+        // migration's own comment — "WHICH BRANCH PRODUCTION TAKES IS UNKNOWN.
+        // Do not assume the cheap one." — stands undiminished by this test, and
+        // must not be read as softened by it.
+        // The lift itself is symmetric (FORCE restored inside the same DO block),
+        // and on the single-session scratch database the bypass branch that does
+        // run is harmless.
         "20260815102440_AddRawBlobSubjects",
     ];
 
