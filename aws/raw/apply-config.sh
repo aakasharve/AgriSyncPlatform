@@ -210,9 +210,15 @@ fi
 # Strip the GET-only TransitionDefaultMinimumObjectSize field and sort .Rules
 # by ID before comparing — low-risk on this bucket's single-rule document,
 # applied for consistency with aws/uploads/apply-config.sh. Not exercised
-# against a real --apply (zero mutating calls made by this agent).
+# against a real --apply (zero mutating calls made by this agent). Round-2
+# review non-blocking note, fixed because it was one line: also normalise an
+# empty-object Filter ({}) to {"Prefix":""} — semantically identical, but a
+# live response returning one shape while we authored the other would
+# otherwise false-FAIL this diff (non-destructive either way).
 normalize_lifecycle() {
-  jq -S 'del(.TransitionDefaultMinimumObjectSize) | .Rules |= ((. // []) | sort_by(.ID))'
+  jq -S 'del(.TransitionDefaultMinimumObjectSize)
+    | .Rules |= ((. // []) | sort_by(.ID))
+    | .Rules |= (map(if .Filter == {} then .Filter = {"Prefix": ""} else . end))'
 }
 
 echo "[apply-config] 3/3: diffing live vs desired, and re-checking version counts..."
@@ -247,4 +253,14 @@ if [[ "$DIFF_FAILED" -eq 1 ]]; then
 fi
 
 echo "[apply-config] OK. Capture + rendered-desired + diff saved under: $CAPTURE_DIR"
-[[ "$DO_APPLY" -eq 0 ]] && echo "[apply-config] Nothing was changed (dry-run). Re-run with --apply to write."
+if [[ "$DO_APPLY" -eq 0 ]]; then
+  echo "[apply-config] Nothing was changed (dry-run). Re-run with --apply to write."
+fi
+
+# === ROUND 2 REVIEW FINDING B2 — FIX APPLIED 2026-08-15 ===
+# `[[ "$DO_APPLY" -eq 0 ]] && echo ...` used to be the LAST statement in the
+# script. Under `set -e`, in --apply mode the test is false, `&&`
+# short-circuits, and that false test became the script's own exit status —
+# a fully successful --apply exited 1 anyway. Fixed with an explicit `if/fi`
+# plus an explicit `exit 0` as the true last statement.
+exit 0

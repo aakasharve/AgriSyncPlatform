@@ -24,9 +24,16 @@
 # IAM NOTE: §5 needs S3 read permissions the audit role does not have yet as of
 # 2026-08-15 (verified read-only against the live policy — see
 # aws/audit/s3-readonly-policy-addition.json for the exact statement to merge in,
-# author-only, not applied). Until that grant lands, §5's S3 calls fail
-# AccessDenied and the section reports one WARN + skips its granular checks; the
-# rest of this script (§1-4) is unaffected.
+# author-only, not applied). Until that grant lands, §5's FIRST S3 call (the raw
+# bucket's D9 tripwire) fails with the specific AccessDenied signature, the
+# section reports ONE WARN naming that as the expected pre-grant cause, and
+# skips the rest of §5 — the rest of this script (§1-4) is unaffected, and the
+# audit exits 0 (round-2 finding B1). This is a NARROW exception: an unreadable
+# result for ANY OTHER reason (throttle, expired token, wrong region, a renamed
+# bucket, an unparseable response) is still CRITICAL and does NOT skip anything
+# — that distinction is the entire point of §5a and it does not go away once
+# the IAM grant lands. After the grant is applied, an AccessDenied here would
+# no longer match "the known missing grant" and would correctly become CRIT.
 set -uo pipefail
 export MSYS_NO_PATHCONV=1
 
@@ -157,14 +164,16 @@ fi
 # never printed as OK — see 5a below for where this matters most.
 
 # s3_get_status <get-subcommand> <bucket> <not-found-error-substring>
-# Sets three globals: S3_STATUS (present/absent/unreadable), S3_JSON (the
-# response body when present, empty otherwise), S3_ERROR (raw stderr, only
-# meaningful when unreadable). Never conflates "could not read" with "doesn't
-# exist". MUST be called as a plain statement, NOT inside $(...) — command
-# substitution runs the whole function in a subshell, and bash does not
-# propagate variable assignments made inside a subshell back to the caller,
-# which would silently discard S3_STATUS every time (hit this exact bug while
-# fixing round-1 finding I1; caught by testing before commit, not by review).
+# Sets globals: S3_STATUS (present/absent/unreadable), S3_JSON (the response
+# body when present, empty otherwise), S3_ERROR (raw stderr, only meaningful
+# when unreadable), S3_IS_ACCESS_DENIED (1/0, only meaningful when
+# unreadable — round-2 finding B1, see below). Never conflates "could not
+# read" with "doesn't exist". MUST be called as a plain statement, NOT
+# inside $(...) — command substitution runs the whole function in a
+# subshell, and bash does not propagate variable assignments made inside a
+# subshell back to the caller, which would silently discard S3_STATUS every
+# time (hit this exact bug while fixing round-1 finding I1; caught by
+# testing before commit, not by review).
 s3_get_status() {
   local subcmd="$1" bucket="$2" not_found_marker="$3"
   local errfile ec err
@@ -172,6 +181,7 @@ s3_get_status() {
   S3_JSON=$(aws s3api "$subcmd" --bucket "$bucket" --region "$REGION" --output json 2>"$errfile")
   ec=$?
   err=$(cat "$errfile"); rm -f "$errfile"
+  S3_IS_ACCESS_DENIED=0
   if [ $ec -eq 0 ]; then
     S3_STATUS="present"
   elif echo "$err" | grep -q "$not_found_marker"; then
@@ -181,18 +191,47 @@ s3_get_status() {
     S3_STATUS="unreadable"
     S3_ERROR="$err"
     S3_JSON=""
+    echo "$err" | grep -qi "AccessDenied" && S3_IS_ACCESS_DENIED=1
   fi
 }
 
 echo ""
 echo "## 5. S3 config drift — uploads + raw buckets"
 
+# === ROUND 2 REVIEW FINDING B1 — FIX APPLIED 2026-08-15 ===
+# Round 1 turned EVERY unreadable raw-bucket lifecycle into CRIT, deleting
+# the graceful-degradation branch three other documents (this file's header,
+# the workflow YAML, s3-readonly-policy-addition.json) still promised
+# existed. The audit role has ZERO S3 permissions as of this writing and the
+# IAM grant is still author-only — so every run would hit AccessDenied on
+# THIS exact call and email the founder "ACTION NEEDED - 1 critical" every
+# Monday, for a cause everyone already knows about, until he learns to
+# ignore the alarm. Ruling: split unreadable into two cases. AccessDenied —
+# the specific, known, already-documented missing-grant signature — is WARN,
+# and skips the rest of §5 (which would all hit the identical cause).
+# Unreadable for ANY OTHER reason (throttle, expired token, wrong region, a
+# renamed bucket, an unparseable response) stays CRIT — that is I1's whole
+# point and it must survive untouched. This is verified below both ways:
+# AccessDenied -> WARN/exit 0, NoSuchBucket (a different, non-AccessDenied
+# unreadable cause) -> CRIT/exit 1 (see report for both stub commands).
+SKIP_REMAINING_5=0
+
 # ---- 5a. RAW BUCKET — D9 tripwire [the single most important check here] ----
 s3_get_status get-bucket-lifecycle-configuration "$RAW_BUCKET" NoSuchLifecycleConfiguration
 LIVE_RAW_LIFECYCLE="$S3_JSON"
 case "$S3_STATUS" in
   absent)
-    echo "  OK    raw bucket ($RAW_BUCKET): no lifecycle configuration (matches desired — D9 untouched)"
+    # === ROUND 2 REVIEW FINDING B3 — FIX APPLIED 2026-08-15 ===
+    # "matches desired" was only true pre-apply. Once aws/raw/apply-config.sh
+    # --apply lands, the desired state gains an AbortIncompleteMultipartUpload
+    # rule, so an absent lifecycle becomes DRIFT, not compliance — still safe
+    # (D9 can never be violated by the ABSENCE of an expiring rule; there is
+    # nothing here to expire anything), but the "matches desired" phrasing
+    # would be factually wrong post-apply. Rephrased to be true in both states.
+    echo "  OK    raw bucket ($RAW_BUCKET): no lifecycle configuration. D9-safe either way (an absent"
+    echo "        lifecycle cannot expire anything) — but if aws/raw/apply-config.sh --apply has already"
+    echo "        run, absent here is itself drift (the desired state adds an AbortIncompleteMultipartUpload"
+    echo "        rule, harmless but expected) and worth re-applying, not evidence of compliance."
     ;;
   present)
     FORBIDDEN=$(echo "$LIVE_RAW_LIFECYCLE" | jq '[.Rules[]? | keys[] | select(. != "ID" and . != "Status" and . != "Filter" and . != "AbortIncompleteMultipartUpload")] | length' 2>/dev/null || echo "?")
@@ -208,13 +247,28 @@ case "$S3_STATUS" in
     fi
     ;;
   unreadable)
-    echo "  CRIT  raw bucket ($RAW_BUCKET): lifecycle UNREADABLE — ${S3_ERROR:0:120}"
-    echo "        This is the D9 tripwire. A bucket this check could NOT read must never be reported"
-    echo "        compliant. Investigate now (credentials? IAM grant applied — see"
-    echo "        aws/audit/s3-readonly-policy-addition.json? throttle? wrong region? renamed bucket?)."
-    CRIT=$((CRIT+1))
+    if [ "$S3_IS_ACCESS_DENIED" -eq 1 ]; then
+      echo "  WARN  raw bucket ($RAW_BUCKET): lifecycle AccessDenied — the documented IAM grant"
+      echo "        (aws/audit/s3-readonly-policy-addition.json) is not applied yet. This is the EXPECTED"
+      echo "        pre-grant state, not a D9 violation. Skipping the rest of §5 (same cause would repeat)."
+      echo "        Once the grant lands, AccessDenied here becomes a genuine CRIT again — this branch"
+      echo "        only applies to the specific 'AccessDenied' signature, nothing else."
+      WARN=$((WARN+1))
+      SKIP_REMAINING_5=1
+    else
+      echo "  CRIT  raw bucket ($RAW_BUCKET): lifecycle UNREADABLE for a reason OTHER than the known"
+      echo "        missing IAM grant — ${S3_ERROR:0:120}"
+      echo "        This is the D9 tripwire. A bucket this check could NOT read must never be reported"
+      echo "        compliant. Investigate now (throttle? expired token? wrong region? renamed bucket?"
+      echo "        unparseable response?)."
+      CRIT=$((CRIT+1))
+    fi
     ;;
 esac
+
+if [ "$SKIP_REMAINING_5" -eq 1 ]; then
+  echo "  ..    (5b-5h skipped this run — see the AccessDenied WARN above)"
+else
 
 # ---- 5b. RAW BUCKET — version counts, informational trend line only ----
 RAW_COUNTS=$(aws s3api list-object-versions --bucket "$RAW_BUCKET" --region "$REGION" \
@@ -283,7 +337,9 @@ case "$S3_STATUS" in
       echo "  WARN  uploads bucket: ai-sessions/ expires at ${AI_SESSIONS_DAYS}d, desired state is 7d — drift"
       WARN=$((WARN+1))
     else
-      echo "  OK    uploads bucket: ai-sessions/ expires at 7d (matches desired)"
+      echo "  OK    uploads bucket: ai-sessions/ expires at 7d (matches desired — reminder: this prefix's"
+      echo "        contents were never observed, it is empty; the rule is justified by what this prefix"
+      echo "        is FOR in code, not by object-level proof — see aws/uploads/lifecycle-policy.json)"
     fi
     ;;
 esac
@@ -307,6 +363,8 @@ for b in "$UPLOADS_BUCKET" "$RAW_BUCKET"; do
     unreadable) echo "  ..    $b: CORS UNREADABLE — ${S3_ERROR:0:120} (informational tier, not scored)" ;;
   esac
 done
+
+fi   # end SKIP_REMAINING_5 gate
 
 # ---------- verdict ----------
 echo ""

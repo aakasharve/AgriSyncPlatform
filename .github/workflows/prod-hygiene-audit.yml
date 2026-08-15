@@ -13,9 +13,14 @@ name: Prod Hygiene & Cost Audit
 # holds farmer voice evidence with no backup, retained FOREVER per founder ruling
 # D9, and §5 fails CRITICAL if its live lifecycle ever gains an expiring action.
 # IAM NOTE: the agrisync-prod-audit role has ZERO S3 permissions as of 2026-08-15
-# (verified read-only) — §5 degrades to one WARN + skipped checks until
-# aws/audit/s3-readonly-policy-addition.json is merged into that role (founder-gated
-# IAM change, authored not applied; see that file for the exact steps).
+# (verified read-only) — until aws/audit/s3-readonly-policy-addition.json is merged
+# into that role (founder-gated IAM change, authored not applied), §5's first S3
+# call (the raw-bucket D9 tripwire) hits AccessDenied, which the script recognises
+# by name as the known pre-grant cause: ONE WARN, skip the rest of §5, exit 0 —
+# this run does NOT go red weekly for a cause everyone already knows about
+# (round-2 finding B1). Unreadable for any OTHER reason (throttle, expired token,
+# wrong region, a renamed bucket) is still CRITICAL and does still fail the run —
+# that distinction survives the grant landing and is not weakened by this note.
 #
 # NOTE: scheduled (cron) workflows only run from the default branch (main). This file
 # must be on `main` for the weekly schedule to fire. workflow_dispatch works from any

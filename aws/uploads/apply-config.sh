@@ -181,11 +181,36 @@ if [[ "$BUCKET_WIDE_EXPIRING_RULES" -gt 0 ]]; then
   GUARDRAIL_FAILED=1
 fi
 
+# round-2 review non-blocking note, fixed because it was cheap: the three checks
+# above did not stop someone from adding NoncurrentVersionExpiration to
+# attachments/ (versioning is ON — this bucket's evidence retention is only
+# current-version-based; a noncurrent rule there would start deleting old
+# versions of farmer evidence, which nothing above catches), or from re-adding
+# the exact Expiration+NoncurrentVersionExpiration shape C2 removed on
+# _deploy/, _deploys/, deploys/ (their reproducibility is still unproven).
+ATTACHMENTS_HAS_NONCURRENT="$(echo "$RENDERED_LIFECYCLE" | jq '[.Rules[]? | select((.Filter.Prefix // "") == "attachments/") | select(.NoncurrentVersionExpiration != null)] | length')"
+if [[ "$ATTACHMENTS_HAS_NONCURRENT" -gt 0 ]]; then
+  echo "[apply-config] GUARDRAIL FAIL: attachments/ carries a NoncurrentVersionExpiration — this bucket is" >&2
+  echo "  versioned, so this would delete old versions of farmer evidence. Not authorised anywhere in §11." >&2
+  GUARDRAIL_FAILED=1
+fi
+
+for p in _deploy/ _deploys/ deploys/; do
+  UNPROVEN_PREFIX_HAS_RULE="$(echo "$RENDERED_LIFECYCLE" | jq --arg p "$p" '[.Rules[]? | select((.Filter.Prefix // "") == $p) | select(.Expiration != null or (.Transitions // [] | length) > 0 or .NoncurrentVersionExpiration != null)] | length')"
+  if [[ "$UNPROVEN_PREFIX_HAS_RULE" -gt 0 ]]; then
+    echo "[apply-config] GUARDRAIL FAIL: $p carries an expiring rule — its reproducibility was never" >&2
+    echo "  proven (round-1 finding C2, see lifecycle-policy.json). Re-check the evidence before shipping" >&2
+    echo "  a deletion rule for this prefix; do not just re-add it because a guardrail let it through." >&2
+    GUARDRAIL_FAILED=1
+  fi
+done
+
 if [[ "$GUARDRAIL_FAILED" -eq 1 ]]; then
   echo "[apply-config] REFUSING TO PROCEED — the rendered document failed one or more guardrail checks." >&2
   exit 6
 fi
-echo "[apply-config]   guardrail OK: attachments/ retention intact, apk/ has no expiry, no bucket-wide expiry"
+echo "[apply-config]   guardrail OK: attachments/ retention intact (current-version only), apk/ has no"
+echo "[apply-config]   expiry, no bucket-wide expiry, and _deploy/_deploys/deploys/ carry no unproven rule"
 
 # ─── Step 3: APPLY (gated), each call tracked independently (I6 fix) ──────
 LIFECYCLE_APPLIED=0
@@ -240,8 +265,17 @@ fi
 # SEMANTICALLY (I5 fix): strip the GET-only TransitionDefaultMinimumObjectSize
 # field and sort .Rules by ID before comparing, since S3 does not document
 # rule-order preservation and jq -S only sorts object keys, not array order.
+# Round-2 review non-blocking note, fixed because it was one line: also
+# normalise an empty-object Filter ({}) to {"Prefix":""} — the two are
+# semantically identical (no filter = matches everything, same as an empty
+# prefix), but a live response returning one shape while we authored the
+# other would otherwise false-FAIL this diff after a genuinely successful
+# apply. Non-destructive either way (fails after the apply, rolls nothing
+# back) but worth the one line since it was cheap.
 normalize_lifecycle() {
-  jq -S 'del(.TransitionDefaultMinimumObjectSize) | .Rules |= ((. // []) | sort_by(.ID))'
+  jq -S 'del(.TransitionDefaultMinimumObjectSize)
+    | .Rules |= ((. // []) | sort_by(.ID))
+    | .Rules |= (map(if .Filter == {} then .Filter = {"Prefix": ""} else . end))'
 }
 
 echo "[apply-config] 4/4: diffing live vs desired (semantic normalisation applied)..."
@@ -266,4 +300,22 @@ if [[ "$DIFF_FAILED" -eq 1 ]]; then
 fi
 
 echo "[apply-config] OK. Capture + rendered-desired + diff saved under: $CAPTURE_DIR"
-[[ "$DO_APPLY" -eq 0 ]] && echo "[apply-config] Nothing was changed (dry-run). Re-run with --apply to write."
+if [[ "$DO_APPLY" -eq 0 ]]; then
+  echo "[apply-config] Nothing was changed (dry-run). Re-run with --apply to write."
+fi
+
+# === ROUND 2 REVIEW FINDING B2 — FIX APPLIED 2026-08-15 ===
+# `[[ "$DO_APPLY" -eq 0 ]] && echo ...` used to be the LAST statement in the
+# script. Under `set -e`, a `[[ ]] && cmd` compound command's own exit status
+# is the status of whichever side last ran — in --apply mode the test is
+# false, `&&` short-circuits without running `echo`, and THAT false test
+# becomes the script's own exit status. A fully successful --apply (all three
+# PUTs landed, semantic diff passed, "OK." printed) exited 1 anyway, silently.
+# This repo's rule is that the founder confirms success from the exit code,
+# not the log line — the old README text ("do not consider the apply
+# trustworthy if it exits non-zero") pointed him straight at a false failure
+# on every successful apply. Fixed with an explicit `if/fi` (never trips -e
+# regardless of which branch is taken) AND an explicit `exit 0` as the true
+# last statement, so nothing after this point can leave an accidental exit
+# code again.
+exit 0
