@@ -138,6 +138,49 @@ export function getPermanentRejectionCodes(): readonly string[] {
 }
 
 // ---------------------------------------------------------------------------
+// §P0.7 box 2a — the THIRD failure class: the parent, not the row.
+// ---------------------------------------------------------------------------
+
+/**
+ * The one code that means "this row was refused because of something ELSE".
+ *
+ * `ShramSafalErrors.cs:29` — `Error.NotFound("ShramSafal.DailyLogNotFound", ...)`.
+ * `normalizeCode` keeps the tail after the last dot and upper-cases it, so the
+ * lookup form is `DAILYLOGNOTFOUND`.
+ *
+ * NOTE WHY THIS IS NOT SIMPLY ADDED TO `PERMANENT_REJECTION_CODES`, which is
+ * the one-line change an executor reaches for first. Doing that would park
+ * EVERY child of an in-flight parent in `REJECTED_USER_REVIEW` on the very
+ * first cycle — including the ordinary, self-healing case where the parent is
+ * merely one batch behind. The farmer would be asked to resolve a conflict that
+ * was about to resolve itself. The code is not permanent and it is not
+ * transient; it is a statement about a DIFFERENT row, and it needs the parent's
+ * actual state to be classified. That resolution lives in `MutationDependency`.
+ */
+const DEPENDENCY_PENDING_CODE = 'DAILYLOGNOTFOUND';
+
+/**
+ * Did the server refuse this row because its parent daily log is missing?
+ *
+ * Same two signals and the same precedence as `categorizeRejection`: the code
+ * first, then the message as a last resort, because some layers serialize the
+ * code only into the body.
+ */
+export function isDependencyPendingRejection(input: RejectionInput): boolean {
+    const code = input.errorCode ? normalizeCode(input.errorCode) : '';
+    if (code === DEPENDENCY_PENDING_CODE) {
+        return true;
+    }
+
+    const message = input.errorMessage ?? '';
+    if (message.trim().length === 0) {
+        return false;
+    }
+
+    return message.toUpperCase().includes(DEPENDENCY_PENDING_CODE);
+}
+
+// ---------------------------------------------------------------------------
 // Labour Phase 2 -> Phase 1 (honesty backstop), Task T3 / finding R1.
 // ---------------------------------------------------------------------------
 
@@ -173,7 +216,21 @@ export function getPermanentRejectionCodes(): readonly string[] {
  * row for the network's failure. This type is that distinction, made at the
  * only place where the information still exists — the moment of failure.
  */
-export type MutationFailureKind = 'TRANSPORT' | 'REJECTION';
+export type MutationFailureKind =
+    | 'TRANSPORT'
+    | 'REJECTION'
+    /**
+     * §P0.7 box 2a — the row was judged, and the verdict was about a DIFFERENT
+     * row: its parent daily log is not on the server yet. Uncharged for the
+     * same reason `TRANSPORT` is uncharged — this row's own validity is still
+     * unknown — but recorded separately, because "we never reached the server"
+     * and "the server told us our parent is missing" are different facts and a
+     * log line that conflates them cannot be debugged.
+     *
+     * Only produced when the parent is demonstrably still in progress. A parent
+     * that will never move produces a durable rejection instead, not this.
+     */
+    | 'DEPENDENCY';
 
 /**
  * HTTP statuses that describe the SERVER's own availability rather than the

@@ -7,7 +7,12 @@ import { getDatabase } from '../storage/DexieDatabase';
 import { AiJobWorker } from './AiJobWorker';
 import { isSyncMutationType } from './SyncMutationCatalog';
 import { getRootStore } from '../../app/state/RootStore';
-import { categorizePushFailure, categorizeRejection } from './RejectionPolicy';
+import { categorizePushFailure, categorizeRejection, isDependencyPendingRejection } from './RejectionPolicy';
+import {
+    describeDependencyRejection,
+    describeDependencyWait,
+    resolveDailyLogDependency,
+} from './MutationDependency';
 import { resetFailedUploadsToPending } from './UploadQueueRetry';
 
 // Sub-plan 04 Task 4 — bridge worker → syncMachine. Wrapped so the worker
@@ -308,6 +313,56 @@ export class BackgroundSyncWorker {
                 // REJECTED_USER_REVIEW (skips auto-retry, surfaces in
                 // OfflineConflictPage). Transient → FAILED (auto-retry).
                 const errorMessage = result.errorMessage ?? result.errorCode ?? 'Unknown sync error';
+
+                // §P0.7 box 2a — the THIRD class, tested BEFORE the two-way
+                // split because it is not a point on that axis. A
+                // `DailyLogNotFound` is a verdict about the row's PARENT, and
+                // whether the child should wait or escalate depends entirely on
+                // what that parent is doing. See `MutationDependency` for why
+                // "parent still open" is the wrong question and loops forever.
+                if (isDependencyPendingRejection({
+                    errorCode: result.errorCode,
+                    errorMessage: result.errorMessage,
+                })) {
+                    const verdict = await resolveDailyLogDependency(
+                        mutationQueue.getDeviceId(),
+                        mutation.mutationType,
+                        mutation.payload,
+                    );
+
+                    if (verdict.disposition === 'PARENT_IN_PROGRESS') {
+                        // Uncharged: this row was never judged on its own
+                        // merits. Backed off by `markFailed` so a child whose
+                        // parent takes a while does not re-ask every 15s.
+                        await mutationQueue.markFailed(
+                            mutationId,
+                            describeDependencyWait(verdict),
+                            'DEPENDENCY',
+                        );
+                        continue;
+                    }
+
+                    if (verdict.disposition === 'PARENT_UNRECOVERABLE') {
+                        // The parent will not move again without a tap, so
+                        // waiting is a lie. Reject durably, NAMING the parent —
+                        // a rejection the farmer cannot trace to a cause is not
+                        // resolvable, and `ConflictResolutionService` is where
+                        // it now becomes resolvable.
+                        const dependencyReason = describeDependencyRejection(verdict);
+                        await mutationQueue.markRejectedUserReview(mutationId, dependencyReason);
+                        notifySync({
+                            type: 'MUTATION_REJECTED',
+                            mutationId: mutation.clientRequestId,
+                            reason: dependencyReason,
+                        });
+                        continue;
+                    }
+
+                    // NOT_A_DEPENDENCY — no daily-log parent on this payload, or
+                    // the parent is already APPLIED. Fall through unchanged: the
+                    // server is saying something this rule cannot interpret.
+                }
+
                 const category = categorizeRejection({
                     errorCode: result.errorCode,
                     errorMessage: result.errorMessage,

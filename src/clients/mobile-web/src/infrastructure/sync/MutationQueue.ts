@@ -148,6 +148,8 @@ export class MutationQueue {
      * catalog) reached about this row — is charged. A `TRANSPORT` failure never
      * judged the row at all, so charging it would let 75 seconds of bad signal
      * strand a perfectly good record permanently (Task T3, finding R1).
+     * §P0.7 adds `DEPENDENCY`, which is uncharged for the same reason: the
+     * server judged the row's PARENT, not the row.
      *
      * The status still becomes `FAILED` either way: the row is genuinely not
      * sent, and the farmer's records must never look more delivered than they
