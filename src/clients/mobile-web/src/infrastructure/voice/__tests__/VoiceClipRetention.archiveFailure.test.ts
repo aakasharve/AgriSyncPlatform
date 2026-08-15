@@ -52,22 +52,34 @@ vi.mock('../../../core/telemetry/eventEmitters', () => ({
 
 import { resetDatabase, getDatabase } from '../../storage/DexieDatabase';
 import { archiveToRetainedTierIfConsented } from '../VoiceClipRetention';
+import { EventSchemas } from '../../../core/telemetry/eventSchema';
 
 const CLIP_ID = 'c1111111-1111-4111-8111-111111111111';
 const FARM_ID = 'f2222222-2222-4222-8222-222222222222';
 
-/** A sealed v18+ row: ciphertext longer than the 16-byte AES-GCM tag. */
-function sealedRow(overrides: Record<string, unknown> = {}) {
+/**
+ * THE ROW A REAL CLIP ACTUALLY HAS TODAY.
+ *
+ * REVIEW C1 — THE FIXTURE WAS THE BUG. This file previously had only a
+ * `sealedRow()` helper that manufactured a `ciphertext`/`iv`/`wrappedDekId`
+ * triple, and four "the ordinary path stays silent" tests all used it. **No live
+ * writer produces that shape.** So the fixture's world was one where the
+ * ordinary path is silent and production's was not, and the tests confirmed the
+ * world rather than the code — defeating the exact trap the brief pre-announced.
+ *
+ * Built the way `BackendAiClient.persistProcessingVoiceClip` builds it:
+ * `localBlob`, no sealed triple. Verified in that source, and it is why
+ * `awaiting_seal_support` is now a silent skip.
+ */
+function liveRow(overrides: Record<string, unknown> = {}) {
     return {
         id: CLIP_ID,
         farmId: FARM_ID,
         recordedAtUtc: '2026-08-15T09:00:00.000Z',
         durationMs: 4000,
         mimeType: 'audio/webm',
-        sizeBytes: 48,
-        ciphertext: new Uint8Array(48).fill(7),
-        iv: new Uint8Array(12).fill(3),
-        wrappedDekId: 'dek-1',
+        sizeBytes: 3,
+        localBlob: new Blob([new Uint8Array([1, 2, 3])], { type: 'audio/webm' }),
         status: 'parsed',
         retentionPolicy: 'processing_30d',
         expiresAtUtc: '2026-09-14T09:00:00.000Z',
@@ -75,6 +87,23 @@ function sealedRow(overrides: Record<string, unknown> = {}) {
         updatedAt: '2026-08-15T09:00:00.000Z',
         ...overrides,
     };
+}
+
+/**
+ * A SEALED row — the shape the write path is heading for and does not yet
+ * produce. Kept, and labelled, because `persistVoiceClip` really does produce
+ * it and the archive path must be correct on the day it is wired. Any test
+ * using this is testing a future state; the silence tests must not.
+ */
+function sealedRow(overrides: Record<string, unknown> = {}) {
+    return liveRow({
+        localBlob: undefined,
+        sizeBytes: 48,
+        ciphertext: new Uint8Array(48).fill(7),
+        iv: new Uint8Array(12).fill(3),
+        wrappedDekId: 'dek-1',
+        ...overrides,
+    });
 }
 
 async function freshDb() {
@@ -116,6 +145,31 @@ describe('archiveToRetainedTierIfConsented — the failure has to land (D9)', ()
         expect(payload.message).toContain(CLIP_ID);
         expect(payload.message).toContain('Network Error');
         expect(payload.farmId).toBe(FARM_ID);
+    });
+
+    it('I1_a_farmId_that_zod_rejects_does_not_cost_us_the_whole_report', async () => {
+        // REVIEW I1. `00000000-0000-0000-0000-000000000001` passes a hex-shape
+        // regex and FAILS zod's `.uuid()`, which enforces the RFC version and
+        // variant nibbles — and that exact string is a farmId in this repo's own
+        // e2e specs. `emit` drops the ENTIRE payload when the schema fails, so
+        // the old hand-rolled guard would have swallowed the report it exists to
+        // deliver.
+        const badFarmId = '00000000-0000-0000-0000-000000000001';
+        await getDatabase().voiceClips.put(sealedRow({ farmId: badFarmId }) as never);
+        persistMock.mockRejectedValue(new Error('Network Error'));
+
+        await archiveToRetainedTierIfConsented(CLIP_ID);
+
+        expect(emitClientErrorMock).toHaveBeenCalledTimes(1);
+        const payload = emitClientErrorMock.mock.calls[0][0] as { message: string; farmId?: string };
+        // The structured field is dropped, because zod would have rejected it...
+        expect(payload.farmId).toBeUndefined();
+        // ...and the report still lands, with the farm id preserved in the text
+        // so support has not lost the one identifier they would search on.
+        expect(payload.message).toContain('persist_failed');
+        expect(payload.message).toContain(badFarmId);
+        // And the payload we actually emit is one the schema accepts.
+        expect(EventSchemas['client.error'].safeParse(payload).success).toBe(true);
     });
 
     it('D9_the_failure_is_also_recorded_durably_on_the_clip_so_someone_can_act_later', async () => {
@@ -177,16 +231,25 @@ describe('archiveToRetainedTierIfConsented — the failure has to land (D9)', ()
         expect(emitClientErrorMock).toHaveBeenCalledTimes(1);
     });
 
-    it('D9_an_unsealed_legacy_row_is_a_failure_because_it_will_never_be_archived', async () => {
-        await getDatabase().voiceClips.put(
-            sealedRow({ ciphertext: undefined, iv: undefined, wrappedDekId: undefined }) as never,
-        );
+    it('C1_the_local_stamp_failing_after_a_successful_upload_is_not_reported_as_persist_failed', async () => {
+        // REVIEW I2. The upload worked; only the local cross-reference write
+        // did not. Saying `persist_failed` here tells an admin a recording is
+        // missing while it sits in S3.
+        await getDatabase().voiceClips.put(sealedRow() as never);
+        persistMock.mockResolvedValue({ clipId: 'server-clip-1' });
+        const db = getDatabase();
+        const realUpdate = db.voiceClips.update.bind(db.voiceClips);
+        const spy = vi.spyOn(db.voiceClips, 'update').mockRejectedValueOnce(new Error('QuotaExceeded'));
 
         const outcome = await archiveToRetainedTierIfConsented(CLIP_ID);
+        spy.mockImplementation(realUpdate);
 
-        expect(outcome.status === 'failed' && outcome.reason).toBe('unsealed_legacy_row');
-        expect(emitClientErrorMock).toHaveBeenCalledTimes(1);
-        expect(persistMock).not.toHaveBeenCalled();
+        // The promise IS kept — the clip is in the archive.
+        expect(outcome.status).toBe('archived');
+        const payload = emitClientErrorMock.mock.calls[0][0] as { message: string };
+        expect(payload.message).toContain('local_stamp_failed');
+        expect(payload.message).toContain('upload SUCCEEDED');
+        expect(payload.message).not.toContain('persist_failed');
     });
 
     it('D9_a_ciphertext_shorter_than_the_auth_tag_is_a_failure_and_never_hits_the_wire', async () => {
@@ -206,6 +269,46 @@ describe('archiveToRetainedTierIfConsented — the ordinary path stays silent', 
         getConsentMock.mockReset();
         persistMock.mockReset();
         emitClientErrorMock.mockReset();
+    });
+
+    it('C1_SILENT_the_shape_every_live_clip_actually_has_emits_nothing', async () => {
+        // THE TEST THAT WAS MISSING, and the one the brief's requirement 4 is
+        // about. Nothing on the live write path seals clips, so THIS is the
+        // ordinary path: one report per clip here would be one alarm per note
+        // per consenting farmer, uncapped — every consenting farmer a
+        // "suffering farm" by lunchtime, with `persist_failed` buried under it.
+        getConsentMock.mockResolvedValue({ fullHistoryJournal: true });
+        await getDatabase().voiceClips.put(liveRow() as never);
+
+        const outcome = await archiveToRetainedTierIfConsented(CLIP_ID);
+
+        expect(outcome).toEqual({ status: 'skipped', clipId: CLIP_ID, reason: 'awaiting_seal_support' });
+        expect(emitClientErrorMock).not.toHaveBeenCalled();
+        expect(persistMock).not.toHaveBeenCalled();
+    });
+
+    it('C1_SILENT_ten_notes_in_a_day_produce_zero_alarms', async () => {
+        // The volume claim, measured rather than argued. `GetTopSufferingFarmsAsync`
+        // flags any farm with >= 2 client errors in 24h.
+        getConsentMock.mockResolvedValue({ fullHistoryJournal: true });
+        for (let i = 0; i < 10; i++) {
+            const id = `c1111111-1111-4111-8111-00000000000${i}`;
+            await getDatabase().voiceClips.put(liveRow({ id }) as never);
+            await archiveToRetainedTierIfConsented(id);
+        }
+
+        expect(emitClientErrorMock).toHaveBeenCalledTimes(0);
+    });
+
+    it('C1_but_the_unarchivable_clip_is_still_recorded_so_it_is_silent_not_invisible', async () => {
+        getConsentMock.mockResolvedValue({ fullHistoryJournal: true });
+        await getDatabase().voiceClips.put(liveRow() as never);
+
+        await archiveToRetainedTierIfConsented(CLIP_ID);
+
+        const row = await clipRow();
+        expect(row?.retainedArchiveError).toContain('awaiting_seal_support');
+        expect(row?.retainedArchiveLastAttemptAtUtc).toBeTruthy();
     });
 
     it('SILENT_a_successful_archive_emits_nothing_and_writes_no_failure_state', async () => {
@@ -230,7 +333,7 @@ describe('archiveToRetainedTierIfConsented — the ordinary path stays silent', 
 
     it('SILENT_a_farmer_who_never_consented_emits_nothing_and_never_hits_the_wire', async () => {
         getConsentMock.mockResolvedValue({ fullHistoryJournal: false });
-        await getDatabase().voiceClips.put(sealedRow() as never);
+        await getDatabase().voiceClips.put(liveRow() as never);
 
         const outcome = await archiveToRetainedTierIfConsented(CLIP_ID);
 
@@ -242,7 +345,7 @@ describe('archiveToRetainedTierIfConsented — the ordinary path stays silent', 
 
     it('SILENT_a_clip_already_archived_emits_nothing_and_costs_no_round_trip', async () => {
         getConsentMock.mockResolvedValue({ fullHistoryJournal: true });
-        await getDatabase().voiceClips.put(sealedRow({ s3RetainedKey: 'already-there' }) as never);
+        await getDatabase().voiceClips.put(liveRow({ s3RetainedKey: 'already-there' }) as never);
 
         const outcome = await archiveToRetainedTierIfConsented(CLIP_ID);
 
@@ -256,7 +359,7 @@ describe('archiveToRetainedTierIfConsented — the ordinary path stays silent', 
         // ordinary flaky connectivity, the clip is untouched on the phone, and a
         // report per flaky read would bury the failures that matter.
         getConsentMock.mockRejectedValue(new Error('offline'));
-        await getDatabase().voiceClips.put(sealedRow() as never);
+        await getDatabase().voiceClips.put(liveRow() as never);
 
         const outcome = await archiveToRetainedTierIfConsented(CLIP_ID);
 

@@ -268,7 +268,7 @@ export interface PendingAiJobRetainedArchive {
     status: 'archived' | 'skipped' | 'failed';
     /** Machine reason from `VoiceClipArchiveOutcome`; absent when archived. */
     reason?: string;
-    /** POST attempts made. Absent when the wire was never reached. */
+    /** POST attempts made. `0` when the wire was never reached; never omitted. */
     attempts?: number;
     /** When the archive step ran. */
     at: string;
@@ -309,13 +309,25 @@ export interface VoiceClipCacheRecord {
     mimeType: string;
     sizeBytes: number;
     /**
-     * Pre-v18 plaintext blob. Optional during the upgrade window — rows
-     * written before v18 carry this; rows written after v18 carry the
-     * sealed triple (`ciphertext` + `iv` + `wrappedDekId`) instead.
-     * Backward-compat lives here only so the v18 upgrade callback can
-     * detect legacy rows and flag them for re-seal.
+     * The clip's audio bytes, IN PLAINTEXT. **This is what every live clip
+     * carries today**, not a pre-v18 remnant.
      *
-     * spec: data-principle-spine-2026-05-05/05.3
+     * ⚠️ THIS COMMENT USED TO SAY the opposite — *"rows written before v18 carry
+     * this; rows written after v18 carry the sealed triple"*. That stopped being
+     * true and was never corrected, and a reader who trusted it concluded that
+     * an unsealed row must be a rare legacy leftover. It is not. Verified in
+     * source: `BackendAiClient.persistProcessingVoiceClip` is the only live
+     * writer and it writes `localBlob` and never the sealed triple, and
+     * `VoiceClipRetention.persistVoiceClip` — the only function that seals — has
+     * ZERO callers in `src/clients`.
+     *
+     * The sealed triple below is therefore ASPIRATIONAL on the write path: real,
+     * tested, and unreached. `VoiceClipRetention.ts` header and founder ruling
+     * D9 both record that wiring it is the next item in this area.
+     *
+     * Do not restore the old wording without first checking the writer.
+     *
+     * spec: data-principle-spine-2026-05-05/05.3; founder ruling D9 (2026-08-14)
      */
     localBlob?: Blob;
     /**

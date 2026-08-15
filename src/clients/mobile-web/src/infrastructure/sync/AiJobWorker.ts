@@ -160,7 +160,10 @@ export class AiJobWorker {
             // archived" distinguishable from "parsed, archive failed".
             const clipId = job.context.idempotencyKey;
             if (clipId && job.operationType === 'voice_parse' && job.context.operation !== 'text') {
-                const outcome = await archiveToRetainedTierIfConsented(clipId);
+                // `job.context.farmId` is passed so a `clip_row_missing` report is not
+                // content-free: without it that branch has no row to read a farm from,
+                // and the surface these render on is farm-scoped (review I1 note).
+                const outcome = await archiveToRetainedTierIfConsented(clipId, job.context.farmId);
                 await db.pendingAiJobs.update(job.id, {
                     retainedArchive: {
                         status: outcome.status,
