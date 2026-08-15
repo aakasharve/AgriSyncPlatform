@@ -33,6 +33,36 @@
 # read-only AWS calls. This script has never been run with --apply by the
 # agent that authored it.
 #
+# === ROUND 1 REVIEW FINDINGS — FIXES APPLIED 2026-08-15 ===
+# C1 (bucket-policy.json's encryption-header deny was not safe): that
+#   statement is REMOVED from bucket-policy.json (now TLS-only) and moved to
+#   aws/raw/bucket-policy-encryption-deny.NOT-VERIFIED-DO-NOT-APPLY.json — see
+#   that file and bucket-policy.json's own _comment for the full reasoning.
+#   This script therefore now applies STRICTLY LESS than it did in round 1
+#   (TLS-only, not TLS+encryption-header) — it still never touches either
+#   bucket-policy-cmk-deny-rail.PHASE2-DO-NOT-APPLY.json or the new
+#   encryption-deny file.
+# I4a (rollback command wrong): bucket-policy capture now uses
+#   `--query Policy --output text`, which returns the policy document itself
+#   (directly re-appliable to put-bucket-policy), not the
+#   `{"Policy":"<json string>"}` wrapper get-bucket-policy returns by default.
+# I5 (diff will likely false-FAIL): the post-apply diff now strips the GET-only
+#   TransitionDefaultMinimumObjectSize field and sorts .Rules by ID before
+#   comparing (S3 does not document rule-order preservation, and this bucket's
+#   own single-rule document makes this low-risk today, but the normalisation
+#   is applied for consistency with aws/uploads/apply-config.sh and because it
+#   costs nothing when there is only one rule). NOT exercised against a real
+#   --apply — zero mutating calls made by this agent.
+# I6 (no partial-failure handling; missing MSYS_NO_PATHCONV): each of the
+#   three PUTs is now wrapped in its own if/then so a failed PUT does not
+#   kill the script under `set -e`, and always reaches a
+#   what-landed-and-what-didn't summary. MSYS_NO_PATHCONV=1 is now set,
+#   scoped to just the three put-bucket-* calls (Git Bash on Windows — the
+#   founder's shell — otherwise mangles file:///dev/stdin); it is NOT
+#   exported globally because this script also calls jq against real file
+#   paths, which a global MSYS_NO_PATHCONV=1 breaks (reproduced locally while
+#   fixing aws/uploads/apply-config.sh — see that script's header).
+#
 # Usage:
 #   bash aws/raw/apply-config.sh                 # dry-run: capture + diff only
 #   bash aws/raw/apply-config.sh --apply          # capture + apply + diff (MUTATES PROD)
@@ -77,7 +107,10 @@ aws s3api get-bucket-lifecycle-configuration --bucket "$BUCKET" --region "$REGIO
   > "${CAPTURE_DIR}/lifecycle.live.json" 2>"${CAPTURE_DIR}/lifecycle.live.stderr" \
   || echo '{"_note":"NoSuchLifecycleConfiguration or call failed - see lifecycle.live.stderr"}' > "${CAPTURE_DIR}/lifecycle.live.json"
 
-aws s3api get-bucket-policy --bucket "$BUCKET" --region "$REGION" \
+# I4a fix: --query Policy --output text extracts the policy DOCUMENT ITSELF
+# (directly re-appliable to put-bucket-policy), not the default
+# {"Policy":"<json-encoded string>"} wrapper, which cannot be fed back as-is.
+aws s3api get-bucket-policy --bucket "$BUCKET" --region "$REGION" --query 'Policy' --output text \
   > "${CAPTURE_DIR}/policy.live.json" 2>"${CAPTURE_DIR}/policy.live.stderr" \
   || echo '{"_note":"NoSuchBucketPolicy or call failed - see policy.live.stderr"}' > "${CAPTURE_DIR}/policy.live.json"
 
@@ -94,7 +127,12 @@ aws s3api list-object-versions --bucket "$BUCKET" --region "$REGION" \
 
 echo "[apply-config]   captured -> ${CAPTURE_DIR}/{lifecycle,policy,cors}.live.json"
 echo "[apply-config]   version counts (current/noncurrent/delete-markers) -> ${CAPTURE_DIR}/version-counts.json"
-echo "[apply-config]   THIS CAPTURE IS THE ROLLBACK."
+echo "[apply-config]   THIS CAPTURE IS THE ROLLBACK. To roll back:"
+echo "[apply-config]     aws s3api put-bucket-lifecycle-configuration --bucket $BUCKET --lifecycle-configuration file://${CAPTURE_DIR}/lifecycle.live.json --region $REGION"
+echo "[apply-config]     aws s3api put-bucket-policy --bucket $BUCKET --policy file://${CAPTURE_DIR}/policy.live.json --region $REGION"
+echo "[apply-config]     aws s3api put-bucket-cors --bucket $BUCKET --cors-configuration file://${CAPTURE_DIR}/cors.live.json --region $REGION"
+echo "[apply-config]   (or delete-bucket-lifecycle / delete-bucket-policy / delete-bucket-cors if a file"
+echo "[apply-config]   contains a NoSuchX note, meaning that config did not exist before.)"
 
 RENDERED_LIFECYCLE="$(jq 'del(._comment)' "${SCRIPT_DIR}/lifecycle-policy.json")"
 echo "$RENDERED_LIFECYCLE" > "${CAPTURE_DIR}/lifecycle.desired.rendered.json"
@@ -120,34 +158,71 @@ if [[ "$FORBIDDEN_ACTIONS" -ne 0 ]]; then
 fi
 echo "[apply-config]   guardrail OK: desired lifecycle contains only AbortIncompleteMultipartUpload"
 
-# ─── Step 2: APPLY (gated) ─────────────────────────────────────────────────
+# ─── Step 2: APPLY (gated), each call tracked independently (I6 fix) ──────
+LIFECYCLE_APPLIED=0
+POLICY_APPLIED=0
+CORS_APPLIED=0
+
 if [[ "$DO_APPLY" -eq 1 ]]; then
   echo "[apply-config] 2/3: APPLYING (this mutates prod S3 config)..."
-  echo "$RENDERED_LIFECYCLE" | aws s3api put-bucket-lifecycle-configuration \
-    --bucket "$BUCKET" --region "$REGION" --lifecycle-configuration file:///dev/stdin
-  echo "[apply-config]   lifecycle applied (AbortIncompleteMultipartUpload only)"
 
-  echo "$RENDERED_POLICY" | aws s3api put-bucket-policy \
-    --bucket "$BUCKET" --region "$REGION" --policy file:///dev/stdin
-  echo "[apply-config]   bucket policy applied (Phase 1 — TLS + encryption-header deny only;"
-  echo "[apply-config]   bucket-policy-cmk-deny-rail.PHASE2-DO-NOT-APPLY.json NOT applied)"
+  if echo "$RENDERED_LIFECYCLE" | MSYS_NO_PATHCONV=1 aws s3api put-bucket-lifecycle-configuration \
+      --bucket "$BUCKET" --region "$REGION" --lifecycle-configuration file:///dev/stdin; then
+    LIFECYCLE_APPLIED=1
+    echo "[apply-config]   lifecycle applied (AbortIncompleteMultipartUpload only)"
+  else
+    echo "[apply-config]   ERROR: lifecycle PUT failed (see AWS CLI error above)" >&2
+  fi
 
-  echo "$RENDERED_CORS" | aws s3api put-bucket-cors \
-    --bucket "$BUCKET" --region "$REGION" --cors-configuration file:///dev/stdin
-  echo "[apply-config]   CORS applied"
+  if echo "$RENDERED_POLICY" | MSYS_NO_PATHCONV=1 aws s3api put-bucket-policy \
+      --bucket "$BUCKET" --region "$REGION" --policy file:///dev/stdin; then
+    POLICY_APPLIED=1
+    echo "[apply-config]   bucket policy applied (TLS-only; encryption-header deny and CMK deny rail"
+    echo "[apply-config]   NOT applied — see bucket-policy-encryption-deny.NOT-VERIFIED-DO-NOT-APPLY.json"
+    echo "[apply-config]   and bucket-policy-cmk-deny-rail.PHASE2-DO-NOT-APPLY.json)"
+  else
+    echo "[apply-config]   ERROR: bucket policy PUT failed (see AWS CLI error above)" >&2
+  fi
+
+  if echo "$RENDERED_CORS" | MSYS_NO_PATHCONV=1 aws s3api put-bucket-cors \
+      --bucket "$BUCKET" --region "$REGION" --cors-configuration file:///dev/stdin; then
+    CORS_APPLIED=1
+    echo "[apply-config]   CORS applied"
+  else
+    echo "[apply-config]   ERROR: CORS PUT failed (see AWS CLI error above)" >&2
+  fi
+
+  echo "[apply-config]   summary: lifecycle=$([[ $LIFECYCLE_APPLIED -eq 1 ]] && echo OK || echo FAILED)" \
+       "policy=$([[ $POLICY_APPLIED -eq 1 ]] && echo OK || echo FAILED)" \
+       "cors=$([[ $CORS_APPLIED -eq 1 ]] && echo OK || echo FAILED)"
+
+  if [[ "$LIFECYCLE_APPLIED" -eq 0 || "$POLICY_APPLIED" -eq 0 || "$CORS_APPLIED" -eq 0 ]]; then
+    echo "[apply-config] FAILED — at least one of the three PUTs did not land. This is NOT an atomic" >&2
+    echo "  transaction; the bucket may now be in a MIXED state. Check each config live before" >&2
+    echo "  assuming anything, then re-run the PUT(s) that failed." >&2
+    exit 1
+  fi
 else
   echo "[apply-config] 2/3: DRY-RUN — skipping apply. Re-run with --apply to write these."
 fi
 
-# ─── Step 3: DIFF + verify noncurrent versions are untouched ──────────────
+# ─── Step 3: DIFF (semantically, I5 fix) + verify noncurrent versions untouched ──
+# Strip the GET-only TransitionDefaultMinimumObjectSize field and sort .Rules
+# by ID before comparing — low-risk on this bucket's single-rule document,
+# applied for consistency with aws/uploads/apply-config.sh. Not exercised
+# against a real --apply (zero mutating calls made by this agent).
+normalize_lifecycle() {
+  jq -S 'del(.TransitionDefaultMinimumObjectSize) | .Rules |= ((. // []) | sort_by(.ID))'
+}
+
 echo "[apply-config] 3/3: diffing live vs desired, and re-checking version counts..."
 aws s3api get-bucket-lifecycle-configuration --bucket "$BUCKET" --region "$REGION" \
   > "${CAPTURE_DIR}/lifecycle.after.json" 2>/dev/null || echo '{}' > "${CAPTURE_DIR}/lifecycle.after.json"
 
 DIFF_FAILED=0
-if ! diff -u <(jq -S . "${CAPTURE_DIR}/lifecycle.desired.rendered.json") <(jq -S . "${CAPTURE_DIR}/lifecycle.after.json"); then
+if ! diff -u <(normalize_lifecycle < "${CAPTURE_DIR}/lifecycle.desired.rendered.json") <(normalize_lifecycle < "${CAPTURE_DIR}/lifecycle.after.json"); then
   if [[ "$DO_APPLY" -eq 1 ]]; then
-    echo "[apply-config] ERROR: live lifecycle does not match desired after apply" >&2
+    echo "[apply-config] ERROR: live lifecycle does not match desired after apply (post-normalisation)" >&2
     DIFF_FAILED=1
   else
     echo "[apply-config]   (dry-run: diff above is EXPECTED — live still shows the pre-change policy)"

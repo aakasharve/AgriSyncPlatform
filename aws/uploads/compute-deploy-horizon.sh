@@ -1,9 +1,40 @@
 #!/usr/bin/env bash
 # compute-deploy-horizon.sh — prints ONE integer to stdout: the number of days
-# deploy-ish S3 prefixes (_deploy/, _deploys/, deploys/, ai-sessions/) on
-# shramsafal-uploads-prod should be allowed to live before expiry.
+# a deploy-artifact S3 prefix on shramsafal-uploads-prod should be allowed to
+# live before expiry, computed from the oldest retained manual RDS snapshot.
 #
 # spec: FINAL_SERVER_AUTHORITATIVE_EXECUTION_PLAN §11 (S11-infra-author)
+#
+# === ROUND 1 REVIEW FINDING C2 — STATUS UPDATE 2026-08-15 ===
+# CURRENTLY UNUSED. Round 1 wired this into _deploy/, _deploys/, deploys/, and
+# ai-sessions/. Round-1 review (C2) found that reproducibility is UNPROVEN for
+# _deploy/, _deploys/, deploys/ (concrete non-reproducible content found in
+# _deploys/ — see aws/uploads/lifecycle-policy.json's _comment for the full
+# read-only evidence) — so those three prefixes now carry NO destructive rule
+# at all, and this script has no caller for them. ai-sessions/ was moved to a
+# fixed, independently-reasoned 7-day constant instead (its rationale is "AI
+# verification-poll duplicate, ~60s useful life", which has nothing to do with
+# RDS-snapshot-paired deploy rollback — the RDS-snapshot linkage never actually
+# applied to it and tying it there was leftover grouping from when all four
+# prefixes were treated as one category).
+#
+# KEPT IN THE REPO for whenever _deploy/, _deploys/, deploys/ earn a properly
+# proven destructive rule (e.g. after a write-time reproducibility-tagging
+# convention lands, or after a founder-directed manual prune of the confirmed
+# non-reproducible incident scripts in _deploys/). The reasoning below is still
+# correct for THAT future use — do not delete this file to "clean up", and do
+# not re-wire it back into apply-config.sh without re-proving reproducibility
+# first (see lifecycle-policy.json's C2 section for what proof looks like).
+#
+# LESSON FOR WHOEVER RE-ENABLES THIS (round-1 finding I2, so it isn't repeated):
+# do not patch the rendered lifecycle document with a jq PATH-ASSIGNMENT like
+#   (.Rules[] | select(...) | .Expiration.Days) = $days
+# — jq path assignment auto-vivifies: if a human has deliberately deleted the
+# Expiration key from a rule to stop it expiring, this silently RE-ADDS it,
+# populated. Guard with `select(.Expiration != null)` in the path expression
+# (which also correctly treats an explicit `"Expiration": null` the same as a
+# deleted key) so a human's removal of the key is respected:
+#   (.Rules[] | select(...) | select(.Expiration != null) | .Expiration.Days) = $days
 #
 # WHY THIS EXISTS (do not replace with a round number):
 #   Manual RDS snapshots never expire (no lifecycle prunes them). §15 promises

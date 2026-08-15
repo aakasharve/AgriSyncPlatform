@@ -1,27 +1,52 @@
 {
   "_comment": [
-    "S3 bucket policy — shramsafal-uploads-prod.",
+    "S3 bucket policy — shramsafal-uploads-prod. TLS-only. Safe to apply now.",
     "spec: FINAL_SERVER_AUTHORITATIVE_EXECUTION_PLAN §11 (S11-infra-author)",
     "",
     "LIVE STATE CAPTURED 2026-08-15 (read-only, aws s3api get-bucket-policy):",
-    "  NoSuchBucketPolicy — this bucket has NO policy today. Rollback for this",
-    "  file is therefore 'delete the policy':",
+    "  NoSuchBucketPolicy — this bucket has NO policy today. Rollback:",
     "    aws s3api delete-bucket-policy --bucket shramsafal-uploads-prod --region ap-south-1",
     "",
-    "Mirrors aws/snapshot/bucket-policy.json and aws/voice-retained/bucket-policy.json:",
-    "  1. DenyInsecureTransport — block any S3 call not over TLS.",
-    "  2. DenyUnencryptedUploads — block any PutObject that does not carry",
-    "     x-amz-server-side-encryption: AES256 (this bucket's live default",
-    "     encryption, confirmed 2026-08-15 via get-bucket-encryption — AES256,",
-    "     BucketKeyEnabled=false; unchanged by this transaction).",
-    "  3. DenyMissingEncryptionHeader — belt-and-braces: deny PutObject that",
-    "     omits the header entirely (a bare AES256 StringNotEquals check alone",
-    "     would allow an absent header through).",
+    "=== ROUND 1 REVIEW FINDING C1 — FIX APPLIED 2026-08-15 ===",
+    "This file used to also carry a DenyUnencryptedUploads / DenyMissingEncryptionHeader",
+    "pair, justified as 'safe' because the bucket's DEFAULT encryption is AES256.",
+    "That justification was WRONG: default bucket encryption does not populate the",
+    "s3:x-amz-server-side-encryption CONDITION KEY — that key reflects the REQUEST",
+    "HEADER the writer sent, not what the bucket would apply by default. A Deny",
+    "with Null:{s3:x-amz-server-side-encryption:true} therefore denies every",
+    "PutObject that omits the header, REGARDLESS of whether default encryption",
+    "would have encrypted the object anyway — it is not the no-op it was claimed",
+    "to be. Two concrete hazards found:",
+    "  1. No in-repo writer is confirmed for _deploy/, _deploys/, deploys/, or",
+    "     apk/ on this bucket (grep across .github/, aws/, scripts/ finds no",
+    "     s3 cp / s3 sync targeting shramsafal-uploads-prod; android-release.yml",
+    "     pushes to a DIFFERENT bucket, shramsafal-app-prod). Something outside",
+    "     this repo writes ~618 MB of deploy artifacts here. Plain `aws s3 cp`",
+    "     sends no SSE header unless --sse is passed — this repo's own",
+    "     aws/snapshot/snapshot.sh:245 proves the team knows to pass it, for a",
+    "     DIFFERENT bucket. Whether the unaudited writer here does the same",
+    "     cannot be determined from this repo.",
+    "  2. s3:PutObject Deny with a Null SSE condition also denies UploadPart —",
+    "     multipart parts structurally CANNOT carry an encryption header (it is",
+    "     set once, at CreateMultipartUpload). Any object that crosses the",
+    "     multipart threshold — plausible for the 44 MB tarballs in _deploy/ —",
+    "     would be denied even when the initiator set the header correctly at",
+    "     initiation.",
+    "This cannot be settled by reading this repo (it needs CloudTrail data events",
+    "or a full enumeration of every principal/pipeline capable of writing here).",
+    "Per this review round's explicit instruction, it is NOT reclassified as",
+    "'prove it' work for this lane — it is moved to the same do-not-apply-yet",
+    "posture as the raw bucket's CMK deny rail:",
+    "  aws/uploads/bucket-policy-encryption-deny.NOT-VERIFIED-DO-NOT-APPLY.json",
+    "See that file for what must be verified before it can be applied, and for",
+    "the exact statements (unchanged in substance, only moved).",
     "",
-    "This bucket is NOT part of the CMK/encryption-rail item in §11 — that item",
-    "is scoped to the raw-blob bucket only (see aws/raw/). This policy does not",
-    "require or reference any KMS key and is safe to apply independently of the",
-    "CMK binding work.",
+    "WHAT REMAINS IN THIS FILE: TLS-only enforcement (DenyInsecureTransport).",
+    "This has none of the above hazards — aws:SecureTransport is a TLS-layer",
+    "property of the connection itself, not a per-request header a writer can",
+    "forget to set, so there is no 'unaudited writer might not send it' failure",
+    "mode and no multipart interaction (every S3 API action, including",
+    "UploadPart, either uses TLS or it doesn't; there is nothing to omit).",
     "",
     "APPLY (founder only): aws s3api put-bucket-policy --bucket shramsafal-uploads-prod --policy file://bucket-policy.json --region ap-south-1",
     "  (apply-config.sh does this as part of the single transaction.)",
@@ -42,30 +67,6 @@
       "Condition": {
         "Bool": {
           "aws:SecureTransport": "false"
-        }
-      }
-    },
-    {
-      "Sid": "DenyUnencryptedUploads",
-      "Effect": "Deny",
-      "Principal": "*",
-      "Action": "s3:PutObject",
-      "Resource": "arn:aws:s3:::shramsafal-uploads-prod/*",
-      "Condition": {
-        "StringNotEquals": {
-          "s3:x-amz-server-side-encryption": "AES256"
-        }
-      }
-    },
-    {
-      "Sid": "DenyMissingEncryptionHeader",
-      "Effect": "Deny",
-      "Principal": "*",
-      "Action": "s3:PutObject",
-      "Resource": "arn:aws:s3:::shramsafal-uploads-prod/*",
-      "Condition": {
-        "Null": {
-          "s3:x-amz-server-side-encryption": "true"
         }
       }
     }

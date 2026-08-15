@@ -1,32 +1,43 @@
 {
   "_comment": [
-    "S3 bucket policy — agrisync-raw-ap-south-1. PHASE 1 (safe to apply now).",
+    "S3 bucket policy — agrisync-raw-ap-south-1. TLS-only. Safe to apply now.",
     "spec: FINAL_SERVER_AUTHORITATIVE_EXECUTION_PLAN §11 (S11-infra-author)",
     "",
     "LIVE STATE CAPTURED 2026-08-15 (read-only, aws s3api get-bucket-policy):",
     "  NoSuchBucketPolicy — this bucket has NO policy today. Rollback:",
     "    aws s3api delete-bucket-policy --bucket agrisync-raw-ap-south-1 --region ap-south-1",
     "",
-    "This is PHASE 1 only — TLS-only + 'some encryption header present' deny",
-    "rails. It deliberately does NOT require a specific algorithm or a specific",
-    "KMS key. Live encryption on this bucket today (captured 2026-08-15, read-",
-    "only aws s3api get-bucket-encryption) is SSE-S3 AES256 with",
-    "BucketKeyEnabled=true — NOT the customer-managed KMS key the plan intends",
-    "('under AES256, not the intended customer-managed key' — gap register I4).",
-    "This policy is written to be satisfied by that CURRENT state, so applying",
-    "it today changes nothing about what encryption objects get; it only",
-    "closes the 'no policy at all' gap and blocks unencrypted / non-TLS access.",
+    "=== ROUND 1 REVIEW FINDING C1 — FIX APPLIED 2026-08-15 ===",
+    "This file used to also carry a DenyMissingEncryptionHeader statement,",
+    "labelled 'Phase 1, safe to apply now'. It was NOT safe: the",
+    "s3:x-amz-server-side-encryption condition key reflects the REQUEST HEADER a",
+    "writer sends, not the bucket's default encryption — a Null-condition Deny on",
+    "s3:PutObject denies every write that omits the header regardless of what",
+    "default encryption would otherwise have applied, and the same Deny covers",
+    "multipart UploadPart, which structurally cannot carry that header at all.",
+    "This is the identical statement/identical reasoning error as",
+    "aws/uploads/bucket-policy.json used to carry — see that file's C1 note for",
+    "the two concrete hazards. THE SHARP EDGE HERE, specifically: this bucket's",
+    "write path (S3RawBlobStore.PutAsync) SWALLOWS the exception on a failed",
+    "PutObject. If this Deny had been applied and anything about the write path",
+    "changed to stop sending the header (a bug, a future refactor, an admin",
+    "script bypassing S3RawBlobStore), the failure would be invisible — farmers",
+    "would get HTTP 200 while their evidence silently stopped being retained.",
+    "That is the exact failure class §11 exists to end, reintroduced by a",
+    "statement labelled safe.",
     "",
-    "PHASE 2 (a SEPARATE, NOT-YET-SAFE file: bucket-policy-cmk-deny-rail.",
-    "PHASE2-DO-NOT-APPLY.json) tightens this to require the dedicated CMK",
-    "specifically. Do not fold that statement into this file and do not apply",
-    "it until the ordering trap in that file's header is resolved by the",
-    "backend team (unswallow the failure -> bind RawBlobStore config with",
-    "ValidateOnStart -> only then add the CMK deny rail). Applying the CMK",
-    "requirement before the key is bound makes every PUT fail with the",
-    "exception silently swallowed by the current write path — farmers would",
-    "get HTTP 200s while their evidence silently stopped being retained. That",
-    "code change is out of this lane's scope (src/, not aws/).",
+    "The encryption-header-deny statement is moved to:",
+    "  aws/raw/bucket-policy-encryption-deny.NOT-VERIFIED-DO-NOT-APPLY.json",
+    "— a SEPARATE hazard from, and a separate file from, the CMK deny rail",
+    "(aws/raw/bucket-policy-cmk-deny-rail.PHASE2-DO-NOT-APPLY.json). Do not merge",
+    "these two files into one — they have different preconditions (CloudTrail /",
+    "writer-enumeration for the encryption-header deny; a bound CMK for the CMK",
+    "rail) and different owners for clearing them.",
+    "",
+    "WHAT REMAINS IN THIS FILE: TLS-only enforcement (DenyInsecureTransport).",
+    "aws:SecureTransport is a connection-layer property, not a per-request",
+    "header a writer can forget — no 'unaudited writer' failure mode, no",
+    "multipart interaction.",
     "",
     "APPLY (founder only): aws s3api put-bucket-policy --bucket agrisync-raw-ap-south-1 --policy file://bucket-policy.json --region ap-south-1",
     "  (apply-config.sh does this as part of the single transaction.)",
@@ -47,18 +58,6 @@
       "Condition": {
         "Bool": {
           "aws:SecureTransport": "false"
-        }
-      }
-    },
-    {
-      "Sid": "DenyMissingEncryptionHeader",
-      "Effect": "Deny",
-      "Principal": "*",
-      "Action": "s3:PutObject",
-      "Resource": "arn:aws:s3:::agrisync-raw-ap-south-1/*",
-      "Condition": {
-        "Null": {
-          "s3:x-amz-server-side-encryption": "true"
         }
       }
     }

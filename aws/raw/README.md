@@ -30,11 +30,28 @@ anything beyond that one action.
 | File | Purpose |
 |---|---|
 | `lifecycle-policy.json` | The ONE rule this bucket gets: `AbortIncompleteMultipartUpload` after 7 days. Nothing else. See its `_comment` for the full measurement + D9 reasoning + live-state rollback. |
-| `bucket-policy.json` | **Phase 1 (safe to apply now).** TLS-only + "some SSE header present" deny rails. Does not require a specific algorithm or KMS key — satisfied by the bucket's current AES256 default encryption. |
-| `bucket-policy-cmk-deny-rail.PHASE2-DO-NOT-APPLY.json` | **NOT a valid standalone policy document (deliberately — cannot be applied by accident).** The eventual "require the dedicated CMK" statements, authored because §11 asks for them, explicitly flagged as unsafe to apply until backend work (out of this lane's scope) lands first. See its header for the mandatory ordering. |
+| `bucket-policy.json` | TLS-only. Safe to apply now. |
+| `bucket-policy-encryption-deny.NOT-VERIFIED-DO-NOT-APPLY.json` | **Not safe to apply yet** (round-1 finding C1) — the encryption-header-deny statement this file used to carry, labelled "Phase 1, safe to apply now". It wasn't: the condition key checks the request header, not default encryption, and this bucket's write path swallows PutObject failures. See its header. |
+| `bucket-policy-cmk-deny-rail.PHASE2-DO-NOT-APPLY.json` | **NOT a valid standalone policy document (deliberately — cannot be applied by accident).** The eventual "require the dedicated CMK" statements, authored because §11 asks for them, explicitly flagged as unsafe to apply until backend work (out of this lane's scope) lands first. See its header for the mandatory ordering. This is a SEPARATE hazard/file from the encryption-deny file above — do not merge them. |
 | `cors-policy.json` | Conservative GET-only CORS. Currently a no-op — verified no code path in `src/` does a direct browser-to-S3 request against this bucket. |
-| `apply-config.sh` | Capture → guardrail-check → apply (gated behind `--apply`) → diff, for `lifecycle-policy.json` + `bucket-policy.json` + `cors-policy.json` only. Never touches the Phase 2 CMK file. |
+| `apply-config.sh` | Capture → guardrail-check → apply (gated behind `--apply`) → diff, for `lifecycle-policy.json` + `bucket-policy.json` + `cors-policy.json` only. Never touches the CMK file or the encryption-deny file. |
 | `.gitignore` | Ignores the `capture/` folder `apply-config.sh` writes on every run. |
+
+## The encryption-header deny was not safe either (round-1 finding C1)
+
+`bucket-policy.json` used to also carry a `DenyMissingEncryptionHeader` statement
+labelled "Phase 1, safe to apply now". A round-1 review found the justification
+wrong: `s3:x-amz-server-side-encryption` in a `Null` condition checks the
+**request header** a writer sends, not the bucket's default encryption — a
+Deny on that condition denies every write that omits the header regardless of
+what default encryption would otherwise have applied, and the same Deny also
+covers multipart `UploadPart`, which cannot carry that header at all. On this
+bucket specifically, `S3RawBlobStore.PutAsync` **swallows the exception** on a
+failed PutObject — applying this while anything about the write path ever
+sends a PUT without the header (a bug, a refactor, a bypass) would silently
+stop retaining evidence while the farmer's app shows success. That statement
+is now in `bucket-policy-encryption-deny.NOT-VERIFIED-DO-NOT-APPLY.json`,
+not shipped — see that file for what would need to be verified first.
 
 ## The ordering hazard on the CMK deny rail (why it's a separate, unsafe file)
 
@@ -61,8 +78,9 @@ only prepares the eventual bucket-policy shape; it does not sequence or apply it
       `s3:ListBucketVersions` on `arn:aws:s3:::agrisync-raw-ap-south-1`.
 - [ ] Founder approval recorded — this is a founder-apply-gated change.
 - [ ] Read `lifecycle-policy.json`'s `_comment` block once, in full.
-- [ ] Confirmed you are applying `bucket-policy.json` (Phase 1), **not**
-      `bucket-policy-cmk-deny-rail.PHASE2-DO-NOT-APPLY.json`.
+- [ ] Confirmed you are applying `bucket-policy.json` (TLS-only), **not**
+      `bucket-policy-cmk-deny-rail.PHASE2-DO-NOT-APPLY.json` and **not**
+      `bucket-policy-encryption-deny.NOT-VERIFIED-DO-NOT-APPLY.json`.
 
 ## Apply
 
@@ -73,10 +91,14 @@ bash aws/raw/apply-config.sh
 # 2. Review the diff it prints. If it matches your expectation:
 bash aws/raw/apply-config.sh --apply
 
-# 3. It re-diffs live-after-apply against desired automatically AND re-checks
-#    object version counts (current/noncurrent/delete-markers) before vs after,
-#    warning if they changed (they should never change from this script — its
-#    only lifecycle action is AbortIncompleteMultipartUpload).
+# 3. It re-diffs live-after-apply against desired automatically (semantically —
+#    strips the GET-only TransitionDefaultMinimumObjectSize field and sorts
+#    Rules by ID before comparing; not exercised against a real --apply, zero
+#    mutating calls made by this agent) AND re-checks object version counts
+#    (current/noncurrent/delete-markers) before vs after, warning if they
+#    changed (they should never change from this script — its only lifecycle
+#    action is AbortIncompleteMultipartUpload). It also prints a per-PUT
+#    landed/not-landed summary — the three PUTs are not an atomic transaction.
 ```
 
 Each run writes a timestamped folder under `capture/` (gitignored) containing the
@@ -101,10 +123,21 @@ aws s3api list-object-versions --bucket agrisync-raw-ap-south-1 --region ap-sout
 
 ## Rollback
 
+Run from the repo root — captures write to
+`aws/raw/capture/<timestamp>/...` (round-1 finding I4b: this path used to be
+written as `capture/<timestamp>/...`, which does not resolve from repo root,
+where the Apply section above tells you to run; `apply-config.sh` itself now
+prints these exact commands with the real path filled in after every capture
+step):
+
 ```bash
 # If the captured file is a real document (not a NoSuchX note):
 aws s3api put-bucket-lifecycle-configuration --bucket agrisync-raw-ap-south-1 \
-  --lifecycle-configuration file://capture/<timestamp>/lifecycle.live.json --region ap-south-1
+  --lifecycle-configuration file://aws/raw/capture/<timestamp>/lifecycle.live.json --region ap-south-1
+aws s3api put-bucket-policy --bucket agrisync-raw-ap-south-1 \
+  --policy file://aws/raw/capture/<timestamp>/policy.live.json --region ap-south-1
+aws s3api put-bucket-cors --bucket agrisync-raw-ap-south-1 \
+  --cors-configuration file://aws/raw/capture/<timestamp>/cors.live.json --region ap-south-1
 
 # If the captured file says NoSuchLifecycleConfiguration / NoSuchBucketPolicy /
 # NoSuchCORSConfiguration, the rollback is to DELETE the config, not re-apply an
@@ -114,8 +147,17 @@ aws s3api delete-bucket-policy --bucket agrisync-raw-ap-south-1 --region ap-sout
 aws s3api delete-bucket-cors --bucket agrisync-raw-ap-south-1 --region ap-south-1
 ```
 
-The verbatim capture at the time this lane's PR landed (2026-08-15) is also
-recorded in the landing commit message.
+**Where the durable rollback record actually lives (round-1 finding I7 —
+corrected 2026-08-15):** this section previously claimed the verbatim capture
+"is also recorded in the landing commit message" — checked against commit
+`f5a8baf9`, that was false; its body carries the spec line and a Change
+Surface, not the captured document. The durable, git-tracked copy is
+`lifecycle-policy.json`'s own `_comment` block — committed, versioned,
+diffable in git history — not a gitignored local `capture/` folder and not
+the commit message. Each `apply-config.sh` run writes a second, timestamped
+copy to `capture/<timestamp>/lifecycle.live.json` for convenience, but that
+folder is gitignored and disposable; treat `lifecycle-policy.json` itself as
+the source of truth for "what was live before this changed."
 
 ## What this does NOT do
 
@@ -123,6 +165,9 @@ recorded in the landing commit message.
   `Transitions` — see the 🛑🛑 above. `apply-config.sh` refuses to run if
   `lifecycle-policy.json` ever gains one of these (`FORBIDDEN_ACTIONS` guardrail).
 - Does NOT apply the CMK deny rail — see the ordering-hazard section above.
+- Does NOT enforce any encryption-header requirement — that statement was found
+  unsafe (round-1 finding C1) and moved to
+  `bucket-policy-encryption-deny.NOT-VERIFIED-DO-NOT-APPLY.json`, not shipped.
 - Does NOT change default bucket encryption (stays AES256 with
   `BucketKeyEnabled=true`, unchanged from live) — that only changes once the CMK
   is created and bound, which is out of this lane's scope.

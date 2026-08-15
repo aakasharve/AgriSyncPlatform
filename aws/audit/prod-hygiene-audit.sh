@@ -37,7 +37,11 @@ LIVE_DB=shramsafal-prod-db   # the ONE true prod database
 SNAPSHOT_WARN_COUNT=35       # warn if manual snapshot count exceeds this
 UPLOADS_BUCKET=shramsafal-uploads-prod
 RAW_BUCKET=agrisync-raw-ap-south-1
-DEPLOY_PREFIXES="_deploy/ _deploys/ deploys/ ai-sessions/"   # §11: the four deploy-ish prefixes, enumerated
+# NOTE: round-1 finding C2 found _deploy/, _deploys/, deploys/ reproducibility
+# UNPROVEN (see aws/uploads/lifecycle-policy.json) — §5f below checks those
+# three for the ABSENCE of any expiring rule, and checks ai-sessions/
+# separately for its own fixed 7-day rule. There is no longer a single
+# "deploy-ish prefixes" list treated uniformly.
 TODAY=$(date -u +%Y-%m-%d)
 CRIT=0
 WARN=0
@@ -134,33 +138,66 @@ fi
 # ---------- 5. S3 config drift — shramsafal-uploads-prod / agrisync-raw-ap-south-1 ----------
 # §11 (S11-infra-author). REPORTS drift only — never calls a put-/delete-bucket-*
 # API. Desired-state source of truth: aws/uploads/ and aws/raw/ (lifecycle-policy.json,
-# bucket-policy.json, cors-policy.json). This section re-derives its own expected
-# deploy-prefix horizon at run time (via compute-deploy-horizon.sh) rather than
-# trusting any hardcoded number, for the same reason apply-config.sh does: manual
-# RDS snapshots never expire, so a fixed number goes stale.
+# bucket-policy.json, cors-policy.json).
+#
+# === ROUND 1 REVIEW FINDING I1 — FIX APPLIED 2026-08-15 ===
+# The D9 tripwire (5a) used to GET with `2>/dev/null` and treat ANY failure —
+# AccessDenied, throttle, expired credentials mid-run, wrong region, a renamed
+# bucket — as an empty response, printing "OK ... no lifecycle configuration
+# (matches desired — D9 untouched)". A bucket this check could not read was
+# reported as a bucket it had verified, in the one check the founder is told
+# to rely on. Compounding: the single upfront permission probe covered only
+# the raw bucket, so an uploads-only AccessDenied fell through to the
+# granular checks below and printed "not yet applied" instead of "not
+# readable". FIXED: every S3 GET in this section now goes through
+# s3_get_status(), which distinguishes three outcomes — PRESENT (call
+# succeeded), ABSENT (call failed with the specific "this config doesn't
+# exist" error, e.g. NoSuchLifecycleConfiguration), and UNREADABLE (call
+# failed for any OTHER reason). UNREADABLE is never treated as ABSENT and
+# never printed as OK — see 5a below for where this matters most.
+
+# s3_get_status <get-subcommand> <bucket> <not-found-error-substring>
+# Sets three globals: S3_STATUS (present/absent/unreadable), S3_JSON (the
+# response body when present, empty otherwise), S3_ERROR (raw stderr, only
+# meaningful when unreadable). Never conflates "could not read" with "doesn't
+# exist". MUST be called as a plain statement, NOT inside $(...) — command
+# substitution runs the whole function in a subshell, and bash does not
+# propagate variable assignments made inside a subshell back to the caller,
+# which would silently discard S3_STATUS every time (hit this exact bug while
+# fixing round-1 finding I1; caught by testing before commit, not by review).
+s3_get_status() {
+  local subcmd="$1" bucket="$2" not_found_marker="$3"
+  local errfile ec err
+  errfile=$(mktemp)
+  S3_JSON=$(aws s3api "$subcmd" --bucket "$bucket" --region "$REGION" --output json 2>"$errfile")
+  ec=$?
+  err=$(cat "$errfile"); rm -f "$errfile"
+  if [ $ec -eq 0 ]; then
+    S3_STATUS="present"
+  elif echo "$err" | grep -q "$not_found_marker"; then
+    S3_STATUS="absent"
+    S3_JSON=""
+  else
+    S3_STATUS="unreadable"
+    S3_ERROR="$err"
+    S3_JSON=""
+  fi
+}
+
 echo ""
 echo "## 5. S3 config drift — uploads + raw buckets"
 
-S3_PERMS_OK=1
-LIVE_RAW_LIFECYCLE=$(aws s3api get-bucket-lifecycle-configuration --bucket "$RAW_BUCKET" --region "$REGION" 2>/tmp/s3-perm-check.$$)
-if [ $? -ne 0 ] && grep -qi 'AccessDenied' /tmp/s3-perm-check.$$ 2>/dev/null; then
-  S3_PERMS_OK=0
-fi
-rm -f /tmp/s3-perm-check.$$
-
-if [ "$S3_PERMS_OK" -eq 0 ]; then
-  echo "  WARN  audit role lacks S3 read permissions (AccessDenied) — see aws/audit/s3-readonly-policy-addition.json"
-  echo "        §5's granular checks are skipped this run; §1-4 above are unaffected."
-  WARN=$((WARN+1))
-else
-  # ---- 5a. RAW BUCKET — D9 tripwire [CRITICAL, the reason this section exists] ----
-  LIVE_RAW_LIFECYCLE=$(aws s3api get-bucket-lifecycle-configuration --bucket "$RAW_BUCKET" --region "$REGION" --output json 2>/dev/null)
-  if [ -z "$LIVE_RAW_LIFECYCLE" ]; then
+# ---- 5a. RAW BUCKET — D9 tripwire [the single most important check here] ----
+s3_get_status get-bucket-lifecycle-configuration "$RAW_BUCKET" NoSuchLifecycleConfiguration
+LIVE_RAW_LIFECYCLE="$S3_JSON"
+case "$S3_STATUS" in
+  absent)
     echo "  OK    raw bucket ($RAW_BUCKET): no lifecycle configuration (matches desired — D9 untouched)"
-  else
+    ;;
+  present)
     FORBIDDEN=$(echo "$LIVE_RAW_LIFECYCLE" | jq '[.Rules[]? | keys[] | select(. != "ID" and . != "Status" and . != "Filter" and . != "AbortIncompleteMultipartUpload")] | length' 2>/dev/null || echo "?")
     if [ "$FORBIDDEN" = "?" ]; then
-      echo "  WARN  raw bucket: could not parse live lifecycle to check D9 compliance"; WARN=$((WARN+1))
+      echo "  CRIT  raw bucket: lifecycle response could not be parsed — cannot verify D9 compliance, treat as UNKNOWN"; CRIT=$((CRIT+1))
     elif [ "$FORBIDDEN" -gt 0 ]; then
       echo "  CRIT  raw bucket ($RAW_BUCKET) lifecycle has an action beyond AbortIncompleteMultipartUpload"
       echo "        — this bucket holds 129 MB of noncurrent-only raw voice/export evidence"
@@ -169,20 +206,37 @@ else
     else
       echo "  OK    raw bucket ($RAW_BUCKET): live lifecycle contains only AbortIncompleteMultipartUpload"
     fi
-  fi
+    ;;
+  unreadable)
+    echo "  CRIT  raw bucket ($RAW_BUCKET): lifecycle UNREADABLE — ${S3_ERROR:0:120}"
+    echo "        This is the D9 tripwire. A bucket this check could NOT read must never be reported"
+    echo "        compliant. Investigate now (credentials? IAM grant applied — see"
+    echo "        aws/audit/s3-readonly-policy-addition.json? throttle? wrong region? renamed bucket?)."
+    CRIT=$((CRIT+1))
+    ;;
+esac
 
-  # ---- 5b. RAW BUCKET — version counts, informational trend line only ----
-  RAW_COUNTS=$(aws s3api list-object-versions --bucket "$RAW_BUCKET" --region "$REGION" \
-    --query '{current: length(Versions[?IsLatest==`true`]), noncurrent: length(Versions[?IsLatest==`false`]), delete_markers: length(DeleteMarkers)}' \
-    --output json 2>/dev/null)
-  echo "  ..    raw bucket object versions (informational): ${RAW_COUNTS:-could not measure}"
+# ---- 5b. RAW BUCKET — version counts, informational trend line only ----
+RAW_COUNTS=$(aws s3api list-object-versions --bucket "$RAW_BUCKET" --region "$REGION" \
+  --query '{current: length(Versions[?IsLatest==`true`]), noncurrent: length(Versions[?IsLatest==`false`]), delete_markers: length(DeleteMarkers)}' \
+  --output json 2>/dev/null)
+echo "  ..    raw bucket object versions (informational): ${RAW_COUNTS:-could not measure (unreadable — not scored, but see 5a for the scored version of this same problem)}"
 
-  # ---- 5c/5d/5e. UPLOADS BUCKET — retention shape ----
-  LIVE_UPLOADS_LIFECYCLE=$(aws s3api get-bucket-lifecycle-configuration --bucket "$UPLOADS_BUCKET" --region "$REGION" --output json 2>/dev/null)
-  if [ -z "$LIVE_UPLOADS_LIFECYCLE" ]; then
+# ---- 5c/5d/5e. UPLOADS BUCKET — retention shape ----
+s3_get_status get-bucket-lifecycle-configuration "$UPLOADS_BUCKET" NoSuchLifecycleConfiguration
+LIVE_UPLOADS_LIFECYCLE="$S3_JSON"
+case "$S3_STATUS" in
+  absent)
     echo "  WARN  uploads bucket ($UPLOADS_BUCKET): no lifecycle configuration live — desired state (aws/uploads/) not yet applied"
     WARN=$((WARN+1))
-  else
+    ;;
+  unreadable)
+    echo "  WARN  uploads bucket ($UPLOADS_BUCKET): lifecycle UNREADABLE — ${S3_ERROR:0:120}"
+    echo "        Cannot verify retention shape this run (not the same as 'not yet applied' — see"
+    echo "        aws/audit/s3-readonly-policy-addition.json if this is AccessDenied). Skipping 5c-5f."
+    WARN=$((WARN+1))
+    ;;
+  present)
     BUCKET_WIDE_GLACIER_RULE=$(echo "$LIVE_UPLOADS_LIFECYCLE" | jq '[.Rules[]? | select((.Filter.Prefix // "") == "" and (.Transitions // [] | length) > 0 and .Expiration.Days? != null)] | length' 2>/dev/null || echo 0)
     if [ "${BUCKET_WIDE_GLACIER_RULE:-0}" -gt 0 ]; then
       echo "  WARN  uploads bucket: a bucket-wide rule still carries BOTH a Glacier transition"
@@ -205,47 +259,54 @@ else
       echo "  OK    uploads bucket: apk/ carries no expiry (live download links protected)"
     fi
 
-    # ---- 5f. UPLOADS BUCKET — deploy-ish prefixes vs freshly recomputed horizon ----
-    EXPECTED_MIN_DAYS=$(bash "$(dirname "${BASH_SOURCE[0]}")/../uploads/compute-deploy-horizon.sh" --region "$REGION" 2>/dev/null || echo "")
-    if [ -z "$EXPECTED_MIN_DAYS" ]; then
-      echo "  WARN  could not recompute the deploy-prefix horizon (compute-deploy-horizon.sh failed)"
+    # ---- 5f. UPLOADS BUCKET — deploy-artifact prefixes: NO rule expected (round-1 finding C2:
+    # reproducibility unproven for _deploy/, _deploys/, deploys/ — see lifecycle-policy.json).
+    # ai-sessions/ is the one exception: expects a fixed 7-day expiry (not RDS-tied — see that
+    # file's C2 note for why compute-deploy-horizon.sh no longer applies to it).
+    for p in _deploy/ _deploys/ deploys/; do
+      HAS_RULE=$(echo "$LIVE_UPLOADS_LIFECYCLE" | jq --arg p "$p" '[.Rules[]? | select((.Filter.Prefix // "") == $p) | select(.Expiration != null or (.Transitions // [] | length) > 0 or .NoncurrentVersionExpiration != null)] | length' 2>/dev/null || echo 0)
+      if [ "${HAS_RULE:-0}" -gt 0 ]; then
+        echo "  CRIT  uploads bucket: prefix $p carries an expiring rule, but its reproducibility was"
+        echo "        never proven (round-1 finding C2) — this should not exist live. Investigate before"
+        echo "        trusting this bucket, and re-check the evidence in aws/uploads/lifecycle-policy.json."
+        CRIT=$((CRIT+1))
+      else
+        echo "  OK    uploads bucket: prefix $p carries no expiring rule (matches desired — unproven, not shipped)"
+      fi
+    done
+
+    AI_SESSIONS_DAYS=$(echo "$LIVE_UPLOADS_LIFECYCLE" | jq '[.Rules[]? | select((.Filter.Prefix // "") == "ai-sessions/") | .Expiration.Days] | first // empty' 2>/dev/null)
+    if [ -z "$AI_SESSIONS_DAYS" ]; then
+      echo "  WARN  uploads bucket: ai-sessions/ has no expiration rule live yet (desired state not applied)"
+      WARN=$((WARN+1))
+    elif [ "$AI_SESSIONS_DAYS" != "7" ]; then
+      echo "  WARN  uploads bucket: ai-sessions/ expires at ${AI_SESSIONS_DAYS}d, desired state is 7d — drift"
       WARN=$((WARN+1))
     else
-      for p in $DEPLOY_PREFIXES; do
-        LIVE_DAYS=$(echo "$LIVE_UPLOADS_LIFECYCLE" | jq --arg p "$p" '[.Rules[]? | select((.Filter.Prefix // "") == $p) | .Expiration.Days] | first // empty' 2>/dev/null)
-        if [ -z "$LIVE_DAYS" ]; then
-          echo "  WARN  uploads bucket: prefix $p has no expiration rule live yet (desired state not applied)"
-          WARN=$((WARN+1))
-        elif [ "$LIVE_DAYS" -lt "$EXPECTED_MIN_DAYS" ]; then
-          echo "  WARN  uploads bucket: prefix $p expires at ${LIVE_DAYS}d, but today's oldest retained manual"
-          echo "        RDS snapshot implies a minimum of ${EXPECTED_MIN_DAYS}d — re-run aws/uploads/apply-config.sh --apply"
-          WARN=$((WARN+1))
-        else
-          echo "  OK    uploads bucket: prefix $p expires at ${LIVE_DAYS}d (>= recomputed minimum ${EXPECTED_MIN_DAYS}d)"
-        fi
-      done
+      echo "  OK    uploads bucket: ai-sessions/ expires at 7d (matches desired)"
     fi
-  fi
+    ;;
+esac
 
-  # ---- 5g. Bucket policies present? (informational until founder applies) ----
-  for b in "$UPLOADS_BUCKET" "$RAW_BUCKET"; do
-    if aws s3api get-bucket-policy --bucket "$b" --region "$REGION" >/dev/null 2>&1; then
-      echo "  OK    $b: bucket policy present"
-    else
-      echo "  WARN  $b: no bucket policy live yet — desired state authored in aws/{uploads,raw}/bucket-policy.json, not yet applied"
-      WARN=$((WARN+1))
-    fi
-  done
+# ---- 5g. Bucket policies present? (informational until founder applies) ----
+for b in "$UPLOADS_BUCKET" "$RAW_BUCKET"; do
+  s3_get_status get-bucket-policy "$b" NoSuchBucketPolicy
+  case "$S3_STATUS" in
+    present)   echo "  OK    $b: bucket policy present" ;;
+    absent)    echo "  WARN  $b: no bucket policy live yet — desired state authored in aws/{uploads,raw}/bucket-policy.json, not yet applied"; WARN=$((WARN+1)) ;;
+    unreadable) echo "  WARN  $b: bucket policy UNREADABLE — ${S3_ERROR:0:120}"; WARN=$((WARN+1)) ;;
+  esac
+done
 
-  # ---- 5h. CORS presence — informational only, not scored ----
-  for b in "$UPLOADS_BUCKET" "$RAW_BUCKET"; do
-    if aws s3api get-bucket-cors --bucket "$b" --region "$REGION" >/dev/null 2>&1; then
-      echo "  ..    $b: CORS configured"
-    else
-      echo "  ..    $b: no CORS live (expected — no code path needs it yet; see aws/{uploads,raw}/cors-policy.json)"
-    fi
-  done
-fi
+# ---- 5h. CORS presence — informational only, not scored ----
+for b in "$UPLOADS_BUCKET" "$RAW_BUCKET"; do
+  s3_get_status get-bucket-cors "$b" NoSuchCORSConfiguration
+  case "$S3_STATUS" in
+    present)   echo "  ..    $b: CORS configured" ;;
+    absent)    echo "  ..    $b: no CORS live (expected — no code path needs it yet; see aws/{uploads,raw}/cors-policy.json)" ;;
+    unreadable) echo "  ..    $b: CORS UNREADABLE — ${S3_ERROR:0:120} (informational tier, not scored)" ;;
+  esac
+done
 
 # ---------- verdict ----------
 echo ""
