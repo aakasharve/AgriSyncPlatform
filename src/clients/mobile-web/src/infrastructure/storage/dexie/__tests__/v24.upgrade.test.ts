@@ -38,7 +38,7 @@ import 'fake-indexeddb/auto';
 import Dexie from 'dexie';
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 
-import { DATABASE_VERSION } from '../../DexieDatabase';
+import { AgriLogDatabase, DATABASE_VERSION } from '../../DexieDatabase';
 import { containsTranscriptText } from '../../../../domain/ai/contracts/transcriptRedaction';
 import { applyV1 } from '../versions/v1';
 import { applyV2 } from '../versions/v2';
@@ -311,14 +311,31 @@ describe('§P0.4 — Dexie v22 → v24 upgrade', () => {
 /**
  * A handset that took `feat/dfes-companion` FIRST.
  *
- * DFES's v23 adds a `pendingInterpretations` store. Reproduced here rather than
- * imported, because that file lives on the other branch and this branch must not
- * depend on it — what is being modelled is only the FACT that the device records
- * "23", which is the whole of the hazard.
+ * The DFES build is modelled as base + DFES's own v23, which is the state that
+ * leaves "23" recorded in IndexedDB with `pendingInterpretations` in it.
+ *
+ * REVIEW C1 — WHAT THIS USED TO GET WRONG, because the correction is the whole
+ * lesson. The "this branch arrives" side used to be
+ * `applyThrough22 + applyDfesV23 + applyV24`, assembled locally. That chain does
+ * not exist in any build: `DexieDatabase.ts` wires `applyV1..applyV24`. So the
+ * test SUPPLIED the v23 declaration whose ABSENCE was the danger, and then
+ * concluded the declaration was unnecessary. It passed, and it was proving a
+ * property of the fixture.
+ *
+ * Measured against the repo's own dexie 4.3.0, seeded identically:
+ *   synthetic chain (base + dfesV23 + v24) -> verno 24, store present, rows 1
+ *   real chain      (new AgriLogDatabase)  -> verno 24, InvalidTableError, gone
+ *
+ * Dexie's schema is the UNION of the versions the running build DECLARES, and a
+ * store survives only while some version STILL IN THAT CHAIN declares it. The
+ * fix is in production, not here: `DexieDatabase.ts` now declares v23.
+ *
+ * So every "this branch arrives" case below opens the REAL `AgriLogDatabase`.
+ * A test that assembles its own chain cannot answer this question.
  */
 function applyDfesV23(db: Dexie): void {
     db.version(23).stores({
-        pendingInterpretations: '++id, status, createdAt',
+        pendingInterpretations: 'captureId, farmId, status, createdAtUtc, [status+createdAtUtc]',
     });
 }
 
@@ -330,14 +347,15 @@ async function openDfesV23(name: string): Promise<Dexie> {
     return db;
 }
 
-/** This branch arriving on that handset afterwards. */
-async function openDfesThenV24(name: string): Promise<Dexie> {
-    const db = new Dexie(name);
-    applyThrough22(db);
-    applyDfesV23(db);
-    applyV24(db);
+/**
+ * This branch arriving on that handset — THE REAL PRODUCTION CLASS, no locally
+ * assembled chain. If `DexieDatabase.ts` ever drops a version declaration, these
+ * tests are what notices.
+ */
+async function openRealAppDatabase(name: string): Promise<Dexie> {
+    const db = new AgriLogDatabase(name);
     await db.open();
-    return db;
+    return db as unknown as Dexie;
 }
 
 describe('§P0.4 — the renumber: a device already at 23 still gets stripped', () => {
@@ -357,7 +375,7 @@ describe('§P0.4 — the renumber: a device already at 23 still gets stripped', 
         dfes.close();
 
         // This branch arrives.
-        const upgraded = await openDfesThenV24(DFES_DB);
+        const upgraded = await openRealAppDatabase(DFES_DB);
         const after = await upgraded.table('aiCorrectionEvents').get('corr-dfes') as Record<string, unknown>;
         const verno = upgraded.verno;
         upgraded.close();
@@ -372,23 +390,52 @@ describe('§P0.4 — the renumber: a device already at 23 still gets stripped', 
         expect(containsTranscriptText(after)).toBe(false);
     });
 
-    it('DFES_own_store_survives_this_branch_arriving_after_it', async () => {
-        // v24's store list does not mention `pendingInterpretations` — it cannot,
-        // the other branch is not merged. Dexie treats an unlisted store as
-        // UNCHANGED rather than deleted, so DFES's data is safe. Asserted rather
-        // than assumed, because getting this wrong destroys a store on every
-        // device that shipped DFES first.
+    it('C1_DFES_own_store_and_its_rows_survive_the_REAL_app_database_arriving_after_it', async () => {
+        // THE ONE THAT WAS WRONG. It used to open a locally assembled chain that
+        // included DFES's v23, so it proved nothing about the build we ship.
+        // Against the real `AgriLogDatabase` before the fix this failed with
+        // `InvalidTableError` and 32 tables — the store and every row deleted,
+        // silently, with the upgrade reporting success.
         const dfes = await openDfesV23(DFES_DB);
-        await dfes.table('pendingInterpretations').put({ status: 'pending', createdAt: 'x' });
+        await dfes.table('pendingInterpretations').bulkPut([
+            { captureId: 'cap-1', farmId: 'f1', status: 'pending', createdAtUtc: 1 },
+            { captureId: 'cap-2', farmId: 'f1', status: 'failed', createdAtUtc: 2 },
+        ]);
+        expect(dfes.verno).toBe(23);
         dfes.close();
 
-        const upgraded = await openDfesThenV24(DFES_DB);
+        const upgraded = await openRealAppDatabase(DFES_DB);
         const names = upgraded.tables.map(t => t.name);
-        const surviving = await upgraded.table('pendingInterpretations').count();
+        const surviving = await upgraded.table('pendingInterpretations').toArray();
+        const verno = upgraded.verno;
         upgraded.close();
 
+        expect(verno).toBe(24);
         expect(names).toContain('pendingInterpretations');
-        expect(surviving).toBe(1);
+        // The ROWS, not just the store. A recreated-but-empty store would satisfy
+        // a names-only assertion and would still have lost the farmer's captures.
+        expect(surviving.map(r => (r as { captureId: string }).captureId).sort())
+            .toEqual(['cap-1', 'cap-2']);
+    });
+
+    it('C1_a_device_that_never_saw_DFES_still_reaches_24_and_gets_the_store_empty', async () => {
+        // The cost of carrying another branch's declaration: one empty store this
+        // branch never touches. Asserted so the cost is a fact rather than a
+        // claim, and so an accidental `.upgrade()` on v23 would show up here.
+        const db22 = await openV22(DFES_DB);
+        await db22.table('aiCorrectionEvents').put(legacyRow('corr-fresh'));
+        db22.close();
+
+        const upgraded = await openRealAppDatabase(DFES_DB);
+        const verno = upgraded.verno;
+        const rows = await upgraded.table('pendingInterpretations').count();
+        const after = await upgraded.table('aiCorrectionEvents').get('corr-fresh') as Record<string, unknown>;
+        upgraded.close();
+
+        expect(verno).toBe(24);
+        expect(rows).toBe(0);
+        // And the strip still ran on the way through.
+        expect(containsTranscriptText(after)).toBe(false);
     });
 
     it('the_ordinary_path_is_unaffected_a_device_at_22_goes_straight_to_24', async () => {

@@ -38,6 +38,7 @@ import { applyV19 } from './dexie/versions/v19';
 import { applyV20 } from './dexie/versions/v20';
 import { applyV21 } from './dexie/versions/v21';
 import { applyV22 } from './dexie/versions/v22';
+import { applyV23 } from './dexie/versions/v23';
 import { applyV24 } from './dexie/versions/v24';
 import { LEGACY_DATABASE_NAME } from './userDatabaseName';
 import { getActiveDatabaseName, clearResolvedDatabaseName } from './activeDatabaseName';
@@ -219,6 +220,23 @@ export class AgriLogDatabase extends Dexie {
         applyV20(this);
         applyV21(this);
         applyV22(this);
+        // §P0.7 review C1 — THIS BRANCH MUST DECLARE v23 EVEN THOUGH IT DID NOT
+        // WRITE IT, and the file is `feat/dfes-companion`'s, byte-identical.
+        //
+        // Dexie's schema is the UNION of the versions the running build
+        // DECLARES, and `deleteRemovedTables` drops any object store the union
+        // does not contain. A gap is not inert: with v23 missing from this
+        // chain, opening a handset that took DFES first upgraded it to 24 and
+        // SILENTLY DELETED `pendingInterpretations` and every row in it —
+        // measured, verno 24, `InvalidTableError`, no error raised, upgrade
+        // reported success.
+        //
+        // Carrying the declaration is what keeps that store alive; it is not
+        // optional and it is not tidy-up-able. On a device that has never seen
+        // DFES it creates one empty store this branch never touches, which
+        // costs nothing. Kept BYTE-IDENTICAL to the other branch so the merge is
+        // a no-op and any divergence there surfaces as a real conflict.
+        applyV23(this);
         applyV24(this);
     }
 }
