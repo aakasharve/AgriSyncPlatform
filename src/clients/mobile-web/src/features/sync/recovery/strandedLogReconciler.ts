@@ -50,10 +50,26 @@
  * 3. IT REUSES THE PRODUCTION PATH. `enqueueLogsForSync` is the same function the
  *    save path calls, given the same `DailyLog` read back out of Dexie. Nothing
  *    is reconstructed, defaulted or inferred, so this cannot invent a value the
- *    farmer never gave (`P4`). A log it cannot route is REPORTED as skipped, not
- *    quietly dropped.
+ *    farmer never gave (`P4`). A log it cannot route is REPORTED — to
+ *    `emitClientError`, which reaches a screen, not just a WebView console; see
+ *    `reportToHumans` below for why counting it was not enough.
  *
- * 4. IT DELETES NOTHING. These rows are, by definition, the only copy.
+ * 4. IT RESOLVES "THEN" WITH "THEN", NOT WITH "NOW" (review B001).
+ *    The save path resolves a plot-scoped log's crop cycle from CURRENT
+ *    reference data, ordering open cycles first. That is right when the enqueue
+ *    happens seconds after the farmer speaks. It is WRONG here: a log stranded
+ *    during last season's grape cycle — exactly the record this box exists to
+ *    recover — would come back attributed to THIS season's open cycle, with the
+ *    date correct and the attribution invented. That is a `cropCycleId` the
+ *    farmer never gave, manufactured by the recovery itself.
+ *
+ *    So this passes `cycleResolution: 'from-log-date'`, which asks only which
+ *    cycle's own dates CONTAIN the log's own date and refuses unless exactly one
+ *    does. No sort, no open-cycle preference, no fallback. When the evidence does
+ *    not identify the cycle the log is reported `unroutable` and stays on the
+ *    device — absent beats wrong.
+ *
+ * 5. IT DELETES NOTHING. These rows are, by definition, the only copy.
  *
  * WHY `APPLIED` MUTATION ROWS MUST NOT BE PRUNED
  * ----------------------------------------------
@@ -72,12 +88,69 @@
  * with the farmer's history. That is the price of finding records nothing else
  * is looking for, and it is off the critical path: `start()` fires it without
  * awaiting it.
+ *
+ * NETWORK COST IS ONE CYCLE, NOT K (review B004). `enqueueLogsForSync` ends in an
+ * AWAITED `triggerNow()`, and this module calls it once per log — so the first
+ * version drove K sequential push+pull+AI cycles at every app start, on rural
+ * mobile data, for the population that by definition has a backlog. The per-log
+ * isolation is kept (that function has none of its own); the round trips are not.
+ * `triggerSync: false` on each call, one fire-and-forget trigger at the end, and
+ * only if something was actually re-queued.
  */
 import { getDatabase } from '../../../infrastructure/storage/DexieDatabase';
 import { parentClientRequestIdForDailyLog } from '../../../infrastructure/sync/MutationDependency';
 import { mutationQueue } from '../../../infrastructure/sync/MutationQueue';
+import { backgroundSyncWorker } from '../../../infrastructure/sync/BackgroundSyncWorker';
 import { enqueueLogsForSync } from '../../logs/services/logSyncMutationService';
+import { emitClientError } from '../../../core/telemetry/eventEmitters';
 import type { DailyLog } from '../../../types';
+
+/**
+ * Review B005 — WHERE A HUMAN ACTUALLY SEES THIS.
+ *
+ * The first version of this module counted `unroutable` and `failed` into a
+ * returned result and wrote them to `console.error`. The only production caller
+ * discards the result, and `console.error` in a WebView on a farmer's Android
+ * reaches nobody — so a record that is still stranded and still invisible, which
+ * is the exact thing this box exists to surface, was counted and then dropped.
+ * Counting is not reporting.
+ *
+ * `emitClientError` is the sink this codebase already has and already uses for
+ * `window.onerror` (`index.tsx`): it writes to `analyticsOutbox`, which
+ * `AnalyticsEventBus` drains to `POST /analytics/ingest`. It is offline-durable,
+ * which matters here — the device this fires on is by definition one whose sync
+ * has been failing.
+ *
+ * No farmer data leaves in these payloads: log ids and counts only, never
+ * payloads, transcripts or notes.
+ *
+ * Everything goes in `message` because the frozen `client.error` vocabulary is
+ * `{ farmId?, message, stack? }` (`eventSchema.ts:68`) and `emit` DROPS a
+ * payload with extra keys rather than widening. Widening a frozen schema to
+ * carry one module's diagnostics is not a trade worth making; a greppable
+ * prefix is. `AdminOpsPage` already lists `client.error` rows.
+ */
+const REPORT_PREFIX = '[strandedLogReconciler]';
+
+function reportToHumans(summary: string, context: Record<string, unknown>): void {
+    const message = `${REPORT_PREFIX} ${summary} ${JSON.stringify(context)}`;
+
+    // Telemetry must never be able to break a recovery pass. `emit` already
+    // swallows schema failures by design; this guards the bus itself.
+    try {
+        emitClientError({ message });
+    } catch {
+        // fall through to the console line, which happens either way
+    }
+
+    console.error(JSON.stringify({
+        level: 'error',
+        component: 'strandedLogReconciler',
+        message: summary,
+        ...context,
+        timestamp: new Date().toISOString(),
+    }));
+}
 
 export interface StrandedLogReconcileResult {
     /** Non-deleted logs this device has never seen from the server. */
@@ -88,12 +161,15 @@ export interface StrandedLogReconcileResult {
     requeued: number;
     /**
      * Stranded logs `resolveSyncTarget` still cannot route — a plot this device
-     * has not pulled, or plots that disagree about their farm. NOT a failure of
-     * this module, and NOT hidden: the count is returned and logged so the
-     * number is a fact someone can act on rather than a silence.
+     * has not pulled, plots that disagree about their farm, or (review B001) a
+     * log whose own date does not land inside exactly one crop cycle.
+     *
+     * Each one is a record that IS STILL STRANDED AND STILL INVISIBLE, so each
+     * one is reported through `reportToHumans`, not merely counted. Returning
+     * the number and dropping it is what the first version of this module did.
      */
     unroutable: number;
-    /** Stranded logs whose re-enqueue threw. Logged individually. */
+    /** Stranded logs whose re-enqueue threw. Reported individually. */
     failed: number;
 }
 
@@ -117,9 +193,9 @@ async function hasCreateMutation(deviceId: string, logId: string): Promise<boole
  * Find logs that never reached the sync queue and put them back in it.
  *
  * Never throws. A reconciler that can break worker start would trade a silent
- * data-loss bug for a silent sync outage — but every failure is COUNTED and
- * LOGGED, never swallowed, because a recovery that cannot say what it recovered
- * is indistinguishable from one that did nothing.
+ * data-loss bug for a silent sync outage — but nothing is merely counted:
+ * every record left stranded is REPORTED through `reportToHumans`, which reaches
+ * `analyticsOutbox` and therefore a screen, not just a WebView console.
  */
 export async function reconcileStrandedLogs(): Promise<StrandedLogReconcileResult> {
     const result: StrandedLogReconcileResult = {
@@ -143,13 +219,9 @@ export async function reconcileStrandedLogs(): Promise<StrandedLogReconcileResul
                 candidates.push(record.log);
             });
     } catch (error) {
-        console.error(JSON.stringify({
-            level: 'error',
-            component: 'strandedLogReconciler',
-            message: 'Could not read the log table; stranded records were not scanned for',
-            error: error instanceof Error ? { message: error.message, stack: error.stack } : String(error),
-            timestamp: new Date().toISOString(),
-        }));
+        reportToHumans('Could not read the log table; stranded records were not scanned for', {
+            error: error instanceof Error ? error.message : String(error),
+        });
         return result;
     }
 
@@ -161,14 +233,10 @@ export async function reconcileStrandedLogs(): Promise<StrandedLogReconcileResul
             // The queue could not be read for this log. Treat it as NOT stranded:
             // "I could not check" must never become "so I re-sent it".
             result.failed += 1;
-            console.error(JSON.stringify({
-                level: 'error',
-                component: 'strandedLogReconciler',
+            reportToHumans('Could not check the mutation queue for this log; leaving it alone', {
                 logId: log.id,
-                message: 'Could not check the mutation queue for this log; leaving it alone',
-                error: error instanceof Error ? { message: error.message } : String(error),
-                timestamp: new Date().toISOString(),
-            }));
+                error: error instanceof Error ? error.message : String(error),
+            });
             continue;
         }
 
@@ -179,30 +247,60 @@ export async function reconcileStrandedLogs(): Promise<StrandedLogReconcileResul
         result.stranded += 1;
 
         try {
-            // ONE log per call. `enqueueLogsForSync` has no per-log isolation
-            // (`logSyncMutationService.ts:503`), so a batch call would let one
-            // bad record cost every record behind it.
-            const outcome = await enqueueLogsForSync([log]);
+            // ONE log per call. `enqueueLogsForSync` has no per-log isolation, so
+            // a batch call would let one bad record cost every record behind it.
+            //
+            // `triggerSync: false` (review B004) — that function ends in an
+            // AWAITED `triggerNow()`, so per-log calls would mean K sequential
+            // push+pull+AI cycles at app start on a device that by definition has
+            // a backlog. One cycle is fired below, after the whole pass.
+            //
+            // `cycleResolution: 'from-log-date'` (review B001) — see (4) in the
+            // header. Recovery must not attribute last season's record to this
+            // season's open cycle.
+            const outcome = await enqueueLogsForSync([log], {
+                triggerSync: false,
+                cycleResolution: 'from-log-date',
+            });
             result.requeued += outcome.queuedLogIds.length;
             result.unroutable += outcome.skippedLogIds.length;
+
+            if (outcome.skippedLogIds.length > 0) {
+                // STILL STRANDED. The plot has not been pulled, the plots
+                // disagree about their farm, or the log's date does not identify
+                // exactly one crop cycle. Nothing else in the app is looking for
+                // this record, so this line is the only way anyone finds out.
+                reportToHumans('A stranded record could not be routed and is still only on this device', {
+                    logId: log.id,
+                    logDate: log.date,
+                });
+            }
         } catch (error) {
             result.failed += 1;
-            console.error(JSON.stringify({
-                level: 'error',
-                component: 'strandedLogReconciler',
+            reportToHumans('Re-enqueue of a stranded log threw; the record is still only on this device', {
                 logId: log.id,
-                message: 'Re-enqueue of a stranded log threw; the record is still only on this device',
-                error: error instanceof Error ? { message: error.message, stack: error.stack } : String(error),
-                timestamp: new Date().toISOString(),
-            }));
+                error: error instanceof Error ? error.message : String(error),
+            });
         }
+    }
+
+    // Review B004 — ONE cycle for the whole pass, not one per log, and only if
+    // there is something new to send. Fire-and-forget: a recovery pass must not
+    // block worker start on a round trip.
+    if (result.requeued > 0) {
+        void backgroundSyncWorker.triggerNow().catch((error: unknown) => {
+            reportToHumans('Recovered records were queued but the follow-up sync could not start', {
+                requeued: result.requeued,
+                error: error instanceof Error ? error.message : String(error),
+            });
+        });
     }
 
     if (result.stranded > 0 || result.failed > 0) {
         console.warn(JSON.stringify({
             level: 'warn',
             component: 'strandedLogReconciler',
-            message: 'Recovered records that had reached no sync queue',
+            message: 'Records that had reached no sync queue',
             ...result,
             timestamp: new Date().toISOString(),
         }));

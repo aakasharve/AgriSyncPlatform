@@ -32,8 +32,20 @@ import type { CropProfile, FarmerProfile, LogScope, PlotGeo } from '../../../../
 import type { WeatherPort } from '../../../../application/ports/WeatherPort';
 import type { WeatherStamp } from '../../../../domain/types/weather.types';
 
+const { triggerNowMock, clientErrorMock } = vi.hoisted(() => ({
+    triggerNowMock: vi.fn().mockResolvedValue(undefined),
+    clientErrorMock: vi.fn(),
+}));
+
 vi.mock('../../../../infrastructure/sync/BackgroundSyncWorker', () => ({
-    backgroundSyncWorker: { triggerNow: vi.fn().mockResolvedValue(undefined) },
+    backgroundSyncWorker: { triggerNow: triggerNowMock },
+}));
+
+// Review B005 — the sink is asserted, not assumed. `emitClientError` is the
+// module `index.tsx` already wires `window.onerror` into, and it reaches
+// `analyticsOutbox` -> `POST /analytics/ingest`.
+vi.mock('../../../../core/telemetry/eventEmitters', () => ({
+    emitClientError: clientErrorMock,
 }));
 
 const FARM_ID = 'f0000000-0000-4000-8000-000000000001';
@@ -48,8 +60,13 @@ vi.mock('../../../../infrastructure/storage/SessionStore', () => ({
 
 const CROP_ID = 'd0000000-0000-4000-8000-000000000001';
 const PLOT_A = 'a0000000-0000-4000-8000-00000000000a';
-const CYCLE_A = 'e0000000-0000-4000-8000-00000000000a';
+/** This season's grape cycle. Open — no `endDate`. */
+const CYCLE_OPEN = 'e0000000-0000-4000-8000-00000000000a';
+/** Last season's grape cycle on the SAME plot, closed. */
+const CYCLE_CLOSED = 'e0000000-0000-4000-8000-00000000000b';
 const DATE = '2026-08-15';
+/** Inside `CYCLE_CLOSED`, months before `CYCLE_OPEN` even started. */
+const LAST_SEASON_DATE = '2025-11-04';
 
 const grapes: CropProfile = {
     id: CROP_ID,
@@ -96,7 +113,24 @@ const scope: LogScope = {
     applyPolicy: 'SHARED',
 } as unknown as LogScope;
 
-async function seedReferenceData() {
+function cycleRow(id: string, startDate: string, endDate?: string) {
+    return {
+        id, plotId: PLOT_A,
+        payload: {
+            id, plotId: PLOT_A, farmId: FARM_ID, cropName: 'Grapes',
+            startDate, ...(endDate ? { endDate } : {}),
+            modifiedAtUtc: '2026-08-01T00:00:00.000Z',
+        },
+        modifiedAtUtc: '2026-08-01T00:00:00.000Z',
+    };
+}
+
+/**
+ * @param cycles which crop cycles the device currently holds. The default is the
+ *   single open cycle every other test in this file wants; the B001 tests pass
+ *   two, which is the situation that made the old behaviour fabricate.
+ */
+async function seedReferenceData(cycles = [cycleRow(CYCLE_OPEN, '2026-06-01')]) {
     const db = getDatabase();
     await db.farms.bulkPut([{
         id: FARM_ID, payload: { id: FARM_ID }, updatedAt: '2026-08-01T00:00:00.000Z',
@@ -105,24 +139,17 @@ async function seedReferenceData() {
         id: PLOT_A, payload: { id: PLOT_A, farmId: FARM_ID, name: 'Plot A' },
         modifiedAtUtc: '2026-08-01T00:00:00.000Z',
     }] as never);
-    await db.cropCycles.bulkPut([{
-        id: CYCLE_A, plotId: PLOT_A,
-        payload: {
-            id: CYCLE_A, plotId: PLOT_A, farmId: FARM_ID, cropName: 'Grapes',
-            modifiedAtUtc: '2026-08-01T00:00:00.000Z',
-        },
-        modifiedAtUtc: '2026-08-01T00:00:00.000Z',
-    }] as never);
+    await db.cropCycles.bulkPut(cycles as never);
 }
 
 /**
  * THE CRASH. The save runs for real and then the process "dies" before
  * `enqueueLogsForSync` — the two writes are not in one transaction.
  */
-async function saveWithoutEnqueueing(): Promise<string> {
+async function saveWithoutEnqueueing(date = DATE): Promise<string> {
     const service = new LogCommandServiceImpl(DexieLogsRepository.getInstance(), weatherPort);
     const logs = await service.createFromManual(
-        { date: DATE, notes: 'शेतात पाणी दिले' },
+        { date, notes: 'शेतात पाणी दिले' },
         scope,
         [grapes],
         ownerProfile,
@@ -270,6 +297,142 @@ describe('strandedLogReconciler — §P0.7 box 2e', () => {
         expect(result.unroutable).toBe(1);
         // And the record is still there — nothing was deleted to tidy up.
         expect(await getDatabase().logs.get(logId)).toBeDefined();
+    });
+
+    // -----------------------------------------------------------------------
+    // Review B001 — recovery must not resolve "then" using "now".
+    // -----------------------------------------------------------------------
+
+    it('B001_a_stranded_log_from_a_CLOSED_cycle_is_not_attributed_to_the_open_one', async () => {
+        // Two grape cycles on the same plot, which is the ordinary shape of a
+        // second season. The old behaviour sorted open-first and would have
+        // stamped this record with CYCLE_OPEN — right date, invented attribution.
+        await getDatabase().cropCycles.clear();
+        await seedReferenceData([
+            cycleRow(CYCLE_CLOSED, '2025-09-01', '2025-12-31'),
+            cycleRow(CYCLE_OPEN, '2026-06-01'),
+        ]);
+        const logId = await saveWithoutEnqueueing(LAST_SEASON_DATE);
+
+        const result = await reconcileStrandedLogs();
+
+        expect(result.requeued).toBe(1);
+        const payload = (await createMutationFor(logId))?.payload as { cropCycleId?: string; logDate: string };
+        expect(payload.logDate).toBe(LAST_SEASON_DATE);
+        expect(payload.cropCycleId).not.toBe(CYCLE_OPEN);
+        // The log's own date lands inside exactly one cycle, so the attribution
+        // is evidence, not a preference.
+        expect(payload.cropCycleId).toBe(CYCLE_CLOSED);
+    });
+
+    it('B001_when_the_date_does_not_identify_one_cycle_nothing_is_attributed_at_all', async () => {
+        // Two cycles that both contain the log's date. There is no honest answer,
+        // so there is no answer: the record stays on the device and is reported.
+        await getDatabase().cropCycles.clear();
+        await seedReferenceData([
+            cycleRow(CYCLE_CLOSED, '2025-09-01', '2026-12-31'),
+            cycleRow(CYCLE_OPEN, '2025-10-01'),
+        ]);
+        const logId = await saveWithoutEnqueueing(LAST_SEASON_DATE);
+
+        const result = await reconcileStrandedLogs();
+
+        expect(result.stranded).toBe(1);
+        expect(result.requeued).toBe(0);
+        expect(result.unroutable).toBe(1);
+        expect(await createMutationFor(logId)).toBeUndefined();
+        // And the only copy is untouched.
+        expect(await getDatabase().logs.get(logId)).toBeDefined();
+    });
+
+    it('B001_a_log_predating_every_cycle_the_device_holds_is_left_unattributed', async () => {
+        // Zero matches is as unresolved as two. The old sort would still have
+        // answered — it always answers, as long as the plot has any cycle at all.
+        const logId = await saveWithoutEnqueueing('2024-03-02');
+
+        const result = await reconcileStrandedLogs();
+
+        expect(result.stranded).toBe(1);
+        expect(result.requeued).toBe(0);
+        expect(result.unroutable).toBe(1);
+        expect(await createMutationFor(logId)).toBeUndefined();
+    });
+
+    it('B001_the_normal_save_path_is_untouched_and_still_resolves_at_capture_time', async () => {
+        // The default is `'at-capture'`. A record saved today still routes to the
+        // open cycle through the same code, with no date-containment involved.
+        await getDatabase().cropCycles.clear();
+        await seedReferenceData([
+            cycleRow(CYCLE_CLOSED, '2025-09-01', '2025-12-31'),
+            cycleRow(CYCLE_OPEN, '2026-06-01'),
+        ]);
+        const service = new LogCommandServiceImpl(DexieLogsRepository.getInstance(), weatherPort);
+        const logs = await service.createFromManual({ date: DATE }, scope, [grapes], ownerProfile);
+        await service.confirmAndSave(logs);
+
+        await enqueueLogsForSync(logs);
+
+        const payload = (await createMutationFor(logs[0].id))?.payload as { cropCycleId?: string };
+        expect(payload.cropCycleId).toBe(CYCLE_OPEN);
+    });
+
+    // -----------------------------------------------------------------------
+    // Review B004 — one sync cycle for the pass, not one per stranded log.
+    // -----------------------------------------------------------------------
+
+    it('B004_three_stranded_logs_produce_ONE_sync_cycle_not_three', async () => {
+        await saveWithoutEnqueueing('2026-08-13');
+        await saveWithoutEnqueueing('2026-08-14');
+        await saveWithoutEnqueueing('2026-08-15');
+        triggerNowMock.mockClear();
+
+        const result = await reconcileStrandedLogs();
+
+        expect(result.requeued).toBe(3);
+        // Three logs, three enqueues, ONE round trip. `triggerNow` is awaited and
+        // chains onto `currentCycle`, so three would have been three sequential
+        // push+pull+AI cycles at app start on rural mobile data.
+        expect(triggerNowMock).toHaveBeenCalledTimes(1);
+    });
+
+    it('B004_a_pass_that_recovers_nothing_does_not_touch_the_network', async () => {
+        triggerNowMock.mockClear();
+
+        await reconcileStrandedLogs();
+
+        expect(triggerNowMock).not.toHaveBeenCalled();
+    });
+
+    // -----------------------------------------------------------------------
+    // Review B005 — a still-stranded record must reach somewhere a human looks.
+    // -----------------------------------------------------------------------
+
+    it('B005_an_unroutable_record_is_REPORTED_to_the_telemetry_sink_not_just_counted', async () => {
+        const logId = await saveWithoutEnqueueing();
+        await getDatabase().plots.clear();
+        await getDatabase().cropCycles.clear();
+        clientErrorMock.mockClear();
+
+        const result = await reconcileStrandedLogs();
+
+        expect(result.unroutable).toBe(1);
+        // The returned count is discarded by the only production caller, so the
+        // count alone was counting-then-dropping. This is the line that reaches
+        // `analyticsOutbox` -> POST /analytics/ingest.
+        expect(clientErrorMock).toHaveBeenCalledTimes(1);
+        const { message } = clientErrorMock.mock.calls[0][0] as { message: string };
+        expect(message).toContain('[strandedLogReconciler]');
+        expect(message).toContain(logId);
+        // Log ids and dates only — never payloads, notes or transcripts.
+        expect(message).not.toContain('शेतात पाणी दिले');
+    });
+
+    it('B005_a_clean_pass_reports_nothing', async () => {
+        clientErrorMock.mockClear();
+
+        await reconcileStrandedLogs();
+
+        expect(clientErrorMock).not.toHaveBeenCalled();
     });
 
     it('the_key_it_checks_is_the_key_the_save_path_writes', async () => {

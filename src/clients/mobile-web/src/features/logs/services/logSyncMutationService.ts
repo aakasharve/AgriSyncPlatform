@@ -430,7 +430,68 @@ export async function resolveLogFarmId(log: DailyLog): Promise<string | null> {
     return namesNoPlot(log) ? await resolveRecordedFarmId(log) : null;
 }
 
-async function resolveSyncTarget(log: DailyLog): Promise<ResolvedLogSyncTarget | null> {
+/**
+ * §P0.7 box 2e / review B001 — WHICH MOMENT THE CROP CYCLE IS RESOLVED AS OF.
+ *
+ * `'at-capture'` is the original behaviour and is correct for the save path: the
+ * enqueue happens seconds after the farmer speaks, so "the plot's current cycle"
+ * and "the cycle the work happened in" are the same cycle.
+ *
+ * `'from-log-date'` exists because THE RECONCILER IS THE ONLY THING IN THE
+ * SYSTEM THAT RESOLVES "THEN" USING "NOW". A log stranded during last season's
+ * grape cycle — precisely the record box 2e exists to recover — would be routed
+ * by the open-first sort below to THIS season's cycle. `logDate` would survive
+ * and the attribution would be invented: a `cropCycleId` the farmer never gave,
+ * manufactured by the recovery itself.
+ *
+ * So recovery does not consult "now" at all. It asks which cycle's own dates
+ * CONTAIN the log's own date — the record's evidence against server-issued
+ * boundaries — and if that question does not have exactly one answer it refuses
+ * and the caller reports the log as unroutable. It never falls back, never
+ * prefers the open cycle, and never picks the likelier one.
+ */
+export type CycleResolution = 'at-capture' | 'from-log-date';
+
+/**
+ * The one cycle whose dates contain this log's date, or `null`.
+ *
+ * `null` for zero matches AND for two or more. Ambiguity is not a tie to be
+ * broken — a second candidate means the evidence does not identify the cycle,
+ * and absent beats wrong (`P4`).
+ *
+ * An OPEN cycle (no `endDate`) contains every date at or after its start, which
+ * is what makes this discriminate correctly in the case that motivated it: last
+ * season's log predates this season's `startDate`, so the open cycle does not
+ * contain it and only the closed one does.
+ */
+function selectCycleContainingDate(
+    candidates: readonly CropCycleDto[],
+    logDate: string,
+): CropCycleDto | null {
+    const at = Date.parse(logDate);
+    if (Number.isNaN(at)) {
+        return null;
+    }
+
+    const containing = candidates.filter(cycle => {
+        const start = Date.parse(cycle.startDate);
+        if (Number.isNaN(start) || at < start) {
+            return false;
+        }
+        if (!cycle.endDate) {
+            return true;
+        }
+        const end = Date.parse(cycle.endDate);
+        return Number.isNaN(end) ? false : at <= end;
+    });
+
+    return containing.length === 1 ? containing[0] : null;
+}
+
+async function resolveSyncTarget(
+    log: DailyLog,
+    cycleResolution: CycleResolution = 'at-capture',
+): Promise<ResolvedLogSyncTarget | null> {
     const selection = log.context.selection?.[0];
     const resolved = await resolveLogPlots(log);
     if (!resolved) {
@@ -476,16 +537,28 @@ async function resolveSyncTarget(log: DailyLog): Promise<ResolvedLogSyncTarget |
         .map(record => record.payload as CropCycleDto)
         .filter(candidate => normalizeName(candidate.cropName) === cropName);
 
-    const selectedCycle = (candidates.length > 0 ? candidates : cycleRecords.map(record => record.payload as CropCycleDto))
-        .sort((left, right) => {
-            const leftEnd = left.endDate ? Date.parse(left.endDate) : Number.MAX_SAFE_INTEGER;
-            const rightEnd = right.endDate ? Date.parse(right.endDate) : Number.MAX_SAFE_INTEGER;
-            if (leftEnd !== rightEnd) {
-                return rightEnd - leftEnd;
-            }
+    // ONE candidate list, both modes. The cropName filter with its
+    // fall-back-to-all is unchanged; only what happens NEXT differs, so the two
+    // modes cannot drift apart over which cycles were even in the running.
+    const inTheRunning = candidates.length > 0
+        ? candidates
+        : cycleRecords.map(record => record.payload as CropCycleDto);
 
-            return Date.parse(right.modifiedAtUtc) - Date.parse(left.modifiedAtUtc);
-        })[0];
+    const selectedCycle = cycleResolution === 'from-log-date'
+        // Review B001 — recovery resolves "then" with "then". No sort, no
+        // fallback: either the log's own date lands inside exactly one cycle or
+        // this log has no resolvable attribution and the caller must say so.
+        ? selectCycleContainingDate(inTheRunning, log.date)
+        : inTheRunning
+            .sort((left, right) => {
+                const leftEnd = left.endDate ? Date.parse(left.endDate) : Number.MAX_SAFE_INTEGER;
+                const rightEnd = right.endDate ? Date.parse(right.endDate) : Number.MAX_SAFE_INTEGER;
+                if (leftEnd !== rightEnd) {
+                    return rightEnd - leftEnd;
+                }
+
+                return Date.parse(right.modifiedAtUtc) - Date.parse(left.modifiedAtUtc);
+            })[0];
 
     if (!selectedCycle) {
         return null;
@@ -500,12 +573,38 @@ async function resolveSyncTarget(log: DailyLog): Promise<ResolvedLogSyncTarget |
     };
 }
 
-export async function enqueueLogsForSync(logs: DailyLog[]): Promise<{ queuedLogIds: string[]; skippedLogIds: string[] }> {
+export interface EnqueueLogsOptions {
+    /**
+     * Review B001 — as of WHICH MOMENT the crop cycle is resolved. Defaults to
+     * `'at-capture'`, which is every existing caller's behaviour, unchanged.
+     * Only the crash reconciler passes `'from-log-date'`.
+     */
+    cycleResolution?: CycleResolution;
+    /**
+     * Review B004 — whether to drive a sync cycle when this call finishes.
+     *
+     * Defaults to `true`, which is every existing caller's behaviour. The crash
+     * reconciler passes `false` and triggers ONCE at the end: it calls this
+     * function per log (that isolation is deliberate — this function has none of
+     * its own, so a batch call would let one bad record cost every record behind
+     * it), and `triggerNow()` is awaited and chains onto `currentCycle`, so K
+     * stranded logs would otherwise mean K sequential push+pull+AI cycles at
+     * every app start — on rural mobile data, for the population that by
+     * definition has a backlog.
+     */
+    triggerSync?: boolean;
+}
+
+export async function enqueueLogsForSync(
+    logs: DailyLog[],
+    options: EnqueueLogsOptions = {},
+): Promise<{ queuedLogIds: string[]; skippedLogIds: string[] }> {
+    const { cycleResolution = 'at-capture', triggerSync = true } = options;
     const queuedLogIds: string[] = [];
     const skippedLogIds: string[] = [];
 
     for (const log of logs) {
-        const target = await resolveSyncTarget(log);
+        const target = await resolveSyncTarget(log, cycleResolution);
         if (!target) {
             skippedLogIds.push(log.id);
             continue;
@@ -606,7 +705,7 @@ export async function enqueueLogsForSync(logs: DailyLog[]): Promise<{ queuedLogI
         queuedLogIds.push(log.id);
     }
 
-    if (queuedLogIds.length > 0) {
+    if (triggerSync && queuedLogIds.length > 0) {
         await backgroundSyncWorker.triggerNow();
     }
 

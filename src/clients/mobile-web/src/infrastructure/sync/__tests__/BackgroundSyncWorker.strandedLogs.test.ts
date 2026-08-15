@@ -96,6 +96,9 @@ async function freshDb() {
         id: CYCLE_A, plotId: PLOT_A,
         payload: {
             id: CYCLE_A, plotId: PLOT_A, farmId: FARM_ID, cropName: 'Grapes',
+            // Review B001 — recovery resolves the cycle by DATE CONTAINMENT, so
+            // a cycle fixture without dates is now a cycle nothing can land in.
+            startDate: '2026-06-01',
             modifiedAtUtc: '2026-08-01T00:00:00.000Z',
         },
         modifiedAtUtc: '2026-08-01T00:00:00.000Z',
