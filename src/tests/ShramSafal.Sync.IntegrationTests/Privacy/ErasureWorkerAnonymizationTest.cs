@@ -1010,7 +1010,7 @@ internal sealed class InMemoryRetainedBlobStore : IRetainedBlobStore
 {
     private readonly Dictionary<Guid, (VoiceClipRetained Meta, byte[] Cipher)> _store = new();
 
-    public Task DeleteRetainedVoiceForUserAsync(Guid userId, CancellationToken ct)
+    public Task<RetainedVoiceDeletionOutcome> DeleteRetainedVoiceForUserAsync(Guid userId, CancellationToken ct)
     {
         var keys = _store
             .Where(kv => kv.Value.Meta.UserId == userId)
@@ -1020,7 +1020,12 @@ internal sealed class InMemoryRetainedBlobStore : IRetainedBlobStore
         {
             _store.Remove(key);
         }
-        return Task.CompletedTask;
+
+        // This fake genuinely removes what it holds, so Deleted is the honest
+        // answer when there was something to remove.
+        return Task.FromResult(keys.Count == 0
+            ? RetainedVoiceDeletionOutcome.NothingToDelete
+            : RetainedVoiceDeletionOutcome.Deleted);
     }
 
     public Task<Guid> PersistAsync(VoiceClipRetained metadata, byte[] cipherBytes, CancellationToken ct)

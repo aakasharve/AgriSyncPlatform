@@ -27,6 +27,47 @@ using ShramSafal.Domain.Privacy;
 
 namespace ShramSafal.Application.Privacy.Ports;
 
+/// <summary>
+/// What <see cref="IRetainedBlobStore.DeleteRetainedVoiceForUserAsync"/> actually
+/// did, so the DPDP §12 erasure record can state it instead of guessing.
+/// </summary>
+public enum RetainedVoiceDeletionOutcome
+{
+    /// <summary>
+    /// The subject had no rows in <c>ssf.voice_clips_retained</c>. There was
+    /// nothing to purge and the tier is clear for this subject.
+    /// </summary>
+    NothingToDelete = 0,
+
+    /// <summary>
+    /// Every S3 object was deleted (or already absent) and the metadata rows
+    /// were removed. The tier is genuinely purged.
+    /// </summary>
+    Deleted = 1,
+
+    /// <summary>
+    /// ⚠️ Rows existed, but no bucket is configured, so the metadata rows were
+    /// removed WITHOUT any S3 object being touched.
+    ///
+    /// <para>
+    /// <b>This is residue, not success, and the reasoning is not speculative.</b>
+    /// <c>PersistAsync</c> throws when <c>BucketName</c> is blank, so a
+    /// <c>voice_clips_retained</c> row can only have been written while a bucket
+    /// WAS configured — which means the S3 object was written too. Reaching this
+    /// outcome therefore means the farmer's audio is still in the bucket while
+    /// the rows that located it have just been deleted.
+    /// </para>
+    ///
+    /// <para>
+    /// It is reachable through a documented operational procedure, not only by
+    /// misconfiguration: <c>aws/voice-retained/README.md:148</c> offers blanking
+    /// <c>RetainedBlobStore__BucketName</c> and redeploying as a "safer
+    /// alternative" whose stated effect is "clips remain in S3 untouched".
+    /// </para>
+    /// </summary>
+    SkippedNoBucketConfigured = 2,
+}
+
 public interface IRetainedBlobStore
 {
     /// <summary>
@@ -47,7 +88,15 @@ public interface IRetainedBlobStore
     /// completes successfully (idempotent on second call).
     /// </para>
     /// </summary>
-    Task DeleteRetainedVoiceForUserAsync(Guid userId, CancellationToken ct);
+    /// <para>
+    /// <b>Returns what it actually did.</b> A bare <c>Task</c> forced the caller
+    /// to infer "no exception ⇒ purged", and that inference is wrong for the
+    /// no-bucket short-circuit — see
+    /// <see cref="RetainedVoiceDeletionOutcome.SkippedNoBucketConfigured"/>.
+    /// The erasure audit record states this outcome verbatim rather than
+    /// collapsing it to a boolean.
+    /// </para>
+    Task<RetainedVoiceDeletionOutcome> DeleteRetainedVoiceForUserAsync(Guid userId, CancellationToken ct);
 
     /// <summary>
     /// Persist a single retained voice clip. <paramref name="metadata"/>

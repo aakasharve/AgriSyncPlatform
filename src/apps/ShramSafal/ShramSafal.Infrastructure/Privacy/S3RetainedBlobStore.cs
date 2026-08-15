@@ -44,11 +44,11 @@ public sealed class S3RetainedBlobStore : IRetainedBlobStore
         _db = db;
     }
 
-    public async Task DeleteRetainedVoiceForUserAsync(Guid userId, CancellationToken ct)
+    public async Task<RetainedVoiceDeletionOutcome> DeleteRetainedVoiceForUserAsync(Guid userId, CancellationToken ct)
     {
         if (userId == Guid.Empty)
         {
-            return;
+            return RetainedVoiceDeletionOutcome.NothingToDelete;
         }
 
         // 1. Enumerate every retained clip metadata row for the user.
@@ -64,7 +64,7 @@ public sealed class S3RetainedBlobStore : IRetainedBlobStore
 
         if (rows.Count == 0)
         {
-            return;
+            return RetainedVoiceDeletionOutcome.NothingToDelete;
         }
 
         if (string.IsNullOrWhiteSpace(_opt.BucketName))
@@ -74,7 +74,13 @@ public sealed class S3RetainedBlobStore : IRetainedBlobStore
             // don't exist.
             _db.VoiceClipsRetained.RemoveRange(rows);
             await _db.SaveChangesAsync(ct).ConfigureAwait(false);
-            return;
+
+            // Rows existed but nothing in S3 was touched. PersistAsync refuses
+            // to write a row while BucketName is blank, so these rows were
+            // written when a bucket WAS configured — the objects are still
+            // there. Reporting success here is what made the erasure record
+            // claim the voice tier was purged when it was not.
+            return RetainedVoiceDeletionOutcome.SkippedNoBucketConfigured;
         }
 
         foreach (var clip in rows)
@@ -94,6 +100,7 @@ public sealed class S3RetainedBlobStore : IRetainedBlobStore
 
         _db.VoiceClipsRetained.RemoveRange(rows);
         await _db.SaveChangesAsync(ct).ConfigureAwait(false);
+        return RetainedVoiceDeletionOutcome.Deleted;
     }
 
     public async Task<Guid> PersistAsync(

@@ -213,6 +213,64 @@ public sealed class ErasureAuditSurvivesBlobFailureRealPostgresTests : IAsyncLif
             "a clean run must state the voice tier WAS purged, not merely omit the field");
     }
 
+    /// <summary>
+    /// The kill-switch must NOT be recorded as a successful purge.
+    ///
+    /// <para>
+    /// <c>aws/voice-retained/README.md:148</c> offers, as a supported "safer
+    /// alternative", blanking <c>RetainedBlobStore__BucketName</c> and
+    /// redeploying — explicitly stating "clips remain in S3 untouched". Do that
+    /// after clips exist and the next erasure takes the store's no-bucket
+    /// short-circuit: it removes the <c>voice_clips_retained</c> rows, touches
+    /// no S3 object, and returns without throwing.
+    /// </para>
+    ///
+    /// <para>
+    /// The first version of this task's payload reported that as
+    /// <c>retainedVoiceDeleted: true</c> with status <c>Completed</c> — the
+    /// farmer's audio still in the bucket, the rows that located it gone, and
+    /// the record now affirming the tier was purged. That is worse than the
+    /// silence it replaced: it converted an omission into a false affirmative,
+    /// on the erasure path.
+    /// </para>
+    ///
+    /// <para>
+    /// This is not speculative residue. <c>PersistAsync</c> throws when the
+    /// bucket name is blank, so a metadata row can only exist if a bucket was
+    /// configured when the clip was stored — meaning the object was written and
+    /// is still there.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public async Task NoBucketConfiguredSkip_IsRecordedAsResidue_NotAsAPurge()
+    {
+        var requestId = await SeedErasureRequestAsync();
+
+        await RunWorkerAsync(new SkippingRetainedBlobStore(), requestId);
+
+        await using var raw = new NpgsqlConnection(_superuserConn);
+        await raw.OpenAsync();
+
+        var status = Convert.ToInt32(await ScalarAsync(raw,
+            "SELECT status FROM ssf.erasure_requests WHERE id = @id", ("id", requestId)));
+        status.Should().Be((int)ErasureStatus.CompletedWithResidue,
+            "a skip that deleted the pointer without deleting the object is residue, not success");
+
+        var payload = (string?)await ScalarAsync(raw,
+            """
+            SELECT payload::text FROM ssf.audit_events
+             WHERE entity_type = 'ErasureRequest' AND entity_id = @id
+             ORDER BY occurred_at_utc DESC LIMIT 1
+            """,
+            ("id", requestId));
+
+        payload.Should().NotBeNull();
+        payload!.Should().Contain("\"retainedVoiceDeleted\":false",
+            "the record must not affirm a purge that did not happen");
+        payload.Should().Contain("\"retainedVoiceOutcome\":\"SkippedNoBucketConfigured\"",
+            "and it must say WHICH non-purge this was — a skip is not the same as a failure");
+    }
+
     // ── harness ──────────────────────────────────────────────────────────
 
     /// <summary>
@@ -297,7 +355,7 @@ public sealed class ErasureAuditSurvivesBlobFailureRealPostgresTests : IAsyncLif
     /// </summary>
     private sealed class ThrowingRetainedBlobStore : IRetainedBlobStore
     {
-        public Task DeleteRetainedVoiceForUserAsync(Guid userId, CancellationToken ct) =>
+        public Task<RetainedVoiceDeletionOutcome> DeleteRetainedVoiceForUserAsync(Guid userId, CancellationToken ct) =>
             throw new Amazon.S3.AmazonS3Exception("Access Denied")
             {
                 ErrorCode = "AccessDenied",
@@ -315,10 +373,34 @@ public sealed class ErasureAuditSurvivesBlobFailureRealPostgresTests : IAsyncLif
             throw new NotSupportedException();
     }
 
-    /// <summary>Succeeds silently — the clean-path control.</summary>
+    /// <summary>
+    /// The kill-switch shape: no exception, no S3 call, metadata rows removed.
+    /// This is what <c>S3RetainedBlobStore</c> does when
+    /// <c>RetainedBlobStore:BucketName</c> is blank — a state
+    /// <c>aws/voice-retained/README.md:148</c> offers as a supported rollback
+    /// whose stated effect is "clips remain in S3 untouched".
+    /// </summary>
+    private sealed class SkippingRetainedBlobStore : IRetainedBlobStore
+    {
+        public Task<RetainedVoiceDeletionOutcome> DeleteRetainedVoiceForUserAsync(Guid userId, CancellationToken ct) =>
+            Task.FromResult(RetainedVoiceDeletionOutcome.SkippedNoBucketConfigured);
+
+        public Task<Guid> PersistAsync(VoiceClipRetained metadata, byte[] cipherBytes, CancellationToken ct) =>
+            throw new NotSupportedException();
+
+        public Task<RetainedClipResult?> GetByIdAsync(Guid clipId, Guid callerUserId, CancellationToken ct) =>
+            throw new NotSupportedException();
+
+        public Task<IReadOnlyList<VoiceClipRetainedListItem>> GetByRangeAsync(
+            Guid userId, DateOnly from, DateOnly to, CancellationToken ct) =>
+            throw new NotSupportedException();
+    }
+
+    /// <summary>Genuinely purges — the clean-path control.</summary>
     private sealed class NoOpRetainedBlobStore : IRetainedBlobStore
     {
-        public Task DeleteRetainedVoiceForUserAsync(Guid userId, CancellationToken ct) => Task.CompletedTask;
+        public Task<RetainedVoiceDeletionOutcome> DeleteRetainedVoiceForUserAsync(Guid userId, CancellationToken ct) =>
+            Task.FromResult(RetainedVoiceDeletionOutcome.Deleted);
 
         public Task<Guid> PersistAsync(VoiceClipRetained metadata, byte[] cipherBytes, CancellationToken ct) =>
             throw new NotSupportedException();

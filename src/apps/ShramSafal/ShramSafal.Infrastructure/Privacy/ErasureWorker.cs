@@ -512,17 +512,47 @@ public sealed class ErasureWorker(
         // wherever the delete cannot succeed, which is strictly worse for the
         // farmer. What has to become atomic is the RECORD, not the deletion.
         string? retainedVoiceResidue = null;
+
+        // Recorded verbatim in the audit payload: NothingToDelete | Deleted |
+        // SkippedNoBucketConfigured | Failed. A boolean could not tell the last
+        // two apart, and conflating them is exactly the bug fixed here.
+        var retainedVoiceOutcome = nameof(RetainedVoiceDeletionOutcome.NothingToDelete);
+
         var retainedStore = sp.GetRequiredService<IRetainedBlobStore>();
         try
         {
-            await retainedStore.DeleteRetainedVoiceForUserAsync(targetUserId, ct).ConfigureAwait(false);
+            var storeOutcome = await retainedStore
+                .DeleteRetainedVoiceForUserAsync(targetUserId, ct)
+                .ConfigureAwait(false);
+            retainedVoiceOutcome = storeOutcome.ToString();
+
+            // A silent skip is residue too, not success. The store removes the
+            // metadata rows when no bucket is configured, which deletes the only
+            // pointer to objects that are still in S3 — and that state is
+            // reachable through a DOCUMENTED rollback
+            // (aws/voice-retained/README.md:148 blanks
+            // RetainedBlobStore__BucketName and states "clips remain in S3
+            // untouched"). Recording that as retainedVoiceDeleted:true would be
+            // an affirmative false claim on the erasure path, which is worse
+            // than the silence it replaced.
+            if (storeOutcome == RetainedVoiceDeletionOutcome.SkippedNoBucketConfigured)
+            {
+                voiceClipsDeferred = true;
+                retainedVoiceResidue = Truncate(
+                    "SkippedNoBucketConfigured: RetainedBlobStore:BucketName is blank, so the "
+                    + "voice_clips_retained rows were removed WITHOUT deleting any S3 object. "
+                    + "PersistAsync refuses to write a row without a bucket, so those clips were "
+                    + "stored while one was configured and are still in the bucket — now with no "
+                    + "row pointing at them.");
+            }
         }
         catch (Exception ex)
         {
             // Cancellation is deliberately included. At shutdown the scrub is
             // still done, so the record still has to land — see recordCt below.
             voiceClipsDeferred = true;
-            retainedVoiceResidue = $"{ex.GetType().Name}: {ex.Message}";
+            retainedVoiceOutcome = "Failed";
+            retainedVoiceResidue = Truncate($"{ex.GetType().Name}: {ex.Message}");
 
             logger.LogError(ex,
                 "ErasureWorker: retained voice deletion FAILED for user {UserId}. The database scrub "
@@ -539,11 +569,25 @@ public sealed class ErasureWorker(
         // the record is a handful of local inserts; finishing it is always
         // correct and always fast.
         //
-        // NOTE this does NOT cover a cancellation that lands mid-scrub, higher
-        // up: that still aborts with some tables scrubbed, no audit, and the
-        // request stuck InProgress (RunPassAsync:302 excludes
-        // OperationCanceledException from its catch). Same class of hole, wider
-        // blast radius, reported rather than fixed here.
+        // ── FOLLOW-UP: erasure-cancellation-midscrub — NOT YET TRACKED ──
+        //
+        // This does NOT cover a cancellation that lands mid-scrub, higher up.
+        // That window is much larger than the one closed here: the nine
+        // anonymizers run raw SQL across nine tables and account for nearly all
+        // the wall-clock in which a shutdown can land, whereas the guard above
+        // protects a single await.
+        //
+        // Consequences there are worse, not equal: RunPassAsync's catch is
+        // `when (ex is not OperationCanceledException)`, so MarkFailedSafelyAsync
+        // never runs; and the poller selects only Requested rows, so the request
+        // is stranded at InProgress PERMANENTLY and is never retried — some
+        // tables scrubbed, no audit, no terminal state, no second attempt.
+        //
+        // Deferred on scope, not on judgement. A tracked item has to exist for
+        // this or it dies with the report; it belongs in
+        // _COFOUNDER/specs/_inbox/, which is outside this agent's allowlist, so
+        // it is named here and in task-5-report.md §I2 for the coordinator to
+        // file. Grep marker: erasure-cancellation-midscrub.
         var recordCt = CancellationToken.None;
 
         // Per-row audit emission per DS-017 rule (d). We emit one
@@ -579,7 +623,13 @@ public sealed class ErasureWorker(
             // What actually happened to the retained voice tier, stated either
             // way rather than only on failure — an absent field reads as "not
             // considered", which is what we are trying to stop doing.
+            //
+            // retainedVoiceDeleted is TRUE only when the tier is genuinely
+            // clear (Deleted, or NothingToDelete because the subject had none).
+            // A no-bucket skip removes the metadata rows without touching S3,
+            // so it reports FALSE and carries residue text — it is not success.
             retainedVoiceDeleted = retainedVoiceResidue is null,
+            retainedVoiceOutcome,
             retainedVoiceResidue,
 
             // Requirement: a retry must not report smaller numbers than the
@@ -607,7 +657,41 @@ public sealed class ErasureWorker(
 
         // recordCt, not ct — see the note above. The scrub is irreversible and
         // already committed; the record must land even if we are shutting down.
-        await admin.SaveChangesAsync(recordCt).ConfigureAwait(false);
+        //
+        // ── The status transition is in-memory until THIS line commits ──
+        //
+        // MarkCompleted/MarkCompletedWithResidue above only mutate the tracked
+        // entity. Until this SaveChangesAsync succeeds the row is still
+        // InProgress in the database. So if this call is the thing that fails —
+        // statement timeout on a loaded box, connection drop, deadlock — the
+        // exception unwinds to RunPassAsync, MarkFailedSafelyAsync opens a
+        // FRESH context, reads InProgress, passes its own guard, and stamps
+        // Failed. Nine tables scrubbed, zero audit rows, status Failed: the
+        // exact defect this method exists to remove, reached through a
+        // different door. The terminal-state guard cannot help, because the
+        // terminal state was never written.
+        //
+        // So a failure here gets one fallback attempt on a fresh context that
+        // writes the MINIMUM honest record — the status transition plus a single
+        // compact audit row. It deliberately drops the per-row audit events,
+        // which are the bulk of the payload and the likeliest cause of a slow or
+        // oversized write; a smaller write is the one most likely to succeed
+        // where the first did not.
+        try
+        {
+            await admin.SaveChangesAsync(recordCt).ConfigureAwait(false);
+        }
+        catch (Exception saveEx)
+        {
+            await TryWriteMinimalOutcomeRecordAsync(
+                sp, request.Id, totalAnonymized, retainedVoiceOutcome, retainedVoiceResidue, saveEx)
+                .ConfigureAwait(false);
+
+            // Rethrow so the failure stays visible. This is now safe: if the
+            // fallback landed, the row is already terminal and
+            // MarkFailedSafelyAsync's guard blocks the downgrade to Failed.
+            throw;
+        }
 
         if (retainedVoiceResidue is null)
         {
@@ -929,6 +1013,116 @@ UPDATE ssf.farm_operations
         "golden_set_candidate" => new[] { "deleted" },
         _ => Array.Empty<string>(),
     };
+
+    /// <summary>
+    /// Cap for text going into a durable record. Matches the 1000-char limit
+    /// <see cref="MarkFailedSafelyAsync"/> already applies to
+    /// <c>ErasureRequest.FailureReason</c>.
+    ///
+    /// <para>
+    /// An exception message is unbounded and, from Npgsql, can embed row or
+    /// parameter detail. This value lands in a jsonb payload on the erasure
+    /// path that is designed to outlive the data it describes, so it gets the
+    /// same cap its sibling field has always had.
+    /// </para>
+    /// </summary>
+    private static string Truncate(string value) =>
+        value.Length <= 1000 ? value : value[..1000];
+
+    /// <summary>
+    /// Last-ditch honest record when the main audit write fails. Fresh context,
+    /// fresh connection, smallest possible write: the status transition plus one
+    /// compact audit row. Best-effort by definition — if this fails too there is
+    /// nothing further to try, and the caller's rethrow surfaces the original
+    /// error.
+    ///
+    /// <para>
+    /// Note what it does NOT do: re-emit the per-row audit events. Those are the
+    /// bulk of the failed write. Dropping them is what makes this attempt more
+    /// likely to succeed than the one that just failed, and the aggregate row
+    /// still records the counts.
+    /// </para>
+    /// </summary>
+    private async Task TryWriteMinimalOutcomeRecordAsync(
+        IServiceProvider sp,
+        Guid requestId,
+        int totalAnonymized,
+        string retainedVoiceOutcome,
+        string? retainedVoiceResidue,
+        Exception saveFailure)
+    {
+        try
+        {
+            var adminFactory = sp.GetRequiredService<IAdminDbContextFactory<ShramSafalDbContext>>();
+            await using var admin = await adminFactory.CreateAsync(
+                reason: $"{nameof(ErasureWorker)}.minimalRecord.{requestId:N}",
+                actorUserId: SystemActor.ErasedFarmer,
+                ct: CancellationToken.None).ConfigureAwait(false);
+
+            var req = await admin.ErasureRequests
+                .FirstOrDefaultAsync(r => r.Id == requestId, CancellationToken.None)
+                .ConfigureAwait(false);
+
+            if (req is null || req.Status != ErasureStatus.InProgress)
+            {
+                return;
+            }
+
+            if (retainedVoiceResidue is null)
+            {
+                req.MarkCompleted(totalAnonymized, DateTime.UtcNow);
+            }
+            else
+            {
+                req.MarkCompletedWithResidue(totalAnonymized, DateTime.UtcNow);
+            }
+
+            admin.AuditEvents.Add(AuditEventFactory.Create(
+                entityType: "ErasureRequest",
+                entityId: requestId,
+                action: retainedVoiceResidue is null ? "Completed" : "CompletedWithResidue",
+                actorUserId: SystemActor.ErasedFarmer,
+                actorRole: "system_erasure_worker",
+                payload: new
+                {
+                    requestId,
+                    rowsAnonymizedCount = totalAnonymized,
+                    retainedVoiceDeleted = retainedVoiceResidue is null,
+                    retainedVoiceOutcome,
+                    retainedVoiceResidue,
+                    countsAreFromThisRunOnly = true,
+
+                    // Says why this record is thinner than the normal one, so a
+                    // handler does not read the absence of per-row events as
+                    // "those tables were not touched".
+                    degradedRecord = true,
+                    degradedReason = Truncate(
+                        "Primary audit write failed; per-row audit events were dropped to land the "
+                        + $"outcome. Original error: {saveFailure.GetType().Name}: {saveFailure.Message}"),
+                },
+                farmId: null,
+                clientCommandId: null,
+                appVersion: AppVersionProvider.Current,
+                deviceId: "system",
+                ipHash: "sha256:system",
+                sourceAiJobId: null));
+
+            await admin.SaveChangesAsync(CancellationToken.None).ConfigureAwait(false);
+
+            logger.LogError(saveFailure,
+                "ErasureWorker: primary audit write failed for request {RequestId}; wrote a DEGRADED "
+                + "outcome record instead (status + aggregate audit row, no per-row events).",
+                requestId);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex,
+                "ErasureWorker: fallback outcome record ALSO failed for request {RequestId}. The scrub "
+                + "completed but the row will be stamped Failed with no audit. Reconcile from "
+                + "ssf.audit_events by target user.",
+                requestId);
+        }
+    }
 
     private async Task MarkFailedSafelyAsync(
         IServiceProvider sp, Guid requestId, string reason, CancellationToken ct)

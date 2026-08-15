@@ -3,7 +3,14 @@
 // Sub-phase 08.1 — DPDP §12 erasure request aggregate. Self-serve or
 // admin-on-behalf-of (OQ-2). Status FSM:
 //   Requested → InProgress → Completed
+//                       ├→ CompletedWithResidue
 //                       └→ Failed
+//
+// CompletedWithResidue: the database manifest ran and the row count is
+// real, but a named part of the erasure did not happen (today: the
+// retained voice clips are still in S3). It is NOT Completed, which
+// would falsely claim a clean erasure, and NOT Failed, which would
+// falsely claim nothing happened after nine tables were scrubbed.
 //
 // The aggregate is async-by-design (OQ-6 verdict — 48h SLA): the
 // endpoint enqueues a row and returns 202 immediately. ErasureWorker
@@ -48,8 +55,10 @@ public sealed class ErasureRequest
     public DateTime? CompletedAtUtc { get; private set; }
 
     /// <summary>
-    /// Populated when <see cref="Status"/> reaches Completed. Counts the
-    /// rows the worker anonymized across all tables in the manifest.
+    /// Populated when <see cref="Status"/> reaches <see cref="ErasureStatus.Completed"/>
+    /// OR <see cref="ErasureStatus.CompletedWithResidue"/> — the count is just
+    /// as real in the residue case, which is the whole point of that state.
+    /// Counts the rows the worker anonymized across all tables in the manifest.
     /// </summary>
     public int? RowsAnonymizedCount { get; private set; }
 
@@ -157,8 +166,13 @@ public sealed class ErasureRequest
     /// </para>
     ///
     /// <para>
-    /// The specifics of what remains live in the <c>ErasureRequest/Completed</c>
-    /// audit event payload for this request.
+    /// The specifics of what remains live in the audit event for this request —
+    /// <c>entity_type = 'ErasureRequest'</c> with
+    /// <c>action = 'CompletedWithResidue'</c>. NOTE the action mirrors the
+    /// status: a clean run writes <c>'Completed'</c>, this one does not. Query
+    /// on <c>entity_id = &lt;requestId&gt;</c> rather than on the action, or a
+    /// handler sent to <c>action = 'Completed'</c> will find nothing for exactly
+    /// the requests that need looking at.
     /// </para>
     /// </summary>
     public void MarkCompletedWithResidue(int rowsAnonymizedCount, DateTime nowUtc)
@@ -206,9 +220,21 @@ public sealed class ErasureRequest
 /// <para>
 /// Persisted as <c>integer</c> with no CHECK constraint
 /// (<c>ssf.erasure_requests.status</c>), so adding a member needs no migration.
-/// Nothing switches exhaustively on this enum; the existing comparisons are all
-/// <c>== Completed</c> / <c>== Requested</c> / <c>!= Failed</c>, and a value of
-/// 4 is correctly NOT treated as clean completion by any of them.
+/// Every BACKEND comparison is <c>== Completed</c> / <c>== Requested</c> /
+/// <c>!= Failed</c>, and a value of 4 is correctly NOT treated as clean
+/// completion by any of them.
+/// </para>
+///
+/// <para>
+/// <b>One frontend consumer IS exhaustive — do not repeat the earlier claim
+/// that nothing is.</b>
+/// <c>src/clients/mobile-web/src/features/dataRights/RecentRequestsList.tsx:18</c>
+/// declares a closed union of the original four names and switches on it with
+/// no <c>default</c>, so an unmapped value renders <c>undefined</c>. It is
+/// dormant today — no listing endpoint feeds it and the component is imported
+/// nowhere — which is why adding the member here was still safe. Anyone wiring
+/// that component up must widen the union first. Frontend is owned by another
+/// lane, so this is recorded, not fixed.
 /// </para>
 /// </summary>
 public enum ErasureStatus
