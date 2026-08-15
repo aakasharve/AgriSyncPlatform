@@ -317,7 +317,19 @@ export class DexieLogsRepository implements LogsRepository {
         };
 
         await db.transaction('rw', [db.logs, db.outbox, db.auditEvents], async () => {
-            await db.logs.put(toRecord(updatedLog));
+            // §P0.7 review B003 — THE FOURTH WRITER, missed when
+            // `toRecordPreservingWatermark` was extracted for the other three.
+            // A bare `toRecord` erases `serverModifiedAtUtc`, which disarms the
+            // pull's freshness guard AND — since §P0.7 box 2e — makes the log
+            // look locally-authored to `strandedLogReconciler`, which would then
+            // re-enqueue a record the server already has as a fresh create.
+            //
+            // Latent: this method has no production caller today. Fixed anyway,
+            // because "safe as long as nobody calls that method" is not an
+            // invariant, and `__tests__/DexieLogsRepository.watermark.test.ts`
+            // now holds all four writers to it rather than leaving it a
+            // convention.
+            await db.logs.put(toRecordPreservingWatermark(updatedLog, record));
 
             await db.outbox.add({
                 idempotencyKey: idempotencyKey(id, 'VERIFY_LOG'),

@@ -173,7 +173,7 @@ export class ConflictResolutionService {
             // Say the one true thing there is to say rather than nothing: the
             // app has stopped trying and the farmer's tap is what restarts it.
             return autoRetriesExhausted
-                ? 'अ‍ॅपने पुन्हा पाठवणे थांबवले आहे. तपासा आणि पुन्हा प्रयत्न करा.'
+                ? 'अॅपने पुन्हा पाठवणे थांबवले आहे. तपासा आणि पुन्हा प्रयत्न करा.'
                 : undefined;
         }
         const upper = reason.toUpperCase();
@@ -198,7 +198,7 @@ export class ConflictResolutionService {
             return 'नोंदीची माहिती तपासा. नंतर बदल करून पुन्हा प्रयत्न करा.';
         }
         if (autoRetriesExhausted) {
-            return 'अ‍ॅपने पुन्हा पाठवणे थांबवले आहे. तपासा आणि पुन्हा प्रयत्न करा.';
+            return 'अॅपने पुन्हा पाठवणे थांबवले आहे. तपासा आणि पुन्हा प्रयत्न करा.';
         }
         return undefined;
     }
