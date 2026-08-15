@@ -235,6 +235,16 @@ Preconditions, all from §14: pre-deploy RDS snapshot · a proven mechanism to a
 the nap schedule suspended for the window · CloudFront invalidation planned · a new APK build.
 **GR is blocked until every one is true.**
 
+- [ ] 🛑 **RELEASE BLOCKER (founder-added 2026-08-15) — MEASURE THE PRODUCTION EXPORT PATH.**
+      Establish whether the **production** migration/admin role carries `rolbypassrls`. `ExportWorker`
+      reads `audit_events.json` for a DSAR through the admin context. Locally that role is superuser
+      and bypasses RLS, so the subject receives their own rows. **If production does not bypass, the
+      tightened §P0.2 policy makes a farmer's own audit export return EMPTY — silently, with no
+      error.** That is a data-rights regression, not a sync bug.
+      **Proof required: run the real export for a real subject against production-shaped roles and
+      confirm the audit section is non-empty.** A role-catalog reading alone is not sufficient —
+      §P0.2's own inspection showed the plan asserting opposite answers in two sections and verifying
+      neither. **GR is blocked until this is measured, not reasoned about.**
 - [ ] **GR decision recorded, separately from GM**
 
 ### The three GM options
@@ -584,9 +594,10 @@ exemplar `FieldOperatorRlsRealPostgresTests.cs` **was verified to carry the cite
 >
 > ### 🛑 TWO CONSEQUENCES THAT NEED A FOUNDER DECISION BEFORE RELEASE
 >
-> **1. The platform-admin branch of `/shramsafal/audit` now returns ZERO rows on the app-role
-> connection.** The tightened policy has no platform-admin escape, and adding one is a *widening* ruled
-> out of P0.2's scope. **Asserted as a fact so it cannot drift silently.** No product screen is
+> **1. ✅ FOUNDER-RULED 2026-08-15: KEEP PLATFORM-ADMIN AUDIT ACCESS CLOSED.** The branch returns ZERO
+> rows on the app-role connection, and that is the accepted state — not a regression to fix. Reopening
+> it is a *widening* requiring its own justification and design; **no executor may reopen it as a
+> side effect of other work.** **Asserted as a fact so it cannot drift silently.** No product screen is
 > affected — `GET /audit` has **zero callers in `src/clients/`**, confirmed. But the admin audit read
 > is now closed until a deliberate widening is designed. *(Separately: that route establishes no tenant
 > scope and is not on either interceptor list, so by code reading it **500s today** regardless. Not
@@ -612,10 +623,12 @@ exemplar `FieldOperatorRlsRealPostgresTests.cs` **was verified to carry the cite
   NULL-farm row, and `UPDATE`/`DELETE` are revoked so a poisoned row is **permanent**. Closing it
   requires giving the admin write path its own identity — real scope. **Trigger: immediately after
   P0.2's `USING` fix is prod-proven. This is not deferred indefinitely.**
-- **`agrisync_app` holds `TRUNCATE` on `ssf.audit_events`.** `HardenAuditIntegrity.cs:169` revoked
+- ✅ **`TRUNCATE` — FOUNDER-APPROVED 2026-08-15, RIDES ALONG.** `HardenAuditIntegrity.cs:169` revoked
   `UPDATE`/`DELETE` to make the ledger append-only and **never revoked TRUNCATE**, which erases the
-  whole ledger in one statement, bypassing RLS. **The append-only guarantee has a hole the size of the
-  table.** One-line `REVOKE` — **founder's call whether it rides along with P0.2.**
+  whole ledger in one statement, bypassing RLS. **The append-only guarantee had a hole the size of the
+  table.** Ruling: **revoke it from the normal application role, while preserving deliberate
+  privileged maintenance access.** The capability is not deleted — it is moved behind a role a farmer
+  request can never reach. **Do not widen this into a permissions review.**
 - **`ResolveTenantDekHandler.cs:48` echoes a client-supplied `dekId` verbatim** into an append-only,
   everyone-readable payload — a stored-injection primitive. Out of P0.2's scope; recorded.
 - **The two DEK sites are non-NULL only by co-assignment.** An explicit `FarmId` guard would stop a
