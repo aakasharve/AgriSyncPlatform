@@ -28,6 +28,33 @@
  * A bare, un-namespaced `oversight_ack_<farmId>` key would let one farmer's
  * "I've seen this" checkpoint apply to the next farmer who signs in on the
  * same phone — reopening the exact leak the other lane's P0 exists to close.
+ *
+ * THIS GUARANTEE IS CONTINGENT ON MOUNT LOCATION (read before relocating
+ * `useOversightAcknowledgement`):
+ * `currentUserId()` below is only correct because `DataSourceProvider.tsx`
+ * (`useEffect` around line 113-165) gates `children` behind `isLoading` and
+ * calls `activateDatabaseForUser(session.userId)` — which also sets
+ * `DemoModeStore`'s active-user record this module reads — for every REAL
+ * (non-demo) `session.userId` change, before any consumer of this hook can
+ * be on screen. If a future component ever mounts
+ * `useOversightAcknowledgement` OUTSIDE that gated tree (e.g. a route that
+ * renders before `DataSourceProvider` resolves), `currentUserId()` can read
+ * a stale or absent active-user id and this module will silently fall back
+ * to `NO_ACTIVE_USER_BUCKET` — breaking per-farmer isolation without an
+ * error anywhere.
+ *
+ * DEMO MODE IS A NARROWER, ALREADY-CONTAINED VERSION OF THE SAME GAP:
+ * `DataSourceProvider.tsx` line 126 guards the `activateDatabaseForUser`
+ * call with `!isDemoMode`, so entering demo mode does NOT update the
+ * active-user record — `currentUserId()` keeps returning whatever the prior
+ * real session (or `NO_ACTIVE_USER_BUCKET`) left behind. This is not a
+ * real-farmer leak only because `storageNamespace.getKey()` still prefixes
+ * the key with `demo_`, so it lands in the demo bucket regardless of which
+ * user id it carries — demo data was never meant to be farmer-attributed.
+ * It IS, however, the same class of gap: `currentUserId()` is trustworthy
+ * only for as long as `DataSourceProvider`'s activation call keeps running
+ * ahead of every read/write this module performs. Do not assume it self-
+ * corrects in any code path that skips that provider.
  */
 
 import { storageNamespace } from '../../infrastructure/storage/StorageNamespace';
