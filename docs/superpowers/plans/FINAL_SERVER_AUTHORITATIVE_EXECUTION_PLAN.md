@@ -9,6 +9,52 @@
 > or `superpowers:executing-plans`. Steps use `- [ ]` checkboxes. **Do not redesign the architecture.**
 > It is closed (§2). If you believe a task is wrong, produce evidence and stop; do not improvise.
 
+> # ▶ FOUNDER EXECUTION DIRECTIVE — 2026-08-15. **DO NOT STOP AT SECTION BOUNDARIES.**
+>
+> **This plan is a QUEUE OF DEPENDENCIES, not a series of assignments requiring a restart after each
+> one.** Execute continuously to the end. **Do not stop after P0.4, P0.9, F1, D1 or any other
+> milestone to ask what to do next.** Report progress briefly at milestones and take the next
+> unblocked dependency immediately.
+>
+> **When repo reality differs from this plan:** measure the actual behaviour → preserve the
+> architectural intent → correct the smallest factual assumption → verify → **continue.**
+> **Do NOT produce** another architecture proposal, planning document, open-question document,
+> handoff, or options memo. **Do not ask the founder to choose between ordinary technical
+> alternatives.**
+>
+> **Include every still-open item in this plan** — an item is not complete because it stopped
+> appearing in a status recap.
+>
+> ### STOP ONLY FOR A GENUINE FOUNDER GATE
+> Merge to `main` where this plan requires approval · deploy to production · **irreversibly delete
+> farmer data** · materially change a locked product or retention decision · **change farmer money
+> semantics** · change privacy rights or consent · a decision this plan explicitly reserves to the
+> founder. **Everything else is engineering. Resolve it and continue.**
+>
+> ### PER-TASK DISCIPLINE
+> ```text
+> inspect repo → establish baseline → smallest plan-aligned change → named red→green proof
+> → negative/mutation proof → integration gate → commit → update status → next unblocked dependency
+> ```
+> **Never make a test green by weakening the requirement.** Never invent a value the farmer did not
+> provide. Never delete the only remaining copy of farmer data. Never add another synchronization or
+> persistence architecture to finish faster. **Never run acceptance testing against a tree another
+> agent is actively modifying.**
+>
+> ### PARALLELISM
+> **Parallelize** independent surfaces: AWS/infrastructure · isolated security · CI/architecture
+> guards · media that shares no active domain file.
+> **Serialize** anything touching the same source-of-truth contracts, the **Dexie version chain**, or
+> the **EF migration pipeline** — two agents adding migrations concurrently collide.
+>
+> ### THE OBJECTIVE — not "P0 green"
+> > **Every acknowledged durable farm record must survive the originating device, return with the same
+> > meaning, remain correctly attributed, remain isolated between farmers, and reconstruct from
+> > server-authoritative infrastructure.**
+>
+> Containment is not completion. **Continue until §18's Definition-of-Done scenarios are satisfied**,
+> or until a genuine founder gate is reached. **Do not turn milestones into permission requests.**
+
 **Date:** 2026-08-15 · **Branch:** `feat/server-authoritative-architecture`
 **Method:** seven independent specialists (CTO, data, sync, mobile, cloud, security, QA), reconciled,
 then adversarially reviewed and cross-verified. All claims carry file:line evidence.
