@@ -231,6 +231,36 @@ public sealed class CreateDailyLogHandler(
             log.SetEvidenceSourcesJson(evidenceJson);
         }
 
+        // ── spec: dfes-companion-2026-07-11 (wave-1.3) ───────────────────────────
+        // THE SERVER HALF of the owner-confirm fix. The device stamps the owner's own
+        // log approved on save (wave-1.1), but verification is a SERVER-derived value —
+        // DailyLog.CurrentVerificationStatus folds the verification events and both
+        // status properties are builder.Ignore()d, so there is no column the device
+        // could ever write. Create emits no verification event, so every log came back
+        // Draft on the next pull and the reconciler (logsReconciler.ts: "Verification is
+        // a server-side FSM; the device never wins it") overwrote the device's answer.
+        // The farmer logged his work and his score dropped again, one sync later.
+        //
+        // The role is read from the DATABASE (farm ownership / non-terminal membership),
+        // never from command.ActorRole — that string arrives from the caller, and a
+        // client that can assert its own approval authority defeats the entire point of
+        // the verification FSM. GetUserRoleForFarmAsync is the same server-side
+        // derivation VerifyLogHandler already trusts for the explicit verify path.
+        //
+        // Non-owner roles get nothing here: TrySelfVerifyAsCreator refuses any role that
+        // does not hold BOTH FSM edges, so a Mukadam's log still lands on Draft and still
+        // needs an owner. No FSM edge was added or widened.
+        var creatorRole = await repository.GetUserRoleForFarmAsync(
+            command.FarmId, command.OperatorUserId, ct);
+        if (creatorRole is { } role
+            && log.TrySelfVerifyAsCreator(idGenerator.New(), idGenerator.New(), role, clock.UtcNow))
+        {
+            logger.LogInformation(
+                "DailyLog {LogId} self-verified on create: operator {OperatorUserId} holds {Role} on farm {FarmId}, " +
+                "which carries both Draft->Confirmed and Confirmed->Verified.",
+                log.Id, command.OperatorUserId, role, command.FarmId);
+        }
+
         await repository.AddDailyLogAsync(log, ct);
 
         // DATA_PRINCIPLE_SPINE sub-phase 04.3b — migrate from AuditEvent.Create

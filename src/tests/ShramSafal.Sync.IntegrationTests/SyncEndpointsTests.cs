@@ -515,6 +515,13 @@ public sealed class SyncEndpointsTests
                         createdByUserId = spoofedUserId
                     }
                 },
+                // spec: dfes-companion-2026-07-11 (wave-1.3) — status changed from
+                // "Approved" (which the server maps to Confirmed) to "Disputed". The
+                // JWT actor owns this farm, so his own log now lands on Verified the
+                // moment it is created; Draft->Confirmed is no longer the edge in
+                // front of him, but Verified->Disputed is. What this test is about is
+                // unchanged: the spoofed verifiedByUserId below must still be ignored
+                // in favour of the JWT identity, which is asserted further down.
                 new
                 {
                     clientRequestId = "req-verify-jwt",
@@ -522,7 +529,8 @@ public sealed class SyncEndpointsTests
                     payload = new
                     {
                         dailyLogId,
-                        status = "Approved",
+                        status = "Disputed",
+                        reason = "spoof-check: the actor must come from the JWT",
                         verifiedByUserId = spoofedUserId
                     }
                 }

@@ -144,6 +144,16 @@ public sealed class AuditReconstructionTests
 
         // ---- Step 3: Verify the log (owner-tier action that emits a
         // VerificationChanged audit row through VerifyLogHandler).
+        //
+        // spec: dfes-companion-2026-07-11 (wave-1.3) — the target status changed from
+        // Confirmed to Disputed. This step used to start from Draft, because
+        // CreateDailyLog emitted no verification event at all; the owner's own log now
+        // lands on Verified at creation (he recorded the day AND he is the authority
+        // that vouches for it), so Draft->Confirmed is no longer the edge in front of
+        // him. Disputed is the owner-tier edge that IS available from Verified — "this
+        // does not match what happened" — and it emits the same single
+        // VerificationChanged audit row this test is actually about. Nothing below
+        // changed: three rows, same actions, same forensic-trio assertions.
         await using (var scope = harness.CreateScope())
         {
             var verifyHandler = scope.ServiceProvider
@@ -151,8 +161,8 @@ public sealed class AuditReconstructionTests
 
             var verifyCommand = new VerifyLogCommand(
                 DailyLogId: createdLog.Id,
-                TargetStatus: VerificationStatus.Confirmed,
-                Reason: "looks good",
+                TargetStatus: VerificationStatus.Disputed,
+                Reason: "the sprayed block was not the one recorded",
                 VerifiedByUserId: TestUserId,
                 VerificationEventId: null,
                 ActorRole: "primary_owner",

@@ -206,6 +206,68 @@ public sealed class DailyLog : Entity<Guid>
         return verification;
     }
 
+    /// <summary>
+    /// spec: dfes-companion-2026-07-11 (wave-1.3) — an owner's own log must come back
+    /// from the server as a day that counts.
+    ///
+    /// <para><b>Why this exists.</b> Verification is derived, not stored:
+    /// <see cref="CurrentVerificationStatus"/> folds <see cref="VerificationEvents"/>, and
+    /// <c>DailyLogConfiguration</c> <c>Ignore</c>s both properties — there is no column a
+    /// client could write. <see cref="Create"/> emits ZERO verification events, so EVERY
+    /// synced log came back <see cref="VerificationStatus.Draft"/>, the farm owner's own
+    /// included. The device stamps his log approved on save; the next pull overwrote that
+    /// with the server's Draft and his day fell out of the closed-day count again.</para>
+    ///
+    /// <para><b>Why two events and not a new FSM edge.</b> When the creating operator's
+    /// SERVER-DERIVED role already holds both edges the machine defines — Draft→Confirmed
+    /// ("I recorded this") and Confirmed→Verified ("I, an owner, vouch for it") — both acts
+    /// genuinely happened, by the same person, at the moment of creation. So we WALK the
+    /// existing edges instead of adding a Draft→Verified shortcut. Nothing in
+    /// <see cref="VerificationStateMachine"/> is loosened, and an operator who holds only
+    /// the first edge (Mukadam, Worker, Consultant) gets NOTHING here: his log stays Draft
+    /// and still needs an owner. That is the whole point of the state machine and the pilot
+    /// depends on it.</para>
+    ///
+    /// <para><b>Why the 1 ms offset.</b> <see cref="CurrentVerificationStatus"/> resolves by
+    /// <c>OrderBy(OccurredAtUtc).Last()</c>. Two events sharing one instant would leave the
+    /// fold at the mercy of row order after an EF reload — the log could read back
+    /// <c>Confirmed</c>, which the client's ring does not count, and the bug would return
+    /// looking like a client regression. Two distinct acts get two distinct instants.</para>
+    ///
+    /// <para>The caller MUST derive <paramref name="creatorRole"/> from the operator's
+    /// membership on the server. A client-supplied role would make the device the authority
+    /// on its own approval, which is exactly what the FSM exists to prevent.</para>
+    /// </summary>
+    /// <returns><c>true</c> when both attestation events were emitted.</returns>
+    public bool TrySelfVerifyAsCreator(
+        Guid confirmEventId,
+        Guid verifyEventId,
+        AppRole creatorRole,
+        DateTime occurredAtUtc)
+    {
+        // Creation-time only. A log that already carries verification history has a
+        // story of its own and must never be silently re-stamped.
+        if (_verificationEvents.Count > 0 || CurrentVerificationStatus != VerificationStatus.Draft)
+        {
+            return false;
+        }
+
+        // Authority is asked of the state machine itself, so this can never drift from
+        // the roles the machine actually permits.
+        var canConfirm = VerificationStateMachine.CanTransitionWithRole(
+            VerificationStatus.Draft, VerificationStatus.Confirmed, creatorRole);
+        var canVerify = VerificationStateMachine.CanTransitionWithRole(
+            VerificationStatus.Confirmed, VerificationStatus.Verified, creatorRole);
+        if (!canConfirm || !canVerify)
+        {
+            return false;
+        }
+
+        Verify(confirmEventId, VerificationStatus.Confirmed, null, creatorRole, OperatorUserId, occurredAtUtc);
+        Verify(verifyEventId, VerificationStatus.Verified, null, creatorRole, OperatorUserId, occurredAtUtc.AddMilliseconds(1));
+        return true;
+    }
+
     public VerificationEvent? Edit(
         Guid verificationEventId,
         UserId editedByUserId,
