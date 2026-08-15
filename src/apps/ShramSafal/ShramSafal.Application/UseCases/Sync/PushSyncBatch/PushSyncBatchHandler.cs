@@ -1027,7 +1027,15 @@ public sealed class PushSyncBatchHandler(
         string? appVersion,
         CancellationToken ct)
     {
-        if (!PayloadHasOnly(payload, "costEntryId", "farmId", "plotId", "cropCycleId", "categoryId", "description", "amount", "currencyCode", "entryDate", "createdByUserId", "location"))
+        // Widened for the money-direction wave. `direction` is the farmer's own
+        // statement of which way the money moved — before it existed, income and
+        // expense were byte-identical on this wire and both landed as a CostEntry,
+        // so a ₹50,000 sale rebuilt on a new phone as ₹50,000 spent. The other six
+        // keys are the line detail the client held locally and dropped here.
+        // Set equality with add_cost_entry.zod.ts is enforced by
+        // sync-contract/tests/allowlist-parity.test.ts — which parses THIS line,
+        // so it must stay on one line.
+        if (!PayloadHasOnly(payload, "costEntryId", "farmId", "plotId", "cropCycleId", "categoryId", "description", "amount", "currencyCode", "entryDate", "createdByUserId", "location", "direction", "qty", "unit", "unitPrice", "paymentMode", "vendorName", "attachments"))
         {
             return MutationExecutionOutcome.Failure(
                 "ShramSafal.SyncInvalidPayload",

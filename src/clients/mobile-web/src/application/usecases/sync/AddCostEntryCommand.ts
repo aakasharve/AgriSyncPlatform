@@ -10,6 +10,16 @@ import type { CostCategoryId } from '../../../domain/finance/CostCategory';
 // schema at sync-contract/schemas/payloads/add_cost_entry.zod.ts must
 // be regenerated to match in the same wire-compat bundle (out of
 // scope for implementor-frontend; coordinator owns).
+/**
+ * Which way the money moved, as the farmer stated it.
+ *
+ * Mirrors `MoneyDirectionEnum` in the canonical zod schema. Deliberately
+ * has NO 'Unknown' member: a producer that does not know the direction must
+ * omit the field, not assert a third value. "Unknown" is a property of a
+ * READ (a row that never carried a statement), never of a write.
+ */
+export type MoneyDirection = 'Expense' | 'Income';
+
 export interface AddCostEntryPayload {
      costEntryId: string;
      farmId: string;
@@ -18,9 +28,32 @@ export interface AddCostEntryPayload {
      amount: number;
      currencyCode: string;
      entryDate: string;
+     /**
+      * REQUIRED here, OPTIONAL on the wire — the one deliberate asymmetry
+      * between this twin and `add_cost_entry.zod.ts`, guarded explicitly in
+      * `__tests__/AddCostEntryPayload.direction.test.ts`.
+      *
+      * Optional on the wire because clients shipped before this change omit
+      * the key and their silence must read as UNKNOWN. Required here because
+      * THIS client always knows: every call site starts from a `MoneyEvent`
+      * whose `type` is the farmer's stated direction. Making it required is
+      * what stops the next money surface from silently re-creating the
+      * defect — a new call site will not compile without stating one.
+      */
+     direction: MoneyDirection;
      plotId?: string;
      cropCycleId?: string;
      location?: LocationPayload;
+     // The line detail that used to stop at the outbox boundary. All optional:
+     // absent means the farmer did not state it. Never invent a value to fill
+     // one, and never derive `amount` from `qty * unitPrice`.
+     qty?: number;
+     unit?: string;
+     unitPrice?: number;
+     paymentMode?: 'Cash' | 'UPI' | 'Bank' | 'Credit';
+     vendorName?: string;
+     /** Client-side attachment ids. `[]` is a statement ("none linked"). */
+     attachments?: string[];
 }
 
 export class AddCostEntryCommand {

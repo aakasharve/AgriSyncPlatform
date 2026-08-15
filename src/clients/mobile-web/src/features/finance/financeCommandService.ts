@@ -131,6 +131,23 @@ export const financeCommandService = {
             amount: event.amount,
             currencyCode: 'INR',
             entryDate: toDateKey(event.dateTime),
+            // The farmer's own statement, passed straight through. NOT derived
+            // from the sign of `amount` and NOT derived from `category` — both
+            // would be a guess wearing a statement's clothes (`P1`). Before this
+            // line existed, income and expense produced byte-identical payloads
+            // and the server recorded both as money SPENT.
+            direction: payload.eventType,
+            // The six that used to stop here. Conditional so an unstated field
+            // stays absent on the wire rather than becoming a sentinel; nothing
+            // below computes a value that the farmer did not give.
+            ...(event.qty !== undefined ? { qty: event.qty } : {}),
+            ...(event.unit !== undefined ? { unit: event.unit } : {}),
+            ...(event.unitPrice !== undefined ? { unitPrice: event.unitPrice } : {}),
+            ...(event.paymentMode !== undefined ? { paymentMode: event.paymentMode } : {}),
+            ...(event.vendorName !== undefined ? { vendorName: event.vendorName } : {}),
+            // Always sent: `[]` means "none linked", which is a statement the
+            // client can honestly make about every event it creates.
+            attachments: event.attachments ?? [],
             ...(payload.location ? { location: payload.location } : {}),
         });
         triggerSyncBestEffort();

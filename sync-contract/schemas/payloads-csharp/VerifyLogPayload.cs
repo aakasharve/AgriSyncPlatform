@@ -14,7 +14,6 @@ public sealed record VerifyLogPayload(
     Guid DailyLogId,
     Guid? VerificationEventId = null,
     string? Status = null,
-    string? TargetStatus = null,
     string? Reason = null,
     Guid? VerifiedByUserId = null
 );
