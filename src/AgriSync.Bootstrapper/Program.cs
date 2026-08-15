@@ -732,11 +732,21 @@ try
 catch (Exception ex)
 {
     Log.Fatal(ex, "AgriSync.Bootstrapper failed to start.");
+    // Task 0.1 (spec: dfes-companion-2026-07-11 wave-0.1) — a fatal
+    // startup exception (e.g. a migration that throws on boot, the
+    // proven production migration lane per deploy 23222cdc) must NOT
+    // exit 0. Falling off the end of this catch previously let the
+    // process report a clean shutdown to systemd while the schema was
+    // left half-applied and the API was down. Return non-zero so the
+    // OS-level exit code reflects the failure.
+    return 1;
 }
 finally
 {
     Log.CloseAndFlush();
 }
+
+return 0;
 
 static void ConfigureDevelopmentSwagger(WebApplication app)
 {
