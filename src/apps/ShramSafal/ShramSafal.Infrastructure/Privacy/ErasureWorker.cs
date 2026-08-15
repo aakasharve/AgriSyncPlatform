@@ -1130,13 +1130,18 @@ UPDATE ssf.farm_operations
         catch (Exception ex)
         {
             // Be precise about WHICH audit row is missing. Querying
-            // ssf.audit_events for this entity_id DOES return rows on this path
-            // — RequestErasureHandler committed an 'ErasureRequest'/'Requested'
-            // row at submission, and the admin factory commits an
-            // 'admin_cross_tenant'/'open' row per context creation. What does
-            // not exist is the OUTCOME event: the per-row events died with the
-            // primary transaction and this fallback wrote nothing. Saying "no
-            // audit event" would send a handler away from rows that are there.
+            // ssf.audit_events for entity_type='ErasureRequest' AND
+            // entity_id=<requestId> DOES return a row on this path: exactly one,
+            // the 'Requested' event RequestErasureHandler committed at
+            // submission. What does not exist is the OUTCOME event — the per-row
+            // events died with the primary transaction and this fallback wrote
+            // nothing. Saying "no audit event" would send a handler away from a
+            // row that is there.
+            //
+            // (The admin factory's 'admin_cross_tenant'/'open' rows are NOT part
+            // of that result set and are not evidence here: they carry
+            // entityType 'admin_cross_tenant' and a freshly minted entityId, so
+            // they match neither half of the query.)
             logger.LogError(ex,
                 "ErasureWorker: fallback outcome record ALSO failed for request {RequestId} "
                 + "(subject {TargetUserId}). The scrub COMPLETED and is committed, but the row will "

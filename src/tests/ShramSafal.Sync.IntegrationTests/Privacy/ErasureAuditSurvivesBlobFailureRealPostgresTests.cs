@@ -313,7 +313,7 @@ public sealed class ErasureAuditSurvivesBlobFailureRealPostgresTests : IAsyncLif
 
         var db = scope.ServiceProvider.GetRequiredService<ShramSafalDbContext>();
 
-        var store = new S3RetainedBlobStore(new ThrowOnAnyCallS3(), options, db);
+        var store = new S3RetainedBlobStore(new ThrowOnDeleteObjectS3(), options, db);
 
         var outcome = await store.DeleteRetainedVoiceForUserAsync(_userId, CancellationToken.None);
 
@@ -540,6 +540,14 @@ public sealed class ErasureAuditSurvivesBlobFailureRealPostgresTests : IAsyncLif
     /// starts deleting fails loudly instead of passing against a permissive fake.
     ///
     /// <para>
+    /// <b>Named for exactly what it does.</b> It was briefly called
+    /// <c>ThrowOnAnyCallS3</c>, which the corrected docstring below then
+    /// contradicted — a name asserting more than the code delivers is the same
+    /// defect as a comment doing it, and harder to notice because the name is
+    /// what the call site reads.
+    /// </para>
+    ///
+    /// <para>
     /// <b>Not a blanket guarantee.</b> This overrides one overload, not every
     /// member. Any other S3 call would fall through to the real
     /// <see cref="Amazon.S3.AmazonS3Client"/> base with dummy credentials and
@@ -548,9 +556,9 @@ public sealed class ErasureAuditSurvivesBlobFailureRealPostgresTests : IAsyncLif
     /// override those too rather than trusting the class name.
     /// </para>
     /// </summary>
-    private sealed class ThrowOnAnyCallS3 : Amazon.S3.AmazonS3Client
+    private sealed class ThrowOnDeleteObjectS3 : Amazon.S3.AmazonS3Client
     {
-        public ThrowOnAnyCallS3()
+        public ThrowOnDeleteObjectS3()
             : base(new Amazon.Runtime.BasicAWSCredentials("test", "test"),
                    Amazon.RegionEndpoint.APSouth1)
         {
@@ -670,8 +678,9 @@ public sealed class ErasureAuditSurvivesBlobFailureRealPostgresTests : IAsyncLif
 ///
 /// <para>
 /// The seam is a <see cref="SaveChangesInterceptor"/> attached to an otherwise
-/// ordinary <see cref="ShramSafalDbContext"/> — NOT a subclass; the type is
-/// <c>sealed</c> (see the note below). It throws on the context's second save.
+/// ordinary <see cref="ShramSafalDbContext"/> — NOT a subclass, because
+/// <c>ShramSafalDbContext</c> is declared <c>sealed</c> and cannot be derived
+/// from. It throws on the context's second save.
 /// <c>ProcessOneAsync</c> saves exactly twice on its context — once for
 /// <c>MarkInProgress</c>, once for the audit + status — so failing the second
 /// reproduces "everything scrubbed and committed, then the record write died"
