@@ -85,6 +85,13 @@ jobs:
         run: npm test
         working-directory: src/clients/mobile-web
       - name: Build
+        # spec: dfes-companion-2026-07-11 (wave-0.3) — vite.config.ts fails a
+        # production `vite build` if VITE_AGRISYNC_API_URL is unset (nine
+        # client call sites would otherwise silently fall back to
+        # http://localhost:5048). Public prod URL, not a secret — matches
+        # android-release.yml's value.
+        env:
+          VITE_AGRISYNC_API_URL: "https://api.shramsafal.in"
         run: npm run build
         working-directory: src/clients/mobile-web
 
