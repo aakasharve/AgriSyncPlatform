@@ -15,7 +15,15 @@
  *      flow, and the broken controls (Log New Harvest, Save Entry) are gone
  *      — not merely hidden behind a still-reachable path;
  *   2. pre-existing local harvest data (config + a session) survives
- *      rendering the page untouched — it is not deleted or migrated;
+ *      rendering the page untouched — it is not deleted or migrated. FIX
+ *      ROUND 1: this must be asserted against the RAW store
+ *      (readHarvestConfigRaw/readHarvestSessionsRaw), not through
+ *      getHarvestConfig/getHarvestSessions — those fall back to a
+ *      module-level cache populated by the same seeding call, so asserting
+ *      through them would still pass even if the page wiped every
+ *      `harvest_config_*`/`harvest_sessions_*` localStorage key on mount.
+ *      The raw functions read localStorage directly, so this is the only
+ *      form of the assertion that can fail for the failure mode it guards;
  *   3. "Other Income" — a different, working feature D4 keeps shipping —
  *      still renders and its entry point is still reachable.
  *
@@ -72,7 +80,12 @@ vi.mock('../../features/logs/components/harvest/OtherIncomeSheet', () => ({
 }));
 
 import HarvestIncomePage from '../HarvestIncomePage';
-import { saveHarvestConfig, startHarvestSession, getHarvestConfig, getHarvestSessions } from '../../services/harvestService';
+import { saveHarvestConfig, startHarvestSession, getHarvestConfig } from '../../services/harvestService';
+// Read-only import of the raw store — NOT an edit to
+// infrastructure/storage/, and the only way to prove the underlying
+// localStorage bytes (not a module-level cache) survive the render. See the
+// suite-level comment above (fix round 1, IMPORTANT finding).
+import { readHarvestConfigRaw, readHarvestSessionsRaw } from '../../infrastructure/storage/HarvestLegacyStore';
 
 const CROPS: CropProfile[] = [{
     id: 'crop-1',
@@ -107,18 +120,27 @@ describe('HarvestIncomePage — route "income" (Task 6, spec D4)', () => {
         expect(screen.queryByText(/patti/i)).not.toBeInTheDocument();
     });
 
-    it('leaves pre-existing local harvest config and session data untouched', () => {
+    it('leaves pre-existing local harvest config and session data untouched (raw store)', () => {
         const config = saveAndReadConfig();
-        const session = startHarvestSession('plot-1', 'crop-1', config);
+        startHarvestSession('plot-1', 'crop-1', config);
+
+        // Snapshot the RAW localStorage bytes before the page ever renders —
+        // not the service's cached read — so a page that wiped these keys on
+        // mount would show up here even though `getHarvestConfig` /
+        // `getHarvestSessions` would still return the in-memory cache and
+        // silently pass.
+        const rawConfigBefore = readHarvestConfigRaw('plot-1');
+        const rawSessionsBefore = readHarvestSessionsRaw('plot-1', 'crop-1');
+        expect(rawConfigBefore).not.toBeNull();
+        expect(rawSessionsBefore).not.toBeNull();
 
         render(<HarvestIncomePage context={null} crops={CROPS} onBack={() => undefined} />);
 
-        // Same data, same shape, after the coming-soon page has rendered —
-        // nothing in this component reads, writes or deletes it.
-        expect(getHarvestConfig('plot-1')).toEqual(config);
-        const sessionsAfter = getHarvestSessions('plot-1', 'crop-1');
-        expect(sessionsAfter).toHaveLength(1);
-        expect(sessionsAfter[0]).toEqual(session);
+        // Byte-identical after the coming-soon page has rendered — this
+        // component reads, writes and deletes nothing under
+        // infrastructure/storage/.
+        expect(readHarvestConfigRaw('plot-1')).toBe(rawConfigBefore);
+        expect(readHarvestSessionsRaw('plot-1', 'crop-1')).toBe(rawSessionsBefore);
     });
 
     it('keeps "Other Income" reachable and rendering its existing entries', () => {

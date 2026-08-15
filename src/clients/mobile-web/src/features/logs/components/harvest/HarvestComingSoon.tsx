@@ -28,15 +28,34 @@
  * mutation — and is unaffected. D4: "Nothing else hidden, because nothing
  * else needs to be."
  *
- * COPY
- * ----
+ * COPY — FIX ROUND 1 CORRECTION
+ * ------------------------------
  * English placeholder only — the founder authors the final Marathi (Global
- * Constraint). No date is promised: `saveToastMessages.ts` names a promise no
- * code path can keep as the same class of defect this whole effort removes.
- * The one factual claim made — that anything already recorded is kept — is
- * true unconditionally: nothing in this change reads, writes, or deletes
- * `HarvestLegacyStore` data, so whatever a farmer already saved before this
- * shipped is untouched, whether that is zero records or several.
+ * Constraint). No date is promised: `saveToastMessages.ts:21-34` names a
+ * promise no code path can keep as the same class of defect this whole
+ * effort removes.
+ *
+ * The FIRST version of this copy also said "anything you already noted down
+ * here is still on your phone; it has not been deleted." Independent review
+ * (fix round 1) caught that this is FALSE for the one thing the task exists
+ * to fix. Tracing what actually persisted, by field:
+ *   - harvest config (pattern/unit)         -> saved (saveHarvestConfig)
+ *   - "Log New Harvest" empty session shell -> saved (startHarvestSession)
+ *   - patti number / OCR-extracted data     -> memory only, never written
+ *   - grade-wise sale: quantities, grades,
+ *     prices, income, payment status        -> NEVER WRITTEN, ever
+ * There is no code path that ever saved a sale, so there was no evidence for
+ * a claim that a farmer's past sale is "still there" — a farmer who read that
+ * line and had genuinely lost three sales in June would conclude in August
+ * that his records were fine, and could throw away the patti slips that were
+ * his only remaining proof. Restating "no date" discipline while smuggling in
+ * a different unevidenced promise is the same defect in different clothes.
+ *
+ * The message now claims only what THIS CHANGE can prove: it reads, writes
+ * and deletes nothing (true and evidenced), and it makes no claim about what
+ * any past entry currently contains. Ruling (fix round 1): do NOT build a
+ * read-only history view to make a stronger claim true — a history view is
+ * product scope for the founder to decide, not a containment task's call.
  *
  * @module features/logs/components/harvest/HarvestComingSoon
  */
@@ -49,7 +68,7 @@ const HarvestComingSoon: React.FC = () => (
         <OfflineEmptyState
             icon={<Clock size={40} className="text-slate-300" />}
             title="Harvest tracking is coming soon"
-            message="This part of the app isn't built yet — recording a harvest sale here would not be saved to your farm records. Anything you already noted down here is still on your phone; it has not been deleted."
+            message="This part of the app isn't built yet — a harvest sale recorded here would not be saved to your farm records. Nothing on your phone has been deleted."
         />
     </div>
 );

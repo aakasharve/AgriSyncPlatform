@@ -6,11 +6,18 @@
  * spec: 2026-08-14-founder-decisions-launch-cohort-and-scope, D4 — Task 6.
  *
  * The shared honest surface every harvest entry point now renders instead of
- * the broken sale/config flow. Covers: the message is present and says
- * plainly that the feature isn't built, it says existing records are kept
- * (not lost), it names no date, and — critically — it offers no control that
- * could start a new harvest write (no button, no input), because a farmer
- * who reaches "coming soon" must not find a door that still opens.
+ * the broken sale/config flow.
+ *
+ * FIX ROUND 1 — the original copy said "anything you already noted down here
+ * is still on your phone; it has not been deleted", which independent review
+ * proved false: grade-wise sale data (quantities, grades, prices, income,
+ * payment status) was NEVER written by any code path, so there was no
+ * evidence a farmer's past sale was "still there". The corrected copy makes
+ * only the evidenced claim — this change deletes nothing — and says nothing
+ * about what a past entry currently contains. This suite pins the CORRECTED
+ * claim positively (not merely "some reassuring text exists") and separately
+ * asserts the specific false phrasing does not reappear, so a future edit
+ * that quietly restores it fails here rather than reaching a farmer.
  */
 import '@testing-library/jest-dom/vitest';
 import React from 'react';
@@ -35,10 +42,23 @@ describe('HarvestComingSoon', () => {
         expect(screen.getByText(/would not be saved to your farm records/i)).toBeInTheDocument();
     });
 
-    it('reassures that anything already recorded is kept, not lost', () => {
+    it('makes only the evidenced claim: this change deletes nothing', () => {
         render(<HarvestComingSoon />);
-        expect(screen.getByText(/still on your phone/i)).toBeInTheDocument();
-        expect(screen.getByText(/has not been deleted/i)).toBeInTheDocument();
+        expect(screen.getByText(/nothing on your phone has been deleted/i)).toBeInTheDocument();
+    });
+
+    it('does NOT claim past harvest sale data is safe, kept, or retrievable', () => {
+        // Fix round 1 regression guard: the false claim this fixed was exactly
+        // "anything you already noted down here is still on your phone; it
+        // has not been deleted" — an unevidenced promise about a sale that
+        // was never written in the first place. Pin its absence by the exact
+        // phrases that made it false, not by a vague "sounds reassuring"
+        // check that a reworded false claim could still pass.
+        render(<HarvestComingSoon />);
+        const text = screen.getByTestId('harvest-coming-soon').textContent || '';
+        expect(text).not.toMatch(/already noted down/i);
+        expect(text).not.toMatch(/still on your phone/i);
+        expect(text).not.toMatch(/your (records|sale)s? (is|are) (safe|kept|fine)/i);
     });
 
     it('promises no date', () => {
