@@ -1672,7 +1672,16 @@ public sealed class PurveshDemoSeeder
                 entryDate,
                 usersByKey[costSeed.CreatedByUserKey].Id,
                 null,
-                createdAtUtc);
+                createdAtUtc,
+                // Stated, not assumed. Every row in `costSeeds` is authored
+                // here as a purchase or a payout — fertilizer, pesticide,
+                // labour — so this seeder is the thing that KNOWS, and saying
+                // so is a statement rather than a guess about someone else's
+                // record. Without it the demo's cost entries read back as
+                // direction-unknown and fall out of the expense total, which
+                // would make a correct app look broken on the one dataset the
+                // founder demonstrates with.
+                direction: MoneyDirection.Expense);
 
             _ssfContext.CostEntries.Add(entry);
             costById[costId] = entry;
