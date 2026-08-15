@@ -193,13 +193,19 @@ END $$;
             // — cannot be answered by a hash or merge join, because an OR across
             // two different columns has no single join key. Postgres falls back
             // to a nested loop running a LIKE with a 64-char needle for every
-            // (blob × job) pair. On a populated production ai_jobs that is
-            // O(n·m) while the table is locked (see below), i.e. minutes of
-            // downtime at startup. Splitting into UNION'd branches lets each
-            // branch use an equality hash join. The LIKE survives only as a
-            // third branch restricted to `length(raw_input_ref) <> 64`, which
-            // matches no row that the equality branch already covered and is
-            // expected to match nothing at all.
+            // (blob × job) pair — O(n·m), while the table is locked (see below).
+            // Splitting into UNION'd branches lets branches 1 and 2 use equality
+            // hash joins. This is a STRUCTURAL argument, not a benchmark: the
+            // only EXPLAIN available was on a database with 0 rows in both
+            // tables (prod is hibernated), so any cost numbers from it would say
+            // nothing about production scale and none are quoted here.
+            //
+            // Branch 3 is still a nested loop with a LIKE. It is cheap only
+            // because `raw_input_ref` is always the bare 64-char hash, so the
+            // `length(...) <> 64` filter is expected to match nothing — and that
+            // is an ASSERTION about historical rows from reading the writer
+            // (AiOrchestrator.cs:133/319/980), not a measurement of them. If a
+            // prefixed form ever existed at scale, this branch is the slow one.
             //
             // The FORCE-RLS lift is likewise now conditional. FORCE applies to
             // the table owner, so a non-superuser migration runner would read
@@ -208,15 +214,23 @@ END $$;
             // `ALTER TABLE ... NO FORCE ROW LEVEL SECURITY` takes an ACCESS
             // EXCLUSIVE lock held to COMMIT — it blocks every reader and writer
             // of ssf.ai_jobs for the duration. A superuser bypasses RLS anyway,
-            // so when the runner can bypass we skip the ALTER entirely and take
-            // no lock at all. On this deployment migrations run as the
-            // superuser, so the locking branch is not expected to execute.
+            // so when the runner can bypass we skip the ALTER and take no lock.
             //
-            // SAFE ROLLOUT if the locking branch ever does run on a populated
-            // database: apply this migration out-of-band (psql, off the startup
-            // path) during a maintenance window rather than letting it run at
-            // boot, and check `select count(*) from ssf.ai_jobs` first.
-            // UNMEASURED on production data — prod is hibernated.
+            // ⚠️ WHICH BRANCH PRODUCTION TAKES IS UNKNOWN. Do not assume the
+            // cheap one. The startup path (Program.cs:944-985) migrates
+            // `ssfContext`, which is registered against ConnectionStrings:
+            // ShramSafalDb — the RUNTIME connection, not the `_Migration` one;
+            // only `dotnet ef` uses the design-time factory. And this repo's own
+            // rehearsal record states the full chain was applied "as the
+            // restricted agrisync_app runtime role (not superuser)"
+            // (docs/superpowers/handoffs/2026-07-19-labour-deploy-handoff.md:210).
+            // So the LOCKING branch is at least as likely as the bypass branch.
+            //
+            // SAFE ROLLOUT, and treat it as the expected path rather than the
+            // contingency: apply this migration out-of-band (psql, off the
+            // startup path) during a maintenance window, after checking
+            // `select count(*) from ssf.ai_jobs`. UNMEASURED on production data
+            // — prod is hibernated.
             migrationBuilder.Sql(@"
 DO $$
 DECLARE

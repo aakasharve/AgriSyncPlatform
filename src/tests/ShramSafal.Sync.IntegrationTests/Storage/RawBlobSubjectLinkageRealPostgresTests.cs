@@ -553,6 +553,8 @@ public sealed class RawBlobSubjectLinkageRealPostgresTests : IAsyncLifetime
     /// </summary>
     private async Task UpsertAsAppRoleAsync(Guid? subjectUserId, Guid farmId, Guid userId, RawBlobRef blob)
     {
+        await AssertAppRoleCannotBypassRlsAsync();
+
         await using var provider = BuildAppRoleProvider();
         await using var scope = provider.CreateAsyncScope();
 
@@ -590,6 +592,50 @@ public sealed class RawBlobSubjectLinkageRealPostgresTests : IAsyncLifetime
           VALUES (gen_random_uuid(), @key, 0, @uid, @fid, 2, 1, now(), 1, now(),
                   'Voice', 'm', 'v1', 1, @sha, @sha);",
         ("key", Guid.NewGuid().ToString("N")), ("uid", userId), ("fid", farmId), ("sha", sha256));
+
+    /// <summary>
+    /// ANTI-VACUITY GUARD. Every <c>ProductionRole_*</c> assertion is only worth
+    /// anything if the role it runs as is genuinely constrained — so prove that
+    /// before trusting any of them.
+    ///
+    /// <para>
+    /// This repo has the rule locked three times over in the Labour handoffs:
+    /// <i>a proof run as <c>postgres</c> is void</i>. If <c>agrisync_app</c> ever
+    /// drifted to <c>SUPERUSER</c> or <c>BYPASSRLS</c> — a one-line
+    /// <c>ALTER ROLE</c> — then
+    /// <see cref="ProductionRole_CrossFarmSameBytes_LinksBothFarmers"/> would pass
+    /// while proving nothing at all: no RLS to hide farmer A's row means no 23505
+    /// to survive. The suite must FAIL loudly in that case rather than report a
+    /// green it did not earn.
+    /// </para>
+    ///
+    /// <para>
+    /// Note this is the exact mirror of
+    /// <see cref="ResolveRlsBypassingConnectionOrThrowAsync"/>, which asserts the
+    /// verification connection <b>can</b> bypass. Both directions matter, and
+    /// only one of them was checked before review round 2.
+    /// </para>
+    /// </summary>
+    private async Task AssertAppRoleCannotBypassRlsAsync()
+    {
+        await using var conn = new NpgsqlConnection(new NpgsqlConnectionStringBuilder(_scratchConn)
+        {
+            Username = TestRoleCredentials.AppRoleUser,
+            Password = TestRoleCredentials.AppRolePassword,
+        }.ConnectionString);
+
+        await conn.OpenAsync();
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = "SELECT rolsuper OR rolbypassrls FROM pg_roles WHERE rolname = current_user";
+        var bypasses = await cmd.ExecuteScalarAsync();
+
+        (bypasses is true).Should().BeFalse(
+            because: "the ProductionRole_* tests exist to prove behaviour UNDER FORCE-RLS and real " +
+                     "table privileges. If '{0}' can bypass RLS they assert nothing — a cross-farm " +
+                     "row would simply be visible and the 23505 this suite guards could never occur. " +
+                     "Revoke SUPERUSER/BYPASSRLS from that role rather than deleting this guard",
+            TestRoleCredentials.AppRoleUser);
+    }
 
     /// <summary>
     /// A DI graph pointed at the scratch database over an <c>agrisync_app</c>

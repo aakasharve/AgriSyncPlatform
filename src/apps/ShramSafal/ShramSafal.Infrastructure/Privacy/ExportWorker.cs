@@ -260,12 +260,33 @@ public sealed class ExportWorker(
         //
         // The linkage row needs an index row for its FK, so this upserts both,
         // the same way the orchestrator does. Constructed directly on `admin`
-        // rather than resolved from `sp` so the writes join THIS worker's
-        // admin-elevated context and transaction rather than a second one.
+        // rather than resolved from `sp` so the writes go through THIS worker's
+        // admin-elevated context rather than a second one. Note there is no
+        // ambient transaction on this path — ShramSafalAdminDbContextFactory
+        // builds its options chain with no interceptor and this worker never
+        // begins one, so each statement autocommits.
         //
-        // Best-effort by deliberate symmetry with the orchestrator: a linkage
-        // failure must not fail a DPDP export the farmer asked for. It is logged
-        // at Error so it is alertable rather than silent.
+        // Best-effort: a linkage failure must not fail a DPDP export the farmer
+        // asked for.
+        //
+        // ⚠️ THIS FAILURE CURRENTLY HAS NO ALERTING DESTINATION. Do not read the
+        // LogError below as "someone gets paged". Verified: production Serilog
+        // (appsettings.Production.json:64-95) writes to Console and a rolling
+        // file at /var/log/agrisync/api-.log with retainedFileCountLimit 7.
+        // There is no CloudWatch Logs sink, no metric filter anywhere under
+        // aws/ or .github/, and no log shipper — the single `awslogs` reference
+        // belongs to an undeployed OTel collector that ships traces and metrics,
+        // not logs. So this line lands in a file on the EC2 box and is deleted
+        // after seven days.
+        //
+        // The missing piece is already named in the programme plan §12 as an
+        // open item: the `raw_blob_write_failures` metric and alarm on the
+        // existing CloudWatch → SNS path. Until that ships, a silent linkage
+        // failure here is invisible — on the most sensitive artefact the system
+        // produces. Error level is the right level; it is just not yet a
+        // destination. (AiOrchestrator.cs:1505-1510 swallows the same way; that
+        // is symmetry with an existing unalerted swallow, not evidence of a
+        // landing place.)
         try
         {
             await new Persistence.Repositories.ShramSafalRepository(admin)

@@ -1543,16 +1543,41 @@ internal sealed class ShramSafalRepository(ShramSafalDbContext db) : IShramSafal
     /// transaction, so a failure is already contained and no savepoint is
     /// needed — hence the null check rather than an assumption.
     /// </para>
+    ///
+    /// <para>
+    /// <b>Every exit path settles the savepoint</b> — released on success,
+    /// rolled back on ANY failure, not only on <c>23505</c>. An earlier version
+    /// rolled back solely inside the unique-violation filter, so a different
+    /// SQLSTATE (a <c>42501</c> permission denial, say — reachable on this very
+    /// table before the GRANT landed) escaped with the savepoint unsettled and
+    /// left the outer request transaction aborted: exactly the <c>25P02</c> this
+    /// helper exists to prevent, on the path where it matters most. Non-duplicate
+    /// failures are still rethrown; the rollback only keeps the caller's
+    /// transaction usable enough to report them.
+    /// </para>
     /// </summary>
     private async Task InsertIgnoringDuplicateAsync(string sql, object[] parameters, CancellationToken ct)
     {
         var transaction = db.Database.CurrentTransaction;
-        var savepoint = transaction is null ? null : "sp_blob_upsert_" + Guid.NewGuid().ToString("N");
 
-        if (transaction is not null)
+        if (transaction is null)
         {
-            await transaction.CreateSavepointAsync(savepoint!, ct);
+            // Implicit per-statement transaction — a failure is already
+            // contained, so there is nothing to protect the caller from.
+            try
+            {
+                await db.Database.ExecuteSqlRawAsync(sql, parameters, ct);
+            }
+            catch (PostgresException ex) when (ex.SqlState == PostgresErrorCodes.UniqueViolation)
+            {
+                // Row already exists (possibly invisible to this tenant).
+            }
+
+            return;
         }
+
+        var savepoint = "sp_blob_upsert_" + Guid.NewGuid().ToString("N");
+        await transaction.CreateSavepointAsync(savepoint, ct);
 
         try
         {
@@ -1560,10 +1585,57 @@ internal sealed class ShramSafalRepository(ShramSafalDbContext db) : IShramSafal
         }
         catch (PostgresException ex) when (ex.SqlState == PostgresErrorCodes.UniqueViolation)
         {
-            if (transaction is not null)
-            {
-                await transaction.RollbackToSavepointAsync(savepoint!, ct);
-            }
+            // Row already exists (possibly invisible to this tenant). Discard
+            // only the failed INSERT and carry on.
+            await RollBackQuietlyAsync(transaction, savepoint);
+            return;
+        }
+        catch
+        {
+            // Anything else is a real error the caller must see — but leave the
+            // outer transaction usable rather than poisoned on the way out.
+            await RollBackQuietlyAsync(transaction, savepoint);
+            throw;
+        }
+
+        // Success: release, so savepoints do not accumulate across the many
+        // blobs a single request can persist.
+        try
+        {
+            await transaction.ReleaseSavepointAsync(savepoint, ct);
+        }
+        catch (PostgresException)
+        {
+            // Releasing is housekeeping. If the provider or server declines it,
+            // the savepoint is discarded at COMMIT anyway; failing the caller's
+            // write over it would be strictly worse.
+        }
+    }
+
+    /// <summary>
+    /// Roll back to <paramref name="savepoint"/> without letting a secondary
+    /// failure mask the primary one. If the connection is already broken the
+    /// rollback cannot succeed and there is nothing left to protect.
+    ///
+    /// <para>
+    /// Deliberately NOT passed the caller's <c>CancellationToken</c>: this runs
+    /// on the failure path, and cancellation is one of the ways we get here. A
+    /// cancelled token would abort the cleanup that exists precisely to leave
+    /// the transaction usable.
+    /// </para>
+    /// </summary>
+    private static async Task RollBackQuietlyAsync(
+        Microsoft.EntityFrameworkCore.Storage.IDbContextTransaction transaction,
+        string savepoint)
+    {
+        try
+        {
+            await transaction.RollbackToSavepointAsync(savepoint, CancellationToken.None);
+        }
+        catch (Exception)
+        {
+            // Swallowed deliberately: the caller is already handling or
+            // rethrowing a more informative exception.
         }
     }
 

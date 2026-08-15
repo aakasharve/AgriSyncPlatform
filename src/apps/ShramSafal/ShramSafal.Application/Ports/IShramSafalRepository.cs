@@ -360,6 +360,14 @@ public interface IShramSafalRepository
     /// upload of the same SHA-256. The unique key is
     /// <see cref="RawBlobRef.Sha256"/>.
     /// <para>
+    /// <b>The increment is best-effort under RLS, and that is not a bug here.</b>
+    /// <c>p_tenant_raw_blob_index</c> scopes visibility by an EXISTS-join to
+    /// <c>ssf.ai_jobs</c> on <c>agrisync.farm_id</c>. When the row exists but
+    /// belongs to a different farm the caller cannot see it, so the increment
+    /// matches nothing and <c>ref_count</c> undercounts. The subject linkage
+    /// below is still written — which is the part that must not be lost.
+    /// </para>
+    /// <para>
     /// <b>§P0.9 — <paramref name="subjectUserId"/> is the data-subject
     /// linkage.</b> The implementation also records
     /// <c>(sha256, subjectUserId)</c> in <c>ssf.raw_blob_subjects</c>,
@@ -378,8 +386,10 @@ public interface IShramSafalRepository
     /// <para>
     /// Default impl is a no-op so the dozens of in-tree
     /// <c>IShramSafalRepository</c> test doubles keep compiling. Production
-    /// <c>ShramSafalRepository</c> overrides with EF Core writes; integration
-    /// suites that care about ref-count semantics override as well.
+    /// <c>ShramSafalRepository</c> overrides with raw parameterised SQL — NOT EF
+    /// Core writes, which cannot express the conflict tolerance the RLS policy
+    /// above forces; integration suites that care about ref-count semantics
+    /// override as well.
     /// </para>
     /// </summary>
     Task UpsertRawBlobIndexAsync(RawBlobRef blobRef, Guid? subjectUserId, CancellationToken ct = default)

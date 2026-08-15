@@ -27,8 +27,41 @@ public sealed class RawBlobIndexEntry
         RefCount = 1,
     };
 
+    /// <summary>
+    /// ⚠️ <b>DEAD — zero production call sites as of §P0.9.</b> Do not read this
+    /// as the mechanism by which ref counts move.
+    ///
+    /// <para>
+    /// <c>ShramSafalRepository.UpsertRawBlobIndexAsync</c> used to call this
+    /// after an EF read. That read was RLS-filtered, so a second farmer uploading
+    /// identical bytes could not see the existing row, took the INSERT branch and
+    /// died on <c>23505</c>. The increment is now a single atomic
+    /// <c>UPDATE ssf.raw_blob_index SET ref_count = ref_count + 1</c> in SQL,
+    /// which also removes the read-modify-write lost-update race this method had.
+    /// </para>
+    ///
+    /// <para>
+    /// Kept rather than deleted only so the aggregate still expresses the
+    /// invariant in one place. If you are looking for live behaviour it is in the
+    /// repository, not here.
+    /// </para>
+    /// </summary>
     public void IncrementRefCount() => RefCount++;
 
+    /// <summary>
+    /// ⚠️ <b>DEAD — zero call sites anywhere, and never had any.</b> Nothing in
+    /// the system decrements a ref count.
+    ///
+    /// <para>
+    /// The only deletion path, <c>S3RawBlobStore.DereferenceAsync</c>, hard-deletes
+    /// the S3 object and never touches <c>ref_count</c> ("Phase 02 leaves
+    /// dereference as a hard-delete; Phase 08 introduces ref-counted erasure" —
+    /// Phase 08 did not). So <c>ref_count</c> is a monotonically increasing
+    /// persist-event counter, not a live reference count: it cannot reach zero and
+    /// therefore cannot answer "is it safe to delete this blob?". Answer that from
+    /// <c>ssf.raw_blob_subjects</c> — distinct live subjects — instead.
+    /// </para>
+    /// </summary>
     public void DecrementRefCount()
     {
         if (RefCount <= 0)
