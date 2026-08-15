@@ -241,6 +241,37 @@ export interface PendingAiJobRecord {
      * completed before the app could keep the answer" and is exactly true.
      */
     result?: PendingAiJobResult;
+    /**
+     * WHETHER THE PERMANENT-ARCHIVE HALF OF THIS JOB ACTUALLY HAPPENED.
+     *
+     * `status: 'completed'` is about the PARSE, and the parse really did
+     * succeed — re-running the job to retry an archive would re-run a paid AI
+     * call and re-upload the audio, which is worse than the defect. So the job
+     * still completes, and this field stops `completed` from claiming more than
+     * it earned: it distinguishes "parsed and archived" from "parsed, archive
+     * failed".
+     *
+     * Before it, the archive call's result was discarded outright and a failed
+     * archive was indistinguishable from a successful one anywhere in the
+     * system (founder ruling D9).
+     *
+     * Shape is declared here rather than imported from `infrastructure/voice`
+     * so the storage types keep no dependency on that module. NON-INDEXED — no
+     * Dexie version bump; absent on old rows, which reads as "this job predates
+     * the record" and is exactly true.
+     */
+    retainedArchive?: PendingAiJobRetainedArchive;
+}
+
+/** See `PendingAiJobRecord.retainedArchive`. */
+export interface PendingAiJobRetainedArchive {
+    status: 'archived' | 'skipped' | 'failed';
+    /** Machine reason from `VoiceClipArchiveOutcome`; absent when archived. */
+    reason?: string;
+    /** POST attempts made. Absent when the wire was never reached. */
+    attempts?: number;
+    /** When the archive step ran. */
+    at: string;
 }
 
 /**
@@ -329,6 +360,26 @@ export interface VoiceClipCacheRecord {
     consentTokenKid?: string;
     /** Cross-ref into retained S3 tier after archiveToRetainedTierIfConsented. Local 30d sweep still deletes the row; S3 holds the canonical copy. spec: voice-diary-e2e-2026-05-17 (D.17) */
     s3RetainedKey?: string;
+    /**
+     * Why the retained-tier archive did not happen, prefixed with the machine
+     * reason (`persist_failed: …`). Cleared the moment an archive succeeds.
+     *
+     * Founder ruling D9 promises a consenting farmer he can hear any day
+     * forever, and this archive is what buys that. When it failed, NOTHING
+     * recorded it — the caller discarded the result and the only trace was a
+     * `console.warn` in a WebView. Telemetry now tells a human today; this field
+     * is what lets anyone act tomorrow, and it is the query a future re-attempt
+     * sweep would run.
+     *
+     * NON-INDEXED, like `result` on `PendingAiJobRecord` — no Dexie version
+     * bump, so no one-way upgrade for APK users. Absent on old rows, which
+     * reads as "never attempted or never failed" and is exactly true.
+     */
+    retainedArchiveError?: string;
+    /** POST attempts made on the last archive call. Bounded at 2. */
+    retainedArchiveAttempts?: number;
+    /** When the last archive attempt ran, successful or not. */
+    retainedArchiveLastAttemptAtUtc?: string;
     status: VoiceClipStatus;
     retentionPolicy: VoiceClipRetentionPolicy;
     expiresAtUtc: string;

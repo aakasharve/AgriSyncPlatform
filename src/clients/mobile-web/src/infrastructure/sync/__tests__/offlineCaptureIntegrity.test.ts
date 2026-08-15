@@ -63,7 +63,13 @@ vi.mock('../../storage/AuthTokenStore', () => ({
 // reaches for WebCrypto; stub it so a crypto failure cannot masquerade as the
 // defect. AiJobWorker.ts:104 is the only call site.
 vi.mock('../../voice/VoiceClipRetention', () => ({
-    archiveToRetainedTierIfConsented: vi.fn().mockResolvedValue(undefined),
+    // Returns a real `VoiceClipArchiveOutcome`, not `undefined`. The caller now
+    // reads `.status` off this (founder ruling D9 — a discarded archive result
+    // was the defect), so a bare `undefined` here would make the stub itself
+    // throw and look like the thing under test.
+    archiveToRetainedTierIfConsented: vi.fn().mockResolvedValue({
+        status: 'skipped', clipId: 'stub', reason: 'consent_not_granted',
+    }),
 }));
 
 Object.defineProperty(window.navigator, 'onLine', { value: true, configurable: true });

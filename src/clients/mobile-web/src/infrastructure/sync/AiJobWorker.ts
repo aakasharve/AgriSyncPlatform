@@ -136,13 +136,39 @@ export class AiJobWorker {
             // spec: voice-diary-e2e-2026-05-17 (D.16) — opportunistic
             // retained-tier archive. The function reads FullHistoryJournal
             // consent and exits early when not granted, so this hook is
-            // safe to call unconditionally on every successful voice
-            // parse. Errors are swallowed inside the function (logged
-            // only) — a failed archive must not affect the AI job
-            // completion path.
+            // safe to call unconditionally on every successful voice parse.
+            //
+            // THE RESULT IS NO LONGER DISCARDED (founder ruling D9).
+            //
+            // This call site used to be `await archiveToRetainedTierIfConsented(clipId);`
+            // — value dropped on the floor — under a comment saying errors were
+            // "swallowed inside the function (logged only)", while that function's
+            // own comment said observability was "owned by the caller (AiJobWorker
+            // hook)". Both halves pointed at the other and neither reported
+            // anything. A consenting farmer's clip could fail to reach the
+            // permanent tier, the job would still tick green, and thirty days
+            // later the clip left the Voice Diary with nothing anywhere
+            // recording why.
+            //
+            // The failure now lands in `emitClientError` from inside the archive
+            // function (the only place that knows WHY it failed). What is added
+            // here is the other half the brief asks for: the JOB RECORD stops
+            // over-claiming. `status` stays `completed` because the parse
+            // genuinely succeeded and re-running this job to retry an archive
+            // would re-run a paid AI call and re-upload the audio — strictly
+            // worse than the defect. `retainedArchive` is what makes "parsed and
+            // archived" distinguishable from "parsed, archive failed".
             const clipId = job.context.idempotencyKey;
             if (clipId && job.operationType === 'voice_parse' && job.context.operation !== 'text') {
-                await archiveToRetainedTierIfConsented(clipId);
+                const outcome = await archiveToRetainedTierIfConsented(clipId);
+                await db.pendingAiJobs.update(job.id, {
+                    retainedArchive: {
+                        status: outcome.status,
+                        ...(outcome.status === 'archived' ? {} : { reason: outcome.reason }),
+                        ...('attempts' in outcome ? { attempts: outcome.attempts } : {}),
+                        at: systemClock.nowISO(),
+                    },
+                });
             }
         } catch (error) {
             const nextRetryCount = job.retryCount + 1;
