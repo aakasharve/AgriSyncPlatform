@@ -89,6 +89,16 @@ jobs:
         working-directory: sync-contract
       - run: npm ci
         working-directory: src/clients/mobile-web
+      # G1 contract-parity gate. Compiles the server's 13 hand-written
+      # `PayloadHasOnly` allow-lists against the canonical Zod key sets and
+      # fails the moment either side drifts. Pure file reads — no database, no
+      # server, no network — so it belongs in the blocking gate, not in the
+      # path-filtered sync-contract workflow (which never runs on a PR that
+      # only touches PushSyncBatchHandler.cs, i.e. exactly the PR that can
+      # break parity). Also runs the catalog + payload smoke suites.
+      - name: Contract tests (sync-contract, incl. G1 allow-list parity)
+        run: npm test
+        working-directory: sync-contract
       - name: TypeScript check
         run: npx tsc --noEmit
         working-directory: src/clients/mobile-web
