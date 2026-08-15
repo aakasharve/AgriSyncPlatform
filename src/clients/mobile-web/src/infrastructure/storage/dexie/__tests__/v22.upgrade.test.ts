@@ -9,7 +9,8 @@
  *
  * Locks the following contracts:
  *
- *   1. DATABASE_VERSION constant is 22.
+ *   1. DATABASE_VERSION never regresses below 22 (the exact pin on the
+ *      current version lives in the newest version's test).
  *   2. v22's store list has the same number of stores as v21 (completeness
  *      guard — a partial list on a new version causes silent data loss on
  *      devices that have never seen the omitted stores).
@@ -136,8 +137,16 @@ async function deleteDb(): Promise<void> {
 // ============================================================================
 
 describe('W1.P2 — Dexie v22: DATABASE_VERSION constant', () => {
-    it('DATABASE_VERSION is 22', () => {
-        expect(DATABASE_VERSION).toBe(22);
+    /**
+     * This file owns the v21 → v22 upgrade. The pin on the CURRENT schema
+     * version moves to the newest version's test with each bump — as of
+     * §P0.4 that is `v23.upgrade.test.ts`, which asserts `toBe(23)` exactly.
+     * What this assertion is for is that v22 has shipped and cannot be
+     * un-shipped: `DATABASE_VERSION` may never fall back below it, because
+     * an older schema opening a newer database throws for that farmer.
+     */
+    it('DATABASE_VERSION never regresses below 22', () => {
+        expect(DATABASE_VERSION).toBeGreaterThanOrEqual(22);
     });
 });
 

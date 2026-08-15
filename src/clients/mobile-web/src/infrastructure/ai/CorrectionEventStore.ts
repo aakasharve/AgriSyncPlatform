@@ -2,6 +2,7 @@ import type { AgriLogResponse } from '../../types';
 import type { LogProvenance } from '../../domain/ai/LogProvenance';
 import type { CorrectionEvent, CorrectionType } from '../../domain/ai/contracts/CorrectionEvent';
 import { withCorrectionBucket } from '../../domain/ai/contracts/CorrectionEvent';
+import { stripTranscriptText } from '../../domain/ai/contracts/transcriptRedaction';
 import { getDatabase } from '../storage/DexieDatabase';
 import { resolveApiBaseUrl } from '../api/transport';
 import { getAuthSession } from '../storage/AuthTokenStore';
@@ -61,16 +62,17 @@ export function buildAiCorrectionEvents(params: {
         params.provenance.model ?? 'model',
         params.provenance.timestamp,
     ].join(':');
-    const rawTranscript = params.provenance.rawTranscript
-        ?? (params.userDraft as ComparableDraft).fullTranscript
-        ?? (params.aiDraft as ComparableDraft).fullTranscript
-        ?? '';
     const promptVersion = params.provenance.promptVersion ?? 'unknown';
     const timestamp = new Date().toISOString();
 
     return BUCKET_FIELDS.flatMap(field => {
-        const aiValue = readBucketValue(params.aiDraft as ComparableDraft, field);
-        const userValue = readBucketValue(params.userDraft as ComparableDraft, field);
+        // §P0.4 — strip verbatim speech BEFORE the diff, not after. Doing it
+        // before means the comparison is purely structural: a "correction"
+        // that only changed which words the AI attributed to a field is not
+        // a correction of anything the farmer can see, and no longer emits
+        // an event carrying those words.
+        const aiValue = stripTranscriptText(readBucketValue(params.aiDraft as ComparableDraft, field));
+        const userValue = stripTranscriptText(readBucketValue(params.userDraft as ComparableDraft, field));
 
         if (stableJson(aiValue) === stableJson(userValue)) {
             return [];
@@ -83,8 +85,12 @@ export function buildAiCorrectionEvents(params: {
             fieldPath: field,
             aiValue,
             userValue,
-            rawTranscript,
+            // Lineage, not speech. `sourceAiJobId` is the originating
+            // operation reference; it is carried as-is or not at all.
+            sourceAiJobId: params.provenance.sourceAiJobId,
+            modelVersion: params.provenance.modelVersion ?? params.provenance.model,
             promptVersion,
+            promptContentHash: params.provenance.promptContentHash,
             correctionType: classifyCorrection(aiValue, userValue),
         });
     });
@@ -95,7 +101,14 @@ export async function persistAiCorrectionEvents(events: CorrectionEvent[]): Prom
         return;
     }
 
-    await getDatabase().aiCorrectionEvents.bulkPut(events.map(withCorrectionBucket));
+    // §P0.4 — redact at the persistence boundary, not only at the build site.
+    // `buildAiCorrectionEvents` already strips, but this is the one function
+    // that writes to IndexedDB, so any other caller is covered too. The strip
+    // is idempotent, so doing it twice costs nothing and guarantees no
+    // transcript key can reach unencrypted local storage.
+    await getDatabase().aiCorrectionEvents.bulkPut(
+        events.map(event => stripTranscriptText(withCorrectionBucket(event))),
+    );
 }
 
 /**
@@ -123,18 +136,32 @@ export function postAiCorrectionBlob(params: {
 
     const { aiDraft, userDraft, provenance } = params;
 
-    // OriginalParseId: prefer the backend AiJob id from provenance if
-    // available; otherwise generate a client-side UUID for the session.
-    const originalParseId: string =
+    // OriginalParseId: the id of the backend AiJob this parse came from.
+    //
+    // §P0.4 — it used to mint a FRESH RANDOM UUID whenever `sourceAiJobId`
+    // was absent or not a UUID. That id matched no AiJob, so
+    // `GoldenSetFeedbackWorker` — which joins `AiJobs.Id == OriginalParseId`
+    // — silently skipped the row, while the column still looked like a
+    // genuine link. `null` is the honest answer: the link is unknown, and
+    // it now says so instead of inventing one.
+    const originalParseId: string | null =
         provenance.sourceAiJobId && isValidUuid(provenance.sourceAiJobId)
             ? provenance.sourceAiJobId
-            : createId();
+            : null;
 
     const body = JSON.stringify({
         OriginalParseId: originalParseId,
-        OriginalParseRaw: JSON.stringify(aiDraft),
-        CorrectedParse: JSON.stringify(userDraft),
+        // §P0.4 — the server gets the STRUCTURED draft only. `fullTranscript`,
+        // `english`, `sourceText` and friends rode into `ssf.correction_events`
+        // unredacted; the locked ruling says no server copy of the transcript
+        // exists, so now none does. The server re-applies the same redaction
+        // on the way in — this is the near end of a belt-and-braces pair, so a
+        // stale client cannot re-open the hole.
+        OriginalParseRaw: JSON.stringify(stripTranscriptText(aiDraft)),
+        CorrectedParse: JSON.stringify(stripTranscriptText(userDraft)),
         PromptVersion: provenance.promptVersion ?? 'unknown',
+        // The only tamper-evident prompt identifier; previously discarded.
+        PromptContentHash: provenance.promptContentHash ?? null,
         // 'mr-IN' is the primary app locale; kept null-safe for test
         // environments where no locale override is available.
         Locale: 'mr-IN',

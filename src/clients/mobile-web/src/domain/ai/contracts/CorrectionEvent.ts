@@ -22,6 +22,17 @@ export type CorrectionType =
     | 'pii_redaction'
     | 'other';
 
+/**
+ * A single AI-vs-farmer disagreement, kept so the model can be taught.
+ *
+ * §P0.4 — **this type carries no verbatim speech.** `rawTranscript` (the whole
+ * utterance) and `sourceText` ("the transcript chunk that produced this field")
+ * were both removed: worker names live in exactly those chunks, and these rows
+ * sit unencrypted in IndexedDB. What is kept is the structured signal — which
+ * field, what the AI said, what the farmer said instead, and enough lineage to
+ * identify the parse that produced it. `aiValue`/`userValue` are passed through
+ * `stripTranscriptText` before they are stored, so speech cannot ride in nested.
+ */
 export interface CorrectionEvent {
     id: string;
     extractionId: string;          // Links to EnhancedLogProvenance.extractionId
@@ -29,13 +40,18 @@ export interface CorrectionEvent {
 
     // What changed
     fieldPath: string;             // e.g., 'irrigation[0].durationHours', 'labour[0].maleCount'
-    aiValue: unknown;              // What AI suggested
-    userValue: unknown;            // What user corrected to
+    aiValue: unknown;              // What AI suggested — transcript-stripped
+    userValue: unknown;            // What user corrected to — transcript-stripped
 
-    // Context
-    sourceText?: string;           // The transcript chunk that produced this field
-    rawTranscript: string;         // Full transcript for this extraction
+    // Lineage — how to find the parse this correction is about, without
+    // keeping a copy of what was said.
+    /** Backend `AiJob.Id` (UUID) when the parse came from one. */
+    sourceAiJobId?: string;
+    /** Spine-honest model identifier, e.g. `"gemini-2.5-flash"`. */
+    modelVersion?: string;
     promptVersion: string;
+    /** 64-char SHA-256 hex of the prompt content — tamper-evident prompt id. */
+    promptContentHash?: string;
 
     // Classification
     correctionType: CorrectionType;

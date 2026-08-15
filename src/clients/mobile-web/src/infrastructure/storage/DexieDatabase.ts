@@ -38,6 +38,7 @@ import { applyV19 } from './dexie/versions/v19';
 import { applyV20 } from './dexie/versions/v20';
 import { applyV21 } from './dexie/versions/v21';
 import { applyV22 } from './dexie/versions/v22';
+import { applyV23 } from './dexie/versions/v23';
 import { LEGACY_DATABASE_NAME } from './userDatabaseName';
 import { getActiveDatabaseName, clearResolvedDatabaseName } from './activeDatabaseName';
 import { recoverLegacyOwnershipClaim, settleOwnershipClaims } from './databaseOwnership';
@@ -85,7 +86,7 @@ export type * from './DexieDatabase.types';
 // =============================================================================
 
 /** Current Dexie schema version — bump this when adding version(N).stores(). */
-export const DATABASE_VERSION = 22; // ai-intelligence-plan-2026-06-25 (W1.P2) — per-field FieldProvenance carry-through; no new index (provenance is a nested JSON field).
+export const DATABASE_VERSION = 23; // §P0.4 — strip the raw transcript out of stored correction events; no index change.
 /** CEI Phase 1 schema version (now active — applied by Task 5.1.1). */
 export const CEI_PHASE1_SCHEMA_VERSION = 7;
 /** CEI Phase 2 schema version — adds test stack (protocols/instances/recs). */
@@ -116,6 +117,8 @@ export const DATA_PRINCIPLE_SPINE_CONSENT_TOKEN_KID_SCHEMA_VERSION = 19;
 export const DATA_PRINCIPLE_SPINE_PII_REDACTION_EVENT_SCHEMA_VERSION = 20;
 /** voice-diary-e2e-2026-05-17 (D.17) — voiceClips row gains `s3RetainedKey` index for cross-reference into the retained S3 tier. */
 export const VOICE_DIARY_RETAINED_KEY_SCHEMA_VERSION = 21;
+/** §P0.4 — correction events stop carrying verbatim speech; v23 strips it from rows already on the handset. */
+export const CORRECTION_EVENT_TRANSCRIPT_STRIPPED_SCHEMA_VERSION = 23;
 
 // =============================================================================
 // DATABASE CLASS
@@ -174,8 +177,10 @@ export class AgriLogDatabase extends Dexie {
     /**
      * @param databaseName Which IndexedDB database to open. Defaults to the one
      * every install already has; `userDatabaseName.ts` decides the rest. The
-     * SCHEMA is identical either way — a per-farmer database is these same v22
+     * SCHEMA is identical either way — a per-farmer database is these same v23
      * stores under another name, which is why this needed no version bump.
+     * It also means every upgrade callback runs ONCE PER FARMER DATABASE on a
+     * shared device, so each one must be idempotent per database.
      */
     constructor(databaseName: string = LEGACY_DATABASE_NAME) {
         super(databaseName);
@@ -205,6 +210,7 @@ export class AgriLogDatabase extends Dexie {
         applyV20(this);
         applyV21(this);
         applyV22(this);
+        applyV23(this);
     }
 }
 
