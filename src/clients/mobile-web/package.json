@@ -18,6 +18,7 @@
     "lint": "eslint --max-warnings 9999 \"src/**/*.{ts,tsx}\"",
     "check:file-sizes": "node scripts/check-file-sizes.mjs",
     "check:storage-discipline": "node scripts/check-storage-discipline.mjs",
+    "check:dexie-version": "node scripts/check-dexie-version.mjs",
     "verify:mutation-queue": "node scripts/verify-mutation-queue.mjs",
     "test": "vitest run",
     "test:repro": "vitest run --config vitest.repro.config.ts",
