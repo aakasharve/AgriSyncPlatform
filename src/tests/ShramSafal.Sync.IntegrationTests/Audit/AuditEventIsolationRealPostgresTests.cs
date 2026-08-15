@@ -15,6 +15,8 @@ using FluentAssertions;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Npgsql;
@@ -690,6 +692,344 @@ public sealed class AuditEventIsolationRealPostgresTests(Xunit.Abstractions.ITes
         output.WriteLine($"[EVIDENCE] UNDELIVERED audit occurred_at = {futureAuditAtUtc:O}");
         output.WriteLine($"[EVIDENCE] NextCursorUtc                 = {response.NextCursorUtc:O}");
         output.WriteLine("[EVIDENCE] required: SinceUtc <= NextCursorUtc < audit occurred_at");
+    }
+
+    // ═════════════════════════════════════════════════════════════════════════
+    // TRUNCATE — the hole in the append-only guarantee.
+    // ═════════════════════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// <c>20260517000000_HardenAuditIntegrity</c> §169 revoked <c>UPDATE</c> and
+    /// <c>DELETE</c> to make the ledger append-only and <b>never revoked
+    /// <c>TRUNCATE</c></b>. One statement from the ordinary application role
+    /// erased the whole ledger — and <c>TRUNCATE</c> is not a row operation, so
+    /// every RLS policy on this table, including the one the rest of this class
+    /// proves, was bypassed completely.
+    ///
+    /// <para><b>🛑 Why this fact rolls the migration back and forward instead of
+    /// just asserting the end state.</b> Written the obvious way — plant a row,
+    /// assert the app role cannot TRUNCATE — this fact <b>passed with the
+    /// migration's <c>Up()</c> body deleted</b>. Measured, not guessed. The
+    /// reason is a divergence between this scratch database and every real
+    /// cluster: here the migration chain runs as the SUPERUSER, so <c>postgres</c>
+    /// owns <c>ssf.audit_events</c> and <c>agrisync_app</c> receives only what
+    /// <c>20260515090000_BootstrapDbRoles</c> grants — <c>SELECT, INSERT, UPDATE,
+    /// DELETE</c>, and <b>never <c>TRUNCATE</c></b>. On <c>agrisync_dev_v2</c> and
+    /// production the app role <i>owns</i> the table, so its ACL reads
+    /// <c>agrisync_app=arDxt/agrisync_app</c> and the <c>D</c> bit is there by
+    /// OWNERSHIP, not by any grant. <b>The defect does not exist in this database,
+    /// so no end-state assertion here can prove it was fixed.</b>
+    /// </para>
+    ///
+    /// <para><b>What is proven instead.</b> The fact drives EF's own migrator
+    /// backward to the migration before this one — running the real
+    /// <c>Down()</c>, whose <c>GRANT TRUNCATE</c> reproduces the production
+    /// privilege exactly — establishes that the app role can then genuinely erase
+    /// the ledger, drives the migrator forward again, and shows the same
+    /// statement now raises <c>42501</c>. The before/after is produced by the
+    /// migration's own SQL, so this cannot pass with <c>Up()</c> empty.</para>
+    ///
+    /// <para><b>Both halves are asserted, because a revoke that over-reaches is
+    /// its own outage.</b> The ledger must stay writable and readable by the app
+    /// role: if <c>INSERT</c> or <c>SELECT</c> broke, audit would stop recording
+    /// and this fact would be the only thing that noticed.</para>
+    ///
+    /// <para><b>The capability is moved, not deleted</b> (founder ruling
+    /// 2026-08-15). The surviving privileged path is the superuser migration role
+    /// — asserted positively below, so a change that locks everyone out of lawful
+    /// ledger maintenance fails here rather than at 3am. <c>agrisync_owner</c> is
+    /// NOT that path and is asserted to hold nothing, because
+    /// <c>HardenAuditIntegrity</c>'s docstring claims otherwise and a future
+    /// reader will believe it.</para>
+    ///
+    /// <para><b>Safety.</b> Every [Fact] in this class gets its own scratch
+    /// database (xUnit builds one instance per fact and
+    /// <see cref="InitializeAsync"/> creates a fresh database), so migrating this
+    /// one backward and forward touches nothing else. The loadability TRUNCATE
+    /// runs inside a transaction that is always ROLLED BACK, so the planted rows
+    /// survive it and the "the ledger is intact" assertion afterwards is real.</para>
+    /// </summary>
+    [Fact]
+    public async Task The_app_role_cannot_truncate_the_audit_ledger_but_can_still_append_and_read()
+    {
+        await AssertAppRoleIsNotVacuousAsync();
+
+        // ── The rollback below must revert THIS migration and nothing else. If a
+        //    later migration is ever added, fail loudly here rather than silently
+        //    reverting unrelated work inside a security proof.
+        var lastApplied = await ReadLastAppliedSsfMigrationAsync();
+        lastApplied.Should().Be(RevokeTruncateMigrationId,
+            "this fact drives the migrator back one step and forward again. That is only safe while "
+            + "the TRUNCATE revoke is the LAST ShramSafal migration. When a newer one lands, retarget "
+            + "the rollback — do not delete this guard");
+
+        // ── The scratch/production divergence, recorded as data so it cannot be
+        //    forgotten by the next reader (see the docstring).
+        var (tableOwner, tableAcl) = await ReadAuditEventsOwnerAndAclAsync();
+
+        // ── A real row, so anything that erases the table has something to
+        //    destroy and the counts below are not counts of nothing.
+        var plantedRow = await PlantAuditEventAsync(farmId: FarmA, actorUserId: Alice, payload: "{}");
+        var rowsBefore = await CountLedgerRowsAsSuperuserAsync();
+        rowsBefore.Should().BeGreaterThan(0,
+            "the ledger must hold rows for a TRUNCATE refusal to mean anything — refusing to erase "
+            + "an empty table proves nothing");
+
+        // ═════ BEFORE. Run the migration's own Down() to reproduce the shipped
+        //       state: TRUNCATE granted to the ordinary application role. ═══════
+        await MigrateShramSafalToAsync(MigrationBeforeRevokeTruncate);
+
+        var appHeldTruncateBefore = await AppRoleHasPrivilegeAsync("TRUNCATE");
+        appHeldTruncateBefore.Should().BeTrue(
+            "LOADABILITY of the privilege itself. Down() grants TRUNCATE back, reproducing the ACL "
+            + "every real cluster carries (agrisync_app=arDxt — the D bit). Without this step the "
+            + "assertions after the roll-forward pass in a database where the hole never existed");
+
+        var beforeRefusal = await TryTruncateAsAppRoleAsync();
+        beforeRefusal.Should().BeNull(
+            "and the privilege must be genuinely EXERCISABLE — the app role really could erase the "
+            + "whole ledger in one statement, with row level security never consulted, because "
+            + "TRUNCATE is not a row operation. This is the defect, executed");
+
+        var rowsAfterRolledBackTruncate = await CountLedgerRowsAsSuperuserAsync();
+        rowsAfterRolledBackTruncate.Should().Be(rowsBefore,
+            "the loadability TRUNCATE ran inside a transaction that was rolled back, so the ledger "
+            + "must be intact before the real assertions start");
+
+        // ═════ AFTER. Run the migration's own Up(). ═══════════════════════════
+        await MigrateShramSafalToAsync(null);
+
+        var appHoldsTruncate = await AppRoleHasPrivilegeAsync("TRUNCATE");
+        appHoldsTruncate.Should().BeFalse(
+            "the revoke must take at the catalog. Revoking UPDATE/DELETE while leaving TRUNCATE is "
+            + "an append-only guarantee with a hole the size of the table");
+
+        // A catalog bit is not an enforcement proof. Issue the statement.
+        var refusal = await TryTruncateAsAppRoleAsync();
+        refusal.Should().NotBeNull(
+            "the application role must be REFUSED, not merely un-granted on paper");
+        refusal!.SqlState.Should().Be("42501",
+            "insufficient_privilege — the refusal must come from the privilege system. Any other "
+            + "SQLSTATE (a foreign-key complaint, a lock timeout) would mean the statement was "
+            + "ALLOWED and failed for an incidental reason another cluster might not have");
+
+        var rowsAfter = await CountLedgerRowsAsSuperuserAsync();
+        rowsAfter.Should().Be(rowsBefore, "the refused TRUNCATE must have destroyed nothing");
+
+        // ── THE OTHER HALF. Ordinary append + read still work, or the fix is
+        //    an outage wearing a security fix's clothes.
+        var appendedId = Guid.NewGuid();
+        var appended = await ExecuteAsAppRoleAsync(Alice, FarmA, """
+            INSERT INTO ssf.audit_events
+                ("Id", farm_id, entity_type, entity_id, action, actor_user_id, actor_role,
+                 payload, occurred_at_utc, client_command_id, app_version, device_id, ip_hash)
+            VALUES (@id, @farm, @etype, @eid, 'Retained', @actor, 'worker',
+                    '{}', NOW(), NULL, 'test', 'test-device', 'sha256:test');
+            """,
+            ("id", appendedId), ("farm", FarmA), ("etype", SharedEntityType), ("eid", Guid.NewGuid()),
+            ("actor", Alice));
+
+        appended.Should().Be(1,
+            "INSERT is the ledger's whole purpose — a revoke that also took the append is a silent "
+            + "stop to audit recording, which is worse than the hole it closed");
+
+        var readBack = await CountAsAppRoleAsync(Alice, FarmA,
+            "SELECT COUNT(*) FROM ssf.audit_events WHERE \"Id\" = @id", ("id", appendedId));
+        readBack.Should().Be(1, "and SELECT must still return the row the app role just wrote");
+
+        // ── The capability is MOVED, not deleted. ────────────────────────────
+        var (privilegedRole, privilegedIsSuper, privilegedHoldsTruncate) =
+            await ReadPrivilegedMaintenancePathAsync();
+
+        privilegedIsSuper.Should().BeTrue(
+            "the deliberate privileged maintenance path is the SUPERUSER migration role — the role "
+            + "migrations run as. No new role was invented for this and none should be");
+        privilegedHoldsTruncate.Should().BeTrue(
+            "the ruling was 'revoke from the normal application role while PRESERVING deliberate "
+            + "privileged maintenance access'. A superuser bypasses every privilege check, so it "
+            + "needs no grant — but assert it anyway, so a cluster whose migration role stops being "
+            + "privileged fails here instead of leaving no lawful maintenance path at all");
+
+        // agrisync_owner is NOT that path, despite HardenAuditIntegrity saying so.
+        var ownerHoldsTruncate = await RoleHasPrivilegeAsync("agrisync_owner", "TRUNCATE");
+        var ownerHoldsDelete = await RoleHasPrivilegeAsync("agrisync_owner", "DELETE");
+        ownerHoldsTruncate.Should().BeFalse(
+            "recorded, not fixed: 20260517000000_HardenAuditIntegrity's docstring claims 'the owner "
+            + "role (agrisync_owner) retains UPDATE/DELETE'. It does not — on agrisync_dev_v2 "
+            + "ssf.audit_events is owned by agrisync_app; only the SCHEMA was reassigned to "
+            + "agrisync_owner, which holds nothing on this table anywhere");
+        ownerHoldsDelete.Should().BeFalse("the same claim, on the privilege it was actually made about");
+
+        output.WriteLine("[EVIDENCE] === TRUNCATE revoke on ssf.audit_events ===");
+        output.WriteLine($"[EVIDENCE] last applied SSF migration                   = {lastApplied}");
+        output.WriteLine($"[EVIDENCE] scratch-db ssf.audit_events owner            = {tableOwner}");
+        output.WriteLine($"[EVIDENCE] scratch-db ssf.audit_events acl              = {tableAcl}");
+        output.WriteLine("[EVIDENCE]   (real clusters: owner=agrisync_app, acl=agrisync_app=arDxt/agrisync_app)");
+        output.WriteLine($"[EVIDENCE] planted row                                  = {plantedRow}");
+        output.WriteLine($"[EVIDENCE] rows before                                  = {rowsBefore} (must be > 0)");
+        output.WriteLine("[EVIDENCE] --- after Down(): the shipped, holed state ---");
+        output.WriteLine($"[EVIDENCE] has_table_privilege(agrisync_app, TRUNCATE)  = {appHeldTruncateBefore} (expect True)");
+        output.WriteLine($"[EVIDENCE] TRUNCATE as agrisync_app                     = {(beforeRefusal is null ? "SUCCEEDED (rolled back)" : beforeRefusal.SqlState)} (expect SUCCEEDED)");
+        output.WriteLine($"[EVIDENCE] rows still present after rollback            = {rowsAfterRolledBackTruncate} (expect {rowsBefore})");
+        output.WriteLine("[EVIDENCE] --- after Up(): the fix ---");
+        output.WriteLine($"[EVIDENCE] has_table_privilege(agrisync_app, TRUNCATE)  = {appHoldsTruncate} (expect False)");
+        output.WriteLine($"[EVIDENCE] TRUNCATE as agrisync_app -> SQLSTATE         = {refusal.SqlState} (expect 42501)");
+        output.WriteLine($"[EVIDENCE] rows after refused TRUNCATE                  = {rowsAfter} (expect {rowsBefore})");
+        output.WriteLine($"[EVIDENCE] INSERT as agrisync_app -> rows affected      = {appended} (expect 1)");
+        output.WriteLine($"[EVIDENCE] SELECT as agrisync_app -> rows read back     = {readBack} (expect 1)");
+        output.WriteLine($"[EVIDENCE] privileged path: role='{privilegedRole}' rolsuper={privilegedIsSuper} TRUNCATE={privilegedHoldsTruncate}");
+        output.WriteLine($"[EVIDENCE] agrisync_owner TRUNCATE={ownerHoldsTruncate} DELETE={ownerHoldsDelete} (both expect False)");
+    }
+
+    private const string RevokeTruncateMigrationId = "20260815052139_RevokeTruncateOnAuditEvents";
+    private const string MigrationBeforeRevokeTruncate = "20260814214715_TightenAuditEventsTenantPolicyUsing";
+
+    /// <summary>
+    /// Drives EF's own migrator on the ShramSafal context. <c>null</c> means
+    /// "forward to latest". Runs on the superuser connection — the same role the
+    /// real migration runner uses.
+    /// </summary>
+    private async Task MigrateShramSafalToAsync(string? targetMigration)
+    {
+        var opts = new DbContextOptionsBuilder<ShramSafalDbContext>().UseNpgsql(_superuserConn).Options;
+        await using var ctx = new ShramSafalDbContext(opts);
+        if (targetMigration is null)
+        {
+            await ctx.Database.MigrateAsync();
+        }
+        else
+        {
+            await ctx.Database.GetService<IMigrator>().MigrateAsync(targetMigration);
+        }
+    }
+
+    /// <summary>
+    /// Asked through EF, not through a hardcoded history table: the scratch
+    /// database uses the DEFAULT <c>public."__EFMigrationsHistory"</c> (
+    /// <see cref="IntegrationMigrationChain"/> sets no
+    /// <c>MigrationsHistoryTable</c> for the ShramSafal context), while
+    /// <c>agrisync_dev_v2</c> carries the custom <c>ssf.__ef_migrations</c>.
+    /// </summary>
+    private async Task<string> ReadLastAppliedSsfMigrationAsync()
+    {
+        var opts = new DbContextOptionsBuilder<ShramSafalDbContext>().UseNpgsql(_superuserConn).Options;
+        await using var ctx = new ShramSafalDbContext(opts);
+        var applied = await ctx.Database.GetAppliedMigrationsAsync();
+        return applied.LastOrDefault() ?? string.Empty;
+    }
+
+    private async Task<(string Owner, string Acl)> ReadAuditEventsOwnerAndAclAsync()
+    {
+        await using var db = new NpgsqlConnection(_superuserConn);
+        await db.OpenAsync();
+        var owner = Convert.ToString(await ScalarAsync(db,
+            "SELECT pg_get_userbyid(relowner) FROM pg_class WHERE oid = 'ssf.audit_events'::regclass")) ?? "?";
+        var acl = Convert.ToString(await ScalarAsync(db,
+            "SELECT COALESCE(relacl::text, '(default — owner only)') FROM pg_class "
+            + "WHERE oid = 'ssf.audit_events'::regclass")) ?? "?";
+        return (owner, acl);
+    }
+
+    private async Task<long> CountLedgerRowsAsSuperuserAsync()
+    {
+        await using var db = new NpgsqlConnection(_superuserConn);
+        await db.OpenAsync();
+        return await ScalarLongAsync(db, "SELECT COUNT(*) FROM ssf.audit_events");
+    }
+
+    /// <summary>
+    /// Issues <c>TRUNCATE ssf.audit_events</c> as <c>agrisync_app</c> inside a
+    /// transaction that is ALWAYS rolled back. Returns the refusal, or
+    /// <c>null</c> when the statement was allowed — which is the answer the
+    /// loadability half needs, and the one the fixed state must never give.
+    /// </summary>
+    private async Task<PostgresException?> TryTruncateAsAppRoleAsync()
+    {
+        await using var db = new NpgsqlConnection(_appConn);
+        await db.OpenAsync();
+        await using var tx = await db.BeginTransactionAsync();
+        try
+        {
+            await using var cmd = db.CreateCommand();
+            cmd.CommandText = "TRUNCATE TABLE ssf.audit_events";
+            await cmd.ExecuteNonQueryAsync();
+            return null;
+        }
+        catch (PostgresException ex)
+        {
+            return ex;
+        }
+        finally
+        {
+            await tx.RollbackAsync();
+        }
+    }
+
+    /// <summary>
+    /// Reads the surviving privileged maintenance path: the role migrations run
+    /// as. Returns its name, whether it is a superuser, and whether it can
+    /// TRUNCATE the ledger.
+    /// </summary>
+    private async Task<(string Role, bool IsSuperuser, bool HoldsTruncate)>
+        ReadPrivilegedMaintenancePathAsync()
+    {
+        await using var db = new NpgsqlConnection(_superuserConn);
+        await db.OpenAsync();
+        var role = Convert.ToString(await ScalarAsync(db, "SELECT current_user")) ?? string.Empty;
+        var isSuper = Convert.ToBoolean(await ScalarAsync(db,
+            "SELECT rolsuper FROM pg_roles WHERE rolname = current_user"));
+        var holdsTruncate = Convert.ToBoolean(await ScalarAsync(db,
+            "SELECT has_table_privilege(current_user, 'ssf.audit_events', 'TRUNCATE')"));
+        return (role, isSuper, holdsTruncate);
+    }
+
+    /// <summary>
+    /// Asks the app role about its OWN privilege, on the app connection — so the
+    /// answer cannot be a superuser's view of somebody else's catalog row.
+    /// </summary>
+    private async Task<bool> AppRoleHasPrivilegeAsync(string privilege)
+    {
+        await using var db = new NpgsqlConnection(_appConn);
+        await db.OpenAsync();
+        return Convert.ToBoolean(await ScalarAsync(db,
+            "SELECT has_table_privilege(current_user, 'ssf.audit_events', @p)", ("p", privilege)));
+    }
+
+    private async Task<bool> RoleHasPrivilegeAsync(string role, string privilege)
+    {
+        await using var db = new NpgsqlConnection(_superuserConn);
+        await db.OpenAsync();
+        return Convert.ToBoolean(await ScalarAsync(db,
+            "SELECT has_table_privilege(@r, 'ssf.audit_events', @p)", ("r", role), ("p", privilege)));
+    }
+
+    /// <summary>
+    /// Runs a statement as <c>agrisync_app</c> under the GUC posture the
+    /// interceptor establishes, and returns rows affected. Mirrors
+    /// <see cref="CountAsAppRoleAsync"/> for the write side.
+    /// </summary>
+    private async Task<int> ExecuteAsAppRoleAsync(
+        Guid callerUserId, Guid? farmScopeId, string sql, params (string Name, object Value)[] args)
+    {
+        await using var db = new NpgsqlConnection(_appConn);
+        await db.OpenAsync();
+        await using var tx = await db.BeginTransactionAsync();
+        await SetGucAsync(db, "agrisync.user_id", callerUserId);
+        if (farmScopeId is { } farmId)
+        {
+            await SetGucAsync(db, "agrisync.farm_id", farmId);
+        }
+
+        await using var cmd = db.CreateCommand();
+        cmd.CommandText = sql;
+        foreach (var (name, value) in args)
+        {
+            cmd.Parameters.AddWithValue(name, value);
+        }
+
+        var affected = await cmd.ExecuteNonQueryAsync();
+        await tx.CommitAsync();
+        return affected;
     }
 
     // ═════════════════════════════════════════════════════════════════════════
