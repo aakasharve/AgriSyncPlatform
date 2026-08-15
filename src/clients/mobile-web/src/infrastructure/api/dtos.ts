@@ -275,6 +275,41 @@ export interface CostEntryDto {
     modifiedAtUtc: string;
     location?: LocationDto;
     isCorrected: boolean;
+    /**
+     * Which way the money moved, as the farmer stated it.
+     *
+     * `?: … | null` and not `?: …`, because BOTH shapes are on the wire and
+     * both mean the same thing: the C# member is `string? Direction = null`,
+     * so a row with no stated direction serialises as JSON `null`, while a
+     * server older than this field omits the key entirely. Same shape and same
+     * reasoning as `DailyLogDto.labour` above.
+     *
+     * A reader must NOT resolve the absent case to `'Expense'`. Every cost
+     * entry written before the column existed carries it, and the client used
+     * to push income down the expense wire — so those rows include sales.
+     * Turning "not stated" into "spent" one layer up is the defect this field
+     * exists to end.
+     */
+    direction?: 'Expense' | 'Income' | null;
+    /** How much of it. Absent/null = not stated. */
+    qty?: number | null;
+    /** The farmer's own unit word. Absent/null = not stated. */
+    unit?: string | null;
+    /** Price per unit as stated. Absent/null = not stated. */
+    unitPrice?: number | null;
+    /** Absent/null = not stated. */
+    paymentMode?: 'Cash' | 'UPI' | 'Bank' | 'Credit' | null;
+    /** Paid to / received from. Absent/null = not stated. */
+    vendorName?: string | null;
+    /**
+     * Attachment ids the CLIENT stated at capture. `null`/absent = no
+     * statement; `[]` = "none linked".
+     *
+     * NOT the authoritative photo linkage — the attachment list reads the
+     * `attachments` table by `linkedEntityId`, and the two can legitimately
+     * disagree when a receipt never finished uploading.
+     */
+    clientAttachmentIds?: string[] | null;
 }
 
 export interface FinanceCorrectionDto {

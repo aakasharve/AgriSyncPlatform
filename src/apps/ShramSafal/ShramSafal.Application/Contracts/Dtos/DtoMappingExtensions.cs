@@ -193,7 +193,16 @@ internal static class DtoMappingExtensions
             entry.CreatedAtUtc,
             entry.ModifiedAtUtc,
             entry.Location?.ToDto(),
-            entry.IsCorrected);
+            entry.IsCorrected,
+            // `?.ToString()` and not a default — a CostEntry with no stated
+            // direction reaches the client as null, and stays unknown there.
+            entry.Direction?.ToString(),
+            entry.Quantity,
+            entry.Unit,
+            entry.UnitPrice,
+            entry.PaymentMode,
+            entry.VendorName,
+            ParseClientAttachmentIds(entry.Id, entry.ClientAttachmentIdsJson));
 
     public static FinanceCorrectionDto ToDto(this FinanceCorrection correction) =>
         new(
@@ -371,6 +380,47 @@ internal static class DtoMappingExtensions
                 tags: new System.Diagnostics.ActivityTagsCollection
                 {
                     { "labour_assignment_id", labourAssignmentId },
+                    { "exception.type", ex.GetType().Name },
+                }));
+            return [];
+        }
+    }
+
+    /// <summary>
+    /// Reads the client's stated attachment ids out of the stored jsonb array.
+    /// </summary>
+    /// <remarks>
+    /// Mirrors <c>ParseWorkerNames</c> above, with one deliberate difference:
+    /// NULL in, NULL out. There, every row has a worker list even when empty;
+    /// here, "the producer said nothing" and "the producer said none" are
+    /// different facts, so a null column must not be flattened into <c>[]</c>.
+    /// Unreadable JSON degrades to <c>[]</c> rather than taking down a whole
+    /// farmer's pull, and — tolerant is not silent — records why on the ambient
+    /// activity, exactly as the worker-names mapper does.
+    /// </remarks>
+    private static IReadOnlyList<string>? ParseClientAttachmentIds(Guid costEntryId, string? json)
+    {
+        if (json is null)
+        {
+            return null;
+        }
+
+        if (string.IsNullOrWhiteSpace(json))
+        {
+            return [];
+        }
+
+        try
+        {
+            return System.Text.Json.JsonSerializer.Deserialize<List<string>>(json) ?? [];
+        }
+        catch (System.Text.Json.JsonException ex)
+        {
+            System.Diagnostics.Activity.Current?.AddEvent(new System.Diagnostics.ActivityEvent(
+                "finance.client_attachment_ids_json.unreadable",
+                tags: new System.Diagnostics.ActivityTagsCollection
+                {
+                    { "cost_entry_id", costEntryId },
                     { "exception.type", ex.GetType().Name },
                 }));
             return [];
