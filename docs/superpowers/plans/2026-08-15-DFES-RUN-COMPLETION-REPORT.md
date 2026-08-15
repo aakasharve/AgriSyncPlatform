@@ -61,9 +61,22 @@ rejects a new phone's day outright**. Shipping web before the API means a window
 day bounces — visibly, as a red badge, recoverable with Retry once the API is up, but an hour of
 farmers seeing failures for no reason.
 
-**No database migration. No new config key, no new dependency, no new registration.** The backend
-deploy is a straight binary swap. (Verified: no migration, entity, or DbContext file is touched, and
-both columns the new code reads already exist.)
+~~**No database migration. No new config key, no new dependency, no new
+registration.** The backend deploy is a straight binary swap. (Verified: no migration,
+entity, or DbContext file is touched, and both columns the new code reads already
+exist.)~~
+
+**Correction (2026-08-16):** true only for this run's own 18-commit window
+(`Base: a11f00cc → Head: 977a95e4`) — **false for the merge.** The branch's merge-base
+with `origin/main` is `739dfe90`, 84 commits back. Migration
+`20260713052440_AddDfesDataSpine` was added by `97f2908b`, an ancestor of `a11f00cc`
+earlier in the same branch, outside this run's window, and it does not exist on
+`origin/main`. `ShramSafalDbContext.cs:146,151` registers
+`DbSet<DailyRichnessAggregate>` and `DbSet<QuestionEvent>`, read by 15+ files.
+**Deploying the merge on the struck sentence means the API does not boot** — the merge
+DOES require the migration to run first. Scope lesson: "no migration in this run" and
+"no migration in this merge" are different claims; verify against the merge-base, not
+the run's own commit window.
 
 **Two flag conditions the founder must know:**
 - **The APK does not read `.env.production`.** `android-release.yml` sets only two environment
