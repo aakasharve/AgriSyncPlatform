@@ -868,15 +868,21 @@ working as designed.
       **And §P0.8 currently lists `aiCorrectionEvents` as "protected, never auto-evicted" — the plan
       would be protecting the exact rows it says must not exist.** Reconcile the two sections: the
       *structured signal* is protected; the *transcript inside it* is removed.
-      > Handsets: Dexie `v23.upgrade`. Server: a backfill inside migration
+      > Handsets: Dexie `v24.upgrade` (renumbered from v23 — see below). Server: a backfill inside migration
       > `20260815080242_StripTranscriptFromCorrectionEvents`, which raises if any row still carries
       > transcript text afterwards — a backfill that silently matches nothing would otherwise be
       > recorded as applied. §P0.8 already states the division correctly; no edit needed there.
 - [x] **This is a breaking client change and needs a migration.** `rawTranscript` is **required** on the
       client type, so removing it invalidates every stored correction row on farmers' phones. The draft
       had no migration task, no Dexie handling and no test.
-      > `DATABASE_VERSION` 22 → 23, `v23.ts` + `v23.upgrade.test.ts` (9 assertions, incl. idempotent
-      > per farmer database and one malformed row not blocking the database from opening).
+      > `DATABASE_VERSION` 22 → **24**, `v24.ts` + `v24.upgrade.test.ts` (14 assertions, incl.
+      > idempotent per farmer database and one malformed row not blocking the database from opening).
+      > **Shipped first as v23 and renumbered.** `feat/dfes-companion` also declared 23, for a
+      > different schema, and ships first; Dexie runs an upgrade only for versions ABOVE the one on
+      > the device, so re-using 23 would have meant this strip never ran on any handset that took
+      > DFES — the fix looking shipped while the speech stayed. This branch therefore also DECLARES
+      > DFES's v23 (byte-identical), because Dexie unions only the versions a build declares and a
+      > gap would delete `pendingInterpretations` off those handsets.
       > **Ships alone** — no behavioural change rides with the bump, because it is one-way for APK users.
 - [x] Stop persisting raw drafts server-side; store the structured signal only.
       > Redaction sits inside `CorrectionEvent.Record`, the aggregate's only constructor, so no caller

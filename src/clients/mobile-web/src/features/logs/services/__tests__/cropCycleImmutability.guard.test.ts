@@ -40,8 +40,16 @@ const ALLOWED_CROP_CYCLE_MUTATIONS: ReadonlySet<string> = new Set([SyncMutationN
 
 describe('§P0.7 N2 — recovery assumes crop cycles are immutable', () => {
     it('the sync catalog still has no way to change an existing crop cycle', () => {
+        // §P0.7 review M3 — MATCH ON `cycle`, NOT ON `crop_cycle`.
+        //
+        // The first version matched `crop_cycle`/`cropcycle` only. The catalog
+        // already names things `abandon_schedule` / `adopt_schedule`, so the
+        // obvious future additions — `close_cycle`, `cycle.close`, `end_cycle` —
+        // would have sailed straight past the tripwire. Widened to any mutation
+        // mentioning a cycle at all; a false positive here costs someone reading
+        // one comment, a false negative costs silent re-attribution of history.
         const cycleMutations = (SYNC_MUTATION_TYPES as readonly string[])
-            .filter(name => name.includes('crop_cycle') || name.includes('cropcycle'));
+            .filter(name => /cycle/i.test(name));
 
         const unexpected = cycleMutations.filter(name => !ALLOWED_CROP_CYCLE_MUTATIONS.has(name));
 
