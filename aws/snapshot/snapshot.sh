@@ -163,29 +163,76 @@ RDS_ENGINE=$(echo "$RDS_SNAP_INFO" | jq -r '.DBSnapshots[0].Engine // "unknown"'
 RDS_ENGINE_VERSION=$(echo "$RDS_SNAP_INFO" | jq -r '.DBSnapshots[0].EngineVersion // "unknown"')
 echo "[snapshot] 1A done: size=${RDS_SNAP_SIZE_GB}GB engine=${RDS_ENGINE}/${RDS_ENGINE_VERSION} completed=${RDS_SNAP_COMPLETED}"
 
+# === TASK 3a (silent-failure-ops) — FIX APPLIED 2026-08-15 ===
+# 1B/1C used to send stderr to /dev/null and cancel the pipeline's failure
+# with `|| true`. If the LISTING call itself failed (expired credentials, a
+# permissions change, throttling, a renamed bucket), that error vanished, the
+# CSV kept only its header row, RAW_OBJECT_COUNT came out "0", and the console
+# printed "0 object versions captured" — indistinguishable from a genuinely
+# empty bucket. VERIFY_FAILED (below) never saw this, so the permanent
+# verification log recorded `verify: pass` for a run that captured NOTHING
+# from S3. This is the snapshot taken before a risky change — its whole job
+# is to be trustworthy at the moment something has gone wrong.
+# FIXED: the AWS call now runs on its own (not piped straight into awk), so
+# its exit code is captured directly, independent of the CSV-formatting step.
+# A LISTING failure is now: (1) loud on stderr with the actual AWS error
+# text, (2) recorded as VERIFY_FAILED=1 so the run's own exit code and the
+# permanent verify log both say "fail", (3) recorded in the manifest as
+# listing_succeeded:false with object_versions_captured:null — jq's `null`,
+# not the number 0 — so "we could not ask" is never stored as "we asked and
+# it was empty". A genuinely empty bucket (the call SUCCEEDS and returns no
+# rows) still correctly reports 0/listing_succeeded:true. Per this task's
+# explicit requirement, this does NOT abort the run: the RDS snapshot (1A,
+# already captured above) and whatever S3 data IS available still get
+# written and uploaded — a partial snapshot that says so honestly is kept,
+# not discarded; only the overall pass/fail verdict changes.
+VERIFY_FAILED=0
+
 # ─── 1B. S3 raw uploads inventory ─────────────────────────────────────────
 echo "[snapshot] 1B: S3 inventory $RAW_BLOB_BUCKET..."
 RAW_INVENTORY_PATH="${WORK_DIR}/raw-blobs-inventory.csv"
+RAW_LISTING_RAW="${WORK_DIR}/raw-blobs-listing.raw.txt"
+RAW_LISTING_STDERR="${WORK_DIR}/raw-blobs-listing.stderr.txt"
 echo "key,size,etag,last_modified,version_id" > "$RAW_INVENTORY_PATH"
-aws s3api list-object-versions --bucket "$RAW_BLOB_BUCKET" --region "$AWS_REGION" \
+if aws s3api list-object-versions --bucket "$RAW_BLOB_BUCKET" --region "$AWS_REGION" \
     --query 'Versions[].[Key,Size,ETag,LastModified,VersionId]' \
-    --output text 2>/dev/null \
-    | awk -F'\t' 'BEGIN{OFS=","} {print $1,$2,$3,$4,$5}' \
-    >> "$RAW_INVENTORY_PATH" || true
-RAW_OBJECT_COUNT="$(($(wc -l < "$RAW_INVENTORY_PATH") - 1))"
-echo "[snapshot] 1B done: ${RAW_OBJECT_COUNT} object versions captured"
+    --output text > "$RAW_LISTING_RAW" 2>"$RAW_LISTING_STDERR"; then
+    RAW_LISTING_OK=true
+    awk -F'\t' 'BEGIN{OFS=","} {print $1,$2,$3,$4,$5}' "$RAW_LISTING_RAW" >> "$RAW_INVENTORY_PATH"
+    RAW_OBJECT_COUNT="$(($(wc -l < "$RAW_INVENTORY_PATH") - 1))"
+    echo "[snapshot] 1B done: ${RAW_OBJECT_COUNT} object versions captured"
+else
+    RAW_LISTING_OK=false
+    RAW_OBJECT_COUNT="null"
+    RAW_LISTING_ERR="$(head -c 500 "$RAW_LISTING_STDERR" 2>/dev/null)"
+    echo "ERROR: 1B S3 LISTING FAILED for $RAW_BLOB_BUCKET — ${RAW_LISTING_ERR}" >&2
+    echo "ERROR: 1B captured ZERO raw-blob data this run. This is 'we could not ask', NOT 'the bucket is empty' —" >&2
+    echo "  the manifest will record object_versions_captured:null, not 0, and this run will NOT verify pass." >&2
+    VERIFY_FAILED=1
+fi
 
 # ─── 1C. S3 retained voice inventory ──────────────────────────────────────
 echo "[snapshot] 1C: S3 inventory $RETAINED_VOICE_BUCKET..."
 RETAINED_INVENTORY_PATH="${WORK_DIR}/retained-voice-inventory.csv"
+RETAINED_LISTING_RAW="${WORK_DIR}/retained-voice-listing.raw.txt"
+RETAINED_LISTING_STDERR="${WORK_DIR}/retained-voice-listing.stderr.txt"
 echo "key,size,etag,last_modified,version_id" > "$RETAINED_INVENTORY_PATH"
-aws s3api list-object-versions --bucket "$RETAINED_VOICE_BUCKET" --region "$AWS_REGION" \
+if aws s3api list-object-versions --bucket "$RETAINED_VOICE_BUCKET" --region "$AWS_REGION" \
     --query 'Versions[].[Key,Size,ETag,LastModified,VersionId]' \
-    --output text 2>/dev/null \
-    | awk -F'\t' 'BEGIN{OFS=","} {print $1,$2,$3,$4,$5}' \
-    >> "$RETAINED_INVENTORY_PATH" || true
-RETAINED_OBJECT_COUNT="$(($(wc -l < "$RETAINED_INVENTORY_PATH") - 1))"
-echo "[snapshot] 1C done: ${RETAINED_OBJECT_COUNT} object versions captured"
+    --output text > "$RETAINED_LISTING_RAW" 2>"$RETAINED_LISTING_STDERR"; then
+    RETAINED_LISTING_OK=true
+    awk -F'\t' 'BEGIN{OFS=","} {print $1,$2,$3,$4,$5}' "$RETAINED_LISTING_RAW" >> "$RETAINED_INVENTORY_PATH"
+    RETAINED_OBJECT_COUNT="$(($(wc -l < "$RETAINED_INVENTORY_PATH") - 1))"
+    echo "[snapshot] 1C done: ${RETAINED_OBJECT_COUNT} object versions captured"
+else
+    RETAINED_LISTING_OK=false
+    RETAINED_OBJECT_COUNT="null"
+    RETAINED_LISTING_ERR="$(head -c 500 "$RETAINED_LISTING_STDERR" 2>/dev/null)"
+    echo "ERROR: 1C S3 LISTING FAILED for $RETAINED_VOICE_BUCKET — ${RETAINED_LISTING_ERR}" >&2
+    echo "ERROR: 1C captured ZERO retained-voice data this run. This is 'we could not ask', NOT 'the bucket is empty' —" >&2
+    echo "  the manifest will record object_versions_captured:null, not 0, and this run will NOT verify pass." >&2
+    VERIFY_FAILED=1
+fi
 
 # ─── 1D. Manifest ─────────────────────────────────────────────────────────
 echo "[snapshot] 1D: writing manifest..."
@@ -207,6 +254,8 @@ jq -n \
     --arg rds_engine_version "$RDS_ENGINE_VERSION" \
     --argjson raw_count "$RAW_OBJECT_COUNT" \
     --argjson retained_count "$RETAINED_OBJECT_COUNT" \
+    --argjson raw_listing_ok "$RAW_LISTING_OK" \
+    --argjson retained_listing_ok "$RETAINED_LISTING_OK" \
     --arg raw_bucket "$RAW_BLOB_BUCKET" \
     --arg retained_bucket "$RETAINED_VOICE_BUCKET" \
     --arg runbook "_COFOUNDER/runbooks/prod-snapshot.md" \
@@ -229,8 +278,8 @@ jq -n \
             engine_version: $rds_engine_version
         },
         s3: {
-            raw_uploads: { bucket: $raw_bucket, object_versions_captured: $raw_count },
-            retained_voice: { bucket: $retained_bucket, object_versions_captured: $retained_count }
+            raw_uploads: { bucket: $raw_bucket, object_versions_captured: $raw_count, listing_succeeded: $raw_listing_ok },
+            retained_voice: { bucket: $retained_bucket, object_versions_captured: $retained_count, listing_succeeded: $retained_listing_ok }
         },
         runbook: $runbook,
         spec: $spec,
@@ -251,8 +300,13 @@ done
 [[ "$UPLOAD_FAILED" -eq 1 ]] && exit 71
 
 # ─── 4A. Per-snapshot S3 storage integrity verification ───────────────────
-echo "[snapshot] 4A: S3 storage integrity check..."
-VERIFY_FAILED=0
+# NOTE: VERIFY_FAILED is initialised near 1B, NOT here — it may already be 1
+# from a listing failure. Re-zeroing it here would silently discard that
+# (this is exactly the bug this task exists to remove; caught while writing
+# this fix, not by a later review).
+echo "[snapshot] 4A: S3 storage integrity check (uploaded-file integrity only — this does NOT check"
+echo "  whether the inventory CONTAINS the bucket's true contents; see the 1B/1C listing-integrity"
+echo "  check above for that, and the runbook's 4A row for the distinction)..."
 for file in raw-blobs-inventory.csv retained-voice-inventory.csv manifest.json; do
     local_size="$(stat -c%s "${WORK_DIR}/${file}" 2>/dev/null || wc -c < "${WORK_DIR}/${file}")"
     remote_meta="$(aws s3api head-object \
@@ -301,7 +355,9 @@ VERIFY_LOG_ENTRY="$(jq -nc \
     --arg rds_snap_id "$RDS_SNAP_ID" \
     --arg rds_snap_arn "$RDS_SNAP_ARN" \
     --arg result "$VERIFY_RESULT" \
-    '{ts: $ts, env: $env, trigger: $trigger, sha: $git_sha_short, prefix: $s3_prefix, rds_snapshot_id: $rds_snap_id, rds_snapshot_arn: $rds_snap_arn, verify: $result, design: "v2-hybrid"}')"
+    --argjson raw_listing_ok "$RAW_LISTING_OK" \
+    --argjson retained_listing_ok "$RETAINED_LISTING_OK" \
+    '{ts: $ts, env: $env, trigger: $trigger, sha: $git_sha_short, prefix: $s3_prefix, rds_snapshot_id: $rds_snap_id, rds_snapshot_arn: $rds_snap_arn, verify: $result, design: "v2-hybrid", raw_listing_ok: $raw_listing_ok, retained_listing_ok: $retained_listing_ok}')"
 
 EXISTING_LOG="$(aws s3 cp "s3://${SNAPSHOT_BUCKET}/_verification-log.jsonl" - --region "$AWS_REGION" 2>/dev/null || echo '')"
 echo -e "${EXISTING_LOG}\n${VERIFY_LOG_ENTRY}" | sed '/^$/d' \
@@ -312,8 +368,28 @@ echo -e "${EXISTING_LOG}\n${VERIFY_LOG_ENTRY}" | sed '/^$/d' \
 echo "[snapshot] 4D: verification log appended"
 
 # ─── Final ────────────────────────────────────────────────────────────────
+# Per task 3a's requirement: never abort silently on a partial capture. State
+# plainly what this run DID and did NOT capture, on both the pass and fail
+# paths, so a partial-but-honest snapshot (e.g. RDS succeeded, one S3 listing
+# failed) is never confused with either a full success or total silence.
+echo "[snapshot] CAPTURE SUMMARY:"
+echo "[snapshot]   RDS snapshot ($DB_INSTANCE_IDENTIFIER): captured, Status=$RDS_SNAP_STATUS"
+if [[ "$RAW_LISTING_OK" == "true" ]]; then
+    echo "[snapshot]   S3 raw uploads ($RAW_BLOB_BUCKET): captured, ${RAW_OBJECT_COUNT} object versions"
+else
+    echo "[snapshot]   S3 raw uploads ($RAW_BLOB_BUCKET): NOT CAPTURED — listing call failed, see 1B error above"
+fi
+if [[ "$RETAINED_LISTING_OK" == "true" ]]; then
+    echo "[snapshot]   S3 retained voice ($RETAINED_VOICE_BUCKET): captured, ${RETAINED_OBJECT_COUNT} object versions"
+else
+    echo "[snapshot]   S3 retained voice ($RETAINED_VOICE_BUCKET): NOT CAPTURED — listing call failed, see 1C error above"
+fi
+
 if [[ "$VERIFY_FAILED" -eq 1 ]]; then
     echo "[snapshot] FAILED verification — see errors above. DO NOT consider this snapshot valid." >&2
+    echo "[snapshot] This is a PARTIAL snapshot — see the CAPTURE SUMMARY above for exactly what did and" >&2
+    echo "  did not land. The RDS half (if captured above) is real and usable; do not discard it — but do" >&2
+    echo "  not treat this run as a complete pre-change safety net until the failing half is re-run." >&2
     exit 72
 fi
 

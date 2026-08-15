@@ -4,10 +4,33 @@ name: zap-baseline
 # the staging API.
 #
 # Status: PREP_READY. The target URL `https://staging.api.agrisync.app`
-# does not yet exist (no staging env provisioned). The first scheduled
-# run will fail until Kiro/AWS deploy automation publishes a staging
-# host. That is acceptable noise once a week; the workflow exists so
-# the staging owner has an obvious place to point it.
+# does not yet exist (no staging env provisioned).
+#
+# === TASK 3b (silent-failure-ops) — FIX APPLIED 2026-08-15 ===
+# This file used to end its scan step with `|| true`, and its own header
+# comment claimed "the first run will fail until staging exists — that's
+# acceptable weekly noise." That claim was false: `|| true` makes EVERY
+# outcome exit 0 — an unreachable host, a crashed scan, and a scan that
+# finds FAIL-severity security holes were all indistinguishable green
+# checkmarks. Nothing downstream read the uploaded report; it was an
+# unopened artifact expiring in 30 days, which is not a place a human
+# reliably sees anything.
+#
+# FIXED with the same shape already proven for the audit's AccessDenied
+# case: a known, named, expected condition may be quiet; everything else
+# must not be. The ONE known/named/expected condition here is "staging does
+# not exist yet" — detected by an explicit reachability pre-check BEFORE the
+# scan ever runs (not by trying to interpret ZAP's own exit code after the
+# fact, which conflates "couldn't connect" with "found nothing"). If the
+# target is unreachable, the scan step is skipped entirely and the job
+# succeeds quietly with a visible `::notice::` explaining why — this is NOT
+# treated as a scan result, so it can never be mistaken for "scanned, clean".
+# If the target IS reachable, the scan runs with NO `|| true` — a scan that
+# crashes or finds FAIL-severity issues now fails this job for real, which
+# is itself "the place a human will see it": GitHub Actions turns the run
+# red, and GitHub's own scheduled-workflow-failure email goes to repo
+# watchers. That is an existing, always-on mechanism, not something new
+# invented here to replace one silent path with another.
 #
 # Trigger model: weekly cron + workflow_dispatch. Findings from the
 # first real scan get triaged in T-IGH-05-ZAP-FINDINGS.
@@ -28,16 +51,42 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Check target reachability (the one known, expected, pre-staging condition)
+        id: reachability
+        run: |
+          TARGET="${{ github.event.inputs.target_url || 'https://staging.api.agrisync.app' }}"
+          echo "target=$TARGET" >> "$GITHUB_OUTPUT"
+          if curl --silent --show-error --fail --max-time 15 --output /dev/null "$TARGET"; then
+            echo "reachable=true" >> "$GITHUB_OUTPUT"
+            echo "Target is reachable: $TARGET"
+          else
+            echo "reachable=false" >> "$GITHUB_OUTPUT"
+            echo "Target is NOT reachable: $TARGET"
+          fi
+
       - name: ZAP baseline scan
+        # No `|| true` here. A scan that crashes or finds FAIL-severity
+        # issues must fail this job — that is the entire point of this fix.
+        if: steps.reachability.outputs.reachable == 'true'
         run: |
           docker run --rm -v "$(pwd):/zap/wrk" -t ghcr.io/zaproxy/zaproxy:stable \
             zap-baseline.py \
-            -t "${{ github.event.inputs.target_url || 'https://staging.api.agrisync.app' }}" \
+            -t "${{ steps.reachability.outputs.target }}" \
             -m 1 \
-            -r zap-report.html || true
+            -r zap-report.html
 
       - uses: actions/upload-artifact@v4
+        if: steps.reachability.outputs.reachable == 'true'
         with:
           name: zap-report
           path: zap-report.html
           retention-days: 30
+
+      - name: Staging not yet provisioned (expected — quiet by design, not a scan result)
+        if: steps.reachability.outputs.reachable == 'false'
+        run: |
+          echo "::notice::Target ${{ steps.reachability.outputs.target }} is unreachable — staging has not"
+          echo "::notice::been provisioned yet. This is the one documented, expected pre-staging condition"
+          echo "::notice::(see this file's header). The scan was SKIPPED, not run and ignored — this is NOT"
+          echo "::notice::a clean-scan result. Once staging exists, this step stops running and the scan"
+          echo "::notice::step above runs for real, with no failure suppression."
