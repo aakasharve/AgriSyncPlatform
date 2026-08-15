@@ -113,7 +113,8 @@ find src/clients/mobile-web/src -name 'REPRO-*.test.ts'  # which reproductions r
 
 | Area | State |
 |---|---|
-| §P0.5 same-device destruction · §P0.6 money · §P0.7 offline trust | `[x]` **LANDED ON FEATURE BRANCH** — not merged, not released |
+| §P0.5 same-device destruction · §P0.7 offline trust | `[x]` **LANDED ON FEATURE BRANCH** — not merged, not released |
+| §P0.6 money | 🔴 **`[~]` PARTIAL — THIS ROW SAID `[x]` AND WAS WRONG. Measured 2026-08-15:** the client still sends `correctionId` and `originalAmount: 0` (`financeCommandService.ts:187-188`, the *"0 as default shim"* comment still present), so **`PayloadHasOnly` refuses every farmer money correction.** `CorrectCostEntryCommand.ts:19-22` **documents the defect in a comment instead of fixing it** — the same "the guard is a comment" pattern G1 exists to end. **Do not trust a `[x]` here without re-measuring the producer.** |
 | §P0.8 device storage pressure | `[~]` **PARTIALLY STARTED** — later commits touch storage and voice-retention surfaces. **Re-check the diff before assuming it is untouched;** an earlier draft asserted the landed work touched no storage file and that is no longer true |
 | §P0.1 isolation | `[x]` **LANDED + FOUNDER-ACCEPTED 2026-08-15** — closed on a real-browser two-farmer check, both directions. Not merged, not released |
 | §P0.2 audit bypass · §P0.3 RLS · §P0.4 transcript · §P0.9 security items | `[ ]` **OPEN** |
