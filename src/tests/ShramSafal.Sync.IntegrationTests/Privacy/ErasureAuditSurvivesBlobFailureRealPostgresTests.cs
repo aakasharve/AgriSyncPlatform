@@ -343,11 +343,16 @@ public sealed class ErasureAuditSurvivesBlobFailureRealPostgresTests : IAsyncLif
     /// </para>
     ///
     /// <para>
-    /// The stub here fails the SECOND context creation — the one
-    /// <c>ProcessOneAsync</c> uses — while letting the first (the poller's) and
-    /// the third (the fallback's) succeed. That reproduces "the primary write
-    /// path broke after the scrub" without breaking the fallback that has to
-    /// rescue it.
+    /// The substitute factory does NOT discriminate between call sites and fails
+    /// no context creation. Every context it hands back carries an interceptor
+    /// that throws on <b>that context's own</b> second save. What makes it land
+    /// on the right one is arithmetic, not targeting:
+    /// <c>ProcessOneAsync</c> saves twice on its context (<c>MarkInProgress</c>,
+    /// then the record write), so its second save IS the record write; the
+    /// fallback's fresh context saves once, so it is still at save #1 and
+    /// survives to rescue the run. The nine anonymizers never enter the count —
+    /// they use <c>ExecuteSqlRawAsync</c>/<c>ExecuteDeleteAsync</c>, which do not
+    /// raise <c>SavingChangesAsync</c>.
     /// </para>
     /// </summary>
     [Fact]
@@ -530,9 +535,18 @@ public sealed class ErasureAuditSurvivesBlobFailureRealPostgresTests : IAsyncLif
     }
 
     /// <summary>
-    /// Throws on every member. Used where the code under test must NOT reach
-    /// S3 — a regression that starts calling it fails loudly rather than
-    /// quietly passing against a permissive fake.
+    /// Throws on <see cref="DeleteObjectAsync(string, string, CancellationToken)"/>
+    /// — the only call the branch under test could make — so a regression that
+    /// starts deleting fails loudly instead of passing against a permissive fake.
+    ///
+    /// <para>
+    /// <b>Not a blanket guarantee.</b> This overrides one overload, not every
+    /// member. Any other S3 call would fall through to the real
+    /// <see cref="Amazon.S3.AmazonS3Client"/> base with dummy credentials and
+    /// attempt a network request — slow, and failing for the wrong reason. If
+    /// this fake is reused for a path that can reach other S3 operations,
+    /// override those too rather than trusting the class name.
+    /// </para>
     /// </summary>
     private sealed class ThrowOnAnyCallS3 : Amazon.S3.AmazonS3Client
     {
@@ -655,11 +669,13 @@ public sealed class ErasureAuditSurvivesBlobFailureRealPostgresTests : IAsyncLif
 /// write at the end of <c>ProcessOneAsync</c>.
 ///
 /// <para>
-/// The seam is a <see cref="ShramSafalDbContext"/> subclass whose second
-/// <c>SaveChangesAsync</c> throws. <c>ProcessOneAsync</c> saves exactly twice on
-/// its context — once for <c>MarkInProgress</c>, once for the audit + status —
-/// so failing the second reproduces "everything scrubbed and committed, then the
-/// record write died" without disturbing anything before it.
+/// The seam is a <see cref="SaveChangesInterceptor"/> attached to an otherwise
+/// ordinary <see cref="ShramSafalDbContext"/> — NOT a subclass; the type is
+/// <c>sealed</c> (see the note below). It throws on the context's second save.
+/// <c>ProcessOneAsync</c> saves exactly twice on its context — once for
+/// <c>MarkInProgress</c>, once for the audit + status — so failing the second
+/// reproduces "everything scrubbed and committed, then the record write died"
+/// without disturbing anything before it.
 /// </para>
 ///
 /// <para>
@@ -691,9 +707,16 @@ internal sealed class FailingAdminDbContextFactory(IConfiguration configuration)
             ?? configuration.GetConnectionString("ShramSafalDb")
             ?? throw new InvalidOperationException("No ShramSafalDb connection string available.");
 
-        // Same options shape the real factory builds — no
+        // Same OPTIONS shape as the real factory — no
         // TenantConnectionInterceptor, so the owner connection bypasses RLS
         // exactly as in production — plus the one seam this test needs.
+        //
+        // It is NOT a full stand-in for ShramSafalAdminDbContextFactory: that
+        // one also commits an 'admin_cross_tenant'/'open' audit row on a
+        // parallel context BEFORE returning, and this does not. Harmless here
+        // (nothing under test reads those rows) but it means the audit ledger
+        // in this test has fewer rows than production would — do not use this
+        // factory to assert anything about audit-row counts.
         var options = new DbContextOptionsBuilder<ShramSafalDbContext>()
             .UseNpgsql(connectionString)
             .AddInterceptors(new ThrowOnSecondSaveInterceptor())

@@ -1129,18 +1129,23 @@ UPDATE ssf.farm_operations
         }
         catch (Exception ex)
         {
-            // Do NOT send anyone to ssf.audit_events here. On this path there
-            // is no erasure audit row to find: the per-row events died with the
-            // primary transaction and this fallback wrote nothing. Naming a
-            // destination that is empty is the same failure as naming one that
-            // does not exist.
+            // Be precise about WHICH audit row is missing. Querying
+            // ssf.audit_events for this entity_id DOES return rows on this path
+            // — RequestErasureHandler committed an 'ErasureRequest'/'Requested'
+            // row at submission, and the admin factory commits an
+            // 'admin_cross_tenant'/'open' row per context creation. What does
+            // not exist is the OUTCOME event: the per-row events died with the
+            // primary transaction and this fallback wrote nothing. Saying "no
+            // audit event" would send a handler away from rows that are there.
             logger.LogError(ex,
                 "ErasureWorker: fallback outcome record ALSO failed for request {RequestId} "
                 + "(subject {TargetUserId}). The scrub COMPLETED and is committed, but the row will "
-                + "be stamped Failed and there is NO erasure audit event for it — do not look for "
-                + "one. What survives: the ssf.erasure_requests row (status Failed, failure_reason), "
-                + "and the scrub itself, evidenced by rows carrying the ErasedFarmer sentinel for "
-                + "this subject. Treat the Failed status as unreliable for this request.",
+                + "be stamped Failed and NO OUTCOME audit event exists for it — the "
+                + "'ErasureRequest'/'Requested' row from submission is still there, so do not read "
+                + "the presence of audit rows as proof the run was recorded. What survives: the "
+                + "ssf.erasure_requests row (status Failed, failure_reason), and the scrub itself, "
+                + "evidenced by rows carrying the ErasedFarmer sentinel for this subject. Treat the "
+                + "Failed status as unreliable for this request.",
                 requestId, targetUserId);
         }
     }
