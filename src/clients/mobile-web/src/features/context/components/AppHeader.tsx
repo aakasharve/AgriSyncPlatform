@@ -4,17 +4,36 @@
  */
 
 import React from 'react';
-import { User2, Settings, Leaf } from 'lucide-react';
+import { User2, Settings, Leaf, X } from 'lucide-react';
 import { AppRoute, PageView } from '../../../types';
 import PageToggle from '../../../shared/components/ui/PageToggle';
 import { useLanguage } from '../../../i18n/LanguageContext';
 
 import { FarmOperator } from '../../../domain/types/farm.types';
-import FarmContextSwitcher from './FarmContextSwitcher';
+import { FarmSwitcherSheet } from './FarmContextSwitcher';
 import type { MyFarmDto } from '../../onboarding/qr/inviteApi';
-import { SyncIndicator } from '../../../shared/components/ui/SyncIndicator';
-import { useSyncStatus } from '../../../app/hooks/useSyncStatus';
 import { useSyncQueueStatus, SyncStatusDrawer } from '../../sync';
+
+// Owner Oversight Loop (spec: owner-oversight-loop). Replaces the old
+// `FarmContextSwitcher compact` pill + `SyncIndicator` chip (spec §2, §4.1).
+import CanonicalStrip from '../../oversight/components/CanonicalStrip';
+import WaitingDrawer from '../../oversight/components/WaitingDrawer';
+import { buildOversightModel, type OversightDecision } from '../../oversight/oversightSelectors';
+import { useOversightAcknowledgement } from '../../oversight/useOversightAcknowledgement';
+import { LocalOversightAcknowledgementStore } from '../../oversight/LocalOversightAcknowledgementStore';
+import { resolveOversightString } from '../../../i18n/oversightTranslations';
+import { systemClock } from '../../../core/domain/services/Clock';
+
+// Same font-selection convention `CanonicalStrip.tsx`/`WaitingDrawer.tsx`
+// already use (root CLAUDE.md Font Rules) — picks which of the two locked
+// fonts a resolved string needs, never what text renders.
+const DEVANAGARI_PATTERN = /[ऀ-ॿ]/;
+const MARATHI_BODY_FONT = { fontFamily: "'Noto Sans Devanagari', sans-serif" } as const;
+const ENGLISH_FONT = { fontFamily: "'DM Sans', sans-serif" } as const;
+
+function fontStyleFor(text: string): React.CSSProperties {
+    return DEVANAGARI_PATTERN.test(text) ? MARATHI_BODY_FONT : ENGLISH_FONT;
+}
 
 interface AppHeaderProps {
   currentRoute: AppRoute;
@@ -69,16 +88,78 @@ const AppHeader: React.FC<AppHeaderProps> = ({
   onVoiceTrigger,
   farmContext,
 }) => {
-  const { t } = useLanguage();
+  const { language, t } = useLanguage();
   const [isSyncDrawerOpen, setIsSyncDrawerOpen] = React.useState(false);
-  // `null` = the app has nothing it can prove about this device's records:
-  // nothing outstanding, and no mutation ever acknowledged. Rendering the chip
-  // there means picking one of three claims we cannot back, so we render no
-  // chip. An absent chip is not a fourth state; it is the absence of a claim.
-  const { claim: syncClaim, lastSyncedAt } = useSyncStatus();
+  const [isFarmSwitcherOpen, setIsFarmSwitcherOpen] = React.useState(false);
+  const [isWaitingDrawerOpen, setIsWaitingDrawerOpen] = React.useState(false);
   const queueStatus = useSyncQueueStatus();
 
   const userColorClass = activeOperator ? getUserColor(activeOperator.name) : 'border-stone-200 text-stone-500 bg-stone-50';
+
+  // OVERSIGHT LOOP (spec §2/§3) — the awareness checkpoint is read/written
+  // through the local adapter directly, unconditionally, the same way
+  // `useSyncQueueStatus` above is already called regardless of whether
+  // `farmContext` is present; only the RENDER below is gated on
+  // `farmContext`. `farmId` falls back to `''` before any farm is known —
+  // harmless (the port just reads/writes a key nothing renders yet).
+  const currentFarmId = farmContext?.currentFarmId ?? '';
+  const { checkpointISO, status: acknowledgementStatus, acknowledge } =
+    useOversightAcknowledgement(currentFarmId, LocalOversightAcknowledgementStore);
+
+  const currentFarm = farmContext?.farms.find((f) => f.farmId === farmContext.currentFarmId)
+    ?? farmContext?.farms[0];
+  const farmName = currentFarm?.name ?? '';
+
+  // PLOT COUNT — genuinely UNREACHABLE from `AppHeader` today. `farmContext`
+  // carries `MyFarmDto` (`onboarding/qr/inviteApi.ts`: farmId/name/role/
+  // farmCode/subscription — no plot count). The real count lives on
+  // `app.data.crops`, scoped inside `<AppFeatureProviders>` in
+  // `AppContent.tsx` — a SIBLING of `<AppHeader>` there, not an ancestor, so
+  // no prop or context reaches it without touching a file outside this
+  // task's scope ("Files: modify AppHeader.tsx"). Honest zero, never a
+  // fabricated count (spec §P-F) — see the task-6 report for the finding.
+  const plotCount = 0;
+
+  // `failedSendCount` mirrors exactly what the deleted `SyncIndicator` chip
+  // used to sum for its own red badge (`queueStatus.failedCount +
+  // queueStatus.failedUploads`, see the removed JSX below in history) — and
+  // those two terms are exactly `syncHonestyState.ts`'s two `NEEDS_FIX`
+  // conditions (a durable/capped mutation row; a capped upload row). This is
+  // how `NEEDS_FIX` keeps reaching the farmer after the chip is deleted
+  // (spec §4.1's binding constraint).
+  const failedSendCount = queueStatus.failedCount + queueStatus.failedUploads;
+
+  // The rest of `buildOversightModel`'s inputs — real per-farm logs,
+  // resolved operator names, the outstanding-approval count and yesterday's
+  // close state — are ALSO unreachable from `AppHeader`: they live on
+  // `app.data.history` / `app.data.crops` / `app.data.farmerProfile.operators`
+  // behind the same `AppFeatureProviders` boundary as plot count above.
+  // Honest empty/zero inputs — not a fabricated model (spec §P-F). Only
+  // `failedSendCount`, read straight off `useSyncQueueStatus` (a hook
+  // already called in this component before this task), is real.
+  const oversightModel = buildOversightModel({
+    logs: [],
+    checkpointISO,
+    nowISO: systemClock.nowISO(),
+    operatorNameById: {},
+    unverifiedCount: 0,
+    yesterdayNotClosed: false,
+    failedSendCount,
+    approvalHolderName: null,
+  });
+
+  // Ruling 4 (plan ledger) — removing the sync chip orphans this header's
+  // only opener of `SyncStatusDrawer`. `failedSend` is the one decision kind
+  // that can ever be non-empty from AppHeader's reachable data (the two
+  // inputs above are always 0/false), so it is the one wired open here;
+  // `approval`/`dayNotClosed` never appear from this component and have no
+  // reachable detail view to open yet.
+  const handleOpenDecision = (decision: OversightDecision) => {
+    if (decision.kind === 'failedSend') {
+      setIsWaitingDrawerOpen(false);
+      setIsSyncDrawerOpen(true);
+    }
+  };
 
   return (
     <header className="sticky top-0 z-50 border-b border-stone-200 bg-white/95 backdrop-blur" style={{ boxShadow: '0 4px 12px -2px rgba(0,0,0,0.06), 0 1px 0 rgba(0,0,0,0.04)' }}>
@@ -177,29 +258,88 @@ const AppHeader: React.FC<AppHeaderProps> = ({
 
       </div>
 
-      {/* Phase 6 — slim farm-context strip. Always visible when farm data is available. */}
+      {/* Owner Oversight Loop (spec §2) — the canonical strip. Canonical on
+          every route by construction: AppHeader itself renders on every
+          route, so no per-page wiring is needed (spec §2's own claim). */}
       {farmContext && (
-        <div className="page-content pl-safe-area pr-safe-area flex items-center justify-between gap-2 border-t border-stone-100 bg-stone-50/60 py-1.5">
-          <FarmContextSwitcher
-            farms={farmContext.farms}
-            currentFarmId={farmContext.currentFarmId}
-            onSwitch={farmContext.onSwitchFarm}
-            onCreateFarm={farmContext.onCreateFarm}
-            onJoinViaQr={farmContext.onJoinViaQr}
-            compact
+        <div className="page-content pl-safe-area pr-safe-area border-t border-stone-100 bg-stone-50/60 py-1.5">
+          <CanonicalStrip
+            language={language}
+            farmName={farmName}
+            plotCount={plotCount}
+            waitingCount={oversightModel.waitingCount}
+            onOpenFarmSwitcher={() => setIsFarmSwitcherOpen(true)}
+            onToggleWaiting={() => setIsWaitingDrawerOpen(true)}
           />
-          {syncClaim && (
-            <SyncIndicator
-              status={syncClaim}
-              lastSyncedAt={lastSyncedAt}
-              pendingCount={queueStatus.pendingCount + queueStatus.pendingUploads + queueStatus.pendingAiJobs}
-              failedCount={queueStatus.failedCount + queueStatus.failedUploads}
-              onClick={() => setIsSyncDrawerOpen(true)}
-              testId="sync-status-indicator"
-            />
-          )}
         </div>
       )}
+
+      {/* Farm switcher — reuses the EXISTING `FarmSwitcherSheet` unchanged
+          (spec §2.1: "Only the trigger's shell changes"). AppHeader now owns
+          the open/close state that `FarmContextSwitcher`'s own pill used to
+          hold internally for this — lifted, not copied (task-6 brief). */}
+      {isFarmSwitcherOpen && farmContext && (
+        <FarmSwitcherSheet
+          farms={farmContext.farms}
+          currentFarmId={currentFarm?.farmId ?? ''}
+          onClose={() => setIsFarmSwitcherOpen(false)}
+          onSwitch={(farmId) => {
+            farmContext.onSwitchFarm(farmId);
+            setIsFarmSwitcherOpen(false);
+          }}
+          onCreateFarm={() => {
+            setIsFarmSwitcherOpen(false);
+            farmContext.onCreateFarm();
+          }}
+          onJoinViaQr={() => {
+            setIsFarmSwitcherOpen(false);
+            farmContext.onJoinViaQr();
+          }}
+        />
+      )}
+
+      {/* Waiting drawer (spec §3). `WaitingDrawer` is presentational only —
+          no overlay chrome of its own (Task 5) — so this sheet follows the
+          same bottom-sheet convention `SyncStatusDrawer` (below) and
+          `FarmSwitcherSheet` already use in this app. */}
+      {isWaitingDrawerOpen && (
+        <div
+          className="fixed inset-0 z-[150] flex items-end justify-center bg-stone-900/50 backdrop-blur-sm sm:items-center"
+          onClick={() => setIsWaitingDrawerOpen(false)}
+        >
+          <div
+            data-testid="waiting-drawer-sheet"
+            className="max-h-[85vh] w-full max-w-md overflow-y-auto rounded-t-3xl bg-stone-50 shadow-2xl sm:rounded-3xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between border-b border-stone-200 bg-white px-3.5 py-3">
+              <span
+                className="text-[15px] font-extrabold text-stone-800"
+                style={fontStyleFor(resolveOversightString(language, 'waitingLabel'))}
+              >
+                {resolveOversightString(language, 'waitingLabel')}
+              </span>
+              <button
+                type="button"
+                onClick={() => setIsWaitingDrawerOpen(false)}
+                data-testid="waiting-drawer-close"
+                aria-label="Close"
+                className="rounded-full bg-stone-100 p-2 text-stone-600 hover:bg-stone-200"
+              >
+                <X size={16} />
+              </button>
+            </div>
+            <WaitingDrawer
+              language={language}
+              model={oversightModel}
+              status={acknowledgementStatus}
+              onAcknowledge={() => { void acknowledge(); }}
+              onOpenDecision={handleOpenDecision}
+            />
+          </div>
+        </div>
+      )}
+
       <SyncStatusDrawer
         isOpen={isSyncDrawerOpen}
         onClose={() => setIsSyncDrawerOpen(false)}
