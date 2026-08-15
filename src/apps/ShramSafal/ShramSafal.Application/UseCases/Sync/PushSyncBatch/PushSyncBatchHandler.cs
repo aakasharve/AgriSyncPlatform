@@ -34,6 +34,7 @@ using ShramSafal.Application.UseCases.Work.CreateJobCard;
 using ShramSafal.Application.UseCases.Work.SettleJobCardPayout;
 using ShramSafal.Application.UseCases.Work.StartJobCard;
 using ShramSafal.Application.UseCases.Work.VerifyJobCardForPayout;
+using ShramSafal.Domain.Finance;
 using ShramSafal.Domain.Location;
 using ShramSafal.Domain.Logs;
 using ShramSafal.Domain.Tests;
@@ -1059,6 +1060,58 @@ public sealed class PushSyncBatchHandler(
         // the prior wire behavior exactly.
         Guid? costEntryId = request.CostEntryId == Guid.Empty ? null : request.CostEntryId;
 
+        // Which way the money moved. Mapped TOTALLY and explicitly, exactly like
+        // `scope` in HandleCreateDailyLogAsync.
+        //
+        // Absent / empty => NULL, meaning NOBODY SAID. Every client shipped
+        // before this field existed omits it, and those clients pushed income
+        // down this same wire — so reading their silence as Expense would be the
+        // very inversion this field exists to end (`P4`). Null travels all the
+        // way to the column; nothing downstream may fill it in.
+        //
+        // An UNRECOGNISED value is rejected, never nulled: a producer that said
+        // something we cannot read has still SAID something, and quietly
+        // demoting that to "unknown" would lose a statement rather than surface
+        // a broken producer. Enum.TryParse is deliberately not used — it also
+        // accepts the underlying numeric values, which are not on this contract.
+        MoneyDirection? direction;
+        switch (request.Direction)
+        {
+            case null or "":
+                direction = null;
+                break;
+            case "Expense":
+                direction = MoneyDirection.Expense;
+                break;
+            case "Income":
+                direction = MoneyDirection.Income;
+                break;
+            default:
+                return MutationExecutionOutcome.Failure(
+                    "ShramSafal.SyncInvalidPayload",
+                    "add_cost_entry payload carries an unrecognised direction.");
+        }
+
+        // Same treatment for the one other closed vocabulary on this payload.
+        // A value outside the four is a non-conforming producer, and storing it
+        // would silently overflow the column rather than say so here.
+        switch (request.PaymentMode)
+        {
+            case null or "" or "Cash" or "UPI" or "Bank" or "Credit":
+                break;
+            default:
+                return MutationExecutionOutcome.Failure(
+                    "ShramSafal.SyncInvalidPayload",
+                    "add_cost_entry payload carries an unrecognised paymentMode.");
+        }
+
+        // The client's stated attachment ids, stored verbatim as a JSON array.
+        // NULL when the producer said nothing; "[]" when it said "none linked".
+        // The two are different facts and both are preserved.
+        var clientAttachmentIdsJson = request.Attachments is null
+            ? null
+            : JsonSerializer.Serialize(request.Attachments);
+
         // Phase 1 tenant-scope fix (2026-07-19) — see HandleCreatePlotAsync.
         var (isMember, _) = await EstablishFarmScopeForDerivationAsync(request.FarmId, actorUserId, ct);
         if (!isMember)
@@ -1085,7 +1138,14 @@ public sealed class PushSyncBatchHandler(
                 ActorRole: actorRole,
                 ClientCommandId: clientRequestId,
                 SourceAiJobId: null,
-                ClientAppVersion: string.IsNullOrWhiteSpace(appVersion) ? "unknown" : appVersion),
+                ClientAppVersion: string.IsNullOrWhiteSpace(appVersion) ? "unknown" : appVersion,
+                Direction: direction,
+                Quantity: request.Qty,
+                Unit: request.Unit,
+                UnitPrice: request.UnitPrice,
+                PaymentMode: request.PaymentMode,
+                VendorName: request.VendorName,
+                ClientAttachmentIdsJson: clientAttachmentIdsJson),
             ct);
 
         return ToOutcome(result);

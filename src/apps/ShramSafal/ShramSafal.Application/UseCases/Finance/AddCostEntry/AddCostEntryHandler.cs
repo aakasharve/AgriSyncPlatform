@@ -144,7 +144,14 @@ public sealed class AddCostEntryHandler(
             command.Location,
             clock.UtcNow,
             provenance: provenance,
-            sourceAiJobId: command.SourceAiJobId);
+            sourceAiJobId: command.SourceAiJobId,
+            direction: command.Direction,
+            quantity: command.Quantity,
+            unit: command.Unit,
+            unitPrice: command.UnitPrice,
+            paymentMode: command.PaymentMode,
+            vendorName: command.VendorName,
+            clientAttachmentIdsJson: command.ClientAttachmentIdsJson);
 
         var duplicateCandidates = await repository.GetCostEntriesForDuplicateCheck(
             farmId,
@@ -190,7 +197,11 @@ public sealed class AddCostEntryHandler(
                     command.Amount,
                     command.CurrencyCode,
                     command.EntryDate,
-                    command.Location
+                    command.Location,
+                    // Additive key. Null here is not a gap in the audit — it is
+                    // the record that this caller stated no direction, which is
+                    // itself the fact a later reader needs.
+                    direction = command.Direction?.ToString()
                 },
                 farmId: command.FarmId,
                 clientCommandId: command.ClientCommandId,
