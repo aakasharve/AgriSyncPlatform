@@ -334,6 +334,30 @@ function checkCrossBranch(ourVersion) {
         }
     }
 
+    // N1 — ACT ON THE DENOMINATOR, DO NOT MERELY PRINT IT.
+    //
+    // `refs.length === 0` and `ourFiles.size === 0` already fail above, but a
+    // third zero slipped between them: refs can EXIST and every one of them can
+    // be unreadable — a ref with no versions directory is skipped by `continue`,
+    // so `compared` stays 0 while `refs.length` does not. Measured in a scratch
+    // repo with one such sibling: `compared 0 of 1 refs`, then `OK`, exit 0.
+    //
+    // This is the rule from the `0 version slots` defect, half-applied, in the
+    // guard that produced the rule. Printing the count makes a defect findable by
+    // a human reading output; only acting on it makes it findable by CI, and only
+    // the second one is a guard.
+    //
+    // Unreachable in this repository today — 6 of 52 refs lack the directory and
+    // 46 do not — which is exactly why it was worth closing before it was not.
+    if (compared === 0) {
+        fail(
+            `cross-branch check compared nothing: ${refs.length} ref(s) were visible but none `
+            + 'had a readable version directory, so no collision could have been detected.\n'
+            + '    Exiting non-zero rather than reporting OK on a zero denominator.',
+        );
+        return;
+    }
+
     notes.push(
         `cross-branch: compared ${compared} of ${refs.length} refs across `
         + `${ourFiles.size} version slots.`,

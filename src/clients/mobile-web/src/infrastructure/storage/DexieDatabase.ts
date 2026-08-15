@@ -88,7 +88,17 @@ export type * from './DexieDatabase.types';
 
 /** Current Dexie schema version — bump this when adding version(N).stores(). */
 export const DATABASE_VERSION = 24; // §P0.4 — strip the raw transcript out of stored correction events; no index change. 23 is RESERVED for feat/dfes-companion — see versions/v24.ts.
-/** CEI Phase 1 schema version (now active — applied by Task 5.1.1). */
+/**
+ * CEI Phase 1 schema version (now active — applied by Task 5.1.1).
+ *
+ * §P0.7 review N2 — `tests/storage/migrationService.test.ts` used to 'reserve'
+ * this number with a pair of compile-time assertions. It was deleted: the
+ * directory is in neither `tsconfig.include` (`["src"]`) nor the vitest
+ * include, so nothing loaded the file and no assertion in it could ever fail —
+ * one of them had been wrong since v7 and never said so. This declaration is
+ * the reservation. `dexie/__tests__/dexieVersionIntegrity.test.ts` owns the
+ * assertions, in a file that runs.
+ */
 export const CEI_PHASE1_SCHEMA_VERSION = 7;
 /** CEI Phase 2 schema version — adds test stack (protocols/instances/recs). */
 export const CEI_PHASE2_SCHEMA_VERSION = 8;
