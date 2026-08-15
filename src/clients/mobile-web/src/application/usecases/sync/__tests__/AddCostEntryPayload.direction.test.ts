@@ -67,9 +67,25 @@ const contractSatisfiesTwin: Assignable<WireWithDirectionStated, AddCostEntryPay
 // 1b. KEY SETS. Assignability alone is blind to an OPTIONAL field added on one
 //     side — which is precisely how six fields sat in the local model and on no
 //     wire for months. So the key sets are compared directly.
+/**
+ * The one field the contract names that this twin deliberately does not send.
+ *
+ * `createdByUserId` is in the zod schema, in the generated C# record and in
+ * `PushSyncBatchHandler`'s allow-list — and is then IGNORED: the handler builds
+ * `AddCostEntryCommand` with `CreatedByUserId: actorUserId`, taken from the
+ * caller's token, never from the payload
+ * (`PushSyncBatchHandler.HandleAddCostEntryAsync`). A client that sent it would
+ * be making a no-op claim about who recorded the money, so omitting it is the
+ * truthful shape. Same situation, same treatment as `operatorUserId` in
+ * `CreateDailyLogPayload.scope.test.ts`.
+ *
+ * Anything else that shows up in this gap is DRIFT, and fails the build below.
+ */
+type DeliberatelyNotSent = 'createdByUserId';
+
 type ContractFieldsMissingFromTwin = Exclude<
     keyof AddCostEntryPayloadType,
-    keyof AddCostEntryPayload
+    keyof AddCostEntryPayload | DeliberatelyNotSent
 >;
 type TwinFieldsNotInContract = Exclude<
     keyof AddCostEntryPayload,

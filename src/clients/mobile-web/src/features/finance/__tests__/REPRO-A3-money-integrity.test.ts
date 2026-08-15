@@ -280,6 +280,11 @@ describe('A3.3 — idempotency keys', () => {
             amount: 500,
             currencyCode: 'INR',
             entryDate: '2026-08-14',
+            // Added when `direction` became a required field on the client twin.
+            // It is inert for these two tests — they measure the IDEMPOTENCY KEY,
+            // which is derived from `costEntryId` alone — and no assertion in
+            // this block was touched.
+            direction: 'Expense' as const,
         };
 
         const first = await AddCostEntryCommand.enqueue({ ...payload });
@@ -317,6 +322,11 @@ describe('A3.3 — idempotency keys', () => {
             amount: 500,
             currencyCode: 'INR',
             entryDate: '2026-08-14',
+            // Added when `direction` became a required field on the client twin.
+            // It is inert for these two tests — they measure the IDEMPOTENCY KEY,
+            // which is derived from `costEntryId` alone — and no assertion in
+            // this block was touched.
+            direction: 'Expense' as const,
         };
 
         await AddCostEntryCommand.enqueue({ ...payload });
