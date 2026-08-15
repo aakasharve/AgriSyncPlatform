@@ -1,3 +1,18 @@
+// RESERVED: this branch (feat/dfes-companion) owns Dexie schema version 23.
+//
+// Founder decision 18 (2026-08-16): feat/dfes-companion and
+// feat/server-authoritative-architecture each independently created a v23.ts
+// exporting applyV23, and each registered applyV23(this) in DexieDatabase.ts.
+// origin/main tops out at v22. Dexie never re-runs a version it has already
+// applied — if this branch ships v23 to farmers and the sibling branch later
+// ships a DIFFERENT v23, those devices are already at IndexedDB 23 and will
+// NEVER run the sibling's upgrade. Permanent, silent schema divergence, no
+// error thrown.
+//
+// Resolution: this branch ships first and keeps v23. feat/server-authoritative-
+// architecture MUST renumber its own applyV23 to v24 (registered as
+// db.version(24)) before any web deploy from that branch.
+//
 // spec: dfes-companion-2026-07-11
 //
 // Dexie schema v23 — Phase 4: voice-continuity pending-interpretation store.
