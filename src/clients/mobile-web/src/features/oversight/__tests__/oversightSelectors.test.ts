@@ -1,0 +1,210 @@
+/**
+ * @license
+ * SPDX-License-Identifier: Apache-2.0
+ *
+ * spec: owner-oversight-loop
+ *
+ * Task 1 — pins the rules `buildOversightModel` must honour. Pure module,
+ * no Dexie / React / infrastructure — fixtures are hand-built `DailyLog`
+ * objects, not fetched from storage.
+ */
+import { describe, it, expect } from 'vitest';
+
+import { buildOversightModel } from '../oversightSelectors';
+import type { DailyLog, FarmContext } from '../../../domain/types/log.types';
+
+function makeContext(plotNames: string[]): FarmContext {
+    if (plotNames.length === 0) return { selection: [] };
+    return {
+        selection: [
+            {
+                cropId: 'crop-1',
+                cropName: 'Grapes',
+                selectedPlotIds: plotNames.map((_, i) => `plot-${i}`),
+                selectedPlotNames: plotNames,
+            },
+        ],
+    };
+}
+
+function makeLog(overrides: Partial<DailyLog> & { id: string }): DailyLog {
+    return {
+        id: overrides.id,
+        date: overrides.date ?? '2026-08-10',
+        context: overrides.context ?? makeContext([]),
+        dayOutcome: overrides.dayOutcome ?? 'WORK_RECORDED',
+        cropActivities: overrides.cropActivities ?? [],
+        irrigation: overrides.irrigation ?? [],
+        labour: overrides.labour ?? [],
+        inputs: overrides.inputs ?? [],
+        machinery: overrides.machinery ?? [],
+        observations: overrides.observations,
+        meta: overrides.meta,
+        financialSummary: overrides.financialSummary ?? {
+            totalLabourCost: 0,
+            totalInputCost: 0,
+            totalMachineryCost: 0,
+            grandTotal: 0,
+        },
+    };
+}
+
+const baseInput = {
+    checkpointISO: null as string | null,
+    nowISO: '2026-08-15T00:00:00.000Z',
+    operatorNameById: {} as Record<string, string>,
+    unverifiedCount: 0,
+    yesterdayNotClosed: false,
+    failedSendCount: 0,
+    approvalHolderName: null as string | null,
+};
+
+describe('buildOversightModel', () => {
+    it('counts_only_named_people_in_the_people_tally', () => {
+        const logs: DailyLog[] = [
+            makeLog({ id: 'l1', meta: { createdAtISO: '2026-08-10T00:00:00.000Z', createdByOperatorId: 'op-1' } }),
+            makeLog({ id: 'l2', meta: { createdAtISO: '2026-08-11T00:00:00.000Z', createdByOperatorId: 'op-1' } }),
+            makeLog({ id: 'l3', meta: { createdAtISO: '2026-08-12T00:00:00.000Z', createdByOperatorId: 'op-2' } }),
+        ];
+
+        const model = buildOversightModel({
+            ...baseInput,
+            logs,
+            operatorNameById: { 'op-1': 'Ramesh', 'op-2': 'Sunita' },
+        });
+
+        expect(model.people).toHaveLength(2);
+        const opOne = model.people.find((p) => p.operatorId === 'op-1');
+        const opTwo = model.people.find((p) => p.operatorId === 'op-2');
+        expect(opOne?.name).toBe('Ramesh');
+        expect(opOne?.recordCount).toBe(2);
+        expect(opTwo?.name).toBe('Sunita');
+        expect(opTwo?.recordCount).toBe(1);
+    });
+
+    it('records_with_no_creator_become_the_unattributed_bucket', () => {
+        const logs: DailyLog[] = [
+            makeLog({ id: 'l1', meta: { createdAtISO: '2026-08-10T00:00:00.000Z' } }), // no createdByOperatorId
+            makeLog({ id: 'l2' }), // no meta at all
+            makeLog({ id: 'l3', meta: { createdAtISO: '2026-08-12T00:00:00.000Z', createdByOperatorId: 'op-1' } }),
+        ];
+
+        const model = buildOversightModel({
+            ...baseInput,
+            logs,
+            operatorNameById: { 'op-1': 'Ramesh' },
+        });
+
+        expect(model.unattributed).not.toBeNull();
+        expect(model.unattributed?.operatorId).toBeNull();
+        expect(model.unattributed?.name).toBe('');
+        expect(model.unattributed?.recordCount).toBe(2);
+        // Named people tally must stay honest: only the 1 named record counts.
+        expect(model.people).toHaveLength(1);
+        expect(model.people[0].recordCount).toBe(1);
+        // totalRecords includes the unattributed ones too.
+        expect(model.totalRecords).toBe(3);
+    });
+
+    it('a_log_that_arrived_after_the_checkpoint_is_unseen_even_when_its_work_date_is_older', () => {
+        const checkpointISO = '2026-08-01T00:00:00.000Z';
+        const logs: DailyLog[] = [
+            // Work date is old (before the checkpoint), but it was actually
+            // recorded/arrived AFTER the checkpoint -> must count as unseen.
+            makeLog({
+                id: 'late-arrival',
+                date: '2026-01-01',
+                meta: { createdAtISO: '2026-08-05T00:00:00.000Z', createdByOperatorId: 'op-1' },
+            }),
+            // Control: genuinely arrived before the checkpoint -> must NOT count.
+            makeLog({
+                id: 'already-seen',
+                date: '2026-08-14',
+                meta: { createdAtISO: '2026-07-15T00:00:00.000Z', createdByOperatorId: 'op-1' },
+            }),
+        ];
+
+        const model = buildOversightModel({
+            ...baseInput,
+            logs,
+            checkpointISO,
+        });
+
+        expect(model.totalRecords).toBe(1);
+        expect(model.people[0]?.recordCount).toBe(1);
+    });
+
+    it('a_null_checkpoint_makes_everything_unseen_and_sinceDays_null', () => {
+        const logs: DailyLog[] = [
+            makeLog({ id: 'l1', meta: { createdAtISO: '2020-01-01T00:00:00.000Z', createdByOperatorId: 'op-1' } }),
+            makeLog({ id: 'l2', meta: { createdAtISO: '2026-08-14T00:00:00.000Z', createdByOperatorId: 'op-2' } }),
+        ];
+
+        const model = buildOversightModel({
+            ...baseInput,
+            logs,
+            checkpointISO: null,
+        });
+
+        expect(model.totalRecords).toBe(2);
+        expect(model.sinceDays).toBeNull();
+    });
+
+    it('zero_count_decisions_are_omitted', () => {
+        const model = buildOversightModel({
+            ...baseInput,
+            logs: [],
+            unverifiedCount: 0,
+            yesterdayNotClosed: true,
+            failedSendCount: 3,
+            approvalHolderName: null,
+        });
+
+        expect(model.decisions).toHaveLength(2);
+        expect(model.decisions.some((d) => d.kind === 'approval')).toBe(false);
+        const dayNotClosed = model.decisions.find((d) => d.kind === 'dayNotClosed');
+        const failedSend = model.decisions.find((d) => d.kind === 'failedSend');
+        expect(dayNotClosed?.count).toBe(1);
+        expect(failedSend?.count).toBe(3);
+    });
+
+    it('work_categories_appear_only_when_the_log_carries_that_array', () => {
+        const logs: DailyLog[] = [
+            makeLog({
+                id: 'l1',
+                meta: { createdAtISO: '2026-08-10T00:00:00.000Z', createdByOperatorId: 'op-1' },
+                irrigation: [{ id: 'irr-1', method: 'drip', source: 'well' }],
+                cropActivities: [],
+                labour: [],
+            }),
+            makeLog({
+                id: 'l2',
+                meta: { createdAtISO: '2026-08-11T00:00:00.000Z', createdByOperatorId: 'op-1' },
+                inputs: [{ id: 'inp-1', method: 'Spray', mix: [] }],
+            }),
+        ];
+
+        const model = buildOversightModel({ ...baseInput, logs });
+
+        const person = model.people[0];
+        expect(person.workCategories).toContain('irrigation');
+        expect(person.workCategories).toContain('inputs');
+        expect(person.workCategories).not.toContain('labour');
+        expect(person.workCategories).not.toContain('cropActivity');
+        expect(person.workCategories).not.toContain('machinery');
+        expect(person.workCategories).not.toContain('observation');
+    });
+
+    it('missing_server_timestamps_set_boundaryApproximate_true', () => {
+        // DailyLog carries no server-received timestamp on the pure domain
+        // type (only the Dexie storage record does) — so the boundary this
+        // selector computes is always derived from a fallback, never a
+        // proven server-receipt time.
+        const model = buildOversightModel({
+            ...baseInput,
+            logs: [makeLog({ id: 'l1', meta: { createdAtISO: '2026-08-10T00:00:00.000Z', createdByOperatorId: 'op-1' } })],
+        });
+
+        expect(model.boundaryApproximate).toBe(true);
+    });
+});
