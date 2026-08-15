@@ -1,4 +1,4 @@
-// @vitest-environment node
+// @vitest-environment jsdom
 /**
  * @license
  * SPDX-License-Identifier: Apache-2.0
@@ -33,27 +33,58 @@
  * looks renumbered and behaves as though it never was — which is the original
  * bug back again, now with a misleading filename on top.
  */
-import { describe, it, expect } from 'vitest';
-import { readdirSync, readFileSync } from 'node:fs';
+import 'fake-indexeddb/auto';
+import Dexie from 'dexie';
+import { describe, it, expect, afterAll } from 'vitest';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { fileURLToPath } from 'node:url';
 
-import { DATABASE_VERSION } from '../../DexieDatabase';
+import { AgriLogDatabase, DATABASE_VERSION } from '../../DexieDatabase';
 
-const STORAGE_DIR = fileURLToPath(new URL('../..', import.meta.url));
+// Resolved from the vitest root (`src/clients/mobile-web`) rather than
+// `import.meta.url`, which is not a file: URL under the jsdom environment this
+// file needs for the real-database check below. Asserted rather than assumed —
+// a wrong cwd would otherwise make every scan read nothing and pass vacuously.
+const STORAGE_DIR = join(process.cwd(), 'src', 'infrastructure', 'storage');
 const VERSIONS_DIR = join(STORAGE_DIR, 'dexie', 'versions');
-const DB_SOURCE = readFileSync(join(STORAGE_DIR, 'DexieDatabase.ts'), 'utf8');
+/**
+ * Comments stripped before every check below.
+ *
+ * Found by this guard failing on itself: DFES's `v23.ts` header contains the
+ * literal `db.version(24))` in prose instructing the sibling branch to renumber,
+ * and a first-match regex over raw source read that comment as the declaration.
+ * A guard that can be satisfied — or broken — by a sentence is not checking the
+ * code. The version files' index strings contain no comment tokens, so this is
+ * safe on them.
+ */
+function stripComments(source: string): string {
+    return source
+        .replace(/\/\*[\s\S]*?\*\//g, ' ')
+        .replace(/^[ 	]*\/\/.*$/gm, ' ')
+        .replace(/([^:])\/\/.*$/gm, '$1');
+}
+
+const DB_SOURCE = stripComments(readFileSync(join(STORAGE_DIR, 'DexieDatabase.ts'), 'utf8'));
 
 /** Every `vN.ts` present, ascending. Gaps are legal — see the last test. */
 const VERSION_FILES = readdirSync(VERSIONS_DIR)
     .map(name => ({ name, m: /^v(\d+)\.ts$/.exec(name) }))
     .filter((e): e is { name: string; m: RegExpExecArray } => e.m !== null)
-    .map(e => ({ name: e.name, n: Number(e.m[1]), source: readFileSync(join(VERSIONS_DIR, e.name), 'utf8') }))
+    .map(e => ({
+        name: e.name,
+        n: Number(e.m[1]),
+        source: stripComments(readFileSync(join(VERSIONS_DIR, e.name), 'utf8')),
+    }))
     .sort((a, b) => a.n - b.n);
 
 describe('Dexie schema version integrity', () => {
-    it('there is at least one version file to check', () => {
-        expect(VERSION_FILES.length).toBeGreaterThan(0);
+    it('the scan actually found the source it is meant to check', () => {
+        // Guards against the whole file passing vacuously on a wrong cwd.
+        expect(existsSync(VERSIONS_DIR), `${VERSIONS_DIR} not found`).toBe(true);
+        expect(VERSION_FILES.length).toBeGreaterThan(20);
+        expect(DB_SOURCE).toContain('export const DATABASE_VERSION');
+        // stripComments must not have eaten the code it is meant to leave.
+        expect(DB_SOURCE).toContain('applyV1(this)');
     });
 
     it('DATABASE_VERSION equals the highest version file present', () => {
@@ -94,12 +125,83 @@ describe('Dexie schema version integrity', () => {
         expect([...positions].sort((a, b) => a - b)).toEqual(positions);
     });
 
-    it('23 is deliberately absent — it belongs to feat/dfes-companion', () => {
-        // Not an accident and not to be tidied up. §P0.4 shipped as v23, and was
-        // renumbered to 24 because DFES owns 23 and ships first. Reusing 23 here
-        // would mean Dexie compares 23 to 23 on a DFES handset and runs nothing.
-        // Gaps are legal in Dexie; a re-used number is not recoverable.
-        expect(VERSION_FILES.map(f => f.n)).not.toContain(23);
-        expect(DATABASE_VERSION).toBeGreaterThan(23);
+    it('the version chain has NO GAPS below DATABASE_VERSION', () => {
+        // §P0.7 review C1 — THE ASSERTION THAT REPLACED "23 IS ABSENT", and the
+        // inversion is the point.
+        //
+        // The old version of this test asserted that v23 must NOT exist, because
+        // 23 belongs to feat/dfes-companion. That was backwards in the most
+        // dangerous way available: the day DFES's v23.ts lands this test would go
+        // red, and the quickest way to green it would be to DELETE DFES's v23 —
+        // which is precisely the change that silently destroys
+        // `pendingInterpretations` on every handset that took DFES first. A guard
+        // whose simplest resolution is the catastrophe is worse than no guard.
+        //
+        // Dexie's schema is the UNION of the versions the running build DECLARES.
+        // A gap is not inert: every store introduced at the missing version is
+        // absent from the union, and `deleteRemovedTables` drops it, with the
+        // upgrade reporting success. So the invariant is contiguity, and it fails
+        // in the direction that ASKS FOR the missing file rather than inviting
+        // someone to remove another.
+        const numbers = VERSION_FILES.map(f => f.n);
+        const expected = Array.from({ length: DATABASE_VERSION }, (_, i) => i + 1);
+        expect(numbers).toEqual(expected);
     });
+});
+
+/**
+ * Every store name any version file declares, from the `.stores({...})` blocks.
+ * Deliberately parsed from source rather than imported: the question being asked
+ * is whether the WIRING loses something the FILES declare, and importing the
+ * assembled result would beg it.
+ */
+function declaredStoreNames(source: string): string[] {
+    const block = /\.stores\(\{([\s\S]*?)\}\)/g;
+    const names: string[] = [];
+    let m: RegExpExecArray | null;
+    while ((m = block.exec(source)) !== null) {
+        for (const line of m[1].split(/\r?\n/)) {
+            const key = /^\s*([A-Za-z_$][\w$]*)\s*:/.exec(line);
+            if (key) names.push(key[1]);
+        }
+    }
+    return names;
+}
+
+const ALL_DECLARED_STORES = [...new Set(VERSION_FILES.flatMap(f => declaredStoreNames(f.source)))].sort();
+
+describe('the shipped chain keeps every store its own versions declare', () => {
+    const PROBE_DB = 'AgriLogDB_version_integrity_probe';
+
+    afterAll(async () => { await Dexie.delete(PROBE_DB); });
+
+    it('parsed at least the stores we know exist, so the check is not vacuous', () => {
+        expect(ALL_DECLARED_STORES).toContain('logs');
+        expect(ALL_DECLARED_STORES).toContain('mutationQueue');
+        expect(ALL_DECLARED_STORES.length).toBeGreaterThan(25);
+    });
+
+    it('C1 — the real AgriLogDatabase exposes every store the version files declare', async () => {
+        // THE GUARD FOR THE DEFECT THAT WAS SHIPPED. A version file can declare a
+        // store and the assembled chain can still lose it — that is exactly what
+        // happened when `DexieDatabase.ts` skipped v23: `pendingInterpretations`
+        // was declared in `versions/`, absent from the union the build produced,
+        // and deleted off farmers' handsets with the upgrade reporting success.
+        //
+        // This opens the REAL production class. No locally assembled chain can
+        // answer this question, which is the mistake the C1 test made.
+        await Dexie.delete(PROBE_DB);
+        const db = new AgriLogDatabase(PROBE_DB);
+        await db.open();
+        const live = db.tables.map(t => t.name).sort();
+        db.close();
+
+        const missing = ALL_DECLARED_STORES.filter(name => !live.includes(name));
+        expect(
+            missing,
+            'A store is declared by a version file but absent from the database the app '
+            + 'actually builds. Almost always a version missing from the applyVN chain in '
+            + 'DexieDatabase.ts — Dexie unions only the versions it is GIVEN, and drops the rest.',
+        ).toEqual([]);
+    }, 60000);
 });
