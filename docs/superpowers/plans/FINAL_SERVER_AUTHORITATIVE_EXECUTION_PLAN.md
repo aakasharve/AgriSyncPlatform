@@ -846,24 +846,58 @@ working as designed.
 `OriginalParseRaw`/`CorrectedParse` containing `fullTranscript`, unredacted.
 **Matrix line 72 ("no server copy exists") is wrong.**
 
-- [ ] **Remove `rawTranscript` AND `sourceText`.** The draft named only the first. `sourceText` is *"the
+> ✅ **DONE 2026-08-15.** One factual correction to the framing above, measured rather than assumed.
+> The **client** leak was exactly as described: required on the type, unencrypted on the handset,
+> and the full draft went out over the wire on every farmer edit. The **server** half is worse than
+> a leak and differently shaped — `ssf.correction_events` has never held a row, because the EF model
+> addressed PascalCase columns on a snake_case table and every insert threw `42703`. So the wire
+> carried the transcript to an endpoint that then 500'd. The redaction, the backfill and the mapping
+> fix all landed together; the backfill is a no-op wherever the table is empty and correct wherever
+> it is not.
+
+- [x] **Remove `rawTranscript` AND `sourceText`.** The draft named only the first. `sourceText` is *"the
       transcript chunk that produced this field"* — verbatim speech, and **worker names live in exactly
       those chunks**. Keep: field · AI value · farmer value · **originating operation reference** ·
       model version · prompt version.
-- [ ] **Deal with the transcripts already persisted, or this is a bleed-stop mislabelled as a fix.**
+      > Both removed from `CorrectionEvent.ts`. Kept, and now carried where they were not before:
+      > `sourceAiJobId`, `modelVersion`, `promptVersion`, `promptContentHash`. The per-item
+      > `sourceText` also rode *inside* `aiValue`/`userValue`, so `transcriptRedaction.ts` deep-strips
+      > the payloads too — removing only the top-level pair would have left the worker names in place.
+- [x] **Deal with the transcripts already persisted, or this is a bleed-stop mislabelled as a fix.**
       Rows exist in production **and** unencrypted on every handset today.
       **And §P0.8 currently lists `aiCorrectionEvents` as "protected, never auto-evicted" — the plan
       would be protecting the exact rows it says must not exist.** Reconcile the two sections: the
       *structured signal* is protected; the *transcript inside it* is removed.
-- [ ] **This is a breaking client change and needs a migration.** `rawTranscript` is **required** on the
+      > Handsets: Dexie `v23.upgrade`. Server: a backfill inside migration
+      > `20260815080242_StripTranscriptFromCorrectionEvents`, which raises if any row still carries
+      > transcript text afterwards — a backfill that silently matches nothing would otherwise be
+      > recorded as applied. §P0.8 already states the division correctly; no edit needed there.
+- [x] **This is a breaking client change and needs a migration.** `rawTranscript` is **required** on the
       client type, so removing it invalidates every stored correction row on farmers' phones. The draft
       had no migration task, no Dexie handling and no test.
-- [ ] Stop persisting raw drafts server-side; store the structured signal only.
-- [ ] **Preserve `promptContentHash`** — today it is discarded, and it is the only tamper-evident prompt
+      > `DATABASE_VERSION` 22 → 23, `v23.ts` + `v23.upgrade.test.ts` (9 assertions, incl. idempotent
+      > per farmer database and one malformed row not blocking the database from opening).
+      > **Ships alone** — no behavioural change rides with the bump, because it is one-way for APK users.
+- [x] Stop persisting raw drafts server-side; store the structured signal only.
+      > Redaction sits inside `CorrectionEvent.Record`, the aggregate's only constructor, so no caller
+      > can persist speech by forgetting to; the client also strips before sending.
+      > 🔍 **Found while verifying: the EF mapping had never matched the table.** `correction_events`
+      > is snake_case (raw-SQL creation migration) with no snake_case convention on the context, so the
+      > model addressed `"UserId"`, `"OriginalParseRaw"` and friends — `select "UserId" from
+      > ssf.correction_events` answers `column "UserId" does not exist`. **Every insert threw 42703, so
+      > this table has never held a row**, and the endpoint has been failing since it shipped. Mapping
+      > corrected in the same change; proven by a real-Postgres round-trip test that an in-memory
+      > provider could not have caught.
+- [x] **Preserve `promptContentHash`** — today it is discarded, and it is the only tamper-evident prompt
       identifier. Stop substituting a **fresh random UUID** for a non-UUID `sourceAiJobId`, which
       silently breaks the link to the originating job.
-- [ ] **Ordering:** this lands **before** the correction bridge is made durable. The bridge is
+      > `prompt_content_hash` column added and carried end to end. `original_parse_id` is now
+      > **nullable**: an unknown originating job is recorded as unknown instead of as a random UUID
+      > that matched no `AiJob` — `GoldenSetFeedbackWorker` skips those explicitly now rather than
+      > issuing a join that cannot match.
+- [x] **Ordering:** this lands **before** the correction bridge is made durable. The bridge is
       fire-and-forget today; making it reliable first would ship more raw transcript, more reliably.
+      > Held: the bridge is still fire-and-forget. Nothing in this change makes it durable.
 
 ### P0.5 — Stop the same-device destruction
 
@@ -1065,20 +1099,38 @@ the farmer's next recording silently fails. Nothing in the client observes stora
 
 ### P0.9 — Three security items that cannot wait for a domain
 
-- [ ] **Disable or make real the fabricated export link.** `ExportWorker.cs:221` string-concatenates a
+- [x] **Disable or make real the fabricated export link.** `ExportWorker.cs:221` string-concatenates a
       URL with **no signature and no credential**, against a bucket that does not exist (404), and
       persists it as the download link for a **complete DPDP personal-data export**. The domain layer
       even validates the string is non-empty — guarding the *shape* of a value that carries no
       authority. Meanwhile the actual bundle lands in the **undocumented raw evidence bucket**.
       This is `P5` on the most sensitive artefact the system produces. Disable it or make it real;
       do not leave it.
+      > **DONE `0ec56385`.** No presigner exists to make it real — `IRawBlobStore` has exactly three
+      members and neither implementation presigns, so the header claim that both "expose a presigned
+      URL" was false too. Took the honest failure: the ZIP is still assembled, still uploaded, still
+      indexed in `ssf.export_artifacts`, and the `DataExport/Generated` audit event still fires (now
+      carrying `downloadLinkIssued = false`), but the request is marked **Failed** with a
+      plain-language reason instead of Completed with a dead link. `MarkCompleted` now requires an
+      absolute https URL carrying `X-Amz-Signature`/`Signature`, so the fabricated form cannot be
+      persisted by any future caller. **Export contents unchanged** — no privacy-rights change.
+      Line 221 had not drifted. No honest-surface registry exists yet to register this in (that is
+      §P0.8's own unbuilt task).
 - [ ] **Give raw blobs a subject linkage — before the next erasure request, not after.** The erasure
       cascade deletes the table where the only pointer lives, so the audio survives, unattributable,
       forever. **This is the one item where waiting makes the problem permanently unfixable rather
       than merely larger.** Either add a tenant dimension to the blob index, or preserve the pointer
       through erasure.
-- [ ] **Bind additional authenticated data into the voice seal.** The sealing primitive binds nothing
+- [x] **Bind additional authenticated data into the voice seal.** The sealing primitive binds nothing
       today, so a ciphertext could be moved between rows. Bind the clip id and owner account.
+      > **DONE `86064416`.** `sealVoiceClip`/`openVoiceClip` now take a mandatory binding
+      (`clipId` + `ownerAccountId`) as versioned, length-prefixed AAD. Proven by a red→green test that
+      a ciphertext relocated to a different clip row under the **same tenant DEK** fails to open.
+      **No existing sealed data exists to break** — verified: `sealVoiceClip`'s only caller
+      (`persistVoiceClip`) has zero callers, the live write path writes `localBlob`, v18 only tags
+      legacy rows rather than re-sealing, and the retained tier bails when `row.ciphertext` is absent.
+      Binding resolves from the local Dexie `farms` cache **before** `resolveDek`, so §8's offline gap
+      is not widened.
 - [ ] **Fix the bare-cast RLS policy on `p_user_correction_events`** — it uses the form that **throws
       on every claimless request**, the same bug the boundary policy must avoid. Cheap, independent,
       currently live.
